@@ -63,7 +63,6 @@ struct vinfo_type
 
 extern vinfo_type vinfo[VINFO_MAX_GRIDS];
 
-byte cave_style_floor_choice(int sidx);
 byte cave_style_door_choice(int sidx);
 bool cave_style_index_is_valid(int sidx);
 int cave_style_index_for_color(byte color_value);

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -51,6 +52,7 @@ cptr main_menu_title(int choice)
     case MAIN_MENU_BLITZ: return "Blitz";
     case MAIN_MENU_OPTIONS: return "Options";
     case MAIN_MENU_HELP: return "Help";
+    case MAIN_MENU_TUTORIAL_CARDS: return "Tutorial cards";
     case MAIN_MENU_ABOUT: return "About";
     case MAIN_MENU_SAVE: return "Save";
     case MAIN_MENU_SAVE_QUIT:
@@ -77,6 +79,7 @@ int main_menu_keyboard_key(int choice)
     case MAIN_MENU_BLITZ: return 'z';
     case MAIN_MENU_OPTIONS: return 'o';
     case MAIN_MENU_HELP: return 'h';
+    case MAIN_MENU_TUTORIAL_CARDS: return 'u';
     case MAIN_MENU_ABOUT: return 'b';
     case MAIN_MENU_SAVE: return 's';
     case MAIN_MENU_SAVE_QUIT: return 'q';
@@ -273,6 +276,7 @@ int main_menu_choice_from_key(int key)
     case 'z': return MAIN_MENU_BLITZ;
     case 'o': return MAIN_MENU_OPTIONS;
     case 'h': return MAIN_MENU_HELP;
+    case 'u': return MAIN_MENU_TUTORIAL_CARDS;
     case 'b': return MAIN_MENU_ABOUT;
     case 's':
         if (death_spectator_active())
@@ -664,6 +668,9 @@ enum {
     LOG_HISTORY_CLICK_FILTER_NOTES = -20004
 };
 
+#define LOG_HISTORY_PREV_FILTER_KEY '['
+#define LOG_HISTORY_NEXT_FILTER_KEY ']'
+
 typedef enum log_history_entry_kind
 {
     LOG_HISTORY_ENTRY_MESSAGE,
@@ -766,6 +773,21 @@ static int log_history_next_filter(int filter)
         return LOG_HISTORY_FILTER_NOTES;
     default:
         return LOG_HISTORY_FILTER_ALL;
+    }
+}
+
+static int log_history_previous_filter(int filter)
+{
+    switch (filter)
+    {
+    case LOG_HISTORY_FILTER_ALL:
+        return LOG_HISTORY_FILTER_NOTES;
+    case LOG_HISTORY_FILTER_MESSAGES:
+        return LOG_HISTORY_FILTER_ALL;
+    case LOG_HISTORY_FILTER_COMBAT:
+        return LOG_HISTORY_FILTER_MESSAGES;
+    default:
+        return LOG_HISTORY_FILTER_COMBAT;
     }
 }
 
@@ -1353,6 +1375,11 @@ static void do_cmd_hint_quest_menu(hint_quest_page initial_page,
 
     while (page != HINT_QUEST_PAGE_EXIT)
     {
+        tutorial_game_menu(page == HINT_QUEST_PAGE_QUESTS ? "quests"
+            : page == HINT_QUEST_PAGE_THRALLS ? "thralls" : "hints",
+            page == HINT_QUEST_PAGE_QUESTS ? "Read your objectives, progress and consequences here."
+            : page == HINT_QUEST_PAGE_THRALLS ? "Review encountered thralls and their requests. Read the objective before deciding how to help."
+            : "Review messages and tips you have already received. Tabs open Quests and Thralls.");
         if (page == HINT_QUEST_PAGE_QUESTS)
         {
             page = do_cmd_quest_status_page();
@@ -1592,6 +1619,11 @@ static bool do_cmd_main_menu_execute_choice_impl(int actiontype,
         do_cmd_help_menu();
         return true;
     }
+    case MAIN_MENU_TUTORIAL_CARDS: // Tutorial cards (u)
+    {
+        tutorial_game_archive();
+        return true;
+    }
     case MAIN_MENU_ABOUT: // About (b)
     {
         main_menu_about();
@@ -1644,6 +1676,9 @@ static bool do_cmd_main_menu_execute_choice_impl(int actiontype,
 
 bool do_cmd_main_menu_execute_choice(int actiontype)
 {
+    if (!tutorial_game_action_allowed("open-menu", NULL)) return false;
+    if (actiontype==MAIN_MENU_BLITZ
+        && !tutorial_game_action_allowed("switch-run", NULL)) return false;
     bool pending_hint_look = false;
     int pending_hint_look_y = -1;
     int pending_hint_look_x = -1;
@@ -1916,7 +1951,7 @@ static hint_message_action skeleton_tip_show(int index)
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_HINTS, "Hints & Quests",
             "Survival Tip", true, true, 0);
-        sdl_hint_quest_menu_add_block(tip_text, TERM_WHITE, 0, 0);
+        sdl_hint_quest_menu_add_contextual_block(tip_text, TERM_WHITE, 0, 0);
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
@@ -1966,6 +2001,7 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
     hint_message_meta meta;
     byte stored_line_count;
     hint_message_action action = HINT_MESSAGE_ACTION_NONE;
+    bool tutorial;
     bool steamdeck = steamdeck_controls_active();
 
     hint_messages_ensure_level_state();
@@ -1975,6 +2011,8 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
 
     hint_messages_message_meta(index, &meta);
     hint_message_body_text(index, body_text, sizeof(body_text));
+    tutorial = SDL_strcasestr(hint_message_title(index), "Survival Tip")
+        || SDL_strcasestr(hint_message_title(index), "Tutorial");
     if (standalone)
         screen_save();
 
@@ -1987,7 +2025,15 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
             "Hint Message", true, true, 0);
         sdl_hint_quest_menu_add_block(
             hint_message_title(index), TERM_L_WHITE, 0, 0);
-        sdl_hint_quest_menu_add_block(body_text, TERM_WHITE, 0, 0);
+        if (tutorial)
+        {
+            sdl_hint_quest_menu_add_contextual_block(body_text, TERM_WHITE,
+                0, 0);
+        }
+        else
+        {
+            sdl_hint_quest_menu_add_block(body_text, TERM_WHITE, 0, 0);
+        }
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
         if (hint_message_has_source(&meta))
@@ -2258,8 +2304,16 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
             }
             else
                 hint_message_pixel_list_text(idx, entry, sizeof(entry));
-            sdl_hint_quest_menu_add_block(entry, TERM_WHITE, 0,
-                HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
+            if (show_all_tips)
+            {
+                sdl_hint_quest_menu_add_contextual_block(entry, TERM_WHITE, 0,
+                    HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
+            }
+            else
+            {
+                sdl_hint_quest_menu_add_block(entry, TERM_WHITE, 0,
+                    HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
+            }
         }
 
         if (tip_n > 0)
@@ -2657,8 +2711,8 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_THRALLS, "Hints & Quests",
             title, true, true, 0);
-        sdl_hint_quest_menu_add_block(goal, TERM_WHITE, 0, 0);
-        sdl_hint_quest_menu_add_block(
+        sdl_hint_quest_menu_add_contextual_block(goal, TERM_WHITE, 0, 0);
+        sdl_hint_quest_menu_add_contextual_block(
             "Location: on this dungeon level. Use Look or Map to find the thrall.",
             TERM_SLATE, 0, 0);
         sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
@@ -2798,7 +2852,7 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
             thrall_quest_format_goal(&mon_list[entries[idx]], goal,
                 sizeof(goal), false);
             strnfmt(entry, sizeof(entry), "%d. %s", idx + 1, goal);
-            sdl_hint_quest_menu_add_block(entry, TERM_WHITE, 0,
+            sdl_hint_quest_menu_add_contextual_block(entry, TERM_WHITE, 0,
                 HINT_MESSAGE_CLICK_ENTRY_BASE + idx);
         }
         if (count > 0)
@@ -3011,6 +3065,7 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
  */
 void do_cmd_messages_with_filter(int initial_filter)
 {
+    tutorial_game_menu("messages", "Review recorded messages and combat rolls. Filters change which past events are shown.");
     char ch;
 
     int i, j, n;
@@ -3098,6 +3153,15 @@ void do_cmd_messages_with_filter(int initial_filter)
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
+                SDL_TOUCH_MENU_CATEGORY_OTHER))
+        {
+            ui_scroll_area_set_keys(0, 0, LOG_HISTORY_PREV_FILTER_KEY,
+                LOG_HISTORY_NEXT_FILTER_KEY);
+            ui_scroll_area_set_horizontal_page_mode(true);
+            ui_scroll_area_enable_horizontal_page_swipe(
+                LOG_HISTORY_PREV_FILTER_KEY, LOG_HISTORY_NEXT_FILTER_KEY);
+        }
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_touch_exit_button(true);
@@ -3179,8 +3243,8 @@ void do_cmd_messages_with_filter(int initial_filter)
             else if (sdl_touch_only_device_active())
             {
                 const char* variants[] = {
-                    "Tap a tab to filter, drag to scroll",
-                    "Tap a tab, drag to scroll",
+                    "Swipe left/right tabs, drag up/down to scroll",
+                    "Swipe tabs, drag to scroll",
                     "Tap a tab to filter"
                 };
                 terminal_prompt_pick_variant(prompt, sizeof(prompt), wid, false,
@@ -3259,6 +3323,20 @@ void do_cmd_messages_with_filter(int initial_filter)
         }
         ch = (char)steamdeck_menu_key(ch, 'p', 'n');
 
+        if (ch == LOG_HISTORY_PREV_FILTER_KEY)
+        {
+            filter = log_history_previous_filter(filter);
+            i = 0;
+            continue;
+        }
+
+        if (ch == LOG_HISTORY_NEXT_FILTER_KEY)
+        {
+            filter = log_history_next_filter(filter);
+            i = 0;
+            continue;
+        }
+
         if (log_history_filter_key(ch))
         {
             filter = log_history_next_filter(filter);
@@ -3298,11 +3376,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_menu_click_clear();
             ui_scroll_area_clear();
 
-            /* Prompt */
-            prt("Highlight: ", hgt - 1, 0);
-
             /* Get a "shower" string, or continue */
-            if (!askfor_aux(shower, sizeof(shower)))
+            if (!get_string_panel("Highlight Log Text", shower,
+                    sizeof(shower)))
                 continue;
 
             /* Okay */
@@ -3317,11 +3393,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_menu_click_clear();
             ui_scroll_area_clear();
 
-            /* Prompt */
-            prt("Find: ", hgt - 1, 0);
-
             /* Get a "finder" string, or continue */
-            if (!askfor_aux(finder, sizeof(finder)))
+            if (!get_string_panel("Search Message Log", finder,
+                    sizeof(finder)))
                 continue;
 
             /* Show it */

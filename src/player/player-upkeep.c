@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "metarun.h"
 #include "pane.h"
 #include "supplies.h"
@@ -28,6 +29,11 @@ void update_stuff(void)
         p_ptr->update &= ~(PU_BONUS);
         // log_trace("update_stuff: calculating bonuses");
         calc_bonuses();
+
+        /* Match generation's initial visibility before any encounter or
+         * tutorial observation; process_player() has not run calc_torch yet. */
+        if (playerturn == 0 && !p_ptr->restoring)
+            calc_torch();
     }
 
     if (p_ptr->update & (PU_HP))
@@ -80,13 +86,13 @@ void update_stuff(void)
         p_ptr->update &= ~(PU_DISTANCE);
         p_ptr->update &= ~(PU_MONSTERS);
         log_trace("update_stuff: updating distances and monsters");
-        update_monsters(true);
+        SIL_PERF_PHASE("monsters.visibility", update_monsters(true));
     }
 
     if (p_ptr->update & (PU_MONSTERS))
     {
         p_ptr->update &= ~(PU_MONSTERS);
-        update_monsters(false);
+        SIL_PERF_PHASE("monsters.visibility", update_monsters(false));
     }
 
     if (p_ptr->update & (PU_PANEL))

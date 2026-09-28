@@ -192,15 +192,19 @@ void song_of_piercing(monster_type* m_ptr)
     monster_desc(m_name, sizeof(m_name), m_ptr, 0x80);
 
     // messages for beginning a new song
-    if ((m_ptr->song != SNG_PIERCING) && m_ptr->ml)
+    if (m_ptr->song != SNG_PIERCING)
     {
-        msg_format("%^s begins a song of piercing.", m_name);
+        if (m_ptr->ml)
+            msg_format("%^s begins a song of piercing.", m_name);
+        else if (dist <= 30)
+            msg_print("You hear a song of piercing begin.");
 
         // and remember the monsters is now singing this song
         m_ptr->song = SNG_PIERCING;
 
         // disturb if message printed
-        disturb(1, 0);
+        if (m_ptr->ml || dist <= 30)
+            disturb(1, 0);
     }
 
     // messages for continuing a song

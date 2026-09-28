@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -89,7 +90,7 @@ static bool get_explored_bounds(int* min_y, int* max_y, int* min_x, int* max_x)
             continue;
 
         /* Only include marked (detected/memorized) objects */
-        if (!o_ptr->marked)
+        if (!object_is_visible(o_ptr))
             continue;
 
         int oy = o_ptr->iy;
@@ -211,7 +212,7 @@ static bool unified_look_can_show_marked_object_at(int y, int x)
 {
     int o_idx = cave_o_idx[y][x];
 
-    return (o_idx > 0) && o_list[o_idx].k_idx && o_list[o_idx].marked
+    return (o_idx > 0) && object_is_visible(&o_list[o_idx])
         && grid_info_is_available(y, x);
 }
 
@@ -260,7 +261,7 @@ static int unified_look_count_visible_entities(unified_look_state* state)
                 continue;
 
             /* Only count marked (memorized) objects (matches sidebar display) */
-            if (!o_ptr->marked)
+            if (!object_is_visible(o_ptr))
                 continue;
             if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
                 continue;
@@ -309,7 +310,7 @@ static int unified_look_count_visible_objects_for_group(unified_look_state* stat
             continue;
 
         /* Only count marked (memorized) objects (matches sidebar display) */
-        if (!o_ptr->marked)
+        if (!object_is_visible(o_ptr))
             continue;
         if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
             continue;
@@ -504,7 +505,7 @@ static void unified_look_prompt_label(int binding, const char* fallback, char* b
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }
@@ -1167,6 +1168,7 @@ static void unified_look_redraw_overlay(unified_look_state* state,
 
 void do_cmd_unified_look(void)
 {
+    tutorial_game_menu("look", "Move the inspection cursor and select visible creatures, known items or terrain. Looking does not move your character.");
     unified_look_state state;
     int y, x;
     char query;
@@ -2647,6 +2649,7 @@ void do_cmd_locate(void)
     }
 
     /* Calculate explored bounds */
+    tutorial_game_menu("map", "Pan through explored terrain. Moving this view does not move your character or reveal unexplored squares.");
     if (get_explored_bounds(&min_y, &max_y, &min_x, &max_x))
     {
         /* Calculate viewport bounds based on explored area */

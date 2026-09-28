@@ -5,6 +5,7 @@
 #include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_runs.h"
@@ -17,10 +18,8 @@
 #include <string.h>
 #include <time.h>
 
-/* Profiling is deliberately zero-cost in normal builds.  Some wrapped scopes
- * wait for player input, so timing them as active turn work produces false
- * warnings and synchronous log flushes during ordinary play. */
-#define TIME_PHASE(label, stmt) do { (void)(label); stmt; } while (0)
+/* Opt-in summaries exclude SDL event waits and never log inside the phase. */
+#define TIME_PHASE(label, stmt) SIL_PERF_PHASE(label, stmt)
 
 extern int last_player_y;
 extern int last_player_x;

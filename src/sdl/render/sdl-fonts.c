@@ -1119,6 +1119,9 @@ void sdl_window_create(int window_width, int window_height, bool fullscreen, boo
     }
 
     g_state.system_scale = SDL_GetWindowDisplayScale(g_state.window);
+    log_info("SDL renderer=%s window=%dx%d display_scale=%.2f vsync=requested",
+        SDL_GetRendererName(g_state.renderer), window_width, window_height,
+        g_state.system_scale);
     log_debug("window scale is %g", g_state.system_scale);
 #if defined(SIL_IOS)
     sdl_ios_install_orientation_observer(g_state.window);

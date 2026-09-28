@@ -6,6 +6,7 @@
 #include "h-define.h"
 #include "init.h"
 #include "item_set.h"
+#include "level-generation/level-generation-themes.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "score/score_guid.h"
@@ -211,7 +212,9 @@ void init_angband(void)
     /* Initialize feature info */
     note("[Initializing arrays... (features)]");
     if (init_f_info())
-        quit("Cannot initialize features");
+        quit("Cannot initialize terrain: game data is incomplete or incompatible.\n"
+            "Update the game's lib/edit folder along with the executable.\n"
+            "See log.txt for details.");
 
     /* Initialize object info */
     note("[Initializing arrays... (objects)]");
@@ -295,6 +298,7 @@ void init_angband(void)
     style_name = style_head.name_ptr;
     if (init_partition_info())
         quit("Cannot initialize partition rules");
+    (void)terrain_themes_load();
 
     /* Initialize curses info */
     note("[Initializing arrays... (curses)]");

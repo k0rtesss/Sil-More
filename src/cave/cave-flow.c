@@ -1,6 +1,15 @@
 /* File: cave-flow.c */
 
 #include "cave-internal.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave-bridge.h"
+#include "cave/cave-flood.h"
+#include "cave/cave-water-flow.h"
+#include "level-generation/level-generation-terrain-history.h"
+#include "melee/melee-util.h"
+#include "monster/monster-senses.h"
+#include "log/perf.h"
 
 /*
  * Determines how far a grid is from the source using the given flow.
@@ -41,8 +50,236 @@ int flow_dist(int which_flow, int y, int x)
  *
  */
 
-void update_flow(int cy, int cx, int which_flow)
+/* With no possible poison exposure, the cheapest route dominates every
+ * alternative. Keep just one label per square and avoid the Pareto scratch
+ * initialization and comparisons on ordinary maps or for immune creatures. */
+static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
+    monster_type* m_ptr, bool pursuit, bool allow_player)
 {
+    enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
+    static int next[FLOW_CELLS], previous[FLOW_CELLS];
+    int heads[FLOW_MAX_DIST];
+    int origin = cy * MAX_DUNGEON_WID + cx;
+    int entry_cost[3][3] = {{0}};
+    int best_step = FLOW_MAX_DIST + 1;
+
+    if (pursuit)
+        for (int d = 0; d < 8; d++)
+        {
+            int dy = ddy_ddd[d], dx = ddx_ddd[d];
+            int y = m_ptr->fy + dy, x = m_ptr->fx + dx;
+            if (in_bounds(y, x) && (allow_player || cave_m_idx[y][x] >= 0))
+                entry_cost[dy + 1][dx + 1] = monster_step_cost(
+                    m_ptr, m_ptr->fy, m_ptr->fx, y, x);
+        }
+
+    for (int i = 0; i < FLOW_MAX_DIST; i++)
+        heads[i] = -1;
+    heads[0] = origin;
+    next[origin] = previous[origin] = -1;
+
+    for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
+    {
+        /* Every entry costs at least one. Once this frontier reaches the
+         * best complete first step, no remaining square can tie or improve
+         * it. All winning neighbors are settled, preserving direction ties.
+         * Full wandering/retreat flows and poison routes never stop early. */
+        if (pursuit && cost >= best_step)
+            return;
+        while (heads[cost] >= 0)
+        {
+            int grid = heads[cost];
+            int y = grid / MAX_DUNGEON_WID;
+            int x = grid % MAX_DUNGEON_WID;
+            heads[cost] = next[grid];
+            if (next[grid] >= 0)
+                previous[next[grid]] = -1;
+            previous[grid] = -2;
+
+            if (pursuit)
+            {
+                int dy = y - m_ptr->fy, dx = x - m_ptr->fx;
+                if (ABS(dy) <= 1 && ABS(dx) <= 1 && entry_cost[dy + 1][dx + 1])
+                    best_step = MIN(best_step, cost + entry_cost[dy + 1][dx + 1]);
+            }
+
+            for (int d = 0; d < 8; d++)
+            {
+                int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
+                int neighbor, edge, total, old;
+                if (!in_bounds(yy, xx))
+                    continue;
+                neighbor = yy * MAX_DUNGEON_WID + xx;
+                old = cave_cost[which_flow][yy][xx];
+                /* Positive edge costs cannot improve a settled square. */
+                if (old < FLOW_MAX_DIST && previous[neighbor] == -2)
+                    continue;
+                /* Match the Pareto flow's reverse edges and virtual player
+                 * endpoint, including escape from forbidden terrain. */
+                edge = grid == origin && cave_m_idx[y][x] < 0 ? 1
+                    : monster_step_cost(m_ptr, yy, xx, y, x);
+                if (!edge)
+                    continue;
+                total = cost + edge;
+                if (total >= old || total >= FLOW_MAX_DIST)
+                    continue;
+
+                if (old < FLOW_MAX_DIST)
+                {
+                    if (previous[neighbor] >= 0)
+                        next[previous[neighbor]] = next[neighbor];
+                    else
+                        heads[old] = next[neighbor];
+                    if (next[neighbor] >= 0)
+                        previous[next[neighbor]] = previous[neighbor];
+                }
+                cave_cost[which_flow][yy][xx] = total;
+                previous[neighbor] = -1;
+                next[neighbor] = heads[total];
+                if (heads[total] >= 0)
+                    previous[heads[total]] = neighbor;
+                heads[total] = neighbor;
+            }
+        }
+    }
+}
+
+/* Keep a bounded Pareto frontier of cost/exposure at each merge. A cheap but
+ * poisonous route must not erase the longer dry route needed by a predecessor.
+ * Eight labels retain both extremes and useful intermediate alternatives. */
+static void update_monster_flow(int cy, int cx, int which_flow,
+    monster_type* m_ptr)
+{
+    enum { LABELS = 8, FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID,
+        FLOW_LABELS = FLOW_CELLS * LABELS };
+    static int next[FLOW_LABELS], previous[FLOW_LABELS];
+    static int poison_damage[FLOW_LABELS], costs[FLOW_LABELS];
+    int heads[FLOW_MAX_DIST];
+    int origin = cy * MAX_DUNGEON_WID + cx;
+
+    for (int i = 0; i < FLOW_MAX_DIST; i++)
+        heads[i] = -1;
+    /* Only current-map cells can enter the queue. Do not clear the maximum
+     * map's eight labels per square when exploring a smaller level. */
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (int i = y * MAX_DUNGEON_WID * LABELS;
+             i < (y * MAX_DUNGEON_WID + p_ptr->cur_map_wid) * LABELS; i++)
+            costs[i] = FLOW_MAX_DIST;
+    heads[0] = origin * LABELS;
+    next[origin * LABELS] = previous[origin * LABELS] = -1;
+    poison_damage[origin * LABELS] = costs[origin * LABELS] = 0;
+
+    for (int cost = 0; cost < FLOW_MAX_DIST; cost++)
+    {
+        while (heads[cost] >= 0)
+        {
+            int label = heads[cost];
+            int grid = label / LABELS;
+            int y = grid / MAX_DUNGEON_WID;
+            int x = grid % MAX_DUNGEON_WID;
+            heads[cost] = next[label];
+            if (next[label] >= 0)
+                previous[next[label]] = -1;
+            previous[label] = -2;
+
+            for (int d = 0; d < 8; d++)
+            {
+                int yy = y + ddy_ddd[d];
+                int xx = x + ddx_ddd[d];
+                int neighbor, edge, total, poison;
+                if (!in_bounds(yy, xx))
+                    continue;
+                neighbor = yy * MAX_DUNGEON_WID + xx;
+                /* Expand backwards: a predecessor moves INTO this square.
+                 * Forbidden predecessors receive an escape distance but do
+                 * not carry the flow through themselves. The actual player
+                 * origin is also a virtual approach target for NEVER_BLOW
+                 * monsters; their real melee permission stays unchanged. */
+                edge = grid == origin && cave_m_idx[y][x] < 0 ? 1
+                    : monster_step_cost(m_ptr, yy, xx, y, x);
+                if (!edge)
+                    continue;
+                poison = poison_damage[label]
+                    + monster_poison_step_damage(m_ptr, yy, xx, y, x);
+                /* Reserve the initial contact dose for hypothetical entry
+                 * into this predecessor. The real starting grid is already
+                 * occupied and its accrued stacks are in poisoned. */
+                int entry = (yy == m_ptr->fy && xx == m_ptr->fx) ? 0
+                    : distance(yy, xx, m_ptr->fy, m_ptr->fx) <= 1
+                        ? monster_poison_step_damage(m_ptr,
+                            m_ptr->fy, m_ptr->fx, yy, xx)
+                        : 2 * monster_poison_step_damage(m_ptr, yy, xx, yy, xx);
+                if (poison + entry > 0
+                    && m_ptr->poisoned + poison + entry >= m_ptr->hp)
+                    continue;
+                total = cost + edge;
+                if (total >= FLOW_MAX_DIST)
+                    continue;
+                int slot = -1, cheapest = -1, safest = -1;
+                bool dominated = false;
+                for (int k = neighbor * LABELS; k < (neighbor + 1) * LABELS; k++)
+                {
+                    if (costs[k] == FLOW_MAX_DIST)
+                    {
+                        slot = k;
+                        continue;
+                    }
+                    if (costs[k] <= total && poison_damage[k] <= poison)
+                        dominated = true;
+                    if (cheapest < 0 || costs[k] < costs[cheapest]) cheapest = k;
+                    if (safest < 0 || poison_damage[k] < poison_damage[safest]) safest = k;
+                }
+                if (dominated)
+                    continue;
+                /* Remove dominated queued labels before reusing their slot. */
+                for (int k = neighbor * LABELS; k < (neighbor + 1) * LABELS; k++)
+                {
+                    if (costs[k] == FLOW_MAX_DIST || costs[k] < total
+                        || poison_damage[k] < poison)
+                        continue;
+                    if (previous[k] != -2)
+                    {
+                        if (previous[k] >= 0) next[previous[k]] = next[k];
+                        else heads[costs[k]] = next[k];
+                        if (next[k] >= 0) previous[next[k]] = previous[k];
+                    }
+                    costs[k] = FLOW_MAX_DIST;
+                    slot = k;
+                }
+                if (slot < 0)
+                {
+                    /* Preserve both the cheapest and least exposed routes.
+                     * Replace the most expensive interior route. */
+                    for (int k = neighbor * LABELS; k < (neighbor + 1) * LABELS; k++)
+                        if (k != cheapest && k != safest
+                            && (slot < 0 || costs[k] > costs[slot])) slot = k;
+                    if (slot < 0 || (total >= costs[slot]
+                            && poison >= poison_damage[safest]))
+                        continue;
+                    if (previous[slot] != -2)
+                    {
+                        if (previous[slot] >= 0) next[previous[slot]] = next[slot];
+                        else heads[costs[slot]] = next[slot];
+                        if (next[slot] >= 0) previous[next[slot]] = previous[slot];
+                    }
+                }
+                cave_cost[which_flow][yy][xx] = MIN(cave_cost[which_flow][yy][xx], total);
+                costs[slot] = total;
+                poison_damage[slot] = poison;
+                previous[slot] = -1;
+                next[slot] = heads[total];
+                if (heads[total] >= 0)
+                    previous[heads[total]] = slot;
+                heads[total] = slot;
+            }
+        }
+    }
+}
+
+static void update_flow_aux(int cy, int cx, int which_flow,
+    bool pursuit, bool allow_player)
+{
+    sil_perf_stamp perf_start = sil_perf_begin();
     int cost;
 
     int i, d;
@@ -55,11 +292,11 @@ void update_flow(int cy, int cx, int which_flow)
     int next_cycle = 1;
 
     bool monster_flow = false;
-    bool bash = false;
     bool found = false;
+    bool poison_possible = false;
+    bool poison_present = false;
 
     monster_type* m_ptr = NULL; // default to soothe compiler warnings
-    monster_race* r_ptr = NULL; // default to soothe compiler warnings
 
     byte flow_table[2][2][8 * FLOW_MAX_DIST];
 
@@ -69,7 +306,6 @@ void update_flow(int cy, int cx, int which_flow)
         monster_flow = true;
 
         m_ptr = &mon_list[which_flow];
-        r_ptr = &r_info[m_ptr->r_idx];
     }
 
     // pull out the relevant monster info for the wandering monster flows
@@ -86,7 +322,6 @@ void update_flow(int cy, int cx, int which_flow)
             if (!m_ptr->r_idx)
                 continue;
 
-            r_ptr = &r_info[m_ptr->r_idx];
 
             // find the first monster with this flow
             if (m_ptr->wandering_idx == which_flow)
@@ -102,6 +337,15 @@ void update_flow(int cy, int cx, int which_flow)
             return;
     }
 
+    if (monster_flow)
+    {
+        monster_race* r_ptr = &r_info[m_ptr->r_idx];
+        /* These are exactly the immunity checks used by
+         * monster_poison_step_damage(). Existing poison still ticks normally. */
+        poison_possible = !(r_ptr->flags2 & RF2_FLYING)
+            && !(r_ptr->flags3 & RF3_RES_POIS);
+    }
+
     /* Save the new flow epicenter */
     flow_center_y[which_flow] = cy;
     flow_center_x[which_flow] = cx;
@@ -114,6 +358,8 @@ void update_flow(int cy, int cx, int which_flow)
         for (x = 0; x < p_ptr->cur_map_wid; x++)
         {
             cave_cost[which_flow][y][x] = FLOW_MAX_DIST;
+            if (poison_possible && cave_feat[y][x] == FEAT_POISON)
+                poison_present = true;
         }
     }
 
@@ -121,6 +367,19 @@ void update_flow(int cy, int cx, int which_flow)
 
     /* Store base cost at the character location */
     cave_cost[which_flow][cy][cx] = 0;
+
+    if (monster_flow)
+    {
+        if (poison_present)
+            update_monster_flow(cy, cx, which_flow, m_ptr);
+        else
+            update_monster_flow_without_poison(cy, cx, which_flow, m_ptr,
+                pursuit, allow_player);
+        sil_perf_end(poison_present ? "flow.monster.poison"
+            : pursuit ? "flow.monster.pursuit" : "flow.monster.simple",
+            perf_start);
+        return;
+    }
 
     /* Store this grid in the flow table, note that we've done so */
     flow_table[this_cycle][0][0] = cy;
@@ -182,62 +441,7 @@ void update_flow(int cy, int cx, int which_flow)
                     if (cave_cost[which_flow][y2][x2] < FLOW_MAX_DIST)
                         continue;
 
-                    // Deal with monster pathfinding
-                    if (monster_flow)
-                    {
-                        // get the percentage chance of the monster being able
-                        // to move onto that square
-                        int chance = cave_passable_mon(m_ptr, y2, x2, &bash);
-
-                        // if there is any chance, then convert it to a number
-                        // of turns
-                        if (chance > 0)
-                        {
-                            extra_cost += (100 / chance) - 1;
-
-                            // add an extra turn for unlocking/opening doors as
-                            // this action doesn't move the monster
-                            if (cave_any_closed_door_bold(y2, x2) && !bash)
-                            {
-                                if (!((r_ptr->flags2 & (RF2_PASS_DOOR))
-                                        || (r_ptr->flags2 & (RF2_PASS_WALL))))
-                                {
-                                    extra_cost += 1;
-                                }
-                            }
-
-                            // add extra turn(s) for tunneling through
-                            // rubble/walls as this action doesn't move the
-                            // monster
-                            else if (cave_wall_bold(y2, x2)
-                                && (r_ptr->flags2 & (RF2_TUNNEL_WALL)))
-                            {
-                                if (cave_feat[y2][x2] == FEAT_RUBBLE)
-                                    extra_cost
-                                        += 1; // an extra turn to dig through
-                                else
-                                    extra_cost += 2; // two extra turns to dig
-                                                     // through granite/quartz
-                            }
-
-                            else if (cave_wall_bold(y2, x2)
-                                && (r_ptr->flags2 & (RF2_KILL_WALL)))
-                            {
-                                extra_cost += 1; // pretend it would take an
-                                                 // extra turn (to prefer routes
-                                                 // with less wall destruction
-                            }
-                        }
-
-                        // if there is no chance, just skip this square
-                        else
-                        {
-                            continue;
-                        }
-                    }
-
-                    // Deal with noise flows
-                    else
+                    // Deal with noise flows (monster flows use Dijkstra above).
                     {
                         // ignore walls
                         if (cave_wall_bold(y2, x2)
@@ -249,17 +453,6 @@ void update_flow(int cy, int cx, int which_flow)
                         {
                             extra_cost += 5;
                         }
-                    }
-
-                    /* Monsters at this site need to re-consider their targets
-                     */
-
-                    if (cave_m_idx[y2][x2] > 0)
-                    {
-                        monster_type* n_ptr = &mon_list[cave_m_idx[y2][x2]];
-
-                        n_ptr->target_x = 0;
-                        n_ptr->target_y = 0;
                     }
 
                     /* Store cost at this location */
@@ -287,6 +480,17 @@ void update_flow(int cy, int cx, int which_flow)
             next_cycle = 1;
         }
     }
+    sil_perf_end("flow.noise", perf_start);
+}
+
+void update_flow(int cy, int cx, int which_flow)
+{
+    update_flow_aux(cy, cx, which_flow, false, true);
+}
+
+void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player)
+{
+    update_flow_aux(cy, cx, m_idx, true, allow_player);
 }
 
 /*
@@ -305,6 +509,57 @@ void update_flow(int cy, int cx, int which_flow)
  * Whenever the age count loops, most of the scent trail is erased and
  * the age of the remainder is recalculated.
  */
+/* The scent stencil must not stamp the opposite bank of a narrow stream.
+ * Check every cell touched by the straight segment, including both sides of
+ * a diagonal corner; water is a barrier to scent, but never to sight. */
+static bool scent_crosses_water(int y0, int x0, int y1, int x1)
+{
+    int dx = ABS(x1 - x0), dy = ABS(y1 - y0);
+    int sx = x1 > x0 ? 1 : -1, sy = y1 > y0 ? 1 : -1;
+    int ix = 0, iy = 0;
+    while (ix < dx || iy < dy)
+    {
+        int decision = (1 + 2 * ix) * dy - (1 + 2 * iy) * dx;
+        if (decision == 0)
+        {
+            if (cave_feat[y0][x0 + sx] == FEAT_WATER
+                || cave_feat[y0][x0 + sx] == FEAT_DEEP_WATER
+                || cave_feat[y0 + sy][x0] == FEAT_WATER
+                || cave_feat[y0 + sy][x0] == FEAT_DEEP_WATER)
+                return true;
+            x0 += sx; y0 += sy; ix++; iy++;
+        }
+        else if (decision < 0) { x0 += sx; ix++; }
+        else { y0 += sy; iy++; }
+        if (cave_feat[y0][x0] == FEAT_WATER || cave_feat[y0][x0] == FEAT_DEEP_WATER)
+            return true;
+    }
+    return false;
+}
+
+byte scent_export_cell(int y, int x)
+{
+    int age = get_scent(y, x);
+    return age >= 0 && age <= SMELL_STRENGTH ? (byte)(age + 1) : 0;
+}
+
+void scent_restore_begin(void)
+{
+    scent_when = 250 - SMELL_STRENGTH;
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        memset(cave_when[y], 0, p_ptr->cur_map_wid * sizeof(cave_when[y][0]));
+}
+
+void scent_restore_cell(int y, int x, byte normalized)
+{
+    if (!in_bounds(y, x))
+        return;
+    cave_when[y][x] = normalized >= 1 && normalized <= SMELL_STRENGTH + 1
+            && cave_feat[y][x] != FEAT_WATER && cave_feat[y][x] != FEAT_DEEP_WATER
+            && !(cave_info[y][x] & CAVE_WALL)
+        ? scent_when + normalized - 1 : 0;
+}
+
 void update_smell(void)
 {
     int i, j;
@@ -347,6 +602,16 @@ void update_smell(void)
         /* Reset the age value */
         scent_when = 250 - SMELL_STRENGTH;
     }
+    /* Wading never stamps the neighboring banks. Existing land tracks age
+     * normally. An airborne player also leaves no fresh trail. */
+    if (cave_feat[py][px] == FEAT_WATER || cave_feat[py][px] == FEAT_DEEP_WATER
+        || p_ptr->leaping)
+    {
+        if (cave_feat[py][px] == FEAT_WATER || cave_feat[py][px] == FEAT_DEEP_WATER)
+            cave_when[py][px] = 0;
+        return;
+    }
+
     /* Lay down new scent */
     for (i = 0; i < 5; i++)
     {
@@ -374,6 +639,9 @@ void update_smell(void)
             if (scent_adjust[i][j] == 250)
                 continue;
 
+            if (scent_crosses_water(py, px, y, x))
+                continue;
+
             /* Mark the grid with new scent */
             cave_when[y][x] = scent_when + scent_adjust[i][j];
         }
@@ -390,7 +658,9 @@ void map_feature(int y, int x)
     /* All non-walls are "checked", including rubble */
     if ((cave_feat[y][x] < FEAT_WALL_HEAD) || (cave_stair_bold(y, x))
         || (cave_feat[y][x] == FEAT_RUBBLE) || cave_forge_bold(y, x)
-        || (cave_feat[y][x] == FEAT_CHASM))
+        || (cave_feat[y][x] == FEAT_CHASM) || (cave_feat[y][x] == FEAT_WATER)
+        || (cave_feat[y][x] == FEAT_DEEP_WATER) || FEAT_IS_ICE(cave_feat[y][x])
+        || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Memorize normal features */
         if ((cave_feat[y][x] >= FEAT_DOOR_HEAD) || (cave_stair_bold(y, x))
@@ -662,6 +932,16 @@ void gates_illuminate(bool daytime)
 
 /* Legacy floor/wall color codes and group identifiers removed; using styles only */
 
+static int cave_flow_feature(int feat)
+{
+    int underlay = cave_bridge_underlay(feat);
+    if (underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER)
+        return FEAT_WATER;
+    if (underlay == FEAT_POISON)
+        return FEAT_POISON;
+    return FEAT_NONE;
+}
+
 /* Get default encoded color for current depth. Now returns
  * COLOR_STYLE_BASE + <chosen level style> for consistency. */
 byte get_depth_color(int depth)
@@ -682,8 +962,42 @@ byte get_depth_color(int depth)
  */
 void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
+    feat = terrain_history_construction_feature(y, x, feat);
+    int old_feat = cave_feat[y][x];
+    int old_flow_feature = cave_flow_feature(old_feat);
+    int new_flow_feature = cave_flow_feature(feat);
+    if (old_feat != feat)
+        cave_flood_surface_changed(y, x, feat);
+    bool removed_floor_border = cave_feat[y][x] != feat
+        && (styles_floor_border(cave_bridge_underlay(cave_feat[y][x]), NULL, NULL)
+            || FEAT_IS_ICE(cave_bridge_underlay(cave_feat[y][x]))
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_WATER
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_DEEP_WATER
+            || cave_bridge_underlay(cave_feat[y][x]) == FEAT_POISON);
+    bool chasm_changed = cave_feat[y][x] != feat
+        && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_CHASM
+            || cave_bridge_underlay(feat) == FEAT_CHASM);
+    bool lava_changed = cave_feat[y][x] != feat
+        && (cave_bridge_underlay(cave_feat[y][x]) == FEAT_LAVA
+            || cave_bridge_underlay(feat) == FEAT_LAVA);
+    bool ice_changed = cave_feat[y][x] != feat
+        && (FEAT_IS_ICE(cave_feat[y][x]) || FEAT_IS_ICE(feat));
+    bool poison_changed = cave_feat[y][x] != feat && feat == FEAT_POISON;
+    if (cave_feat[y][x] != feat)
+        cave_fixture_set(y, x, CAVE_FIXTURE_NONE);
+    /* Construction replaces natural provenance; cave carvers mark their
+     * own floors again after placement. This also covers room-over-cave edits. */
+    if (!character_dungeon && cave_natural
+        && (FEAT_IS_GRANITE(feat) || feat == FEAT_FLOOR))
+        cave_natural[y][x] = 0;
     /* Change the feature */
     cave_feat[y][x] = feat;
+    cave_environment_changed(y, x, old_feat, feat);
+    if (old_feat != feat && old_flow_feature != new_flow_feature)
+        cave_water_flow_invalidate_at(y, x);
+    if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && cave_when)
+        cave_when[y][x] = 0;
 
     /* Set the color (0 means use depth default) */
     if (color == 0)
@@ -705,6 +1019,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
 
     /* Handle "wall/door" grids */
     if (((feat >= FEAT_DOOR_HEAD) && (feat <= FEAT_WALL_TAIL))
+        || FEAT_IS_ROCK(feat)
         || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3)
     {
         cave_info[y][x] |= (CAVE_WALL);
@@ -719,11 +1034,43 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Notice/Redraw */
     if (character_dungeon)
     {
+        if (FEAT_IS_QUARTZ(old_feat) && !FEAT_IS_QUARTZ(feat)
+            && (feat == FEAT_RUBBLE || !cave_wall_bold(y, x)))
+            cave_quartz_release(y, x);
+        if (old_feat != feat && p_ptr->py == y && p_ptr->px == x
+            && water_movement_energy(100, old_feat, old_feat,
+                p_ptr->leaping)
+                != water_movement_energy(100, feat, feat,
+                    p_ptr->leaping))
+            p_ptr->redraw |= PR_SPEED;
+        if (ice_changed && p_ptr->py == y && p_ptr->px == x)
+        {
+            p_ptr->update |= PU_BONUS;
+            /* The next blow in a multiattack must use the new footing. */
+            update_stuff();
+        }
+        if (lava_changed)
+        {
+            p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+            if (p_ptr->py == y && p_ptr->px == x)
+                player_lava_exposure(p_ptr->leaping);
+            if (cave_m_idx[y][x] > 0)
+                monster_lava_exposure(cave_m_idx[y][x]);
+        }
+        if (poison_changed)
+        {
+            if (p_ptr->py == y && p_ptr->px == x)
+                player_poison_terrain_exposure(p_ptr->leaping);
+            if (cave_m_idx[y][x] > 0)
+                monster_poison_terrain_exposure(cave_m_idx[y][x]);
+        }
         /* Notice */
         note_spot(y, x);
 
         /* Redraw */
         lite_spot(y, x);
+        if (removed_floor_border || chasm_changed)
+            cave_floor_border_redraw_neighbors(y, x);
     }
 }
 

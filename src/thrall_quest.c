@@ -2074,7 +2074,10 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
     m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARD_PENDING;
 
     if (offer_thrall_reward(m_ptr, false))
+    {
         m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARDED;
+        lite_spot(m_ptr->fy, m_ptr->fx);
+    }
 
     /* Update windows */
     p_ptr->window |= (PW_INVEN);
@@ -2113,7 +2116,10 @@ bool handle_thrall_interaction(monster_type* m_ptr)
     if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING)
     {
         if (offer_thrall_reward(m_ptr, true))
+        {
             m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARDED;
+            lite_spot(m_ptr->fy, m_ptr->fx);
+        }
         return true;
     }
     

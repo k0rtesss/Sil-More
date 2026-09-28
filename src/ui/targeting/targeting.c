@@ -45,6 +45,8 @@ static void look_mon_desc(char* buf, size_t max, int m_idx)
         SDL_strlcat(buf, "confused, ", max);
     if (m_ptr->stunned)
         SDL_strlcat(buf, "stunned, ", max);
+    if (m_ptr->poisoned)
+        SDL_strlcat(buf, format("poisoned (%d), ", m_ptr->poisoned), max);
     if ((m_ptr->slowed) && (!m_ptr->hasted))
         SDL_strlcat(buf, "slowed, ", max);
     if ((!m_ptr->slowed) && (m_ptr->hasted))
@@ -670,14 +672,17 @@ static bool determine_location_is_interesting(int y, int x)
 
     /* Check for objects first (only shown when on floors, not when in rubble) */
     /* This is checked BEFORE monsters to prevent showing unmarked objects under detected monsters */
-    if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT))
+    if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT)
+        || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER
+        || FEAT_IS_ICE(cave_feat[y][x])
+        || cave_feat[y][x] == FEAT_POISON || FEAT_IS_BRIDGE(cave_feat[y][x]))
     {
         /* Scan all objects in the grid */
         for (o_ptr = get_first_object(y, x); o_ptr;
              o_ptr = get_next_object(o_ptr))
         {
             /* Memorized object - this makes the location interesting */
-            if (o_ptr->marked && !object_is_searched_skeleton(o_ptr))
+            if (object_is_visible(o_ptr) && !object_is_searched_skeleton(o_ptr))
                 return (true);
         }
     }
@@ -978,7 +983,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                             && (cave_floorlike_bold(y, x)
                                 || (cave_feat[y][x] == FEAT_SUNLIGHT))
                             && cave_o_idx[y][x]
-                            && (&o_list[cave_o_idx[y][x]])->marked)
+                            && object_is_visible(&o_list[cave_o_idx[y][x]]))
                         {
                             show_more = true;
                         }
@@ -1143,10 +1148,12 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 continue;
 
             /* Objects (only shown when on floors, not when in rubble) */
-            if (cave_floorlike_bold(y, x) || (cave_feat[y][x] == FEAT_SUNLIGHT))
+            if (cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT
+                || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER
+                || FEAT_IS_ICE(cave_feat[y][x]) || FEAT_IS_BRIDGE(cave_feat[y][x]))
             {
                 /* Describe it */
-                if (o_ptr->marked && grid_info_is_available(y, x))
+                if (object_is_visible(o_ptr) && grid_info_is_available(y, x))
                 {
                     char o_name[80];
 
@@ -1223,15 +1230,14 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 name = "unknown square";
 
             /* Note a trap the player has rewired to catch monsters */
-            else if (cave_rewired[y][x] && (feat >= FEAT_TRAP_HEAD)
-                && (feat <= FEAT_TRAP_TAIL))
+            else if (cave_rewired[y][x] && FEAT_IS_TRAP(feat))
             {
                 strnfmt(name_buf, sizeof(name_buf), "%s (rewired)", name);
                 name = name_buf;
             }
 
             /* Pick a prefix */
-            if (*s2 && (feat >= FEAT_DOOR_HEAD))
+            if (*s2 && (feat >= FEAT_DOOR_HEAD) && !FEAT_IS_BRIDGE(feat))
                 s2 = "in ";
 
             /* Use the definite article for the unique forge */
@@ -1245,6 +1251,52 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             else
             {
                 s3 = (is_a_vowel(name[0])) ? "an " : "a ";
+            }
+
+            if (FEAT_IS_BRIDGE(feat))
+            {
+                strnfmt(name_buf, sizeof(name_buf), "%s (dry crossing)", name);
+                name = name_buf;
+            }
+            else if (feat == FEAT_WATER)
+            {
+                s3 = "";
+                name = "shallow water (move 150%, splash -3 Stealth, no scent)";
+            }
+            else if (feat == FEAT_DEEP_WATER)
+            {
+                s3 = "";
+                name = "deep water (move 400%; cannot attack while submerged)";
+            }
+            else if (feat == FEAT_MELTING_ICE)
+            {
+                s3 = "";
+                name = "melting ice (grounded: -2 attack, -2 Evasion; 20% break chance)";
+            }
+            else if (FEAT_IS_ICE(feat))
+            {
+                s3 = "";
+                name = "solid ice (grounded: -2 attack, -2 Evasion; fire melts it)";
+            }
+            else if (feat == FEAT_POISON)
+            {
+                s3 = "";
+                strnfmt(name_buf, sizeof(name_buf),
+                    "poisonous acid (up to %d stacks/contact before poison protection; leap avoids)",
+                    player_poison_terrain_dose_at(y, x));
+                name = name_buf;
+            }
+            else if (feat == FEAT_LAVA)
+            {
+                int damage = player_lava_damage_at(y, x, false);
+                s3 = "";
+                if (damage < 0)
+                    strnfmt(name_buf, sizeof(name_buf),
+                        "molten lava (instant death; jump heat %d)", player_lava_damage_at(y, x, true));
+                else
+                    strnfmt(name_buf, sizeof(name_buf),
+                        "molten lava (%d damage/turn; jump heat %d)", damage, player_lava_damage_at(y, x, true));
+                name = name_buf;
             }
 
             /* Display a message */
@@ -1361,7 +1413,7 @@ static int draw_path(
         }
 
         /* Known objects are yellow. */
-        else if (cave_o_idx[y][x] && o_list[cave_o_idx[y][x]].marked)
+        else if (cave_o_idx[y][x] && object_is_visible(&o_list[cave_o_idx[y][x]]))
         {
             colour = TERM_YELLOW;
         }
@@ -1457,7 +1509,7 @@ void target_prompt_label(int binding, cptr fallback, char* buf, size_t buflen)
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (!buf[0] || streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback ? fallback : "", buflen);
 }
@@ -2173,7 +2225,7 @@ bool target_set_interactive(int mode, int range)
             }
 
             // change the terrain
-            else if (strchr(".;'^+#:%0<>", query) || inc_terrain)
+            else if (strchr(".;'^+#:%0<>_", query) || inc_terrain)
             {
                 feature_type* f_ptr;
                 feature_type* old_f_ptr;
@@ -2207,7 +2259,9 @@ bool target_set_interactive(int mode, int range)
                         f_ptr = &f_info[i];
 
                         // stop when you find one
-                        if (f_ptr->d_char == query)
+                        if (f_ptr->d_char == query
+                            || (query == '_' && i == FEAT_WATER)
+                            || (query == '`' && i == FEAT_LAVA))
                         {
                             found = true;
                             break;

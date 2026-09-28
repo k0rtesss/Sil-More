@@ -91,7 +91,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 
 ##### Non-kind (contains the 'pile' picture) #####
@@ -1010,7 +1010,7 @@ P:-5:5d2:0:0d0
 R:ATT:-4
 R:DS:3
 A:10/50
-F:TUNNEL | TWO_HANDED | LESS_SPECIAL
+F:TUNNEL | TWO_HANDED | LESS_SPECIAL | HARNESS_STOWABLE
 D:[neutral]A heavy mattock, half tool and half weapon, built to bite
 D: stone, root, and stubborn earth. Delvers and sappers prize such an
 D: implement, for it breaks what the shovel can only shift and may, in a
@@ -1021,7 +1021,7 @@ D: before enchantment it speaks of deep halls, red forge-light, and a
 D: people who could turn a miner's tool to war without any shame in the
 D: doing.
 D: It can be equipped as a weapon and (usually) allows you to dig
-D: through rubble or quartz.
+D: through rubble, damaged walls or quartz.
 
 
 
@@ -1371,7 +1371,7 @@ D: tireless march, a louder tread, and endurance without honour.
 ##### Gloves #####
 
 N:125:& Set~ of Gloves
-G:]:U
+G:]:W
 T:5:20
 I:31:1:0
 Y:PACK:9
@@ -2297,9 +2297,15 @@ W:7:0:5:400
 P:0:0d0:0:0d0
 A:2/70
 D:A gem of inward sight, turning the bearer's perception
-D: upon themselves. It lets you know all of your status
-D: effects and also gives a slight chance to feel current
-D: curses and traits.
+D: upon themselves. It shows all of your status effects and
+D: character traits. While diseased, it identifies the disease
+D: name and cure herb if you have Alchemy. Without Alchemy,
+D: each use has a 50% chance to identify the disease name;
+D: once the name is known, each use has a 50% chance to
+D: identify the cure herb. Discoveries last for the current
+D: infection and are saved. A new infection gets a new name
+D: and cure and resets them. Each use also gives a chance
+D: to reveal one active curse.
 
 
 N:203:Warding
@@ -2445,7 +2451,8 @@ D: of the healing drink of the Valar in the Blessed Realm.
 D: It cures stunning, confusion, hallucination, poison,
 D: blindness, and fear. It halves any current bleeding,
 D: restores 20 health and 20% of your maximum health,
-D: and restores all your voice.
+D: and restores all your voice. It also cures disease and
+D: restores all attribute points lost to that disease.
 
 
 N:315:Orcish Liquor
@@ -2499,6 +2506,8 @@ F:EASY_KNOW
 D:A draught of potent healing, brewed with the virtue of
 D: herbs and ancient craft. It halves any current bleeding
 D: and restores 15 health and 16% of your maximum health.
+D: It also cures disease and restores all attribute points
+D: lost to that disease.
 
 
 N:319:Voice
@@ -2816,6 +2825,10 @@ D: even as their judgment dims. It sends you into a dark rage
 D: (+1 Str/Con, -1 Dex/Gra, special melee attack, resistance
 D: to fear) for 10d4 turns. Herbs provide nourishment for about
 D: 250 turns under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:381:Sustenance
@@ -2830,6 +2843,10 @@ D: and green even in the deepest dark. The wanderers of
 D: Beleriand long relied upon such plants when other food could
 D: not be found. It provides nourishment for about 2,000 turns
 D: under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 # Do not move Herb of Terror from this location, used by quests.
 
@@ -2846,6 +2863,10 @@ D: limbs find desperate swiftness. It induces fear that lasts
 D: for 10d4 turns and a burst of speed that lasts 5d4 turns.
 D: Herbs provide nourishment for about 250 turns under normal
 D: conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:383:Healing
@@ -2859,8 +2880,12 @@ D:An herb of ancient virtue, long known to the healers of the
 D: Eldar. Its leaves, when eaten, close wounds and ease pain,
 D: mending what battle has broken. It halves any current
 D: bleeding and restores 11 health and 12% of your maximum
-D: health. Herbs provide nourishment for about 250 turns
-D: under normal conditions.
+D: health. Herbs provide nourishment for about 250 turns under
+D: normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:384:Restoration
@@ -2873,8 +2898,12 @@ F:EASY_KNOW
 D:A rare herb prized above all others by the healers of the
 D: Elder Days, for it restores what has been diminished and
 D: renews what the Enemy's malice has drained. It restores all
-D: of your statistics by up to 3 points each. Herbs provide
+D: of your statistics by up to 3 drained points each. Herbs provide
 D: nourishment for about 250 turns under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:385:Emptiness
@@ -2888,6 +2917,10 @@ D:A withered herb, dry and ashen, that grows in blighted soil
 D: where nothing wholesome takes root. It fills the belly with
 D: a gnawing hollowness, making you more hungry (by 1,000 turns
 D: under normal conditions).
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:386:Visions
@@ -2904,6 +2937,10 @@ D: sometimes the veil of blindness is lifted thereby. It causes
 D: you to hallucinate for 80d4 turns, but cures blindness in
 D: the process. Herbs provide nourishment for about 250 turns
 D: under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:387:Entrancement
@@ -2918,6 +2955,10 @@ D: as though the eater were caught in one of the Enemy's lesser
 D: snares. It induces a trance that lasts for 10d4 turns. Herbs
 D: provide nourishment for about 250 turns under normal
 D: conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:388:Weakness
@@ -2931,6 +2972,10 @@ D:A bitter herb that saps the body's vigour, leaving the limbs
 D: heavy and the grip uncertain. It reduces your strength by
 D: one point. Herbs provide nourishment for about 250 turns
 D: under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:389:Sickness
@@ -2941,9 +2986,17 @@ P:0:0d0:0:0d0
 A:8/30
 F:EASY_KNOW
 D:A sickly herb, spotted and foul, that gnaws at the body's
-D: endurance and leaves one vulnerable to further hardship. It
-D: reduces your constitution by one point. Herbs provide
+D: endurance. Its normal effect is to infect a healthy eater
+D: with disease:
+D: -1 Constitution immediately, then -1 to a random attribute
+D: every 100 player turns until cured. Rest does not cure it.
+D: Potions of Healing or Miruvor cure disease directly and restore only
+D: the attribute points lost to disease. It provides
 D: nourishment for about 250 turns under normal conditions.
+D:If this is the cure for your current disease, eating it cures the
+D: disease and restores its disease penalties instead of applying
+D: this herb's normal effect or nourishment. Otherwise, its usual
+D: effect applies.
 
 
 N:399:& Piece~ of Dark Bread
@@ -2969,11 +3022,14 @@ W:10:0:10:3
 P:0:0d0:0:0d0
 A:10/100
 F:EASY_KNOW
-D:Strips of meat dried and salted against the long marches of
-D: war. The Edain carried such provisions on the road, for in
-D: the wilds of Beleriand fresh food was seldom to be found. It
-D: provides nourishment for about 2,000 turns under normal
-D: conditions.
+D:Strips of meat dried and salted for long marches. These
+D: poorly kept provisions are beginning to spoil, with a
+D: sour taint beneath the salt. Eating a strip provides
+D: nourishment for about 2,000 turns under normal conditions,
+D: with a 20% chance of causing disease.
+D: Disease causes -1 Constitution immediately, then -1 to a
+D: random attribute every 100 player turns until cured by a
+D: potion of Healing or Miruvor. Rest does not cure it.
 
 
 N:401:& Fragment~ of Lembas
@@ -3063,4 +3119,73 @@ A:20/10
 F:EASY_KNOW
 D:Dense fragments of metal fallen from the heights, stronger than common steel.
 D: They can be used at a forge to create or alloy star-iron items.
+
+
+##### An Unfinished Tale: fixed vault scrolls (no random allocation) #####
+# Existing scroll tile; the text is read through the normal TV_NOTE route.
+
+N:492:& Scroll~ of the First Sentence
+G:~:w
+T:32:25
+I:2:100:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:Large, uneven letters march across the parchment: "There was a green
+D: great dragon. He lived beneath a hill, and there was no knight brave
+D: enough to knock upon his door." Below, a dragon has been drawn much
+D: larger than the hill. The writer has squeezed the door in afterwards.
+
+N:493:& Scroll~ with a Careful Correction
+G:~:w
+T:32:25
+I:2:101:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:A smaller, steadier hand has written in the margin: "A great green
+D: dragon, dear. The words must go in that order." Two curved marks
+D: exchange the offending words. Nothing has been said about the dragon,
+D: the hill, or the absence of a sufficiently courageous knight.
+
+N:494:& Scroll~ with a Stubborn Reply
+G:~:w
+T:32:25
+I:2:102:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:The large letters return, pressed so hard that the nib has almost
+D: pierced the parchment: "But why? He was green before he was great."
+D: Beneath this stands a very small dragon, carefully shaded green.
+D: Beside it is the same dragon, now too large to fit upon the leaf.
+
+N:495:& Scroll~ of Wandering Words
+G:~:w
+T:32:25
+I:2:103:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:Here the story gives way to columns of curious words. Some have been
+D: crossed out; others are joined by branching lines. Along the bottom,
+D: in the first uncertain hand, is written: "If these words will not
+D: behave, perhaps I shall make some of my own." The dragon in the
+D: margin is asleep.
+
+N:496:& Scroll~ of the Unwritten Ending
+G:~:w
+T:32:25
+I:2:104:0
+Y:PACK:1
+W:0:0:1:0
+P:0:0d0:0:0d0
+F:EASY_KNOW | NO_SMITHING | IGNORE_ALL
+D:Only one line has been written: "And when the dragon woke--"
+D: The rest of the scroll is blank. A heavy green scale holds the
+D: parchment flat, just below the place where the next word should be.
 

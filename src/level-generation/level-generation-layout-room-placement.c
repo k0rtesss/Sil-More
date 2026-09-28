@@ -1,6 +1,7 @@
 /* File: level-generation-layout-room-placement.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 
 bool room_build_in_bounds(int typ, int y1, int y2, int x1, int x2)
@@ -12,6 +13,8 @@ bool room_build_in_bounds(int typ, int y1, int y2, int x1, int x2)
 
     int y = rand_range(MAX(5, y1 + 3), MIN(p_ptr->cur_map_hgt - 5, y2 - 3));
     int x = rand_range(MAX(5, x1 + 3), MIN(p_ptr->cur_map_wid - 5, x2 - 3));
+    if (typ < 8) terrain_history_pick_bank_site(&y, &x,
+        MAX(5, y1 + 3), MAX(5, x1 + 3), MIN(p_ptr->cur_map_hgt - 5, y2 - 3), MIN(p_ptr->cur_map_wid - 5, x2 - 3));
 
     switch (typ)
     {

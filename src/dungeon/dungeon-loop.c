@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "tutorial/tutorial-game.h"
 
 /*
  * Interact with the current dungeon level.
@@ -13,6 +14,7 @@ void dungeon(void)
 {
     monster_type* m_ptr;
     int i;
+    int previous_depth = last_music_depth;
 
     log_debug("Entering dungeon level %d", p_ptr->depth);
 
@@ -224,6 +226,17 @@ void dungeon(void)
     /* Refresh */
     log_debug("Final terminal refresh");
     Term_fresh();
+    sdl_sound_update_environment();
+
+    /* Confirm downward progress after the new level is visible.  Comparing
+     * against the previous displayed level avoids replaying this on restore or
+     * when a blocked descent leaves the player at the same depth. */
+    if (!p_ptr->restoring && (previous_depth >= 0)
+        && (p_ptr->depth > previous_depth))
+    {
+        msg_format("You have descended deeper into the dungeon, to %d ft.",
+            p_ptr->depth * 50);
+    }
 
     /*
      * Show partition entry messages/XP after the initial draw so they can't be
@@ -242,6 +255,7 @@ void dungeon(void)
     keyboard_preset_maybe_show_first_game_selection();
     sdl_touch_maybe_show_first_game_tutorial();
     sdl_mouse_maybe_show_first_game_tutorial();
+    tutorial_game_start();
 
     log_info("Dungeon display setup completed successfully");
 
@@ -355,6 +369,7 @@ void dungeon(void)
                 /* Process monster with even more energy first */
             log_trace("[LOOP] process_monsters pre-player: threshold=%d", p_ptr->energy + 1);
             TIME_PHASE("monsters(pre-player)", process_monsters(p_ptr->energy + 1));
+            sil_popup_trace_stage("pre-player-monsters-complete");
             log_trace("[LOOP] after process_monsters pre-player: combat_number=%d old=%d", combat_number, combat_number_old);
 
             /* If still alive */
@@ -373,10 +388,12 @@ void dungeon(void)
                 /* Process the player */
                 log_trace("[LOOP] process_player start");
                 TIME_PHASE("process_player", process_player());
+                sil_popup_trace_stage("process-player-returned");
                 log_trace("[LOOP] process_player end: combat_number=%d old=%d", combat_number, combat_number_old);
                 
                 /* Scan for artifacts near player and mark as seen */
                 scan_artifacts_near_player();
+                sil_popup_trace_stage("artifact-scan-complete");
                 
             }
         }
@@ -420,7 +437,12 @@ void dungeon(void)
 
         /* Process monsters (any that haven't had a chance to move yet) */
     log_trace("[LOOP] process_monsters post-player: threshold=100");
-    TIME_PHASE("monsters(post-player)", process_monsters(100));
+    {
+        Uint64 popup_phase = sil_popup_trace_phase_begin();
+        TIME_PHASE("monsters(post-player)", process_monsters(100));
+        sil_popup_trace_phase_end("monsters-post-player", popup_phase);
+    }
+    sil_popup_trace_stage("post-player-monsters-complete");
     log_trace("[LOOP] after process_monsters post-player: combat_number=%d old=%d", combat_number, combat_number_old);
     
         /* Notice stuff */
@@ -455,7 +477,12 @@ void dungeon(void)
             break;
 
         /* Process the world */
-        TIME_PHASE("process_world", process_world());
+        {
+            Uint64 popup_phase = sil_popup_trace_phase_begin();
+            TIME_PHASE("process_world", process_world());
+            sil_popup_trace_phase_end("world-processing", popup_phase);
+        }
+        sil_popup_trace_stage("world-processing-complete");
 
         /* Notice stuff */
         if (p_ptr->notice)
@@ -512,6 +539,8 @@ void dungeon(void)
             }
 
             /* Give this monster some energy */
+            if (r_info[m_ptr->r_idx].flags5 & RF5_SPRINTING)
+                calc_monster_speed(m_ptr->fy, m_ptr->fx);
             m_ptr->energy += extract_energy[m_ptr->mspeed];
         }
 

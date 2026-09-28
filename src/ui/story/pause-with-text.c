@@ -18,77 +18,9 @@ const char entry_poetry[][100] = { { "Into the vast and echoing gloom," },
 
     { "" } };
 
-const char tutorial_leave_text[][100] = {
-    { "You have finished the first half of the tutorial and are ready" },
-    { "to create a new character." }, { " " },
-    { "Don't let the choices overwhelm you the first time." },
-    { "Just start with the default Race and Character, then invest most" },
-    { "of your starting experience in Melee and Evasion." },
-    { "Once the game begins, finding some weapons and armour should" },
-    { "be your top priority." }, { " " },
-    { "Remember that a key feature of Sil (and all Roguelike games)" },
-    { "is that you cannot use savepoints: if you die, that's it." },
-    { "It is thus a challenging game where you need to really *think*." },
-    { "You will die many times. When you do: reflect on what to learn" },
-    { "from that death, see if you set a high score, then think about" },
-    { "all the things you want to do differently with the next character..." },
 
-    { "" }
-};
 
-const char tutorial_win_text[][100] = {
-    { "Congratulations. You have survived a fire-drake (usually found" },
-    { "at 900 ft!), and have finished the tutorial in fine form." },
-    { "You are more than ready to create a new character." }, { " " },
-    { "Don't let the choices overwhelm you the first time." },
-    { "Just start with the default Race and Character, then invest most" },
-    { "of your starting experience in Melee and Evasion." },
-    { "Once the game begins, finding some weapons and armour should" },
-    { "be your top priority." }, { " " },
-    { "Remember that a key feature of Sil (and all Roguelike games)" },
-    { "is that you cannot use savepoints: if you die, that's it." },
-    { "It is thus a challenging game where you need to really *think*." },
-    { "You will die many times. When you do: reflect on what to learn" },
-    { "from that death, see if you set a high score, then think about" },
-    { "all the things you want to do differently with the next character..." },
 
-    { "" }
-};
-
-const char tutorial_early_death_text[][100] = { { "You have been slain." },
-    { " " },
-    { "A key feature of Sil (and all Roguelike games) is that you cannot" },
-    { "use savepoints: if you die, that's it!" },
-    { "It is thus a challenging game where you need to really *think*." },
-    { " " },
-    { "However, it is a bit frustrating to die before the end of the" },
-    { "tutorial, so we evidently made it a bit too deadly." }, { " " },
-    { "Just restart the tutorial and you should be back to where you" },
-    { "were in a couple of minutes. Remember that if combat is not going" },
-    { "your way, you can try to escape and heal, then either come back" },
-    { "and again to defeat your adversary, or simply ignore it." },
-
-    { "" } };
-
-const char tutorial_late_death_text[][100] = {
-    { "Congratulations: you have finished the tutorial." }, { " " },
-    { "You have also just been through a rite of passage: dying." },
-    { "Remember that a key feature of Sil (and all Roguelike games)" },
-    { "is that you cannot use savepoints: if you die, that's it." },
-    { "It is thus a challenging game where you need to really *think*." },
-    { "You will die many times. When you do: reflect on what to learn" },
-    { "from that death, see if you set a high score, then think about" },
-    { "all the things you want to do differently with the next character..." },
-    { " " },
-    { "You are now more than ready to create a character and start playing." },
-    { " " }, { "Don't let the choices overwhelm you the first time." },
-    { "Just start with the default Race and Character, then invest most" },
-    { "of your starting experience in Melee and Evasion." },
-    { "Once the game begins, finding some weapons and armour should" },
-    { "be your top priority." },
-
-    { "" }
-};
 
 const char throne_poetry[][100] = { { "Loud rose a din of laughter hoarse," },
     { "  self-loathing yet without remorse;" },
@@ -143,52 +75,6 @@ const char ultimate_bug_text[][100]
 
           { "" } };
 
-static bool pause_with_text_is_tutorial(const char desc[][100])
-{
-    return desc == tutorial_leave_text || desc == tutorial_win_text
-        || desc == tutorial_early_death_text
-        || desc == tutorial_late_death_text;
-}
-
-/* The legacy tutorial conclusion/death pages do not support inline spans.
- * Their source is already split into short ideas, so colour only the lines
- * carrying success, danger, or concrete next-step advice. */
-static byte pause_with_text_tutorial_attr(cptr line)
-{
-    if (!line)
-        return TERM_WHITE;
-
-    if (strstr(line, "Congratulations") || strstr(line, "finished")
-        || strstr(line, "survived") || strstr(line, "more than ready"))
-    {
-        return TERM_L_GREEN;
-    }
-
-    if (strstr(line, "slain") || strstr(line, "cannot use savepoints")
-        || strstr(line, "if you die") || strstr(line, "You will die")
-        || strstr(line, "from that death") || strstr(line, "too deadly"))
-    {
-        return TERM_L_RED;
-    }
-
-    if (strstr(line, "default Race and Character")
-        || strstr(line, "starting experience")
-        || strstr(line, "Melee and Evasion")
-        || strstr(line, "weapons and armour")
-        || strstr(line, "restart the tutorial")
-        || strstr(line, "escape and heal")
-        || strstr(line, "high score")
-        || strstr(line, "top priority"))
-    {
-        return TERM_L_BLUE;
-    }
-
-    if (strstr(line, "*think*") || strstr(line, "reflect on what to learn"))
-        return TERM_YELLOW;
-
-    return TERM_WHITE;
-}
-
 static void pause_with_text_semantic_add(cptr text, byte attr,
     int base_indent, int* line_count)
 {
@@ -215,7 +101,6 @@ static void pause_with_text_sdl(const char desc[][100], int row, int col,
     int banner_col = MAX(0, col - 5);
     int tail_col = banner_col + 4;
     int n_extra = 0;
-    bool tutorial_text = pause_with_text_is_tutorial(desc);
 
     (void)row;
 
@@ -255,8 +140,7 @@ static void pause_with_text_sdl(const char desc[][100], int row, int col,
 
     for (int i = 0; desc && desc[i][0]; i++)
     {
-        byte attr = tutorial_text
-            ? pause_with_text_tutorial_attr(desc[i]) : TERM_WHITE;
+        byte attr = TERM_WHITE;
 
         pause_with_text_semantic_add(desc[i], attr, col - origin_col,
             &line_count);

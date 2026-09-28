@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -15,6 +16,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_guid.h"
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
+#include "ui/question.h"
 
 static void desc_obj_fake(int k_idx);
 static cptr equipment_slot_text(int slot);
@@ -3921,6 +3923,30 @@ static void supply_register_page_tabs(const knowledge_browser_layout* layout)
     }
 }
 
+/*
+ * Register the tab strip as a horizontal-swipe target and make horizontal
+ * swipes work from the content areas too.  The tab strip has no vertical
+ * command of its own, so vertical motion there is consumed without sending a
+ * stray cursor key.
+ */
+static void knowledge_enable_horizontal_page_swipe(
+    const knowledge_browser_layout* layout, int touch_category, int tab_row,
+    int previous_key, int next_key)
+{
+    if (!layout || layout->term_wid <= 0 || layout->term_hgt <= 0)
+        return;
+    if (tab_row < 0 || tab_row >= layout->term_hgt)
+        return;
+
+    if (ui_scroll_area_add_cols(0, layout->term_wid - 1, tab_row, tab_row,
+            touch_category))
+    {
+        ui_scroll_area_set_keys(0, 0, previous_key, next_key);
+        ui_scroll_area_set_horizontal_page_mode(true);
+        ui_scroll_area_enable_horizontal_page_swipe(previous_key, next_key);
+    }
+}
+
 static void knowledge_begin_touch_scroll_area(
     const knowledge_browser_layout* layout, int touch_category)
 {
@@ -4242,24 +4268,6 @@ static bool equipment_slot_is_inactive_harness_item(int slot)
         && !equipment_slot_active_for_display(slot);
 }
 
-static int inactive_harness_ready_mode_for_slot(int slot)
-{
-    if (!equipment_slot_is_inactive_harness_item(slot))
-        return PLAYER_ACTIVE_WEAPON_NONE;
-
-    switch (slot)
-    {
-    case INVEN_WIELD:
-    case INVEN_ARM:
-        return PLAYER_ACTIVE_WEAPON_MELEE;
-    case INVEN_BOW:
-    case INVEN_QUIVER1:
-        return PLAYER_ACTIVE_WEAPON_RANGED_1;
-    default:
-        return PLAYER_ACTIVE_WEAPON_NONE;
-    }
-}
-
 static bool equipment_slot_accepts_object(int slot, const object_type* o_ptr)
 {
     int natural_slot;
@@ -4322,6 +4330,12 @@ static object_type* equipment_entry_object(const equipment_list_entry* entry)
     if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
         return player_quiver_arrow_object(entry->item_idx);
 
+    if (entry->item_idx >= 0 && entry->item_idx < INVEN_TOTAL
+        && inventory_slot_is_quivered_arrow(entry->item_idx))
+    {
+        return &inventory[entry->item_idx];
+    }
+
     if (player_inventory_handle_is_carried(entry->item_idx))
         return player_inventory_object(entry->item_idx);
 
@@ -4332,6 +4346,47 @@ static object_type* equipment_entry_object(const equipment_list_entry* entry)
         return &o_list[entry->floor_idx];
 
     return NULL;
+}
+
+static int equipment_entry_item_handle(const equipment_list_entry* entry)
+{
+    if (!entry || entry->floor_idx > 0 || entry->supply_idx >= 0)
+        return -1;
+    return entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL
+        ? entry->equip_idx : entry->item_idx;
+}
+
+static bool equipment_entry_has_active_item_menu(const equipment_list_entry* entry)
+{
+    return player_active_item_menu_available(equipment_entry_item_handle(entry));
+}
+
+static bool equipment_entry_is_active_combat(const equipment_list_entry* entry)
+{
+    int item = equipment_entry_item_handle(entry);
+    return (item == INVEN_WIELD || item == INVEN_BOW || item == INVEN_ARM)
+        && inventory[item].k_idx && player_equipment_slot_is_active(item);
+}
+
+static cptr equipment_entry_active_action_text(
+    const equipment_list_entry* entry)
+{
+    return equipment_entry_is_active_combat(entry)
+        ? "Change setup" : "Make active";
+}
+
+static bool equipment_entry_is_quiver_arrow(
+    const equipment_list_entry* entry)
+{
+    object_type* o_ptr = equipment_entry_object(entry);
+
+    if (!entry || !o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_ARROW)
+        return false;
+
+    return (entry->item_idx >= QUIVER_INDEX
+            && entry->item_idx < QUIVER_INDEX_END)
+        || (entry->item_idx >= 0 && entry->item_idx < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(entry->item_idx));
 }
 
 static bool equipment_add_entry(equipment_list_entry entries[], int* count,
@@ -4870,6 +4925,8 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         {
             return "Harness";
         }
+        if (equipment_entry_is_active_combat(entry))
+            return "Active";
         return equipment_slot_where_text(entry->equip_idx);
     }
 
@@ -5145,6 +5202,9 @@ static bool equipment_entry_volume_text(const object_type* o_ptr, char* buf,
     if (!o_ptr || !o_ptr->k_idx)
         return false;
 
+    if (object_is_quivered_arrow(o_ptr))
+        return false;
+
     group = inventory_limit_group_for_object(o_ptr);
     if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
         return false;
@@ -5229,7 +5289,8 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
     }
     object_desc(name, sizeof(name), o_ptr, true, 3);
     if (entry->equipped && !show_source)
-        SDL_strlcat(name, " [equipped]", sizeof(name));
+        SDL_strlcat(name, equipment_entry_is_active_combat(entry)
+            ? " [active]" : " [equipped]", sizeof(name));
     else if (entry->floor_idx > 0 && entry->floor_idx < o_max && !show_source)
         SDL_strlcat(name, " [floor]", sizeof(name));
     strnfmt(display_name, display_name_len, "%s%s", label_prefix, name);
@@ -5785,6 +5846,30 @@ static bool equipment_ready_after_wield(int selected_slot)
     return true;
 }
 
+static cptr equipment_menu_use_action_text(const equipment_list_entry* entry,
+    int selected_slot, supply_floor_action floor_action)
+{
+    object_type* obj;
+
+    if (!entry)
+        return "Use";
+    if (entry->floor_idx > 0 && entry->floor_idx < o_max)
+        return floor_touch_action_text(floor_action,
+            &o_list[entry->floor_idx], entry->floor_idx);
+    if (selected_slot != INVEN_BELT
+        && equipment_entry_has_active_item_menu(entry))
+        return equipment_entry_active_action_text(entry);
+    if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
+        return browser_item_use_action_text(&inventory[entry->equip_idx],
+            entry->equip_idx);
+    if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
+        return entry->equipped ? "Remove" : "Make active";
+    obj = equipment_entry_object(entry);
+    if (!obj || !obj->k_idx)
+        return "Use";
+    return selected_slot == EQUIPMENT_MENU_QUIVERS ? "Quiver" : "Equip";
+}
+
 static bool equipment_menu_use_entry(equipment_list_entry* entry,
     int selected_slot, supply_floor_action floor_action)
 {
@@ -5816,21 +5901,12 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         return equipment_ready_after_wield(selected_slot);
     }
 
+    if (selected_slot != INVEN_BELT
+        && equipment_entry_has_active_item_menu(entry))
+        return do_cmd_active_item(equipment_entry_item_handle(entry));
+
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        int ready_mode = inactive_harness_ready_mode_for_slot(
-            entry->equip_idx);
-
-        if (entry->equip_idx == INVEN_BOW && !entry->equipped)
-        {
-            if (!confirm_equipment_entry_action("Ready", entry))
-                return false;
-            return player_ready_bow_with_arrow(
-                player_quiver_selected_arrow_slot());
-        }
-        if (ready_mode != PLAYER_ACTIVE_WEAPON_NONE)
-            return player_set_active_weapon_mode(ready_mode, true, true);
-
         if (!confirm_equipment_entry_action(
                 browser_item_use_action_text(
                     &inventory[entry->equip_idx], entry->equip_idx), entry))
@@ -5970,6 +6046,7 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry)
 static const inventory_menu_group inventory_browser_groups[] = {
     INVENTORY_MENU_GROUP_PACK,
     INVENTORY_MENU_GROUP_HARNESS,
+    INVENTORY_MENU_GROUP_QUIVER,
     INVENTORY_MENU_GROUP_JEWELRY
 };
 
@@ -5985,6 +6062,8 @@ static cptr inventory_browser_group_text(inventory_menu_group group)
         return "Pack";
     case INVENTORY_MENU_GROUP_HARNESS:
         return "Harness";
+    case INVENTORY_MENU_GROUP_QUIVER:
+        return "Quiver";
     case INVENTORY_MENU_GROUP_JEWELRY:
         return "Jewelry Pouch";
     default:
@@ -6012,6 +6091,8 @@ static bool inventory_browser_object_matches_group(
     if (!o_ptr || !o_ptr->k_idx)
         return false;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return object_is_quivered_arrow(o_ptr);
     if (group == INVENTORY_MENU_GROUP_PACK)
         return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK;
     if (group == INVENTORY_MENU_GROUP_HARNESS)
@@ -6028,6 +6109,9 @@ static bool inventory_browser_equipped_slot_matches_group(
     if (slot < INVEN_WIELD || slot >= INVEN_TOTAL || !inventory[slot].k_idx)
         return false;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return object_is_quivered_arrow(&inventory[slot]);
+
     return inventory_browser_object_matches_group(group, &inventory[slot]);
 }
 
@@ -6038,6 +6122,13 @@ static bool inventory_browser_group_includes_supplies(
 {
     (void)group;
     return false;
+}
+
+static int inventory_browser_quiver_entry_count(void)
+{
+    int slots[QUIVER_ARROW_CAPACITY + 1];
+
+    return player_quiver_arrow_slots(slots, (int)N_ELEMENTS(slots));
 }
 
 #define INVENTORY_SELECT_INVALID (-1000000)
@@ -6058,6 +6149,14 @@ static int inventory_select_entry_item(const equipment_list_entry* entry)
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         return entry->equip_idx;
 
+    if ((entry->item_idx >= QUIVER_INDEX
+            && entry->item_idx < QUIVER_INDEX_END)
+        || (entry->item_idx >= 0 && entry->item_idx < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(entry->item_idx)))
+    {
+        return entry->item_idx;
+    }
+
     if (player_inventory_handle_is_carried(entry->item_idx))
         return entry->item_idx;
 
@@ -6077,6 +6176,13 @@ static bool inventory_select_item_allowed(
     if (item < 0)
     {
         if (!(flags & USE_FLOOR))
+            return false;
+    }
+    else if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
+    {
+        if (!(flags & USE_INVEN))
             return false;
     }
     else if (item >= INVEN_WIELD && item < INVEN_TOTAL)
@@ -6149,6 +6255,14 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
         return;
 
     buf[0] = '\0';
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+    {
+        strnfmt(buf, buflen, "%d/%d arrows (%d free)",
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
+            player_quiver_arrow_space());
+        return;
+    }
+
     if (group == INVENTORY_MENU_GROUP_PACK)
         limit_group = INV_LIMIT_PACK;
     else if (group == INVENTORY_MENU_GROUP_HARNESS)
@@ -6261,6 +6375,9 @@ static byte inventory_browser_section_attr(inventory_menu_group group)
     enum inventory_limit_group limit_group;
     int limit;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return TERM_L_GREEN;
+
     if (group == INVENTORY_MENU_GROUP_JEWELRY)
         return TERM_VIOLET;
 
@@ -6287,6 +6404,15 @@ static void inventory_browser_section_header(inventory_menu_group group,
 
     if (!buf || buflen == 0)
         return;
+
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+    {
+        strnfmt(buf, buflen, "%s (%d): %d/%d arrows; %d free",
+            inventory_browser_group_text(group), entry_cnt,
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
+            player_quiver_arrow_space());
+        return;
+    }
 
     if (group == INVENTORY_MENU_GROUP_JEWELRY)
     {
@@ -6363,6 +6489,16 @@ static void inventory_browser_group_status(inventory_menu_group group,
         return;
     }
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+    {
+        strnfmt(buf, buflen,
+            "%s: %d choice%s. Arrows %d/%d (%d free). Weight %s.",
+            inventory_browser_group_text(group), entry_cnt,
+            (entry_cnt == 1) ? "" : "s", player_quiver_arrow_count(),
+            QUIVER_ARROW_CAPACITY, player_quiver_arrow_space(), weight);
+        return;
+    }
+
     inventory_browser_group_limit_status(group, limits, sizeof(limits));
     if (limits[0])
     {
@@ -6382,6 +6518,9 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
 {
     int count = 0;
 
+    if (group == INVENTORY_MENU_GROUP_QUIVER)
+        return inventory_browser_quiver_entry_count();
+
     if (group == INVENTORY_MENU_GROUP_ALL)
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
@@ -6395,6 +6534,7 @@ static int count_inventory_browser_group_entries(inventory_menu_group group)
         }
 
         count += player_pack_entry_count();
+        count += inventory_browser_quiver_entry_count();
     }
     else
     {
@@ -6495,6 +6635,20 @@ static int count_inventory_select_group_entries(inventory_menu_group group,
             if (inventory_select_item_allowed(request, item))
                 count++;
         }
+
+        if (group == INVENTORY_MENU_GROUP_ALL
+            || group == INVENTORY_MENU_GROUP_QUIVER)
+        {
+            int slots[QUIVER_ARROW_CAPACITY + 1];
+            int slot_count = player_quiver_arrow_slots(slots,
+                (int)N_ELEMENTS(slots));
+
+            for (int i = 0; i < slot_count; i++)
+            {
+                if (inventory_select_item_allowed(request, slots[i]))
+                    count++;
+            }
+        }
     }
 
     if (request->item_select_flags & USE_FLOOR)
@@ -6565,6 +6719,22 @@ static void prepare_inventory_browser_group_icons(
             object_copy(icon_obj, &inventory[i]);
             icons[group_idx].has_icon = true;
             break;
+        }
+
+        if (icons[group_idx].has_icon)
+            continue;
+
+        if (group == INVENTORY_MENU_GROUP_ALL
+            || group == INVENTORY_MENU_GROUP_QUIVER)
+        {
+            int handle = player_quiver_first_arrow_slot();
+            object_type* o_ptr = player_quiver_arrow_object(handle);
+
+            if (o_ptr && o_ptr->k_idx)
+            {
+                object_copy(icon_obj, o_ptr);
+                icons[group_idx].has_icon = true;
+            }
         }
 
         if (icons[group_idx].has_icon)
@@ -6758,6 +6928,25 @@ static int collect_inventory_page_entries(inventory_menu_group group,
         }
     }
 
+    if ((group == INVENTORY_MENU_GROUP_ALL
+            || group == INVENTORY_MENU_GROUP_QUIVER)
+        && (!select_mode || (request->item_select_flags & USE_INVEN)))
+    {
+        int slots[QUIVER_ARROW_CAPACITY + 1];
+        int slot_count = player_quiver_arrow_slots(slots,
+            (int)N_ELEMENTS(slots));
+
+        for (int i = 0; i < slot_count && count < capacity; i++)
+        {
+            if (!inventory_select_item_allowed(request, slots[i]))
+                continue;
+
+            equipment_add_entry(entries, &count, capacity, slots[i], -1, -1,
+                player_quiver_counts_as_equipped()
+                    && slots[i] == player_quiver_selected_arrow_slot());
+        }
+    }
+
     for (int i = 0; i < player_pack_entry_count() && count < capacity; i++)
     {
         int item = player_pack_entry_handle_at(i);
@@ -6856,6 +7045,8 @@ static int collect_inventory_page_all_entries(equipment_list_entry entries[],
             limit_group = INV_LIMIT_PACK;
         else if (group == INVENTORY_MENU_GROUP_HARNESS)
             limit_group = INV_LIMIT_HARNESS;
+        else if (group == INVENTORY_MENU_GROUP_QUIVER)
+            limit_group = INV_LIMIT_NONE;
         else
             limit_group = INV_LIMIT_JEWELRY;
         int added = collect_inventory_page_entries(group, entries + count,
@@ -6906,6 +7097,270 @@ static bool inventory_replacement_type_matches(const object_type* incoming,
     }
 
     return false;
+}
+
+static enum inventory_limit_group inventory_storage_exchange_target_group(
+    const supply_menu_request* request)
+{
+    if (!request)
+        return INV_LIMIT_NONE;
+
+    if (request->storage_exchange_target == OBJECT_STORAGE_PACK)
+        return INV_LIMIT_PACK;
+    if (request->storage_exchange_target == OBJECT_STORAGE_HARNESS)
+        return INV_LIMIT_HARNESS;
+    return INV_LIMIT_NONE;
+}
+
+static bool inventory_storage_exchange_possible(
+    const supply_menu_request* request, const object_type* outgoing)
+{
+    if (!request || !request->storage_exchange_incoming || !outgoing)
+        return false;
+
+    if (request->storage_exchange_allow_non_stowable)
+    {
+        return inventory_limit_floor_storage_exchange_possible(
+            request->storage_exchange_incoming, outgoing);
+    }
+
+    if (request->storage_exchange_partial)
+    {
+        for (int quantity = 1;
+             quantity <= request->storage_exchange_incoming->number; ++quantity)
+            if (inventory_limit_storage_exchange_quantity_possible(
+                    request->storage_exchange_incoming, outgoing, quantity))
+                return true;
+        return false;
+    }
+
+    return inventory_limit_storage_exchange_possible(
+        request->storage_exchange_incoming, outgoing);
+}
+
+static bool inventory_storage_exchange_object_allowed(
+    const supply_menu_request* request, const object_type* o_ptr)
+{
+    enum inventory_limit_group target_group;
+
+    if (!request || !request->storage_exchange_mode
+        || !request->storage_exchange_incoming
+        || !request->storage_exchange_incoming->k_idx
+        || !o_ptr || !o_ptr->k_idx)
+    {
+        return false;
+    }
+
+    target_group = inventory_storage_exchange_target_group(request);
+    if (target_group == INV_LIMIT_NONE
+        || inventory_limit_group_for_object(o_ptr) != target_group)
+    {
+        return false;
+    }
+
+    if (!request->storage_exchange_allow_non_stowable
+        && !object_can_choose_pack_or_harness(o_ptr))
+    {
+        return false;
+    }
+
+    return inventory_storage_exchange_possible(request, o_ptr);
+}
+
+static bool inventory_storage_exchange_equipment_allowed(
+    const supply_menu_request* request, int slot)
+{
+    if (!request || !request->storage_exchange_include_equip
+        || slot < INVEN_WIELD || slot >= INVEN_TOTAL
+        || !inventory[slot].k_idx || cursed_p(&inventory[slot]))
+    {
+        return false;
+    }
+
+    return inventory_storage_exchange_object_allowed(request,
+        &inventory[slot]);
+}
+
+static int count_inventory_storage_exchange_group_entries(
+    inventory_menu_group group, const supply_menu_request* request)
+{
+    int count = 0;
+
+    if (!request || !request->storage_exchange_mode)
+        return 0;
+
+    if (request->storage_exchange_include_equip)
+    {
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        {
+            if (group != INVENTORY_MENU_GROUP_ALL
+                && !inventory_browser_equipped_slot_matches_group(group, i))
+            {
+                continue;
+            }
+            if (inventory_storage_exchange_equipment_allowed(request, i))
+                count++;
+        }
+    }
+
+    for (int i = 0; i < player_pack_entry_count(); i++)
+    {
+        object_type* o_ptr = player_pack_entry_at(i);
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        if (group != INVENTORY_MENU_GROUP_ALL
+            && !inventory_browser_object_matches_group(group, o_ptr))
+        {
+            continue;
+        }
+        if (inventory_storage_exchange_object_allowed(request, o_ptr))
+            count++;
+    }
+
+    return count;
+}
+
+static void compute_inventory_storage_exchange_group_totals(
+    int totals[INVENTORY_BROWSER_GROUP_COUNT],
+    const supply_menu_request* request)
+{
+    for (int i = 0; i < INVENTORY_BROWSER_GROUP_COUNT; i++)
+        totals[i] = count_inventory_storage_exchange_group_entries(
+            inventory_browser_groups[i], request);
+}
+
+static int collect_inventory_storage_exchange_entries(
+    inventory_menu_group group, equipment_list_entry entries[], int capacity,
+    const supply_menu_request* request)
+{
+    int count = 0;
+
+    if (!entries || capacity <= 0 || !request
+        || !request->storage_exchange_mode)
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < capacity; i++)
+        equipment_entry_clear(&entries[i]);
+
+    if (request->storage_exchange_include_equip)
+    {
+        for (int i = INVEN_WIELD; i < INVEN_TOTAL && count < capacity; i++)
+        {
+            if (group != INVENTORY_MENU_GROUP_ALL
+                && !inventory_browser_equipped_slot_matches_group(group, i))
+            {
+                continue;
+            }
+            if (inventory_storage_exchange_equipment_allowed(request, i))
+            {
+                equipment_add_entry(entries, &count, capacity, -1, -1, i,
+                    equipment_slot_active_for_display(i));
+            }
+        }
+    }
+
+    for (int i = 0; i < player_pack_entry_count() && count < capacity; i++)
+    {
+        int item = player_pack_entry_handle_at(i);
+        object_type* o_ptr = player_inventory_object(item);
+
+        if (!o_ptr || !o_ptr->k_idx)
+            continue;
+        if (group != INVENTORY_MENU_GROUP_ALL
+            && !inventory_browser_object_matches_group(group, o_ptr))
+        {
+            continue;
+        }
+        if (inventory_storage_exchange_object_allowed(request, o_ptr))
+            equipment_add_entry(entries, &count, capacity, item, -1, -1,
+                false);
+    }
+
+    return count;
+}
+
+static bool inventory_storage_exchange_overlay_entry(
+    const supply_menu_request* request, equipment_list_entry* entry)
+{
+    const object_type* objects[2];
+    const char* headings[2];
+    char incoming_heading[40];
+    char outgoing_heading[40];
+    object_type* candidate;
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+
+    if (!request || !request->storage_exchange_mode
+        || !request->storage_exchange_incoming || !entry)
+    {
+        return false;
+    }
+
+    candidate = equipment_entry_object(entry);
+    if (!candidate || !candidate->k_idx)
+        return false;
+
+    source_group = inventory_limit_group_for_object(
+        request->storage_exchange_incoming);
+    target_group = inventory_storage_exchange_target_group(request);
+    if (source_group == INV_LIMIT_NONE || target_group == INV_LIMIT_NONE)
+        return false;
+
+    strnfmt(incoming_heading, sizeof(incoming_heading), "Move to %s",
+        inventory_limit_group_name(target_group));
+    strnfmt(outgoing_heading, sizeof(outgoing_heading), "Move to %s",
+        inventory_limit_group_name(source_group));
+    headings[0] = incoming_heading;
+    headings[1] = outgoing_heading;
+    objects[0] = request->storage_exchange_incoming;
+    objects[1] = candidate;
+
+    return object_info_overlay_show_multi(objects, headings, 2);
+}
+
+static void inventory_storage_exchange_volume_status(
+    const supply_menu_request* request, inventory_menu_group selected_group,
+    const equipment_list_entry* selected_entry, int candidate_count,
+    char* buf, size_t buflen)
+{
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+    object_type* candidate;
+
+    if (!buf || buflen == 0)
+        return;
+    buf[0] = '\0';
+    if (!request || !request->storage_exchange_incoming)
+        return;
+
+    source_group = inventory_limit_group_for_object(
+        request->storage_exchange_incoming);
+    target_group = inventory_storage_exchange_target_group(request);
+    if (source_group == INV_LIMIT_NONE || target_group == INV_LIMIT_NONE)
+        return;
+
+    candidate = equipment_entry_object(selected_entry);
+    if (candidate && candidate->k_idx
+        && inventory_storage_exchange_possible(request, candidate))
+    {
+        strnfmt(buf, buflen,
+            "Move the incoming item to %s; the selected item moves to %s.",
+            inventory_limit_group_name(target_group),
+            inventory_limit_group_name(source_group));
+    }
+    else
+    {
+        strnfmt(buf, buflen,
+            "%s: %d exchange candidate%s. Select an item to move to %s; "
+            "the incoming item moves to %s.",
+            inventory_browser_group_text(selected_group), candidate_count,
+            candidate_count == 1 ? "" : "s",
+            inventory_limit_group_name(source_group),
+            inventory_limit_group_name(target_group));
+    }
 }
 
 static bool inventory_replacement_object_allowed(
@@ -7351,13 +7806,11 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
     if (!entry)
         return "Use";
 
+    if (equipment_entry_has_active_item_menu(entry))
+        return equipment_entry_active_action_text(entry);
+
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        if (inactive_harness_ready_mode_for_slot(entry->equip_idx)
-            != PLAYER_ACTIVE_WEAPON_NONE)
-        {
-            return "Ready";
-        }
         return browser_item_use_action_text(&inventory[entry->equip_idx],
             entry->equip_idx);
     }
@@ -7366,13 +7819,16 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
         return floor_touch_action_text(floor_action,
             &o_list[entry->floor_idx], entry->floor_idx);
 
+    if (equipment_entry_is_quiver_arrow(entry))
+        return "Pack";
+
     if (player_inventory_handle_is_carried(entry->item_idx))
     {
         o_ptr = player_inventory_object(entry->item_idx);
         if (object_can_choose_pack_or_harness(o_ptr))
         {
             return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
-                ? "Ready" : "Store";
+                ? "Move to Harness" : "Store in Pack";
         }
         return browser_item_use_action_text(o_ptr, entry->item_idx);
     }
@@ -7434,14 +7890,11 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
         return floor_entry_perform_action(entry->floor_idx, floor_action, -1);
     }
 
+    if (equipment_entry_has_active_item_menu(entry))
+        return do_cmd_active_item(equipment_entry_item_handle(entry));
+
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
-        int ready_mode = inactive_harness_ready_mode_for_slot(
-            entry->equip_idx);
-
-        if (ready_mode != PLAYER_ACTIVE_WEAPON_NONE)
-            return player_set_active_weapon_mode(ready_mode, true, true);
-
         if (!confirm_equipment_entry_action(
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
@@ -7451,13 +7904,20 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
         return true;
     }
 
+    if (equipment_entry_is_quiver_arrow(entry))
+    {
+        if (!confirm_equipment_entry_action("Pack", entry))
+            return false;
+
+        return do_cmd_move_item_to_storage(entry->item_idx,
+            OBJECT_STORAGE_PACK);
+    }
+
     if (player_inventory_handle_is_carried(entry->item_idx))
     {
         object_type* o_ptr = player_inventory_object(entry->item_idx);
         cptr action = inventory_page_use_action_text(entry, floor_action);
-
-        if (!confirm_equipment_entry_action(
-                action, entry))
+        if (!confirm_equipment_entry_action(action, entry))
         {
             return false;
         }
@@ -7507,6 +7967,9 @@ static bool inventory_page_drop_entry(equipment_list_entry* entry)
 
     if (equipment_entry_carried_pack_action_blocked(entry))
         return false;
+
+    if (equipment_entry_is_quiver_arrow(entry))
+        return do_cmd_drop_item_by_index_confirm(entry->item_idx, true);
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         return do_cmd_drop_item_by_index_confirm(entry->equip_idx, true);
@@ -8308,8 +8771,8 @@ static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
     else if (sdl_touch_only_device_active())
     {
         const char* variants[] = {
-            "Tap a row to recall",
-            "Tap to recall",
+            "Swipe left/right tabs; tap a row to recall",
+            "Swipe tabs; tap to recall",
             "Tap to recall"
         };
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->term_wid,
@@ -8470,6 +8933,8 @@ static void knowledge_begin_clicks(const knowledge_browser_layout* layout)
     ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
     knowledge_begin_touch_scroll_area(layout, SDL_TOUCH_MENU_CATEGORY_OTHER);
     knowledge_register_tabs(layout);
+    knowledge_enable_horizontal_page_swipe(layout,
+        SDL_TOUCH_MENU_CATEGORY_OTHER, layout->tabs_row, '[', ']');
 }
 
 static void knowledge_init_inventory_portrait_layout(
@@ -8490,6 +8955,8 @@ static void knowledge_begin_grouped_clicks(
         MAX(0, group_count - layout->group_rows), entry_top,
         MAX(0, entry_count - layout->entry_rows));
     knowledge_register_tabs(layout);
+    knowledge_enable_horizontal_page_swipe(layout,
+        SDL_TOUCH_MENU_CATEGORY_OTHER, layout->tabs_row, '[', ']');
 }
 
 static bool knowledge_consume_click(int* ch, int* page,
@@ -9595,6 +10062,7 @@ void do_cmd_knowledge_browser_page(int page)
     int monster_old = -1;
     knowledge_browser_state state = { 0 };
     bool done = false;
+    int tutorial_page = -1;
 
     page = knowledge_normalize_page(page);
     g_knowledge_last_page = page;
@@ -9648,6 +10116,24 @@ void do_cmd_knowledge_browser_page(int page)
     {
         knowledge_browser_layout layout;
         int ch;
+
+        if (tutorial_page != page) {
+            tutorial_page = page;
+            switch (page) {
+            case KNOWLEDGE_PAGE_ARTEFACTS:
+                tutorial_game_menu("knowledge-artefacts", "Browse known artefacts. Recall shows recorded properties; it does not grant or equip an item.");
+                break;
+            case KNOWLEDGE_PAGE_OBJECTS:
+                tutorial_game_menu("knowledge-objects", "Browse known object kinds and their descriptions. This catalogue is separate from your carried inventory.");
+                break;
+            case KNOWLEDGE_PAGE_MONSTERS:
+                tutorial_game_menu("knowledge-monsters", "Review learned creature information. Recall reflects what your character knows.");
+                break;
+            case KNOWLEDGE_PAGE_CURSES:
+                tutorial_game_menu("knowledge-curses", "Review discovered curses and their effects. Reading an entry does not remove a curse.");
+                break;
+            }
+        }
 
         /* These lists highlight the selection directly, so keep the blinking
          * text cursor hidden.  Re-asserted each iteration in case a recall
@@ -10274,6 +10760,10 @@ static void supply_register_prompt_clicks(const knowledge_browser_layout* layout
         "x/->");
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "use");
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "equip");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt,
+        "make active");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt,
+        "change setup");
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "take off");
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "u/Space");
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, use_label);
@@ -10494,39 +10984,52 @@ static void knowledge_init_inventory_portrait_layout(
 }
 
 static void inventory_one_page_allocate_rows(int available_rows,
-    int pack_needed, int harness_needed, int jewelry_needed, int* pack_rows,
-    int* harness_rows, int* jewelry_rows)
+    int pack_needed, int harness_needed, int quiver_needed,
+    int jewelry_needed, int* pack_rows, int* harness_rows, int* quiver_rows,
+    int* jewelry_rows)
 {
     int body_rows;
-    int needed[3];
-    int rows[3] = { 0, 0, 0 };
+    int needed[4];
+    int rows[4] = { 0, 0, 0, 0 };
     int allocated = 0;
 
-    if (!pack_rows || !harness_rows || !jewelry_rows)
+    if (!pack_rows || !harness_rows || !quiver_rows || !jewelry_rows)
         return;
 
     *pack_rows = 0;
     *harness_rows = 0;
+    *quiver_rows = 0;
     *jewelry_rows = 0;
-    /* Harness and Jewelry each add a blank row, header, and divider.  Give
-     * Pack and Harness their complete lists first; Jewelry gets the remaining
-     * rows and can scroll within that section. */
-    body_rows = available_rows - 6;
+    /* Harness, Quiver, and Jewelry each add a blank row, header, and divider.
+     * Give Pack, Harness, and Quiver their complete lists first; Jewelry gets
+     * the remaining rows and can scroll within that section. */
+    body_rows = available_rows - 9;
     if (body_rows <= 0)
         return;
 
     needed[0] = MAX(pack_needed, 0);
     needed[1] = MAX(harness_needed, 0);
+    needed[2] = MAX(quiver_needed, 0);
+    needed[3] = MAX(jewelry_needed, 0);
 
-    /* Spend the body rows on Pack and Harness before giving any to Jewelry.
-     * This makes both volume-pool lists complete whenever they fit. */
+    /* A visible Quiver section must retain at least one row whenever it has
+     * arrows, even if a large Pack/Harness list consumes the remaining space. */
+    if (needed[2] > 0)
+    {
+        rows[2] = 1;
+        allocated = 1;
+    }
+
+    /* Spend the body rows on Pack, Harness, and Quiver before giving any to
+     * Jewelry.  This makes the storage lists complete whenever they fit. */
     while (allocated < body_rows
-        && (rows[0] < needed[0] || rows[1] < needed[1]))
+        && (rows[0] < needed[0] || rows[1] < needed[1]
+            || rows[2] < needed[2]))
     {
         int best = -1;
         int best_deficit = 0;
 
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 3; i++)
         {
             int deficit = needed[i] - rows[i];
 
@@ -10545,11 +11048,12 @@ static void inventory_one_page_allocate_rows(int available_rows,
     /* All unused body rows belong to Jewelry, even when that section has more
      * entries than fit; its own top/max-top state provides scrolling. */
     if (jewelry_needed > 0)
-        rows[2] = body_rows - allocated;
+        rows[3] = body_rows - allocated;
 
     *pack_rows = rows[0];
     *harness_rows = rows[1];
-    *jewelry_rows = rows[2];
+    *quiver_rows = rows[2];
+    *jewelry_rows = rows[3];
 }
 
 static void knowledge_draw_stacked_entry_divider(
@@ -10616,11 +11120,12 @@ static void supply_touch_row_prompt(char* buf, size_t buflen, int term_wid,
 
     action = supply_touch_row_action_text(desc_overlay_on, drop_click_mode,
         delete_click_mode, normal_action);
-    strnfmt(full, sizeof(full), "Tap a row to %s", action);
-    strnfmt(compact, sizeof(compact), "Tap row: %s", action);
+    strnfmt(full, sizeof(full), "Swipe left/right tabs; tap a row to %s",
+        action);
+    strnfmt(compact, sizeof(compact), "Swipe tabs; tap row: %s", action);
     variants[0] = full;
     variants[1] = compact;
-    variants[2] = "Tap row";
+    variants[2] = "Tap row to act";
     terminal_prompt_pick_variant(buf, buflen, term_wid, false, variants,
         N_ELEMENTS(variants));
 }
@@ -10735,6 +11240,18 @@ static char supply_controller_menu_key(char ch, int prev_page_key,
     return (char)steamdeck_menu_key(ch, prev_page_key, next_page_key);
 }
 
+/* Tutorial controls must use the same local Preview action and controller
+ * binding as this browser, rather than the dungeon's global Examine key. */
+static void supply_update_tutorial_preview(bool available, bool shown,
+    bool allow_secondary)
+{
+    char label[24] = "";
+    sdl_gameplay_tutorial_set_menu_preview(available, shown);
+    if (available)
+        (void)supply_controller_info_key(label, sizeof(label), allow_secondary);
+    sdl_gameplay_tutorial_set_menu_preview_control(label);
+}
+
 static void supply_browser_cursor_move(char ch, int* column, int* grp_cur,
     int grp_cnt, int* list_cur, int list_cnt, int page_rows, bool wrap_rows,
     bool has_groups, supply_overlay_cache* overlay_cache,
@@ -10806,6 +11323,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     int inv_entry_top = 0;
     int inv_pack_top = 0;
     int inv_harness_top = 0;
+    int inv_quiver_top = 0;
     int inv_jewelry_top = 0;
     int inv_column = 0;
     inventory_menu_group inv_focus_group = INVENTORY_MENU_GROUP_ALL;
@@ -10824,6 +11342,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     char inventory_action_notice[192] = "";
     bool desc_overlay_on = false;
     bool replacement_mode = false;
+    bool storage_exchange_mode = false;
     bool slot_pick_mode = false;
     bool item_select_mode = false;
     int focus_floor_o_idx = -1;
@@ -10880,7 +11399,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 inv_focus_group = request->inventory_group;
                 inv_focus_group_pending =
                     request->inventory_group == INVENTORY_MENU_GROUP_PACK
-                    || request->inventory_group == INVENTORY_MENU_GROUP_HARNESS;
+                    || request->inventory_group == INVENTORY_MENU_GROUP_HARNESS
+                    || request->inventory_group == INVENTORY_MENU_GROUP_QUIVER;
             }
         }
         if (request->preview_inventory_description)
@@ -10923,6 +11443,20 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 SUPPLY_INTERACTION_DESCRIPTION);
             forced_action = SUPPLY_MENU_ACTION_NONE;
             *request->replacement_item_out = -1;
+        }
+        if (request->storage_exchange_mode
+            && request->storage_exchange_incoming
+            && request->storage_exchange_incoming->k_idx
+            && request->storage_exchange_item_out)
+        {
+            storage_exchange_mode = true;
+            page = SUPPLY_MENU_PAGE_INVENTORY;
+            inv_column = 1;
+            supply_set_interaction_mode(&overlay_cache, &desc_overlay_on,
+                &drop_click_mode, &delete_click_mode,
+                SUPPLY_INTERACTION_DESCRIPTION);
+            forced_action = SUPPLY_MENU_ACTION_NONE;
+            *request->storage_exchange_item_out = -1;
         }
         if (request->slot_pick_mode && request->slot_pick_incoming
             && request->slot_pick_incoming->k_idx
@@ -11010,6 +11544,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             equipment_entry_columns entry_cols;
             int selected_slot;
             char status_buf[120];
+            char primary_action[32] = "use";
             int entry_page_rows;
             int max_entry_top;
             bool touch_only;
@@ -11053,6 +11588,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     equip_entry_cur = equip_entry_cnt - 1;
                 if (equip_entry_cur < 0)
                     equip_entry_cur = 0;
+            }
+            if (equip_entry_cnt > 0)
+            {
+                SDL_strlcpy(primary_action,
+                    equipment_menu_use_action_text(&equip_entries[equip_entry_cur],
+                        selected_slot, floor_action), sizeof(primary_action));
+                primary_action[0] = (char)tolower(
+                    (unsigned char)primary_action[0]);
             }
             if (preserve_touch_view)
             {
@@ -11116,7 +11659,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             supply_draw_page_header(&layout, page,
                 supply_browser_hover_page(), "Equipped");
             supply_draw_page_summary(&layout, TERM_SLATE,
-                "Equipped items, slots, and matching pack/supply choices");
+                "Active combat gear, worn items, and Belt equipment");
             Term_erase(0, layout.header_row, 255);
             if (layout.stacked)
             {
@@ -11160,6 +11703,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         TERM_L_DARK, '|');
 
             supply_register_page_tabs(&layout);
+            knowledge_enable_horizontal_page_swipe(&layout,
+                SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                layout.title_row, SUPPLY_BROWSER_PREV_PAGE_KEY,
+                SUPPLY_BROWSER_NEXT_PAGE_KEY);
 
             if (!compact_entry_only)
             {
@@ -11239,26 +11786,26 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s] equip  [%s] drop  [%s] back",
-                        prev_label, next_label, info_label, confirm_label,
+                        "D-pad nav  [%s/%s] page  [%s] info  [%s] %s  [%s] drop  [%s] back",
+                        prev_label, next_label, info_label, confirm_label, primary_action,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s] equip  [%s] drop",
-                        info_label, confirm_label, drop_label);
+                        "D-pad nav  [%s] info  [%s] %s  [%s] drop",
+                        info_label, confirm_label, primary_action, drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] drop  [%s] back",
-                        prev_label, next_label, confirm_label,
+                        "D-pad nav  [%s/%s] page  [%s] %s  [%s] drop  [%s] back",
+                        prev_label, next_label, confirm_label, primary_action,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] equip  [%s] drop",
-                        confirm_label, drop_label);
+                        "D-pad nav  [%s] %s  [%s] drop",
+                        confirm_label, primary_action, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad nav  [%s] equip  [%s] drop", confirm_label,
-                    drop_label);
+                    "D-pad nav  [%s] %s  [%s] drop", confirm_label,
+                    primary_action, drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
@@ -11267,7 +11814,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt_buf);
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL,
-                    NULL, confirm_label, drop_label, back_label);
+                    primary_action, confirm_label, drop_label, back_label);
                 if (info_available)
                     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
                         layout.prompt_row, prompt_buf, info_label);
@@ -11278,7 +11825,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 supply_touch_row_prompt(prompt_buf, sizeof(prompt_buf),
                     layout.term_wid, desc_overlay_on, drop_click_mode, false,
-                    "equip");
+                    primary_action);
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_SLATE, prompt_buf);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PREVIEW,
@@ -11295,16 +11842,35 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 char prompt_buf[160];
                 const char* const* variants;
                 size_t variant_count;
-                static const char* letter_variants[] = {
-                    "letter use  Dir move  x preview  u equip  z drop  Tab  Esc",
-                    "letter use  x preview  z drop  Tab  Esc",
-                    "letter use  z drop  Tab  Esc"
+                char letter_full[160];
+                char letter_mid[128];
+                char letter_short[96];
+                char move_full[160];
+                char move_mid[128];
+                char move_short[96];
+                const char* letter_variants[] = {
+                    letter_full, letter_mid, letter_short
                 };
-                static const char* move_variants[] = {
-                    "Dir move  x preview  u equip  z drop  Tab  Esc",
-                    "x preview  u equip  z drop  Tab  Esc",
-                    "u equip  z drop  Esc"
+                const char* move_variants[] = {
+                    move_full, move_mid, move_short
                 };
+
+                strnfmt(letter_full, sizeof(letter_full),
+                    "letter %s  Dir move  x preview  u %s  z drop  Tab  Esc",
+                    primary_action, primary_action);
+                strnfmt(letter_mid, sizeof(letter_mid),
+                    "letter %s  x preview  u %s  z drop  Tab  Esc",
+                    primary_action, primary_action);
+                strnfmt(letter_short, sizeof(letter_short),
+                    "letter %s  u %s  z drop  Esc", primary_action,
+                    primary_action);
+                strnfmt(move_full, sizeof(move_full),
+                    "Dir move  x preview  u %s  z drop  Tab  Esc",
+                    primary_action);
+                strnfmt(move_mid, sizeof(move_mid),
+                    "x preview  u %s  z drop  Tab  Esc", primary_action);
+                strnfmt(move_short, sizeof(move_short),
+                    "u %s  z drop  Esc", primary_action);
 
                 if (indexed_menu_letters_enabled())
                 {
@@ -11362,6 +11928,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_gotoxy(layout.group_col,
                     layout.group_row + (equip_grp_cur - equip_grp_top));
 
+            supply_update_tutorial_preview(equip_entry_cnt > 0,
+                overlay_cache.active, true);
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
@@ -11650,10 +12218,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             knowledge_browser_layout page_summary_layout;
             knowledge_browser_layout pack_layout;
             knowledge_browser_layout harness_layout;
+            knowledge_browser_layout quiver_layout;
             knowledge_browser_layout jewelry_layout;
             equipment_entry_columns entry_cols;
             equipment_entry_columns pack_cols;
             equipment_entry_columns harness_cols;
+            equipment_entry_columns quiver_cols;
             equipment_entry_columns jewelry_cols;
             inventory_menu_group selected_group;
             int entry_page_rows;
@@ -11661,20 +12231,25 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             int max_entry_top;
             int pack_entry_cnt = 0;
             int harness_entry_cnt = 0;
+            int quiver_entry_cnt = 0;
             int jewelry_entry_cnt = 0;
             int pack_rows = 0;
             int harness_rows = 0;
+            int quiver_rows = 0;
             int jewelry_rows = 0;
             int pack_rendered_rows = 0;
             int harness_rendered_rows = 0;
+            int quiver_rendered_rows = 0;
             int jewelry_rendered_rows = 0;
             int max_pack_top = 0;
             int max_harness_top = 0;
+            int max_quiver_top = 0;
             int max_jewelry_top = 0;
             int picker_header_rows = 0;
             char status_buf[384] = "";
             char pack_header[192] = "";
             char harness_header[192] = "";
+            char quiver_header[192] = "";
             char jewelry_header[192] = "";
             char picker_heading[180] = "";
             char picker_detail[180] = "";
@@ -11685,11 +12260,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             bool preserve_touch_view;
             bool show_source;
             bool compact_entry_only;
-            bool inventory_one_page = !replacement_mode && !slot_pick_mode
+            bool inventory_one_page = !replacement_mode
+                && !storage_exchange_mode && !slot_pick_mode
                 && !item_select_mode;
 
             prepare_inventory_browser_group_icons(inventory_icons);
-            if (replacement_mode)
+            if (storage_exchange_mode)
+                compute_inventory_storage_exchange_group_totals(
+                    inventory_totals, request);
+            else if (replacement_mode)
                 compute_inventory_replacement_group_totals(inventory_totals,
                     request);
             else if (slot_pick_mode)
@@ -11700,10 +12279,40 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     request);
             else
                 compute_inventory_browser_group_totals(inventory_totals);
-            if (replacement_mode)
+            if (storage_exchange_mode)
+            {
+                char incoming_name[120];
+                enum inventory_limit_group source_group =
+                    inventory_limit_group_for_object(
+                        request->storage_exchange_incoming);
+                enum inventory_limit_group target_group =
+                    inventory_storage_exchange_target_group(request);
+
+                object_desc(incoming_name, sizeof(incoming_name),
+                    request->storage_exchange_incoming, true, 3);
+                if (request->storage_exchange_reason
+                    && request->storage_exchange_reason[0])
+                {
+                    SDL_strlcpy(picker_heading,
+                        request->storage_exchange_reason,
+                        sizeof(picker_heading));
+                    picker_heading_attr = TERM_YELLOW;
+                }
+                else
+                    SDL_strlcpy(picker_heading, "Exchange storage",
+                        sizeof(picker_heading));
+                strnfmt(picker_detail, sizeof(picker_detail),
+                    "Move to %s: %s - choose an item to move to %s",
+                    inventory_limit_group_name(target_group), incoming_name,
+                    inventory_limit_group_name(source_group));
+            }
+            else if (replacement_mode)
             {
                 char incoming_name[120];
                 cptr reason = request->replacement_reason;
+                cptr operation = request->replacement_operation
+                    && request->replacement_operation[0]
+                    ? request->replacement_operation : "Picking up";
 
                 object_desc(incoming_name, sizeof(incoming_name),
                     request->replacement_incoming, true, 3);
@@ -11719,7 +12328,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         sizeof(picker_heading));
                 }
                 strnfmt(picker_detail, sizeof(picker_detail),
-                    "Picking up: %s - choose one to replace", incoming_name);
+                    "%s: %s - choose one to %s", operation, incoming_name,
+                    streq(operation, "Equipping") ? "drop" : "replace");
             }
             else if (slot_pick_mode)
             {
@@ -11815,7 +12425,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 selected_group = inventory_browser_groups[inv_grp_cur];
             }
-            if (replacement_mode)
+            if (storage_exchange_mode)
+                inventory_entry_cnt = collect_inventory_storage_exchange_entries(
+                    selected_group, equip_entries, equip_capacity, request);
+            else if (replacement_mode)
                 inventory_entry_cnt = collect_inventory_replacement_entries(
                     selected_group, equip_entries, equip_capacity, request);
             else if (slot_pick_mode)
@@ -11827,8 +12440,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else
                 inventory_entry_cnt = collect_inventory_page_entries(
                     selected_group, equip_entries, equip_capacity, request);
-            inventory_choice_cnt = (replacement_mode || slot_pick_mode
-                    || item_select_mode)
+            inventory_choice_cnt = (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                 ? inventory_entry_cnt
                 : inventory_one_page
                 ? inventory_entry_cnt
@@ -11839,25 +12452,41 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             if (inventory_one_page && inv_focus_group_pending)
             {
-                enum inventory_limit_group focus_limit =
-                    (inv_focus_group == INVENTORY_MENU_GROUP_HARNESS)
-                    ? INV_LIMIT_HARNESS
-                    : (inv_focus_group == INVENTORY_MENU_GROUP_JEWELRY)
-                        ? INV_LIMIT_JEWELRY
-                        : INV_LIMIT_PACK;
-
-                for (i = 0; i < inventory_entry_cnt; i++)
+                if (inv_focus_group == INVENTORY_MENU_GROUP_QUIVER)
                 {
-                    if (equip_entries[i].limit_group != focus_limit)
-                        continue;
+                    for (i = 0; i < inventory_entry_cnt; i++)
+                    {
+                        if (!equipment_entry_is_quiver_arrow(
+                                &equip_entries[i]))
+                            continue;
 
-                    inv_entry_cur = i;
-                    break;
+                        inv_entry_cur = i;
+                        break;
+                    }
+                }
+                else
+                {
+                    enum inventory_limit_group focus_limit =
+                        (inv_focus_group == INVENTORY_MENU_GROUP_HARNESS)
+                        ? INV_LIMIT_HARNESS
+                        : (inv_focus_group == INVENTORY_MENU_GROUP_JEWELRY)
+                            ? INV_LIMIT_JEWELRY
+                            : INV_LIMIT_PACK;
+
+                    for (i = 0; i < inventory_entry_cnt; i++)
+                    {
+                        if (equip_entries[i].limit_group != focus_limit)
+                            continue;
+
+                        inv_entry_cur = i;
+                        break;
+                    }
                 }
                 inv_focus_group_pending = false;
             }
 
-            if (!replacement_mode && !slot_pick_mode && !item_select_mode
+            if (!storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode && !item_select_mode
                 && focus_floor_o_idx > 0)
             {
                 for (i = 0; i < inventory_entry_cnt; i++)
@@ -11888,7 +12517,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (inventory_one_page || slot_pick_mode)
                     inv_column = 1;
             }
-            if (!replacement_mode && !slot_pick_mode && !item_select_mode
+            if (!storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode && !item_select_mode
                 && inventory_entry_cnt > 0)
             {
                 cptr action = inventory_page_use_action_text(
@@ -11927,33 +12557,58 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 int pack_needed;
                 int harness_needed;
+                int quiver_needed;
                 int jewelry_needed;
                 bool pack_selected;
                 bool harness_selected;
+                bool quiver_selected;
                 bool jewelry_selected;
 
-                pack_entry_cnt = MIN(inventory_totals[0], inventory_entry_cnt);
-                harness_entry_cnt = MIN(inventory_totals[1],
-                    inventory_entry_cnt - pack_entry_cnt);
-                jewelry_entry_cnt = inventory_entry_cnt - pack_entry_cnt
-                    - harness_entry_cnt;
+                int pack_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_PACK);
+                int harness_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_HARNESS);
+                int quiver_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_QUIVER);
+                int jewelry_group_idx = inventory_browser_group_index(
+                    INVENTORY_MENU_GROUP_JEWELRY);
+                int remaining_entries = inventory_entry_cnt;
+
+                pack_entry_cnt = MIN(inventory_totals[pack_group_idx],
+                    remaining_entries);
+                remaining_entries -= pack_entry_cnt;
+                harness_entry_cnt = MIN(inventory_totals[harness_group_idx],
+                    remaining_entries);
+                remaining_entries -= harness_entry_cnt;
+                quiver_entry_cnt = MIN(inventory_totals[quiver_group_idx],
+                    remaining_entries);
+                remaining_entries -= quiver_entry_cnt;
+                jewelry_entry_cnt = MIN(inventory_totals[jewelry_group_idx],
+                    remaining_entries);
                 pack_cols = entry_cols;
                 harness_cols = entry_cols;
+                quiver_cols = entry_cols;
                 jewelry_cols = entry_cols;
                 harness_cols.entry_index_base = pack_entry_cnt;
-                jewelry_cols.entry_index_base = pack_entry_cnt
+                quiver_cols.entry_index_base = pack_entry_cnt
                     + harness_entry_cnt;
+                jewelry_cols.entry_index_base = pack_entry_cnt
+                    + harness_entry_cnt + quiver_entry_cnt;
                 pack_needed = equipment_entry_total_rows(equip_entries,
                     pack_entry_cnt, &pack_cols);
                 harness_needed = equipment_entry_total_rows(
                     equip_entries + pack_entry_cnt, harness_entry_cnt,
                     &harness_cols);
-                jewelry_needed = equipment_entry_total_rows(
+                quiver_needed = equipment_entry_total_rows(
                     equip_entries + pack_entry_cnt + harness_entry_cnt,
+                    quiver_entry_cnt, &quiver_cols);
+                jewelry_needed = equipment_entry_total_rows(
+                    equip_entries + pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt,
                     jewelry_entry_cnt, &jewelry_cols);
                 inventory_one_page_allocate_rows(layout.entry_rows,
-                    pack_needed, harness_needed, jewelry_needed, &pack_rows,
-                    &harness_rows, &jewelry_rows);
+                    pack_needed, harness_needed, quiver_needed, jewelry_needed,
+                    &pack_rows, &harness_rows, &quiver_rows, &jewelry_rows);
 
                 pack_layout = layout;
                 pack_layout.entry_row = layout.entry_row;
@@ -11961,14 +12616,22 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 harness_layout = layout;
                 harness_layout.entry_row = layout.entry_row + pack_rows + 3;
                 harness_layout.entry_rows = harness_rows;
-                jewelry_layout = layout;
-                jewelry_layout.entry_row = harness_layout.entry_row
+                quiver_layout = layout;
+                quiver_layout.entry_row = harness_layout.entry_row
                     + harness_rows + 3;
+                quiver_layout.entry_rows = quiver_rows;
+                jewelry_layout = layout;
+                jewelry_layout.entry_row = quiver_layout.entry_row
+                    + quiver_rows + 3;
                 jewelry_layout.entry_rows = jewelry_rows;
                 pack_selected = inv_entry_cur < pack_entry_cnt;
                 harness_selected = !pack_selected
                     && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
-                jewelry_selected = !pack_selected && !harness_selected;
+                quiver_selected = !pack_selected && !harness_selected
+                    && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt;
+                jewelry_selected = !pack_selected && !harness_selected
+                    && !quiver_selected;
 
                 if (pack_entry_cnt > 0 && pack_rows > 0)
                 {
@@ -12005,19 +12668,43 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     inv_harness_top = 0;
                 }
 
+                if (quiver_entry_cnt > 0 && quiver_rows > 0)
+                {
+                    int quiver_cur = pack_selected || harness_selected
+                        ? 0
+                        : inv_entry_cur - pack_entry_cnt - harness_entry_cnt;
+
+                    equipment_entry_adjust_top(
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt, quiver_selected ? quiver_cur : 0,
+                        quiver_rows, &quiver_cols,
+                        preserve_touch_view || !quiver_selected,
+                        &inv_quiver_top);
+                    max_quiver_top = equipment_entry_last_page_top(
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt, quiver_rows, &quiver_cols);
+                }
+                else
+                {
+                    inv_quiver_top = 0;
+                }
+
                 if (jewelry_entry_cnt > 0 && jewelry_rows > 0)
                 {
                     int jewelry_cur = jewelry_selected
                         ? inv_entry_cur - pack_entry_cnt - harness_entry_cnt
+                            - quiver_entry_cnt
                         : 0;
 
                     equipment_entry_adjust_top(
-                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt,
                         jewelry_entry_cnt, jewelry_cur, jewelry_rows,
                         &jewelry_cols, preserve_touch_view || !jewelry_selected,
                         &inv_jewelry_top);
                     max_jewelry_top = equipment_entry_last_page_top(
-                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt,
                         jewelry_entry_cnt, jewelry_rows, &jewelry_cols);
                 }
                 else
@@ -12027,7 +12714,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 max_entry_top = 0;
                 entry_page_rows = pack_selected ? pack_rows
-                    : harness_selected ? harness_rows : jewelry_rows;
+                    : harness_selected ? harness_rows
+                    : quiver_selected ? quiver_rows : jewelry_rows;
                 if (entry_page_rows < 1)
                     entry_page_rows = 1;
                 inventory_browser_section_header(INVENTORY_MENU_GROUP_PACK,
@@ -12036,7 +12724,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     INVENTORY_MENU_GROUP_HARNESS, harness_entry_cnt,
                     harness_header, sizeof(harness_header));
                 inventory_browser_section_header(
-                    INVENTORY_MENU_GROUP_JEWELRY, inventory_totals[2],
+                    INVENTORY_MENU_GROUP_QUIVER, quiver_entry_cnt,
+                    quiver_header, sizeof(quiver_header));
+                inventory_browser_section_header(
+                    INVENTORY_MENU_GROUP_JEWELRY, jewelry_entry_cnt,
                     jewelry_header, sizeof(jewelry_header));
             }
             else if (inventory_entry_cnt > 0)
@@ -12074,6 +12765,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     harness_layout.entry_row + harness_layout.entry_rows - 1,
                     SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
                     &inv_harness_top, max_harness_top, false);
+                knowledge_touch_scroll_region(&layout, layout.list_col,
+                    list_right, quiver_layout.entry_row,
+                    quiver_layout.entry_row + quiver_layout.entry_rows - 1,
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                    &inv_quiver_top, max_quiver_top, false);
                 knowledge_touch_scroll_region(&layout, layout.list_col,
                     list_right, jewelry_layout.entry_row,
                     jewelry_layout.entry_row + jewelry_layout.entry_rows - 1,
@@ -12127,7 +12823,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         ? &page_summary_layout
                         : &layout,
                     TERM_SLATE,
-                    "Pack, Harness, and Jewelry Pouch items, equipment, and floor finds");
+                    "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds");
             }
             Term_erase(0, layout.header_row, 255);
             if (inventory_one_page)
@@ -12144,7 +12840,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 knowledge_draw_stacked_entry_divider(&layout);
                 Term_putstr(0, layout.entry_header_row, layout.term_wid,
                     TERM_SLATE,
-                    replacement_mode ? "Replacement candidates"
+                    storage_exchange_mode ? "Storage exchange"
+                    : replacement_mode ? "Replacement candidates"
                     : item_select_mode ? "Matching items"
                     : inventory_browser_group_text(selected_group));
                 if (entry_cols.show_volume)
@@ -12163,7 +12860,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     "Category");
                 Term_putstr(layout.list_col, layout.header_row, layout.list_w,
                     TERM_SLATE,
-                    replacement_mode ? "Replacement candidates"
+                    storage_exchange_mode ? "Storage exchange"
+                    : replacement_mode ? "Replacement candidates"
                     : slot_pick_mode ? "Destination slots"
                     : item_select_mode ? "Matching items"
                     : inventory_browser_group_text(selected_group));
@@ -12185,8 +12883,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     Term_putch(layout.divider_col, layout.list_row + i,
                         TERM_L_DARK, '|');
 
-            if (!replacement_mode && !slot_pick_mode && !item_select_mode)
+            if (!storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode && !item_select_mode)
+            {
                 supply_register_page_tabs(&layout);
+                knowledge_enable_horizontal_page_swipe(&layout,
+                    SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT,
+                    layout.title_row, SUPPLY_BROWSER_PREV_PAGE_KEY,
+                    SUPPLY_BROWSER_NEXT_PAGE_KEY);
+            }
 
             if (!inventory_one_page && !slot_pick_mode && !compact_entry_only)
             {
@@ -12219,14 +12924,25 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 bool pack_selected = inv_entry_cur < pack_entry_cnt;
                 bool harness_selected = !pack_selected
                     && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
-                bool jewelry_selected = !pack_selected && !harness_selected;
+                bool quiver_selected = !pack_selected && !harness_selected
+                    && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt;
+                bool jewelry_selected = !pack_selected && !harness_selected
+                    && !quiver_selected;
                 int harness_cur = harness_selected
                     ? inv_entry_cur - pack_entry_cnt : 0;
-                int jewelry_cur = jewelry_selected
+                int quiver_cur = quiver_selected
                     ? inv_entry_cur - pack_entry_cnt - harness_entry_cnt : 0;
+                int jewelry_cur = jewelry_selected
+                    ? inv_entry_cur - pack_entry_cnt - harness_entry_cnt
+                        - quiver_entry_cnt
+                    : 0;
                 int harness_gap_row = harness_layout.entry_row - 3;
                 int harness_header_row = harness_layout.entry_row - 2;
                 int harness_divider_row = harness_layout.entry_row - 1;
+                int quiver_gap_row = quiver_layout.entry_row - 3;
+                int quiver_header_row = quiver_layout.entry_row - 2;
+                int quiver_divider_row = quiver_layout.entry_row - 1;
                 int jewelry_gap_row = jewelry_layout.entry_row - 3;
                 int jewelry_header_row = jewelry_layout.entry_row - 2;
                 int jewelry_divider_row = jewelry_layout.entry_row - 1;
@@ -12273,6 +12989,40 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         &harness_rendered_rows);
                 }
 
+                if (quiver_gap_row >= layout.list_row
+                    && quiver_gap_row < layout.status_row)
+                {
+                    Term_erase(layout.list_col, quiver_gap_row,
+                        layout.list_w);
+                }
+                if (quiver_header_row >= layout.list_row
+                    && quiver_header_row < layout.status_row)
+                {
+                    Term_erase(layout.list_col, quiver_header_row,
+                        layout.list_w);
+                    supply_put_fitted(layout.list_col, quiver_header_row,
+                        layout.list_w,
+                        inventory_browser_section_attr(
+                            INVENTORY_MENU_GROUP_QUIVER),
+                        quiver_header);
+                }
+                if (quiver_divider_row >= layout.list_row
+                    && quiver_divider_row < layout.status_row)
+                {
+                    for (i = 0; i < layout.term_wid; i++)
+                        Term_putch(i, quiver_divider_row, TERM_L_DARK, '=');
+                }
+                if (quiver_layout.entry_rows > 0)
+                {
+                    (void)display_equipment_slot_entries_wrapped(
+                        &quiver_layout, quiver_layout.entry_row,
+                        quiver_layout.entry_rows,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt, quiver_cur, inv_quiver_top,
+                        quiver_selected ? inv_column : 0, &quiver_cols,
+                        &quiver_rendered_rows);
+                }
+
                 if (jewelry_gap_row >= layout.list_row
                     && jewelry_gap_row < layout.status_row)
                 {
@@ -12301,13 +13051,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     (void)display_equipment_slot_entries_wrapped(
                         &jewelry_layout, jewelry_layout.entry_row,
                         jewelry_layout.entry_rows,
-                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt,
                         jewelry_entry_cnt, jewelry_cur, inv_jewelry_top,
                         jewelry_selected ? inv_column : 0, &jewelry_cols,
                         &jewelry_rendered_rows);
                 }
                 rendered_entry_rows = pack_rendered_rows
-                    + harness_rendered_rows + jewelry_rendered_rows + 6;
+                    + harness_rendered_rows + quiver_rendered_rows
+                    + jewelry_rendered_rows + 9;
             }
             else
             {
@@ -12320,7 +13072,19 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     entry_page_rows = 1;
             }
 
-            if (replacement_mode)
+            if (storage_exchange_mode)
+            {
+                equipment_list_entry* selected_entry =
+                    (inv_entry_cur >= 0
+                        && inv_entry_cur < inventory_entry_cnt)
+                    ? &equip_entries[inv_entry_cur]
+                    : NULL;
+
+                inventory_storage_exchange_volume_status(request,
+                    selected_group, selected_entry, inventory_entry_cnt,
+                    status_buf, sizeof(status_buf));
+            }
+            else if (replacement_mode)
             {
                 equipment_list_entry* selected_entry =
                     (inv_entry_cur >= 0
@@ -12375,7 +13139,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             }
 
             Term_erase(0, layout.prompt_row, 255);
-            if (replacement_mode)
+            if (storage_exchange_mode)
+            {
+                char prompt[160];
+                const char* variants[] = {
+                    "Exchange: select an item to move to the other pool",
+                    "Exchange: select an item",
+                    "Select an item"
+                };
+
+                terminal_prompt_pick_variant(prompt, sizeof(prompt),
+                    layout.term_wid, false, variants, N_ELEMENTS(variants));
+                Term_putstr(0, layout.prompt_row, layout.term_wid,
+                    TERM_L_DARK, prompt);
+                supply_register_prompt_clicks(&layout, prompt, NULL, "select",
+                    NULL, NULL, "Esc");
+            }
+            else if (replacement_mode)
             {
                 char prompt[160];
 
@@ -12723,25 +13503,33 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     : inventory_browser_compare_slot_for_entry(selected_group,
                           &equip_entries[inv_entry_cur]);
 
-                if (replacement_mode || slot_pick_mode)
+                if (storage_exchange_mode || replacement_mode || slot_pick_mode)
                     supply_overlay_avoid_entries(&layout, rendered_entry_rows);
                 else if (inventory_one_page)
                 {
                     bool pack_selected = inv_entry_cur < pack_entry_cnt;
                     bool harness_selected = !pack_selected
                         && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
+                    bool quiver_selected = !pack_selected && !harness_selected
+                        && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt;
                     const knowledge_browser_layout* selected_layout =
                         pack_selected ? &pack_layout
                         : harness_selected ? &harness_layout
+                        : quiver_selected ? &quiver_layout
                         : &jewelry_layout;
                     int selected_cur = pack_selected
                         ? inv_entry_cur
                         : harness_selected
                             ? inv_entry_cur - pack_entry_cnt
-                            : inv_entry_cur - pack_entry_cnt
-                                - harness_entry_cnt;
+                            : quiver_selected
+                                ? inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt
+                                : inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt - quiver_entry_cnt;
                     int selected_top = pack_selected ? inv_pack_top
                         : harness_selected ? inv_harness_top
+                        : quiver_selected ? inv_quiver_top
                         : inv_jewelry_top;
 
                     supply_overlay_avoid_selection(
@@ -12757,7 +13545,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         inv_entry_cur, (int)selected_group, layout.term_wid,
                         layout.term_hgt))
                 {
-                    bool shown = replacement_mode
+                    bool shown = storage_exchange_mode
+                        ? inventory_storage_exchange_overlay_entry(request,
+                            &equip_entries[inv_entry_cur])
+                        : replacement_mode
                         ? inventory_replacement_overlay_entry(request,
                             &equip_entries[inv_entry_cur])
                         : slot_pick_mode
@@ -12787,15 +13578,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 bool pack_selected = inv_entry_cur < pack_entry_cnt;
                 bool harness_selected = !pack_selected
                     && inv_entry_cur < pack_entry_cnt + harness_entry_cnt;
+                bool quiver_selected = !pack_selected && !harness_selected
+                    && inv_entry_cur < pack_entry_cnt + harness_entry_cnt
+                        + quiver_entry_cnt;
                 int selected_row = pack_selected
                     ? pack_layout.entry_row + (inv_entry_cur - inv_pack_top)
                     : harness_selected
                         ? harness_layout.entry_row
                             + (inv_entry_cur - pack_entry_cnt
                                 - inv_harness_top)
-                        : jewelry_layout.entry_row
-                            + (inv_entry_cur - pack_entry_cnt
-                                - harness_entry_cnt - inv_jewelry_top);
+                        : quiver_selected
+                            ? quiver_layout.entry_row
+                                + (inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt - inv_quiver_top)
+                            : jewelry_layout.entry_row
+                                + (inv_entry_cur - pack_entry_cnt
+                                    - harness_entry_cnt - quiver_entry_cnt
+                                    - inv_jewelry_top);
 
                 Term_gotoxy(layout.list_col, selected_row);
             }
@@ -12806,6 +13605,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_gotoxy(layout.group_col,
                     layout.group_row + (inv_grp_cur - inv_grp_top));
 
+            supply_update_tutorial_preview(inventory_entry_cnt > 0,
+                overlay_cache.active, true);
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
@@ -12869,8 +13670,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                                 continue;
                             if (supply_touch_preview_entry_select_only(
                                     desc_overlay_on, click_action,
-                                    replacement_mode || slot_pick_mode
-                                    || item_select_mode,
+                                    storage_exchange_mode || replacement_mode
+                                    || slot_pick_mode || item_select_mode,
                                     drop_click_mode || delete_click_mode))
                                 continue;
                             ch = (click_action == UI_MENU_CLICK_SECONDARY) ? 'x'
@@ -12950,7 +13751,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 ch = supply_controller_menu_key(ch,
                     SUPPLY_BROWSER_PREV_PAGE_KEY,
                     SUPPLY_BROWSER_NEXT_PAGE_KEY,
-                    !replacement_mode && !slot_pick_mode
+                    !storage_exchange_mode && !replacement_mode
+                        && !slot_pick_mode
                         && !item_select_mode, true);
 
             if (!click_generated_command)
@@ -12965,7 +13767,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
             }
 
-            if (ch == '-' && !replacement_mode && !slot_pick_mode
+            if (ch == '-' && !storage_exchange_mode && !replacement_mode
+                && !slot_pick_mode
                 && inventory_entry_cnt)
             {
                 bool found_floor = false;
@@ -13003,7 +13806,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             case SUPPLY_BROWSER_PREV_PAGE_KEY:
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = supply_browser_turn_page(page, -1);
                 if (page != SUPPLY_MENU_PAGE_INVENTORY)
@@ -13012,7 +13816,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             case SUPPLY_BROWSER_NEXT_PAGE_KEY:
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = supply_browser_turn_page(page, 1);
                 if (page != SUPPLY_MENU_PAGE_INVENTORY)
@@ -13021,7 +13826,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
             case KTRL('I'):
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = supply_browser_turn_page(page, 1);
                 delete_click_mode = false;
@@ -13030,7 +13836,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'e':
             case 'E':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = SUPPLY_MENU_PAGE_EQUIPPED;
                 delete_click_mode = false;
@@ -13042,7 +13849,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'j':
             case 'J':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 page = SUPPLY_MENU_PAGE_JEWELRY;
                 grp_cur = 0;
@@ -13056,18 +13864,21 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 bool preview_was_open = desc_overlay_on;
 
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                 {
                     if (inventory_entry_cnt)
                     {
                         inv_column = 1;
                         supply_set_interaction_mode(&overlay_cache,
                             &desc_overlay_on, &drop_click_mode,
-                            &delete_click_mode, SUPPLY_INTERACTION_DESCRIPTION);
+                            &delete_click_mode, desc_overlay_on
+                                ? SUPPLY_INTERACTION_NONE
+                                : SUPPLY_INTERACTION_DESCRIPTION);
                     }
-                    supply_touch_preview_restore_group_focus(
-                        touch_only && click_generated_command,
-                        preview_was_open, desc_overlay_on, &inv_column);
+                    /* Modal pickers have no category-only state: after a
+                     * touch long-press closes the comparison, keep focus on
+                     * the candidate list so the next tap can select an item. */
                     break;
                 }
                 if (inventory_entry_cnt)
@@ -13099,6 +13910,27 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             case 'u':
             case 'U':
             case ' ':
+                if (storage_exchange_mode)
+                {
+                    if (!inv_column && inventory_entry_cnt)
+                    {
+                        inv_column = 1;
+                    }
+                    else if (inventory_entry_cnt)
+                    {
+                        int exchange_item = inventory_replacement_entry_item(
+                            &equip_entries[inv_entry_cur]);
+
+                        if (exchange_item >= 0 && request
+                            && request->storage_exchange_item_out)
+                        {
+                            *request->storage_exchange_item_out = exchange_item;
+                            acted = true;
+                            flag = true;
+                        }
+                    }
+                    break;
+                }
                 if (replacement_mode)
                 {
                     if (!inv_column && inventory_entry_cnt)
@@ -13196,7 +14028,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'z':
             case 'Z':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 if (!inv_column && inventory_entry_cnt)
                 {
@@ -13227,7 +14060,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             case 'y':
             case 'Y':
-                if (replacement_mode || slot_pick_mode || item_select_mode)
+                if (storage_exchange_mode || replacement_mode
+                    || slot_pick_mode || item_select_mode)
                     break;
                 if (!inv_column && inventory_entry_cnt)
                 {
@@ -13611,6 +14445,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         supply_draw_page_header(&draw_layout, page,
             supply_browser_hover_page(), title_label);
         supply_register_page_tabs(&draw_layout);
+        knowledge_enable_horizontal_page_swipe(&draw_layout,
+            SDL_TOUCH_MENU_CATEGORY_SUPPLY, draw_layout.title_row,
+            SUPPLY_BROWSER_PREV_PAGE_KEY, SUPPLY_BROWSER_NEXT_PAGE_KEY);
 
         if (!single_column || !column)
         {
@@ -13872,6 +14709,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             Term_gotoxy(draw_layout.group_col,
                 draw_layout.group_row + (grp_cur - grp_top));
 
+        supply_update_tutorial_preview(entry_cnt > 0, overlay_cache.active,
+            grp_idx[grp_cur] != SUPPLY_GROUP_JEWELRY_PRESETS);
         char ch = inkey();
         bool click_generated_command = false;
         pack_combat_notice = false;
@@ -14433,6 +15272,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         }
     }
 
+    sdl_gameplay_tutorial_set_menu_preview(false, false);
     object_info_overlay_clear();
     mem_free_null(entries);
     mem_free_null(equip_entries);

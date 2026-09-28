@@ -62,6 +62,10 @@ string(REGEX REPLACE
   "${SIL_VERSION_STRING_LINE}"
 )
 
+# The runtime rejects text templates from a different major/minor/patch.
+# Catch a partial release bump before producing an executable that cannot boot.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ValidateTemplateVersions.cmake")
+
 # Configure SDL_mixer when built from the vendored submodule: enable only the
 # codecs we actually use (WAV + Ogg Vorbis via stb_vorbis) and keep the build
 # self-contained so it works on every platform without system codec packages.
@@ -95,6 +99,16 @@ if (SIL_BUILD_WITH_SDL_SOURCES)
   # in SDL_ttf, but set it explicitly here for clarity.
   if(SIL_IOS OR ANDROID)
     set(SDLTTF_VENDORED ON CACHE BOOL "Use vendored freetype/harfbuzz for mobile" FORCE)
+  endif()
+
+  # The game only ships PNG image assets.  SDL_image enables AVIF by default,
+  # which pulls in vendored libavif/libaom on Android; libaom's configure step
+  # requires a host Perl installation even though Sil-More never loads AVIFs.
+  # Keep the Android build self-contained and avoid that unused host-tool
+  # dependency.  FORCE also fixes existing Gradle/CMake build trees whose cache
+  # recorded SDLIMAGE_AVIF=ON before this option was added.
+  if(ANDROID)
+    set(SDLIMAGE_AVIF OFF CACHE BOOL "Support loading AVIF images" FORCE)
   endif()
 
   # Build SDL as static libraries on iOS to avoid code-signing issues
@@ -210,6 +224,18 @@ set(SIL_MORE_SOURCES
     src/birth/birth-ui-text.c
     src/cave/cave-awareness.c
     src/cave/cave-flow.c
+    src/cave/cave-fixtures.c
+    src/cave/cave-water.c
+    src/cave/cave-illusion.c
+    src/cave/cave-water-flow.c
+    src/cave/cave-events.c
+    src/cave/cave-environment.c
+    src/cave/cave-rock.c
+    src/cave/cave-bridge.c
+    src/cave/cave-lava.c
+    src/cave/cave-poison.c
+    src/cave/cave-flood.c
+    src/monster/monster-poison.c
     src/cave/cave-geometry.c
     src/cave/cave-map-ui.c
     src/cave/cave-projection.c
@@ -267,11 +293,21 @@ set(SIL_MORE_SOURCES
     src/ui/story.c
     src/format.c
     src/level-generation/level-generation.c
+    src/level-generation/level-generation-utumno.c
     src/level-generation/level-generation-access.c
     src/level-generation/level-generation-finalize.c
+    src/level-generation/level-generation-fixtures.c
     src/level-generation/level-generation-layout-anchors.c
     src/level-generation/level-generation-layout-big-cave.c
     src/level-generation/level-generation-layout-caves.c
+    src/level-generation/level-generation-cave-floor.c
+    src/level-generation/level-generation-themes.c
+    src/level-generation/level-generation-landmarks.c
+    src/level-generation/level-generation-terrain-history.c
+    src/level-generation/level-generation-terrain-vaults.c
+    src/level-generation/level-generation-terrain-structures.c
+    src/level-generation/level-generation-terrain.c
+    src/level-generation/level-generation-terrain-access.c
     src/level-generation/level-generation-layout-connectivity.c
     src/level-generation/level-generation-layout-doors.c
     src/level-generation/level-generation-layout-modes.c
@@ -345,6 +381,10 @@ set(SIL_MORE_SOURCES
     src/sdl/render/sdl-fonts.c
     src/sdl/render/sdl-present.c
     src/sdl/render/sdl-term-callbacks.c
+    src/sdl/render/sdl-material-edge.c
+    src/sdl/render/sdl-chasm-transition.c
+    src/sdl/render/sdl-idle-animation.c
+    src/sdl/render/sdl-bridge.c
     src/sdl/render/sdl-text.c
       src/sdl/ui/sdl-main-menu.c
       src/sdl/ui/sdl-halls-screen.c
@@ -354,12 +394,14 @@ set(SIL_MORE_SOURCES
     src/sdl/ui/sdl-panes.c
     src/sdl/ui/sdl-screens.c
     src/sdl/ui/sdl-song-menu.c
+    src/sdl/ui/sdl-gameplay-tutorial.c
     src/sdl/ui/sdl-question-menu.c
     src/melee/melee-attack.c
     src/melee/melee-attack-ranged.c
     src/melee/melee-combat-display.c
     src/melee/melee-movement.c
     src/melee/melee-movement-path.c
+    src/melee/melee-movement-tactics.c
     src/melee/melee-movement-resolution.c
     src/melee/melee-process.c
     src/melee/melee-util.c
@@ -388,6 +430,15 @@ set(SIL_MORE_SOURCES
     src/monster/monster-recall.c
     src/monster/monster-select.c
     src/monster/monster-spawn.c
+    src/monster/monster-abilities.c
+    src/monster/monster-ai.c
+    src/monster/monster-senses.c
+    src/monster/monster-world.c
+    src/monster/monster-tactics.c
+    src/monster/monster-thrall.c
+    src/monster/monster-social.c
+    src/monster/monster-routine.c
+    src/cave/cave-light.c
     src/monster/monster-summon.c
     src/monster/monster-update.c
     src/object/object-allocation.c
@@ -436,6 +487,8 @@ set(SIL_MORE_SOURCES
     src/fs/save-player.c
     src/fs/save-notes-inventory.c
     src/fs/save-dungeon.c
+    src/fs/save-environment.c
+    src/fs/load-environment.c
     src/score/score_io.c
     src/score/score_logic.c
     src/score/score_guid.c
@@ -443,6 +496,9 @@ set(SIL_MORE_SOURCES
     src/score/score_runs.c
     src/score/score_ui.c
     src/sdl-config.c
+    src/tutorial/tutorial.c
+    src/tutorial/tutorial-game.c
+    src/tutorial/tutorial-world.c
     src/sdl-sound.c
     src/sound-config.c
     src/fs/io_sdl.c
@@ -460,6 +516,7 @@ set(SIL_MORE_SOURCES
     src/ui/targeting/direction.c
     src/ui/targeting/targeting.c
     src/log/bootstrap.c
+    src/log/perf.c
     src/log/fatal.c
     src/player/player-song-disguise.c
     src/player/player-song-duels.c
@@ -543,7 +600,7 @@ if(SIL_IOS)
   file(GLOB SIL_RES_GRAF    CONFIGURE_DEPENDS "lib/xtra/graf/*.png")
   file(GLOB_RECURSE SIL_RES_SOUND LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/sound/*")
   file(GLOB_RECURSE SIL_RES_MUSIC LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/music/*")
-  file(GLOB SIL_RES_HELP    CONFIGURE_DEPENDS "lib/help/*.txt" "lib/help/*.hlp")
+  file(GLOB SIL_RES_HELP    CONFIGURE_DEPENDS "lib/help/*.txt" "lib/help/*.hlp" "lib/help/*.json")
 
   # Preserve directory structure inside the bundle's Resources/lib/ tree.
   foreach(_file ${SIL_RES_EDIT})
@@ -615,7 +672,7 @@ if(MINGW)
 endif()
 
 # Link SDL3 libraries (required for this build)
-target_compile_definitions(sil-more PRIVATE USE_SDL)
+target_compile_definitions(sil-more PRIVATE USE_SDL SIL_PERF_DIAGNOSTICS)
 
 if(SIL_IOS)
   target_link_libraries(sil-more PRIVATE SDL3::SDL3-static SDL3_ttf::SDL3_ttf-static SDL3_image::SDL3_image-static SDL3_mixer::SDL3_mixer-static log m "-framework UIKit")

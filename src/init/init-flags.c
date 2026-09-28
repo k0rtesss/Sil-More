@@ -24,12 +24,21 @@
 #define VLT 9
 #define CUR 10
 #define UNQ 11
-#define MAX_FLAG_SETS 12
+#define RF5 12
+#define MAX_FLAG_SETS 13
 
 /*
  * Monster race flags for the race_info_flags1 structure
  */
 static flag_name info_flags[] = {
+
+    { "SMITE", RF5, RF5_SMITE },
+    { "SPRINTING", RF5, RF5_SPRINTING },
+    { "CONCENTRATION", RF5, RF5_CONCENTRATION },
+    { "DODGING", RF5, RF5_DODGING },
+    { "BLOCKING", RF5, RF5_BLOCKING },
+    { "VENGEANCE", RF5, RF5_VENGEANCE },
+    { "BRIDGE_BUILDER", RF5, RF5_BRIDGE_BUILDER },
 
     /*
      * Monster race flags 2
@@ -301,9 +310,11 @@ static flag_name info_flags[] = {
     { "TEST", VLT, VLT_TEST }, { "NO_ROTATION", VLT, VLT_NO_ROTATION },
     { "TRAPS", VLT, VLT_TRAPS }, { "WEBS", VLT, VLT_WEBS },
     { "LIGHT", VLT, VLT_LIGHT }, { "SURFACE", VLT, VLT_SURFACE },
-    { "QUEST", VLT, VLT_QUEST }, { "VLTXXXX8", VLT, VLT_VLTXXXX8 },
-    { "VLTXXXX9", VLT, VLT_VLTXXXX9 }, { "VLTXXX10", VLT, VLT_VLTXXX10 },
-    { "VLTXXX11", VLT, VLT_VLTXXX11 }, { "VLTXXX12", VLT, VLT_VLTXXX12 },
+    { "QUEST", VLT, VLT_QUEST }, { "TORCHES", VLT, VLT_TORCHES },
+    { "TERRAIN_CROSSING", VLT, VLT_TERRAIN_CROSSING },
+    { "TERRAIN_FLOOD", VLT, VLT_TERRAIN_FLOOD },
+    { "TERRAIN_REPAIRED", VLT, VLT_TERRAIN_REPAIRED },
+    { "VLTXXX12", VLT, VLT_VLTXXX12 },
     { "VLTXXX13", VLT, VLT_VLTXXX13 }, { "VLTXXX14", VLT, VLT_VLTXXX14 },
     { "VLTXXX15", VLT, VLT_VLTXXX15 }, { "VLTXXX16", VLT, VLT_VLTXXX16 },
     { "VLTXXX17", VLT, VLT_VLTXXX17 }, { "VLTXXX18", VLT, VLT_VLTXXX18 },

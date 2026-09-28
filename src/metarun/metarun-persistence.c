@@ -119,6 +119,13 @@ static bool metarun_header_before(const meta_file_header* header,
     return header->version_extra < extra;
 }
 
+static void metarun_migrate_tutorial_notice(metarun* tale,
+    const meta_file_header* header)
+{
+    if (tale && metarun_header_before(header, 0, 9, 8, 0))
+        tale->tutorial_upgrade_pending = 1;
+}
+
 static void metarun_clear_obsolete_interface_options_097(metarun* m)
 {
     if (!m)
@@ -520,6 +527,7 @@ errr load_metaruns(bool create_if_missing)
 
     meta_file_header header;
     bool interface_settings_migrated = false;
+    bool tutorial_settings_migrated = false;
     sdl_seek(fd, 0);
     if (sdl_read(fd, (char*)&header, sizeof(header)) != 0) {
         log_error("Failed to read metarun header");
@@ -530,6 +538,7 @@ errr load_metaruns(bool create_if_missing)
     log_info("Loading versioned meta file v%d.%d.%d.%d (%u entries)",
              header.version_major, header.version_minor,
              header.version_patch, header.version_extra, header.entry_count);
+    tutorial_settings_migrated = metarun_header_before(&header, 0, 9, 8, 0);
     /* Keep the original 0.9.7 interface migration on every platform.  Only
      * Android and iOS need the newer orientation-profile migration. */
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -626,6 +635,7 @@ errr load_metaruns(bool create_if_missing)
 
     if (metaruns) {
         for (s16b i = 0; i < metarun_max; i++) {
+            metarun_migrate_tutorial_notice(&metaruns[i], &header);
             if (interface_settings_migrated)
                 metarun_clear_obsolete_interface_options_097(&metaruns[i]);
         }
@@ -708,9 +718,9 @@ errr load_metaruns(bool create_if_missing)
         apply_difficulty_curses(&metar);
         save_metaruns(); /* persist the changes */
     }
-    else if (interface_settings_migrated)
+    else if (interface_settings_migrated || tutorial_settings_migrated)
     {
-        save_metaruns(); /* rewrite header and cleared obsolete option bits */
+        save_metaruns(); /* Persist all Tales' notices before rewriting the old header. */
     }
 
     log_debug("Loaded metarun %d with %d silmarils, %d deaths", metar.id, metar.silmarils, metar.deaths);

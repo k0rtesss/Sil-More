@@ -318,6 +318,82 @@ static void quest_status_put_wrapped(int col, int wid, int hgt, int *row,
         (*row)++;
 }
 
+static void quest_status_put_main_step(int col, int hgt, int *row,
+    cptr text, bool complete, bool current)
+{
+    char line[160];
+    byte color = TERM_SLATE;
+
+    if (complete)
+        color = TERM_L_GREEN;
+    else if (current)
+        color = TERM_WHITE;
+
+    strnfmt(line, sizeof(line), "%s %s",
+        complete ? "[done]" : (current ? ">" : "[ ]"), text);
+    quest_status_put_line(col, hgt, row, color, line);
+}
+
+static void quest_status_put_main_quest(int col, int wid, int hgt, int *row)
+{
+    char objective[160];
+    bool escaped = p_ptr->escaped != 0;
+    bool has_silmaril = escaped || (silmarils_possessed() > 0);
+    bool found_throne = has_silmaril || p_ptr->morgoth_hall_entered;
+    bool reached_morgoth = found_throne
+        || (p_ptr->max_depth >= MORGOTH_DEPTH)
+        || (p_ptr->depth >= MORGOTH_DEPTH);
+
+    quest_status_put_line(col, hgt, row, TERM_ORANGE,
+        "Main Quest: The Silmaril");
+
+    if (!reached_morgoth)
+    {
+        strnfmt(objective, sizeof(objective),
+            "Current objective: Reach Morgoth's level at %d ft.",
+            MORGOTH_DEPTH * 50);
+    }
+    else if (!found_throne)
+    {
+        SDL_strlcpy(objective,
+            "Current objective: Find Morgoth's throne room.",
+            sizeof(objective));
+    }
+    else if (!has_silmaril)
+    {
+        SDL_strlcpy(objective,
+            "Current objective: Steal a Silmaril from the Iron Crown.",
+            sizeof(objective));
+    }
+    else if (!escaped)
+    {
+        SDL_strlcpy(objective,
+            "Current objective: Escape Angband with the Silmaril.",
+            sizeof(objective));
+    }
+    else
+    {
+        SDL_strlcpy(objective,
+            "Complete - You escaped Angband with a Silmaril.",
+            sizeof(objective));
+    }
+
+    quest_status_put_wrapped(col, wid, hgt, row,
+        escaped ? TERM_L_GREEN : TERM_WHITE, objective);
+    quest_status_put_main_step(col + 2, hgt, row,
+        "Reach Morgoth's level.", reached_morgoth, !reached_morgoth);
+    quest_status_put_main_step(col + 2, hgt, row,
+        "Find Morgoth's throne room.", found_throne,
+        reached_morgoth && !found_throne);
+    quest_status_put_main_step(col + 2, hgt, row,
+        "Steal a Silmaril from the Iron Crown.", has_silmaril,
+        found_throne && !has_silmaril);
+    quest_status_put_main_step(col + 2, hgt, row,
+        "Escape Angband with the Silmaril.", escaped,
+        has_silmaril && !escaped);
+    quest_status_put_line(col, hgt, row, TERM_WHITE, "");
+}
+
 /*
  * Simple string search function - finds needle in haystack
  * Returns pointer to first occurrence, or NULL if not found
@@ -578,6 +654,10 @@ hint_quest_page do_cmd_quest_status_page(void)
 
     quest_status_tabs_focus = true;
     quest_status_reset_page(col, &row);
+
+    /* The purpose of every run remains visible even before a side quest is
+     * discovered.  Existing endgame state supplies each milestone. */
+    quest_status_put_main_quest(col, wid, hgt, &row);
 
     /* Check Tulkas quest */
     if (p_ptr->tulkas_quest > TULKAS_QUEST_GIVER_PRESENT) {
@@ -1043,10 +1123,10 @@ hint_quest_page do_cmd_quest_status_page(void)
     /* If no quests are active or completed */
     if (!any_quests) {
         quest_status_put_line(col, hgt, &row, TERM_SLATE,
-            "No active or completed quests this run.");
+            "No active or completed side quests this run.");
         quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
         quest_status_put_line(col, hgt, &row, TERM_L_DARK,
-            "Quest vaults may appear as you delve deeper...");
+            "Side-quest vaults may appear as you delve deeper...");
     }
 
     quest_status_put_line(col, hgt, &row, TERM_WHITE, "");

@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-terrain.c */
 
 #include "angband.h"
+#include "cave/cave-events.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -33,6 +34,7 @@ bool lock_door(int y, int x, int power)
                 || (cave_feat[y][x] == FEAT_BROKEN))
             {
                 cave_set_feat(y, x, FEAT_DOOR_HEAD);
+                sound_at(MSG_SHUTDOOR, y, x);
 
                 obvious = true;
 
@@ -292,11 +294,11 @@ void destroy_area(int y1, int x1, int r, bool full)
                     feat = FEAT_WALL_EXTRA;
                 }
 
-                /* Quartz */
+                /* Fractured stone */
                 else if (t < 100)
                 {
-                    /* Create quartz vein */
-                    feat = FEAT_QUARTZ;
+                    /* Create damaged stone, never new minerals */
+                    feat = FEAT_DAMAGED_WALL;
                 }
 
                 /* Change the feature */
@@ -319,8 +321,9 @@ void destroy_area(int y1, int x1, int r, bool full)
         }
     }
 
-    /* Make a lot of noise */
-    monster_perception(true, false, -30);
+    /* The collapse is a physical clue at the epicentre, not evidence that
+     * the player made a sound at their current location. */
+    cave_event_emit(CAVE_EVENT_COLLAPSE, y1, x1, 30);
 
     /* Fully update the visuals */
     p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS);
@@ -431,6 +434,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
 
             if (sn > 0)
             {
+                p_ptr->leaping = false;
                 monster_swap(p_ptr->py, p_ptr->px, sy, sx);
             }
 
@@ -597,7 +601,15 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                 && !((y == pit_y) && (x == pit_x)))
             {
                 /* Destroy location (if valid) */
-                if (cave_valid_bold(y, x))
+                if (cave_valid_bold(y, x)
+                    /* Utumno has a single forward route. Shattering its dry
+                     * crossings or openable doors must not require the player
+                     * to have brought a mattock. Damage still applies above,
+                     * and existing walls can still collapse. */
+                    && !(((p_ptr->depth == UTUMNO_DEPTH)
+                             || (p_ptr->depth == UTUMNO_FORGE_DEPTH))
+                        && (cave_floor_bold(y, x)
+                            || cave_known_closed_door_bold(y, x))))
                 {
                     int adj_chasms = 0;
 
@@ -630,7 +642,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                             else if (t < 70)
                                 feat = FEAT_WALL_EXTRA;
                             else
-                                feat = FEAT_QUARTZ;
+                                feat = FEAT_DAMAGED_WALL;
                         }
                         else
                         {
@@ -649,7 +661,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                         else if (t < 80)
                             feat = FEAT_WALL_EXTRA;
                         else
-                            feat = FEAT_QUARTZ;
+                            feat = FEAT_DAMAGED_WALL;
                     }
 
                     // if we started with rubble
@@ -663,7 +675,7 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                         else if (t < 70)
                             feat = FEAT_WALL_EXTRA;
                         else
-                            feat = FEAT_QUARTZ;
+                            feat = FEAT_DAMAGED_WALL;
                     }
 
                     // if we started with a wall of some sort
@@ -715,8 +727,8 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
         take_hit(damage, "falling into a pit");
     }
 
-    /* Make a lot of noise */
-    monster_perception(true, false, -30);
+    /* Earthquakes are heard at their origin, independently of the player. */
+    cave_event_emit(CAVE_EVENT_COLLAPSE, cy, cx, 30);
 
     /* Fully update the visuals */
     p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS);

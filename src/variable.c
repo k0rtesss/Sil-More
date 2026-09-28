@@ -353,6 +353,21 @@ const cptr angband_sound_name[MSG_MAX] = {
     "trap_fire",
     "chest_open",
     "torch_light",
+    "forge",
+    "horn_terror",
+    "horn_thunder",
+    "horn_force",
+    "horn_blasting",
+    "horn_warning",
+    "landing",
+    "trap_acid",
+    "trap_flood",
+    "trap_spiked",
+    "trap_alarm",
+    "trap_caltrops",
+    "trap_deadfall",
+    "trap_flash",
+    "ice",
 };
 
 /*

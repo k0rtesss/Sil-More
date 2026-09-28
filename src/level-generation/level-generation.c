@@ -1,10 +1,111 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "monster/monster-routine.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-flood.h"
+#include "cave/cave.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-terrain-vaults.h"
+#include "level-generation/level-generation-terrain-history.h"
+#include "blitz.h"
+#include "sdl-config.h"
+#include "tutorial/tutorial.h"
+#include "tutorial/tutorial-game.h"
+#include "player/player-upkeep-internal.h"
+
+static bool tutorial_start_triggers_tutorial(void)
+{
+    /* Use the real visibility calculation on scratch state: rejected maps
+     * must not reveal terrain, award encounters, or change the character.
+     * The tutorial-game helper then checks the same visible monster and
+     * nearby map-subject boundary used by the first checkpoint. */
+    typedef struct start_preview {
+        player_type player;
+        monster_type monsters[MAX_MONSTERS];
+        u16b info[MAX_DUNGEON_HGT][256];
+        s16b light[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+        u16b view[VIEW_MAX];
+        u16b temp[TEMP_MAX];
+        byte noise_cost[2][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+        byte noise_centers[2][4];
+    } start_preview;
+    start_preview *preview = mem_alloc(start_preview);
+    player_type *saved_player = p_ptr;
+    monster_type *saved_monsters = mon_list;
+    u16b (*saved_info)[256] = cave_info;
+    s16b (*saved_light)[MAX_DUNGEON_WID] = cave_light;
+    u16b *saved_view = view_g, *saved_temp = temp_g;
+    int saved_view_n = view_n;
+    bool saved_character_dungeon = character_dungeon;
+    const int noise_flows[2] = { FLOW_PLAYER_NOISE, FLOW_MONSTER_NOISE };
+    u64b saved_rng = Rand_state_export();
+    bool triggered;
+
+    if (!preview) quit("Out of memory checking the tutorial start");
+    preview->player = *p_ptr;
+    memcpy(preview->monsters, mon_list, mon_max * sizeof(*mon_list));
+    memcpy(preview->info, cave_info, sizeof(preview->info));
+    /* Glow checks overwrite monster noise; Listen needs current player noise.
+     * These fixed global arrays cannot be redirected to the scratch state. */
+    for (int i = 0; i < 2; ++i) {
+        int flow = noise_flows[i];
+        memcpy(preview->noise_cost[i], cave_cost[flow], sizeof(preview->noise_cost[i]));
+        preview->noise_centers[i][0] = flow_center_y[flow];
+        preview->noise_centers[i][1] = flow_center_x[flow];
+        preview->noise_centers[i][2] = update_center_y[flow];
+        preview->noise_centers[i][3] = update_center_x[flow];
+    }
+    p_ptr = &preview->player;
+    mon_list = preview->monsters;
+    cave_info = preview->info;
+    cave_light = preview->light;
+    view_g = preview->view;
+    temp_g = preview->temp;
+    view_n = 0;
+    character_dungeon = true;
+
+    calc_bonuses_for_preview();
+    calc_torch();
+    update_view_for_generation();
+    /* Equipped and floor weapon glow depends on the field of view. Settle
+     * light again now that the first pass has established that field. */
+    calc_torch();
+    update_view_for_generation();
+    update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
+    for (int i = 1; i < mon_max; ++i)
+        if (mon_list[i].r_idx) update_mon_for_generation(i);
+    triggered = tutorial_game_first_turn_triggered();
+
+    p_ptr = saved_player;
+    mon_list = saved_monsters;
+    cave_info = saved_info;
+    cave_light = saved_light;
+    view_g = saved_view;
+    temp_g = saved_temp;
+    view_n = saved_view_n;
+    character_dungeon = saved_character_dungeon;
+    for (int i = 0; i < 2; ++i) {
+        int flow = noise_flows[i];
+        memcpy(cave_cost[flow], preview->noise_cost[i], sizeof(preview->noise_cost[i]));
+        flow_center_y[flow] = preview->noise_centers[i][0];
+        flow_center_x[flow] = preview->noise_centers[i][1];
+        update_center_y[flow] = preview->noise_centers[i][2];
+        update_center_x[flow] = preview->noise_centers[i][3];
+    }
+    Rand_state_import(saved_rng);
+    mem_free(preview);
+    return triggered;
+}
 
 bool cave_gen(void)
 {
+    if (p_ptr->depth == UTUMNO_FORGE_DEPTH)
+        return utumno_gen();
+
+    terrain_history_reset();
     int i;
 
     int l;
@@ -16,6 +117,7 @@ bool cave_gen(void)
     int is_guaranteed_forge_level = false;
     bool duruin_bastion_forced = false;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    bool is_utumno_level = (p_ptr->depth == UTUMNO_DEPTH);
 
     reset_morgoth_layout_state(is_morgoth_level);
 
@@ -27,7 +129,7 @@ bool cave_gen(void)
     qv_stored_y1 = qv_stored_x1 = qv_stored_y2 = qv_stored_x2 = -1;
 
     /* Run quest lottery once per level to determine which quest (if any) gets this level */
-    if (is_morgoth_level) {
+    if (is_morgoth_level || is_utumno_level) {
         quest_lottery_winner = 0;
     } else {
         run_quest_lottery();
@@ -43,7 +145,7 @@ bool cave_gen(void)
               p_ptr->varda_quest, quest_lottery_winner);
 
     /* Varda quest: flag forced bastion placement on first level deeper than 500ft */
-    if (!is_morgoth_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
+    if (!is_morgoth_level && !is_utumno_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
         if (!p_ptr->varda_vault_ready) {
             log_trace("Varda quest: Crossing 500ft, setting bastion_ready at depth %d", p_ptr->depth);
         }
@@ -75,6 +177,10 @@ bool cave_gen(void)
         l -= 3;
         if (l < 6) l = 6; /* Allow 6x6 and 7x7 block maps */
     }
+
+    /* Six branch shafts need six distinct regions outside the throne room. */
+    if (utumno_corridors && is_morgoth_level && l < 11)
+        l = 11;
 
     // Square levels: same dimension for both height and width
     p_ptr->cur_map_hgt = l * (PANEL_HGT);
@@ -124,6 +230,9 @@ bool cave_gen(void)
     dun->cent_n = 0;
     log_trace("cave_gen: cent_n reset to 0");
     layout_anchor_reset();
+    current_partition_count = 0;
+    /* Utumno reserves its entrance before planning the ordinary geology. */
+    if (!is_utumno_level) terrain_history_begin();
 
     /* Verify dun struct sanity */
     log_trace("cave_gen: sanity check dun ptr=%p cent capacity=%d connection[0][0]=%d piece[0]=%d corner[0]=(y1=%d,x1=%d,y2=%d,x2=%d)",
@@ -175,7 +284,7 @@ bool cave_gen(void)
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
     log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
 
-    if (!is_morgoth_level)
+    if (!is_morgoth_level && !is_utumno_level)
     {
         /* Quest vault determination - Allow re-placement during level regeneration */
         log_trace("Quest vault: ENTERING quest vault logic check (quest_vault_used=%d, force_forge=%s, qv_placed_this_level=%s)",
@@ -342,9 +451,12 @@ bool cave_gen(void)
     /* Seed a handful of prefab anchors up front to diversify layout */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_SHAPING,
         "Generating partitions, rooms, and special areas.");
-    seed_prefab_anchors();
+    if (!is_utumno_level) seed_prefab_anchors();
     /* Apply quadrant generation modes - this is now the primary room generation */
     apply_quadrant_generation_modes();
+    if (is_utumno_level && (g_vault_name[0] == '\0'
+        || terrain_history_count() != 3))
+        return false;
     /* DISABLED: ensure_partition_connectivity() was creating dead-end corridors.
      * The corridor system and rescue tunnels handle connectivity instead. */
     /* Repair all outer walls - critical fix for tunnel connectivity after overlapping generation */
@@ -488,6 +600,7 @@ bool cave_gen(void)
     /* Sil - This has been changed considerably */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_LINKING,
         "Connecting rooms and validating access.");
+    terrain_history_start_tunnels();
     if (!connect_rooms_stairs())
     {
         if (cheat_room)
@@ -549,6 +662,15 @@ bool cave_gen(void)
     check_quest_vault_integrity("AFTER_DOOR_RANDOMIZATION");
 
     /* place the stairs, traps, rubble, secret doors, and player */
+    if (!terrain_history_finish())
+    {
+        if (p_ptr->force_forge) p_ptr->fixed_forge_count--;
+        genlog_fail("Terrain history could not retain its planned topology");
+        return false;
+    }
+    place_dungeon_terrain();
+    if (is_utumno_level) utumno_shape_frontiers();
+
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_ENTRY,
         "Placing stairs, rubble, doors, and player start.");
     if (!place_rubble_player())
@@ -579,6 +701,11 @@ bool cave_gen(void)
     }
 
     prune_invalid_nonvault_doors();
+
+    /* Place decorative light only after tunnels, doors, hazards, stairs, and
+     * the player start have settled, so later terrain passes cannot erase it. */
+    place_illusory_passages();
+    place_generation_fixtures();
 
     {
         partition_population_plan plans[PARTITION_META_MAX];
@@ -1238,6 +1365,16 @@ bool cave_gen(void)
     }
     p_ptr->force_forge = false;
 
+    if (is_utumno_level && !utumno_finalize_corridors()) return false;
+
+    if ((utumno_corridors || p_ptr->utumno_forge_visited) && is_morgoth_level
+        && !utumno_place_morgoth_route())
+        return false;
+
+    /* All liquid geometry is final after population and quest placement.  The
+     * source-to-outlet graph is kept as level metadata for the renderer. */
+    cave_water_flow_build();
+
     /* Level generation successful - log completion */
     genlog_summary("Level %d generation COMPLETE: %d rooms, quest_lottery=%d",
                    p_ptr->depth, dun->cent_n, quest_lottery_winner);
@@ -1496,6 +1633,7 @@ void generate_cave(void)
 {
     int y, x, i;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+    const bool protect_tutorial_start = tutorial_game_start_needs_clear_area();
 
     log_info("generate_cave: Function entry - about to start");
     log_debug("generate_cave: Starting cave generation");
@@ -1505,6 +1643,7 @@ void generate_cave(void)
 
     /* The dungeon is not ready */
     character_dungeon = false;
+    cave_environment_reset();
 
     /* Don't know feeling yet */
     do_feeling = 0;
@@ -1610,6 +1749,11 @@ if (playerturn == 0) {
         mon_max = 1;
         feeling = 0;
 
+        cave_fixtures_clear();
+        cave_flood_clear();
+        terrain_generation_reset();
+        terrain_vault_reset();
+
         /* Start with a blank cave */
         for (y = 0; y < MAX_DUNGEON_HGT; y++)
         {
@@ -1711,10 +1855,24 @@ if (playerturn == 0) {
             }
         }
 
+        /* Check the final population, including vaults and special monsters,
+         * before accepting the map or committing its pending quest state. */
+        if (okay && protect_tutorial_start)
+        {
+            /* Match the lighting that will be used after acceptance. */
+            apply_chasm_partition_tags();
+            apply_partition_and_room_glow_rules();
+            if (tutorial_start_triggers_tutorial())
+            {
+                okay = false;
+                why = "tutorial trigger at start";
+            }
+        }
+
         /*message*/
         if (!okay)
         {
-            if (cheat_room || cheat_hear || cheat_peek || cheat_xtra)
+            if (!why && (cheat_room || cheat_hear || cheat_peek || cheat_xtra))
                 why = "defective level";
 
             // Must reset all the artefacts that were generated on the defective
@@ -1795,6 +1953,10 @@ if (playerturn == 0) {
         /* Accept */
         if (okay)
         {
+            if (p_ptr->depth == UTUMNO_FORGE_DEPTH)
+                p_ptr->utumno_forge_visited = true;
+            if (is_morgoth_level)
+                p_ptr->utumno_return_to_throne = false;
             /* QUEST VAULT REGENERATION FIX: Apply pending quest state changes when level generation is COMPLETELY successful */
             apply_pending_quest_states();
 
@@ -1836,6 +1998,11 @@ if (playerturn == 0) {
     /* The dungeon is ready */
     character_dungeon = true;
 
+    /* Reach the first input/tutorial checkpoint on the accepted map before
+     * newly spawned monsters (initial energy 0..9) can take a turn. */
+    if (protect_tutorial_start)
+        p_ptr->energy = MAX(p_ptr->energy, 100);
+
     /* Reset the number of traps on the level. */
     num_trap_on_level = 0;
 
@@ -1861,6 +2028,8 @@ if (playerturn == 0) {
         }
     }
 
+    monster_routine_finish_level();
+    cave_environment_seed();
     level_gen_screen_finish(true);
 
     // Valar quest doesn't provide map rewards like the old thrall quest

@@ -6,6 +6,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "game/game-lifecycle.h"
 #include "fs/file.h"
@@ -175,6 +176,7 @@ void do_cmd_morgoth_victory(void)
  */
 void do_cmd_suicide(void)
 {
+    if (!tutorial_game_action_allowed("suicide", NULL)) return;
     /* Flush input */
     flush();
 
@@ -298,6 +300,7 @@ void do_cmd_save_game(void)
  */
 static void close_game_aux(void)
 {
+    tutorial_game_lifecycle(p_ptr->escaped ? "tale.escape" : "tale.death");
     static bool death_processing = false;
     high_score the_score;
 
@@ -474,22 +477,6 @@ void close_game(void)
             log_info("Player %s died at depth %d in %s.",
                 op_ptr->full_name, p_ptr->depth, p_ptr->died_from);
             close_game_aux();
-        }
-        else if (p_ptr->game_type == -1)
-        {
-            monster_lore* l_ptr = &l_list[R_IDX_ORC_ARCHER];
-
-            if (p_ptr->chp <= 0)
-            {
-                if (l_ptr->psights == 0)
-                {
-                    pause_with_text(tutorial_early_death_text, 5, 10, NULL, 0);
-                }
-                else
-                {
-                    pause_with_text(tutorial_late_death_text, 5, 10, NULL, 0);
-                }
-            }
         }
 
         /* Now wipe the level */

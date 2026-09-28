@@ -419,7 +419,7 @@ bool sprinting(void)
 
     if (p_ptr->active_ability[S_EVN][EVN_SPRINTING])
     {
-        /* Count up to 5 squares so the heavier-armour threshold can be met */
+        /* Count recent compatible movement toward the armour threshold */
         for (i = 1; i < 5; i++)
         {
             if ((p_ptr->previous_action[i] >= 1)
@@ -451,7 +451,7 @@ bool sprinting(void)
     }
 
     /* Light armour lets you reach top speed a square sooner */
-    return (turns >= (wearing_only_light_armour() ? 4 : 5));
+    return (turns >= (wearing_only_light_armour() ? 3 : 4));
 }
 
 /* Calculate stats */
@@ -460,13 +460,11 @@ void calc_stats(void)
     for (int i = 0; i < A_MAX; i++)
     {
         /* Extract the new "stat_use" value for the stat */
-        p_ptr->stat_use[i] = p_ptr->stat_base[i] + p_ptr->stat_equip_mod[i]
-            + p_ptr->stat_drain[i] + p_ptr->stat_misc_mod[i];
+        int value = p_ptr->stat_base[i] + p_ptr->stat_equip_mod[i]
+            + p_ptr->stat_drain[i] + p_ptr->stat_disease[i]
+            + p_ptr->stat_misc_mod[i];
 
         /* cap to -9 and 20 */
-        if (p_ptr->stat_use[i] < BASE_STAT_MIN)
-            p_ptr->stat_use[i] = BASE_STAT_MIN;
-        else if (p_ptr->stat_use[i] > BASE_STAT_MAX)
-            p_ptr->stat_use[i] = BASE_STAT_MAX;
+        p_ptr->stat_use[i] = MAX(BASE_STAT_MIN, MIN(BASE_STAT_MAX, value));
     }
 }

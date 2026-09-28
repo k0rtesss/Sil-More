@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
+#include "cave/cave-fixtures.h"
 
 /*
  * Note that Level generation is *not* an important bottleneck,
@@ -685,6 +686,11 @@ void apply_partition_and_room_glow_rules(void)
             }
         }
     }
+
+    /* Reapply decorative fixture light after the darkness policy. Fixtures
+     * are explicit saved state; their local glow must not be mistaken for a
+     * permanently lit cave or labyrinth room. */
+    reapply_cave_fixture_glow();
 }
 
 bool place_chasm_theme_monster_at(int y, int x, int r_idx);
@@ -755,6 +761,19 @@ int mode_weight_for_depth(quadrant_mode_t mode, int depth, int blocks,
         return 0;
 
     (void)blocks; /* No longer used for scaling */
+
+    if (depth == UTUMNO_DEPTH)
+    {
+        /* The ordinary partition sampler and depth caps still apply. */
+        switch (mode)
+        {
+        case QUAD_MODE_ROOMY: return 8;
+        case QUAD_MODE_CAVEY: return 32;
+        case QUAD_MODE_RUINED: return 30;
+        case QUAD_MODE_BIG_CAVE: return 30;
+        default: return 0;
+        }
+    }
 
     switch (mode)
     {

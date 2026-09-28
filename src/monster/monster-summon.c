@@ -168,11 +168,14 @@ static bool summon_specific_okay(int r_idx)
  *
  * Note that this function may not succeed, though this is very rare.
  */
-bool summon_specific(int y1, int x1, int lev, int type)
+bool summon_specific_with_index(int y1, int x1, int lev, int type, int* m_idx)
 {
     int i, x, y, r_idx;
 
     bool (*get_mon_num_hook_temp)(int r_idx) = get_mon_num_hook;
+
+    if (m_idx)
+        *m_idx = 0;
 
     /* Look for a location */
     for (i = 0; i < 20; ++i)
@@ -225,8 +228,16 @@ bool summon_specific(int y1, int x1, int lev, int type)
     if (!place_monster_aux(y, x, r_idx, false, true))
         return (false);
 
+    if (m_idx)
+        *m_idx = cave_m_idx[y][x];
+
     /* Success */
     return (true);
+}
+
+bool summon_specific(int y1, int x1, int lev, int type)
+{
+    return summon_specific_with_index(y1, x1, lev, type, NULL);
 }
 
 /*

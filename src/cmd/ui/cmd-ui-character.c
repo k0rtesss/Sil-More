@@ -1,7 +1,9 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
+#include "ui/character-screen.h"
 
 extern struct sound_config g_sound_config;
 #include "externs.h"
@@ -166,14 +168,14 @@ static const character_sheet_named_trait character_sheet_named_traits[] = {
 };
 
 static const cptr character_sheet_skill_descriptions[S_MAX] = {
-    "Melee chance to hit and control in close combat.",
-    "Ranged chance to hit with bows and thrown weapons.",
-    "Avoiding attacks; also shown in armour as hit-avoid chance.",
-    "Avoiding detection and moving quietly.",
-    "Noticing hidden doors, traps, monsters, and subtle details.",
-    "Mental resistance and force of will.",
-    "Crafting items at forges.",
-    "Power and reliability of songs.",
+    "Chance to hit in close combat and with thrown weapons.",
+    "Chance to hit with bows.",
+    "Opposes enemy attack rolls to avoid hits.",
+    "Reduces noise and helps avoid visual detection.",
+    "Detects hidden doors, traps, and invisible foes; helps identify items.",
+    "Resists fear, confusion, entrancement, and other hostile effects.",
+    "Determines which items you can craft at forges.",
+    "Determines song power and opposed song checks.",
     ""
 };
 
@@ -650,7 +652,7 @@ static cptr character_sheet_stat_description(int stat)
 {
     switch (stat)
     {
-    case A_STR: return "melee damage dice and weight capacity";
+    case A_STR: return "weapon damage die sides and carried-weight limit";
     case A_DEX: return "melee, evasion, archery, and stealth";
     case A_CON: return "maximum health";
     case A_GRA: return "will, perception, smithing, song, and voice";
@@ -713,10 +715,12 @@ static void character_sheet_format_stat_item(const character_sheet_item* item,
     cnv_stat(p_ptr->stat_use[stat], use_buf);
     cnv_stat(p_ptr->stat_base[stat], base_buf);
     strnfmt(buf, buflen,
-        "%s: %s current = %s base%+d equip%+d misc%+d drain. Affects %s.",
+        "%s: %s current (base %s, equipment %+d, misc %+d, "
+        "Drain %+d, Disease %+d). Affects %s.",
         character_sheet_stat_full_name(stat), use_buf, base_buf,
         p_ptr->stat_equip_mod[stat], p_ptr->stat_misc_mod[stat],
-        p_ptr->stat_drain[stat], character_sheet_stat_description(stat));
+        p_ptr->stat_drain[stat], p_ptr->stat_disease[stat],
+        character_sheet_stat_description(stat));
 }
 
 static void character_sheet_format_value_item(const character_sheet_item* item,
@@ -911,6 +915,11 @@ static void character_sheet_format_skill_item(const character_sheet_item* item,
         skill_names_full[skill], character_sheet_skill_description(skill),
         p_ptr->skill_use[skill], p_ptr->skill_base[skill], stat_mod,
         equip_mod, misc_mod, next_cost);
+
+    if (!p_ptr->leaping && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px])
+        && (skill == S_MEL || skill == S_ARC
+            || (skill == S_EVN && !p_ptr->entranced && p_ptr->stun <= 100)))
+        SDL_strlcat(buf, " Ice footing contributes -2 to the misc modifier.", buflen);
 }
 
 static void character_sheet_format_trait_item(const character_sheet_item* item,
@@ -1054,6 +1063,7 @@ void character_sheet_format_vital_description(cptr label, char* buf,
 
 void do_cmd_character_sheet(void)
 {
+    tutorial_game_menu("character", "Inspect current attributes, skills, Health, Voice and traits. Select a value to see the effects contributing to it.");
     char ch;
     int focus_item = -1;
     bool focus_from_pointer = false;
@@ -1073,6 +1083,26 @@ void do_cmd_character_sheet(void)
     /* Forever */
     while (1)
     {
+        if (config.debug_character_sheet)
+        {
+            int wid = 80;
+            int hgt = 24;
+            const char* prompt = "DEBUG: any key returns to the game";
+            bool saved_hide_cursor = hide_cursor;
+
+            display_player(DISPLAY_PLAYER_MODE_COMPACT_STATS_SKILLS);
+            Term_get_size(&wid, &hgt);
+            if (hgt > 0)
+                c_put_str(TERM_SLATE, prompt, hgt - 1,
+                    MAX(0, (wid - (int)strlen(prompt)) / 2));
+            Term_fresh();
+
+            hide_cursor = true;
+            (void)inkey();
+            hide_cursor = saved_hide_cursor;
+            break;
+        }
+
         bool steamdeck = steamdeck_controls_active();
         character_sheet_item sheet_items[CHARACTER_SHEET_MAX_ITEMS];
         int sheet_item_count;
@@ -1270,8 +1300,9 @@ void do_cmd_character_sheet(void)
             handle_stuff();
         }
 
-        /* File dump - 'f' or L1 */
-        else if (ch == 'f' || (steamdeck && ch == steamdeck_prev_page_key()))
+        /* File dump - keyboard command only.  Shoulders are reserved for
+         * previous/next page on controller screens that actually have pages. */
+        else if (ch == 'f')
         {
             char ftmp[80];
 

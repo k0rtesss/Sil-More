@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -8,9 +9,11 @@
 
 extern void ident(object_type* o_ptr)
 {
+    bool was_known = object_known_p(o_ptr);
     /* Identify it */
     object_aware(o_ptr);
     object_known(o_ptr);
+    if (!was_known) tutorial_game_identified(o_ptr, "identification.item");
 
     /* Apply an autoinscription, if necessary */
     apply_autoinscription(o_ptr);
@@ -730,6 +733,7 @@ extern void ident_resist(u32b flag)
                 /* Print the messages */
                 msg_format("%s", effect_string);
                 msg_format("You realize that it is %s.", o_full_name);
+                tutorial_game_identified(o_ptr, "identification.elemental");
             }
 
             return;

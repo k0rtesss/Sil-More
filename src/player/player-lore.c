@@ -619,6 +619,10 @@ void update_lore(u32b update_flags)
             if (o_ptr->held_m_idx)
                 continue;
 
+            /* Submerged objects cannot be inspected through concealing water. */
+            if (!object_can_see_floor(o_ptr->iy, o_ptr->ix))
+                continue;
+
             /* If the object is in sight, or under the player... */
             if ((cave_info[o_ptr->iy][o_ptr->ix] & (CAVE_SEEN))
                 || ((p_ptr->py == o_ptr->iy) && (p_ptr->px == o_ptr->ix)))

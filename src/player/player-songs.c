@@ -1,6 +1,8 @@
 ﻿/* File: player/player-songs.c */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
@@ -12,6 +14,7 @@
 
 void change_song(int song)
 {
+    if (song != SNG_NOTHING && !tutorial_game_action_allowed("song", NULL)) return;
     int song_to_change;
     int old_song;
     bool new_song_is_duel;
@@ -435,6 +438,9 @@ void change_song(int song)
     }
 
     // Display synergy message if a woven theme pair is detected
+    tutorial_game_action_done("song", NULL);
+
+    // Display synergy message if a woven theme pair is detected
     if (song != SNG_NOTHING && song_to_change == 2)
     {
         display_synergy_message(p_ptr->song1, p_ptr->song2);
@@ -448,6 +454,7 @@ void change_song(int song)
     {
         /* Take time */
         p_ptr->energy_use = 100;
+        monster_ai_witness(MON_AI_SONG, 1, p_ptr->py, p_ptr->px);
 
         // store the action type
         p_ptr->previous_action[0] = ACTION_MISC;

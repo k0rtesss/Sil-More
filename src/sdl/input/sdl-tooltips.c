@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "sdl/main-sdl-private.h"
 
 typedef struct description_overlay_touch_scroll_state
@@ -201,17 +202,29 @@ bool sdl_mouse_monster_is_friendly(int m_idx)
     return (r_ptr->flags1 & (RF1_PEACEFUL)) != 0;
 }
 
+/* Keep tooltip object lookup in step with the map renderer: these terrain
+ * types can visibly contain a marked floor object. */
+static bool sdl_mouse_grid_can_show_objects(int y, int x)
+{
+    int feat = cave_feat[y][x];
+
+    return cave_floorlike_bold(y, x) || feat == FEAT_SUNLIGHT
+        || feat == FEAT_WATER || feat == FEAT_DEEP_WATER
+        || feat == FEAT_LAVA || FEAT_IS_ICE(feat)
+        || feat == FEAT_POISON;
+}
+
 bool sdl_mouse_grid_has_marked_object(int y, int x, object_type** out_obj)
 {
     s16b o_idx;
 
     if (!in_bounds(y, x) || !grid_info_is_available(y, x))
         return false;
-    if (!(cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT))
+    if (!sdl_mouse_grid_can_show_objects(y, x))
         return false;
 
     o_idx = cave_o_idx[y][x];
-    if (!o_idx || !o_list[o_idx].marked)
+    if (!o_idx || !object_is_visible(&o_list[o_idx]))
         return false;
 
     if (out_obj)
@@ -327,9 +340,9 @@ typedef struct sdl_tooltip_semantic_rule {
 } sdl_tooltip_semantic_rule;
 
 /* Text-only hover/long-press popups do not carry the per-byte attributes used
- * by map tooltips.  Add restrained semantic accents at render time: controls
- * are green, their UI targets blue, warnings red/orange, and trait meanings
- * retain the same colours used by the character tutorials. */
+ * by map tooltips.  Apply the same restrained contract as Help and sheets:
+ * named UI/game targets blue, controls brown, benefits green, and
+ * costs/danger orange or red. */
 static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
     { "second-quiver ranged attack mode", TERM_L_BLUE },
     { "ranged attack mode", TERM_L_BLUE },
@@ -337,11 +350,11 @@ static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
     { "supplies for lights", TERM_L_BLUE },
     { "character details", TERM_L_BLUE },
     { "compact panel", TERM_L_BLUE },
-    { "power rating", TERM_ORANGE },
+    { "power rating", TERM_L_BLUE },
     { "song menu", TERM_L_BLUE },
-    { "right-click", TERM_L_GREEN },
-    { "left-click", TERM_L_GREEN },
-    { "long-press", TERM_L_GREEN },
+    { "right-click", TERM_UMBER },
+    { "left-click", TERM_UMBER },
+    { "long-press", TERM_UMBER },
     { "inventory", TERM_L_BLUE },
     { "abilities", TERM_L_BLUE },
     { "smithing", TERM_L_BLUE },
@@ -352,13 +365,13 @@ static const sdl_tooltip_semantic_rule sdl_tooltip_semantic_rules[] = {
     { "vulnerable", TERM_L_RED },
     { "vulnerability", TERM_L_RED },
     { "penalty", TERM_L_RED },
-    { "cursed", TERM_UMBER },
-    { "curse", TERM_UMBER },
-    { "unique", TERM_VIOLET },
-    { "click", TERM_L_GREEN },
-    { "tap", TERM_L_GREEN },
-    { "hold", TERM_L_GREEN },
-    { "select", TERM_L_GREEN },
+    { "cursed", TERM_L_RED },
+    { "curse", TERM_L_RED },
+    { "unique", TERM_L_BLUE },
+    { "click", TERM_UMBER },
+    { "tap", TERM_UMBER },
+    { "hold", TERM_UMBER },
+    { "select", TERM_UMBER },
 };
 
 static bool sdl_tooltip_semantic_word_char(char ch)
@@ -426,18 +439,22 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         return false;
     if (!sdl_mouse_feature_known_for_action(y, x))
         return false;
-    if ((cave_feat[y][x] >= FEAT_TRAP_HEAD)
-        && (cave_feat[y][x] <= FEAT_TRAP_TAIL)
+    if (FEAT_IS_TRAP(cave_feat[y][x])
         && (cave_info[y][x] & CAVE_HIDDEN))
     {
         return false;
     }
 
-    feat = f_info[cave_feat[y][x]].mimic;
+    feat = cave_environment_known_feature(y, x);
+    if (!z_info || !f_info || feat >= z_info->f_max)
+        return false;
+    feat = f_info[feat].mimic;
+    if (feat >= z_info->f_max)
+        return false;
     if (feat == FEAT_NONE || feat == FEAT_FLOOR || feat == FEAT_RAGE_FLOOR)
         return false;
 
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL)
+    if (FEAT_IS_TRAP(feat)
         && (cave_info[y][x] & CAVE_HIDDEN))
     {
         return false;
@@ -457,6 +474,36 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         name = "down shaft";
     else if (feat == FEAT_SUNLIGHT)
         name = "patch of sunlight";
+    else if (feat == FEAT_WATER)
+        name = "shallow water: movement 150%; splash -3 Stealth; no scent trail; cold freezes it";
+    else if (feat == FEAT_DEEP_WATER)
+        name = "deep water: movement 400%; cannot attack while submerged; bridges provide dry footing";
+    else if (feat == FEAT_MELTING_ICE)
+        name = "melting ice: grounded -2 attack and -2 Evasion; 20% break chance; may become deep water away from ground; cold reinforces it";
+    else if (FEAT_IS_ICE(feat))
+        name = "solid ice: grounded -2 attack and -2 Evasion; normal movement; fire melts it";
+    else if (feat == FEAT_POISON)
+    {
+        static char poison_name[180];
+        strnfmt(poison_name, sizeof(poison_name),
+            "Poisonous acid (up to %d stacks/contact before poison protection; successful leaps avoid contact)",
+            player_poison_terrain_dose_at(y, x));
+        name = poison_name;
+    }
+    else if (feat == FEAT_LAVA)
+    {
+        static char lava_name[180];
+        int damage = player_lava_damage_at(y, x, false);
+        if (damage < 0)
+            strnfmt(lava_name, sizeof(lava_name),
+                "molten lava: instant death; jumping heat %d damage; emits light",
+                player_lava_damage_at(y, x, true));
+        else
+            strnfmt(lava_name, sizeof(lava_name),
+                "molten lava: %d damage on entry/turn; jumping heat %d; emits light",
+                damage, player_lava_damage_at(y, x, true));
+        name = lava_name;
+    }
     else
         name = f_name + f_info[feat].name;
 
@@ -464,7 +511,7 @@ bool sdl_object_tooltip_feature_name(int y, int x, cptr* out_name)
         return false;
 
     /* A trap the player has rewired is shown as such. */
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL)
+    if (FEAT_IS_TRAP(feat)
         && cave_rewired[y][x])
     {
         static char rewired_buf[80];
@@ -560,7 +607,7 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
         }
     }
 
-    if (cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT) {
+    if (sdl_mouse_grid_can_show_objects(y, x)) {
         object_type* o_ptr;
 
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -568,7 +615,7 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
         {
             char o_name[80];
 
-            if (!o_ptr->k_idx || !o_ptr->marked)
+            if (!o_ptr->k_idx || !object_is_visible(o_ptr))
                 continue;
 
             object_count++;
@@ -592,6 +639,11 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
     if (sdl_object_tooltip_feature_name(y, x, &feature_name))
         sdl_object_tooltip_append_part(buf, buflen, attrs, feature_name,
             TERM_WHITE);
+
+    char environment[120];
+    if (cave_environment_describe(y, x, environment, sizeof(environment)))
+        sdl_object_tooltip_append_part(buf, buflen, attrs, environment,
+            TERM_YELLOW);
 
     return buf[0] != '\0';
 }
@@ -770,6 +822,9 @@ int sdl_object_tooltip_font_px(void)
     int font_size = sdl_auto_font_size_from_main(3, 4);
 #endif
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
+
+    if (sdl_touch_only_mobile_device_active())
+        font_px = MAX(font_px, sdl_main_menu_pane_font_px());
 
     return (font_px > 0) ? font_px : SDL_OBJECT_TOOLTIP_FONT_SIZE;
 }
@@ -3079,12 +3134,12 @@ bool sdl_mouse_grid_has_marked_searched_skeleton(int y, int x,
 
     if (!in_bounds(y, x) || !grid_info_is_available(y, x))
         return false;
-    if (!(cave_floorlike_bold(y, x) || cave_feat[y][x] == FEAT_SUNLIGHT))
+    if (!sdl_mouse_grid_can_show_objects(y, x))
         return false;
 
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
-        if (!o_ptr->marked)
+        if (!object_is_visible(o_ptr))
             continue;
         if (!object_is_searched_skeleton(o_ptr))
             continue;

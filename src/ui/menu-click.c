@@ -31,6 +31,7 @@ typedef struct ui_scroll_area_entry
     int* offset_ptr;
     int offset_max;
     bool page_mode;
+    bool horizontal_page_mode;
 } ui_scroll_area_entry;
 
 typedef struct ui_menu_touch_button_entry
@@ -710,6 +711,7 @@ bool ui_scroll_area_add_cols(int left_col, int right_col, int top_row,
     entry->offset_ptr = NULL;
     entry->offset_max = 0;
     entry->page_mode = false;
+    entry->horizontal_page_mode = false;
     ui_scroll_area_current = ui_scroll_area_entry_count - 1;
     return true;
 }
@@ -874,6 +876,42 @@ bool ui_scroll_area_is_page_mode(void)
     ui_scroll_area_entry* entry = ui_scroll_area_current_entry();
 
     return entry && entry->page_mode;
+}
+
+void ui_scroll_area_set_horizontal_page_mode(bool enabled)
+{
+    ui_scroll_area_entry* entry = ui_scroll_area_current_entry();
+
+    if (entry)
+        entry->horizontal_page_mode = enabled;
+}
+
+bool ui_scroll_area_is_horizontal_page_mode(void)
+{
+    ui_scroll_area_entry* entry = ui_scroll_area_current_entry();
+
+    return entry && entry->horizontal_page_mode;
+}
+
+/*
+ * Enable horizontal tab/page swipes on every currently registered scroll
+ * area.  The direction names are explicit because a leftward finger motion
+ * is the natural "next" gesture: previous_key is assigned to a rightward
+ * swipe and next_key to a leftward swipe.  Vertical scrolling keeps each
+ * area's existing keys and behavior.
+ */
+void ui_scroll_area_enable_horizontal_page_swipe(int previous_key,
+    int next_key)
+{
+    if (!previous_key || !next_key)
+        return;
+
+    for (int i = 0; i < ui_scroll_area_entry_count; i++)
+    {
+        ui_scroll_area_entries[i].positive_x_key = previous_key;
+        ui_scroll_area_entries[i].negative_x_key = next_key;
+        ui_scroll_area_entries[i].horizontal_page_mode = true;
+    }
 }
 
 /*

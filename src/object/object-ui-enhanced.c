@@ -463,26 +463,31 @@ static cptr description_inventory_group_name(const object_type* o_ptr)
 
 
 static char describe_item_with_comparisons_aux(int item_index,
-    bool include_comparisons, bool floor_actions)
+    object_type* preview_obj, bool include_comparisons, bool floor_actions)
 {
     const object_type* objects[MAX_DESCRIPTION_COMPARE_ITEMS];
     const char* headings[MAX_DESCRIPTION_COMPARE_ITEMS];
     char heading_texts[MAX_DESCRIPTION_COMPARE_ITEMS][64];
     int count = 0;
     object_type* base_obj;
-    bool is_floor = (item_index < 0);
-    bool is_supply = (item_index >= SUPPLIES_INDEX);
-    bool is_quiver = item_index >= QUIVER_INDEX
+    bool is_preview = (preview_obj != NULL);
+    bool is_floor = !is_preview && (item_index < 0);
+    bool is_supply = !is_preview && (item_index >= SUPPLIES_INDEX);
+    bool is_quiver = !is_preview && item_index >= QUIVER_INDEX
         && item_index < QUIVER_INDEX_END;
     u32b base_groups;
 
-    if (item_index == ENHANCED_MENU_NO_SELECTION)
+    if (!is_preview && item_index == ENHANCED_MENU_NO_SELECTION)
         return 0;
 
-    if (inventory_item_is_supply_summary(item_index))
+    if (!is_preview && inventory_item_is_supply_summary(item_index))
         return 0;
 
-    if (is_floor || is_supply || is_quiver)
+    if (is_preview)
+    {
+        base_obj = preview_obj;
+    }
+    else if (is_floor || is_supply || is_quiver)
     {
         base_obj = inventory_item_to_object_ptr(item_index);
     }
@@ -496,7 +501,10 @@ static char describe_item_with_comparisons_aux(int item_index,
     if (!base_obj || !base_obj->k_idx)
         return 0;
 
-    /* Opening an item description attempts smithing-difficulty identification. */
+    /* Opening an item description attempts smithing-difficulty identification.
+     * A smithing preview is already a fully known temporary object and has no
+     * inventory handle to identify. */
+    if (!is_preview)
     {
         bool is_equipped = player_inventory_handle_is_equipped(item_index)
             && player_equipment_slot_counts_as_equipped(item_index);
@@ -508,10 +516,11 @@ static char describe_item_with_comparisons_aux(int item_index,
 
     append_description_object(objects, headings, heading_texts, &count,
         MAX_DESCRIPTION_COMPARE_ITEMS, base_obj,
-        is_floor ? "Selected item (floor)"
-                 : (is_supply ? "Selected item (supply)"
-                              : (is_quiver ? "Selected item (quiver)"
-                                           : "Selected item")));
+        is_preview ? "Smithing preview"
+            : (is_floor ? "Selected item (floor)"
+                : (is_supply ? "Selected item (supply)"
+                    : (is_quiver ? "Selected item (quiver)"
+                        : "Selected item"))));
 
     if (include_comparisons)
     {
@@ -846,13 +855,20 @@ comparisons_done:
 
 void describe_item_with_comparisons(int item_index, bool include_comparisons)
 {
-    (void)describe_item_with_comparisons_aux(item_index,
+    (void)describe_item_with_comparisons_aux(item_index, NULL,
         include_comparisons, false);
+}
+
+void describe_object_with_comparisons(object_type* o_ptr,
+    bool include_comparisons)
+{
+    (void)describe_item_with_comparisons_aux(
+        ENHANCED_MENU_NO_SELECTION, o_ptr, include_comparisons, false);
 }
 
 char describe_item_with_floor_actions(int item_index, bool include_comparisons)
 {
-    return describe_item_with_comparisons_aux(item_index,
+    return describe_item_with_comparisons_aux(item_index, NULL,
         include_comparisons, true);
 }
 

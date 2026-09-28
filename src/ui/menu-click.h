@@ -62,6 +62,10 @@ void ui_scroll_area_set_tap_key(int key);
 int ui_scroll_area_get_tap_key(void);
 void ui_scroll_area_set_page_mode(bool enabled);
 bool ui_scroll_area_is_page_mode(void);
+void ui_scroll_area_set_horizontal_page_mode(bool enabled);
+bool ui_scroll_area_is_horizontal_page_mode(void);
+void ui_scroll_area_enable_horizontal_page_swipe(int previous_key,
+    int next_key);
 void ui_scroll_area_set_offset_target(int* offset, int max_offset);
 bool ui_scroll_area_has_offset_target(void);
 bool ui_scroll_area_offset_scroll(int delta);

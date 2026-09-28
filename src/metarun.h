@@ -134,7 +134,8 @@ typedef struct metarun
     byte pending_blessing_count;      /* How many choices are currently pending (0-3)     */
     
     byte blessing_threshold_mode;     /* 0=normal (default), 1=easier, 2=harder          */
-    byte reserved_runtime[31];        /* Remaining runtime expansion space               */
+    byte tutorial_upgrade_pending;   /* 0.9.8 notice for this Tale, preserved until acknowledged. */
+    byte reserved_runtime[30];        /* Remaining runtime expansion space; record size unchanged. */
 
 } metarun;
 

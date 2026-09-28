@@ -36,7 +36,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 # Melee ---------------------------------------------
 
@@ -61,7 +61,7 @@ T:31:0:99  # Gloves
 N:2:Knock Back
 I:0:2:3
 D:Like the thunderous charges of the Edain lords in the Nirnaeth Arnoediad, where foes were hurled aside in the press of battle. Huor and Húrin drove through the orcish ranks with such force that their enemies stumbled and fell back before them, unable to hold their ground against the fury of the Edain.
-E:Chance to knock enemies back one square in melee (your Strength vs their Constitution).
+E:Chance to knock enemies back one square in melee (two squares from ice for grounded targets), using your Strength vs their Constitution.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords
@@ -72,7 +72,7 @@ N:3:Throwing
 I:0:3:4
 Y:THROWING:20
 D:Recalling the deadly casts of spears by the Sindar in the defense of Doriath's borders. The march-wardens of Thingol were trained to hurl their javelins with lethal accuracy across great distances, striking down intruders before they could set foot beneath the enchanted trees of Neldoreth.
-E:+1 attack with throwing weapons. Distance penalties halved. Thrown criticals easier. Throwing weapons use 20% less Harness volume. Harness daggers can be quick-thrown when the active weapon is a one-handed or one-and-a-half-handed melee weapon, or a bow. Your first active weapon change before your next action is free when changing between throwing weapons. With Warden, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between bow and throwing or between bows. With both Warden and Versatility, it may be any active weapon change.
+E:+1 attack with throwing weapons. Distance penalties halved. Thrown criticals easier. Throwing weapons use 20% less Harness volume. Harness daggers can be quick-thrown with no melee weapon equipped, or when the active weapon is a one-handed or one-and-a-half-handed melee weapon, a throwing weapon, or a Shortbow. Your first active weapon change before your next action is free when changing between throwing weapons. With Warden, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between bow and throwing or between bows. With both Warden and Versatility, it may be any active weapon change.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords
@@ -181,7 +181,7 @@ E:+1 Strength.
 N:15:Warden
 I:0:15:7
 D:As the March-wardens of Doriath, who kept the bounds of the Girdle of Melian and ranged its shadowed eaves with bow and blade alike. Beleg Strongbow, captain of that watchful company, was no less deadly with his sword than with his great bow, for a hand long schooled to the close clash of steel does not waver upon the bowstring, and the warrior's eye, trained to read a foe's every movement, guides the arrow as surely as the sword-stroke.
-E:Archery bonus of half (Melee - Archery) when Melee exceeds Archery, or one third of your full Melee skill, rounded up, if you also have Versatility. Your first active weapon change before your next action is free from melee to bow. With Throwing, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between melee weapons or between bows.
+E:Archery bonus of half (base Melee - base Archery) when base Melee exceeds base Archery, or one third of base Melee, rounded up, if you also have Versatility. Base skill means invested skill points, before attributes and other bonuses. Your first active weapon change before your next action is free from melee to bow. With Throwing, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between melee weapons or between bows.
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
 T:23:0:99  # Swords
@@ -217,7 +217,7 @@ T:45:0:99  # Ring
 N:22:Point Blank Archery
 I:1:2:4
 D:Loosing arrows at point-blank range as did the defenders of Menegroth during the ruinous assault of the Dwarves of Nogrod. In the close confines of the Thousand Caves, the elven archers learned to fire even as their enemies bore down upon them, too swift to be struck before the arrow flew.
-E:No attack of opportunity from the target when firing at point blank. A round shield still grants evasion and armour while a shortbow is active.
+E:When you shoot an adjacent monster, that target does not make an attack of opportunity. Other adjacent alert enemies still can. Point Blank Archery lets you make a round shield active with a shortbow.
 T:19:0:99  # Bows
 T:31:1:1   # Gloves (leather gloves only)
 
@@ -240,7 +240,7 @@ T:35:0:99  # Cloak
 N:25:Versatility
 I:1:5:7
 D:Versatile in arms as was Túrin Turambar, who bore both the great bow of Beleg and the black sword Gurthang in the forests about Nargothrond. The greatest warriors of the First Age disdained no weapon, and their skill with the bow lent sureness to their sword-arm, for a keen eye serves all forms of combat.
-E:Melee bonus of half (Archery - Melee) when Archery exceeds Melee, or one third of your full Archery skill, rounded up, if you also have Warden. Your first active weapon change before your next action is free from bow to melee. With Throwing, it may instead change between bow and throwing or between bows. With Warden, it may instead change between melee weapons or between bows.
+E:Melee bonus of half (base Archery - base Melee) when base Archery exceeds base Melee, or one third of base Archery, rounded up, if you also have Warden. Base skill means invested skill points, before attributes and other bonuses. Your first active weapon change before your next action is free from bow to melee. With Throwing, it may instead change between bow and throwing or between bows. With Warden, it may instead change between melee weapons or between bows.
 T:19:0:99  # Bows
 T:31:1:1   # Gloves (leather gloves only)
 
@@ -318,7 +318,7 @@ N:45:Sprinting
 I:2:5:7
 P:2/0:2/4
 D:Sprinting with the endurance of the messengers who bore tidings across Beleriand, running without rest from Hithlum to Nargothrond. Once their stride found its rhythm across open ground, they moved with the tireless speed of the Firstborn, their pace quickening with every stride.
-E:Increased speed after running in roughly the same direction for 4+ squares while wearing only light armour, or 5+ squares otherwise.
+E:Increased speed after running in roughly the same direction for 3+ squares while wearing only light armour, or 4+ squares otherwise.
 T:30:0:99  # Boots
 
 N:46:Flanking
@@ -464,7 +464,7 @@ T:40:0:99  # Amulet
 N:84:Alchemy
 I:4:4:5
 D:Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.
-E:Auto-identify herbs, potions, staves, and horns. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
+E:Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.
 T:32:0:99  # Helm
 T:45:0:99  # Ring
 
@@ -665,7 +665,7 @@ T:31:0:99  # Gloves
 N:129:Reforging
 I:6:9:4
 D:Reworking worn gear as the patient craftsmen of Nogrod straightened bent mail, renewed old edges, and laid fresh virtue on worthy pieces after hard-fought battles. A smith with this art can restore what was marred in the deeps or add new excellence to found gear without remaking it from nothing.
-E:Repair damaged items at a forge, or add a missing prefix to a found item. Reforging difficulty is 1.5x the difficulty increase.
+E:Repair damaged items at a forge, restore damaged bridges, or add a missing prefix to a found item. Reforging difficulty is 1.5x the difficulty increase.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -846,7 +846,7 @@ E:Immune to fear, hallucination, trance, rage, stun, and confusion. Quest reward
 N:161:Aulë's Forge
 I:8:1:0
 D:Harnessing the creative fire of Aulë the Smith, mightiest of craftsmen among the Valar, who shaped the substance of Arda itself and fashioned the Dwarves in secret beneath the mountains. His blessing upon a mortal smith grants mastery at the forge that surpasses all ordinary limits of skill.
-E:Counts as Masterpiece with +2 extra difficulty allowance. Supersedes Masterpiece. Quest reward.
+E:Exceed effective Smithing by up to twice your base Smithing. Each 2 points of excess difficulty cost 1 base Smithing, rounding the cost up. Supersedes Masterpiece. Quest reward.
 N:162:Oath of Mercy
 I:8:2:0
 D:Swearing the Oath of Mercy, akin to the compassion shown by Finrod Felagund when he befriended Beren in Nargothrond, honouring the bond between all free peoples. Those who vow to spare the helpless are touched by a gentle grace, but the oath is fragile and shatters if its keeper takes the life of a defenceless foe.

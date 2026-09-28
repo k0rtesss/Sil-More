@@ -1,6 +1,8 @@
 /* File: monster-move.c */
 
 #include "monster-internal.h"
+#include "log/perf.h"
+#include "cave/cave.h"
 
 /*
  * Make a monster carry an object
@@ -175,6 +177,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
     switch (feat)
     {
     case FEAT_TRAP_DART:
+        sound_at(MSG_TRAP_NEEDLE, fy, fx);
         if (m_ptr->ml)
             msg_format("A dart shoots out and strikes %s.", m_name);
         dd = 1;
@@ -182,6 +185,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_CALTROPS:
+        sound_at(MSG_TRAP_CALTROPS, fy, fx);
         if (m_ptr->ml)
             msg_format("%^s blunders into a field of caltrops.", m_name);
         dd = 1;
@@ -189,6 +193,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_ACID:
+        sound_at(MSG_TRAP_ACID, fy, fx);
         if (m_ptr->ml)
             msg_format("%^s is splashed with acid.", m_name);
         dd = 4;
@@ -196,6 +201,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_DEADFALL:
+        sound_at(MSG_TRAP_DEADFALL, fy, fx);
         if (m_ptr->ml)
             msg_format("The ceiling collapses on %s!", m_name);
         dd = 6;
@@ -204,6 +210,7 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
         break;
 
     case FEAT_TRAP_GAS_CONF:
+        sound_at(MSG_TRAP_GAS, fy, fx);
         if (m_ptr->ml)
             msg_format("Confusing vapours billow around %s.", m_name);
         /* Reuse the same radius effect the player gas trap uses; it confuses
@@ -445,7 +452,9 @@ static bool player_environment_bonus_state_changed(int old_y, int old_x,
     int new_y, int new_x)
 {
     return level_partition_big_cave_type_for_point(old_y, old_x)
-        != level_partition_big_cave_type_for_point(new_y, new_x);
+        != level_partition_big_cave_type_for_point(new_y, new_x)
+        || FEAT_IS_ICE(cave_feat[old_y][old_x])
+        || FEAT_IS_ICE(cave_feat[new_y][new_x]);
 }
 
 void monster_swap(int y1, int x1, int y2, int x2)
@@ -474,6 +483,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         // (skip_next_turn is there to stop you getting opportunist attacks afer
         // knocking someone back)
         if (player_active_weapon_is_melee()
+            && !(r_info[m_ptr->r_idx].flags1 & RF1_PEACEFUL)
             && !singing(SNG_DISGUISE) && m_ptr->ml && !m_ptr->skip_next_turn
             && !p_ptr->truce
             && !p_ptr->confused && !p_ptr->afraid && !p_ptr->entranced
@@ -540,6 +550,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move monster */
         m_ptr->fy = y2;
         m_ptr->fx = x2;
+        if (!m_ptr->ability_in_action)
+            monster_abilities_forced_movement(m_ptr);
         m_ptr->visual_facing_dir = (byte)rough_direction(y1, x1, y2, x2);
 
         if ((r_info[m_ptr->r_idx].flags3 & RF3_SPECIAL_VAULT_ONLY)
@@ -594,7 +606,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
                     if (!singing(SNG_DISGUISE)
                         && (m_ptr->alertness >= ALERTNESS_ALERT)
                         && !m_ptr->confused && (m_ptr->stance != STANCE_FLEEING)
-                        && !m_ptr->skip_next_turn && !m_ptr->skip_this_turn)
+                        && monster_abilities_can_react(m_ptr))
                     {
                         // Opportunist
                         if ((r_ptr->flags2 & (RF2_OPPORTUNIST))
@@ -602,7 +614,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
                         {
                             msg_format(
                                 "%^s attacks you as you step away.", m_name);
-                            make_attack_normal(m_ptr);
+                            make_attack_reaction(m_ptr);
 
                             // remember that the monster can do this
                             if (m_ptr->ml)
@@ -611,11 +623,12 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
                         // Zone of Control
                         if ((r_ptr->flags2 & (RF2_ZONE_OF_CONTROL))
+                            && !monster_moved_last_action(m_ptr)
                             && (distance(m_ptr->fy, m_ptr->fx, y2, x2) == 1))
                         {
                             msg_format("You move through %s's zone of control.",
                                 m_name);
-                            make_attack_normal(m_ptr);
+                            make_attack_reaction(m_ptr);
 
                             // remember that the monster can do this
                             if (m_ptr->ml)
@@ -631,6 +644,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move player */
         p_ptr->py = y2;
         p_ptr->px = x2;
+        sil_popup_trace_begin(y1, x1, y2, x2);
 
         /* Update the panel */
         p_ptr->update |= (PU_PANEL);
@@ -659,6 +673,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
         /* Move monster */
         m_ptr->fy = y1;
         m_ptr->fx = x1;
+        monster_abilities_forced_movement(m_ptr);
         m_ptr->visual_facing_dir = (byte)rough_direction(y2, x2, y1, x1);
 
         // makes noise when moving
@@ -675,9 +690,13 @@ void monster_swap(int y1, int x1, int y2, int x2)
     /* Player 2 */
     else if (m2 < 0)
     {
+        bool bonus_state_changed =
+            player_environment_bonus_state_changed(y2, x2, y1, x1);
+
         /* Move player */
         p_ptr->py = y1;
         p_ptr->px = x1;
+        sil_popup_trace_begin(y2, x2, y1, x1);
 
         /* Update the panel */
         p_ptr->update |= (PU_PANEL);
@@ -687,19 +706,57 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
         /* Window stuff */
         p_ptr->window |= (PW_OVERHEAD);
+
+        /* Forced exchanges must use the destination's fire-cave resistance
+         * before resolving the terrain beneath the player. */
+        if (bonus_state_changed)
+        {
+            p_ptr->update |= PU_BONUS;
+            update_stuff();
+        }
     }
 
     /* Update grids */
     cave_m_idx[y1][x1] = m2;
     cave_m_idx[y2][x2] = m1;
+    /* Contact dispels the disguise for normal steps and forced exchanges. */
+    if (m1) cave_dissolve_illusion(y2, x2);
+    if (m2) cave_dissolve_illusion(y1, x1);
+    if (m1 > 0 && mon_list[m1].r_idx)
+        calc_monster_speed(mon_list[m1].fy, mon_list[m1].fx);
+    if (m2 > 0 && mon_list[m2].r_idx)
+        calc_monster_speed(mon_list[m2].fy, mon_list[m2].fx);
 
     /* Redraw */
     lite_spot(y1, x1);
     lite_spot(y2, x2);
+    if (m1 < 0 || m2 < 0)
+        sil_popup_trace_stage("player-grid-queued");
+
+    if (m1 < 0 || m2 < 0)
+        (void)player_melting_ice_exposure();
+
+    /* Forced movement uses the same entry hazard as normal movement. */
+    if (m1 > 0)
+    {
+        monster_melting_ice_exposure(m1);
+        monster_lava_exposure(m1);
+        monster_poison_terrain_exposure(m1);
+    }
+    if (m2 > 0)
+    {
+        monster_melting_ice_exposure(m2);
+        monster_lava_exposure(m2);
+        monster_poison_terrain_exposure(m2);
+    }
+
+    if (monster1)
+        m_ptr = &mon_list[m1];
 
     // deal with set polearm attacks
     if (player_active_weapon_is_melee()
-        && p_ptr->active_ability[S_MEL][MEL_POLEARMS] && monster1 && m_ptr->ml)
+        && p_ptr->active_ability[S_MEL][MEL_POLEARMS] && monster1
+        && m_ptr->r_idx && m_ptr->ml)
     {
         object_type* o_ptr = &inventory[INVEN_WIELD];
         u32b f1, f2, f3;
@@ -741,6 +798,11 @@ void monster_swap(int y1, int x1, int y2, int x2)
         }
     }
 
+    /* Entry clears even an old/save-restored scent on the wet square. */
+    if ((m1 < 0 || m2 < 0) && (cave_feat[p_ptr->py][p_ptr->px] == FEAT_WATER
+        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_DEEP_WATER))
+        cave_when[p_ptr->py][p_ptr->px] = 0;
+
     // deal with falling down chasms
     if (m1 > 0)
         m_fall_in_chasm(y2, x2);
@@ -756,6 +818,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
     // describe object you are standing on if any
     if ((m1 < 0) || (m2 < 0))
     {
+        player_lava_exposure(p_ptr->leaping);
+        player_poison_terrain_exposure(p_ptr->leaping);
         describe_floor_object();
     }
 }
@@ -882,9 +946,13 @@ void calc_monster_speed(int y, int x)
         speed += 1;
     if (m_ptr->slowed)
         speed -= 1;
+    if (monster_sprinting(m_ptr) && speed < 4)
+        speed += 1;
 
     if (speed < 1)
         speed = 1;
+    if (speed > 7)
+        speed = 7;
 
     /*set the speed and return*/
     m_ptr->mspeed = speed;

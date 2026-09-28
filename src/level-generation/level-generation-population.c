@@ -575,8 +575,6 @@ int partition_extra_monster_target_for_depth(
     {
         int extra_pct = rule->scale_pct_at_depth_20 - 100;
         scale_pct += (extra_pct * depth) / 20;
-        if (scale_pct > rule->scale_pct_at_depth_20)
-            scale_pct = rule->scale_pct_at_depth_20;
     }
 
     target = target * scale_pct / 100;
@@ -597,10 +595,11 @@ int partition_depth_bonus_monsters(quadrant_mode_t mode, int floor_count, int de
 
     if (depth <= 1 || target_at_20 <= 0)
         return 0;
-    if (depth >= 20)
-        return target_at_20;
-
-    return (target_at_20 * (depth - 1) + 9) / 19;
+    int target = (target_at_20 * (depth - 1) + 9) / 19;
+    const partition_rule_config* cfg =
+        partition_config_get(partition_kind_from_mode(mode));
+    int hard_cap = MAX(1, floor_count / MAX(1, cfg->depth_monsters.hard_cap_divisor));
+    return MIN(target, hard_cap);
 }
 
 int partition_object_scale_pct(void)
@@ -1136,7 +1135,13 @@ int alloc_objects_from_plan(
 
             if (!in_bounds_fully(y, x))
                 continue;
-            if (!partition_population_naked_bold(plan->mode, y, x))
+            /* Water participates in the normal loot roll, but only gems can
+             * survive the placement filter. Keep monster spawning on land. */
+            if (!partition_population_naked_bold(plan->mode, y, x)
+                && !((cave_feat[y][x] == FEAT_WATER
+                         || cave_feat[y][x] == FEAT_DEEP_WATER)
+                    && !cave_o_idx[y][x] && !cave_m_idx[y][x]
+                    && !generation_escape_tunnel_bold(y, x)))
                 continue;
             if (level_partition_index_for_point(y, x) != plan->pi)
                 continue;

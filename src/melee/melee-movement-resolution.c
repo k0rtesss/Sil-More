@@ -1,4 +1,9 @@
 #include "angband.h"
+#include "monster/monster-routine.h"
+#include "monster/monster-senses.h"
+#include "monster/monster-social.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-tactics.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
@@ -108,6 +113,7 @@ void warning_message(monster_type* m_ptr)
 
     // makes monster noise too
     m_ptr->noise += 10;
+    monster_ai_share_warning(m_ptr);
 }
 
 static void pursuit_message(monster_type* m_ptr)
@@ -181,6 +187,7 @@ static void pursuit_message(monster_type* m_ptr)
  */
 void monster_exchange_places(monster_type* m_ptr)
 {
+    if (!monster_routine_allows(m_ptr, p_ptr->py, p_ptr->px)) return;
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
     char m_name1[80];
     char m_name2[80];
@@ -196,8 +203,22 @@ void monster_exchange_places(monster_type* m_ptr)
     /* Message */
     msg_format("%^s exchanges places with you.", m_name1);
 
+    int player_from_feat = p_ptr->leaping ? FEAT_FLOOR
+        : cave_feat[p_ptr->py][p_ptr->px];
+    p_ptr->leaping = false;
     // swap positions with the player
+    monster_abilities_forced_movement(m_ptr);
     monster_swap(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
+    if (!m_ptr->r_idx || p_ptr->is_dead)
+        return;
+
+    if (m_ptr->r_idx && (m_ptr->fy != y || m_ptr->fx != x))
+    {
+        m_ptr->energy -= water_movement_energy(100, cave_feat[y][x],
+            cave_feat[m_ptr->fy][m_ptr->fx],
+            (r_info[m_ptr->r_idx].flags2 & RF2_FLYING) != 0) - 100;
+        player_water_displaced(player_from_feat, cave_feat[p_ptr->py][p_ptr->px]);
+    }
 
     // update some things
     update_view();
@@ -256,6 +277,8 @@ void monster_exchange_places(monster_type* m_ptr)
  */
 void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 {
+    if (in_bounds(ty, tx) && cave_m_idx[ty][tx] >= 0
+        && !monster_routine_allows(m_ptr, ty, tx)) return;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
 
@@ -326,9 +349,25 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         // Otherwise attack if possible
         else if (!p_ptr->truce && !(r_ptr->flags1 & (RF1_NEVER_BLOW)))
         {
-            if (r_ptr->flags2 & (RF2_EXCHANGE_PLACES) && one_in_(4)
-                && (adj_mon_count(m_ptr->fy, m_ptr->fx)
-                    >= adj_mon_count(p_ptr->py, p_ptr->px)))
+            bool exchange = false;
+            if (r_ptr->flags2 & RF2_EXCHANGE_PLACES)
+            {
+                int surrounding = adj_mon_count(m_ptr->fy, m_ptr->fx)
+                    - adj_mon_count(p_ptr->py, p_ptr->px);
+                if (monster_ai_enabled(m_ptr))
+                {
+                    int gain = monster_tactical_displacement_utility(m_ptr,
+                        m_ptr->fy, m_ptr->fx, true) + surrounding * 8;
+                    /* Existing displacement still pays its reaction and
+                     * terrain costs. No generic push or Stand Fast peek. */
+                    exchange = gain > 8
+                        && monster_ai_poison_safe(m_ptr, p_ptr->py, p_ptr->px, 1)
+                        && monster_terrain_penalty(m_ptr, p_ptr->py, p_ptr->px) < 100;
+                }
+                else
+                    exchange = one_in_(4) && surrounding >= 0;
+            }
+            if (exchange)
             {
                 if (p_ptr->stand_fast)
                 {
@@ -355,11 +394,14 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         do_move = false;
     }
 
+    if (!m_ptr->r_idx || p_ptr->is_dead)
+        return;
+
     /* Can still move */
     if (do_move)
     {
         /* Entering a wall */
-        if (cave_info[ny][nx] & (CAVE_WALL))
+        if (cave_monster_wall_bold(ny, nx))
         {
             /* Monster passes through walls (and doors) */
             if (r_ptr->flags2 & (RF2_PASS_WALL))
@@ -396,6 +438,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 if (cave_any_closed_door_bold(ny, nx))
                 {
                     cave_set_feat(ny, nx, FEAT_BROKEN);
+                    sound_at(MSG_BASHDOOR, ny, nx);
 
                     if (msg)
                     {
@@ -412,6 +455,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 else
                 {
                     cave_set_feat(ny, nx, FEAT_FLOOR);
+                    sound_at(MSG_DIG, ny, nx);
 
                     if (msg)
                     {
@@ -484,6 +528,8 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                     // monster noise
                     m_ptr->noise += 15;
                 }
+
+                sound_at(MSG_DIG, ny, nx);
             }
 
             /* Doors */
@@ -539,6 +585,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                         cave_set_feat(ny, nx, FEAT_BROKEN);
                     else
                         cave_set_feat(ny, nx, FEAT_OPEN);
+                    sound_at(MSG_BASHDOOR, ny, nx);
                 }
 
                 /* Monster opens the door */
@@ -553,6 +600,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
                         /* Unlock the door */
                         cave_set_feat(ny, nx, FEAT_DOOR_HEAD + 0x00);
+                        sound_at(MSG_OPENDOOR, ny, nx);
 
                         /* Do not move */
                         do_move = false;
@@ -572,6 +620,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
 
                         /* Open the door */
                         cave_set_feat(ny, nx, FEAT_OPEN);
+                        sound_at(MSG_OPENDOOR, ny, nx);
 
                         /* Step into doorway sometimes */
                         if (!one_in_(5))
@@ -646,7 +695,8 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 //}
 
                 /* The other monster cannot switch places */
-                if (!cave_exist_mon(nr_ptr, m_ptr->fy, m_ptr->fx, true, true))
+                if (!cave_exist_mon(nr_ptr, m_ptr->fy, m_ptr->fx, true, true)
+                    || monster_terrain_penalty(n_ptr, m_ptr->fy, m_ptr->fx) >= 100)
                 {
                     /* Try to push it aside */
                     if (!push_aside(m_ptr, n_ptr))
@@ -668,22 +718,43 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
             && (distance(ny, nx, p_ptr->py, p_ptr->px) == 1)
             && (m_ptr->alertness >= ALERTNESS_ALERT)
             && (m_ptr->stance != STANCE_FLEEING) && !m_ptr->confused
-            && !did_swap)
+            && !did_swap && monster_abilities_can_react(m_ptr))
         {
             char m_name[80];
 
             monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
             msg_format("%^s attacks you as it moves by.", m_name);
-            make_attack_normal(m_ptr);
+            make_attack_reaction(m_ptr);
 
             // remember that the monster can do this
             if (m_ptr->ml)
                 l_ptr->flags2 |= (RF2_FLANKING);
         }
 
+        if (!m_ptr->r_idx || p_ptr->is_dead)
+            return;
+
         /* Move the monster */
         monster_swap(oy, ox, ny, nx);
+        if (!m_ptr->r_idx || p_ptr->is_dead)
+            return;
+
+        /* A reaction can knock the mover away and abort monster_swap.
+         * It never reached the intended grid: do not collect its items,
+         * advertise its scent or record a completed step there. */
+        if (m_ptr->fy != ny || m_ptr->fx != nx)
+            goto movement_done;
+
+        if (m_ptr->r_idx && (oy != ny || ox != nx)
+            && m_ptr->fy == ny && m_ptr->fx == nx)
+        {
+            int cost = water_movement_energy(100, cave_feat[oy][ox],
+                cave_feat[ny][nx], (r_ptr->flags2 & RF2_FLYING) != 0);
+            m_ptr->energy -= cost - 100;
+            if (cost > 100)
+                m_ptr->noise = MAX(m_ptr->noise, 8);
+        }
 
         /* Cancel target when reached */
         if ((m_ptr->target_y == ny) && (m_ptr->target_x == nx))
@@ -721,13 +792,13 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
          * scent trail while out of LOS of the character, it will
          * communicate this to similar monsters.
          */
-        if ((!player_has_los_bold(ny, nx)) && (r_ptr->flags1 & (RF1_FRIENDS))
+        if ((!monster_has_sight(m_ptr)) && !singing(SNG_SILENCE)
+            && (r_ptr->flags1 & (RF1_FRIENDS))
             && (monster_can_smell(m_ptr)) && (get_scent(oy, ox) == -1)
             && (!m_ptr->target_y) && (!m_ptr->target_x))
         {
             int i;
             monster_type* n_ptr;
-            monster_race* nr_ptr;
             bool alerted_others = false;
 
             /* Scan all other monsters */
@@ -735,14 +806,15 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
             {
                 /* Access the monster */
                 n_ptr = &mon_list[i];
-                nr_ptr = &r_info[n_ptr->r_idx];
 
                 /* Ignore dead monsters */
-                if (!n_ptr->r_idx)
+                if (!n_ptr->r_idx || n_ptr == m_ptr)
                     continue;
 
-                /* Ignore monsters with the wrong symbol */
-                if (r_ptr->d_char != nr_ptr->d_char)
+                /* Scent directions are shared only with actual allies.  A
+                 * common glyph is not enough to cross a local feud or a
+                 * different custom band. */
+                if (!monster_social_allies(m_ptr, n_ptr))
                     continue;
 
                 /* Ignore monsters with specific orders */
@@ -750,18 +822,20 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                     continue;
 
                 /* Ignore monsters picking up a good scent */
-                if (get_scent(n_ptr->fy, n_ptr->fx) < SMELL_STRENGTH - 10)
+                int age = get_scent(n_ptr->fy, n_ptr->fx);
+                if (age >= 0 && age < SMELL_STRENGTH - 10
+                    && monster_can_smell(n_ptr))
                     continue;
 
                 /* Ignore monsters not in LOS */
-                if (!los(m_ptr->fy, m_ptr->fx, n_ptr->fy, n_ptr->fx))
+                if (distance(ny, nx, n_ptr->fy, n_ptr->fx) > MAX_SIGHT
+                    || !los(m_ptr->fy, m_ptr->fx, n_ptr->fy, n_ptr->fx))
                     continue;
 
                 /* Activate all other monsters and give directions */
-                make_alert(m_ptr);
+                make_alert(n_ptr);
                 n_ptr->mflag |= (MFLAG_ACTV);
-                n_ptr->target_y = ny;
-                n_ptr->target_x = nx;
+                monster_senses_share_trace(n_ptr, ny, nx);
 
                 alerted_others = true;
             }
@@ -936,6 +1010,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
         }
     } /* End of monster's move */
 
+movement_done:
     /* Notice changes in view */
     if (do_view)
     {

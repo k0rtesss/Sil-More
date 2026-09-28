@@ -22,6 +22,12 @@
 # S: spell type | spell type | etc
 # F: flag | flag | etc
 # Q: 16-digit (or longer) hexadecimal GUID identifying the monster (optional)
+# L: leadership grade : doctrine : kin [: additional command kin separated by |]
+#    Grades: NONE (follower only), ORDINARY, LEADER, COMMANDER. Omitted: unaffiliated.
+#    Doctrines: TACTICAL (soldiers), PACK (pursuit and surrounding).
+#    Kin: ORC, MAN, ELF, TROLL, RAUKO, WOLF, CAT, DRAGON, SPIDER, UNDEAD,
+#         VAMPIRE, GIANT, HORROR. Only TACTICAL COMMANDER may name extra kin.
+#    Leadership does not grant Rally, followers at spawn, or combat stat bonuses.
 # D: Description
 #
 # 'N' indicates the beginning of an entry. The serial number must
@@ -299,7 +305,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 
 ##### Non-race (contains the player picture) #####
@@ -364,6 +370,7 @@ D: rests upon you, grave and gentle, full of grief that is not despair.
 ##### 1 #####
 
 N:11:Wolf
+L:ORDINARY:PACK:WOLF
 Q:d589b743f32151d3
 W:1:1
 G:C:u
@@ -400,12 +407,13 @@ Q:cbb819a9cb63bbba
 W:1:0
 G:@:g
 T:8:1
-I:2:8d4:0
-A:60:1:0:1
+I:1:8d4:0
+A:0:1:0:1
 P:[+0]
-F:MALE | MAN | NEVER_MOVE | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
+F:MALE | MAN | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
 D:A scarred and dirty man clad only in a loincloth. A metal collar
-D: is about his neck, and a long chain leads from it to the wall.
+D: is about his neck. He shuffles slowly through the mine, chipping
+D: quartz into rubble under the eyes of his overseers.
 
 # Can't move from idx 14 for dungeon generation reasons
 N:14:Dejected elven thrall
@@ -414,15 +422,17 @@ Q:9829bd03cfda98e7
 W:1:0
 G:@:g
 T:8:2
-I:2:10d4:0
-A:60:1:0:2
+I:1:10d4:0
+A:0:1:0:2
 P:[+0]
-F:MALE | ELF | NEVER_MOVE | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
-D:A chained elf slumps here, filthy hair hanging to his shoulders
-D: and eyes vacant. His back and arms bear the marks of a whip.
+F:MALE | ELF | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
+D:A shackled elf labours slowly at the quartz, filthy hair hanging
+D: to his shoulders and eyes vacant. His back and arms bear the
+D: marks of a whip.
 
 # Can't move from idx 15 for dungeon generation reasons
 N:15:Orc thrallmaster
+L:LEADER:TACTICAL:ORC
 O:FACING_LEFT
 Q:05f49e29acf49a93
 W:1:0
@@ -518,6 +528,7 @@ D: and in his eyes is the memory of every doom that has been spoken.
 ##### 2 #####
 
 N:21:Orc skirmisher
+L:ORDINARY:TACTICAL:ORC
 O:FACING_LEFT
 Q:aebc036dc91edf62
 W:2:1
@@ -553,6 +564,7 @@ D: and its keen eyes miss little that moves in the deep places below.
 
 
 N:23:Mewlip
+L:ORDINARY:TACTICAL:HORROR
 O:FACING_RANDOM
 Q:315d21268dcdd817
 W:2:1
@@ -574,6 +586,7 @@ D: bones of unwary travelers. Their eyes gleam with hunger in the darkness.
 ##### 3 #####
 
 N:31:Orc scout
+L:ORDINARY:TACTICAL:ORC
 O:FACING_LEFT
 Q:3db7e18811837249
 W:3:1
@@ -596,6 +609,7 @@ D: away into the shadows.
 
 # Can't move from idx 32, used by monster ability HATCH_SPIDER
 N:32:Spider hatchling
+L:NONE:PACK:SPIDER
 O:FACING_RANDOM
 Q:ddbfaed0110335da
 W:3:2
@@ -633,6 +647,7 @@ D: frost forms where its coils have rested on the stone.
 ##### 4 #####
 
 N:41:Orc soldier
+L:ORDINARY:TACTICAL:ORC
 O:FACING_LEFT
 Q:b7a6509ba8b8b7e9
 W:4:1
@@ -643,7 +658,7 @@ I:2:8d4:0
 A:15:1:1:2
 P:[+3,2d4]
 B:HIT:HURT:(+3,2d7)
-F:MALE | FRIENDS | DROP_33 | OPEN_DOOR | BASH_DOOR
+F:MALE | FRIENDS | DROP_33 | OPEN_DOOR | BASH_DOOR | BRIDGE_BUILDER
 F:ORC | HURT_LITE | SMART
 F:HAS_WEAPON | HAS_ARMOUR
 D:He is one of Morgoth's grim mockeries of the firstborn.
@@ -685,6 +700,7 @@ D: flesh, gouging at the face and eyes with cruel beak.
 
 
 N:44:Brood spider
+L:LEADER:PACK:SPIDER
 O:FACING_RIGHT
 Q:940b46dbe98fba40
 W:4:3
@@ -705,6 +721,7 @@ D: Its hairy mandibles are wet with a dark fluid.
 
 
 N:51:Orc archer
+L:ORDINARY:TACTICAL:ORC
 O:FACING_LEFT
 Q:12288708ac66ebf8
 W:5:3
@@ -727,6 +744,7 @@ D: for what skill does not.
 
 
 N:52:White wolf
+L:ORDINARY:PACK:WOLF
 Q:d880813f941186df
 W:5:1
 G:C:w
@@ -762,6 +780,7 @@ D: the stone beneath its belly is scorched dark where it has lain.
 
 
 N:54:Gorgol, the Butcher
+L:COMMANDER:TACTICAL:ORC
 O:FACING_LEFT
 Q:333546bf2a893575
 W:5:10
@@ -785,6 +804,7 @@ D: His pack follows him out of fear rather than loyalty.
 
 
 N:61:Orc warrior
+L:ORDINARY:TACTICAL:ORC
 O:FACING_LEFT
 Q:ef3c140d0bce7a2b
 W:6:1
@@ -794,7 +814,7 @@ I:2:9d4:0
 A:15:2:1:4
 P:[+5,2d4]
 B:HIT:HURT:(+3,3d6)
-F:MALE | DROP_33 | OPEN_DOOR | BASH_DOOR
+F:MALE | DROP_33 | OPEN_DOOR | BASH_DOOR | BRIDGE_BUILDER
 F:ORC | HURT_LITE | FRIEND | SMART
 F:HAS_WEAPON | HAS_ARMOUR
 F:CHARGE
@@ -804,6 +824,7 @@ D: into battle with a heavy axe, his snarl baring iron-capped teeth.
 
 
 N:62:Sword spider
+L:NONE:PACK:SPIDER
 O:FACING_RIGHT
 Q:48b96d75487ee896
 W:6:2
@@ -838,6 +859,7 @@ D: keen eyes miss nothing that moves in the shadows below.
 
 
 N:64:Phantom
+L:NONE:TACTICAL:UNDEAD
 O:FACING_RANDOM
 Q:dc3a9fec7f8b557a
 W:6:3
@@ -862,6 +884,7 @@ D: are seized by a terror from which reason cannot free them.
 
 
 N:71:Attercop
+L:ORDINARY:PACK:SPIDER
 O:FACING_LEFT
 Q:8087b3f084f094c2
 W:7:1
@@ -916,6 +939,7 @@ D: and the very air it breathes turns sickly and poisonous.
 
 
 N:74:Mountain troll
+L:ORDINARY:TACTICAL:TROLL
 O:FACING_LEFT
 Q:949bb8a5ee1ce58f
 W:7:1
@@ -935,6 +959,7 @@ D: it came.
 
 
 N:75:Tattered wight
+L:ORDINARY:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:8632cc4215700e14
 W:7:2
@@ -957,7 +982,8 @@ D: the halls in hollow rage, grasping at the living with fingers
 D: that drain the nimbleness from flesh and bone.
 
 
-N:76:Boldog, the Merciless
+N:76:Baugon, the Merciless
+L:COMMANDER:TACTICAL:ORC
 O:FACING_LEFT
 Q:d41e3b6bfafb596f
 W:7:20
@@ -975,11 +1001,10 @@ F:HURT_LITE
 S:SINDARBANE
 S:SPELL_PCT_15 | POW_11
 S:ARROW2
-D:One of the mightiest orc-captains to serve Morgoth, Boldog was sent
-D: with a host to break through the Girdle of Melian and seize Lúthien
-D: Tinuviel for the Dark Lord. Though that errand failed, he has since
-D: led countless raids against the Eldar, earning his name through
-D: merciless slaughter of any who fall into his hands.
+D:An Orc captain hardened by years of raids against the Eldar, Baugon
+D: rules his warband through fear. He takes pride in prisoners brought
+D: alive to Angband, and his followers know what awaits those who fail
+D: him. His cruel strength is an Orc's own, with no spirit behind it.
 
 
 ##### 8 #####
@@ -988,6 +1013,7 @@ D: merciless slaughter of any who fall into his hands.
 # need to leave Orc champion at location 81
 
 N:81:Orc champion
+L:LEADER:TACTICAL:ORC
 O:FACING_LEFT
 Q:88ef7547642967b2
 W:8:2
@@ -1009,6 +1035,7 @@ D: as any foe.
 
 
 N:82:Easterling warrior
+L:LEADER:TACTICAL:MAN
 O:FACING_LEFT
 Q:0e401610ae33a21f
 W:8:2
@@ -1017,10 +1044,11 @@ T:9:6
 I:2:10d4:1
 A:15:3:1:7
 P:[+5,3d4]
+H:1
 B:HIT:HURT:(+7,2d8)
-F:MAN | MALE | DROP_33 | OPEN_DOOR | BASH_DOOR | FRIENDS
+F:MAN | MALE | DROP_33 | OPEN_DOOR | BASH_DOOR | FRIENDS | BRIDGE_BUILDER
 F:SMART
-F:FLANKING
+F:BLOCKING
 D:A warrior of the Easterlings, one of those peoples who crossed into
 D: Beleriand and swore oaths to the lords of the Eldar -- only to break
 D: them when Morgoth's promises proved sweeter. He fights with a crude
@@ -1044,6 +1072,7 @@ D: and despair.
 
 
 N:84:Balcmeg, the Relentless
+L:LEADER:TACTICAL:ORC
 O:FACING_LEFT
 Q:bf68d49c92c9d98c
 W:8:20
@@ -1063,6 +1092,7 @@ D: reached safety. His warband follows him out of dread.
 
 
 N:85:Lug, the Grotesque
+L:LEADER:TACTICAL:ORC
 O:FACING_RIGHT
 Q:f30bbaa9d32572af
 W:8:20
@@ -1087,6 +1117,7 @@ D: deeply, and few survive his attentions long.
 # need to leave Orc captain at location 91
 
 N:91:Orc captain
+L:COMMANDER:TACTICAL:ORC
 O:FACING_LEFT
 Q:2c739cdb1be99f2c
 W:9:3
@@ -1107,6 +1138,7 @@ D: won in the dark halls of Angband.
 
 
 N:92:Warg
+L:ORDINARY:PACK:WOLF
 Q:03bc4a090682d59e
 W:9:1
 G:C:s
@@ -1123,6 +1155,7 @@ D: keen intelligence makes them dangerous hunters.
 
 
 N:93:Grave wight
+L:ORDINARY:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:0b47bc4372b11e08
 W:9:2
@@ -1163,6 +1196,7 @@ D: and its breath carries a chill that chokes the spirit.
 
 
 N:95:Orcobal, Champion of the Orcs
+L:COMMANDER:TACTICAL:ORC
 O:FACING_LEFT
 Q:8a1995b8587aa0a2
 W:9:15
@@ -1189,6 +1223,7 @@ D: for he has slain many of their kin beneath the shadows of Thangorodrim.
 
 
 N:101:Whispering shadow
+L:NONE:TACTICAL:UNDEAD
 O:FACING_RIGHT
 Q:ccff426ff2ef0318
 W:10:1
@@ -1208,6 +1243,7 @@ D: consumed, calling others to join them in the cold.
 
 
 N:102:Distended spider
+L:NONE:PACK:SPIDER
 O:FACING_RIGHT
 Q:3e116a9ee6cfa9d7
 W:10:1
@@ -1224,6 +1260,7 @@ D: fluids slowly dissolve the victim from within.
 
 
 N:103:Easterling archer
+L:ORDINARY:TACTICAL:MAN
 Q:7ed54d5976d25b3e
 W:10:3
 G:@:u
@@ -1261,6 +1298,7 @@ D: with a speed that belies its broken form.
 
 
 N:105:Othrod, the Orc Lord
+L:COMMANDER:TACTICAL:ORC
 O:FACING_LEFT
 Q:78d6c2d78e85ea3d
 W:10:10
@@ -1289,6 +1327,7 @@ D: earned him a feared name among the hosts of Angband.
 
 
 N:111:Snow troll
+L:ORDINARY:TACTICAL:TROLL
 O:FACING_LEFT
 Q:cb874b1cadd2c23b
 W:11:1
@@ -1311,6 +1350,7 @@ D: cold that would slay lesser creatures only makes it stronger.
 # need to leave Barrow wight at location 112
 
 N:112:Barrow wight
+L:ORDINARY:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:c92f7e02e189e1bd
 W:11:100
@@ -1333,6 +1373,7 @@ D: cold of the soul, not merely of the flesh.
 
 
 N:113:Lurking horror
+L:NONE:TACTICAL:HORROR
 O:FACING_RANDOM
 Q:d2d2f0b7edcf4cf6
 W:11:5
@@ -1352,6 +1393,7 @@ D: that pours from it can break the will of even the bravest.
 
 
 N:114:Giant
+L:ORDINARY:TACTICAL:GIANT
 O:FACING_LEFT
 Q:a6ab3acc59fc624a
 W:11:1
@@ -1372,6 +1414,7 @@ D: hurl great boulders at their foes from afar.
 
 
 N:115:Uldor, the Accursed
+L:COMMANDER:TACTICAL:MAN
 O:FACING_LEFT
 Q:e7c39145ef0dc35d
 W:11:10
@@ -1396,6 +1439,7 @@ D: yet the curse upon his name endures: Uldor the Accursed.
 # need to leave Brodda at location 117
 
 N:117:Brodda, the Easterling Lord
+L:LEADER:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:ed37fc4fce32643f
 W:11:100
@@ -1424,6 +1468,7 @@ D: has been altered. The dark power binds his spirit here still.
 # need to leave Easterling spy at location 121
 
 N:121:Easterling spy
+L:LEADER:TACTICAL:MAN
 O:FACING_LEFT
 Q:4acd2c9fcc5cd6e5
 W:12:3
@@ -1462,6 +1507,7 @@ D: finds its prey with uncanny ease.
 
 
 N:123:Sulrauko
+L:ORDINARY:TACTICAL:RAUKO
 O:FACING_RANDOM
 Q:1c6330b77b8028c2
 W:12:2
@@ -1480,6 +1526,7 @@ D: swift, battering all who stand against its fell master.
 
 
 N:124:Fire-drake hatchling
+L:NONE:TACTICAL:DRAGON
 O:FACING_RANDOM
 Q:d633995ddac90132
 W:12:6
@@ -1502,6 +1549,7 @@ D: to sear flesh from bone.
 
 
 N:125:Ulfang the Black
+L:COMMANDER:TACTICAL:MAN
 O:FACING_LEFT
 Q:66eda88da3bb69b9
 W:12:10
@@ -1527,6 +1575,7 @@ D: or slavery. He is cunning and ruthless, and strikes at every opening.
 # (Duruin = red flame of the night)
 
 N:126:Duruin, Least of the Balrogs
+L:LEADER:TACTICAL:RAUKO
 O:FACING_LEFT
 Q:9c44dec3f9d6d14c
 W:12:30
@@ -1554,6 +1603,7 @@ D: and shadow. He wields fiery sword and whip.
 
 
 N:131:Werewolf
+L:ORDINARY:PACK:WOLF
 Q:6853902a5ac58c5e
 W:13:1
 G:C:U
@@ -1572,6 +1622,7 @@ D: and their venom brings a slow and painful death.
 
 
 N:132:Shadow spider
+L:NONE:PACK:SPIDER
 O:FACING_RIGHT
 Q:d5e4892102e9b48a
 W:13:1
@@ -1589,7 +1640,8 @@ D: from your very eyes.
 
 
 N:133:Shadow
-O:FACING_RIGHT
+L:ORDINARY:TACTICAL:UNDEAD
+O:FACING_LEFT
 Q:6c92b6a7a9e4a63e
 W:13:3
 G:W:d
@@ -1629,6 +1681,7 @@ D: still and cold, as though winter itself had come to these dark halls.
 
 
 N:135:Gilim, the Giant of Eruman
+L:LEADER:TACTICAL:GIANT
 O:FACING_LEFT
 Q:57efe839cfc78085
 W:13:10
@@ -1676,6 +1729,7 @@ D: radiates from its coils, and the stone beneath it cracks and warps.
 
 
 N:142:Creeping horror
+L:NONE:TACTICAL:HORROR
 O:FACING_RANDOM
 Q:54981cf971e538fc
 W:14:4
@@ -1695,6 +1749,7 @@ D: long before it ever reaches you.
 
 
 N:143:Ringrauko
+L:ORDINARY:TACTICAL:RAUKO
 O:FACING_RIGHT
 Q:0d9a80e3fa33a2f2
 W:14:1
@@ -1715,6 +1770,7 @@ D: its hand drinks the warmth from all it touches.
 # (Delthaur = abominable horror)
 
 N:145:Delthaur, Balrog of Terror
+L:LEADER:TACTICAL:RAUKO
 O:FACING_LEFT
 Q:04a01f92e1cf1e4c
 W:14:20
@@ -1742,6 +1798,7 @@ D: him by a darker title: the Bane of Durin.
 
 
 N:146:Nan, the Giant
+L:LEADER:TACTICAL:GIANT
 O:FACING_LEFT
 Q:3de81cfd79cf3740
 W:14:30
@@ -1767,6 +1824,7 @@ D: to Melkor when the world was young, and both have served him ever since.
 ##### 15 #####
 
 N:151:Cave troll
+L:ORDINARY:TACTICAL:TROLL
 O:FACING_LEFT
 Q:53efd5c081c139df
 W:15:1
@@ -1808,6 +1866,7 @@ D: ever strike.
 
 # Can't move from idx 153, used by monster Song of Oaths
 N:153:Oathwraith
+L:LEADER:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:f119b039c564429b
 W:15:6
@@ -1832,6 +1891,7 @@ D: who have sworn vows, seeking to drag them down into its own damnation.
 # need to leave Cat warrior at location 154
 
 N:154:Cat warrior
+L:ORDINARY:TACTICAL:CAT
 O:FACING_LEFT
 Q:3c10b33361f6f136
 W:15:1
@@ -1843,7 +1903,7 @@ P:[+15,1d4]
 B:CLAW:WOUND:(+18,1d9)
 F:FRIENDS | OPEN_DOOR | UNLOCK_DOOR | BASH_DOOR | SMART
 F:DROP_33
-F:EXCHANGE_PLACES | CAT
+F:EXCHANGE_PLACES | CAT | BRIDGE_BUILDER
 D:One of the warriors of Tevildo's court, this great cat walks
 D: upright like a man, though no man could match its speed. Its
 D: long scything claws are weapons of terrible precision, and it
@@ -1874,6 +1934,7 @@ D: follows close behind.
 
 
 N:162:Kemenrauko
+L:LEADER:TACTICAL:RAUKO
 O:FACING_RIGHT
 Q:6d237eb553034a0a
 W:16:2
@@ -1917,6 +1978,7 @@ D: in fitful glares that leaped and died.'
 # need to leave Young cold-drake at location 164
 
 N:164:Young cold-drake
+L:ORDINARY:TACTICAL:DRAGON
 O:FACING_RANDOM
 Q:2f6ec4ab45007365
 W:16:6
@@ -1941,6 +2003,7 @@ D: ancient and terrible mind.
 
 
 N:165:Umuiyan, the Doorkeeper
+L:COMMANDER:TACTICAL:CAT
 Q:8a374a2b19facb77
 W:16:15
 G:f:y
@@ -1950,7 +2013,7 @@ A:20:13:10:8
 P:[+20,1d4]
 B:CLAW:WOUND:(+25,1d11)
 F:ESCORT | UNIQUE | MALE | OPEN_DOOR | BASH_DOOR | SMART
-F:DROP_100 | UNLOCK_DOOR | DROP_GOOD | CAT
+F:DROP_100 | UNLOCK_DOOR | DROP_GOOD | CAT | BRIDGE_BUILDER
 S:SPELL_PCT_60 | POW_21
 S:ARROW2
 D:Grizzled and cunning, Umuiyan has kept watch at the gates of Tevildo's
@@ -1963,6 +2026,7 @@ D: in the slow torment of those who think themselves clever enough to slip by.
 # (Belegwath = mighty shadow)
 
 N:166:Belegwath, Balrog of Shadow
+L:LEADER:TACTICAL:RAUKO
 O:FACING_LEFT
 Q:bba0d000d9578563
 W:16:20
@@ -1986,6 +2050,7 @@ D: Shadow has been the last thing they ever beheld.
 
 
 N:167:Spectre
+L:ORDINARY:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:689e64a1f84df282
 W:16:6
@@ -2011,6 +2076,7 @@ D: through walls as though they were not there.
 
 
 N:171:Spider of Gorgoroth
+L:LEADER:PACK:SPIDER
 O:FACING_RANDOM
 Q:bb6a0afb90bf789d
 W:17:1
@@ -2029,6 +2095,7 @@ D: to the very darkest parts of the stronghold.
 
 
 N:172:Greater werewolf
+L:ORDINARY:PACK:WOLF
 Q:18a465a8fded0273
 W:17:1
 G:C:D1
@@ -2067,6 +2134,7 @@ D: things can match its terrible versatility.
 
 
 N:174:Lesser vampire
+L:ORDINARY:TACTICAL:VAMPIRE
 O:FACING_LEFT
 Q:41d90b9e0df3798c
 W:17:1
@@ -2088,6 +2156,7 @@ D: its victims, leaving them cold and hollow.
 # need to leave Cat assassin at location 175
 
 N:175:Cat assassin
+L:LEADER:TACTICAL:CAT
 O:FACING_RIGHT
 Q:9a6fbc6e7b46f502
 W:17:3
@@ -2098,7 +2167,7 @@ A:5:12:15:5
 P:[+19,1d4]
 B:CLAW:WOUND:(+20,1d11)
 F:INVISIBLE | OPEN_DOOR | UNLOCK_DOOR | BASH_DOOR | SMART
-F:DROP_100 | FRIEND | CAT
+F:DROP_100 | FRIEND | CAT | BRIDGE_BUILDER
 S:SPELL_PCT_50 | POW_23
 S:ARROW1
 D:One of the silent hunters of Tevildo's court, this jet-black cat
@@ -2108,6 +2177,7 @@ D: of one who has stalked and slain many times before.
 
 
 N:176:Scatha the Worm
+L:LEADER:TACTICAL:DRAGON
 Q:25d89441afca341a
 W:17:30
 G:d:B
@@ -2133,6 +2203,7 @@ D: One day he may crawl forth from Angband to trouble the world above.
 # only ever appears in the escort of Tevildo
 
 N:177:Oikeroi, Guard of Tevildo
+L:LEADER:TACTICAL:CAT
 O:FACING_LEFT
 Q:dd75751a350323a0
 W:17:15
@@ -2143,7 +2214,7 @@ A:15:13:10:9
 P:[+21,1d4]
 B:CLAW:WOUND:(+30,1d11)
 F:UNIQUE | MALE | OPEN_DOOR | BASH_DOOR | SMART
-F:UNLOCK_DOOR | UNIQUE_FRIEND | DROP_1D2 | DROP_GOOD | CAT
+F:UNLOCK_DOOR | UNIQUE_FRIEND | DROP_1D2 | DROP_GOOD | CAT | BRIDGE_BUILDER
 D:Chief among the thanes of Tevildo, Oikeroi is sworn to guard his
 D: master with fang and claw. He is cunning in the ways of ambush
 D: and has slain many who sought to challenge the Prince of Cats.
@@ -2156,6 +2227,7 @@ D: His loyalty to Tevildo is absolute, born of both fear and dark devotion.
 # need to leave Young fire-drake at location 181
 
 N:181:Young fire-drake
+L:ORDINARY:TACTICAL:DRAGON
 Q:0af151dfe09fe455
 W:18:6
 G:d:r
@@ -2181,6 +2253,7 @@ D: his bones were ashes in the hot mire.
 
 
 N:182:Darting horror
+L:NONE:TACTICAL:HORROR
 O:FACING_RANDOM
 Q:2d4cdde8b5b64d56
 W:18:5
@@ -2201,6 +2274,7 @@ D: reason itself crumbles.
 
 
 N:183:Wraith
+L:LEADER:TACTICAL:UNDEAD
 O:FACING_LEFT
 Q:6607c32f97be3bc2
 W:18:4
@@ -2224,6 +2298,7 @@ D: its will can hold a victim helpless as the grave.
 
 
 N:184:Ururauko
+L:LEADER:TACTICAL:RAUKO
 O:FACING_RANDOM
 Q:0a03a1d09883f949
 W:18:1
@@ -2243,6 +2318,7 @@ D: World was young, and now its fire serves only to destroy.
 
 
 N:185:Tevildo, Prince of Cats
+L:COMMANDER:TACTICAL:CAT
 O:FACING_LEFT
 Q:fad36da2cdb9a6ef
 W:18:10
@@ -2254,7 +2330,7 @@ P:[+24,1d4]
 B:CLAW:WOUND:(+26,1d13)
 F:UNIQUE | MALE | OPEN_DOOR | BASH_DOOR | SMART
 F:UNLOCK_DOOR | UNIQUE_FRIEND | DROP_1D2 | DROP_GREAT
-F:CRUEL_BLOW | EXCHANGE_PLACES | CAT
+F:CRUEL_BLOW | EXCHANGE_PLACES | CAT | BRIDGE_BUILDER
 S:SINDARBANE
 D:Tevildo is a mighty fay in the service of Melko, lord and master of
 D: all the cats. In his fortress he keeps many thralls in torment, and
@@ -2266,6 +2342,7 @@ D: and while he wears it, none may defeat him.
 # (Turkano = powerful commander)
 
 N:186:Turkano, Balrog of the Hosts
+L:COMMANDER:TACTICAL:RAUKO:ORC|TROLL
 O:FACING_LEFT
 Q:5dbb205e018a3e6a
 W:18:20
@@ -2316,6 +2393,7 @@ D: Its breath can freeze a warrior where he stands, armour and all.
 # need to leave Troll guard at location 192
 
 N:192:Troll guard
+L:LEADER:TACTICAL:TROLL
 O:FACING_LEFT
 Q:b39a82dfdc1c5ef9
 W:19:1
@@ -2337,6 +2415,7 @@ D: of death itself can stop them.
 
 
 N:193:Vampire
+L:ORDINARY:TACTICAL:VAMPIRE
 O:FACING_LEFT
 Q:a6dd7747bfd8b38d
 W:19:1
@@ -2372,6 +2451,7 @@ D: eating its way through the roots of the earth.
 
 
 N:195:Smaug the Golden
+L:LEADER:TACTICAL:DRAGON
 Q:0eb5a6c19e20c8c4
 W:19:30
 G:d:y1
@@ -2397,6 +2477,7 @@ D: truly terrible, but even now he is a deadly foe.
 
 
 N:196:Maeglin, Betrayer of Gondolin
+L:LEADER:TACTICAL:ELF
 O:FACING_LEFT
 Q:707ee98ab7f93af6
 W:19:100
@@ -2444,6 +2525,7 @@ D: it radiates makes the very air painful to breathe.
 
 
 N:202:Great cold-drake
+L:ORDINARY:TACTICAL:DRAGON
 Q:2c31b6feba73a132
 W:20:6
 G:D:W
@@ -2492,6 +2574,7 @@ D: or his escape.
 
 
 N:204:Gwathrauko
+L:ORDINARY:TACTICAL:RAUKO
 O:FACING_LEFT
 Q:7aea95599424e3b6
 W:20:4
@@ -2510,6 +2593,7 @@ D: darkness so deep that even torches cannot burn within it.
 
 
 N:205:Draugluin, Sire of Werewolves
+L:COMMANDER:PACK:WOLF
 Q:fc2ac65daee47c7a
 W:20:15
 G:C:W
@@ -2533,6 +2617,7 @@ D: in the service of the Dark Lord, and now he stalks these halls once more.
 # (Vallach = Powerful leaping flame)
 
 N:206:Vallach, Balrog of Sudden Flame
+L:LEADER:TACTICAL:RAUKO
 O:FACING_LEFT
 Q:f960b4324c03fa54
 W:20:20
@@ -2560,6 +2645,7 @@ D: as though it will one day bear him and a golden lord to a common doom.
 
 
 N:211:Ancient spider
+L:LEADER:PACK:SPIDER
 O:FACING_LEFT
 Q:ccaa5a00f768feca
 W:21:3
@@ -2598,6 +2684,7 @@ D: near it can bring sickness and death.
 
 
 N:213:Vampire lord
+L:LEADER:TACTICAL:VAMPIRE
 O:FACING_LEFT
 Q:356607a1d590333b
 W:21:2
@@ -2618,6 +2705,7 @@ D: essence of life.
 
 
 N:214:Dagorhir, the Elfbane
+L:COMMANDER:TACTICAL:TROLL
 O:FACING_LEFT
 Q:5ebdcd9da7ef3d73
 W:21:15
@@ -2640,6 +2728,7 @@ D: the deep halls, and the sound of his tread brings dread to all who hear.
 
 
 N:215:Gostir, the Dread Glance
+L:LEADER:TACTICAL:DRAGON
 O:FACING_LEFT
 Q:85e8d31f214e8586
 W:21:30
@@ -2686,6 +2775,7 @@ D: to make out its true shape until its fangs are already upon you.
 
 
 N:222:Great fire-drake
+L:ORDINARY:TACTICAL:DRAGON
 Q:0f141e8db8cbc8f6
 W:22:6
 G:D:r
@@ -2708,6 +2798,7 @@ D: worthy of its terrible power, for who could ever challenge a Dragon?
 
 
 N:223:Hithrauko
+L:LEADER:TACTICAL:RAUKO
 Q:2f73bb8e0f78b92e
 W:22:2
 G:R:B1
@@ -2726,6 +2817,7 @@ D: visions of such horror that their minds shatter like glass.
 
 
 N:224:Shelob, Spider of Darkness
+L:LEADER:PACK:SPIDER
 O:FACING_LEFT
 Q:5fb5b208d8946775
 W:22:30
@@ -2748,6 +2840,7 @@ D: of Angband, and all lesser spiders pay her fearful homage.
 # The master of the guard in Angband
 
 N:225:Lungorthin, Lord of Balrogs
+L:COMMANDER:TACTICAL:RAUKO
 O:FACING_LEFT
 Q:dd9a5db3ba5bb028
 W:22:20
@@ -2796,6 +2889,7 @@ D: poison, and shadow in turn. It is said to be as old as Angband itself.
 
 
 N:232:Unrelenting horror
+L:NONE:TACTICAL:HORROR
 O:FACING_RANDOM
 Q:5244d72f7ce563a7
 W:23:2
@@ -2816,6 +2910,7 @@ D: clear how one could ever slay such a thing.
 
 
 N:233:Ancalagon the Black
+L:LEADER:TACTICAL:DRAGON
 O:FACING_RIGHT
 Q:4da7998251196a35
 W:24:6
@@ -2840,6 +2935,7 @@ D: with great thunder, and lightning, and a tempest of fire.
 
 
 N:234:Thuringwethil, the Vampire Messenger
+L:LEADER:TACTICAL:VAMPIRE
 O:FACING_LEFT
 Q:de682ee6b4e6d275
 W:23:3
@@ -2867,6 +2963,7 @@ D: claws have torn the throats of many who trusted her charming guise.
 # need to leave Gothmog at location 241
 
 N:241:Gothmog, High Captain of Balrogs
+L:COMMANDER:TACTICAL:RAUKO:ORC|TROLL
 O:FACING_LEFT
 Q:0e0f11695f8a443d
 W:24:3
@@ -2893,6 +2990,7 @@ D: master, when Morgoth's cry rang through the trembling North.
 # need to leave Ungoliant at location 242
 
 N:242:Ungoliant, the Gloomweaver
+L:LEADER:PACK:SPIDER
 O:FACING_LEFT
 Q:c2485b83ba33934d
 W:24:3
@@ -2918,6 +3016,7 @@ D: even herself at the last.
 # need to leave Glaurung at location 243
 
 N:243:Glaurung, the Deceiver
+L:LEADER:TACTICAL:DRAGON
 Q:3ab7e216cb871fec
 W:24:3
 G:D:y1
@@ -2948,6 +3047,7 @@ D: matched only by his cunning, and his hoard is vast beyond measure.
 # Also known as Sauron and Thu
 
 N:244:Gorthaur, Servant of Morgoth
+L:COMMANDER:PACK:WOLF
 O:FACING_LEFT
 Q:7b038638b2981d20
 W:24:3
@@ -2975,6 +3075,7 @@ D: save only Draugluin. His eyes burn with malice older than the Sun.
 
 
 N:245:Flying cold-drake
+L:ORDINARY:TACTICAL:DRAGON
 O:FACING_RIGHT
 Q:7a94fd98505d6076
 W:24:6
@@ -2996,6 +3097,7 @@ D: gale spills from its throat, freezing stone and flesh beneath its shadow.
 
 
 N:246:Flying fire-drake
+L:ORDINARY:TACTICAL:DRAGON
 O:FACING_LEFT
 Q:49c954b30d9f0406
 W:24:6
@@ -3065,6 +3167,7 @@ D: that plagues the Children of Ilúvatar.
 # need to leave Carcharoth at location 253
 
 N:253:Carcharoth, the Jaws of Thirst
+L:LEADER:PACK:WOLF
 Q:9cbdbb88fd4f59dc
 W:25:1
 G:C:r
@@ -3073,10 +3176,10 @@ O:FACING_RIGHT
 I:4:35d4:0
 A:20:20:5:20
 P:[+30,2d4]
-B:BITE:POISON:(+31,2d17)
+B:BITE:POISON:(+31,2d12)
 F:UNIQUE | MALE | FORCE_DEPTH
 F:SMART
-F:WOLF
+F:WOLF | VENGEANCE
 S:SINDARBANE
 #D:The first guard of Angband, Carcharoth, also known as 'The Red Maw',
 #D: is the greatest wolf to ever walk the earth.  He is highly
@@ -3367,3 +3470,218 @@ F:UNIQUE | MALE
 D:Clothed in shining white, he appears as a beacon of
 D: hope and strength in this fallen world.
 
+
+# A childhood tale remembered for the order of two words.
+# Explicit vault placement only: zero allocation weight also excludes the
+# dragon from the throne room's otherwise unrestricted special-vault pool.
+N:402:Green Great Dragon
+L:LEADER:TACTICAL:DRAGON
+Q:90921d863b6a4eaa
+W:18:0
+G:D:G
+T:21:15
+O:FACING_RIGHT
+I:2:40d4:0
+A:40:8:2:19
+P:[+14,3d4]
+B:CLAW:HURT:(+20,3d10)
+B:BITE:WOUND:(+16,2d20)
+F:UNIQUE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:SMART | TERRITORIAL | BASH_DOOR | DRAGON
+F:DROP_1D2 | DROP_GREAT
+S:SPELL_PCT_20
+S:CONF | SCARE
+D:A great weight of green scales lies coiled among the remnants of an
+D: unfinished tale. Two words upon the oldest leaf have been marked for
+D: correction. The dragon appears unmoved by the objection. Its claws
+D: have left deep furrows in the stone, yet the fragile scrolls beneath
+D: them remain untouched.
+
+
+
+# New embodied spirits and the abandoned winged strain.
+# Reserved deep-route guardians have rarity zero and no authored token yet.
+# FORCE_DEPTH is only a minimum-depth restriction, never an exact home.
+
+N:403:Ringwion, the Pale Blade
+L:LEADER:TACTICAL:RAUKO
+Q:4bb71145c50a9794
+O:FACING_RIGHT
+W:16:15
+G:R:B
+T:21:13
+I:2:26d4:0
+A:10:6:3:17
+P:[+20,2d4]
+B:HIT:COLD:(+17,2d9)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:RAUKO | SMART | HAS_WEAPON | BASH_DOOR
+F:RES_COLD | HURT_FIRE | RIPOSTE | CONCENTRATION
+F:DROP_1D2 | DROP_GOOD
+D:Frost follows the edge of his narrow blade. He watches your hands
+D: with an ancient patience, and gives no ground until you strike.
+D: Then the pale steel moves.
+
+N:404:Helcamo, the Hoarfrost
+L:LEADER:TACTICAL:RAUKO
+Q:7222d6d7c82f6571
+O:FACING_RIGHT
+W:22:0
+G:R:W
+T:21:14
+I:2:48d4:0
+A:10:8:2:23
+P:[+18,4d4]
+B:HIT:COLD:(+25,3d10)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:RAUKO | SMART | TERRITORIAL | HAS_WEAPON | BASH_DOOR
+F:RES_COLD | HURT_FIRE
+F:DROP_2D2 | DROP_GREAT
+S:SPELL_PCT_20
+S:SLOW
+D:Rime lies thick upon his shoulders. Behind him the broken doors
+D: are sealed with ice, and beneath that ice something still wears
+D: its chains. He lifts his weapon, and your breath hangs motionless
+D: between you.
+
+N:405:Lhamthanc, the Forked Tongue
+L:LEADER:TACTICAL:DRAGON
+Q:cbfc75c5e401080b
+O:FACING_RIGHT
+W:24:0
+G:d:u
+T:21:18
+I:3:60d4:0
+A:40:10:1:23
+P:[+18,3d4]
+B:CLAW:HURT:(+28,3d13)
+B:BITE:WOUND:(+22,2d23)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:DRAGON | SMART | TERRITORIAL | FLYING | BASH_DOOR
+F:DROP_2D2 | DROP_GREAT
+S:SPELL_PCT_15
+S:SCARE
+D:Brown wings unfold above a heap of stolen things. No smoke escapes
+D: his jaws, only a divided tongue and a whisper of malice. The keepers
+D: abandoned this chamber long ago; what they bred here still watches
+D: the door.
+
+N:406:Angacirca, Reaper of Thralls
+L:LEADER:TACTICAL:ORC
+Q:9b6ad11d2169260e
+O:FACING_RIGHT
+W:16:15
+G:o:D
+T:21:19
+I:2:32d4:0
+A:10:7:2:17
+P:[+17,3d4]
+B:HIT:WOUND:(+21,3d7)
+B:HIT:DISARM:(+18)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:ORC | RAUKO | SMART | HAS_WEAPON | HAS_ARMOUR
+F:OPEN_DOOR | UNLOCK_DOOR | BASH_DOOR | ZONE_OF_CONTROL
+F:DROP_1D2 | DROP_GOOD
+D:An Orc's face looks out beneath the dark helm, but the malice behind
+D: it is older than the Orcs. His hooked blade is polished along its
+D: inward edge. The guards give way when he passes.
+
+N:407:Langon, the Rushing Herald
+L:LEADER:TACTICAL:RAUKO
+Q:322c93f003d1b00a
+O:FACING_RIGHT
+W:15:15
+G:R:W
+T:21:20
+I:3:16d4:0
+A:10:8:5:15
+P:[+18,1d4]
+B:HIT:HURT:(+17,2d6)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:RAUKO | SMART | HAS_WEAPON | FLYING | PASS_DOOR
+F:EXCHANGE_PLACES | RES_POIS | SPRINTING
+F:DROP_1D2 | DROP_GOOD
+S:SPELL_PCT_15
+S:SHRIEK
+D:His cloak streams behind him though the air is still. Beneath it
+D: you glimpse a drawn sword and a form that will not remain at rest.
+D: He turns towards the deeper halls, already drawing breath to cry
+D: aloud.
+
+N:408:Dúron, Keeper of the Unlit Ways
+L:LEADER:TACTICAL:RAUKO
+Q:a1850b923ec90b6d
+O:FACING_RIGHT
+W:20:15
+G:R:D
+T:21:21
+I:2:24d4:-3
+A:10:8:5:20
+P:[+18,3d4]
+B:HIT:DARK:(+22,2d9)
+F:UNIQUE | MALE | FORCE_DEPTH
+F:RAUKO | SMART | HURT_LITE | PASS_DOOR
+F:FLANKING | DODGING
+F:DROP_1D2 | DROP_GOOD
+D:The figure stands apart from the wall, yet its shadow joins every
+D: shadow about it. No flame is reflected in its face. When it moves,
+D: the doorway behind it seems to change its place.
+
+N:409:Fankil, the Sower of Strife
+L:COMMANDER:TACTICAL:MAN:RAUKO
+Q:e03ee4217593ca39
+O:FACING_RIGHT
+W:14:0
+G:@:r
+T:21:22
+I:2:24d4:0
+A:10:7:3:17
+P:[+15,2d4]
+B:HIT:HURT:(+16,2d7)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:MAN | RAUKO | SMART | HAS_WEAPON | OPEN_DOOR | UNLOCK_DOOR
+F:DROP_1D2 | DROP_GOOD
+S:SPELL_PCT_25 | POW_8
+S:RALLY | SCARE
+D:Red and gold still adorn the envoy's dark raiment. He speaks of
+D: gifts, of lands beyond the mountains, and of the weakness of those
+D: you trusted. At his quiet command the guards turn towards you.
+
+N:410:Ondotur, the Buried Lord
+L:LEADER:TACTICAL:RAUKO
+Q:23eb4b3c8f754c0a
+O:FACING_RIGHT
+W:23:0
+G:R:s
+T:21:23
+I:1:64d4:0
+A:10:8:0:24
+P:[+12,6d4]
+B:HIT:SHATTER:(+24,5d8)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:RAUKO | SMART | TUNNEL_WALL | STONE | BASH_DOOR
+F:RES_CRIT | RES_FIRE | RES_COLD | RES_POIS | NO_FEAR
+F:DROP_2D2 | DROP_GREAT
+D:What seemed a fallen pillar rises from the floor. Dust pours from
+D: hollows where a face might be, and beneath the dust the stone is
+D: unbroken. The roots of the mountain groan as it turns.
+
+N:411:Nambatur, Custodian of Grond's Forge
+L:LEADER:TACTICAL:RAUKO
+Q:f1f38a4b25dfcc33
+O:FACING_RIGHT
+W:23:0
+G:R:W
+T:21:24
+I:2:60d4:0
+A:10:8:1:24
+P:[+20,5d4]
+B:HIT:BATTER:(+27,4d9)
+F:UNIQUE | MALE | SPECIAL_GEN | SPECIAL_VAULT_ONLY
+F:RAUKO | SMART | HAS_WEAPON | HAS_ARMOUR | OPEN_DOOR | BASH_DOOR
+F:RES_FIRE | SMITE
+F:DROP_2D2 | DROP_GREAT
+D:Pale hands close about the haft of a great hammer. Behind the smith
+D: stands an anvil greater than a king's tomb, scored by work no mortal
+D: arm could have wrought. The master's weapon is gone, but its keeper
+D: has not abandoned the fire.

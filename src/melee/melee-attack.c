@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-tactics.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
 #include "player/killer.h"
@@ -543,11 +545,177 @@ void do_betrayal_helm_crown(void)
     }
 }
 
+/* All evaluations use this creature's capabilities and witnessed evidence.
+ * In particular, no player equipment, exact HP or actual resistance is read. */
+static void monster_damage_player(monster_type* m_ptr, int damage, cptr cause)
+{
+    take_hit(damage, cause);
+    if (damage > 0)
+        monster_ai_observe(m_ptr, MON_AI_WOUNDED, 1);
+}
+
+static bool observe_melee_status(monster_type* m_ptr, int feature, bool allowed)
+{
+    monster_ai_observe(m_ptr, feature, allowed ? -1 : 1);
+    return allowed;
+}
+
+static int melee_effect_feature(int effect)
+{
+    switch (effect)
+    {
+    case RBE_FIRE: return MON_AI_FIRE;
+    case RBE_COLD: return MON_AI_COLD;
+    case RBE_DARK: return MON_AI_DARK;
+    case RBE_POISON: return MON_AI_POISON;
+    case RBE_CONFUSE: return MON_AI_CONFUSION;
+    case RBE_TERRIFY: return MON_AI_FEAR;
+    case RBE_ENTRANCE: return MON_AI_HOLD;
+    case RBE_SLOW: return MON_AI_SLOW;
+    case RBE_DISARM: return MON_AI_DISARM;
+    default: return -1;
+    }
+}
+
+int monster_melee_utility(const monster_type* m_ptr, int blow,
+    bool ordinary, bool smite)
+{
+    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    const monster_blow* attack;
+    int dd, ds, hit, damage, control = 0, feature, evidence;
+    if (blow < 0 || blow >= MONSTER_BLOW_MAX || !r_ptr->blow[blow].method
+        || (r_ptr->flags1 & RF1_NEVER_BLOW))
+        return 0;
+    attack = &r_ptr->blow[blow];
+    dd = attack->dd > 0
+        ? MAX(1, attack->dd - m_ptr->blow_dd_reduction[blow]) : 0;
+    ds = attack->ds > 0
+        ? MAX(1, attack->ds - m_ptr->blow_ds_reduction[blow]) : 0;
+    dd += monster_vengeance_bonus_dice_preview(m_ptr);
+    hit = MIN(90, MAX(25, 65 + attack->att
+        + monster_concentration_bonus_preview(m_ptr, ordinary)
+        - 10 - 7 * monster_ai_confidence(m_ptr, MON_AI_ACCURACY)));
+    if (attack->method == RBM_SPORE) hit = 100;
+    damage = (smite ? dd * ds : dd * (ds + 1) / 2) * 3;
+    if (attack->method != RBM_TOUCH && attack->method != RBM_SPORE)
+        damage = MAX(0, damage - 5 * MAX(0,
+            monster_ai_confidence(m_ptr, MON_AI_ARMOUR)));
+    feature = melee_effect_feature(attack->effect);
+    evidence = feature < 0 ? 0 : monster_ai_confidence(m_ptr, feature);
+    switch (attack->effect)
+    {
+    case RBE_FIRE: case RBE_COLD: case RBE_DARK: case RBE_POISON:
+        /* Elemental melee adds a bonus die; resistance never deletes the
+         * physical blow. Pure breath uses its separate damage route. */
+        control = MAX(0, 3 * (ds + 1) / 2 - 3 * evidence);
+        if (attack->effect == RBE_POISON)
+            control = MAX(0, control - 3 * MAX(0,
+                monster_ai_confidence(m_ptr, MON_AI_POISON_PRESSURE)));
+        break;
+    case RBE_WOUND: case RBE_BATTER: control = 10; break;
+    case RBE_SHATTER: control = 12; break;
+    case RBE_CONFUSE: case RBE_ENTRANCE: case RBE_TERRIFY: case RBE_SLOW:
+        control = MAX(0, 18 - 5 * evidence); break;
+    case RBE_DISARM: control = MAX(0, 15 - 4 * evidence); break;
+    case RBE_LOSE_MANA:
+        control = 8 + 3 * MAX(0, monster_ai_confidence(m_ptr, MON_AI_SONG));
+        break;
+    case RBE_LOSE_STR: case RBE_LOSE_DEX: case RBE_LOSE_CON:
+    case RBE_LOSE_GRA: case RBE_LOSE_STR_CON: case RBE_LOSE_ALL:
+        control = 10; break;
+    default: break;
+    }
+    if (blow == 0 && (r_ptr->flags2 & RF2_KNOCK_BACK)
+        && monster_ai_can_see_player(m_ptr))
+        control += monster_tactical_displacement_utility(
+            (monster_type*)m_ptr, m_ptr->fy, m_ptr->fx, false);
+    if (monster_ai_confidence(m_ptr, MON_AI_RIPOSTE) > 0)
+        control -= (100 - hit) / 5;
+    damage = (damage + control) * hit / 100;
+    if (smite)
+    {
+        /* Recovery gives up a follow-up and another chance to escape. */
+        damage -= monster_melee_utility(m_ptr, blow, ordinary, false) * 2 / 5 + 8;
+        damage -= 3 * monster_ai_poison_damage(m_ptr, m_ptr->fy, m_ptr->fx, 2);
+    }
+    return MAX(0, damage);
+}
+
+static bool monster_smite_position_safe(const monster_type* m_ptr, bool ordinary)
+{
+    return monster_can_smite(m_ptr, ordinary)
+        && m_ptr->stance != STANCE_FLEEING
+        && monster_ai_poison_safe(m_ptr, m_ptr->fy, m_ptr->fx, 2);
+}
+
+int monster_best_melee_utility(const monster_type* m_ptr)
+{
+    int best = 0, i;
+    if (!monster_ai_can_see_player(m_ptr)
+        || distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) != 1)
+        return 0;
+    for (i = 0; i < MONSTER_BLOW_MAX; ++i)
+    {
+        int ordinary = monster_melee_utility(m_ptr, i, true, false);
+        best = MAX(best, ordinary);
+        if (monster_smite_position_safe(m_ptr, true))
+        {
+            int smite = monster_melee_utility(m_ptr, i, true, true);
+            if (smite > ordinary + 3) best = MAX(best, smite);
+        }
+    }
+    return best;
+}
+
+static int monster_choose_blow(const monster_type* m_ptr, bool ordinary)
+{
+    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    int i, count = 0, choices[MONSTER_BLOW_MAX + 1], scores[MONSTER_BLOW_MAX];
+    int best = 0;
+    bool simple = (r_ptr->flags2 & RF2_MINDLESS) || m_ptr->r_idx == R_IDX_MORGOTH;
+    for (i = 0; i < MONSTER_BLOW_MAX; ++i)
+    {
+        scores[i] = r_ptr->blow[i].method
+            ? monster_melee_utility(m_ptr, i, ordinary, false) : -1;
+        if (scores[i] >= 0)
+        {
+            if (!simple && monster_smite_position_safe(m_ptr, ordinary))
+            {
+                int smite = monster_melee_utility(m_ptr, i, ordinary, true);
+                if (smite > scores[i] + 3) scores[i] = smite;
+            }
+            best = MAX(best, scores[i]);
+        }
+    }
+    for (i = 0; i < MONSTER_BLOW_MAX; ++i)
+    {
+        if (scores[i] < 0) continue;
+        if (!simple && scores[i] * 10 < best *
+                ((r_ptr->flags2 & RF2_SMART) ? 9 : 8)) continue;
+        choices[count++] = i;
+        if (i == 0) choices[count++] = i;
+    }
+    return count ? choices[rand_int(count)] : 0;
+}
+
+static bool monster_choose_smite(const monster_type* m_ptr, int blow,
+    bool ordinary)
+{
+    if (!monster_smite_position_safe(m_ptr, ordinary))
+        return false;
+    return monster_melee_utility(m_ptr, blow, ordinary, true)
+        > monster_melee_utility(m_ptr, blow, ordinary, false) + 3;
+}
+
 /*
  * Attack the player via physical attacks.
  */
-bool make_attack_normal(monster_type* m_ptr)
+static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
 {
+    if (cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_DEEP_WATER
+        && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING))
+        return false;
+
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -559,6 +727,7 @@ bool make_attack_normal(monster_type* m_ptr)
     int b, blows;
 
     bool alive = true;
+    bool smite = false;
 
     object_type* o_ptr;
 
@@ -579,6 +748,11 @@ bool make_attack_normal(monster_type* m_ptr)
     /* Not allowed to attack */
     if (r_ptr->flags1 & (RF1_NEVER_BLOW))
         return (false);
+    if (m_ptr->smite_recovery || (!ordinary && !monster_abilities_can_react(m_ptr)))
+        return false;
+    if (ordinary && m_ptr->r_idx != R_IDX_MORGOTH
+        && !monster_ai_can_see_player(m_ptr))
+        return false;
 
     /* Starting any real melee attack, including one that misses, interrupts
      * a pending Pack action. */
@@ -599,21 +773,23 @@ bool make_attack_normal(monster_type* m_ptr)
     blinked = false;
 
     /* Calculate the number of blows this monster gets */
+    blows = 0;
     for (b = 0; b < MONSTER_BLOW_MAX; b++)
-    {
-        if (!r_ptr->blow[b].method)
-            break;
-    }
-    blows = b;
+        if (r_ptr->blow[b].method)
+            ++blows;
+    if (blows == 0)
+        return false;
+
+    monster_abilities_mark_melee(m_ptr, ordinary);
+    b = monster_choose_blow(m_ptr, ordinary);
+    smite = monster_commit_smite(m_ptr, ordinary,
+        monster_choose_smite(m_ptr, b, ordinary));
+    if (smite)
+        msg_format("%^s smites you with all its strength!", m_name);
 
     /* Monsters might notice */
     attacked_player = true;
 
-    // use the alternate attack one in three times
-    if ((blows > 1) && one_in_(3))
-        b = 1;
-    else
-        b = 0;
 
     // introduce a new code block to all us to declare all these variables
     if (true)
@@ -677,6 +853,7 @@ bool make_attack_normal(monster_type* m_ptr)
 
         // determine the monster's attack score
         total_attack_mod = total_monster_attack(m_ptr, att);
+        total_attack_mod += monster_concentration_bonus(m_ptr, ordinary);
 
         if (monster_charge(m_ptr))
         {
@@ -700,7 +877,9 @@ bool make_attack_normal(monster_type* m_ptr)
                 total_attack_mod, total_evasion_mod, m_ptr, PLAYER, true);
         }
 
-        sound(MSG_MONSTER_ATTACK);
+        if (method != RBM_SPORE)
+            monster_ai_observe(m_ptr, MON_AI_ACCURACY, hit_result > 0 ? -1 : 1);
+        monster_sound(m_ptr, MONSTER_SOUND_MELEE_BASE + b);
 
         /* Monster hits player */
         if (!effect || (hit_result > 0))
@@ -854,10 +1033,14 @@ bool make_attack_normal(monster_type* m_ptr)
             if (no_crit)
                 crit_bonus_dice = 0;
 
-            total_damage_dice = dd + crit_bonus_dice + elem_bonus_dice;
+            total_damage_dice = dd + crit_bonus_dice + elem_bonus_dice
+                + monster_vengeance_bonus_dice(m_ptr);
+            monster_consume_vengeance(m_ptr);
 
             /* Roll out the damage */
             dam = damroll(total_damage_dice, ds);
+            if (smite)
+                dam = total_damage_dice * ds;
 
             /* Determine the armour based damage-reduction for the player */
             /* Note that some attack types should ignore this             */
@@ -866,6 +1049,13 @@ bool make_attack_normal(monster_type* m_ptr)
             // now calculate net_dam, taking (modified) protection into account
             prt = (prt * prt_percent) / 100;
             net_dam = (dam - prt > 0) ? (dam - prt) : 0;
+
+            if (dam > 0 && prt_percent > 0)
+                monster_ai_observe(m_ptr, MON_AI_ARMOUR, prt >= dam ? 1 : -1);
+            if (net_dam > 0 && (effect == RBE_FIRE || effect == RBE_COLD
+                    || effect == RBE_DARK || effect == RBE_POISON))
+                monster_ai_observe(m_ptr, melee_effect_feature(effect),
+                    elem_bonus_dice == 0 ? 1 : -1);
 
             // Traitor items may expose their users to big (non-lethal) hits
             betrayal_wield = is_traitor_item(INVEN_WIELD);
@@ -952,7 +1142,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 obvious = true;
 
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 break;
             }
@@ -964,7 +1154,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 obvious = true;
 
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Usually don't stun */
                 if ((do_stun) && (!one_in_(5)))
@@ -983,7 +1173,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 obvious = true;
 
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Usually don't cut */
                 if ((do_cut) && (!one_in_(5)))
@@ -1002,7 +1192,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 obvious = true;
 
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Usually don't cut */
                 if ((do_cut) && (!one_in_(5)))
@@ -1018,7 +1208,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_UN_BONUS:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Apply disenchantment */
                 if (apply_disenchant(0))
@@ -1031,7 +1221,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_UN_POWER:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Find an item */
                 for (k = 0; k < 20; k++)
@@ -1213,7 +1403,7 @@ bool make_attack_normal(monster_type* m_ptr)
                     }
                 }
                 /* Damage (physical) */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 break;
             }
@@ -1222,12 +1412,12 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_SLOW:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Increase "slow" */
                 if (net_dam > 0 || dam == 0)
                 {
-                    if (!allow_player_slow(m_ptr))
+                    if (!observe_melee_status(m_ptr, MON_AI_SLOW, allow_player_slow(m_ptr)))
                     {
                         msg_print("You resist the effects!");
                         obvious = true;
@@ -1245,7 +1435,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_EAT_ITEM:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Blindly scrabble in the backpack ten times */
                 for (k = 0; k < 10; k++)
@@ -1307,7 +1497,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_EAT_FOOD:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Steal some food */
                 for (k = 0; k < 6; k++)
@@ -1356,7 +1546,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 obvious = true;
 
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* We're not dead yet */
                 if (!p_ptr->is_dead && (net_dam > 0 || dam == 0))
@@ -1443,6 +1633,8 @@ bool make_attack_normal(monster_type* m_ptr)
             {
                 /* Take "poison" effect */
                 pois_dam_mixed(net_dam);
+                if (net_dam > 0)
+                    monster_ai_observe(m_ptr, MON_AI_POISON_PRESSURE, 1);
 
                 if (net_dam > 0)
                 {
@@ -1469,6 +1661,8 @@ bool make_attack_normal(monster_type* m_ptr)
                     net_dam, ddesc);
 
                 dam_type = GF_FIRE;
+                (void)cave_transform_elemental_terrain(
+                    p_ptr->py, p_ptr->px, GF_FIRE);
 
                 break;
             }
@@ -1487,6 +1681,8 @@ bool make_attack_normal(monster_type* m_ptr)
                     net_dam, ddesc);
 
                 dam_type = GF_COLD;
+                (void)cave_transform_elemental_terrain(
+                    p_ptr->py, p_ptr->px, GF_COLD);
 
                 break;
             }
@@ -1494,7 +1690,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_BLIND:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Increase blindness */
                 if (net_dam > 0 || dam == 0)
@@ -1522,12 +1718,12 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_CONFUSE:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Increase "confused" */
                 if (net_dam > 0 || dam == 0)
                 {
-                    if (!allow_player_confusion(m_ptr))
+                    if (!observe_melee_status(m_ptr, MON_AI_CONFUSION, allow_player_confusion(m_ptr)))
                     {
                         msg_print("You resist the effects.");
                         obvious = true;
@@ -1544,10 +1740,10 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_TERRIFY:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Increase "afraid" */
-                if (!allow_player_fear(m_ptr))
+                if (!observe_melee_status(m_ptr, MON_AI_FEAR, allow_player_fear(m_ptr)))
                 {
                     msg_print("You stand your ground!");
                     obvious = true;
@@ -1564,12 +1760,12 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_ENTRANCE:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Increase "entranced" */
                 if (net_dam > 0 || dam == 0)
                 {
-                    if (!allow_player_entrancement(m_ptr))
+                    if (!observe_melee_status(m_ptr, MON_AI_HOLD, allow_player_entrancement(m_ptr)))
                     {
                         msg_print("You are unaffected!");
                         obvious = true;
@@ -1591,7 +1787,7 @@ bool make_attack_normal(monster_type* m_ptr)
                 int do_disease = net_dam;
 
                 /* Take (adjusted) damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 /* Inflict disease */
                 if (net_dam > 0 || dam == 0)
@@ -1609,7 +1805,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_LOSE_ALL:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 if (net_dam > 0 || dam == 0)
                 {
@@ -1685,6 +1881,7 @@ bool make_attack_normal(monster_type* m_ptr)
                         m_ptr, difficulty, p_ptr->stat_use[A_STR] * 2, PLAYER)
                     <= 0)
                 {
+                    monster_ai_observe(m_ptr, MON_AI_DISARM, 1);
                     msg_format("%^s tries to disarm you, but you keep a grip "
                                "on your weapon.",
                         m_name);
@@ -1737,6 +1934,7 @@ bool make_attack_normal(monster_type* m_ptr)
 
                     /* Drop it near the player */
                     drop_near(i_ptr, 0, near_y, near_x);
+                    monster_ai_observe(m_ptr, MON_AI_DISARM, -1);
 
                     /* Modify, Optimize */
                     if (item >= 0)
@@ -1760,7 +1958,7 @@ bool make_attack_normal(monster_type* m_ptr)
             case RBE_HALLU:
             {
                 /* Take damage */
-                take_hit(net_dam, ddesc);
+                monster_damage_player(m_ptr, net_dam, ddesc);
 
                 if (net_dam > 0 || dam == 0)
                 {
@@ -1911,12 +2109,16 @@ bool make_attack_normal(monster_type* m_ptr)
                 }
             }
 
+            /* Knockback into lava may have ended the game immediately. */
+            if (p_ptr->is_dead)
+                return true;
+
             // deal with cowardice
             if ((p_ptr->cowardice > 0) && (net_dam >= 10 / p_ptr->cowardice))
             {
                 if (!p_ptr->afraid)
                 {
-                    if (allow_player_fear(m_ptr))
+                    if (observe_melee_status(m_ptr, MON_AI_FEAR, allow_player_fear(m_ptr)))
                     {
                         ident_f2(TR2_FEAR, NULL);
 
@@ -2074,4 +2276,14 @@ bool make_attack_normal(monster_type* m_ptr)
 
     /* Assume we attacked */
     return (true);
+}
+
+bool make_attack_normal(monster_type* m_ptr)
+{
+    return make_attack_melee(m_ptr, true);
+}
+
+bool make_attack_reaction(monster_type* m_ptr)
+{
+    return make_attack_melee(m_ptr, false);
 }

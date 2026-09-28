@@ -495,6 +495,7 @@ struct monster_race
     s16b evn; /* Bonus to evasion */
     byte pd; /* Protection dice */
     byte ps; /* Protection sides */
+    byte shield_dd; /* Shield dice included in pd; Blocking doubles this part. */
 
     byte speed; /* Speed (normally 110) */
     s16b light; /* Light/Dark radius (if any) */
@@ -514,6 +515,11 @@ struct monster_race
     u32b flags2; /* Flags 2 (abilities) */
     u32b flags3; /* Flags 3 (race/resist) */
     u32b flags4; /* Flags 4 ('spells') */
+    u32b flags5; /* Stateful combat abilities */
+
+    /* Template leadership, independent of generation and spell flags. */
+    byte command_grade, command_style, command_kin;
+    u32b command_authority; /* Permitted command kin, including its own. */
 
     monster_blow blow[MONSTER_BLOW_MAX]; /* Up to four blows per round */
 
@@ -565,6 +571,7 @@ struct monster_lore
     u32b flags2; /* Observed racial flags */
     u32b flags3; /* Observed racial flags */
     u32b flags4; /* Observed racial flags */
+    u32b flags5; /* Observed stateful combat abilities */
 
     byte song_lore_flags; /* Stats revealed by duel songs */
 };
@@ -702,6 +709,65 @@ struct object_type
  * The "hold_o_idx" field points to the first object of a stack
  * of objects (if any) being carried by the monster (see above).
  */
+typedef struct monster_ai_observation
+{
+    s16b value;
+    byte ttl;
+    s32b turn;
+} monster_ai_observation;
+
+typedef struct monster_sense_state
+{
+    byte kind, y, x;
+    byte anchor_y, anchor_x;
+    byte scent_age, stale_decisions, search_decisions;
+    byte recent_count, recent_next;
+    byte recent_y[4], recent_x[4];
+    u32b observed_turn;
+} monster_sense_state;
+
+typedef struct monster_ai_state
+{
+    monster_ai_observation observations[MON_AI_FEATURE_COUNT];
+    monster_sense_state sense;
+    byte cast_reserve;
+    byte goal_y, goal_x, goal_age;
+    byte previous_y, previous_x, waits;
+    byte player_y, player_x, player_action;
+    byte attack_y, attack_x, attack_chain;
+    s32b player_action_turn, attack_turn;
+    bool cast_checked, cast_available; /* Current action only; never saved. */
+    /* Presentation only, never saved; losing a cooldown cannot change combat. */
+    byte feedback_reason, feedback_y, feedback_x, feedback_cooldown;
+} monster_ai_state;
+
+/* Rebuilt before each monster processing pass; never serialized. */
+typedef struct monster_squad_order
+{
+    s16b commander;
+    byte role, y, x, target_y, target_x;
+    byte job, plan, plan_age, anchor_y, anchor_x;
+    u32b plan_turn;
+} monster_squad_order;
+
+/* Physical observations and work orders are separate from player tracking. */
+#define MON_PATROL_MAX 128
+typedef struct monster_routine_state
+{
+    byte home_y, home_x;
+    byte territory; /* Partition index + 1; zero keeps ordinary behavior. */
+    byte style, count, next;
+    byte y[MON_PATROL_MAX], x[MON_PATROL_MAX];
+} monster_routine_state;
+
+typedef struct monster_world_state
+{
+    u32b last_event;
+    byte initialized, observation_kind, observation_y, observation_x, observation_age;
+    byte task, target_y, target_x, task_age, retries, cooldown;
+    byte home_y, home_x, supplies;
+} monster_world_state;
+
 struct monster_type
 {
     s16b r_idx; /* Monster race index */
@@ -722,10 +788,11 @@ struct monster_type
                             this turn (Song of Mastery) */
 
     byte mspeed; /* Monster "speed" */
-    byte energy; /* Monster "energy" */
+    s16b energy; /* May be negative after a costly movement action. */
 
     byte stunned; /* Monster is stunned */
     byte confused; /* Monster is confused */
+    s16b poisoned; /* Remaining poison damage, capped at 100 like the player. */
     s16b slowed; /* Monster is slowed */
     s16b hasted; /* Monster is hasted */
 
@@ -775,6 +842,25 @@ struct monster_type
                                  row immediately prior to now */
     s16b turns_stationary; /* How many times it has stayed still in a row
                               immediately prior to now */
+
+    byte vengeance; /* One pending bonus damage die after a melee wound. */
+    byte smite_recovery; /* 0 ready, 1 next action owed, 2 recovery action spent. */
+    bool ability_in_action; /* Runtime action bookkeeping, never saved. */
+    bool ability_melee; /* An ordinary melee attack occurred in this action. */
+    bool ability_displaced; /* This action was interrupted by displacement. */
+
+    monster_ai_state ai; /* Bounded, individually witnessed tactical knowledge. */
+    monster_squad_order squad; /* Local command and reserved combat position. */
+    monster_world_state world; /* Environmental memory survives list compaction. */
+    monster_routine_state routine; /* Individual territory and repeatable circuit. */
+
+    byte social_group; /* Zero infers race membership; otherwise a band ID. */
+    s16b social_rival; /* Personal feud, repaired on deletion/compaction. */
+    byte social_memory; /* Actions before an unseen rival is forgotten. */
+    byte social_cooldown; /* Delay before another spontaneous quarrel. */
+    byte social_state, social_timer; /* Challenge, fight, help, or withdrawal. */
+    s16b social_focus, social_ally; /* Witness's threat and supported combatant. */
+    byte social_player_threat; /* Recent player aggression, in own actions. */
 
     byte blow_dd_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage dice */
     byte blow_ds_reduction[MONSTER_BLOW_MAX]; /* Reduction applied to blow damage sides */
@@ -991,6 +1077,15 @@ typedef struct runtype_type {
     u32b heroes[FLAG_WORDS];       /* applicable heroes (max 64)            */
 } runtype_type;
 
+/* Startup configuration only; never serialized with style or save records. */
+typedef struct cave_floor_palette {
+    int coverage;
+    int patches;
+    int count;
+    int styles[8];
+    int weights[8];
+} cave_floor_palette;
+
 /*
  * Depth-based visual style definition (data-driven from lib/edit/style.txt)
  * Each style belongs to a group (GREY/GREEN/BLUE/RED/PURPLE/BLACK) and
@@ -1005,6 +1100,7 @@ struct style_type {
     /* Floors: support multiple options (first used if no selection) */
     byte floor_row, floor_col;            /* legacy single values */
     byte floor_count;                     /* number of floor variants */
+    bool floor_tiled;                     /* choose variants per grid, without RNG */
     byte floor_rowv[8], floor_colv[8];    /* up to 8 variants */
     /* Doors: support multiple options (first used if no selection) */
     byte door_row,  door_col;             /* legacy base tile; open +1, broken +2 */
@@ -1112,6 +1208,7 @@ struct player_other
     byte noble_item_spawn_mode; /* Noble item sources (NOBLE_ITEM_SPAWN_*) */
     byte min_depth_timer_mode; /* Minimum-depth timer pace (MIN_DEPTH_TIMER_MODE_*) */
     byte monster_tile_health_bar_mode; /* Map tile monster health bars (MONSTER_TILE_HEALTH_BARS_*) */
+    byte environment_speed; /* App preference (ENVIRONMENT_SPEED_*), saved in SDL JSON. */
 };
 
 /*
@@ -1164,6 +1261,11 @@ struct player_type
 
     s16b stat_base[A_MAX]; /* The base ('internal') stat values */
     s16b stat_drain[A_MAX]; /* The negative modifier from stat drain */
+    s16b stat_disease[A_MAX]; /* Negative penalties restored only by curing disease */
+    s16b diseased; /* 0: healthy; otherwise player turns until the next disease penalty */
+    byte disease_name; /* Stable 1-based name index; 0 when healthy */
+    byte disease_cure; /* Herb sval assigned to this infection */
+    byte disease_knowledge; /* DISEASE_KNOWN_* discoveries for this infection */
 
     s16b skill_base[S_MAX]; /* The base skill values */
 
@@ -1267,6 +1369,8 @@ struct player_type
     s16b smithing_leftover; /* Turns needed to finish making the current item */
     bool unique_forge_made; /* Has the unique forge been generated */
     bool unique_forge_seen; /* Has the unique forge been encountered */
+    bool utumno_forge_visited; /* Unlocks Morgoth's private return passage */
+    bool utumno_return_to_throne; /* Pending arrival behind Morgoth */
 
     s16b greater_vaults[MAX_GREATER_VAULTS]; // Which greater vaults have been
                                              // generated?
@@ -1484,6 +1588,7 @@ struct player_type
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Count of quest-designated vaults generated this game */
     byte quest_reserved[15];   /* quest_reserved[0] = quest encounters initiated this run; quest_reserved[1..6] mark quest completions recorded this run */
+    bool tutorial_deferred;    /* Pre-0.9.8 hero: tutorials start with the next new hero. */
 };
 
 /* scores.raw header version == core game version (no independent bumping) */

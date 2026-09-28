@@ -265,6 +265,9 @@ bool askfor_aux(char* buf, size_t len)
     return (ch != ESCAPE);
 }
 
+static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
+    bool allow_random_name);
+
 /*
  * A reimplementation of askfor_aux, but allows for random names
  *
@@ -272,120 +275,7 @@ bool askfor_aux(char* buf, size_t len)
  */
 bool askfor_name(char* buf, size_t len)
 {
-    int y, x;
-    int term_wid = active_term_width();
-
-    size_t k = 0;
-
-    char ch = '\0';
-
-    bool done = false;
-    bool new_default_name = false;
-
-    inkey_prompt_input_begin();
-
-    /* Locate the cursor */
-    Term_locate(&x, &y);
-
-    /* Paranoia */
-    if ((x < 0) || (x >= term_wid))
-        x = 0;
-
-    /* Restrict the length */
-    if ((size_t)x + len > (size_t)term_wid)
-        len = (size_t)(term_wid - x);
-    if (len < 1)
-        len = 1;
-
-    /* Truncate the default entry */
-    buf[len - 1] = '\0';
-
-    /* Display the default answer */
-    Term_erase(x, y, (int)len);
-    Term_putstr(x, y, -1, TERM_YELLOW, buf);
-
-    /* Process input */
-    while (!done)
-    {
-        /* Place cursor */
-        Term_gotoxy(x + k, y);
-
-        /* Get a key */
-        inkey_request_text_cursor();
-        ch = inkey();
-
-        /* Analyze the key */
-        switch (ch)
-        {
-        case ESCAPE:
-        {
-            k = 0;
-            done = true;
-            break;
-        }
-
-        case '\n':
-        case '\r':
-        {
-            k = strlen(buf);
-            done = true;
-            break;
-        }
-
-        case 0x7F:
-        case '\010':
-        {
-            if (k > 0)
-                k--;
-            break;
-        }
-
-        case '\t':
-        {
-            /*get the random name, display for approval. */
-            make_random_name(buf, len);
-
-            new_default_name = true;
-            k = 0;
-            break;
-        }
-
-        default:
-        {
-            if ((k < len - 1) && (isprint((unsigned char)ch)))
-            {
-                buf[k++] = ch;
-            }
-            else
-            {
-                bell("Illegal edit key!");
-            }
-            break;
-        }
-        }
-
-        if (new_default_name)
-        {
-            /* Display the random name */
-            Term_erase(x, y, (int)len);
-            Term_putstr(x, y, -1, TERM_YELLOW, buf);
-
-            new_default_name = false;
-        }
-        else
-        {
-            /* Terminate */
-            buf[k] = '\0';
-
-            /* Update the entry */
-            Term_erase(x, y, (int)len);
-            Term_putstr(x, y, -1, TERM_WHITE, buf);
-        }
-    }
-
-    /* Done */
-    inkey_prompt_input_end();
-    return (ch != ESCAPE);
+    return get_string_panel_aux("Artifact name", buf, len, true);
 }
 
 /*
@@ -398,38 +288,27 @@ bool askfor_name(char* buf, size_t len)
  */
 bool term_get_string(cptr prompt, char* buf, size_t len)
 {
-    bool res;
-
-    /* Paranoia XXX XXX XXX */
     message_flush();
-
-    /* Display prompt */
-    prt(prompt, 0, 0);
-
-    /* Ask the user for a string */
-    res = askfor_aux(buf, len);
-
-    /* Clear prompt */
-    prt("", 0, 0);
-
-    /* Result */
-    return (res);
+    return get_string_panel(prompt, buf, len);
 }
 
 /*
  * Choice ids for the free-text entry panel rows (>= 0 so the question menu
  * treats them as clickable).
  */
-#define STRING_PANEL_CLICK_CONFIRM 2001
-#define STRING_PANEL_CLICK_CLEAR   2002
-#define STRING_PANEL_CLICK_CANCEL  2003
+#define STRING_PANEL_CLICK_FIELD   2001
+#define STRING_PANEL_CLICK_CONFIRM 2002
+#define STRING_PANEL_CLICK_CLEAR   2003
+#define STRING_PANEL_CLICK_CANCEL  2004
+#define STRING_PANEL_CLICK_RANDOM  2005
 
 /*
  * Draw the text-entry overlay panel: the prompt is the title, the current
- * text (with a trailing caret) is the highlighted confirm row, plus Clear and
- * Cancel rows so mouse/touch can drive it.
+ * text (with a trailing caret) is the highlighted field, followed by explicit
+ * Confirm, Clear, and Cancel rows so mouse/touch can drive it.
  */
-static void string_panel_draw(cptr prompt, const char* text, int touch_category)
+static void string_panel_draw(cptr prompt, const char* text, int touch_category,
+    bool allow_random_name, bool default_selected)
 {
     char line[120];
 
@@ -442,15 +321,22 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category)
 
     /* Show the current text with a caret (just the caret when empty) */
     strnfmt(line, sizeof(line), "%s_", (text && text[0]) ? text : "");
-    sdl_question_menu_add_entry(STRING_PANEL_CLICK_CONFIRM, "", line,
-        TERM_L_BLUE);
+    sdl_question_menu_add_entry(STRING_PANEL_CLICK_FIELD, "", line,
+        default_selected ? TERM_YELLOW : TERM_L_BLUE);
 
+    sdl_question_menu_add_entry(STRING_PANEL_CLICK_CONFIRM, "", "Confirm",
+        TERM_L_WHITE);
+    if (allow_random_name)
+    {
+        sdl_question_menu_add_entry(STRING_PANEL_CLICK_RANDOM, "",
+            "Random name", TERM_L_WHITE);
+    }
     sdl_question_menu_add_entry(STRING_PANEL_CLICK_CLEAR, "", "Clear",
         TERM_L_WHITE);
     sdl_question_menu_add_entry(STRING_PANEL_CLICK_CANCEL, "", "Cancel",
         TERM_SLATE);
 
-    sdl_question_menu_set_highlight(STRING_PANEL_CLICK_CONFIRM);
+    sdl_question_menu_set_highlight(STRING_PANEL_CLICK_FIELD);
     sdl_question_menu_finish();
 
     Term_fresh();
@@ -462,29 +348,37 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category)
  * result; typing edits it, Enter/confirm accepts, Esc/Cancel aborts.  Returns
  * false when cancelled (leaving the entered text in "buf" regardless).
  */
-bool get_string_panel(cptr prompt, char* buf, size_t len)
+static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
+    bool allow_random_name)
 {
     size_t k;
     bool done = false;
     bool canceled = false;
+    bool default_selected;
     bool saved_hide_cursor = hide_cursor;
 
     if (!buf || len < 1)
         return false;
 
+    message_flush();
+
     /* Start the caret after any default text */
     buf[len - 1] = '\0';
     k = strlen(buf);
+    default_selected = (k > 0);
 
     /* The overlay owns the display; never show the term cursor */
     hide_cursor = true;
+    inkey_prompt_input_begin();
+    sdl_text_input_begin();
 
     while (!done)
     {
         int ch;
 
-        string_panel_draw(prompt ? prompt : "Enter text:", buf,
-            SDL_TOUCH_MENU_CATEGORY_OTHER);
+        string_panel_draw(prompt ? prompt : "Enter text", buf,
+            SDL_TOUCH_MENU_CATEGORY_OTHER, allow_random_name,
+            default_selected);
 
         ch = inkey();
 
@@ -499,12 +393,26 @@ bool get_string_panel(cptr prompt, char* buf, size_t len)
 
                 switch (clicked_choice)
                 {
+                case STRING_PANEL_CLICK_FIELD:
+                    /* Refocus the field and reopen a dismissed soft keyboard. */
+                    default_selected = false;
+                    sdl_text_input_reopen();
+                    continue;
                 case STRING_PANEL_CLICK_CONFIRM:
                     ch = '\r';
                     break;
                 case STRING_PANEL_CLICK_CLEAR:
                     k = 0;
                     buf[0] = '\0';
+                    default_selected = false;
+                    continue;
+                case STRING_PANEL_CLICK_RANDOM:
+                    if (allow_random_name)
+                    {
+                        make_random_name(buf, len);
+                        k = strlen(buf);
+                        default_selected = true;
+                    }
                     continue;
                 case STRING_PANEL_CLICK_CANCEL:
                     ch = ESCAPE;
@@ -532,27 +440,67 @@ bool get_string_panel(cptr prompt, char* buf, size_t len)
 
         case '\b':
         case 0x7F:
-            if (k > 0)
+            if (default_selected)
+            {
+                k = 0;
+                default_selected = false;
+            }
+            else if (k > 0)
+            {
                 k--;
+                while (k > 0
+                    && (((unsigned char)buf[k] & 0xC0U) == 0x80U))
+                {
+                    k--;
+                }
+            }
             buf[k] = '\0';
             break;
 
-        default:
-            if (isprint((unsigned char)ch) && (k < len - 1))
+        case '\t':
+            if (allow_random_name)
             {
-                buf[k++] = (char)ch;
-                buf[k] = '\0';
+                make_random_name(buf, len);
+                k = strlen(buf);
+                default_selected = true;
+            }
+            break;
+
+        default:
+            /* SDL text input supplies UTF-8 one byte at a time through the
+             * terminal queue.  Accept printable ASCII and UTF-8 bytes here;
+             * control characters are handled above or ignored. */
+            if ((unsigned char)ch >= 0x20U && (unsigned char)ch != 0x7FU)
+            {
+                if (default_selected)
+                {
+                    k = 0;
+                    buf[0] = '\0';
+                    default_selected = false;
+                }
+                if (k < len - 1)
+                {
+                    buf[k++] = (char)ch;
+                    buf[k] = '\0';
+                }
             }
             break;
         }
     }
 
+    sdl_text_input_end();
+    inkey_prompt_input_end();
     hide_cursor = saved_hide_cursor;
     sdl_question_menu_clear();
     ui_menu_click_clear();
     Term_fresh();
 
     return (!canceled);
+}
+
+bool get_string_panel(cptr prompt, char* buf, size_t len)
+{
+    return get_string_panel_aux(prompt, buf, len, false);
 }
 
 /*

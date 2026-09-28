@@ -1,13 +1,18 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "metarun.h"
+#include "cave/cave-environment.h"
 #include "object/object-ui-select.h"
 #include "sdl-config.h"
 #include "ui/question.h"
 
 static void prise_silmaril(void);
+static bool floor_context_is_pickup_destination(
+    floor_context_action_kind kind);
 
 /*
  * Helper function to determine the equip sound based on item type
@@ -482,7 +487,7 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
             sizeof(use_label)))
     {
         floor_context_add_action(actions, capacity, &count,
-            FLOOR_CONTEXT_ACTION_USE, 'u', use_label, TERM_L_GREEN);
+            FLOOR_CONTEXT_ACTION_USE, 'u', use_label, TERM_L_WHITE);
     }
 
     if (!interaction_only)
@@ -492,19 +497,19 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
             floor_context_add_action(actions, capacity, &count,
                 FLOOR_CONTEXT_ACTION_QUIVER, 'v', "Quiver", TERM_L_BLUE);
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_BLUE);
         }
         else if (supplies_is_supply_object(o_ptr))
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_SUPPLIES, 'j', "Supplies", TERM_L_GREEN);
+                FLOOR_CONTEXT_ACTION_SUPPLIES, 'j', "Supplies", TERM_L_BLUE);
         }
         else if (object_can_choose_pack_or_harness(o_ptr))
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_UMBER);
+                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_BLUE);
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_BLUE);
         }
         else if (o_ptr->storage == OBJECT_STORAGE_JEWELRY)
         {
@@ -514,12 +519,12 @@ int floor_context_collect_item_actions(int floor_item, bool include_details,
         else if (o_ptr->storage == OBJECT_STORAGE_PACK)
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_WHITE);
+                FLOOR_CONTEXT_ACTION_PACK, 'g', "Pack", TERM_L_BLUE);
         }
         else if (o_ptr->storage == OBJECT_STORAGE_HARNESS)
         {
             floor_context_add_action(actions, capacity, &count,
-                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_UMBER);
+                FLOOR_CONTEXT_ACTION_HARNESS, 'h', "Harness", TERM_L_BLUE);
         }
         else
         {
@@ -617,7 +622,23 @@ static bool floor_context_preferred_pickup_action(int floor_item,
 
 static cptr floor_context_space_pickup_label(int floor_item)
 {
+    floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
     floor_context_action selected;
+    int count = floor_context_collect_item_actions(floor_item, false, false,
+        actions, (int)N_ELEMENTS(actions));
+    int pickup_count = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (floor_context_is_pickup_destination(actions[i].kind))
+            pickup_count++;
+    }
+
+    /* Space opens the destination chooser whenever more than one storage
+     * pool is available, so its contextual label must describe the action,
+     * not whichever destination currently has priority. */
+    if (pickup_count > 1)
+        return "Pick Up";
 
     if (floor_context_preferred_pickup_action(floor_item, &selected))
     {
@@ -879,10 +900,18 @@ bool do_cmd_context_square_action_popup(void)
     char context_label[32];
     int floor_item = first_floor_item_under_player();
     char title[80];
+    environment_bridge_job bridge_job;
+    bool bridge_repairable = p_ptr->active_ability[S_SMT][SMT_REPAIR]
+        && cave_environment_bridge_job_at(p_ptr->py, p_ptr->px,
+            &bridge_job)
+        && bridge_job.repair;
+
+    sil_popup_trace_stage("popup-build-begin");
 
     if (!get_sdl_show_context_square_popups()
         || context_square_popup_is_suppressed())
     {
+        sil_popup_trace_end("popup-disabled-or-suppressed");
         return false;
     }
 
@@ -890,6 +919,7 @@ bool do_cmd_context_square_action_popup(void)
             context_label, sizeof(context_label))
         || strcmp(context_label, "Confirm") == 0)
     {
+        sil_popup_trace_end("popup-no-context-action");
         return false;
     }
 
@@ -901,19 +931,30 @@ bool do_cmd_context_square_action_popup(void)
 
         strnfmt(title, sizeof(title), "%^s", feature_name);
     }
+    else if (bridge_repairable)
+    {
+        SDL_strlcpy(title, "Damaged bridge", sizeof(title));
+    }
     else if (floor_item)
     {
         object_type* o_ptr = &o_list[0 - floor_item];
 
         if (!o_ptr->k_idx)
+        {
+            sil_popup_trace_end("popup-invalid-item");
             return false;
+        }
         if (o_ptr->tval == TV_CHEST && o_ptr->pval == 0)
+        {
+            sil_popup_trace_end("popup-empty-chest");
             return false;
+        }
 
         object_desc(title, sizeof(title), o_ptr, true, 3);
     }
     else
     {
+        sil_popup_trace_end("popup-no-floor-item");
         return false;
     }
 
@@ -935,24 +976,42 @@ bool do_cmd_context_square_action_popup(void)
             sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
         if (!action_is_pickup)
             sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
-                action_name, TERM_L_GREEN);
+                action_name, TERM_L_WHITE);
         if (!action_only)
         {
-            cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
-                ? "Pack" : "Pick Up";
+            if (o_ptr->tval == TV_ARROW)
+                sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_QUIVER,
+                    "Quiver", TERM_L_BLUE);
 
-            sdl_question_menu_add_button('g', pickup_name, TERM_L_WHITE);
             if (object_can_choose_pack_or_harness(o_ptr))
-                sdl_question_menu_add_button(' ', "Harness", TERM_L_UMBER);
+            {
+                /* Space opens the Pack/Harness destination chooser.  Keep
+                 * this as one Pick Up action so the popup does not offer a
+                 * second storage choice after the player selects Harness. */
+                sdl_question_menu_add_button(' ', "Pick Up", TERM_L_WHITE);
+            }
+            else
+            {
+                cptr pickup_name = object_can_store_directly_in_pack(o_ptr)
+                    ? "Pack" : "Pick Up";
+
+                sdl_question_menu_add_button('g', pickup_name,
+                    streq(pickup_name, "Pack")
+                        ? TERM_L_BLUE : TERM_L_WHITE);
+            }
         }
     }
     else
     {
-        sdl_question_menu_add_button(' ', context_label, TERM_L_GREEN);
+        sdl_question_menu_add_button(' ', context_label, TERM_L_WHITE);
     }
 
     sdl_question_menu_finish();
     sdl_question_menu_set_context_hint();
+    sil_popup_trace_stage("popup-ready");
+    /* Movement may have already presented the player, and the next ordinary
+     * refresh can wait until all monster energy ticks finish. Present the
+     * ready hint now, including when no terminal cells changed. */
     Term_fresh();
     return true;
 }
@@ -995,6 +1054,15 @@ void do_cmd_context_floor_item_action(void)
             (void)floor_context_perform_action(floor_item,
                 FLOOR_CONTEXT_ACTION_USE);
     }
+}
+
+void do_cmd_context_floor_quiver_action(void)
+{
+    int floor_item = first_floor_item_under_player();
+
+    if (floor_item)
+        (void)floor_context_perform_action(floor_item,
+            FLOOR_CONTEXT_ACTION_QUIVER);
 }
 
 void do_cmd_queue_floor_context_action(floor_context_action_kind kind)
@@ -1113,6 +1181,7 @@ bool touch_shortcut_context_action(int binding, bool description_open,
     int floor_interaction = 0;
     const char* name = NULL;
     char context_name[32];
+    environment_bridge_job bridge_job;
 
     if (!character_dungeon || !p_ptr || !p_ptr->playing || p_ptr->is_dead)
         return false;
@@ -1132,10 +1201,19 @@ bool touch_shortcut_context_action(int binding, bool description_open,
                  * Space so multiple destinations can open their chooser
                  * instead of bypassing it through one raw destination key. */
                 key = ' ';
-                name = selected.label;
+                name = floor_context_space_pickup_label(floor_item);
             }
             else
                 name = "Confirm";
+        } else if (p_ptr->active_ability[S_SMT][SMT_REPAIR]
+            && cave_environment_bridge_job_at(p_ptr->py, p_ptr->px,
+                &bridge_job)
+            && bridge_job.repair) {
+            /* Space is expanded to the normal interact-here (/5) command by
+             * the context popup, so this reaches do_cmd_alter() on the
+             * crossing beneath the player. */
+            key = ' ';
+            name = "Repair bridge";
         } else if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';
@@ -1251,6 +1329,7 @@ static bool smith_oath_takeoff_hits_pack(const object_type* o_ptr, int source_it
 
 bool open_supplies_menu_with_context(supply_menu_action default_action, int default_group, bool default_focus, bool default_hotkey)
 {
+    tutorial_game_menu("supplies", "Browse food, potions, gems and lights. Select an item to inspect or use it; supplies have their own category and weight limits.");
     supply_menu_request request = {0};
     supply_menu_action action = default_action;
     bool hotkey = default_hotkey;
@@ -1295,6 +1374,10 @@ bool open_inventory_menu_page(supply_menu_page page)
 
 bool open_inventory_menu_category(inventory_menu_group group)
 {
+    tutorial_game_menu(group == INVENTORY_MENU_GROUP_PACK ? "pack"
+        : group == INVENTORY_MENU_GROUP_HARNESS ? "harness"
+        : group == INVENTORY_MENU_GROUP_QUIVER ? "quiver" : "jewelry",
+        "Pack, Harness, Quiver and Jewelry have different storage and readiness rules. Read the footer for Ready, Store, Use and Examine.");
     supply_menu_request request = {0};
 
     request.focus_page = true;
@@ -1371,9 +1454,10 @@ static bool replacement_choice_allowed(const object_type* incoming,
     return replacement_choice_type_matches(incoming, candidate);
 }
 
-bool open_inventory_replacement_menu(inventory_menu_group group,
-    const object_type* incoming, bool include_equip, bool include_supplies,
-    cptr reason, int* replacement_item)
+static bool open_inventory_replacement_menu_with_action(
+    inventory_menu_group group, const object_type* incoming,
+    bool include_equip, bool include_supplies, cptr reason,
+    cptr operation, int* replacement_item)
 {
     object_choice_entry* entries;
     int capacity;
@@ -1406,6 +1490,7 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
         request.replacement_incoming = incoming;
         request.replacement_include_equip = include_equip;
         request.replacement_include_supplies = include_supplies;
+        request.replacement_operation = operation;
         request.replacement_reason = reason;
         request.replacement_item_out = replacement_item;
         return do_cmd_knowledge_supplies(&request);
@@ -1512,6 +1597,128 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
     *replacement_item = entries[selected].item;
     entries = mem_free(entries);
     return true;
+}
+
+bool open_inventory_replacement_menu(inventory_menu_group group,
+    const object_type* incoming, bool include_equip, bool include_supplies,
+    cptr reason, int* replacement_item)
+{
+    return open_inventory_replacement_menu_with_action(group, incoming,
+        include_equip, include_supplies, reason, "Picking up",
+        replacement_item);
+}
+
+static bool open_inventory_equip_replacement_menu(
+    inventory_menu_group group, const object_type* incoming,
+    bool include_equip, cptr reason, int* replacement_item)
+{
+    return open_inventory_replacement_menu_with_action(group, incoming,
+        include_equip, false, reason, "Equipping", replacement_item);
+}
+
+static void format_storage_exchange_reason(const object_type* incoming,
+    byte target_storage, char* buf, size_t buflen)
+{
+    object_type moving;
+    enum inventory_limit_group group;
+    enum inventory_limit_group source_group;
+    int used;
+    int limit;
+    int left;
+    char incoming_name[120];
+
+    if (!buf || buflen == 0)
+        return;
+    buf[0] = '\0';
+
+    if (!incoming || !incoming->k_idx)
+        return;
+
+    object_copy(&moving, incoming);
+    moving.storage = target_storage;
+    group = inventory_limit_group_for_object(&moving);
+    source_group = inventory_limit_group_for_object(incoming);
+    if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
+        return;
+
+    object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
+    used = inventory_limit_usage_for_group(group);
+    limit = inventory_limit_limit_for_group(group);
+    left = MAX(limit - used, 0);
+    strnfmt(buf, buflen,
+        "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). Choose an "
+        "item to move to your %s; %s will move to your %s.",
+        inventory_limit_group_name(group), used / 10, ABS(used % 10),
+        limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
+        inventory_limit_group_name(source_group), incoming_name,
+        inventory_limit_group_name(group));
+}
+
+static bool open_inventory_storage_exchange_menu(
+    const object_type* incoming, byte target_storage, bool include_equip,
+    bool allow_non_stowable, bool allow_partial, int* exchange_item)
+{
+    enum inventory_limit_group source_group;
+    enum inventory_limit_group target_group;
+    supply_menu_request request = {0};
+    char reason[280];
+
+    if (exchange_item)
+        *exchange_item = -1;
+    if (!incoming || !incoming->k_idx || !exchange_item
+        || (target_storage != OBJECT_STORAGE_PACK
+            && target_storage != OBJECT_STORAGE_HARNESS))
+    {
+        return false;
+    }
+
+    source_group = inventory_limit_group_for_object(incoming);
+    target_group = target_storage == OBJECT_STORAGE_PACK
+        ? INV_LIMIT_PACK : INV_LIMIT_HARNESS;
+    if ((source_group != INV_LIMIT_PACK
+            && source_group != INV_LIMIT_HARNESS)
+        || source_group == target_group)
+    {
+        return false;
+    }
+
+    format_storage_exchange_reason(incoming, target_storage, reason,
+        sizeof(reason));
+    request.focus_page = true;
+    request.page = SUPPLY_MENU_PAGE_INVENTORY;
+    request.focus_inventory_group = true;
+    request.inventory_group = inventory_menu_group_for_limit_group(
+        target_group);
+    request.preview_inventory_description = true;
+    request.storage_exchange_mode = true;
+    request.storage_exchange_incoming = incoming;
+    request.storage_exchange_target = target_storage;
+    request.storage_exchange_include_equip = include_equip;
+    request.storage_exchange_partial = allow_partial;
+    request.storage_exchange_allow_non_stowable = allow_non_stowable;
+    request.storage_exchange_reason = reason;
+    request.storage_exchange_item_out = exchange_item;
+    return do_cmd_knowledge_supplies(&request);
+}
+
+static bool choose_storage_exchange_item(const object_type* incoming,
+    byte target_storage, bool include_equip, bool allow_non_stowable,
+    bool allow_partial, int* exchange_item)
+{
+    object_type moving;
+
+    if (exchange_item)
+        *exchange_item = -1;
+    if (!incoming || !incoming->k_idx || !exchange_item)
+        return false;
+
+    object_copy(&moving, incoming);
+    moving.storage = target_storage;
+    if (inventory_type_slot_available(&moving, false))
+        return false;
+
+    return open_inventory_storage_exchange_menu(incoming, target_storage,
+        include_equip, allow_non_stowable, allow_partial, exchange_item);
 }
 
 bool open_inventory_slot_pick_menu(const object_type* incoming,
@@ -1729,8 +1936,9 @@ static bool replace_pack_item_for_arrow_move(const object_type* incoming)
     return true;
 }
 
-static void do_cmd_unquiver_pack_arrow(int item)
+static bool do_cmd_unquiver_pack_arrow(int item)
 {
+    if (!tutorial_game_action_allowed("store", NULL)) return false;
     object_type packed;
     object_type* o_ptr;
     int max_quantity;
@@ -1740,7 +1948,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     o_ptr = player_quiver_arrow_object(item);
     if (!o_ptr || !o_ptr->k_idx)
     {
-        return;
+        return false;
     }
 
     object_copy(&packed, o_ptr);
@@ -1751,7 +1959,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     packed.storage = OBJECT_STORAGE_NONE;
     if (player_pack_action_start(PLAYER_PACK_ACTION_MOVE_STORAGE, item,
             OBJECT_STORAGE_PACK, false, &packed))
-        return;
+        return true;
 
     max_quantity = inventory_limit_max_carryable_quantity(&packed);
     if (max_quantity > 0)
@@ -1767,7 +1975,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
             o_ptr->number, false);
     }
     if (packed.number <= 0)
-        return;
+        return false;
 
     while (!inventory_type_slot_available(&packed, true))
     {
@@ -1775,7 +1983,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
             || inven_carry_limit_group() != INV_LIMIT_PACK
             || !replace_pack_item_for_arrow_move(&packed))
         {
-            return;
+            return false;
         }
     }
 
@@ -1785,7 +1993,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     if (placed <= 0)
     {
         msg_print("There is not enough room in your Pack for those arrows.");
-        return;
+        return false;
     }
     player_quiver_remove_arrows(item, placed);
     p_ptr->energy_use = 100;
@@ -1796,6 +2004,7 @@ static void do_cmd_unquiver_pack_arrow(int item)
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
     msg_format("You move %d arrow%s from your quiver to your Pack.", placed,
         placed == 1 ? "" : "s");
+    return true;
 }
 
 static bool item_storage_destination_available(const object_type* o_ptr,
@@ -1839,8 +2048,396 @@ static bool item_storage_destination_available(const object_type* o_ptr,
     return false;
 }
 
+static int storage_exchange_max_incoming_quantity(
+    const object_type* incoming, const object_type* outgoing)
+{
+    int maximum = 0;
+
+    if (!incoming || !incoming->k_idx || incoming->number <= 0
+        || !outgoing || !outgoing->k_idx)
+    {
+        return 0;
+    }
+
+    for (int quantity = 1; quantity <= incoming->number; quantity++)
+    {
+        if (inventory_limit_storage_exchange_quantity_possible(
+                incoming, outgoing, quantity))
+            maximum = quantity;
+    }
+    return maximum;
+}
+
+static int choose_storage_exchange_quantity(const object_type* incoming,
+    int maximum)
+{
+    char incoming_name[120];
+    char prompt[240];
+
+    if (!incoming || !incoming->k_idx || maximum <= 0)
+        return 0;
+    if (maximum == 1)
+        return 1;
+
+    object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
+    strnfmt(prompt, sizeof(prompt),
+        "Only %d of %s fit after the exchange. Move how many? (0-%d): ",
+        maximum, incoming_name, maximum);
+    return get_quantity_touch_category_force_prompt_action(prompt, "Move",
+        maximum, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+}
+
+static int storage_exchange_find_source_item(int preferred_item,
+    const object_type* expected)
+{
+    object_type* candidate;
+
+    if (!expected || !expected->k_idx)
+        return -1;
+
+    if (player_inventory_handle_is_carried(preferred_item))
+    {
+        candidate = player_inventory_object(preferred_item);
+        if (candidate && candidate->number == expected->number
+            && object_similar(candidate, expected))
+        {
+            return preferred_item;
+        }
+    }
+
+    for (int ordinal = 0; ordinal < player_pack_entry_count(); ordinal++)
+    {
+        int item = player_pack_entry_handle_at(ordinal);
+
+        candidate = player_inventory_object(item);
+        if (candidate && candidate->number == expected->number
+            && object_similar(candidate, expected))
+        {
+            return item;
+        }
+    }
+
+    return -1;
+}
+
+bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
+    int exchange_item, int incoming_quantity)
+{
+    object_type* incoming;
+    object_type* outgoing;
+    object_type incoming_move;
+    bool outgoing_equipped;
+    byte source_storage;
+    char incoming_name[120];
+    char outgoing_name[120];
+    const char* target_name;
+    const char* source_name;
+
+    if (!player_inventory_handle_is_carried(item)
+        || (!player_inventory_handle_is_carried(exchange_item)
+            && !player_inventory_handle_is_equipped(exchange_item))
+        || item == exchange_item
+        || (target_storage != OBJECT_STORAGE_PACK
+            && target_storage != OBJECT_STORAGE_HARNESS))
+    {
+        return false;
+    }
+
+    incoming = player_inventory_object(item);
+    outgoing = player_inventory_object(exchange_item);
+    outgoing_equipped = player_inventory_handle_is_equipped(exchange_item);
+    if (!incoming || !incoming->k_idx || !outgoing || !outgoing->k_idx
+        || incoming_quantity <= 0 || incoming_quantity > incoming->number
+        || !object_can_choose_pack_or_harness(incoming)
+        || !object_can_choose_pack_or_harness(outgoing)
+        || (outgoing_equipped && cursed_p(outgoing)))
+    {
+        return false;
+    }
+
+    source_storage = incoming->storage;
+    if ((source_storage != OBJECT_STORAGE_PACK
+            && source_storage != OBJECT_STORAGE_HARNESS)
+        || source_storage == target_storage
+        || outgoing->storage != target_storage)
+    {
+        return false;
+    }
+
+    object_copy(&incoming_move, incoming);
+    incoming_move.number = incoming_quantity;
+    if (!inventory_limit_storage_exchange_quantity_possible(
+            incoming, outgoing, incoming_quantity))
+        return false;
+
+    incoming_move.storage = target_storage;
+    if (target_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(&incoming_move);
+    else
+    {
+        incoming_move.pickup = false;
+        incoming_move.pickup_slot = -1;
+    }
+
+    object_desc(incoming_name, sizeof(incoming_name), &incoming_move, true, 3);
+    object_desc(outgoing_name, sizeof(outgoing_name), outgoing, true, 3);
+
+    /* A storage exchange can move part of an incoming stack.  The old
+     * whole-entry swap was unable to use a 0.3 qt Harness dagger to make room
+     * for one 0.4 qt Pack dagger when the incoming entry contained four
+     * daggers.  Carry the selected quantity as a separate destination entry,
+     * then reduce the original source stack. */
+    if (incoming_quantity < incoming->number)
+    {
+        object_type outgoing_copy;
+        object_type outgoing_original;
+        object_type source_snapshot;
+        object_type moved_incoming;
+        int carry_slot;
+        int placed;
+        int source_item;
+
+        object_copy(&outgoing_copy, outgoing);
+        outgoing_copy.storage = source_storage;
+        outgoing_copy.pickup = false;
+        outgoing_copy.pickup_slot = -1;
+        object_copy(&outgoing_original, outgoing);
+        object_copy(&source_snapshot, incoming);
+        object_copy(&moved_incoming, &incoming_move);
+
+        if (outgoing_equipped && target_storage != OBJECT_STORAGE_HARNESS)
+            return false;
+
+        /* Move the selected outgoing entry across logically first so the
+         * target pool's capacity check sees the space it is about to free.
+         * For an equipped item, also preflight its eventual Pack carry after
+         * the selected source quantity is removed. */
+        outgoing->storage = source_storage;
+        if (source_storage == OBJECT_STORAGE_HARNESS)
+            player_active_weapon_assign_harness_color(outgoing);
+        else
+        {
+            outgoing->pickup = false;
+            outgoing->pickup_slot = -1;
+        }
+        if (!inventory_type_slot_available(&incoming_move, false)
+            || (outgoing_equipped
+                && !inven_carry_okay_after_removing(&outgoing_copy, item,
+                    incoming_quantity)))
+        {
+            object_copy(outgoing, &outgoing_original);
+            return false;
+        }
+
+        carry_slot = inven_carry(&incoming_move, false);
+        placed = incoming_quantity - incoming_move.number;
+        if (carry_slot < 0 || incoming_move.number > 0)
+        {
+            if (placed > 0 && player_inventory_handle_valid(carry_slot))
+            {
+                inven_item_increase(carry_slot, -placed);
+                inven_item_optimize(carry_slot);
+            }
+            object_copy(outgoing, &outgoing_original);
+            return false;
+        }
+
+        source_item = storage_exchange_find_source_item(item,
+            &source_snapshot);
+        if (source_item < 0)
+        {
+            if (placed > 0 && player_inventory_handle_valid(carry_slot))
+            {
+                inven_item_increase(carry_slot, -placed);
+                inven_item_optimize(carry_slot);
+            }
+            object_copy(outgoing, &outgoing_original);
+            return false;
+        }
+        inven_item_increase(source_item, -incoming_quantity);
+
+        if (outgoing_equipped
+            && inven_takeoff(exchange_item, outgoing_copy.number) < 0)
+        {
+            return false;
+        }
+
+        tutorial_game_action_done(target_storage == OBJECT_STORAGE_HARNESS
+            ? "ready" : "store", &moved_incoming);
+        target_name = target_storage == OBJECT_STORAGE_HARNESS
+            ? "Harness" : "Pack";
+        source_name = source_storage == OBJECT_STORAGE_HARNESS
+            ? "Harness" : "Pack";
+        msg_format("You move %s to your %s and %s to your %s.",
+            incoming_name, target_name, outgoing_name, source_name);
+
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->update |= PU_BONUS;
+        p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
+
+    /* An equipped Harness object has to become a real Pack object, not merely
+     * acquire a Pack storage marker while remaining in an equipment slot.
+     * Move the incoming object to its destination first so the outgoing item
+     * can be carried without merging back into the incoming stack.  The
+     * exchange projection above guarantees that this carry fits. */
+    if (outgoing_equipped)
+    {
+        object_type incoming_copy;
+        object_type incoming_original;
+        object_type outgoing_copy;
+
+        if (target_storage != OBJECT_STORAGE_HARNESS)
+            return false;
+
+        object_copy(&incoming_original, incoming);
+        object_copy(&incoming_copy, incoming);
+        incoming_copy.storage = target_storage;
+        object_copy(&outgoing_copy, outgoing);
+        outgoing_copy.storage = source_storage;
+        outgoing_copy.pickup = false;
+        outgoing_copy.pickup_slot = -1;
+        incoming->storage = target_storage;
+        player_active_weapon_assign_harness_color(incoming);
+
+        if (!inventory_type_slot_available(&outgoing_copy, false))
+        {
+            object_copy(incoming, &incoming_original);
+            return false;
+        }
+
+        /* Takeoff copies the equipped object itself. Apply the destination
+         * there as well, or it goes back into the already full Harness. */
+        object_copy(outgoing, &outgoing_copy);
+        if (inven_takeoff(exchange_item, outgoing_copy.number) < 0)
+            return false;
+
+        tutorial_game_action_done("ready", &incoming_copy);
+        msg_format("You move %s to your %s and %s to your %s.",
+            incoming_name, "Harness", outgoing_name, "Pack");
+
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->update |= PU_BONUS;
+        p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
+
+    outgoing->storage = source_storage;
+    if (source_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(outgoing);
+    else
+    {
+        outgoing->pickup = false;
+        outgoing->pickup_slot = -1;
+    }
+
+    incoming->storage = target_storage;
+    if (target_storage == OBJECT_STORAGE_HARNESS)
+        player_active_weapon_assign_harness_color(incoming);
+    else
+    {
+        incoming->pickup = false;
+        incoming->pickup_slot = -1;
+    }
+
+    tutorial_game_action_done(target_storage == OBJECT_STORAGE_HARNESS
+        ? "ready" : "store", incoming);
+    target_name = target_storage == OBJECT_STORAGE_HARNESS
+        ? "Harness" : "Pack";
+    source_name = source_storage == OBJECT_STORAGE_HARNESS
+        ? "Harness" : "Pack";
+    msg_format("You move %s to your %s and %s to your %s.", incoming_name,
+        target_name, outgoing_name, source_name);
+
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return true;
+}
+
+bool do_cmd_wield_floor_storage_exchange(int item, byte target_storage,
+    int exchange_item)
+{
+    object_type* incoming;
+    object_type* outgoing;
+    object_type projected_incoming;
+    char outgoing_name[120];
+    int floor_idx;
+    bool outgoing_equipped;
+
+    if (item >= 0 || target_storage != OBJECT_STORAGE_HARNESS)
+        return false;
+
+    floor_idx = 0 - item;
+    if (floor_idx <= 0 || floor_idx >= o_max || !o_list[floor_idx].k_idx
+        || !player_inventory_handle_valid(exchange_item)
+        || (!player_inventory_handle_is_carried(exchange_item)
+            && !player_inventory_handle_is_equipped(exchange_item)))
+    {
+        return false;
+    }
+
+    incoming = &o_list[floor_idx];
+    outgoing = player_inventory_object(exchange_item);
+    outgoing_equipped = player_inventory_handle_is_equipped(exchange_item);
+    if (!outgoing || !outgoing->k_idx
+        || inventory_limit_group_for_object(incoming) != INV_LIMIT_HARNESS
+        || inventory_limit_group_for_object(outgoing) != INV_LIMIT_HARNESS
+        || (outgoing_equipped && cursed_p(outgoing)))
+    {
+        return false;
+    }
+
+    /* The floor object is not in either carried pool yet.  Treat it as a
+     * Pack-side incoming object for the shared projection so the check adds
+     * it to Harness without incorrectly removing it from the real Pack. */
+    object_copy(&projected_incoming, incoming);
+    projected_incoming.storage = OBJECT_STORAGE_PACK;
+    if (!inventory_limit_floor_storage_exchange_possible(
+            &projected_incoming, outgoing))
+    {
+        return false;
+    }
+
+    object_desc(outgoing_name, sizeof(outgoing_name), outgoing, true, 3);
+
+    if (outgoing_equipped)
+    {
+        /* Make the destination explicit before takeoff; otherwise the
+         * ordinary takeoff path would try to return this Harness item to the
+         * already-full Harness. */
+        outgoing->storage = OBJECT_STORAGE_PACK;
+        if (inven_takeoff(exchange_item, 255) < 0)
+            return false;
+    }
+    else
+    {
+        outgoing->storage = OBJECT_STORAGE_PACK;
+        outgoing->pickup = false;
+        outgoing->pickup_slot = -1;
+    }
+
+    msg_format("You move %s to your Pack to make room.", outgoing_name);
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+
+    /* Re-enter the normal floor-wield path now that the selected Harness
+     * item has freed enough volume.  The Pack action remains marked as
+     * completing, so this does not start a second delayed action. */
+    do_cmd_wield(incoming, item);
+    return wield_command_succeeded;
+}
+
 bool do_cmd_move_item_to_storage(int item, byte target_storage)
 {
+    if (!tutorial_game_action_allowed(target_storage == OBJECT_STORAGE_HARNESS ? "ready" : "store",
+            player_inventory_object(item))) return false;
     object_type* o_ptr;
     char o_name[80];
 
@@ -1848,7 +2445,42 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
         && ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
             || (item >= 0 && inventory_slot_is_quivered_arrow(item))))
     {
-        do_cmd_unquiver_pack_arrow(item);
+        return do_cmd_unquiver_pack_arrow(item);
+    }
+
+    /* Reserved weapon slots are an implementation detail of the Harness.
+     * Storing one must use the same delayed Pack action as a carried copy. */
+    if (player_inventory_handle_is_equipped(item)
+        && target_storage == OBJECT_STORAGE_PACK)
+    {
+        object_type moving;
+
+        o_ptr = player_inventory_object(item);
+        if (!o_ptr || !o_ptr->k_idx || cursed_p(o_ptr)
+            || !object_can_choose_pack_or_harness(o_ptr))
+            return false;
+        object_copy(&moving, o_ptr);
+        moving.storage = OBJECT_STORAGE_PACK;
+        moving.pickup = false;
+        moving.pickup_slot = -1;
+        if (!inven_carry_okay_after_removing(&moving, item, o_ptr->number))
+        {
+            msg_print("There is no room in your Pack for that item.");
+            return false;
+        }
+        if (player_pack_action_start_forced(PLAYER_PACK_ACTION_MOVE_STORAGE,
+                item, target_storage, false, o_ptr))
+            return true;
+        if (smith_oath_forbids_object(o_ptr) && !smith_oath_confirm_break())
+            return false;
+        object_copy(o_ptr, &moving);
+        if (inven_takeoff(item, moving.number) < 0)
+            return false;
+        tutorial_game_action_done("store", &moving);
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        p_ptr->update |= PU_BONUS;
+        p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_QUIVER | PR_MAP;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
         return true;
     }
 
@@ -1865,9 +2497,50 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     }
 
     if (!item_storage_destination_available(o_ptr, target_storage,
-            o_ptr->number, true))
+            o_ptr->number, false))
     {
-        return false;
+        int exchange_item = -1;
+        int exchange_quantity;
+        object_type* exchange_object;
+
+        /* Preserve the carried stack's identity and allow any transferable
+         * quantity when finding exchange candidates. */
+        if (!choose_storage_exchange_item(o_ptr, target_storage,
+                true, false, true,
+                &exchange_item))
+        {
+            (void)item_storage_destination_available(o_ptr, target_storage,
+                o_ptr->number, true);
+            return false;
+        }
+
+        exchange_object = player_inventory_object(exchange_item);
+        exchange_quantity = storage_exchange_max_incoming_quantity(o_ptr,
+            exchange_object);
+        if (!exchange_object || exchange_quantity <= 0)
+        {
+            (void)item_storage_destination_available(o_ptr, target_storage,
+                o_ptr->number, true);
+            return false;
+        }
+
+        exchange_quantity = choose_storage_exchange_quantity(o_ptr,
+            exchange_quantity);
+        if (exchange_quantity <= 0)
+            return false;
+
+        if (player_pack_action_completing(PLAYER_PACK_ACTION_MOVE_STORAGE))
+        {
+            return do_cmd_move_item_to_storage_exchange(item, target_storage,
+                exchange_item, exchange_quantity);
+        }
+
+        if (!player_pack_action_start_storage_exchange(item, target_storage,
+                o_ptr, exchange_item, exchange_object, exchange_quantity))
+        {
+            return false;
+        }
+        return true;
     }
 
     /* Reaching into the Pack, or opening it to store something, follows the
@@ -1879,6 +2552,7 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     }
 
     o_ptr->storage = target_storage;
+    tutorial_game_action_done(target_storage == OBJECT_STORAGE_HARNESS ? "ready" : "store", o_ptr);
     if (target_storage == OBJECT_STORAGE_HARNESS)
         player_active_weapon_assign_harness_color(o_ptr);
     if (target_storage == OBJECT_STORAGE_PACK)
@@ -1900,6 +2574,144 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     return true;
 }
 
+static bool drop_equipped_harness_replacement_item(int item, int amount)
+{
+    object_type* source;
+    object_type dropped;
+    char o_name[120];
+
+    if (!player_inventory_handle_is_equipped(item) || amount <= 0)
+        return false;
+
+    source = player_inventory_object(item);
+    if (!source || !source->k_idx || cursed_p(source))
+        return false;
+
+    amount = MIN(amount, source->number);
+    if (amount <= 0)
+        return false;
+
+    /* Do not route an equipped Harness object through inven_takeoff().  That
+     * would first carry it back into the Harness, where it can merge with an
+     * identical carried item and leave the selected object apparently behind.
+     * Copy and remove the equipment directly, then place exactly that copy on
+     * the floor. */
+    object_copy(&dropped, source);
+    dropped.number = amount;
+    dropped.next_o_idx = 0;
+    dropped.held_m_idx = 0;
+    dropped.iy = dropped.ix = 0;
+    dropped.marked = false;
+    dropped.pickup = false;
+    dropped.pickup_slot = -1;
+    if (object_can_choose_pack_or_harness(&dropped))
+        dropped.storage = OBJECT_STORAGE_HARNESS;
+
+    object_desc(o_name, sizeof(o_name), &dropped, true, 3);
+    msg_format("You drop %s (%c).", o_name, player_inventory_label(item));
+
+    drop_near(&dropped, 0, p_ptr->py, p_ptr->px);
+    inven_item_increase(item, -amount);
+    inven_item_describe(item);
+    inven_item_optimize(item);
+    p_ptr->redraw |= PR_MAP | PR_QUIVER | PR_EQUIPPY | PR_RESIST;
+    p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+    return true;
+}
+
+static bool drop_harness_replacement_for_floor_wield(
+    const object_type* incoming)
+{
+    enum inventory_limit_group group = INV_LIMIT_HARNESS;
+    object_type incoming_unit;
+    object_type* candidate;
+    int replacement_item = -1;
+    int used;
+    int limit;
+    int needed;
+    int left;
+    int remove_amount;
+    char reason[280];
+
+    if (!incoming || !incoming->k_idx)
+        return false;
+
+    /* Equipping consumes one member of a floor stack.  Keep capacity
+     * accounting about that one item even if dropping the selected old item
+     * later combines it with the floor stack. */
+    object_copy(&incoming_unit, incoming);
+    incoming_unit.number = 1;
+
+    /* Recheck after every selected drop so the replacement menu can enumerate
+     * the remaining Harness choices until the one incoming item fits. */
+    while (!inventory_type_slot_available(&incoming_unit, true))
+    {
+        replacement_item = -1;
+        used = inventory_limit_usage_for_group(group);
+        limit = inven_carry_limit_value();
+        if (limit <= 0)
+            limit = inventory_limit_limit_for_group(group);
+        needed = inventory_limit_additional_space_for_object(&incoming_unit);
+        left = MAX(limit - used, 0);
+        strnfmt(reason, sizeof(reason),
+            "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; choose an item to drop.",
+            used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+            left / 10, ABS(left % 10), needed / 10, ABS(needed % 10));
+
+        if (!open_inventory_equip_replacement_menu(
+                INVENTORY_MENU_GROUP_HARNESS, &incoming_unit, true, reason,
+                &replacement_item))
+        {
+            return false;
+        }
+
+        if (!player_inventory_handle_valid(replacement_item))
+            return false;
+
+        candidate = player_inventory_object(replacement_item);
+        if (!candidate || !candidate->k_idx
+            || inventory_limit_group_for_object(candidate) != group
+            || (player_inventory_handle_is_equipped(replacement_item)
+                && cursed_p(candidate)))
+        {
+            msg_print("That item cannot be dropped.");
+            continue;
+        }
+
+        /* Drop only as much of a stack as needed when one choice is enough;
+         * otherwise drop the whole selected stack and let the next menu
+         * choose another Harness item. */
+        remove_amount = MAX(candidate->number, 1);
+        for (int amount = 1; amount <= candidate->number; amount++)
+        {
+            int projected = inventory_limit_usage_after_replacing(
+                &incoming_unit, candidate, amount);
+
+            if (projected >= 0 && projected <= limit)
+            {
+                remove_amount = amount;
+                break;
+            }
+        }
+
+        if (player_inventory_handle_is_equipped(replacement_item))
+        {
+            if (!drop_equipped_harness_replacement_item(replacement_item,
+                    remove_amount))
+            {
+                return false;
+            }
+        }
+        else
+            inven_drop(replacement_item, remove_amount);
+        p_ptr->notice |= PN_COMBINE | PN_REORDER;
+        notice_stuff();
+    }
+
+    return true;
+}
+
 void do_cmd_use_item_by_index(int item)
 {
     if (item == SUPPLIES_INDEX)
@@ -1910,7 +2722,9 @@ void do_cmd_use_item_by_index(int item)
 
     object_type* o_ptr;
 
-    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
     {
         do_cmd_unquiver_pack_arrow(item);
         return;
@@ -1947,9 +2761,12 @@ void do_cmd_use_item_by_index(int item)
         return;
     }
 
+    const char *tutorial_action = (o_ptr->tval == TV_POTION || o_ptr->tval == TV_FOOD
+        || o_ptr->tval == TV_GEM || o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN
+        || o_ptr->tval == TV_FLASK) ? "use-item" : "equip";
+    if (!tutorial_game_action_allowed(tutorial_action, o_ptr)) return;
     if (handle_iron_crown_silmaril_action(o_ptr, item))
         return;
-
     if (!((item < 0) && o_ptr->tval == TV_ARROW)
         && player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM, item, 0,
             false, o_ptr))
@@ -2314,6 +3131,7 @@ void do_cmd_use_item_enhanced(void)
  */
 void do_cmd_inven_direct(void)
 {
+    tutorial_game_menu("inventory", "Inspect and manage carried items. Pack, Harness, Quiver and Jewelry have different readiness and capacity rules.");
     log_debug("do_cmd_inven_direct: Opening inventory browser page");
     (void)open_inventory_menu_page(SUPPLY_MENU_PAGE_INVENTORY);
 }
@@ -2323,6 +3141,7 @@ void do_cmd_inven_direct(void)
  */
 void do_cmd_equip_direct(void)
 {
+    tutorial_game_menu("equipment", "Inspect worn gear and the active setup. Removing or replacing equipment uses the normal game rules.");
     log_debug("do_cmd_equip_direct: Opening equipped browser page");
     (void)open_inventory_menu_page(SUPPLY_MENU_PAGE_EQUIPPED);
 }
@@ -2430,6 +3249,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
     }
 
+    if (!tutorial_game_action_allowed("equip", o_ptr)) return;
+
     if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN)
     {
         msg_print("Staves and horns are kept in your Harness and used from there.");
@@ -2511,27 +3332,54 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     /* Equipping directly from the floor is still an acquisition.  Harness
      * items continue to consume Harness volume after being equipped, so this
-     * path must not bypass the same limit enforced by normal pickup. */
+     * path must not bypass the same limit enforced by normal pickup.  Wielding
+     * takes one item from a floor stack, so preflight one item rather than the
+     * entire stack. */
     if (item < 0
-        && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS
-        && !inventory_type_slot_available(o_ptr, true))
+        && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
     {
-        enum inventory_limit_group group = inven_carry_limit_group();
+        object_type capacity_item;
 
-        if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+        object_copy(&capacity_item, o_ptr);
+        capacity_item.number = 1;
+
+        if (inventory_type_slot_available(&capacity_item, true))
         {
-            int used = inventory_limit_usage_for_group(group);
-            int limit = inven_carry_limit_value();
-            int needed = inventory_limit_additional_space_for_object(o_ptr);
-            int left = MAX(limit - used, 0);
-
-            msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
-                       "this item needs %d.%d qt.",
-                inventory_limit_group_name(group), used / 10, used % 10,
-                limit / 10, limit % 10, left / 10, left % 10,
-                needed / 10, needed % 10);
+            /* There is already room; continue below and equip the floor
+             * object normally. */
         }
-        return;
+        else
+        {
+            /* A floor Equip is a Harness replacement, not a Pack exchange.
+             * Let the player choose which Harness item to drop, then continue
+             * through the ordinary wield path with the incoming item. */
+            if (drop_harness_replacement_for_floor_wield(o_ptr)
+                && inventory_type_slot_available(&capacity_item, false))
+            {
+                /* The selected item has been dropped; continue below and
+                 * equip the floor object normally. */
+            }
+            else
+            {
+                enum inventory_limit_group group = inven_carry_limit_group();
+
+                if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
+                {
+                    int used = inventory_limit_usage_for_group(group);
+                    int limit = inven_carry_limit_value();
+                    int needed = inventory_limit_additional_space_for_object(
+                        &capacity_item);
+                    int left = MAX(limit - used, 0);
+
+                    msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
+                               "this item needs %d.%d qt.",
+                        inventory_limit_group_name(group), used / 10,
+                        used % 10, limit / 10, limit % 10, left / 10,
+                        left % 10, needed / 10, needed % 10);
+                }
+                return;
+            }
+        }
     }
 
     if ((item < 0) && player_light_carry_cap(o_ptr) > 0
@@ -2723,9 +3571,40 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             ? MIN(o_ptr->number, object_stack_limit(o_ptr)) : 1;
 
         if (!item_storage_destination_available(o_ptr,
-                OBJECT_STORAGE_HARNESS, moving_quantity, true))
+                OBJECT_STORAGE_HARNESS, moving_quantity, false))
         {
-            return;
+            int exchange_item = -1;
+            object_type* exchange_object;
+
+            /* A normal wield can move only one member of a throwing stack.
+             * Storage exchange changes the pool of the whole object entry, so
+             * leave that partial wield on the ordinary failure path. */
+            if (moving_quantity < o_ptr->number)
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+
+            if (!choose_storage_exchange_item(o_ptr,
+                    OBJECT_STORAGE_HARNESS, false, false, false, &exchange_item))
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+
+            exchange_object = player_inventory_object(exchange_item);
+            if (!exchange_object
+                || !inventory_limit_storage_exchange_possible(o_ptr,
+                    exchange_object)
+                || !do_cmd_move_item_to_storage_exchange(item,
+                    OBJECT_STORAGE_HARNESS, exchange_item, moving_quantity))
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
         }
     }
     // Check for paired weapons (e.g., Glamdring + Orcrist)
@@ -3426,6 +4305,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         p_ptr->previous_action[0] = ACTION_NOTHING;
         player_active_weapon_free_change_commit();
     }
+    tutorial_game_action_done("equip", &inventory[slot]);
 
     /* Force immediate sidebar update */
     handle_stuff();
@@ -3699,6 +4579,7 @@ static void jewelry_preset_display_name(int preset, char* buf, size_t buflen)
 
 bool do_cmd_jewelry_preset_apply(int preset)
 {
+    if (!tutorial_game_action_allowed("equip", NULL)) return false;
     const object_type* targets[JEWELRY_PRESET_SLOT_MAX];
     bool target_present[JEWELRY_PRESET_SLOT_MAX];
     bool changed = false;
@@ -3863,7 +4744,8 @@ bool do_cmd_jewelry_preset_clear(int preset)
 
 void do_cmd_jewelry_preset_shortcut(void)
 {
-    ui_question_option options[JEWELRY_PRESET_MAX];
+    tutorial_game_menu("jewelry-sets", "Record or apply a combination of rings and an amulet. Applying a set uses the normal equipment rules and requires the items to be available.");
+    ui_question_option options[JEWELRY_PRESET_MAX + 1];
     char labels[JEWELRY_PRESET_MAX][JEWELRY_PRESET_NAME_MAX + 24];
     int choice;
 
@@ -3883,11 +4765,21 @@ void do_cmd_jewelry_preset_shortcut(void)
         options[i].disabled = !available;
     }
 
+    options[JEWELRY_PRESET_MAX] = (ui_question_option){
+        'j', "Open Jewelry tab", TERM_L_WHITE, false
+    };
+
     choice = ui_question_ask("Wear which jewelry set?",
         "Grey choices cannot be worn right now.", options,
-        JEWELRY_PRESET_MAX, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+        JEWELRY_PRESET_MAX + 1, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
     if (choice < 0)
         return;
+
+    if (choice == JEWELRY_PRESET_MAX)
+    {
+        (void)open_inventory_menu_category(INVENTORY_MENU_GROUP_JEWELRY);
+        return;
+    }
 
     (void)do_cmd_jewelry_preset_apply(choice);
 }
@@ -3897,6 +4789,7 @@ void do_cmd_jewelry_preset_shortcut(void)
  */
 void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
 {
+    if (!tutorial_game_action_allowed("remove", default_o_ptr)) return;
     int item;
     bool can_break_curse;
 
@@ -4054,6 +4947,7 @@ static bool confirm_drop_item_amount(object_type* o_ptr, int amt)
  */
 bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
 {
+    if (!tutorial_game_action_allowed("drop", NULL)) return false;
     if (item == SUPPLIES_INDEX)
     {
         open_supplies_menu_with_context(SUPPLY_MENU_ACTION_DROP, -1, false, true);
@@ -4065,7 +4959,9 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     char o_name[80];
     char quantity_prompt[160];
 
-    if (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
     {
         object_type dropped;
 
@@ -4671,6 +5567,7 @@ static void prise_silmaril(void)
 
 bool do_cmd_delete_item_by_index(int item)
 {
+    if (!tutorial_game_action_allowed("delete", NULL)) return false;
     int amt;
     int old_number;
     int old_charges = 0;
@@ -4682,6 +5579,41 @@ bool do_cmd_delete_item_by_index(int item)
     char quantity_name[80];
     char quantity_prompt[160];
     char prompt[160];
+
+    if ((item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item)))
+    {
+        o_ptr = player_quiver_arrow_object(item);
+        if (!o_ptr || !o_ptr->k_idx)
+            return false;
+
+        object_desc(quantity_name, sizeof(quantity_name), o_ptr, false, 0);
+        strnfmt(quantity_prompt, sizeof(quantity_prompt),
+            "Delete how many %s? ", quantity_name);
+        amt = get_quantity_action(quantity_prompt, "Delete", o_ptr->number);
+        if (amt <= 0)
+            return false;
+
+        old_number = o_ptr->number;
+        o_ptr->number = amt;
+        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc(prompt_name, sizeof(prompt_name), o_ptr, false, 0);
+        o_ptr->number = old_number;
+
+        strnfmt(prompt, sizeof(prompt), "Do you really want to DELETE %s? ",
+            prompt_name);
+        if (!get_check(prompt))
+            return false;
+
+        p_ptr->energy_use = 100;
+        p_ptr->previous_action[0] = ACTION_MISC;
+        msg_format("You delete %s.", o_name);
+        player_quiver_remove_arrows(item, amt);
+        p_ptr->redraw |= PR_QUIVER;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+        return true;
+    }
 
     /* Get the item (in the pack) */
     if (player_inventory_handle_valid(item))
@@ -4922,11 +5854,122 @@ static bool floor_context_is_pickup_destination(
         || kind == FLOOR_CONTEXT_ACTION_PICKUP;
 }
 
+/* Leave room for both destinations even with unusually large inventories.
+ * Normal inventories fit in full; overflow is explicitly counted. */
+#define PICKUP_PREVIEW_STACKS 60
+#define PICKUP_PREVIEW_ROWS (2 * (PICKUP_PREVIEW_STACKS + 2))
+
+typedef struct pickup_destination_preview {
+    ui_question_option options[PICKUP_PREVIEW_ROWS];
+    const object_type* icons[PICKUP_PREVIEW_ROWS];
+    floor_context_action_kind actions[PICKUP_PREVIEW_ROWS];
+    char labels[PICKUP_PREVIEW_ROWS][256];
+    int count;
+} pickup_destination_preview;
+
+static void floor_context_pickup_preview_item(pickup_destination_preview* preview,
+    const object_type* o_ptr, int* stacks, int* quantity)
+{
+    int row;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->number <= 0)
+        return;
+    *quantity += o_ptr->number;
+    if ((*stacks)++ >= PICKUP_PREVIEW_STACKS)
+        return;
+
+    row = preview->count++;
+    object_desc(preview->labels[row], sizeof(preview->labels[row]),
+        o_ptr, true, 3);
+    preview->options[row] = (ui_question_option){
+        0, preview->labels[row], TERM_L_WHITE, true
+    };
+    preview->icons[row] = o_ptr;
+}
+
+static int floor_context_pickup_preview_destination(
+    pickup_destination_preview* preview, const floor_context_action* action,
+    const object_type* incoming)
+{
+    int heading = preview->count++;
+    int stacks = 0;
+    int quantity = 0;
+    bool quiver = action->kind == FLOOR_CONTEXT_ACTION_QUIVER;
+    bool arrows_only = incoming->tval == TV_ARROW;
+    enum inventory_limit_group group = action->kind == FLOOR_CONTEXT_ACTION_HARNESS
+        ? INV_LIMIT_HARNESS : INV_LIMIT_PACK;
+
+    preview->actions[heading] = action->kind;
+    preview->options[heading] = (ui_question_option){
+        (char)action->key, preview->labels[heading], action->attr, false
+    };
+
+    if (quiver)
+    {
+        int slots[QUIVER_ARROW_CAPACITY + 1];
+        int count = player_quiver_arrow_slots(slots, (int)N_ELEMENTS(slots));
+
+        for (int i = 0; i < count; i++)
+            floor_context_pickup_preview_item(preview,
+                player_quiver_arrow_object(slots[i]), &stacks, &quantity);
+        strnfmt(preview->labels[heading], sizeof(preview->labels[heading]),
+            "Quiver: %d/%d arrows (%d free)", player_quiver_arrow_count(),
+            QUIVER_ARROW_CAPACITY, player_quiver_arrow_space());
+    }
+    else
+    {
+        int used = inventory_limit_usage_for_group(group);
+        int limit = inventory_limit_limit_for_group(group);
+        int free_space = MAX(0, limit - used);
+        int physical_count = group == INV_LIMIT_HARNESS ? INVEN_TOTAL : INVEN_PACK;
+
+        /* Match capacity accounting: worn Harness items still occupy the
+         * Harness, whereas worn Pack apparel is outside the backpack. */
+        for (int i = 0; i < physical_count + player_carried_extra_entry_count(); i++)
+        {
+            const object_type* held = i < physical_count ? &inventory[i]
+                : player_carried_extra_entry_at(i - physical_count);
+
+            if (!inventory_limit_object_matches_group(group, held)
+                || (arrows_only && held->tval != TV_ARROW))
+                continue;
+            floor_context_pickup_preview_item(preview, held, &stacks, &quantity);
+        }
+        strnfmt(preview->labels[heading], sizeof(preview->labels[heading]),
+            "%s: %d.%d/%d.%d qt used (%d.%d free)", action->label,
+            used / 10, used % 10, limit / 10, limit % 10,
+            free_space / 10, free_space % 10);
+        if (arrows_only)
+        {
+            size_t len = strlen(preview->labels[heading]);
+            strnfmt(preview->labels[heading] + len,
+                sizeof(preview->labels[heading]) - len,
+                "\n%d arrow%s in Pack", quantity, quantity == 1 ? "" : "s");
+        }
+    }
+
+    if (stacks == 0 || stacks > PICKUP_PREVIEW_STACKS)
+    {
+        int row = preview->count++;
+
+        if (stacks == 0)
+            strnfmt(preview->labels[row], sizeof(preview->labels[row]),
+                "%s", arrows_only ? "No arrows" : "Empty");
+        else
+            strnfmt(preview->labels[row], sizeof(preview->labels[row]),
+                "%d more stacks", stacks - PICKUP_PREVIEW_STACKS);
+        preview->options[row] = (ui_question_option){
+            0, preview->labels[row], TERM_SLATE, true
+        };
+    }
+    return heading;
+}
+
 static bool floor_context_pickup(int floor_item)
 {
     floor_context_action actions[FLOOR_CONTEXT_MAX_ACTIONS];
     floor_context_action destinations[FLOOR_CONTEXT_MAX_ACTIONS];
-    ui_question_option options[FLOOR_CONTEXT_MAX_ACTIONS];
+    pickup_destination_preview preview = { 0 };
     object_type* o_ptr;
     char o_name[120];
     char desc[180];
@@ -4962,12 +6005,6 @@ static bool floor_context_pickup(int floor_item)
         if (!floor_context_is_pickup_destination(actions[i].kind))
             continue;
         destinations[destination_count] = actions[i];
-        options[destination_count] = (ui_question_option){
-            (char)actions[i].key, destinations[destination_count].label,
-            actions[i].attr, false
-        };
-        if (actions[i].kind == FLOOR_CONTEXT_ACTION_PACK)
-            default_index = destination_count;
         destination_count++;
     }
 
@@ -4979,15 +6016,23 @@ static bool floor_context_pickup(int floor_item)
             destinations[0].kind);
     }
 
-    object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 0);
+    for (int i = 0; i < destination_count; i++)
+    {
+        int heading = floor_context_pickup_preview_destination(&preview,
+            &destinations[i], o_ptr);
+        if (destinations[i].kind == FLOOR_CONTEXT_ACTION_PACK)
+            default_index = heading;
+    }
+
+    object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 0);
     strnfmt(desc, sizeof(desc), "Choose where to put %s.", o_name);
-    choice = ui_question_ask("Pick up where?", desc, options,
-        destination_count, p_ptr->py, p_ptr->px, default_index);
-    if (choice < 0 || choice >= destination_count)
+    choice = ui_question_ask_objects("Pick up where?", desc, preview.options,
+        preview.icons, preview.count, p_ptr->py, p_ptr->px, default_index);
+    if (choice < 0 || choice >= preview.count || preview.options[choice].disabled)
         return false;
 
     return floor_context_perform_action(floor_item,
-        destinations[choice].kind);
+        preview.actions[choice]);
 }
 
 /* Equipping a Belt weapon from the floor is distinct from merely picking it
@@ -5049,6 +6094,10 @@ static bool floor_context_equip_belt_weapon(object_type* o_ptr,
 bool floor_context_perform_action(int floor_item,
     floor_context_action_kind kind)
 {
+    if (tutorial_is_active() && kind != FLOOR_CONTEXT_ACTION_DETAILS
+        && kind != FLOOR_CONTEXT_ACTION_ITEMS && kind != FLOOR_CONTEXT_ACTION_CLOSE
+        && kind != FLOOR_CONTEXT_ACTION_USE && kind != FLOOR_CONTEXT_ACTION_READY_THROW)
+        return false;
     object_type* o_ptr;
     int o_idx;
 
@@ -5337,6 +6386,7 @@ void do_cmd_uninscribe(void)
  */
 void do_cmd_inscribe(void)
 {
+    if (!tutorial_game_action_allowed("inscribe", NULL)) return;
     int item;
 
     object_type* o_ptr;
@@ -5470,6 +6520,7 @@ static bool item_tester_refuel_lantern(const object_type* o_ptr)
  */
 void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
 {
+    if (!tutorial_game_action_allowed("use-item", default_o_ptr)) return;
     int item;
 
     object_type* o_ptr = NULL;

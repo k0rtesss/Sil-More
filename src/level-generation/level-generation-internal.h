@@ -6,6 +6,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "gen-log.h"
+#include "level-generation/level-generation-terrain.h"
 #include "metarun.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -470,6 +471,7 @@ extern void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2, u16b 
 extern bool bounds_have_chasm_tag(int y1, int y2, int x1, int x2);
 extern bool carve_ca_blob_anchor(void);
 extern bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_max, int style_idx);
+extern void cave_apply_floor_palette(int y1, int y2, int x1, int x2, int base_style);
 extern int prune_big_cave_detached_components( int y1, int y2, int x1, int x2, int style_idx);
 extern bool chasm_mask_has_clearance( const bool* is_cave, int h, int w, int ly, int lx, int radius);
 extern bool repair_chasm_walkable_connectivity( int y1, int y2, int x1, int x2, int bridge_style);
@@ -496,6 +498,11 @@ extern void reset_partition_population_metadata(void);
 extern bool place_chest_in_bounds( int pi, int y1, int y2, int x1, int x2, const partition_chest_recipe* recipe, quadrant_mode_t mode, bool require_room_tile);
 extern bool place_chest_in_partition( int pi, int y1, int y2, int x1, int x2, const partition_chest_recipe* recipe, quadrant_mode_t mode);
 extern void apply_quadrant_generation_modes(void);
+extern bool utumno_gen(void);
+extern bool utumno_build_entrance(int cy, int cx);
+extern void utumno_shape_frontiers(void);
+extern bool utumno_finalize_corridors(void);
+extern bool utumno_place_morgoth_route(void);
 extern void ensure_partition_connectivity(void);
 extern int partition_index_from_point(int y, int x, int rows, int cols);
 extern int room_partition_index(int room_idx);
@@ -585,8 +592,6 @@ extern bool partition_metal_tile_ok(const partition_population_plan* plan, int y
 extern int place_partition_metal_drops(const partition_population_plan* plan);
 extern void alloc_object_global(int set, int typ, int num, bool out_of_sight);
 extern bool build_streamer(int feat);
-extern bool build_chasm(void);
-extern void build_chasms(void);
 extern bool solid_rock(int y1, int x1, int y2, int x2);
 extern bool doubled_wall(int y1, int x1, int y2, int x2);
 extern void generate_room(int y1, int x1, int y2, int x2, int light);
@@ -596,11 +601,21 @@ extern void generate_plus(int y1, int x1, int y2, int x2, int feat);
 extern bool h_tunnel_ok( int x1, int x2, int y, bool tentative, int desired_changes);
 extern bool v_tunnel_ok( int y1, int y2, int x, bool tentative, int desired_changes);
 extern tunnel_profile choose_tunnel_profile(bool tentative);
-extern void apply_tunnel_niche_torch_glow(int niche_y, int niche_x, int front_dy, int front_dx);
+extern void apply_tunnel_niche_torch_glow(
+    int niche_y, int niche_x, int front_dy, int front_dx);
+extern void apply_fixture_light_area(
+    int center_y, int center_x, int radius, bool allow_room_tiles);
+extern void apply_cave_fixture_glow(
+    int wall_y, int wall_x, int source_y, int source_x,
+    bool allow_room_tiles);
+extern void reapply_cave_fixture_glow(void);
+extern int place_vault_template_fixtures(int y0, int x0, const vault_type* v_ptr,
+    bool flip_v, bool flip_h, bool flip_d);
+extern int place_generation_fixtures(void);
 extern void apply_v_tunnel_treatment( int r1, int r2, int y_lo, int y_hi, int x, bool widen_west, bool widen_east, const tunnel_profile* profile, bool mark_escape);
 extern void apply_h_tunnel_treatment( int r1, int r2, int x_lo, int x_hi, int y, bool widen_north, bool widen_south, const tunnel_profile* profile, bool mark_escape);
-extern void build_v_tunnel( int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile);
-extern void build_h_tunnel( int r1, int r2, int x1, int x2, int y, const tunnel_profile* profile);
+extern void build_v_tunnel( int r1, int r2, int y1, int y2, int x, const tunnel_profile* profile, byte fixture_kind);
+extern void build_h_tunnel( int r1, int r2, int x1, int x2, int y, const tunnel_profile* profile, byte fixture_kind);
 extern bool build_tunnel( int r1, int r2, int y1, int x1, int y2, int x2, bool tentative);
 extern bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate);
 extern bool connect_room_to_corridor(int r);
@@ -624,6 +639,7 @@ extern void place_monster_by_letter( int y, int x, char c, bool allow_unique, in
 extern int vault_drop_gate_percent(vault_drop_gate_kind kind);
 extern bool vault_drop_passes(vault_drop_gate_kind kind);
 extern bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d);
+extern bool vault_is_valid_for_depth(const vault_type* v_ptr, int depth);
 extern bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2);
 extern void compute_vault_bounds( int y0, int x0, const vault_type* v_ptr, bool flip_d, int* y1, int* x1, int* y2, int* x2);
 extern bool place_room_forced_internal( int y0, int x0, vault_type* v_ptr, bool flip_d, bool log_failures);

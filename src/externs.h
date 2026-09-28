@@ -1,5 +1,7 @@
 /* File: externs.h */
 
+#include "monster/monster-abilities.h"
+
 /*
  * Copyright (c) 1997 Ben Harrison
  *
@@ -108,12 +110,35 @@ typedef struct skeleton_note_state_save {
 #define HINT_MESSAGE_META_DEFINED
 #define HINT_MESSAGE_CUE_MAX 2
 #define HINT_MESSAGE_CUE_TEXT_MAX 64
+#define HINT_MESSAGE_DESTINATION_MAX 2
+typedef enum hint_message_destination_kind {
+    HINT_DESTINATION_NONE = 0,
+    HINT_DESTINATION_FIXED_FEATURE,
+    HINT_DESTINATION_GREAT_VAULT,
+    HINT_DESTINATION_ARTEFACT,
+    HINT_DESTINATION_QUEST_GIVER,
+    HINT_DESTINATION_UNIQUE_MONSTER,
+    HINT_DESTINATION_PARTITION,
+    HINT_DESTINATION_FIXED_QUEST_SITE
+} hint_message_destination_kind;
+typedef struct hint_message_destination {
+    byte kind;
+    /* The exact target reconstructs the clue's direction and discovery state;
+     * moving-target clues may remain text-only instead of exposing an area. */
+    s16b y;
+    s16b x;
+    s16b id;
+    s16b min_dist;
+    s16b max_dist;
+} hint_message_destination;
 typedef struct hint_message_meta {
     s16b source_y;
     s16b source_x;
     byte cue_count;
     char cue_dirs[HINT_MESSAGE_CUE_MAX][HINT_MESSAGE_CUE_TEXT_MAX];
     char cue_dists[HINT_MESSAGE_CUE_MAX][HINT_MESSAGE_CUE_TEXT_MAX];
+    byte destination_count;
+    hint_message_destination destinations[HINT_MESSAGE_DESTINATION_MAX];
 } hint_message_meta;
 #endif
 
@@ -242,6 +267,9 @@ extern byte (*cave_rewired)[MAX_DUNGEON_WID];
 extern s16b (*cave_light)[MAX_DUNGEON_WID];
 extern s16b (*cave_o_idx)[MAX_DUNGEON_WID];
 extern s16b (*cave_m_idx)[MAX_DUNGEON_WID];
+extern int cave_corridor1[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+extern int cave_corridor2[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+extern bool feature_is_any_door(int feat);
 extern u32b mon_power_ave[MAX_DEPTH][CREATURE_TYPE_MAX];
 
 extern byte cave_cost[MAX_FLOWS][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -467,6 +495,8 @@ extern bool seen_by_keen_senses(int y, int x);
 extern bool cave_valid_bold(int y, int x);
 extern bool feat_supports_lighting(int feat);
 extern void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp);
+extern void map_info_terrain(int y, int x, byte* tap, char* tcp);
+extern void map_info_floor_terrain(int y, int x, byte* tap, char* tcp);
 extern void map_info_default(int y, int x, byte* ap, char* cp);
 extern int player_tile_offset(void);
 extern void move_cursor_relative(int y, int x);
@@ -482,7 +512,46 @@ extern void forget_view(void);
 extern void update_view(void);
 extern int flow_dist(int which_flow, int y, int x);
 extern void update_flow(int cy, int cx, int which_flow);
+extern void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 extern void update_smell(void);
+extern int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
+extern int player_current_movement_energy(void);
+extern int player_current_movement_speed(void);
+extern bool player_submerged_in_deep_water(void);
+extern bool cave_deep_water_allowed(int y, int x);
+extern bool player_melting_ice_exposure(void);
+extern void player_melting_ice_begin_action(void);
+extern void player_melting_ice_end_action(void);
+extern void monster_melting_ice_exposure(int m_idx);
+extern void monster_melting_ice_begin_action(int m_idx);
+extern void monster_melting_ice_end_action(int m_idx);
+
+extern bool cave_transform_elemental_terrain(int y, int x, int typ);
+extern void cave_apply_elemental_brands(int y, int x,
+    const object_type* weapon, const object_type* ammunition);
+extern void player_water_movement(int from_feat, int to_feat);
+extern void player_water_displaced(int from_feat, int to_feat);
+extern int player_lava_damage(bool airborne);
+extern int player_lava_damage_at(int y, int x, bool airborne);
+extern void player_lava_exposure(bool airborne);
+extern void player_lava_begin_action(void);
+extern void player_lava_end_action(void);
+extern bool monster_lava_exposure(int m_idx);
+extern bool monster_lava_begin_action(int m_idx);
+extern void monster_lava_end_action(int m_idx);
+extern void lava_light(void);
+extern int player_poison_terrain_dose_at(int y, int x);
+extern void player_poison_terrain_begin_action(void);
+extern void player_poison_terrain_exposure(bool airborne);
+extern void player_poison_terrain_end_action(void);
+extern void monster_poison_terrain_begin_action(int m_idx);
+extern void monster_poison_terrain_exposure(int m_idx);
+extern void monster_poison_terrain_end_action(int m_idx);
+extern void monster_poison_add(int m_idx, int amount);
+extern bool monster_poison_tick(int m_idx);
+extern bool monster_thrall_turn(monster_type* m_ptr);
+extern void monster_poison_brand(int m_idx, const object_type* first,
+    const object_type* second, int damage);
 extern void map_feature(int y, int x);
 extern void map_area(void);
 extern void map_area_radius(int radius);
@@ -491,6 +560,10 @@ extern void wiz_dark(void);
 extern void gates_illuminate(bool daytime);
 extern void cave_set_feat(int y, int x, int feat);
 extern void cave_set_feat_with_color(int y, int x, int feat, int color);
+extern int cave_rock_damage_feature(int feat, int margin);
+extern bool cave_quartz_natural_site(int y, int x);
+extern int cave_quartz_metal_kind(int y, int x, int depth);
+extern void cave_quartz_release(int y, int x);
 extern byte get_depth_color(int depth);
 extern void reset_depth_color_cache(void);
 /* Style-weight APIs */
@@ -510,6 +583,20 @@ extern void styles_vault_rules_clear(void);
 extern void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int count);
 extern void styles_apply_vault_default_for_depth(int depth);
 extern void styles_partition_rules_clear(void);
+extern void styles_cave_floor_palettes_clear(void);
+extern byte cave_style_floor_choice(int sidx);
+extern bool styles_set_cave_floor_palette(int base_style,
+    const cave_floor_palette* palette);
+extern bool styles_cave_floor_palette(int base_style, cave_floor_palette* out);
+extern void styles_floor_borders_clear(void);
+extern bool styles_set_floor_border(int feat, int row, int col);
+extern bool styles_set_floor_border_variants(int feat, int radius,
+    const int* rows, const int* cols, int count);
+extern bool styles_floor_border(int feat, byte* row, byte* col);
+extern bool styles_floor_border_at(int feat, int radius, int y, int x,
+    byte* row, byte* col);
+extern bool cave_water_has_icy_shore(int y, int x);
+extern void cave_floor_border_redraw_neighbors(int y, int x);
 extern void styles_add_partition_rule(int depth, int kind, const int* sidx, const int* weight, int count);
 extern int styles_pick_partition_style(int depth, int kind);
 extern int styles_get_level_primary_style(void);
@@ -648,6 +735,7 @@ extern int master_hunter_bonus(monster_type* m_ptr);
 extern bool knock_back(int y1, int x1, int y2, int x2);
 extern bool abort_for_mercy(monster_type* m_ptr);
 extern bool abort_for_valorous(monster_type* m_ptr);
+extern bool merciless_attack(monster_type* m_ptr);
 extern bool cowardly_attack(monster_type* m_ptr);
 extern bool is_aoe_attack_type(int attack_type);
 extern void break_mercy_oath(monster_type* m_ptr, int damage);
@@ -690,6 +778,9 @@ extern bool trap_disarm_power(int feat, int* power);
 extern bool trap_is_rewireable(int feat);
 extern int show_interaction_skill_roll_animation(cptr title, cptr action,
     int y, int x, int skill, int difficulty, skill_roll_details* roll);
+extern int show_interaction_skill_roll_animation_lock_or_disarm(cptr title,
+    cptr action, int y, int x, int skill, int difficulty,
+    skill_roll_details* roll);
 extern int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
     int y, int x, int skill, int difficulty, int skill_sides,
     int difficulty_sides, skill_roll_details* roll);
@@ -733,6 +824,10 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 /* cmd3.c */
 extern void do_cmd_use_item_by_index(int item);
 extern bool do_cmd_move_item_to_storage(int item, byte target_storage);
+extern bool do_cmd_move_item_to_storage_exchange(int item,
+    byte target_storage, int exchange_item, int incoming_quantity);
+extern bool do_cmd_wield_floor_storage_exchange(int item,
+    byte target_storage, int exchange_item);
 extern void do_cmd_use_item(void);
 extern void do_cmd_use_item_enhanced(void);
 extern void do_cmd_inven(void);
@@ -811,6 +906,7 @@ extern void do_cmd_queue_floor_context_action(
     floor_context_action_kind kind);
 extern bool do_cmd_context_square_action_popup(void);
 extern void do_cmd_context_floor_item_action(void);
+extern void do_cmd_context_floor_quiver_action(void);
 extern void do_cmd_suppress_context_square_popups(void);
 extern bool touch_shortcut_context_action(int binding, bool description_open,
     int* out_key, char* label, size_t label_len);
@@ -900,11 +996,12 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_BLITZ 11
 #define MAIN_MENU_OPTIONS 12
 #define MAIN_MENU_HELP 13
-#define MAIN_MENU_ABOUT 14
-#define MAIN_MENU_SAVE 15
-#define MAIN_MENU_SAVE_QUIT 16
-#define MAIN_MENU_RETURN_GAME 17
-#define MAIN_MENU_MAX 17
+#define MAIN_MENU_TUTORIAL_CARDS 14
+#define MAIN_MENU_ABOUT 15
+#define MAIN_MENU_SAVE 16
+#define MAIN_MENU_SAVE_QUIT 17
+#define MAIN_MENU_RETURN_GAME 18
+#define MAIN_MENU_MAX 18
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);
@@ -1136,6 +1233,7 @@ extern int get_sides(int attack);
 extern int dodging_bonus(void);
 extern bool blocking_bonus_active(void);
 extern bool make_attack_normal(monster_type* m_ptr);
+extern bool make_attack_reaction(monster_type* m_ptr);
 extern bool make_attack_ranged(monster_type* m_ptr, int attack);
 extern void mon_cloud(int m_idx, int typ, int dd, int ds, int dif, int rad);
 extern void cloud_surround(int r_idx, int* typ, int* dd, int* ds, int* rad);
@@ -1205,6 +1303,7 @@ extern void lore_treasure(int m_idx, int num_item);
 extern int monster_skill(monster_type* m_ptr, int skill_type);
 extern int monster_stat(monster_type* m_ptr, int stat_type);
 extern void update_mon(int m_idx, bool full);
+extern void update_mon_for_generation(int m_idx);
 extern void update_monsters(bool full);
 extern bool detect_monster_noise(monster_type* m_ptr, int skill);
 extern s16b monster_carry(int m_idx, object_type* j_ptr);
@@ -1236,6 +1335,8 @@ extern bool place_monster(int y, int x, bool slp, bool grp, bool vault);
 extern bool quest_monster_spawn_okay(int r_idx);
 extern bool alloc_monster(bool on_stairs, bool force_undead);
 extern bool summon_specific(int y1, int x1, int lev, int type);
+extern bool summon_specific_with_index(int y1, int x1, int lev, int type,
+    int* m_idx);
 extern bool reproduce_monster(int old_m_idx, int new_r_idx);
 extern void message_pain(int m_idx, int dam);
 
@@ -1262,6 +1363,8 @@ extern bool object_info_overlay_show_multi(const object_type** objects,
     const char** headings, int count);
 extern void object_info_overlay_clear(void);
 extern void describe_item_with_comparisons(int item_index, bool include_comparisons);
+extern void describe_object_with_comparisons(object_type* o_ptr,
+    bool include_comparisons);
 extern char describe_item_with_floor_actions(int item_index,
     bool include_comparisons);
 
@@ -1336,6 +1439,8 @@ extern void object_known(object_type* o_ptr);
 extern void object_aware(object_type* o_ptr);
 extern void object_tried(object_type* o_ptr);
 extern bool object_has_ego_flag4(const object_type* o_ptr, u32b flag);
+extern bool object_can_see_floor(int y, int x);
+extern bool object_is_visible(const object_type* o_ptr);
 extern s32b object_value(const object_type* o_ptr);
 extern bool object_similar(const object_type* o_ptr, const object_type* j_ptr);
 extern void object_absorb(object_type* o_ptr, object_type* j_ptr);
@@ -1571,6 +1676,12 @@ extern int inventory_limit_removal_space_for_object(
     const object_type* o_ptr);
 extern int inventory_limit_usage_after_replacing(const object_type* incoming,
     const object_type* removed, int remove_quantity);
+extern bool inventory_limit_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing);
+extern bool inventory_limit_storage_exchange_quantity_possible(
+    const object_type* incoming, const object_type* outgoing, int quantity);
+extern bool inventory_limit_floor_storage_exchange_possible(
+    const object_type* incoming, const object_type* outgoing);
 extern int inventory_limit_max_carryable_quantity(const object_type* o_ptr);
 extern bool inventory_limit_object_matches_group(
     enum inventory_limit_group group, const object_type* o_ptr);
@@ -1681,6 +1792,8 @@ extern void flush_fail(void);
 extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);
+extern void monster_sound(const monster_type* m_ptr, int action);
+extern void monster_sound_force(const monster_type* m_ptr, int action);
 extern void sound_delayed(int val, unsigned int delay_ms);
 extern void sdl_present_batch_begin(void);
 extern void sdl_present_batch_end(void);
@@ -1953,6 +2066,7 @@ extern void sdl_minimap_begin(void);
 extern void sdl_minimap_end(void);
 extern void sdl_minimap_focus(int y, int x);
 extern bool sdl_minimap_adjust_zoom(int delta);
+extern void sdl_minimap_toggle_skeleton_hints(void);
 extern bool sdl_minimap_pan(int dx, int dy);
 extern bool sdl_minimap_take_hint_click(int* out_index);
 extern void c_put_str(byte attr, cptr str, int row, int col);
@@ -1969,6 +2083,9 @@ extern bool askfor_aux(char* buf, size_t len);
 extern bool askfor_name(char* buf, size_t len);
 extern bool term_get_string(cptr prompt, char* buf, size_t len);
 extern bool get_string_panel(cptr prompt, char* buf, size_t len);
+extern void sdl_text_input_begin(void);
+extern void sdl_text_input_reopen(void);
+extern void sdl_text_input_end(void);
 extern s16b get_quantity(cptr prompt, int max);
 extern s16b get_quantity_action(cptr prompt, cptr action, int max);
 extern s16b get_quantity_touch_category(cptr prompt, int max,
@@ -2035,6 +2152,10 @@ extern void ui_scroll_area_set_tap_key(int key);
 extern int ui_scroll_area_get_tap_key(void);
 extern void ui_scroll_area_set_page_mode(bool enabled);
 extern bool ui_scroll_area_is_page_mode(void);
+extern void ui_scroll_area_set_horizontal_page_mode(bool enabled);
+extern bool ui_scroll_area_is_horizontal_page_mode(void);
+extern void ui_scroll_area_enable_horizontal_page_swipe(int previous_key,
+    int next_key);
 extern void ui_scroll_area_set_offset_target(int* offset, int max_offset);
 extern bool ui_scroll_area_has_offset_target(void);
 extern bool ui_scroll_area_offset_scroll(int delta);
@@ -2083,6 +2204,9 @@ extern bool player_pack_action_start(player_pack_action_kind kind, int item,
     int arg, bool flag, const object_type* o_ptr);
 extern bool player_pack_action_start_forced(player_pack_action_kind kind,
     int item, int arg, bool flag, const object_type* o_ptr);
+extern bool player_pack_action_start_storage_exchange(int item, int arg,
+    const object_type* incoming, int exchange_item,
+    const object_type* exchange_object, int incoming_quantity);
 extern bool player_pack_action_pending(void);
 extern int player_pack_action_turns_left(void);
 extern bool player_pack_action_completing(player_pack_action_kind kind);
@@ -2137,6 +2261,8 @@ extern bool player_set_active_weapon_mode(
 extern bool player_ready_bow_with_arrow(int arrow_item);
 extern bool player_ready_throwing_weapon(object_type* o_ptr, int item);
 extern void do_cmd_toggle_active_weapon(void);
+extern bool player_active_item_menu_available(int item);
+extern bool do_cmd_active_item(int item);
 extern void player_queue_active_weapon_mode(int mode);
 extern void player_queue_ranged_quiver_mode(int mode);
 extern void do_cmd_pending_active_weapon_mode(void);
@@ -2197,6 +2323,14 @@ extern bool set_blind(int v);
 extern bool allow_player_confusion(monster_type* m_ptr);
 extern bool set_confused(int v);
 extern bool set_poisoned(int v);
+extern bool infect_disease(void);
+extern void disease_assign_identity(void);
+extern void disease_identify(void);
+extern cptr disease_name(void);
+extern cptr disease_cure_name(void);
+extern bool disease_herb_matches(const object_type* o_ptr);
+extern bool cure_disease(void);
+extern void process_disease(void);
 extern bool allow_player_fear(monster_type* m_ptr);
 extern bool set_afraid(int v);
 extern bool allow_player_entrancement(monster_type* m_ptr);
@@ -2332,10 +2466,6 @@ extern bool get_rep_dir(int* dp);
 extern bool get_grid_choice_dir(cptr prompt, const int ys[], const int xs[],
     const int dirs[], int count, int* dp);
 extern bool confuse_dir(int* dp);
-extern const char tutorial_leave_text[][100];
-extern const char tutorial_win_text[][100];
-extern const char tutorial_early_death_text[][100];
-extern const char tutorial_late_death_text[][100];
 extern const char entry_poetry[][100];
 extern const char throne_poetry[][100];
 extern const char ultimate_bug_text[][100];
@@ -2484,15 +2614,20 @@ extern void sdl_question_menu_set_scroll_offset_target(int* offset,
 extern bool sdl_question_menu_take_touch_scrolled(void);
 extern void sdl_question_menu_set_blocking_input(bool blocking);
 extern bool sdl_question_menu_blocks_input(void);
+extern bool sdl_question_menu_queue_navigation(int direction);
+extern int sdl_question_menu_take_navigation(void);
 extern void sdl_question_menu_set_nonblocking(bool nonblocking);
 extern void sdl_question_menu_set_context_hint(void);
 extern void sdl_question_menu_clear_context_hint(void);
 extern bool sdl_question_menu_context_hint_active(void);
+extern bool sdl_question_menu_is_active(void);
 extern void sdl_question_menu_set_timeout_ms(int ms);
 extern void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
     cptr section, bool show_tabs, bool center_body, int selected_choice);
 extern void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
     int choice);
+extern void sdl_hint_quest_menu_add_contextual_block(cptr text, byte attr,
+    int indent, int choice);
 extern void sdl_hint_quest_menu_add_button(int choice, cptr label, byte attr);
 extern void sdl_hint_quest_menu_finish(void);
 extern void sdl_hint_quest_menu_prepare_page_turn(
@@ -2545,7 +2680,12 @@ extern bool g_hide_left_panel;
 #ifdef USE_SDL
 extern bool g_sdl_left_panel_pane_source_active;
 extern void sdl_side_map_pane_forget_level(void);
+extern void sdl_minimap_map_texture_cache_clear(void);
 extern void sdl_side_map_pane_invalidate_cell(int y, int x);
+extern void sdl_idle_animation_redraw_cached_cells(
+    void (*redraw_cell)(int col, int row, int width));
+extern bool sdl_idle_animation_tracks_grid(int y, int x);
+extern bool sdl_material_edge_at(int y, int x);
 #endif
 extern bool g_suppress_hidden_left_panel_overlay;
 extern byte g_hidden_left_panel_overlay_start_row;
@@ -2630,6 +2770,12 @@ extern int get_sdl_gamepad_dpad_diagonal_delay_ms(void);
 extern void set_sdl_gamepad_dpad_diagonal_delay_ms(int value);
 extern bool get_sdl_gamepad_use_left_stick(void);
 extern void set_sdl_gamepad_use_left_stick(bool value);
+bool get_sdl_gamepad_use_right_stick(void);
+void set_sdl_gamepad_use_right_stick(bool value);
+int get_sdl_gamepad_stick_delay_ms(int stick);
+void set_sdl_gamepad_stick_delay_ms(int stick, int value);
+void sdl_gamepad_swap_stick_roles(void);
+void sdl_gamepad_reset_movement_controls(void);
 extern bool get_sdl_gamepad_default_enabled(void);
 extern bool get_sdl_steamdeck_default_inv_equip_same_button_cycle(void);
 extern bool get_sdl_gamepad_default_use_dpad(void);
@@ -2717,6 +2863,8 @@ extern void sdl_touch_request_tutorial_from_settings(void);
 extern bool sdl_touch_settings_tutorial_requested(void);
 extern void sdl_touch_show_requested_tutorial(void);
 extern void sdl_touch_show_tutorial(void);
+extern void sdl_gameplay_tutorial_set_menu_preview(bool available, bool shown);
+extern void sdl_gameplay_tutorial_set_menu_preview_control(const char *label);
 extern void sdl_touch_maybe_show_first_game_tutorial(void);
 extern bool sdl_touch_tutorial_device_available(void);
 extern void sdl_mouse_request_tutorial_from_settings(void);
@@ -2738,6 +2886,9 @@ extern int get_sdl_touch_movement_default_mode(void);
 extern bool get_sdl_touch_round_movement_enabled(void);
 extern void set_sdl_touch_round_movement_enabled(bool value);
 extern bool get_sdl_touch_round_movement_default_enabled(void);
+extern bool get_sdl_touch_round_portrait_centered(void);
+extern void set_sdl_touch_round_portrait_centered(bool value);
+extern bool get_sdl_touch_round_portrait_centered_default(void);
 extern int get_sdl_touch_zone_overlay_mode(void);
 extern void set_sdl_touch_zone_overlay_mode(int mode);
 extern int get_sdl_touch_zone_overlay_default_mode(void);
@@ -2785,6 +2936,8 @@ extern bool get_sdl_touch_swipe_default_enabled(void);
 extern int get_sdl_touch_swipe_default_binding(int dir);
 /* Controller UI menu helpers - get key bindings for menu actions */
 extern int steamdeck_back_key(void);      /* B button (EAST) - for back/quit */
+extern void sdl_gamepad_ui_prompt_label(int binding, cptr fallback,
+    char* buf, size_t buflen);
 extern int steamdeck_confirm_key(void);   /* A button (SOUTH) - for confirm/ok */
 extern int steamdeck_prev_page_key(void); /* L1 button - for previous page/tab */
 extern int steamdeck_next_page_key(void); /* R1 button - for next page/tab */

@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -22,6 +23,9 @@
 #include <fcntl.h>  /* O_RDONLY */
 #include <errno.h>
 #include <stdbool.h>
+
+_Static_assert(MON_AI_IMPALE == 29 && MON_AI_FEATURE_COUNT == 33,
+    "Monster observation save record counts must remain append-only");
 
 /* #include "init.h"  not required directly here after refactor */
 #include "metarun.h"
@@ -56,6 +60,15 @@
  * Local "savefile" pointer
  */
 static SDL_IOStream* fff;
+
+/* Validate the final block's length without changing decoder/checksum state.
+ * The two trailing checksums must occupy exactly eight bytes. */
+bool load_only_checksums_remain(void)
+{
+    Sint64 position = SDL_TellIO(fff);
+    Sint64 size = SDL_GetIOSize(fff);
+    return position >= 0 && size >= position && size - position == 8;
+}
 
 /*
  * Hack -- old "encryption" byte
@@ -92,8 +105,11 @@ bool savefile_has_partition_meta_types = false;
 bool savefile_has_cave_info_hi = false;
 bool savefile_has_cave_rewired = false;
 bool savefile_has_cave_natural = false;
+bool savefile_has_cave_water_flow = false;
+bool savefile_has_cave_flood_trap_kinds = false;
 bool savefile_has_hint_messages = false;
 bool savefile_has_hint_message_meta = false;
+bool savefile_has_hint_message_destinations = false;
 bool savefile_has_thrall_quest = false;
 bool savefile_has_thrall_quest_requested = false;
 bool savefile_has_randart_flags4 = false;
@@ -859,6 +875,14 @@ errr rd_item(object_type* o_ptr)
         o_ptr->storage = a_ptr->storage;
         o_ptr->volume = a_ptr->volume;
 
+        /* Artefacts may also opt into deliberate Pack/Harness storage. */
+        if (has_saved_storage && object_can_choose_pack_or_harness(o_ptr)
+            && (saved_storage == OBJECT_STORAGE_PACK
+                || saved_storage == OBJECT_STORAGE_HARNESS))
+        {
+            o_ptr->storage = saved_storage;
+        }
+
         /* Ensure artefact-granted abilities are present (some generators may omit them). */
         for (int ai = 0; ai < a_ptr->abilities && o_ptr->abilities < (int)N_ELEMENTS(o_ptr->skilltype); ai++)
         {
@@ -956,7 +980,14 @@ void rd_monster(monster_type* m_ptr)
     rd_s16b(&m_ptr->alertness);
     rd_byte(&m_ptr->skip_next_turn);
     rd_byte(&m_ptr->mspeed);
-    rd_byte(&m_ptr->energy);
+    if (savefile_version_at_least(0, 9, 8, 2))
+        rd_s16b(&m_ptr->energy);
+    else
+    {
+        byte old_energy;
+        rd_byte(&old_energy);
+        m_ptr->energy = old_energy;
+    }
     rd_byte(&m_ptr->stunned);
     rd_byte(&m_ptr->confused);
     rd_s16b(&m_ptr->hasted);
@@ -1077,6 +1108,71 @@ void rd_monster(monster_type* m_ptr)
         m_ptr->thrall_quest_requested = 0;
         m_ptr->thrall_quest_completed = 0;
     }
+    if (savefile_version_at_least(0, 9, 8, 4))
+    {
+        rd_s16b(&m_ptr->poisoned);
+        m_ptr->poisoned = MAX(0, MIN(100, m_ptr->poisoned));
+    }
+    else
+        m_ptr->poisoned = 0;
+    m_ptr->vengeance = 0;
+    m_ptr->smite_recovery = 0;
+    m_ptr->ability_in_action = false;
+    m_ptr->ability_melee = false;
+    m_ptr->ability_displaced = false;
+    if (savefile_version_at_least(0, 9, 8, 5))
+    {
+        rd_byte(&m_ptr->vengeance);
+        rd_byte(&m_ptr->smite_recovery);
+        m_ptr->vengeance = MIN(1, m_ptr->vengeance);
+        m_ptr->smite_recovery = MIN(2, m_ptr->smite_recovery);
+        if (m_ptr->smite_recovery == 1)
+            m_ptr->skip_next_turn = true;
+    }
+    else
+        m_ptr->consecutive_attacks = 0;
+
+    memset(&m_ptr->ai, 0, sizeof(m_ptr->ai));
+    if (savefile_version_at_least(0, 9, 8, 6))
+    {
+        /* .6 wrote the original 29 observation records.  .7 appends the
+         * four attack-geometry/weapon-fear records after that prefix. */
+        int observation_count = savefile_version_at_least(0, 9, 8, 7)
+            ? MON_AI_FEATURE_COUNT : MON_AI_IMPALE;
+        for (int f = 0; f < observation_count; ++f)
+        {
+            rd_s16b(&m_ptr->ai.observations[f].value);
+            rd_byte(&m_ptr->ai.observations[f].ttl);
+            rd_s32b(&m_ptr->ai.observations[f].turn);
+        }
+        /* MULTI_TARGET was a catch-all in .6 and has no meaning in the
+         * split .7 taxonomy.  Clear it for every AI-bearing save. */
+        memset(&m_ptr->ai.observations[MON_AI_MULTI_TARGET], 0,
+            sizeof(m_ptr->ai.observations[MON_AI_MULTI_TARGET]));
+        monster_sense_state* sense = &m_ptr->ai.sense;
+        rd_byte(&sense->kind);
+        rd_byte(&sense->y); rd_byte(&sense->x);
+        rd_byte(&sense->anchor_y); rd_byte(&sense->anchor_x);
+        rd_byte(&sense->scent_age);
+        rd_byte(&sense->stale_decisions); rd_byte(&sense->search_decisions);
+        rd_byte(&sense->recent_count); rd_byte(&sense->recent_next);
+        for (int n = 0; n < 4; ++n)
+        {
+            rd_byte(&sense->recent_y[n]); rd_byte(&sense->recent_x[n]);
+        }
+        rd_u32b(&sense->observed_turn);
+        rd_byte(&m_ptr->ai.cast_reserve);
+        rd_byte(&m_ptr->ai.goal_y); rd_byte(&m_ptr->ai.goal_x);
+        rd_byte(&m_ptr->ai.goal_age);
+        rd_byte(&m_ptr->ai.previous_y); rd_byte(&m_ptr->ai.previous_x);
+        rd_byte(&m_ptr->ai.waits);
+        rd_byte(&m_ptr->ai.player_y); rd_byte(&m_ptr->ai.player_x);
+        rd_byte(&m_ptr->ai.player_action);
+        rd_byte(&m_ptr->ai.attack_y); rd_byte(&m_ptr->ai.attack_x);
+        rd_byte(&m_ptr->ai.attack_chain);
+        rd_s32b(&m_ptr->ai.player_action_turn); rd_s32b(&m_ptr->ai.attack_turn);
+        monster_ai_sanitize(m_ptr);
+    }
 }
 
 /*
@@ -1113,9 +1209,16 @@ static void rd_lore(int r_idx)
     rd_u32b(&l_ptr->flags2);
     rd_u32b(&l_ptr->flags3);
     rd_u32b(&l_ptr->flags4);
+    l_ptr->flags5 = 0;
+    if (savefile_version_at_least(0, 9, 8, 5))
+        rd_u32b(&l_ptr->flags5);
 
     /* Read the "Racial" monster limit per level */
     rd_byte(&r_ptr->max_num);
+    /* Old saves gave then-unused race slots a normal population cap of 100.
+     * Newly added uniques must still allow only one; preserve a dead cap of 0. */
+    if (r_ptr->flags1 & RF1_UNIQUE)
+        r_ptr->max_num = MIN(1, r_ptr->max_num);
 
     /* Song-revealed lore plus spare bytes */
     rd_byte(&l_ptr->song_lore_flags);
@@ -1126,6 +1229,7 @@ static void rd_lore(int r_idx)
     l_ptr->flags2 &= r_ptr->flags2;
     l_ptr->flags3 &= r_ptr->flags3;
     l_ptr->flags4 &= r_ptr->flags4;
+    l_ptr->flags5 &= r_ptr->flags5;
     l_ptr->song_lore_flags
         &= (MONSTER_LORE_SONG_CONTEST | MONSTER_LORE_SONG_LAMENT);
 }
@@ -1427,6 +1531,13 @@ static void rd_options(void)
 
     if (!savefile_version_at_least(0, 9, 7, 0))
         clear_obsolete_interface_options_097();
+
+    /* This used to be a reserved slot; older characters do not opt in. */
+    if (!savefile_version_at_least(0, 9, 8, 13))
+        op_ptr->opt[OPT_utumno_corridors] = false;
+
+    if (!savefile_version_at_least(0, 9, 8, 18))
+        op_ptr->opt[OPT_illusory_walls] = true;
 
     /*** Window Options ***/
 
@@ -2711,8 +2822,12 @@ static errr rd_savefile_new_aux(void)
     savefile_has_cave_info_hi = savefile_version_at_least(0, 9, 1, 8);
     savefile_has_cave_rewired = savefile_version_at_least(0, 9, 7, 2);
     savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
+    savefile_has_cave_water_flow = savefile_version_at_least(0, 9, 8, 12);
+    savefile_has_cave_flood_trap_kinds = savefile_version_at_least(0, 9, 8, 15);
     savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
     savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
+    savefile_has_hint_message_destinations =
+        savefile_version_at_least(0, 9, 7, 14);
     savefile_has_thrall_quest = savefile_version_at_least(0, 9, 1, 11);
     savefile_has_thrall_quest_requested = savefile_version_at_least(0, 9, 1, 12);
     savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
@@ -3202,8 +3317,12 @@ bool load_player(void)
             savefile_has_cave_info_hi = savefile_version_at_least(0, 9, 1, 8);
             savefile_has_cave_rewired = savefile_version_at_least(0, 9, 7, 2);
             savefile_has_cave_natural = savefile_version_at_least(0, 9, 7, 4);
+            savefile_has_cave_water_flow = savefile_version_at_least(0, 9, 8, 12);
+            savefile_has_cave_flood_trap_kinds = savefile_version_at_least(0, 9, 8, 15);
             savefile_has_hint_messages = savefile_version_at_least(0, 9, 1, 10);
             savefile_has_hint_message_meta = savefile_version_at_least(0, 9, 5, 7);
+            savefile_has_hint_message_destinations =
+                savefile_version_at_least(0, 9, 7, 14);
             savefile_has_thrall_quest = savefile_version_at_least(0, 9, 1, 11);
             savefile_has_thrall_quest_requested = savefile_version_at_least(0, 9, 1, 12);
             savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);

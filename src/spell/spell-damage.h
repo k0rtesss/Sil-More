@@ -14,6 +14,7 @@ bool hates_fire(const object_type* o_ptr);
 bool hates_cold(const object_type* o_ptr);
 bool elemental_attack_destroys_object(int attack_type,
     const object_type* o_ptr);
+void acid_damage_items(int raw_dam, int min_raw, int max_raw, int damage);
 void acid_dam(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str);
 void elec_dam(int raw_dam, int min_raw, int max_raw, int hp_dam,
@@ -25,9 +26,17 @@ int resist_dark(void);
 void fire_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str);
 void fire_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str);
+void fire_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer);
 void cold_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str);
 void cold_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str);
+void cold_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer);
+void dark_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
+    monster_type* observer);
+void pois_dam_pure_observed(int dd, int ds, bool update_rolls,
+    monster_type* observer);
 void dark_dam_mixed(int dam, cptr kb_str);
 void dark_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str);
 void pois_dam_mixed(int dam);

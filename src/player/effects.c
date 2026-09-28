@@ -232,10 +232,127 @@ bool set_confused(int v)
     return (true);
 }
 
-/*
- * Set "p_ptr->poisoned", notice observable changes
- *
- */
+/* Disease is independent of ordinary stat drain, sustain and regeneration.
+ * Its countdown never expires: reaching zero applies another penalty. */
+static void disease_changed(void)
+{
+    p_ptr->update |= PU_BONUS;
+    p_ptr->redraw |= PR_STATS | PR_EXTRA;
+    p_ptr->window |= PW_PLAYER_0;
+    disturb(0, 0);
+    handle_stuff();
+}
+
+/* These indices are saved: append names rather than reordering them. */
+cptr disease_name(void)
+{
+    static const char* names[DISEASE_NAME_COUNT] = {
+        "Ashen Ague", "Barrow Fever", "Blackroot Blight", "Cavern Chills",
+        "Ironlung", "Marsh Shivers", "Pale Wasting", "Shadow Pox"
+    };
+    if (!p_ptr->diseased || p_ptr->disease_name == 0
+        || p_ptr->disease_name > DISEASE_NAME_COUNT)
+        return "Unknown disease";
+    return names[p_ptr->disease_name - 1];
+}
+
+cptr disease_cure_name(void)
+{
+    static const char* names[DISEASE_HERB_COUNT] = {
+        "Rage", "Sustenance", "Terror", "Healing", "Restoration",
+        "Hunger", "Visions", "Entrancement", "Weakness", "Sickness"
+    };
+    if (!p_ptr->diseased || p_ptr->disease_cure >= DISEASE_HERB_COUNT)
+        return "Unknown";
+    return names[p_ptr->disease_cure];
+}
+
+/* Also used to give pre-0.9.8.9 infections an identity during migration. */
+void disease_assign_identity(void)
+{
+    p_ptr->disease_name = 1 + rand_int(DISEASE_NAME_COUNT);
+    p_ptr->disease_cure = rand_int(DISEASE_HERB_COUNT);
+    p_ptr->disease_knowledge = 0;
+}
+
+void disease_identify(void)
+{
+    if (!p_ptr->diseased)
+        return;
+
+    if (p_ptr->active_ability[S_PER][PER_ALCHEMY])
+    {
+        p_ptr->disease_knowledge = DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE;
+        return;
+    }
+
+    if (!(p_ptr->disease_knowledge & DISEASE_KNOWN_NAME) && one_in_(2))
+        p_ptr->disease_knowledge |= DISEASE_KNOWN_NAME;
+    if ((p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
+        && !(p_ptr->disease_knowledge & DISEASE_KNOWN_CURE) && one_in_(2))
+        p_ptr->disease_knowledge |= DISEASE_KNOWN_CURE;
+}
+
+bool disease_herb_matches(const object_type* o_ptr)
+{
+    return p_ptr->diseased && o_ptr && o_ptr->tval == TV_FOOD
+        && p_ptr->disease_cure < DISEASE_HERB_COUNT
+        && o_ptr->sval == p_ptr->disease_cure;
+}
+
+bool infect_disease(void)
+{
+    if (p_ptr->diseased)
+        return false;
+
+    p_ptr->diseased = DISEASE_INTERVAL;
+    disease_assign_identity();
+    p_ptr->stat_disease[A_CON] = -1;
+    msg_print("You contract a disease. Your Constitution decreases.");
+    disease_changed();
+    return true;
+}
+
+bool cure_disease(void)
+{
+    if (!p_ptr->diseased)
+        return false;
+
+    p_ptr->diseased = 0;
+    p_ptr->disease_name = 0;
+    p_ptr->disease_cure = 0;
+    p_ptr->disease_knowledge = 0;
+    for (int stat = 0; stat < A_MAX; stat++)
+        p_ptr->stat_disease[stat] = 0;
+    msg_print("Your disease is cured. The attributes it weakened are restored.");
+    disease_changed();
+    return true;
+}
+
+void process_disease(void)
+{
+    static const char* names[A_MAX] = {
+        "Strength", "Dexterity", "Constitution", "Grace"
+    };
+
+    if (!p_ptr->diseased)
+        return;
+    if (--p_ptr->diseased > 0)
+        return;
+
+    p_ptr->diseased = DISEASE_INTERVAL;
+    int stat = rand_int(A_MAX);
+    /* Saturate storage during arbitrarily long games; calc_stats applies the
+     * normal attribute floor independently of the accumulated penalties. */
+    if (p_ptr->stat_disease[stat] > -32767)
+    {
+        p_ptr->stat_disease[stat]--;
+        msg_format("Your disease worsens. Your %s decreases.", names[stat]);
+        disease_changed();
+    }
+}
+
+/* Set "p_ptr->poisoned", noticing observable changes. */
 bool set_poisoned(int v)
 {
     int new;
@@ -1624,14 +1741,14 @@ bool set_food(int v)
         /* Starving */
         case 0:
         {
-            msg_print("You are beginning to starve!");
+            msg_print("You are beginning to starve! You lose 1 health each world update and cannot regenerate health.");
             break;
         }
 
         /* Weak */
         case 1:
         {
-            msg_print("You are getting weak from hunger!");
+            msg_print("You are getting weak from hunger (-1 Strength).");
             break;
         }
 

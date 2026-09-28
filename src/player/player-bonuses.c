@@ -558,6 +558,15 @@ void calc_bonuses(void)
 
     /*** Temporary flags ***/
 
+    /* Slippery footing affects melee, bows and thrown attacks once through
+     * the displayed skills. Airborne players do not touch the ice. */
+    if (!p_ptr->leaping && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px]))
+    {
+        p_ptr->skill_misc_mod[S_MEL] -= ICE_ATTACK_PENALTY;
+        p_ptr->skill_misc_mod[S_ARC] -= ICE_ATTACK_PENALTY;
+        p_ptr->skill_misc_mod[S_EVN] -= ICE_EVASION_PENALTY;
+    }
+
     /* Apply temporary "stun" */
     if (p_ptr->stun >= 50)
     {
@@ -679,6 +688,13 @@ void calc_bonuses(void)
         if (shift) p_ptr->resist_cold -= shift;
     }
 
+    /* Utumno's mingled frost and fire erode both elemental defences. */
+    if (p_ptr->depth == UTUMNO_DEPTH)
+    {
+        p_ptr->resist_fire -= 1;
+        p_ptr->resist_cold -= 1;
+    }
+
     /* CUR_HUNGER curse/blessing: curse increases hunger, blessing decreases it */
     {
         int h = curse_flag_delta_cur(CUR_HUNGER);
@@ -769,9 +785,9 @@ void calc_bonuses(void)
         {
             p_ptr->resist_fear -= 1;
             p_ptr->resist_stun -= 1;
-            if (cave_type == BIG_CAVE_FIRE)
+            if (cave_type == BIG_CAVE_FIRE && p_ptr->depth != UTUMNO_DEPTH)
                 p_ptr->resist_fire -= 1;
-            else if (cave_type == BIG_CAVE_ICE)
+            else if (cave_type == BIG_CAVE_ICE && p_ptr->depth != UTUMNO_DEPTH)
                 p_ptr->resist_cold -= 1;
             else if (cave_type == BIG_CAVE_POIS)
                 p_ptr->resist_pois -= 1;
@@ -1210,6 +1226,11 @@ void calc_bonuses(void)
     {
         p_ptr->update |= (PU_MANA);
     }
+
+    /* Perception changes can reveal or conceal items under water. */
+    if (MAX(0, p_ptr->skill_use[S_PER]) / 5
+        != MAX(0, old_skill_use[S_PER]) / 5)
+        p_ptr->update |= PU_UPDATE_VIEW;
 
     /* Hack -- Telepathy Change */
     if (p_ptr->telepathy != old_telepathy)

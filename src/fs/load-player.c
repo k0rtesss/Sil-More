@@ -17,6 +17,15 @@
 #include "metarun.h"
 #include "fs/load-internal.h"
 
+/* A legacy hero keeps this flag even after being saved by 0.9.8. Clearing
+ * tutorial history or changing the global mode cannot bypass the deferral. */
+static void rd_tutorial_character_state(void)
+{
+    byte deferred = 1;
+    if (savefile_version_at_least(0, 9, 8, 0)) rd_byte(&deferred);
+    p_ptr->tutorial_deferred = deferred != 0;
+}
+
 /*
  * Read the "extra" information
  */
@@ -71,6 +80,55 @@ errr rd_extra(void)
         rd_s16b(&p_ptr->stat_base[i]);
     for (i = 0; i < A_MAX; i++)
         rd_s16b(&p_ptr->stat_drain[i]);
+
+    p_ptr->diseased = 0;
+    memset(p_ptr->stat_disease, 0, sizeof(p_ptr->stat_disease));
+    if (savefile_version_at_least(0, 9, 8, 3))
+    {
+        rd_s16b(&p_ptr->diseased);
+        for (i = 0; i < A_MAX; i++)
+            rd_s16b(&p_ptr->stat_disease[i]);
+        if (p_ptr->diseased < 0 || p_ptr->diseased > DISEASE_INTERVAL)
+        {
+            note("Invalid disease countdown in savefile.");
+            return -1;
+        }
+        for (i = 0; i < A_MAX; i++)
+        {
+            if (p_ptr->stat_disease[i] > 0
+                || (!p_ptr->diseased && p_ptr->stat_disease[i] != 0))
+            {
+                note("Invalid disease attribute penalty in savefile.");
+                return -1;
+            }
+        }
+    }
+
+    p_ptr->disease_name = 0;
+    p_ptr->disease_cure = 0;
+    p_ptr->disease_knowledge = 0;
+    if (savefile_version_at_least(0, 9, 8, 9))
+    {
+        rd_byte(&p_ptr->disease_name);
+        rd_byte(&p_ptr->disease_cure);
+        rd_byte(&p_ptr->disease_knowledge);
+        if (p_ptr->disease_name > DISEASE_NAME_COUNT
+            || p_ptr->disease_cure >= DISEASE_HERB_COUNT
+            || (p_ptr->disease_knowledge & ~(DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE))
+            || ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+                && !(p_ptr->disease_knowledge & DISEASE_KNOWN_NAME))
+            || (p_ptr->diseased && !p_ptr->disease_name)
+            || (!p_ptr->diseased && (p_ptr->disease_name
+                || p_ptr->disease_cure || p_ptr->disease_knowledge)))
+        {
+            note("Invalid disease identity or diagnosis in savefile.");
+            return -1;
+        }
+    }
+    else if (p_ptr->diseased)
+    {
+        disease_assign_identity();
+    }
 
     /* Read the skill info - all skills including S_SPC (Special) present in 0.9.0 */
     for (i = 0; i < S_MAX; i++)
@@ -379,6 +437,15 @@ errr rd_extra(void)
     // p_ptr->is_dead = tmp8u;
     rd_bool(&p_ptr->unique_forge_made);
     rd_bool(&p_ptr->unique_forge_seen);
+    p_ptr->utumno_forge_visited = false;
+    p_ptr->utumno_return_to_throne = false;
+    if (savefile_version_at_least(0, 9, 8, 13))
+    {
+        rd_bool(&p_ptr->utumno_forge_visited);
+        rd_bool(&p_ptr->utumno_return_to_throne);
+        if (!p_ptr->utumno_forge_visited)
+            p_ptr->utumno_return_to_throne = false;
+    }
     rd_bool(&p_ptr->is_dead);
 
     /* Read "feeling" */
@@ -598,6 +665,14 @@ errr rd_extra(void)
             memset(&meta, 0, sizeof(meta));
             meta.source_y = -1;
             meta.source_x = -1;
+            for (int destination = 0;
+                destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+            {
+                meta.destinations[destination].kind = HINT_DESTINATION_NONE;
+                meta.destinations[destination].y = -1;
+                meta.destinations[destination].x = -1;
+                meta.destinations[destination].max_dist = -1;
+            }
 
             if (savefile_has_hint_message_meta)
             {
@@ -609,6 +684,34 @@ errr rd_extra(void)
                 {
                     rd_string(meta.cue_dists[cue], sizeof(meta.cue_dists[cue]));
                     rd_string(meta.cue_dirs[cue], sizeof(meta.cue_dirs[cue]));
+                }
+            }
+
+            if (savefile_has_hint_message_destinations)
+            {
+                rd_byte(&meta.destination_count);
+                meta.destination_count = MIN(meta.destination_count,
+                    HINT_MESSAGE_DESTINATION_MAX);
+                for (int destination = 0;
+                    destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+                {
+                    hint_message_destination* dst =
+                        &meta.destinations[destination];
+                    rd_byte(&dst->kind);
+                    rd_s16b(&dst->y);
+                    rd_s16b(&dst->x);
+                    rd_s16b(&dst->id);
+                    rd_s16b(&dst->min_dist);
+                    rd_s16b(&dst->max_dist);
+                    if (destination >= meta.destination_count)
+                    {
+                        dst->kind = HINT_DESTINATION_NONE;
+                        dst->y = -1;
+                        dst->x = -1;
+                        dst->id = 0;
+                        dst->min_dist = 0;
+                        dst->max_dist = -1;
+                    }
                 }
             }
 
@@ -664,6 +767,7 @@ errr rd_extra(void)
 
     /* Min depth counter */
     rd_s32b(&min_depth_counter);
+    rd_tutorial_character_state();
     morgoth_call_sync_loaded_stage();
     log_info("LOAD: min_depth_counter=%d, calculated min_depth()=%d", min_depth_counter, min_depth());
 

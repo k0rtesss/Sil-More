@@ -1,0 +1,46 @@
+Verdant 03 — Worlds: Snow, Desert & Volcanic [16x16]
+Copyright (c) 2026 Core Systems Asset Factory. All rights reserved.
+
+ASSET LICENCE
+
+You are granted a perpetual, worldwide, non-exclusive licence to use the artwork in this
+pack, subject to the terms below.
+
+YOU MAY
+  - Use these tiles in commercial and non-commercial projects, including paid games,
+    on an unlimited number of projects, with no royalty.
+  - Use them in projects for clients, and in projects developed as part of a team.
+  - Modify, recolour, extend, remix and build upon the tiles freely.
+  - Distribute them as an incorporated part of a game, application, film, video or
+    other end product, including in a compiled asset bundle for such a product.
+  - Use them without crediting us. Attribution is welcome but never required.
+
+YOU MAY NOT
+  - Resell, sublicense or redistribute the pack itself, or any substantial portion of
+    its tiles, as an asset pack, tile pack, template, or asset library — whether free
+    or paid, whether modified or not. The tiles are licensed for USE in a product, not
+    for redistribution AS a product.
+  - Use them to train, fine-tune or evaluate a generative machine-learning model.
+  - Claim authorship of the artwork itself, or register it as your own trademark.
+
+NO WARRANTY
+  THE ARTWORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+  PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE ARTWORK OR THE USE
+  OR OTHER DEALINGS IN THE ARTWORK.
+
+ORIGIN OF THE ARTWORK
+  Every tile in this pack was generated programmatically by original software written
+  by Core Systems Asset Factory, from a hand-authored palette, hand-authored motifs and
+  hand-authored material rules. No diffusion or image-generation model was used in
+  producing this artwork, and no third-party artwork is incorporated. The copyright
+  holder therefore holds clear title to everything in this pack and is able to grant
+  the licence above.
+
+  If your storefront, publisher or platform requires a generative-AI disclosure, this
+  pack is disclosed as: Graphics = generated programmatically. Sounds = none.
+  Text and dialog = none. See Readme.md.
+
+Questions about a use this licence does not obviously cover: ask before you ship.

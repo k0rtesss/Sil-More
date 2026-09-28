@@ -1,6 +1,12 @@
 /* File: fs/save-dungeon.c -- carved from save.c (shares state via fs/save-internal.h) */
 
 #include "angband.h"
+#include "monster/monster-routine.h"
+#include "cave/cave-flood.h"
+#include "monster/monster-senses.h"
+#include "monster/monster-social.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -16,6 +22,147 @@
     (CAVE_MARK | CAVE_GLOW | CAVE_ICKY | CAVE_ROOM | CAVE_G_VAULT | CAVE_HIDDEN)
 #define IMPORTANT_FLAGS_HI (CAVE_CHASM_AREA)
 #define IMPORTANT_FLAGS_16 (IMPORTANT_FLAGS_LO | IMPORTANT_FLAGS_HI)
+
+static void wr_floods(void)
+{
+    u16b count = 0;
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_stage_at(y, x))
+                count++;
+    wr_u16b(0xF100);
+    wr_u16b(count);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            byte stage = cave_flood_stage_at(y, x);
+            if (!stage)
+                continue;
+            wr_byte((byte)y);
+            wr_byte((byte)x);
+            wr_byte(stage);
+        }
+}
+
+static void wr_fixtures(void)
+{
+    int y, x;
+    u16b fixture_count = 0;
+
+    /* Sparse decorative fixtures, introduced in 0.9.8.1. Animation phase is
+     * frontend-only and intentionally absent from the savefile. */
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+            if (cave_fixture_at(y, x))
+                fixture_count++;
+    wr_u16b(SAVEFILE_FIXTURES_MAGIC);
+    wr_u16b(fixture_count);
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            byte kind = cave_fixture_at(y, x);
+            if (!kind)
+                continue;
+            wr_byte((byte)y);
+            wr_byte((byte)x);
+            wr_byte(kind);
+        }
+}
+
+static void wr_water_flow(void)
+{
+    byte count = 0, previous = 0;
+    wr_u16b(CAVE_WATER_FLOW_SAVE_MAGIC);
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (int x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            byte value = cave_water_flow_encoded_at(y, x);
+            if (value != previous || count == MAX_UCHAR)
+            {
+                wr_byte(count);
+                wr_byte(previous);
+                previous = value;
+                count = 1;
+            }
+            else count++;
+        }
+    if (count)
+    {
+        wr_byte(count);
+        wr_byte(previous);
+    }
+}
+
+static void wr_flood_trap_kinds(void)
+{
+    u16b count = 0;
+
+    /* Acid is a variant of FEAT_TRAP_FLOOD, not another terrain feature.
+     * Water is the implicit default, so only acid trap cells need storage. */
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_trap_is_acid_at(y, x))
+                count++;
+
+    wr_u16b(CAVE_FLOOD_TRAP_KIND_SAVE_MAGIC);
+    wr_u16b(count);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_trap_is_acid_at(y, x))
+            {
+                wr_byte((byte)y);
+                wr_byte((byte)x);
+                wr_byte(CAVE_FLOOD_KIND_ACID);
+    }
+}
+
+static void wr_flood_surface_markers(void)
+{
+    u16b count = 0;
+
+    /* Surface markers distinguish flood-created acid from natural poison.
+     * Store the exact set so a long, narrow flood does not regain banks after
+     * loading from its source and stage alone. */
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (cave_flood_surface_kind_at(y, x))
+                count++;
+
+    wr_u16b(CAVE_FLOOD_SURFACE_SAVE_MAGIC);
+    wr_u16b(count);
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            byte kind = cave_flood_surface_kind_at(y, x);
+            if (!kind)
+                continue;
+            wr_byte((byte)y);
+            wr_byte((byte)x);
+            wr_byte(kind);
+        }
+}
+
+static void wr_monster_social(void)
+{
+    wr_u16b(MON_SOCIAL_SAVE_MAGIC);
+    for (int a = 1; a < MON_GROUP_MAX; a++)
+        for (int b = a + 1; b < MON_GROUP_MAX; b++)
+            wr_byte((byte)monster_group_relation(a, b));
+    wr_u16b(mon_max);
+    for (int i = 1; i < mon_max; i++)
+    {
+        const monster_type* m = &mon_list[i];
+        wr_byte(m->social_group);
+        wr_s16b(m->social_rival);
+        wr_byte(m->social_memory);
+        wr_byte(m->social_cooldown);
+        wr_byte(m->social_state);
+        wr_byte(m->social_timer);
+        wr_s16b(m->social_focus);
+        wr_s16b(m->social_ally);
+        wr_byte(m->social_player_threat);
+    }
+}
 
 /*
  * Write the current dungeon
@@ -303,6 +450,9 @@ void wr_dungeon(void)
     }
     log_trace("[save:%06u] === END CAVE_NATURAL RLE ===", (unsigned)save_byte_offset);
 
+    wr_fixtures();
+    wr_water_flow();
+
     /*** Compact ***/
 
     log_trace("[save:%06u] Compacting objects and monsters", (unsigned)save_byte_offset);
@@ -362,7 +512,28 @@ void wr_dungeon(void)
     }
     log_trace("[save:%06u] === END WANDERING MONSTERS ===", (unsigned)save_byte_offset);
 
+    /* Fixed-size normalized ages avoid depending on the wrapping scent clock. */
+    wr_u16b(0x5CE6);
+    for (y = 0; y < p_ptr->cur_map_hgt; ++y)
+        for (x = 0; x < p_ptr->cur_map_wid; ++x)
+            wr_byte(scent_export_cell(y, x));
+
+    wr_floods();
+    wr_flood_trap_kinds();
+    wr_flood_surface_markers();
+    save_write_environment();
+    wr_monster_social();
+    wr_u16b(MON_ROUTINE_SAVE_MAGIC);
+    wr_u16b(mon_max);
+    for (i = 1; i < mon_max; i++)
+    {
+        const monster_routine_state* r = &mon_list[i].routine;
+        wr_byte(r->home_y); wr_byte(r->home_x); wr_byte(r->territory);
+        wr_byte(r->style); wr_byte(r->count); wr_byte(r->next);
+        for (int j = 0; j < r->count; j++)
+        { wr_byte(r->y[j]); wr_byte(r->x[j]); }
+    }
+
     log_debug("Dungeon data write completed - %d objects, %d monsters", o_max - 1, mon_max - 1);
     log_trace("[save:%06u] === END DUNGEON ===", (unsigned)save_byte_offset);
 }
-

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -1112,7 +1113,7 @@ static void song_menu_show_overlay(const int songs[], int song_count,
     sdl_song_menu_begin("Songs");
 
     sdl_song_menu_add_entry(line, steamdeck ? "" : "s)", "Stop Singing",
-        TERM_SLATE);
+        TERM_L_WHITE);
     line++;
 
     for (int j = 0; j < song_count; j++)
@@ -1129,7 +1130,7 @@ static void song_menu_show_overlay(const int songs[], int song_count,
     if (p_ptr->song2 != SNG_NOTHING)
     {
         sdl_song_menu_add_entry(line, steamdeck ? "" : "x)",
-            "Exchange themes", TERM_L_BLUE);
+            "Exchange themes", TERM_L_WHITE);
         line++;
     }
 
@@ -1166,6 +1167,7 @@ static void song_menu_show_message(cptr text)
 
 void do_cmd_change_song()
 {
+    tutorial_game_menu("songs", "Choose, change or stop a song. Each active theme spends its own Voice cost, and Voice does not regenerate while singing.");
     bool done = false;
 
     int songs[SNG_MAX];
@@ -3126,6 +3128,9 @@ static void ability_browser_build_summary(int skilltype, char* summary,
 
 static bool ability_browser_train_skill(int skilltype)
 {
+    if (!tutorial_game_action_allowed("train", NULL)) return false;
+    tutorial_game_explain_now("advancement.skills", "Train a skill", "The next base rank costs 100 times the new rank in XP. Training changes the base skill; attributes and equipment contribute separately.");
+    if (!tutorial_game_action_allowed("train", NULL)) return false;
     int cost;
     int old_base;
     char prompt[120];
@@ -3347,6 +3352,26 @@ static void ability_browser_draw_skill_summary(
         ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + skill,
             col, tab_row, token_widths[skill]);
         col += token_widths[skill];
+    }
+}
+
+static void ability_browser_enable_skill_swipe(
+    const ability_browser_layout* layout, int skill_options)
+{
+    if (!layout || skill_options < 2 || layout->skill_w <= 0
+        || layout->skill_rows <= 0)
+    {
+        return;
+    }
+
+    if (ui_scroll_area_add_cols(layout->skill_col,
+            layout->skill_col + layout->skill_w - 1, layout->skill_row,
+            layout->skill_row + layout->skill_rows - 1,
+            SDL_TOUCH_MENU_CATEGORY_OTHER))
+    {
+        ui_scroll_area_set_keys(0, 0, '[', ']');
+        ui_scroll_area_set_horizontal_page_mode(true);
+        ui_scroll_area_enable_horizontal_page_swipe('[', ']');
     }
 }
 
@@ -4003,15 +4028,29 @@ static void ability_browser_add_prerequisites(
 
     if (skilltype != S_SPC
         && !p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-        && prereqs(skilltype, b_ptr->abilitynum))
+        && prereq_abilities_met(b_ptr))
     {
-        int exp_cost = ability_purchase_exp_cost(skilltype);
+        int ability_xp = ability_purchase_exp_cost(skilltype);
+        int skill_xp = (b_ptr->level > p_ptr->skill_base[skilltype])
+            ? ability_browser_skill_training_cost(
+                p_ptr->skill_base[skilltype], b_ptr->level)
+            : 0;
+        int total_xp = skill_xp + ability_xp;
+        byte cost_attr = (total_xp <= p_ptr->new_exp)
+            ? TERM_L_GREEN : TERM_L_DARK;
 
-        strnfmt(buf, sizeof(buf), "Price: %d XP (%ld available)",
-            exp_cost, (long)p_ptr->new_exp);
-        ability_desc_add_wrapped(lines, line_count,
-            (exp_cost <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK,
-            buf, width);
+        if (skill_xp > 0)
+        {
+            strnfmt(buf, sizeof(buf),
+                "Total XP: %d (%d skill + %d ability; %ld available)",
+                total_xp, skill_xp, ability_xp, (long)p_ptr->new_exp);
+        }
+        else
+        {
+            strnfmt(buf, sizeof(buf), "Ability XP: %d (%ld available)",
+                ability_xp, (long)p_ptr->new_exp);
+        }
+        ability_desc_add_wrapped(lines, line_count, cost_attr, buf, width);
     }
 }
 
@@ -4783,6 +4822,7 @@ static void ability_browser_draw_prompt(const ability_browser_layout* layout)
 
 static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 {
+    if (!tutorial_game_action_allowed("buy-ability", NULL)) return false;
     int banechoice = -1;
     int oathchoice = -1;
     int highlight3 = 1;
@@ -4805,6 +4845,10 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         ability_type* b_ptr;
         bool has_skill_prereq;
         bool has_ability_prereq;
+        bool train_skill = false;
+        int old_skill_base = 0;
+        int skill_cost = 0;
+        int total_exp_cost;
         int exp_cost;
 
         if (skilltype == S_SPC)
@@ -4817,12 +4861,6 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
         has_ability_prereq = prereq_abilities_met(b_ptr);
 
-        if (!has_skill_prereq)
-        {
-            bell("Insufficient skill points for ability!");
-            return false;
-        }
-
         if (!has_ability_prereq)
         {
             bell("Insufficient prerequisite abilities for ability!");
@@ -4830,7 +4868,30 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         }
 
         exp_cost = ability_purchase_exp_cost(skilltype);
-        if (exp_cost > p_ptr->new_exp)
+        total_exp_cost = exp_cost;
+        if (!has_skill_prereq)
+        {
+            old_skill_base = p_ptr->skill_base[skilltype];
+            skill_cost = ability_browser_skill_training_cost(
+                old_skill_base, b_ptr->level);
+            total_exp_cost += skill_cost;
+            train_skill = true;
+
+            if (b_ptr->level > BASE_SKILL_MAX)
+            {
+                bell("This ability requires an invalid skill level.");
+                return false;
+            }
+
+            if (total_exp_cost > p_ptr->new_exp)
+            {
+                msg_format("Need %d XP (%d skill + %d ability), but only %ld XP is available.",
+                    total_exp_cost, skill_cost, exp_cost,
+                    (long)p_ptr->new_exp);
+                return false;
+            }
+        }
+        else if (exp_cost > p_ptr->new_exp)
         {
             bell("You do not have enough experience to acquire this ability.");
             return false;
@@ -4889,7 +4950,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 
         {
             char gain_name[80];
-            char prompt[160];
+            char prompt[240];
 
             if (banechoice > 0)
             {
@@ -4907,17 +4968,41 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                     sizeof(gain_name));
             }
 
-            strnfmt(prompt, sizeof(prompt), "Gain %s for %d XP? ",
-                gain_name, exp_cost);
+            tutorial_game_ability(skilltype, abilitynum, true);
+            if (skilltype == S_SNG)
+                tutorial_game_explain("advancement.song", gain_name,
+                    "Buying a song does not start singing. Its description states its Voice cost; Voice does not regenerate while any song is active.");
+            tutorial_game_wait();
+            if (!tutorial_game_action_allowed("buy-ability", NULL)) return false;
+            if (train_skill)
+            {
+                strnfmt(prompt, sizeof(prompt),
+                    "Raise %s %d to %d (%d XP) and gain %s (%d XP), %d XP total? ",
+                    skill_names_full[skilltype], old_skill_base,
+                    b_ptr->level, skill_cost, gain_name, exp_cost,
+                    total_exp_cost);
+            }
+            else
+            {
+                strnfmt(prompt, sizeof(prompt), "Gain %s for %d XP? ",
+                    gain_name, exp_cost);
+            }
             if (!get_check(prompt))
                 return false;
+        }
+
+        if (train_skill)
+        {
+            p_ptr->skill_base[skilltype] = b_ptr->level;
+            if (old_skill_base == 0)
+                sdl_quick_access_suggest_skill_shortcut(skilltype);
         }
 
         p_ptr->innate_ability[skilltype][abilitynum] = true;
         p_ptr->have_ability[skilltype][abilitynum] = true;
         p_ptr->active_ability[skilltype][abilitynum] = true;
         ability_log_record_gain(skilltype, abilitynum);
-        p_ptr->new_exp -= exp_cost;
+        p_ptr->new_exp -= total_exp_cost;
 
         if (banechoice <= 0 && oathchoice <= 0)
         {
@@ -5848,6 +5933,7 @@ int abilities_menu2(int skilltype, int* highlight)
 
 void do_cmd_ability_screen(void)
 {
+    tutorial_game_menu("abilities", "Select a skill and an ability to read its requirements, XP cost and current effect. Buying and toggling are separate from browsing.");
     int skill_cur = S_MEL;
     int entry_cur = 0;
     int entry_top = 0;
@@ -5974,6 +6060,7 @@ void do_cmd_ability_screen(void)
              * the description belonging to the selected ability. */
             ui_scroll_area_set_offset_target(&desc_top, desc_max_top);
         }
+        ability_browser_enable_skill_swipe(&layout, skill_options);
 
         if (ui_menu_click_get_hover_choice(&hover_choice)
             && hover_choice == ABILITY_MENU_CLICK_TRAIN)

@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-projection-effects.c */
 
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "spell/spell-projection-internal.h"
 #include "log/log.h"
@@ -48,6 +49,12 @@ bool project_f(
     /* Analyze the type */
     switch (typ)
     {
+    case GF_FIRE:
+    case GF_COLD:
+        if (cave_transform_elemental_terrain(y, x, typ))
+            obvious = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
+        break;
+
     /* Ignore most effects */
 
     /* Destroy Traps */
@@ -88,6 +95,7 @@ bool project_f(
                 /* Unlock the door */
                 cave_set_feat(y, x, FEAT_DOOR_HEAD + 0x00);
 
+                sound_at(MSG_OPENDOOR, y, x);
                 msg_print("You hear a 'click'.");
             }
             else if (result <= 10)
@@ -97,6 +105,7 @@ bool project_f(
 
                 /* Open the door */
                 cave_set_feat(y, x, FEAT_OPEN);
+                sound_at(MSG_OPENDOOR, y, x);
 
                 /* Update the flow code */
                 p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
@@ -116,6 +125,7 @@ bool project_f(
             {
                 /* Break the door */
                 cave_set_feat(y, x, FEAT_BROKEN);
+                sound_at(MSG_BASHDOOR, y, x);
 
                 /* Update the flow code */
                 p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
@@ -177,39 +187,23 @@ bool project_f(
         if (cave_feat[y][x] == FEAT_WALL_PERM)
             break;
 
-        /* Granite */
-        if (cave_feat[y][x] >= FEAT_WALL_EXTRA
-            && skill_check(PLAYER, dif, 14, NULL) > 0)
+        /* Classify once: failed granite checks must not retry as quartz. */
+        if (FEAT_IS_ROCK(cave_feat[y][x]))
         {
-            /* Message */
-            if (cave_info[y][x] & (CAVE_MARK))
+            int old = cave_feat[y][x];
+            int resistance = FEAT_IS_GRANITE(old) ? 14 : 12;
+            int margin = skill_check(PLAYER, dif, resistance, NULL);
+            int next = cave_rock_damage_feature(old, margin);
+            if (next != old)
             {
-                msg_print("The wall shatters!");
-                obvious = true;
+                if (cave_info[y][x] & CAVE_MARK)
+                {
+                    msg_print(next == FEAT_RUBBLE ? "The stone shatters into rubble!"
+                        : "Cracks spread through the stone!");
+                    obvious = true;
+                }
+                cave_set_feat(y, x, next);
             }
-
-            /* Forget the wall */
-            cave_info[y][x] &= ~(CAVE_MARK);
-
-            /* Destroy the wall */
-            cave_set_feat(y, x, FEAT_RUBBLE);
-        }
-        /* Quartz */
-        else if (cave_feat[y][x] >= FEAT_QUARTZ
-            && skill_check(PLAYER, dif, 12, NULL) > 0)
-        {
-            /* Message */
-            if (cave_info[y][x] & (CAVE_MARK))
-            {
-                msg_print("The vein shatters!");
-                obvious = true;
-            }
-
-            /* Forget the wall */
-            cave_info[y][x] &= ~(CAVE_MARK);
-
-            /* Destroy the wall */
-            cave_set_feat(y, x, FEAT_RUBBLE);
         }
         /* Rubble */
         else if (cave_feat[y][x] == FEAT_RUBBLE
@@ -609,6 +603,7 @@ bool project_m(
     bool who_vis = (who == -1) ? true : who_ptr->ml;
 
     int dam = damroll(dd, ds);
+    int poison_dose = 0;
 
     // Monster's skill modifier
     int resistance;
@@ -782,6 +777,14 @@ bool project_m(
             if (seen)
                 l_ptr->flags3 |= (RF3_RES_POIS);
         }
+        else if (dam > 0)
+        {
+            poison_dose = dam;
+            monster_poison_add(cave_m_idx[y][x], poison_dose);
+            note = " is poisoned.";
+        }
+        /* Poison projections build the same delayed counter as weapons. */
+        dam = 0;
         break;
     }
 
@@ -1430,7 +1433,7 @@ bool project_m(
     }
 
     // update combat info
-    if ((dam > 0) && m_ptr->ml)
+    if ((dam > 0 || poison_dose > 0) && m_ptr->ml)
     {
         int combat_dd = dd;
         int combat_ds = ds;
@@ -1439,7 +1442,9 @@ bool project_m(
             combat_ds = cave_light[y][x];
 
         update_combat_rolls1b(who_ptr, m_ptr, who_vis);
-        update_combat_rolls2(combat_dd, combat_ds, dam, -1, -1, 0, 0, typ, false);
+        update_combat_rolls2(combat_dd, combat_ds,
+            poison_dose > 0 ? poison_dose : dam,
+            -1, -1, 0, 0, typ, false);
     }
 
     /* If another monster did the damage, hurt the monster by hand */
@@ -1502,6 +1507,8 @@ bool project_m(
         /* Damaged monster */
         else
         {
+            if (dam > 0)
+                monster_sound(m_ptr, MONSTER_SOUND_DAMAGE);
             // Alert it
             make_alert(m_ptr);
 
@@ -1533,7 +1540,7 @@ bool project_m(
             note_dies = "";
 
         /* Check for oath breaking before applying damage */
-        if (who < 0 && dam > 0) // Player-caused damage
+        if (who < 0 && (dam > 0 || poison_dose > 0)) // Player-caused damage
         {
             /* All player-caused attacks break Valor on hit */
             if (m_ptr->ml && cowardly_attack(m_ptr))
@@ -1543,7 +1550,7 @@ bool project_m(
                 p_ptr->oaths_broken |= OATH_VALOROUS_FLAG;
             }
 
-            break_mercy_oath(m_ptr, dam);
+            break_mercy_oath(m_ptr, MAX(dam, poison_dose));
         }
 
         /* Hurt the monster, check for death */
@@ -1576,7 +1583,8 @@ bool project_m(
             if ((do_fear) && (m_ptr->ml) && (!suppress_message))
             {
                 /* Message */
-                message_format(MSG_FLEE, m_ptr->r_idx, "%^s cowers.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_FLEE,
+                    m_ptr->r_idx, "%^s cowers.", m_name);
             }
 
             /* Hack -- handle sleep */
@@ -1732,7 +1740,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by fire!");
-        fire_dam_pure(dd, ds, true, killer);
+        fire_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1741,7 +1749,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by cold!");
-        cold_dam_pure(dd, ds, true, killer);
+        cold_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1750,7 +1758,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by something!");
-        dark_dam_pure(dd, ds, true, killer);
+        dark_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1767,7 +1775,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by poison!");
-        (void)pois_dam_pure(dd, ds, true);
+        pois_dam_pure_observed(dd, ds, true, who > 0 ? m_ptr : NULL);
         break;
     }
 
@@ -1959,6 +1967,8 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
         hit_result = hit_roll(
             total_attack_mod, total_evasion_mod, m_ptr, PLAYER, true);
 
+        monster_ai_observe(m_ptr, MON_AI_ACCURACY, hit_result > 0 ? -1 : 1);
+
         if (hit_result > 0)
         {
             int feat = cave_feat[p_ptr->py][p_ptr->px];
@@ -1966,6 +1976,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
 
             if (can_web)
             {
+                monster_ai_observe(m_ptr, MON_AI_WEB, -1);
                 if (blind)
                 {
                     msg_print("Something sticky falls over you.");
@@ -2041,4 +2052,3 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     /* Return "Anything seen?" */
     return (obvious);
 }
-

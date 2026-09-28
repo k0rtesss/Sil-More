@@ -48,6 +48,10 @@ errr parse_quest_info(char* buf, header* head)
         /* Point at the "info" */
         quest_ptr = (quest_type*)head->info_ptr + i;
 
+        /* Formula bounds default once per record.  E: may precede P:. */
+        quest_ptr->depth_min = 0;
+        quest_ptr->depth_max = 25;
+
         /* Store the name */
         if (!(quest_ptr->name = add_name(head, s)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
@@ -103,8 +107,6 @@ errr parse_quest_info(char* buf, header* head)
         quest_ptr->formula_params[1] = 0.0f;
         quest_ptr->formula_params[2] = 0.0f;
         quest_ptr->formula_params[3] = 0.0f;
-        quest_ptr->depth_min = 0;
-        quest_ptr->depth_max = 25;
         
         /* Parse formula name */
         if (sscanf(buf + 2, "%31[^:]", formula_name) == 1) {

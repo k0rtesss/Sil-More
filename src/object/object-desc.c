@@ -1287,9 +1287,18 @@ void object_desc(
     else if (o_ptr->tval == TV_CHEST)
     {
         cptr tail = "";
+        bool trap_details_known = known;
+
+        /* Generic item identification (for example, from Enchantment) does
+         * not identify an armed chest's concealed trap in the minigame. */
+        if (chest_trap_minigame && o_ptr->pval > 0)
+        {
+            trap_details_known
+                = (o_ptr->ident & IDENT_CHEST_TRAP_FULL) != 0;
+        }
 
         /* Not searched yet */
-        if (!known || (o_ptr->sval == SV_CHEST_PRESENT))
+        if (!trap_details_known || (o_ptr->sval == SV_CHEST_PRESENT))
         {
             /* Nothing */
         }

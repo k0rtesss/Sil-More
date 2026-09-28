@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -173,20 +174,29 @@ void do_cmd_exchange(void)
 
     /* Message */
     msg_format("You exchange places with %s.", m_name);
+    monster_ai_witness(MON_AI_EXCHANGE, 3, y, x);
 
     // attack of opportunity
     if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
-        && !(r_ptr->flags2 & (RF2_MINDLESS)))
+        && !(r_ptr->flags2 & (RF2_MINDLESS))
+        && monster_abilities_can_react(m_ptr))
     {
         msg_print("It attacks you as you slip past.");
-        make_attack_normal(m_ptr);
+        make_attack_reaction(m_ptr);
     }
 
     // Alert the monster
     make_alert(m_ptr);
 
     // Swap positions with the monster
-    monster_swap(p_ptr->py, p_ptr->px, y, x);
+    {
+        int from_feat = cave_feat[p_ptr->py][p_ptr->px];
+        p_ptr->leaping = false;
+        monster_swap(p_ptr->py, p_ptr->px, y, x);
+        if (p_ptr->is_dead) return;
+        if (p_ptr->py == y && p_ptr->px == x)
+            player_water_movement(from_feat, cave_feat[y][x]);
+    }
 
     /* Set off traps */
     if (cave_trap_bold(y, x) || (cave_feat[y][x] == FEAT_CHASM))

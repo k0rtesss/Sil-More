@@ -357,7 +357,7 @@ static NavResult player_birth_aux(void)
                 /* Skill allocation: Esc returns to stats; q returns to character selection. */
                 log_debug("Stats accepted, entering skills allocation");
                 screen_push_touch_pane_hidden();
-                NavResult g = gain_skills();
+                NavResult g = gain_skills_birth();
                 screen_pop_touch_pane_hidden();
                 if (g == NAV_BACK) continue;
                 if (g == NAV_TO_CHARACTER) {

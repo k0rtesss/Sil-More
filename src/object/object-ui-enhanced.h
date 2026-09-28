@@ -6,6 +6,8 @@
 #include "angband.h"
 
 void describe_item_with_comparisons(int item_index, bool include_comparisons);
+void describe_object_with_comparisons(object_type* o_ptr,
+    bool include_comparisons);
 char describe_item_with_floor_actions(int item_index, bool include_comparisons);
 void show_inven_enhanced(void);
 void show_equip_enhanced(void);

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "sdl/main-sdl-private.h"
 #include "ui/question.h"
@@ -587,6 +588,12 @@ bool sdl_main_menu_choice_disabled_now(int choice)
 
 void sdl_main_menu_overlay_reset_nav_input(void)
 {
+    /* A movement accepted before the menu opened must not survive its wake
+     * key being consumed by the overlay and run after the menu closes. */
+    movement_input_clear_commands();
+    sdl_gamepad_context_focus_clear();
+    sdl_gamepad_reset_modifiers();
+    sdl_gamepad_clear_pending_shoulder();
     g_gamepad_state.dpad_up = false;
     g_gamepad_state.dpad_down = false;
     g_gamepad_state.dpad_left = false;
@@ -598,11 +605,13 @@ void sdl_main_menu_overlay_reset_nav_input(void)
     g_gamepad_state.left_y = 0;
     g_gamepad_state.left_dir = 0;
     g_gamepad_state.left_bind_dir = -1;
-    sdl_gamepad_clear_pending_left_stick();
+    g_gamepad_state.left_ui_dir = -1;
+    sdl_gamepad_clear_pending_sticks();
 
     g_gamepad_state.right_x = 0;
     g_gamepad_state.right_y = 0;
     g_gamepad_state.right_dir = -1;
+    g_gamepad_state.right_ui_dir = -1;
 
     g_main_menu_overlay_left_stick_dir = 0;
     g_main_menu_overlay_right_stick_dir = 0;
@@ -670,6 +679,8 @@ void sdl_main_menu_overlay_begin(void)
 
     sdl_main_menu_overlay_scroll_to_highlight(layout.visible_count);
     g_state.need_present = true;
+    tutorial_game_menu("main-menu", "Open character views, Supplies, Knowledge, tutorials and settings from this menu.");
+    tutorial_checkpoint(true);
 }
 
 void sdl_main_menu_overlay_move(int delta)
@@ -994,6 +1005,7 @@ void sdl_popup_notification_render(void)
     SDL_FRect panel;
     SDL_FRect shadow;
     TTF_Font* font;
+    SDL_Color accent;
     SDL_Color text;
     Uint8 alpha;
 
@@ -1012,7 +1024,8 @@ void sdl_popup_notification_render(void)
     SDL_SetRenderDrawColor(g_state.renderer, 8, 10, 12,
         sdl_popup_notification_scaled_alpha(alpha, 226));
     SDL_RenderFillRect(g_state.renderer, &panel);
-    SDL_SetRenderDrawColor(g_state.renderer, 255, 184, 94,
+    accent = g_state.palette[TERM_L_BLUE];
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
         sdl_popup_notification_scaled_alpha(alpha, 154));
     SDL_RenderRect(g_state.renderer, &panel);
 
@@ -1102,7 +1115,7 @@ void sdl_main_menu_pane_render(void)
         return;
 
     text = g_state.palette[g_main_menu_pane_hover
-        ? TERM_YELLOW : TERM_L_WHITE];
+        ? TERM_L_BLUE : TERM_L_WHITE];
 
     shadow = rect;
     shadow.x += 2.0f;
@@ -1184,6 +1197,12 @@ static void sdl_main_menu_button_queue_disable_prompt(void)
 
     g_main_menu_button_disable_prompt_pending = true;
     Term_keypress('m');
+}
+
+void sdl_main_menu_button_cancel_input(void)
+{
+    sdl_main_menu_button_clear_press();
+    g_main_menu_button_disable_prompt_pending = false;
 }
 
 bool sdl_main_menu_button_handle_secondary_pointer(float x, float y)
@@ -1692,51 +1711,44 @@ bool sdl_main_menu_overlay_handle_gamepad_button(
     const SDL_GamepadButtonEvent* ev)
 {
     SDL_GamepadButton button;
-    int binding;
-    int choice;
 
     if (!g_main_menu_overlay_active || !ev)
         return false;
+    if (!config.gamepad_enabled)
+        return true;
     if (!ev->down)
         return true;
 
     sdl_gamepad_mark_auto_ui();
     button = (SDL_GamepadButton)ev->button;
-    binding = sdl_gamepad_capture_binding_for_input(GAMEPAD_CAPTURE_BUTTON,
-        (int)button);
 
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP || binding == '8') {
-        sdl_main_menu_overlay_move(-1);
-        return true;
-    }
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_DOWN || binding == '2') {
-        sdl_main_menu_overlay_move(1);
-        return true;
-    }
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
-        || binding == steamdeck_back_key())
+    /* Native overlays own physical UI semantics before configurable gameplay
+     * bindings.  Binding collisions must never make South go Back or East
+     * confirm a choice. */
+    if (sdl_gamepad_button_is_ui_back(button)
+        || button == SDL_GAMEPAD_BUTTON_START)
     {
         sdl_main_menu_overlay_close();
         return true;
     }
-    if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT
-        || binding == steamdeck_confirm_key())
-    {
+    if (sdl_gamepad_button_is_ui_confirm(button)) {
         sdl_main_menu_overlay_choose(g_main_menu_overlay_highlight);
         return true;
     }
 
-    choice = main_menu_choice_from_key(binding);
-    if (choice > 0) {
-        sdl_main_menu_overlay_choose(choice);
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP) {
+        sdl_main_menu_overlay_move(-1);
         return true;
     }
-
-    if (button == SDL_GAMEPAD_BUTTON_EAST) {
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_DOWN) {
+        sdl_main_menu_overlay_move(1);
+        return true;
+    }
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT) {
         sdl_main_menu_overlay_close();
         return true;
     }
-    if (button == SDL_GAMEPAD_BUTTON_SOUTH) {
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
         sdl_main_menu_overlay_choose(g_main_menu_overlay_highlight);
         return true;
     }

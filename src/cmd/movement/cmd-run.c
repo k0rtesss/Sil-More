@@ -1,8 +1,11 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
+#include "log/perf.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "cave/cave-environment.h"
 #include "ui/question.h"
 #include <math.h>
 
@@ -33,12 +36,65 @@ bool player_grid_is_leapable_obstacle(int y, int x)
 {
     if (!in_bounds(y, x))
         return false;
-    if (cave_feat[y][x] == FEAT_CHASM)
+    if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_WATER
+        || cave_feat[y][x] == FEAT_LAVA || cave_feat[y][x] == FEAT_POISON)
         return true;
 
     return cave_trap_bold(y, x) && !cave_floorlike_bold(y, x)
         && !cave_rewired[y][x] && cave_feat[y][x] != FEAT_TRAP_ROOST
         && cave_feat[y][x] != FEAT_TRAP_WEB;
+}
+
+static bool player_has_leap_run_up(int dir)
+{
+    int i;
+    int d;
+    int y = p_ptr->py + ddy[dir];
+    int x = p_ptr->px + ddx[dir];
+
+    for (i = -1; i <= 1; i++)
+    {
+        d = cycle[chome[dir_from_delta(y - p_ptr->py, x - p_ptr->px)] + i];
+        if (p_ptr->previous_action[1] == d)
+            return true;
+    }
+
+    return false;
+}
+
+/* Ask before choosing between entering a hazardous tile and using Leaping. */
+static int player_terrain_movement_choice(int y, int x)
+{
+    ui_question_option options[2] = {
+        { 'j', "Jump over", TERM_L_GREEN, false },
+        { 'g', "Go in", TERM_L_RED, false }
+    };
+    char desc[480];
+    int choice;
+
+    if (cave_feat[y][x] == FEAT_WATER)
+    {
+        SDL_strlcpy(desc,
+            "You can go into the shallow water, or use Leaping to cross "
+            "this one-tile stretch without touching it.", sizeof(desc));
+    }
+    else if (cave_feat[y][x] == FEAT_POISON)
+    {
+        SDL_strlcpy(desc,
+            "You can go into the poisonous acid, or use Leaping to cross "
+            "this one-tile stretch without touching it.", sizeof(desc));
+    }
+    else
+    {
+        int damage = player_lava_damage_at(y, x, true);
+        strnfmt(desc, sizeof(desc),
+            "You can go into the molten lava, or jump over it. The leap "
+            "will still deal %d heat damage.", damage);
+    }
+
+    choice = ui_question_ask("Choose how to cross", desc, options, 2,
+        y, x, 0);
+    return choice;
 }
 
 static bool move_target_exits_gates(int y, int x)
@@ -53,12 +109,10 @@ static bool move_target_exits_gates(int y, int x)
         || (x == p_ptr->cur_map_wid - 1);
 }
 
-/*
- * Return the strongest actual mattock in the main-hand slot or pack.
- * Forge sabotage deliberately excludes shovels, while using the same
- * tunneling value as quartz-vein destruction.
- */
-static object_type* forge_sabotage_mattock(int* out_score)
+/* Return the strongest carried item with tunneling, using the same value as
+ * quartz-vein destruction.  Forge sabotage does not require a specific item
+ * type: weapons with tunneling work just as digging tools do. */
+static object_type* forge_sabotage_item(int* out_score)
 {
     object_type* best = NULL;
     int best_score = 0;
@@ -70,8 +124,7 @@ static object_type* forge_sabotage_mattock(int* out_score)
                             : player_pack_entry_at(ordinal);
         u32b f1, f2, f3;
 
-        if (!o_ptr->k_idx || (o_ptr->tval != TV_DIGGING)
-            || (o_ptr->sval != SV_MATTOCK))
+        if (!o_ptr->k_idx)
         {
             continue;
         }
@@ -96,7 +149,7 @@ static object_type* forge_sabotage_mattock(int* out_score)
 static bool forge_entry_choice(int y, int x)
 {
     ui_question_option options[2];
-    object_type* mattock;
+    object_type* tunneling_item;
     int digging_score = 0;
     int feat = cave_feat[y][x];
     int choice;
@@ -122,18 +175,18 @@ static bool forge_entry_choice(int y, int x)
         return choice == 0;
     }
 
-    mattock = forge_sabotage_mattock(&digging_score);
-    if (!mattock)
+    tunneling_item = forge_sabotage_item(&digging_score);
+    if (!tunneling_item)
     {
         SDL_strlcpy(tool_status,
-            "You carry no mattock with which to break it apart.",
+            "You carry no weapon or tool with tunneling to break it apart.",
             sizeof(tool_status));
     }
     else if (digging_score < TUNNEL_DIFFICULTY_QUARTZ)
     {
         char o_name[80];
 
-        object_desc(o_name, sizeof(o_name), mattock, false, -1);
+        object_desc(o_name, sizeof(o_name), tunneling_item, false, -1);
         strnfmt(tool_status, sizeof(tool_status),
             "Your %s has tunneling %d; destroying the forge requires %d.",
             o_name, digging_score, TUNNEL_DIFFICULTY_QUARTZ);
@@ -141,17 +194,17 @@ static bool forge_entry_choice(int y, int x)
     else if (p_ptr->stat_use[A_STR] < TUNNEL_DIFFICULTY_QUARTZ)
     {
         strnfmt(tool_status, sizeof(tool_status),
-            "Your mattock is suitable, but destroying the forge requires "
+            "Your tunneling item is suitable, but destroying the forge requires "
             "Strength %d.",
             TUNNEL_DIFFICULTY_QUARTZ);
     }
     else
     {
         SDL_strlcpy(tool_status,
-            "Your mattock and Strength are sufficient to destroy it.",
+            "Your tunneling item and Strength are sufficient to destroy it.",
             sizeof(tool_status));
     }
-    can_destroy = mattock
+    can_destroy = tunneling_item
         && (digging_score >= TUNNEL_DIFFICULTY_QUARTZ)
         && (p_ptr->stat_use[A_STR] >= TUNNEL_DIFFICULTY_QUARTZ);
 
@@ -182,7 +235,7 @@ static bool forge_entry_choice(int y, int x)
     if (choice != 1)
         return false;
 
-    sound(MSG_DIG);
+    sound_at(MSG_DIG, y, x);
     monster_perception(true, false, -10);
     cave_set_feat(y, x, FEAT_RUBBLE);
     gain_exp(FORGE_DESTROY_EXP);
@@ -195,6 +248,7 @@ static bool forge_entry_choice(int y, int x)
 
 void move_player(int dir)
 {
+    if (!tutorial_game_command_allowed(';', dir)) return;
     int py = p_ptr->py;
     int px = p_ptr->px;
 
@@ -315,33 +369,119 @@ void move_player(int dir)
             return;
         }
 
-        /* Check before walking on known traps/chasms on movement */
-        if ((!p_ptr->confused) && (cave_info[y][x] & (CAVE_MARK)))
+        /* Check before walking onto known leapable hazards */
+        if (!p_ptr->confused
+            && p_ptr->active_ability[S_SMT][SMT_REPAIR]
+            && (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
         {
-            // leapable things: chasms, traps (except roosts and webs).
-            // A trap the player has rewired is safe for them -- no leap prompt.
-            if (player_grid_is_leapable_obstacle(y, x))
+            environment_bridge_job bridge_job;
+
+            if (cave_environment_bridge_job_at(y, x, &bridge_job)
+                && bridge_job.repair)
             {
-                char prompt[80];
-                int i;
-                int d;
-                bool run_up = false;
-                bool confirm = true;
+                int command = 0;
 
-                // test all three directions roughly towards the chasm/pit
-                for (i = -1; i <= 1; i++)
+                /* A broken crossing is still a walkable liquid tile, so give
+                 * Reforge a chance before water/leap handling takes over. */
+                disturb(0, 0);
+                flush();
+                if (!grid_interact_question(y, x, &command, NULL))
                 {
-                    d = cycle[chome[dir_from_delta(
-                                  y - p_ptr->py, x - p_ptr->px)]
-                        + i];
-
-                    // if the last action was a move in this direction, we have
-                    // a valid run_up
-                    if (p_ptr->previous_action[1] == d)
-                        run_up = true;
+                    p_ptr->energy_use = 0;
+                    return;
                 }
 
-                if (p_ptr->active_ability[S_EVN][EVN_LEAPING])
+                if (command == '/')
+                {
+                    /* The selected repair is a different command from the
+                     * movement command that opened this prompt. Preserve it
+                     * for the automatic remaining-work repetitions. */
+                    p_ptr->command_cmd = '/';
+                    p_ptr->command_dir = dir;
+                    do_cmd_alter();
+                    return;
+                }
+
+                if (command != ';')
+                {
+                    p_ptr->energy_use = 0;
+                    return;
+                }
+            }
+        }
+
+        if ((!p_ptr->confused) && (cave_info[y][x] & (CAVE_MARK)))
+        {
+            bool terrain_entry_chosen = false;
+            bool terrain_jump_chosen = false;
+            bool run_up = player_has_leap_run_up(dir);
+
+            // leapable things: chasms, traps (except roosts and webs).
+            // A trap the player has rewired is safe for them -- no leap prompt.
+            if (player_grid_is_leapable_obstacle(y, x)
+                && (cave_feat[y][x] != FEAT_POISON
+                    || (cave_feat[py][px] != FEAT_POISON
+                        && in_bounds_fully(y + ddy[dir], x + ddx[dir])
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]]
+                            & (CAVE_MARK | CAVE_SEEN))
+                        && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_POISON))
+                && (cave_feat[y][x] != FEAT_LAVA
+                    || (cave_feat[py][px] != FEAT_LAVA
+                        && in_bounds_fully(y + ddy[dir], x + ddx[dir])
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]]
+                            & (CAVE_MARK | CAVE_SEEN))
+                        && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_LAVA))
+                && (cave_feat[y][x] != FEAT_WATER
+                    || (cave_feat[py][px] != FEAT_WATER
+                        && in_bounds_fully(y + ddy[dir], x + ddx[dir])
+                        && (cave_info[y + ddy[dir]][x + ddx[dir]]
+                            & (CAVE_MARK | CAVE_SEEN))
+                        && cave_feat[y + ddy[dir]][x + ddx[dir]] != FEAT_WATER)))
+            {
+                char prompt[160];
+                bool confirm = true;
+
+                /* A one-tile water, acid, or lava crossing can be handled in
+                 * two ways. Ask only when the same conditions below make a
+                 * real leap available; traps and chasms retain their old
+                 * automatic leap behavior. */
+                if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
+                    && run_up
+                    && (cave_feat[y][x] == FEAT_WATER
+                        || cave_feat[y][x] == FEAT_POISON
+                        || cave_feat[y][x] == FEAT_LAVA)
+                    && (cave_feat[y][x] != FEAT_WATER
+                        || !sdl_mouse_path_is_following()))
+                {
+                    int y_end = y + ddy[dir];
+                    int x_end = x + ddx[dir];
+                    bool landing_blocked = !in_bounds_fully(y_end, x_end)
+                        || ((cave_info[y_end][x_end]
+                                & (CAVE_MARK | CAVE_SEEN))
+                            && (cave_wall_bold(y_end, x_end)
+                                || cave_any_closed_door_bold(y_end, x_end)));
+
+                    if (!landing_blocked)
+                    {
+                        int choice;
+
+                        disturb(0, 0);
+                        flush();
+                        choice = player_terrain_movement_choice(y, x);
+                        if (choice < 0)
+                        {
+                            p_ptr->energy_use = 0;
+                            return;
+                        }
+                        terrain_jump_chosen = (choice == 0);
+                        terrain_entry_chosen = (choice == 1);
+                    }
+                }
+
+                if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
+                    && (cave_feat[y][x] != FEAT_WATER
+                        || (run_up && !sdl_mouse_path_is_following()))
+                    && !terrain_entry_chosen)
                 {
                     int y_mid, x_mid; // the midpoint of the leap
                     int y_end, x_end; // the endpoint of the leap
@@ -429,6 +569,14 @@ void move_player(int dir)
                                 m_name);
                         }
 
+                        else if (cave_feat[y_mid][x_mid] == FEAT_LAVA
+                            && !terrain_jump_chosen)
+                        {
+                            strnfmt(prompt, sizeof(prompt),
+                                "Leap over the lava? The heat will deal %d damage. ",
+                                player_lava_damage_at(y_mid, x_mid, true));
+                        }
+
                         // default confirmation
                         else
                         {
@@ -466,12 +614,22 @@ void move_player(int dir)
                                 // store the action type
                                 p_ptr->previous_action[0] = dir;
 
+                                /* Mark flight before the shared movement hook
+                                 * applies terrain contact at the midpoint. */
+                                p_ptr->leaping = true;
+
                                 // move player to the new position
                                 monster_swap(
                                     p_ptr->py, p_ptr->px, y_mid, x_mid);
 
+                                /* Taking off from water still touches it;
+                                 * crossing the airborne midpoint does not. */
+                                if (p_ptr->py == y_mid && p_ptr->px == x_mid)
+                                    player_water_movement(cave_feat[py][px], FEAT_FLOOR);
+
                                 // remember that the player is in the air now
-                                p_ptr->leaping = true;
+                                p_ptr->leaping = p_ptr->py == y_mid
+                                    && p_ptr->px == x_mid && !p_ptr->is_dead;
 
                                 return;
                             }
@@ -499,6 +657,39 @@ void move_player(int dir)
 
                         return;
                     }
+                }
+            }
+
+            if (cave_feat[y][x] == FEAT_LAVA)
+            {
+                char prompt[160];
+                int damage = player_lava_damage_at(y, x, false);
+                disturb(0, 0);
+                flush();
+                if (damage < 0)
+                    SDL_strlcpy(prompt, "Step into molten lava? You will die immediately. ", sizeof(prompt));
+                else
+                    strnfmt(prompt, sizeof(prompt),
+                        "Step into molten lava? You will take %d damage on entry and each turn here. ", damage);
+                if (!get_check_near(y, x, prompt))
+                {
+                    p_ptr->energy_use = 0;
+                    return;
+                }
+            }
+
+            if (cave_feat[y][x] == FEAT_POISON)
+            {
+                char prompt[180];
+                disturb(0, 0);
+                flush();
+                strnfmt(prompt, sizeof(prompt),
+                    "Step into poisonous acid? Each exposure adds up to %d poison stacks after resistance, before poison protection. ",
+                    player_poison_terrain_dose_at(y, x));
+                if (!get_check_near(y, x, prompt))
+                {
+                    p_ptr->energy_use = 0;
+                    return;
                 }
             }
 
@@ -619,14 +810,18 @@ void move_player(int dir)
             }
         }
 
-        /* Sound */
-        sound(MSG_WALK);
-
         // do flanking or controlled retreat attack if any
         flanking_or_retreat(y, x);
 
         /* Move player */
         monster_swap(py, px, y, x);
+        sil_popup_trace_stage("move-swap-returned");
+        if (p_ptr->is_dead) return;
+        if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x) {
+            player_water_movement(cave_feat[py][px], cave_feat[y][x]);
+            sound(MSG_WALK);
+        }
+        tutorial_action_finished("move", "", true);
 
         /* Check for Mandos quest interaction after movement */
         check_mandos_quest_interaction();
@@ -654,6 +849,7 @@ void move_player(int dir)
 
         /* Spontaneous Searching */
         perceive();
+        sil_popup_trace_stage("movement-perception-complete");
 
         // remember this direction of movement
         p_ptr->previous_action[0] = dir;
@@ -663,6 +859,12 @@ void move_player(int dir)
         {
             cave_info[y][x] |= (CAVE_MARK);
             lite_spot(y, x);
+            if (utumno_corridors && p_ptr->depth == MORGOTH_DEPTH
+                && cave_feat[y][x] == FEAT_MORE_SHAFT)
+            {
+                msg_print("An ancient cold rises from the shaft. Below lie the "
+                          "remains of Utumno, and tunnels long forgotten.");
+            }
         }
 
         /* Remark on Forge and discover it if blind */
@@ -1105,7 +1307,7 @@ static bool run_test(void)
              o_ptr = get_next_object(o_ptr))
         {
             /* Visible object */
-            if (o_ptr->marked && !object_is_searched_skeleton(o_ptr))
+            if (object_is_visible(o_ptr) && !object_is_searched_skeleton(o_ptr))
                 return (true);
         }
 
@@ -1122,12 +1324,20 @@ static bool run_test(void)
             {
             /* Floors */
             case FEAT_FLOOR:
+            case FEAT_BRIDGE_WATER_H: case FEAT_BRIDGE_WATER_V:
+            case FEAT_BRIDGE_CHASM_H: case FEAT_BRIDGE_CHASM_V:
+            case FEAT_BRIDGE_LAVA_H: case FEAT_BRIDGE_LAVA_V:
+            case FEAT_BRIDGE_POISON_H: case FEAT_BRIDGE_POISON_V:
+            case FEAT_BRIDGE_ICE_H: case FEAT_BRIDGE_ICE_V:
+            case FEAT_BRIDGE_DEEP_WATER_H: case FEAT_BRIDGE_DEEP_WATER_V:
 
             /* Secret doors */
             case FEAT_SECRET:
 
             /* Walls */
             case FEAT_QUARTZ:
+            case FEAT_CRACKED_QUARTZ:
+            case FEAT_DAMAGED_WALL:
             case FEAT_WALL_EXTRA:
             case FEAT_WALL_INNER:
             case FEAT_WALL_OUTER:

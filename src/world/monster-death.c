@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "monster/monster-ai.h"
+#include "monster/monster-social.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -51,7 +53,8 @@ extern void break_truce(bool obvious)
 {
     int i;
 
-    monster_type* m_ptr = NULL; // default to soothe compiler warnings
+    monster_type* m_ptr;
+    monster_type* witness = NULL;
 
     char m_name[80];
 
@@ -78,6 +81,7 @@ extern void break_truce(bool obvious)
             /* Get the monster name (using 'something' for hidden creatures) */
             monster_desc(m_name, sizeof(m_name), m_ptr, 0x04);
 
+            witness = m_ptr;
             p_ptr->truce = false;
         }
 
@@ -92,7 +96,7 @@ extern void break_truce(bool obvious)
                     "%^s lets out a cry! The tension is broken.", m_name);
 
                 /* Make a lot of noise */
-                update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
+                update_flow(witness->fy, witness->fx, FLOW_MONSTER_NOISE);
                 monster_perception(false, false, -10);
             }
             else
@@ -118,15 +122,14 @@ extern void break_truce(bool obvious)
 }
 
 /*
- * Checks whether monsters on two separate coordinates are of the same type
- * (i.e. the same letter or share an RF3_ race flag)
+ * Checks whether monsters on two separate coordinates can cooperate.  The
+ * social layer owns race/glyph compatibility, wandering bands, and local
+ * hostilities; callers retain this coordinate-based convenience wrapper.
  */
 bool similar_monsters(int m1y, int m1x, int m2y, int m2x)
 {
     monster_type* m_ptr;
-    monster_race* r_ptr;
     monster_type* n_ptr;
-    monster_race* nr_ptr;
 
     /*first check if there are monsters on both coordinates*/
     if (!(cave_m_idx[m1y][m1x] > 0))
@@ -136,37 +139,18 @@ bool similar_monsters(int m1y, int m1x, int m2y, int m2x)
 
     /* Access monster 1*/
     m_ptr = &mon_list[cave_m_idx[m1y][m1x]];
-    r_ptr = &r_info[m_ptr->r_idx];
 
     /* Access monster 2*/
     n_ptr = &mon_list[cave_m_idx[m2y][m2x]];
-    nr_ptr = &r_info[n_ptr->r_idx];
-
-    /* Monsters have the same symbol */
-    if (r_ptr->d_char == nr_ptr->d_char)
-        return (true);
-
-    /*
-     * Same race (we are not checking all RF3 types
-     * because that would be true at
-     * the symbol check
-     */
-    if ((r_ptr->flags3 & (RF3_DRAGON)) && (nr_ptr->flags3 & (RF3_DRAGON)))
-        return (true);
-    if ((r_ptr->flags3 & (RF3_SERPENT)) && (nr_ptr->flags3 & (RF3_SERPENT)))
-        return (true);
-    if ((r_ptr->flags3 & (RF3_HORROR)) && (nr_ptr->flags3 & (RF3_HORROR)))
-        return (true);
-
-    /*Not the same*/
-    return (false);
+    return monster_social_allies(m_ptr, n_ptr);
 }
 
 /*
- *  Cause a temporary penalty to morale in monsters of the same type who can see
- * the specified monster. (Used when it dies and for cruel blow).
+ *  Cause a temporary penalty to allied monsters that can see the specified
+ * monster. (Used when it dies and for cruel blow).
  */
-void scare_onlooking_friends(const monster_type* m_ptr, int amount)
+static void scare_onlooking_friends_observed(
+    const monster_type* m_ptr, int amount, bool weapon_fear)
 {
     int i;
     int fy, fx, y, x;
@@ -189,17 +173,32 @@ void scare_onlooking_friends(const monster_type* m_ptr, int amount)
         y = n_ptr->fy;
         x = n_ptr->fx;
 
-        // Only consider alert monsters of the same type in line of sight
+        // Only consider alert allies in line of sight
         if ((n_ptr->alertness >= ALERTNESS_ALERT)
             && !(r_ptr->flags3 & (RF3_NO_FEAR))
-            && similar_monsters(fy, fx, y, x) && los(y, x, fy, fx))
+            && monster_social_allies(m_ptr, n_ptr) && los(y, x, fy, fx))
         {
             // cause a temporary morale penalty
             n_ptr->tmp_morale += amount;
+
+            /* Remember the witnessed blow only in the creatures it actually
+             * frightened. Learning still requires sight of the player. */
+            if (weapon_fear)
+                monster_ai_observe(n_ptr, MON_AI_SLAY_FEAR, 3);
         }
     }
 
     return;
+}
+
+void scare_onlooking_friends(const monster_type* m_ptr, int amount)
+{
+    scare_onlooking_friends_observed(m_ptr, amount, false);
+}
+
+void scare_onlooking_friends_from_weapon(const monster_type* m_ptr, int amount)
+{
+    scare_onlooking_friends_observed(m_ptr, amount, true);
 }
 
 /*
@@ -956,6 +955,9 @@ void monster_death(int m_idx)
 
     int multiplier = 1;
 
+    /* All real deaths, including environmental kills, share this path. */
+    monster_sound(m_ptr, MONSTER_SOUND_DEATH);
+
     /* Track monster death for Nienna mercy quest */
     if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE && m_ptr->r_idx != R_IDX_NIENA) {
         p_ptr->niena_monsters_killed++;
@@ -1231,6 +1233,12 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     monster_type* m_ptr = &mon_list[m_idx];
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
+    /* Even an armour-absorbed player hit is a social threat.  Ambient
+     * monster damage uses who == 0, while direct player damage uses a
+     * negative source index. */
+    if (who < 0)
+        monster_social_player_attack(m_ptr);
+
     /* Redraw (later) if needed */
     if (p_ptr->health_who == m_idx)
         p_ptr->redraw |= (PR_HEALTHBAR);
@@ -1262,6 +1270,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
             log_info("Morgoth reached 0 HP; entering god state.");
             (void)morgoth_enter_final_stage(m_idx);
 
+            monster_sound(m_ptr, MONSTER_SOUND_DAMAGE);
+
             return (false);
         }
 
@@ -1281,7 +1291,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
             else
             {
-                message_format(MSG_KILL, m_ptr->r_idx, "%^s%s", m_name, note);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "%^s%s", m_name, note);
             }
         }
 
@@ -1291,8 +1302,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
             // You only get messages for unseen monsters if you kill them
             if ((who < 0)
                 && (distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) == 1))
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "You have killed %s.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "You have killed %s.", m_name);
             // else			message_format(MSG_KILL, m_ptr->r_idx,
             // "%^s has been killed.", m_name);
         }
@@ -1301,22 +1312,22 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
         else if (monster_nonliving(r_ptr))
         {
             if (who < 0)
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "You have destroyed %s.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "You have destroyed %s.", m_name);
             else
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "%^s has been destroyed.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "%^s has been destroyed.", m_name);
         }
 
         /* Death by Physical attack -- living monster */
         else
         {
             if (who < 0)
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "You have slain %s.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "You have slain %s.", m_name);
             else
-                message_format(
-                    MSG_KILL, m_ptr->r_idx, "%^s has been slain.", m_name);
+                message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
+                    m_ptr->r_idx, "%^s has been slain.", m_name);
         }
 
         /* Generate treasure */
@@ -1338,6 +1349,7 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
     // Wake it up if there was real damage dealt
     if (dam > 0)
     {
+        monster_sound(m_ptr, MONSTER_SOUND_DAMAGE);
         int random_level = rand_range(ALERTNESS_ALERT, ALERTNESS_QUITE_ALERT);
         set_alertness(m_ptr, MAX(m_ptr->alertness + dam, random_level + dam));
     }

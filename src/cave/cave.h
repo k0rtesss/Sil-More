@@ -28,10 +28,38 @@ void do_cmd_view_map(void);
 errr vinfo_init(void);
 void forget_view(void);
 void update_view(void);
+/* Computes only view/light buffers, without revealing terrain or encounters. */
+void update_view_for_generation(void);
 
 int flow_dist(int which_flow, int y, int x);
 void update_flow(int cy, int cx, int which_flow);
+/* Only the best next-step distances are guaranteed by a pursuit flow. */
+void update_pursuit_flow(int cy, int cx, int m_idx, bool allow_player);
 void update_smell(void);
+int water_movement_energy(int energy, int from_feat, int to_feat, bool airborne);
+int player_current_movement_energy(void);
+int player_current_movement_speed(void);
+bool player_submerged_in_deep_water(void);
+bool cave_deep_water_allowed(int y, int x);
+bool cave_water_has_icy_shore(int y, int x);
+bool player_melting_ice_exposure(void);
+void player_melting_ice_begin_action(void);
+void player_melting_ice_end_action(void);
+void monster_melting_ice_exposure(int m_idx);
+void monster_melting_ice_begin_action(int m_idx);
+void monster_melting_ice_end_action(int m_idx);
+
+void player_water_movement(int from_feat, int to_feat);
+void player_water_displaced(int from_feat, int to_feat);
+int player_lava_damage(bool airborne);
+int player_lava_damage_at(int y, int x, bool airborne);
+void player_lava_exposure(bool airborne);
+void player_lava_begin_action(void);
+void player_lava_end_action(void);
+bool monster_lava_exposure(int m_idx);
+bool monster_lava_begin_action(int m_idx);
+void monster_lava_end_action(int m_idx);
+void lava_light(void);
 void map_feature(int y, int x);
 void map_area(void);
 void map_area_radius(int radius);
@@ -41,6 +69,12 @@ void gates_illuminate(bool daytime);
 byte get_depth_color(int depth);
 void cave_set_feat_with_color(int y, int x, int feat, int color);
 void cave_set_feat(int y, int x, int feat);
+int cave_illusion_opacity(int y, int x);
+bool cave_illusion_debug_enabled(void);
+bool cave_illusion_debug_marked(int y, int x);
+void cave_illusion_debug_set(bool enabled);
+void cave_dissolve_illusion(int y, int x);
+void place_illusory_passages(void);
 
 void reset_depth_color_cache(void);
 void styles_init_for_level(void);

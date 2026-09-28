@@ -15,7 +15,7 @@ void spells2_prompt_label(int binding, const char* fallback, char* buf,
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (!buf[0] || streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback ? fallback : "", buflen);
 }
@@ -1070,6 +1070,24 @@ void self_knowledge(void)
         identify[j] = false;
     }
 
+    /* One diagnosis attempt per use; the captured menu can reflow without
+     * rerolling or forgetting discoveries from earlier uses. */
+    if (p_ptr->diseased)
+    {
+        disease_identify();
+        strnfmt(s[i], sizeof(s[i]), "Disease: %s",
+            (p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
+                ? disease_name() : "Unknown");
+        if (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+            strnfmt(t[i], sizeof(t[i]),
+                "Cure: a herb of %s. It only cures disease; its usual effects do not apply.",
+                disease_cure_name());
+        else
+            strnfmt(t[i], sizeof(t[i]), "Herb cure: Unknown. A potion of Healing or Miruvor also cures disease.");
+        good[i] = false;
+        i++;
+    }
+
     // Get item flags from equipment
     for (k = INVEN_WIELD; k < INVEN_TOTAL; k++) {
         u32b t1, t2, t3, t4;
@@ -1123,9 +1141,8 @@ void self_knowledge(void)
         }
     }
 
-    // Show either curse or flag information, not both
+    // Each use has an independent 1-in-6 chance to reveal an active curse.
     bool show_curse = (n_active > 0) && one_in_(6);
-    bool show_flag = (n > 0) && one_in_(6);
 
     if (show_curse) {
         int pick = active_ids[rand_int(n_active)];
@@ -1140,9 +1157,11 @@ void self_knowledge(void)
         i++;
         CURSE_SEEN_SET(pick);
     }
-    if (show_flag) {
-        const flag_name *d = &info_flags_desc[cand[rand_int(n)]];
-        strnfmt(s[i], 200, "You sense a hidden trait.");
+
+    // Character traits are self-knowledge, so always show every active trait.
+    for (int trait = 0; trait < n; trait++) {
+        const flag_name *d = &info_flags_desc[cand[trait]];
+        strnfmt(s[i], 200, "Character trait");
         strnfmt(t[i], 200, "%s", d->name);
         good[i] = true;
         i++;
@@ -1202,6 +1221,14 @@ void self_knowledge(void)
         char no_resist_buf[200];
         char vuln_buf[200];
         int res;
+
+        if (p_ptr->depth == UTUMNO_DEPTH)
+        {
+            strnfmt(s[i], 80, "Utumno weakens your resistance to fire and cold");
+            strnfmt(t[i], 80, "(-1 to each throughout this level)");
+            good[i] = false;
+            i++;
+        }
 
         resist_buf[0] = '\0';
         no_resist_buf[0] = '\0';
@@ -1633,4 +1660,3 @@ void identify_revealed_items(bool identify[])
         }
     }
 }
-

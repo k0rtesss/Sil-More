@@ -5,12 +5,74 @@
 #include "log/log.h"
 #include "pane.h"
 #include "cJSON.h"
+#include "tutorial/tutorial.h"
 #include <SDL3/SDL_keyboard.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // JSON-based configuration system using cJSON library
+
+static bool sdl_config_gamepad_dpad_source_is_valid(int source)
+{
+    return source >= GAMEPAD_DPAD_SOURCE_STANDARD
+        && source < GAMEPAD_DPAD_SOURCE_COUNT;
+}
+
+int sdl_config_gamepad_dpad_source_for_guid(const char* guid)
+{
+    if (!guid || !guid[0])
+        return GAMEPAD_DPAD_SOURCE_STANDARD;
+
+    for (int i = 0; i < GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT; i++) {
+        const gamepad_dpad_source_override* override =
+            &config.gamepad_dpad_source_overrides[i];
+
+        if (override->guid[0] && streq(override->guid, guid)
+            && sdl_config_gamepad_dpad_source_is_valid(override->source))
+        {
+            return override->source;
+        }
+    }
+
+    return GAMEPAD_DPAD_SOURCE_STANDARD;
+}
+
+void sdl_config_set_gamepad_dpad_source_for_guid(const char* guid, int source)
+{
+    int free_slot = -1;
+
+    if (!guid || !guid[0]
+        || !sdl_config_gamepad_dpad_source_is_valid(source))
+    {
+        return;
+    }
+
+    for (int i = 0; i < GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT; i++) {
+        gamepad_dpad_source_override* override =
+            &config.gamepad_dpad_source_overrides[i];
+
+        if (!override->guid[0] && free_slot < 0)
+            free_slot = i;
+        if (override->guid[0] && streq(override->guid, guid)) {
+            if (source == GAMEPAD_DPAD_SOURCE_STANDARD)
+                memset(override, 0, sizeof(*override));
+            else
+                override->source = source;
+            return;
+        }
+    }
+
+    if (source == GAMEPAD_DPAD_SOURCE_STANDARD)
+        return;
+    if (free_slot < 0) {
+        log_warn("Cannot save D-pad source: controller profile table is full");
+        return;
+    }
+    SDL_strlcpy(config.gamepad_dpad_source_overrides[free_slot].guid,
+        guid, GAMEPAD_DPAD_GUID_STRING_LEN);
+    config.gamepad_dpad_source_overrides[free_slot].source = source;
+}
 
 typedef struct sdl_default_keymap_entry {
     byte mode;
@@ -1664,6 +1726,7 @@ static char* read_file_contents(const char* filename)
 }
 
 static bool g_app_intro_seen = false;
+static tutorial_mode g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
 static bool g_app_touch_tutorial_seen = false;
 static bool g_app_mouse_tutorial_seen = false;
 static bool g_app_character_wheel_tutorial_seen = false;
@@ -1679,6 +1742,7 @@ static const byte app_interface_options[] = {
     OPT_song_list_sort_by_recent, OPT_styled_player_health_bar,
     OPT_styled_monster_health_bars, OPT_styled_monster_tile_health_bars,
     OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
+    OPT_show_dungeon_events,
     OPT_supply_menu_random_icons,
     OPT_supply_menu_hide_flavor_compact, OPT_hide_secondary_action_ring,
     OPT_hide_supporting_panes_fullscreen,
@@ -1697,6 +1761,7 @@ static const byte app_gameplay_options[] = {
     OPT_load_blitz_by_default,
     OPT_lockpick_minigame,
     OPT_chest_trap_minigame,
+    OPT_illusory_walls,
     OPT_NONE
 };
 
@@ -1707,6 +1772,7 @@ static const byte app_visual_options[] = {
     OPT_pixel_monster_status_icons, OPT_mirror_player_tile_facing,
     OPT_handcrafted_player_tile_facing,
     OPT_mirror_monster_tile_facing,
+    OPT_torch_animation_always,
     OPT_center_player, OPT_run_avoid_center,
     OPT_show_smithing_difficulty,
     OPT_show_smithing_difficulty_look, OPT_NONE
@@ -1740,12 +1806,12 @@ static bool option_is_retired_app_text_option(int opt)
 
 bool option_is_app_persistent(int opt)
 {
-    /* Multi-value non-bool options saved explicitly in the visual JSON block */
+    /* Multi-value options saved explicitly in their named JSON groups. */
     if (opt == OPT_delay_factor || opt == OPT_running_delay
         || opt == OPT_hitpoint_warning
         || opt == OPT_intro_style || opt == OPT_show_level_entry_banner
         || opt == OPT_show_partition_narrative
-        || opt == OPT_narrative_banner_turns)
+        || opt == OPT_narrative_banner_turns || opt == OPT_environment_speed)
         return true;
     if (option_is_retired_app_text_option(opt))
         return true;
@@ -1806,6 +1872,7 @@ static void sdl_config_apply_app_option_defaults(void)
     op_ptr->partition_narrative_mode = PARTITION_NARRATIVE_BANNER_DELAY;
     op_ptr->narrative_banner_turns = DEFAULT_NARRATIVE_BANNER_TURNS;
     op_ptr->monster_tile_health_bar_mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+    op_ptr->environment_speed = ENVIRONMENT_SPEED_NORMAL;
     op_ptr->opt[OPT_styled_monster_tile_health_bars] = true;
 }
 
@@ -1974,6 +2041,23 @@ static bool sdl_config_try_load_byte_value(cJSON* parent, const char* key,
     return true;
 }
 
+/* The named mode supersedes the old boolean. An explicit legacy opt-out is
+ * retained; old opt-ins and absent preferences gain the Extended default. */
+static tutorial_mode sdl_config_gameplay_tutorial_mode_from_json(const cJSON *app_options)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(app_options, "gameplayTutorialMode");
+    if (cJSON_IsString(item)) {
+        if (!SDL_strcasecmp(item->valuestring, "Disabled")) return TUTORIAL_MODE_DISABLED;
+        if (!SDL_strcasecmp(item->valuestring, "Normal")) return TUTORIAL_MODE_NORMAL;
+        if (!SDL_strcasecmp(item->valuestring, "Extended")) return TUTORIAL_MODE_EXTENDED;
+    } else if (cJSON_IsNumber(item) && item->valuedouble == item->valueint
+        && item->valueint >= TUTORIAL_MODE_DISABLED && item->valueint <= TUTORIAL_MODE_EXTENDED) {
+        return (tutorial_mode)item->valueint;
+    }
+    item = cJSON_GetObjectItemCaseSensitive(app_options, "gameplayTutorialEnabled");
+    return cJSON_IsFalse(item) ? TUTORIAL_MODE_DISABLED : TUTORIAL_MODE_EXTENDED;
+}
+
 void sdl_config_load_app_options(const char* filename)
 {
     char* content;
@@ -1988,6 +2072,7 @@ void sdl_config_load_app_options(const char* filename)
         config_exists = SDL_GetPathInfo(filename, NULL);
 
     g_app_intro_seen = config_exists;
+    g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
     g_app_touch_tutorial_seen = false;
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
@@ -2026,6 +2111,8 @@ void sdl_config_load_app_options(const char* filename)
     item = cJSON_GetObjectItemCaseSensitive(app_options, "introSeen");
     if (cJSON_IsBool(item))
         g_app_intro_seen = cJSON_IsTrue(item);
+
+    g_app_gameplay_tutorial_mode = sdl_config_gameplay_tutorial_mode_from_json(app_options);
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "touchTutorialSeen");
     if (cJSON_IsBool(item))
@@ -2076,6 +2163,13 @@ void sdl_config_load_app_options(const char* filename)
     item = cJSON_GetObjectItemCaseSensitive(app_options, "interface");
     sdl_config_load_byte_value(item, "hitpointWarning", &op_ptr->hitpoint_warn,
         9, 3);
+
+    item = cJSON_GetObjectItemCaseSensitive(app_options, "gameplay");
+    cJSON* speed = cJSON_GetObjectItemCaseSensitive(item, "environmentSpeed");
+    if (cJSON_IsNumber(speed) && speed->valuedouble == speed->valueint
+        && speed->valueint >= ENVIRONMENT_SPEED_SLOW
+        && speed->valueint <= ENVIRONMENT_SPEED_MAX)
+        op_ptr->environment_speed = (byte)speed->valueint;
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "visual");
     op_ptr->delay_factor = 5;
@@ -2143,6 +2237,38 @@ void sdl_config_mark_intro_seen(void)
 bool sdl_config_touch_tutorial_seen(void)
 {
     return g_app_touch_tutorial_seen;
+}
+
+bool get_sdl_gameplay_tutorial_enabled(void)
+{
+    return g_app_gameplay_tutorial_mode != TUTORIAL_MODE_DISABLED;
+}
+
+void set_sdl_gameplay_tutorial_enabled(bool enabled)
+{
+    set_sdl_gameplay_tutorial_mode(!enabled ? TUTORIAL_MODE_DISABLED
+        : g_app_gameplay_tutorial_mode == TUTORIAL_MODE_DISABLED
+            ? TUTORIAL_MODE_EXTENDED : g_app_gameplay_tutorial_mode);
+}
+
+tutorial_mode get_sdl_gameplay_tutorial_mode(void)
+{
+    return g_app_gameplay_tutorial_mode;
+}
+
+void set_sdl_gameplay_tutorial_mode(tutorial_mode mode)
+{
+    if (mode < TUTORIAL_MODE_DISABLED || mode > TUTORIAL_MODE_EXTENDED)
+        mode = TUTORIAL_MODE_EXTENDED;
+    g_app_gameplay_tutorial_mode = mode;
+    tutorial_set_mode(mode);
+    (void)save_pane_config_to_json();
+}
+
+void cycle_sdl_gameplay_tutorial_mode(void)
+{
+    set_sdl_gameplay_tutorial_mode((tutorial_mode)
+        ((get_sdl_gameplay_tutorial_mode() + 1) % (TUTORIAL_MODE_EXTENDED + 1)));
 }
 
 void sdl_config_mark_touch_tutorial_seen(void)
@@ -2240,16 +2366,83 @@ static void sdl_config_migrate_touch_pane_binding(struct sdl_config* config,
         log_info("%s", message);
 }
 
+static bool sdl_config_top_panel_legacy_defaults_match(
+    const int* bindings, const int* long_bindings, int count)
+{
+    static const int legacy_defaults[8] = {
+        'j', 'i', 'y', 'h',
+        TOUCH_BIND_TOGGLE_TILES, 'S', 'l', 'M',
+    };
+
+    if (!bindings || !long_bindings || count < 8)
+        return false;
+
+    for (int i = 0; i < 8; i++) {
+        if (bindings[i] != legacy_defaults[i]
+            || long_bindings[i] != GAMEPAD_BIND_NONE)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void sdl_config_migrate_top_panel_jewelry_button(
+    int* cell_count, int* bindings, int* long_bindings)
+{
+    int count;
+
+    if (!cell_count || !bindings || !long_bindings)
+        return;
+
+    count = normalize_touch_top_panel_cell_count(*cell_count);
+    for (int i = 0; i < count; i++) {
+        if (bindings[i] == TOUCH_BIND_OPEN_JEWELRY
+            || long_bindings[i] == TOUCH_BIND_OPEN_JEWELRY)
+        {
+            return;
+        }
+    }
+
+    if (!sdl_config_top_panel_legacy_defaults_match(bindings, long_bindings,
+            count))
+    {
+        return;
+    }
+
+    if (count == 8) {
+        bindings[count] = TOUCH_BIND_OPEN_JEWELRY;
+        long_bindings[count] = GAMEPAD_BIND_NONE;
+        *cell_count = count + 1;
+        log_info("Migrated Quick Access defaults with a Jewelry button");
+        return;
+    }
+
+    /* Portrait profiles from older configs may already have appended Main
+     * Menu at the first new slot.  Keep it after the new Jewelry button. */
+    if (count == 9 && bindings[8] == 'm'
+        && long_bindings[8] == GAMEPAD_BIND_NONE)
+    {
+        bindings[9] = bindings[8];
+        long_bindings[9] = long_bindings[8];
+        bindings[8] = TOUCH_BIND_OPEN_JEWELRY;
+        long_bindings[8] = GAMEPAD_BIND_NONE;
+        *cell_count = count + 1;
+        log_info("Migrated portrait Quick Access defaults with a Jewelry button");
+    }
+}
+
 static void sdl_config_set_default_top_panel_bindings(struct sdl_config* config)
 {
-    /* Left to right: Supplies, Inventory, Abilities, Character sheet,
+    /* Left to right: Supplies, Jewelry, Inventory, Abilities, Character sheet,
      * ASCII/Tiles toggle, Stealth, Look, Map.  Portrait profiles append Main
      * Menu so the separate fixed button is unnecessary there. */
     static const int top_panel_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
-        'j', 'i', 'y', 'h',
+        'j', TOUCH_BIND_OPEN_JEWELRY, 'i', 'y', 'h',
         TOUCH_BIND_TOGGLE_TILES, 'S', 'l', 'M',
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
-        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
+        GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
         GAMEPAD_BIND_NONE, GAMEPAD_BIND_NONE,
     };
     static const int top_panel_long_defaults[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT] = {
@@ -3419,6 +3612,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 input_ui_mode_to_string(config->input_ui_mode));
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "desktopInputChoice");
+        if (cJSON_IsString(item) && item->valuestring)
+            config->desktop_input_choice = parse_input_ui_mode(item->valuestring);
+
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "terminalMenuScaleOffset");
         if (cJSON_IsNumber(item)) {
@@ -3449,6 +3646,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             config->compact_inventory_menus = cJSON_IsTrue(item);
             log_debug("Loaded compactInventoryMenus: %s",
                 config->compact_inventory_menus ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "debugCharacterSheet");
+        if (cJSON_IsBool(item)) {
+            config->debug_character_sheet = cJSON_IsTrue(item);
+            log_debug("Loaded debugCharacterSheet: %s",
+                config->debug_character_sheet ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
@@ -4217,10 +4422,53 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 config->gamepad_dpad_diagonal_delay_ms);
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(gamepad,
+            "dpadSourceOverrides");
+        if (cJSON_IsArray(item)) {
+            int count = cJSON_GetArraySize(item);
+
+            if (count > GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT)
+                count = GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT;
+            for (int i = 0; i < count; i++) {
+                cJSON* entry = cJSON_GetArrayItem(item, i);
+                cJSON* guid;
+                cJSON* source;
+
+                if (!cJSON_IsObject(entry))
+                    continue;
+                guid = cJSON_GetObjectItemCaseSensitive(entry, "guid");
+                source = cJSON_GetObjectItemCaseSensitive(entry, "source");
+                if (!cJSON_IsString(guid)
+                    || !guid->valuestring || !guid->valuestring[0]
+                    || !cJSON_IsNumber(source)
+                    || !sdl_config_gamepad_dpad_source_is_valid(source->valueint))
+                {
+                    continue;
+                }
+
+                SDL_strlcpy(config->gamepad_dpad_source_overrides[i].guid,
+                    guid->valuestring, GAMEPAD_DPAD_GUID_STRING_LEN);
+                config->gamepad_dpad_source_overrides[i].source =
+                    source->valueint;
+            }
+            log_debug("Loaded gamepad.dpadSourceOverrides (%d entries)", count);
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useLeftStick");
         if (cJSON_IsBool(item)) {
             config->gamepad_use_left_stick = cJSON_IsTrue(item);
             log_debug("Loaded gamepad.useLeftStick: %s", config->gamepad_use_left_stick ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(gamepad, "useRightStick");
+        if (cJSON_IsBool(item))
+            config->gamepad_use_right_stick = cJSON_IsTrue(item);
+        const char* stick_delay_keys[2] = { "leftStickDelayMs", "rightStickDelayMs" };
+        for (int stick = 0; stick < 2; stick++) {
+            item = cJSON_GetObjectItemCaseSensitive(gamepad, stick_delay_keys[stick]);
+            if (cJSON_IsNumber(item))
+                config->gamepad_stick_diagonal_delay_ms[stick] =
+                    MAX(0, MIN(SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS, item->valueint));
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "deadzone");
@@ -4351,6 +4599,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
                 config->gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
             }
+        }
+        if (config->gamepad_use_right_stick) {
+            for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++)
+                config->gamepad_right_stick_bindings[i] = GAMEPAD_BIND_NONE;
         }
     } else {
         log_warn("'gamepad' object not found in JSON");
@@ -4514,6 +4766,8 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     "movementMode");
                 cJSON* round_movement = cJSON_GetObjectItemCaseSensitive(touch_control,
                     "roundMovementLayerEnabled");
+                cJSON* round_portrait_center = cJSON_GetObjectItemCaseSensitive(
+                    touch_control, "roundMovementPortraitCenter");
                 cJSON* corner_button_overlay = cJSON_GetObjectItemCaseSensitive(touch_control,
                     "cornerButtonOverlayMode");
                 cJSON* corner_button_markers = cJSON_GetObjectItemCaseSensitive(touch_control,
@@ -4638,6 +4892,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                         cJSON_IsTrue(round_movement);
                     log_debug("Loaded touchControl.roundMovementLayerEnabled: %s",
                         config->touch_round_movement_enabled ? "true" : "false");
+                }
+
+                if (cJSON_IsBool(round_portrait_center)) {
+                    config->touch_round_portrait_centered =
+                        cJSON_IsTrue(round_portrait_center);
+                    log_debug("Loaded touchControl.roundMovementPortraitCenter: %s",
+                        config->touch_round_portrait_centered
+                            ? "true" : "false");
                 }
 
                 if (cJSON_IsString(corner_button_overlay)
@@ -4896,6 +5158,21 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
             normalize_touch_profile(config->touch_profile);
     }
 
+    sdl_config_migrate_top_panel_jewelry_button(
+        &config->touch_top_panel_cell_count,
+        config->touch_top_panel_bindings,
+        config->touch_top_panel_long_bindings);
+    if (pane_profiles) {
+        int count = MIN(profile_count, SDL_PANE_PROFILE_COUNT);
+
+        for (int i = 0; i < count; i++) {
+            sdl_config_migrate_top_panel_jewelry_button(
+                &pane_profiles[i].touch_top_panel_cell_count,
+                pane_profiles[i].touch_top_panel_bindings,
+                pane_profiles[i].touch_top_panel_long_bindings);
+        }
+    }
+
     {
         cJSON* mouse_control = cJSON_GetObjectItemCaseSensitive(root, "mouseControl");
         if (cJSON_IsObject(mouse_control)) {
@@ -5008,6 +5285,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->terminal_menu_scale_offset);
     cJSON_AddBoolToObject(sdl, "compactInventoryMenus",
         config->compact_inventory_menus);
+    cJSON_AddBoolToObject(sdl, "debugCharacterSheet",
+        config->debug_character_sheet);
     cJSON_AddNumberToObject(sdl, "mobileStartingZoomOffset",
         config->mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -5054,6 +5333,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         config->show_context_square_popups);
     cJSON_AddStringToObject(sdl, "inputUiMode",
         input_ui_mode_to_string(config->input_ui_mode));
+    cJSON_AddStringToObject(sdl, "desktopInputChoice",
+        input_ui_mode_to_string(config->desktop_input_choice));
     
     // Save window position and size for windowed mode
     cJSON_AddNumberToObject(sdl, "windowX", config->window_x);
@@ -5191,7 +5472,38 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
             cJSON_AddNumberToObject(gamepad, "dpadDiagonalDelayMs",
                 config->gamepad_dpad_diagonal_delay_ms);
+            {
+                cJSON* source_overrides = cJSON_CreateArray();
+
+                if (source_overrides) {
+                    for (int i = 0; i < GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT;
+                        i++) {
+                        const gamepad_dpad_source_override* override =
+                            &config->gamepad_dpad_source_overrides[i];
+                        cJSON* entry;
+
+                        if (!override->guid[0]
+                            || !sdl_config_gamepad_dpad_source_is_valid(
+                                override->source))
+                        {
+                            continue;
+                        }
+
+                        entry = cJSON_CreateObject();
+                        if (!entry)
+                            continue;
+                        cJSON_AddStringToObject(entry, "guid", override->guid);
+                        cJSON_AddNumberToObject(entry, "source", override->source);
+                        cJSON_AddItemToArray(source_overrides, entry);
+                    }
+                    cJSON_AddItemToObject(gamepad, "dpadSourceOverrides",
+                        source_overrides);
+                }
+            }
             cJSON_AddBoolToObject(gamepad, "useLeftStick", config->gamepad_use_left_stick);
+            cJSON_AddBoolToObject(gamepad, "useRightStick", config->gamepad_use_right_stick);
+            cJSON_AddNumberToObject(gamepad, "leftStickDelayMs", config->gamepad_stick_diagonal_delay_ms[0]);
+            cJSON_AddNumberToObject(gamepad, "rightStickDelayMs", config->gamepad_stick_diagonal_delay_ms[1]);
             cJSON_AddNumberToObject(gamepad, "deadzone", config->gamepad_deadzone);
             cJSON_AddNumberToObject(gamepad, "triggerThreshold", config->gamepad_trigger_threshold);
 
@@ -5367,6 +5679,9 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
                 touch_movement_mode_to_string(config->touch_movement_mode));
             cJSON_AddBoolToObject(touch_control, "roundMovementLayerEnabled",
                 config->touch_round_movement_enabled);
+            cJSON_AddBoolToObject(touch_control,
+                "roundMovementPortraitCenter",
+                config->touch_round_portrait_centered);
             cJSON_AddStringToObject(touch_control, "cornerButtonOverlayMode",
                 touch_zone_overlay_mode_to_string(
                     config->touch_zone_overlay_mode));
@@ -5426,9 +5741,12 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
         cJSON* app_options = cJSON_CreateObject();
         cJSON* interface = NULL;
         cJSON* visual = NULL;
+        cJSON* gameplay = NULL;
 
         if (app_options && op_ptr) {
             cJSON_AddBoolToObject(app_options, "introSeen", g_app_intro_seen);
+            cJSON_AddStringToObject(app_options, "gameplayTutorialMode",
+                tutorial_mode_name(g_app_gameplay_tutorial_mode));
             cJSON_AddBoolToObject(app_options, "touchTutorialSeen",
                 g_app_touch_tutorial_seen);
             cJSON_AddBoolToObject(app_options, "mouseTutorialSeen",
@@ -5443,6 +5761,12 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             sdl_config_save_app_option_group(app_options, "text", app_text_options);
             sdl_config_save_app_option_group(app_options, "gameplay", app_gameplay_options);
             sdl_config_save_app_option_group(app_options, "visual", app_visual_options);
+
+            gameplay = cJSON_GetObjectItemCaseSensitive(app_options, "gameplay");
+            if (cJSON_IsObject(gameplay))
+                cJSON_AddNumberToObject(gameplay, "environmentSpeed",
+                    op_ptr->environment_speed <= ENVIRONMENT_SPEED_MAX
+                        ? op_ptr->environment_speed : ENVIRONMENT_SPEED_NORMAL);
 
             interface = cJSON_GetObjectItemCaseSensitive(app_options, "interface");
             if (cJSON_IsObject(interface)) {
@@ -5633,6 +5957,7 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config)
         config->touch_menu_command_enabled[i] = true;
     config->touch_movement_mode = SDL_TOUCH_MOVEMENT_ON;
     config->touch_round_movement_enabled = false;
+    config->touch_round_portrait_centered = false;
     config->touch_zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_MARKERS;
     memcpy(config->touch_zone_center_bindings, center_defaults,
         sizeof(center_defaults));
@@ -5673,6 +5998,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
             config->main_view_scale);
     config->compact_inventory_menus = false;
+    config->debug_character_sheet = false;
     config->mobile_starting_zoom_offset =
         SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;
     config->mobile_portrait_mode = false;
@@ -5763,12 +6089,18 @@ void sdl_config_set_defaults(struct sdl_config* config)
 
     // Default gamepad settings
     config->input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
+    config->desktop_input_choice = SDL_INPUT_UI_MODE_AUTO;
     config->gamepad_enabled = true;
     config->steamdeck_inv_equip_same_button_cycle = true;
     config->gamepad_use_dpad = true;
     config->gamepad_dpad_diagonal_delay_ms =
         SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS;
+    memset(config->gamepad_dpad_source_overrides, 0,
+        sizeof(config->gamepad_dpad_source_overrides));
     config->gamepad_use_left_stick = true;
+    config->gamepad_use_right_stick = false;
+    config->gamepad_stick_diagonal_delay_ms[0] = 0;
+    config->gamepad_stick_diagonal_delay_ms[1] = 0;
     config->gamepad_deadzone = 12000;
     config->gamepad_trigger_threshold = 16000;
     config->mouse_enabled = true;

@@ -1,16 +1,28 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "sdl-config.h"
+#include "cave/cave-environment.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "ui/question.h"
 #include <SDL3/SDL_timer.h>
 
 #define INTERACTION_ROLL_ANIM_FRAME_MS 250
 #define INTERACTION_ROLL_BASH_REDUCTION_MS 1000
+#define INTERACTION_ROLL_FAST_CHANCE_MIN_PERCENT 90
+#define INTERACTION_ROLL_FAST_MAX_MS 1000
+
+static int bridge_repair_work_required(const environment_bridge_job* job)
+{
+    if (!job)
+        return 0;
+    return job->integrity ? 4
+        : job->material == ENV_BRIDGE_WOOD ? 8 : 16;
+}
 
 static bool is_open(int feat) { return (feat == FEAT_OPEN); }
 
@@ -76,6 +88,44 @@ static void interaction_roll_present_frame(void)
     Term_fresh();
     Term_xtra(TERM_XTRA_EVENT, 0);
     Term_fresh();
+}
+
+/* The roll cannot fail when the minimum skill throw beats the maximum
+ * difficulty throw.  The player variant also follows the percentage shown in
+ * the interaction menus, including its curse handling and rounding. */
+static bool interaction_roll_is_guaranteed(monster_type* actor, int skill,
+    int difficulty, int skill_sides, int difficulty_sides)
+{
+    if (actor == PLAYER)
+    {
+        return player_skill_check_success_percent(skill, difficulty,
+                   skill_sides, difficulty_sides)
+            >= 100;
+    }
+
+    return skill + 1 > difficulty + difficulty_sides;
+}
+
+static int interaction_roll_high_chance_lock_ms(int lock_ms,
+    monster_type* actor, int skill, int difficulty, int skill_sides,
+    int difficulty_sides)
+{
+    int success_percent;
+    int fast_lock_ms;
+
+    if (actor != PLAYER)
+        return lock_ms;
+
+    success_percent = player_skill_check_success_percent(skill, difficulty,
+        skill_sides, difficulty_sides);
+    if (success_percent < INTERACTION_ROLL_FAST_CHANCE_MIN_PERCENT)
+        return lock_ms;
+
+    /* At 90% keep one second of rolling time, then remove 100 ms for each
+     * additional percentage point.  A user-configured shorter duration still
+     * wins, so this remains a speed-up rather than an override. */
+    fast_lock_ms = (100 - success_percent) * 100;
+    return MIN(lock_ms, MIN(INTERACTION_ROLL_FAST_MAX_MS, fast_lock_ms));
 }
 
 static void interaction_roll_render_overlay(cptr title, cptr action, int y,
@@ -245,7 +295,7 @@ static int show_interaction_skill_roll_animation_actor_sided(
     monster_type* actor, cptr title,
     cptr action, int y, int x, int skill, int difficulty,
     int skill_sides, int difficulty_sides, skill_roll_details* roll,
-    int lock_adjust_ms)
+    int lock_adjust_ms, bool shorten_high_chance)
 {
     skill_roll_details local_roll;
     skill_roll_details preview_roll;
@@ -267,7 +317,9 @@ static int show_interaction_skill_roll_animation_actor_sided(
     if (difficulty_sides < 1)
         difficulty_sides = 1;
 
-    if (!Term || character_icky)
+    if (!Term || character_icky
+        || interaction_roll_is_guaranteed(actor, skill, difficulty,
+            skill_sides, difficulty_sides))
         return skill_check_details_sided(actor, skill, difficulty, NULL,
             skill_sides, difficulty_sides, roll);
 
@@ -289,6 +341,11 @@ static int show_interaction_skill_roll_animation_actor_sided(
     lock_ms += lock_adjust_ms;
     if (lock_ms < 0)
         lock_ms = 0;
+    if (shorten_high_chance)
+    {
+        lock_ms = interaction_roll_high_chance_lock_ms(lock_ms, actor, skill,
+            difficulty, skill_sides, difficulty_sides);
+    }
     overlay_ms = get_sdl_dice_roll_overlay_ms();
     visual_seed = interaction_roll_visual_seed(title, action, y, x, skill,
         difficulty);
@@ -327,7 +384,7 @@ int show_interaction_skill_roll_animation_actor(monster_type* actor, cptr title,
     skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(actor, title,
-        action, y, x, skill, difficulty, 10, 10, roll, 0);
+        action, y, x, skill, difficulty, 10, 10, roll, 0, false);
 }
 
 /*
@@ -339,7 +396,17 @@ int show_interaction_skill_roll_animation(cptr title, cptr action, int y,
     int x, int skill, int difficulty, skill_roll_details* roll)
 {
     return show_interaction_skill_roll_animation_actor_sided(
-        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0);
+        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0,
+        false);
+}
+
+int show_interaction_skill_roll_animation_lock_or_disarm(cptr title,
+    cptr action, int y, int x, int skill, int difficulty,
+    skill_roll_details* roll)
+{
+    return show_interaction_skill_roll_animation_actor_sided(
+        PLAYER, title, action, y, x, skill, difficulty, 10, 10, roll, 0,
+        true);
 }
 
 int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
@@ -348,7 +415,7 @@ int show_interaction_skill_roll_animation_sided(cptr title, cptr action,
 {
     return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
         action, y, x, skill, difficulty, skill_sides, difficulty_sides, roll,
-        0);
+        0, false);
 }
 
 static int show_interaction_skill_roll_animation_bash(cptr title, cptr action,
@@ -356,7 +423,7 @@ static int show_interaction_skill_roll_animation_bash(cptr title, cptr action,
 {
     return show_interaction_skill_roll_animation_actor_sided(PLAYER, title,
         action, y, x, skill, difficulty, 10, 10, roll,
-        -INTERACTION_ROLL_BASH_REDUCTION_MS);
+        -INTERACTION_ROLL_BASH_REDUCTION_MS, false);
 }
 
 /*
@@ -375,7 +442,7 @@ static bool is_trap(int feat)
 {
     bool test_trap = false;
 
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+    if (FEAT_IS_TRAP(feat))
         test_trap = true;
 
     return (test_trap);
@@ -620,7 +687,11 @@ static int door_minigame_question(int y, int x)
         player_skill_check_success_percent(p_ptr->stat_use[A_STR] * 2,
             door_bash_difficulty(y, x), 10, 10));
 
-    desc[0] = '\0';
+    SDL_strlcpy(desc,
+        "Interaction check: choose an action, then the game rolls automatically. "
+        "The displayed percentage is the success probability; a tie fails. "
+        "Acting spends one turn, while Leave spends none. ",
+        sizeof(desc));
     if (door_retry.active && door_retry.y == y && door_retry.x == x
         && door_retry.previous[0])
     {
@@ -658,7 +729,7 @@ static int door_minigame_question(int y, int x)
             "lockpick may jam it.", sizeof(desc));
         options[count]
             = (ui_question_option){
-                'p', lockpick_label, TERM_L_GREEN, false
+                'p', lockpick_label, TERM_ORANGE, false
             };
         actions[count++] = DOOR_CHOICE_LOCKPICK;
         options[count]
@@ -702,7 +773,8 @@ static bool do_cmd_open_test(int y, int x)
     if (!cave_known_closed_door_bold(y, x))
     {
         /* Message */
-        message(MSG_NOTHING_TO_OPEN, 0, "You see nothing there to open.");
+        message_at(y, x, MSG_NOTHING_TO_OPEN, 0,
+            "You see nothing there to open.");
 
         /* Nope */
         return (false);
@@ -774,12 +846,14 @@ bool do_cmd_open_aux(int y, int x)
         score = p_ptr->skill_use[S_PER];
         power = (cave_feat[y][x] - FEAT_DOOR_HEAD) & 0x07;
         difficulty = door_lockpick_difficulty(y, x);
-        result = show_interaction_skill_roll_animation("Picking the lock",
+        result = show_interaction_skill_roll_animation_lock_or_disarm(
+            "Picking the lock",
             "Working the lockpick", y, x, score, difficulty, &roll);
 
         if (result > 0)
         {
-            message(MSG_OPENDOOR, 0, "You have picked the lock.");
+            message_at(y, x, MSG_OPENDOOR, 0,
+                "You have picked the lock.");
             cave_set_feat(y, x, FEAT_OPEN);
             p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
             return false;
@@ -794,7 +868,7 @@ bool do_cmd_open_aux(int y, int x)
             if (jammed)
             {
                 cave_set_feat(y, x, FEAT_DOOR_HEAD + 0x08 + power);
-                message(MSG_LOCKPICK_FAIL, 0,
+                message_at(y, x, MSG_LOCKPICK_FAIL, 0,
                     "The pick twists in the lock, jamming it fast!");
                 SDL_strlcpy(previous,
                     "Lockpick failed and jammed the door.",
@@ -802,7 +876,7 @@ bool do_cmd_open_aux(int y, int x)
             }
             else
             {
-                message(MSG_LOCKPICK_FAIL, 0,
+                message_at(y, x, MSG_LOCKPICK_FAIL, 0,
                     "You failed to pick the lock.");
                 SDL_strlcpy(previous,
                     "Lockpick failed. The door remains locked.",
@@ -848,7 +922,8 @@ bool do_cmd_open_aux(int y, int x)
         if (result > 0)
         {
             /* Message */
-            message(MSG_OPENDOOR, 0, "You have picked the lock.");
+            message_at(y, x, MSG_OPENDOOR, 0,
+                "You have picked the lock.");
 
             /* Open the door */
             cave_set_feat(y, x, FEAT_OPEN);
@@ -864,7 +939,8 @@ bool do_cmd_open_aux(int y, int x)
             flush();
 
             /* Message */
-            message(MSG_LOCKPICK_FAIL, 0, "You failed to pick the lock.");
+            message_at(y, x, MSG_LOCKPICK_FAIL, 0,
+                "You failed to pick the lock.");
 
             /* We may keep trying */
             more = true;
@@ -881,7 +957,7 @@ bool do_cmd_open_aux(int y, int x)
         p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
 
         /* Sound */
-        sound(MSG_OPENDOOR);
+        sound_at(MSG_OPENDOOR, y, x);
     }
 
     /* Result */
@@ -893,6 +969,7 @@ bool do_cmd_open_aux(int y, int x)
  */
 void do_cmd_open(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y = 0, x = 0, dir;
 
     s16b o_idx = 0;
@@ -1105,7 +1182,7 @@ static bool do_cmd_close_aux(int y, int x)
     p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
 
     /* Sound */
-    sound(MSG_SHUTDOOR);
+    sound_at(MSG_SHUTDOOR, y, x);
 
     /* Result */
     return (false);
@@ -1293,6 +1370,7 @@ bool trap_disarm_power(int feat, int* power)
     case FEAT_TRAP_ACID:
         p = 1;
         break;
+    case FEAT_TRAP_FLOOD:
     case FEAT_TRAP_IMPRISONMENT:
         p = 4;
         break;
@@ -1382,6 +1460,10 @@ static cptr trap_flavor_text(int feat)
         return "A mass of rock rigged to come crashing down.";
     case FEAT_TRAP_ACID:
         return "A spray of corrosive liquid waits beneath this square.";
+    case FEAT_TRAP_FLOOD:
+        return "A hidden reservoir fills the next reachable paths over your "
+               "next two actions. Walls hold it; doors are swept away. The "
+               "centre becomes deep water.";
     case FEAT_TRAP_IMPRISONMENT:
         return "A rune of binding that holds the unwary fast.";
     case FEAT_GLYPH:
@@ -1445,6 +1527,7 @@ static void grid_question_append(char* buf, size_t buflen, cptr text)
 bool grid_interact_available(int y, int x)
 {
     int dir;
+    environment_bridge_job bridge_job;
 
     if (!p_ptr || !character_dungeon || !in_bounds(y, x))
         return false;
@@ -1487,7 +1570,7 @@ bool grid_interact_available(int y, int x)
         object_type* o_ptr = &o_list[cave_o_idx[y][x]];
 
         if ((o_ptr->tval == TV_SKELETON)
-            && !object_is_searched_skeleton(o_ptr) && o_ptr->marked)
+            && !object_is_searched_skeleton(o_ptr) && object_is_visible(o_ptr))
         {
             return true;
         }
@@ -1496,10 +1579,19 @@ bool grid_interact_available(int y, int x)
         for (o_ptr = get_first_object(y, x); o_ptr;
              o_ptr = get_next_object(o_ptr))
         {
-            if (o_ptr->k_idx && o_ptr->marked)
+            if (o_ptr->k_idx && object_is_visible(o_ptr))
                 return false;
         }
     }
+
+    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
+        || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON)
+        return true;
+    if (cave_environment_bridge_job_at(y, x, &bridge_job)
+        && bridge_job.repair)
+        return true;
+    if (FEAT_IS_BRIDGE(cave_feat[y][x]))
+        return true;
 
     /* Empty floor: strike at the square without stepping in */
     if (cave_floorlike_bold(y, x))
@@ -1527,6 +1619,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     char desc[480];
     char line[160];
     char disarm_label[64];
+    environment_bridge_job bridge_job;
+    bool bridge_repairable;
 
     if (out_command)
         *out_command = 0;
@@ -1538,6 +1632,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
 
     dir = coords_to_dir(y, x);
     feat = cave_feat[y][x];
+    bridge_repairable = cave_environment_bridge_job_at(y, x, &bridge_job)
+        && bridge_job.repair;
     title[0] = '\0';
     desc[0] = '\0';
     memset(step_choice, 0, sizeof(step_choice));
@@ -1592,7 +1688,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "thrall to hear the request, offer the needed item, or claim an "
             "earned reward.",
             sizeof(desc));
-        GRID_Q_ADD(';', 't', "Talk", TERM_L_GREEN);
+        GRID_Q_ADD(';', 't', "Talk", TERM_WHITE);
     }
 
     /* --- Dark / unknown square --- */
@@ -1615,7 +1711,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "An open doorway. Closing it would slow pursuers and block line "
             "of sight.",
             sizeof(desc));
-        GRID_Q_ADD('c', 'c', "Close it", TERM_L_GREEN);
+        GRID_Q_ADD('c', 'c', "Close it", TERM_WHITE);
     }
     else if (feat == FEAT_BROKEN)
     {
@@ -1655,7 +1751,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 "quietly tests your Perception; bashing it down tests your "
                 "Strength and makes a great noise.",
                 power + DOOR_LOCKPICK_BASE_DIFFICULTY);
-            GRID_Q_ADD('o', 'o', "Pick the lock", TERM_L_GREEN);
+            GRID_Q_ADD('o', 'o', "Pick the lock", TERM_ORANGE);
             GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
         else
@@ -1673,7 +1769,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 grid_question_append(desc, sizeof(desc),
                     "Words of warding glimmer about its frame.");
             }
-            GRID_Q_ADD('o', 'o', "Open it", TERM_L_GREEN);
+            GRID_Q_ADD('o', 'o', "Open it", TERM_WHITE);
             GRID_Q_ADD('b', 'b', "Bash it open", TERM_ORANGE);
         }
     }
@@ -1712,7 +1808,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 "margin, the harder foes find it to notice or undo.");
             /* Same command as disarm: do_cmd_disarm_aux re-keys it when you
              * have the ability (see the rewire branch there). */
-            GRID_Q_ADD('D', 'd', disarm_label, TERM_L_BLUE);
+            GRID_Q_ADD('D', 'd', disarm_label, TERM_ORANGE);
         }
         else if (disarmable)
         {
@@ -1760,32 +1856,25 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                     "obstacles to dig through (difficulty 1).",
                     sizeof(desc));
             }
-            else if (feat == FEAT_QUARTZ)
+            else if (FEAT_IS_QUARTZ(feat))
             {
-                level_partition_kind part_kind
-                    = level_partition_kind_for_point(y, x);
-                bool in_chasm_area
-                    = (cave_info[y][x] & CAVE_CHASM_AREA) != 0;
-                bool loot_ground = ((part_kind == LEVEL_PART_CAVEY)
-                    || (part_kind == LEVEL_PART_BIG_CAVE))
-                    && ((cave_info[y][x] & CAVE_ROOM) != 0) && !in_chasm_area;
-                bool star_ground
-                    = (part_kind == LEVEL_PART_CHASM) && in_chasm_area;
-
                 difficulty = TUNNEL_DIFFICULTY_QUARTZ;
-                SDL_strlcpy(title, "Quartz vein", sizeof(title));
+                SDL_strlcpy(title, feat == FEAT_CRACKED_QUARTZ
+                    ? "Cracked quartz vein" : "Quartz vein", sizeof(title));
                 SDL_strlcpy(desc,
-                    "A vein of milky quartz seams the rock (digging "
-                    "difficulty 2). Miners tell that veins in great caverns "
-                    "can hold gems below 500 ft and even mithril below 600 "
-                    "ft, and that veins in the chasm's depths may yield "
-                    "star-iron.",
-                    sizeof(desc));
-                if ((loot_ground || star_ground) && (p_ptr->depth >= 10))
-                {
-                    grid_question_append(desc, sizeof(desc),
-                        "This one lies in promising ground.");
-                }
+                    "Milky crystals seam the rock (digging difficulty 2). "
+                    "Breaking the vein releases a gem. Deep veins may also "
+                    "yield mithril; only meteorite chasms hold star iron. "
+                    "A strong strike can shatter intact stone at once; "
+                    "otherwise it cracks first.", sizeof(desc));
+            }
+            else if (feat == FEAT_DAMAGED_WALL)
+            {
+                difficulty = TUNNEL_DIFFICULTY_DAMAGED;
+                SDL_strlcpy(title, "Damaged wall", sizeof(title));
+                SDL_strlcpy(desc, "Fractured stone or crumbling masonry "
+                    "(digging difficulty 2). Breaking it leaves rubble, "
+                    "without mineral rewards.", sizeof(desc));
             }
             else
             {
@@ -1793,7 +1882,8 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 difficulty = TUNNEL_DIFFICULTY_GRANITE;
                 SDL_strlcpy(title, "Granite wall", sizeof(title));
                 SDL_strlcpy(desc,
-                    "A wall of solid granite (digging difficulty 3).",
+                    "Solid granite (digging difficulty 3). An ordinary strike "
+                    "damages it; a strong strike reduces it to rubble.",
                     sizeof(desc));
             }
 
@@ -1872,7 +1962,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
                 grid_question_append(desc, sizeof(desc),
                     "It has not been searched for traps.");
             }
-            GRID_Q_ADD('o', 'o', "Open it", TERM_L_GREEN);
+            GRID_Q_ADD('o', 'o', "Open it", TERM_WHITE);
         }
     }
 
@@ -1893,15 +1983,135 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         GRID_Q_ADD('/', 's', "Search it", TERM_L_BLUE);
     }
 
+    /* --- Bridges and damaged crossings --- */
+    else if (FEAT_IS_BRIDGE(feat) || bridge_repairable)
+    {
+        bool can_repair = bridge_repairable
+            && p_ptr->active_ability[S_SMT][SMT_REPAIR];
+
+        SDL_strlcpy(title, bridge_repairable ? "Damaged bridge" : "Bridge",
+            sizeof(title));
+        if (!cave_environment_describe(y, x, desc, sizeof(desc)))
+        {
+            SDL_strlcpy(desc,
+                "A constructed crossing over dangerous terrain.",
+                sizeof(desc));
+        }
+        if (bridge_repairable)
+        {
+            grid_question_append(desc, sizeof(desc), can_repair
+                ? "Your Reforge ability lets you restore it over several actions."
+                : "Repairing it requires the Reforge ability.");
+            GRID_Q_ADD_EX('/', 'r', "Repair bridge", TERM_L_GREEN,
+                !can_repair);
+        }
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
+    }
+
+    /* --- Molten lava --- */
+    else if (feat == FEAT_LAVA)
+    {
+        SDL_strlcpy(title, "Molten lava", sizeof(title));
+        SDL_strlcpy(desc,
+            "Ground contact kills immediately without net fire resistance. "
+            "One resistance level takes 40 damage on entry and each turn; "
+            "two take 30, three take 24. Fire caves remove one level. "
+            "Submerged items can suffer normal fire damage; bridges and "
+            "successful leaps keep items safe. "
+            "With Leaping and a run-up, jump a single lava tile to a known bank: "
+            "the heat deals damage with one extra resistance level. "
+            "Flying monsters take 40 heat damage each turn. Fire-resistant "
+            "monsters are unharmed. Lava casts light two squares away.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_RED);
+    }
+
+    /* --- Poisonous acid --- */
+    else if (feat == FEAT_POISON)
+    {
+        SDL_strlcpy(title, "Poisonous acid", sizeof(title));
+        SDL_strlcpy(desc,
+            "Contact adds 8 poison stacks before resistance and poison protection. "
+            "Its acid can damage submerged items using normal acid rules, "
+            "even with poison resistance. Bridges keep items safe. "
+            "Entering or spending another action here applies a dose; entry is "
+            "not charged twice in the same action. Poison caves remove one "
+            "resistance level. Poison deals one fifth of the remaining stacks "
+            "each action, rounded up, and consumes those stacks. It continues "
+            "after leaving and prevents normal Health recovery. Flying and "
+            "poison-resistant monsters ignore this terrain. A successful leap "
+            "over a single tile avoids contact; a blocked landing does not.",
+            sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_GREEN);
+    }
+
+    /* --- Melting ice --- */
+    else if (feat == FEAT_MELTING_ICE)
+    {
+        SDL_strlcpy(title, "Melting ice", sizeof(title));
+        SDL_strlcpy(desc,
+            "Slippery footing gives grounded creatures -2 attack and -2 Evasion. "
+            "Movement costs normally. Each grounded entry or later turn on "
+            "this ice has a 20% chance to break it into water. Flying monsters "
+            "and successful leaps avoid breaking it. Near dry ground it becomes "
+            "shallow water; deep water is possible only with water or ice on "
+            "all eight neighboring squares, at least two tiles from ground. "
+            "Deep water prevents attacks and costs four times normal movement "
+            "energy. Fire also melts this ice; cold reinforces it into solid ice.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_WHITE);
+    }
+
+    /* --- Solid ice --- */
+    else if (FEAT_IS_ICE(feat))
+    {
+        SDL_strlcpy(title, "Solid ice", sizeof(title));
+        SDL_strlcpy(desc,
+            "Slippery footing gives grounded creatures -2 attack and -2 Evasion. "
+            "This affects melee, archery and thrown attacks. Movement costs "
+            "normally. Flying monsters ignore the footing penalties. Fire "
+            "attacks melt ice into shallow water; cold attacks freeze water "
+            "back into ice.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_WHITE);
+    }
+
+    /* --- Deep water --- */
+    else if (feat == FEAT_DEEP_WATER)
+    {
+        SDL_strlcpy(title, "Deep water", sizeof(title));
+        SDL_strlcpy(desc,
+            "Swimming through deep water takes four times normal movement "
+            "energy, including entry and exit. You cannot attack while "
+            "submerged. Bridges provide dry footing, and flying creatures "
+            "are unaffected by the water below them.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
+    }
+
+    /* --- Shallow water --- */
+    else if (feat == FEAT_WATER)
+    {
+        SDL_strlcpy(title, "Shallow water", sizeof(title));
+        SDL_strlcpy(desc,
+            "Entering, crossing, or leaving water costs 150% movement energy. "
+            "Each wading move splashes (-3 Stealth for that action). Standing "
+            "actions cost normally. Water holds no scent, and wading leaves "
+            "no fresh tracks on nearby banks; sight, hearing and old land "
+            "tracks still matter. Flying monsters move normally. With Leaping "
+            "and a run-up, you can jump one water tile to a known dry bank. "
+            "Cold attacks freeze water into solid ice; fire melts it back.",
+            sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
+    }
+
     /* --- Empty floor --- */
     else
     {
         SDL_strlcpy(title, "Empty square", sizeof(title));
         SDL_strlcpy(desc,
             "Nothing lies there that you can see. You could strike at the "
-            "square without stepping in - an unseen enemy might lurk there.",
+            "square without stepping in - an unseen enemy might lurk there - "
+            "or run in this direction.",
             sizeof(desc));
         GRID_Q_ADD('/', 's', "Strike at it", TERM_L_RED);
+        GRID_Q_ADD('.', '.', "Run this way", TERM_L_GREEN);
     }
 
 #undef GRID_Q_ADD
@@ -1927,6 +2137,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
 
 void do_cmd_close(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y, x, dir;
 
     bool more = false;
@@ -2061,127 +2272,21 @@ static bool do_cmd_tunnel_test(int y, int x)
  * of the room, and whose "illumination" status do not change with
  * the rest of the room.
  */
-static bool twall(int y, int x)
+static bool twall(int y, int x, int margin)
 {
     /* Paranoia -- Require a wall or door or some such */
     if (cave_floor_bold(y, x))
         return (false);
 
     /* Sound */
-    sound(MSG_DIG);
+    sound_at(MSG_DIG, y, x);
 
     /* Forget the wall */
     // cave_info[y][x] &= ~(CAVE_MARK);
 
-    /* Granite */
-    if (cave_feat[y][x] >= FEAT_WALL_EXTRA && cave_feat[y][x] <= FEAT_WALL_SOLID)
+    if (FEAT_IS_ROCK(cave_feat[y][x]))
     {
-        /* Regular granite walls - just convert to rubble, no special drops */
-        cave_set_feat(y, x, FEAT_RUBBLE);
-    }
-
-    /* Quartz */
-    else if (cave_feat[y][x] == FEAT_QUARTZ)
-    {
-        /* Cave and big-cave quartz can yield gems or mithril; chasm-tagged quartz yields star-iron. */
-        int depth = p_ptr->depth;
-        level_partition_kind part_kind = level_partition_kind_for_point(y, x);
-        bool in_chasm_area = (cave_info[y][x] & CAVE_CHASM_AREA) != 0;
-        bool in_cave_loot_quartz = ((part_kind == LEVEL_PART_CAVEY)
-            || (part_kind == LEVEL_PART_BIG_CAVE))
-            && ((cave_info[y][x] & CAVE_ROOM) != 0)
-            && !in_chasm_area;
-        bool allow_mithril = in_cave_loot_quartz;
-        bool allow_star_iron = (part_kind == LEVEL_PART_CHASM) && in_chasm_area;
-        
-        /* Base 10% chance at depth 10, scaling up to 25% at depth 20+ */
-        int special_chance = 10 + depth;
-        if (special_chance > 25) special_chance = 25;
-        
-        log_debug("twall: digging vein at (%d,%d) depth=%d part=%d cave_info=0x%04x in_cave_loot_quartz=%d in_chasm=%d allow_mithril=%d allow_star_iron=%d special_chance=%d%%",
-                  y, x, depth, part_kind, cave_info[y][x], in_cave_loot_quartz, in_chasm_area, allow_mithril, allow_star_iron, special_chance);
-        
-        if ((allow_mithril || allow_star_iron) && depth >= 10 && rand_int(100) < special_chance)
-        {
-            object_type object_type_body;
-            object_type *i_ptr = &object_type_body;
-            object_wipe(i_ptr);
-            
-            log_debug("twall: PASSED chance check! Attempting drop at depth=%d", depth);
-            
-            bool try_mithril = allow_mithril
-                && (depth >= MITHRIL_VEIN_MIN_DEPTH) && (rand_int(100) < 45);
-
-            log_debug("twall: try_star_iron=%d try_mithril=%d", allow_star_iron, try_mithril);
-
-            if (allow_star_iron)
-            {
-                /* Drop star iron */
-                s16b k_idx = lookup_kind(TV_METAL, SV_METAL_STAR_IRON);
-                if (k_idx > 0)
-                {
-                    object_prep(i_ptr, k_idx);
-                    drop_near(i_ptr, -1, y, x);
-                    msg_print("You find a jagged shard of star iron!");
-                }
-            }
-            else if (try_mithril)
-            {
-                /* Drop mithril */
-                s16b k_idx = lookup_kind(TV_METAL, SV_METAL_MITHRIL);
-                if (k_idx > 0)
-                {
-                    object_prep(i_ptr, k_idx);
-                    drop_near(i_ptr, -1, y, x);
-                    msg_print("You find a gleaming piece of mithril!");
-                }
-            }
-            else
-            {
-                /* Try to drop a gem using profiled generation to ensure we get a gem */
-                log_debug("twall: Attempting gem drop via profile");
-                drop_profile gem_profile;
-                drop_profile_default(&gem_profile);
-                gem_profile.weight_weapon = 0;
-                gem_profile.weight_armor = 0;
-                gem_profile.weight_jewelry = 0;
-                gem_profile.weight_supply = 120;
-                gem_profile.supply_potion = 0;
-                gem_profile.supply_herb = 0;
-                gem_profile.supply_gem = 50;
-                gem_profile.supply_staff = 0;
-                gem_profile.supply_light = 0;
-                gem_profile.supply_arrows = 0;
-
-                if (drop_generate_object_profiled(depth, DROP_QUALITY_NORMAL,
-                        DROP_TYPE_STAFF, 0, false, &gem_profile, i_ptr))
-                {
-                    log_debug("twall: gem generated successfully, tval=%d", i_ptr->tval);
-                    if (i_ptr->tval == TV_GEM)
-                    {
-                        char gem_name[80];
-
-                        i_ptr->number = 1;
-                        object_aware(i_ptr);
-                        object_desc(gem_name, sizeof(gem_name), i_ptr, true, 0);
-                        drop_near(i_ptr, -1, y, x);
-                        msg_format("%^s glitters in the rubble!", gem_name);
-                    }
-                    else
-                    {
-                        drop_near(i_ptr, -1, y, x);
-                        msg_print("A gem glitters in the rubble!");
-                    }
-                }
-                else
-                {
-                    log_debug("twall: gem generation FAILED");
-                }
-            }
-        }
-        
-        /* Leave a pile of rubble */
-        cave_set_feat(y, x, FEAT_RUBBLE);
+        cave_set_feat(y, x, cave_rock_damage_feature(cave_feat[y][x], margin));
     }
 
     /* Rubble */
@@ -2323,7 +2428,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
     object_desc(o_name, sizeof(o_name), digger_ptr, false, -1);
 
     /* Granite */
-    if (cave_feat[y][x] >= FEAT_WALL_EXTRA)
+    if (FEAT_IS_GRANITE(cave_feat[y][x]))
     {
         difficulty = TUNNEL_DIFFICULTY_GRANITE;
         SDL_strlcpy(success_message, "You break through the granite.",
@@ -2341,7 +2446,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
         }
     }
     /* Quartz */
-    else if (cave_feat[y][x] >= FEAT_QUARTZ)
+    else if (FEAT_IS_QUARTZ(cave_feat[y][x]))
     {
         difficulty = TUNNEL_DIFFICULTY_QUARTZ;
         SDL_strlcpy(success_message, "You shatter the quartz.",
@@ -2357,6 +2462,14 @@ static bool do_cmd_tunnel_aux(int y, int x)
             strnfmt(failure_message, sizeof(failure_message),
                 "You are not strong enough to break the quartz.");
         }
+    }
+    else if (cave_feat[y][x] == FEAT_DAMAGED_WALL)
+    {
+        difficulty = TUNNEL_DIFFICULTY_DAMAGED;
+        SDL_strlcpy(success_message, "You break the damaged wall into rubble.", sizeof(success_message));
+        SDL_strlcpy(failure_message, difficulty > digging_score
+            ? "Your tool cannot break the damaged wall."
+            : "You are not strong enough to break the damaged wall.", sizeof(failure_message));
     }
     /* Rubble */
     else if (cave_feat[y][x] == FEAT_RUBBLE)
@@ -2404,8 +2517,17 @@ static bool do_cmd_tunnel_aux(int y, int x)
         /* Make a lot of noise */
         monster_perception(true, false, -10);
 
-        twall(y, x);
-        msg_print(success_message);
+        /* Eligibility guarantees progress. Strength decides whether an intact
+         * wall skips its damaged stage; never reroll tool eligibility. */
+        int margin = FEAT_IS_ROCK(cave_feat[y][x])
+            ? MAX(1, skill_check(PLAYER, p_ptr->stat_use[A_STR], difficulty, NULL)) : 1;
+        twall(y, x, margin);
+        if (cave_feat[y][x] == FEAT_DAMAGED_WALL)
+            msg_print("You fracture the wall. It still blocks the way.");
+        else if (cave_feat[y][x] == FEAT_CRACKED_QUARTZ)
+            msg_print("You crack the quartz vein. Its crystals remain embedded.");
+        else
+            msg_print(success_message);
 
         // Possibly identify the digger
         if (!object_known_p(digger_ptr) && (f1 & (TR1_TUNNEL)))
@@ -2473,6 +2595,7 @@ static bool do_cmd_tunnel_aux(int y, int x)
  */
 void do_cmd_tunnel(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y, x, dir;
 
     bool more = false;
@@ -2759,6 +2882,7 @@ bool do_cmd_disarm_aux(int y, int x)
         power = 1;
         break;
     }
+    case FEAT_TRAP_FLOOD:
     case FEAT_TRAP_IMPRISONMENT:
     {
         power = 4;
@@ -2777,7 +2901,7 @@ bool do_cmd_disarm_aux(int y, int x)
         && trap_is_rewireable(cave_feat[y][x]) && !cave_rewired[y][x];
 
     // perform the check
-    result = show_interaction_skill_roll_animation(
+    result = show_interaction_skill_roll_animation_lock_or_disarm(
         rewiring ? "Rewiring trap" : "Disarming trap",
         rewiring ? "Re-keying the mechanism" : "Testing the mechanism", y, x,
         score, difficulty, &roll);
@@ -2860,6 +2984,7 @@ bool do_cmd_disarm_aux(int y, int x)
  */
 void do_cmd_disarm(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y = 0, x = 0, dir;
 
     s16b o_idx;
@@ -3089,13 +3214,14 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
                 if (singing(SNG_SILENCE))
                 {
                     /* Message */
-                    message(
-                        MSG_BASHDOOR, 0, "A door opens with a muffled crash!");
+                    message_at(y, x, MSG_BASHDOOR, 0,
+                        "A door opens with a muffled crash!");
                 }
                 else
                 {
                     /* Message */
-                    message(MSG_BASHDOOR, 0, "A door crashes open!");
+                    message_at(y, x, MSG_BASHDOOR, 0,
+                        "A door crashes open!");
                 }
             }
             else
@@ -3103,13 +3229,14 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
                 if (singing(SNG_SILENCE))
                 {
                     /* Message */
-                    message(MSG_BASHDOOR, 0,
+                    message_at(y, x, MSG_BASHDOOR, 0,
                         "The door opens with a muffled crash!");
                 }
                 else
                 {
                     /* Message */
-                    message(MSG_BASHDOOR, 0, "The door crashes open!");
+                    message_at(y, x, MSG_BASHDOOR, 0,
+                        "The door crashes open!");
                 }
             }
 
@@ -3148,7 +3275,8 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
         if (cave_known_closed_door_bold(y, x))
         {
             /* Message */
-            message(MSG_BASHDOOR_FAIL, 0, "The door holds firm.");
+            message_at(y, x, MSG_BASHDOOR_FAIL, 0,
+                "The door holds firm.");
         }
 
         /* Stuns */
@@ -3186,6 +3314,7 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
  */
 void do_cmd_bash(void)
 {
+    if (!tutorial_game_action_allowed("interact", NULL)) return;
     int y, x, dir;
 
     /* No closed door adjacent */
@@ -3273,6 +3402,7 @@ void do_cmd_bash(void)
  */
 void do_cmd_alter(void)
 {
+    if (tutorial_is_active() && strcmp(tutorial_current_action(), "attack")) return;
     int y, x, dir;
     s16b chest_o_idx = 0;
 
@@ -3282,10 +3412,14 @@ void do_cmd_alter(void)
     bool skeleton_present = false;
 
     bool more = false;
+    environment_bridge_job bridge_job;
+    bool bridge_repairable;
 
     /* Get a direction */
     if (!get_rep_dir(&dir))
         return;
+
+    if (!tutorial_game_command_allowed('/', dir)) return;
 
     /* Get location */
     y = p_ptr->py + ddy[dir];
@@ -3355,11 +3489,47 @@ void do_cmd_alter(void)
 
     bool is_marked = (cave_info[y][x] & CAVE_MARK) > 0;
     bool is_visible = (cave_info[y][x] & CAVE_SEEN) > 0;
+    bridge_repairable = p_ptr->active_ability[S_SMT][SMT_REPAIR]
+        && (is_marked || is_visible)
+        && cave_environment_bridge_job_at(y, x, &bridge_job)
+        && bridge_job.repair;
 
     /*Is there a monster on the space?*/
     if (cave_m_idx[y][x] > 0)
     {
         py_attack(y, x, ATT_MAIN);
+    }
+    /* Reforge can restore an existing damaged or destroyed bridge.  Use the
+     * same work counter and route checks as bridge-building monsters. */
+    else if (bridge_repairable)
+    {
+        int before = cave_environment_bridge_progress(y, x);
+        bool done = cave_environment_bridge_work(y, x, bridge_job.material);
+        int after = cave_environment_bridge_progress(y, x);
+        int required = bridge_repair_work_required(&bridge_job);
+
+        if (done)
+        {
+            msg_print("You repair the bridge.");
+            more = false;
+        }
+        else if (after > before)
+        {
+            msg_format("You work on the damaged bridge (%d/%d).",
+                after, required);
+            /* Continue the selected repair across the remaining turns. An
+             * explicit player input still interrupts command repetition via
+             * disturb(), just as it does for other long actions. */
+            if (after < required)
+                p_ptr->command_rep = MAX(p_ptr->command_rep,
+                    required - after);
+            more = true;
+        }
+        else
+        {
+            msg_print("You cannot repair that bridge now.");
+            more = false;
+        }
     }
     // deal with players who can't see the square
     else if ((dir != 5) && !(is_marked || is_visible))

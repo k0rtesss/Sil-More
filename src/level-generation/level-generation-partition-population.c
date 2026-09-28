@@ -1,6 +1,7 @@
 /* File: level-generation-partition-population.c */
 
 #include "angband.h"
+#include "object/object-place.h"
 #include "level-generation/level-generation-internal.h"
 
 
@@ -565,7 +566,9 @@ bool partition_population_floor_bold(quadrant_mode_t mode, int y, int x)
         return false;
     if (mode == QUAD_MODE_CHASM)
         return chasm_native_walkable_bold(y, x);
-    return cave_floor_bold(y, x);
+    /* Terrain rivers reduce ordinary spawn space. Match the plain-floor
+     * location picker instead of counting lava, poison or water as capacity. */
+    return cave_feat[y][x] == FEAT_FLOOR;
 }
 
 bool partition_population_naked_bold(quadrant_mode_t mode, int y, int x)
@@ -1052,7 +1055,10 @@ void place_object_with_profile_params(
 {
     if (!in_bounds(y, x))
         return;
-    if (!cave_clean_bold(y, x))
+    if (!cave_clean_bold(y, x)
+        && !(cave_feat[y][x] == FEAT_DEEP_WATER && !cave_o_idx[y][x]))
+        return;
+    if (!object_terrain_allows_generation(cave_feat[y][x], TV_GEM))
         return;
 
     object_type object_type_body;
@@ -1076,7 +1082,10 @@ void place_object_with_profile_params(
     if (extra_ident)
         i_ptr->ident |= extra_ident;
 
-    if (!floor_carry(y, x, i_ptr))
+    /* Keep the normal gem rarity: a water roll for other loot is discarded,
+     * rather than repeatedly rolling until it becomes a gem. */
+    if (!object_terrain_allows_generation(cave_feat[y][x], i_ptr->tval)
+        || !floor_carry(y, x, i_ptr))
     {
         a_info[i_ptr->name1].cur_num = 0;
     }

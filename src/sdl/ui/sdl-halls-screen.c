@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "sdl/main-sdl-private.h"
 
 /*
@@ -437,6 +438,7 @@ bool sdl_halls_screen_active(void)
 void sdl_halls_screen_begin(cptr subtitle, cptr page_status,
     bool detailed, int outside_choice)
 {
+    tutorial_game_menu("halls", "Review fallen heroes and completed runs. These records explain previous outcomes; they do not resume a finished hero.");
     memset(&g_sdl_halls, 0, sizeof(g_sdl_halls));
     g_sdl_halls.active = true;
     g_sdl_halls.detailed = detailed;
@@ -948,7 +950,7 @@ static void sdl_halls_render_actions(const SDL_Rect* canvas, float content_x,
         hovered = (action->choice == g_sdl_halls.hover_choice);
         action->hit_rect = (SDL_FRect){ content_x, y, action_w, h };
         content_x += action_w + gap;
-        border = sdl_halls_color(hovered ? TERM_YELLOW : TERM_BLUE,
+        border = sdl_halls_color(hovered ? TERM_L_BLUE : TERM_BLUE,
             hovered ? 230 : 115);
         SDL_SetRenderDrawColor(g_state.renderer, hovered ? 12 : 3,
             hovered ? 20 : 8, hovered ? 32 : 15, 240);
@@ -959,8 +961,7 @@ static void sdl_halls_render_actions(const SDL_Rect* canvas, float content_x,
         box = action->hit_rect;
         box.x += gap;
         box.w -= gap * 2.0f;
-        (void)sdl_halls_draw_text(font, action->label,
-            hovered ? TERM_YELLOW : action->attr, box, 0);
+        (void)sdl_halls_draw_text(font, action->label, action->attr, box, 0);
     }
 }
 

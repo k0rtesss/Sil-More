@@ -1,6 +1,9 @@
 /* File: cave-visuals.c */
 
 #include "cave-internal.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-bridge.h"
+#include "cave/cave-flood.h"
 
 /*
  * Multi-hued monsters shimmer according to their base colour.
@@ -107,7 +110,7 @@ bool feat_supports_lighting(int feat)
     if (use_graphics == GRAPHICS_PSEUDO)
         return false;
 
-    if ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+    if FEAT_IS_TRAP(feat)
     {
         return true;
     }
@@ -117,6 +120,8 @@ bool feat_supports_lighting(int feat)
     case FEAT_FLOOR:
     case FEAT_SECRET:
     case FEAT_QUARTZ:
+    case FEAT_CRACKED_QUARTZ:
+    case FEAT_DAMAGED_WALL:
     case FEAT_WALL_EXTRA:
     case FEAT_WALL_INNER:
     case FEAT_WALL_OUTER:
@@ -261,7 +266,7 @@ static void special_lighting_wall(byte* a, char* c, int feat, int info, int ligh
     case GRAPHICS_MICROCHASM:
         if (feat_supports_lighting(feat)
             && (is_dark
-                || (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+                || (FEAT_IS_TRAP(feat)
                     && !(info & (CAVE_SEEN)))))
         {
             /* use darker tile variant */
@@ -291,6 +296,27 @@ static void special_lighting_wall(byte* a, char* c, int feat, int info, int ligh
     }
 }
 
+static void apply_flood_trap_variant_visual(int y, int x, byte* a, char* c)
+{
+    if (!in_bounds(y, x) || cave_feat[y][x] != FEAT_TRAP_FLOOD)
+        return;
+
+    /* The two plate variants occupy adjacent atlas columns.  Reapply the
+     * intended column after generic trap lighting, whose dark-tile +1 would
+     * otherwise turn blue water into the green acid plate when remembered. */
+    if (graphics_are_ascii())
+    {
+        if (cave_flood_trap_is_acid_at(y, x))
+            *a = TERM_L_GREEN;
+        return;
+    }
+
+    *a = (byte)(CAVE_FLOOD_TRAP_TILE_ROW | 0x80);
+    *c = (char)((cave_flood_trap_is_acid_at(y, x)
+            ? CAVE_FLOOD_TRAP_ACID_TILE_COL
+            : CAVE_FLOOD_TRAP_WATER_TILE_COL) | 0x80);
+}
+
 /*
  * Group-aware floor and door graphics (extensible)
  * These helpers allow selecting alternative tiles for floors and doors
@@ -317,6 +343,56 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
     if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR && feat != FEAT_SUNLIGHT)
         return false;
 
+    /* Shores depend only on known neighboring terrain. In restricted views,
+     * remembered hazards outside current sight must not reveal their banks. */
+    for (int radius = 1; radius <= 2; radius++) {
+        bool have_border = false;
+        byte border_row = 0, border_col = 0;
+        for (int dy = -radius; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                int ny = y + dy, nx = x + dx;
+                byte row, col;
+                /* Search the closest ring globally before any outer-bank rule. */
+                if ((ABS(dy) != radius && ABS(dx) != radius) || !in_bounds(ny, nx)) continue;
+                u16b known = cave_info[ny][nx];
+                if (!(known & (CAVE_MARK | CAVE_SEEN))
+                    || ((p_ptr->rage || g_labyrinth_view_active) && !(known & CAVE_SEEN)))
+                    continue;
+                int border_feat = cave_environment_display_underlay(ny, nx);
+                if (cave_water_has_icy_shore(ny, nx)) border_feat = FEAT_ICE;
+                /* Ordinary water meets the existing floor. Its SDL edge
+                 * samples that floor instead of manufacturing a sand bank. */
+                if (border_feat == FEAT_WATER || border_feat == FEAT_DEEP_WATER)
+                    continue;
+                if (cave_flood_surface_at(ny, nx)
+                    && (border_feat == FEAT_WATER
+                        || border_feat == FEAT_DEEP_WATER
+                        || border_feat == FEAT_POISON))
+                    continue;
+                if (styles_floor_border_at(border_feat,
+                        radius, y, x, &row, &col)) {
+                    /* Prefer snow over ordinary banks throughout this ring,
+                     * so water cannot repaint an ice shore by scan order. */
+                    if (FEAT_IS_ICE(border_feat)) {
+                        *a = (byte)(row | 0x80);
+                        *c = (char)(col | 0x80);
+                        return true;
+                    }
+                    if (!have_border) {
+                        have_border = true;
+                        border_row = row;
+                        border_col = col;
+                    }
+                }
+            }
+        }
+        if (have_border) {
+            *a = (byte)(border_row | 0x80);
+            *c = (char)(border_col | 0x80);
+            return true;
+        }
+    }
+
     /* Respect per-cell color selection; 0/1/2 are defaults/legacy/vault */
     byte color_value = cave_color[y][x];
 
@@ -329,7 +405,17 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
         /* Halo can force variant 0 via color flag */
         byte choice = 0;
         if (!cave_style_color_force_first_variant(color_value) && s->floor_count > 1) {
-            choice = cave_style_floor_choice(sidx);
+            if (s->floor_tiled) {
+                /* Stable across redraws and save/load, with no gameplay RNG. */
+                u32b hash = (u32b)x * 0x9e3779b9u ^ (u32b)y * 0x85ebca6bu;
+                hash ^= (u32b)p_ptr->depth * 0xc2b2ae35u;
+                hash ^= hash >> 16;
+                hash *= 0x7feb352du;
+                hash ^= hash >> 15;
+                choice = (byte)(hash % s->floor_count);
+            } else {
+                choice = cave_style_floor_choice(sidx);
+            }
         }
         if (s->floor_count > 0 && choice >= s->floor_count)
             choice = 0;
@@ -699,7 +785,19 @@ static bool monster_can_see_player_for_stealth_vision(monster_type* m_ptr)
     return true;
 }
 
-void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
+/* Rewarded quest thralls no longer need the alert icon over their tile. */
+static bool monster_alert_icon_visible(const monster_type* m_ptr)
+{
+    bool rewarded_thrall =
+        (m_ptr->r_idx == R_IDX_ALERT_HUMAN_THRALL
+            || m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
+        && m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARDED;
+
+    return m_ptr->alertness >= ALERTNESS_ALERT && !rewarded_thrall;
+}
+
+static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
+    char* tcp, bool terrain_only)
 {
     byte a = TERM_DARK; // these are defaults to soothe compilation warnings
     char c = ' '; //
@@ -714,11 +812,21 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 
     s16b image = p_ptr->image;
 
+    /* Reject off-map cells before indexing any cave arrays. Both callers
+     * need a complete darkness result, including the terrain underlay. */
+    if (!in_bounds(y, x) || y >= p_ptr->cur_map_hgt || x >= p_ptr->cur_map_wid)
+    {
+        cave_feature_visual(&f_info[FEAT_NONE], &a, &c);
+        *ap = *tap = a;
+        *cp = *tcp = c;
+        return;
+    }
+
     /* Monster/Player */
     m_idx = cave_m_idx[y][x];
 
     /* Feature */
-    feat = cave_feat[y][x];
+    feat = cave_environment_known_feature(y, x);
 
     /* Cave flags */
     info = cave_info[y][x];
@@ -734,18 +842,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     if ((!p_ptr->is_dead) && p_ptr->rage)
         rage_active = true;
 
-    /* make sure not to display things off screen */
-    if ((y < 0) || (x < 0) || (y >= p_ptr->cur_map_hgt)
-        || (x >= p_ptr->cur_map_wid))
-    {
-        /* Get the darkness feature */
-        f_ptr = &f_info[FEAT_NONE];
-
-        cave_feature_visual(f_ptr, &a, &c);
-    }
-
     // hiding squares out of line of sight during rage
-    else if (hide_square)
+    if (hide_square)
     {
         /* Get the darkness feature */
         f_ptr = &f_info[FEAT_NONE];
@@ -754,7 +852,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     }
 
     /* Boring grids (floors, etc) */
-    else if (cave_floorlike_bold(y, x))
+    else if (feat == FEAT_FLOOR || (FEAT_IS_TRAP(feat) && (info & CAVE_HIDDEN)))
     {
         /* Seen floors are normal; marked, illuminated floors outside LOS use
          * the dark floor appearance selected by special_lighting_floor(). */
@@ -802,7 +900,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             /* Mark a rewired trap distinctly in ASCII view (tiles are tinted
              * by the renderer instead -- see sdl_rewired_trap_tint_active). */
             if (graphics_are_ascii() && cave_rewired[y][x]
-                && (feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+                && FEAT_IS_TRAP(feat))
             {
                 a = TERM_VIOLET;
             }
@@ -812,19 +910,19 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 
 #if DEPTH_BASED_WALLS
             /* Apply style-based wall/vein graphics for non-ASCII graphics */
-            if (!graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) && feat != FEAT_RUBBLE)
+            if (!graphics_are_ascii() && FEAT_IS_WALL(feat) && feat != FEAT_RUBBLE)
             {
                 /* Get the cave color for this location */
                 byte color_value = cave_color[y][x];
 
                 /* Decode style index from cave_color (first-variant flag is ignored here) */
                 int sidx2 = cave_style_index_for_color(color_value);
-                if (feat == FEAT_QUARTZ) {
+                if (FEAT_IS_QUARTZ(feat) || feat == FEAT_DAMAGED_WALL) {
                     /* Veins */
                     if (sidx2 >= 0) {
                         int display_sidx2 = cave_hallucination_style_for_display(sidx2);
                         style_type* s = &style_info[display_sidx2];
-                        if (s->vein_defined) {
+                        if (s->vein_defined && feat == FEAT_DAMAGED_WALL) {
                             /* Full replacement vein tile */
                             a = (byte)(s->vein_row | 0x80);
                             c = (char)(s->vein_col | 0x80);
@@ -832,8 +930,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                             /* Overlay default vein tile on this style's wall tile */
                             extern byte get_default_vein_row(void);
                             extern byte get_default_vein_col(void);
-                            byte dv_r = get_default_vein_row();
-                            byte dv_c = get_default_vein_col();
+                            byte dv_r = FEAT_IS_QUARTZ(feat) ? GRAPHICS_QUARTZ_OVERLAY_ROW : get_default_vein_row();
+                            byte dv_c = FEAT_IS_QUARTZ(feat) ? (feat == FEAT_CRACKED_QUARTZ ? 2 : 0) : get_default_vein_col();
                             byte wall_a = (byte)(s->wall_row | 0x80);
                             byte wall_c = (byte)(s->wall_col | 0x80);
                             if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
@@ -848,8 +946,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                                     c += 1;
                                 }
                             }
-                            
+
                             /* Check for visible monster on this vein before returning */
+                            if (terrain_only)
+                                return;
                             if ((m_idx > 0) && !hide_square) {
                                 monster_type* m_ptr = &mon_list[m_idx];
                                 if (m_ptr->ml) {
@@ -867,7 +967,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                                     if (rage_active && graphics_are_ascii()) a = TERM_RED;
                                     if (!monster_race_is_vala(m_ptr->r_idx)
                                         && !graphics_are_ascii()
-                                        && m_ptr->alertness >= ALERTNESS_ALERT) c += GRAPHICS_ALERT_MASK;
+                                        && monster_alert_icon_visible(m_ptr)) c += GRAPHICS_ALERT_MASK;
                                 }
                             }
                             
@@ -884,8 +984,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                             byte wall_c = (byte)(sfb->wall_col | 0x80);
                             extern byte get_default_vein_row(void);
                             extern byte get_default_vein_col(void);
-                            byte dv_r = get_default_vein_row();
-                            byte dv_c = get_default_vein_col();
+                            byte dv_r = FEAT_IS_QUARTZ(feat) ? GRAPHICS_QUARTZ_OVERLAY_ROW : get_default_vein_row();
+                            byte dv_c = FEAT_IS_QUARTZ(feat) ? (feat == FEAT_CRACKED_QUARTZ ? 2 : 0) : get_default_vein_col();
                             a = (byte)(dv_r | 0x80); c = (char)(dv_c | 0x80);
                             if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
                                 if (p_ptr->blind || (!(info & (CAVE_GLOW)) && cave_light[y][x] <= 0)) {
@@ -894,8 +994,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                             }
                             *tap = wall_a; *tcp = wall_c; /* base wall */
                             log_warn("VEIN fallback: unencoded cave_color=%d at (%d,%d); using primary style %d wall(row=%d,col=%d)", color_value, y, x, fb, sfb->wall_row, sfb->wall_col);
-                            
+
                             /* Check for visible monster on this vein before returning */
+                            if (terrain_only)
+                                return;
                             if ((m_idx > 0) && !hide_square) {
                                 monster_type* m_ptr = &mon_list[m_idx];
                                 if (m_ptr->ml) {
@@ -913,7 +1015,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                                     if (rage_active && graphics_are_ascii()) a = TERM_RED;
                                     if (!monster_race_is_vala(m_ptr->r_idx)
                                         && !graphics_are_ascii()
-                                        && m_ptr->alertness >= ALERTNESS_ALERT) c += GRAPHICS_ALERT_MASK;
+                                        && monster_alert_icon_visible(m_ptr)) c += GRAPHICS_ALERT_MASK;
                                 }
                             }
                             
@@ -964,13 +1066,14 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             }
             else {
                 /* ASCII/text mode: colour wall & vein glyphs by their style. */
-                if (graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) && feat != FEAT_RUBBLE)
+                if (graphics_are_ascii() && FEAT_IS_WALL(feat) && feat != FEAT_RUBBLE)
                 {
                     int sidx2 = cave_style_index_for_color(cave_color[y][x]);
                     if (sidx2 < 0) sidx2 = cave_style_primary_for_grid(y, x);
                     sidx2 = cave_hallucination_style_for_display(sidx2);
                     int style_attr = cave_style_ascii_attr(sidx2);
                     if (style_attr >= 0) a = (byte)style_attr;
+                    if (FEAT_IS_QUARTZ(feat)) a = TERM_WHITE;
                 }
 
                 /* Standard lighting effects (darkens unlit walls). */
@@ -980,6 +1083,16 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             /* Depth-based walls disabled, use standard lighting only */
             special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
 #endif /* DEPTH_BASED_WALLS */
+
+            apply_flood_trap_variant_visual(y, x, &a, &c);
+
+            /* Text mode conveys the same light clue without tile blending. */
+            if (graphics_are_ascii() && cave_feat[y][x] == FEAT_ILLUSORY_WALL
+                && cave_illusion_opacity(y, x) < 255)
+            {
+                a = cave_light[y][x] >= 3 ? TERM_L_DARK : TERM_SLATE;
+                if (cave_light[y][x] >= 5) c = ':';
+            }
         }
 
         /* Unknown */
@@ -999,8 +1112,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     /* Traps, stairs, shafts, forges, sunlight, and rubble are drawn as a middle layer in
      * the SDL renderer (floor -> feature -> monster). For transparency to work, use a
      * floor tile as the terrain underlay when one of these features is visible. */
-    if ((info & (CAVE_MARK)) &&
-        (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL)) ||
+    if (!hide_square && (info & (CAVE_MARK)) &&
+        (FEAT_IS_TRAP(feat) ||
          ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL)) ||
          ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL)) ||
          (feat == FEAT_SUNLIGHT) ||
@@ -1017,14 +1130,20 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
     (*tap) = terrain_a;
     (*tcp) = terrain_c;
 
+    if (terrain_only)
+        return;
+
     /* Objects (only shown when on floors, not when in rubble) */
-    if (feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT)
+    if (feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || feat == FEAT_WATER
+        || feat == FEAT_DEEP_WATER
+        || feat == FEAT_LAVA || FEAT_IS_ICE(feat) || feat == FEAT_POISON
+        || FEAT_IS_BRIDGE(feat))
     {
         for (o_ptr = get_first_object(y, x); o_ptr;
              o_ptr = get_next_object(o_ptr))
         {
             /* Memorized objects */
-            if (o_ptr->marked && !hide_square)
+            if (object_is_visible(o_ptr) && !hide_square)
             {
                 /* Normal attr */
                 a = object_attr(o_ptr);
@@ -1137,7 +1256,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                 a += (MAX_COLORS * BG_DARK);
             }
             else if (!is_vala && !graphics_are_ascii()
-                && m_ptr->alertness >= ALERTNESS_ALERT)
+                && monster_alert_icon_visible(m_ptr))
             {
                 c += GRAPHICS_ALERT_MASK;
             }
@@ -1177,9 +1296,49 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
         }
     }
 
+    /* Debug inspection deliberately marks even unexplored illusions. */
+    if (graphics_are_ascii() && cave_illusion_debug_marked(y, x))
+    {
+        a = TERM_YELLOW;
+        c = '.';
+    }
+
     /* Result */
     (*ap) = a;
     (*cp) = c;
+}
+
+void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
+{
+    map_info_aux(y, x, ap, cp, tap, tcp, false);
+}
+
+/*
+ * Return only the terrain layer selected by map_info().  This keeps terrain
+ * overlays from asking the full map renderer to inspect objects or actors
+ * (which can consume hallucination/multi-hued display randomness).  The
+ * terrain selection itself remains the map_info() path above, including
+ * style, lighting, visibility, and feature-underlay handling.
+ */
+void map_info_terrain(int y, int x, byte* tap, char* tcp)
+{
+    byte a = TERM_DARK;
+    char c = ' ';
+
+    if (!tap || !tcp)
+        return;
+
+    map_info_aux(y, x, &a, &c, tap, tcp, true);
+}
+
+/* Terrain sampling for a feature whose foreground sprite must not be copied
+ * into a neighboring surface. Callers first apply map visibility gates. */
+void map_info_floor_terrain(int y, int x, byte* tap, char* tcp)
+{
+    if (!tap || !tcp || !in_bounds(y, x)) return;
+    cave_feature_visual(&f_info[FEAT_FLOOR], tap, tcp);
+    (void)apply_style_floor_graphics(y, x, FEAT_FLOOR, cave_info[y][x], tap, tcp);
+    special_lighting_floor(tap, tcp, cave_info[y][x], cave_light[y][x]);
 }
 
 /*
@@ -1208,7 +1367,7 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     m_idx = cave_m_idx[y][x];
 
     /* Feature */
-    feat = cave_feat[y][x];
+    feat = cave_environment_known_feature(y, x);
 
     /* Cave flags */
     info = cave_info[y][x];
@@ -1223,7 +1382,7 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     }
 
     /* Boring grids (floors, etc) */
-    else if (cave_floorlike_bold(y, x))
+    else if (feat == FEAT_FLOOR || (FEAT_IS_TRAP(feat) && (info & CAVE_HIDDEN)))
     {
         /* Seen floors are normal; marked and illuminated floors remain mapped
          * outside LOS and are darkened by the logic below. */
@@ -1335,7 +1494,7 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
         /* Memorized objects */
-        if (o_ptr->marked)
+        if (object_is_visible(o_ptr))
         {
             /* Hack -- object hallucination */
             if (image)

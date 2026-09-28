@@ -1,7 +1,11 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
+#include "cave/cave-events.h"
+#include "monster/monster-ai.h"
 #include "dungeon-internal.h"
+#include "tutorial/tutorial-game.h"
 
 static bool auto_pickup_okay(const object_type* o_ptr)
 {
@@ -35,11 +39,42 @@ static bool auto_pickup_okay(const object_type* o_ptr)
  */
 void land(void)
 {
+    bool ended_in_air = p_ptr->leaping;
+    int landing_feat = cave_feat[p_ptr->py][p_ptr->px];
+    bool landing_plays_fall_sound = landing_feat == FEAT_CHASM
+        || landing_feat == FEAT_TRAP_PIT
+        || (landing_feat == FEAT_TRAP_false_FLOOR && !p_ptr->avoid_traps
+            && p_ptr->depth != UTUMNO_DEPTH
+            && p_ptr->depth != UTUMNO_FORGE_DEPTH);
     // the player has landed
     p_ptr->leaping = false;
+    if (ended_in_air && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px]))
+    {
+        p_ptr->update |= PU_BONUS;
+        update_stuff();
+    }
+    /* Successful movement already applied ground contact in monster_swap.
+     * Only a blocked leap still occupies its airborne midpoint here. */
+    if (ended_in_air)
+    {
+        (void)player_melting_ice_exposure();
+        player_lava_exposure(false);
+        player_poison_terrain_exposure(false);
+    }
+    if (p_ptr->is_dead) return;
+
+    /* Falling tiles play this when their fall resolves in hit_trap(). */
+    if (!landing_plays_fall_sound)
+    {
+        sound(MSG_LANDING);
+    }
 
     // make some noise when landing
     stealth_score -= 5;
+
+    /* A blocked leap can end in the stream. Touch the landing square once;
+     * the airborne midpoint of a successful crossing never counts as wading. */
+    player_water_movement(FEAT_FLOOR, cave_feat[p_ptr->py][p_ptr->px]);
 
     /* Set off traps */
     if (cave_trap_bold(p_ptr->py, p_ptr->px)
@@ -120,7 +155,10 @@ void continue_leap(void)
         flanking_or_retreat(y_end, x_end);
 
         // move player to the new position
+        p_ptr->leaping = false;
         monster_swap(p_ptr->py, p_ptr->px, y_end, x_end);
+        if (p_ptr->py != y_end || p_ptr->px != x_end)
+            p_ptr->leaping = true;
     }
 
     // land on the ground
@@ -143,6 +181,7 @@ void process_player_aux(void)
     static u32b old_flags2 = 0L;
     static u32b old_flags3 = 0L;
     static u32b old_flags4 = 0L;
+    static u32b old_flags5 = 0L;
 
     static byte old_blows[MONSTER_BLOW_MAX];
 
@@ -167,6 +206,7 @@ void process_player_aux(void)
         if (changed || (old_monster_race_idx != p_ptr->monster_race_idx)
             || (old_flags1 != l_ptr->flags1) || (old_flags2 != l_ptr->flags2)
             || (old_flags3 != l_ptr->flags3) || (old_flags4 != l_ptr->flags4)
+            || (old_flags5 != l_ptr->flags5)
             || (old_ranged != l_ptr->ranged))
 
         {
@@ -178,6 +218,7 @@ void process_player_aux(void)
             old_flags2 = l_ptr->flags2;
             old_flags3 = l_ptr->flags3;
             old_flags4 = l_ptr->flags4;
+            old_flags5 = l_ptr->flags5;
 
             /* Memorize blows */
             for (i = 0; i < MONSTER_BLOW_MAX; i++)
@@ -219,6 +260,12 @@ void process_player(void)
     int amount;
     int regen_multiplier;
     int depth_counter_increment;
+    int action_start_y = p_ptr->py;
+    int action_start_x = p_ptr->px;
+    /* An infection acquired during this action starts a full 100-turn cycle. */
+    bool disease_was_active = p_ptr->diseased != 0;
+
+    sil_popup_trace_stage("next-player-processing");
 
     player_active_weapon_begin_player_turn();
 
@@ -441,6 +488,7 @@ void process_player(void)
             display_light_map();
 
         /* Refresh */
+        sil_popup_trace_stage("player-input-refresh");
         Term_fresh();
 
         /* Hack -- Pack Overflow if needed */
@@ -456,6 +504,10 @@ void process_player(void)
             p_ptr->command_see = false;
 
         /* Assume free turn */
+        cave_flood_begin_action();
+        player_lava_begin_action();
+        player_poison_terrain_begin_action();
+        player_melting_ice_begin_action();
         p_ptr->energy_use = 0;
 
     // Reset number of attacks this turn happens at start of player energy loop
@@ -473,6 +525,10 @@ void process_player(void)
                 note_info_screen(o_ptr);
             }
         }
+
+        /* Leaping */
+        tutorial_game_checkpoint();
+        sil_popup_trace_stage("tutorial-checkpoint-complete");
 
         /* Leaping */
         if (p_ptr->leaping)
@@ -679,6 +735,7 @@ void process_player(void)
                 && (p_ptr->previous_action[1] <= 9)
                 && (p_ptr->previous_action[1] != 5))
             {
+                sil_popup_trace_stage("input-turn-popup-attempt");
                 context_popup_handled =
                     do_cmd_context_square_action_popup();
             }
@@ -718,7 +775,10 @@ void process_player(void)
                 p_ptr->restoring = false;
 
                 /* Get a command (normal) */
+                sil_popup_trace_stage("request-command-begin");
+                sdl_sound_update_environment();
                 TIME_PHASE("request_command", request_command());
+                sil_popup_trace_end("next-command-received-before-popup");
                 sdl_question_menu_clear_context_hint();
                 if (p_ptr->leaving)
                 {
@@ -729,6 +789,7 @@ void process_player(void)
 
                 /* Process the command */
                 TIME_PHASE("process_command", process_command());
+                sil_popup_trace_stage("command-processing-complete");
             }
 
             // check the item under the player
@@ -743,6 +804,7 @@ void process_player(void)
         }
 
         /*** Clean up ***/
+        sil_popup_trace_stage("action-cleanup-begin");
 
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         update_labyrinth_view_state(true);
@@ -849,6 +911,11 @@ void process_player(void)
         last_player_y = p_ptr->py;
         last_player_x = p_ptr->px;
         morgoth_entry_preconfirmed = false;
+
+        player_lava_end_action();
+        player_poison_terrain_end_action();
+        player_melting_ice_end_action();
+        cave_flood_end_action();
 
         /* Significant */
         if (p_ptr->energy_use)
@@ -963,6 +1030,7 @@ void process_player(void)
         return;
 
     /* Do song effects */
+    sil_popup_trace_stage("action-upkeep-begin");
     sing();
 
     // make less noise if you did nothing at all
@@ -1230,6 +1298,10 @@ void process_player(void)
         (void)set_oppose_pois(p_ptr->oppose_pois - 1);
     }
 
+    /* Disease persists through resting and advances once per completed action. */
+    if (disease_was_active)
+        process_disease();
+
     /*** Poison and Stun and Cut ***/
 
     /* Poison */
@@ -1310,6 +1382,7 @@ void process_player(void)
         }
     }
 
+    monster_ai_player_action();
     playerturn++;
 
     /* Count down active narrative banners by full player turns.
@@ -1344,6 +1417,36 @@ void process_player(void)
     // Sil-y: note that these are now being set every single turn, somewhat
     // defeating their purpose
     p_ptr->window |= (PW_INVEN | PW_EQUIP);
+    cave_events_player_moved(
+        (p_ptr->py != action_start_y || p_ptr->px != action_start_x)
+        && p_ptr->previous_action[0] >= 1
+        && p_ptr->previous_action[0] <= 9
+        && p_ptr->previous_action[0] != 5);
+    sdl_sound_update_environment();
+    sil_popup_trace_stage("action-upkeep-complete");
+
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
+    /* Prepare the hint before the post-action map refresh and monster/world
+     * processing.  Waiting for the next request_command() leaves a visible
+     * gap after the move.  The input branch above rebuilds it from the final
+     * square state once the player can act again. */
+    if (!p_ptr->is_dead && !p_ptr->leaving && !p_ptr->running
+        && !p_ptr->leaping && !p_ptr->command_rep && !p_ptr->skip_next_turn
+        && !p_ptr->entranced && p_ptr->stun <= 100
+        && (p_ptr->py != action_start_y || p_ptr->px != action_start_x)
+        && p_ptr->previous_action[0] >= 1
+        && p_ptr->previous_action[0] <= 9
+        && p_ptr->previous_action[0] != 5
+        && !sdl_question_menu_is_active())
+    {
+        sil_popup_trace_stage("end-of-move-popup-attempt");
+        (void)do_cmd_context_square_action_popup();
+    }
+    else
+    {
+        sil_popup_trace_stage("end-of-move-popup-deferred");
+    }
+#endif
     
     /*
      * Do NOT set PW_COMBAT_ROLLS unconditionally here - it should only be

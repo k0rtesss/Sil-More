@@ -9,6 +9,11 @@
 #include "fs/save-internal.h"
 #include <stdio.h>
 
+static void wr_tutorial_character_state(void)
+{
+    wr_byte(p_ptr->tutorial_deferred ? 1 : 0);
+}
+
 /*
  * Write some "extra" info
  */
@@ -41,6 +46,13 @@ void wr_extra(void)
         wr_s16b(p_ptr->stat_base[i]);
     for (i = 0; i < A_MAX; ++i)
         wr_s16b(p_ptr->stat_drain[i]);
+
+    wr_s16b(p_ptr->diseased);
+    for (i = 0; i < A_MAX; ++i)
+        wr_s16b(p_ptr->stat_disease[i]);
+    wr_byte(p_ptr->disease_name);
+    wr_byte(p_ptr->disease_cure);
+    wr_byte(p_ptr->disease_knowledge);
 
     /* Dump the skill bases */
     for (i = 0; i < S_MAX; ++i)
@@ -233,6 +245,8 @@ void wr_extra(void)
     wr_u16b(p_ptr->smithing_leftover);
     wr_byte(p_ptr->unique_forge_made ? 1 : 0);
     wr_byte(p_ptr->unique_forge_seen ? 1 : 0);
+    wr_byte(p_ptr->utumno_forge_visited ? 1 : 0);
+    wr_byte(p_ptr->utumno_return_to_throne ? 1 : 0);
 
     /* Write death */
     wr_byte(p_ptr->is_dead ? 1 : 0);
@@ -371,6 +385,19 @@ void wr_extra(void)
                 wr_string(meta.cue_dists[cue]);
                 wr_string(meta.cue_dirs[cue]);
             }
+            wr_byte(meta.destination_count);
+            for (int destination = 0;
+                destination < HINT_MESSAGE_DESTINATION_MAX; ++destination)
+            {
+                const hint_message_destination* dst =
+                    &meta.destinations[destination];
+                wr_byte(dst->kind);
+                wr_s16b(dst->y);
+                wr_s16b(dst->x);
+                wr_s16b(dst->id);
+                wr_s16b(dst->min_dist);
+                wr_s16b(dst->max_dist);
+            }
         }
     }
 
@@ -386,6 +413,7 @@ void wr_extra(void)
     }
 
     wr_s32b(min_depth_counter);
+    wr_tutorial_character_state();
     log_info("SAVE: min_depth_counter=%d, current depth=%d, calculated min_depth()=%d", 
              min_depth_counter, p_ptr->depth, min_depth());
 

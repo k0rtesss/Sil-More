@@ -13,6 +13,9 @@
  */
 size_t vstrnfmt(char* buf, size_t max, cptr fmt, va_list vp)
 {
+    if (max == 0)
+        return 0;
+
     size_t n = 0;
     cptr s = fmt;
 
@@ -71,7 +74,7 @@ size_t vstrnfmt(char* buf, size_t max, cptr fmt, va_list vp)
             else if (*s == '*')
             {
                 int arg = va_arg(vp, int);
-                sprintf(aux + q, "%d", arg);
+                snprintf(aux + q, sizeof(aux) - q, "%d", arg);
                 while (aux[q])
                     q++;
                 s++;
@@ -110,11 +113,11 @@ size_t vstrnfmt(char* buf, size_t max, cptr fmt, va_list vp)
         }
 
         case 'p':
-            (void)sprintf(tmp, aux, va_arg(vp, void*));
+            (void)snprintf(tmp, sizeof(tmp), aux, va_arg(vp, void*));
             break;
 
         case 'c':
-            (void)sprintf(tmp, aux, va_arg(vp, int));
+            (void)snprintf(tmp, sizeof(tmp), aux, va_arg(vp, int));
             break;
 
         case 's':
@@ -133,9 +136,9 @@ size_t vstrnfmt(char* buf, size_t max, cptr fmt, va_list vp)
         case 'd':
         case 'i':
             if (do_long)
-                sprintf(tmp, aux, va_arg(vp, long));
+                snprintf(tmp, sizeof(tmp), aux, va_arg(vp, long));
             else
-                sprintf(tmp, aux, va_arg(vp, int));
+                snprintf(tmp, sizeof(tmp), aux, va_arg(vp, int));
             break;
 
         case 'u':
@@ -143,9 +146,9 @@ size_t vstrnfmt(char* buf, size_t max, cptr fmt, va_list vp)
         case 'x':
         case 'X':
             if (do_long)
-                sprintf(tmp, aux, va_arg(vp, unsigned long));
+                snprintf(tmp, sizeof(tmp), aux, va_arg(vp, unsigned long));
             else
-                sprintf(tmp, aux, va_arg(vp, unsigned int));
+                snprintf(tmp, sizeof(tmp), aux, va_arg(vp, unsigned int));
             break;
 
         case 'f':
@@ -154,7 +157,7 @@ size_t vstrnfmt(char* buf, size_t max, cptr fmt, va_list vp)
         case 'E':
         case 'g':
         case 'G':
-            sprintf(tmp, aux, va_arg(vp, double));
+            snprintf(tmp, sizeof(tmp), aux, va_arg(vp, double));
             break;
 
         default:

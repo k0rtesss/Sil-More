@@ -1,6 +1,7 @@
 /* File: level-generation-layout-modes.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 
 void reset_partition_population_metadata(void)
@@ -110,6 +111,7 @@ void apply_quadrant_generation_modes(void)
     int partition_count;
     int grid_rows, grid_cols;
     int depth = p_ptr->depth;
+    bool utumno = (depth == UTUMNO_DEPTH);
 
     /* Partition scaling - REDUCED partition counts for larger anchors.
      * Each partition should be at least ~40 tiles per side to fit big caves/chasms.
@@ -175,6 +177,18 @@ void apply_quadrant_generation_modes(void)
 
     remember_partition_grid(grid_rows, grid_cols, partition_count);
 
+    int utumno_partition = -1;
+    if (utumno)
+    {
+        int y1, y2, x1, x2;
+        utumno_partition = choose_central_partition_index(grid_rows, grid_cols);
+        compute_partition_bounds(utumno_partition, grid_rows, grid_cols,
+            &y1, &y2, &x1, &x2);
+        if (!utumno_build_entrance((y1 + y2) / 2, (x1 + x2) / 2)) return;
+        terrain_history_begin();
+        seed_prefab_anchors();
+    }
+
     log_trace("Level size %d blocks: using %dx%d partition grid (%d zones)",
               blocks, grid_rows, grid_cols, partition_count);
 
@@ -192,7 +206,7 @@ void apply_quadrant_generation_modes(void)
     int gv_min_depth = min_nonquest_gv_depth();
     bool gv_level_allowed = false;
 
-    if (depth >= gv_min_depth)
+    if (!utumno && depth >= gv_min_depth)
     {
         if (!cached_gv_level_roll_resolved)
         {
@@ -246,7 +260,7 @@ void apply_quadrant_generation_modes(void)
     int mode_counts[6] = {0};
     /* Guarantee minimum ROOMY and CAVEY partitions based on partition count */
     /* ROOMY provides reliable standard rooms that connect well */
-    int guaranteed_roomy = 1 + partition_count / 5;  /* At least 1 ROOMY, +1 per 5 partitions */
+    int guaranteed_roomy = utumno ? 1 : 1 + partition_count / 5;
     int guaranteed_cavey = partition_count / 8;      /* 0 for small, 1+ for larger */
 
     /* Initialize with guaranteed modes first */
@@ -306,10 +320,19 @@ void apply_quadrant_generation_modes(void)
     }
 
     /* Pick a random visual style and density for each partition */
+    if (utumno_partition >= 0) modes[utumno_partition] = QUAD_MODE_ROOMY;
     for (int i = 0; i < partition_count; ++i)
     {
         partition_bridge_styles[i] = -1;
         partition_big_cave_types[i] = BIG_CAVE_NONE;
+
+        /* Preexisting geology constrains later regional construction. Keep
+         * incompatible elemental rules from covering an older river. */
+        int gy1, gy2, gx1, gx2, ancient_material = 0;
+        if (compute_partition_bounds(i, grid_rows, grid_cols, &gy1, &gy2, &gx1, &gx2))
+            ancient_material = terrain_history_material_in_bounds(gy1, gx1, gy2, gx2);
+        if (ancient_material && (modes[i] == QUAD_MODE_CHASM || modes[i] == QUAD_MODE_BIG_CAVE))
+            modes[i] = QUAD_MODE_CAVEY;
 
         switch (modes[i])
         {
@@ -427,6 +450,7 @@ void apply_quadrant_generation_modes(void)
     bool partition_done[25];
     for (int i = 0; i < 25; ++i)
         partition_done[i] = false;
+    if (utumno_partition >= 0) partition_done[utumno_partition] = true;
 
     /* TWO-PASS PROCESSING:
      * Pass 1: Process special modes (LABYRINTH, CHASM, BIG_CAVE) first.
@@ -439,6 +463,7 @@ void apply_quadrant_generation_modes(void)
     /* Pass 1: Special modes only */
     for (int pi = 0; pi < partition_count; ++pi)
     {
+        if (partition_done[pi]) continue;
         quadrant_mode_t mode = modes[pi];
         bool is_gv_partition = (pi == gv_partition);
         bool is_morgoth_partition = (morgoth_level_active && pi == morgoth_partition_index);

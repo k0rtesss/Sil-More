@@ -12,6 +12,8 @@
 #ifndef INCLUDED_FS_LOAD_INTERNAL_H
 #define INCLUDED_FS_LOAD_INTERNAL_H
 
+errr load_read_environment(void);
+
 /* Debug cursor: count of bytes consumed from the save stream (post-decode). */
 extern u32b load_byte_offset;
 
@@ -31,8 +33,11 @@ extern bool savefile_has_partition_meta_types;
 extern bool savefile_has_cave_info_hi;
 extern bool savefile_has_cave_rewired;
 extern bool savefile_has_cave_natural;
+extern bool savefile_has_cave_water_flow;
+extern bool savefile_has_cave_flood_trap_kinds;
 extern bool savefile_has_hint_messages;
 extern bool savefile_has_hint_message_meta;
+extern bool savefile_has_hint_message_destinations;
 extern bool savefile_has_thrall_quest;
 extern bool savefile_has_thrall_quest_requested;
 extern bool savefile_has_randart_flags4;
@@ -60,6 +65,7 @@ void load_rd_u32b(u32b* ip);
 void load_rd_s32b(s32b* ip);
 void load_rd_string(char* str, int max);
 void load_strip_bytes(int n);
+bool load_only_checksums_remain(void);
 errr load_rd_item(object_type* o_ptr);
 void load_rd_monster(monster_type* m_ptr);
 bool load_savefile_version_at_least(byte major, byte minor, byte patch, byte extra);

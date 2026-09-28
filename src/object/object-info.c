@@ -1,6 +1,7 @@
 /* File: object/object-info.c */
 
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-info.h"
 #include "log/log.h"
@@ -39,7 +40,7 @@ static bool object_info_overlay_capture_active = false;
 static void object_info_screen_multi_body(const object_type** objects,
     const char** headings, int count, bool clear_current_line);
 static char object_info_screen_capture_view(
-    const object_info_screen_capture* capture, cptr footer,
+    const object_info_screen_capture* capture, const object_type* item, cptr footer,
     const object_info_screen_action* actions, int action_count);
 
 static int object_info_screen_preferred_capture_width(bool use_story_font)
@@ -109,6 +110,15 @@ static bool describe_consumable_healing(const object_type* o_ptr)
         && !(o_ptr->ident & IDENT_SPOIL))
     {
         return false;
+    }
+
+    if ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+        && disease_herb_matches(o_ptr))
+    {
+        p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
+            disease_name()));
+        p_text_out("Its usual effects and nourishment do not apply while curing this disease.  ");
+        return true;
     }
 
     potential = consumable_healing_points(o_ptr);
@@ -566,6 +576,11 @@ static bool describe_brand(const object_type* o_ptr, u32b f1)
     }
 
     /* We are done here */
+    if (f1 & TR1_BRAND_POIS)
+        p_text_out("Venom adds poison equal to half the damage dealt after "
+                   "Protection, rounded up. Each turn, one fifth of the "
+                   "remaining poison deals damage, rounded up. "
+                   "Poison-resistant creatures are immune.  ");
     return (cnt ? true : false);
 }
 
@@ -2550,6 +2565,7 @@ static void object_info_overlay_capture_release(void)
 
 void object_info_overlay_clear(void)
 {
+    tutorial_game_item_description_closed();
     sdl_description_overlay_clear();
     object_info_overlay_capture_release();
 }
@@ -2738,6 +2754,11 @@ bool object_info_overlay_show_multi(const object_type** objects,
     if (object_info_blocked_by_hallucination())
         return false;
 
+    /* The description owns the foreground.  Retire transient context and
+     * interaction-result popups so they cannot render over it or capture its
+     * input. */
+    sdl_question_menu_clear_nonblocking();
+
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();
     overlay_width = object_info_screen_preferred_capture_width(use_story_font);
@@ -2764,6 +2785,11 @@ bool object_info_overlay_show_multi(const object_type** objects,
         return false;
     }
 
+    /* Inventory/Equipment/Supplies use this inline path for x Preview.
+     * Report the actual displayed description, not merely the input key. */
+    tutorial_game_item_described(objects[0]);
+    if (objects[0] && objects[0]->tval != TV_SKELETON && objects[0]->tval != TV_CHEST)
+        tutorial_game_menu("item-description", "This description shows known identity, combat values, modifiers, handling and effects. Read unknown properties as unknown; inspect the full effect before using or equipping.");
     return true;
 }
 
@@ -2832,11 +2858,12 @@ static void object_info_configure_footer(cptr footer,
 }
 
 static char object_info_screen_capture_view(
-    const object_info_screen_capture* capture, cptr footer,
+    const object_info_screen_capture* capture, const object_type* item, cptr footer,
     const object_info_screen_action* actions, int action_count)
 {
     int scroll = 0;
     char result = 0;
+    bool described = false;
 
     if (!capture)
         return 0;
@@ -2858,6 +2885,12 @@ static char object_info_screen_capture_view(
                 true, &visible_rows, &max_scroll))
         {
             break;
+        }
+        if (!described) {
+            tutorial_game_item_described(item);
+            if (item && item->tval != TV_SKELETON && item->tval != TV_CHEST)
+                tutorial_game_menu("item-description", "This description shows known identity, combat values, modifiers, handling and effects. Read unknown properties as unknown; inspect the full effect before using or equipping.");
+            described = true;
         }
         if (scroll > max_scroll)
             scroll = max_scroll;
@@ -2915,6 +2948,7 @@ static char object_info_screen_capture_view(
     sdl_description_overlay_clear_footer_actions();
     sdl_description_overlay_set_footer(NULL, false);
     ui_scroll_area_clear();
+    tutorial_game_item_description_closed();
 
     return result;
 }
@@ -2945,6 +2979,11 @@ char object_info_screen_multi_with_actions(const object_type** objects,
 
     if (object_info_blocked_by_hallucination())
         return 0;
+
+    /* The description owns the foreground.  Retire transient context and
+     * interaction-result popups so they cannot render over it or capture its
+     * input. */
+    sdl_question_menu_clear_nonblocking();
 
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();
@@ -2992,7 +3031,7 @@ char object_info_screen_multi_with_actions(const object_type** objects,
             use_story_font, true);
     if (have_capture)
     {
-        result = object_info_screen_capture_view(&capture, footer,
+        result = object_info_screen_capture_view(&capture, objects[0], footer,
             effective_action_count ? effective_actions : NULL,
             effective_action_count);
     }

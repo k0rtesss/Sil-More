@@ -1,6 +1,8 @@
 /* File: dungeon/dungeon-world.c */
 
 #include "angband.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-events.h"
 #include "dungeon-internal.h"
 
 /*
@@ -135,8 +137,8 @@ static void regen_monsters(void)
         if (!m_ptr->r_idx)
             continue;
 
-        /* Allow hp regeneration, if needed. */
-        if (m_ptr->hp != m_ptr->maxhp)
+        /* Poison prevents ordinary Health recovery, as it does for players. */
+        if (!m_ptr->poisoned && m_ptr->hp != m_ptr->maxhp)
         {
             int old_hp = m_ptr->hp;
 
@@ -282,9 +284,15 @@ void process_world(void)
     /* Check for Varda quest interaction every turn */
     check_varda_quest_interaction();
 
+    /* Positional loops can change on any actor turn, not just world ticks. */
+    sdl_sound_update_environment();
+
     /* Stop now unless the turn count is divisible by 10 */
     if (turn % 10)
         return;
+
+    cave_environment_process();
+    cave_events_process();
 
     /*** Check the Time and Load ***/
     if (!(turn % 1000))

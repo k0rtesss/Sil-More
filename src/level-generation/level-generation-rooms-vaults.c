@@ -1,7 +1,39 @@
 /* File: level-generation-rooms-vaults.c */
 
 #include "angband.h"
+#include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-terrain-vaults.h"
+
+/* Fixed lore objects are placed independently of the random loot setting. */
+static bool place_vault_scroll_token(char symbol, int y, int x)
+{
+    int sval;
+    switch (symbol)
+    {
+    case '5': sval = SV_NOTE_TALE_BEGINNING; break;
+    case '6': sval = SV_NOTE_TALE_CORRECTION; break;
+    case '8': sval = SV_NOTE_TALE_REPLY; break;
+    case '9': sval = SV_NOTE_TALE_WORDS; break;
+    case '=': sval = SV_NOTE_TALE_ENDING; break;
+    default: return false;
+    }
+
+    s16b k_idx = lookup_kind(TV_NOTE, sval);
+    if (!k_idx)
+    {
+        log_error("Vault: missing scroll kind for token '%c'", symbol);
+        return true;
+    }
+
+    object_type scroll;
+    object_prep(&scroll, k_idx);
+    object_aware(&scroll);
+    object_known(&scroll);
+    if (!floor_carry(y, x, &scroll))
+        log_warn("Vault: could not place scroll '%c' at (%d,%d)", symbol, y, x);
+    return true;
+}
 
 
 int vault_drop_gate_percent(vault_drop_gate_kind kind)
@@ -63,11 +95,36 @@ bool vault_drop_passes(vault_drop_gate_kind kind)
     return percent_chance(chance);
 }
 
+/* Content restrictions must be checked before committing to a quest vault.
+ * A different placement or regenerated map cannot make these tokens valid.
+ * Template min/max depths are checked separately by the selection paths. */
+bool vault_is_valid_for_depth(const vault_type* v_ptr, int depth)
+{
+    cptr data = v_text + v_ptr->text;
+
+    for (int i = 0; i < v_ptr->hgt * v_ptr->wid; ++i)
+    {
+        /* Barrow wights cannot occur below 700 ft. */
+        if (data[i] == 'W' && depth > 14)
+            return false;
+
+        /* Chasms cannot occur at 1000 ft. */
+        if (data[i] == '7' && depth >= MORGOTH_DEPTH)
+            return false;
+    }
+
+    return true;
+}
+
 /*
  * Hack -- fill in "vault" rooms
  */
 bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 {
+    int planned_h = flip_d ? v_ptr->wid : v_ptr->hgt;
+    int planned_w = flip_d ? v_ptr->hgt : v_ptr->wid;
+    if (!terrain_history_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
+            y0 - planned_h / 2 + planned_h - 1, x0 - planned_w / 2 + planned_w - 1)) return false;
     int ymax = v_ptr->hgt;
     int xmax = v_ptr->wid;
     cptr data = v_text + v_ptr->text;
@@ -90,25 +147,14 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 
     cptr t;
 
-    // Check that the vault doesn't contain invalid things for its depth
-    for (t = data, dy = 0; dy < ymax; dy++)
+    if (!vault_is_valid_for_depth(v_ptr, p_ptr->depth))
     {
-        for (dx = 0; dx < xmax; dx++, t++)
-        {
-            // Barrow wights can't be deeper than level 13
-            if ((*t == 'W') && (p_ptr->depth > 13))
-            {
-                log_debug("Skipped a barrow wight vault.");
-                return (false);
-            }
-
-            // chasms can't occur at 1000 ft
-            if ((*t == '7') && (p_ptr->depth >= MORGOTH_DEPTH))
-            {
-                return (false);
-            }
-        }
+        log_trace("Skipped vault '%s': contents invalid at depth %d",
+            v_name + v_ptr->name, p_ptr->depth);
+        return false;
     }
+
+    terrain_vault_begin();
 
     // reflections
     if ((p_ptr->depth > 0) && (p_ptr->depth < MORGOTH_DEPTH))
@@ -184,6 +230,8 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             if (*t == ' ')
                 continue;
 
+            terrain_vault_record(y, x, v_ptr, *t);
+
             /* Track bbox of actual vault content */
             if (y < v_min_y) v_min_y = y;
             if (y > v_max_y) v_max_y = y;
@@ -217,6 +265,12 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
+            /* Damaged masonry, distinct from an authored mineral deposit. */
+            case '/':
+            {
+                cave_set_feat_with_color(y, x, FEAT_DAMAGED_WALL, 0);
+                break;
+            }
             /* Quartz vein */
             case '%':
             {
@@ -288,6 +342,27 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
+            /* Shallow water ('~' is already used for chests). */
+            case '_':
+            {
+                cave_set_feat(y, x, FEAT_WATER);
+                break;
+            }
+
+            /* Molten lava ('~' is already used for chests). */
+            case '`':
+            {
+                cave_set_feat(y, x, FEAT_LAVA);
+                break;
+            }
+
+            /* Authored ice uses its own token, distinct from ore and water. */
+            case '{':
+            {
+                cave_set_feat(y, x, FEAT_ICE);
+                break;
+            }
+
             /* Sunlight */
             case ',':
             {
@@ -338,7 +413,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                             near_vault_door = true;
                         }
                         /* Walls and wall-like */
-                        else if ((nfeat >= FEAT_WALL_HEAD && nfeat <= FEAT_WALL_TAIL) ||
+                        else if (FEAT_IS_WALL(nfeat) ||
                                  nfeat == FEAT_QUARTZ || nfeat == FEAT_RUBBLE) {
                             near_vault_wall = true;
                         }
@@ -377,6 +452,12 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 
     /* Restore level styles after vault placement */
     styles_end_vault();
+
+    /* Decorative vault fixtures are authored by the vault's TORCHES flag.
+     * Place them after the style halo so no later wall recolor can erase the
+     * mounted fixture. The helper is deterministic and adds no RNG noise. */
+    place_vault_template_fixtures(
+        y0, x0, v_ptr, flip_v, flip_h, flip_d);
 
     /* Place dungeon monsters and objects */
     {
@@ -448,6 +529,9 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 continue;
 
             if (is_vault_monster_token(*t))
+                continue;
+
+            if (place_vault_scroll_token(*t, y, x))
                 continue;
 
             /* Analyze the symbol */
@@ -900,7 +984,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 place_vault_monster_token('A', y, x);
                 break;
             }
-            /* Aulë (quest giver) */
+            /* AulÃ« (quest giver) */
             case 'L':
             {
                 place_vault_monster_token('L', y, x);
@@ -1089,6 +1173,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
  */
 bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2)
 {
+    if (!terrain_history_vault_fits(y1, x1, y2, x2)) return false;
     int y, x;
 
     if (x2 >= MAX_DUNGEON_WID || y2 >= MAX_DUNGEON_HGT)
@@ -1488,7 +1573,7 @@ bool choose_vault_contact(
                     door_x = x;
                 }
             }
-            else if ((feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL))
+            else if FEAT_IS_WALL(feat)
             {
                 wall_seen++;
                 if (one_in_(wall_seen))
@@ -1516,7 +1601,7 @@ bool choose_vault_contact(
                     door_x = x;
                 }
             }
-            else if ((feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL))
+            else if FEAT_IS_WALL(feat)
             {
                 wall_seen++;
                 if (one_in_(wall_seen))

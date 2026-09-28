@@ -1,4 +1,7 @@
 #include "angband.h"
+#include "cave/cave-flood.h"
+#include "monster/monster-ai.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -508,6 +511,11 @@ int total_monster_attack(monster_type* m_ptr, int base)
     int att = base;
     bool unseen = false;
 
+    /* Flying creatures do not need footing on the surface below them. */
+    if (FEAT_IS_ICE(cave_feat[m_ptr->fy][m_ptr->fx])
+        && !(r_ptr->flags2 & RF2_FLYING))
+        att -= ICE_ATTACK_PENALTY;
+
     // penalise stunning
     if (m_ptr->stunned)
         att -= 2;
@@ -555,8 +563,13 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int evn = r_ptr->evn;
+    evn += monster_dodging_bonus(m_ptr);
     evn -= m_ptr->song_evasion_penalty;
     bool unseen = false;
+
+    if (FEAT_IS_ICE(cave_feat[m_ptr->fy][m_ptr->fx])
+        && !(r_ptr->flags2 & RF2_FLYING))
+        evn -= ICE_EVASION_PENALTY;
 
     // penalise stunning
     if (m_ptr->stunned)
@@ -1442,7 +1455,7 @@ int slay_bonus(
             }
         }
 
-        /* Brand (Poison) */
+        /* Poison adds delayed damage after Protection, rather than a die. */
         if (f1 & (TR1_BRAND_POIS))
         {
             /* Notice immunity */
@@ -1454,11 +1467,9 @@ int slay_bonus(
                 }
             }
 
-            /* Otherwise, take the damage */
+            /* Notice the brand; the successful hit supplies its poison. */
             else
             {
-                brand_bonus_dice += 1;
-
                 *noticed_flag = maybe_notice_slay(o_ptr, TR1_BRAND_POIS);
             }
         }
@@ -1470,7 +1481,7 @@ int slay_bonus(
     if ((slay_bonus_dice > 0) || (brand_bonus_dice > 1))
     {
         // cause a temporary morale penalty
-        scare_onlooking_friends(m_ptr, -20);
+        scare_onlooking_friends_from_weapon(m_ptr, -20);
     }
 
     return (slay_bonus_dice + brand_bonus_dice);
@@ -1598,6 +1609,7 @@ void hit_trap(int y, int x)
         {
             msg_print("...and land somewhere deeper in the Iron Hells.");
             message_flush();
+            sound(MSG_LANDING);
 
             // add to the notes file
             do_cmd_note("Fell into a chasm", p_ptr->depth);
@@ -1622,6 +1634,13 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_false_FLOOR:
     {
+        if (p_ptr->depth == UTUMNO_DEPTH || p_ptr->depth == UTUMNO_FORGE_DEPTH)
+        {
+            msg_print("The crumbling floor rests on the unbroken foundations of Utumno.");
+            cave_set_feat(y, x, FEAT_FLOOR);
+            break;
+        }
+
         // give several messages so the player has a chance to see it happen
         msg_print("The floor crumbles beneath you!");
         message_flush();
@@ -1629,6 +1648,7 @@ void hit_trap(int y, int x)
         message_flush();
         msg_print("...and land somewhere deeper in the Iron Hells.");
         message_flush();
+        sound(MSG_LANDING);
 
         // add to the notes file
         do_cmd_note("Fell through a false floor", p_ptr->depth);
@@ -1653,6 +1673,7 @@ void hit_trap(int y, int x)
     case FEAT_TRAP_PIT:
     {
         msg_print("You fall into a pit!");
+        sound(MSG_LANDING);
 
         /* Falling damage (deeper pits hit harder) */
         dam = damroll(2 + trap_depth_dice(7), 4);
@@ -1673,6 +1694,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_SPIKED_PIT:
     {
+        sound_at(MSG_TRAP_SPIKED, y, x);
         msg_print("You fall into a spiked pit!");
 
         /* Falling damage (deeper pits hit harder) */
@@ -1721,7 +1743,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_DART:
     {
-        sound(MSG_TRAP_NEEDLE);
+        sound_at(MSG_TRAP_NEEDLE, y, x);
 
         if (check_hit(15, true))
         {
@@ -1770,6 +1792,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_FLASH:
     {
+        sound_at(MSG_TRAP_FLASH, y, x);
         if (!p_ptr->blind)
         {
             msg_print("There is a searing flash of light!");
@@ -1791,7 +1814,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_GAS_CONF:
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("A vapor fills the air and you feel yourself becoming "
                   "lightheaded.");
@@ -1813,7 +1836,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_GAS_MEMORY:
     {
-        sound(MSG_TRAP_GAS);
+        sound_at(MSG_TRAP_GAS, y, x);
 
         msg_print("You are surrounded by a strange mist!");
         if (saving_throw(NULL, 0))
@@ -1837,6 +1860,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_ACID:
     {
+        sound_at(MSG_TRAP_ACID, y, x);
         msg_print("You are splashed with acid!");
 
         /* Acid damage (stronger deeper down) */
@@ -1859,8 +1883,16 @@ void hit_trap(int y, int x)
         break;
     }
 
+    case FEAT_TRAP_FLOOD:
+    {
+        sound_at(MSG_TRAP_FLOOD, y, x);
+        cave_flood_trigger(y, x);
+        break;
+    }
+
     case FEAT_TRAP_IMPRISONMENT:
     {
+        sound_at(MSG_SHUTDOOR, y, x);
         msg_print("Words of imprisonment echo through the halls!");
         (void)lock_doors_radius(y, x, 10, 10 + (p_ptr->depth / 2));
 
@@ -1869,6 +1901,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_ALARM:
     {
+        sound_at(MSG_TRAP_ALARM, y, x);
         if (singing(SNG_SILENCE))
         {
             msg_print("You hear the muffled toll of a bell above your head.");
@@ -1886,6 +1919,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_CALTROPS:
     {
+        sound_at(MSG_TRAP_CALTROPS, y, x);
         if (skill_check(PLAYER, p_ptr->skill_use[S_PER], 10, NULL) > 0)
         {
             msg_print("You step carefully amidst a field of caltrops.");
@@ -1919,20 +1953,30 @@ void hit_trap(int y, int x)
     case FEAT_TRAP_ROOST:
     {
         int count = 0;
+        int idle_sound_m_idx = 0;
 
         for (i = 0; i < 1000; i++)
         {
             if (count < 2)
             {
-                count += summon_specific(y, x,
-                    p_ptr->depth + damroll(2, 2) - damroll(2, 2),
-                    SUMMON_BIRD_BAT);
+                int summoned_m_idx = 0;
+                if (summon_specific_with_index(y, x,
+                        p_ptr->depth + damroll(2, 2) - damroll(2, 2),
+                        SUMMON_BIRD_BAT, &summoned_m_idx))
+                {
+                    count++;
+                    if (!idle_sound_m_idx)
+                        idle_sound_m_idx = summoned_m_idx;
+                }
             }
         }
 
         if (count >= 1)
         {
             msg_print("There is a flutter of wings from high above.");
+            if (idle_sound_m_idx > 0)
+                monster_sound_force(&mon_list[idle_sound_m_idx],
+                    MONSTER_SOUND_IDLE);
 
             /* Forget the trap */
             cave_info[y][x] &= ~(CAVE_MARK);
@@ -1947,6 +1991,7 @@ void hit_trap(int y, int x)
     case FEAT_TRAP_WEB:
     {
         int count = 0;
+        int spider_m_idx = 0;
 
         msg_print("You are caught in a vast black web.");
 
@@ -1954,15 +1999,18 @@ void hit_trap(int y, int x)
         {
             if (count < 1)
             {
-                count += summon_specific(y, x,
+                count += summon_specific_with_index(y, x,
                     p_ptr->depth + damroll(2, 2) - damroll(2, 2),
-                    SUMMON_SPIDER);
+                    SUMMON_SPIDER, &spider_m_idx);
             }
         }
 
         if (count >= 1)
         {
             msg_print("A spider descends from the gloom.");
+            if (spider_m_idx > 0)
+                monster_sound_force(&mon_list[spider_m_idx],
+                    MONSTER_SOUND_IDLE);
         }
 
         break;
@@ -1970,6 +2018,7 @@ void hit_trap(int y, int x)
 
     case FEAT_TRAP_DEADFALL:
     {
+        sound_at(MSG_TRAP_DEADFALL, y, x);
         int yy, xx;
         int sy = y; // to soothe compiler warnings
         int sx = x; // to soothe compiler warnings
@@ -2050,6 +2099,7 @@ void hit_trap(int y, int x)
             }
 
             /* Move player */
+            p_ptr->leaping = false;
             monster_swap(p_ptr->py, p_ptr->px, sy, sx);
         }
 
@@ -2363,13 +2413,37 @@ void attack_punctuation(char* punctuation, int net_dam, int crit_bonus_dice)
     }
 }
 
+/* Return the distance available in one knockback direction.  A grounded
+ * target on ice slides up to two squares, but never through a wall or actor.
+ * Returning the furthest reachable square preserves the normal behaviour of
+ * a push against an obstruction. */
+static int knock_back_path(int y, int x, int dy, int dx, int max_distance,
+    int* dest_y, int* dest_x)
+{
+    int distance = 0;
+
+    for (int step = 1; step <= max_distance; step++)
+    {
+        int yy = y + step * dy;
+        int xx = x + step * dx;
+        if (!in_bounds(yy, xx) || !cave_floor_bold(yy, xx)
+            || cave_m_idx[yy][xx] != 0)
+            break;
+        *dest_y = yy;
+        *dest_x = xx;
+        distance = step;
+    }
+
+    return distance;
+}
+
 bool knock_back(int y1, int x1, int y2, int x2)
 {
     bool knocked = false;
 
     bool monster_target = false;
 
-    int mod, d, i;
+    int mod, d, i, knock_distance = 1;
     int y3, x3; // the location to get knocked to
     int dir;
 
@@ -2392,14 +2466,18 @@ bool knock_back(int y1, int x1, int y2, int x2)
         m_ptr = &mon_list[cave_m_idx[y2][x2]];
     }
 
+    /* Ice only changes the displacement of a target that is actually using
+     * the surface.  Flyers and a leaping player are airborne, so they keep
+     * the ordinary one-square knockback. */
+    if (FEAT_IS_ICE(cave_feat[y2][x2])
+        && ((!monster_target && !p_ptr->leaping)
+            || (monster_target
+                && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING))))
+        knock_distance = ICE_KNOCK_BACK_DISTANCE;
+
     // first try to knock it straight back
-    if (cave_floor_bold(y2 + dy, x2 + dx)
-        && (cave_m_idx[y2 + dy][x2 + dx] == 0))
-    {
-        y3 = y2 + dy;
-        x3 = x2 + dx;
+    if (knock_back_path(y2, x2, dy, dx, knock_distance, &y3, &x3) > 0)
         knocked = true;
-    }
 
     // then try the adjacent directions
     else
@@ -2414,9 +2492,8 @@ bool knock_back(int y1, int x1, int y2, int x2)
         for (i = 0; i < 2; i++)
         {
             d = cycle[chome[dir_from_delta(dy, dx)] + mod];
-            y3 = y2 + ddy[d];
-            x3 = x2 + ddx[d];
-            if (cave_floor_bold(y3, x3) && (cave_m_idx[y3][x3] == 0))
+            if (knock_back_path(y2, x2, ddy[d], ddx[d], knock_distance,
+                    &y3, &x3) > 0)
             {
                 knocked = true;
                 break;
@@ -2432,7 +2509,10 @@ bool knock_back(int y1, int x1, int y2, int x2)
     {
         if (monster_target)
         {
+            if (y1 == p_ptr->py && x1 == p_ptr->px)
+                monster_ai_witness(MON_AI_KNOCKBACK, 3, y2, x2);
             m_ptr->skip_next_turn = true;
+            monster_abilities_forced_movement(m_ptr);
 
             // actually move the monster
             monster_swap(y2, x2, y3, x3);
@@ -2444,11 +2524,18 @@ bool knock_back(int y1, int x1, int y2, int x2)
 
             p_ptr->skip_next_turn = true;
 
+            bool was_leaping = p_ptr->leaping;
+            p_ptr->leaping = false;
+
             // actually move the player
             monster_swap(y2, x2, y3, x3);
+            if (p_ptr->py == y3 && p_ptr->px == x3)
+                player_water_displaced(was_leaping ? FEAT_FLOOR : cave_feat[y2][x2],
+                    cave_feat[y3][x3]);
 
             // cannot stay in the air
             p_ptr->leaping = false;
+            if (p_ptr->is_dead) return knocked;
 
             // make some noise when landing
             stealth_score -= 5;
@@ -2730,7 +2817,7 @@ static bool handle_peaceful_attack_target(int y, int x, int attack_type)
             msg_format("You stop before you bump into %s.", m_name);
     }
 
-    if (!player_attacked)
+    if (attack_type == ATT_MAIN && !player_attacked)
     {
         p_ptr->previous_action[0] = ACTION_NOTHING;
         p_ptr->energy_use = 0;
@@ -2746,6 +2833,10 @@ static bool handle_peaceful_attack_target(int y, int x, int attack_type)
  */
 void py_attack_aux(int y, int x, int attack_type)
 {
+    /* Reactions must not refund the movement/action that triggered them. */
+    if (player_submerged_in_deep_water())
+        return;
+
     int num = 0;
 
     int attack_mod = 0, total_attack_mod = 0, total_evasion_mod = 0;
@@ -2887,7 +2978,7 @@ void py_attack_aux(int y, int x, int attack_type)
     // Cancel the attack if needed
     if (abort_attack)
     {
-        if (!player_attacked)
+        if (attack_type == ATT_MAIN && !player_attacked)
         {
             // reset the action type
             p_ptr->previous_action[0] = ACTION_NOTHING;
@@ -2914,6 +3005,7 @@ void py_attack_aux(int y, int x, int attack_type)
 
     /* Monsters might notice */
     player_attacked = true;
+    tutorial_game_attack(m_ptr);
 
     // Determine the number of attacks
     blows = 1;
@@ -3006,6 +3098,8 @@ void py_attack_aux(int y, int x, int attack_type)
                 charge = true;
                 attack_mod += 3;
 
+                monster_ai_witness(MON_AI_CHARGE, 3, y, x);
+
                 // undo strength adjustment to the attack (if any)
                 mds = total_mds(o_ptr, str_adjustment);
 
@@ -3037,6 +3131,8 @@ void py_attack_aux(int y, int x, int attack_type)
 
         song_disguise_note_player_attack(cave_m_idx[m_ptr->fy][m_ptr->fx]);
 
+        monster_ai_player_attack(m_ptr, attack_type);
+
         hit_result = hit_roll(
             total_attack_mod, total_evasion_mod, PLAYER, m_ptr, true);
 
@@ -3065,6 +3161,7 @@ void py_attack_aux(int y, int x, int attack_type)
             crit_bonus_dice = crit_bonus(
                 hit_result, weapon_weight, r_ptr, S_MEL, false, NULL, o_ptr);
             slay_bonus_dice = slay_bonus(o_ptr, m_ptr, &noticed_flag);
+            cave_apply_elemental_brands(y, x, o_ptr, NULL);
 
             if (f3 & TR3_CUMBERSOME)
             {
@@ -3073,12 +3170,21 @@ void py_attack_aux(int y, int x, int attack_type)
 
             total_dice = mdd + slay_bonus_dice + crit_bonus_dice;
 
+            if (crit_bonus_dice > 0) {
+                char tutorial_detail[240];
+                strnfmt(tutorial_detail, sizeof(tutorial_detail),
+                    "Your hit margin was %d with a %.1f lb weapon, adding %d critical dice. Damage now rolls %dd%d before Protection.",
+                    hit_result, weapon_weight / 10.0, crit_bonus_dice, total_dice, mds);
+                tutorial_game_explain("combat.critical", "Critical hit", tutorial_detail);
+            }
+
             dam = damroll(total_dice, mds);
             if (smite)
                 dam = total_dice * mds;
 
             /* Apply armor dice/sides curses/blessings */
-            int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+            int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty
+                + monster_blocking_bonus_dice(m_ptr);
             if (armor_dice_base < 0)
                 armor_dice_base = 0;
             int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -3112,7 +3218,8 @@ void py_attack_aux(int y, int x, int attack_type)
             // onset, so weapon_animation_delay is "ms from swing start" rather
             // than drifting with display_hit's internal pause.
             u16b result_sound = (net_dam > 0) ? MSG_HIT : MSG_ARMOR;
-            sound_delayed(result_sound, weapon_animation_delay(weapon_swing_type));
+            sound_delayed_at(result_sound, weapon_animation_delay(weapon_swing_type),
+                m_ptr->fy, m_ptr->fx);
 
             // determine the punctuation for the attack ("...", ".", "!" etc)
             attack_punctuation(punctuation, net_dam, crit_bonus_dice);
@@ -3248,6 +3355,11 @@ void py_attack_aux(int y, int x, int attack_type)
             {
                 // damage, check for death
                 fatal_blow = mon_take_hit(m_idx, net_dam, NULL, -1);
+                if (!fatal_blow)
+                {
+                    monster_receive_melee_damage(m_ptr, net_dam);
+                    monster_poison_brand(m_idx, o_ptr, NULL, net_dam);
+                }
                 p_ptr->vengeance = 0;
             }
 
@@ -3268,6 +3380,8 @@ void py_attack_aux(int y, int x, int attack_type)
             if (noticed_flag)
             {
                 ident_weapon_by_use(o_ptr, m_ptr, noticed_flag);
+                if (object_known_p(o_ptr))
+                    tutorial_game_identified(o_ptr, "identification.brand");
                 noticed_flag = false;
             }
 
@@ -3300,6 +3414,7 @@ void py_attack_aux(int y, int x, int attack_type)
                 if (do_knock_back)
                 {
                     knocked = knock_back(p_ptr->py, p_ptr->px, y, x);
+                    if (!m_ptr->r_idx) break;
                 }
 
                 // Morgoth drops his iron crown if he is hit for 10 or more net
@@ -3386,11 +3501,11 @@ void py_attack_aux(int y, int x, int attack_type)
             // treats attack a weapon weighing 2 pounds per damage die
             if ((r_ptr->flags2 & (RF2_RIPOSTE)) && (monster_ripostes == 0)
                 && !m_ptr->confused && (m_ptr->stance != STANCE_FLEEING)
-                && !m_ptr->skip_this_turn && !m_ptr->skip_next_turn
+                && monster_abilities_can_react(m_ptr)
                 && (hit_result <= -10 - (2 * r_ptr->blow[0].dd)))
             {
                 msg_format("%^s ripostes!", m_name);
-                make_attack_normal(m_ptr);
+                make_attack_reaction(m_ptr);
                 monster_ripostes++;
 
                 if (m_ptr->ml)
@@ -3441,7 +3556,7 @@ int count_open_adjacent_squares(int y, int x)
         /* Check if square is passable (not wall, not rubble, not closed door) */
         if (cave_floor_bold(adj_y, adj_x) || 
             cave_feat[adj_y][adj_x] == FEAT_OPEN ||
-            (cave_feat[adj_y][adj_x] >= FEAT_TRAP_HEAD && cave_feat[adj_y][adj_x] <= FEAT_TRAP_TAIL))
+            FEAT_IS_TRAP(cave_feat[adj_y][adj_x]))
         {
             passable[i] = true;
         }
@@ -3505,6 +3620,16 @@ bool can_impale()
 
 void py_attack(int y, int x, int attack_type)
 {
+    if (player_submerged_in_deep_water())
+    {
+        if (attack_type == ATT_MAIN)
+        {
+            msg_print("You cannot attack while submerged in deep water.");
+            p_ptr->energy_use = 0;
+        }
+        return;
+    }
+    if (attack_type == ATT_MAIN && !tutorial_game_action_allowed("attack", NULL)) return;
     int dir, dir0, yy, xx;
 
     dir = dir_from_delta(y - p_ptr->py, x - p_ptr->px);
@@ -3627,6 +3752,15 @@ void py_attack(int y, int x, int attack_type)
     {
         py_attack_aux(y, x, attack_type);
     }
+
+    /* Only the requested attack owns the action cost. Automatic attacks
+     * cannot refund movement, and an early skipped target in Rage, Whirlwind
+     * or Impale must not make a later attack free. */
+    if (attack_type == ATT_MAIN && !player_attacked)
+    {
+        p_ptr->previous_action[0] = ACTION_NOTHING;
+        p_ptr->energy_use = 0;
+    }
 }
 
 /*
@@ -3635,6 +3769,9 @@ void py_attack(int y, int x, int attack_type)
  */
 void flanking_or_retreat(int y, int x)
 {
+    if (player_submerged_in_deep_water())
+        return;
+
     int py = p_ptr->py;
     int px = p_ptr->px;
     int d;

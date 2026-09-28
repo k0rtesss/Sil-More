@@ -1,6 +1,13 @@
 /* File: fs/load-dungeon.c -- carved from load.c (shares state via fs/load-internal.h) */
 
 #include "angband.h"
+#include "cave/cave-flood.h"
+#include "cave/cave-environment.h"
+#include "monster/monster-senses.h"
+#include "monster/monster-social.h"
+#include "monster/monster-routine.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave-water-flow.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -21,6 +28,227 @@
  * Read one dungeon RLE pair.  The low-level reader returns zero at EOF, so
  * verify that both bytes actually advanced the stream before inspecting them.
  */
+static errr rd_monster_social(void)
+{
+    monster_social_reset();
+    if (!savefile_version_at_least(0, 9, 8, 19)) return 0;
+    u16b magic = 0, count = 0;
+    u32b start = load_byte_offset;
+    rd_u16b(&magic);
+    if (magic != MON_SOCIAL_SAVE_MAGIC || load_byte_offset - start != 2)
+        goto invalid;
+    for (int a = 1; a < MON_GROUP_MAX; a++)
+        for (int b = a + 1; b < MON_GROUP_MAX; b++)
+        {
+            byte relation = 0;
+            start = load_byte_offset;
+            rd_byte(&relation);
+            if (load_byte_offset - start != 1
+                || !monster_group_set_relation(a, b, relation)) goto invalid;
+        }
+    start = load_byte_offset;
+    rd_u16b(&count);
+    if (load_byte_offset - start != 2 || count != mon_max) goto invalid;
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_type* m = &mon_list[i];
+        start = load_byte_offset;
+        rd_byte(&m->social_group);
+        rd_s16b(&m->social_rival);
+        rd_byte(&m->social_memory);
+        rd_byte(&m->social_cooldown);
+        if (savefile_version_at_least(0, 9, 8, 20))
+        {
+            rd_byte(&m->social_state);
+            rd_byte(&m->social_timer);
+            rd_s16b(&m->social_focus);
+            rd_s16b(&m->social_ally);
+            rd_byte(&m->social_player_threat);
+            if (load_byte_offset - start != MON_SOCIAL_RECORD_BYTES) goto invalid;
+        }
+        else
+        {
+            if (load_byte_offset - start != 5) goto invalid;
+            /* Old feuds were already fighting; give them a bounded duration. */
+            if (m->social_rival)
+            {
+                m->social_state = MON_SOCIAL_FIGHT;
+                m->social_timer = MON_SOCIAL_DISPUTE_ACTIONS;
+            }
+        }
+        if (!monster_social_valid(m)) goto invalid;
+    }
+    /* Personal quarrels are always mutual. Reject mismatched/reused indices. */
+    for (int i = 1; i < mon_max; i++)
+    {
+        const monster_type* m = &mon_list[i];
+        if (m->social_rival && (mon_list[m->social_rival].social_rival != i
+                || mon_list[m->social_rival].social_state != m->social_state)) goto invalid;
+        if (m->social_state == MON_SOCIAL_HELP
+            && (mon_list[m->social_ally].social_rival != m->social_focus
+                || mon_list[m->social_ally].social_state != MON_SOCIAL_FIGHT)) goto invalid;
+    }
+    if (!savefile_version_at_least(0, 9, 8, 21)
+        && !load_only_checksums_remain()) goto invalid;
+    return 0;
+invalid:
+    monster_social_reset();
+    note("Invalid monster relationships.");
+    return -1;
+}
+
+static errr rd_monster_routines(void)
+{
+    /* Older saves have no trustworthy birth location: preserve old behavior. */
+    for (int i = 1; i < mon_max; i++)
+        memset(&mon_list[i].routine, 0, sizeof(mon_list[i].routine));
+    if (!savefile_version_at_least(0, 9, 8, 21)) return 0;
+    u16b magic = 0, count = 0;
+    u32b start = load_byte_offset;
+    rd_u16b(&magic); rd_u16b(&count);
+    if (load_byte_offset - start != 4 || magic != MON_ROUTINE_SAVE_MAGIC
+        || count != mon_max) goto invalid;
+    for (int i = 1; i < mon_max; i++)
+    {
+        monster_routine_state* r = &mon_list[i].routine;
+        start = load_byte_offset;
+        rd_byte(&r->home_y); rd_byte(&r->home_x); rd_byte(&r->territory);
+        rd_byte(&r->style); rd_byte(&r->count); rd_byte(&r->next);
+        if (r->count > MON_PATROL_MAX) goto invalid;
+        for (int j = 0; j < r->count; j++)
+        { rd_byte(&r->y[j]); rd_byte(&r->x[j]); }
+        if (load_byte_offset - start != (u32b)(6 + 2 * r->count)
+            || !monster_routine_valid(&mon_list[i])) goto invalid;
+    }
+    if (!load_only_checksums_remain()) goto invalid;
+    return 0;
+invalid:
+    note("Invalid monster territories or patrol routes.");
+    return -1;
+}
+
+static errr rd_floods(void)
+{
+    u16b magic = 0, count = 0;
+    u32b start_offset;
+    cave_flood_clear();
+    if (!savefile_version_at_least(0, 9, 8, 11))
+        return 0;
+    start_offset = load_byte_offset;
+    rd_u16b(&magic);
+    rd_u16b(&count);
+    if (load_byte_offset - start_offset != 4 || magic != 0xF100
+        || count > (p_ptr->cur_map_hgt - 2) * (p_ptr->cur_map_wid - 2))
+    {
+        note("Invalid flooding trap header.");
+        return -1;
+    }
+    for (int i = 0; i < count; i++)
+    {
+        byte y = 0, x = 0, stage = 0;
+        start_offset = load_byte_offset;
+        rd_byte(&y);
+        rd_byte(&x);
+        rd_byte(&stage);
+        bool valid_stage = stage >= 1 && stage <= 2;
+        if (stage == CAVE_FLOOD_STAGE_COMPLETE
+            && savefile_version_at_least(0, 9, 8, 14))
+            valid_stage = true;
+        if (load_byte_offset - start_offset != 3
+            || !valid_stage || !cave_flood_restore(y, x, stage))
+        {
+            cave_flood_clear();
+            note("Invalid flooding trap event.");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static errr rd_flood_trap_kinds(void)
+{
+    u16b magic = 0, count = 0;
+    u32b start_offset = load_byte_offset;
+
+    if (!savefile_has_cave_flood_trap_kinds)
+        return 0;
+
+    rd_u16b(&magic);
+    rd_u16b(&count);
+    if (load_byte_offset - start_offset != 4
+        || magic != CAVE_FLOOD_TRAP_KIND_SAVE_MAGIC
+        || count > (p_ptr->cur_map_hgt - 2) * (p_ptr->cur_map_wid - 2))
+    {
+        note("Invalid flooding trap kind header.");
+        return -1;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        byte y = 0, x = 0, kind = 0;
+        start_offset = load_byte_offset;
+        rd_byte(&y);
+        rd_byte(&x);
+        rd_byte(&kind);
+        if (load_byte_offset - start_offset != 3
+            || !cave_flood_restore_trap_kind(y, x, kind))
+        {
+            note("Invalid flooding trap kind.");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static errr rd_flood_surface_markers(void)
+{
+    u16b magic = 0, count = 0;
+    u32b start_offset;
+
+    /* Older saves reconstruct surfaces from source/stage records. */
+    if (!savefile_version_at_least(0, 9, 8, 16))
+        return 0;
+
+    start_offset = load_byte_offset;
+    rd_u16b(&magic);
+    rd_u16b(&count);
+    if (load_byte_offset - start_offset != 4
+        || magic != CAVE_FLOOD_SURFACE_SAVE_MAGIC
+        || count > (p_ptr->cur_map_hgt - 2) * (p_ptr->cur_map_wid - 2))
+    {
+        note("Invalid flood surface header.");
+        return -1;
+    }
+
+    /* Replace the approximate reconstruction with the exact saved set,
+     * including an empty set. The restore helper rejects duplicates,
+     * out-of-bounds coordinates, and kinds that do not match the terrain. */
+    cave_flood_clear_surface_markers();
+    for (int i = 0; i < count; i++)
+    {
+        byte y = 0, x = 0, kind = 0;
+        start_offset = load_byte_offset;
+        rd_byte(&y);
+        rd_byte(&x);
+        rd_byte(&kind);
+        if (load_byte_offset - start_offset != 3
+            || !cave_flood_restore_surface(y, x, kind))
+        {
+            cave_flood_clear_surface_markers();
+            note("Invalid flood surface marker.");
+            return -1;
+        }
+    }
+    if (!savefile_version_at_least(0, 9, 8, 17) && !load_only_checksums_remain())
+    {
+        cave_flood_clear_surface_markers();
+        note("Invalid flood surface block length.");
+        return -1;
+    }
+    log_debug("Loaded %u exact flood surface markers", (unsigned)count);
+    return 0;
+}
+
 static bool read_dungeon_rle_pair(byte* count, byte* value, cptr stream_name)
 {
     u32b start_offset = load_byte_offset;
@@ -63,6 +291,105 @@ static int dungeon_rle_pair_status(
         stream_name, (unsigned)(load_byte_offset - 2));
     note(format("Invalid zero-length %s dungeon run.", stream_name));
     return -1;
+}
+
+static errr rd_fixtures(void)
+{
+    int i;
+
+    /* Old saves have no fixture identities; start empty instead of guessing
+     * from CAVE_GLOW (which is also set by rooms and spells). */
+    cave_fixtures_clear();
+    if (savefile_version_at_least(0, 9, 8, 1))
+    {
+        u16b magic = 0, fixture_count = 0;
+        u32b start_offset = load_byte_offset;
+        rd_u16b(&magic);
+        rd_u16b(&fixture_count);
+        if (load_byte_offset - start_offset != 4
+            || magic != SAVEFILE_FIXTURES_MAGIC
+            || fixture_count > p_ptr->cur_map_hgt * p_ptr->cur_map_wid)
+        {
+            note("Invalid corridor fixtures header.");
+            return -1;
+        }
+        for (i = 0; i < fixture_count; i++)
+        {
+            byte fy = 0, fx = 0, kind = 0;
+            start_offset = load_byte_offset;
+            rd_byte(&fy);
+            rd_byte(&fx);
+            rd_byte(&kind);
+            if (load_byte_offset - start_offset != 3
+                || fy >= p_ptr->cur_map_hgt || fx >= p_ptr->cur_map_wid
+                || kind < CAVE_FIXTURE_WALL_TORCH
+                || kind > CAVE_FIXTURE_WALL_TORCH_2)
+            {
+                note("Invalid corridor fixture.");
+                return -1;
+            }
+            /* Before fixture textures were wall-mounted, braziers could be
+             * recorded on a walkable niche floor. Drop that decoration during
+             * load; leave the serialized floor and CAVE_GLOW untouched so the
+             * saved route and lighting remain unchanged. */
+            if (kind == CAVE_FIXTURE_BRAZIER
+                && cave_feat[fy][fx] == FEAT_FLOOR)
+            {
+                log_debug("Discarding legacy floor brazier at (%d,%d)", fy, fx);
+                continue;
+            }
+            cave_fixture_set(fy, fx, kind);
+        }
+    }
+
+    return 0;
+}
+
+static errr rd_water_flow(void)
+{
+    cave_water_flow_restore_begin();
+    if (!savefile_has_cave_water_flow)
+        return 0; /* Visual flow is calm; ambient audio uses terrain fallback. */
+
+    u16b magic = 0;
+    u32b start_offset = load_byte_offset;
+    rd_u16b(&magic);
+    if (load_byte_offset - start_offset != 2
+        || magic != CAVE_WATER_FLOW_SAVE_MAGIC)
+    {
+        note("Invalid water-flow header.");
+        return -1;
+    }
+
+    int total = p_ptr->cur_map_hgt * p_ptr->cur_map_wid;
+    int cells = 0;
+    bool first_pair = true;
+    while (cells < total)
+    {
+        byte count = 0, value = 0;
+        if (!read_dungeon_rle_pair(&count, &value, "water_flow")) return -1;
+        int pair_status = dungeon_rle_pair_status(count, &first_pair, "water_flow");
+        if (pair_status < 0) return -1;
+        if (pair_status == 0) continue;
+        if (cells + count > total)
+        {
+            note("Water-flow RLE exceeds dungeon size.");
+            return -1;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            int y = (cells + i) / p_ptr->cur_map_wid;
+            int x = (cells + i) % p_ptr->cur_map_wid;
+            if (!cave_water_flow_restore_cell(y, x, value))
+            {
+                note("Invalid water-flow cell.");
+                return -1;
+            }
+        }
+        cells += count;
+    }
+    cave_water_flow_restore_finish();
+    return 0;
 }
 
 /*
@@ -118,7 +445,9 @@ errr rd_dungeon(void)
     header_px = px;
 
     /* Ignore illegal dungeons */
-    if ((depth < 0) || (depth > MORGOTH_DEPTH))
+    if ((depth < 0) || ((depth > MORGOTH_DEPTH)
+        && !(savefile_version_at_least(0, 9, 8, 13)
+            && ((depth == UTUMNO_DEPTH) || (depth == UTUMNO_FORGE_DEPTH)))))
     {
         note(format("Ignoring illegal dungeon depth (%d)", depth));
         return (0);
@@ -498,6 +827,12 @@ errr rd_dungeon(void)
         log_trace("[load:%06u] === END CAVE_NATURAL RLE ===", (unsigned)load_byte_offset);
     }
 
+    if (rd_fixtures() != 0)
+        return -1;
+
+    if (rd_water_flow() != 0)
+        return -1;
+
     /*** Player ***/
 
     /* Load depth */
@@ -865,6 +1200,49 @@ errr rd_dungeon(void)
     }
     log_trace("[load:%06u] === END WANDERING MONSTERS ===", (unsigned)load_byte_offset);
 
+    scent_restore_begin();
+    if (savefile_version_at_least(0, 9, 8, 6))
+    {
+        u16b magic = 0;
+        u32b start_offset = load_byte_offset;
+        rd_u16b(&magic);
+        if (magic != 0x5CE6 || load_byte_offset - start_offset != 2)
+        {
+            note("Invalid monster scent header.");
+            return -1;
+        }
+        for (y = 0; y < p_ptr->cur_map_hgt; ++y)
+            for (x = 0; x < p_ptr->cur_map_wid; ++x)
+            {
+                byte age = 0;
+                start_offset = load_byte_offset;
+                rd_byte(&age);
+                if (age > SMELL_STRENGTH + 1
+                    || load_byte_offset - start_offset != 1)
+                {
+                    note("Invalid monster scent age.");
+                    return -1;
+                }
+                scent_restore_cell(y, x, age);
+            }
+    }
+
+    if (rd_floods())
+        return -1;
+    if (rd_flood_trap_kinds())
+        return -1;
+    if (rd_flood_surface_markers())
+        return -1;
+    if (load_read_environment())
+        return -1;
+    if (rd_monster_social())
+        return -1;
+    if (rd_monster_routines())
+    {
+        monster_social_reset();
+        return -1;
+    }
+
     /*** Success ***/
 
     /* After loading the level, pick the level primary style based on the
@@ -889,6 +1267,28 @@ errr rd_dungeon(void)
     }
 
     /* The dungeon is ready */
+    if (!savefile_version_at_least(0, 9, 8, 22))
+    {
+        /* Old quartz also represented architectural damage. Its provenance
+         * cannot identify individual authored mineral vaults, so keep only
+         * natural cave/chasm deposits on legacy maps. No contents are mined
+         * during this migration; future levels use explicit vault symbols. */
+        for (int yy = 1; yy < p_ptr->cur_map_hgt - 1; yy++)
+            for (int xx = 1; xx < p_ptr->cur_map_wid - 1; xx++)
+                if (!cave_quartz_natural_site(yy, xx))
+                {
+                    environment_cell cell = *cave_environment_cell_at(yy, xx);
+                    if (cave_feat[yy][xx] == FEAT_QUARTZ)
+                    {
+                        cave_set_feat(yy, xx, FEAT_DAMAGED_WALL);
+                        cell.integrity = MIN(cell.integrity, 60);
+                    }
+                    if (cell.known_feat == FEAT_QUARTZ) cell.known_feat = FEAT_DAMAGED_WALL;
+                    if (cell.base_feat == FEAT_QUARTZ) cell.base_feat = FEAT_DAMAGED_WALL;
+                    if (cell.pending_feat == FEAT_QUARTZ) cell.pending_feat = FEAT_DAMAGED_WALL;
+                    if (!cave_environment_restore_cell(yy, xx, cell)) return -1;
+                }
+    }
     character_dungeon = true;
 
     log_trace("[load:%06u] === END DUNGEON ===", (unsigned)load_byte_offset);

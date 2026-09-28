@@ -5,6 +5,8 @@ param(
     [ValidateSet('Sideload','Play')]
     [string]$Delivery = 'Sideload',
 
+    [switch]$Apk2,
+
     [string]$AdbPath,
 
     [string]$Serial,
@@ -295,6 +297,33 @@ function Get-AndroidApkPath {
     return Join-Path $RepoRoot "android\app\build\outputs\apk\$flavor\$buildType\app-$flavor-$buildType.apk"
 }
 
+function Get-AndroidApplicationId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Delivery,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Config,
+
+        [switch]$Apk2
+    )
+
+    $applicationId = if ($Delivery -eq 'Play') {
+        'com.silmore.myapp'
+    } else {
+        'com.silmore.myapp.sideload'
+    }
+
+    if ($Config -eq 'Debug') {
+        $applicationId += '.debug'
+    }
+    if ($Apk2) {
+        $applicationId += '.apk2'
+    }
+
+    return $applicationId
+}
+
 $adb = Resolve-AdbPath -Provided $AdbPath
 
 $apk = Get-AndroidApkPath -RepoRoot $PSScriptRoot -Delivery $Delivery -Config $Config
@@ -306,6 +335,13 @@ if (-not (Test-Path $apk)) {
 $apkMetadata = Get-ApkMetadata -ApkPath $apk
 if (-not $apkMetadata -or [string]::IsNullOrWhiteSpace($apkMetadata.ApplicationId)) {
     throw 'Could not determine the APK applicationId from output-metadata.json. Refusing to install because the target package identity cannot be verified.'
+}
+
+if ($Apk2) {
+    $expectedApplicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config -Apk2
+    if ($apkMetadata.ApplicationId -ne $expectedApplicationId) {
+        throw "APK applicationId is '$($apkMetadata.ApplicationId)', but apk2 installation requires '$expectedApplicationId'. Build the APK with -Apk2 first."
+    }
 }
 
 $connected = Get-ConnectedDevices -Adb $adb

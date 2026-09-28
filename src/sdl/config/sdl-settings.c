@@ -15,6 +15,9 @@ void get_sdl_config_info(char* buf, size_t size)
         "Compact Inventory Menus: %s\n",
         config.compact_inventory_menus ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset,
+        "Character Sheet Mode: %s\n",
+        config.debug_character_sheet ? "debug" : "SDL");
+    offset += (size_t)strnfmt(buf + offset, size - offset,
         "Mobile Starting Zoom Offset: %+d\n",
         config.mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -1559,6 +1562,8 @@ void sdl_touch_pane_load_default_bindings(void)
     g_default_touch_movement_mode = defaults.touch_movement_mode;
     g_default_touch_round_movement_enabled =
         defaults.touch_round_movement_enabled;
+    g_default_touch_round_portrait_centered =
+        defaults.touch_round_portrait_centered;
     g_default_touch_zone_overlay_mode = defaults.touch_zone_overlay_mode;
     memcpy(g_default_touch_zone_center_bindings,
         defaults.touch_zone_center_bindings,
@@ -1655,10 +1660,13 @@ void set_sdl_input_ui_mode(int mode)
 {
     if (mode < SDL_INPUT_UI_MODE_AUTO || mode >= SDL_INPUT_UI_MODE_COUNT)
         mode = SDL_INPUT_UI_MODE_AUTO;
+    /* An explicit settings change replaces the remembered startup answer. */
+    config.desktop_input_choice = SDL_INPUT_UI_MODE_AUTO;
     if (config.input_ui_mode == mode)
         return;
 
     config.input_ui_mode = mode;
+    sdl_gamepad_context_focus_clear();
     sdl_touch_cancel_all_inputs();
     if (g_state.window) {
         sdl_resize_for_current_layout();
@@ -1692,6 +1700,8 @@ void set_sdl_gamepad_enabled(bool value)
 {
     config.gamepad_enabled = value;
     if (!value) {
+        sdl_gamepad_context_focus_clear();
+        sdl_gamepad_reset_modifiers();
         g_gamepad_state.dpad_up = false;
         g_gamepad_state.dpad_down = false;
         g_gamepad_state.dpad_left = false;
@@ -1703,10 +1713,12 @@ void set_sdl_gamepad_enabled(bool value)
         g_gamepad_state.left_y = 0;
         g_gamepad_state.left_dir = 0;
         g_gamepad_state.left_bind_dir = -1;
-        sdl_gamepad_clear_pending_left_stick();
+        g_gamepad_state.left_ui_dir = -1;
+        sdl_gamepad_clear_pending_sticks();
         g_gamepad_state.right_x = 0;
         g_gamepad_state.right_y = 0;
         g_gamepad_state.right_dir = -1;
+        g_gamepad_state.right_ui_dir = -1;
         sdl_gamepad_clear_pending_shoulder();
         g_gamepad_state.left_trigger_down = false;
         g_gamepad_state.right_trigger_down = false;
@@ -1778,26 +1790,69 @@ bool get_sdl_gamepad_use_left_stick(void)
     return config.gamepad_use_left_stick;
 }
 
+static void sdl_gamepad_set_stick_movement(int stick, bool value)
+{
+    sdl_gamepad_reset_movement_controls();
+    if (stick == 0)
+        config.gamepad_use_left_stick = value;
+    else
+        config.gamepad_use_right_stick = value;
+    if (value) {
+        int* bindings = stick ? config.gamepad_right_stick_bindings
+            : config.gamepad_left_stick_bindings;
+        for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++)
+            bindings[i] = GAMEPAD_BIND_NONE;
+    }
+}
+
 void set_sdl_gamepad_use_left_stick(bool value)
 {
-    config.gamepad_use_left_stick = value;
-    if (value) {
-        if (g_gamepad_state.left_bind_dir >= 0 && g_gamepad_state.left_bind_dir < GAMEPAD_STICK_DIR_COUNT) {
-            int binding = config.gamepad_left_stick_bindings[g_gamepad_state.left_bind_dir];
-            if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL || binding == GAMEPAD_BIND_ALT) {
-                sdl_gamepad_apply_modifier(binding, false);
-            }
+    sdl_gamepad_set_stick_movement(0, value);
+}
+
+bool get_sdl_gamepad_use_right_stick(void)
+{
+    return config.gamepad_use_right_stick;
+}
+
+void set_sdl_gamepad_use_right_stick(bool value)
+{
+    sdl_gamepad_set_stick_movement(1, value);
+}
+
+int get_sdl_gamepad_stick_delay_ms(int stick)
+{
+    return stick >= 0 && stick < 2 ? config.gamepad_stick_diagonal_delay_ms[stick] : 0;
+}
+
+void set_sdl_gamepad_stick_delay_ms(int stick, int value)
+{
+    if (stick < 0 || stick >= 2)
+        return;
+    config.gamepad_stick_diagonal_delay_ms[stick] =
+        MAX(0, MIN(SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS, value));
+    sdl_gamepad_clear_pending_sticks();
+}
+
+void sdl_gamepad_swap_stick_roles(void)
+{
+    sdl_gamepad_reset_movement_controls();
+    bool use_left = config.gamepad_use_left_stick;
+    config.gamepad_use_left_stick = config.gamepad_use_right_stick;
+    config.gamepad_use_right_stick = use_left;
+    int delay = config.gamepad_stick_diagonal_delay_ms[0];
+    config.gamepad_stick_diagonal_delay_ms[0] = config.gamepad_stick_diagonal_delay_ms[1];
+    config.gamepad_stick_diagonal_delay_ms[1] = delay;
+    for (int dir = 0; dir < GAMEPAD_STICK_DIR_COUNT; dir++) {
+        int binding = config.gamepad_left_stick_bindings[dir];
+        config.gamepad_left_stick_bindings[dir] = config.gamepad_right_stick_bindings[dir];
+        config.gamepad_right_stick_bindings[dir] = binding;
+        for (int modifier = 0; modifier < GAMEPAD_MODIFIER_COUNT; modifier++) {
+            binding = config.gamepad_left_stick_combo_bindings[modifier][dir];
+            config.gamepad_left_stick_combo_bindings[modifier][dir] =
+                config.gamepad_right_stick_combo_bindings[modifier][dir];
+            config.gamepad_right_stick_combo_bindings[modifier][dir] = binding;
         }
-        g_gamepad_state.left_bind_dir = -1;
-        for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-            config.gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
-        }
-    } else {
-        g_gamepad_state.left_x = 0;
-        g_gamepad_state.left_y = 0;
-        g_gamepad_state.left_dir = 0;
-        g_gamepad_state.left_bind_dir = -1;
-        sdl_gamepad_clear_pending_left_stick();
     }
 }
 
@@ -2449,6 +2504,27 @@ bool get_sdl_touch_round_movement_default_enabled(void)
 {
     sdl_touch_pane_load_default_bindings();
     return g_default_touch_round_movement_enabled;
+}
+
+bool get_sdl_touch_round_portrait_centered(void)
+{
+    return config.touch_round_portrait_centered;
+}
+
+void set_sdl_touch_round_portrait_centered(bool value)
+{
+    if (config.touch_round_portrait_centered == value)
+        return;
+
+    config.touch_round_portrait_centered = value;
+    sdl_touch_round_cancel_press();
+    g_state.need_present = true;
+}
+
+bool get_sdl_touch_round_portrait_centered_default(void)
+{
+    sdl_touch_pane_load_default_bindings();
+    return g_default_touch_round_portrait_centered;
 }
 
 int get_sdl_touch_zone_overlay_mode(void)

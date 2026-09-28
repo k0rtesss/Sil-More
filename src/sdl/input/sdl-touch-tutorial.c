@@ -1,5 +1,24 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
+
+static bool sdl_device_tutorial_suspend_gameplay(void)
+{
+    bool visible = tutorial_is_active();
+    if (visible) {
+        tutorial_checkpoint(false);
+        sdl_gameplay_tutorial_sync();
+    }
+    return visible;
+}
+
+static void sdl_device_tutorial_restore_gameplay(bool was_visible)
+{
+    if (was_visible) {
+        tutorial_checkpoint(true);
+        sdl_gameplay_tutorial_sync();
+    }
+}
 
 enum {
     SDL_TOUCH_TUTORIAL_PANEL_ALPHA = 242,
@@ -9,7 +28,10 @@ enum {
 
 static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 {
-    const float scale = 1.14f;
+    /* Keep explanation cards near the gameplay tutorial's readable type size
+     * on touch-only mobile screens; panels measure and wrap at this size. */
+    const float scale = sdl_touch_only_mobile_device_active()
+        ? 1.45f : 1.14f;
 
     return (int)sdl_touch_pane_clampf(
         px * scale, min_px * scale, max_px * scale);
@@ -18,6 +40,13 @@ static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 static TTF_Font* sdl_touch_tutorial_font_for_height(int font_px)
 {
     return sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
+}
+
+static int sdl_touch_tutorial_readable_body_px(int suggested_px)
+{
+    if (sdl_touch_only_mobile_device_active())
+        return MAX(suggested_px, sdl_main_menu_pane_font_px());
+    return suggested_px;
 }
 
 static int sdl_touch_tutorial_story_width_n(TTF_Font* font, cptr text,
@@ -720,6 +749,9 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
         30.0f, 50.0f);
     out->body_px = sdl_touch_tutorial_text_px((float)screen->h * 0.032f,
         22.0f, 34.0f);
+    out->body_px = sdl_touch_tutorial_readable_body_px(out->body_px);
+    if (sdl_touch_only_mobile_device_active())
+        out->title_px = MAX(out->title_px, out->body_px + 6);
     title_font = sdl_touch_tutorial_font_for_height(out->title_px);
     body_font = sdl_touch_tutorial_font_for_height(out->body_px);
     if (!title_font || !body_font)
@@ -755,6 +787,14 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
         out->title_max_w = out->panel.w * 0.52f;
     out->body_max_w = out->panel.w - pad * 2.0f;
     out->title_h = (float)MAX(title_h, 1);
+    if (sdl_touch_only_mobile_device_active())
+    {
+        int title_lines = sdl_touch_tutorial_line_count(title,
+            out->title_px, out->title_max_w);
+
+        out->title_h = MAX(out->title_h,
+            (float)MAX(1, title_lines) * (float)out->title_px * 1.30f);
+    }
     out->body_y = out->text_y + out->title_h + 5.0f;
     out->body_h = sdl_touch_tutorial_rich_draw_or_measure(body,
         out->center_x, out->body_y, out->body_max_w, out->body_px,
@@ -808,8 +848,14 @@ float sdl_touch_tutorial_draw_header_at(const SDL_Rect* screen,
         title_color.b, 230);
     SDL_RenderRect(g_state.renderer, &layout.panel);
 
-    (void)sdl_touch_tutorial_draw_text_line(title, layout.center_x,
-        layout.text_y, layout.title_max_w, layout.title_px, title_color, true);
+    if (sdl_touch_only_mobile_device_active())
+        (void)sdl_touch_tutorial_draw_wrapped_centered(title,
+            layout.center_x, layout.text_y, layout.title_max_w,
+            layout.title_px, title_color);
+    else
+        (void)sdl_touch_tutorial_draw_text_line(title, layout.center_x,
+            layout.text_y, layout.title_max_w, layout.title_px, title_color,
+            true);
     (void)sdl_touch_tutorial_draw_rich_centered(body, layout.center_x,
         layout.body_y, layout.body_max_w, layout.body_px, text_color);
 
@@ -835,7 +881,7 @@ static void sdl_touch_tutorial_prompt_label(int binding, const char* fallback,
     if (!buf || buflen == 0)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }
@@ -857,13 +903,16 @@ static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
 
     font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
         22.0f, 30.0f);
+    font_px = sdl_touch_tutorial_readable_body_px(font_px);
     line_h = (float)font_px * 1.30f;
     bottom_pad = sdl_touch_pane_clampf((float)screen->h * 0.008f,
         6.0f, 10.0f);
     legacy_h = sdl_touch_pane_clampf((float)screen->h * 0.090f,
         54.0f, 78.0f);
 
-    return MAX(legacy_h, line_h * 2.0f + bottom_pad);
+    return MAX(legacy_h, line_h
+        * (sdl_touch_only_mobile_device_active() ? 3.0f : 2.0f)
+        + bottom_pad);
 }
 
 void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
@@ -881,6 +930,7 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
 
     font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
         22.0f, 30.0f);
+    font_px = sdl_touch_tutorial_readable_body_px(font_px);
     line_h = (float)font_px * 1.30f;
     y = (float)(screen->y + screen->h)
         - sdl_touch_tutorial_footer_height(screen);
@@ -943,7 +993,7 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
             sizeof(page_text));
     }
 
-    (void)sdl_touch_tutorial_draw_rich_centered(advance_text,
+    line_h = sdl_touch_tutorial_draw_rich_centered(advance_text,
         (float)screen->x + (float)screen->w * 0.5f, y,
         (float)screen->w * 0.90f, font_px, text_color);
     (void)sdl_touch_tutorial_draw_rich_centered(page_text,
@@ -1190,6 +1240,8 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     font_px = mobile_section
         ? sdl_touch_tutorial_text_px((float)screen->h * 0.036f, 22.0f, 30.0f)
         : sdl_touch_tutorial_text_px((float)screen->h * 0.030f, 16.0f, 24.0f);
+    if (mobile_section)
+        font_px = sdl_touch_tutorial_readable_body_px(font_px);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.012f, 5.0f, 9.0f);
 
     w = (float)screen->w * 0.88f;
@@ -1203,7 +1255,8 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         return;
     text_w = w - pad * 2.0f;
 
-    min_font_px = mobile_section ? 16 : 14;
+    min_font_px = mobile_section
+        ? sdl_touch_tutorial_readable_body_px(16) : 14;
     {
         int low_px = min_font_px;
         int high_px = MAX(font_px, min_font_px);
@@ -1338,6 +1391,7 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     float screen_bottom;
     float text_w;
     int title_px;
+    int title_lines;
     int detail_px;
     int detail_lines;
 
@@ -1348,24 +1402,32 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
         26.0f, 38.0f);
     detail_px = sdl_touch_tutorial_text_px((float)screen->h * 0.034f,
         22.0f, 32.0f);
+    detail_px = sdl_touch_tutorial_readable_body_px(detail_px);
+    if (sdl_touch_only_mobile_device_active())
+        title_px = MAX(title_px, detail_px + 6);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.016f, 10.0f, 18.0f);
 
     max_box_w = (float)screen->w - 2.0f * pad;
     if (max_box_w < 80.0f)
         return;
 
-    box_w = (float)screen->w * 0.42f;
+    box_w = (float)screen->w
+        * (sdl_touch_only_mobile_device_active() ? 0.90f : 0.42f);
     if (box_w < 300.0f)
         box_w = 300.0f;
-    if (box_w > 620.0f)
-        box_w = 620.0f;
+    if (box_w > (sdl_touch_only_mobile_device_active() ? 980.0f
+                                                     : 620.0f))
+        box_w = sdl_touch_only_mobile_device_active() ? 980.0f : 620.0f;
     if (box_w > max_box_w)
         box_w = max_box_w;
     text_w = box_w - pad * 2.0f;
+    title_lines = sdl_touch_only_mobile_device_active()
+        ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
+        : 1;
     detail_lines = sdl_touch_tutorial_rich_line_count(detail, detail_px,
         text_w);
 
-    box_h = pad * 2.0f + (float)title_px * 1.25f;
+    box_h = pad * 2.0f + (float)title_lines * (float)title_px * 1.30f;
     if (detail_lines > 0)
         box_h += 7.0f + (float)detail_lines * (float)detail_px * 1.30f;
 
@@ -1402,13 +1464,18 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
         title_color.b, 242);
     SDL_RenderRect(g_state.renderer, &box);
 
-    (void)sdl_touch_tutorial_draw_text_line(title,
-        box.x + box.w * 0.5f, box.y + pad, text_w,
-        title_px, title_color, true);
+    if (sdl_touch_only_mobile_device_active())
+        (void)sdl_touch_tutorial_draw_wrapped_centered(title,
+            box.x + box.w * 0.5f, box.y + pad, text_w,
+            title_px, title_color);
+    else
+        (void)sdl_touch_tutorial_draw_text_line(title,
+            box.x + box.w * 0.5f, box.y + pad, text_w,
+            title_px, title_color, true);
     if (detail_lines > 0) {
         (void)sdl_touch_tutorial_draw_rich_centered(detail,
             box.x + box.w * 0.5f,
-            box.y + pad + (float)title_px * 1.34f,
+            box.y + pad + (float)title_lines * (float)title_px * 1.34f,
             text_w, detail_px, detail_color);
     }
 }
@@ -1425,6 +1492,7 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     float text_w;
     float h;
     int title_px;
+    int title_lines = 0;
     int body_px;
     int body_lines;
 
@@ -1436,6 +1504,16 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
         26.0f, 38.0f);
     body_px = sdl_touch_tutorial_text_px((float)screen->h * 0.034f,
         22.0f, 32.0f);
+    body_px = sdl_touch_tutorial_readable_body_px(body_px);
+    if (sdl_touch_only_mobile_device_active())
+        title_px = MAX(title_px, body_px + 6);
+    if (sdl_touch_only_mobile_device_active())
+    {
+        /* Side-by-side guide panels leave too few words per line on phones.
+         * Use the open width above the illustrated control instead. */
+        x = (float)screen->x + pad;
+        w = (float)screen->w - pad * 2.0f;
+    }
     text_w = w - pad * 2.0f;
     if (text_w <= 40.0f)
         return;
@@ -1443,7 +1521,12 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
     body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
     h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
     if (title && title[0])
-        h += (float)title_px * 1.35f + 5.0f;
+    {
+        title_lines = sdl_touch_only_mobile_device_active()
+            ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
+            : 1;
+        h += (float)title_lines * (float)title_px * 1.35f + 5.0f;
+    }
 
     box = (SDL_FRect){ .x = x, .y = y, .w = w, .h = h };
     footer_top = (float)(screen->y + screen->h)
@@ -1468,8 +1551,13 @@ void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
 
     y = box.y + pad;
     if (title && title[0]) {
-        y += sdl_touch_tutorial_draw_text_line(title,
-            box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
+        if (sdl_touch_only_mobile_device_active())
+            y += sdl_touch_tutorial_draw_wrapped_centered(title,
+                box.x + box.w * 0.5f, y, text_w, title_px, title_color);
+        else
+            y += sdl_touch_tutorial_draw_text_line(title,
+                box.x + box.w * 0.5f, y, text_w, title_px, title_color,
+                true);
         y += 5.0f;
     }
     (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
@@ -1743,7 +1831,7 @@ void sdl_touch_tutorial_draw_zones_page(const SDL_Rect* screen,
         body = "<a>Tap</a> the highlighted play areas. Use the map to move or target; <a>hold</a> for contextual actions.";
     } else if (mobile_sections) {
         title = "Touch: Quick Controls & Status";
-        body = "<a>Tap</a> overlays for fast commands and views. <a>Hold</a> quick-access buttons to edit them.";
+        body = "<a>Tap</a> overlays for fast commands and views. <a>Hold</a> quick-access buttons for descriptions.";
     } else {
         title = mouse ? "Main Screen Mouse Controls" : "Default Touch Layout";
         body = mouse
@@ -1967,7 +2055,7 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
     bool have_wheel;
     cptr header_title = "Button Wheel + Quick Access";
     cptr header_body =
-        "The <t>wheel</t> uses the open right-side lane between the upper and lower overlays. <t>Quick access</t> stays at <n>bottom center</n>.";
+        "The <t>wheel</t> uses the open lane beside Quick Touch. <t>Portrait Wheel Center</t> can move it toward the screen middle without crossing live buttons or overlays. <t>Quick access</t> stays at <n>bottom center</n>.";
 
     sdl_touch_tutorial_draw_screen_dim(screen, 150);
     sdl_touch_tutorial_draw_overlay_menu(screen);
@@ -2036,7 +2124,7 @@ void sdl_touch_tutorial_draw_buttonwheel_page(const SDL_Rect* screen,
 
     sdl_touch_tutorial_draw_info_panel(screen,
         panel_x, panel_y, panel_w, "Button wheel controls",
-        "<t>Outer arrows:</t> <a>tap</a> a direction to step.\n<t>Inner wheel:</t> <a>press and drag</a> toward a direction, then release. Drag 1.3x the centre-to-arrow distance until <g>Run</g> appears to run on release.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a button for its command; <a>hold</a> for its description. The square changes it; the cross closes the description.\n<t>Status changes:</t> the wheel re-centres and shrinks inside the open lane as the condition panel grows.\nDescription cards open above the bottom-center quick-access overlay.");
+        "<t>Outer arrows:</t> <a>tap</a> to step.\n<t>Inner wheel:</t> <a>press and drag</a>, then release. Drag farther until <g>Run</g> appears to run.\n<t>Center:</t> <a>tap</a> to repeat the last direction.\n<a>Swipe edge:</a> reveal or hide the touch pane.\n<t>Quick access:</t> <a>tap</a> a command; <a>hold</a> for its description. The square changes it; the cross closes it.\n<t>Status changes:</t> the wheel moves and shrinks as the condition panel grows.\nDescription cards open above Quick Access.");
 
     (void)sdl_touch_tutorial_draw_header(screen, header_title, header_body,
         page, page_count);
@@ -2074,6 +2162,10 @@ int sdl_touch_tutorial_wait_action(Uint64 accept_after_ns)
         if (ev.type == SDL_EVENT_KEY_DOWN) {
             SDL_Keycode key = ev.key.key;
 
+            /* SDL may repeat a held navigation/confirm key while a page is
+             * being redrawn.  A repeat is not a new tutorial choice. */
+            if (ev.key.repeat)
+                continue;
             if (now_ns < accept_after_ns)
                 continue;
             if (sdl_key_is_escape_or_back(key) || key == 'q' || key == 'Q')
@@ -2190,8 +2282,23 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
         return;
     }
 
-    if (full)
-        sdl_touch_tutorial_draw_buttonwheel_page(&screen, page, page_count);
+    if (full) {
+        /* The profile page must describe the layout the player currently has.
+         * First-run setup selects the round wheel before entering this path;
+         * Help replay keeps the selected profile intact. */
+        switch (get_sdl_touch_profile()) {
+        case SDL_TOUCH_PROFILE_TOUCH_PANE:
+            sdl_touch_tutorial_draw_pane_page(&screen, page, page_count);
+            break;
+        case SDL_TOUCH_PROFILE_CORNERS:
+            sdl_touch_tutorial_draw_movement_page(&screen, page, page_count);
+            break;
+        case SDL_TOUCH_PROFILE_ROUND_WHEEL:
+        default:
+            sdl_touch_tutorial_draw_buttonwheel_page(&screen, page, page_count);
+            break;
+        }
+    }
 }
 
 void sdl_touch_tutorial_prepare_snapshot(void)
@@ -2220,10 +2327,12 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
         + (full ? 1 : 0);
     bool done = false;
     Uint64 accept_after_ns;
+    bool gameplay_was_visible;
 
     if (!g_state.window || !g_state.renderer)
         return;
 
+    gameplay_was_visible = sdl_device_tutorial_suspend_gameplay();
     sdl_touch_tutorial_prepare_snapshot();
     d = sdl_view_from_term(Term);
     sdl_touch_cancel_all_inputs();
@@ -2263,6 +2372,7 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
     }
     g_state.need_present = false;
     sdl_touch_cancel_all_inputs();
+    sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
 }
 
 /* ------------------------------------------------------------------------
@@ -2298,7 +2408,7 @@ typedef struct birth_coach_step {
 static const birth_coach_step birth_coach_sheet_steps[] = {
     { "Vitals", 0, 0, "Vitals",
         "Your live status at a glance.\n"
-        "<t>Exp:</t> spent / earned - the pool you spend on skills and abilities.\n"
+        "<t>Exp:</t> unspent / earned - the pool you spend on skills and abilities.\n"
         "<t>Burden:</t> weight carried / the most you can bear before slowing.\n"
         "<t>Depth c/m:</t> current depth / the shallowest you may climb back to.\n"
         "<t>Health and Voice:</t> your hit points and song points.\n"
@@ -2310,36 +2420,35 @@ static const birth_coach_step birth_coach_sheet_steps[] = {
         "See the two Combat steps at the end for how these are used." },
     { "Traits", 0, 0, "Traits",
         "Innate strengths and flaws from your hero and house.\n"
-        "<a>++ mastery</a> and <g>+ affinity</g> make a skill cheaper and stronger.\n"
+        "<a>++ mastery</a> and <g>+ affinity</g> raise current skill and lower its ability costs.\n"
         "<r>- and --</r> are penalties; <v>UNIQUE</v> marks a special power.\n"
-        "<u>Curses</u> such as Doom of Mandos are shown in umber.\n"
-        "Lean into your affinities and play around your curses." },
+        "Choose abilities that suit the skills you want to train." },
     { "Attributes", 0, 0, "Attributes",
         "<t>Str, Dex, Con, Gra</t> - the roots every skill grows from.\n"
-        "<t>Str:</t> melee damage dice and carrying capacity.\n"
-        "<t>Dex:</t> feeds melee, evasion, archery and stealth.\n"
-        "<t>Con:</t> your hit points and resilience.\n"
+        "<t>Str:</t> weapon damage die sides and carried-weight limit.\n"
+        "<t>Dex:</t> feeds Melee, Evasion, Archery and Stealth.\n"
+        "<t>Con:</t> sets maximum Health.\n"
         "<t>Gra:</t> feeds will, perception, song, smithing and voice.\n"
         "Read each as <y>Current = Base +equip +misc -drain</y>." },
     { "Skills", 0, 0, "Skills",
         "What you train by spending experience.\n"
         "<y>Total = Base +stat +equip +misc</y>.\n"
-        "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-        "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-        "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+        "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+        "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+        "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
         "<a>Click</a> a skill, or press <a>i</a>, to raise it." },
     { "Skills", 0, 0, "Combat: attack & evasion",
         "Whether a blow lands is one <y>opposed roll</y>:\n"
         "  you: <y>1d20 + Melee</y>   vs   them: <y>1d20 + Evasion</y>.\n"
         "The higher total wins; a tie misses.\n"
-        "<t>Evasion</t> is active dodging, so it is <n>reduced when you are\n"
-        "surrounded</n> - fight in doorways and corridors to keep it.\n"
+        "Surrounding foes gain <n>attack bonuses</n>, especially from behind -\n"
+        "fight in doorways and corridors to limit their advantage.\n"
         "Archery uses the same roll, your <t>Archery</t> vs their <t>Evasion</t>.\n"
         "Beat their roll by a wide margin to land a <r>critical hit</r>,\n"
         "which rolls extra damage dice." },
     { "Skills", 0, 0, "Combat: damage & armour",
         "Damage is rolled only after a hit connects:\n"
-        "  <y>damage dice = weapon dice + Strength</y> (capped by weapon weight).\n"
+        "  <y>damage die sides = weapon sides + Strength</y> (capped by weapon weight).\n"
         "A foe's armour is shown as <y>[Evasion, Protection]</y>.\n"
         "<t>Protection</t> rolls a value within that range each blow and is\n"
         "subtracted from your damage - <n>only the excess wounds them</n>.\n"
@@ -2358,8 +2467,8 @@ static const birth_coach_step birth_coach_select_step = {
 static const birth_coach_step birth_coach_stats_step = {
     NULL, 0, 999, "Assign attributes",
     "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
-    "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-    "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+    "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+    "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
     "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.\n"
     "Every point ripples into the skills shown alongside."
 };
@@ -2368,7 +2477,7 @@ static const birth_coach_step birth_coach_skills_step = {
     NULL, 0, 999, "Buy skills",
     "Spend experience on the <t>eight skills</t>.\n"
     "<y>Total = Base +stat +equip +misc</y>.\n"
-    "<n>Base also sets how dear abilities are to buy later.</n>\n"
+    "<n>Trained base sets which ability ranks you may buy later.</n>\n"
     "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience."
 };
 
@@ -2433,8 +2542,8 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
                 "<a>Tap</a> a stat to select it; <a>tap it again</a> to raise it.\n"
                 "<a>Long-tap</a> a stat to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to heroes.\n"
-                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
@@ -2448,8 +2557,8 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
                 "<a>D-pad Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>%s</a> accepts; <a>%s</a> returns to heroes.\n"
-                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 confirm_label, back_label);
         }
@@ -2460,8 +2569,8 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>Enter</a> accepts; <a>Esc</a> returns to heroes.\n"
                 "<a>Click</a> a stat to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
-                "<t>Str:</t> melee dice & capacity.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> hit points.  <t>Gra:</t> will/perception/song/smithing & voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
+                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
@@ -2477,7 +2586,7 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Tap</a> a skill to select it; <a>tap it again</a> to raise it.\n"
                 "<a>Long-tap</a> a skill to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to attributes.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<n>Trained base sets which ability ranks you may buy later.</n>\n"
                 "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 buflen);
         }
@@ -2492,7 +2601,7 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>D-pad Up/Down</a> picks a skill; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>%s</a> accepts; <a>%s</a> returns to attributes.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<n>Trained base sets which ability ranks you may buy later.</n>\n"
                 "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 confirm_label, back_label);
         }
@@ -2504,7 +2613,7 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Enter</a> accepts; <a>Esc</a> returns to attributes.\n"
                 "<a>Click</a> a skill to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<n>Base also sets how dear abilities are to buy later.</n>\n"
+                "<n>Trained base sets which ability ranks you may buy later.</n>\n"
                 "<t>Cost</t> climbs the higher the skill; <y>Points Left =</y> your experience.",
                 buflen);
         }
@@ -2519,9 +2628,9 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             SDL_strlcpy(buf,
                 "What you train by spending experience.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+                "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+                "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
                 "<a>Tap</a> a skill once to focus it, then <a>tap again</a> or <a>tap Increase</a> to raise it.",
                 buflen);
         }
@@ -2532,9 +2641,9 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             strnfmt(buf, buflen,
                 "What you train by spending experience.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+                "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+                "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
                 "<a>D-pad or left stick</a> moves focus; <a>%s</a> raises the focused skill.",
                 confirm_label);
         }
@@ -2543,9 +2652,9 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
             SDL_strlcpy(buf,
                 "What you train by spending experience.\n"
                 "<y>Total = Base +stat +equip +misc</y>.\n"
-                "<t>Melee / Archery:</t> chance to hit.  <t>Evasion:</t> avoid being hit.\n"
-                "<t>Stealth / Perception:</t> stay unseen and notice things.\n"
-                "<t>Will</t> resists fear & magic; <t>Smithing</t> forges; <t>Song</t> sings powers.\n"
+                "<t>Melee:</t> close/thrown attacks. <t>Archery:</t> bows. <t>Evasion:</t> opposes attacks.\n"
+                "<t>Stealth / Perception:</t> avoid notice and find hidden things.\n"
+                "<t>Will</t> resists hostile effects; <t>Smithing</t> forges; <t>Song</t> powers songs.\n"
                 "<a>Click</a> a skill twice, or press <a>i/Space</a>, to raise skills.",
                 buflen);
         }
@@ -2650,8 +2759,8 @@ static bool birth_coach_step_zone(const birth_coach_step* step, SDL_FRect* out)
 
 /*
  * The coach's own callout box: wider than the shared zone-prompt, left-aligned
- * body text, an auto-shrinking font and no 14-line cap, so detailed multi-line
- * explanations fit without being truncated.  Positioned beside the highlighted
+ * body text, a font fitted to available height and no 14-line cap, so detailed
+ * explanations fit without truncation.  Positioned beside the highlighted
  * block when one is given, otherwise centred under the title.
  */
 static void birth_coach_draw_callout(const SDL_Rect* screen,
@@ -2677,11 +2786,16 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         28.0f, 44.0f);
     int detail_px = sdl_touch_tutorial_text_px((float)screen->h * 0.038f,
         22.0f, 36.0f);
+    bool mobile = sdl_touch_only_mobile_device_active();
     int n = 0;
 
     max_box_w = (float)screen->w - pad * 2.0f;
     if (max_box_w <= 40.0f)
         return;
+
+    detail_px = sdl_touch_tutorial_readable_body_px(detail_px);
+    if (mobile)
+        title_px = MAX(title_px, detail_px + 6);
 
     box_w = (float)screen->w * 0.64f;
     if (box_w > 1160.0f)
@@ -2693,6 +2807,8 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         title_px, body, detail_px, pad);
     if (natural_box_w > box_w)
         box_w = natural_box_w;
+    if (mobile)
+        box_w = max_box_w;
     if (box_w > max_box_w)
         box_w = max_box_w;
 
@@ -2704,13 +2820,15 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     if (avail_h < (float)screen->h * 0.40f)
         avail_h = (float)screen->h * 0.82f;
 
-    /* Shrink the body font until the wrapped text fits the vertical budget. */
+    /* Fit the complete wrapped explanation without shrinking it to the old
+     * tiny mobile floor.  A wider box leaves room for the larger type. */
     {
         int initial_title_px = title_px;
         int title_gap = MAX(initial_title_px - detail_px, 8);
-        int low_px = 18;
-        int high_px = MAX(detail_px, 18);
-        int chosen_px = 18;
+        int min_px = mobile ? sdl_touch_tutorial_readable_body_px(32) : 18;
+        int low_px = min_px;
+        int high_px = MAX(detail_px, min_px);
+        int chosen_px = min_px;
 
         while (low_px <= high_px) {
             int candidate_px = low_px + (high_px - low_px) / 2;
@@ -2718,8 +2836,12 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
                 candidate_px + title_gap);
             int candidate_lines = sdl_touch_tutorial_rich_line_count(body,
                 candidate_px, text_w);
+            int candidate_title_lines = mobile
+                ? MAX(1, sdl_touch_tutorial_line_count(title,
+                    candidate_title_px, text_w)) : 1;
             float candidate_line_h = (float)candidate_px * 1.30f;
-            float candidate_title_h = (float)candidate_title_px * 1.25f;
+            float candidate_title_h = (float)candidate_title_lines
+                * (float)candidate_title_px * 1.30f;
             float candidate_h = pad * 2.0f + candidate_title_h + 6.0f
                 + (float)candidate_lines * candidate_line_h;
 
@@ -2735,7 +2857,10 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     }
     n = sdl_touch_tutorial_rich_line_count(body, detail_px, text_w);
     line_h = (float)detail_px * 1.30f;
-    title_h = (float)title_px * 1.25f;
+    title_h = mobile
+        ? (float)MAX(1, sdl_touch_tutorial_line_count(title, title_px,
+            text_w)) * (float)title_px * 1.30f
+        : (float)title_px * 1.25f;
     box_h = pad * 2.0f + title_h + 6.0f + (float)n * line_h;
 
     /* Place beside the block: below it if there is room, else above, else at the
@@ -2772,8 +2897,12 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     SDL_RenderRect(g_state.renderer, &box);
 
     y = box.y + pad;
-    (void)sdl_touch_tutorial_draw_text_line(title, box.x + box.w * 0.5f, y,
-        text_w, title_px, title_color, true);
+    if (mobile)
+        (void)sdl_touch_tutorial_draw_wrapped_centered(title,
+            box.x + box.w * 0.5f, y, text_w, title_px, title_color);
+    else
+        (void)sdl_touch_tutorial_draw_text_line(title,
+            box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
     y += title_h + 6.0f;
     (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
         detail_px, text_color);
@@ -2994,14 +3123,17 @@ void sdl_touch_tutorial_choice_layout(const SDL_Rect* screen,
         (float)screen->h * 0.245f, 118.0f, 190.0f)
         + sdl_touch_tutorial_top_reserved_height(screen);
     bottom = (float)(screen->y + screen->h)
-        - sdl_touch_pane_clampf((float)screen->h * 0.115f, 62.0f, 92.0f);
+        - MAX(sdl_touch_pane_clampf((float)screen->h * 0.115f,
+            62.0f, 92.0f), sdl_touch_tutorial_footer_height(screen));
     if (bottom <= top + 80.0f)
         bottom = (float)(screen->y + screen->h) - 46.0f;
     if (bottom <= top + 80.0f)
         top = (float)screen->y + 88.0f;
 
     gap = sdl_touch_pane_clampf((float)screen->h * 0.018f, 8.0f, 16.0f);
-    grid = (screen->w >= 760 && screen->h >= 430);
+    grid = (screen->w >= 760 && screen->h >= 430)
+        && !(sdl_touch_only_mobile_device_active()
+            && screen->h > screen->w);
 
     if (grid) {
         card_w = (max_w - gap) * 0.5f;
@@ -3048,6 +3180,7 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
     float pad;
     float text_x;
     float text_w;
+    float body_h;
     float y;
     int title_px;
     int body_px;
@@ -3059,6 +3192,9 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
     pad = sdl_touch_pane_clampf(rect->h * 0.13f, 8.0f, 17.0f);
     title_px = sdl_touch_tutorial_text_px(rect->h * 0.205f, 17.0f, 28.0f);
     body_px = sdl_touch_tutorial_text_px(rect->h * 0.148f, 13.0f, 21.0f);
+    body_px = sdl_touch_tutorial_readable_body_px(body_px);
+    if (sdl_touch_only_mobile_device_active())
+        title_px = MAX(title_px, body_px + 6);
 
     shadow = *rect;
     shadow.x += 3.0f;
@@ -3087,13 +3223,19 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
     text_w = rect->w - pad * 2.0f;
     y = rect->y + pad;
 
-    (void)sdl_touch_tutorial_draw_text_line(title, text_x, y, text_w,
-        title_px, title_color, false);
+    if (sdl_touch_only_mobile_device_active())
+        y += sdl_touch_tutorial_draw_wrapped(title, text_x, y, text_w,
+            title_px, title_color);
+    else
+        y += sdl_touch_tutorial_draw_text_line(title, text_x, y, text_w,
+            title_px, title_color, false);
 
-    if (rect->h >= pad * 2.0f + (float)title_px * 1.25f
-            + (float)body_px * 1.55f)
+    body_h = sdl_touch_tutorial_rich_draw_or_measure(choice->body,
+        text_x, y, text_w, body_px, body_color, false, false);
+    if (rect->h >= y - rect->y + pad
+            + (float)title_px * 0.12f + body_h)
     {
-        y += (float)title_px * 1.35f;
+        y += (float)title_px * 0.12f;
         (void)sdl_touch_tutorial_draw_rich(choice->body, text_x, y,
             text_w, body_px, body_color);
     }
@@ -3122,8 +3264,9 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         return false;
 
     sdl_touch_tutorial_draw_screen_dim(&screen, 172);
-    footer_px = sdl_touch_tutorial_text_px((float)screen.h * 0.028f,
-        16.0f, 24.0f);
+    footer_px = sdl_touch_tutorial_readable_body_px(
+        sdl_touch_tutorial_text_px((float)screen.h * 0.028f,
+            16.0f, 24.0f));
 
     sdl_touch_tutorial_choice_layout(&screen, choice_rects);
     current_index = sdl_touch_tutorial_current_choice_index();
@@ -3138,7 +3281,7 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         0, 0);
 
     y = (float)(screen.y + screen.h)
-        - sdl_touch_pane_clampf((float)screen.h * 0.076f, 42.0f, 62.0f);
+        - sdl_touch_tutorial_footer_height(&screen);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
         SDL_TOUCH_TUTORIAL_FOOTER_ALPHA);
@@ -3148,12 +3291,12 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         .w = (float)screen.w,
         .h = (float)(screen.y + screen.h) - y + 8.0f,
     });
-    (void)sdl_touch_tutorial_draw_text_line(
+    (void)sdl_touch_tutorial_draw_wrapped_centered(
         sdl_touch_tutorial_device_available()
             ? "Tap a choice to apply it   Back keeps the current preset"
             : "Click a choice   Up/Down selects   Enter applies   Esc keeps current",
         (float)screen.x + (float)screen.w * 0.5f, y,
-        (float)screen.w * 0.92f, footer_px, text_color, true);
+        (float)screen.w * 0.92f, footer_px, text_color);
 
     SDL_RenderPresent(g_state.renderer);
     sdl_restore_render_target(d);
@@ -3222,6 +3365,8 @@ int sdl_touch_tutorial_choose_profile(void)
         if (ev.type == SDL_EVENT_KEY_DOWN) {
             SDL_Keycode key = ev.key.key;
 
+            if (ev.key.repeat)
+                continue;
             if (now_ns < accept_after_ns)
                 continue;
             if (sdl_key_is_escape_or_back(key) || key == 'q' || key == 'Q')
@@ -3504,12 +3649,13 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
 {
     char confirm_label[16];
     char back_label[16];
+    char open_label[48];
 
     switch (input) {
     case SDL_WHEEL_COACH_INPUT_TOUCH:
         SDL_strlcpy(buf,
-            "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "Common actions while standing on your square - wait, use an "
+            "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
             "<t>Open it:</t> <a>tap</a> your own square on the <t>map</t>.\n"
             "<t>Choose:</t> <a>drag</a> to a wedge and lift your finger to run that action.\n"
             "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
@@ -3517,24 +3663,25 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
             buflen);
         return buf;
     case SDL_WHEEL_COACH_INPUT_CONTROLLER:
+        sdl_gamepad_action_binding_short_label(INPUT_BIND_CONFIRM, open_label, sizeof(open_label));
         sdl_touch_tutorial_prompt_label(steamdeck_confirm_key(), "A",
             confirm_label, sizeof(confirm_label));
         sdl_touch_tutorial_prompt_label(steamdeck_back_key(), "B",
             back_label, sizeof(back_label));
         strnfmt(buf, buflen,
-            "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "Common actions while standing on your square - wait, use an "
+            "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
             "<t>Open it:</t> <a>press and hold</a> <y>%s</y> while standing still.\n"
             "<t>Choose:</t> <y>D-pad Left/Right</y> turns the ring; <y>Up/Down</y> reaches the outer "
-            "ring of second actions.\n"
+            "ring of second actions. Either stick also navigates.\n"
             "<t>Run it:</t> <a>press</a> <y>%s</y> on the highlighted wedge.\n"
             "<t>Close:</t> <a>press</a> <y>%s</y> or <y>Start</y>.",
-            confirm_label, confirm_label, back_label);
+            open_label, confirm_label, back_label);
         return buf;
     default:
         SDL_strlcpy(buf,
-            "Everything you can do while standing on your square - wait, use an "
-            "item, ready your bow, sing, and more - lives on this <t>wheel</t>.\n"
+            "Common actions while standing on your square - wait, use an "
+            "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
             "<t>Open it:</t> <a>right-click</a> your own square on the <t>map</t>.\n"
             "<t>Choose:</t> move the cursor to a wedge and <a>left-click</a> to run that action.\n"
             "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
@@ -3551,13 +3698,17 @@ static bool sdl_character_wheel_coach_run(void)
     Uint64 accept_after_ns;
     int input;
     bool shown = false;
+    bool gameplay_was_visible;
 
     if (!g_state.window || !g_state.renderer)
         return false;
     if (!sdl_main_screen_click_shortcuts_active())
         return false;
-    if (!sdl_player_action_menu_open())
+    gameplay_was_visible = sdl_device_tutorial_suspend_gameplay();
+    if (!sdl_player_action_menu_open()) {
+        sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
         return false;
+    }
 
     input = sdl_character_wheel_coach_input();
     d = sdl_view_from_term(Term);
@@ -3626,6 +3777,7 @@ static bool sdl_character_wheel_coach_run(void)
     }
     g_state.need_present = false;
     sdl_touch_cancel_all_inputs();
+    sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
     return shown;
 }
 
@@ -3792,7 +3944,10 @@ void sdl_input_tutorial_maybe_show_deferred(void)
 
 void sdl_touch_show_tutorial(void)
 {
-    sdl_touch_tutorial_run_fixed();
+    /* Help replays the guide; it must not silently replace a profile the
+     * player selected in Touch Settings.  The first-run path below retains
+     * the fixed default profile for a new touch-only device. */
+    sdl_touch_tutorial_run(sdl_touch_tutorial_full_mode(), false);
     sdl_touch_mark_tutorial_seen_and_save();
 }
 

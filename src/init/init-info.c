@@ -600,6 +600,17 @@ errr init_f_info(void)
 {
     errr err;
 
+    /* Text templates share a version across content updates. An old limits
+     * file (or its cache) can therefore still pass the ordinary version gate. */
+    if (z_info->f_max < FEAT_COUNT)
+    {
+        log_error("Incompatible terrain data: limits defines %u features; "
+            "this executable requires at least %u. Update lib/edit together "
+            "with the executable and regenerate limits.raw and terrain.raw.",
+            (unsigned)z_info->f_max, (unsigned)FEAT_COUNT);
+        return PARSE_ERROR_OBSOLETE_FILE;
+    }
+
     /* Init the header */
     init_header(&f_head, z_info->f_max, sizeof(feature_type));
 
@@ -611,6 +622,35 @@ errr init_f_info(void)
 #endif /* ALLOW_TEMPLATES */
 
     err = init_info("terrain", &f_head);
+
+    if (err)
+        return err;
+
+    /* Validate both freshly parsed templates and cached data before any map
+     * renderer or tooltip can follow a feature's mimic/name offset. */
+    const feature_type* features = f_head.info_ptr;
+    if (!features || !f_head.name_ptr || !f_head.name_size)
+        return PARSE_ERROR_GENERIC;
+    for (unsigned i = 0; i < f_head.info_num; ++i)
+    {
+        const feature_type* feature = &features[i];
+
+        /* Spare records above the built-in range may be unassigned. */
+        if (i >= FEAT_COUNT && !feature->name)
+            continue;
+        if (!feature->name || feature->name >= f_head.name_size
+            || !f_head.name_ptr[feature->name]
+            || !memchr(f_head.name_ptr + feature->name, '\0',
+                f_head.name_size - feature->name)
+            || feature->mimic >= f_head.info_num
+            || !features[feature->mimic].name)
+        {
+            log_error("Invalid or missing terrain record %u. Update "
+                "lib/edit/limits.txt and lib/edit/terrain.txt together "
+                "with the executable and regenerate their raw caches.", i);
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        }
+    }
 
     /* Set the global variables */
     f_info = f_head.info_ptr;

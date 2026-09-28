@@ -12,11 +12,11 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 
 # Maximum number of feature types
-M:F:86
+M:F:106
 
 # Maximum number of object kinds
 M:K:600
@@ -54,7 +54,7 @@ M:R:656
 M:G:19
 
 # Maximum number of vaults
-M:V:520
+M:V:525
 
 # Maximum number of player races
 M:P:6
@@ -85,7 +85,7 @@ M:O:1536
 M:Y:4
 
 # Number of Styles (visual themes)
-M:Z:62
+M:Z:64
 
 # Maximum number of skeleton note templates
 M:X:420

@@ -1,7 +1,66 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-internal.h"
 #include "object/object-ui-select.h"
+
+/* Utility and restorative items remain usable underwater. Offensive effects
+ * are checked before Pack preparation, targeting, charges, or voice costs. */
+static bool reject_submerged_attack_item(const object_type* o_ptr)
+{
+    bool attack = false;
+    if (!player_submerged_in_deep_water() || !o_ptr)
+        return false;
+    if (o_ptr->tval == TV_HORN)
+        attack = o_ptr->sval != SV_HORN_WARNING;
+    else if (o_ptr->tval == TV_STAFF)
+        attack = o_ptr->sval == SV_STAFF_LIGHT
+            || o_ptr->sval == SV_STAFF_SLUMBER
+            || o_ptr->sval == SV_STAFF_MAJESTY
+            || o_ptr->sval == SV_STAFF_DISMAY;
+    else if (artefact_p(o_ptr))
+    {
+        switch (a_info[o_ptr->name1].activation)
+        {
+        case ACT_ILLUMINATION:
+        case ACT_DISP_EVIL:
+        case ACT_FIRE3:
+        case ACT_FROST5:
+        case ACT_ELEC2:
+        case ACT_BIZZARE:
+        case ACT_STAR_BALL:
+        case ACT_BANISHMENT:
+        case ACT_SLEEP:
+        case ACT_MISSILE:
+        case ACT_FIRE1:
+        case ACT_FROST1:
+        case ACT_LIGHTNING_BOLT:
+        case ACT_ACID1:
+        case ACT_ARROW:
+        case ACT_STINKING_CLOUD:
+        case ACT_FROST2:
+        case ACT_FROST4:
+        case ACT_FROST3:
+        case ACT_FIRE2:
+        case ACT_DRAIN_LIFE2:
+        case ACT_MASS_BANISHMENT:
+        case ACT_TELE_AWAY:
+        case ACT_CONFUSE:
+        case ACT_DRAIN_LIFE1:
+        case ACT_STARLIGHT:
+        case ACT_MANA_BOLT:
+            attack = true;
+            break;
+        default:
+            break;
+        }
+    }
+    if (!attack)
+        return false;
+    msg_print("You cannot attack while submerged in deep water.");
+    p_ptr->energy_use = 0;
+    return true;
+}
 
 static bool reject_broken_item_use(const object_type* o_ptr)
 {
@@ -158,6 +217,7 @@ int understanding_gem_count_for_item_description(
 
 bool do_cmd_use_understanding_gem_on_item(const object_type* viewed_o_ptr)
 {
+    if (!tutorial_game_action_allowed("use-item", NULL)) return false;
     understanding_gem_source source;
     object_type* target_o_ptr;
     int target_item;
@@ -300,6 +360,7 @@ static void msg_print_object_identified(const object_type* o_ptr)
     char o_name[80];
     object_desc(o_name, sizeof(o_name), o_ptr, true, 0);
     msg_format("You identify %s.", o_name);
+    tutorial_game_identified(o_ptr, "identification.item");
 }
 
 static const object_type* sanctity_target_excluded = NULL;
@@ -589,6 +650,7 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_EAT, item, 0, false,
             o_ptr))
         return;
@@ -745,6 +807,7 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_QUAFF, item, 0, false,
             o_ptr))
         return;
@@ -860,6 +923,10 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    if (reject_submerged_attack_item(o_ptr))
+        return;
+
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_PLAY,
             carried_inventory_index(o_ptr), 0, false, o_ptr))
         return;
@@ -959,6 +1026,10 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    if (reject_submerged_attack_item(o_ptr))
+        return;
+
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
             false, o_ptr))
         return;
@@ -1109,6 +1180,7 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     if (!o_ptr)
         return;
 
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_USE_GEM, item, 0, false,
             o_ptr))
         return;
@@ -1247,6 +1319,10 @@ void do_cmd_activate_by_index(int item)
     if (!o_ptr->k_idx)
         return;
 
+    if (reject_submerged_attack_item(o_ptr))
+        return;
+
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
     if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE, item, 0, false,
             o_ptr))
         return;

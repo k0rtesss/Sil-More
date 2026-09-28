@@ -1,6 +1,7 @@
 /* File: monster-spawn.c */
 
 #include "monster-internal.h"
+#include "monster/monster-routine.h"
 
 /*
  * Attempt to place a monster of the given race at the given location.
@@ -25,7 +26,8 @@ bool place_monster_one(
         return (false);
 
     /* Require empty space */
-    if (!cave_empty_bold(y, x))
+    if (!cave_empty_bold(y, x)
+        && !(cave_feat[y][x] == FEAT_LAVA && cave_m_idx[y][x] == 0))
         return (false);
 
     /* Hack -- no creation on glyph of warding */
@@ -167,6 +169,10 @@ bool place_monster_one(
             n_ptr->alertness = ALERTNESS_ALERT;
     }
 
+    /* Miners begin working, without becoming hostile or noticing the player. */
+    if (r_idx == R_IDX_HUMAN_THRALL || r_idx == R_IDX_ELF_THRALL)
+        n_ptr->alertness = ALERTNESS_UNWARY;
+
     /* Assign average hitpoints */
     if (r_ptr->flags1 & (RF1_UNIQUE))
     {
@@ -249,6 +255,8 @@ bool place_monster_one(
             (cave_info[y][x] & CAVE_ICKY) ? 1 : 0,
             (cave_info[y][x] & CAVE_MORGOTH_TUNNEL) ? 1 : 0);
     }
+
+    monster_routine_spawn(n_ptr);
 
     // give the monster a place to wander towards
     new_wandering_destination(n_ptr, m_ptr);

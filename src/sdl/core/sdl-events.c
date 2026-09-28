@@ -1,5 +1,8 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
+
+#define SDL_TEXT_INPUT_QUEUE_LIMIT 128
 
 static bool g_description_overlay_mouse_release_claimed = false;
 static bool g_description_overlay_finger_release_claimed = false;
@@ -252,6 +255,7 @@ void sdl_handle_renderer_reset(void)
         : "lib/xtra/font/VictorMono-Medium.ttf";
 
     sdl_select_page_turn_free();
+    sdl_idle_animation_shutdown();
     sdl_left_panel_canvas_destroy();
     sdl_minimap_map_texture_cache_clear();
     sdl_side_map_pane_texture_cache_clear();
@@ -311,15 +315,7 @@ void sdl_handle_renderer_reset(void)
         SDL_DestroyTexture(g_state.tileset);
         g_state.tileset = NULL;
 
-        SDL_Surface* ts = IMG_Load("lib/xtra/graf/16x16.png");
-        if (ts) {
-            g_state.tileset = SDL_CreateTextureFromSurface(g_state.renderer, ts);
-            if (g_state.tileset) {
-                SDL_SetTextureScaleMode(g_state.tileset, SDL_SCALEMODE_NEAREST);
-                SDL_SetTextureBlendMode(g_state.tileset, SDL_BLENDMODE_BLEND);
-            }
-            SDL_DestroySurface(ts);
-        }
+        sdl_load_tileset_texture();
     }
 
     // Force a full redraw
@@ -865,6 +861,28 @@ static bool sdl_event_is_narrative_banner_input(const SDL_Event* ev)
     }
 }
 
+static bool sdl_event_is_narrative_banner_back_input(const SDL_Event* ev)
+{
+    if (!ev)
+        return false;
+
+    if (ev->type == SDL_EVENT_KEY_DOWN)
+        return sdl_key_is_escape_or_back(ev->key.key);
+
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+    {
+        SDL_GamepadButton button =
+            (SDL_GamepadButton)ev->gbutton.button;
+
+        /* East is the controller's semantic Back button.  Start is also a
+         * back/escape alternative in the dungeon controller contract. */
+        return sdl_gamepad_button_is_ui_back(button)
+            || button == SDL_GAMEPAD_BUTTON_START;
+    }
+
+    return false;
+}
+
 static bool sdl_event_targets_touch_top_panel(const SDL_Event* ev)
 {
     float x;
@@ -942,7 +960,12 @@ static bool sdl_event_starts_touch_round_input(const SDL_Event* ev)
 
 static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
 {
-    if (!active_narrative_banner_consumes_input())
+    bool back_input;
+
+    if (!active_narrative_banner_visible())
+        return false;
+    back_input = sdl_event_is_narrative_banner_back_input(ev);
+    if (!active_narrative_banner_consumes_input() && !back_input)
         return false;
     if (!sdl_event_is_narrative_banner_input(ev))
         return false;
@@ -1269,6 +1292,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
     (void)st;
     sdl_normalize_event_to_render_coords(ev);
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+        sdl_gamepad_release_button_modifier(ev->gbutton.button);
     if (sdl_sound_try_handle_event(ev)) {
         return;
     }
@@ -1277,10 +1302,22 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     }
 #endif
+    if (sdl_gameplay_tutorial_handle_event(ev))
+        return;
     if (sdl_try_handle_touch_mouse_fallback_event(st, ev))
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
         return;
+    if (ev->type == SDL_EVENT_KEY_DOWN
+        || ev->type == SDL_EVENT_FINGER_DOWN
+        || (ev->type == SDL_EVENT_MOUSE_MOTION
+            && ev->motion.which != SDL_TOUCH_MOUSEID
+            && (ev->motion.xrel != 0 || ev->motion.yrel != 0))
+        || (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
+            && ev->button.which != SDL_TOUCH_MOUSEID))
+    {
+        sdl_gamepad_context_focus_clear();
+    }
     if ((ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
             || ev->type == SDL_EVENT_MOUSE_BUTTON_UP)
         && ev->button.which != SDL_TOUCH_MOUSEID)
@@ -1342,6 +1379,28 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         } else if (ev->type == SDL_EVENT_FINGER_UP || ev->type == SDL_EVENT_FINGER_CANCELED) {
             return;
+        } else if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+            || ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+        {
+            if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
+                && config.gamepad_enabled)
+            {
+                SDL_GamepadButton button =
+                    (SDL_GamepadButton)ev->gbutton.button;
+
+                sdl_gamepad_mark_auto_ui();
+                if (sdl_gamepad_button_is_ui_confirm(button))
+                    sdl_touch_pane_finish_reset_confirm(true);
+                else if (sdl_gamepad_button_is_ui_back(button)
+                    || button == SDL_GAMEPAD_BUTTON_BACK
+                    || button == SDL_GAMEPAD_BUTTON_START)
+                {
+                    sdl_touch_pane_finish_reset_confirm(false);
+                }
+            }
+            return;
+        } else if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+            return;
         }
     } else if (sdl_yes_no_prompt_handle_modal_event(ev)) {
         return;
@@ -1366,7 +1425,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     } else if (sdl_question_menu_captures_pointer()
         && sdl_question_overlay_consume_pointer(ev)) {
         return;
-    } else if (sdl_character_sheet_screen_handle_pointer_event(ev)) {
+    } else if (sdl_character_sheet_screen_handle_event(ev)) {
         return;
     } else if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
@@ -2649,6 +2708,19 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             sdl_touch_round_cancel_press();
         }
+    } else if (ev->type == SDL_EVENT_TEXT_INPUT) {
+        size_t i;
+
+        /* SDL3 only emits committed text (including Android keyboard input)
+         * while text input is active.  Keep that UTF-8 data inside synchronous
+         * word-entry prompts and bridge its bytes to the legacy terminal
+         * queue, which is what inkey() reads. */
+        if (!inkey_prompt_input_active() || !ev->text.text)
+            return;
+
+        for (i = 0; ev->text.text[i] && i < SDL_TEXT_INPUT_QUEUE_LIMIT; i++)
+            (void)Term_keypress((unsigned char)ev->text.text[i]);
+        return;
     } else if (ev->type == SDL_EVENT_KEY_DOWN) {
         int key = ev->key.key;
 
@@ -2726,6 +2798,39 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
 
+        /* The terminal question loop uses 2/8 for vertical navigation, but
+         * numbered menus also use those characters as direct shortcuts. Keep
+         * physical arrows distinct so Down/Up cannot activate a numbered
+         * option before the question overlay sees them. */
+        if (sdl_question_menu_captures_pointer())
+        {
+            int navigation = 0;
+
+            switch (key)
+            {
+            case SDLK_UP:
+            case SDLK_LEFT:
+            case SDLK_KP_8:
+            case SDLK_KP_4:
+                navigation = -1;
+                break;
+            case SDLK_DOWN:
+            case SDLK_RIGHT:
+            case SDLK_KP_2:
+            case SDLK_KP_6:
+                navigation = 1;
+                break;
+            default:
+                break;
+            }
+
+            if (navigation
+                && sdl_question_menu_queue_navigation(navigation))
+            {
+                return;
+            }
+        }
+
         /* For letter-based movement presets, Alt+<movement letter> issues that
          * letter's normal command. Runs before the Alt layout shortcuts so a
          * shadowed letter (e.g. Alt+a = activate staff in WASD) wins; unshadowed
@@ -2735,7 +2840,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 
         /* Handle SDL layout shortcuts before menu/game input routing so they
          * work from the initial menu onward. */
-        if (sdl_handle_global_layout_shortcut(&ev->key))
+        if (!tutorial_is_active() && sdl_handle_global_layout_shortcut(&ev->key))
             return;
 
         // Keep other Alt-based key handling limited to the dungeon.
@@ -2763,6 +2868,16 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             bool ctrl = ev->key.mod & SDL_KMOD_CTRL;
             bool alt = ev->key.mod & SDL_KMOD_ALT;
             bool gui = ev->key.mod & SDL_KMOD_GUI;
+
+            /* When SDL text input is active, the matching TEXT_INPUT event is
+             * authoritative for unmodified printable keys.  Sending this
+             * keydown as well would duplicate physical-keyboard characters. */
+            if (inkey_prompt_input_active() && g_state.window
+                && SDL_TextInputActive(g_state.window)
+                && !ctrl && !alt && !gui)
+            {
+                return;
+            }
             if (ctrl && !alt && !gui && SDL_isalpha(key)) {
                 /* Map to control character */
                 Term_keypress(KTRL(key));
@@ -2946,4 +3061,41 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         g_state.need_present = true;
         Term_redraw();
     }
+}
+static unsigned int g_sdl_text_input_depth = 0;
+
+void sdl_text_input_begin(void)
+{
+    g_sdl_text_input_depth++;
+    if (g_sdl_text_input_depth == 1 && g_state.window)
+    {
+#if defined(SDL_PLATFORM_ANDROID)
+        /* Text fields are explicit UI actions.  Always show Android's keyboard
+         * even when SDL also detects a physical keyboard or game controller. */
+        (void)SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "1");
+#endif
+        (void)SDL_StartTextInput(g_state.window);
+    }
+}
+
+void sdl_text_input_reopen(void)
+{
+    if (!g_state.window || g_sdl_text_input_depth == 0)
+        return;
+
+    /* On mobile, starting an already-active input session may not restore a
+     * keyboard the user dismissed.  Restart it when the field is tapped. */
+    if (SDL_TextInputActive(g_state.window))
+        (void)SDL_StopTextInput(g_state.window);
+    (void)SDL_StartTextInput(g_state.window);
+}
+
+void sdl_text_input_end(void)
+{
+    if (g_sdl_text_input_depth == 0)
+        return;
+
+    g_sdl_text_input_depth--;
+    if (g_sdl_text_input_depth == 0 && g_state.window)
+        (void)SDL_StopTextInput(g_state.window);
 }

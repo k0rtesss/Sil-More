@@ -55,6 +55,7 @@ typedef enum inventory_menu_group
     INVENTORY_MENU_GROUP_ALL = 0,
     INVENTORY_MENU_GROUP_PACK,
     INVENTORY_MENU_GROUP_HARNESS,
+    INVENTORY_MENU_GROUP_QUIVER,
     INVENTORY_MENU_GROUP_JEWELRY,
     INVENTORY_MENU_GROUP_MAX
 } inventory_menu_group;
@@ -84,8 +85,17 @@ typedef struct supply_menu_request
     const struct object_type* replacement_incoming;
     bool replacement_include_equip;
     bool replacement_include_supplies;
+    cptr replacement_operation; /* e.g. "Picking up" or "Equipping" */
     cptr replacement_reason; /* why a replacement is needed; shown atop menu */
     int* replacement_item_out; /* inventory slot or SUPPLIES_INDEX + supply idx */
+    bool storage_exchange_mode; /* choose an item for the opposite pool */
+    const struct object_type* storage_exchange_incoming;
+    byte storage_exchange_target; /* OBJECT_STORAGE_* destination */
+    bool storage_exchange_include_equip;
+    bool storage_exchange_partial; /* allow a subset of the incoming stack */
+    bool storage_exchange_allow_non_stowable;
+    cptr storage_exchange_reason; /* why the exchange is needed */
+    int* storage_exchange_item_out; /* item to move to the source pool */
     bool slot_pick_mode; /* choose an equip slot to place an item into */
     const struct object_type* slot_pick_incoming; /* item being placed */
     const bool* slot_pick_enabled; /* INVEN_TOTAL flags: selectable slots */

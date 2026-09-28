@@ -408,6 +408,21 @@ bool object_choice_overlay(cptr title, cptr desc,
         if (sdl_question_menu_take_touch_scrolled())
             scroll_follow_highlight = false;
 
+        /* Physical arrows are queued separately from their legacy keypad
+         * characters so a directional key cannot accidentally activate an
+         * item shortcut.  Consume that semantic navigation here, just as the
+         * shared question selector does. */
+        {
+            int navigation = sdl_question_menu_take_navigation();
+
+            if (navigation)
+            {
+                highlight = (highlight + count + navigation) % count;
+                scroll_follow_highlight = true;
+                continue;
+            }
+        }
+
         {
             int clicked_choice = 0;
             int click_action = UI_MENU_CLICK_PRIMARY;

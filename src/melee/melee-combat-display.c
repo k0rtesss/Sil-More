@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "melee/melee-combat-display.h"
@@ -434,6 +435,7 @@ void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
         }
 
         log_trace("[ROLL2] exit: index=%d done", combat_number - 1);
+        tutorial_game_combat_roll(&combat_rolls[0][combat_number - 1]);
         combat_rolls_mark_dirty();
     }
 }
@@ -471,6 +473,7 @@ void update_combat_rolls_no_damage(void)
         combat_rolls[0][combat_number - 1].sequence =
             log_history_next_sequence();
         log_trace("[ROLL0] stamped index=%d", combat_number - 1);
+        tutorial_game_combat_roll(&combat_rolls[0][combat_number - 1]);
         combat_rolls_mark_dirty();
     }
 }
@@ -1577,6 +1580,15 @@ void do_cmd_combat_history_legacy(void)
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
+                SDL_TOUCH_MENU_CATEGORY_OTHER))
+        {
+            /* The legacy combat view keeps horizontal body panning, while
+             * the tab strip itself accepts a left/right swipe to return to
+             * the message log. */
+            ui_scroll_area_set_keys(0, 0, 'i', 'i');
+            ui_scroll_area_set_horizontal_page_mode(true);
+        }
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         
@@ -1926,8 +1938,8 @@ void do_cmd_combat_history_legacy(void)
             ui_menu_click_clear();
             ui_scroll_area_clear();
 
-            prt("Find: ", hgt - 1, 0);
-            if (!askfor_aux(finder, sizeof(finder))) continue;
+            if (!get_string_panel("Search Combat History", finder,
+                    sizeof(finder))) continue;
             
             /* Search through combat rolls */
             for (z = i + 1; z < n; z++) {
@@ -2013,6 +2025,7 @@ void do_cmd_combat_history_legacy(void)
 
 void do_cmd_combat_history(void)
 {
+    tutorial_game_menu("combat-history", "Review attack rolls, hit margins, damage dice and Protection in completed rounds. Reading the history is free.");
     do_cmd_messages_with_filter(LOG_HISTORY_FILTER_COMBAT);
 }
 

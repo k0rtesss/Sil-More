@@ -127,14 +127,15 @@ void teleport_away(int m_idx, int dis)
         look = false;
     }
 
-    /* Sound */
-    sound(MSG_TPOTHER);
+    /* Sound at the monster's departure grid. */
+    sound_at(MSG_TPOTHER, oy, ox);
 
     /*the monster should re-evaluate their target*/
     m_ptr->target_y = 0;
     m_ptr->target_x = 0;
 
     /* Swap the monsters */
+    monster_abilities_forced_movement(m_ptr);
     monster_swap(oy, ox, ny, nx);
 }
 
@@ -276,6 +277,7 @@ void teleport_player(int dis)
     sound(MSG_TELEPORT);
 
     /* Move player */
+    p_ptr->leaping = false;
     monster_swap(py, px, y, x);
 
     /* Handle stuff XXX XXX XXX */
@@ -329,6 +331,7 @@ void teleport_player_to(int ny, int nx)
     sound(MSG_TELEPORT);
 
     /* Move player */
+    p_ptr->leaping = false;
     monster_swap(py, px, y, x);
 
     /* Handle stuff XXX XXX XXX */
@@ -393,8 +396,8 @@ void teleport_towards(int oy, int ox, int ny, int nx)
         }
     }
 
-    /* Sound (assumes monster is moving) */
-    sound(MSG_TPOTHER);
+    /* Sound at the monster's departure grid. */
+    sound_at(MSG_TPOTHER, oy, ox);
 
     /* Move monster */
     monster_swap(oy, ox, y, x);
@@ -410,6 +413,12 @@ void teleport_player_level()
 {
     bool go_up = false;
     bool go_down = false;
+
+    if (p_ptr->depth == UTUMNO_DEPTH || p_ptr->depth == UTUMNO_FORGE_DEPTH)
+    {
+        msg_print("The ancient foundations of Utumno bar your passage.");
+        return;
+    }
 
     if (birth_ironman)
     {

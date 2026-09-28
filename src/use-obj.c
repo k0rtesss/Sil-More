@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "player/killer.h"
 
@@ -408,6 +409,14 @@ bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident)
 
 static bool eat_food(object_type* o_ptr, bool* ident)
 {
+    /* The assigned herb treats this infection instead of applying any of its
+     * usual effects, including nourishment. It works before diagnosis too. */
+    if (disease_herb_matches(o_ptr))
+    {
+        *ident = cure_disease();
+        return true;
+    }
+
     // Easter Eggs
     if ((o_ptr->sval < SV_FOOD_MIN_FOOD) && easter_time())
     {
@@ -530,8 +539,8 @@ static bool eat_food(object_type* o_ptr, bool* ident)
 
     case SV_FOOD_SICKNESS:
     {
-        if (do_dec_stat(A_CON, NULL))
-            *ident = true;
+        (void)infect_disease();
+        *ident = true;
         break;
     }
 
@@ -545,6 +554,8 @@ static bool eat_food(object_type* o_ptr, bool* ident)
     case SV_FOOD_MEAT:
     {
         msg_print("It tastes foul.");
+        if (!p_ptr->diseased && one_in_(DISEASE_MEAT_ONE_IN))
+            (void)infect_disease();
         *ident = true;
         break;
     }
@@ -579,6 +590,7 @@ static bool quaff_potion(object_type* o_ptr, bool* ident)
         (void)set_image(0);
         (void)set_poisoned(0);
         (void)set_blind(0);
+        (void)cure_disease();
         (void)set_cut(p_ptr->cut / 2);
         (void)set_afraid(0);
         (void)hp_player(consumable_healing_points(o_ptr), false, true);
@@ -648,6 +660,7 @@ static bool quaff_potion(object_type* o_ptr, bool* ident)
     {
         msg_print("It has the bitter taste of medicine.");
         *ident = true;
+        (void)cure_disease();
         set_cut(p_ptr->cut / 2);
         hp_player(consumable_healing_points(o_ptr), false, true);
         break;
@@ -1094,6 +1107,47 @@ static bool use_gem(object_type* o_ptr, bool* ident)
     return use_staff_effects(o_ptr, ident, true);
 }
 
+static bool tutorial_horn_aim_allowed(const object_type *horn, int dir)
+{
+    tutorial_view view;
+    if (!tutorial_peek_view(&view) || !tutorial_action_waiting()
+        || strcmp(view.id, "item.horn.use")) return true;
+    if (dir < 1 || dir > 9 || (dir == 5 && !target_okay(0))) return false;
+    int y1 = dir == 5 ? p_ptr->target_row : p_ptr->py + MAX_RANGE * ddy[dir];
+    int x1 = dir == 5 ? p_ptr->target_col : p_ptr->px + MAX_RANGE * ddx[dir];
+    int n1y = MAX(0, MIN(40, y1 - p_ptr->py + 20));
+    int n1x = MAX(0, MIN(40, x1 - p_ptr->px + 20));
+    int centerline = 90 - get_angle_to_grid[n1y][n1x];
+    int force_dir = dir == 5 ? rough_direction(p_ptr->py, p_ptr->px, y1, x1) : dir;
+    bool target = false;
+    for (int i = 1; i < mon_max; ++i) {
+        const monster_type *monster = &mon_list[i];
+        if (!monster->r_idx || !monster->ml) continue;
+        int dy = monster->fy - p_ptr->py, dx = monster->fx - p_ptr->px;
+        if (abs(dy) > 3 || abs(dx) > 3
+            || !los(p_ptr->py, p_ptr->px, monster->fy, monster->fx)) continue;
+        bool affected = false;
+        if (horn->sval == SV_HORN_FORCE) {
+            if (force_dir < 1 || force_dir > 9 || force_dir == 5) return false;
+            for (int spread = -1; spread <= 1; ++spread) {
+                int ray = cycle[chome[force_dir] + spread];
+                for (int range = 1; range <= 3; ++range)
+                    if (dy == range * ddy[ray] && dx == range * ddx[ray]) affected = true;
+            }
+        } else {
+            int angle = ABS(get_angle_to_grid[dy + 20][dx + 20] + centerline) % 180;
+            affected = distance(p_ptr->py, p_ptr->px, monster->fy, monster->fx) <= 3
+                && ABS(90 - angle) < (90 + 6) / 4;
+        }
+        if (!affected) continue;
+        if (!tutorial_game_target_allowed(monster->fy, monster->fx)) return false;
+        if (horn->sval == SV_HORN_TERROR
+            && (l_list[monster->r_idx].flags3 & RF3_NO_FEAR)) continue;
+        target = true;
+    }
+    return target;
+}
+
 static bool play_instrument(object_type* o_ptr, bool* ident)
 {
     int voice_cost = p_ptr->active_ability[S_WIL][WIL_CHANNELING] ? 10 : 20;
@@ -1120,6 +1174,7 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
         {
             return (false);
         }
+        if (!tutorial_horn_aim_allowed(o_ptr, dir)) return false;
     }
 
     /* Base chance of success */
@@ -1132,6 +1187,25 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
 
     /* Window stuff */
     p_ptr->window |= (PW_PLAYER_0);
+
+    switch (o_ptr->sval)
+    {
+    case SV_HORN_TERROR:
+        sound(MSG_HORN_TERROR);
+        break;
+    case SV_HORN_THUNDER:
+        sound(MSG_HORN_THUNDER);
+        break;
+    case SV_HORN_FORCE:
+        sound(MSG_HORN_FORCE);
+        break;
+    case SV_HORN_BLASTING:
+        sound(MSG_HORN_BLASTING);
+        break;
+    case SV_HORN_WARNING:
+        sound(MSG_HORN_WARNING);
+        break;
+    }
 
     msg_print("You sound a loud note on the horn.");
 
@@ -1890,7 +1964,12 @@ static bool activate_object(object_type* o_ptr)
 
 bool use_object(object_type* o_ptr, bool* ident)
 {
+    tutorial_view tutorial_before;
+    bool tutorial_use = tutorial_peek_view(&tutorial_before) && tutorial_action_waiting()
+        && !strcmp(tutorial_before.action, "use-item");
     bool used;
+
+    if (!tutorial_game_action_allowed("use-item", o_ptr)) return false;
 
     /* Analyze the object */
     switch (o_ptr->tval)
@@ -1932,6 +2011,18 @@ bool use_object(object_type* o_ptr, bool* ident)
     }
     }
 
+    if (used) {
+        tutorial_view tutorial_after;
+        /* A cure may remove its own eligibility (for example, restored Grace).
+         * The input gate checked it before use; retain that semantic subject
+         * until the real effect reports a committed use. */
+        if (tutorial_use && tutorial_peek_view(&tutorial_after)
+            && !strcmp(tutorial_before.id, tutorial_after.id)
+            && tutorial_before.step == tutorial_after.step
+            && tutorial_before.action_subject[0])
+            tutorial_action_finished("use-item", tutorial_before.action_subject, true);
+        else tutorial_game_item_used(o_ptr);
+    }
     return (used);
 }
 

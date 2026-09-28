@@ -1,6 +1,8 @@
 /* File: monster-lore.c */
 
 #include "monster-internal.h"
+#include "monster-ai.h"
+#include "monster-social.h"
 
 /*
  * Pronoun arrays, by gender.
@@ -353,7 +355,8 @@ static void describe_monster_toughness(
             monster_type* live = (monster_type*)m_ptr;
             evn = total_monster_evasion(live, false);
 
-            int base_dice = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+            int base_dice = r_ptr->pd + monster_blocking_bonus_dice(live)
+                - m_ptr->song_armor_dice_penalty;
             if (base_dice < 0)
                 base_dice = 0;
             prot_dice = base_dice + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -524,6 +527,113 @@ static void describe_monster_song_duel_progress(
         text_out(".  ");
 }
 
+static byte monster_observation_color(int feature, int confidence)
+{
+    switch (feature)
+    {
+    case MON_AI_FIRE: case MON_AI_COLD: case MON_AI_POISON:
+    case MON_AI_DARK: case MON_AI_FEAR: case MON_AI_SLOW:
+    case MON_AI_CONFUSION: case MON_AI_HOLD: case MON_AI_WEB:
+    case MON_AI_DISARM: case MON_AI_ACCURACY: case MON_AI_ARMOUR:
+        return confidence > 0 ? TERM_L_GREEN : TERM_L_RED;
+    case MON_AI_WOUNDED: case MON_AI_POISON_PRESSURE:
+        return TERM_L_RED;
+    default:
+        return TERM_YELLOW;
+    }
+}
+
+/* These are this monster's impressions, not the player's actual abilities. */
+static void describe_monster_observations(const monster_type* m_ptr)
+{
+    static const struct
+    {
+        cptr positive;
+        cptr negative;
+    } descriptions[MON_AI_FEATURE_COUNT] = {
+        [MON_AI_FIRE] = { "fire resistance", "fire vulnerability" },
+        [MON_AI_COLD] = { "cold resistance", "cold vulnerability" },
+        [MON_AI_POISON] = { "poison resistance", "poison vulnerability" },
+        [MON_AI_DARK] = { "dark resistance", "dark vulnerability" },
+        [MON_AI_FEAR] = { "fear resistance", "fear vulnerability" },
+        [MON_AI_SLOW] = { "slow resistance", "slow vulnerability" },
+        [MON_AI_CONFUSION] = { "confusion resistance", "confusion vulnerability" },
+        [MON_AI_HOLD] = { "entrancement resistance", "entrancement vulnerability" },
+        [MON_AI_WEB] = { "web resistance", "web vulnerability" },
+        [MON_AI_DISARM] = { "disarm resistance", "disarm vulnerability" },
+        [MON_AI_FLANKING] = { "flanking attack", NULL },
+        [MON_AI_CONTROLLED_RETREAT] = { "controlled retreat", NULL },
+        [MON_AI_OPPORTUNIST] = { "opportunist attack", NULL },
+        [MON_AI_ZONE] = { "zone of control", NULL },
+        [MON_AI_POLEARM] = { "polearm attack", NULL },
+        [MON_AI_RIPOSTE] = { "riposte", NULL },
+        [MON_AI_CHARGE] = { "charge", NULL },
+        [MON_AI_KNOCKBACK] = { "knockback", NULL },
+        [MON_AI_EXCHANGE] = { "exchange places", NULL },
+        [MON_AI_KITING] = { "kiting", NULL },
+        [MON_AI_FOCUS] = { "prepared attack", NULL },
+        [MON_AI_CONCENTRATION] = { "repeated attacks", NULL },
+        [MON_AI_IMPALE] = { "impale", NULL },
+        [MON_AI_WHIRLWIND] = { "sweeping attacks", NULL },
+        [MON_AI_FOLLOW_THROUGH] = { "follow-through", NULL },
+        [MON_AI_SLAY_FEAR] = { "weapon fear", NULL },
+        [MON_AI_STEALTH] = { "stealth", NULL },
+        [MON_AI_SONG] = { "singing", NULL },
+        [MON_AI_ACCURACY] = { "high evasion", "being hit" },
+        [MON_AI_ARMOUR] = { "armour blocking blows", "blows penetrate armour" },
+        [MON_AI_WOUNDED] = { "wounded", NULL },
+        [MON_AI_POISON_PRESSURE] = { "poisoned", NULL },
+    };
+    bool printed = false;
+
+    text_out("\n");
+    text_out_c(TERM_L_BLUE, "Observations about you: ");
+    for (int feature = 0; feature < MON_AI_FEATURE_COUNT; feature++)
+    {
+        /* Use the AI accessor so forgotten or disabled memories stay hidden. */
+        int confidence = monster_ai_confidence(m_ptr, feature);
+        cptr description = confidence > 0 ? descriptions[feature].positive
+                                          : descriptions[feature].negative;
+        if (!confidence || !description)
+            continue;
+
+        if (printed)
+            text_out("; ");
+        text_out_c(monster_observation_color(feature, confidence), description);
+        text_out_c(TERM_SLATE, format(" (%s)",
+            ABS(confidence) == 1 ? "weak"
+                : ABS(confidence) == 2 ? "moderate" : "strong"));
+        printed = true;
+    }
+    if (!printed)
+        text_out("none remembered");
+    text_out(".  ");
+}
+
+static void describe_monster_live_state(const monster_type* m_ptr)
+{
+    if (!m_ptr || !m_ptr->r_idx || !m_ptr->ml)
+        return;
+
+    text_out_c(m_ptr->poisoned > 0 ? TERM_GREEN : TERM_SLATE,
+        format("Poison stacks: %d.  ", m_ptr->poisoned));
+    int morale = m_ptr->morale >= 0
+        ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
+    text_out_c(m_ptr->morale < 0 ? TERM_L_RED : TERM_SLATE,
+        format("Morale: %d.  ", morale));
+    switch (m_ptr->social_state)
+    {
+        case MON_SOCIAL_CHALLENGE: text_out("It is confronting a rival.  "); break;
+        case MON_SOCIAL_FIGHT: text_out("It has an ongoing quarrel.  "); break;
+        case MON_SOCIAL_HELP: text_out("It has taken an ally's side in a quarrel.  "); break;
+        case MON_SOCIAL_AVOID: text_out("It is trying to withdraw from a disturbance.  "); break;
+        default: break;
+    }
+    if (monster_ai_confidence(m_ptr, MON_AI_SLAY_FEAR) > 0)
+        text_out("It remembers weapon strikes that frightened its kind.  ");
+    describe_monster_observations(m_ptr);
+}
+
 static void describe_monster_exp(int r_idx, const monster_lore* l_ptr)
 {
     const monster_race* r_ptr = &r_info[r_idx];
@@ -623,6 +733,12 @@ static void describe_monster_movement(
         text_out_c(TERM_L_BLUE, " serpent");
     else if (l_ptr->flags3 & RF3_VAMPIRE)
         text_out_c(TERM_L_BLUE, " vampire");
+    else if ((l_ptr->flags3 & (RF3_RAUKO | RF3_MAN))
+        == (RF3_RAUKO | RF3_MAN))
+        text_out_c(TERM_L_BLUE, " rauko in an assumed human form");
+    else if ((l_ptr->flags3 & (RF3_RAUKO | RF3_ORC))
+        == (RF3_RAUKO | RF3_ORC))
+        text_out_c(TERM_L_BLUE, " rauko in an assumed Orc form");
     else if (l_ptr->flags3 & RF3_RAUKO)
         text_out_c(TERM_L_BLUE, " rauko");
     else if (l_ptr->flags3 & RF3_TROLL)
@@ -729,22 +845,27 @@ static void describe_monster_movement(
         if (display_speed > 2)
         {
             if (display_speed > 5)
-                text_out_c(TERM_L_GREEN, " incredibly");
+                text_out_c(TERM_ORANGE, " incredibly");
             else if (display_speed > 4)
-                text_out_c(TERM_L_GREEN, " extremely");
+                text_out_c(TERM_ORANGE, " extremely");
             else if (display_speed > 3)
-                text_out_c(TERM_L_GREEN, " very");
-            text_out_c(TERM_L_GREEN, " quickly");
+                text_out_c(TERM_ORANGE, " very");
+            text_out_c(TERM_ORANGE, " quickly");
         }
         else if (display_speed < 2)
         {
-            text_out_c(TERM_L_UMBER, " slowly");
+            text_out_c(TERM_L_BLUE, " slowly");
+        }
+
+        {
+            int speed_index = MAX(0, MIN(display_speed, 7));
+            text_out_c(TERM_L_BLUE,
+                format(" (speed %d; %d%% of normal)", display_speed,
+                    (extract_energy[speed_index] * 100) / extract_energy[2]));
         }
 
         if (m_ptr)
         {
-            text_out_c(
-                TERM_L_GREEN, format(" (speed %d)", display_speed));
             if (is_hasted && is_slowed)
                 text_out(" while hasted and slowed");
             else if (is_hasted)
@@ -822,6 +943,7 @@ static void cheat_monster_lore(int r_idx, monster_lore* l_ptr)
     l_ptr->flags2 = r_ptr->flags2;
     l_ptr->flags3 = r_ptr->flags3;
     l_ptr->flags4 = r_ptr->flags4;
+    l_ptr->flags5 = r_ptr->flags5;
 }
 
 /*
@@ -925,6 +1047,10 @@ void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
 
     /* Describe the monster drop */
     describe_monster_drop(r_idx, &lore);
+
+    /* Individual state belongs only in live recall, never race spoilers. */
+    if (!spoilers && m_ptr && m_ptr->r_idx == r_idx)
+        describe_monster_live_state(m_ptr);
 
     /* All done */
     text_out("\n");

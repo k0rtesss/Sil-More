@@ -1,0 +1,598 @@
+#!/usr/bin/env python3
+"""Run production water rules/generation/rendering against an isolated SDL map.
+
+Build first with build-incremental.ps1. Reuses the torch regression harness so
+water must also preserve the existing animation, overlays and pan behavior.
+No player save/config files are opened.
+"""
+from pathlib import Path
+import os
+import shlex
+import subprocess
+import json
+import check_idle_animation as idle
+
+ROOT = Path(__file__).resolve().parents[1]
+BUILD = ROOT / "build-standard"
+OUT = ROOT / "scripts/output/water-check"
+
+TESTS = r'''
+#include "melee/melee-movement.h"
+#include "melee/melee-util.h"
+#include "sdl/main-sdl-private.h"
+
+void continue_leap(void);
+void generation_tests(void);
+void water_test_reset_partition(void);
+void monster_save_tests(void);
+void vault_water_tests(void);
+bool build_vault(int,int,vault_type*,bool);
+void __wrap_perceive(void) {}
+void __wrap_check_mandos_quest_interaction(void) {}
+void __wrap_check_niena_quest_completion(void) {}
+void __wrap_trigger_chasm_sanctum_ambush_if_needed(int y,int x) {(void)y;(void)x;}
+void __wrap_update_mon(int m, bool full) {(void)m;(void)full;}
+void __wrap_msg_print(cptr msg) {(void)msg;}
+void __wrap_message_flush(void) {}
+void __wrap_place_forge(int y,int x) {cave_set_feat(y,x,FEAT_FORGE_NORMAL_HEAD+3);}
+static int movement_choice;
+int __wrap_ui_question_ask(cptr title, cptr desc,
+    const ui_question_option* options, int count, int y, int x,
+    int default_index) {
+    (void)title; (void)desc; (void)y; (void)x;
+    assert(count == 2);
+    assert(strcmp(options[0].label, "Jump over") == 0);
+    assert(strcmp(options[1].label, "Go in") == 0);
+    assert(default_index == 0);
+    return movement_choice;
+}
+static int artefact_y, artefact_x, artefact_count;
+void __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
+    assert(id==ART_DURIN);(void)identify;
+    artefact_y=y;artefact_x=x;artefact_count++;
+}
+
+static bool status_has_label(const status_pane_entry* entries, int count,
+    const char* label) {
+    for (int i=0; i<count; i++)
+        if (!strcmp(entries[i].label,label)) return true;
+    return false;
+}
+
+void water_preview(const char* path,int scale) {
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,p_ptr->cur_map_wid*16*scale,p_ptr->cur_map_hgt*16*scale);
+    assert(target);SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);SDL_RenderClear(g_state.renderer);
+    for(int y=0;y<p_ptr->cur_map_hgt;y++)for(int x=0;x<p_ptr->cur_map_wid;x++) {
+        byte a,c,ta,tc;
+        map_info(y,x,&a,(char*)&c,&ta,(char*)&tc);
+        SDL_FRect dst={x*16*scale,y*16*scale,16*scale,16*scale};
+        sdl_draw_map_tile_layers_at(y,x,a,c,ta,tc,&dst);
+    }
+    SDL_Surface* surface=SDL_RenderReadPixels(g_state.renderer,NULL);assert(surface);
+    assert(IMG_SavePNG(surface,path));SDL_DestroySurface(surface);
+    SDL_SetRenderTarget(g_state.renderer,previous);SDL_DestroyTexture(target);
+}
+
+void water_map(int h, int w, int feat) {
+    character_dungeon = false;
+    p_ptr->cur_map_hgt = h; p_ptr->cur_map_wid = w;
+    p_ptr->depth = 5; p_ptr->py = 10; p_ptr->px = 10;
+    p_ptr->leaping = p_ptr->blind = p_ptr->rage = false;
+    p_ptr->truce = false; p_ptr->total_weight = 0;
+    p_ptr->chp = p_ptr->mhp = 100;
+    p_ptr->wy = p_ptr->wx = 0; p_ptr->is_dead = false;
+    g_labyrinth_view_active = false;
+    for (int y=0; y<h; y++) for(int x=0; x<w; x++) {
+        cave_set_feat(y,x,feat);
+        cave_color[y][x] = COLOR_STYLE_BASE;
+        cave_info[y][x] |= CAVE_MARK | CAVE_SEEN;
+        cave_natural[y][x] = cave_when[y][x] = 0;
+        cave_m_idx[y][x] = cave_o_idx[y][x] = 0;
+        cave_light[y][x] = 2;
+    }
+    water_test_reset_partition();
+    cave_fixtures_clear(); sdl_idle_animation_clear_cells();
+}
+
+static void scent_tests(void) {
+    water_map(32,32,FEAT_FLOOR);
+    scent_when = 100;
+    for(int y=1;y<31;y++) cave_set_feat(y,11,FEAT_WATER);
+    update_smell();
+    assert(cave_when[10][10] != 0 && cave_when[10][11] == 0);
+    assert(cave_when[10][12] == 0 && cave_when[9][12] == 0);
+    byte old_bank = cave_when[10][10];
+    p_ptr->px = 11; cave_when[10][11] = 70; update_smell();
+    assert(cave_when[10][11] == 0 && cave_when[10][10] == old_bank);
+    assert(cave_when[10][12] == 0);
+    p_ptr->px = 12; update_smell();
+    assert(cave_when[10][12] && cave_when[10][10] == old_bank);
+    cave_when[10][11] = scent_when; assert(get_scent(10,11) == -1);
+    cave_set_feat(10,12,FEAT_WATER); assert(cave_when[10][12] == 0);
+    p_ptr->py = p_ptr->px = 20; p_ptr->leaping = true; update_smell();
+    assert(cave_when[20][20] == 0); p_ptr->leaping = false;
+    puts("Scent: both banks, wet entry, old land tracks, tracker and airborne midpoint: PASS");
+}
+
+static void movement_tests(void) {
+    water_map(32,32,FEAT_FLOOR);
+    p_ptr->pspeed=2; p_ptr->leaping=false;
+    assert(player_current_movement_energy()==100
+        && player_current_movement_speed()==2);
+    status_pane_entry entries[SDL_STATUS_PANE_MAX_ENTRIES];
+    character_generated=true; character_icky=false;
+    cave_set_feat(10,10,FEAT_WATER);
+    assert(player_current_movement_energy()==150
+        && player_current_movement_speed()==1);
+    int status_count=sdl_status_pane_collect(entries,SDL_STATUS_PANE_MAX_ENTRIES);
+    assert(status_has_label(entries,status_count,"Slow"));
+    assert(!status_has_label(entries,status_count,"Very slow"));
+    cave_set_feat(10,10,FEAT_DEEP_WATER);
+    assert(player_current_movement_energy()==400
+        && player_current_movement_speed()==0);
+    status_count=sdl_status_pane_collect(entries,SDL_STATUS_PANE_MAX_ENTRIES);
+    assert(status_has_label(entries,status_count,"Very slow"));
+    character_generated=false;
+    puts("Terrain speed status: shallow Slow, deep Very slow, airborne normal: PASS");
+    p_ptr->leaping=true;
+    assert(player_current_movement_energy()==100
+        && player_current_movement_speed()==2);
+    p_ptr->leaping=false; cave_set_feat(10,10,FEAT_FLOOR);
+    cave_m_idx[10][10] = -1;
+    cave_set_feat(10,11,FEAT_WATER); cave_set_feat(10,12,FEAT_WATER);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING] = false;
+    for(int step=0;step<4;step++) {
+        p_ptr->energy_use=100; stealth_score=20; move_player(6);
+        if(p_ptr->px != 11+step) fprintf(stderr,"step=%d pos=(%d,%d) energy=%d feat=%d info=%x\n",step,p_ptr->py,p_ptr->px,p_ptr->energy_use,cave_feat[10][11],cave_info[10][11]);
+        assert(p_ptr->px == 11+step);
+        assert(p_ptr->energy_use == (step<3 ? 150 : 100));
+        assert(stealth_score == (step<3 ? 17 : 20));
+    }
+    p_ptr->energy_use=200; stealth_score=20;
+    player_water_movement(FEAT_WATER,FEAT_WATER);
+    assert(p_ptr->energy_use==300 && stealth_score==17);
+    assert(water_movement_energy(100,FEAT_WATER,FEAT_WATER,true)==100);
+    /* A real leap has two turns; neither touches its water midpoint. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=0; p_ptr->previous_action[1]=6;
+    p_ptr->energy_use=100; stealth_score=20;
+    move_player(6);
+    assert(p_ptr->px==11 && p_ptr->leaping && p_ptr->energy_use==100 && stealth_score==20);
+    continue_leap();
+    assert(p_ptr->px==12 && !p_ptr->leaping && p_ptr->energy_use==100 && stealth_score==15);
+    /* A visible but not yet memorized dry bank is still a valid landing. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    cave_info[10][12] &= ~CAVE_MARK;
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=0; p_ptr->previous_action[1]=6; p_ptr->energy_use=100;
+    move_player(6);
+    assert(p_ptr->px==11 && p_ptr->leaping);
+    continue_leap();
+    assert(p_ptr->px==12 && !p_ptr->leaping);
+    /* Choosing to go in keeps the ordinary wading movement. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    movement_choice=1; p_ptr->previous_action[1]=6; p_ptr->energy_use=100;
+    move_player(6);
+    assert(p_ptr->px==11 && !p_ptr->leaping && p_ptr->energy_use==150);
+    /* Landing blocked after takeoff: exactly one wet landing charge. */
+    water_map(32,32,FEAT_FLOOR); cave_m_idx[10][10]=-1;
+    cave_set_feat(10,11,FEAT_WATER);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=true;
+    p_ptr->previous_action[1]=6;
+    movement_choice=0; p_ptr->energy_use=100; stealth_score=20; move_player(6);
+    cave_set_feat(10,12,FEAT_WALL_EXTRA); continue_leap();
+    assert(p_ptr->px==11 && !p_ptr->leaping && p_ptr->energy_use==150 && stealth_score==12);
+    p_ptr->active_ability[S_EVN][EVN_LEAPING]=false;
+    /* Actual monster movement leaves signed energy debt, without slowing flight. */
+    water_map(32,32,FEAT_FLOOR); p_ptr->py=p_ptr->px=25;
+    monster_type* m=&mon_list[1]; memset(m,0,sizeof(*m));
+    m->r_idx=1; m->fy=10; m->fx=10; m->hp=10; m->maxhp=10;
+    m->alertness=ALERTNESS_ALERT; cave_m_idx[10][10]=1;
+    cave_set_feat(10,11,FEAT_WATER); cave_set_feat(10,12,FEAT_WATER);
+    r_info[1].flags2=0; process_move(m,10,11,false);
+    assert(m->fx==11 && m->energy==-50 && m->noise>=8);
+    m->energy=0; process_move(m,10,11,false); assert(m->energy==0);
+    m->energy=0; process_move(m,10,12,false); assert(m->energy==-50);
+    m->energy=0; process_move(m,10,13,false); assert(m->energy==-50);
+    m->energy=0; r_info[1].flags2=RF2_FLYING;
+    process_move(m,10,12,false); assert(m->energy==0);
+    r_info[1].flags2=0;
+    puts("Movement: enter/cross/exit, actual two-turn/blocked leaps, ground/flying monsters: PASS");
+}
+
+int terrain_generation_components(const byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
+    int labels[MAX_DUNGEON_HGT][MAX_DUNGEON_WID]);
+void generation_tests(void) {
+    static dun_data dungeon;
+    static byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int before_components[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int after_components[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static int component_matches[MAX_DUNGEON_HGT*MAX_DUNGEON_WID+1];
+    dun=&dungeon;
+    int generated[4]={0}, totals[4]={0}, floors[4]={0};
+    const int materials[4]={FEAT_WATER,FEAT_ICE,FEAT_LAVA,FEAT_POISON};
+    const big_cave_type_t subtypes[4]={BIG_CAVE_NONE,BIG_CAVE_ICE,BIG_CAVE_FIRE,BIG_CAVE_POIS};
+    const char* names[4]={"water","ice","lava","poison"};
+    for(int kind=0;kind<4;kind++) for(int seed=1;seed<=100;seed++) {
+        water_map(64,96,FEAT_WALL_EXTRA); memset(dun,0,sizeof(*dun));
+        memset(room_anchor_kind,0,sizeof(room_anchor_kind));
+        Rand_state_init(seed); layout_anchor_count=0;
+        if(kind==0) {
+            for(int i=0;i<6;i++) {
+                int y=2+(i/3)*29,x=2+(i%3)*30;
+                for(int t=0;t<20;t++)
+                    if(carve_ca_blob_anchor_bounds(y,y+26,x,x+27,0)) break;
+            }
+        } else {
+            current_partition_modes[0]=QUAD_MODE_BIG_CAVE;
+            current_partition_big_cave_types[0]=subtypes[kind];
+            assert(carve_big_cave_bounds(2,61,2,93,0,subtypes[kind]));
+        }
+        cave_set_feat(30,45,FEAT_MORE); cave_set_feat(31,45,FEAT_FORGE_NORMAL_HEAD);
+        cave_set_feat(29,45,FEAT_FLOOR); cave_info[29][45]|=CAVE_G_VAULT;
+        cave_set_feat(28,45,FEAT_FLOOR); cave_o_idx[28][45]=1;
+        cave_set_feat(27,45,FEAT_FLOOR); cave_m_idx[27][45]=1;
+        memcpy(before,cave_feat,sizeof(before));
+        terrain_generation_components(before,before_components);
+        terrain_generation_reset(); place_dungeon_terrain();
+        terrain_generation_components(cave_feat,after_components);
+        memset(component_matches,0,sizeof(component_matches));
+        int count=0;
+        for(int y=1;y<63;y++)for(int x=1;x<95;x++) {
+            int old_component=before_components[y][x],new_component=after_components[y][x];
+            if(old_component && new_component) {
+                assert(!component_matches[old_component] || component_matches[old_component]==new_component);
+                component_matches[old_component]=new_component;
+            }
+            if(before[y][x]==FEAT_FLOOR) floors[kind]++;
+            bool rock=before[y][x]==FEAT_WALL_EXTRA || before[y][x]==FEAT_WALL_OUTER
+                || before[y][x]==FEAT_WALL_INNER || before[y][x]==FEAT_WALL_SOLID
+                || before[y][x]==FEAT_QUARTZ;
+            /* Major geology excavates cavern granite, with banks and bridges.
+             * Local ice accents still retain the original floor-only policy. */
+            if(before[y][x]!=FEAT_FLOOR && !rock) assert(before[y][x]==cave_feat[y][x]);
+            if(rock && before[y][x]!=cave_feat[y][x])
+                assert(terrain_landmark_cell(y,x)!=TERRAIN_LANDMARK_NONE || !kind);
+            bool wet = kind==1 ? FEAT_IS_ICE(cave_feat[y][x])
+                : kind ? cave_feat[y][x]==materials[kind]
+                : (cave_feat[y][x]==FEAT_WATER || cave_feat[y][x]==FEAT_DEEP_WATER);
+            if(!wet) continue;
+            count++; assert(before[y][x]==FEAT_FLOOR || rock);
+            assert(!(cave_info[y][x]&(CAVE_ICKY|CAVE_G_VAULT)));
+            assert(!cave_o_idx[y][x]&&!cave_m_idx[y][x]);
+            bool adjacent=false;
+            static const int dy[]={-1,0,1,0},dx[]={0,1,0,-1};
+            for(int d=0;d<4;d++) {
+                int neighbour=cave_feat[y+dy[d]][x+dx[d]];
+                adjacent|=kind==1 ? FEAT_IS_ICE(neighbour)
+                    : kind ? neighbour==materials[kind]
+                    : (neighbour==FEAT_WATER || neighbour==FEAT_DEEP_WATER);
+            }
+            assert(adjacent);
+            if(cave_feat[y][x]==FEAT_DEEP_WATER)
+                for(int oy=-1;oy<=1;oy++)for(int ox=-1;ox<=1;ox++) {
+                    int neighbour=cave_feat[y+oy][x+ox];
+                    assert(neighbour==FEAT_WATER || neighbour==FEAT_DEEP_WATER
+                        || FEAT_IS_ICE(neighbour));
+                }
+        }
+        assert(cave_feat[30][45]==FEAT_MORE && cave_feat[31][45]==FEAT_FORGE_NORMAL_HEAD);
+        assert(cave_feat[29][45]==FEAT_FLOOR && cave_feat[28][45]==FEAT_FLOOR && cave_feat[27][45]==FEAT_FLOOR);
+        totals[kind]+=count;
+        if(count>0) {
+            int* total=&generated[kind];
+            if(++*total==1) {
+                cave_o_idx[28][45]=cave_m_idx[27][45]=0;
+                char path[128];
+                strnfmt(path,sizeof(path),"scripts/output/water-check/cave-%s.png",names[kind]);
+                water_preview(path,1);
+            }
+        }
+    }
+    for(int kind=0;kind<4;kind++) {
+        assert(generated[kind]>0);
+        /* A single depth accent used to cover less than 1% of these caverns.
+         * Require a visible increase while retaining ample ordinary floor. */
+        if(kind) assert(totals[kind]*100>=floors[kind]*5 && totals[kind]*100<floors[kind]*20);
+        printf("Production %s geometry: %d/100 generated, %.1f matching tiles/map (%.1f%% of original floor); protected features and access intact: PASS\n",
+            names[kind],generated[kind],totals[kind]/100.0,100.0*totals[kind]/floors[kind]);
+    }
+}
+
+static void water_render_tests(void) {
+    water_map(32,32,FEAT_FLOOR); character_dungeon=character_generated=true;
+    p_ptr->py=p_ptr->px=15; use_bigtile=false;
+    Term->total_erase=true;prt_map();Term_fresh();
+    cave_set_feat(10,11,FEAT_WATER); cave_set_feat(10,12,FEAT_WATER);
+    f_info[FEAT_WATER].x_attr=TILE_FLAG; f_info[FEAT_WATER].x_char=(char)(TILE_FLAG|1);
+    cave_water_flow_set(10,11,CAVE_WATER_FLOW_EAST);
+    cave_water_flow_set(10,12,CAVE_WATER_FLOW_EAST);
+    Term->soft_cursor=false;
+    frame_tick=0; draw_cell(10,11,false); draw_cell(10,12,false);
+    assert(water_texture && cell_count==2);
+    u64b rng=Rand_state_export(); s16b energy=p_ptr->energy;
+    int loads=image_loads, textures=texture_creations;
+    SDL_Surface* frames[4];
+    for(int i=0;i<4;i++) {
+        frame_tick=(Uint64)i*8; draw_cell(10,11,false);draw_cell(10,12,false);
+        frames[i]=capture(40+i);
+        if(i) assert(!same_surface(frames[i-1],frames[i]));
+    }
+    assert(sdl_idle_animation_timeout_ms(32*IDLE_STEP_NS)==0);
+    sdl_idle_animation_update(32*IDLE_STEP_NS);
+    assert(p_ptr->energy==energy && Rand_state_export()==rng);
+    assert(image_loads==loads && texture_creations==textures);
+    for(int big=0;big<2;big++) {
+        use_bigtile=big;
+        /* Match the full erase issued by the actual tile-width setting. */
+        Term->total_erase=true;
+        for(int pan=0;pan<3;pan++) {
+            p_ptr->wx=pan;prt_map();Term_fresh();
+            SDL_Surface* incremental=capture(50);
+            force_map_redraw();Term_fresh();
+            SDL_Surface* full=capture(51);
+            assert(same_surface(incremental,full));
+            SDL_DestroySurface(incremental);SDL_DestroySurface(full);
+        }
+    }
+    use_bigtile=false;Term->total_erase=true;p_ptr->wx=0;prt_map();Term_fresh();
+    /* Erasing a water tile must also erase its animation pixels. */
+    cave_set_feat(10,11,FEAT_FLOOR);Term_fresh();
+    SDL_Surface* erased=capture(52);force_map_redraw();Term_fresh();
+    SDL_Surface* repaint=capture(53);assert(same_surface(erased,repaint));
+    SDL_DestroySurface(erased);SDL_DestroySurface(repaint);
+    cave_info[10][11]&=~CAVE_SEEN; cave_info[10][12]&=~CAVE_SEEN;
+    assert(sdl_idle_animation_timeout_ms(40*IDLE_STEP_NS)==-1);
+    cave_info[10][11]=0;assert(!visible_liquid(10,11));
+    assert(same_surface(frames[0],frames[3])); /* Native forward river loop: 0,1,2. */
+    for(int i=0;i<4;i++)SDL_DestroySurface(frames[i]);
+
+    /* A lake has no flow direction, but it still uses Verdant 03's four
+     * authored surface frames and must remain in the idle scheduler. */
+    water_map(32,32,FEAT_FLOOR); character_dungeon=character_generated=true;
+    cave_water_flow_reset();
+    p_ptr->py=p_ptr->px=15; use_bigtile=false;
+    Term->total_erase=true; prt_map(); Term_fresh();
+    cave_set_feat(10,11,FEAT_WATER);
+    cave_info[10][11] |= CAVE_MARK | CAVE_SEEN;
+    f_info[FEAT_WATER].x_attr=TILE_FLAG; f_info[FEAT_WATER].x_char=(char)(TILE_FLAG|1);
+    frame_tick=0; draw_cell(10,11,false);
+    assert(cell_count==1 && cell_can_animate(&cells[0]));
+    SDL_Surface* still_frames[4];
+    for(int i=0;i<4;i++) {
+        frame_tick=(Uint64)i*8; draw_cell(10,11,false);
+        still_frames[i]=capture(60+i);
+        if(i) assert(!same_surface(still_frames[i-1],still_frames[i]));
+    }
+    frame_tick=0; draw_cell(10,11,false);
+    g_state.need_present=false;
+    assert(sdl_idle_animation_timeout_ms(8*IDLE_STEP_NS)==0);
+    sdl_idle_animation_update(8*IDLE_STEP_NS);
+    assert(g_state.need_present);
+    assert(!same_surface(still_frames[0],still_frames[3]));
+    for(int i=0;i<4;i++)SDL_DestroySurface(still_frames[i]);
+    puts("Water pixels: calm four-frame animation, native current loop, idle redraw, pan/erase in both tile widths, fog of war, no turn/RNG/I/O activity: PASS");
+}
+
+static void water_tests(void) {
+    cave_when=calloc(MAX_DUNGEON_HGT,sizeof(*cave_when));
+    cave_natural=calloc(MAX_DUNGEON_HGT,sizeof(*cave_natural));
+    mon_list=calloc(64,sizeof(*mon_list)); r_info=calloc(64,sizeof(*r_info));
+    l_list=calloc(64,sizeof(*l_list)); inventory=calloc(INVEN_TOTAL,sizeof(*inventory));
+    o_list=calloc(64,sizeof(*o_list)); k_info=calloc(64,sizeof(*k_info));
+    r_name="\0test creature\0"; r_info[1].name=1; mon_max=1;
+    scent_tests(); movement_tests(); generation_tests(); monster_save_tests();
+    vault_water_tests(); water_render_tests();
+}
+'''
+
+VAULT_TEST = r'''
+void vault_water_tests(void) {
+    vault_type vault={0};
+    static char rows[]=@ROWS@;
+    v_text=rows;v_name="Kheled-Zaram";
+    vault.typ=8;vault.hgt=@HEIGHT@;vault.wid=@WIDTH@;
+    vault.flags=VLT_LIGHT|VLT_SURFACE;
+    vault.style_count=1;vault.style_idx[0]=0;vault.style_weight[0]=1;
+    /* Use the source vault's style with the harness's single style slot. */
+    style_info[0].wall_row=@WALL_ROW@;style_info[0].wall_col=@WALL_COL@;
+    style_info[0].floor_row=@FLOOR_ROW@;style_info[0].floor_col=@FLOOR_COL@;
+    style_info[0].floor_count=0;
+    for(int rotation=0;rotation<2;rotation++)for(int seed=0;seed<8;seed++) {
+        water_map(23,23,FEAT_WALL_EXTRA);Rand_state_init(seed);artefact_count=0;
+        assert(build_vault(11,11,&vault,rotation));
+        int wet=0;
+        for(int y=0;y<23;y++)for(int x=0;x<23;x++) {
+            assert(cave_feat[y][x]!=FEAT_CHASM);
+            if(cave_feat[y][x]==FEAT_WATER) {wet++;assert(cave_info[y][x]&CAVE_ICKY);}
+        }
+        assert(wet==@WET@&&artefact_count==1);
+        assert(cave_feat[artefact_y][artefact_x]==FEAT_FLOOR);
+        if(!rotation&&seed==0)water_preview("scripts/output/water-check/kheled-zaram.png",2);
+    }
+    puts("Kheled-Zaram: actual vault builder, 16 rotations/reflections, lake tiles and dry Durin artefact square: PASS");
+    style_info[0].wall_row=0;style_info[0].wall_col=4;
+    style_info[0].floor_row=0;style_info[0].floor_col=1;
+}
+'''
+
+SAVE_TEST = r'''
+#include "angband.h"
+#include "monster/monster-ai.h"
+#include <assert.h>
+#include <stdio.h>
+static byte bytes[2048];
+static int write_pos, read_pos, extra_version;
+static int poison_offset, abilities_offset, ai_offset;
+static const bool savefile_has_song_duels=true, savefile_has_monster_shatter=true;
+static const bool savefile_has_thrall_quest=true, savefile_has_thrall_quest_requested=true;
+static void wr_byte(byte x) { assert(write_pos < 2048); bytes[write_pos++]=x; }
+static void wr_u16b(u16b x) {wr_byte(x);wr_byte(x>>8);}
+static void wr_s16b(s16b x) {wr_u16b((u16b)x);}
+static void wr_u32b(u32b x) {wr_u16b(x);wr_u16b(x>>16);}
+static void wr_s32b(s32b x) {wr_u32b((u32b)x);}
+static void rd_byte(byte* x) {assert(read_pos<write_pos);*x=bytes[read_pos++];}
+static void rd_u16b(u16b* x) {byte a,b;rd_byte(&a);rd_byte(&b);*x=a|((u16b)b<<8);}
+static void rd_s16b(s16b* x) {u16b n;rd_u16b(&n);*x=(s16b)n;}
+static void rd_u32b(u32b* x) {u16b a,b;rd_u16b(&a);rd_u16b(&b);*x=a|((u32b)b<<16);}
+static void rd_s32b(s32b* x) {u32b n;rd_u32b(&n);*x=(s32b)n;}
+static void strip_bytes(int n) {while(n--) {byte b;rd_byte(&b);}}
+static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {
+    assert(a==0&&b==9&&c==8&&d>=2&&d<=7);return extra_version>=d;
+}
+/* The complete production record writer and reader are inserted below. */
+@FUNCTIONS@
+void monster_save_tests(void) {
+    for(int version=1;version<=7;version++) {
+        monster_type before={0}, after={0};
+        before.r_idx=3;before.image_r_idx=7;before.fy=14;before.fx=19;
+        before.hp=39;before.maxhp=46;before.alertness=ALERTNESS_ALERT;
+        before.energy=version>=2?-50:213;before.mspeed=2;before.stunned=9;
+        before.poisoned=17;
+        before.vengeance=1;before.smite_recovery=2;
+        before.ai.cast_reserve=2;
+        before.ai.observations[MON_AI_FIRE].value=2;
+        before.ai.observations[MON_AI_FIRE].ttl=40;
+        before.ai.observations[MON_AI_IMPALE].value=3;
+        before.ai.observations[MON_AI_IMPALE].ttl=20;
+        before.confused=6;before.song_will_penalty=11;before.thrall_quest_completed=1;
+        before.previous_action[0]=6;before.previous_action[1]=8;
+        extra_version=version;write_pos=read_pos=0;wr_monster(&before);
+        /* Construct each historical tail explicitly, independent of the
+         * size of subsequently appended ability and observation records. */
+        if(version<4)write_pos=poison_offset;
+        else if(version<5)write_pos=abilities_offset;
+        else if(version<6)write_pos=ai_offset;
+        else if(version==6) {
+            int start=ai_offset+29*7, count=(MON_AI_FEATURE_COUNT-29)*7;
+            memmove(bytes+start,bytes+start+count,write_pos-start-count);write_pos-=count;
+        }
+        if(version==1) {
+            /* Old byte-energy record: omit its high byte, preserve its tail. */
+            assert(bytes[14]==213 && bytes[15]==0);
+            memmove(bytes+15,bytes+16,write_pos-16);write_pos--;
+        }
+        rd_monster(&after);
+        assert(read_pos==write_pos);
+        assert(after.energy==before.energy && after.hp==before.hp);
+        assert(after.r_idx==3&&after.fx==19&&after.stunned==9&&after.confused==6);
+        assert(after.song_will_penalty==11 && after.thrall_quest_completed==1);
+        assert(after.previous_action[1]==8);
+        assert(after.poisoned==(version>=4?17:0));
+        assert(after.vengeance==(version>=5?1:0));
+        assert(after.smite_recovery==(version>=5?2:0));
+        assert(after.ai.cast_reserve==(version>=6?2:0));
+        assert(after.ai.observations[MON_AI_IMPALE].value==(version>=7?3:0));
+    }
+    puts("Monster save records: versions 0.9.8.1-7, signed debt, old unsigned energy, poison/ability/AI defaults and record alignment: PASS");
+}
+'''
+
+def c_function(path, name):
+    source = path.read_text(encoding="utf-8")
+    start = source.index("void " + name + "(")
+    pos = source.index("{", start)
+    depth = 1
+    end = pos + 1
+    while depth:
+        if source[end] == "{":
+            depth += 1
+        elif source[end] == "}":
+            depth -= 1
+        end += 1
+    return source[start:end]
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    idle.OUT.mkdir(parents=True, exist_ok=True)
+    # Keep the original fixture regression suite and its minimal environment.
+    gen_start = TESTS.index("int terrain_generation_components(")
+    gen_end = TESTS.index("static void water_render_tests(void)")
+    gen = OUT / "generation-check.c"
+    gen.write_text('#include "angband.h"\n#include "level-generation/level-generation-internal.h"\n#include "level-generation/level-generation-terrain.h"\n#include "level-generation/level-generation-landmarks.h"\n#include <assert.h>\n'
+        'void water_map(int,int,int);\n'
+        'void water_preview(const char*,int);\n'
+        'void water_test_reset_partition(void) { current_partition_rows = current_partition_cols = current_partition_count = 1; current_partition_modes[0] = QUAD_MODE_CAVEY; current_partition_big_cave_types[0] = BIG_CAVE_NONE; }\n'
+        + TESTS[gen_start:gen_end], encoding="utf-8")
+    vault_text = (ROOT / "lib/edit/vault.txt").read_text(encoding="utf-8").split("N:407:Kheled-Zaram", 1)[1].split("\nN:", 1)[0]
+    rows = [line[2:] for line in vault_text.splitlines() if line.startswith("D:")]
+    assert len({len(row) for row in rows}) == 1
+    style = (ROOT / "lib/edit/style.txt").read_text(encoding="utf-8").split("N:57:", 1)[1].split("\nN:", 1)[0]
+    wall = next(line[2:].split(":") for line in style.splitlines() if line.startswith("W:"))
+    floor = next(line[2:].split()[0].split(":") for line in style.splitlines() if line.startswith("F:"))
+    vault_test = VAULT_TEST
+    values = {"ROWS": json.dumps("".join(rows)), "HEIGHT": len(rows), "WIDTH": len(rows[0]),
+              "WET": sum(row.count("_") for row in rows), "WALL_ROW": wall[0], "WALL_COL": wall[1],
+              "FLOOR_ROW": floor[0], "FLOOR_COL": floor[1]}
+    for key, value in values.items():
+        vault_test = vault_test.replace("@" + key + "@", str(value))
+    terrain_init = []
+    feature = None
+    for line in (ROOT / "lib/edit/terrain.txt").read_text(encoding="utf-8").splitlines():
+        if line.startswith("N:"):
+            feature = int(line.split(":")[1])
+        elif line.startswith("T:"):
+            row, col = map(int, line[2:].split(":"))
+            terrain_init.append(f'f_info[{feature}].x_attr=TILE_FLAG|{row};f_info[{feature}].x_char=(char)(TILE_FLAG|{col});')
+    harness = idle.HARNESS.replace("int main(void) {", TESTS[:gen_start] + TESTS[gen_end:] + vault_test + "\nint main(void) {")
+    harness = harness.replace("    sdl_idle_animation_shutdown();\n    SDL_Quit();", "    water_tests();\n    sdl_idle_animation_shutdown();\n    SDL_Quit();")
+    harness = harness.replace("    water_tests();", "    " + "".join(terrain_init) + "\n    water_tests();")
+    source = OUT / "check.c"
+    source.write_text(harness, encoding="utf-8")
+    save_check = OUT / "monster-save-check.c"
+    writer_source = (ROOT / "src/fs/save.c").read_text(encoding="utf-8")
+    saved_flags = writer_source[writer_source.index("#define SAVE_MON_FLAGS"):]
+    saved_flags = saved_flags[:saved_flags.index("\n\n")]
+    writer = c_function(ROOT / "src/fs/save.c", "wr_monster")
+    writer = writer.replace("wr_s16b(m_ptr->poisoned);", "poison_offset=write_pos;wr_s16b(m_ptr->poisoned);")
+    writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=write_pos;wr_byte(m_ptr->vengeance);")
+    writer = writer.replace("for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)",
+                            "ai_offset=write_pos;for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)", 1)
+    save_check.write_text(SAVE_TEST.replace("@FUNCTIONS@", saved_flags + "\n" +
+        writer + "\n" +
+        c_function(ROOT / "src/fs/load.c", "rd_monster")), encoding="utf-8")
+    wrappers = [str(gen), str(save_check)]
+    for operation, internal in (("write", "wr"), ("read", "rd")):
+        stem = "save" if operation == "write" else "load"
+        p = OUT / (stem + "-check.c")
+        result, ret = ("void", "") if operation == "write" else ("errr", "return ")
+        p.write_text(f'#include "fs/{stem}-dungeon.c"\n{result} test_{operation}_fixtures(void) {{ {ret}{internal}_fixtures(); }}\n', encoding="utf-8")
+        wrappers.append(str(p))
+    menu = OUT / "settings-check.c"
+    menu.write_text('#include "cmd/ui/cmd-ui-settings.c"\n'
+        'bool test_pick_torch_option(bool* handled) { return option_pick_value(OPT_torch_animation_always, handled); }\n'
+        'void test_reset_torch_option(bool* app_dirty) { const int opt[] = { OPT_torch_animation_always }; bool meta = false, sound = false; options_aux_reset_to_default(VISUAL_PAGE, opt, 0, false, NULL, app_dirty, &sound, &meta); }\n', encoding="utf-8")
+    wrappers.append(str(menu))
+    cmake = BUILD / "CMakeFiles/sil-more.dir"
+    objects = shlex.split((cmake / "objects1.rsp").read_text())
+    exclude = ("/src/main.c.obj", "/src/sdl/render/sdl-idle-animation.c.obj", "/src/fs/save-dungeon.c.obj",
+               "/src/fs/load-dungeon.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj")
+    rsp = OUT / "objects.rsp"
+    rsp.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith(exclude)), encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([
+        *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")],
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
+    env["SDL_VIDEO_DRIVER"] = "dummy"
+    env["SDL_RENDER_DRIVER"] = "software"
+    symbols = ("save_wr_byte", "save_wr_u16b", "load_rd_byte", "load_rd_u16b", "load_savefile_version_at_least",
+        "load_note", "sdl_present_if_needed", "ui_question_ask", "ui_question_ask_overlay_buttons", "perceive",
+        "check_mandos_quest_interaction", "check_niena_quest_completion", "trigger_chasm_sanctum_ambush_if_needed",
+        "update_mon", "msg_print", "message_flush", "place_forge", "create_chosen_artefact")
+    exe = OUT / "check.exe"
+    subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), *wrappers,
+        "@" + str(rsp), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+        *["-Wl,--wrap=" + s for s in symbols], "-o", str(exe)], cwd=BUILD, env=env, check=True)
+    subprocess.run([str(exe)], cwd=ROOT, env=env, check=True, timeout=60)
+
+if __name__ == "__main__":
+    main()

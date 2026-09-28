@@ -4,9 +4,13 @@
 #include <SDL3/SDL_gamepad.h>
 #include "pane.h"
 #include "support/movement-input.h"
+#include "tutorial/tutorial.h"
 
 #define GAMEPAD_TRIGGER_COUNT 2
 #define GAMEPAD_STICK_DIR_COUNT 4
+#define GAMEPAD_DPAD_SOURCE_COUNT 3
+#define GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT 16
+#define GAMEPAD_DPAD_GUID_STRING_LEN 33
 #define TOUCH_SWIPE_DIR_COUNT 4
 #define GAMEPAD_MODIFIER_COUNT 3
 #define SDL_KEYMAP_MODE_COUNT 4
@@ -22,6 +26,10 @@
 #define GAMEPAD_STICK_DIR_DOWN 1
 #define GAMEPAD_STICK_DIR_LEFT 2
 #define GAMEPAD_STICK_DIR_RIGHT 3
+
+#define GAMEPAD_DPAD_SOURCE_STANDARD 0
+#define GAMEPAD_DPAD_SOURCE_LEFT_STICK 1
+#define GAMEPAD_DPAD_SOURCE_RIGHT_STICK 2
 
 #define TOUCH_SWIPE_DIR_UP 0
 #define TOUCH_SWIPE_DIR_DOWN 1
@@ -70,6 +78,7 @@
 #define TOUCH_BIND_MAIN_MENU_KNOWLEDGE -9
 #define TOUCH_BIND_MAIN_MENU_HINTS_QUESTS -10
 #define TOUCH_BIND_TOGGLE_TILES -11
+#define TOUCH_BIND_OPEN_JEWELRY -12
 
 #define SDL_TOUCH_PANE_BUTTON_COLS 3
 #define SDL_TOUCH_PANE_BUTTON_ROWS 8
@@ -102,7 +111,7 @@
 #define SDL_TOUCH_TOP_PANEL_BUTTON_COUNT 16
 #define SDL_TOUCH_TOP_PANEL_CELL_COUNT_MIN 0
 #define SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX SDL_TOUCH_TOP_PANEL_BUTTON_COUNT
-#define SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT 8
+#define SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT 9
 #define SDL_TOUCH_TOP_PANEL_COLUMNS_MIN 0
 #define SDL_TOUCH_TOP_PANEL_COLUMNS_MAX SDL_TOUCH_TOP_PANEL_BUTTON_COUNT
 #define SDL_TOUCH_TOP_PANEL_ROWS_MIN 1
@@ -145,7 +154,7 @@
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS 50
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS 300
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS 25
-#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 200
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 300
 #define SDL_CAMERA_CENTER_CLEARANCE_MIN 1
 #define SDL_CAMERA_CENTER_CLEARANCE_MAX 20
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -208,6 +217,11 @@ struct sdl_pane_profile {
     struct pane_config pane_configs[MAX_PANE_CONFIGS];
 };
 
+typedef struct gamepad_dpad_source_override {
+    char guid[GAMEPAD_DPAD_GUID_STRING_LEN];
+    int source;
+} gamepad_dpad_source_override;
+
 // SDL-specific configuration structure
 struct sdl_config {
     int main_view_scale;
@@ -215,6 +229,8 @@ struct sdl_config {
     int terminal_menu_scale_offset;
     // Use focus-dependent compact layouts for Inventory-style browsers.
     bool compact_inventory_menus;
+    // Use the compact terminal character sheet when opening the sheet in SDL.
+    bool debug_character_sheet;
     // Extra scale steps applied when mobile gameplay first appears.
     int mobile_starting_zoom_offset;
     // On mobile, request a real portrait device orientation.  Landscape
@@ -294,11 +310,16 @@ struct sdl_config {
 
     // Input presentation and gamepad/controller settings
     int input_ui_mode;                   // Auto, platform-native touch/keyboard, or controller UI
+    int desktop_input_choice;            // Auto = ask; otherwise remembered desktop input choice
     bool gamepad_enabled;                 // Enable gamepad input
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
     int gamepad_dpad_diagonal_delay_ms;   // Wait for a second d-pad direction before sending a cardinal move
+    gamepad_dpad_source_override
+        gamepad_dpad_source_overrides[GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT];
     bool gamepad_use_left_stick;          // Use left stick for movement
+    bool gamepad_use_right_stick;         // Independent right-stick movement
+    int gamepad_stick_diagonal_delay_ms[2]; // Left/right movement only; navigation is immediate
     int gamepad_deadzone;                 // Deadzone for analog sticks
     int gamepad_trigger_threshold;        // Threshold to treat triggers as pressed
     int gamepad_button_bindings[SDL_GAMEPAD_BUTTON_COUNT];
@@ -325,6 +346,7 @@ struct sdl_config {
     bool touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_COUNT];
     int touch_movement_mode;
     bool touch_round_movement_enabled;
+    bool touch_round_portrait_centered;
     int touch_zone_overlay_mode;
     int touch_zone_center_bindings[SDL_TOUCH_ZONE_CENTER_BINDING_COUNT];
     int touch_corner_up_down_side;
@@ -355,6 +377,9 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
 bool sdl_config_save(const char* filename, const struct sdl_config* config,
                      const struct sdl_pane_profile* pane_profiles,
                      int profile_count);
+
+int sdl_config_gamepad_dpad_source_for_guid(const char* guid);
+void sdl_config_set_gamepad_dpad_source_for_guid(const char* guid, int source);
 
 /* Seed a profile with the portrait HUD defaults formerly imposed at render
  * time.  Once seeded, the values remain ordinary editable general settings. */
@@ -412,6 +437,11 @@ void sdl_config_reset_app_options_to_defaults(void);
 bool sdl_config_should_force_intro_flame(void);
 void sdl_config_mark_intro_seen(void);
 bool sdl_config_touch_tutorial_seen(void);
+bool get_sdl_gameplay_tutorial_enabled(void);
+void set_sdl_gameplay_tutorial_enabled(bool enabled);
+tutorial_mode get_sdl_gameplay_tutorial_mode(void);
+void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
+void cycle_sdl_gameplay_tutorial_mode(void);
 void sdl_config_mark_touch_tutorial_seen(void);
 bool sdl_config_mouse_tutorial_seen(void);
 void sdl_config_mark_mouse_tutorial_seen(void);

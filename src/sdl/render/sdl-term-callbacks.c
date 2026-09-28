@@ -1,5 +1,9 @@
 #include "angband.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
+#include "log/perf.h"
 
 errr callback_sdl_xtra(int n, int v)
 {
@@ -8,8 +12,11 @@ errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_EVENT: {
         SDL_Event ev;
 
+        sil_popup_trace_stage("event-pump-enter");
+        sdl_gameplay_tutorial_sync();
         sdl_present_if_needed(d);
-        sdl_input_tutorial_maybe_show_deferred();
+        if (!tutorial_is_active())
+            sdl_input_tutorial_maybe_show_deferred();
         sdl_mono_font_prewarm_process_idle();
 
         if (v) {
@@ -64,6 +71,8 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_popup_notification_pending_timeout_ms(now_ns);
             int mouse_cursor_timeout_ms =
                 sdl_mouse_cursor_animation_timeout_ms(now_ns);
+            int idle_animation_timeout_ms =
+                sdl_idle_animation_timeout_ms(now_ns);
             int round_wheel_timeout_ms =
                 sdl_touch_round_pending_timeout_ms(now_ns);
             int thumb_touch_timeout_ms =
@@ -152,6 +161,9 @@ errr callback_sdl_xtra(int n, int v)
             {
                 timeout_ms = round_wheel_timeout_ms;
             }
+            if (idle_animation_timeout_ms >= 0
+                && (timeout_ms < 0 || idle_animation_timeout_ms < timeout_ms))
+                timeout_ms = idle_animation_timeout_ms;
             if (timeout_ms < 0 || (thumb_touch_timeout_ms >= 0
                     && thumb_touch_timeout_ms < timeout_ms))
             {
@@ -159,10 +171,16 @@ errr callback_sdl_xtra(int n, int v)
             }
             g_sdl_blocking_key_wait = true;
             {
+                sil_perf_flush();
+                sil_popup_trace_stage("input-wait-begin");
+                sil_perf_stamp input_wait = sil_perf_begin();
                 bool got_event = (timeout_ms >= 0)
                     ? SDL_WaitEventTimeout(&ev, timeout_ms)
                     : SDL_WaitEvent(&ev);
+                sil_perf_wait_end(input_wait);
                 if (got_event) {
+                    unsigned int tutorial_before_event = tutorial_revision();
+                    unsigned int tutorial_before_input = sdl_gameplay_tutorial_input_epoch();
                     sdl_handle_event(&g_state, &ev);
                     /*
                      * SDL_WaitEvent() removes one event only. Returning to
@@ -174,7 +192,9 @@ errr callback_sdl_xtra(int n, int v)
                      * new gesture while the previous command is still being
                      * resolved (and can age into a long press behind a banner).
                      */
-                    while (Term->key_head == Term->key_tail
+                    while (tutorial_revision() == tutorial_before_event
+                        && sdl_gameplay_tutorial_input_epoch() == tutorial_before_input
+                        && Term->key_head == Term->key_tail
                         && SDL_PollEvent(&ev))
                     {
                         sdl_handle_event(&g_state, &ev);
@@ -186,7 +206,7 @@ errr callback_sdl_xtra(int n, int v)
             g_sdl_blocking_key_wait = old_blocking_key_wait;
             Uint64 flush_ns = SDL_GetTicksNS();
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
-            sdl_gamepad_flush_pending_left_stick(flush_ns, false);
+            sdl_gamepad_flush_pending_sticks(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_gamepad_flush_pending_confirm(flush_ns);
             sdl_screen_back_gesture_flush_pending_press(flush_ns);
@@ -207,6 +227,7 @@ errr callback_sdl_xtra(int n, int v)
             sdl_side_pane_menu_flush_pending_press(flush_ns);
             sdl_touch_round_flush_pending_highlight(flush_ns);
             sdl_mouse_cursor_animation_update(flush_ns);
+            sdl_idle_animation_update(flush_ns);
             sdl_music_update(); /* Update music after handling event */
         } else {
             /* Non-blocking scan so animation loops (intro fades, etc.) keep running */
@@ -220,7 +241,7 @@ errr callback_sdl_xtra(int n, int v)
             sdl_minimap_flush_pending_redraw();
             Uint64 flush_ns = SDL_GetTicksNS();
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
-            sdl_gamepad_flush_pending_left_stick(flush_ns, false);
+            sdl_gamepad_flush_pending_sticks(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_gamepad_flush_pending_confirm(flush_ns);
             sdl_screen_back_gesture_flush_pending_press(flush_ns);
@@ -241,6 +262,8 @@ errr callback_sdl_xtra(int n, int v)
             sdl_side_pane_menu_flush_pending_press(flush_ns);
             sdl_touch_round_flush_pending_highlight(flush_ns);
             sdl_mouse_cursor_animation_update(flush_ns);
+
+            sdl_idle_animation_update(flush_ns);
 
             /* Avoid pegging a CPU core when we're repeatedly asked to poll */
             if (!handled) {
@@ -281,10 +304,19 @@ errr callback_sdl_xtra(int n, int v)
             sdl_mouse_cursor_animation_update(flush_ns);
         }
         sdl_present_if_needed(d);
+        /* Term_flush() discards the terminal keys after this callback.
+         * Events drained above can have queued semantic movement plus wake
+         * keys, so discard both sides together.  Retire unfinished chords as
+         * well, or their timeout can resurrect input after the flush. */
+        movement_input_clear_commands();
+        sdl_gamepad_clear_pending_dpad();
+        sdl_gamepad_clear_pending_sticks();
         return 0;
     case TERM_XTRA_CLEAR:
         if (!d || !d->canvas)
             return 0;
+        if (Term == term_screen)
+            sdl_idle_animation_clear_cells();
         SDL_SetRenderTarget(g_state.renderer, d->canvas);
         SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
@@ -294,6 +326,8 @@ errr callback_sdl_xtra(int n, int v)
         g_state.need_present = true;
         return 0;
     case TERM_XTRA_FRESH:
+        if (Term == term_screen && character_dungeon && graphics_are_ascii())
+            sil_popup_trace_player_drawn(p_ptr->py, p_ptr->px);
         sdl_present_if_needed(d);
         return 0;
     case TERM_XTRA_DELAY: {
@@ -335,6 +369,8 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_log_pane_menu_flush_pending_press(flush_ns);
                 sdl_side_pane_menu_flush_pending_press(flush_ns);
                 sdl_mouse_cursor_animation_update(flush_ns);
+                sdl_idle_animation_update(flush_ns);
+                sdl_present_if_needed(d);
             }
         }
         return 0;
@@ -430,6 +466,7 @@ errr callback_sdl_wipe(int x, int y, int n)
     if (n <= 0)
         return 0;
     sdl_side_map_pane_invalidate_term_span(x, y, n);
+    sdl_idle_animation_invalidate_span(x, y, n);
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
     SDL_Rect clip = { x * d->cell_w, y * d->cell_h, n * d->cell_w, d->cell_h };
     SDL_SetRenderClipRect(g_state.renderer, &clip);
@@ -537,6 +574,7 @@ errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
     if (n <= 0)
         return 0;
     sdl_side_map_pane_invalidate_term_span(x, y, n);
+    sdl_idle_animation_invalidate_span(x, y, n);
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
 
     if (sdl_render_term_health_bar(d, x, y))
@@ -823,6 +861,39 @@ void sdl_draw_tileset_sprite(byte a, char c, const SDL_FRect* dst,
     sdl_draw_tileset_sprite_ex(a, c, dst, icon, SDL_FLIP_NONE);
 }
 
+/* Illusory walls retain their styled wall artwork as the foreground, but the
+ * floor beneath them must show through as light exposes the disguise.  The
+ * tileset is shared by every map pass (and by a few overlays), so scope the
+ * alpha modulation to this one sprite and restore the complete prior state.
+ * Multiplying the existing alpha keeps callers' atlas modulation intact. */
+static void sdl_draw_illusory_wall_sprite(byte a, char c,
+    const SDL_FRect* dst, SDL_FlipMode flip, int opacity)
+{
+    SDL_BlendMode old_blend;
+    Uint8 old_r, old_g, old_b, old_a;
+    Uint8 draw_a;
+
+    if (!g_state.tileset || !dst)
+        return;
+
+    SDL_GetTextureBlendMode(g_state.tileset, &old_blend);
+    SDL_GetTextureColorMod(g_state.tileset, &old_r, &old_g, &old_b);
+    SDL_GetTextureAlphaMod(g_state.tileset, &old_a);
+
+    opacity = MAX(0, MIN(255, opacity));
+    draw_a = (Uint8)(((unsigned)old_a * (unsigned)opacity + 127) / 255);
+
+    /* Alpha only reveals the already-rendered floor; retain the atlas colour
+     * modulation set by the surrounding render pass. */
+    SDL_SetTextureBlendMode(g_state.tileset, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(g_state.tileset, draw_a);
+    sdl_draw_tileset_sprite_ex(a, c, dst, false, flip);
+
+    SDL_SetTextureBlendMode(g_state.tileset, old_blend);
+    SDL_SetTextureColorMod(g_state.tileset, old_r, old_g, old_b);
+    SDL_SetTextureAlphaMod(g_state.tileset, old_a);
+}
+
 bool sdl_map_grid_is_player(int y, int x)
 {
     return p_ptr && (y >= 0) && (x >= 0) && (y < p_ptr->cur_map_hgt)
@@ -1017,7 +1088,7 @@ bool sdl_rage_wall_tint_active(int y, int x)
         return false;
 
     feat = f_info[cave_feat[y][x]].mimic;
-    return (feat >= FEAT_WALL_HEAD) && (feat <= FEAT_WALL_TAIL)
+    return FEAT_IS_WALL(feat)
         && (feat != FEAT_RUBBLE);
 }
 
@@ -1032,7 +1103,7 @@ bool sdl_rage_floor_tint_active(int y, int x)
         return true;
 
     feat = f_info[cave_feat[y][x]].mimic;
-    return ((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+    return FEAT_IS_TRAP(feat)
         || ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL))
         || ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL))
         || (feat == FEAT_SUNLIGHT)
@@ -1054,7 +1125,7 @@ bool sdl_rage_visible_floor_object(int y, int x)
     for (o_ptr = get_first_object(y, x); o_ptr;
          o_ptr = get_next_object(o_ptr))
     {
-        if (o_ptr->marked)
+        if (object_is_visible(o_ptr))
             return true;
     }
 
@@ -1708,6 +1779,25 @@ static void sdl_draw_map_monster_status_icons(bool sleep, bool seen,
     }
 }
 
+static void sdl_draw_illusion_debug_dot(int y, int x, const SDL_FRect* dst)
+{
+    if (!cave_illusion_debug_marked(y, x)) return;
+    Uint8 r, g, b, a;
+    SDL_GetRenderDrawColor(g_state.renderer, &r, &g, &b, &a);
+    float size = MIN(MIN(dst->w, dst->h),
+        MAX(1.0f, SDL_floorf(MIN(dst->w, dst->h) * 0.20f)));
+    float rim = MIN(MIN(dst->w, dst->h), size + 2.0f);
+    SDL_FRect border = {dst->x + (dst->w - rim) / 2,
+        dst->y + (dst->h - rim) / 2, rim, rim};
+    SDL_FRect dot = {dst->x + (dst->w - size) / 2,
+        dst->y + (dst->h - size) / 2, size, size};
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+    SDL_RenderFillRect(g_state.renderer, &border);
+    SDL_SetRenderDrawColor(g_state.renderer, 255, 230, 40, 255);
+    SDL_RenderFillRect(g_state.renderer, &dot);
+    SDL_SetRenderDrawColor(g_state.renderer, r, g, b, a);
+}
+
 static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     char c, byte ta, char tc, const SDL_FRect* dst, float status_icon_scale)
 {
@@ -1721,6 +1811,15 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     bool sleep = !ui_background && (ta & GRAPHICS_SLEEP_MASK) != 0;
     bool tile_mode = g_state.use_tiles && g_state.tileset;
     bool health_bar_visible;
+    bool fixture_drawn = false;
+    bool material_edge_drawn = false;
+    bool fixture_cell = false;
+    bool illusion_wall = dy >= 0 && dx >= 0 && p_ptr
+        && dy < p_ptr->cur_map_hgt && dx < p_ptr->cur_map_wid
+        && cave_feat[dy][dx] == FEAT_ILLUSORY_WALL
+        && (cave_info[dy][dx] & CAVE_MARK)
+        && (p_ptr->is_dead || !(p_ptr->rage || g_labyrinth_view_active)
+            || (cave_info[dy][dx] & CAVE_SEEN));
 
     if (!dst)
         return;
@@ -1753,11 +1852,42 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     if (!terrain_tile && !base_tile)
+    {
+        sdl_draw_illusion_debug_dot(dy, dx, dst);
         return;
+    }
 
-    /* Terrain underlay */
-    if (terrain_tile)
-        sdl_draw_tileset_sprite(ta, tc, dst, false);
+    /* Terrain underlay. An illusory wall is authored as a wall tile so its
+     * styled masonry remains the foreground, but its real surface is the
+     * current cell's styled floor. Draw the wall exactly once over that floor. */
+    if (terrain_tile) {
+        if (illusion_wall) {
+            byte floor_a = 0;
+            char floor_c = 0;
+
+            map_info_floor_terrain(dy, dx, &floor_a, &floor_c);
+            if ((floor_a & TILE_FLAG) && (((byte)floor_c) & TILE_FLAG))
+                sdl_draw_tileset_sprite(floor_a, floor_c, dst, false);
+            sdl_draw_illusory_wall_sprite(ta, tc, dst, SDL_FLIP_NONE,
+                cave_illusion_opacity(dy, dx));
+        } else {
+            sdl_draw_tileset_sprite(ta, tc, dst, false);
+        }
+    }
+    if (terrain_tile && dy >= 0 && dx >= 0 && p_ptr
+        && dy < p_ptr->cur_map_hgt && dx < p_ptr->cur_map_wid)
+        fixture_cell = cave_fixture_at(dy, dx) != CAVE_FIXTURE_NONE;
+    if (terrain_tile && !illusion_wall && fixture_cell) {
+        /* Opaque wall fixtures must remain on top of the transition pixels. */
+        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, false);
+        fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
+    } else if (terrain_tile && !illusion_wall) {
+        /* Authored terrain contours own their floor pixels. Generic contacts
+         * may add wall shading, but must not repaint these contours. A failed
+         * atlas load leaves the generic material fallback available. */
+        fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
+        material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, fixture_drawn);
+    }
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))
         sdl_draw_rage_tile_filter(ta, tc, dy, dx, dst);
     else if (sdl_rage_floor_tint_active(dy, dx))
@@ -1780,7 +1910,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
                 byte feat = cave_feat[dy][dx];
                 feat = f_info[feat].mimic;
 
-                if (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
+                if (FEAT_IS_TRAP(feat)
                     || ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL))
                     || ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL))
                     || (feat == FEAT_SUNLIGHT))
@@ -1806,12 +1936,15 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
             if (m_idx < 0) {
                 byte feat = cave_feat[dy][dx];
 
-                if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)) {
+                if ((feat == FEAT_FLOOR) || (feat == FEAT_SUNLIGHT)
+                    || (feat == FEAT_WATER) || (feat == FEAT_DEEP_WATER) || (feat == FEAT_LAVA)
+                    || (FEAT_IS_ICE(feat)) || (feat == FEAT_POISON)
+                    || FEAT_IS_BRIDGE(feat)) {
                     object_type* o_ptr;
 
                     for (o_ptr = get_first_object(dy, dx); o_ptr;
                          o_ptr = get_next_object(o_ptr)) {
-                        if (o_ptr->marked) {
+                        if (object_is_visible(o_ptr)) {
                             byte obj_a = object_attr(o_ptr);
                             byte obj_c = (byte)object_char(o_ptr);
 
@@ -1840,7 +1973,9 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     }
 
     /* Base tile */
-    if (base_tile) {
+    if (base_tile && !((fixture_drawn || material_edge_drawn || illusion_wall)
+            && (a & TILE_INDEX_MASK) == (ta & TILE_INDEX_MASK)
+            && ((byte)c & TILE_INDEX_MASK) == ((byte)tc & TILE_INDEX_MASK))) {
         byte draw_a = a;
         SDL_FlipMode flip = SDL_FLIP_NONE;
 
@@ -1874,6 +2009,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         sdl_draw_map_monster_health_bar(dy, dx, dst);
     sdl_draw_map_monster_status_icons(sleep, seen, alert, alert_fleeing,
         health_bar_visible, dst, status_icon_scale);
+    sdl_draw_illusion_debug_dot(dy, dx, dst);
 }
 
 void sdl_draw_map_tile_layers_at(int dy, int dx, byte a, char c, byte ta,
@@ -1888,27 +2024,379 @@ bool sdl_minimap_hint_source_valid(const hint_message_meta* meta)
     return sdl_minimap_hint_source_in_bounds(meta);
 }
 
-void sdl_minimap_expand_bounds_for_hint_sources(int* min_y, int* min_x,
-    int* max_y, int* max_x, bool* any)
+typedef enum sdl_hint_destination_display {
+    SDL_HINT_DESTINATION_HIDDEN = 0,
+    SDL_HINT_DESTINATION_AREA
+} sdl_hint_destination_display;
+
+static bool sdl_minimap_hint_destination_valid(
+    const hint_message_meta* meta, const hint_message_destination* destination)
 {
-    byte count;
+    return meta && destination
+        && destination->kind > HINT_DESTINATION_NONE
+        && destination->kind <= HINT_DESTINATION_FIXED_QUEST_SITE
+        && sdl_minimap_focus_point_valid(meta->source_y, meta->source_x)
+        && sdl_minimap_focus_point_valid(destination->y, destination->x)
+        && destination->min_dist >= 0
+        && destination->max_dist >= destination->min_dist;
+}
 
-    if (!min_y || !min_x || !max_y || !max_x || !any)
-        return;
+static monster_type* sdl_minimap_hint_destination_monster(int r_idx)
+{
+    if (r_idx <= 0)
+        return NULL;
 
-    count = hint_messages_count_for_save();
-    for (int i = 0; i < count; i++) {
+    for (int i = 1; i < mon_max; ++i) {
+        if (mon_list[i].r_idx == r_idx)
+            return &mon_list[i];
+    }
+    return NULL;
+}
+
+static bool sdl_minimap_hint_destination_artefact_found(
+    const hint_message_destination* destination)
+{
+    bool present = false;
+
+    if (!destination)
+        return true;
+    if (destination->id > 0 && z_info && a_info
+        && destination->id < z_info->art_max)
+    {
+        const artefact_type* a_ptr = &a_info[destination->id];
+
+        if ((a_ptr->seen & ART_SEEN_PHYSICAL) || a_ptr->found_num > 0)
+            return true;
+    }
+
+    for (int i = 1; i < o_max; ++i) {
+        const object_type* o_ptr = &o_list[i];
+
+        if (!o_ptr->k_idx || o_ptr->held_m_idx)
+            continue;
+        if (destination->id > 0) {
+            if (o_ptr->name1 != destination->id)
+                continue;
+        } else if (o_ptr->iy != destination->y
+            || o_ptr->ix != destination->x)
+        {
+            continue;
+        }
+
+        present = true;
+        if (object_is_visible(o_ptr))
+            return true;
+    }
+
+    /* Once the original floor object is gone, its possible-location clue is
+     * resolved even if another effect destroyed or displaced it unseen. */
+    return !present;
+}
+
+static bool sdl_minimap_hint_destination_partition_found(int partition_index)
+{
+    if (!p_ptr || partition_index < 0)
+        return false;
+
+    for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+        for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+            if (level_partition_index_for_point(y, x) != partition_index)
+                continue;
+            if (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool sdl_minimap_hint_destination_vault_found(void)
+{
+    if (!p_ptr)
+        return false;
+    for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+        for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+            if ((cave_info[y][x] & CAVE_G_VAULT)
+                && (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
+                return true;
+        }
+    }
+    return false;
+}
+
+static sdl_hint_destination_display sdl_minimap_hint_destination_state(
+    const hint_message_meta* meta, const hint_message_destination* destination)
+{
+    monster_type* m_ptr;
+
+    if (!sdl_minimap_hint_destination_valid(meta, destination))
+        return SDL_HINT_DESTINATION_HIDDEN;
+
+    switch ((hint_message_destination_kind)destination->kind) {
+    case HINT_DESTINATION_FIXED_FEATURE:
+    case HINT_DESTINATION_FIXED_QUEST_SITE:
+        return (cave_info[destination->y][destination->x]
+                & (CAVE_MARK | CAVE_SEEN))
+            ? SDL_HINT_DESTINATION_HIDDEN
+            : SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_GREAT_VAULT:
+        if (sdl_minimap_hint_destination_vault_found()) {
+            return SDL_HINT_DESTINATION_HIDDEN;
+        }
+        return SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_ARTEFACT:
+        return sdl_minimap_hint_destination_artefact_found(destination)
+            ? SDL_HINT_DESTINATION_HIDDEN
+            : SDL_HINT_DESTINATION_AREA;
+    case HINT_DESTINATION_QUEST_GIVER:
+        m_ptr = sdl_minimap_hint_destination_monster(destination->id);
+        if (!m_ptr)
+            return SDL_HINT_DESTINATION_HIDDEN;
+        if (!m_ptr->encountered && !m_ptr->ml
+            && !(m_ptr->mflag & MFLAG_MARK))
+        {
+            return SDL_HINT_DESTINATION_AREA;
+        }
+        return SDL_HINT_DESTINATION_HIDDEN;
+    case HINT_DESTINATION_UNIQUE_MONSTER:
+        /* The recorded position is only a snapshot of a moving monster.
+         * Keep the note text and source marker, but never expose a stale
+         * destination area or label on the map. */
+        return SDL_HINT_DESTINATION_HIDDEN;
+    case HINT_DESTINATION_PARTITION:
+        return sdl_minimap_hint_destination_partition_found(destination->id)
+            ? SDL_HINT_DESTINATION_HIDDEN
+            : SDL_HINT_DESTINATION_AREA;
+    default:
+        return SDL_HINT_DESTINATION_HIDDEN;
+    }
+}
+
+static int sdl_minimap_hint_direction_sign(int delta)
+{
+    return (delta > 0) ? 1 : ((delta < 0) ? -1 : 0);
+}
+
+static bool sdl_minimap_grid_in_hint_destination_area(
+    const hint_message_meta* meta, const hint_message_destination* destination,
+    int y, int x)
+{
+    int target_dy;
+    int target_dx;
+    int grid_dy;
+    int grid_dx;
+    int dist;
+
+    if (!sdl_minimap_hint_destination_valid(meta, destination)
+        || !sdl_minimap_focus_point_valid(y, x))
+    {
+        return false;
+    }
+
+    target_dy = sdl_minimap_hint_direction_sign(
+        destination->y - meta->source_y);
+    target_dx = sdl_minimap_hint_direction_sign(
+        destination->x - meta->source_x);
+    grid_dy = sdl_minimap_hint_direction_sign(y - meta->source_y);
+    grid_dx = sdl_minimap_hint_direction_sign(x - meta->source_x);
+    if (target_dy != grid_dy || target_dx != grid_dx)
+        return false;
+
+    dist = distance(meta->source_y, meta->source_x, y, x);
+    return dist >= destination->min_dist
+        && dist <= destination->max_dist;
+}
+
+/* The saved message count is a byte, with at most two clues per message. */
+#define SDL_HINT_AREA_CLUE_MAX (256 * HINT_MESSAGE_DESTINATION_MAX)
+typedef struct sdl_hint_area_clue {
+    s16b source_y;
+    s16b source_x;
+    hint_message_destination destination;
+    int next;
+} sdl_hint_area_clue;
+
+typedef struct sdl_hint_area_group {
+    int first;
+    int last;
+    bool resolved;
+} sdl_hint_area_group;
+
+typedef struct sdl_hint_area_set {
+    sdl_hint_area_clue clues[SDL_HINT_AREA_CLUE_MAX];
+    sdl_hint_area_group groups[SDL_HINT_AREA_CLUE_MAX];
+    int clue_count;
+    int group_count;
+} sdl_hint_area_set;
+
+static bool sdl_minimap_hint_same_target(const hint_message_destination* a,
+    const hint_message_destination* b)
+{
+    bool a_monster = a->kind == HINT_DESTINATION_QUEST_GIVER
+        || a->kind == HINT_DESTINATION_UNIQUE_MONSTER;
+    bool b_monster = b->kind == HINT_DESTINATION_QUEST_GIVER
+        || b->kind == HINT_DESTINATION_UNIQUE_MONSTER;
+    bool a_fixed = a->kind == HINT_DESTINATION_FIXED_FEATURE
+        || a->kind == HINT_DESTINATION_FIXED_QUEST_SITE;
+    bool b_fixed = b->kind == HINT_DESTINATION_FIXED_FEATURE
+        || b->kind == HINT_DESTINATION_FIXED_QUEST_SITE;
+
+    if (a_monster && b_monster)
+        return a->id > 0 && a->id == b->id;
+    if (a_fixed && b_fixed)
+        return a->y == b->y && a->x == b->x;
+    if (a->kind != b->kind)
+        return false;
+    switch ((hint_message_destination_kind)a->kind) {
+    case HINT_DESTINATION_GREAT_VAULT:
+        /* Generation allows only one greater vault on a level. */
+        return true;
+    case HINT_DESTINATION_PARTITION:
+        return a->id >= 0 && a->id == b->id;
+    case HINT_DESTINATION_ARTEFACT:
+        if (a->id > 0 || b->id > 0)
+            return a->id > 0 && a->id == b->id;
+        return a->y == b->y && a->x == b->x;
+    default:
+        return false;
+    }
+}
+
+static void sdl_minimap_collect_hint_areas(sdl_hint_area_set* areas)
+{
+    int count = hint_messages_count_for_save();
+
+    areas->clue_count = 0;
+    areas->group_count = 0;
+    for (int i = 0; i < count; ++i) {
         hint_message_meta meta;
 
         hint_messages_message_meta(i, &meta);
-        if (!sdl_minimap_hint_source_valid(&meta))
-            continue;
+        for (int d = 0; d < MIN(meta.destination_count,
+                 HINT_MESSAGE_DESTINATION_MAX); ++d)
+        {
+            const hint_message_destination* destination = &meta.destinations[d];
+            int group;
+            int clue_index;
+            sdl_hint_area_clue* clue;
 
-        if (meta.source_y < *min_y) *min_y = meta.source_y;
-        if (meta.source_y > *max_y) *max_y = meta.source_y;
-        if (meta.source_x < *min_x) *min_x = meta.source_x;
-        if (meta.source_x > *max_x) *max_x = meta.source_x;
-        *any = true;
+            if (!sdl_minimap_hint_destination_valid(&meta, destination))
+                continue;
+            for (group = 0; group < areas->group_count; ++group) {
+                if (sdl_minimap_hint_same_target(destination,
+                        &areas->clues[areas->groups[group].first].destination))
+                    break;
+            }
+            clue_index = areas->clue_count++;
+            clue = &areas->clues[clue_index];
+            clue->source_y = meta.source_y;
+            clue->source_x = meta.source_x;
+            clue->destination = *destination;
+            clue->next = -1;
+            if (group == areas->group_count) {
+                areas->groups[group] = (sdl_hint_area_group){
+                    clue_index, clue_index, false
+                };
+                ++areas->group_count;
+            } else {
+                areas->clues[areas->groups[group].last].next = clue_index;
+                areas->groups[group].last = clue_index;
+            }
+            if (sdl_minimap_hint_destination_state(&meta, destination)
+                == SDL_HINT_DESTINATION_HIDDEN)
+                areas->groups[group].resolved = true;
+        }
+    }
+}
+
+static bool sdl_minimap_hint_group_mask(const sdl_hint_area_set* areas,
+    int group_index, byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
+{
+    const sdl_hint_area_group* group = &areas->groups[group_index];
+    bool first = true;
+    bool any = false;
+    int min_y = 0, min_x = 0, max_y, max_x;
+
+    memset(mask, 0, MAX_DUNGEON_HGT * MAX_DUNGEON_WID * sizeof(byte));
+    if (!p_ptr || group->resolved)
+        return false;
+    max_y = MIN(p_ptr->cur_map_hgt, MAX_DUNGEON_HGT) - 1;
+    max_x = MIN(p_ptr->cur_map_wid, MAX_DUNGEON_WID) - 1;
+    for (int c = group->first; c >= 0; c = areas->clues[c].next) {
+        const sdl_hint_area_clue* clue = &areas->clues[c];
+        hint_message_meta meta;
+        bool overlap = false;
+
+        meta.source_y = clue->source_y;
+        meta.source_x = clue->source_x;
+        if (first) {
+            min_y = MAX(0, clue->source_y - clue->destination.max_dist);
+            min_x = MAX(0, clue->source_x - clue->destination.max_dist);
+            max_y = MIN(max_y, clue->source_y + clue->destination.max_dist);
+            max_x = MIN(max_x, clue->source_x + clue->destination.max_dist);
+        }
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                if (!first && !mask[y][x])
+                    continue;
+                bool inside = sdl_minimap_grid_in_hint_destination_area(
+                    &meta, &clue->destination, y, x);
+                /* Bit 1 stages this intersection without losing the old area. */
+                mask[y][x] = (mask[y][x] & 1) | (inside ? 2 : 0);
+                overlap |= inside;
+            }
+        }
+        /* Region clues can refer to different edges, and monsters can move.
+         * An incompatible later clue must not erase an unfound target or
+         * enlarge its previously inferred area. Keep the last nonempty area. */
+        for (int y = min_y; y <= max_y; ++y) {
+            for (int x = min_x; x <= max_x; ++x) {
+                mask[y][x] = overlap ? ((mask[y][x] & 2) != 0)
+                                     : (mask[y][x] & 1);
+            }
+        }
+        any |= overlap;
+        first = false;
+    }
+    return any;
+}
+
+static void sdl_minimap_include_hint_point(int y, int x, int* min_y,
+    int* min_x, int* max_y, int* max_x, bool* any)
+{
+    if (y < *min_y) *min_y = y;
+    if (y > *max_y) *max_y = y;
+    if (x < *min_x) *min_x = x;
+    if (x > *max_x) *max_x = x;
+    *any = true;
+}
+
+void sdl_minimap_expand_bounds_for_hints(int* min_y, int* min_x,
+    int* max_y, int* max_x, bool* any)
+{
+    sdl_hint_area_set areas;
+    byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    int count = hint_messages_count_for_save();
+
+    if (!min_y || !min_x || !max_y || !max_x || !any || !p_ptr)
+        return;
+    for (int i = 0; i < count; ++i) {
+        hint_message_meta meta;
+        hint_messages_message_meta(i, &meta);
+        if (sdl_minimap_hint_source_valid(&meta))
+            sdl_minimap_include_hint_point(meta.source_y, meta.source_x,
+                min_y, min_x, max_y, max_x, any);
+    }
+    sdl_minimap_collect_hint_areas(&areas);
+    for (int group = 0; group < areas.group_count; ++group) {
+        if (!sdl_minimap_hint_group_mask(&areas, group, mask))
+            continue;
+        for (int y = 0; y < p_ptr->cur_map_hgt; ++y) {
+            for (int x = 0; x < p_ptr->cur_map_wid; ++x) {
+                if (mask[y][x])
+                    sdl_minimap_include_hint_point(y, x, min_y, min_x,
+                        max_y, max_x, any);
+            }
+        }
     }
 }
 
@@ -1952,6 +2440,360 @@ void sdl_minimap_draw_hint_source_symbol(const object_type* o_ptr,
     sdl_draw_ascii_minimap_cell(obj_a, (char)obj_c, obj_a, (char)obj_c, dst);
 }
 
+static SDL_Color sdl_minimap_hint_destination_color(
+    const hint_message_destination* destination, byte alpha)
+{
+    SDL_Color color = { 95, 175, 255, alpha };
+
+    if (!destination)
+        return color;
+    switch ((hint_message_destination_kind)destination->kind) {
+    case HINT_DESTINATION_FIXED_FEATURE:
+        color = (SDL_Color){ 245, 165, 65, alpha };
+        break;
+    case HINT_DESTINATION_GREAT_VAULT:
+        color = (SDL_Color){ 185, 110, 245, alpha };
+        break;
+    case HINT_DESTINATION_ARTEFACT:
+        color = (SDL_Color){ 245, 205, 75, alpha };
+        break;
+    case HINT_DESTINATION_QUEST_GIVER:
+        color = (SDL_Color){ 75, 220, 130, alpha };
+        break;
+    case HINT_DESTINATION_UNIQUE_MONSTER:
+        color = (SDL_Color){ 240, 90, 90, alpha };
+        break;
+    case HINT_DESTINATION_FIXED_QUEST_SITE:
+        color = (SDL_Color){ 65, 215, 190, alpha };
+        break;
+    case HINT_DESTINATION_PARTITION:
+        switch (level_partition_kind_for_point(destination->y,
+            destination->x))
+        {
+        case LEVEL_PART_ROOMY:
+            color = (SDL_Color){ 110, 165, 225, alpha };
+            break;
+        case LEVEL_PART_CAVEY:
+            color = (SDL_Color){ 75, 195, 215, alpha };
+            break;
+        case LEVEL_PART_RUINED:
+            color = (SDL_Color){ 195, 135, 80, alpha };
+            break;
+        case LEVEL_PART_LABYRINTH:
+            color = (SDL_Color){ 175, 110, 240, alpha };
+            break;
+        case LEVEL_PART_CHASM:
+            color = (SDL_Color){ 125, 140, 175, alpha };
+            break;
+        case LEVEL_PART_BIG_CAVE:
+            switch (level_partition_big_cave_type_for_point(destination->y,
+                destination->x))
+            {
+            case BIG_CAVE_ICE:
+                color = (SDL_Color){ 90, 205, 255, alpha };
+                break;
+            case BIG_CAVE_FIRE:
+                color = (SDL_Color){ 255, 105, 60, alpha };
+                break;
+            case BIG_CAVE_POIS:
+                color = (SDL_Color){ 100, 220, 115, alpha };
+                break;
+            default:
+                color = (SDL_Color){ 70, 185, 205, alpha };
+                break;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    return color;
+}
+
+/* Fill row runs and trace only exposed cell edges, so a combined clue has
+ * one outline and no internal seams. Drawing and bounds use the same mask. */
+static bool sdl_minimap_draw_hint_destination_area(
+    const byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
+    const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x,
+    SDL_Color fill, float* out_label_x, float* out_label_y)
+{
+    float grid_w = map_dst->w / (float)(max_x - min_x + 1);
+    float grid_h = map_dst->h / (float)(max_y - min_y + 1);
+    int first_y = MAX(0, min_y), first_x = MAX(0, min_x);
+    int last_y = MIN(MAX_DUNGEON_HGT - 1, max_y);
+    int last_x = MIN(MAX_DUNGEON_WID - 1, max_x);
+    float sum_y = 0, sum_x = 0;
+    int cells = 0;
+    int label_y = -1, label_x = -1;
+    float best_distance = 0;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, fill.r, fill.g, fill.b, fill.a);
+    for (int y = first_y; y <= last_y; ++y) {
+        for (int x = first_x; x <= last_x; ++x) {
+            if (!mask[y][x])
+                continue;
+            int start = x;
+            while (x <= last_x && mask[y][x]) {
+                sum_y += y;
+                sum_x += x;
+                ++cells;
+                ++x;
+            }
+            SDL_FRect run = {
+                map_dst->x + (start - min_x) * grid_w,
+                map_dst->y + (y - min_y) * grid_h,
+                (x - start) * grid_w, grid_h
+            };
+            SDL_RenderFillRect(g_state.renderer, &run);
+        }
+    }
+    if (!cells)
+        return false;
+    sum_y /= cells;
+    sum_x /= cells;
+    SDL_SetRenderDrawColor(g_state.renderer, fill.r, fill.g, fill.b, 155);
+    for (int y = first_y; y <= last_y; ++y) {
+        for (int x = first_x; x <= last_x; ++x) {
+            if (!mask[y][x])
+                continue;
+            float left = map_dst->x + (x - min_x) * grid_w;
+            float top = map_dst->y + (y - min_y) * grid_h;
+            float dist = (y - sum_y) * (y - sum_y)
+                + (x - sum_x) * (x - sum_x);
+            if (label_y < 0 || dist < best_distance) {
+                label_y = y;
+                label_x = x;
+                best_distance = dist;
+            }
+            if (y == 0 || !mask[y - 1][x])
+                SDL_RenderLine(g_state.renderer, left, top, left + grid_w, top);
+            if (y == MAX_DUNGEON_HGT - 1 || !mask[y + 1][x])
+                SDL_RenderLine(g_state.renderer, left, top + grid_h,
+                    left + grid_w, top + grid_h);
+            if (x == 0 || !mask[y][x - 1])
+                SDL_RenderLine(g_state.renderer, left, top, left, top + grid_h);
+            if (x == MAX_DUNGEON_WID - 1 || !mask[y][x + 1])
+                SDL_RenderLine(g_state.renderer, left + grid_w, top,
+                    left + grid_w, top + grid_h);
+        }
+    }
+    *out_label_x = map_dst->x + (label_x - min_x + 0.5f) * grid_w;
+    *out_label_y = map_dst->y + (label_y - min_y + 0.5f) * grid_h;
+    return true;
+}
+
+static const char* sdl_minimap_hint_destination_label(
+    const hint_message_destination* destination)
+{
+    int feat;
+
+    if (!destination)
+        return "Destination";
+    switch ((hint_message_destination_kind)destination->kind) {
+    case HINT_DESTINATION_FIXED_FEATURE:
+        feat = destination->id;
+        if (feat == FEAT_MORE) return "Down Stair";
+        if (feat == FEAT_MORE_SHAFT) return "Down Shaft";
+        if (feat == FEAT_LESS) return "Up Stair";
+        if (feat == FEAT_LESS_SHAFT) return "Up Shaft";
+        if (feat >= FEAT_FORGE_UNIQUE_HEAD
+            && feat <= FEAT_FORGE_UNIQUE_TAIL)
+        {
+            return "Unique Forge";
+        }
+        if (feat >= FEAT_FORGE_GOOD_HEAD && feat <= FEAT_FORGE_GOOD_TAIL)
+            return "Enchanted Forge";
+        return "Forge";
+    case HINT_DESTINATION_GREAT_VAULT:
+        return "Great Vault";
+    case HINT_DESTINATION_ARTEFACT:
+        return "Hidden Artefact";
+    case HINT_DESTINATION_QUEST_GIVER:
+        return "Quest Giver";
+    case HINT_DESTINATION_UNIQUE_MONSTER:
+        return "Unique Monster";
+    case HINT_DESTINATION_PARTITION:
+        switch (level_partition_kind_for_point(destination->y,
+            destination->x))
+        {
+        case LEVEL_PART_ROOMY:
+            return "Rooms";
+        case LEVEL_PART_CAVEY:
+            return "Caves";
+        case LEVEL_PART_RUINED:
+            return "Ruins";
+        case LEVEL_PART_LABYRINTH:
+            return "Labyrinth";
+        case LEVEL_PART_CHASM:
+            return "Chasm";
+        case LEVEL_PART_BIG_CAVE:
+            switch (level_partition_big_cave_type_for_point(destination->y,
+                destination->x))
+            {
+            case BIG_CAVE_ICE:
+                return "Ice Cave";
+            case BIG_CAVE_FIRE:
+                return "Fire Cave";
+            case BIG_CAVE_POIS:
+                return "Poison Cave";
+            default:
+                return "Great Cave";
+            }
+        default:
+            return "Region";
+        }
+    case HINT_DESTINATION_FIXED_QUEST_SITE:
+        return "Quest Site";
+    default:
+        return "Destination";
+    }
+}
+
+static void sdl_minimap_draw_hint_destination_label(const char* label,
+    float anchor_x, float anchor_y, float grid_h, const SDL_FRect* map_dst,
+    bool exact, SDL_Color accent)
+{
+    sdl_view* d = sdl_view_from_term(Term);
+    SDL_FRect box;
+    SDL_Color text_color = {
+        (byte)MIN(255, (int)accent.r + 70),
+        (byte)MIN(255, (int)accent.g + 70),
+        (byte)MIN(255, (int)accent.b + 70),
+        255
+    };
+    int len;
+    int atlas_cell_w;
+    int atlas_cell_h;
+    float cell_h;
+    float cell_w;
+    float max_box_w;
+    const float pad_x = 3.0f;
+    const float pad_y = 2.0f;
+
+    if (!label || !label[0] || !map_dst || !d || !d->font_atlas)
+        return;
+    len = (int)strlen(label);
+    if (len <= 0)
+        return;
+
+    atlas_cell_w = d->font_atlas_cell_w > 0
+        ? d->font_atlas_cell_w : d->cell_w;
+    atlas_cell_h = d->font_atlas_cell_h > 0
+        ? d->font_atlas_cell_h : d->cell_h;
+    cell_h = grid_h * 1.35f;
+    if (cell_h < 8.0f) cell_h = 8.0f;
+    if (cell_h > 13.0f) cell_h = 13.0f;
+    cell_w = cell_h * 0.62f;
+    max_box_w = MAX(12.0f, map_dst->w - 4.0f);
+    if ((float)len * cell_w + 2.0f * pad_x > max_box_w) {
+        cell_w = (max_box_w - 2.0f * pad_x) / (float)len;
+        cell_h = cell_w / 0.62f;
+    }
+    if (cell_h + 2.0f * pad_y > map_dst->h - 2.0f) {
+        cell_h = map_dst->h - 2.0f - 2.0f * pad_y;
+        cell_w = cell_h * 0.62f;
+    }
+    if (cell_h < 6.0f)
+        return;
+
+    box.w = (float)len * cell_w + 2.0f * pad_x;
+    box.h = cell_h + 2.0f * pad_y;
+    box.x = anchor_x - box.w * 0.5f;
+    box.y = exact ? anchor_y - box.h - 5.0f : anchor_y - box.h * 0.5f;
+    if (box.x < map_dst->x + 1.0f)
+        box.x = map_dst->x + 1.0f;
+    if (box.x + box.w > map_dst->x + map_dst->w - 1.0f)
+        box.x = map_dst->x + map_dst->w - box.w - 1.0f;
+    if (box.y < map_dst->y + 1.0f)
+        box.y = exact ? anchor_y + 5.0f : map_dst->y + 1.0f;
+    if (box.y + box.h > map_dst->y + map_dst->h - 1.0f)
+        box.y = map_dst->y + map_dst->h - box.h - 1.0f;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer,
+        (byte)((int)accent.r / 8), (byte)((int)accent.g / 8),
+        (byte)((int)accent.b / 8), exact ? 230 : 218);
+    SDL_RenderFillRect(g_state.renderer, &box);
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b,
+        240);
+    SDL_RenderRect(g_state.renderer, &box);
+    sdl_render_mono_text_scaled(d->font_atlas, atlas_cell_w, atlas_cell_h,
+        cell_w, cell_h, box.x + pad_x, box.y + pad_y, 0, 0, len, label,
+        text_color);
+}
+
+void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
+    int min_x, int max_y, int max_x)
+{
+#define SDL_HINT_DESTINATION_LABEL_MAX 64
+    typedef struct sdl_hint_destination_pending_label {
+        const char* text;
+        float x;
+        float y;
+        bool exact;
+        SDL_Color accent;
+    } sdl_hint_destination_pending_label;
+    sdl_hint_area_set areas;
+    byte mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    bool had_clip;
+    SDL_Rect old_clip;
+    SDL_Rect map_clip;
+    float grid_h;
+    sdl_hint_destination_pending_label labels[SDL_HINT_DESTINATION_LABEL_MAX];
+    int label_count = 0;
+
+    if (!g_minimap.skeleton_hints_visible || !map_dst
+        || max_y < min_y || max_x < min_x)
+        return;
+    grid_h = map_dst->h / (float)(max_y - min_y + 1);
+    had_clip = SDL_RenderClipEnabled(g_state.renderer);
+    if (had_clip)
+        SDL_GetRenderClipRect(g_state.renderer, &old_clip);
+    map_clip = sdl_frect_to_clip_rect(map_dst);
+    if (had_clip) {
+        SDL_Rect intersection;
+
+        if (!SDL_GetRectIntersection(&map_clip, &old_clip, &intersection))
+            return;
+        map_clip = intersection;
+    }
+    SDL_SetRenderClipRect(g_state.renderer, &map_clip);
+
+    sdl_minimap_collect_hint_areas(&areas);
+    for (int group = 0; group < areas.group_count; ++group) {
+        const hint_message_destination* destination =
+            &areas.clues[areas.groups[group].first].destination;
+        SDL_Color accent = sdl_minimap_hint_destination_color(destination, 255);
+        SDL_Color fill = accent;
+        float label_x, label_y;
+
+        if (!sdl_minimap_hint_group_mask(&areas, group, mask))
+            continue;
+        fill.a = 58;
+        if (sdl_minimap_draw_hint_destination_area(mask, map_dst,
+                min_y, min_x, max_y, max_x, fill, &label_x, &label_y)
+            && label_count < SDL_HINT_DESTINATION_LABEL_MAX)
+        {
+            labels[label_count++] = (sdl_hint_destination_pending_label){
+                sdl_minimap_hint_destination_label(destination),
+                label_x, label_y, false, accent
+            };
+        }
+    }
+    for (int i = 0; i < label_count; ++i) {
+        sdl_minimap_draw_hint_destination_label(labels[i].text, labels[i].x,
+            labels[i].y, grid_h, map_dst, labels[i].exact,
+            labels[i].accent);
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, had_clip ? &old_clip : NULL);
+#undef SDL_HINT_DESTINATION_LABEL_MAX
+}
+
 void sdl_minimap_draw_hint_sources(const SDL_FRect* map_dst, int min_y,
     int min_x, int max_y, int max_x)
 {
@@ -1961,7 +2803,8 @@ void sdl_minimap_draw_hint_sources(const SDL_FRect* map_dst, int min_y,
     float grid_w;
     float grid_h;
 
-    if (!map_dst || map_rows <= 0 || map_cols <= 0)
+    if (!g_minimap.skeleton_hints_visible || !map_dst
+        || map_rows <= 0 || map_cols <= 0)
         return;
 
     count = hint_messages_count_for_save();
@@ -2100,6 +2943,115 @@ static void sdl_minimap_draw_focused_location(const SDL_FRect* map_dst,
     }
 }
 
+static bool sdl_minimap_stair_selection_color(byte feature,
+    SDL_Color* color)
+{
+    if (!color)
+        return false;
+
+    switch (feature) {
+    case FEAT_LESS:
+        *color = (SDL_Color){70, 245, 135, 255};
+        return true;
+    case FEAT_MORE:
+        *color = (SDL_Color){255, 185, 75, 255};
+        return true;
+    case FEAT_LESS_SHAFT:
+        *color = (SDL_Color){70, 205, 255, 255};
+        return true;
+    case FEAT_MORE_SHAFT:
+        *color = (SDL_Color){235, 125, 255, 255};
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void sdl_minimap_draw_stair_selections(const SDL_FRect* map_dst,
+    int min_y, int min_x, int max_y, int max_x)
+{
+    const float min_marker = 12.0f;
+    bool had_clip;
+    SDL_Rect old_clip;
+    SDL_Rect map_clip;
+    float grid_w;
+    float grid_h;
+
+    if (!map_dst || map_dst->w <= 0.0f || map_dst->h <= 0.0f
+        || max_y < min_y || max_x < min_x)
+    {
+        return;
+    }
+
+    grid_w = map_dst->w / (float)(max_x - min_x + 1);
+    grid_h = map_dst->h / (float)(max_y - min_y + 1);
+    had_clip = SDL_RenderClipEnabled(g_state.renderer);
+    if (had_clip)
+        SDL_GetRenderClipRect(g_state.renderer, &old_clip);
+    map_clip = sdl_frect_to_clip_rect(map_dst);
+    if (had_clip) {
+        SDL_Rect intersection;
+
+        if (!SDL_GetRectIntersection(&map_clip, &old_clip, &intersection))
+            return;
+        map_clip = intersection;
+    }
+    SDL_SetRenderClipRect(g_state.renderer, &map_clip);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+
+    for (int y = min_y; y <= max_y; ++y) {
+        for (int x = min_x; x <= max_x; ++x) {
+            SDL_Color color;
+            SDL_FRect marker;
+            float center_x;
+            float center_y;
+
+            if (!sdl_minimap_focus_point_valid(y, x)
+                || !(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+                || !sdl_minimap_stair_selection_color(cave_feat[y][x],
+                    &color))
+            {
+                continue;
+            }
+
+            marker = (SDL_FRect){
+                map_dst->x + (float)(x - min_x) * grid_w,
+                map_dst->y + (float)(y - min_y) * grid_h,
+                grid_w,
+                grid_h
+            };
+            center_x = marker.x + marker.w * 0.5f;
+            center_y = marker.y + marker.h * 0.5f;
+            if (marker.w < min_marker) {
+                marker.w = min_marker;
+                marker.x = center_x - marker.w * 0.5f;
+            }
+            if (marker.h < min_marker) {
+                marker.h = min_marker;
+                marker.y = center_y - marker.h * 0.5f;
+            }
+
+            SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g,
+                color.b, 72);
+            SDL_RenderFillRect(g_state.renderer, &marker);
+            SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g,
+                color.b, color.a);
+            SDL_RenderRect(g_state.renderer, &marker);
+            if (marker.w >= 8.0f && marker.h >= 8.0f) {
+                SDL_FRect inner = {
+                    marker.x + 1.0f,
+                    marker.y + 1.0f,
+                    marker.w - 2.0f,
+                    marker.h - 2.0f
+                };
+                SDL_RenderRect(g_state.renderer, &inner);
+            }
+        }
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, had_clip ? &old_clip : NULL);
+}
+
 void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h,
     const SDL_FRect* map_dst, int min_y, int min_x, int max_y, int max_x)
 {
@@ -2120,7 +3072,8 @@ void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h,
     SDL_FRect box;
     SDL_Color text = {235, 242, 236, 255};
 
-    if (!g_minimap.active || !g_minimap.focus_active || !d || !map_dst)
+    if (!g_minimap.skeleton_hints_visible || !g_minimap.active
+        || !g_minimap.focus_active || !d || !map_dst)
         return;
     if (d->cell_w <= 0 || d->cell_h <= 0 || d->cols <= 0 || d->rows <= 0)
         return;
@@ -2215,7 +3168,8 @@ bool sdl_minimap_known_bounds(int* min_y, int* min_x, int* max_y,
 
     for (int y = 0; y < p_ptr->cur_map_hgt; y++) {
         for (int x = 0; x < p_ptr->cur_map_wid; x++) {
-            if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
+            if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+                && !cave_illusion_debug_marked(y, x))
                 continue;
 
             if (y < *min_y) *min_y = y;
@@ -2248,8 +3202,10 @@ bool sdl_minimap_known_bounds(int* min_y, int* min_x, int* max_y,
         any = true;
     }
 
-    sdl_minimap_expand_bounds_for_hint_sources(min_y, min_x, max_y, max_x,
-        &any);
+    if (g_minimap.skeleton_hints_visible) {
+        sdl_minimap_expand_bounds_for_hints(min_y, min_x, max_y, max_x,
+            &any);
+    }
 
     if (g_minimap.focus_active
         && sdl_minimap_grid_opened(g_minimap.focus_y, g_minimap.focus_x))
@@ -2482,6 +3438,31 @@ static Uint64 sdl_side_map_pane_aux_bounds_hash(void)
         hash *= 1099511628211ULL;
         hash ^= (Uint64)(u16b)meta.source_x;
         hash *= 1099511628211ULL;
+        hash ^= (Uint64)meta.destination_count;
+        hash *= 1099511628211ULL;
+        for (int destination_index = 0;
+            destination_index < meta.destination_count; ++destination_index)
+        {
+            const hint_message_destination* destination =
+                &meta.destinations[destination_index];
+            sdl_hint_destination_display display =
+                sdl_minimap_hint_destination_state(&meta, destination);
+
+            hash ^= (Uint64)destination->kind;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->y;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->x;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->id;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->min_dist;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)(u16b)destination->max_dist;
+            hash *= 1099511628211ULL;
+            hash ^= (Uint64)display;
+            hash *= 1099511628211ULL;
+        }
     }
     hash ^= (Uint64)(g_minimap.focus_active ? 1 : 0);
     hash *= 1099511628211ULL;
@@ -2770,7 +3751,11 @@ void sdl_side_map_pane_render(void)
     SDL_SetRenderClipRect(g_state.renderer, &clip);
     SDL_RenderTexture(g_state.renderer, map_texture, NULL, &map_dst);
 
+    sdl_minimap_draw_hint_destinations(&map_dst, min_y, min_x, max_y,
+        max_x);
     sdl_minimap_draw_hint_sources(&map_dst, min_y, min_x, max_y, max_x);
+    sdl_minimap_draw_stair_selections(&map_dst, min_y, min_x, max_y,
+        max_x);
     sdl_side_map_pane_draw_player_marker(&map_dst, min_y, min_x, max_y,
         max_x);
     SDL_SetRenderClipRect(g_state.renderer, NULL);
@@ -3494,8 +4479,12 @@ bool sdl_display_pixel_map(int* cy, int* cx)
     SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 80);
     SDL_RenderRect(g_state.renderer, &map_dst);
 
+    sdl_minimap_draw_hint_destinations(&map_dst, min_y, min_x, max_y,
+        max_x);
     sdl_minimap_draw_hint_sources(&map_dst, min_y, min_x, max_y, max_x);
     sdl_minimap_draw_focused_location(&map_dst, min_y, min_x, max_y, max_x);
+    sdl_minimap_draw_stair_selections(&map_dst, min_y, min_x, max_y,
+        max_x);
 
     if (p_ptr->py >= min_y && p_ptr->py <= max_y
         && p_ptr->px >= min_x && p_ptr->px <= max_x)
@@ -3564,6 +4553,7 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
     if (n <= 0)
         return 0;
     //log_trace("sdl3_pict stripe start: y=%d x=%d n=%d", y, x, n);
+    sdl_idle_animation_invalidate_span(x, y, n * (use_bigtile + 1));
 
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
     SDL_SetRenderClipRect(g_state.renderer, &(SDL_Rect){
@@ -3626,13 +4616,59 @@ errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
         }
 
         if (dy >= 0 && dx >= 0)
+        {
             sdl_side_map_pane_invalidate_cell(dy, dx);
+        }
         sdl_draw_map_tile_layers_at(dy, dx, a, c, tap[i], tcp[i], &dst);
+        if (dy == p_ptr->py && dx == p_ptr->px)
+            sil_popup_trace_player_drawn(dy, dx);
+        if (dy >= 0 && dx >= 0)
+            sdl_idle_animation_track(x + i * (use_bigtile + 1), y,
+                dy, dx, a, c, tap[i], tcp[i]);
     }
 
     SDL_SetRenderClipRect(g_state.renderer, NULL);
     g_state.need_present = true;
     return 0;
+}
+
+/* Preserve the existing vein mask and alpha; remap its blue-green shading to
+ * milky quartz. Store light/dark pairs in a reserved runtime atlas row so every
+ * tile consumer (map, minimap and previews) receives the same mineral colour. */
+SDL_Surface* sdl_quartz_tileset_surface(SDL_Surface* source)
+{
+    extern byte get_default_vein_row(void);
+    extern byte get_default_vein_col(void);
+    const int size = TILE_SIZE;
+    int sx = get_default_vein_col() * size;
+    int sy = get_default_vein_row() * size;
+    if (!source || sx + size > source->w || sy + size > source->h) return NULL;
+    SDL_Surface* result = SDL_CreateSurface(source->w,
+        MAX(source->h, (GRAPHICS_QUARTZ_OVERLAY_ROW + 1) * size), SDL_PIXELFORMAT_RGBA32);
+    if (!result) return NULL;
+    SDL_FillSurfaceRect(result, NULL, SDL_MapSurfaceRGBA(result, 0, 0, 0, 0));
+    SDL_BlendMode blend;
+    SDL_GetSurfaceBlendMode(source, &blend);
+    SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_NONE);
+    bool copied = SDL_BlitSurface(source, NULL, result, NULL);
+    SDL_SetSurfaceBlendMode(source, blend);
+    if (!copied) { SDL_DestroySurface(result); return NULL; }
+    for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
+        Uint8 r, g, b, a;
+        if (!SDL_ReadSurfacePixel(source, sx+x, sy+y, &r, &g, &b, &a)) {
+            SDL_DestroySurface(result); return NULL;
+        }
+        for (int variant = 0; variant < 4; variant++) {
+            int light = 140 + (r + g + b) / 4;
+            if (variant >= 2) light -= 28; /* Fractured crystals remain pale. */
+            if (variant & 1) light = light * 2 / 5;
+            Uint32* row = (Uint32*)((byte*)result->pixels
+                + (GRAPHICS_QUARTZ_OVERLAY_ROW * size + y) * result->pitch);
+            row[variant * size + x] = SDL_MapSurfaceRGBA(result,
+                MIN(255, light), MIN(255, light+5), MIN(255, light+9), a);
+        }
+    }
+    return result;
 }
 
 bool sdl_load_tileset_texture(void)
@@ -3650,6 +4686,13 @@ bool sdl_load_tileset_texture(void)
         return false;
     }
 
+    SDL_Surface* mineral_tiles = sdl_quartz_tileset_surface(ts);
+    SDL_DestroySurface(ts);
+    if (!mineral_tiles) {
+        log_error("Failed to prepare quartz overlay: %s", SDL_GetError());
+        return false;
+    }
+    ts = mineral_tiles;
     tileset_width = ts->w;
     texture = SDL_CreateTextureFromSurface(g_state.renderer, ts);
     SDL_DestroySurface(ts);

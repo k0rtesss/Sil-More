@@ -2,19 +2,22 @@
 
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
+#include "level-generation/level-generation-terrain-access.h"
 
 bool player_passable(int y, int x, bool ignore_rubble_and_chasms)
 {
     if (!in_bounds_fully(y, x)) return false;
 
     byte feature = cave_feat[y][x];
+    /* Hazard cells are never walking routes; flood_access can leap over them. */
+    if (feature == FEAT_LAVA || feature == FEAT_POISON) return false;
     bool icky_interior = (cave_info[y][x] & (CAVE_ICKY))
         && (cave_info[y][x - 1] & (CAVE_ICKY))
         && (cave_info[y][x + 1] & (CAVE_ICKY))
         && (cave_info[y - 1][x] & (CAVE_ICKY))
         && (cave_info[y + 1][x] & (CAVE_ICKY));
 
-    if ((feature < FEAT_WALL_HEAD) || (feature > FEAT_WALL_TAIL))
+    if (!FEAT_IS_WALL(feature))
     {
         return !((feature == FEAT_CHASM) && !ignore_rubble_and_chasms);
     }
@@ -57,9 +60,14 @@ void flood_access(int y, int x,
             int ny = cy + ddy[d];
             int nx = cx + ddx[d];
 
-            if (!in_bounds_fully(ny, nx)) continue;
+            if (!player_passable(ny, nx, ignore_rubble_and_chasms))
+            {
+                if (!terrain_generation_jump(cy, cx, ddy[d], ddx[d], NULL))
+                    continue;
+                ny += ddy[d];
+                nx += ddx[d];
+            }
             if (access_array[ny][nx]) continue;
-            if (!player_passable(ny, nx, ignore_rubble_and_chasms)) continue;
 
             access_array[ny][nx] = true;
             if (tail < (int)N_ELEMENTS(queue))
@@ -148,7 +156,7 @@ void place_rubble(int y, int x)
 {
     /* Create rubble */
     if (p_ptr->depth >= 4 && cave_feat[y][x] != FEAT_MORE
-        && cave_feat[y][x] != FEAT_LESS)
+        && cave_feat[y][x] != FEAT_LESS && !terrain_generation_reserved(y, x))
         cave_set_feat(y, x, FEAT_RUBBLE);
 }
 

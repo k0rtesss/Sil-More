@@ -375,6 +375,13 @@ static byte message_log_type_color(u16b type)
     case MSG_TRAP_GAS:
     case MSG_TRAP_NEEDLE:
     case MSG_TRAP_FIRE:
+    case MSG_TRAP_ACID:
+    case MSG_TRAP_FLOOD:
+    case MSG_TRAP_SPIKED:
+    case MSG_TRAP_ALARM:
+    case MSG_TRAP_CALTROPS:
+    case MSG_TRAP_DEADFALL:
+    case MSG_TRAP_FLASH:
         return TERM_L_RED;
 
     case MSG_BELL:
@@ -1081,6 +1088,23 @@ void message(u16b message_type, s16b extra, cptr message)
     sound(message_type);
 
     msg_print_aux(message_type, message);
+}
+
+void message_at(int y, int x, u16b message_type, s16b extra, cptr text)
+{
+    (void)extra;
+    sound_at(message_type, y, x);
+    msg_print_aux(message_type, text);
+}
+
+void message_format_at(int y, int x, u16b message_type, s16b extra, cptr fmt, ...)
+{
+    va_list vp;
+    char buf[1024];
+    va_start(vp, fmt);
+    (void)vstrnfmt(buf, sizeof(buf), fmt, vp);
+    va_end(vp);
+    message_at(y, x, message_type, extra, buf);
 }
 
 /*

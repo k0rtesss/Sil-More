@@ -1,7 +1,9 @@
 /* File: birth/birth-skills.c */
 
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "birth/birth-internal.h"
+#include "ui/question.h"
 
 /*
  * Skill point costs.
@@ -17,6 +19,57 @@ int birth_skill_cost(int base, int points)
 
 static int gain_skills_initial_skill = -1;
 
+void birth_skill_recommendation_text(char* buf, size_t len)
+{
+    bool song_character = birth_skill_specialty_score(S_SNG) > 0;
+    bool stealth_character = birth_skill_specialty_score(S_STL) > 0;
+
+    if (current_character_profile)
+        song_character |= (current_character_profile->flags_u
+            & (UNQ_SNG_FIN | UNQ_SNG_LUT | UNQ_SNG_MEL | UNQ_SNG_HURIN
+                | UNQ_SNG_THINGOL | UNQ_SNG_TURGON | UNQ_MINSTREL)) != 0;
+
+    SDL_strlcpy(buf,
+        "Suggested base skills: Melee 5, Evasion 5, Will 3, Perception 3. "
+        "Lower any purchased rank here to recover its XP.", len);
+    if (stealth_character)
+        SDL_strlcat(buf, " Your character suits stealth: consider spending "
+            "remaining XP on Stealth to help avoid detection.", len);
+    if (song_character)
+    {
+        if (p_ptr && p_ptr->oath_type == OATH_SILENCE)
+            SDL_strlcat(buf, " Your character suits Song, but singing would "
+                "break your Oath of Silence.", len);
+        else
+            SDL_strlcat(buf, " Your character suits singing: consider raising "
+                "Song. Training Song does not teach you a song: you must know "
+                "a song ability and actively sing it to benefit.", len);
+    }
+}
+
+/* Keep these purchases in skill_gain so every suggested rank can be refunded
+ * during creation through the normal decrease action. */
+static bool birth_recommend_skills(const int old_base[S_MAX],
+    int skill_gain[S_MAX], int available_exp)
+{
+    static const int recommended[S_MAX] = {
+        [S_MEL] = 5, [S_EVN] = 5, [S_WIL] = 3, [S_PER] = 3
+    };
+    int gains[S_MAX] = { 0 };
+    int cost = 0;
+
+    for (int i = 0; i < S_MAX; i++)
+    {
+        if (i == S_SPC) continue;
+        gains[i] = MAX(0, recommended[i] - old_base[i]);
+        cost += birth_skill_cost(old_base[i], gains[i]);
+    }
+    if (cost > available_exp) return false;
+    for (int i = 0; i < S_MAX; i++)
+        skill_gain[i] = gains[i];
+    return true;
+}
+
 void gain_skills_set_initial_skill(int skill)
 {
     if (skill < 0 || skill >= S_MAX || skill == S_SPC)
@@ -28,8 +81,9 @@ void gain_skills_set_initial_skill(int skill)
 /*
  * Increase your skills by spending experience points.
  */
-extern NavResult gain_skills(void)
+static NavResult gain_skills_aux(bool birth)
 {
+    tutorial_game_menu("skills", "Train base skills with experience. The next base rank costs 100 times the new rank; the displayed total also includes attributes and equipment.");
     int i;
 
     int skill = ((gain_skills_initial_skill >= 0
@@ -50,6 +104,7 @@ extern NavResult gain_skills(void)
     NavResult result = NAV_OK;
 
     bool death_view = death_spectator_active();
+    bool advice_pending = birth && !death_view;
 
     log_debug("Starting skills allocation with %d experience points", p_ptr->new_exp);
     gain_skills_initial_skill = -1;
@@ -64,6 +119,9 @@ extern NavResult gain_skills(void)
     /* initialise the skill gains */
     for (i = 0; i < S_MAX; i++)
         skill_gain[i] = 0;
+
+    if (birth && !death_view)
+        (void)birth_recommend_skills(old_base, skill_gain, old_new_exp);
 
     /* Interact */
     while (1)
@@ -114,6 +172,22 @@ extern NavResult gain_skills(void)
         /* First-time players: guided callouts over the real skills screen. */
         birth_coach_show_once(BIRTH_COACH_SKILLS);
 
+        if (advice_pending)
+        {
+            char advice[1024];
+            const ui_question_option close[] = {
+                { 0, "Continue", TERM_L_WHITE, false }
+            };
+
+            birth_skill_recommendation_text(advice, sizeof(advice));
+            (void)ui_question_ask_overlay("Starting skill advice", advice,
+                close, N_ELEMENTS(close), UI_QUESTION_GLOBAL,
+                UI_QUESTION_GLOBAL, 0);
+            advice_pending = false;
+            /* Rebuild allocation hit targets after the popup consumed input. */
+            continue;
+        }
+
         /* Get key */
         hide_cursor = true;
         ch = inkey();
@@ -150,12 +224,25 @@ extern NavResult gain_skills(void)
                 } else if (clicked_choice == -3) {
                     ch = 'q';
                     click_generated_command = true;
+                } else if (clicked_choice == -4 && birth) {
+                    ch = 'n';
+                    click_generated_command = true;
                 }
             }
         }
 
         if (!click_generated_command)
             ch = (char)steamdeck_menu_key(ch, 0, 0);
+
+        if (birth && !death_view && (ch == 'n' || ch == 'N'
+            || (steamdeck && ch == steamdeck_alt_action_key())))
+        {
+            if (!birth_recommend_skills(old_base, skill_gain, old_new_exp))
+                bell("Not enough experience for the beginner defaults.");
+            else
+                advice_pending = true;
+            continue;
+        }
 
         /* Return to character selection before the game starts */
         if (((ch == 'Q') || (ch == 'q')) && (turn == 0)) {
@@ -213,6 +300,7 @@ extern NavResult gain_skills(void)
         /* Final Look retains this browser but not skill purchases. */
         if ((ch == '4') || (ch == '6'))
         {
+            if (!tutorial_game_action_allowed("train", NULL)) continue;
             if (death_view)
             {
                 msg_print("You cannot do that during this final look.");
@@ -262,4 +350,14 @@ extern NavResult gain_skills(void)
 
     /* Done */
     return result;
+}
+
+NavResult gain_skills(void)
+{
+    return gain_skills_aux(false);
+}
+
+NavResult gain_skills_birth(void)
+{
+    return gain_skills_aux(true);
 }

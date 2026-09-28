@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/player-upkeep-internal.h"
@@ -506,6 +507,9 @@ static void ranged_slot_choice_name(char* buf, size_t buflen, int slot)
 
 typedef struct active_weapon_choice
 {
+    /* Zero is a combat setup; storage choices appear only in item menus. */
+    enum { ACTIVE_ITEM_SETUP, ACTIVE_ITEM_HARNESS,
+        ACTIVE_ITEM_PACK, ACTIVE_ITEM_BELT } action;
     int item;
     object_type* o_ptr;
     int mode;
@@ -1090,6 +1094,7 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     }
 
     choice = &choices[*count];
+    choice->action = ACTIVE_ITEM_SETUP;
     choice->item = item;
     choice->o_ptr = o_ptr;
     choice->mode = mode;
@@ -1480,6 +1485,7 @@ static void add_empty_active_hand_choice(active_weapon_choice choices[],
     }
 
     choice = &choices[*count];
+    choice->action = ACTIVE_ITEM_SETUP;
     choice->item = INVEN_WIELD;
     choice->o_ptr = NULL;
     choice->mode = PLAYER_ACTIVE_WEAPON_MELEE;
@@ -1594,7 +1600,78 @@ static void prepare_active_weapon_menu_choices(
     }
 }
 
-static bool choose_active_weapon(active_weapon_choice* selected)
+bool player_active_item_menu_available(int item)
+{
+    const object_type* obj = player_inventory_object(item);
+
+    return obj && obj->k_idx && !object_has_broken_prefix(obj)
+        && inventory_limit_group_for_object(obj) == INV_LIMIT_HARNESS
+        && (object_is_melee_combat_weapon(obj) || obj->tval == TV_BOW
+            || obj->tval == TV_SHIELD);
+}
+
+static bool active_weapon_choice_uses_item(const active_weapon_choice* choice,
+    int item)
+{
+    const object_type* obj = player_inventory_object(item);
+
+    if (!obj || !obj->k_idx)
+        return false;
+    if (obj->tval != TV_SHIELD)
+        return choice->item == item;
+    if (choice->shield_item >= 0)
+        return choice->shield_item == item;
+    return choice->shield_item != ACTIVE_WEAPON_SHIELD_NONE
+        && item == INVEN_ARM
+        && active_weapon_choice_allows_shield(choice->mode,
+            choice->target_slot, choice->o_ptr, obj);
+}
+
+static int active_weapon_filter_item_choices(active_weapon_choice choices[],
+    ui_question_option options[], int count, int item)
+{
+    int kept = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (!active_weapon_choice_uses_item(&choices[i], item))
+            continue;
+        choices[kept] = choices[i];
+        options[kept] = options[i];
+        {
+            char original_label[sizeof(choices[kept].label)];
+            bool active = strstr(choices[kept].label, "[active]") != NULL;
+
+            SDL_strlcpy(original_label, choices[kept].label,
+                sizeof(original_label));
+            strnfmt(choices[kept].label, sizeof(choices[kept].label),
+                "%s: %s", active ? "Active setup" : "Make active",
+                original_label);
+        }
+        options[kept].label = choices[kept].label;
+        options[kept].key = active_weapon_menu_key(kept);
+        kept++;
+    }
+    return kept;
+}
+
+static void active_item_add_storage_choice(active_weapon_choice choices[],
+    ui_question_option options[], int* count, int item, int action,
+    cptr label, bool disabled)
+{
+    active_weapon_choice* choice = &choices[*count];
+    memset(choice, 0, sizeof(*choice));
+    choice->action = action;
+    choice->item = item;
+    choice->o_ptr = player_inventory_object(item);
+    choice->arrow_item = -1;
+    SDL_strlcpy(choice->label, label, sizeof(choice->label));
+    options[*count] = (ui_question_option){ active_weapon_menu_key(*count),
+        choice->label, TERM_L_WHITE, disabled };
+    (*count)++;
+}
+
+static bool choose_active_weapon(active_weapon_choice* selected, int item)
 {
     int pack_count = player_pack_entry_count();
     int shield_capacity = MAX(pack_count, 1);
@@ -1602,7 +1679,7 @@ static bool choose_active_weapon(active_weapon_choice* selected)
     int shield_count = active_weapon_collect_shield_items(shield_items,
         shield_capacity);
     int capacity = 2 * (pack_count + 5)
-        * (player_quiver_store_entry_count() + 1) * (shield_count + 2);
+        * (player_quiver_store_entry_count() + 1) * (shield_count + 2) + 3;
     active_weapon_choice* choices;
     ui_question_option* options;
     const object_type** object_icons;
@@ -1666,7 +1743,7 @@ static bool choose_active_weapon(active_weapon_choice* selected)
             item, o_ptr, shield_items, shield_count, &default_index);
     }
 
-    if (count <= 0)
+    if (count <= 0 && item < 0)
     {
         msg_print("You have no combat weapon to ready.");
         choices = mem_free(choices);
@@ -1679,14 +1756,39 @@ static bool choose_active_weapon(active_weapon_choice* selected)
     prepare_active_weapon_menu_choices(choices, options, count,
         &default_index);
 
+    if (item >= 0)
+    {
+        const object_type* obj = player_inventory_object(item);
+        bool equipped = player_inventory_handle_is_equipped(item);
+
+        count = active_weapon_filter_item_choices(choices, options, count, item);
+        default_index = 0;
+        /* An inactive reserved weapon is already in the Harness from the
+         * player's perspective. Do not expose its serialized slot. */
+        bool in_use = equipped && player_equipment_slot_counts_as_equipped(item);
+        active_item_add_storage_choice(choices, options, &count, item,
+            ACTIVE_ITEM_HARNESS,
+            in_use ? "Return to Harness" : "Harness [stored]", !in_use);
+        if (object_can_choose_pack_or_harness(obj))
+            active_item_add_storage_choice(choices, options, &count, item,
+                ACTIVE_ITEM_PACK, "Store in Pack", equipped && cursed_p(obj));
+        if (item != INVEN_BELT && object_is_belt_weapon(obj))
+            active_item_add_storage_choice(choices, options, &count, item,
+                ACTIVE_ITEM_BELT, "Equip on Belt",
+                inventory[INVEN_BELT].k_idx && cursed_p(&inventory[INVEN_BELT]));
+    }
+
     for (int i = 0; i < count; i++)
     {
         object_type* arrow = player_quiver_arrow_object(choices[i].arrow_item);
         object_icons[i] = arrow ? arrow : choices[i].o_ptr;
     }
 
-    selected_index = ui_question_ask_objects_with_help("Change active weapon",
-            "Choose how to ready a weapon; the current choice is marked [active]. Each bow row selects one arrow type from the mixed Quiver, and changing only that arrow choice always takes no time. A throwing-capable weapon has separate Melee and Throwing choices. One-handed melee and throwing rows list available Harness shield combinations; Point Blank Archery also allows a round shield with a shortbow. Expected attack and damage are shown at the end of each row. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
+    selected_index = ui_question_ask_objects_with_help(
+            item >= 0 ? "Choose item setup" : "Change active weapon",
+            item >= 0
+                ? "Make this item active, including a compatible Harness shield and arrows where available, or choose where to keep it. [active] marks your current setup. Only active combat gear grants combat bonuses. Changing only arrows is free. Other changes keep their normal turn cost and ability exceptions. Pack actions take three turns."
+                : "Choose how to ready a weapon; the current choice is marked [active]. Each bow row selects one arrow type from the mixed Quiver, and changing only that arrow choice always takes no time. A throwing-capable weapon has separate Melee and Throwing choices. One-handed melee and throwing rows list available Harness shield combinations; Point Blank Archery also allows a round shield with a shortbow. Expected attack and damage are shown at the end of each row. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
             options, object_icons, count, UI_QUESTION_GLOBAL,
             UI_QUESTION_GLOBAL, default_index);
 
@@ -1738,19 +1840,33 @@ static bool player_active_weapon_allows_quick_throw(void)
 {
     const object_type* active_weapon;
 
+    /* Quick Throw can use a Harness dagger even when the player has no
+     * equipped weapon at all. */
+    if (!inventory[INVEN_WIELD].k_idx && !inventory[INVEN_BOW].k_idx)
+        return true;
+
     if (player_active_weapon_is_ranged())
     {
+        /* Quick Throw does not require changing away from an active
+         * throwing weapon.  Only the Shortbow is a valid active bow here. */
+        if (player_active_weapon_kind()
+            == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+        {
+            return true;
+        }
         if (player_active_weapon_kind()
             != PLAYER_ACTIVE_WEAPON_KIND_BOW)
         {
             return false;
         }
         active_weapon = &inventory[INVEN_BOW];
-        return active_weapon->k_idx && active_weapon->tval == TV_BOW;
+        return active_weapon->k_idx && active_weapon->tval == TV_BOW
+            && active_weapon->sval == SV_SHORT_BOW;
     }
 
     active_weapon = &inventory[INVEN_WIELD];
-    return object_allows_quick_throw(active_weapon);
+    /* An empty active hand is also a valid Quick Throw stance. */
+    return !active_weapon->k_idx || object_allows_quick_throw(active_weapon);
 }
 
 static bool object_is_dagger(const object_type* o_ptr)
@@ -2174,6 +2290,7 @@ static void player_polearm_switch_attack(void)
 
 bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
 {
+    if (take_turn && !tutorial_game_action_allowed("change-active", NULL)) return false;
     int old_mode = player_active_weapon_mode();
     int old_kind = player_active_weapon_kind();
     int new_kind;
@@ -2229,6 +2346,7 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
         player_active_weapon_free_change_commit();
     }
 
+    tutorial_game_action_done("change-active", NULL);
     return true;
 }
 
@@ -2374,7 +2492,7 @@ static int active_weapon_find_physical_item(const object_type* wanted,
     return -1;
 }
 
-static void apply_active_weapon_choice(const active_weapon_choice* choice)
+static void apply_active_weapon_choice_internal(const active_weapon_choice* choice)
 {
     int old_mode;
     int old_kind;
@@ -2521,6 +2639,40 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
     (void)player_set_active_weapon_mode(choice->mode, false, true);
 }
 
+static void apply_active_weapon_choice(const active_weapon_choice* choice)
+{
+    tutorial_view view;
+    const object_type *tutorial_subject = choice ? choice->o_ptr : NULL;
+    if (tutorial_get_view(&view) && !strcmp(view.action_subject, "arrows")) {
+        if (!choice || choice->item != INVEN_BOW || choice->kind != PLAYER_ACTIVE_WEAPON_KIND_BOW
+            || choice->arrow_item < 0 || choice->arrow_item == player_quiver_selected_arrow_slot()) return;
+        if (inventory[INVEN_ARM].k_idx ? choice->shield_item != INVEN_ARM
+            : choice->shield_item >= 0) return;
+        tutorial_subject = player_quiver_arrow_object(choice->arrow_item);
+    }
+    const char *action = tutorial_action_waiting()
+        && !strcmp(tutorial_current_action(), "ready") ? "ready" : "change-active";
+    if (!choice || !choice->o_ptr
+        || !tutorial_subject || !tutorial_game_begin_action(action, tutorial_subject)) return;
+    object_type subject = *tutorial_subject;
+    int old_arrow = player_quiver_selected_arrow_slot();
+    apply_active_weapon_choice_internal(choice);
+    tutorial_game_end_action();
+    bool committed = player_active_weapon_kind() == choice->kind;
+    if (!strcmp(action, "ready")) {
+        /* Readying must move the chosen physical item into an equipped slot;
+         * an already-active role alone is not evidence of success. */
+        committed = choice->target_slot >= INVEN_WIELD && choice->target_slot < INVEN_TOTAL
+            && choice->item != choice->target_slot
+            && active_weapon_same_physical_item(&subject, &inventory[choice->target_slot]);
+    } else if (subject.tval == TV_ARROW) {
+        committed = old_arrow != player_quiver_selected_arrow_slot()
+            && player_quiver_selected_arrow_slot() == choice->arrow_item;
+    }
+    if (!player_pack_action_pending() && committed)
+        tutorial_game_action_done(action, &subject);
+}
+
 bool player_ready_bow_with_arrow(int arrow_item)
 {
     active_weapon_choice choice;
@@ -2554,6 +2706,7 @@ bool player_ready_bow_with_arrow(int arrow_item)
 
 bool player_ready_throwing_weapon(object_type* o_ptr, int item)
 {
+    if (!tutorial_game_action_allowed("ready", o_ptr)) return false;
     active_weapon_choice choice;
     object_type wanted;
 
@@ -2580,12 +2733,37 @@ bool player_ready_throwing_weapon(object_type* o_ptr, int item)
 
 void do_cmd_toggle_active_weapon(void)
 {
+    tutorial_game_menu("active-weapon", "Select a compatible ready weapon, shield and arrow setup. Changing only arrows is free; other changes keep their normal turn cost and ability exceptions.");
     active_weapon_choice choice;
 
-    if (!choose_active_weapon(&choice))
+    if (!choose_active_weapon(&choice, -1))
         return;
 
     apply_active_weapon_choice(&choice);
+}
+
+bool do_cmd_active_item(int item)
+{
+    active_weapon_choice choice;
+
+    if (!player_active_item_menu_available(item))
+        return false;
+    tutorial_game_menu("active-weapon", "Choose a setup for this Harness item, or choose where to keep it.");
+    if (!choose_active_weapon(&choice, item))
+        return false;
+    switch (choice.action)
+    {
+    case ACTIVE_ITEM_HARNESS:
+        do_cmd_takeoff(choice.o_ptr, item);
+        return !inventory[item].k_idx;
+    case ACTIVE_ITEM_PACK:
+        return do_cmd_move_item_to_storage(item, OBJECT_STORAGE_PACK);
+    case ACTIVE_ITEM_BELT:
+        return do_cmd_wield_to_slot(choice.o_ptr, item, INVEN_BELT);
+    default:
+        apply_active_weapon_choice(&choice);
+        return true;
+    }
 }
 
 void player_queue_active_weapon_mode(int mode)

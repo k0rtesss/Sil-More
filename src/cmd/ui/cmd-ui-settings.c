@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
@@ -18,6 +19,8 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
+#include "ui/command-reference.h"
+#include "tutorial/tutorial-game.h"
 #include <SDL3/SDL_keyboard.h>
 
 #define SIL_MORE_PRIVACY_POLICY_URL \
@@ -73,12 +76,23 @@ void clear_skills_and_abilities()
  */
 enum {
     SOUND_OPT_ENABLED = 0,
+    SOUND_OPT_MASTER_VOLUME,
+    SOUND_OPT_ATTACK_ENABLED,
+    SOUND_OPT_DAMAGE_ENABLED,
+    SOUND_OPT_DEATH_ENABLED,
+    SOUND_OPT_IDLE_ENABLED,
     SOUND_OPT_COMBAT_ENABLED,
     SOUND_OPT_MONSTER_HITS_ENABLED,
     SOUND_OPT_INVENTORY_ENABLED,
     SOUND_OPT_WALK_ENABLED,
     SOUND_OPT_DOORS_ENABLED,
     SOUND_OPT_TRAPS_ENABLED,
+    SOUND_OPT_OTHER_ENABLED,
+    SOUND_OPT_RIVER_ENABLED,
+    SOUND_OPT_TORCHES_ENABLED,
+    SOUND_OPT_LAVA_ENABLED,
+    SOUND_OPT_FORGE_ENABLED,
+    SOUND_OPT_BRIDGE_ENABLED,
     SOUND_OPT_COMBAT_VOLUME,
     SOUND_OPT_MONSTER_HITS_VOLUME,
     SOUND_OPT_INVENTORY_VOLUME,
@@ -86,6 +100,11 @@ enum {
     SOUND_OPT_DOORS_VOLUME,
     SOUND_OPT_TRAPS_VOLUME,
     SOUND_OPT_OTHER_VOLUME,
+    SOUND_OPT_RIVER_VOLUME,
+    SOUND_OPT_TORCHES_VOLUME,
+    SOUND_OPT_LAVA_VOLUME,
+    SOUND_OPT_FORGE_VOLUME,
+    SOUND_OPT_BRIDGE_VOLUME,
     SOUND_OPT_MUSIC_MAIN_ENABLED,
     SOUND_OPT_MUSIC_AMBIENT_ENABLED,
     SOUND_OPT_MUSIC_MAIN_VOLUME,
@@ -157,6 +176,7 @@ static const struct option_group_marker interface_option_groups[] = {
     { OPT_hide_secondary_action_ring, "Quick Access" },
     { OPT_show_level_generation_debug, "Debug" },
     { OPT_show_elemental_item_rolls, "Debug" },
+    { OPT_show_dungeon_events, "Debug" },
     { -1, NULL }
 };
 
@@ -183,9 +203,12 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_disable_skeleton_note_tutorial, "Tutorial" },
     { OPT_smaller_level_size, "World Generation" },
     { OPT_more_stairs, "World Generation" },
+    { OPT_utumno_corridors, "World Generation" },
+    { OPT_illusory_walls, "World Generation" },
     { OPT_vault_drop_frequency, "World Generation" },
     { OPT_noble_item_spawn_mode, "World Generation" },
     { OPT_min_depth_timer_mode, "World Generation" },
+    { OPT_environment_speed, "Living Dungeon" },
     { OPT_load_blitz_by_default, "Blitz" },
     { -1, NULL }
 };
@@ -200,6 +223,7 @@ static const struct option_group_marker visual_option_groups[] = {
     { OPT_running_delay, "Animation" },
     { OPT_mirror_player_tile_facing, "Animation" },
     { OPT_mirror_monster_tile_facing, "Animation" },
+    { OPT_torch_animation_always, "Animation" },
     { OPT_center_player, "Camera" },
     { OPT_run_avoid_center, "Camera" },
     { OPT_show_level_entry_banner, "Narrative" },
@@ -242,12 +266,23 @@ static const struct option_group_marker debug_option_groups[] = {
 
 static const struct option_group_marker sound_option_groups[] = {
     { SOUND_OPTION_ROW(SOUND_OPT_ENABLED), "Master" },
+    { SOUND_OPTION_ROW(SOUND_OPT_MASTER_VOLUME), "Master" },
+    { SOUND_OPTION_ROW(SOUND_OPT_ATTACK_ENABLED), "Sound Types" },
+    { SOUND_OPTION_ROW(SOUND_OPT_DAMAGE_ENABLED), "Sound Types" },
+    { SOUND_OPTION_ROW(SOUND_OPT_DEATH_ENABLED), "Sound Types" },
+    { SOUND_OPTION_ROW(SOUND_OPT_IDLE_ENABLED), "Sound Types" },
     { SOUND_OPTION_ROW(SOUND_OPT_COMBAT_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_MONSTER_HITS_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_INVENTORY_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_WALK_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_DOORS_ENABLED), "Effects" },
     { SOUND_OPTION_ROW(SOUND_OPT_TRAPS_ENABLED), "Effects" },
+    { SOUND_OPTION_ROW(SOUND_OPT_OTHER_ENABLED), "Effects" },
+    { SOUND_OPTION_ROW(SOUND_OPT_RIVER_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_TORCHES_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_LAVA_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_FORGE_ENABLED), "Environmental" },
+    { SOUND_OPTION_ROW(SOUND_OPT_BRIDGE_ENABLED), "Environmental" },
     { SOUND_OPTION_ROW(SOUND_OPT_COMBAT_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_MONSTER_HITS_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_INVENTORY_VOLUME), "Effect Volume" },
@@ -255,6 +290,11 @@ static const struct option_group_marker sound_option_groups[] = {
     { SOUND_OPTION_ROW(SOUND_OPT_DOORS_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_TRAPS_VOLUME), "Effect Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_OTHER_VOLUME), "Effect Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_RIVER_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_TORCHES_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_LAVA_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_FORGE_VOLUME), "Environmental Volume" },
+    { SOUND_OPTION_ROW(SOUND_OPT_BRIDGE_VOLUME), "Environmental Volume" },
     { SOUND_OPTION_ROW(SOUND_OPT_MUSIC_MAIN_ENABLED), "Music" },
     { SOUND_OPTION_ROW(SOUND_OPT_MUSIC_AMBIENT_ENABLED), "Music" },
     { SOUND_OPTION_ROW(SOUND_OPT_MUSIC_MAIN_VOLUME), "Music Volume" },
@@ -587,19 +627,35 @@ static cptr sound_option_label(int index)
         switch (index)
         {
         case SOUND_OPT_ENABLED: return narrow ? "Sounds" : "Game sounds";
+        case SOUND_OPT_MASTER_VOLUME: return narrow ? "Master vol" : "Master volume";
         case SOUND_OPT_COMBAT_ENABLED: return narrow ? "Combat sfx" : "Combat sounds";
-        case SOUND_OPT_MONSTER_HITS_ENABLED: return narrow ? "Mon hit sfx" : "Monster hit sounds";
+        case SOUND_OPT_MONSTER_HITS_ENABLED: return narrow ? "Monster sfx" : "Monster sounds";
+        case SOUND_OPT_ATTACK_ENABLED: return narrow ? "Attack sfx" : "Attack sounds";
+        case SOUND_OPT_DAMAGE_ENABLED: return narrow ? "Damage sfx" : "Damage sounds";
+        case SOUND_OPT_DEATH_ENABLED: return narrow ? "Death sfx" : "Death sounds";
+        case SOUND_OPT_IDLE_ENABLED: return narrow ? "Idle sfx" : "Idle sounds";
         case SOUND_OPT_INVENTORY_ENABLED: return narrow ? "Inv sfx" : "Inventory sounds";
         case SOUND_OPT_WALK_ENABLED: return narrow ? "Walk sfx" : "Walk sounds";
         case SOUND_OPT_DOORS_ENABLED: return narrow ? "Door sfx" : "Door sounds";
         case SOUND_OPT_TRAPS_ENABLED: return narrow ? "Trap sfx" : "Trap sounds";
+        case SOUND_OPT_OTHER_ENABLED: return narrow ? "Other sfx" : "Other sounds";
+        case SOUND_OPT_RIVER_ENABLED: return narrow ? "Water sfx" : "Water/river sounds";
+        case SOUND_OPT_TORCHES_ENABLED: return narrow ? "Torch sfx" : "Torch sounds";
+        case SOUND_OPT_LAVA_ENABLED: return narrow ? "Lava sfx" : "Lava sounds";
+        case SOUND_OPT_FORGE_ENABLED: return narrow ? "Forge sfx" : "Forge sounds";
+        case SOUND_OPT_BRIDGE_ENABLED: return narrow ? "Bridge sfx" : "Bridge work sounds";
         case SOUND_OPT_COMBAT_VOLUME: return narrow ? "Combat vol" : "Combat volume";
-        case SOUND_OPT_MONSTER_HITS_VOLUME: return narrow ? "Mon hit vol" : "Monster hit volume";
+        case SOUND_OPT_MONSTER_HITS_VOLUME: return narrow ? "Monster vol" : "Monster volume";
         case SOUND_OPT_INVENTORY_VOLUME: return narrow ? "Inv vol" : "Inventory volume";
         case SOUND_OPT_WALK_VOLUME: return narrow ? "Walk vol" : "Walk volume";
         case SOUND_OPT_DOORS_VOLUME: return narrow ? "Door vol" : "Door volume";
         case SOUND_OPT_TRAPS_VOLUME: return narrow ? "Trap vol" : "Trap volume";
         case SOUND_OPT_OTHER_VOLUME: return narrow ? "Other vol" : "Other volume";
+        case SOUND_OPT_RIVER_VOLUME: return narrow ? "Water vol" : "Water/river vol";
+        case SOUND_OPT_TORCHES_VOLUME: return narrow ? "Torch vol" : "Torch volume";
+        case SOUND_OPT_LAVA_VOLUME: return narrow ? "Lava vol" : "Lava volume";
+        case SOUND_OPT_FORGE_VOLUME: return narrow ? "Forge vol" : "Forge volume";
+        case SOUND_OPT_BRIDGE_VOLUME: return narrow ? "Bridge vol" : "Bridge work vol";
         case SOUND_OPT_MUSIC_MAIN_ENABLED: return "Menu music";
         case SOUND_OPT_MUSIC_AMBIENT_ENABLED: return "Ambient music";
         case SOUND_OPT_MUSIC_MAIN_VOLUME: return narrow ? "Menu vol" : "Menu music volume";
@@ -611,19 +667,35 @@ static cptr sound_option_label(int index)
     switch (index)
     {
     case SOUND_OPT_ENABLED: return "Enable game sounds";
+    case SOUND_OPT_MASTER_VOLUME: return "Master sound volume";
     case SOUND_OPT_COMBAT_ENABLED: return "Enable combat sounds";
-    case SOUND_OPT_MONSTER_HITS_ENABLED: return "Enable monster hit sounds";
+    case SOUND_OPT_MONSTER_HITS_ENABLED: return "Enable monster sounds";
+    case SOUND_OPT_ATTACK_ENABLED: return "Enable attack sounds";
+    case SOUND_OPT_DAMAGE_ENABLED: return "Enable damage sounds";
+    case SOUND_OPT_DEATH_ENABLED: return "Enable death sounds";
+    case SOUND_OPT_IDLE_ENABLED: return "Enable idle sounds";
     case SOUND_OPT_INVENTORY_ENABLED: return "Enable inventory sounds";
     case SOUND_OPT_WALK_ENABLED: return "Enable walk sounds";
     case SOUND_OPT_DOORS_ENABLED: return "Enable door sounds";
     case SOUND_OPT_TRAPS_ENABLED: return "Enable trap sounds";
+    case SOUND_OPT_OTHER_ENABLED: return "Enable other sounds";
+    case SOUND_OPT_RIVER_ENABLED: return "Enable water and river sounds";
+    case SOUND_OPT_TORCHES_ENABLED: return "Enable torch sounds";
+    case SOUND_OPT_LAVA_ENABLED: return "Enable lava sounds";
+    case SOUND_OPT_FORGE_ENABLED: return "Enable forge sounds";
+    case SOUND_OPT_BRIDGE_ENABLED: return "Enable bridge repair and construction sounds";
     case SOUND_OPT_COMBAT_VOLUME: return "Combat sounds volume";
-    case SOUND_OPT_MONSTER_HITS_VOLUME: return "Monster hit sounds volume";
+    case SOUND_OPT_MONSTER_HITS_VOLUME: return "Monster sounds volume";
     case SOUND_OPT_INVENTORY_VOLUME: return "Inventory sounds volume";
     case SOUND_OPT_WALK_VOLUME: return "Walk sounds volume";
     case SOUND_OPT_DOORS_VOLUME: return "Door sounds volume";
     case SOUND_OPT_TRAPS_VOLUME: return "Trap sounds volume";
     case SOUND_OPT_OTHER_VOLUME: return "Other sounds volume";
+    case SOUND_OPT_RIVER_VOLUME: return "Water and river sounds volume";
+    case SOUND_OPT_TORCHES_VOLUME: return "Torch sounds volume";
+    case SOUND_OPT_LAVA_VOLUME: return "Lava sounds volume";
+    case SOUND_OPT_FORGE_VOLUME: return "Forge sounds volume";
+    case SOUND_OPT_BRIDGE_VOLUME: return "Bridge repair and construction sounds volume";
     case SOUND_OPT_MUSIC_MAIN_ENABLED: return "Enable main menu music";
     case SOUND_OPT_MUSIC_AMBIENT_ENABLED: return "Enable ambient dungeon music";
     case SOUND_OPT_MUSIC_MAIN_VOLUME: return "Main menu music volume";
@@ -660,6 +732,8 @@ static cptr option_menu_label(int opt)
     case OPT_pixel_monster_status_icons:
         return compact ? (narrow ? "Pixel status" : "Pixel monster status")
                        : "Use pixel-rendered monster status icons";
+    case OPT_torch_animation_always:
+        return compact ? "Torch animation" : "Torch and brazier animation";
     case OPT_hide_supporting_panes_fullscreen:
         return compact ? (narrow ? "Hide panes FS" : "Hide panes full-screen")
                        : "Hide supporting panes on full-screen screens";
@@ -674,6 +748,8 @@ static cptr option_menu_label(int opt)
     case OPT_min_depth_timer_mode:
         return compact ? (narrow ? "Depth pace" : "Min depth pace")
                        : "Minimum depth pace";
+    case OPT_environment_speed:
+        return compact ? "Environment speed" : "Environmental effects speed";
     case OPT_noble_item_spawn_mode:
         return compact ? (narrow ? "Noble items" : "Noble item sources")
                        : "Noble item spawns";
@@ -709,6 +785,9 @@ static cptr option_menu_label(int opt)
     case OPT_show_elemental_item_rolls:
         return compact ? (narrow ? "Dbg elem items" : "Debug elemental items")
                        : "Show elemental item break rolls and target probabilities";
+    case OPT_show_dungeon_events:
+        return compact ? (narrow ? "Events {debug}" : "Dungeon events {debug}")
+                       : "Log all dungeon events in messages {debug}";
     case OPT_show_smithing_difficulty:
         return compact ? (narrow ? "Smith dbg items" : "Debug smithing in items")
                        : "Show {sd,wr} in item descriptions";
@@ -739,14 +818,16 @@ static cptr option_menu_label(int opt)
         case OPT_active_weapon_switch_confirm: return narrow ? "Weapon switch" : "Confirm weapon switch";
         case OPT_forgo_attacking_unwary: return narrow ? "Skip unwary hits" : "Forgo unwary attacks";
         case OPT_assassination_over_charge: return narrow ? "Stealth over charge" : "Assassination over Charge";
-        case OPT_lockpick_minigame: return narrow ? "Door minigame" : "Locked-door minigame";
-        case OPT_chest_trap_minigame: return narrow ? "Chest minigame" : "Chest trap minigame";
+        case OPT_lockpick_minigame: return narrow ? "Door checks" : "Locked-door interaction checks";
+        case OPT_chest_trap_minigame: return narrow ? "Chest checks" : "Chest interaction checks";
         case OPT_stop_singing_on_rest: return narrow ? "Stop song on rest" : "Stop singing on rest";
         case OPT_know_monster_info: return narrow ? "Know monsters" : "Know monster info";
         case OPT_visual_recognition: return narrow ? "Need light to spot" : "Need light to spot";
         case OPT_disable_skeleton_note_tutorial: return narrow ? "Hide skeleton tips" : "Hide skeleton tutorials";
         case OPT_smaller_level_size: return narrow ? "Smaller levels" : "Smaller level size";
         case OPT_more_stairs: return narrow ? "More stairs" : "Extra stairs";
+        case OPT_utumno_corridors: return "Utumno corridors";
+        case OPT_illusory_walls: return "Illusory walls";
         case OPT_running_delay: return narrow ? "Run delay" : "Running delay";
         case OPT_center_player: return narrow ? "Center map" : "Center map";
         case OPT_run_avoid_center: return narrow ? "No center on run" : "Avoid centering on run";
@@ -927,6 +1008,7 @@ static void option_apply_side_effects(int opt)
         || opt == OPT_sleep_icon || opt == OPT_mirror_player_tile_facing
         || opt == OPT_pixel_monster_status_icons
         || opt == OPT_handcrafted_player_tile_facing
+        || opt == OPT_torch_animation_always
         || opt == OPT_mirror_monster_tile_facing)
         p_ptr->redraw |= (PR_MAP);
 }
@@ -1160,6 +1242,11 @@ static bool option_pick_value(int opt, bool* handled)
         { MIN_DEPTH_TIMER_MODE_RELAXED, "Relaxed (+30000)" },
         { MIN_DEPTH_TIMER_MODE_HARSH, "Harsh (-30000)" }
     };
+    static const struct settings_value_choice environment_speed_choices[] = {
+        { ENVIRONMENT_SPEED_SLOW, "Slow" },
+        { ENVIRONMENT_SPEED_NORMAL, "Normal (default)" },
+        { ENVIRONMENT_SPEED_FAST, "Fast" }
+    };
     static const struct settings_value_choice noble_spawn_choices[] = {
         { NOBLE_ITEM_SPAWN_RESTRICTED,
             "0 (good+/chests/human+elf skeletons)" },
@@ -1189,6 +1276,10 @@ static bool option_pick_value(int opt, bool* handled)
         { PLAYER_TILE_FACING_OFF, "off" },
         { PLAYER_TILE_FACING_MIRROR, "mirror" },
         { PLAYER_TILE_FACING_HANDCRAFTED, "handcrafted" }
+    };
+    static const struct settings_value_choice torch_animation_choices[] = {
+        { 1, "Always animate" },
+        { 0, "Freeze outside sight" }
     };
     static const struct settings_value_choice monster_tile_health_choices[] = {
         { MONSTER_TILE_HEALTH_BARS_SHOW, "Show" },
@@ -1286,6 +1377,20 @@ static bool option_pick_value(int opt, bool* handled)
         }
         return false;
 
+    case OPT_environment_speed:
+        value = op_ptr->environment_speed;
+        if (value > ENVIRONMENT_SPEED_MAX) value = ENVIRONMENT_SPEED_NORMAL;
+        if (handled) *handled = true;
+        if (settings_pick_value(option_menu_label(opt),
+                "Slow keeps the original pace. Normal is twice as fast; Fast is four times as fast. Hazard warning time stays the same.",
+                environment_speed_choices, (int)N_ELEMENTS(environment_speed_choices),
+                value, &value) && value != op_ptr->environment_speed)
+        {
+            cave_environment_set_speed((byte)value);
+            return true;
+        }
+        return false;
+
     case OPT_noble_item_spawn_mode:
         value = op_ptr->noble_item_spawn_mode;
         if (value > NOBLE_ITEM_SPAWN_INCLUDE_VAULTS)
@@ -1338,6 +1443,18 @@ static bool option_pick_value(int opt, bool* handled)
         }
         return false;
 
+    case OPT_torch_animation_always:
+        value = op_ptr->opt[opt] ? 1 : 0;
+        if (option_pick_from_choices(opt, torch_animation_choices,
+                (int)N_ELEMENTS(torch_animation_choices), value, &value, handled)
+            && value != (op_ptr->opt[opt] ? 1 : 0))
+        {
+            op_ptr->opt[opt] = (value != 0);
+            option_apply_side_effects(opt);
+            return true;
+        }
+        return false;
+
     case OPT_mirror_player_tile_facing:
         value = option_player_tile_facing_mode();
         if (option_pick_from_choices(opt, player_tile_facing_choices,
@@ -1375,6 +1492,7 @@ static float* sound_option_volume_ptr(struct sound_config* sound_cfg,
 
     switch (index)
     {
+    case SOUND_OPT_MASTER_VOLUME: return &sound_cfg->volume_master;
     case SOUND_OPT_COMBAT_VOLUME: return &sound_cfg->volume_combat;
     case SOUND_OPT_MONSTER_HITS_VOLUME: return &sound_cfg->volume_monster_hits;
     case SOUND_OPT_INVENTORY_VOLUME: return &sound_cfg->volume_inventory;
@@ -1382,6 +1500,11 @@ static float* sound_option_volume_ptr(struct sound_config* sound_cfg,
     case SOUND_OPT_DOORS_VOLUME: return &sound_cfg->volume_doors;
     case SOUND_OPT_TRAPS_VOLUME: return &sound_cfg->volume_traps;
     case SOUND_OPT_OTHER_VOLUME: return &sound_cfg->volume_other;
+    case SOUND_OPT_RIVER_VOLUME: return &sound_cfg->volume_river;
+    case SOUND_OPT_TORCHES_VOLUME: return &sound_cfg->volume_torches;
+    case SOUND_OPT_LAVA_VOLUME: return &sound_cfg->volume_lava;
+    case SOUND_OPT_FORGE_VOLUME: return &sound_cfg->volume_forge;
+    case SOUND_OPT_BRIDGE_VOLUME: return &sound_cfg->volume_bridge;
     case SOUND_OPT_MUSIC_MAIN_VOLUME: return &sound_cfg->music_main_volume;
     case SOUND_OPT_MUSIC_AMBIENT_VOLUME: return &sound_cfg->music_ambient_volume;
     default: return NULL;
@@ -1439,8 +1562,14 @@ static bool sound_option_pick_value(int index, struct sound_config* sound_cfg,
         return false;
 
     *volume = new_volume;
-    if (index == SOUND_OPT_MUSIC_MAIN_VOLUME
-        || index == SOUND_OPT_MUSIC_AMBIENT_VOLUME)
+    if (index == SOUND_OPT_MASTER_VOLUME
+        || index == SOUND_OPT_MUSIC_MAIN_VOLUME
+        || index == SOUND_OPT_MUSIC_AMBIENT_VOLUME
+        || index == SOUND_OPT_RIVER_VOLUME
+        || index == SOUND_OPT_TORCHES_VOLUME
+        || index == SOUND_OPT_LAVA_VOLUME
+        || index == SOUND_OPT_FORGE_VOLUME
+        || index == SOUND_OPT_BRIDGE_VOLUME)
     {
         sdl_music_update_volumes();
         sdl_sound_save_config();
@@ -1534,11 +1663,26 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
             sound_cfg->enabled = def.enabled;
             use_sound = sound_cfg->enabled;
             break;
+        case SOUND_OPT_MASTER_VOLUME:
+            sound_cfg->volume_master = def.volume_master;
+            break;
         case SOUND_OPT_COMBAT_ENABLED:
             sound_cfg->enable_combat = def.enable_combat;
             break;
         case SOUND_OPT_MONSTER_HITS_ENABLED:
             sound_cfg->enable_monster_hits = def.enable_monster_hits;
+            break;
+        case SOUND_OPT_ATTACK_ENABLED:
+            sound_cfg->enable_attack = def.enable_attack;
+            break;
+        case SOUND_OPT_DAMAGE_ENABLED:
+            sound_cfg->enable_damage = def.enable_damage;
+            break;
+        case SOUND_OPT_DEATH_ENABLED:
+            sound_cfg->enable_death = def.enable_death;
+            break;
+        case SOUND_OPT_IDLE_ENABLED:
+            sound_cfg->enable_idle = def.enable_idle;
             break;
         case SOUND_OPT_INVENTORY_ENABLED:
             sound_cfg->enable_inventory = def.enable_inventory;
@@ -1551,6 +1695,24 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
             break;
         case SOUND_OPT_TRAPS_ENABLED:
             sound_cfg->enable_traps = def.enable_traps;
+            break;
+        case SOUND_OPT_OTHER_ENABLED:
+            sound_cfg->enable_other = def.enable_other;
+            break;
+        case SOUND_OPT_RIVER_ENABLED:
+            sound_cfg->enable_river = def.enable_river;
+            break;
+        case SOUND_OPT_TORCHES_ENABLED:
+            sound_cfg->enable_torches = def.enable_torches;
+            break;
+        case SOUND_OPT_LAVA_ENABLED:
+            sound_cfg->enable_lava = def.enable_lava;
+            break;
+        case SOUND_OPT_FORGE_ENABLED:
+            sound_cfg->enable_forge = def.enable_forge;
+            break;
+        case SOUND_OPT_BRIDGE_ENABLED:
+            sound_cfg->enable_bridge = def.enable_bridge;
             break;
         case SOUND_OPT_COMBAT_VOLUME:
             sound_cfg->volume_combat = def.volume_combat;
@@ -1572,6 +1734,21 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
             break;
         case SOUND_OPT_OTHER_VOLUME:
             sound_cfg->volume_other = def.volume_other;
+            break;
+        case SOUND_OPT_RIVER_VOLUME:
+            sound_cfg->volume_river = def.volume_river;
+            break;
+        case SOUND_OPT_TORCHES_VOLUME:
+            sound_cfg->volume_torches = def.volume_torches;
+            break;
+        case SOUND_OPT_LAVA_VOLUME:
+            sound_cfg->volume_lava = def.volume_lava;
+            break;
+        case SOUND_OPT_FORGE_VOLUME:
+            sound_cfg->volume_forge = def.volume_forge;
+            break;
+        case SOUND_OPT_BRIDGE_VOLUME:
+            sound_cfg->volume_bridge = def.volume_bridge;
             break;
         case SOUND_OPT_MUSIC_MAIN_ENABLED:
             sound_cfg->music_main_enabled = def.music_main_enabled;
@@ -1616,6 +1793,9 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
         break;
     case OPT_min_depth_timer_mode:
         op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
+        break;
+    case OPT_environment_speed:
+        cave_environment_set_speed(ENVIRONMENT_SPEED_NORMAL);
         break;
     case OPT_narrative_banner_turns:
         op_ptr->narrative_banner_turns = DEFAULT_NARRATIVE_BANNER_TURNS;
@@ -1791,6 +1971,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enabled ? "yes" : "no ");
                     break;
+                case SOUND_OPT_MASTER_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_master * 100.0f);
+                    break;
                 case SOUND_OPT_COMBAT_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_combat ? "yes" : "no ");
@@ -1798,6 +1982,22 @@ extern void do_cmd_options_aux(int page, cptr info)
                 case SOUND_OPT_MONSTER_HITS_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_monster_hits ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_ATTACK_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_attack ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_DAMAGE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_damage ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_DEATH_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_death ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_IDLE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_idle ? "yes" : "no ");
                     break;
                 case SOUND_OPT_INVENTORY_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
@@ -1814,6 +2014,30 @@ extern void do_cmd_options_aux(int page, cptr info)
                 case SOUND_OPT_TRAPS_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
                         sound_cfg->enable_traps ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_OTHER_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_other ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_RIVER_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_river ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_TORCHES_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_torches ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_LAVA_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_lava ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_FORGE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_forge ? "yes" : "no ");
+                    break;
+                case SOUND_OPT_BRIDGE_ENABLED:
+                    strnfmt(value_str, sizeof(value_str), "%s",
+                        sound_cfg->enable_bridge ? "yes" : "no ");
                     break;
                 case SOUND_OPT_COMBAT_VOLUME:
                     strnfmt(value_str, sizeof(value_str), "%.0f%%",
@@ -1842,6 +2066,26 @@ extern void do_cmd_options_aux(int page, cptr info)
                 case SOUND_OPT_OTHER_VOLUME:
                     strnfmt(value_str, sizeof(value_str), "%.0f%%",
                         sound_cfg->volume_other * 100.0f);
+                    break;
+                case SOUND_OPT_RIVER_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_river * 100.0f);
+                    break;
+                case SOUND_OPT_TORCHES_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_torches * 100.0f);
+                    break;
+                case SOUND_OPT_LAVA_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_lava * 100.0f);
+                    break;
+                case SOUND_OPT_FORGE_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_forge * 100.0f);
+                    break;
+                case SOUND_OPT_BRIDGE_VOLUME:
+                    strnfmt(value_str, sizeof(value_str), "%.0f%%",
+                        sound_cfg->volume_bridge * 100.0f);
                     break;
                 case SOUND_OPT_MUSIC_MAIN_ENABLED:
                     strnfmt(value_str, sizeof(value_str), "%s",
@@ -1965,6 +2209,13 @@ extern void do_cmd_options_aux(int page, cptr info)
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
                     mode_str);
             }
+            else if (opt[i] == OPT_environment_speed)
+            {
+                const char* speed = op_ptr->environment_speed == ENVIRONMENT_SPEED_SLOW
+                    ? "Slow" : op_ptr->environment_speed == ENVIRONMENT_SPEED_FAST
+                    ? "Fast" : "Normal";
+                option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]), speed);
+            }
             else if (opt[i] == OPT_noble_item_spawn_mode)
             {
                 const char *mode_str
@@ -2009,6 +2260,12 @@ extern void do_cmd_options_aux(int page, cptr info)
                 option_menu_format_line(buf, sizeof(buf),
                     option_menu_label(opt[i]),
                     op_ptr->opt[opt[i]] ? "Random" : "Fixed");
+            }
+            else if (opt[i] == OPT_torch_animation_always)
+            {
+                option_menu_format_line(buf, sizeof(buf),
+                    option_menu_label(opt[i]), op_ptr->opt[opt[i]]
+                        ? "Always animate" : "Freeze outside sight");
             }
             else if (opt[i] == OPT_mirror_player_tile_facing)
             {
@@ -2252,6 +2509,22 @@ extern void do_cmd_options_aux(int page, cptr info)
                             sound_cfg->enable_monster_hits = !sound_cfg->enable_monster_hits;
                             changed = true;
                             break;
+                        case SOUND_OPT_ATTACK_ENABLED:
+                            sound_cfg->enable_attack = !sound_cfg->enable_attack;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_DAMAGE_ENABLED:
+                            sound_cfg->enable_damage = !sound_cfg->enable_damage;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_DEATH_ENABLED:
+                            sound_cfg->enable_death = !sound_cfg->enable_death;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_IDLE_ENABLED:
+                            sound_cfg->enable_idle = !sound_cfg->enable_idle;
+                            changed = true;
+                            break;
                         case SOUND_OPT_INVENTORY_ENABLED:
                             sound_cfg->enable_inventory = !sound_cfg->enable_inventory;
                             changed = true;
@@ -2266,6 +2539,30 @@ extern void do_cmd_options_aux(int page, cptr info)
                             break;
                         case SOUND_OPT_TRAPS_ENABLED:
                             sound_cfg->enable_traps = !sound_cfg->enable_traps;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_OTHER_ENABLED:
+                            sound_cfg->enable_other = !sound_cfg->enable_other;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_RIVER_ENABLED:
+                            sound_cfg->enable_river = !sound_cfg->enable_river;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_TORCHES_ENABLED:
+                            sound_cfg->enable_torches = !sound_cfg->enable_torches;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_LAVA_ENABLED:
+                            sound_cfg->enable_lava = !sound_cfg->enable_lava;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_FORGE_ENABLED:
+                            sound_cfg->enable_forge = !sound_cfg->enable_forge;
+                            changed = true;
+                            break;
+                        case SOUND_OPT_BRIDGE_ENABLED:
+                            sound_cfg->enable_bridge = !sound_cfg->enable_bridge;
                             changed = true;
                             break;
                         case SOUND_OPT_MUSIC_MAIN_ENABLED:
@@ -2330,6 +2627,18 @@ extern void do_cmd_options_aux(int page, cptr info)
                     case SOUND_OPT_MONSTER_HITS_ENABLED:
                         sound_cfg->enable_monster_hits = true;
                         break;
+                    case SOUND_OPT_ATTACK_ENABLED:
+                        sound_cfg->enable_attack = true;
+                        break;
+                    case SOUND_OPT_DAMAGE_ENABLED:
+                        sound_cfg->enable_damage = true;
+                        break;
+                    case SOUND_OPT_DEATH_ENABLED:
+                        sound_cfg->enable_death = true;
+                        break;
+                    case SOUND_OPT_IDLE_ENABLED:
+                        sound_cfg->enable_idle = true;
+                        break;
                     case SOUND_OPT_INVENTORY_ENABLED:
                         sound_cfg->enable_inventory = true;
                         break;
@@ -2341,6 +2650,27 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_TRAPS_ENABLED:
                         sound_cfg->enable_traps = true;
+                        break;
+                    case SOUND_OPT_OTHER_ENABLED:
+                        sound_cfg->enable_other = true;
+                        break;
+                    case SOUND_OPT_RIVER_ENABLED:
+                        sound_cfg->enable_river = true;
+                        break;
+                    case SOUND_OPT_TORCHES_ENABLED:
+                        sound_cfg->enable_torches = true;
+                        break;
+                    case SOUND_OPT_LAVA_ENABLED:
+                        sound_cfg->enable_lava = true;
+                        break;
+                    case SOUND_OPT_FORGE_ENABLED:
+                        sound_cfg->enable_forge = true;
+                        break;
+                    case SOUND_OPT_BRIDGE_ENABLED:
+                        sound_cfg->enable_bridge = true;
+                        break;
+                    case SOUND_OPT_MASTER_VOLUME:
+                        sound_cfg->volume_master = (sound_cfg->volume_master < 1.0f) ? sound_cfg->volume_master + 0.1f : 1.0f;
                         break;
                     case SOUND_OPT_COMBAT_VOLUME:
                         sound_cfg->volume_combat = (sound_cfg->volume_combat < 1.0f) ? sound_cfg->volume_combat + 0.1f : 1.0f;
@@ -2362,6 +2692,21 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_OTHER_VOLUME:
                         sound_cfg->volume_other = (sound_cfg->volume_other < 1.0f) ? sound_cfg->volume_other + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_RIVER_VOLUME:
+                        sound_cfg->volume_river = (sound_cfg->volume_river < 1.0f) ? sound_cfg->volume_river + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_TORCHES_VOLUME:
+                        sound_cfg->volume_torches = (sound_cfg->volume_torches < 1.0f) ? sound_cfg->volume_torches + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_LAVA_VOLUME:
+                        sound_cfg->volume_lava = (sound_cfg->volume_lava < 1.0f) ? sound_cfg->volume_lava + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_FORGE_VOLUME:
+                        sound_cfg->volume_forge = (sound_cfg->volume_forge < 1.0f) ? sound_cfg->volume_forge + 0.1f : 1.0f;
+                        break;
+                    case SOUND_OPT_BRIDGE_VOLUME:
+                        sound_cfg->volume_bridge = (sound_cfg->volume_bridge < 1.0f) ? sound_cfg->volume_bridge + 0.1f : 1.0f;
                         break;
                     case SOUND_OPT_MUSIC_MAIN_ENABLED:
                         sound_cfg->music_main_enabled = true;
@@ -2441,6 +2786,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                         ? op_ptr->min_depth_timer_mode + 1
                         : MIN_DEPTH_TIMER_MODE_MAX;
                 }
+                else if (opt[k] == OPT_environment_speed)
+                {
+                    cave_environment_set_speed((byte)MIN(ENVIRONMENT_SPEED_MAX,
+                        op_ptr->environment_speed + 1));
+                }
                 else if (opt[k] == OPT_noble_item_spawn_mode)
                 {
                     op_ptr->noble_item_spawn_mode
@@ -2519,6 +2869,18 @@ extern void do_cmd_options_aux(int page, cptr info)
                     case SOUND_OPT_MONSTER_HITS_ENABLED:
                         sound_cfg->enable_monster_hits = false;
                         break;
+                    case SOUND_OPT_ATTACK_ENABLED:
+                        sound_cfg->enable_attack = false;
+                        break;
+                    case SOUND_OPT_DAMAGE_ENABLED:
+                        sound_cfg->enable_damage = false;
+                        break;
+                    case SOUND_OPT_DEATH_ENABLED:
+                        sound_cfg->enable_death = false;
+                        break;
+                    case SOUND_OPT_IDLE_ENABLED:
+                        sound_cfg->enable_idle = false;
+                        break;
                     case SOUND_OPT_INVENTORY_ENABLED:
                         sound_cfg->enable_inventory = false;
                         break;
@@ -2530,6 +2892,27 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_TRAPS_ENABLED:
                         sound_cfg->enable_traps = false;
+                        break;
+                    case SOUND_OPT_OTHER_ENABLED:
+                        sound_cfg->enable_other = false;
+                        break;
+                    case SOUND_OPT_RIVER_ENABLED:
+                        sound_cfg->enable_river = false;
+                        break;
+                    case SOUND_OPT_TORCHES_ENABLED:
+                        sound_cfg->enable_torches = false;
+                        break;
+                    case SOUND_OPT_LAVA_ENABLED:
+                        sound_cfg->enable_lava = false;
+                        break;
+                    case SOUND_OPT_FORGE_ENABLED:
+                        sound_cfg->enable_forge = false;
+                        break;
+                    case SOUND_OPT_BRIDGE_ENABLED:
+                        sound_cfg->enable_bridge = false;
+                        break;
+                    case SOUND_OPT_MASTER_VOLUME:
+                        sound_cfg->volume_master = (sound_cfg->volume_master > 0.0f) ? sound_cfg->volume_master - 0.1f : 0.0f;
                         break;
                     case SOUND_OPT_COMBAT_VOLUME:
                         sound_cfg->volume_combat = (sound_cfg->volume_combat > 0.0f) ? sound_cfg->volume_combat - 0.1f : 0.0f;
@@ -2551,6 +2934,21 @@ extern void do_cmd_options_aux(int page, cptr info)
                         break;
                     case SOUND_OPT_OTHER_VOLUME:
                         sound_cfg->volume_other = (sound_cfg->volume_other > 0.0f) ? sound_cfg->volume_other - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_RIVER_VOLUME:
+                        sound_cfg->volume_river = (sound_cfg->volume_river > 0.0f) ? sound_cfg->volume_river - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_TORCHES_VOLUME:
+                        sound_cfg->volume_torches = (sound_cfg->volume_torches > 0.0f) ? sound_cfg->volume_torches - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_LAVA_VOLUME:
+                        sound_cfg->volume_lava = (sound_cfg->volume_lava > 0.0f) ? sound_cfg->volume_lava - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_FORGE_VOLUME:
+                        sound_cfg->volume_forge = (sound_cfg->volume_forge > 0.0f) ? sound_cfg->volume_forge - 0.1f : 0.0f;
+                        break;
+                    case SOUND_OPT_BRIDGE_VOLUME:
+                        sound_cfg->volume_bridge = (sound_cfg->volume_bridge > 0.0f) ? sound_cfg->volume_bridge - 0.1f : 0.0f;
                         break;
                     case SOUND_OPT_MUSIC_MAIN_ENABLED:
                         sound_cfg->music_main_enabled = false;
@@ -2629,6 +3027,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                         = (op_ptr->min_depth_timer_mode > MIN_DEPTH_TIMER_MODE_NORMAL)
                         ? op_ptr->min_depth_timer_mode - 1
                         : MIN_DEPTH_TIMER_MODE_NORMAL;
+                }
+                else if (opt[k] == OPT_environment_speed)
+                {
+                    cave_environment_set_speed((byte)MAX(ENVIRONMENT_SPEED_SLOW,
+                        op_ptr->environment_speed - 1));
                 }
                 else if (opt[k] == OPT_noble_item_spawn_mode)
                 {
@@ -2925,11 +3328,13 @@ void do_cmd_pane_settings(void)
         PANE_SETTING_MAIN_VIEW_SCALE,
         PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
         PANE_SETTING_COMPACT_INVENTORY_MENUS,
+        PANE_SETTING_DEBUG_CHARACTER_SHEET,
         PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET,
         PANE_SETTING_CAMERA_VERTICAL_DISTANCE,
         PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE,
 #if defined(__ANDROID__) || defined(SIL_IOS)
         PANE_SETTING_MOBILE_PORTRAIT_MODE,
+        PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER,
 #endif
         PANE_SETTING_ENABLE_SIDE_PANES,
         PANE_SETTING_ENABLE_BOTTOM_PANES,
@@ -3048,6 +3453,17 @@ void do_cmd_pane_settings(void)
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_COMPACT_INVENTORY_MENUS, 3, a, buf);
 
+        a = (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Character Sheet Mode",
+                "Character Sheet",
+                "Sheet Mode"),
+            config.debug_character_sheet ? "debug" : "SDL",
+            row_width, 5);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_DEBUG_CHARACTER_SHEET, 4, a, buf);
+
         /* Extra zoom applied when mobile gameplay starts. */
         a = (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             ? TERM_L_BLUE : TERM_WHITE;
@@ -3098,6 +3514,19 @@ void do_cmd_pane_settings(void)
             get_sdl_mobile_portrait_mode() ? "portrait" : "landscape",
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_PORTRAIT_MODE, 4,
+            a, buf);
+
+        a = (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Portrait Button Wheel Position",
+                "Portrait Wheel Position",
+                "Wheel Position"),
+            get_sdl_touch_round_portrait_centered()
+                ? "smart center" : "side lane",
+            row_width, 12);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER, 5,
             a, buf);
 #endif
 
@@ -3254,6 +3683,10 @@ void do_cmd_pane_settings(void)
                     "Use shorter category names in Equipped, Inventory, and "
                     "Supplies. When focus moves to the item list, hide the "
                     "category pane and use its space for item names.",
+                [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
+                    "Choose debug to use the compact terminal character sheet "
+                    "for h/@. "
+                    "Choose SDL to return to the current character sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
                     "Set to 0 to start at the configured main-map scale. The "
@@ -3273,6 +3706,12 @@ void do_cmd_pane_settings(void)
                     "Choose the device's real portrait or landscape "
                     "orientation. Pane and overlay "
                     "layouts are saved separately for portrait and landscape.",
+                [PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER] =
+                    "In portrait, Smart Center moves the button wheel as "
+                    "close as possible to the horizontal screen center while "
+                    "keeping clear of live buttons, panes, overlays, and the "
+                    "display safe area. Side Lane keeps the established "
+                    "left/right placement.",
 #endif
                 [PANE_SETTING_ENABLE_SIDE_PANES] =
                     "Show panes to the side of the map (inventory, monster "
@@ -3367,6 +3806,10 @@ void do_cmd_pane_settings(void)
                         set_sdl_compact_inventory_menus(
                             def.compact_inventory_menus);
                         break;
+                    case PANE_SETTING_DEBUG_CHARACTER_SHEET:
+                        config.debug_character_sheet =
+                            def.debug_character_sheet;
+                        break;
                     case PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET:
                         set_sdl_mobile_starting_zoom_offset(
                             def.mobile_starting_zoom_offset);
@@ -3382,6 +3825,10 @@ void do_cmd_pane_settings(void)
 #if defined(__ANDROID__) || defined(SIL_IOS)
                     case PANE_SETTING_MOBILE_PORTRAIT_MODE:
                         set_sdl_mobile_portrait_mode(def.mobile_portrait_mode);
+                        break;
+                    case PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER:
+                        set_sdl_touch_round_portrait_centered(
+                            def.touch_round_portrait_centered);
                         break;
 #endif
                     case PANE_SETTING_ENABLE_SIDE_PANES:
@@ -3586,6 +4033,12 @@ void do_cmd_pane_settings(void)
                     !get_sdl_compact_inventory_menus());
                 settings_changed = true;
             }
+            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            {
+                config.debug_character_sheet =
+                    !config.debug_character_sheet;
+                settings_changed = true;
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 int old_value = get_sdl_mobile_starting_zoom_offset();
@@ -3650,6 +4103,12 @@ void do_cmd_pane_settings(void)
             else if (k == PANE_SETTING_MOBILE_PORTRAIT_MODE)
             {
                 set_sdl_mobile_portrait_mode(!get_sdl_mobile_portrait_mode());
+                settings_changed = true;
+            }
+            else if (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            {
+                set_sdl_touch_round_portrait_centered(
+                    !get_sdl_touch_round_portrait_centered());
                 settings_changed = true;
             }
 #endif
@@ -3761,6 +4220,14 @@ void do_cmd_pane_settings(void)
                     settings_changed = true;
                 }
             }
+            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            {
+                if (!config.debug_character_sheet)
+                {
+                    config.debug_character_sheet = true;
+                    settings_changed = true;
+                }
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 val = get_sdl_mobile_starting_zoom_offset();
@@ -3794,6 +4261,14 @@ void do_cmd_pane_settings(void)
                 if (!get_sdl_mobile_portrait_mode())
                 {
                     set_sdl_mobile_portrait_mode(true);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            {
+                if (!get_sdl_touch_round_portrait_centered())
+                {
+                    set_sdl_touch_round_portrait_centered(true);
                     settings_changed = true;
                 }
             }
@@ -3899,6 +4374,14 @@ void do_cmd_pane_settings(void)
                     settings_changed = true;
                 }
             }
+            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
+            {
+                if (config.debug_character_sheet)
+                {
+                    config.debug_character_sheet = false;
+                    settings_changed = true;
+                }
+            }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
                 val = get_sdl_mobile_starting_zoom_offset();
@@ -3932,6 +4415,14 @@ void do_cmd_pane_settings(void)
                 if (get_sdl_mobile_portrait_mode())
                 {
                     set_sdl_mobile_portrait_mode(false);
+                    settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER)
+            {
+                if (get_sdl_touch_round_portrait_centered())
+                {
+                    set_sdl_touch_round_portrait_centered(false);
                     settings_changed = true;
                 }
             }
@@ -6090,6 +6581,7 @@ static const int touch_pane_main_action_choices[] = {
     GAMEPAD_BIND_NONE,
     TOUCH_BIND_TOP_PANEL_OPEN, TOUCH_BIND_TOP_PANEL_CLOSE,
     TOUCH_BIND_MAIN_MENU_KNOWLEDGE, TOUCH_BIND_MAIN_MENU_HINTS_QUESTS,
+    TOUCH_BIND_OPEN_JEWELRY,
     ESCAPE, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_SHIFT, INPUT_BIND_CONFIRM,
     'e', 'i', 'j',
     'u', 's', 'f',
@@ -6101,7 +6593,7 @@ static const int touch_pane_main_action_choices[] = {
     'z', '.', '/',
     'w', 'r', 'k', 'g', 'Z',
     'o', 'c', 'D', 'X',
-    '-', '{', 'a', KTRL('A'), 'E', 't', 'p', 'q',
+    '-', '{', 'E', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b', 'L', 'm',
     KTRL('Q'), '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
 };
@@ -6110,6 +6602,7 @@ static const int touch_pane_second_action_choices[] = {
     TOUCH_PANE_BIND_INHERIT, GAMEPAD_BIND_NONE,
     TOUCH_BIND_TOP_PANEL_OPEN, TOUCH_BIND_TOP_PANEL_CLOSE,
     TOUCH_BIND_MAIN_MENU_KNOWLEDGE, TOUCH_BIND_MAIN_MENU_HINTS_QUESTS,
+    TOUCH_BIND_OPEN_JEWELRY,
     ESCAPE, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_SHIFT, INPUT_BIND_CONFIRM,
     'e', 'i', 'j',
     'u', 's', 'f',
@@ -6121,7 +6614,7 @@ static const int touch_pane_second_action_choices[] = {
     'z', '.', '/',
     'w', 'r', 'k', 'g', 'Z',
     'o', 'c', 'D', 'X',
-    '-', '{', 'a', KTRL('A'), 'E', 't', 'p', 'q',
+    '-', '{', 'E', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b', 'L', 'm',
     KTRL('Q'), '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
 };
@@ -6133,6 +6626,7 @@ static const int touch_context_action_choices[] = {
     GAMEPAD_BIND_NONE,
     'm',
     TOUCH_BIND_MAIN_MENU_KNOWLEDGE, TOUCH_BIND_MAIN_MENU_HINTS_QUESTS,
+    TOUCH_BIND_OPEN_JEWELRY,
     TOUCH_BIND_TOGGLE_TILES,
     INPUT_BIND_CONFIRM,
     'e', 'i', 'j',
@@ -6141,7 +6635,7 @@ static const int touch_context_action_choices[] = {
     'M', 'h', 'y', '\t',
     'z', 'g', 'Z',
     'o', 'c', 'D', 'X',
-    '-', KTRL('A'), 't', 'p', 'q',
+    '-', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b',
     KTRL('Q'), KTRL('Y'), 'J', '0', '?', 'O',
 };
@@ -7257,6 +7751,8 @@ static void touch_control_reset_to_default(void)
     set_sdl_touch_movement_mode(get_sdl_touch_movement_default_mode());
     set_sdl_touch_round_movement_enabled(
         get_sdl_touch_round_movement_default_enabled());
+    set_sdl_touch_round_portrait_centered(
+        get_sdl_touch_round_portrait_centered_default());
     set_sdl_touch_zone_overlay_mode(get_sdl_touch_zone_overlay_default_mode());
     for (int i = 0; i < SDL_TOUCH_ZONE_CENTER_BINDING_COUNT; i++)
         set_sdl_touch_zone_center_binding(i,
@@ -7412,15 +7908,15 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             char desc[512];
 
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                "Switch Button Panel", "Tab", TERM_SLATE);
+                "Switch Button Panel", "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_SELECTED,
-                "Rename Button Label", "L", TERM_SLATE);
+                "Rename Button Label", "L", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_GROUP,
-                "Rename Panel", "P", TERM_SLATE);
+                "Rename Panel", "P", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
+                "Reset Selected", "X", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset Panel Buttons", "M", TERM_SLATE);
+                "Reset Panel Buttons", "M", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
                 "%s. Space chooses an action. Left/Right nudges the selected action. Main panel must keep Confirm on at least one button.",
                 info_buf);
@@ -7803,11 +8299,13 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL,
             "Add Cell", total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
-                ? "Max" : "+1", TERM_SLATE);
+                ? "Max" : "+1",
+            total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
+                ? TERM_SLATE : TERM_UMBER);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_SLATE);
+            "Reset Selected", "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Quick Access Buttons", "M", TERM_SLATE);
+            "Reset All Quick Access Buttons", "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
             "Add Cell opens a new action picker. Choosing Unbound removes that cell. Rows balance the current cells across one or two rows. X resets selected, M resets all.");
         sdl_character_sheet_screen_commit_select(highlight);
@@ -8004,9 +8502,9 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_SLATE);
+            "Reset Selected", "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Thumb Buttons", "M", TERM_SLATE);
+            "Reset All Thumb Buttons", "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
             "Space toggles On/Off or chooses an action. Left/Right nudges the selected row. X resets selected, M resets all. Escape or Enter returns.");
         sdl_character_sheet_screen_commit_select(highlight);
@@ -8667,9 +9165,9 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_SLATE);
+            "Reset Selected", "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Touch Controls", "M", TERM_SLATE);
+            "Reset All Touch Controls", "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
             "Controls touch menus, game-screen layers, movement, overlays, and swipes. Space chooses binding rows; Left/Right nudges values; X resets selected, M resets all.");
         sdl_character_sheet_screen_commit_select(highlight);
@@ -8983,9 +9481,9 @@ static void do_cmd_mouse_settings(bool* settings_changed)
 
         {
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_SLATE);
+                "Reset Selected", "X", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All", "M", TERM_SLATE);
+                "Reset All", "M", TERM_ORANGE);
             static const char* const mouse_setting_desc[MOUSE_SETTING_COUNT] = {
                 [MOUSE_SETTING_ENABLE] = "Turn mouse input on or off.",
                 [MOUSE_SETTING_MOVEMENT] =
@@ -9382,6 +9880,7 @@ static void do_cmd_other_options(void)
 
 int options_menu(int* highlight)
 {
+    tutorial_game_menu("settings", "Input, presentation and gameplay options are separate. Gameplay tutorial mode and Tale lesson history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
     int ch;
     int options = 9;
     int clicked_choice = 0;
@@ -9754,7 +10253,8 @@ static int input_option_rows_collect(struct input_option_row* rows,
             "Choose Auto, Keyboard, or Controller presentation. Auto leaves "
             "the choice to the game's device and input detection. Keyboard "
             "and Controller force an override. Left/Right or Enter changes "
-            "the mode; R resets Auto.");
+            "the mode; R resets Auto. Changing this clears the remembered "
+            "startup choice. At launch, a missing controller switches to Keyboard.");
 #endif
     }
     if (SDL_HasKeyboard()) {
@@ -10174,15 +10674,6 @@ static void describe_keycode(byte keycode, char* buf, size_t buflen)
 
     ascii_to_text(buf, buflen, raw);
 }
-
-struct keybind_entry
-{
-    byte key_code;
-    cptr extra_default_keys;
-    cptr key_name;
-    cptr action;
-    bool requires_keymap;
-};
 
 static bool key_matches_default(const struct keybind_entry* entry, byte key)
 {
@@ -10975,58 +11466,10 @@ void do_cmd_keybinds(void)
     int highlight_primary = 0;
     int highlight_secondary = 0;
     const char* default_file = "sil_sdl.json";
-    static const struct keybind_entry primary_keybinds[] = {
-        {'i', NULL, "Inventory", "i", false},
-        {'e', NULL, "Equipment", "e", false},
-        {'u', NULL, "Use item", "u", false},
-        {'x', NULL, "Examine item", "x", false},
-        {'s', NULL, "Sing / change song", "s", false},
-        {'S', NULL, "Toggle stealth", "S", false},
-        {'h', "H@", "Character sheet (h / H / @)", "h", false},
-        {'\t', NULL, "Change active weapon", "Tab", false},
-        {'y', NULL, "Abilities", "y", false},
-        {'f', NULL, "Ranged attack (active weapon)", "f", false},
-        {'F', NULL, "Ranged attack (active weapon)", "F", false},
-        {'l', NULL, "Look around", "l", false},
-        {'T', NULL, "Tunnel / dig", "T", false},
-        {'b', NULL, "Bash door", "b", false},
-    };
-
-    static const struct keybind_entry secondary_keybinds[] = {
-        {'j', NULL, "Supplies overview", "j", false},
-        {'w', NULL, "Wear / wield equipment", "w", false},
-        {'r', NULL, "Remove equipment", "r", false},
-        {'g', NULL, "Pick up items", "g", false},
-        {'o', NULL, "Open door / chest", "o", false},
-        {'c', NULL, "Close door", "c", false},
-        {'D', NULL, "Disarm trap / chest", "D", false},
-        {'X', NULL, "Exchange places", "X", false},
-        {'-', NULL, "Fletch arrows", "-", false},
-        {'{', NULL, "Inscribe item", "{", false},
-        {'a', NULL, "Activate staff", "a", false},
-        {KTRL('A'), NULL, "Activate Harness staff", "\001", false},
-        {'E', NULL, "Eat food", "E", false},
-        {'t', NULL, "Throw item", "t", false},
-        {'p', NULL, "Blow horn", "p", false},
-        {'q', NULL, "Quaff potion", "q", false},
-        {'M', NULL, "View map", "M", false},
-        {'L', NULL, "Pan", "L", false},
-        {KTRL('Q'), NULL, "Combat rolls", "\021", false},
-        {'0', NULL, "Smithing screen", "0", false},
-        {'<', NULL, "Go upstairs", "<", false},
-        {'>', NULL, "Go downstairs", ">", false},
-        {'m', NULL, "Main menu", "m", false},
-        {'?', NULL, "Help", "?", false},
-        {'@', NULL, "Character sheet (alternate)", "@", false},
-        {'O', NULL, "Options menu", "O", false},
-        {':', NULL, "Take notes", ":", false},
-        {'~', NULL, "Knowledge browser", "~", false},
-        {'[', NULL, "Monster list", "[", false},
-        {']', NULL, "Object list", "]", false},
-    };
-
-    int primary_count = (int)N_ELEMENTS(primary_keybinds);
-    int secondary_count = (int)N_ELEMENTS(secondary_keybinds);
+    const struct keybind_entry* primary_keybinds = command_primary_keybinds;
+    const struct keybind_entry* secondary_keybinds = command_secondary_keybinds;
+    int primary_count = COMMAND_PRIMARY_KEYBIND_COUNT;
+    int secondary_count = COMMAND_SECONDARY_KEYBIND_COUNT;
 
     /* Determine the keyset mode */
     if (!hjkl_movement && !angband_keyset)
@@ -11075,7 +11518,10 @@ void do_cmd_keybinds(void)
 
         highlight = *highlight_ptr;
 
-        settings_semantic_menu_begin("Keybind Configuration", highlight);
+        settings_semantic_menu_begin(showing_primary
+                ? "Keybinds - Core commands"
+                : "Keybinds - All other commands",
+            highlight);
 
         for (i = 0; i < num_keybinds; i++)
         {
@@ -11102,15 +11548,15 @@ void do_cmd_keybinds(void)
             describe_action_bindings(mode, &keybinds[highlight],
                 detail_binding_buf, sizeof(detail_binding_buf));
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                showing_primary ? "Show Supplementary Commands"
-                                : "Show Primary Commands",
-                "Tab", TERM_SLATE);
+                showing_primary ? "Show All Other Commands"
+                                : "Show Core Commands",
+                "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_SAVE,
-                "Save Keybinds", "S", TERM_SLATE);
+                "Save Keybinds", "S", TERM_L_GREEN);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "R", TERM_SLATE);
+                "Reset Selected", "R", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
-                "%s. Enter or Space rebinds the selected command. Tab switches groups. S saves to %s. R resets selected.%s%s",
+                "%s. Enter or Space rebinds the selected command. Tab switches between the complete Core and All Other lists. S saves to %s. R resets selected.%s%s",
                 detail_binding_buf, default_file,
                 dirty ? " " : "",
                 dirty ? "Unsaved changes." : "");
@@ -11326,6 +11772,7 @@ typedef enum controller_entry_type {
     CONTROLLER_ENTRY_TOGGLE = 0,
     CONTROLLER_ENTRY_CYCLE,
     CONTROLLER_ENTRY_ACTION,
+    CONTROLLER_ENTRY_COMMAND,
 } controller_entry_type;
 
 typedef enum controller_toggle_id {
@@ -11333,10 +11780,13 @@ typedef enum controller_toggle_id {
     CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE,
     CONTROLLER_TOGGLE_DPAD,
     CONTROLLER_TOGGLE_LEFT_STICK,
+    CONTROLLER_TOGGLE_RIGHT_STICK,
 } controller_toggle_id;
 
 typedef enum controller_setting_id {
     CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY = 0,
+    CONTROLLER_SETTING_LEFT_DELAY,
+    CONTROLLER_SETTING_RIGHT_DELAY,
 } controller_setting_id;
 
 typedef struct controller_entry {
@@ -11422,7 +11872,17 @@ static int controller_dpad_diagonal_delay_index(int value)
 
 static void controller_adjust_setting(int setting_id, int delta)
 {
-    if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+    if (setting_id == CONTROLLER_SETTING_LEFT_DELAY
+        || setting_id == CONTROLLER_SETTING_RIGHT_DELAY) {
+        int stick = setting_id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1;
+        int count = SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS
+            / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS + 1;
+        int index = get_sdl_gamepad_stick_delay_ms(stick)
+            / SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS;
+        index = (index + delta + count) % count;
+        set_sdl_gamepad_stick_delay_ms(stick,
+            index * SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS);
+    } else if (setting_id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
         int count = controller_dpad_diagonal_delay_count();
         int index = controller_dpad_diagonal_delay_index(
             get_sdl_gamepad_dpad_diagonal_delay_ms());
@@ -12187,7 +12647,7 @@ void controller_prompt_label(int binding, const char* fallback, char* buf, size_
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple")) {
         SDL_strlcpy(buf, fallback, buflen);
     }
@@ -12215,19 +12675,29 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         case CONTROLLER_TOGGLE_LEFT_STICK:
             SDL_strlcpy(buf, get_sdl_gamepad_use_left_stick() ? "On" : "Off", buflen);
             break;
+        case CONTROLLER_TOGGLE_RIGHT_STICK:
+            SDL_strlcpy(buf, get_sdl_gamepad_use_right_stick() ? "On" : "Off", buflen);
+            break;
         default:
             SDL_strlcpy(buf, "(unknown)", buflen);
             break;
         }
         break;
     case CONTROLLER_ENTRY_CYCLE:
-        if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
+        if (entry->id == CONTROLLER_SETTING_LEFT_DELAY
+            || entry->id == CONTROLLER_SETTING_RIGHT_DELAY) {
+            int stick = entry->id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1;
+            strnfmt(buf, buflen, "%d ms", get_sdl_gamepad_stick_delay_ms(stick));
+        } else if (entry->id == CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY) {
             int delay = get_sdl_gamepad_dpad_diagonal_delay_ms();
 
             strnfmt(buf, buflen, "%d ms", delay);
         } else {
             SDL_strlcpy(buf, "(unknown)", buflen);
         }
+        break;
+    case CONTROLLER_ENTRY_COMMAND:
+        SDL_strlcpy(buf, "Swap", buflen);
         break;
     case CONTROLLER_ENTRY_ACTION:
         controller_action_binding_label(entry->id, buf, buflen);
@@ -12253,6 +12723,9 @@ static void controller_set_toggle(int toggle_id, bool value)
     case CONTROLLER_TOGGLE_LEFT_STICK:
         set_sdl_gamepad_use_left_stick(value);
         break;
+    case CONTROLLER_TOGGLE_RIGHT_STICK:
+        set_sdl_gamepad_use_right_stick(value);
+        break;
     default:
         break;
     }
@@ -12269,6 +12742,8 @@ static bool controller_toggle_default_value(int toggle_id)
         return get_sdl_gamepad_default_use_dpad();
     case CONTROLLER_TOGGLE_LEFT_STICK:
         return get_sdl_gamepad_default_use_left_stick();
+    case CONTROLLER_TOGGLE_RIGHT_STICK:
+        return false;
     default:
         return false;
     }
@@ -12496,9 +12971,13 @@ void do_cmd_controller_settings(void)
     static const controller_entry entries[] = {
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "D-pad Movement" },
-        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Diagonal Delay" },
-        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Left Stick Movement" },
+        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "Move with D-pad" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Move Delay" },
+        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_LEFT_STICK, "Move with Left Stick" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_LEFT_DELAY, "Left Stick Move Delay" },
+        { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_RIGHT_STICK, "Move with Right Stick" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_RIGHT_DELAY, "Right Stick Move Delay" },
+        { CONTROLLER_ENTRY_COMMAND, 0, "Swap Left/Right Stick Roles" },
         { CONTROLLER_ENTRY_ACTION, '\r', "Enter" },
         { CONTROLLER_ENTRY_ACTION, INPUT_BIND_CONFIRM, "Confirm (Space)" },
         { CONTROLLER_ENTRY_ACTION, ESCAPE, "Escape" },
@@ -12533,8 +13012,7 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, 'X', "Exchange places" },
         { CONTROLLER_ENTRY_ACTION, '-', "Fletch arrows" },
         { CONTROLLER_ENTRY_ACTION, '{', "Inscribe item" },
-        { CONTROLLER_ENTRY_ACTION, 'a', "Activate staff" },
-        { CONTROLLER_ENTRY_ACTION, KTRL('A'), "Activate Harness staff" },
+        { CONTROLLER_ENTRY_ACTION, 'a', "Activate Harness staff" },
         { CONTROLLER_ENTRY_ACTION, 'E', "Eat food" },
         { CONTROLLER_ENTRY_ACTION, 't', "Throw item" },
         { CONTROLLER_ENTRY_ACTION, 'p', "Blow horn" },
@@ -12586,15 +13064,19 @@ void do_cmd_controller_settings(void)
                     sizeof(semantic_line), line_buf);
                 settings_semantic_add_row(i, semantic_line,
                     (i == highlight) ? TERM_L_BLUE : TERM_WHITE);
-                sdl_character_sheet_screen_set_last_select_row_reset(
-                    SETTINGS_CLICK_RESET_ROW_BASE + i);
+                if (entries[i].type != CONTROLLER_ENTRY_COMMAND)
+                    sdl_character_sheet_screen_set_last_select_row_reset(
+                        SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
         }
 
         {
             char desc[1024];
 
-            if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
+            if (entries[highlight].type == CONTROLLER_ENTRY_COMMAND) {
+                strnfmt(desc, sizeof(desc), "Swap movement roles, movement delays, and directional bindings "
+                    "between the sticks. Stick clicks and D-pad controls stay the same.");
+            } else if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_describe_action_bindings_compact(entries[highlight].id,
                     detail_value_buf, sizeof(detail_value_buf));
                 strnfmt(desc, sizeof(desc),
@@ -12604,6 +13086,12 @@ void do_cmd_controller_settings(void)
                 cptr cycle_desc;
 
                 switch (entries[highlight].id) {
+                case CONTROLLER_SETTING_LEFT_DELAY:
+                case CONTROLLER_SETTING_RIGHT_DELAY:
+                    cycle_desc = "Wait for the second movement axis before a cardinal step. "
+                        "0 ms is immediate. Recognized diagonals and menu navigation are immediate. "
+                        "Use a delay if a virtual joystick represents your physical D-pad.";
+                    break;
                 case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
                     cycle_desc =
                         "Wait this long for a second D-pad direction to form a diagonal. "
@@ -12627,10 +13115,15 @@ void do_cmd_controller_settings(void)
                         "of two separate buttons.";
                     break;
                 case CONTROLLER_TOGGLE_DPAD:
-                    toggle_desc = "Move with the D-pad.";
+                    toggle_desc = "Enable D-pad movement independently of either stick.";
                     break;
                 case CONTROLLER_TOGGLE_LEFT_STICK:
-                    toggle_desc = "Move with the left analog stick.";
+                    toggle_desc = "On: walk with the left stick. Off: navigate interface focus. "
+                        "D-pad and right-stick movement can remain on.";
+                    break;
+                case CONTROLLER_TOGGLE_RIGHT_STICK:
+                    toggle_desc = "On: walk with the right stick. Off: navigate interface focus. "
+                        "D-pad and left-stick movement can remain on.";
                     break;
                 default:
                     toggle_desc = "";
@@ -12639,9 +13132,9 @@ void do_cmd_controller_settings(void)
                 strnfmt(desc, sizeof(desc), "%s", toggle_desc);
             }
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", steamdeck ? "X" : "R", TERM_SLATE);
+                "Reset Selected", steamdeck ? "X" : "R", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All", steamdeck ? "Y" : "M", TERM_SLATE);
+                "Reset All", steamdeck ? "Y" : "M", TERM_ORANGE);
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
         }
@@ -12711,6 +13204,8 @@ void do_cmd_controller_settings(void)
                     (ch == '6') ? 1 : -1);
             }
         } else if (ch == 'r' || (steamdeck && ch == steamdeck_alt_action_key())) {
+            if (entries[highlight].type == CONTROLLER_ENTRY_COMMAND)
+                continue;
             if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_clear_effective_action_bindings(entries[highlight].id);
                 if (controller_restore_action_default_bindings(entries[highlight].id)) {
@@ -12725,6 +13220,10 @@ void do_cmd_controller_settings(void)
                 {
                     set_sdl_gamepad_dpad_diagonal_delay_ms(
                         get_sdl_gamepad_default_dpad_diagonal_delay_ms());
+                } else if (entries[highlight].id == CONTROLLER_SETTING_LEFT_DELAY
+                    || entries[highlight].id == CONTROLLER_SETTING_RIGHT_DELAY) {
+                    set_sdl_gamepad_stick_delay_ms(
+                        entries[highlight].id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1, 0);
                 }
                 msg_format("Reset %s to default.", entries[highlight].label);
                 message_flush();
@@ -12741,7 +13240,9 @@ void do_cmd_controller_settings(void)
         } else if (ch == '\r' || ch == '\n' || ch == ' ') {
             const controller_entry* entry = &entries[highlight];
 
-            if (entry->type == CONTROLLER_ENTRY_TOGGLE) {
+            if (entry->type == CONTROLLER_ENTRY_COMMAND) {
+                sdl_gamepad_swap_stick_roles();
+            } else if (entry->type == CONTROLLER_ENTRY_TOGGLE) {
                 char cur[16];
                 controller_entry_value(entry, cur, sizeof(cur));
                 controller_set_toggle(entry->id, streq(cur, "Off"));
@@ -13249,7 +13750,8 @@ void do_cmd_macros(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Append macros to file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Dump the macros */
@@ -13324,7 +13826,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (get_string_panel("Macro action", tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -13373,7 +13875,8 @@ void do_cmd_macros(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Append keymaps to file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Dump the macros */
@@ -13448,7 +13951,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (get_string_panel("Keymap action", tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -13501,7 +14004,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (get_string_panel("New action", tmp, 80))
             {
                 /* Extract an action */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -13776,7 +14279,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Monster display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -13851,7 +14355,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Object display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -13927,7 +14432,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Feature display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -14003,7 +14509,8 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!get_string_panel("Flavor display file", ftmp,
+                    sizeof(ftmp)))
                 continue;
 
             /* Build the filename */

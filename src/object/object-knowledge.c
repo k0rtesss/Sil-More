@@ -6,6 +6,32 @@
 #include "object/object-internal.h"
 #include "log/log.h"
 
+/* Water conceals its contents even after their locations are memorized.
+ * Each five points of effective Perception reveal another grid of range. */
+bool object_can_see_floor(int y, int x)
+{
+    int range;
+
+    if (!in_bounds(y, x))
+        return false;
+    if (cave_feat[y][x] != FEAT_WATER
+        && cave_feat[y][x] != FEAT_DEEP_WATER)
+        return true;
+
+    range = MAX(0, p_ptr->skill_use[S_PER]) / 5;
+    return (cave_info[y][x] & CAVE_SEEN)
+        && !p_ptr->blind
+        && distance(p_ptr->py, p_ptr->px, y, x) <= range;
+}
+
+/* Keep remembered knowledge, but never draw or list concealed floor items. */
+bool object_is_visible(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx && o_ptr->marked
+        && !o_ptr->held_m_idx
+        && object_can_see_floor(o_ptr->iy, o_ptr->ix);
+}
+
 
 void object_known(object_type* o_ptr)
 {

@@ -176,7 +176,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_flame[] = {
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "Take up blade and burden. Descend." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { 0, 0, NULL }
@@ -203,7 +203,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_feanor[] = {
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "Take up blade and burden. Descend." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { 0, 0, NULL }
@@ -260,7 +260,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_luthien[] = {
     { TERM_WHITE, SDL_WELCOME_LINE_BODY,
         "and seize what Morgoth stole of old." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { 0, 0, NULL }
@@ -286,7 +286,7 @@ const sdl_welcome_intro_line g_sdl_welcome_intro_hurin[] = {
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "Take up blade and burden. Descend." },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
-        "Oaths, quests, blessings of the Valar" },
+        "Dangers, secrets, and glory" },
     { TERM_YELLOW, SDL_WELCOME_LINE_ACTION,
         "await in the First Age reborn." },
     { TERM_L_BLUE, SDL_WELCOME_LINE_QUOTE, "\"Aure entuluva!\"" },
@@ -2820,7 +2820,7 @@ bool sdl_char_sheet_choice_is_valid(int choice)
 bool sdl_char_sheet_prompt_choice_is_valid(int choice)
 {
     return g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_LIVE
-        && choice >= -3 && choice <= -1;
+        && choice >= -4 && choice <= -1;
 }
 
 void sdl_char_sheet_clear_hits(void)
@@ -3897,7 +3897,8 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     if (focused)
         sdl_char_sheet_draw_focus_rect(row_rect, true);
 
-    sdl_char_sheet_copy_trimmed((p_ptr && p_ptr->stat_drain[stat] < 0)
+    sdl_char_sheet_copy_trimmed((p_ptr && (p_ptr->stat_drain[stat] < 0
+            || p_ptr->stat_disease[stat] < 0))
             ? stat_names_reduced[stat] : stat_names[stat],
         label, sizeof(label));
     cnv_stat(p_ptr ? p_ptr->stat_use[stat]
@@ -3907,8 +3908,9 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 5,
         TERM_WHITE, label, focused);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 6, 6,
-        (p_ptr && p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW
-                                               : TERM_L_GREEN,
+        (p_ptr && (p_ptr->stat_drain[stat] < 0
+            || p_ptr->stat_disease[stat] < 0)) ? TERM_YELLOW
+                                                : TERM_L_GREEN,
         value, focused);
 
     if (allocation)
@@ -4159,7 +4161,8 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
         cptr desc;
         const sdl_character_sheet_live_item* item;
 
-        SDL_strlcpy(label, (p_ptr->stat_drain[stat] < 0)
+        SDL_strlcpy(label, (p_ptr->stat_drain[stat] < 0
+                || p_ptr->stat_disease[stat] < 0)
                 ? stat_names_reduced[stat] : stat_names[stat],
             sizeof(label));
         for (size_t len = strlen(label); len > 0 && label[len - 1] == ' ';
@@ -4177,7 +4180,7 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
             switch (stat)
             {
             case A_STR:
-                desc = "Strength: melee damage dice and weight capacity.";
+                desc = "Strength: weapon damage die sides and carried-weight limit.";
                 break;
             case A_DEX:
                 desc = "Dexterity: melee, evasion, archery, and stealth.";
@@ -4194,7 +4197,8 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
 
         strnfmt(text, sizeof(text), "%s\t%s", label, value);
         sdl_char_sheet_add_line(lines, &count, max_count, text,
-            (p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN,
+            (p_ptr->stat_drain[stat] < 0 || p_ptr->stat_disease[stat] < 0)
+                ? TERM_YELLOW : TERM_L_GREEN,
             choice, desc);
     }
 
@@ -5151,12 +5155,19 @@ static void sdl_tale_screen_render_canvas(const SDL_Rect* canvas)
             float line_h = line->heading
                 ? metrics.heading_h : metrics.body_line_h;
             byte attr = line->heading ? TERM_L_BLUE : TERM_WHITE;
+            byte alpha = line->entry == screen->active_entry
+                ? screen->active_alpha : 255;
 
-            if (line->entry != screen->active_entry)
+            if (i > start && line->entry != screen->layout_lines[i - 1].entry)
+                y += metrics.entry_gap;
+            if (line->entry > screen->active_entry)
+            {
+                y += line_h;
                 continue;
+            }
             (void)sdl_char_sheet_draw_text_alpha(
                 line->heading ? metrics.heading_font : metrics.body_font,
-                line->text, attr, screen->active_alpha,
+                line->text, attr, alpha,
                 metrics.column_x, y, metrics.column_w, line_h);
             y += line_h;
         }
@@ -5719,6 +5730,13 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         { "C curses", 'c' },
 #endif
     };
+    static const sdl_char_sheet_prompt_item live_controller_items[] = {
+        { "A increase", 'i' },
+        { "X abilities", 'x' },
+        { "Y story", 's' },
+        { "View help", '?' },
+        { "B back", ESCAPE },
+    };
     static const sdl_char_sheet_prompt_item birth_items[] = {
         { "Esc back", -1 },
         { "Enter confirm", -2 },
@@ -5753,6 +5771,8 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     int item_count = (int)N_ELEMENTS(birth_items);
     sdl_char_sheet_prompt_item birth_controller_items[2];
     sdl_char_sheet_prompt_item select_controller_items[2];
+    sdl_char_sheet_prompt_item beginner_items[3];
+    char beginner_label[48];
     char controller_back_label[16];
     char controller_confirm_label[16];
     char birth_controller_back_text[32];
@@ -5765,6 +5785,12 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     bool preview_prompt = g_sdl_character_sheet_screen.context
         == SDL_CHARACTER_SHEET_BIRTH_PREVIEW;
     bool controller = steamdeck_controls_active();
+    bool beginner_defaults = !character_generated && turn == 0
+        && !death_spectator_active()
+        && (g_sdl_character_sheet_screen.context
+                == SDL_CHARACTER_SHEET_BIRTH_STATS
+            || g_sdl_character_sheet_screen.context
+                == SDL_CHARACTER_SHEET_BIRTH_SKILLS);
 #if SIL_SDL_MOBILE_BUILD
     float spacing = MAX(8.0f, h * 0.45f);
     bool touch_only = sdl_touch_only_device_active();
@@ -5782,7 +5808,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     if (controller)
     {
-        sdl_gamepad_action_binding_short_label(steamdeck_back_key(),
+        sdl_gamepad_ui_prompt_label(steamdeck_back_key(), "B",
             controller_back_label, sizeof(controller_back_label));
         if (streq(controller_back_label, "(unbound)")
             || streq(controller_back_label, "Multiple"))
@@ -5791,7 +5817,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                 sizeof(controller_back_label));
         }
 
-        sdl_gamepad_action_binding_short_label(steamdeck_confirm_key(),
+        sdl_gamepad_ui_prompt_label(steamdeck_confirm_key(), "A",
             controller_confirm_label, sizeof(controller_confirm_label));
         if (streq(controller_confirm_label, "(unbound)")
             || streq(controller_confirm_label, "Multiple"))
@@ -5828,6 +5854,11 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     {
         items = live_items;
         item_count = (int)N_ELEMENTS(live_items);
+        if (controller)
+        {
+            items = live_controller_items;
+            item_count = (int)N_ELEMENTS(live_controller_items);
+        }
 #if SIL_SDL_MOBILE_BUILD
         if (touch_only)
         {
@@ -5894,6 +5925,32 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         item_count = (int)N_ELEMENTS(birth_controller_items);
     }
 
+    if (beginner_defaults)
+    {
+        SDL_strlcpy(beginner_label, "N beginner defaults",
+            sizeof(beginner_label));
+        if (controller)
+        {
+            char controller_beginner_label[16];
+
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
+                controller_beginner_label, sizeof(controller_beginner_label));
+            strnfmt(beginner_label, sizeof(beginner_label),
+                "%s beginner defaults", controller_beginner_label);
+        }
+#if SIL_SDL_MOBILE_BUILD
+        if (touch_only)
+            SDL_strlcpy(beginner_label, "Beginner defaults",
+                sizeof(beginner_label));
+#endif
+        beginner_items[0] = items[0];
+        beginner_items[1].label = beginner_label;
+        beginner_items[1].choice = -4;
+        beginner_items[2] = items[1];
+        items = beginner_items;
+        item_count = (int)N_ELEMENTS(beginner_items);
+    }
+
     if (item_count > (int)N_ELEMENTS(text_widths))
         item_count = (int)N_ELEMENTS(text_widths);
 
@@ -5904,18 +5961,38 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     for (int i = 0; i < item_count; i++)
     {
+        float button_pad_x = (beginner_defaults && items[i].choice == -4)
+            ? MAX(12.0f, h * 0.58f) : 0.0f;
+
         text_widths[i] = sdl_char_sheet_text_width(font, items[i].label);
         item_widths[i] = (float)text_widths[i];
 #if SIL_SDL_MOBILE_BUILD
         if (touch_buttons)
-            item_widths[i] += touch_button_pad_x * 2.0f;
+            button_pad_x = touch_button_pad_x;
 #endif
+        item_widths[i] += button_pad_x * 2.0f;
         total_w += item_widths[i];
         if (i + 1 < item_count)
             total_w += spacing;
     }
     if (total_w > w && item_count > 1)
     {
+        if (beginner_defaults)
+        {
+            float max_gap = (w - (float)item_count)
+                / (float)(item_count - 1);
+            float fitted_width;
+
+            /* Keep all three actions visible on narrow allocation screens. */
+            spacing = MIN(spacing, MAX(0.0f, max_gap));
+            fitted_width = MAX(1.0f,
+                (w - spacing * (float)(item_count - 1)) / (float)item_count);
+            for (int i = 0; i < item_count; i++)
+                item_widths[i] = fitted_width;
+            total_w = fitted_width * (float)item_count
+                + spacing * (float)(item_count - 1);
+        }
+        else
 #if SIL_SDL_MOBILE_BUILD
         if (touch_buttons)
         {
@@ -5965,16 +6042,20 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         int text_w = text_widths[i];
         float item_w = item_widths[i];
         int choice = items[i].choice;
+        bool button_style = beginner_defaults && choice == -4;
         bool disabled = (choice == -2
             && !sdl_char_sheet_selected_choice_confirmable());
         bool focused = (choice >= 0)
             ? sdl_char_sheet_choice_focused(choice)
             : sdl_char_sheet_prompt_focused(choice);
 
+#if SIL_SDL_MOBILE_BUILD
+        button_style |= touch_buttons;
+#endif
         if (disabled)
             focused = false;
 
-        if (!preview_prompt
+        if (!preview_prompt && !beginner_defaults
 #if SIL_SDL_MOBILE_BUILD
             && !touch_buttons
 #endif
@@ -5985,15 +6066,18 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
         {
             SDL_FRect hit = { cursor_x, y, item_w + 4.0f, h };
+            if (beginner_defaults)
+                hit.w = item_w;
 #if SIL_SDL_MOBILE_BUILD
-            if (!preview_prompt && !touch_buttons)
+            if (!preview_prompt && !touch_buttons && !beginner_defaults)
             {
                 float pad_x = MAX(10.0f, h * 0.32f);
 
                 hit.x = MAX(x, cursor_x - pad_x * 0.5f);
                 hit.w = MIN(x + w - hit.x, (float)text_w + 4.0f + pad_x);
             }
-            if (touch_buttons)
+#endif
+            if (button_style)
             {
                 SDL_Color fill = disabled
                     ? (SDL_Color){ 76, 76, 76, 220 }
@@ -6014,7 +6098,6 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                     border.b, border.a);
                 SDL_RenderRect(g_state.renderer, &hit);
             }
-#endif
             if (preview_prompt)
             {
                 SDL_Color fill = focused ? (SDL_Color){ 245, 245, 245, 255 }
@@ -6034,20 +6117,17 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                     border.b, border.a);
                 SDL_RenderRect(g_state.renderer, &hit);
             }
-            if (focused && !preview_prompt
-#if SIL_SDL_MOBILE_BUILD
-                && !touch_buttons
-#endif
-                )
+            if (focused && !preview_prompt && !button_style)
                 sdl_char_sheet_draw_focus_rect(hit, true);
-            if (preview_prompt
-#if SIL_SDL_MOBILE_BUILD
-                || touch_buttons
-#endif
-                )
+            if (preview_prompt || button_style)
             {
                 (void)sdl_char_sheet_draw_button_text(font, label,
                     disabled ? TERM_L_DARK : TERM_DARK, &hit);
+            }
+            else if (beginner_defaults)
+            {
+                (void)sdl_char_sheet_draw_button_text(font, label, disabled
+                    ? TERM_DARK : (focused ? TERM_DARK : TERM_L_WHITE), &hit);
             }
             else
             {
@@ -6373,26 +6453,26 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             char back_label[16];
             char last_label[16];
 
-            sdl_gamepad_action_binding_short_label(steamdeck_prev_page_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_prev_page_key(), "L1",
                 prev_label, sizeof(prev_label));
             if (streq(prev_label, "(unbound)") || streq(prev_label, "Multiple"))
                 SDL_strlcpy(prev_label, "L1", sizeof(prev_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_next_page_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_next_page_key(), "R1",
                 next_label, sizeof(next_label));
             if (streq(next_label, "(unbound)") || streq(next_label, "Multiple"))
                 SDL_strlcpy(next_label, "R1", sizeof(next_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_confirm_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_confirm_key(), "A",
                 confirm_label, sizeof(confirm_label));
             if (streq(confirm_label, "(unbound)")
                 || streq(confirm_label, "Multiple"))
             {
                 SDL_strlcpy(confirm_label, "A", sizeof(confirm_label));
             }
-            sdl_gamepad_action_binding_short_label(steamdeck_back_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_back_key(), "B",
                 back_label, sizeof(back_label));
             if (streq(back_label, "(unbound)") || streq(back_label, "Multiple"))
                 SDL_strlcpy(back_label, "B", sizeof(back_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 last_label, sizeof(last_label));
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
@@ -6515,11 +6595,11 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             char next_label[16];
             char last_label[16];
 
-            sdl_gamepad_action_binding_short_label(steamdeck_next_page_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_next_page_key(), "R1",
                 next_label, sizeof(next_label));
             if (streq(next_label, "(unbound)") || streq(next_label, "Multiple"))
                 SDL_strlcpy(next_label, "R1", sizeof(next_label));
-            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 last_label, sizeof(last_label));
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
@@ -6588,11 +6668,21 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         cptr label = jump_to_last_page
             ? "Jump to last page" : display_close_label;
 
+        /* The race-book shortcut needs a full third of a portrait footer.
+         * A single long line was scaled down to half the neighboring labels. */
+        if (jump_to_last_page && g_sdl_narrative_portrait_rendering)
+        {
+            cw = MIN(content_w * control_width_fraction, bh * 9.0f);
+            ccx = content_x + (content_w - cw) * 0.5f;
+            r.x = ccx;
+            r.w = cw;
+        }
+
         if (jump_to_last_page && steamdeck_controls_active())
         {
             char last_label[16];
 
-            sdl_gamepad_action_binding_short_label(steamdeck_alt_action_key(),
+            sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 last_label, sizeof(last_label));
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
@@ -6609,8 +6699,30 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             if (larger_font)
                 close_font = larger_font;
         }
-        (void)sdl_char_sheet_draw_text(close_font, label, a, ccx, close_y,
-            cw, close_h, true);
+        if (g_sdl_narrative_portrait_rendering
+            && !steamdeck_controls_active()
+            && (jump_to_last_page
+                || (label && streq(label, "Create character"))))
+        {
+            int line_px = MAX(1,
+                (int)((float)TTF_GetFontHeight(prompt_font) * 0.58f));
+            TTF_Font* line_font = sdl_story_font_for_height_slot(line_px,
+                SDL_STORY_FONT_SLOT_DEFAULT);
+            float line_h = close_h * 0.5f;
+            cptr first_line = jump_to_last_page ? "Jump to" : "Create";
+            cptr second_line = jump_to_last_page ? "last page" : "character";
+
+            if (!line_font)
+                line_font = prompt_font;
+            (void)sdl_char_sheet_draw_text_aligned(line_font,
+                first_line, a, ccx, close_y, cw, line_h, true, true);
+            (void)sdl_char_sheet_draw_text_aligned(line_font,
+                second_line, a, ccx, close_y + line_h, cw, line_h,
+                true, true);
+        }
+        else
+            (void)sdl_char_sheet_draw_text(close_font, label, a, ccx,
+                close_y, cw, close_h, true);
         sdl_char_sheet_add_select_button_hit(r, SDL_SELECT_CLICK_CLOSE);
     }
 }
@@ -7905,86 +8017,6 @@ static void sdl_char_sheet_tooltip_mark_phrase(cptr text, byte* attrs,
     }
 }
 
-static bool sdl_char_sheet_tooltip_value_char(char ch)
-{
-    return isdigit((unsigned char)ch) || ch == '+' || ch == '-'
-        || ch == '.' || ch == ',' || ch == '/' || ch == '%'
-        || ch == 'd' || ch == 'D' || ch == '(' || ch == ')'
-        || ch == '[' || ch == ']';
-}
-
-static void sdl_char_sheet_tooltip_mark_value_before(cptr text, byte* attrs,
-    size_t attrs_len, cptr phrase, byte attr)
-{
-    size_t text_len;
-    size_t phrase_len;
-    const char* search;
-
-    if (!text || !attrs || !phrase || !phrase[0] || attrs_len == 0)
-        return;
-    text_len = MIN(strlen(text), attrs_len);
-    phrase_len = strlen(phrase);
-    search = text;
-
-    while (search && *search)
-    {
-        const char* match = SDL_strcasestr(search, phrase);
-        size_t end;
-        size_t start;
-
-        if (!match)
-            break;
-        end = MIN((size_t)(match - text), text_len);
-        while (end > 0 && isspace((unsigned char)text[end - 1]))
-            end--;
-        start = end;
-        while (start > 0
-            && sdl_char_sheet_tooltip_value_char(text[start - 1]))
-        {
-            start--;
-        }
-        for (size_t i = start; i < end; i++)
-            attrs[i] = attr;
-        search = match + phrase_len;
-    }
-}
-
-static void sdl_char_sheet_tooltip_mark_value_after(cptr text, byte* attrs,
-    size_t attrs_len, cptr phrase, byte attr)
-{
-    size_t text_len;
-    size_t phrase_len;
-    const char* search;
-
-    if (!text || !attrs || !phrase || !phrase[0] || attrs_len == 0)
-        return;
-    text_len = MIN(strlen(text), attrs_len);
-    phrase_len = strlen(phrase);
-    search = text;
-
-    while (search && *search)
-    {
-        const char* match = SDL_strcasestr(search, phrase);
-        size_t start;
-        size_t end;
-
-        if (!match)
-            break;
-        start = MIN((size_t)(match - text) + phrase_len, text_len);
-        while (start < text_len && isspace((unsigned char)text[start]))
-            start++;
-        end = start;
-        while (end < text_len
-            && sdl_char_sheet_tooltip_value_char(text[end]))
-        {
-            end++;
-        }
-        for (size_t i = start; i < end; i++)
-            attrs[i] = attr;
-        search = match + phrase_len;
-    }
-}
-
 static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
     byte* attrs, size_t attrs_len)
 {
@@ -7992,83 +8024,63 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
         cptr phrase;
         byte attr;
     } rules[] = {
-        { "Click/tap", TERM_L_BLUE },
-        { "right-click", TERM_L_BLUE },
-        { "long tap", TERM_L_BLUE },
-        { "Tap", TERM_L_BLUE },
-        { "selected row", TERM_L_BLUE },
+        /* UI instructions use the same brown label colour as Help. */
+        { "Click/tap", TERM_UMBER },
+        { "right-click", TERM_UMBER },
+        { "long tap", TERM_UMBER },
+        { "Tap", TERM_UMBER },
+        { "selected row", TERM_UMBER },
+
+        /* Green is reserved for an actual benefit or restoration. */
         { "increase", TERM_L_GREEN },
-        { "decrease", TERM_ORANGE },
-        { "Unspent XP", TERM_L_GREEN },
-        { "unspent", TERM_L_GREEN },
-        { "earned", TERM_L_BLUE },
-        { "increasing cost", TERM_YELLOW },
-        { "skills", TERM_L_BLUE },
-        { "abilities", TERM_VIOLET },
-        { "Strength", TERM_L_BLUE },
-        { "costs 1 speed", TERM_ORANGE },
-        { "above 150%", TERM_L_RED },
-        { "cannot move or pick up more", TERM_L_RED },
-        { "Inventory", TERM_L_BLUE },
-        { "supplies", TERM_L_BLUE },
-        { "lamp oil", TERM_YELLOW },
-        { "maximum", TERM_L_GREEN },
-        { "minimum-depth", TERM_YELLOW },
-        { "minimum", TERM_YELLOW },
-        { "current", TERM_L_BLUE },
-        { "progress", TERM_L_BLUE },
-        { "stairs", TERM_L_BLUE },
-        { "force you deeper", TERM_L_RED },
-        { "50-ft rise", TERM_YELLOW },
-        { "extra depth", TERM_ORANGE },
-        { "carried Deep Call items", TERM_ORANGE },
-        { "regeneration", TERM_L_GREEN },
-        { "timed effects", TERM_YELLOW },
-        { "minimum-depth pressure", TERM_ORANGE },
-        { "illuminates nearby tiles", TERM_YELLOW },
         { "helps you see", TERM_L_GREEN },
-        { "monsters notice you", TERM_L_RED },
-        { "attack score", TERM_L_GREEN },
-        { "enemy Evasion", TERM_L_BLUE },
-        { "Evasion", TERM_L_BLUE },
-        { "Damage", TERM_L_RED },
-        { "base weapon damage", TERM_ORANGE },
-        { "base bow damage", TERM_ORANGE },
-        { "base damage", TERM_ORANGE },
-        { "protection", TERM_L_BLUE },
-        { "Criticals", TERM_ORANGE },
-        { "slays", TERM_VIOLET },
-        { "second main-hand attack", TERM_L_GREEN },
-        { "offhand", TERM_L_BLUE },
-        { "Range", TERM_YELLOW },
-        { "physical damage", TERM_L_RED },
-        { "hit lands", TERM_L_RED },
-        { "hit points", TERM_L_BLUE },
-        { "reaching 0 is fatal", TERM_L_RED },
-        { "Constitution", TERM_L_BLUE },
-        { "maximum Health", TERM_L_GREEN },
-        { "resting", TERM_L_GREEN },
-        { "restore", TERM_L_GREEN },
-        { "song points", TERM_L_GREEN },
-        { "Singing", TERM_L_GREEN },
-        { "spends current Voice", TERM_YELLOW },
-        { "does not regenerate", TERM_ORANGE },
-        { "Grace", TERM_L_BLUE },
-        { "maximum Voice", TERM_L_GREEN },
-        { "primary song", TERM_L_GREEN },
-        { "minor theme", TERM_L_BLUE },
-        { "reduced Song skill", TERM_ORANGE },
-        { "Voice cost", TERM_YELLOW },
-        { "synergy pair", TERM_VIOLET },
+        { "regeneration", TERM_L_GREEN },
+        { "restore missing Health", TERM_L_GREEN },
+        { "resting restores", TERM_L_GREEN },
+        { "costs are reduced", TERM_L_GREEN },
+        { "not reduced", TERM_L_GREEN },
+        { "twice as effective", TERM_L_GREEN },
+        { "1.5x effective", TERM_L_GREEN },
+        { "1.75x effective", TERM_L_GREEN },
+        { "stronger", TERM_L_GREEN },
+        { "Known blessing", TERM_L_GREEN },
+        { "Unknown blessing", TERM_L_GREEN },
+        { "blessings", TERM_L_GREEN },
+        { "blessing", TERM_L_GREEN },
         { "affinity", TERM_L_GREEN },
         { "resistance", TERM_L_GREEN },
+
+        /* Orange marks a cost, pressure, or non-fatal drawback. */
+        { "decrease", TERM_ORANGE },
+        { "increasing cost", TERM_ORANGE },
+        { "costs 1 speed", TERM_ORANGE },
+        { "minimum-depth pressure", TERM_ORANGE },
+        { "extra depth", TERM_ORANGE },
+        { "50-ft rise", TERM_ORANGE },
+        { "spends current Voice", TERM_ORANGE },
+        { "spends Voice", TERM_ORANGE },
+        { "does not regenerate", TERM_ORANGE },
+        { "reduced Song skill", TERM_ORANGE },
+        { "Voice cost", TERM_ORANGE },
+
+        /* Red is limited to harm, danger, and curses. */
+        { "above 150%", TERM_L_RED },
+        { "cannot move or pick up more", TERM_L_RED },
+        { "force you deeper", TERM_L_RED },
+        { "monsters notice you", TERM_L_RED },
+        { "damage removes current Health", TERM_L_RED },
+        { "reaching 0 is fatal", TERM_L_RED },
+        { "fatal", TERM_L_RED },
         { "vulnerable", TERM_L_RED },
         { "vulnerability", TERM_L_RED },
         { "penalty", TERM_L_RED },
         { "dangerous", TERM_L_RED },
         { "endanger", TERM_L_RED },
-        { "cursed", TERM_UMBER },
-        { "curse", TERM_UMBER },
+        { "Known curse", TERM_L_RED },
+        { "Unknown curse", TERM_L_RED },
+        { "cursed", TERM_L_RED },
+        { "curses", TERM_L_RED },
+        { "curse", TERM_L_RED },
     };
     size_t text_len;
     const char* colon;
@@ -8077,65 +8089,28 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
     if (!text || !attrs || attrs_len == 0)
         return;
 
+    (void)subject_attr;
     text_len = MIN(strlen(text), attrs_len);
     SDL_memset(attrs, TERM_WHITE, attrs_len);
-    if (subject_attr == TERM_WHITE || subject_attr == TERM_L_WHITE
-        || subject_attr == TERM_SLATE || subject_attr == TERM_L_DARK)
-    {
-        subject_attr = TERM_L_BLUE;
-    }
 
-    /* Every sheet popup starts with its subject before the first colon.  Keep
-     * that label in the row's own semantic colour (skill family, trait state,
-     * or vital state) rather than tinting the entire explanation. */
+    /* The subject is always a named sheet field, so it always uses the one
+     * documented game-term colour.  Row colours still communicate state on
+     * the sheet itself; carrying them into prose caused rainbow tooltips. */
     colon = strchr(text, ':');
     if (colon && (size_t)(colon - text) < text_len)
     {
         size_t end = (size_t)(colon - text) + 1;
 
         for (size_t i = 0; i < end; i++)
-            attrs[i] = subject_attr;
+            attrs[i] = TERM_L_BLUE;
     }
 
     for (int i = 0; i < (int)N_ELEMENTS(rules); i++)
         sdl_char_sheet_tooltip_mark_phrase(text, attrs, text_len,
             rules[i].phrase, rules[i].attr);
 
-    /* Tie the displayed vital amounts to the concepts that explain them. */
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "unspent", TERM_L_GREEN);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "earned", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "lb carried", subject_attr);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "ft current", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "ft minimum", TERM_YELLOW);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "per turn", TERM_ORANGE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "base", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "from extra depth", TERM_ORANGE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "toward", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "player turns", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "The first value", TERM_YELLOW);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "hit points", TERM_L_BLUE);
-    sdl_char_sheet_tooltip_mark_value_before(text, attrs, text_len,
-        "song points", TERM_L_GREEN);
-    sdl_char_sheet_tooltip_mark_value_after(text, attrs, text_len,
-        "radius", TERM_YELLOW);
-    sdl_char_sheet_tooltip_mark_value_after(text, attrs, text_len,
-        "Progress is", TERM_L_BLUE);
-
-    /* Keep the price label distinct from action words, and reserve yellow for
-     * the actual amount.  This avoids turning most of an allocation tooltip
-     * green while still making the decision-critical number easy to scan. */
+    /* Allocation cost is the one numeric value with decision semantics: its
+     * label is UI brown and the amount uses the orange cost colour. */
     cost = SDL_strcasestr(text, "Cost to raise now:");
     if (cost)
     {
@@ -8144,7 +8119,7 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
         size_t end;
 
         for (size_t i = start; i < value && i < text_len; i++)
-            attrs[i] = TERM_L_BLUE;
+            attrs[i] = TERM_UMBER;
         while (value < text_len && isspace((unsigned char)text[value]))
             value++;
         end = value;
@@ -8154,7 +8129,7 @@ static void sdl_char_sheet_tooltip_attrs(cptr text, byte subject_attr,
             end++;
         }
         for (size_t i = value; i < end; i++)
-            attrs[i] = TERM_YELLOW;
+            attrs[i] = TERM_ORANGE;
     }
 }
 
@@ -8358,6 +8333,8 @@ void sdl_char_sheet_render_hover_tooltip(void)
     else
         font_px = sdl_char_sheet_clampi((int)((float)screen.h * 0.020f), 14,
             30);
+    if (sdl_touch_only_mobile_device_active())
+        font_px = MAX(font_px, sdl_main_menu_pane_font_px());
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_MENU);
     if (!font)
         return;
@@ -8365,7 +8342,9 @@ void sdl_char_sheet_render_hover_tooltip(void)
     pad = sdl_char_sheet_clampf((float)font_px * 0.44f, 9.0f, 18.0f);
     gap = sdl_char_sheet_clampf((float)font_px * 0.38f, 7.0f, 16.0f);
     margin = sdl_char_sheet_clampf((float)screen.h * 0.010f, 7.0f, 18.0f);
-    max_box_w = MIN((float)screen.w * 0.62f, 980.0f);
+    max_box_w = MIN((float)screen.w
+        * (sdl_touch_only_mobile_device_active() ? 0.90f : 0.62f),
+        980.0f);
     max_box_w = MAX(max_box_w, MIN((float)screen.w - margin * 2.0f, 360.0f));
     max_text_w = max_box_w - pad * 2.0f;
     if (max_text_w <= 1.0f)
@@ -11389,7 +11368,7 @@ static bool sdl_char_sheet_book_story_pages_fit(int px, float content_w,
 }
 
 /*
- * Choose one shared body size (no bigger than the title) for every race-book
+ * Choose one shared body size for every race-book
  * story page.  The final selection page is deliberately excluded and fitted
  * independently below, so its longer list+lore layout cannot shrink the
  * chronicle.
@@ -11399,6 +11378,7 @@ int sdl_char_sheet_book_body_px(float canvas_h, float content_w,
 {
     float region_h = (region_bottom > top_y) ? (region_bottom - top_y) : 1.0f;
     int min_px = sdl_char_sheet_clampi((int)(canvas_h * 0.018f), 14, 24);
+    int max_px = title_px;
     int lowest_px;
     int low_index;
     int high_index;
@@ -11410,12 +11390,17 @@ int sdl_char_sheet_book_body_px(float canvas_h, float content_w,
         && g_sdl_character_sheet_screen.select_book_mode
         && g_sdl_character_sheet_screen.select_page_count >= 3;
 
-    if (title_px < min_px)
+    /* Portrait phones split the chronicle over four leaves.  The title-sized
+     * ceiling left most of each leaf empty and made the prose hard to read. */
+    if (mobile_pages && g_sdl_narrative_portrait_rendering)
+        max_px = MIN(88, (title_px * 3) / 2);
+
+    if (max_px < min_px)
         return min_px;
-    lowest_px = title_px - ((title_px - min_px) / 2) * 2;
+    lowest_px = max_px - ((max_px - min_px) / 2) * 2;
     body_px = lowest_px;
     low_index = 0;
-    high_index = (title_px - lowest_px) / 2;
+    high_index = (max_px - lowest_px) / 2;
     while (low_index <= high_index) {
         int index = low_index + (high_index - low_index) / 2;
         int px = lowest_px + index * 2;
@@ -13065,6 +13050,14 @@ static void sdl_character_sheet_screen_render_canvas(
 
     title_px = sdl_char_sheet_clampi((int)((float)canvas.h * 0.046f), 24,
         64);
+    if (g_sdl_narrative_portrait_rendering
+        && g_sdl_character_sheet_screen.context
+            == SDL_CHARACTER_SHEET_BIRTH_SELECT
+        && g_sdl_character_sheet_screen.select_book_mode)
+    {
+        title_px = sdl_char_sheet_clampi((int)((float)canvas.h * 0.060f),
+            28, 78);
+    }
 #if SIL_SDL_MOBILE_BUILD
     if (sdl_touch_only_device_active())
     {
@@ -14178,6 +14171,8 @@ void sdl_character_sheet_screen_begin_live(int focus_choice)
     {
         g_sdl_character_sheet_screen.sheet_scroll = 0;
         g_sdl_character_sheet_screen.sheet_scroll_max = 0;
+        sdl_gamepad_prepare_ui_navigation();
+        sdl_gamepad_clear_pending_dpad();
     }
     g_sdl_character_sheet_screen.context = SDL_CHARACTER_SHEET_LIVE;
     g_sdl_character_sheet_screen.focus_choice = focus_choice;
@@ -15420,8 +15415,53 @@ bool sdl_character_sheet_screen_handle_pointer_button(float x, float y,
     return true;
 }
 
-bool sdl_character_sheet_screen_handle_pointer_event(
-    const SDL_Event* ev)
+static bool sdl_character_sheet_live_handle_gamepad_button(
+    const SDL_GamepadButtonEvent* ev)
+{
+    SDL_GamepadButton button;
+
+    if (!ev || g_sdl_character_sheet_screen.context
+            != SDL_CHARACTER_SHEET_LIVE)
+    {
+        return false;
+    }
+    if (!config.gamepad_enabled)
+        return true;
+
+    button = (SDL_GamepadButton)ev->button;
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP
+        || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN
+        || button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
+        || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+    {
+        return false;
+    }
+
+    if (!ev->down)
+        return true;
+
+    sdl_gamepad_mark_auto_ui();
+    if (sdl_gamepad_button_is_ui_confirm(button))
+        Term_keypress(' ');
+    else if (sdl_gamepad_button_is_ui_back(button)
+        || button == SDL_GAMEPAD_BUTTON_START)
+    {
+        Term_keypress(ESCAPE);
+    }
+    else if (button == SDL_GAMEPAD_BUTTON_WEST)
+        Term_keypress('x');
+    else if (button == SDL_GAMEPAD_BUTTON_NORTH)
+        Term_keypress('s');
+    else if (button == SDL_GAMEPAD_BUTTON_BACK)
+        Term_keypress('?');
+
+    /* Shoulders and optional controls have no semantic action on the unpaged
+     * live sheet.  Consume them instead of leaking equipment/inventory or
+     * other configured gameplay bindings into this overlay. */
+    return true;
+}
+
+bool sdl_character_sheet_screen_handle_event(const SDL_Event* ev)
 {
     float x;
     float y;
@@ -15431,6 +15471,10 @@ bool sdl_character_sheet_screen_handle_pointer_event(
 
     switch (ev->type)
     {
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+        return sdl_character_sheet_live_handle_gamepad_button(&ev->gbutton);
+
     case SDL_EVENT_MOUSE_MOTION:
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
             return true;

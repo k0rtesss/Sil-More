@@ -42,6 +42,7 @@ def readOptionalBuildValue = { String name ->
 
 def androidCompileSdk = (readOptionalBuildValue('SIL_MORE_COMPILE_SDK') ?: '36') as Integer
 def androidTargetSdk = (readOptionalBuildValue('SIL_MORE_TARGET_SDK') ?: '36') as Integer
+def buildApk2 = (readOptionalBuildValue('SIL_MORE_APK2') ?: 'false').toBoolean()
 
 if (androidCompileSdk < androidTargetSdk) {
     throw new GradleException(
@@ -94,6 +95,11 @@ android {
         targetSdk androidTargetSdk
         versionCode gameVersionCode
         versionName gameVersion
+        // Select a distinct launcher label for the APK2 installation while
+        // retaining the existing labels for the primary app and debug builds.
+        manifestPlaceholders = [
+                appNameResource: buildApk2 ? 'app_name_apk2' : 'app_name'
+        ]
 
         ndk {
             abiFilters 'arm64-v8a'
@@ -120,10 +126,13 @@ android {
         debug {
             // Keep local debug installs separate from both the Play app and
             // the release sideload APK so they can coexist on one device.
-            applicationIdSuffix '.debug'
+            applicationIdSuffix buildApk2 ? '.debug.apk2' : '.debug'
         }
         release {
             minifyEnabled false
+            if (buildApk2) {
+                applicationIdSuffix '.apk2'
+            }
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
@@ -168,4 +177,11 @@ tasks.register('syncGameAssets', Sync) {
 
 tasks.named('preBuild') {
     dependsOn(tasks.named('syncGameAssets'))
+}
+
+// The APK2 switch changes the application ID while reusing the normal
+// delivery/build variant. Make it part of every task's input so switching
+// between the primary APK and APK2 cannot reuse stale manifests or outputs.
+tasks.configureEach {
+    inputs.property('silMoreApk2', buildApk2)
 }

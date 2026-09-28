@@ -1,6 +1,52 @@
 /* File: cave-map-ui.c */
 
 #include "cave-internal.h"
+#include "cave/cave-environment.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave-bridge.h"
+
+/* These floor styles are visual materials whose edge pixels depend on
+ * neighboring material visibility. Keep the IDs stable with the renderer's
+ * raw transition atlases. */
+#define FLOOR_MATERIAL_STYLE_DIRT 44
+#define FLOOR_MATERIAL_STYLE_SNOW 62
+#define FLOOR_MATERIAL_STYLE_BASALT 63
+
+static bool floor_border_redrawing_neighbors;
+
+/* A border can disappear without changing either terminal glyph. Track the
+ * inputs that select the terrain artwork, including discovery and lighting,
+ * so arbitrary material changes invalidate the neighboring cached pixels. */
+static bool terrain_source_changed(int y, int x)
+{
+    static u64b previous[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    u64b current;
+    if (!in_bounds(y, x) || graphics_are_ascii()) return false;
+    current = ((u64b)1 << 63) | (u64b)cave_feat[y][x]
+        | ((u64b)cave_color[y][x] << 8)
+        | ((u64b)cave_info[y][x] << 16)
+        | ((u64b)(byte)cave_light[y][x] << 32);
+    if (previous[y][x] == current) return false;
+    previous[y][x] = current;
+    return true;
+}
+
+static bool floor_material_transition_at(int y, int x)
+{
+    int style;
+    byte underlay;
+
+    if (!in_bounds(y, x))
+        return false;
+    underlay = cave_bridge_underlay(cave_feat[y][x]);
+    if (underlay != FEAT_FLOOR && underlay != FEAT_RAGE_FLOOR
+        && underlay != FEAT_SUNLIGHT)
+        return false;
+    style = styles_decode_color_style(cave_color[y][x]);
+    return style == FLOOR_MATERIAL_STYLE_DIRT
+        || style == FLOOR_MATERIAL_STYLE_SNOW
+        || style == FLOOR_MATERIAL_STYLE_BASALT;
+}
 
 static bool hidden_left_panel_mask_span_at(int vy, int* start_col,
     int* width)
@@ -238,11 +284,14 @@ void note_spot(int y, int x)
     if (!(info & (CAVE_SEEN)))
         return;
 
+    cave_environment_observe(y, x);
+
     /* Hack -- memorize objects */
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
     {
         /* Memorize objects */
-        o_ptr->marked = true;
+        if (object_can_see_floor(y, x))
+            o_ptr->marked = true;
     }
 
     /* Hack -- memorize grids */
@@ -277,6 +326,19 @@ void note_spot(int y, int x)
  *
  * The main screen will always be at least 24x80 in size.
  */
+void cave_floor_border_redraw_neighbors(int y, int x)
+{
+    if (floor_border_redrawing_neighbors || graphics_are_ascii()) return;
+    floor_border_redrawing_neighbors = true;
+    /* Connected edges and both inner and outer bank rings depend on source
+     * discovery/removal, even when their terminal glyph remains unchanged. */
+    for (int dy = -2; dy <= 2; dy++)
+        for (int dx = -2; dx <= 2; dx++)
+            if ((dy || dx) && in_bounds(y + dy, x + dx))
+                lite_spot(y + dy, x + dx);
+    floor_border_redrawing_neighbors = false;
+}
+
 void lite_spot(int y, int x)
 {
     byte a;
@@ -287,6 +349,18 @@ void lite_spot(int y, int x)
     int ky, kx;
     int vy, vx;
     int cell_w;
+    bool terrain_changed = terrain_source_changed(y, x);
+
+    /* Discovery and view changes alter adjacent banks and connected surfaces,
+     * including cells outside the main viewport in the retained side map. */
+    byte underlay = cave_bridge_underlay(cave_feat[y][x]);
+    if (FEAT_IS_ICE(underlay) || underlay == FEAT_LAVA
+        || underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
+        || underlay == FEAT_POISON
+        || underlay == FEAT_CHASM
+        || terrain_changed || floor_material_transition_at(y, x)
+        || styles_floor_border(underlay, NULL, NULL))
+        cave_floor_border_redraw_neighbors(y, x);
 
 #ifdef USE_SDL
     /* The retained side minimap includes grids outside the main viewport.
@@ -341,7 +415,23 @@ void lite_spot(int y, int x)
 
     if (!graphics_are_ascii())
     {
-        bool force_visual_redraw = (cave_m_idx[y][x] < 0);
+        /* Fixture frames can change with sight/settings while the glyph stays
+         * identical (notably a permanently lit wall leaving sight). */
+        bool force_visual_redraw = (cave_m_idx[y][x] < 0)
+            || terrain_changed || floor_border_redrawing_neighbors
+            || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
+            || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
+            || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON
+            || cave_feat[y][x] == FEAT_CHASM
+            || cave_feat[y][x] == FEAT_ILLUSORY_WALL
+            || floor_material_transition_at(y, x)
+            || FEAT_IS_BRIDGE(cave_feat[y][x]);
+#ifdef USE_SDL
+        /* Removing a water surface or wall fixture can leave the same base
+         * glyph. Repaint its cached pixels even after the feature changed. */
+        force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x)
+            || sdl_material_edge_at(y, x);
+#endif
 
         if (!force_visual_redraw && mirror_monster_tile_facing
             && (cave_m_idx[y][x] > 0))
@@ -379,8 +469,15 @@ void prt_map(void)
     bool rage_map_filter_active = (!graphics_are_ascii() && p_ptr
         && !p_ptr->is_dead && p_ptr->rage);
     static bool last_rage_map_filter_active = false;
+    static int last_panel_y = -1, last_panel_x = -1, last_cell_w;
+    bool panel_moved = last_panel_y != p_ptr->wy
+        || last_panel_x != p_ptr->wx || last_cell_w != cell_w;
     bool force_rage_map_filter_refresh =
         (rage_map_filter_active != last_rage_map_filter_active);
+
+#ifdef USE_SDL
+    sdl_idle_animation_redraw_cached_cells(force_term_cell_redraw);
+#endif
 
     /* Assume screen */
     ty = p_ptr->wy + SCREEN_HGT;
@@ -428,13 +525,25 @@ void prt_map(void)
                         ' ');
             }
 
-            if (force_rage_map_filter_refresh
-                || (!graphics_are_ascii() && (cave_m_idx[y][x] < 0)))
+            bool material_border = false;
+#ifdef USE_SDL
+            material_border = !graphics_are_ascii() && sdl_material_edge_at(y, x);
+#endif
+            if (force_rage_map_filter_refresh || panel_moved || material_border
+                || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
+                    || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
+                    || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
+                    || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON
+                    || floor_material_transition_at(y, x)
+                    || FEAT_IS_BRIDGE(cave_feat[y][x]))))
                 force_term_cell_redraw(vx, vy, cell_w);
         }
     }
 
     last_rage_map_filter_active = rage_map_filter_active;
+    last_panel_y = p_ptr->wy;
+    last_panel_x = p_ptr->wx;
+    last_cell_w = cell_w;
 }
 
 /*
@@ -479,7 +588,7 @@ void force_map_redraw(void)
  *
  * Note that all "walls" always look like "secret doors" (see "map_info()").
  */
-static const int priority_table[13][2] = {
+static const int priority_table[][2] = {
     /* Dark */
     { FEAT_NONE, 2 },
 
@@ -491,6 +600,8 @@ static const int priority_table[13][2] = {
 
     /* Quartz */
     { FEAT_QUARTZ, 11 },
+    { FEAT_CRACKED_QUARTZ, 11 },
+    { FEAT_DAMAGED_WALL, 11 },
 
     /* Rubble */
     { FEAT_RUBBLE, 13 },
@@ -821,6 +932,13 @@ void do_cmd_view_map(void)
                 if (ch == '-' || ch == '_')
                 {
                     (void)sdl_minimap_adjust_zoom(-1);
+                    Term_fresh();
+                    continue;
+                }
+
+                if (ch == 'h' || ch == 'H')
+                {
+                    sdl_minimap_toggle_skeleton_hints();
                     Term_fresh();
                     continue;
                 }

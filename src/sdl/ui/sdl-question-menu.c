@@ -11,6 +11,7 @@
 
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "log/perf.h"
 
 #include <math.h>
 
@@ -71,6 +72,7 @@ typedef struct sdl_question_menu_touch_state {
 
 static sdl_question_menu_touch_state g_question_menu_touch;
 static bool g_question_menu_touch_scrolled = false;
+static int g_question_menu_pending_navigation = 0;
 
 /* Pixel rect of a map cell on the main view, or false when it is off the
  * current panel.  Shared with the yes/no prompt anchoring. */
@@ -568,6 +570,14 @@ static bool sdl_question_menu_suppress_button_enabled(void)
     return g_question_menu.active && g_question_menu.context_hint;
 }
 
+static bool sdl_question_menu_context_square_valid(void)
+{
+    return p_ptr && p_ptr->playing && !p_ptr->is_dead && !p_ptr->leaving
+        && (!g_question_menu.has_anchor
+            || (g_question_menu.anchor_y == p_ptr->py
+                && g_question_menu.anchor_x == p_ptr->px));
+}
+
 static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
 {
     SDL_Rect anchor;
@@ -624,6 +634,12 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (!out)
         return false;
     *out = (sdl_question_menu_layout_info){ 0 };
+
+    /* A move hint can already be visible while monsters finish their turn.
+     * Forced movement or death must retire its old square immediately. */
+    if (g_question_menu.context_hint
+        && !sdl_question_menu_context_square_valid())
+        sdl_question_menu_clear_context_hint();
 
     if (!g_question_menu.active
         || (g_question_menu.count <= 0
@@ -1459,6 +1475,8 @@ static void sdl_question_menu_render_suppress_button(
 
 void sdl_question_menu_clear(void)
 {
+    if (g_question_menu.context_hint)
+        sil_popup_trace_stage("context-hint-cleared");
     if (g_question_menu.active || g_question_menu.count > 0)
         g_state.need_present = true;
 
@@ -1466,6 +1484,7 @@ void sdl_question_menu_clear(void)
         sdl_object_tooltip_clear();
     sdl_question_menu_cancel_touch();
     g_question_menu_touch_scrolled = false;
+    g_question_menu_pending_navigation = 0;
     memset(&g_question_menu, 0, sizeof(g_question_menu));
     g_question_menu.highlight = -1;
 }
@@ -1487,6 +1506,97 @@ bool sdl_question_menu_context_hint_active(void)
     return g_question_menu.active && g_question_menu.context_hint;
 }
 
+bool sdl_question_menu_is_active(void)
+{
+    return g_question_menu.active;
+}
+
+int sdl_question_menu_collect_controller_focus_targets(
+    sdl_controller_focus_target* targets, int max_targets)
+{
+    sdl_question_menu_layout_info layout;
+    int count = 0;
+
+    if (!targets || max_targets <= 0
+        || !sdl_question_menu_context_hint_active()
+        || !sdl_question_menu_layout(&layout))
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < layout.button_count && count < max_targets; i++)
+    {
+        const SDL_FRect* rect = &layout.buttons[i];
+
+        if (rect->w <= 0.0f || rect->h <= 0.0f)
+            continue;
+        targets[count++] = (sdl_controller_focus_target) {
+            .kind = SDL_CONTROLLER_FOCUS_QUESTION_MENU,
+            .id = g_question_menu.buttons[i].choice,
+            .rect = *rect,
+        };
+    }
+
+    return count;
+}
+
+void sdl_question_menu_set_controller_focus(int choice)
+{
+    int resolved = -1;
+
+    if (sdl_question_menu_context_hint_active())
+    {
+        for (int i = 0; i < g_question_menu.button_count; i++)
+        {
+            if (g_question_menu.buttons[i].choice == choice)
+            {
+                resolved = choice;
+                break;
+            }
+        }
+    }
+
+    sdl_question_menu_set_highlight(resolved);
+}
+
+bool sdl_question_menu_activate_context_choice(int choice)
+{
+    bool found = false;
+
+    if (!sdl_question_menu_context_hint_active()
+        || !inkey_flag || character_icky
+        || !sdl_question_menu_context_square_valid())
+        return false;
+
+    for (int i = 0; i < g_question_menu.button_count; i++)
+    {
+        if (g_question_menu.buttons[i].choice == choice)
+        {
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+
+    sdl_question_menu_clear();
+    /* This is an already selected command, so a keyboard remap must not
+     * reinterpret Description or a pickup action as an unrelated command.
+     * Space is a shortcut for interact-here, not an engine command: its
+     * normal /5 keymap must be expanded explicitly when bypassing keymaps.
+     * Keep the interaction path so stairs still ask for confirmation. */
+    if (choice == ' ')
+    {
+        sdl_enqueue_bypassed_command('/');
+        Term_keypress('5');
+    }
+    else
+    {
+        sdl_enqueue_bypassed_command(choice);
+    }
+    return true;
+}
+
 void sdl_question_menu_begin(cptr title)
 {
     /* The game rebuilds blocking questions after pointer-hover wakeups.  Keep
@@ -1505,6 +1615,7 @@ void sdl_question_menu_begin(cptr title)
         ? g_question_menu.help_scroll_offset : 0;
 
     memset(&g_question_menu, 0, sizeof(g_question_menu));
+    g_question_menu_pending_navigation = 0;
     g_question_menu.active = true;
     g_question_menu.highlight = -1;
     g_question_menu.close_hover = close_hover;
@@ -1660,6 +1771,30 @@ bool sdl_question_menu_captures_pointer(void)
         && !g_question_menu.nonblocking;
 }
 
+/* Physical directional input is normalized to keypad characters by the SDL
+ * event bridge.  Keep that input separate from actual number-key shortcuts so
+ * a menu entry keyed to "2" cannot turn the Down arrow into a selection. */
+bool sdl_question_menu_queue_navigation(int direction)
+{
+    if (!sdl_question_menu_captures_pointer()
+        || (direction != -1 && direction != 1))
+    {
+        return false;
+    }
+
+    g_question_menu_pending_navigation = direction;
+    Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    return true;
+}
+
+int sdl_question_menu_take_navigation(void)
+{
+    int direction = g_question_menu_pending_navigation;
+
+    g_question_menu_pending_navigation = 0;
+    return direction;
+}
+
 void sdl_question_menu_set_nonblocking(bool nonblocking)
 {
     if (!g_question_menu.active)
@@ -1772,8 +1907,18 @@ void sdl_question_menu_render(void)
     if (sdl_question_menu_flush_expired(SDL_GetTicksNS()))
         return;
 
+    if (g_question_menu.context_hint)
+        sil_popup_trace_stage("popup-layout-begin");
+    Uint64 popup_layout_started = sil_popup_trace_phase_begin();
     if (!sdl_question_menu_layout(&layout))
+    {
+        if (g_question_menu.context_hint)
+            sil_popup_trace_stage("popup-layout-unavailable");
         return;
+    }
+    sil_popup_trace_phase_end("popup-layout", popup_layout_started);
+    if (g_question_menu.context_hint)
+        sil_popup_trace_stage("popup-layout-complete");
 
     story_font = sdl_story_font_for_height_slot(layout.font_px,
         SDL_STORY_FONT_SLOT_MENU);
@@ -1908,9 +2053,7 @@ void sdl_question_menu_render(void)
                 && hover_choice == entry->choice;
             SDL_Color letter_color = g_state.palette[
                 selected || hovered ? TERM_L_BLUE : TERM_SLATE];
-            SDL_Color text_color = selected || hovered
-                ? accent
-                : g_state.palette[entry->text_attr];
+            SDL_Color text_color = g_state.palette[entry->text_attr];
             float icon_x = row.x + layout.letter_w + layout.letter_gap;
             float text_x = icon_x + layout.icon_w;
             float text_w = row.w - layout.letter_w - layout.letter_gap
@@ -2057,6 +2200,8 @@ void sdl_question_menu_render(void)
         g_question_menu.close_hover);
 
     SDL_SetRenderClipRect(g_state.renderer, NULL);
+    if (g_question_menu.context_hint)
+        sil_popup_trace_drawn();
 }
 
 static bool sdl_question_menu_close_button_at(float x, float y)
@@ -2251,6 +2396,13 @@ bool sdl_question_menu_handle_pointer(float x, float y, int action)
         return false;
     if (g_question_menu.blocking_input)
         return true;
+    if (g_question_menu.context_hint && (!inkey_flag || character_icky))
+    {
+        /* Show the move hint during turn resolution, but only accept its
+         * actions at the next gameplay command wait (including suppression). */
+        (void)sdl_question_menu_choice_at(x, y, &choice, &in_panel);
+        return in_panel;
+    }
     if (sdl_question_menu_info_button_at(x, y))
     {
         if (action == UI_MENU_CLICK_PRIMARY)
@@ -2298,11 +2450,7 @@ bool sdl_question_menu_handle_pointer(float x, float y, int action)
         if (action != UI_MENU_CLICK_PRIMARY)
             return true;
 
-        sdl_question_menu_clear();
-        if (choice == CMD_CONTEXT_FLOOR_ACTION)
-            sdl_enqueue_bypassed_command(choice);
-        else
-            Term_keypress(choice);
+        (void)sdl_question_menu_activate_context_choice(choice);
         return true;
     }
     if (g_question_menu.nonblocking)

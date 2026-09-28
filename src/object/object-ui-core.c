@@ -61,7 +61,7 @@ void inventory_prompt_label(int binding, const char* fallback, char* buf, size_t
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }
@@ -635,6 +635,9 @@ object_type* inventory_item_to_object_ptr(int item)
 bool inventory_item_uses_inven_channel(int item)
 {
     return player_inventory_handle_is_carried(item)
+        || (item >= QUIVER_INDEX && item < QUIVER_INDEX_END)
+        || (item >= 0 && item < INVEN_TOTAL
+            && inventory_slot_is_quivered_arrow(item))
         || (item >= SUPPLIES_INDEX);
 }
 
@@ -1212,7 +1215,7 @@ int scan_floor(int* items, int size, int y, int x, int mode)
             continue;
 
         /* Marked items only */
-        if ((mode & 0x02) && !o_ptr->marked)
+        if ((mode & 0x02) && !object_is_visible(o_ptr))
             continue;
 
         /* Accept this item */

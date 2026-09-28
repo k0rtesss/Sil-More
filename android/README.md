@@ -86,6 +86,16 @@ For a one-step debug build, install, and optional launch:
 
 `./deploy-android-debug.ps1 -LaunchApp`
 
+For a second test installation that can coexist with the primary APK:
+
+`./deploy-android-apk2.ps1 -LaunchApp`
+
+The APK2 release package is `com.silmore.myapp.sideload.apk2` and appears in the Android launcher as `Sil-More APK 2`. APK2 has separate app-private saves and configuration. To build and install it as separate steps, pass `-Config Release -Apk2` to the existing helpers:
+
+`./build-android-apk.ps1 -Config Release -Apk2`
+
+`./install-android-apk.ps1 -Config Release -Apk2`
+
 `deploy-android.ps1` defaults to `Release` when `-Config` is omitted, and to `Sideload` when `-Delivery` is omitted.
 
 Release APK builds and release deploys use the same upload keystore settings as the Play Store AAB flow below. By default, the scripts load `%USERPROFILE%\.sil-more\play-upload-keystore.env.ps1`, then look for `%USERPROFILE%\.sil-more\play-upload-keystore.jks` with alias `upload`; `SIL_MORE_RELEASE_*` environment variables or script parameters can override that.

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -245,6 +246,7 @@ static bool get_aim_dir_aux(int* dp, int range, bool allow_vertical)
 
 bool get_aim_dir(int* dp, int range)
 {
+    tutorial_game_menu("targeting", "Select a direction or a known target. Confirm commits the intended action; cancel returns without choosing a target.");
     return get_aim_dir_aux(dp, range, false);
 }
 

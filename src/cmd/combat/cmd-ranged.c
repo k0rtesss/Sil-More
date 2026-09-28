@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -8,6 +9,32 @@
 
 #define THROW_PENDING_NONE -9999
 static int throw_pending_slot = THROW_PENDING_NONE;
+
+/* A guided ranged shot needs a legal, already-visible subject. Ordinary
+ * shots keep their existing targeting and oath prompts unchanged. */
+static bool tutorial_ranged_aim_allowed(int range, int ty, int tx, bool exact)
+{
+    u16b path[256];
+    int path_y=ty,path_x=tx;
+    bool found=false;
+    const char *action=tutorial_current_action();
+    if (!tutorial_action_waiting()
+        || (!strstr(action,"fire") && !strstr(action,"throw"))) return true;
+    if (exact && !tutorial_game_target_allowed(ty,tx)) goto rejected;
+    int count=ABS(project_path(path,range,p_ptr->py,p_ptr->px,&path_y,&path_x,PROJECT_THRU));
+    for (int i=0;i<count;++i) {
+        int y=GRID_Y(path[i]),x=GRID_X(path[i]);
+        int monster=cave_m_idx[y][x];
+        /* Never infer a tutorial hint from an unrevealed intervening actor. */
+        if (monster<=0 || !mon_list[monster].ml) continue;
+        if (!tutorial_game_target_allowed(y,x)) goto rejected;
+        found=true;
+    }
+    if (found) return true;
+rejected:
+    msg_print("Choose a visible hostile target for this lesson, or skip it.");
+    return false;
+}
 
 static int breakage_chance(const object_type* o_ptr, bool hit_wall)
 {
@@ -228,8 +255,8 @@ void attacks_of_opportunity(int neutralized_y, int neutralized_x)
             if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
                 && (m_ptr->stance != STANCE_FLEEING)
                 && !(r_ptr->flags2 & (RF2_MINDLESS))
-                && !(r_ptr->flags1 & (RF1_PEACEFUL)) && !m_ptr->skip_next_turn
-                && !m_ptr->skip_this_turn)
+                && !(r_ptr->flags1 & (RF1_PEACEFUL))
+                && monster_abilities_can_react(m_ptr))
             {
                 int evn = p_ptr->skill_use[S_EVN];
                 opportunity_attacks++;
@@ -241,7 +268,7 @@ void attacks_of_opportunity(int neutralized_y, int neutralized_x)
                 }
 
                 p_ptr->skill_use[S_EVN] = evn / 2;
-                make_attack_normal(m_ptr);
+                make_attack_reaction(m_ptr);
                 p_ptr->skill_use[S_EVN] = evn;
             }
         }
@@ -381,6 +408,14 @@ static void restore_target_after_implicit_fire(
 
 void do_cmd_fire(int quiver)
 {
+    if (player_submerged_in_deep_water())
+    {
+        msg_print("You cannot attack while submerged in deep water.");
+        p_ptr->energy_use = 0;
+        return;
+    }
+    if (!tutorial_game_action_allowed(player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING
+        ? "throw" : "fire", NULL)) return;
     int dir, item;
     int i, y, x, ty, tx;
     int ty2,
@@ -531,6 +566,8 @@ void do_cmd_fire(int quiver)
         }
     }
 
+    if (!tutorial_ranged_aim_allowed(tdis,ty,tx,dir==5)) return;
+
     /* Warn before ranged attacks that might hit fleeing enemies (Oath of Valor) */
     if (abort_for_valorous_ranged_path(tdis, ty, tx))
         return;
@@ -584,6 +621,7 @@ void do_cmd_fire(int quiver)
 
     // store the action type
     p_ptr->previous_action[0] = ACTION_ARCHERY;
+    tutorial_game_action_done("fire", &inventory[INVEN_BOW]);
 
     if (p_ptr->active_ability[S_ARC][ARC_DEADLY_HAIL])
     {
@@ -650,6 +688,7 @@ void do_cmd_fire(int quiver)
                 if (!ghost_arrow)
                 {
                     hit_wall = true;
+                    sound_at(MSG_HITWALL, ny, nx);
 
                     // record resting place of arrow
                     final_y = y;
@@ -885,6 +924,7 @@ void do_cmd_fire(int quiver)
                         = slay_bonus(i_ptr, m_ptr, &noticed_arrow_flag);
                     slay_bonus_dice
                         += slay_bonus(j_ptr, m_ptr, &noticed_bow_flag);
+                    cave_apply_elemental_brands(y, x, j_ptr, i_ptr);
 
                     /* Calculate the damage done */
                     total_dd = j_ptr->dd + crit_bonus_dice + slay_bonus_dice;
@@ -911,7 +951,8 @@ void do_cmd_fire(int quiver)
                     dam = damroll(total_dd, total_ds);
                     
                     /* Apply armor dice/sides curses/blessings */
-                    int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+                    int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty
+                        + monster_blocking_bonus_dice(m_ptr);
                     if (armor_dice_base < 0)
                         armor_dice_base = 0;
                     int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -935,6 +976,8 @@ void do_cmd_fire(int quiver)
                     // no negative damage
                     if (net_dam < 0)
                         net_dam = 0;
+
+                    sound_at((net_dam > 0) ? MSG_HIT : MSG_ARMOR, y, x);
 
                     break_mercy_oath(m_ptr, net_dam);
                     break_valorous_oath(m_ptr, net_dam, ATT_MAIN, -1);  // Direct archery shot
@@ -1070,6 +1113,9 @@ void do_cmd_fire(int quiver)
                     // hit the monster, check for death
                     p_ptr->killed_enemy_with_arrow = mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1);
+                    if (!p_ptr->killed_enemy_with_arrow)
+                        monster_poison_brand(cave_m_idx[y][x], i_ptr,
+                            j_ptr, net_dam);
 
                     if (p_ptr->killed_enemy_with_arrow
                         && (f1 & TR1_VAMPIRIC) && !monster_nonliving(r_ptr))
@@ -1275,6 +1321,12 @@ void do_cmd_fire(int quiver)
 
 bool do_cmd_fire_at_adjacent(int y, int x)
 {
+    if (player_submerged_in_deep_water())
+    {
+        msg_print("You cannot attack while submerged in deep water.");
+        p_ptr->energy_use = 0;
+        return false;
+    }
     int dir;
     int quiver;
     bool old_target_set;
@@ -1720,6 +1772,14 @@ static bool select_throw_slot(int* item)
  */
 void do_cmd_throw(bool automatic)
 {
+    if (player_submerged_in_deep_water())
+    {
+        throw_pending_slot = THROW_PENDING_NONE;
+        msg_print("You cannot attack while submerged in deep water.");
+        p_ptr->energy_use = 0;
+        return;
+    }
+    if (!tutorial_game_action_allowed("throw", NULL)) return;
     int dir, item;
     int i, j, y, x, ty, tx;
     int ty2,
@@ -2067,6 +2127,8 @@ void do_cmd_throw(bool automatic)
         return;
     }
 
+    if (!tutorial_ranged_aim_allowed(tdis,ty,tx,dir==5)) return;
+
     /* Get local object */
     i_ptr = &object_type_body;
 
@@ -2161,6 +2223,8 @@ void do_cmd_throw(bool automatic)
     /* Take a turn */
     p_ptr->energy_use = 100;
 
+    tutorial_game_action_done("throw", i_ptr);
+
     // store the action type
     p_ptr->previous_action[0] = ACTION_MISC;
 
@@ -2180,6 +2244,7 @@ void do_cmd_throw(bool automatic)
         if (!cave_floor_bold(ny, nx))
         {
             hit_wall = true;
+            sound_at(MSG_HITWALL, ny, nx);
             log_trace("do_cmd_throw: hit wall at i=%d, breaking loop before updating y,x", i);
 
             // Show collision
@@ -2467,6 +2532,7 @@ void do_cmd_throw(bool automatic)
 
                     slay_bonus_dice
                         = slay_bonus(i_ptr, m_ptr, &noticed_flag);
+                    cave_apply_elemental_brands(y, x, i_ptr, NULL);
 
                     /* Calculate the damage from the thrown object */
                     total_bonus_dice = crit_bonus_dice + slay_bonus_dice;
@@ -2501,6 +2567,7 @@ void do_cmd_throw(bool automatic)
 
                     melee_slay_bonus_dice
                         = slay_bonus(melee_o_ptr, m_ptr, &melee_noticed_flag);
+                    cave_apply_elemental_brands(y, x, melee_o_ptr, NULL);
                     melee_total_dice = p_ptr->mdd + melee_crit_bonus_dice
                         + melee_slay_bonus_dice;
                     melee_ds = p_ptr->mds;
@@ -2509,7 +2576,8 @@ void do_cmd_throw(bool automatic)
                 }
                 
                 /* Apply armor dice/sides curses/blessings */
-                int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty;
+                int armor_dice_base = r_ptr->pd - m_ptr->song_armor_dice_penalty
+                    + monster_blocking_bonus_dice(m_ptr);
                 if (armor_dice_base < 0)
                     armor_dice_base = 0;
                 int armor_dice = armor_dice_base + curse_flag_delta_cur(CUR_MON_ARM_DICE);
@@ -2537,6 +2605,8 @@ void do_cmd_throw(bool automatic)
                 // no negative damage
                 if (net_dam < 0)
                     net_dam = 0;
+
+                sound_at((net_dam > 0) ? MSG_HIT : MSG_ARMOR, y, x);
 
                 break_mercy_oath(m_ptr, net_dam);
                 break_valorous_oath(m_ptr, net_dam, ATT_MAIN, -1);  // Direct thrown weapon
@@ -2664,6 +2734,24 @@ void do_cmd_throw(bool automatic)
                 {
                     fatal_blow = (mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1));
+                    if (!fatal_blow)
+                    {
+                        /* Power Throw shares one armor roll. Allocate the
+                         * resulting damage to its branded weapon portions. */
+                        if (power_throw_hit && melee_hit && melee_dam > 0)
+                            monster_receive_melee_damage(m_ptr,
+                                MIN(melee_dam, net_dam));
+                        int poison_damage = 0;
+                        if (thrown_hit && (f1 & TR1_BRAND_POIS))
+                            poison_damage += thrown_dam;
+                        if (melee_hit && (melee_f1 & TR1_BRAND_POIS))
+                            poison_damage += melee_dam;
+                        if (dam > 0 && poison_damage > 0)
+                            monster_poison_brand(cave_m_idx[y][x],
+                                thrown_hit ? i_ptr : NULL,
+                                melee_hit ? melee_o_ptr : NULL,
+                                (net_dam * poison_damage + dam - 1) / dam);
+                    }
                 }
 
                 display_hit(y, x, net_dam, GF_HURT, fatal_blow);

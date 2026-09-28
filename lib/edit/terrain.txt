@@ -40,7 +40,7 @@
 
 # Version stamp (required)
 
-V:0.9.7
+V:0.9.8
 
 
 # 0x00 --> <darkness>
@@ -60,7 +60,7 @@ T:0:1
 
 N:2:chasm
 G:%:D
-T:11:5
+T:34:0
 
 # 0x03 --> glyph of warding
 
@@ -552,3 +552,127 @@ T:0:29
 N:83:down shaft
 G:>:D
 T:0:28
+
+# 0x54 --> shallow water (SDL draws the animated surface over this underlay)
+
+N:84:shallow water
+G:~:B
+T:0:1
+
+# 0x55 --> molten lava (SDL draws the animated surface over this underlay)
+
+N:85:molten lava
+G:~:R
+T:0:1
+
+# 0x56 --> solid ice (SDL draws the Verdant ice sheet over this underlay)
+
+N:86:solid ice
+G:=:W
+T:0:1
+
+# 0x57 --> poisonous acid (SDL recolors the lava animation green)
+
+N:87:poisonous acid
+G:~:G
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:88:wooden bridge over shallow water
+G:=:u
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:89:wooden bridge over shallow water
+G:|:u
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:90:stone bridge over a chasm
+G:=:U
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:91:stone bridge over a chasm
+G:|:U
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:92:stone bridge over lava
+G:=:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:93:stone bridge over lava
+G:|:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:94:stone bridge over poisonous acid
+G:=:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:95:stone bridge over poisonous acid
+G:|:s
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:96:stone bridge over ice
+G:=:W
+T:0:1
+
+
+# Dry deck; material and direction are encoded in this feature ID.
+N:97:stone bridge over ice
+G:|:W
+T:0:1
+
+# Append IDs to preserve the terrain feature byte in existing saves.
+N:98:wooden bridge over deep water
+G:=:u
+T:0:1
+
+N:99:wooden bridge over deep water
+G:|:u
+T:0:1
+
+# Deep blue water slows movement and prevents submerged attacks; SDL tints the surface.
+N:100:deep water
+G:~:b
+T:0:1
+
+
+# A triggered reservoir floods outward over the next two player actions.
+N:101:flooding trap
+G:^:b
+T:37:0
+
+# Verdant 03 animated ice; may collapse under a grounded creature.
+N:102:melting ice
+G:=:B
+T:0:1
+
+# Walkable floor disguised as a wall; light weakens the illusion.
+N:103:illusory wall
+G:#:s
+T:15:14
+M:56
+
+# Appended IDs preserve existing saved terrain identities.
+N:104:damaged wall
+G:#:s
+T:0:6
+
+N:105:cracked quartz vein
+G:%:w
+T:0:6

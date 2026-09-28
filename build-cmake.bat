@@ -104,6 +104,9 @@ REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3\lib\pref rmdir /S /Q sil-more-windows-sdl3\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3\lib\pref
 
+REM Always refresh the contextual tutorial catalogue and help resources.
+xcopy /E /I /Y /K lib\help sil-more-windows-sdl3\lib\help
+
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
 if exist sil-more-windows-sdl3\lib\xtra\sound rmdir /S /Q sil-more-windows-sdl3\lib\xtra\sound
 xcopy /E /I /Y /K lib\xtra\sound sil-more-windows-sdl3\lib\xtra\sound
@@ -118,6 +121,11 @@ call :StripWavFiles sil-more-windows-sdl3\lib\xtra
 REM Copy tileset graphic
 if not exist sil-more-windows-sdl3\lib\xtra\graf mkdir sil-more-windows-sdl3\lib\xtra\graf
 copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\animated.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\transition_*.png sil-more-windows-sdl3\lib\xtra\graf\
+copy /Y lib\xtra\graf\LICENSE-verdant-*.txt sil-more-windows-sdl3\lib\xtra\graf\
 
 echo.
 echo Standard version complete: sil-more-windows-sdl3\sil-more.exe
@@ -204,6 +212,9 @@ xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3-portable\lib\edit
 REM Always update lib/pref folder to ensure latest default JSON configs
 if exist sil-more-windows-sdl3-portable\lib\pref rmdir /S /Q sil-more-windows-sdl3-portable\lib\pref
 xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3-portable\lib\pref
+
+REM Always refresh the contextual tutorial catalogue and help resources.
+xcopy /E /I /Y /K lib\help sil-more-windows-sdl3-portable\lib\help
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
 if exist sil-more-windows-sdl3-portable\lib\xtra\sound rmdir /S /Q sil-more-windows-sdl3-portable\lib\xtra\sound
 xcopy /E /I /Y /K lib\xtra\sound sil-more-windows-sdl3-portable\lib\xtra\sound
@@ -218,6 +229,11 @@ call :StripWavFiles sil-more-windows-sdl3-portable\lib\xtra
 REM Copy tileset graphic
 if not exist sil-more-windows-sdl3-portable\lib\xtra\graf mkdir sil-more-windows-sdl3-portable\lib\xtra\graf
 copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\animated.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\transition_*.png sil-more-windows-sdl3-portable\lib\xtra\graf\
+copy /Y lib\xtra\graf\LICENSE-verdant-*.txt sil-more-windows-sdl3-portable\lib\xtra\graf\
 
 echo.
 echo Local version complete: sil-more-windows-sdl3-portable\sil-more.exe

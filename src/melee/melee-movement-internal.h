@@ -6,8 +6,9 @@
 typedef struct monster_type monster_type;
 
 bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx);
+bool get_move_tactical(monster_type* m_ptr, int* ty, int* tx);
 void get_move_advance(monster_type* m_ptr, int* ty, int* tx);
-int calc_vulnerability(int fy, int fx);
+int calc_vulnerability(monster_type* m_ptr);
 bool get_route_to_target(monster_type* m_ptr, int* ty, int* tx);
 bool push_aside(monster_type* m_ptr, monster_type* n_ptr);
 

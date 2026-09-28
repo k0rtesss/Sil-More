@@ -52,17 +52,17 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.7"
+#define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.7).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
-#define VERSION_PATCH 7
-#define VERSION_EXTRA 13  /* Remember the selected mixed-Quiver arrow stack. */
+#define VERSION_PATCH 8
+#define VERSION_EXTRA 22 /* Separate damaged walls and mineral veins. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
-#define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
+#define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
@@ -142,7 +142,17 @@
 /*
  * Number of grids in each screen (horizontally)
  */
+#ifdef USE_SDL
+/* SDL has no terminal-owned right-edge status column.  In big-tile mode an
+ * odd final terminal column can show the visible half of one more map tile;
+ * SDL clips the other half at the canvas edge.  Rounding down here leaves that
+ * whole final column black. */
+#define SCREEN_WID \
+    ((Term->wid - COL_MAP + (use_bigtile ? 1 : 0)) \
+        / (use_bigtile ? 2 : 1))
+#else
 #define SCREEN_WID ((Term->wid - COL_MAP - 1) / (use_bigtile ? 2 : 1))
+#endif
 
 /*
  * Maximum level size in blocks (each block is PANEL_HGT x PANEL_WID_FIXED)
@@ -228,6 +238,8 @@
  */
 #define MAX_DEPTH 128
 #define MORGOTH_DEPTH 20
+#define UTUMNO_DEPTH 22
+#define UTUMNO_FORGE_DEPTH 23
 
 /*
  * Minimum-depth timer item bonus units.  Two units equal one dungeon depth, so
@@ -445,6 +457,7 @@
  * Character turns it takes for smell to totally dissipate
  */
 #define SMELL_STRENGTH 80
+#define MON_AI_FEATURE_COUNT 33
 
 /*
  * Number of combat rolls stored in memory per round
@@ -514,6 +527,10 @@
  * instead of reopening the inventory browser.
  */
 #define CMD_CONTEXT_FLOOR_ACTION KTRL('U')
+
+/* Internal command queued by the desktop context shortcut popup for putting
+ * a floor arrow directly into the Quiver. */
+#define CMD_CONTEXT_FLOOR_QUIVER KTRL('O')
 
 /*
  * Internal command queued by the minus button on the desktop context popup.
@@ -1136,7 +1153,7 @@
       // -
       // )
 #define GF_POIS                                                                \
-    8 // adds (XdY) to the poison counter, damages monsters directly    ( p m -
+    8 // adds (XdY) to player or monster poison counters               ( p m -
       // -
       // )
 #define GF_DARK                                                                \
@@ -1281,6 +1298,43 @@
 #define FEAT_LESS_SHAFT 0x52
 #define FEAT_MORE_SHAFT 0x53
 
+/* Shallow water is passable terrain; keep all existing feature IDs stable. */
+#define FEAT_WATER 0x54
+#define FEAT_LAVA 0x55
+#define FEAT_ICE 0x56
+#define FEAT_POISON 0x57
+#define FEAT_BRIDGE_HEAD 0x58
+#define FEAT_BRIDGE_WATER_H 0x58
+#define FEAT_BRIDGE_WATER_V 0x59
+#define FEAT_BRIDGE_CHASM_H 0x5A
+#define FEAT_BRIDGE_CHASM_V 0x5B
+#define FEAT_BRIDGE_LAVA_H 0x5C
+#define FEAT_BRIDGE_LAVA_V 0x5D
+#define FEAT_BRIDGE_POISON_H 0x5E
+#define FEAT_BRIDGE_POISON_V 0x5F
+#define FEAT_BRIDGE_ICE_H 0x60
+#define FEAT_BRIDGE_ICE_V 0x61
+#define FEAT_BRIDGE_DEEP_WATER_H 0x62
+#define FEAT_BRIDGE_DEEP_WATER_V 0x63
+#define FEAT_BRIDGE_TAIL 0x63
+#define FEAT_DEEP_WATER 0x64
+#define FEAT_MELTING_ICE 0x66
+/* All built-in terrain records must be present in the installed data. */
+#define FEAT_ILLUSORY_WALL 0x67
+#define FEAT_DAMAGED_WALL 0x68
+#define FEAT_CRACKED_QUARTZ 0x69
+#define FEAT_COUNT (FEAT_CRACKED_QUARTZ + 1)
+#define FEAT_IS_ICE(F) ((F) == FEAT_ICE || (F) == FEAT_MELTING_ICE)
+#define MELTING_ICE_BREAK_ONE_IN 5
+#define FEAT_IS_BRIDGE(F) ((F) >= FEAT_BRIDGE_HEAD && (F) <= FEAT_BRIDGE_TAIL)
+#define POISON_TERRAIN_DOSE 8
+#define ICE_ATTACK_PENALTY 2
+#define ICE_EVASION_PENALTY 2
+#define ICE_KNOCK_BACK_DISTANCE 2
+#define LAVA_RAW_DAMAGE 60
+#define LAVA_FLYING_DAMAGE 40
+#define WATER_STEALTH_PENALTY 3
+
 /* Stair Head/Tail */
 #define FEAT_STAIR_HEAD 0x50
 #define FEAT_STAIR_TAIL 0x53
@@ -1303,6 +1357,10 @@
 #define FEAT_TRAP_DEADFALL 0x1B
 #define FEAT_TRAP_ACID 0x1C
 #define FEAT_TRAP_IMPRISONMENT 0x1D
+/* Appended feature ID: the original contiguous trap IDs remain stable. */
+#define FEAT_TRAP_FLOOD 0x65
+#define FEAT_IS_TRAP(F) \
+    (((F) >= FEAT_TRAP_HEAD && (F) <= FEAT_TRAP_TAIL) || (F) == FEAT_TRAP_FLOOD)
 
 /* Doors (well, obvious closed doors) */
 #define FEAT_DOOR_HEAD 0x20
@@ -1324,6 +1382,15 @@
 #define FEAT_WALL_SOLID 0x3B
 #define FEAT_WALL_PERM 0x3F
 
+/* New terrain IDs are appended; never infer rock properties from ordering. */
+#define FEAT_IS_QUARTZ(F) ((F) == FEAT_QUARTZ || (F) == FEAT_CRACKED_QUARTZ)
+#define FEAT_IS_GRANITE(F) ((F) >= FEAT_WALL_EXTRA && (F) <= FEAT_WALL_SOLID)
+#define FEAT_IS_ROCK(F) (FEAT_IS_GRANITE(F) || FEAT_IS_QUARTZ(F) || (F) == FEAT_DAMAGED_WALL)
+#define FEAT_IS_WALL(F) (((F) >= FEAT_WALL_HEAD && (F) <= FEAT_WALL_TAIL) \
+    || (F) == FEAT_DAMAGED_WALL || (F) == FEAT_CRACKED_QUARTZ)
+/* Runtime palette variants of the existing vein overlay, reserved atlas row. */
+#define GRAPHICS_QUARTZ_OVERLAY_ROW 60
+
 // Forges
 #define FEAT_FORGE 0x0F
 
@@ -1339,6 +1406,7 @@
 /* Tunneling thresholds shared by terrain interaction and forge sabotage. */
 #define TUNNEL_DIFFICULTY_RUBBLE 1
 #define TUNNEL_DIFFICULTY_QUARTZ 2
+#define TUNNEL_DIFFICULTY_DAMAGED 2
 #define TUNNEL_DIFFICULTY_GRANITE 3
 
 /* Reward for denying a normal or enchanted forge to Morgoth's army. */
@@ -1417,7 +1485,7 @@
  * only armour and weapons and a few other items use any of these flags.
  */
 
-#define TV_NOTE 2 /* ~ Tutorial notes                      */
+#define TV_NOTE 2 /* ~ Readable notes and scrolls          */
 #define TV_SKELETON 3 /* ~ Skeletons                           */
 #define TV_METAL 4 /* ~ Piece of special metal (mithril, star iron) */
 #define TV_CHEST 7 /* ~ Chests                              */
@@ -1452,6 +1520,13 @@
 #define SV_SKELETON_ELF 2 /*  */
 /* Special sval used by skeleton_note.txt templates (not a real object sval) */
 #define SV_SKELETON_NOTE_ANY 255 /* Wildcard */
+
+/* Readable scrolls in An Unfinished Tale; leave old tutorial svals free. */
+#define SV_NOTE_TALE_BEGINNING 100
+#define SV_NOTE_TALE_CORRECTION 101
+#define SV_NOTE_TALE_REPLY 102
+#define SV_NOTE_TALE_WORDS 103
+#define SV_NOTE_TALE_ENDING 104
 
 /* The "sval" codes for TV_METAL */
 #define SV_METAL_MITHRIL 0 /*  */
@@ -1679,6 +1754,16 @@
 
 #define SV_FOOD_BREAD 35
 #define SV_FOOD_MEAT 36
+
+/* Disease exposure odds and progression, measured in completed player turns. */
+#define DISEASE_MEAT_ONE_IN 5
+#define DISEASE_SKELETON_ONE_IN 20
+#define DISEASE_WATER_ONE_IN 200
+#define DISEASE_INTERVAL 100
+#define DISEASE_NAME_COUNT 8
+#define DISEASE_HERB_COUNT 10 /* Contiguous herb svals, Rage through Sickness. */
+#define DISEASE_KNOWN_NAME 0x01
+#define DISEASE_KNOWN_CURE 0x02
 #define SV_FOOD_LEMBAS 37
 
 /*
@@ -2382,10 +2467,10 @@
 #define VLT_LIGHT 0x00000010L /* Vault is always generated with light */
 #define VLT_SURFACE 0x00000020L
 #define VLT_QUEST   0x00000040L /* Quest vault - only once per game, max one per level */
-#define VLT_VLTXXXX8 0x00000080L
-#define VLT_VLTXXXX9 0x00000100L
-#define VLT_VLTXXX10 0x00000200L
-#define VLT_VLTXXX11 0x00000400L
+#define VLT_TORCHES 0x00000080L /* Vault gets decorative wall fixtures */
+#define VLT_TERRAIN_CROSSING 0x00000100L /* Channels may cross this structure */
+#define VLT_TERRAIN_FLOOD 0x00000200L /* Ruin may form part of a flooded basin */
+#define VLT_TERRAIN_REPAIRED 0x00000400L /* Inhabitants maintain crossings and piers */
 #define VLT_VLTXXX12 0x00000800L
 #define VLT_VLTXXX13 0x00001000L
 #define VLT_VLTXXX14 0x00002000L
@@ -2614,6 +2699,17 @@
     (RF2_CHARGE | RF2_ELFBANE | RF2_KNOCK_BACK | RF2_CRIPPLING                 \
         | RF2_OPPORTUNIST | RF2_ZONE_OF_CONTROL | RF2_CRUEL_BLOW               \
         | RF2_EXCHANGE_PLACES | RF2_RIPOSTE | RF2_FLANKING)
+
+/* Stateful combat abilities have their own set; the original flag sets are full. */
+#define RF5_SMITE         0x00000001
+#define RF5_SPRINTING     0x00000002
+#define RF5_CONCENTRATION 0x00000004
+#define RF5_DODGING       0x00000008
+#define RF5_BLOCKING      0x00000010
+#define RF5_VENGEANCE     0x00000020
+#define RF5_BRIDGE_BUILDER 0x00000040 /* Carries tools and finite crossing supplies. */
+#define RF5_ABILITIES (RF5_SMITE | RF5_SPRINTING | RF5_CONCENTRATION \
+    | RF5_DODGING | RF5_BLOCKING | RF5_VENGEANCE)
 
 /*
  * New monster race bit flags
@@ -2917,7 +3013,8 @@
 #define OPT_center_player 68
 #define OPT_run_avoid_center 69
 // reserved legacy slot: scroll_target
-#define OPT_auto_more 71 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_show_dungeon_events 71 /* Reuses the retired auto_more slot. */
+#define OPT_auto_more 71 /* Legacy migration only; never a live setting. */
 #define OPT_know_monster_info 72
 // reserved legacy slot: auto_display_lists
 #define OPT_artifact_unique_color 74
@@ -2935,7 +3032,8 @@
 #define OPT_smaller_level_size 86
 #define OPT_more_stairs 87
 #define OPT_unidentified_items_slate 88
-#define OPT_space_acts_as_comma 89 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_environment_speed 89 /* Reuses the retired space_acts_as_comma slot. */
+#define OPT_space_acts_as_comma 89 /* Legacy migration only. */
 #define OPT_show_level_entry_banner 90
 // reserved legacy slot: ability_desc_mode
 #define OPT_vault_drop_frequency 92
@@ -2957,7 +3055,7 @@
 #define OPT_narrative_banner_turns 108
 #define OPT_min_depth_timer_mode 109
 #define OPT_song_list_sort_by_recent 110
-// reserved legacy slot: inventory_selection_square
+#define OPT_illusory_walls 111
 #define OPT_supply_menu_random_icons 112
 #define OPT_supply_menu_hide_flavor_compact 113
 #define OPT_load_blitz_by_default 114
@@ -2972,6 +3070,8 @@
 #define OPT_pixel_monster_status_icons 123
 #define OPT_lockpick_minigame 124
 #define OPT_chest_trap_minigame 125
+#define OPT_torch_animation_always 126
+#define OPT_utumno_corridors 127
 
 #define MONSTER_TILE_HEALTH_BARS_SHOW 0
 #define MONSTER_TILE_HEALTH_BARS_DAMAGED_ONLY 1
@@ -3016,6 +3116,11 @@
 #define MIN_DEPTH_TIMER_MODE_RELAXED  1
 #define MIN_DEPTH_TIMER_MODE_HARSH    2
 #define MIN_DEPTH_TIMER_MODE_MAX      MIN_DEPTH_TIMER_MODE_HARSH
+
+#define ENVIRONMENT_SPEED_SLOW   0
+#define ENVIRONMENT_SPEED_NORMAL 1
+#define ENVIRONMENT_SPEED_FAST   2
+#define ENVIRONMENT_SPEED_MAX    ENVIRONMENT_SPEED_FAST
 
 // reserved legacy slot: birth_point_based
 // reserved legacy slot: birth_auto_roller
@@ -3094,6 +3199,8 @@
 #define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
 #define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
 #define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
+#define utumno_corridors op_ptr->opt[OPT_utumno_corridors]
+#define illusory_walls op_ptr->opt[OPT_illusory_walls]
 #define load_blitz_by_default op_ptr->opt[OPT_load_blitz_by_default]
 #define depth_in_feet op_ptr->opt[OPT_depth_in_feet]
 // reserved legacy slot: stack_force_notes
@@ -3576,7 +3683,9 @@
  * Line 2 -- forbid normal objects
  */
 #define cave_clean_bold(Y, X)                                                  \
-    ((cave_feat[Y][X] == FEAT_FLOOR) && (cave_o_idx[Y][X] == 0))
+    (((cave_feat[Y][X] == FEAT_FLOOR) || (cave_feat[Y][X] == FEAT_WATER)         \
+         || FEAT_IS_ICE(cave_feat[Y][X]) || FEAT_IS_BRIDGE(cave_feat[Y][X]))   \
+        && (cave_o_idx[Y][X] == 0))
 
 /*
  * Determine if a "legal" grid is an "empty" floor grid
@@ -3587,6 +3696,8 @@
  */
 #define cave_empty_bold(Y, X)                                                  \
     (cave_floor_bold(Y, X) && (cave_feat[Y][X] != FEAT_CHASM)                  \
+        && (cave_feat[Y][X] != FEAT_LAVA)                                     \
+        && (cave_feat[Y][X] != FEAT_POISON)                                   \
         && (cave_feat[Y][X] != FEAT_RUBBLE)                                    \
         && (cave_m_idx[Y][X] == 0))
 
@@ -3607,8 +3718,7 @@
  */
 #define cave_floorlike_bold(Y, X)                                              \
     ((cave_feat[Y][X] == FEAT_FLOOR)                                           \
-        || ((cave_feat[Y][X] >= FEAT_TRAP_HEAD)                                \
-            && (cave_feat[Y][X] <= FEAT_TRAP_TAIL)                             \
+        || (FEAT_IS_TRAP(cave_feat[Y][X])                                      \
             && (cave_info[Y][X] & (CAVE_HIDDEN))))
 
 /*
@@ -3631,7 +3741,7 @@
  * Determine if a "legal" grid is a "trap" grid
  */
 #define cave_trap_bold(Y, X)                                                   \
-    ((cave_feat[Y][X] >= FEAT_TRAP_HEAD) && (cave_feat[Y][X] <= FEAT_TRAP_TAIL))
+    FEAT_IS_TRAP(cave_feat[Y][X])
 
 /*
  * Determine if a "legal" grid is a "forge" grid
@@ -3644,14 +3754,18 @@
  * Determine if a "legal" grid is a "wall" grid
  */
 #define cave_wall_bold(Y, X)                                                   \
-    ((cave_feat[Y][X] >= FEAT_WALL_HEAD) && (cave_feat[Y][X] <= FEAT_WALL_TAIL))
+    FEAT_IS_WALL(cave_feat[Y][X])
+
+/* Illusory walls remain player-passable, but monsters perceive them as walls. */
+#define cave_monster_wall_bold(Y, X)                                           \
+    ((cave_info[Y][X] & (CAVE_WALL))                                           \
+        || (cave_feat[Y][X] == FEAT_ILLUSORY_WALL))
 
 /*
  * Determine if a "legal" grid is an "impassable" grid
  */
 #define cave_impassable_bold(Y, X)                                             \
-    (((cave_feat[Y][X] >= FEAT_WALL_HEAD)                                      \
-         && (cave_feat[Y][X] <= FEAT_WALL_TAIL))                               \
+    (FEAT_IS_WALL(cave_feat[Y][X])                                            \
         || (cave_feat[Y][X] == FEAT_CHASM))
 
 /*
@@ -3837,6 +3951,14 @@
 #define MSG_USE_GEM 61
 #define MSG_ACTIVATE 62
 #define MSG_MONSTER_ATTACK 63
+/* Per-race audio actions; separate from message IDs and save data. */
+#define MONSTER_SOUND_ATTACK 0
+#define MONSTER_SOUND_DAMAGE 1
+#define MONSTER_SOUND_DEATH 2
+#define MONSTER_SOUND_IDLE 3
+#define MONSTER_SOUND_MAX 4
+#define MONSTER_SOUND_MELEE_BASE 32
+#define MONSTER_SOUND_RANGED_BASE 96
 #define MSG_MONSTER_ATTACK_RANGED 64
 #define MSG_MONSTER_ATTACK_BREATH 65
 #define MSG_BASHDOOR_FAIL 66
@@ -3845,7 +3967,22 @@
 #define MSG_TRAP_FIRE 69
 #define MSG_CHEST_OPEN 70
 #define MSG_TORCH_LIGHT 71
-#define MSG_MAX 72
+#define MSG_FORGE 72
+#define MSG_HORN_TERROR 73
+#define MSG_HORN_THUNDER 74
+#define MSG_HORN_FORCE 75
+#define MSG_HORN_BLASTING 76
+#define MSG_HORN_WARNING 77
+#define MSG_LANDING 78
+#define MSG_TRAP_ACID 79
+#define MSG_TRAP_FLOOD 80
+#define MSG_TRAP_SPIKED 81
+#define MSG_TRAP_ALARM 82
+#define MSG_TRAP_CALTROPS 83
+#define MSG_TRAP_DEADFALL 84
+#define MSG_TRAP_FLASH 85
+#define MSG_ICE 86
+#define MSG_MAX 87
 
 /*
  * Maximum number of macro trigger names

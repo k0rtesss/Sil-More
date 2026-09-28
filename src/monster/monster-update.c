@@ -11,7 +11,7 @@ static bool listen_visual_effects_suppressed(void)
         || screen_startup_supporting_panes_hidden_active();
 }
 
-bool detect_monster_noise(monster_type* m_ptr, int skill)
+static bool detect_monster_noise_aux(monster_type* m_ptr, int skill, bool preview)
 {
     byte a;
     char c;
@@ -51,8 +51,11 @@ bool detect_monster_noise(monster_type* m_ptr, int skill)
         difficulty += ability_bonus(S_SNG, SNG_SILENCE);
 
     // make the check
+    bool saved_cheat_skill_rolls = cheat_skill_rolls;
+    if (preview) cheat_skill_rolls = false;
     result = skill_check(PLAYER, skill, difficulty, m_ptr);
-    suppress_visuals = listen_visual_effects_suppressed();
+    cheat_skill_rolls = saved_cheat_skill_rolls;
+    suppress_visuals = preview || listen_visual_effects_suppressed();
 
     // give up if it is a failure
     if (result <= 0)
@@ -98,6 +101,11 @@ bool detect_monster_noise(monster_type* m_ptr, int skill)
     Term_fresh();
 
     return true;
+}
+
+bool detect_monster_noise(monster_type* m_ptr, int skill)
+{
+    return detect_monster_noise_aux(m_ptr, skill, false);
 }
 
 void listen(monster_type* m_ptr)
@@ -164,13 +172,53 @@ void listen(monster_type* m_ptr)
  * or viewed directly, but old targets will remain set.  XXX XXX
  *
  */
-void update_mon(int m_idx, bool full)
+/* Keep initial visibility stable between the generation preview and the
+ * several display updates before the player's first action. Later turns keep
+ * the usual perception rolls. Preview checks must not consume gameplay RNG
+ * or print the optional skill-roll diagnostics. */
+static bool monster_passes_invisibility_check(int m_idx, int difficulty,
+    bool preview)
+{
+    monster_type* m_ptr = &mon_list[m_idx];
+    bool saved_cheat_skill_rolls = cheat_skill_rolls;
+    u64b saved_rng = 0;
+    int result;
+
+    if (playerturn == 0)
+    {
+        u64b seed = 0x9E3779B97F4A7C15ULL
+            ^ ((u64b)m_ptr->r_idx << 32)
+            ^ ((u64b)m_ptr->fy << 16) ^ (u64b)m_ptr->fx;
+        saved_rng = Rand_state_push(seed);
+    }
+    else if (preview)
+        saved_rng = Rand_state_export();
+
+    if (preview)
+        cheat_skill_rolls = false;
+    result = skill_check(PLAYER, p_ptr->skill_use[S_PER], difficulty, m_ptr);
+    cheat_skill_rolls = saved_cheat_skill_rolls;
+
+    if (playerturn == 0 || preview)
+        Rand_state_pop(saved_rng);
+
+    return result > 0;
+}
+
+static void update_mon_aux(int m_idx, bool full, bool preview)
 {
     monster_type* m_ptr = &mon_list[m_idx];
 
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
+    monster_lore preview_lore;
+
+    if (preview)
+    {
+        preview_lore = *l_ptr;
+        l_ptr = &preview_lore;
+    }
 
     int d;
 
@@ -178,7 +226,7 @@ void update_mon(int m_idx, bool full)
     int fy = m_ptr->fy;
     int fx = m_ptr->fx;
 
-    if (monster_clear_vala_state(m_ptr))
+    if (!preview && monster_clear_vala_state(m_ptr))
         calc_monster_speed(fy, fx);
 
     /* Seen at all */
@@ -291,9 +339,8 @@ void update_mon(int m_idx, bool full)
                     //        i.e. saving then loading will 'see' different
                     //        monsters
                     /* See invisible through perception skill */
-                    if (skill_check(
-                            PLAYER, p_ptr->skill_use[S_PER], difficulty, m_ptr)
-                        > 0)
+                    if (monster_passes_invisibility_check(m_idx, difficulty,
+                            preview))
                     {
                         /* Easy to see */
                         easy = flag = true;
@@ -323,6 +370,23 @@ void update_mon(int m_idx, bool full)
                     l_ptr->flags2 |= (RF2_INVISIBLE);
             }
         }
+    }
+
+    /* Generation needs only the visibility result and distance. Do not grant
+     * encounter experience, identify items, alter lore, or draw. Listening
+     * can reveal a monster too, but its preview must not consume noise. */
+    if (preview)
+    {
+        m_ptr->ml = flag || immobile_seen;
+        if (p_ptr->active_ability[S_PER][PER_LISTEN])
+        {
+            int saved_noise = m_ptr->noise;
+            u64b saved_rng = Rand_state_push(((u64b)playerturn + 1) * 15485863ULL);
+            detect_monster_noise_aux(m_ptr, p_ptr->skill_use[S_PER], true);
+            Rand_state_pop(saved_rng);
+            m_ptr->noise = saved_noise;
+        }
+        return;
     }
 
     /* The monster is now visible */
@@ -471,6 +535,16 @@ void update_mon(int m_idx, bool full)
             ident_haunted();
         }
     }
+}
+
+void update_mon(int m_idx, bool full)
+{
+    update_mon_aux(m_idx, full, false);
+}
+
+void update_mon_for_generation(int m_idx)
+{
+    update_mon_aux(m_idx, true, true);
 }
 
 /*

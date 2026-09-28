@@ -950,6 +950,11 @@ void init_file_paths(char* path)
 
     /*** Build the sub-directory names ***/
 
+    /* Contextual lessons are editable resources shipped beside lib/edit.
+     * Resolve them from the installed data root on every platform. */
+    ANGBAND_DIR_HELP = path_build(buf, sizeof(buf), ANGBAND_DIR, "help")
+        ? str_dup(buf) : str_dup(ANGBAND_DIR);
+
     strcpy(tail, "edit");
     ANGBAND_DIR_EDIT = str_dup(path);
     strcpy(tail, "pref");

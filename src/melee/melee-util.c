@@ -1,7 +1,9 @@
 #include "angband.h"
+#include "monster/monster-routine.h"
 #include "externs.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
+#include "monster/monster-social.h"
 
 int get_scent(int y, int x)
 {
@@ -10,6 +12,9 @@ int get_scent(int y, int x)
 
     /* Check Bounds */
     if (!(in_bounds(y, x)))
+        return (-1);
+
+    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER)
         return (-1);
 
     /* Sent trace? */
@@ -22,7 +27,7 @@ int get_scent(int y, int x)
     /* Get age of scent */
     age = scent - scent_when;
 
-    if (age > SMELL_STRENGTH)
+    if (age < 0 || age > SMELL_STRENGTH)
         return (-1);
 
     /* Return the age of the scent */
@@ -54,8 +59,12 @@ bool cave_exist_mon(
 
     /*** Check passability of various features. ***/
 
+    /* Grounded creatures without fire resistance cannot survive lava. */
+    if (feat == FEAT_LAVA)
+        return (r_ptr->flags2 & RF2_FLYING) || (r_ptr->flags3 & RF3_RES_FIRE);
+
     // only flying creatures can pass chasms
-    if (cave_feat[y][x] == FEAT_CHASM)
+    if (feat == FEAT_CHASM)
     {
         if (r_ptr->flags2 & (RF2_FLYING))
             return (true);
@@ -64,7 +73,7 @@ bool cave_exist_mon(
     }
 
     /* Feature is not a wall */
-    if (!(cave_info[y][x] & (CAVE_WALL)))
+    if (!cave_monster_wall_bold(y, x))
         return (true);
 
     /* Feature is a wall */
@@ -142,6 +151,8 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
             return (100);
     }
 
+    if (!monster_routine_allows(m_ptr, y, x)) return 0;
+
     /* Duruin remains within the shadowed inner enclosure until attacked with
      * a bow or thrown weapon.  A player in the doorway can still be attacked
      * because that does not move Duruin across the threshold. */
@@ -149,7 +160,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         return (0);
 
     /* The grid is occupied by a monster. */
-    if (cave_m_idx[y][x] > 0)
+    if (cave_m_idx[y][x] > 0 && &mon_list[cave_m_idx[y][x]] != m_ptr)
     {
         monster_type* n_ptr = &mon_list[cave_m_idx[y][x]];
         monster_race* nr_ptr = &r_info[n_ptr->r_idx];
@@ -225,6 +236,24 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         if (!(r_ptr->flags2 & (RF2_FLYING)))
             return (0);
     }
+    else if (feat == FEAT_LAVA)
+    {
+        /* Flight avoids ground contact, but still takes 40 damage on entry
+         * and at the next action. Do not voluntarily enter damaging lava.
+         * Forced movement and confused collisions use monster_swap instead. */
+        if (!(r_ptr->flags3 & RF3_RES_FIRE))
+            return (0);
+    }
+    else if (feat == FEAT_POISON)
+    {
+        /* Poison remains physically enterable. Confusion ignores the risk;
+         * a creature already immersed must also be allowed to escape. */
+        int dose = monster_poison_step_damage(m_ptr, m_ptr->fy, m_ptr->fx, y, x);
+        if (dose && !m_ptr->confused
+            && cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_POISON
+            && m_ptr->poisoned + dose >= m_ptr->hp)
+            return 0;
+    }
     // Light sensitive creatures and undead cannot pass sunlight
     else if (feat == FEAT_SUNLIGHT)
     {
@@ -235,7 +264,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     /*** Check passability of various features. ***/
 
     /* Feature is not a wall */
-    if (!(cave_info[y][x] & (CAVE_WALL)))
+    if (!cave_monster_wall_bold(y, x))
     {
         /* Any monster can handle floors, except glyphs and chasms, which are
          * handled above */
@@ -246,8 +275,8 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     else
     {
         /* Granite, Quartz, Rubble */
-        if (((feat >= FEAT_QUARTZ) && (feat <= FEAT_WALL_SOLID))
-            || (feat == FEAT_RUBBLE))
+        if (FEAT_IS_ROCK(feat)
+            || (feat == FEAT_RUBBLE) || (feat == FEAT_ILLUSORY_WALL))
         {
             /* Impassible except for monsters that move through walls */
             if ((r_ptr->flags2 & (RF2_PASS_WALL))
@@ -423,6 +452,80 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
     }
 }
 
+/* A standing-square disadvantage, distinct from movement time. Cold
+ * resistance does not improve traction; only flight avoids the ice penalties
+ * in total_monster_attack() and total_monster_evasion(). Rewired traps are
+ * deliberately absent: monsters only discover tampering when they step on it. */
+int monster_terrain_penalty(monster_type* m_ptr, int y, int x)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    if (!in_bounds(y, x))
+        return FLOW_MAX_DIST;
+    if (cave_feat[y][x] == FEAT_LAVA && !(r_ptr->flags3 & RF3_RES_FIRE))
+        return 100;
+    if (monster_poison_step_damage(m_ptr, m_ptr->fy, m_ptr->fx, y, x))
+        return 6;
+    if (FEAT_IS_ICE(cave_feat[y][x]) && !(r_ptr->flags2 & RF2_FLYING))
+        return ICE_ATTACK_PENALTY;
+    return 0;
+}
+
+/* Entry from dry land collects a dose immediately and another before the
+ * next action. Consecutive acid steps add only one dose per action. Every
+ * stack eventually removes one HP, even after reaching land. */
+int monster_poison_step_damage(monster_type* m_ptr,
+    int from_y, int from_x, int y, int x)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    if (!in_bounds(y, x) || cave_feat[y][x] != FEAT_POISON
+        || cave_m_idx[y][x] < 0 || (r_ptr->flags2 & RF2_FLYING)
+        || (r_ptr->flags3 & RF3_RES_POIS))
+        return 0;
+    return POISON_TERRAIN_DOSE
+        * (cave_feat[from_y][from_x] == FEAT_POISON ? 1 : 2);
+}
+
+/* Approximate an edge in whole turns, keeping the byte-sized flow format.
+ * Return zero for forbidden movement. The player endpoint is an attack,
+ * so neither the player's footing nor a wet bank slows that action. */
+int monster_step_cost(monster_type* m_ptr,
+    int from_y, int from_x, int to_y, int to_x)
+{
+    monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    bool bash = false;
+    int chance, cost;
+    if (!in_bounds(from_y, from_x) || !in_bounds(to_y, to_x))
+        return 0;
+    chance = cave_passable_mon(m_ptr, to_y, to_x, &bash);
+    if (chance <= 0)
+        return 0;
+    if (cave_m_idx[to_y][to_x] < 0)
+        return 1;
+    cost = (100 + chance - 1) / chance;
+    if (cave_any_closed_door_bold(to_y, to_x) && !bash)
+    {
+        if (!(r_ptr->flags2 & (RF2_PASS_DOOR | RF2_PASS_WALL)))
+            cost++;
+    }
+    else if (cave_monster_wall_bold(to_y, to_x)
+        && !(r_ptr->flags2 & RF2_PASS_WALL))
+    {
+        if (r_ptr->flags2 & RF2_KILL_WALL)
+            cost++; /* Prefer routes requiring less destructive work. */
+        else if (r_ptr->flags2 & RF2_TUNNEL_WALL)
+            cost += cave_feat[to_y][to_x] == FEAT_RUBBLE ? 1 : 2;
+    }
+    /* Flows store whole turns; account for 150% shallow and 400% deep water,
+     * including the step back onto a bank. */
+    cost += (water_movement_energy(100, cave_feat[from_y][from_x],
+        cave_feat[to_y][to_x], (r_ptr->flags2 & RF2_FLYING) != 0) - 100 + 99) / 100;
+    /* This is a route preference, not extra movement energy. A short poison
+     * crossing is reasonable when the safe detour is considerably longer. */
+    if (monster_poison_step_damage(m_ptr, from_y, from_x, to_y, to_x))
+        cost += 3;
+    return cost;
+}
+
 bool attacker_at(int y, int x)
 {
     if (cave_m_idx[y][x] <= 0)
@@ -464,7 +567,6 @@ int adj_mon_count(int y, int x)
 void tell_allies(int y, int x, u32b flag)
 {
     monster_type* m_ptr;
-    monster_race* r_ptr;
 
     int i;
 
@@ -475,27 +577,25 @@ void tell_allies(int y, int x, u32b flag)
         return;
 
     m_ptr = &mon_list[cave_m_idx[y][x]];
-    r_ptr = &r_info[m_ptr->r_idx];
 
     /* Scan all other monsters */
     for (i = mon_max - 1; i >= 1; i--)
     {
         /* Access the monster */
         monster_type* n_ptr = &mon_list[i];
-        monster_race* nr_ptr = &r_info[n_ptr->r_idx];
 
         int dist;
 
         // Access the monster
         n_ptr = &mon_list[i];
-        nr_ptr = &r_info[n_ptr->r_idx];
 
         // Ignore dead monsters
         if (!n_ptr->r_idx)
             continue;
 
-        // Ignore monsters with the wrong symbol
-        if (r_ptr->d_char != nr_ptr->d_char)
+        /* Only actual social allies receive this warning.  In particular,
+         * shared glyphs and broad race flags do not override a local feud. */
+        if (!monster_social_allies(m_ptr, n_ptr))
             continue;
 
         // Ignore monsters that already know

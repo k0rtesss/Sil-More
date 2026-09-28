@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "blitz.h"
+#include "cave/cave.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
@@ -57,6 +58,7 @@ extern void re_init_some_things(void)
     character_dungeon = false;
     character_loaded = false;
     character_loaded_dead = false;
+    cave_illusion_debug_set(false);
 
     // wipe the whole player structure
     memset(p_ptr, 0, sizeof(player_type));
@@ -194,6 +196,7 @@ extern void re_init_some_things(void)
         op_ptr->opt[i] = option_norm[i];
     }
     op_ptr->monster_tile_health_bar_mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+    op_ptr->environment_speed = ENVIRONMENT_SPEED_NORMAL;
 
     /* Initialize the window flags */
     for (i = 0; i < ANGBAND_TERM_MAX; i++)
@@ -324,6 +327,7 @@ errr init_other(void)
         op_ptr->opt[i] = option_norm[i];
     }
     op_ptr->monster_tile_health_bar_mode = MONSTER_TILE_HEALTH_BARS_SHOW;
+    op_ptr->environment_speed = ENVIRONMENT_SPEED_NORMAL;
 
     /* Initialize the window flags */
     for (i = 0; i < ANGBAND_TERM_MAX; i++)
