@@ -17,6 +17,9 @@ void dungeon(void)
     monster_type* m_ptr;
     int i;
     int previous_depth = last_music_depth;
+    const bool first_dungeon_entry = first_entry_to_dungeon;
+    const bool suppress_fresh_character_level_entry_banner =
+        first_dungeon_entry && !p_ptr->restoring && playerturn == 0;
 
     log_debug("Entering dungeon level %d", p_ptr->depth);
 
@@ -304,9 +307,14 @@ void dungeon(void)
      * Show initial partition narrative for actual level entries.  On save
      * restoration the player may be standing inside a greater vault, where
      * replaying its generic tile-style narrative would contradict the vault's
-     * unique first-entry description.
+     * unique first-entry description.  A fresh character's first frame belongs
+     * to the opening tutorial, so do not cover it with the welcome banner.  If
+     * that tutorial is still queued or in progress, keep the banner suppressed
+     * until the tutorial has had its turn.
      */
     if (!p_ptr->restoring
+        && !suppress_fresh_character_level_entry_banner
+        && !tutorial_game_opening_pending()
         && ((op_ptr->level_entry_narrative_mode
                 == LEVEL_ENTRY_NARRATIVE_BANNER_DELAY)
             || (op_ptr->level_entry_narrative_mode

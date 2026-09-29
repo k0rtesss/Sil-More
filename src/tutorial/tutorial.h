@@ -11,11 +11,15 @@ typedef enum tutorial_mode {
 } tutorial_mode;
 
 /* Only public, already revealed descriptions belong here. Never store world
- * object/monster indices or pointers in tutorial context. Strings are copied. */
+ * object/monster indices or pointers in tutorial context. A known map square
+ * is safe to copy because it is only a public location, not an object handle. */
 typedef struct tutorial_context {
     char subject_type[48];
     char subject[160];
     char text[384];
+    int map_y;
+    int map_x;
+    bool has_map_square;
 } tutorial_context;
 
 typedef enum tutorial_step_kind {

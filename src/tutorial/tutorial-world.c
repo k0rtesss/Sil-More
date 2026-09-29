@@ -62,15 +62,26 @@ static bool world_available(void)
         && !death_spectator_active() && !run_mode_is_blitz();
 }
 
-static void world_observe(const char *id, const char *type,
-    const char *subject, const char *text)
+static void world_observe_at(const char *id, const char *type,
+    const char *subject, const char *text, int map_y, int map_x)
 {
     tutorial_context context = {0};
     if (!tutorial_enabled()) return;
     SDL_strlcpy(context.subject_type,type?type:"",sizeof(context.subject_type));
     SDL_strlcpy(context.subject,subject?subject:"",sizeof(context.subject));
     SDL_strlcpy(context.text,text?text:"",sizeof(context.text));
+    if (in_bounds(map_y, map_x)) {
+        context.map_y = map_y;
+        context.map_x = map_x;
+        context.has_map_square = true;
+    }
     tutorial_observe(id,&context);
+}
+
+static void world_observe(const char *id, const char *type,
+    const char *subject, const char *text)
+{
+    world_observe_at(id,type,subject,text,-1,-1);
 }
 
 static int light_state(void)
@@ -174,8 +185,9 @@ static void observe_monsters(void)
         if ((int)j == selected || status == TUTORIAL_IN_PROGRESS) {
             char name[160];
             monster_desc(name,sizeof(name),subjects[j],0);
-            world_observe(id,"monster",name,
-                "This trait is already known about the visible creature. Inspect its recall before choosing your next action.");
+            world_observe_at(id,"monster",name,
+                "This trait is already known about the visible creature. Inspect its recall before choosing your next action.",
+                subjects[j]->fy,subjects[j]->fx);
         }
     }
 }

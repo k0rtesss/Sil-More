@@ -441,6 +441,12 @@ static bool tutorial_anchor_rect(const tutorial_view *view, SDL_FRect *rect)
         if (tutorial_menu_cells_rect(rect)) return true;
         return tutorial_pane_rect(PANE_MAIN, rect);
     }
+    /* Live nearby observations carry the known feature/creature square.
+     * Replays and generic map lessons continue to use their fallback below. */
+    if ((!strcmp(a, "map") || !strcmp(a, "monster"))
+        && view->context.has_map_square
+        && sdl_map_grid_cell_rect(view->context.map_y, view->context.map_x, rect))
+        return true;
     if (!strcmp(a, "monster")) {
         int nearest = 0, nearest_distance = 100000;
         for (int i = 1; i < mon_max; ++i) {
