@@ -7,6 +7,7 @@
 #include "cave/cave-flood.h"
 #include "cave/cave.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-atmosphere.h"
 #include "cave/cave-water-flow.h"
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain-vaults.h"
@@ -1883,6 +1884,7 @@ void generate_cave(void)
     /* The dungeon is not ready */
     character_dungeon = false;
     cave_environment_reset();
+    cave_atmosphere_reset();
 
     /* Don't know feeling yet */
     do_feeling = 0;
@@ -2263,6 +2265,7 @@ if (playerturn == 0) {
 
     /* Enforce partition/room lighting rules (e.g. labyrinth/CA_BLOB always dark). */
     apply_partition_and_room_glow_rules();
+    cave_atmosphere_generate();
 
     /* Note any forges generated -- have to do this here in case generation
      * fails earlier */

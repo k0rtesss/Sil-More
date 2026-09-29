@@ -7,6 +7,7 @@
 #include "log/log.h"
 #include "log/perf.h"
 #include "sound-config.h"
+#include "sound-footsteps.h"
 #include "cave/cave-events.h"
 #include "cave/cave-fixtures.h"
 #include "cJSON.h"
@@ -38,6 +39,7 @@ typedef struct {
     bool positional;
     int y, x, depth, radius;
     float source_gain; /* Capture actor modifiers when the sound is emitted. */
+    cave_atmosphere_kind atmosphere; /* Captured on game thread, including delayed steps. */
 } sound_origin;
 
 typedef struct {
@@ -65,6 +67,8 @@ typedef struct {
     char water_walk_files[SDL_SOUND_MAX_VARIANTS][SDL_SOUND_NAME_LEN];
     MIX_Audio* water_walk_audio[SDL_SOUND_MAX_VARIANTS];
     int water_walk_count;
+    MIX_Audio* footstep_effect_audio[2][2][SDL_SOUND_MAX_VARIANTS];
+    bool footstep_effect_attempted[2][2][SDL_SOUND_MAX_VARIANTS];
 } sound_bank;
 
 typedef struct {
@@ -382,12 +386,15 @@ static int sdl_sound_radius(int sound_idx)
 
 static sound_origin sdl_sound_origin(int y, int x, int radius)
 {
-    return (sound_origin){ true, y, x, p_ptr ? p_ptr->depth : -1, radius, 1.0f };
+    return (sound_origin){ .positional = true, .y = y, .x = x,
+        .depth = p_ptr ? p_ptr->depth : -1, .radius = radius, .source_gain = 1.0f };
 }
 
 static sound_origin sdl_sound_event_origin(int sound_idx, int y, int x)
 {
     sound_origin origin = sdl_sound_origin(y, x, sdl_sound_radius(sound_idx));
+    if (sound_idx == MSG_WALK)
+        origin.atmosphere = cave_atmosphere_at(y, x);
     if (sound_idx == MSG_WALK && character_generated && p_ptr && p_ptr->playing
         && !p_ptr->is_dead && y == p_ptr->py && x == p_ptr->px)
     {
@@ -510,6 +517,15 @@ static void sdl_sound_reset_bank(void)
 
 static void sdl_sound_destroy_cached_audio(void)
 {
+    for (int effect = 0; effect < 2; effect++)
+        for (int water = 0; water < 2; water++)
+            for (int sample = 0; sample < SDL_SOUND_MAX_VARIANTS; sample++)
+            {
+                if (sound_state.bank.footstep_effect_audio[effect][water][sample])
+                    MIX_DestroyAudio(sound_state.bank.footstep_effect_audio[effect][water][sample]);
+                sound_state.bank.footstep_effect_audio[effect][water][sample] = NULL;
+                sound_state.bank.footstep_effect_attempted[effect][water][sample] = false;
+            }
     cJSON_Delete(g_monster_sound_config);
     g_monster_sound_config = NULL;
     g_monster_sound_config_loaded = false;
@@ -1097,6 +1113,65 @@ static MIX_Audio* sdl_sound_get_water_walk_audio(int sample_idx)
 
     sound_state.bank.water_walk_audio[sample_idx] = audio;
     return audio;
+}
+
+/* Called under g_sound_mutex. Generate each bounded recording/effect once;
+ * playback threads use the captured atmosphere and an already prepared cache. */
+static MIX_Audio* sdl_sound_footstep_variant(MIX_Audio* dry, const char* path,
+    int sample, bool water, const sound_origin* origin, bool allow_decode)
+{
+    int effect;
+    if (!dry || !origin || sample < 0 || sample >= SDL_SOUND_MAX_VARIANTS)
+        return dry;
+    if (origin->atmosphere == CAVE_ATMOSPHERE_HUSHED) effect = 0;
+    else if (origin->atmosphere == CAVE_ATMOSPHERE_ECHOING) effect = 1;
+    else return dry;
+
+    MIX_Audio** cached = &sound_state.bank.footstep_effect_audio[effect][water][sample];
+    bool* attempted = &sound_state.bank.footstep_effect_attempted[effect][water][sample];
+    if (*cached) return *cached;
+    if (*attempted || !allow_decode) return dry;
+    *attempted = true;
+
+    MIX_AudioDecoder* decoder = MIX_CreateAudioDecoder(path, 0);
+    if (!decoder) return dry;
+    SDL_AudioSpec spec;
+    if (!MIX_GetAudioDecoderFormat(decoder, &spec))
+    {
+        MIX_DestroyAudioDecoder(decoder);
+        return dry;
+    }
+    spec.format = SDL_AUDIO_F32;
+    spec.channels = spec.channels == 1 ? 1 : 2;
+    spec.freq = 48000;
+    /* Oversized/modded recordings fall back intact instead of being cut off. */
+    int capacity = (spec.freq * 4 + 1) * spec.channels * (int)sizeof(float);
+    float* decoded = SDL_malloc(capacity);
+    int used = 0, got = -1;
+    if (decoded)
+        while (used < capacity)
+        {
+            got = MIX_DecodeAudio(decoder, (byte*)decoded + used, capacity - used, &spec);
+            if (got <= 0) break;
+            used += got;
+        }
+    MIX_DestroyAudioDecoder(decoder);
+    if (decoded && got == 0 && used > 0
+        && used % (spec.channels * sizeof(float)) == 0)
+    {
+        int frames = used / (spec.channels * sizeof(float));
+        int filtered_frames = 0;
+        float* filtered = sound_footstep_filter(decoded, frames, spec.channels,
+            spec.freq, origin->atmosphere, &filtered_frames);
+        if (filtered)
+        {
+            *cached = MIX_LoadRawAudio(sound_state.mixer, filtered,
+                (size_t)filtered_frames * spec.channels * sizeof(float), &spec);
+            SDL_free(filtered);
+        }
+    }
+    SDL_free(decoded);
+    return *cached ? *cached : dry;
 }
 
 static bool sdl_sound_ensure_mutex(void)
@@ -1808,6 +1883,9 @@ static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
      * profiler. The scheduling thread preloads its sample before starting it. */
     sil_perf_stamp phase = profile ? sil_perf_begin() : (sil_perf_stamp){ 0 };
     MIX_Audio* audio = sdl_sound_get_sample_audio(sound_idx, sample_idx);
+    if (sound_idx == MSG_WALK)
+        audio = sdl_sound_footstep_variant(audio, sample_path, sample_idx,
+            false, origin, profile);
     if (profile) {
         sil_perf_end("audio.sfx.decode", phase);
         phase = sil_perf_begin();
@@ -1843,6 +1921,8 @@ static bool sdl_sound_play_water_walk_sample_locked(int sample_idx,
     const char* sample_path = sound_state.bank.water_walk_files[sample_idx];
     sil_perf_stamp phase = profile ? sil_perf_begin() : (sil_perf_stamp){ 0 };
     MIX_Audio* audio = sdl_sound_get_water_walk_audio(sample_idx);
+    audio = sdl_sound_footstep_variant(audio, sample_path, sample_idx,
+        true, origin, profile);
     if (profile) {
         sil_perf_end("audio.sfx.decode", phase);
         phase = sil_perf_begin();
@@ -2220,7 +2300,12 @@ static void sdl_sound_handle_delayed_with_origin(int sound_idx, Uint32 delay_ms,
     request->due_ns = SDL_GetTicksNS() + (Uint64)delay_ms * 1000000ULL;
 
     /* Decode on the scheduling thread; the timer callback only starts mixing. */
-    if (!sdl_sound_get_sample_audio(sound_idx, request->sample_idx)) {
+    MIX_Audio* audio = sdl_sound_get_sample_audio(sound_idx, request->sample_idx);
+    if (sound_idx == MSG_WALK)
+        audio = sdl_sound_footstep_variant(audio,
+            sound_state.bank.sound_files[sound_idx][request->sample_idx],
+            request->sample_idx, false, origin, true);
+    if (!audio) {
         SDL_UnlockMutex(g_sound_mutex);
         SDL_free(request);
         return;

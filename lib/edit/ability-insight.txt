@@ -14,7 +14,7 @@
 #    the same price and choice group. Insight B: replaces P:/A: ability
 #    prerequisites only; skill/stat gates and existing effects remain.
 
-V:0.9.8
+V:0.9.9
 
 N:8:Subtlety
 B:0/1:1:0

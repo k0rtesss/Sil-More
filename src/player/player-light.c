@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "quest/quest-rewards-beta.h"
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
@@ -36,6 +37,12 @@ int light_up_to(int base_radius, object_type* o_ptr)
             radius--;
         }
     }
+
+    /* A gust briefly dims a flame by one radius without consuming fuel.
+     * Existing low-fuel/cursed sputtering retains its own rules. */
+    if (radius > 0 && fuelable_light_p(o_ptr))
+        radius -= cave_atmosphere_flame_penalty(p_ptr->py, p_ptr->px,
+            o_ptr->sval == SV_LIGHT_LANTERN);
 
     return (radius);
 }

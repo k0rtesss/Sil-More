@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "cave/cave-atmosphere.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "h-define.h"
@@ -283,12 +284,30 @@ errr parse_style_levels(char* buf, header* head)
         styles_partition_rules_clear();
         styles_cave_floor_palettes_clear();
         styles_floor_borders_clear();
+        cave_atmosphere_ground_rules_clear();
         big_cave_type_rules_clear();
     log_debug("parse_style_levels: Version header encountered, cleared existing rules");
         return 0;
     }
     /* Comments or blank lines */
     if (buf[0] == '#' || buf[0] == '\0') return 0;
+
+    /* A:<style>:STONE|SOFT|SNOW -- authored acoustic generation context. */
+    if (buf[0] == 'A' && buf[1] == ':')
+    {
+        int style, used = 0;
+        char ground[16];
+        if (sscanf(buf + 2, "%d:%15[A-Z]%n", &style, ground, &used) != 2)
+            return PARSE_ERROR_GENERIC;
+        const char* tail = buf + 2 + used;
+        while (*tail == ' ' || *tail == '\t') tail++;
+        if (*tail && *tail != '#') return PARSE_ERROR_GENERIC;
+        int material = !strcmp(ground, "STONE") ? ATMOSPHERE_GROUND_STONE
+            : !strcmp(ground, "SOFT") ? ATMOSPHERE_GROUND_SOFT
+            : !strcmp(ground, "SNOW") ? ATMOSPHERE_GROUND_SNOW : -1;
+        return cave_atmosphere_set_ground_rule(style, material)
+            ? 0 : PARSE_ERROR_GENERIC;
+    }
 
     /* M:<base>:<coverage percent>:<patch count>: <accent>:<weight> ... */
     if (buf[0] == 'M' && buf[1] == ':')

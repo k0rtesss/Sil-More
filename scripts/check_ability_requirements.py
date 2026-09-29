@@ -215,6 +215,102 @@ static bool description_has(ability_browser_desc_line* lines, int count, cptr te
     return false;
 }
 
+static void check_insight_ability_xp(void)
+{
+    const player_race* saved_race = rp_ptr;
+    player_race race = *rp_ptr;
+    u32b character_flags = current_character_profile->flags;
+    u32b character_unique = current_character_profile->flags_u;
+    const u32b traits[][2] = {
+        {RHF_ARC_PENALTY, RHF_ARC_PENALTY}, {RHF_ARC_PENALTY, 0},
+        {0, 0}, {RHF_ARC_AFFINITY, 0}, {RHF_ARC_AFFINITY, RHF_ARC_AFFINITY}
+    };
+    const int prices[] = {2400, 2100, 1800, 1500, 1200};
+    ability_type* ambush = &b_info[ability_index(S_ARC, ARC_AMBUSH)];
+    rp_ptr = &race;
+    current_character_profile->flags_u = 0;
+    for (size_t i = 0; i < N_ELEMENTS(traits); ++i)
+    {
+        reset_player(); op_ptr->opt[OPT_insight_beta] = true;
+        race.flags = traits[i][0];
+        current_character_profile->flags = traits[i][1];
+        assert(affinity_level(S_ARC) == (int)i - 2);
+        assert(ability_purchase_xp(ambush) == prices[i]);
+        ability_type higher_gate = *ambush;
+        higher_gate.skill_req[S_ARC] = 8;
+        higher_gate.skill_req[S_STL] = 15;
+        assert(ability_purchase_xp(&higher_gate)
+            == (300 - 50 * ((int)i - 2)) * 8);
+        p_ptr->skill_base[S_ARC] = 30;
+        p_ptr->innate_ability[S_ARC][ARC_FLETCHERY] = true;
+        p_ptr->innate_ability[S_ARC][ARC_PUNCTURE] = true;
+        assert(ability_purchase_xp(ambush) == prices[i]);
+        char price[64], expected[64];
+        ability_format_price(price, sizeof(price), ambush);
+        strnfmt(expected, sizeof(expected), "%d XP", prices[i]);
+        assert(!strcmp(price, expected));
+    }
+
+    reset_player(); op_ptr->opt[OPT_insight_beta] = true;
+    race.flags = current_character_profile->flags = 0;
+    ability_type synthetic = *ambush;
+    synthetic.skill_req[S_ARC] = 8;
+    synthetic.skill_req[S_STL] = 15;
+    assert(ability_purchase_xp(&synthetic) == 2400); /* Primary gate, not other ranks. */
+    race.flags = current_character_profile->flags = RHF_ARC_AFFINITY;
+    assert(ability_purchase_xp(&synthetic) == 1600);
+    race.flags = current_character_profile->flags = 0;
+    current_character_profile->flags = RHF_FREE;
+    assert(ability_purchase_xp(ambush) == 1800); /* The fixed base applies to everyone. */
+    current_character_profile->flags = RHF_MEL_AFFINITY;
+    race.flags = RHF_MEL_AFFINITY;
+    assert(ability_purchase_xp(&b_info[ability_index(S_MEL, MEL_POWER)]) == 200);
+    race.flags = current_character_profile->flags = 0;
+    ability_type* song = &b_info[ability_index(S_SNG, SNG_ELBERETH)];
+    assert(ability_purchase_xp(song) == 300);
+    current_character_profile->flags_u = UNQ_MINSTREL;
+    assert(!ability_purchase_xp(song));
+    current_character_profile->flags_u = 0;
+    for (int i = 0; i < z_info->b_max; ++i)
+        if (b_info[i].name
+            && (ability_in_insight_branch(&b_info[i]) || ability_is_stage(&b_info[i])))
+            assert(!ability_purchase_xp(&b_info[i]));
+    char summary[256];
+    ability_browser_build_summary(S_ARC, summary, sizeof(summary));
+    assert(strstr(summary, "ability price 300 - 50 x affinity per rank"));
+
+    /* Real purchase and UI must agree, including all missing skill training. */
+    ability_browser_desc_line lines[ABILITY_BROWSER_DESC_MAX_LINES];
+    int count = 0;
+    ability_browser_add_prerequisites(lines, &count, S_ARC, ambush, 100);
+    assert(description_has(lines, count, "Total XP: 4500 (2700 skill + 1800 ability"));
+    p_ptr->new_exp = 4499; accept_purchase = true;
+    assert(!ability_browser_activate_choice(S_ARC, ARC_AMBUSH));
+    assert(p_ptr->new_exp == 4499 && !confirmation_count);
+    assert(!p_ptr->skill_base[S_ARC] && !p_ptr->skill_base[S_STL]);
+    p_ptr->new_exp = 4500; accept_purchase = false;
+    assert(!ability_browser_activate_choice(S_ARC, ARC_AMBUSH));
+    assert(p_ptr->new_exp == 4500 && !p_ptr->skill_base[S_ARC]);
+    assert(strstr(confirmation, "(1800 XP), 4500 XP total"));
+    accept_purchase = true;
+    assert(ability_browser_activate_choice(S_ARC, ARC_AMBUSH));
+    assert(!p_ptr->new_exp && p_ptr->insight_points == 77);
+    assert(p_ptr->skill_base[S_ARC] == 6 && p_ptr->skill_base[S_STL] == 3);
+    assert(p_ptr->innate_ability[S_ARC][ARC_AMBUSH]);
+
+    reset_player();
+    assert(ability_purchase_xp(ambush) == 500);
+    p_ptr->innate_ability[S_ARC][ARC_FLETCHERY] = true;
+    assert(ability_purchase_xp(ambush) == 1000);
+    current_character_profile->flags = RHF_FREE;
+    assert(ability_purchase_xp(ambush) == 600);
+    rp_ptr = saved_race;
+    current_character_profile->flags = character_flags;
+    current_character_profile->flags_u = character_unique;
+    reset_player();
+    puts("Insight XP: fixed skill prices, affinity/mastery/penalties, zero-IP-branch XP, display and atomic purchase, legacy pricing PASS.");
+}
+
 static void check_purchase(void)
 {
     reset_player();
@@ -866,7 +962,7 @@ int main(int argc, char** argv)
     rp_ptr = &p_info[5]; current_character_profile = &c_info[30];
     p_ptr->prace = 5; p_ptr->pcharacter = 30;
     p_ptr->py = p_ptr->px = 2; cave_feat[2][2] = FEAT_FLOOR;
-    check_parser(); check_selected_requirements(); check_purchase();
+    check_parser(); check_selected_requirements(); check_insight_ability_xp(); check_purchase();
     check_display_and_existing_gates();
     check_smithing_insight_upgrades();
     check_ability_stages();

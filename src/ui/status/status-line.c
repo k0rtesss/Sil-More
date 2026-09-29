@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -621,8 +622,17 @@ void prt_speed(void)
     }
 }
 
+static const char* status_partition_short(const char* long_label);
+
 static const char* partition_abbrev_for_point(int y, int x)
 {
+    switch (cave_atmosphere_at(y, x))
+    {
+    case CAVE_ATMOSPHERE_HUSHED: return "Caves - Hushed";
+    case CAVE_ATMOSPHERE_ECHOING: return "Room - Echoing";
+    case CAVE_ATMOSPHERE_DRAUGHTY: return "Ruin - Draughty area";
+    default: break;
+    }
     switch (level_partition_kind_for_point(y, x))
     {
     case LEVEL_PART_ROOMY:
@@ -659,6 +669,10 @@ void prt_partition(void)
     const char* label = partition_abbrev_for_point(p_ptr->py, p_ptr->px);
     if (!label[0])
         return;
+    /* The fixed terminal layout has five cells before the depth field.
+     * SDL's depth pane displays the complete area label. */
+    if (strlen(label) > 5)
+        label = status_partition_short(label);
 
     sdl_story_font_enable();
     c_put_str(status_touch_zone_attr(SDL_STATUS_CLICK_MAP, COL_PARTITION,
@@ -968,6 +982,12 @@ static const char* status_partition_short(const char* long_label)
 {
     if (!long_label || !long_label[0])
         return "";
+    if (!strcmp(long_label, "Caves - Hushed"))
+        return "Hush";
+    if (!strcmp(long_label, "Room - Echoing"))
+        return "Echo";
+    if (!strcmp(long_label, "Ruin - Draughty area"))
+        return "Draft";
     if (!strcmp(long_label, "Room"))
         return "Rm";
     if (!strcmp(long_label, "Ruin"))

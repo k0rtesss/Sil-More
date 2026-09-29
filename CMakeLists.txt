@@ -225,6 +225,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-awareness.c
     src/cave/cave-flow.c
     src/cave/cave-fixtures.c
+    src/cave/cave-atmosphere.c
     src/cave/cave-water.c
     src/cave/cave-illusion.c
     src/cave/cave-water-flow.c
@@ -509,6 +510,7 @@ set(SIL_MORE_SOURCES
     src/tutorial/tutorial-game.c
     src/tutorial/tutorial-world.c
     src/sdl-sound.c
+    src/sound-footsteps.c
     src/sound-config.c
     src/fs/io_sdl.c
     src/fs/path.c

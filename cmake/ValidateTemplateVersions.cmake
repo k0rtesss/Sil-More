@@ -1,10 +1,10 @@
 # Keep the normal init_info consumers in sync without duplicating their list.
-# Three runtime templates bypass the raw cache and call init_info_txt directly.
+# Runtime templates that bypass the raw cache and call init_info_txt directly.
 set(_sil_template_loader "${CMAKE_CURRENT_SOURCE_DIR}/src/init/init-info.c")
 file(READ "${_sil_template_loader}" _sil_template_loader_text)
 string(REGEX MATCHALL "init_info\\(\"[a-z_-]+\""
   _sil_template_calls "${_sil_template_loader_text}")
-set(_sil_template_names style-levels partition set)
+set(_sil_template_names style-levels partition set ability-insight)
 foreach(_sil_template_call IN LISTS _sil_template_calls)
   string(REGEX REPLACE "init_info\\(\"([a-z_-]+)\"" "\\1"
     _sil_template_name "${_sil_template_call}")

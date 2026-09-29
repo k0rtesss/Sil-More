@@ -151,6 +151,7 @@ typedef struct partition_meta_save {
     s16b partition_count;
     byte modes[PARTITION_META_MAX];
     byte big_cave_types[PARTITION_META_MAX];
+    byte atmospheres[PARTITION_META_MAX];
 } partition_meta_save;
 #endif
 

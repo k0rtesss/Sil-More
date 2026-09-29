@@ -151,8 +151,20 @@ static int ability_purchase_exp_cost(int skilltype)
 
 static int ability_purchase_xp(const ability_type* ability)
 {
-    return ability_in_insight_branch(ability) || ability_is_stage(ability) ? 0
-        : ability_purchase_exp_cost(ability->skilltype);
+    if (ability_in_insight_branch(ability) || ability_is_stage(ability)) return 0;
+    if (!insight_system_enabled())
+        return ability_purchase_exp_cost(ability->skilltype);
+
+    /* Each required primary-skill rank costs 300 XP, adjusted by 50 XP per
+     * affinity level. Current skill and other learned abilities do not matter. */
+    int skill = ability_required_skill(ability, ability->skilltype);
+    int exp_cost = (300 - 50 * affinity_level(ability->skilltype)) * skill;
+
+    if (ability->skilltype == S_SNG)
+        exp_cost -= 300 * minstrel_level();
+
+    exp_cost += 100 * curse_flag_delta_cur(CUR_ABILITY_COST);
+    return MAX(0, exp_cost);
 }
 
 static void ability_format_price(char* buf, size_t size,
@@ -3262,7 +3274,7 @@ static void ability_browser_build_summary(int skilltype, char* summary,
     size_t summary_len)
 {
     char next_skill[32];
-    char ability_price[32];
+    char ability_price[48];
     char insight_balance[32] = "";
 
     if (!summary || summary_len == 0)
@@ -3280,8 +3292,12 @@ static void ability_browser_build_summary(int skilltype, char* summary,
     {
         strnfmt(next_skill, sizeof(next_skill), "%d XP",
             ability_browser_next_skill_cost(skilltype));
-        strnfmt(ability_price, sizeof(ability_price), "%d XP",
-            ability_purchase_exp_cost(skilltype));
+        if (insight_system_enabled())
+            SDL_strlcpy(ability_price, "300 - 50 x affinity per rank",
+                sizeof(ability_price));
+        else
+            strnfmt(ability_price, sizeof(ability_price), "%d XP",
+                ability_purchase_exp_cost(skilltype));
     }
     else
     {

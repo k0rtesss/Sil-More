@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-narrative.c */
 
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "dungeon-internal.h"
 #include "meta_state.h"
 
@@ -519,6 +520,8 @@ void handle_partition_entry(bool force_message, int narrative_mode)
 {
     if (!p_ptr || p_ptr->is_dead)
         return;
+
+    cave_atmosphere_note_player_position();
 
     int pi = level_partition_index_for_point(p_ptr->py, p_ptr->px);
     level_partition_kind kind = level_partition_kind_for_point(p_ptr->py, p_ptr->px);

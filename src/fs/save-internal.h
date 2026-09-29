@@ -33,6 +33,7 @@ void save_wr_monster(const monster_type* m_ptr);
 
 /* Lane entry points (each defined in its own fs/save-*.c). */
 void save_write_extra(void);
+void save_write_partition_meta(void);
 void save_write_randarts(void);
 void save_write_notes(void);
 void save_write_dungeon(void);

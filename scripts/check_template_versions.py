@@ -22,6 +22,7 @@ DIRECT_PARSERS = {
     "parse_style_levels": "style-levels",
     "parse_partition_info": "partition",
     "parse_set_info": "set",
+    "parse_b_insight_overlay": "ability-insight",
 }
 # These files use dedicated loaders, not the game-versioned init_info parser.
 SCHEMA_TEMPLATES = {"dungeon-themes": 3}
@@ -71,8 +72,12 @@ def active_templates():
             # Bind the parser to its actual immediately preceding path construction.
             preceding = source[:call.start()]
             path_start = preceding.rfind("path_build(")
+            path_source = preceding[path_start:]
             bindings = re.findall(r'format\s*\(\s*"%s\.txt"\s*,\s*"([\w-]+)"',
-                                  preceding[path_start:])
+                                  path_source)
+            if not bindings:
+                bindings = re.findall(r'path_build\s*\([^;]*,\s*"([\w-]+)\.txt"\s*\)',
+                                      path_source)
             if bindings != [DIRECT_PARSERS[parser]]:
                 raise ValueError(f"Audit changed filename binding for {parser} in {path}")
             names.add(bindings[0])

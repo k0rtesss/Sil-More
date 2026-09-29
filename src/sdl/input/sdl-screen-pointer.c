@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "sdl/main-sdl-private.h"
 
 static void sdl_controller_focus_union_rect(SDL_FRect* bounds, bool* found,
@@ -355,6 +356,18 @@ bool sdl_status_line_partition_label_at_col(int row, int col)
 
     if (!Term || !p_ptr)
         return false;
+
+    cptr atmosphere_label = NULL;
+    switch (cave_atmosphere_at(p_ptr->py, p_ptr->px))
+    {
+    case CAVE_ATMOSPHERE_HUSHED: atmosphere_label = "Hush"; break;
+    case CAVE_ATMOSPHERE_ECHOING: atmosphere_label = "Echo"; break;
+    case CAVE_ATMOSPHERE_DRAUGHTY: atmosphere_label = "Draft"; break;
+    default: break;
+    }
+    if (atmosphere_label && sdl_screen_segment_col_hits_ci(Term, row, 0,
+        Term->wid, col, atmosphere_label))
+        return true;
 
     switch (level_partition_kind_for_point(p_ptr->py, p_ptr->px))
     {
@@ -4874,4 +4887,3 @@ bool sdl_character_panel_flush_pending_press(Uint64 now_ns)
     sdl_character_panel_cancel_press();
     return sdl_main_screen_handle_character_panel_secondary_pointer(x, y);
 }
-

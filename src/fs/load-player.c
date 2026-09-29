@@ -1,6 +1,7 @@
 /* File: fs/load-player.c -- carved from load.c (shares state via fs/load-internal.h) */
 
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -16,6 +17,49 @@
 #include <stdbool.h>
 #include "metarun.h"
 #include "fs/load-internal.h"
+
+errr load_read_partition_meta(void)
+{
+    partition_meta_save pm = {0};
+    /* Clear a previous character's area state even for pre-partition saves. */
+    cave_atmosphere_reset();
+    if (savefile_has_partition_meta)
+    {
+        byte marker = 0;
+        rd_byte(&marker);
+        if (marker != 0x53)
+        {
+            note(format("Invalid partition meta marker 0x%02X", marker));
+            return -1;
+        }
+        rd_s16b(&pm.grid_rows);
+        rd_s16b(&pm.grid_cols);
+        rd_s16b(&pm.partition_count);
+        for (int i = 0; i < PARTITION_META_MAX; ++i)
+            rd_byte(&pm.modes[i]);
+        if (savefile_has_partition_meta_types)
+            for (int i = 0; i < PARTITION_META_MAX; ++i)
+                rd_byte(&pm.big_cave_types[i]);
+
+        if (savefile_version_at_least(0, 9, 8, 31))
+        {
+            u32b start = load_byte_offset;
+            for (int i = 0; i < PARTITION_META_MAX; ++i)
+            {
+                rd_byte(&pm.atmospheres[i]);
+                if (pm.atmospheres[i] >= CAVE_ATMOSPHERE_MAX)
+                {
+                    note("Invalid partition atmosphere.");
+                    return -1;
+                }
+            }
+            if (load_byte_offset - start != PARTITION_META_MAX)
+                return -1;
+        }
+    }
+    level_partition_meta_set(&pm);
+    return 0;
+}
 
 /* A legacy hero keeps this flag even after being saved by 0.9.8. Clearing
  * tutorial history or changing the global mode cannot bypass the deferral. */
@@ -673,31 +717,7 @@ errr rd_extra(void)
     }
 
     /* Partition generation metadata (grid + per-partition modes) */
-    if (savefile_has_partition_meta)
-    {
-        byte marker = 0;
-        rd_byte(&marker);
-        if (marker != 0x53)
-        {
-            note(format("Invalid partition meta marker 0x%02X", marker));
-            return (-1);
-        }
-
-        partition_meta_save pm;
-        memset(&pm, 0, sizeof(pm));
-        rd_s16b(&pm.grid_rows);
-        rd_s16b(&pm.grid_cols);
-        rd_s16b(&pm.partition_count);
-        for (int i = 0; i < PARTITION_META_MAX; ++i)
-            rd_byte(&pm.modes[i]);
-        if (savefile_has_partition_meta_types)
-        {
-            for (int i = 0; i < PARTITION_META_MAX; ++i)
-                rd_byte(&pm.big_cave_types[i]);
-        }
-
-        level_partition_meta_set(&pm);
-    }
+    if (load_read_partition_meta()) return -1;
 
     /* Hint message log (per-level skeleton note archive) */
     if (savefile_has_hint_messages)

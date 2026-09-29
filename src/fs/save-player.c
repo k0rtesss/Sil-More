@@ -14,6 +14,23 @@ static void wr_tutorial_character_state(void)
     wr_byte(p_ptr->tutorial_deferred ? 1 : 0);
 }
 
+void save_write_partition_meta(void)
+{
+    partition_meta_save pm;
+    level_partition_meta_get(&pm);
+    wr_byte(0x53);
+    wr_s16b(pm.grid_rows);
+    wr_s16b(pm.grid_cols);
+    wr_s16b(pm.partition_count);
+    for (int i = 0; i < PARTITION_META_MAX; ++i)
+        wr_byte(pm.modes[i]);
+    for (int i = 0; i < PARTITION_META_MAX; ++i)
+        wr_byte(pm.big_cave_types[i]);
+    /* 0.9.8.31: older readers must not interpret these as the hint log. */
+    for (int i = 0; i < PARTITION_META_MAX; ++i)
+        wr_byte(pm.atmospheres[i]);
+}
+
 /*
  * Write some "extra" info
  */
@@ -375,18 +392,7 @@ void wr_extra(void)
     }
 
     /* Partition generation metadata (grid + per-partition modes) */
-    {
-        partition_meta_save pm;
-        level_partition_meta_get(&pm);
-        wr_byte(0x53);
-        wr_s16b(pm.grid_rows);
-        wr_s16b(pm.grid_cols);
-        wr_s16b(pm.partition_count);
-        for (i = 0; i < PARTITION_META_MAX; ++i)
-            wr_byte(pm.modes[i]);
-        for (i = 0; i < PARTITION_META_MAX; ++i)
-            wr_byte(pm.big_cave_types[i]);
-    }
+    save_write_partition_meta();
 
     /* Hint message log (per-level skeleton note archive) */
     {

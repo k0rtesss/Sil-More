@@ -1,6 +1,17 @@
 # File: style-levels.txt
 # Version header
-V:0.9.8
+V:0.9.9
+
+# Ground material used to weight Hushed/Echoing/Draughty generation only.
+# A:<style>:STONE|SOFT|SNOW. Unlisted styles default to STONE.
+# These tags are independent of atlas coordinates and add no movement penalty.
+A:5:SOFT    # Organic growth and slime
+A:6:SOFT    # Mossy stonework
+A:7:SOFT    # Thick green growth
+A:42:SOFT   # Moss-covered caves
+A:43:SOFT   # Packed-earth floors in weathered brickwork
+A:44:SOFT   # Dirt floor patches
+A:62:SNOW   # Snow-covered glacial ground
 
 # Level style rules (exact depths 1..20). Each line:
 # L:<depth>: <style_index>:<weight> [<style_index>:<weight> ...]

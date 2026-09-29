@@ -93,10 +93,10 @@ typedef enum {
 
 typedef struct meta_file_header
 {
-    byte version_major;  /* Major version (0) */
-    byte version_minor;  /* Minor version (9) */
-    byte version_patch;  /* Patch version (1) */
-    byte version_extra;  /* Extra version (0) */
+    byte version_major;  /* Mirrors VERSION_MAJOR */
+    byte version_minor;  /* Mirrors VERSION_MINOR */
+    byte version_patch;  /* Mirrors VERSION_PATCH */
+    byte version_extra;  /* Mirrors VERSION_EXTRA */
     u32b entry_count;    /* Number of metarun entries in file */
 } meta_file_header;
 

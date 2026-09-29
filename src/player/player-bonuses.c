@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "quest/quest-rewards-beta.h"
 #include "quest/quest-runtime.h"
 #include "externs.h"
@@ -985,6 +986,12 @@ void calc_bonuses(void)
 
         p_ptr->skill_misc_mod[S_STL] -= song_noise;
     }
+
+    /* Local acoustics change effective skill, never purchased skill or abilities. */
+    p_ptr->skill_misc_mod[S_STL] +=
+        cave_atmosphere_skill_modifier(p_ptr->py, p_ptr->px, S_STL);
+    p_ptr->skill_misc_mod[S_SNG] +=
+        cave_atmosphere_skill_modifier(p_ptr->py, p_ptr->px, S_SNG);
 
     /* Race/Character skill flags */
     p_ptr->skill_misc_mod[S_MEL] += affinity_level(S_MEL);

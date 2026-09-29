@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "cave/cave-environment.h"
 #include "sdl/main-sdl-private.h"
 
@@ -644,6 +645,20 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
     if (cave_environment_describe(y, x, environment, sizeof(environment)))
         sdl_object_tooltip_append_part(buf, buflen, attrs, environment,
             TERM_YELLOW);
+
+    /* Explain the local rule on visible ground (including otherwise blank
+     * floor), without revealing atmospheres through remembered/hidden tiles. */
+    if ((cave_info[y][x] & CAVE_SEEN) || (y == p_ptr->py && x == p_ptr->px))
+    {
+        cave_atmosphere_kind atmosphere = cave_atmosphere_at(y, x);
+        if (atmosphere != CAVE_ATMOSPHERE_NONE)
+        {
+            sdl_object_tooltip_append_part(buf, buflen, attrs,
+                cave_atmosphere_name(atmosphere), TERM_L_BLUE);
+            sdl_object_tooltip_append_part(buf, buflen, attrs,
+                cave_atmosphere_description(atmosphere), TERM_WHITE);
+        }
+    }
 
     return buf[0] != '\0';
 }

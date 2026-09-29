@@ -1,6 +1,7 @@
 /* File: monster-move.c */
 
 #include "monster-internal.h"
+#include "cave/cave-atmosphere.h"
 #include "quest/quest-runtime.h"
 #include "log/perf.h"
 #include "cave/cave.h"
@@ -455,6 +456,7 @@ static bool player_environment_bonus_state_changed(int old_y, int old_x,
 {
     return level_partition_big_cave_type_for_point(old_y, old_x)
         != level_partition_big_cave_type_for_point(new_y, new_x)
+        || cave_atmosphere_changed(old_y, old_x, new_y, new_x)
         || FEAT_IS_ICE(cave_feat[old_y][old_x])
         || FEAT_IS_ICE(cave_feat[new_y][new_x]);
 }
@@ -662,7 +664,9 @@ void monster_swap(int y1, int x1, int y2, int x2)
 
         if (bonus_state_changed)
         {
-            p_ptr->update |= (PU_BONUS);
+            p_ptr->update |= PU_BONUS;
+            if (cave_atmosphere_changed(y1, x1, y2, x2))
+                p_ptr->update |= PU_TORCH;
             update_stuff();
         }
     }
@@ -714,6 +718,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
         if (bonus_state_changed)
         {
             p_ptr->update |= PU_BONUS;
+            if (cave_atmosphere_changed(y2, x2, y1, x1))
+                p_ptr->update |= PU_TORCH;
             update_stuff();
         }
     }

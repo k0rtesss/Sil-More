@@ -1,6 +1,7 @@
 /* File: level-generation-partition-population.c */
 
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "object/object-place.h"
 #include "level-generation/level-generation-internal.h"
 
@@ -695,10 +696,12 @@ void level_partition_meta_get(partition_meta_save* out)
 
     for (int i = 0; i < PARTITION_META_MAX; ++i)
         out->big_cave_types[i] = (byte)current_partition_big_cave_types[i];
+    cave_atmosphere_get_partitions(out->atmospheres);
 }
 
 void level_partition_meta_set(const partition_meta_save* in)
 {
+    cave_atmosphere_reset();
     if (!in)
         return;
 
@@ -742,6 +745,7 @@ void level_partition_meta_set(const partition_meta_save* in)
         current_partition_densities[i] = DENSITY_NORMAL;
         current_partition_big_cave_types[i] = cave_type;
     }
+    cave_atmosphere_set_partitions(in->atmospheres, count);
 }
 
 int level_partition_index_for_point(int y, int x)

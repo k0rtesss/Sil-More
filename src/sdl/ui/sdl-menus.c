@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-atmosphere.h"
 #include "sdl/main-sdl-private.h"
 
 #define SDL_NARRATIVE_BANNER_TRANSITION_FADE_MS 500
@@ -9,6 +10,14 @@ cptr sdl_depth_menu_partition_label(void)
 {
     if (!p_ptr || !character_dungeon)
         return "";
+
+    switch (cave_atmosphere_at(p_ptr->py, p_ptr->px))
+    {
+    case CAVE_ATMOSPHERE_HUSHED: return "Caves \xC2\xB7 Hushed";
+    case CAVE_ATMOSPHERE_ECHOING: return "Room \xC2\xB7 Echoing";
+    case CAVE_ATMOSPHERE_DRAUGHTY: return "Ruin - Draughty area";
+    default: break;
+    }
 
     switch (level_partition_kind_for_point(p_ptr->py, p_ptr->px))
     {

@@ -13,6 +13,7 @@
 #define INCLUDED_FS_LOAD_INTERNAL_H
 
 errr load_read_environment(void);
+errr load_read_partition_meta(void);
 errr load_read_catastrophe(void);
 
 /* Debug cursor: count of bytes consumed from the save stream (post-decode). */
