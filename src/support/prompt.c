@@ -520,7 +520,7 @@ bool get_string_panel(cptr prompt, char* buf, size_t len)
 /*
  * Show the quantity picker as a question overlay panel (never the top
  * message rows).  The +/- rows adjust the count without closing; digits
- * and 8/2 still edit it from the keyboard.
+ * and +/- still edit it from the keyboard.
  */
 static void quantity_prompt_draw(cptr prompt, cptr action, int current,
     int max, int touch_category)
@@ -609,6 +609,17 @@ static s16b get_quantity_aux(cptr prompt, cptr action, int max,
 
             ch = inkey();
 
+            /* Physical and keypad arrows are queued separately from their
+             * legacy keypad characters by the SDL event bridge.  Consume
+             * that semantic navigation here so the number-row 2 and 8 stay
+             * available for entering quantities. */
+            {
+                int navigation = sdl_question_menu_take_navigation();
+
+                if (navigation)
+                    ch = (navigation < 0) ? '+' : '-';
+            }
+
             {
                 int clicked_choice = 0;
                 int click_action = UI_MENU_CLICK_PRIMARY;
@@ -671,7 +682,6 @@ static s16b get_quantity_aux(cptr prompt, cptr action, int max,
 
             case '+':
             case '=':
-            case '8':
             case 'k':
             case 'K':
 #ifdef ARROW_UP
@@ -694,7 +704,6 @@ static s16b get_quantity_aux(cptr prompt, cptr action, int max,
 
             case '-':
             case '_':
-            case '2':
             case 'j':
             case 'J':
 #ifdef ARROW_DOWN

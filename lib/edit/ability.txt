@@ -40,11 +40,12 @@
 #     These are learning requirements; starting gifts and equipment grants keep
 #     their existing rules, and already learned abilities remain usable.
 # 'S' replaces an ability's default skill score with weighted stat/skill sources.
-#     Skill sources exclude their stat contribution. Sum first, then floor once.
+#     Skill sources exclude their stat contribution. Sum first, then apply the
+#     consumer's final integer rounding.
 #     Smithing's common bonus is permanent DEX + GRA plus active mastery
 #     weights; heavy adds 0.5 STR + 0.5 DEX, mail/light adds DEX, and
 #     jewellery adds GRA. Equipment, misc and forge bonuses are separate.
-#     Sum all craft-stat terms before flooring once.
+#     Sum all craft-stat terms before rounding down once.
 #
 # 'Y' grants learned carriage efficiency. Supported targets are THROWING
 #     and ARROWS. The percentage does not stack with an item's own volume
@@ -655,9 +656,9 @@ T:31:0:99  # Gloves
 N:123:Enchantment
 I:6:3:5
 R:GRA:2
-S:GRA:1
+S:GRA:0.5
 D:Enchanting items with the artistry of Telchar of Nogrod, greatest of dwarven smiths, whose works were imbued with power beyond their mere substance. The enchanter weaves virtue into the very fabric of their creations, and can discern the enchantments hidden within the works of others.
-E:Requires 2 permanent Grace. Create {special} items. Determine enchantments on items. Modest ID bonus.
+E:Requires 2 permanent Grace. Adds half permanent Grace to effective Smithing. Create {special} items. Determine enchantments on items. Modest ID bonus.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 

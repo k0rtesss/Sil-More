@@ -10,13 +10,13 @@ Keep existing Smithing ability levels/names unless noted below. Current Smithing
 ## 1. Core formula
 
 ```text
-effective_smithing = base_smithing + flat_smithing_bonuses + floor(category_bonus + mastery_bonus)
+effective_smithing = base_smithing + flat_smithing_bonuses + floor(common_stat_bonus + category_bonus)
 ```
 
 - `base_smithing` = invested Smithing ranks only.
 - `flat_smithing_bonuses` = existing explicit Smithing bonuses (forge, Oath of the Smith, etc.).
 - Replace the old direct `+ Grace`; do **not** stack it on top of this system.
-- Round once, after summing all stat-derived bonuses.
+- Round down once, after summing all stat-derived bonuses.
 
 ### Craft stats
 Use intrinsic/permanent character stats for crafting.
@@ -60,17 +60,17 @@ purchased upgrades; stored upgrades survive toggling Insight off and back on.
 
 ```text
 Expertise:   +1.0 * DEX
-Enchantment: +1.0 * GRA
+Enchantment: +0.5 * GRA
 Artifice:    +1.0 * GRA
 ```
 
 Thus full advanced contribution becomes:
 
 ```text
-HEAVY_METAL + full mastery = 0.5*STR + 2.5*DEX + 3.0*GRA
-MAIL        + full mastery = 3.0*DEX + 3.0*GRA
-JEWELLERY   + full mastery = 2.0*DEX + 4.0*GRA
-LIGHT_CRAFT + full mastery = 3.0*DEX + 3.0*GRA
+HEAVY_METAL + full mastery = 0.5*STR + 2.5*DEX + 2.5*GRA
+MAIL        + full mastery = 3.0*DEX + 2.5*GRA
+JEWELLERY   + full mastery = 2.0*DEX + 3.5*GRA
+LIGHT_CRAFT + full mastery = 3.0*DEX + 2.5*GRA
 ```
 
 Do not give `Alloy mastery` or `Reforging` additional raw Smithing capacity in the first implementation pass.
@@ -104,7 +104,7 @@ GRA >= 2
 Effect additions:
 
 ```text
-+ GRA to effective Smithing
++ 0.5 * GRA to effective Smithing
 ```
 
 Retain special-item/enchantment functionality.
@@ -234,11 +234,11 @@ For `HEAVY_METAL`:
 Base category: 0.5*3 + 1.5*3 + 3 = 9
 Smithing 12 + category 9 = 21
 + Expertise               = 24
-+ Enchantment              = 27
-+ Artifice                 = 30
++ Enchantment (+1.5)      = 25
++ Artifice (+3.0)         = 28
 ```
 
-Target result: Difficulty 30 should be attainable around Smithing 12-16 with strong crafting development and reasonable stats, rather than requiring ~27+ invested Smithing or total build sacrifice.
+Target result: Difficulty 30 should be attainable around Smithing 12-16 with strong crafting development, reasonable stats, and ordinary flat bonuses, rather than requiring ~27+ invested Smithing or total build sacrifice.
 
 Do **not** globally increase recipe difficulties when implementing this system. Rebalance individual outliers only after playtesting.
 
@@ -248,8 +248,8 @@ Do **not** globally increase recipe difficulties when implementing this system. 
 
 1. `STR=3 DEX=3 GRA=3`, Smithing 12, no advanced mastery, heavy-metal item => effective Smithing 21 before flat bonuses.
 2. Same + Expertise => 24.
-3. Same + Expertise + Enchantment => 27.
-4. Same + Expertise + Enchantment + Artifice => 30.
+3. Same + Expertise + Enchantment => 25.
+4. Same + Expertise + Enchantment + Artifice => 28.
 5. Mail with `DEX=4 GRA=2`, no mastery => stat bonus 10.
 6. Jewellery with `DEX=2 GRA=4`, no mastery => stat bonus 10.
 7. Temporary `+3 STR/DEX/GRA` from Strength in Adversity does not change Smithing capacity.

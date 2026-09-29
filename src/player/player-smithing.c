@@ -74,7 +74,8 @@ bool ability_stat_requirements_met(const ability_type* ability)
 }
 
 /* Fixed point coefficients copied from develop's S: format. Keep hundredths
- * until the final sum so fractional and negative contributions round once. */
+ * until the final sum so fractional and negative contributions round once;
+ * Smithing floors only after adding the category term. */
 int ability_stat_score_scaled(const ability_type* ability, bool permanent)
 {
     int scaled = 0;
@@ -196,7 +197,7 @@ cptr smithing_category_stat_formula(const object_type* object)
 
 int smithing_stat_bonus(const object_type* object)
 {
-    /* The sheet shows the common portion; crafting rounds the whole sum once. */
+    /* The sheet shows the common portion; crafting floors the whole sum once. */
     return score_floor(smithing_common_stat_bonus_scaled()
         + smithing_category_stat_bonus_scaled(object));
 }

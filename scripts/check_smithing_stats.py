@@ -434,7 +434,7 @@ void check_calculation_display(cptr output)
     p_ptr->insight_points = 1;
     assert(insight_upgrade_ability(S_SMT, SMT_ENCHANTMENT));
     smith_build_calculation_report(&report, 76, NULL);
-    assert(report_has(&report, "Enchantment: 3.00"));
+    assert(report_has(&report, "Enchantment: 1.50"));
     op_ptr->opt[OPT_insight_beta] = false;
     p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT] = false;
     p_ptr->innate_ability[S_SMT][SMT_ENCHANTMENT] = false;
@@ -861,9 +861,9 @@ int main(int argc, char** argv)
     p_ptr->active_ability[S_SMT][SMT_EXPERTISE] = true;
     assert(smithing_effective_skill(&heavy) == 24);
     p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT] = true;
-    assert(smithing_effective_skill(&heavy) == 27);
+    assert(smithing_effective_skill(&heavy) == 25);
     p_ptr->active_ability[S_SMT][SMT_ARTEFACT] = true;
-    assert(smithing_effective_skill(&heavy) == 30);
+    assert(smithing_effective_skill(&heavy) == 28);
     p_ptr->innate_ability[S_SMT][SMT_EXPERTISE] = true;
     p_ptr->innate_ability[S_SMT][SMT_ENCHANTMENT] = true;
     p_ptr->innate_ability[S_SMT][SMT_ARTEFACT] = true;
@@ -887,10 +887,10 @@ int main(int argc, char** argv)
         p_ptr->stat_use[i] = 20; p_ptr->stat_equip_mod[i] = 3;
         p_ptr->stat_misc_mod[i] = 3; p_ptr->stat_drain[i] = -3;
     }
-    assert(smithing_effective_skill(&heavy) == 30);
+    assert(smithing_effective_skill(&heavy) == 28);
     p_ptr->active_ability[S_SMT][SMT_GRA] = true;
     p_ptr->innate_ability[S_SMT][SMT_GRA] = true;
-    assert(smithing_effective_skill(&heavy) == 33);
+    assert(smithing_effective_skill(&heavy) == 31);
     memset(p_ptr->active_ability, 0, sizeof(p_ptr->active_ability));
     memset(p_ptr->innate_ability, 0, sizeof(p_ptr->innate_ability));
     p_ptr->stat_base[A_DEX] = 4; p_ptr->stat_base[A_GRA] = 2;
@@ -908,7 +908,7 @@ int main(int argc, char** argv)
     p_ptr->skill_equip_mod[S_SMT] = 2; p_ptr->skill_misc_mod[S_SMT] = 3;
     assert(smithing_effective_skill(&heavy) == 19);
     p_ptr->skill_equip_mod[S_SMT] = p_ptr->skill_misc_mod[S_SMT] = 0;
-    puts("Spec capacities 21/24/27/30, mail/jewellery, permanent Grace, flat bonuses and rounding PASS.");
+    puts("Spec capacities 21/24/25/28, mail/jewellery, permanent Grace, flat bonuses and rounding PASS.");
     check_learning();
     memset(p_ptr->active_ability, 0, sizeof(p_ptr->active_ability));
     memset(p_ptr->have_ability, 0, sizeof(p_ptr->have_ability));

@@ -2242,7 +2242,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY,
             "- Sheet stats: permanent DEX + GRA, plus active smithing masteries.", row++, col);
         put_role(ROLE_BODY,
-            "- The forge adds a category extra and its forge bonus; round stats once.", row++, col);
+            "- The forge adds a category extra and its forge bonus; round stats down once.", row++, col);
         put_role(ROLE_BODY,
             "- Heavy metal: +0.5 STR +0.5 DEX; mail/light: +DEX; jewellery: +GRA.", row++, col);
         put_role(ROLE_BODY,

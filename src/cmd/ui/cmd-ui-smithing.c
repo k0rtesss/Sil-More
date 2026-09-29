@@ -4829,7 +4829,7 @@ static void smith_build_calculation_report(smith_calculation_report* report,
             smithing_category_stat_formula(smith_o_ptr), value));
     smith_scaled_text(common_scaled + extra_scaled, total, sizeof(total));
     smith_report_add(report, width, TERM_WHITE,
-        format("All craft stats: floor(%s) = %d (round once)", total, all_stats));
+        format("All craft stats: floor(%s) = %d (round down once)", total, all_stats));
     smith_report_add(report, width, TERM_L_GREEN,
         format("Normal capacity: %d ranks %+d flat %+d craft stats %+d forge = %d",
             p_ptr->skill_base[S_SMT], flat, all_stats, forge, capacity));

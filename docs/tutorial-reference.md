@@ -1890,7 +1890,7 @@ Open How calculated with ? on a keyboard, the controller Info button (View/Selec
 
 **2. Info**
 
-Choose a base item to see your Smithing capacity and open How calculated (or ?) for the breakdown. Capacity lists invested ranks, the common stat bonus, equipment Smithing, misc Smithing and the forge bonus. The common bonus is permanent Dexterity + permanent Grace, plus Expertise's Dexterity, Enchantment's Grace and Artifice's Grace; the selected category then adds 0.5 Strength + 0.5 Dexterity for heavy metal, Dexterity for mail or light craft, or Grace for jewellery. Sum craft stats before flooring; temporary or conditional stat boosts do not count. The same breakdown shows the item's difficulty components and modifiers, before/after reforge difficulty, and Masterpiece or Aule's Forge rank sacrifices. Reforging uses ceil(1.5 * difficulty increase); review materials, time and forge uses before committing.
+Choose a base item to see your Smithing capacity and open How calculated (or ?) for the breakdown. Capacity lists invested ranks, the common stat bonus, equipment Smithing, misc Smithing and the forge bonus. The common bonus is permanent Dexterity + permanent Grace, plus Expertise's Dexterity, Enchantment's half Grace and Artifice's Grace; the selected category then adds 0.5 Strength + 0.5 Dexterity for heavy metal, Dexterity for mail or light craft, or Grace for jewellery. Sum craft stats before flooring once; temporary or conditional stat boosts do not count. The same breakdown shows the item's difficulty components and modifiers, before/after reforge difficulty, and Masterpiece or Aule's Forge rank sacrifices. Reforging uses ceil(1.5 * difficulty increase); review materials, time and forge uses before committing.
 
 Trigger: The named menu is actually opened: smithing.
 
@@ -3216,7 +3216,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Requires 2 permanent Grace. When active, adds permanent Grace to the common Smithing bonus for every craft, and creates enchanted items with named special properties. Determine enchantments on items and gain a modest identification bonus.
+Requires 2 permanent Grace. When active, adds half permanent Grace to the common Smithing bonus for every craft, and creates enchanted items with named special properties. Determine enchantments on items and gain a modest identification bonus.
 
 Trigger: Public ability preview or newly available ability; raw serial 123, skill 6, ability slot 3.
 

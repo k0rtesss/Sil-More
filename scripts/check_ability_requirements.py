@@ -641,7 +641,8 @@ static void check_smithing_insight_upgrades(void)
     object_prep(&ring, lookup_kind(TV_RING, 0));
     int heavy_base = smithing_effective_skill(&heavy);
     int ring_base = smithing_effective_skill(&ring);
-    int bonus = 0;
+    int heavy_fraction = 50 * (smithing_effective_stat(A_STR) + smithing_effective_stat(A_DEX)) % 100;
+    int bonus_scaled = 0;
     for (int i = 0; i < 3; ++i)
     {
         int ability = abilities[i];
@@ -661,7 +662,9 @@ static void check_smithing_insight_upgrades(void)
         assert(ability_browser_activate_choice(S_SMT, ability));
         assert(!p_ptr->insight_points && !p_ptr->insight_ability_upgraded[S_SMT][ability]);
         assert(!smithing_mastery_stat_bonus_scaled(ability));
-        assert(smithing_effective_skill(&heavy) == heavy_base + bonus);
+        assert(smithing_effective_skill(&heavy) == heavy_base
+            + (heavy_fraction + bonus_scaled) / 100
+            - heavy_fraction / 100);
         s32b xp = p_ptr->new_exp;
         assert(!ability_browser_upgrade_choice(S_SMT, ability));
         p_ptr->insight_points = 1;
@@ -695,17 +698,20 @@ static void check_smithing_insight_upgrades(void)
         assert(!p_ptr->insight_points && p_ptr->new_exp == xp);
         int stat = ability == SMT_EXPERTISE ? A_DEX : A_GRA;
         int contribution = smithing_effective_stat(stat);
-        bonus += contribution;
-        assert(smithing_mastery_stat_bonus_scaled(ability) == 100 * contribution);
-        assert(smithing_effective_skill(&heavy) == heavy_base + bonus);
-        assert(smithing_effective_skill(&ring) == ring_base + bonus);
+        int expected_bonus = ability == SMT_ENCHANTMENT ? 50 * contribution : 100 * contribution;
+        bonus_scaled += expected_bonus;
+        assert(smithing_mastery_stat_bonus_scaled(ability) == expected_bonus);
+        assert(smithing_effective_skill(&heavy) == heavy_base
+            + (heavy_fraction + bonus_scaled) / 100
+            - heavy_fraction / 100);
+        assert(smithing_effective_skill(&ring) == ring_base + bonus_scaled / 100);
         p_ptr->insight_points = 1;
         assert(!ability_browser_upgrade_choice(S_SMT, ability));
         assert(p_ptr->insight_points == 1);
         assert(ability_browser_activate_choice(S_SMT, ability));
         assert(!smithing_mastery_stat_bonus_scaled(ability));
         assert(ability_browser_activate_choice(S_SMT, ability));
-        assert(smithing_mastery_stat_bonus_scaled(ability) == 100 * contribution);
+        assert(smithing_mastery_stat_bonus_scaled(ability) == expected_bonus);
         p_ptr->insight_points = 0;
     }
     /* Equipment grants do not qualify as a learned ability. */
@@ -717,7 +723,7 @@ static void check_smithing_insight_upgrades(void)
     assert(!smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT));
     op_ptr->opt[OPT_insight_beta] = false;
     assert(!insight_upgrade_ability(S_SMT, SMT_ENCHANTMENT));
-    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 300);
+    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 150);
     assert(!insight_upgrade_ability(-1, 0) && !insight_upgrade_ability(S_MAX, 0));
     /* Exercise the new keyboard action through the actual browser loop. */
     reset_player(); op_ptr->opt[OPT_insight_beta] = true;
@@ -739,11 +745,11 @@ static void check_smithing_insight_upgrades(void)
     input_sequence = NULL;
     assert(!p_ptr->insight_points && p_ptr->insight_ability_upgraded[S_SMT][SMT_ENCHANTMENT]);
     assert(p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT]);
-    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 300);
+    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 150);
     op_ptr->opt[OPT_insight_beta] = false;
-    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 300);
+    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 150);
     op_ptr->opt[OPT_insight_beta] = true;
-    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 300);
+    assert(smithing_mastery_stat_bonus_scaled(SMT_ENCHANTMENT) == 150);
     puts("Smithing IP upgrades: separate XP purchases, atomic 1 IP powers, toggle, footer click targets and beta-off behavior PASS.");
 }
 
