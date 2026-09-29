@@ -473,6 +473,9 @@ static void copy_context(tutorial_context *dst, const tutorial_context *src)
         SDL_strlcpy(dst->subject_type, src->subject_type, sizeof(dst->subject_type));
         SDL_strlcpy(dst->subject, src->subject, sizeof(dst->subject));
         SDL_strlcpy(dst->text, src->text, sizeof(dst->text));
+        dst->map_y = src->map_y;
+        dst->map_x = src->map_x;
+        dst->has_map_square = src->has_map_square;
     }
 }
 

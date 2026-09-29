@@ -10376,7 +10376,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} Rooms and connecting passages offer doorways where you can limit approaching enemies. Find a retreat route before crossing an open room.",
+          "text": "{detail} Rooms offer doors that help control enemies; find a retreat route before crossing open ground. Floor loot favors weapons and armour over jewellery.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10399,7 +10399,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} Natural caves have irregular routes and sight lines. Check visible exits and nearby cover before approaching enemies.",
+          "text": "{detail} Natural caves have irregular paths and long sight lines. Check exits and cover before approaching enemies. Floor loot favors supplies; you may also find gems and, at suitable depths, mithril.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10422,7 +10422,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} Ruined halls contain broken structures and irregular passages. Check which doorways still close and where the open routes lead.",
+          "text": "{detail} Ruins have broken structures and irregular passages. Check which doors still close. Loot favors weapons, armour and supplies; damaged gear may turn up.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10445,7 +10445,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} Labyrinths have narrow, winding passages. Keep track of intersections and a route back to known ground. The map helps you review explored passages.",
+          "text": "{detail} Labyrinths have narrow, winding passages. Track intersections and a route back using the map. Loot favors jewellery and supplies, including rings, potions and staves, with few weapons or armour.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10468,7 +10468,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} Chasms divide this area. A fall can hurt you and send you deeper. Check each crossing and any leap requirements before moving.",
+          "text": "{detail} Chasms divide this area. A fall can hurt you and send you deeper. Check each crossing and leap requirement before moving. Look for fallen gear near the edges, but avoid fighting on narrow bridges. Star iron may appear at suitable depths.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10491,7 +10491,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "{detail} A great cave offers long sight lines and many approach routes. Distant enemies may see you too; use visible cover and keep room to retreat.",
+          "text": "{detail} A great cave offers long sight lines and many approach routes; distant enemies may see you too. Use cover and keep space to retreat. Loot is mixed, but supplies and gems are more common here than in ordinary halls; mithril may appear at suitable depths.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10514,7 +10514,7 @@
       "priority": 48,
       "steps": [
         {
-          "text": "{detail} Inside this cave, you lose one layer of fire, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.",
+          "text": "{detail} Inside this cave, you lose one layer of fire, fear and stun resistance. Check your totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present. Supplies may also be found here; weigh any detour against the environmental risk.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10536,7 +10536,7 @@
       "priority": 48,
       "steps": [
         {
-          "text": "{detail} Inside this cave, you lose one layer of cold, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.",
+          "text": "{detail} Inside this cave, you lose one layer of cold, fear and stun resistance. Check your totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present. Supplies may also be found here; weigh any detour against the environmental risk.",
           "kind": "info",
           "anchor": "map"
         }
@@ -10558,7 +10558,7 @@
       "priority": 48,
       "steps": [
         {
-          "text": "{detail} Inside this cave, you lose one layer of poison, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.",
+          "text": "{detail} Inside this cave, you lose one layer of poison, fear and stun resistance. Check your totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present. Supplies may also be found here; weigh any detour against the environmental risk.",
           "kind": "info",
           "anchor": "map"
         }

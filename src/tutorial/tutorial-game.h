@@ -8,6 +8,8 @@ void tutorial_game_start(void);
 /* Generation uses this before tutorial_game_start() to protect a fresh
  * turn-zero opening; it reads the selected mode and Tale history only. */
 bool tutorial_game_start_needs_clear_area(void);
+/* True while the opening tutorial is queued or still in progress. */
+bool tutorial_game_opening_pending(void);
 /* Uses already-computed monster visibility; never queues or displays a card. */
 bool tutorial_game_first_monster_triggered(void);
 /* Uses already-computed visibility; covers every map subject that the first

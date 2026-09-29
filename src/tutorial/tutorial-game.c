@@ -102,6 +102,17 @@ bool tutorial_game_start_needs_clear_area(void)
             || monster_status == TUTORIAL_IN_PROGRESS);
 }
 
+bool tutorial_game_opening_pending(void)
+{
+    tutorial_status status;
+
+    if (!opening_pending || !tutorial_lesson_enabled("opening.move"))
+        return false;
+
+    status = tutorial_lesson_status("opening.move");
+    return status == TUTORIAL_UNSEEN || status == TUTORIAL_IN_PROGRESS;
+}
+
 static const char *tutorial_state_lesson_id(const char *state_id)
 {
     if (!strcmp(state_id, "status.sunlight")) return "terrain.9";
@@ -166,15 +177,26 @@ static bool gameplay_available(void)
         && !p_ptr->is_dead && !death_spectator_active();
 }
 
-static void observe(const char *id, const char *type, const char *subject,
-    const char *detail)
+static void observe_at(const char *id, const char *type, const char *subject,
+    const char *detail, int map_y, int map_x)
 {
     tutorial_context context = {0};
     if (!gameplay_available() || !tutorial_enabled()) return;
     SDL_strlcpy(context.subject_type, type ? type : "", sizeof(context.subject_type));
     SDL_strlcpy(context.subject, subject ? subject : "", sizeof(context.subject));
     SDL_strlcpy(context.text, detail ? detail : "", sizeof(context.text));
+    if (in_bounds(map_y, map_x)) {
+        context.map_y = map_y;
+        context.map_x = map_x;
+        context.has_map_square = true;
+    }
     tutorial_observe(id, &context);
+}
+
+static void observe(const char *id, const char *type, const char *subject,
+    const char *detail)
+{
+    observe_at(id, type, subject, detail, -1, -1);
 }
 
 static const char *item_type(const object_type *item)
@@ -290,16 +312,17 @@ static void offer_remedy(const char *condition, const char *name)
         "Choose a known remedy in Supplies. Read its effect before using it. Pack access retains its normal time cost.");
 }
 
-void tutorial_game_item(const object_type *item)
+static void tutorial_game_item_at(const object_type *item, int map_y, int map_x)
 {
     char name[160], id[80], detail[384];
     const char *type;
     if (!gameplay_available() || !item || !item->k_idx || p_ptr->image) return;
     if (item->tval == TV_SKELETON || item->tval == TV_CHEST) {
         object_desc(name, sizeof(name), item, true, 3);
-        observe(item->tval == TV_SKELETON ? "world.skeleton" : "world.chest",
+        observe_at(item->tval == TV_SKELETON ? "world.skeleton" : "world.chest",
             item->tval == TV_SKELETON ? "skeleton" : "chest", name,
-            "Use this feature's own interaction and inspect the available choices before committing.");
+            "Use this feature's own interaction and inspect the available choices before committing.",
+            map_y, map_x);
         return;
     }
     type = item_type(item);
@@ -323,6 +346,11 @@ void tutorial_game_item(const object_type *item)
     }
     if (object_known_p(item) && item->name1)
         observe("item.artefact", type, name, "Read the entire known description, including drawbacks and granted abilities.");
+}
+
+void tutorial_game_item(const object_type *item)
+{
+    tutorial_game_item_at(item, p_ptr ? p_ptr->py : -1, p_ptr ? p_ptr->px : -1);
 }
 
 void tutorial_game_item_described(const object_type *item)
@@ -961,11 +989,14 @@ static void observe_nearby(void)
     bool forge = false, detailed_forge = false;
     bool trap = false, detailed_trap = false;
     bool chest = false, skeleton = false;
+    int feature_y[256], feature_x[256];
     const int hazards[] = {FEAT_WATER, FEAT_LAVA, FEAT_ICE, FEAT_POISON, FEAT_DEEP_WATER, FEAT_MELTING_ICE};
     const char *hazard_ids[] = {"world.water", "world.lava", "world.ice", "world.poison", "world.deepwater", "world.meltingice"};
     const char *hazard_detail_ids[] = {"terrain.84", "terrain.85", "terrain.86", "terrain.87", "terrain.100", "terrain.102"};
     const char *hazard_names[] = {"Shallow water", "Molten lava", "Ice", "Poisonous acid", "Deep water", "Melting ice"};
     char id[80];
+    for (int i = 0; i < (int)N_ELEMENTS(feature_y); ++i)
+        feature_y[i] = feature_x[i] = -1;
     /* Terrain and containers can be introduced while visibly adjacent.
      * Loose items must be underfoot: Examine opens the current floor pile,
      * and an examination card prevents moving onto an adjacent item. */
@@ -979,24 +1010,32 @@ static void observe_nearby(void)
                 skeleton |= item->tval == TV_SKELETON;
                 if ((y == p_ptr->py && x == p_ptr->px)
                     || item->tval == TV_CHEST || item->tval == TV_SKELETON)
-                    tutorial_game_item(item);
+                    tutorial_game_item_at(item, y, x);
             }
             int feat = cave_feat[y][x];
             if (!tutorial_nearby_feature_is_revealed(y, x)
                 || !tutorial_nearby_feature_is_interesting(feat)) continue;
             int lesson_feat = terrain_lesson_feature(feat);
             features[lesson_feat] = true;
+            feature_y[lesson_feat] = y;
+            feature_x[lesson_feat] = x;
             strnfmt(id, sizeof(id), "terrain.%d", lesson_feat);
-            observe(id, "terrain", "Nearby terrain", "Inspect this known feature before stepping onto it or choosing an interaction.");
+            observe_at(id, "terrain", "Nearby terrain",
+                "Inspect this known feature before stepping onto it or choosing an interaction.",
+                y, x);
             if (cave_forge_bold(y, x)) {
                 forge = true;
                 if (tutorial_lesson_enabled(id)) detailed_forge = true;
-                else observe("world.forge", "terrain", "A forge", "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.");
+                else observe_at("world.forge", "terrain", "A forge",
+                    "Inspect the forge and its remaining uses. Open Smithing to compare requirements before committing resources.",
+                    y, x);
             }
             if (cave_trap_bold(y, x)) {
                 trap = true;
                 if (tutorial_lesson_enabled(id)) detailed_trap = true;
-                else observe("world.trap", "terrain", "A revealed trap", "Inspect the trap before moving. Choose a route around it or check the applicable interaction and its risks.");
+                else observe_at("world.trap", "terrain", "A revealed trap",
+                    "Inspect the trap before moving. Choose a route around it or check the applicable interaction and its risks.",
+                    y, x);
             }
         }
     for (int i = 0; i < (int)N_ELEMENTS(features); ++i)
@@ -1009,8 +1048,9 @@ static void observe_nearby(void)
             /* Normal gets the short warning; Extended gets the detailed
              * terrain card, not both explanations for the same feature. */
             if (!tutorial_lesson_enabled(hazard_detail_ids[i]))
-                observe(hazard_ids[i], "terrain", hazard_names[i],
-                    "This terrain is within one step. Check its risks before choosing a route.");
+                observe_at(hazard_ids[i], "terrain", hazard_names[i],
+                    "This terrain is within one step. Check its risks before choosing a route.",
+                    feature_y[hazards[i]], feature_x[hazards[i]]);
             else tutorial_forget_observation(hazard_ids[i]);
         }
         else tutorial_forget_observation(hazard_ids[i]);
@@ -1215,24 +1255,29 @@ void tutorial_game_checkpoint(void)
             && (tutorial_lesson_status("combat.first_monster") == TUTORIAL_COMPLETED
                 || tutorial_lesson_status("combat.first_monster") == TUTORIAL_SKIPPED)) {
             stealth_useful = true;
-            observe("combat.stealth", "monster", name,
-                "This creature has not noticed you. Stealth improves your chance of remaining unnoticed, but slows movement.");
+            observe_at("combat.stealth", "monster", name,
+                "This creature has not noticed you. Stealth improves your chance of remaining unnoticed, but slows movement.",
+                monster->fy, monster->fx);
         }
         if (target_can_be_attacked(monster)) legal_hostile = true;
         if (tutorial_first_monster_target(monster))
-            observe("combat.first_monster", "monster", name,
-                "Awareness and morale are different. Stealth helps avoid notice but slows movement; it does not guarantee that an alert enemy loses you.");
+            observe_at("combat.first_monster", "monster", name,
+                "Awareness and morale are different. Stealth helps avoid notice but slows movement; it does not guarantee that an alert enemy loses you.",
+                monster->fy, monster->fx);
         if (beside) {
             ++adjacent;
             if (target_can_be_attacked(monster) && player_active_weapon_is_melee()
                 && !p_ptr->entranced && p_ptr->stun <= 100) {
                 legal_adjacent = true;
-                observe("combat.first_adjacent", "monster", name, "");
+                observe_at("combat.first_adjacent", "monster", name, "",
+                    monster->fy, monster->fx);
             }
         }
         if (monster->stance == STANCE_FLEEING) {
             fleeing = true;
-            observe("combat.fleeing", "monster", name, "This creature is fleeing. Morale differs from awareness; check your oath before pursuing or attacking.");
+            observe_at("combat.fleeing", "monster", name,
+                "This creature is fleeing. Morale differs from awareness; check your oath before pursuing or attacking.",
+                monster->fy, monster->fx);
         }
     }
     if (!legal_adjacent) tutorial_forget_observation("combat.first_adjacent");

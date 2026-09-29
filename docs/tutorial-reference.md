@@ -6312,7 +6312,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-{detail} Rooms and connecting passages offer doorways where you can limit approaching enemies. Find a retreat route before crossing an open room.
+{detail} Rooms offer doors that help control enemies; find a retreat route before crossing open ground. Floor loot favors weapons and armour over jewellery.
 
 Trigger: The player enters and publicly discovers partition kind 1.
 
@@ -6328,7 +6328,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-{detail} Natural caves have irregular routes and sight lines. Check visible exits and nearby cover before approaching enemies.
+{detail} Natural caves have irregular paths and long sight lines. Check exits and cover before approaching enemies. Floor loot favors supplies; you may also find gems and, at suitable depths, mithril.
 
 Trigger: The player enters and publicly discovers partition kind 2.
 
@@ -6344,7 +6344,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-{detail} Ruined halls contain broken structures and irregular passages. Check which doorways still close and where the open routes lead.
+{detail} Ruins have broken structures and irregular passages. Check which doors still close. Loot favors weapons, armour and supplies; damaged gear may turn up.
 
 Trigger: The player enters and publicly discovers partition kind 3.
 
@@ -6360,7 +6360,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-{detail} Labyrinths have narrow, winding passages. Keep track of intersections and a route back to known ground. The map helps you review explored passages.
+{detail} Labyrinths have narrow, winding passages. Track intersections and a route back using the map. Loot favors jewellery and supplies, including rings, potions and staves, with few weapons or armour.
 
 Trigger: The player enters and publicly discovers partition kind 4.
 
@@ -6376,7 +6376,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-{detail} Chasms divide this area. A fall can hurt you and send you deeper. Check each crossing and any leap requirements before moving.
+{detail} Chasms divide this area. A fall can hurt you and send you deeper. Check each crossing and leap requirement before moving. Look for fallen gear near the edges, but avoid fighting on narrow bridges. Star iron may appear at suitable depths.
 
 Trigger: The player enters and publicly discovers partition kind 5.
 
@@ -6392,7 +6392,7 @@ Priority: **38** (higher appears first).
 
 **1. Info**
 
-{detail} A great cave offers long sight lines and many approach routes. Distant enemies may see you too; use visible cover and keep room to retreat.
+{detail} A great cave offers long sight lines and many approach routes; distant enemies may see you too. Use cover and keep space to retreat. Loot is mixed, but supplies and gems are more common here than in ordinary halls; mithril may appear at suitable depths.
 
 Trigger: The player enters and publicly discovers partition kind 6.
 
@@ -6408,7 +6408,7 @@ Priority: **48** (higher appears first).
 
 **1. Info**
 
-{detail} Inside this cave, you lose one layer of fire, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.
+{detail} Inside this cave, you lose one layer of fire, fear and stun resistance. Check your totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present. Supplies may also be found here; weigh any detour against the environmental risk.
 
 Trigger: A discovered great cave has the corresponding public elemental cave type.
 
@@ -6424,7 +6424,7 @@ Priority: **48** (higher appears first).
 
 **1. Info**
 
-{detail} Inside this cave, you lose one layer of cold, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.
+{detail} Inside this cave, you lose one layer of cold, fear and stun resistance. Check your totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present. Supplies may also be found here; weigh any detour against the environmental risk.
 
 Trigger: A discovered great cave has the corresponding public elemental cave type.
 
@@ -6440,7 +6440,7 @@ Priority: **48** (higher appears first).
 
 **1. Info**
 
-{detail} Inside this cave, you lose one layer of poison, fear and stun resistance. Check your current totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present.
+{detail} Inside this cave, you lose one layer of poison, fear and stun resistance. Check your totals before meeting enemies or crossing hazards. The cave theme tells you the environment, not which unseen creatures are present. Supplies may also be found here; weigh any detour against the environmental risk.
 
 Trigger: A discovered great cave has the corresponding public elemental cave type.
 
