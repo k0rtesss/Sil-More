@@ -315,6 +315,8 @@ struct ability_type
     byte abilitynum; /* Ability number within a skill */
 
     byte level; /* Prerequisite skill level */
+    byte voice_cost; /* C: Voice spent per interval, for songs */
+    byte voice_cost_interval; /* C: Number of turns in the interval */
     byte carriage_target; /* ABILITY_CARRIAGE_* target, if any */
     byte carriage_reduction_percent; /* Learned ability reduction */
     byte stat_req[A_MAX]; /* Minimum permanent character stats (R:) */

@@ -480,78 +480,64 @@ bool singing(int song)
     return (false);
 }
 
+static const ability_type* song_ability_data(int song)
+{
+    int index;
+    ability_type* b_ptr;
+
+    if (song < 0 || song >= SNG_MAX || !b_info || !z_info)
+        return NULL;
+
+    index = ability_index(S_SNG, song);
+    if (index < 0 || index >= z_info->b_max)
+        return NULL;
+
+    b_ptr = &b_info[index];
+    if (b_ptr->skilltype != S_SNG || b_ptr->abilitynum != song)
+        return NULL;
+
+    return b_ptr;
+}
+
 cptr song_voice_cost_desc(int song)
 {
-    switch (song)
-    {
-    case SNG_CHALLENGE:
-    case SNG_FREEDOM:
-    case SNG_SILENCE:
-    case SNG_THRESHOLDS:
-    case SNG_DELVINGS:
-    case SNG_REVEALING:
-    case SNG_TREES:
-        return "1 Voice per 3 turns";
+    static char desc[64];
+    const ability_type* b_ptr = song_ability_data(song);
 
-    case SNG_ELBERETH:
-    case SNG_STAUNCHING:
-    case SNG_ELVENESS:
-    case SNG_STAYING:
-    case SNG_SLAYING:
-    case SNG_LORIEN:
-        return "1 Voice per turn";
-
-    case SNG_MASTERY:
-    case SNG_SHATTERING:
-        return "2 Voice per turn";
-
-    case SNG_DISGUISE:
-        return "3 Voice per turn";
-
-    case SNG_CONTEST:
-    case SNG_LAMENT:
-        return "7 Voice per turn";
-
-    default:
+    if (!b_ptr || !b_ptr->voice_cost || !b_ptr->voice_cost_interval)
         return NULL;
+
+    if (b_ptr->voice_cost_interval == 1)
+    {
+        strnfmt(desc, sizeof(desc), "%d Voice per turn", b_ptr->voice_cost);
     }
+    else
+    {
+        strnfmt(desc, sizeof(desc), "%d Voice per %d turns",
+            b_ptr->voice_cost, b_ptr->voice_cost_interval);
+    }
+
+    return desc;
 }
 
 static int song_voice_cost_for_turn(int song, int theme_slot, int song_duration)
 {
-    switch (song)
-    {
-    case SNG_CHALLENGE:
-    case SNG_FREEDOM:
-    case SNG_SILENCE:
-    case SNG_THRESHOLDS:
-    case SNG_DELVINGS:
-    case SNG_REVEALING:
-    case SNG_TREES:
-        return ((song_duration % 3) == theme_slot - 1) ? 1 : 0;
+    const ability_type* b_ptr = song_ability_data(song);
 
-    case SNG_ELBERETH:
-    case SNG_STAUNCHING:
-    case SNG_ELVENESS:
-    case SNG_STAYING:
-    case SNG_SLAYING:
-    case SNG_LORIEN:
-        return 1;
-
-    case SNG_MASTERY:
-    case SNG_SHATTERING:
-        return 2;
-
-    case SNG_DISGUISE:
-        return 3;
-
-    case SNG_CONTEST:
-    case SNG_LAMENT:
-        return (theme_slot == 1) ? 7 : 0;
-
-    default:
+    if (!b_ptr || !b_ptr->voice_cost || !b_ptr->voice_cost_interval)
         return 0;
-    }
+
+    /* Duel songs cannot be minor themes, but keep their primary-only cost
+     * here as a safe guard for any stale or externally restored song state. */
+    if (song_is_duel(song) && theme_slot != 1)
+        return 0;
+
+    if (b_ptr->voice_cost_interval == 1)
+        return b_ptr->voice_cost;
+
+    /* Stagger slower costs between the primary and minor theme. */
+    return ((song_duration % b_ptr->voice_cost_interval) == theme_slot - 1)
+        ? b_ptr->voice_cost : 0;
 }
 
 static bool player_can_sustain_song(int song)

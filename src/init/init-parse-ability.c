@@ -588,6 +588,27 @@ errr parse_b_info(char* buf, header* head)
         else b_ptr->insight_cost = (byte)cost;
     }
 
+    /* C: sustained Voice cost as amount:turn interval, for songs only. */
+    else if (buf[0] == 'C')
+    {
+        int cost;
+        int interval;
+        char trailing;
+
+        if (!b_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (b_ptr->skilltype != S_SNG)
+            return PARSE_ERROR_GENERIC;
+        if (sscanf(buf + 2, "%d:%d%c", &cost, &interval, &trailing) != 2)
+            return PARSE_ERROR_GENERIC;
+        if (cost <= 0 || cost > 255 || interval <= 0 || interval > 255)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        if (b_ptr->voice_cost || b_ptr->voice_cost_interval)
+            return PARSE_ERROR_GENERIC;
+
+        b_ptr->voice_cost = (byte)cost;
+        b_ptr->voice_cost_interval = (byte)interval;
+    }
+
     /* Insight is a presentation/purchase branch, not a new engine skill. Keep
      * I: identities stable for equipment, prerequisites and older saves. */
     else if (buf[0] == 'L')
