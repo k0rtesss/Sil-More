@@ -48,5 +48,7 @@ void score_runs_free_details(score_run_detail_block* details);
 bool score_runs_snapshot_details(score_run_detail_block* out);
 bool score_runs_skip_detail_payload(SDL_IOStream* file,
                                     const score_run_detail_header_v1* header);
+/* Read-only validation of the complete database; leaves the stream at EOF. */
+bool score_runs_validate_history_db(SDL_IOStream* file, score_db_header* header);
 
 #endif /* INCLUDED_SCORE_RUNS_H */

@@ -33,7 +33,7 @@ errr parse_e_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static ego_item_type* e_ptr = NULL;
+    ego_item_type* e_ptr = PARSED_RECORD(ego_item_type, head);
 
     static int cur_t = 0;
 

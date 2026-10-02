@@ -19,7 +19,7 @@ errr parse_h_info(char* buf, header* head)
     char* s;
 
     /* Current entry */
-    static hist_type* h_ptr = NULL;
+    hist_type* h_ptr = PARSED_RECORD(hist_type, head);
 
     /* Process 'N' for "New/Number" */
     if (buf[0] == 'N')

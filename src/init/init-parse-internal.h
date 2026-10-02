@@ -4,6 +4,12 @@
 #include "angband.h"
 #include "init.h"
 
+/* Record context belongs to this header and this parse, rather than a static
+ * pointer retained from an earlier template load (possibly already freed). */
+#define PARSED_RECORD(TYPE, HEAD) \
+    (((HEAD)->info_ptr && error_idx >= 0 && error_idx < (HEAD)->info_num) \
+        ? (TYPE*)(HEAD)->info_ptr + error_idx : NULL)
+
 #define TR1 0
 #define TR2 1
 #define TR3 2

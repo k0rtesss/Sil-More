@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_stdinc.h>
 #include <time.h>
+#include <stdint.h>
 
 static Uint64 rng_state = 0;
 
@@ -134,20 +135,17 @@ s16b Rand_normal(int mean, int stand)
 
 s32b div_round(s32b n, s32b d)
 {
-    s32b tmp;
-
     if (!d)
         return n;
 
-    tmp = n / d;
-
-    if ((ABS(n) % ABS(d)) * 2 >= d)
-    {
-        if (n * d > 0L)
-            tmp += 1L;
-        else
-            tmp -= 1L;
-    }
-
-    return tmp;
+    s64b numerator = n, denominator = d;
+    s64b quotient = numerator / denominator;
+    s64b remainder = numerator % denominator;
+    s64b abs_remainder = remainder < 0 ? -remainder : remainder;
+    s64b abs_denominator = denominator < 0 ? -denominator : denominator;
+    if (abs_remainder * 2 >= abs_denominator)
+        quotient += ((n < 0) == (d < 0)) ? 1 : -1;
+    if (quotient > INT32_MAX) return INT32_MAX;
+    if (quotient < INT32_MIN) return INT32_MIN;
+    return (s32b)quotient;
 }

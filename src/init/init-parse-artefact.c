@@ -69,7 +69,7 @@ errr parse_a_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static artefact_type* a_ptr = NULL;
+    artefact_type* a_ptr = PARSED_RECORD(artefact_type, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')

@@ -30,7 +30,7 @@ errr parse_k_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static object_kind* k_ptr = NULL;
+    object_kind* k_ptr = PARSED_RECORD(object_kind, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')

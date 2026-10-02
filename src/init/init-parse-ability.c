@@ -503,7 +503,7 @@ errr parse_b_info(char* buf, header* head)
     static int cur_t = 0;
 
     /* Current entry */
-    static ability_type* b_ptr = NULL;
+    ability_type* b_ptr = PARSED_RECORD(ability_type, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')

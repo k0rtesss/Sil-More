@@ -61,11 +61,8 @@ extern u32b Rand_div(u32b m);
 extern s16b Rand_normal(int mean, int stand);
 
 /**
- * Generate a random number using a separate RNG state.
- * Used for UI/external operations that shouldn't affect gameplay RNG.
- * 
- * @param m Upper bound (exclusive)
- * @return Random value in range [0, m-1]
+ * Divide and round to the nearest integer, with ties away from zero.
+ * A zero divisor returns n; results outside s32b saturate at its limits.
  */
 extern s32b div_round(s32b n, s32b d);
 

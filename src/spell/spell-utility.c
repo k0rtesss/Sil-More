@@ -129,7 +129,7 @@ bool self_knowledge_display_pending(void)
     return true;
 }
 
-static void self_knowledge_capture_render_body(char s[][200], char t[][200],
+static bool self_knowledge_capture_render_body(char s[][200], char t[][200],
     bool good[], int count)
 {
     int term_wid = 80;
@@ -155,7 +155,7 @@ static void self_knowledge_capture_render_body(char s[][200], char t[][200],
         int cy;
 
         if (!Term || line >= Term->hgt - 1)
-            break;
+            return false;
 
         Term_gotoxy(1, line);
 
@@ -176,16 +176,14 @@ static void self_knowledge_capture_render_body(char s[][200], char t[][200],
         Term_locate(&cx, &cy);
         line = cy + 1;
     }
+
+    /* Leave a spare row so wrapping in the final entry cannot clip silently. */
+    return Term && line < Term->hgt - 1;
 }
 
 static bool self_knowledge_capture_build(char s[][200], char t[][200],
     bool good[], int count, self_knowledge_capture* capture)
 {
-    /*
-     * term::hgt is a byte, so taller scratch terms wrap to zero and render
-     * as blank. Keep this at the maximum representable terminal height.
-     */
-    enum { SELF_KNOWLEDGE_CAPTURE_ROWS = 255 };
     term scratch;
     term* saved_term = Term;
     void (*old_hook)(byte, cptr) = text_out_hook;
@@ -194,7 +192,6 @@ static bool self_knowledge_capture_build(char s[][200], char t[][200],
     bool scratch_ready = false;
     bool success = false;
     int term_wid = 80;
-    int term_hgt = 24;
     int used_rows;
 
     if (!capture || !saved_term)
@@ -206,18 +203,24 @@ static bool self_knowledge_capture_build(char s[][200], char t[][200],
     term_wid = sdl_description_overlay_max_cols();
     if (term_wid > SELF_KNOWLEDGE_CAPTURE_MARGIN_COLS)
         term_wid -= SELF_KNOWLEDGE_CAPTURE_MARGIN_COLS;
-    Term_get_size(NULL, &term_hgt);
-    (void)term_hgt;
     if (term_wid < 20)
         term_wid = 20;
 
-    if (term_init(&scratch, term_wid, SELF_KNOWLEDGE_CAPTURE_ROWS, 16) != 0)
+    if (term_init(&scratch, term_wid, MAX(24, count + 4), 16) != 0)
         goto cleanup;
     scratch_ready = true;
 
     Term_activate(&scratch);
-    Term_clear();
-    self_knowledge_capture_render_body(s, t, good, count);
+    /* Ability-heavy reports and narrow layouts can need hundreds of rows.
+     * Render again with more space whenever text reaches the bottom. */
+    for (;;)
+    {
+        Term_clear();
+        if (self_knowledge_capture_render_body(s, t, good, count))
+            break;
+        if (Term_resize(term_wid, scratch.hgt * 2) != 0)
+            goto cleanup;
+    }
 
     used_rows = self_knowledge_capture_used_rows(Term);
     if (used_rows < 1)
@@ -796,12 +799,23 @@ void identify_pack(void)
     int i;
 
     /* Simply identify and know every item */
-    for (i = 0; i < INVEN_TOTAL; i++)
+    int extra = player_carried_extra_entry_count();
+    int quiver = player_quiver_store_entry_count();
+    int total = INVEN_TOTAL + extra + quiver + supplies_entry_count();
+    for (i = 0; i < total; i++)
     {
-        object_type* o_ptr = &inventory[i];
+        object_type* o_ptr;
+        if (i < INVEN_TOTAL)
+            o_ptr = &inventory[i];
+        else if (i < INVEN_TOTAL + extra)
+            o_ptr = player_carried_extra_entry_at(i - INVEN_TOTAL);
+        else if (i < INVEN_TOTAL + extra + quiver)
+            o_ptr = player_quiver_store_entry_at(i - INVEN_TOTAL - extra);
+        else
+            o_ptr = supplies_entry_at(i - INVEN_TOTAL - extra - quiver);
 
         /* Skip non-objects */
-        if (!o_ptr->k_idx)
+        if (!o_ptr || !o_ptr->k_idx)
             continue;
 
         /* Aware and Known */
@@ -1037,9 +1051,23 @@ void self_knowledge(void)
     u32b f2 = 0L, f3 = 0L;
     object_type* o_ptr;
 
-    char s[100][200];
-    char t[100][200];
-    bool good[100];
+    /* All 64 character traits, every equipment-granted ability, and up to
+     * 128 state/equipment/weapon rows can be reported at once. */
+    enum { MAX_ROWS = 64 + S_MAX * ABILITIES_MAX + 128 };
+    typedef struct {
+        char summary[MAX_ROWS][200];
+        char detail[MAX_ROWS][200];
+        bool good[MAX_ROWS];
+    } knowledge_lines;
+    knowledge_lines* lines = mem_alloc(knowledge_lines);
+    if (!lines)
+    {
+        log_error("self_knowledge: unable to allocate report rows");
+        return;
+    }
+    char (*s)[200] = lines->summary;
+    char (*t)[200] = lines->detail;
+    bool* good = lines->good;
     bool identify[INVEN_TOTAL];
 
     int light = 0, mel = 0, arc = 0, stl = 0, medic = 0;
@@ -1062,7 +1090,7 @@ void self_knowledge(void)
     }
 
     // Initialize arrays
-    for (j = 0; j < 100; j++) {
+    for (j = 0; j < MAX_ROWS; j++) {
         s[j][0] = '\0';
         t[j][0] = '\0';
         good[j] = true;
@@ -1396,7 +1424,7 @@ void self_knowledge(void)
 
     // Stun with special handling
     if (p_ptr->stun) {
-        strnfmt(s[i], 80, "You are %sstunned", (p_ptr->stun <= 50) ? "heavily " : "");
+        strnfmt(s[i], 80, "You are %sstunned", (p_ptr->stun > 50) ? "heavily " : "");
         strnfmt(t[i], 80, "(-%d to all skills)", (p_ptr->stun <= 50) ? 2 : 4);
         good[i] = false; i++;
     }
@@ -1486,6 +1514,7 @@ void self_knowledge(void)
 
     // Identify items that revealed information
     identify_revealed_items(identify);
+    mem_free(lines);
 }
 
 // Helper function to analyze weapon properties

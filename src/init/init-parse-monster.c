@@ -111,7 +111,7 @@ errr parse_r_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static monster_race* r_ptr = NULL;
+    monster_race* r_ptr = PARSED_RECORD(monster_race, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')

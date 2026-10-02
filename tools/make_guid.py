@@ -59,8 +59,13 @@ def extract_guid_value(line: str) -> str:
     if ":" not in line:
         return ""
     _, remainder = line.split(":", 1)
-    cleaned = "".join(ch for ch in remainder if ch in string.hexdigits)
-    return cleaned.lower()
+    cleaned = remainder.strip()
+    if cleaned.lower().startswith("0x"):
+        cleaned = cleaned[2:]
+    cleaned = "".join(ch for ch in cleaned if ch not in "- _")
+    if not 1 <= len(cleaned) <= 16 or any(ch not in string.hexdigits for ch in cleaned):
+        raise ValueError(f"Invalid GUID directive: {line.strip()}")
+    return f"{int(cleaned, 16):016x}"
 
 
 def collect_existing_guids(lines: Sequence[str]) -> Set[str]:
@@ -76,7 +81,7 @@ def collect_existing_guids(lines: Sequence[str]) -> Set[str]:
 def generate_guid(existing: Set[str]) -> str:
     while True:
         candidate = secrets.token_hex(8)
-        if candidate not in existing:
+        if int(candidate, 16) != 0 and candidate not in existing:
             return candidate
 
 
@@ -146,12 +151,24 @@ def main() -> None:
     had_error = False
     total_inserted = 0
 
+    # Reserve GUIDs from every target before generating any new ones. A
+    # later file can already own a value generated for an earlier file.
+    readable_targets = []
     for target in targets:
         if not target.exists():
             print(f"[error] Missing file: {target}", file=sys.stderr)
             had_error = True
             continue
 
+        try:
+            global_guids.update(collect_existing_guids(target.read_text(encoding="utf-8").splitlines()))
+        except (OSError, ValueError) as error:
+            print(f"[error] {format_path(target)}: {error}", file=sys.stderr)
+            had_error = True
+            continue
+        readable_targets.append(target)
+
+    for target in readable_targets:
         inserted = process_file(target, args.dry_run, global_guids)
         total_inserted += inserted
         verb = "would add" if args.dry_run else "added"

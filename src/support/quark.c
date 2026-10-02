@@ -38,6 +38,8 @@ static cptr* quark__str;
 s16b quark_add(cptr str)
 {
     int i;
+    if (!str || !quark__str)
+        return 0;
 
     /* Look for an existing quark */
     for (i = 1; i < quark__num; i++)
@@ -52,10 +54,13 @@ s16b quark_add(cptr str)
         return (0);
 
     /* New quark */
-    i = quark__num++;
+    i = quark__num;
 
     /* Add a new quark */
     quark__str[i] = str_dup(str);
+    if (!quark__str[i])
+        return 0;
+    quark__num++;
 
     /* Return the index */
     return (i);
@@ -67,6 +72,8 @@ s16b quark_add(cptr str)
 cptr quark_str(s16b i)
 {
     cptr q;
+    if (!quark__str)
+        return NULL;
 
     /* Verify */
     if ((i < 0) || (i >= quark__num))
@@ -84,11 +91,12 @@ cptr quark_str(s16b i)
  */
 errr quarks_init(void)
 {
+    quarks_free();
     /* Quark variables */
     quark__str = mem_alloc_array(QUARK_MAX, cptr);
 
     /* Success */
-    return (0);
+    return quark__str ? 0 : -1;
 }
 
 /*
@@ -99,13 +107,14 @@ errr quarks_free(void)
     int i;
 
     /* Free the "quarks" */
-    for (i = 1; i < quark__num; i++)
+    for (i = 1; quark__str && i < quark__num; i++)
     {
         str_free(quark__str[i]);
     }
 
     /* Free the list of "quarks" */
     mem_free_null(quark__str);
+    quark__num = 1;
 
     /* Success */
     return (0);

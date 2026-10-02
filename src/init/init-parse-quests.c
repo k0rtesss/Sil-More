@@ -59,7 +59,7 @@ errr parse_quest_info(char* buf, header* head)
     char *s;
 
     /* Current entry */
-    static quest_type* quest_ptr = NULL;
+    quest_type* quest_ptr = PARSED_RECORD(quest_type, head);
 
     /* Process 'N' for "New/Number/Name" or 'Q' for "Quest" */
     if (buf[0] == 'N' || buf[0] == 'Q')

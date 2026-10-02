@@ -18,7 +18,7 @@ errr parse_oath_info(char* buf, header* head)
     char *s;
 
     /* Current entry */
-    static oath_type* oath_ptr = NULL;
+    oath_type* oath_ptr = PARSED_RECORD(oath_type, head);
 
     /* Process 'N' for "New/Number/Name" or 'O' for "Oath" */
     if (buf[0] == 'N' || buf[0] == 'O')
