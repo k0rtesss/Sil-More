@@ -1,11 +1,12 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-environment.h"
 
 /* A chasm recedes into its own cell. Its neighbors keep every original pixel:
  * no raised lip, outline, shadow or painted border is added to their art. */
 typedef struct chasm_donor {
-    byte state; /* 0 unknown, 1 connected void (including bridge), 2 terrain */
+    byte state; /* 0 outside map/unsupported, 1 connected void, 2 terrain */
     byte a;
     char c;
     int y, x;
@@ -14,11 +15,16 @@ typedef struct chasm_donor {
 static const int chasm_dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 static const int chasm_dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 
+static bool chasm_in_bounds(int y, int x)
+{
+    return p_ptr && in_bounds(y, x)
+        && (unsigned)y < (unsigned)p_ptr->cur_map_hgt
+        && (unsigned)x < (unsigned)p_ptr->cur_map_wid;
+}
+
 static bool chasm_known(int y, int x)
 {
-    if (!p_ptr || !in_bounds(y, x)
-        || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
-        || (unsigned)x >= (unsigned)p_ptr->cur_map_wid) return false;
+    if (!chasm_in_bounds(y, x)) return false;
     u16b info = cave_info[y][x];
     if (cave_floorlike_bold(y, x))
     {
@@ -42,7 +48,7 @@ static int chasm_width(int y, int x, int along, bool horizontal)
 }
 
 /* Each quarter resolves convex coast corners, concave diagonal notches and
- * straight contacts. Unknown cells never contribute artwork or corner cuts. */
+ * straight contacts using physical neighbouring terrain. */
 static int chasm_owner(int y, int x, int px, int py, const chasm_donor n[8])
 {
     int h = px < TILE_SIZE / 2 ? 6 : 2;
@@ -73,9 +79,9 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
     for (int i = 0; i < 8; i++)
     {
         int ny = y + chasm_dy[i], nx = x + chasm_dx[i];
-        if (!chasm_known(ny, nx)) continue;
+        if (!chasm_in_bounds(ny, nx)) continue;
         n[i].y = ny; n[i].x = nx;
-        byte feat = cave_bridge_underlay(cave_feat[ny][nx]);
+        byte feat = cave_environment_actual_underlay(ny, nx);
         if (water)
         {
             if (feat == FEAT_WATER || feat == FEAT_DEEP_WATER || FEAT_IS_ICE(feat))
@@ -84,7 +90,7 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
              * water. Only exposed dry floor supplies a receding shoreline. */
             if (!cave_floorlike_bold(ny, nx) || FEAT_IS_BRIDGE(cave_feat[ny][nx]))
                 continue;
-            map_info_floor_terrain(ny, nx, &n[i].a, &n[i].c);
+            map_info_actual_floor_terrain(ny, nx, &n[i].a, &n[i].c);
         }
         else
         {
@@ -94,8 +100,8 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
             if (feat == FEAT_OPEN || feat == FEAT_BROKEN
                 || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
                 || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3)
-                map_info_floor_terrain(ny, nx, &n[i].a, &n[i].c);
-            else map_info_terrain(ny, nx, &n[i].a, &n[i].c);
+                map_info_actual_floor_terrain(ny, nx, &n[i].a, &n[i].c);
+            else map_info_actual_terrain(ny, nx, &n[i].a, &n[i].c);
         }
         if (!(n[i].a & TILE_FLAG) || !((byte)n[i].c & TILE_FLAG)) continue;
         n[i].state = 2;

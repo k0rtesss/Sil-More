@@ -17,7 +17,7 @@ static int normalized_shore(int mask) {
     return mask;
 }
 static void shore_map(int feat,int mask) {
-    floor_reset(feat==FEAT_ICE?62:63);
+    floor_reset(FEAT_IS_ICE(feat)?62:63);
     cave_feat[10][11]=feat;
     for(int i=0;i<8;i++) cave_feat[10+shore_dy[i]][11+shore_dx[i]]=
         mask&(1<<i)?feat:FEAT_FLOOR;
@@ -80,17 +80,17 @@ static void shore_knowledge_tests(void) {
         int feat=kind?FEAT_LAVA:FEAT_ICE;
         shore_map(feat,255);
         for(int i=0;i<8;i++) cave_info[10+shore_dy[i]][11+shore_dx[i]]=0;
-        assert(liquid_transition_mask(10,11,feat)==0);
+        assert(liquid_transition_mask(10,11,feat)==255);
         SDL_Surface* hidden=shore_surface(NULL,0,0,true);
         for(int i=0;i<8;i++) cave_feat[10+shore_dy[i]][11+shore_dx[i]]=FEAT_FLOOR;
         SDL_Surface* absent=shore_surface(NULL,0,0,true);
-        assert(same_surface(hidden,absent));
+        assert(!same_surface(hidden,absent));
         SDL_DestroySurface(hidden); SDL_DestroySurface(absent);
         shore_map(feat,255);
         for(int i=0;i<8;i++) cave_info[10+shore_dy[i]][11+shore_dx[i]]=CAVE_MARK;
         assert(liquid_transition_mask(10,11,feat)==255);
-        p_ptr->rage=1; assert(liquid_transition_mask(10,11,feat)==0); p_ptr->rage=0;
-        g_labyrinth_view_active=true; assert(liquid_transition_mask(10,11,feat)==0);
+        p_ptr->rage=1; assert(liquid_transition_mask(10,11,feat)==255); p_ptr->rage=0;
+        g_labyrinth_view_active=true; assert(liquid_transition_mask(10,11,feat)==255);
         g_labyrinth_view_active=false;
         cave_feat[9][11]=kind?FEAT_BRIDGE_LAVA_H:FEAT_BRIDGE_ICE_H;
         assert(liquid_transition_mask(10,11,feat)==255);
@@ -102,7 +102,99 @@ static void shore_knowledge_tests(void) {
         p_ptr->rage=0; g_labyrinth_view_active=true; assert(!visible_liquid(10,11));
         g_labyrinth_view_active=false;
     }
-    puts("Unknown neighbors have identical pixels; remembered/rage/labyrinth gating and bridge/actor connectivity: PASS");
+    puts("Actual hidden neighbors connect; center-cell discovery/rage/labyrinth gates and bridge/actor connectivity remain intact: PASS");
+}
+static void shore_visibility_tests(void) {
+    const byte features[]={FEAT_LAVA,FEAT_ICE,FEAT_MELTING_ICE,
+        FEAT_WATER,FEAT_DEEP_WATER,FEAT_POISON};
+    u64b rng=Rand_state_export(); s32b turns=turn;
+    for(unsigned kind=0;kind<N_ELEMENTS(features);kind++)for(int mask=0;mask<256;mask++) {
+        byte feat=features[kind]; shore_map(feat,mask);
+        assert(load_liquid_texture(feat));
+        assert(load_liquid_transition_texture(feat));
+        SDL_Surface* normal=shore_surface(NULL,0,0,true);
+        for(int mode=0;mode<4;mode++) {
+            for(int i=0;i<8;i++)
+                cave_info[10+shore_dy[i]][11+shore_dx[i]]=mode?CAVE_MARK:0;
+            p_ptr->rage=mode==2; g_labyrinth_view_active=mode==3;
+            assert(liquid_transition_mask(10,11,feat)==mask);
+            SDL_Surface* restricted=shore_surface(NULL,0,0,true);
+            if(!same_surface(normal,restricted)) {
+                fprintf(stderr,"Visibility mismatch: feature=%d mask=%d mode=%d\n",feat,mask,mode);
+                IMG_SavePNG(normal,"scripts/output/terrain-transitions-check/visibility-normal.png");
+                IMG_SavePNG(restricted,"scripts/output/terrain-transitions-check/visibility-restricted.png");
+            }
+            assert(same_surface(normal,restricted));
+            SDL_DestroySurface(restricted);
+            for(int i=0;i<8;i++) {
+                int y=10+shore_dy[i],x=11+shore_dx[i];
+                assert(cave_info[y][x]==(mode?CAVE_MARK:0));
+                if(!mode || mode>=2) assert(!visible_liquid(y,x));
+            }
+        }
+        p_ptr->rage=0; g_labyrinth_view_active=false;
+        SDL_DestroySurface(normal);
+    }
+    /* Depth and mixed ice rims likewise ignore neighbour discovery. */
+    shore_map(FEAT_WATER,255);
+    cave_feat[9][11]=FEAT_DEEP_WATER; cave_feat[10][12]=FEAT_MELTING_ICE;
+    SDL_Surface* normal=shore_surface(NULL,0,0,true);
+    for(int i=0;i<8;i++) cave_info[10+shore_dy[i]][11+shore_dx[i]]=0;
+    g_labyrinth_view_active=true;
+    assert(water_depth_transition_mask(10,11)==254);
+    assert(ice_only_transition_mask(10,11)==4);
+    SDL_Surface* restricted=shore_surface(NULL,0,0,true);
+    assert(same_surface(normal,restricted));
+    SDL_DestroySurface(normal); SDL_DestroySurface(restricted);
+    g_labyrinth_view_active=false;
+    /* A remembered dynamic bridge must connect by its current underlay. */
+    shore_map(FEAT_LAVA,255);
+    cave_feat[9][11]=FEAT_BRIDGE_LAVA_H; cave_info[9][11]=CAVE_MARK;
+    environment_state state={0}; state.ready=true; state.random=1;
+    assert(cave_environment_restore_state(state));
+    environment_cell cell={0}; cell.flags=ENV_BRIDGE; cell.integrity=100;
+    cell.bridge_feat=FEAT_BRIDGE_LAVA_H; cell.underlay=FEAT_LAVA;
+    cell.known_feat=FEAT_BRIDGE_LAVA_H; cell.known_underlay=FEAT_POISON;
+    assert(cave_environment_restore_cell(9,11,cell));
+    assert(cave_environment_display_underlay(9,11)==FEAT_POISON);
+    assert(liquid_transition_mask(10,11,FEAT_LAVA)==255);
+    cave_environment_reset();
+    assert(Rand_state_export()==rng && turn==turns);
+    puts("Six surfaces x 256 neighbourhoods x four visibility modes render identical center pixels; mixed depths/rims, current bridge underlay, discovery flags and RNG: PASS");
+}
+static void labyrinth_lava_preview(void) {
+    const int size=16,scale=3;
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,size*16*scale*2,size*16*scale); assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255); SDL_RenderClear(g_state.renderer);
+    for(int panel=0;panel<2;panel++) {
+        floor_reset(63); g_labyrinth_view_active=panel==1;
+        for(int y=0;y<size;y++)for(int x=0;x<size;x++) {
+            cave_feat[y][x]=y>=3&&y<=12&&x>=3&&x<=12?FEAT_LAVA:FEAT_FLOOR;
+            if(panel && x+y!=15) cave_info[y][x]=CAVE_MARK;
+        }
+        for(int y=0;y<size;y++)for(int x=0;x<size;x++) {
+            byte a,ta; char c,tc; map_info(y,x,&a,&c,&ta,&tc);
+            SDL_FRect dst={(panel*size+x)*16*scale,y*16*scale,16*scale,16*scale};
+            sdl_draw_map_tile_layers_at(y,x,a,c,ta,tc,&dst);
+            if(panel && x+y==15 && y>=4&&y<=11)
+                assert(liquid_transition_mask(y,x,FEAT_LAVA)==255);
+            if(panel && x+y!=15) assert(!visible_liquid(y,x));
+        }
+    }
+    SDL_Surface* result=SDL_RenderReadPixels(g_state.renderer,NULL); assert(result);
+    /* Every revealed diagonal tile is pixel-identical to the full pool. */
+    for(int y=3;y<=12;y++)for(int py=0;py<16*scale;py++) {
+        int x=15-y;
+        byte* row=(byte*)result->pixels+(y*16*scale+py)*result->pitch;
+        assert(!memcmp(row+x*16*scale*4,row+(size+x)*16*scale*4,16*scale*4));
+    }
+    assert(IMG_SavePNG(result,"scripts/output/terrain-transitions-check/labyrinth-lava.png"));
+    SDL_DestroySurface(result); SDL_SetRenderTarget(g_state.renderer,previous);
+    SDL_DestroyTexture(target); g_labyrinth_view_active=false;
+    puts("Labyrinth lava pool with only a diagonal in sight uses the exact full-pool pixels: PASS");
 }
 static void shore_redraw_tests(void) {
     shore_map(FEAT_ICE,1); cave_info[9][11]=0;
@@ -170,10 +262,12 @@ static void material_transition_tests(void) {
     assert(snow_dirt_transition_texture);
     SDL_Surface* snow=SDL_RenderReadPixels(g_state.renderer,NULL); assert(snow);
 
-    /* A hidden dirt cell must not reveal a transition edge. */
+    /* Hiding the dirt neighbour must leave this displayed edge intact. */
     cave_info[10][12]=0;
     SDL_RenderClear(g_state.renderer);
-    assert(!draw_elemental_transition(10,11,&dst));
+    assert(draw_elemental_transition(10,11,&dst));
+    SDL_Surface* hidden=SDL_RenderReadPixels(g_state.renderer,NULL); assert(hidden);
+    assert(same_surface(snow,hidden)); SDL_DestroySurface(hidden);
 
     floor_reset(63);
     cave_color[10][12]=COLOR_STYLE_BASE+44;
@@ -204,7 +298,7 @@ static void material_transition_tests(void) {
     SDL_DestroySurface(before); SDL_DestroySurface(incremental);
     SDL_DestroySurface(full);
 
-    puts("Snow-on-dirt and basalt-on-dirt use authored raw pixels; hidden dirt stays hidden: PASS");
+    puts("Snow-on-dirt and basalt-on-dirt use stable authored pixels beside hidden dirt: PASS");
 }
 static void material_bank_transition_tests(void) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
@@ -236,8 +330,7 @@ static void material_bank_transition_tests(void) {
         assert(elemental_transition_mask(10,11)==(255^4));
         assert(draw_elemental_transition(10,11,&dst));
 
-        /* An actual dirt edge must not also carve edges toward unknown or
-         * unlit remembered floors elsewhere around the same cell. */
+        /* The edge follows physical dirt even beside unlit remembered floors. */
         floor_reset(style);
         cave_color[10][12]=COLOR_STYLE_BASE+44;
         cave_info[9][11]=0;
@@ -245,17 +338,17 @@ static void material_bank_transition_tests(void) {
         cave_info[9][11]=CAVE_MARK; cave_light[9][11]=0;
         assert(elemental_transition_mask(10,11)==(255^4));
         cave_info[10][12]=CAVE_MARK; cave_light[10][12]=0;
-        assert(elemental_transition_mask(10,11)==255);
-        assert(!draw_elemental_transition(10,11,&dst));
+        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(draw_elemental_transition(10,11,&dst));
         cave_light[10][12]=2;
         assert(elemental_transition_mask(10,11)==(255^4));
         assert(draw_elemental_transition(10,11,&dst));
         p_ptr->rage=1;
-        assert(elemental_transition_mask(10,11)==255);
-        assert(!draw_elemental_transition(10,11,&dst));
+        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(draw_elemental_transition(10,11,&dst));
         p_ptr->rage=0; g_labyrinth_view_active=true;
-        assert(elemental_transition_mask(10,11)==255);
-        assert(!draw_elemental_transition(10,11,&dst));
+        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(draw_elemental_transition(10,11,&dst));
         g_labyrinth_view_active=false;
         cave_info[10][12]=CAVE_MARK|CAVE_SEEN;
         cave_info[10][11]=CAVE_MARK; cave_light[10][11]=0;
@@ -263,8 +356,8 @@ static void material_bank_transition_tests(void) {
         cave_light[10][11]=2;
         assert(draw_elemental_transition(10,11,&dst));
 
-        /* A lone diagonal dirt cell creates a corner only across two visible
-         * floor sides, never across a wall, hazard, or unknown side. Exercise
+        /* A lone diagonal dirt cell creates a corner across two physical
+         * floor sides, including unseen sides, never across a wall or hazard. Exercise
          * every rotation and either intervening side. */
         for(int diagonal=1;diagonal<8;diagonal+=2) {
             floor_reset(style);
@@ -280,8 +373,9 @@ static void material_bank_transition_tests(void) {
                 else if(blocker==1) cave_feat[y][x]=hazard;
                 else if(blocker==2) cave_info[y][x]=0;
                 else { cave_info[y][x]=CAVE_MARK; cave_light[y][x]=0; }
-                assert(elemental_transition_mask(10,11)==255);
-                assert(!draw_elemental_transition(10,11,&dst));
+                int expected=blocker<2?255:(255^(1<<diagonal));
+                assert(elemental_transition_mask(10,11)==expected);
+                assert(draw_elemental_transition(10,11,&dst)==(blocker>=2));
             }
         }
     }
@@ -323,13 +417,13 @@ static void material_bank_redraw_tests(void) {
         cave_color[10][12]=COLOR_STYLE_BASE+44;
         cave_feat[10][13]=kind?FEAT_LAVA:FEAT_ICE;
         cave_info[10][13]=0;
-        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(elemental_transition_mask(10,11)==255);
         Term->total_erase=true; prt_map(); Term_fresh();
         byte a,ta; char c,tc; map_info(10,11,&a,&c,&ta,&tc);
         SDL_Surface* before=capture(100+kind*3); assert(before);
 
-        /* Revealing a hazard two cells away changes the intervening floor's
-         * bank, hence this transition, although this cell's glyph is stable. */
+        /* Revealing the hazard leaves the physical bank and transition fixed,
+         * although the newly revealed hazard itself needs a repaint. */
         cave_info[10][13]=CAVE_MARK|CAVE_SEEN;
         lite_spot(10,13); Term_fresh();
         byte a2,ta2; char c2,tc2; map_info(10,11,&a2,&c2,&ta2,&tc2);
@@ -397,7 +491,7 @@ def main():
     idle.HARNESS = idle.HARNESS.replace("int main(void) {", floors.TESTS + TESTS + "\nint main(void) {")
     idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();",
         "    asynchronous_tests();\n    floor_templates();\n    shore_atlas_tests();\n"
-        "    shore_knowledge_tests();\n    shore_redraw_tests();\n    shore_fallback_tests();\n    material_transition_tests();\n    material_bank_transition_tests();\n    material_bank_redraw_tests();\n    shore_preview();\n    material_bank_preview();")
+        "    shore_knowledge_tests();\n    shore_visibility_tests();\n    labyrinth_lava_preview();\n    shore_redraw_tests();\n    shore_fallback_tests();\n    material_transition_tests();\n    material_bank_transition_tests();\n    material_bank_redraw_tests();\n    shore_preview();\n    material_bank_preview();")
     idle.main()
 
 

@@ -54,6 +54,8 @@ bool cave_environment_describe(int y, int x, char* text, size_t size);
 int cave_environment_thaw_feature(int y, int x, int fallback);
 int cave_environment_known_feature(int y, int x);
 int cave_environment_display_underlay(int y, int x);
+/* Physical surface for terrain connections, independent of map knowledge. */
+int cave_environment_actual_underlay(int y, int x);
 void cave_environment_observe(int y, int x);
 const environment_cell* cave_environment_cell_at(int y, int x);
 const environment_source* cave_environment_source_at(int index);

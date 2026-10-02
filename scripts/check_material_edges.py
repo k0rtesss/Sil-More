@@ -353,19 +353,19 @@ static void material_visibility_tests(void)
     material_pair_setup(FEAT_FLOOR, MATERIAL_STYLE_OLD,
         FEAT_FLOOR, MATERIAL_STYLE_IMPORTED);
     cave_info[MATERIAL_TEST_Y][MATERIAL_NEIGHBOUR_X] = 0;
-    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+    assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
 
     cave_info[MATERIAL_TEST_Y][MATERIAL_NEIGHBOUR_X] = CAVE_MARK;
     cave_light[MATERIAL_TEST_Y][MATERIAL_NEIGHBOUR_X] = 0;
-    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+    assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
     cave_light[MATERIAL_TEST_Y][MATERIAL_NEIGHBOUR_X] = 1;
     assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
 
     p_ptr->rage = 1;
-    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+    assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
     p_ptr->rage = 0;
     g_labyrinth_view_active = true;
-    assert(!sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
+    assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
     g_labyrinth_view_active = false;
     cave_info[MATERIAL_TEST_Y][MATERIAL_NEIGHBOUR_X]
         = CAVE_MARK | CAVE_SEEN | CAVE_GLOW;
@@ -384,7 +384,7 @@ static void material_visibility_tests(void)
     assert(Rand_state_export() == rng && turn == saved_turn
         && playerturn == saved_player_turn);
     p_ptr->image = 0;
-    puts("Unknown/remembered-dark/rage/labyrinth gates and hallucination RNG guard: PASS");
+    puts("Physical material connections persist beside unknown/dark/rage/labyrinth neighbours; hallucination RNG guard: PASS");
 }
 
 static SDL_Texture* material_test_atlas(void)
@@ -581,7 +581,7 @@ static void material_topology_tests(void)
             CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
         SDL_Surface* diagonal = material_render_cell(MATERIAL_TEST_Y,
             MATERIAL_TEST_X, 0, 0, false);
-        assert(same_surface(plain, diagonal));
+        assert(same_surface(plain, diagonal)==(blocker!=3));
         SDL_DestroySurface(plain); SDL_DestroySurface(diagonal);
     }
 

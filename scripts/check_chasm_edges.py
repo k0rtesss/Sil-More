@@ -133,7 +133,7 @@ static void contour_reset(int style,byte feat,unsigned mask) {
 
 static SDL_Surface* contour_donor(int y,int x,bool floor) {
     byte a;char c;
-    if(floor) map_info_floor_terrain(y,x,&a,&c);else map_info_terrain(y,x,&a,&c);
+    if(floor) map_info_actual_floor_terrain(y,x,&a,&c);else map_info_actual_terrain(y,x,&a,&c);
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
         SDL_TEXTUREACCESS_TARGET,16,16);assert(target);
@@ -186,11 +186,14 @@ static void contour_tests(void) {
     contour_reset(40,FEAT_FLOOR,0);SDL_Surface* base=contour_capture();
     for(int mode=0;mode<4;mode++) {
         contour_reset(40,FEAT_WALL_EXTRA,1u<<2);
+        SDL_Surface* known=contour_capture();
         cave_info[10][12]=mode?CAVE_MARK:0;
         if(mode==1)p_ptr->rage=1;
         if(mode==2)g_labyrinth_view_active=true;
         if(mode==3)p_ptr->image=1;
-        SDL_Surface* actual=contour_capture();assert(same_surface(base,actual));SDL_DestroySurface(actual);
+        SDL_Surface* actual=contour_capture();
+        assert(same_surface(mode==3?base:known,actual));
+        SDL_DestroySurface(actual);SDL_DestroySurface(known);
     }
     contour_reset(40,FEAT_FLOOR,0);cave_feat[10][12]=FEAT_BRIDGE_CHASM_H;
     SDL_Surface* bridge=contour_capture();assert(same_surface(base,bridge));SDL_DestroySurface(bridge);
@@ -202,14 +205,15 @@ static void contour_tests(void) {
     cave_feat[10][12]=FEAT_FLOOR;cave_m_idx[10][12]=1234;cave_o_idx[10][12]=1234;
     SDL_Surface* occupied=contour_capture();assert(same_surface(base,occupied));
     SDL_DestroySurface(occupied);SDL_DestroySurface(base);edge_reset();
-    puts("Unknown/rage/labyrinth/hallucination donors hidden; chasm bridges connect; door/actor/object sprites never duplicated: PASS");
+    puts("Physical chasm edges persist beside unknown/rage/labyrinth donors; hallucination guard, bridge connections and foreground exclusion: PASS");
 
-    /* A remembered donor uses its actual dark artwork. An unlit remembered
-     * floor is invisible even though a remembered wall remains available. */
+    /* Unlit donors keep their physical artwork across discovery changes. */
     contour_reset(40,FEAT_WALL_EXTRA,1u<<2);
     cave_info[10][12]=CAVE_MARK;cave_light[10][12]=0;
     SDL_Surface* dark=contour_donor(10,12,false),*actual=contour_capture();
-    cave_info[10][12]=0;base=contour_capture();int changed=0;
+    cave_info[10][12]=0;SDL_Surface* hidden=contour_capture();
+    assert(same_surface(actual,hidden));SDL_DestroySurface(hidden);
+    cave_feat[10][12]=FEAT_CHASM;base=contour_capture();int changed=0;
     for(int py=0;py<16;py++)for(int px=0;px<16;px++) {
         Uint32 pixel=contour_pixel(actual,px+8,py+8);
         if(pixel!=contour_pixel(base,px+8,py+8)) {
@@ -218,9 +222,10 @@ static void contour_tests(void) {
     }
     assert(changed);SDL_DestroySurface(dark);SDL_DestroySurface(actual);
     cave_feat[10][12]=FEAT_FLOOR;cave_info[10][12]=CAVE_MARK;
-    actual=contour_capture();assert(same_surface(actual,base));
-    SDL_DestroySurface(actual);SDL_DestroySurface(base);
-    puts("Remembered walls use dark source pixels; unlit remembered floor donors stay hidden: PASS");
+    actual=contour_capture();assert(!same_surface(actual,base));
+    cave_info[10][12]=0;hidden=contour_capture();assert(same_surface(actual,hidden));
+    SDL_DestroySurface(hidden);SDL_DestroySurface(actual);SDL_DestroySurface(base);
+    puts("Remembered and unknown unlit wall/floor donors supply identical physical contours: PASS");
 }
 
 static void contour_liquid_tests(void) {
