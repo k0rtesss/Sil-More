@@ -1354,8 +1354,8 @@ struct player_type
     u16b
         staircasiness; /* Gets higher when stairs are taken and slowly decays */
 
-    u16b fixed_forge_count; /* The number of mandatory forges that have been
-                               generated */
+    u16b fixed_forge_count; /* Legacy guaranteed-forge count; retained for
+                              save compatibility. */
     u16b forge_count; /* The number of forges that have been generated */
 
     byte stealth_mode; /* Stealth mode */
@@ -1505,8 +1505,6 @@ struct player_type
     s16b stat_use[A_MAX]; /* Current modified stats --  includes equipment and
                              temporary mods */
     s16b skill_use[S_MAX]; /* Current modified skills -- includes all mods */
-
-    bool force_forge; /* Force the generation of a forge on this level */
 
     /*** Extracted fields ***/
 

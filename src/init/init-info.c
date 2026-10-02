@@ -82,6 +82,7 @@ header skeleton_note_head;
 static errr init_info_raw(SDL_IOStream* fd, header* head)
 {
     header test;
+    header loaded = *head;
 
     /* Read and verify the header */
     if (sdl_read(fd, (char*)(&test), sizeof(header))
@@ -96,35 +97,49 @@ static errr init_info_raw(SDL_IOStream* fd, header* head)
         return (-1);
     }
 
-    /* Accept the header */
-    memcpy(head, &test, sizeof(header));
+    /* An interrupted cache write must fall back to the text template before
+     * allocating or publishing partial arrays. Disk pointer fields are never
+     * part of the runtime state, including the parser callback. */
+    Sint64 position = SDL_TellIO(fd);
+    Sint64 size = SDL_GetIOSize(fd);
+    Uint64 payload_size = (Uint64)test.info_size + test.name_size + test.text_size;
+    if (position < 0 || size < position
+        || (Uint64)(size - position) != payload_size)
+        return -1;
 
-    /* Allocate the "*_info" array */
-    head->info_ptr = mem_alloc_array(head->info_size, char);
+    loaded.name_size = test.name_size;
+    loaded.text_size = test.text_size;
+    loaded.info_ptr = NULL;
+    loaded.name_ptr = NULL;
+    loaded.text_ptr = NULL;
 
-    /* Read the "*_info" array */
-    sdl_read(fd, head->info_ptr, head->info_size);
-
-    if (head->name_size)
+    if (loaded.info_size)
     {
-        /* Allocate the "*_name" array */
-        head->name_ptr = mem_alloc_array(head->name_size, char);
-
-        /* Read the "*_name" array */
-        sdl_read(fd, head->name_ptr, head->name_size);
+        loaded.info_ptr = mem_alloc_array(loaded.info_size, char);
+        if (!loaded.info_ptr || sdl_read(fd, loaded.info_ptr, loaded.info_size))
+            goto failed;
+    }
+    if (loaded.name_size)
+    {
+        loaded.name_ptr = mem_alloc_array(loaded.name_size, char);
+        if (!loaded.name_ptr || sdl_read(fd, loaded.name_ptr, loaded.name_size))
+            goto failed;
+    }
+    if (loaded.text_size)
+    {
+        loaded.text_ptr = mem_alloc_array(loaded.text_size, char);
+        if (!loaded.text_ptr || sdl_read(fd, loaded.text_ptr, loaded.text_size))
+            goto failed;
     }
 
-    if (head->text_size)
-    {
-        /* Allocate the "*_text" array */
-        head->text_ptr = mem_alloc_array(head->text_size, char);
+    *head = loaded;
+    return 0;
 
-        /* Read the "*_text" array */
-        sdl_read(fd, head->text_ptr, head->text_size);
-    }
-
-    /* Success */
-    return (0);
+failed:
+    mem_free_null(loaded.info_ptr);
+    mem_free_null(loaded.name_ptr);
+    mem_free_null(loaded.text_ptr);
+    return -1;
 }
 
 #ifdef __ANDROID__

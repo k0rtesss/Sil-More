@@ -34,7 +34,7 @@ bool place_prefab_anchor_of_type(int typ, bool require_neighbor)
         break;
     case 6:
     default:
-        ok = build_type6(y, x, false);
+        ok = build_type6(y, x);
         break;
     }
 

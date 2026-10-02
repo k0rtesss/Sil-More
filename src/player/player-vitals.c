@@ -7,6 +7,17 @@
 #include "item_set.h"
 #include "player/player-upkeep-internal.h"
 
+/* Preserve the reserve ratio, rounding only the final value to the nearest
+ * point. An uninitialized maximum starts with a full reserve. */
+static int rescale_vital(int current, int old_max, int new_max)
+{
+    if (old_max <= 0)
+        return new_max;
+    s64b scaled = (s64b)current * new_max;
+    scaled += scaled < 0 ? -(old_max / 2) : old_max / 2;
+    return (int)(scaled / old_max);
+}
+
 /*
  * Calculate maximum voice.
  *
@@ -39,21 +50,13 @@ extern void calc_voice(void)
     }
     msp = tmp / 100;
 
-    /* New maximum hitpoints */
+    /* New maximum voice */
     if (p_ptr->msp != msp)
     {
-        int i = 100;
-
-        /* Get percentage of maximum sp */
-        if (p_ptr->msp)
-            i = ((100 * p_ptr->csp) / p_ptr->msp);
+        p_ptr->csp = rescale_vital(p_ptr->csp, p_ptr->msp, msp);
 
         /* Save new limit */
         p_ptr->msp = msp;
-
-        /* Update current maximum sp */
-        p_ptr->csp = ((i * p_ptr->msp) / 100)
-            + (((i * p_ptr->msp) % 100 >= 50) ? 1 : 0);
 
         /* Hack - any change in max voice resets frac */
         p_ptr->csp_frac = 0;
@@ -107,18 +110,10 @@ void calc_hitpoints(void)
     /* New maximum hitpoints */
     if (p_ptr->mhp != mhp)
     {
-        int i = 100;
-
-        /* Get percentage of maximum hp */
-        if (p_ptr->mhp)
-            i = ((100 * p_ptr->chp) / p_ptr->mhp);
+        p_ptr->chp = rescale_vital(p_ptr->chp, p_ptr->mhp, mhp);
 
         /* Save new limit */
         p_ptr->mhp = mhp;
-
-        /* Update current maximum hp */
-        p_ptr->chp = ((i * p_ptr->mhp) / 100)
-            + (((i * p_ptr->mhp) % 100 >= 50) ? 1 : 0);
 
         /* Hack - any change in max hitpoint resets frac */
         p_ptr->chp_frac = 0;

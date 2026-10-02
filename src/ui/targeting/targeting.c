@@ -754,9 +754,9 @@ void get_sorted_target_list(int mode, int range)
     temp_n = 0;
 
     /* Scan the current panel */
-    for (y = p_ptr->wy; y < p_ptr->wy + SCREEN_HGT; y++)
+    for (y = p_ptr->wy; y < p_ptr->wy + SCREEN_HGT && temp_n < TEMP_MAX; y++)
     {
-        for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
+        for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID && temp_n < TEMP_MAX; x++)
         {
             /* Check bounds */
             if (!in_bounds_fully(y, x))

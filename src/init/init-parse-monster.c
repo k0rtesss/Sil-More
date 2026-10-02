@@ -299,6 +299,9 @@ errr parse_r_info(char* buf, header* head)
         if (2 != sscanf(buf + 2, "%d:%d", &lev, &rar))
             return (PARSE_ERROR_GENERIC);
 
+        if (lev < 0 || lev >= MAX_DEPTH)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+
         /* Save the values */
         r_ptr->level = lev;
         r_ptr->rarity = rar;

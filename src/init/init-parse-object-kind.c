@@ -244,6 +244,9 @@ errr parse_k_info(char* buf, header* head)
             int depth = atoi(s + 1);
             int rarity = 1;
 
+            if (depth < 0 || depth >= MAX_DEPTH)
+                return PARSE_ERROR_OUT_OF_BOUNDS;
+
             /* Find the slash */
             t = strchr(s + 1, '/');
 

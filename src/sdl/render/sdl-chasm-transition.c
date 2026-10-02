@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-environment.h"
 
 /* A chasm recedes into its own cell. Its neighbors keep every original pixel:
  * no raised lip, outline, shadow or painted border is added to their art. */
@@ -14,13 +15,20 @@ typedef struct chasm_donor {
 static const int chasm_dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 static const int chasm_dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 
+static bool chasm_floorlike(int y, int x)
+{
+    int feat = cave_environment_known_feature(y, x);
+    return feat == FEAT_FLOOR
+        || (FEAT_IS_TRAP(feat) && (cave_info[y][x] & CAVE_HIDDEN));
+}
+
 static bool chasm_known(int y, int x)
 {
     if (!p_ptr || !in_bounds(y, x)
         || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
         || (unsigned)x >= (unsigned)p_ptr->cur_map_wid) return false;
     u16b info = cave_info[y][x];
-    if (cave_floorlike_bold(y, x))
+    if (chasm_floorlike(y, x))
     {
         if (!(info & CAVE_SEEN)
             && (!(info & CAVE_MARK) || cave_light[y][x] <= 0)) return false;
@@ -67,7 +75,7 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
 {
     if (!dst || !g_state.use_tiles || !g_state.renderer || !g_state.tileset
         || !p_ptr || p_ptr->image || !chasm_known(y, x)
-        || (!water && cave_bridge_underlay(cave_feat[y][x]) != FEAT_CHASM)) return;
+        || (!water && cave_environment_display_underlay(y, x) != FEAT_CHASM)) return;
     chasm_donor n[8] = {0};
     bool any = false;
     for (int i = 0; i < 8; i++)
@@ -75,14 +83,15 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
         int ny = y + chasm_dy[i], nx = x + chasm_dx[i];
         if (!chasm_known(ny, nx)) continue;
         n[i].y = ny; n[i].x = nx;
-        byte feat = cave_bridge_underlay(cave_feat[ny][nx]);
+        byte feat = cave_environment_display_underlay(ny, nx);
         if (water)
         {
             if (feat == FEAT_WATER || feat == FEAT_DEEP_WATER || FEAT_IS_ICE(feat))
             { n[i].state = 1; continue; }
             /* Walls keep their own silhouette: never grow masonry into the
              * water. Only exposed dry floor supplies a receding shoreline. */
-            if (!cave_floorlike_bold(ny, nx) || FEAT_IS_BRIDGE(cave_feat[ny][nx]))
+            if (!chasm_floorlike(ny, nx)
+                || FEAT_IS_BRIDGE(cave_environment_known_feature(ny, nx)))
                 continue;
             map_info_floor_terrain(ny, nx, &n[i].a, &n[i].c);
         }

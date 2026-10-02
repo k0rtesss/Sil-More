@@ -4,7 +4,7 @@ Level generation plans unequal basins, narrow streams, tributaries, pools, occas
 
 ## Order and geometry
 
-`terrain_history_begin()` runs after basic granite and anchor reset, before the first guaranteed forge, quest vault or prefab. It selects each system's material, family and history, then plans its geometry. Old systems are carved immediately, with dry shore anchors for the corridor graph. A portion of ordinary room/vault site attempts favor banks; footprint checks prevent construction from covering the old course or its source backing.
+`terrain_history_begin()` runs after basic granite and anchor reset, before any quest vault or prefab. It selects each system's material, family and history, then plans its geometry. Old systems are carved immediately, with dry shore anchors for the corridor graph. A portion of ordinary room/vault site attempts favor banks; footprint checks prevent construction from covering the old course or its source backing.
 
 The construction feature hook preserves preexisting liquid and source caps through natural cavern and labyrinth carving. Incompatible elemental partition recipes yield to older geology. `terrain_history_start_tunnels()` lets actual corridor excavation build oriented bridge decks across the old course. Shore anchors survive carving and remain candidates in the ordinary connection graph.
 

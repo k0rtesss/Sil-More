@@ -41,7 +41,7 @@ bool room_build(int typ)
     // Least Vault
     case 6:
     {
-        if (!build_type6(y, x, false))
+        if (!build_type6(y, x))
         {
             return (false);
         }
@@ -266,8 +266,7 @@ bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
             *had_eligible_candidate = true;
         level_gen_debug_note_quest_vault_name(v_name + qv_ptr->name);
 
-        /* Use forced placement strategy like forge placement:
-         * Pick optimal location near center and use reduced padding */
+        /* Pick an optimal location near center and use reduced padding. */
 
         /* Calculate optimal placement position (center of map with some variation) */
         int center_y = p_ptr->cur_map_hgt / 2;

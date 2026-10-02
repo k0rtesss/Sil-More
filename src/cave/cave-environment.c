@@ -165,7 +165,7 @@ static bool critical_object(int y, int x)
 
 static int origin_heat(int y, int x)
 {
-    int f = cave_bridge_underlay(cave_feat[y][x]);
+    int f = cave_environment_live_underlay(y, x);
     if (f == FEAT_LAVA) return 12;
     /* A coating or recently frozen pool is not a new cold source. */
     if (FEAT_IS_ICE(f) && FEAT_IS_ICE(cells[y][x].base_feat)
@@ -391,6 +391,17 @@ int cave_environment_display_underlay(int y, int x)
     return cave_bridge_underlay(feature);
 }
 
+int cave_environment_live_underlay(int y, int x)
+{
+    if (!cave_feat || !in_bounds(y,x)) return FEAT_NONE;
+    int feature = cave_feat[y][x];
+    const environment_cell* c = &cells[y][x];
+    if (state.ready && (c->flags & ENV_BRIDGE) && c->integrity
+        && (FEAT_IS_BRIDGE(feature) || feature == c->bridge_feat))
+        return c->underlay;
+    return cave_bridge_underlay(feature);
+}
+
 static void release_supply(environment_cell* c, bool refund)
 {
     if (!(c->flags & ENV_ADDED_LIQUID)) return;
@@ -600,6 +611,11 @@ bool cave_environment_catastrophe_contact(int y, int x, int feature,
         if (feature == FEAT_LAVA) force *= wood ? 3 : 2;
         else if (feature == FEAT_POISON) force *= 2;
         c->integrity = MAX(0,(int)c->integrity-force);
+        if (c->underlay != feature) {
+            cave_events_terrain_changed();
+            if (c->underlay == FEAT_LAVA || feature == FEAT_LAVA)
+                p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+        }
         c->underlay = feature; c->work = 0;
         if (!c->integrity) cave_environment_catastrophe_change(y,x,feature);
         cave_environment_observe(y,x);
@@ -653,7 +669,12 @@ static void flood_bridge_with_reason(int y,int x,int fluid,int force,const char*
     environment_cell* c=&cells[y][x];
     if(!(c->flags&ENV_BRIDGE)||(c->flags&ENV_PROTECTED)||!c->integrity)return;
     int old_integrity=c->integrity, old_underlay=c->underlay;
-    if(c->underlay!=fluid)c->work=0;
+    if(c->underlay!=fluid) {
+        c->work=0;
+        cave_events_terrain_changed();
+        if(c->underlay==FEAT_LAVA || fluid==FEAT_LAVA)
+            p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+    }
     c->underlay=fluid;
     cave_environment_observe(y,x);
     int damage=force*(c->material==ENV_BRIDGE_WOOD?3:1);
@@ -770,7 +791,7 @@ static void source_step(int id, int* remaining)
             if(reheat) {
                 bool quenched=false;
                 for(int d=0;d<4;d++) {
-                    int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
+                    int neighbor=cave_environment_live_underlay(y+dy4[d],x+dx4[d]);
                     quenched|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
                 }
                 if(quenched)continue;
@@ -885,7 +906,7 @@ void cave_environment_process(void)
         } else if(f==FEAT_LAVA) {
             bool water=false;
             for(int d=0;d<4;d++) {
-                int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
+                int neighbor=cave_environment_live_underlay(y+dy4[d],x+dx4[d]);
                 /* Ice first melts; only liquid water quenches molten rock. */
                 water|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
             }

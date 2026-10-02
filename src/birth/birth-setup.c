@@ -137,6 +137,12 @@ void get_extra(void)
 void player_wipe(void)
 {
     meta_state_reset_character();
+    /* A previous hero can strengthen shared race templates (especially
+     * Morgoth). Reset those run-specific changes after undoing Tale overlays;
+     * the ordinary population/lore resets below and startup's optional
+     * overlays then apply to the canonical authored races. */
+    if (r_base && r_info && z_info)
+        memcpy(r_info, r_base, z_info->r_max * sizeof(*r_info));
     /* We are about to wipe the old hero, so there is no fully-generated
      * character any more.  This must be cleared **before** we enter the
      * next character-creation cycle; otherwise helpers such as

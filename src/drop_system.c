@@ -3793,6 +3793,11 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
     if (min_depth_penalty_depth < 1)
         min_depth_penalty_depth = 1;
 
+    /* Every catalog caller must honor the character's content restriction,
+     * including ordinary monster loot and chest contents. */
+    allow_artefacts = allow_artefacts
+        && !(adult_no_artefacts || birth_no_artefacts);
+
     /* Handle chest generation specially */
     if (droptype == DROP_TYPE_CHEST)
     {
