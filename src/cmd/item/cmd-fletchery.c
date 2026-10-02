@@ -5,6 +5,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "ui/question.h"
+#include "object/object-internal.h"
 
 static bool item_tester_hook_fletchery_source(const object_type* o_ptr)
 {
@@ -39,6 +40,7 @@ static bool item_tester_hook_fletchery_source(const object_type* o_ptr)
 static object_type fletchery_source_snapshot;
 static bool fletchery_source_snapshot_valid = false;
 static bool fletchery_source_in_pack = false;
+static bool fletchery_source_in_quiver = false;
 
 static void log_fletchery_object_state(
     const char* tag, const object_type* o_ptr, int slot)
@@ -76,6 +78,7 @@ static void clear_fletchery_source_snapshot(void)
     object_wipe(&fletchery_source_snapshot);
     fletchery_source_snapshot_valid = false;
     fletchery_source_in_pack = false;
+    fletchery_source_in_quiver = false;
     p_ptr->fletch_item = -1;
 }
 
@@ -157,6 +160,20 @@ static int collect_fletchery_source_slots(int* slots, int capacity)
 {
     int count = 0;
     int preferred_slot = p_ptr->fletch_item;
+
+    if (fletchery_source_in_quiver)
+    {
+        int quiver_slots[QUIVER_ARROW_CAPACITY + 1];
+        int quiver_count = player_quiver_arrow_slots(quiver_slots,
+            (int)N_ELEMENTS(quiver_slots));
+
+        /* Keep handle order so reverse removal cannot shift later sources. */
+        for (int i = 0; i < quiver_count && count < capacity; i++)
+            if (fletchery_source_matches(
+                    inventory_item_to_object_ptr(quiver_slots[i])))
+                slots[count++] = quiver_slots[i];
+        return count;
+    }
 
     if (player_inventory_handle_valid(preferred_slot)
         && fletchery_source_matches(player_inventory_object(preferred_slot)))
@@ -423,10 +440,22 @@ static bool drop_fletchered_arrows_near(object_type* arrows)
 
 static void distribute_fletchered_arrows(const object_type* arrows)
 {
+    object_type quiver_remainder;
     if (!arrows || arrows->number <= 0 || arrows->k_idx == 0)
         return;
 
     log_fletchery_object_state("distribute_input", arrows, -1);
+
+    if (object_is_quivered_arrow(arrows))
+    {
+        object_copy(&quiver_remainder, arrows);
+        (void)player_quiver_absorb_arrow(&quiver_remainder);
+        if (quiver_remainder.number <= 0)
+            return;
+        quiver_remainder.pickup = false;
+        quiver_remainder.pickup_slot = -1;
+        arrows = &quiver_remainder;
+    }
 
     /* Crafted arrows add Pack volume just like other unquivered arrows. Check before
      * the direct stack-merging passes below, which intentionally do not call
@@ -642,7 +671,7 @@ void do_cmd_fletchery(void)
         o_ptr = &supply_source;
     }
     else
-        o_ptr = player_inventory_object(source_index);
+        o_ptr = inventory_item_to_object_ptr(source_index);
 
     if (!o_ptr || !o_ptr->k_idx)
     {
@@ -676,6 +705,7 @@ void do_cmd_fletchery(void)
         p_ptr->fletching = o_ptr->number;
         fletchery_source_in_pack =
             player_inventory_handle_is_carried(source_index);
+        fletchery_source_in_quiver = object_is_quivered_arrow(o_ptr);
         log_debug("fletchery:start source_index=%d in_pack=%d turns=%d",
             source_index, fletchery_source_in_pack ? 1 : 0, p_ptr->fletching);
         log_fletchery_object_state("start_source", o_ptr, source_index);
@@ -749,7 +779,8 @@ void finish_fletching(int turns_left)
 {
     object_type source_template;
     object_type* o_ptr = NULL;
-    int slot_capacity = MAX(player_pack_entry_count() + 1, 1);
+    int slot_capacity = MAX(player_pack_entry_count() + 1,
+        QUIVER_ARROW_CAPACITY + 1);
     int* slots = mem_alloc_array(slot_capacity, int);
     int* remove_amounts = mem_alloc_array(slot_capacity, int);
     int slot_count = 0;
@@ -769,9 +800,12 @@ void finish_fletching(int turns_left)
         slot_count = collect_fletchery_source_slots(slots, slot_capacity);
         log_fletchery_object_state("finish_snapshot", &source_template, p_ptr->fletch_item);
     }
-    else if (player_inventory_handle_valid(p_ptr->fletch_item))
+    else if ((player_inventory_handle_valid(p_ptr->fletch_item)
+            || (p_ptr->fletch_item >= QUIVER_INDEX
+                && p_ptr->fletch_item < QUIVER_INDEX_END))
+        && (o_ptr = inventory_item_to_object_ptr(p_ptr->fletch_item))
+        && o_ptr->k_idx && o_ptr->tval == TV_ARROW)
     {
-        o_ptr = player_inventory_object(p_ptr->fletch_item);
         object_copy(&source_template, o_ptr);
         count = o_ptr->number - turns_left;
         if (o_ptr->k_idx)
@@ -811,7 +845,7 @@ void finish_fletching(int turns_left)
         for (int i = 0; i < slot_count && available_total < source_total; i++)
         {
             int slot = slots[i];
-            object_type* slot_obj = player_inventory_object(slot);
+            object_type* slot_obj = inventory_item_to_object_ptr(slot);
             int available = slot_obj ? slot_obj->number : 0;
             int used = MIN(source_total - available_total, available);
 
@@ -866,6 +900,8 @@ void finish_fletching(int turns_left)
         {
             if (remove_amounts[i] <= 0)
                 continue;
+            if (slots[i] >= QUIVER_INDEX && slots[i] < QUIVER_INDEX_END)
+                continue;
 
             log_fletchery_object_state("finish_remove_before",
                 player_inventory_object(slots[i]), slots[i]);
@@ -878,6 +914,11 @@ void finish_fletching(int turns_left)
         {
             if (remove_amounts[i] <= 0)
                 continue;
+            if (slots[i] >= QUIVER_INDEX && slots[i] < QUIVER_INDEX_END)
+            {
+                player_quiver_remove_arrows(slots[i], remove_amounts[i]);
+                continue;
+            }
 
             log_fletchery_object_state("finish_optimize_before",
                 player_inventory_object(slots[i]), slots[i]);

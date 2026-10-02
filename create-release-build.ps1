@@ -225,12 +225,11 @@ foreach ($folder in $libFoldersToCopy) {
                 Write-Host "  [SKIP] lib/$folder (audio: no .wav files found)"
             }
             
-            # Remove non-16x16.png files from graf subfolder
+            # Keep runtime terrain atlases, animation frames, and their licenses.
             $grafPath = "$dstFolder/graf"
             if (Test-Path $grafPath) {
-                Get-ChildItem $grafPath -File | Where-Object { $_.Name -ne "16x16.png" } | Remove-Item -Force
                 $grafItems = (Get-ChildItem $grafPath -File | Measure-Object).Count
-                Write-Host "  [OK] lib/$folder (graf: $grafItems files, only 16x16.png kept)"
+                Write-Host "  [OK] lib/$folder (graf: $grafItems runtime graphics and license files)"
             }
 
             # Count music files if present in xtra
@@ -310,7 +309,7 @@ $manifestText += "  xtra/                      - Extended resources (fonts, soun
 $manifestText += "    font/                    - Font files`n"
 $manifestText += "    sound/                   - Audio files (.ogg only; sound packs excluded)`n"
 $manifestText += "    music/                   - Background music files (.ogg only)`n"
-$manifestText += "    graf/                    - Graphics (only 16x16.png)`n"
+$manifestText += "    graf/                    - Tileset, terrain atlases, animation frames, and licenses`n"
 $manifestText += "  docs/                      - Documentation and manuals (6 files)`n"
 $manifestText += "  apex/                      - Runtime data directory (EMPTY - for metarun data)`n"
 $manifestText += "  save/                      - Runtime data directory (EMPTY - for player saves)`n"

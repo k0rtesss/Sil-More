@@ -81,6 +81,7 @@ TESTS = r'''
 
 size_t fixture_write_dungeon(byte*, size_t, size_t*);
 int fixture_read_dungeon(const byte*, size_t, int, u32b*, size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 bool fixture_place_legendary(void);
 bool fixture_area_fit(const meta_dungeon_area*, int, int);
 int fixture_meta_drop_count(int);
@@ -327,13 +328,13 @@ static void test_places(void)
     size_t length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
     legendary_area_map_reset();
     u32b sentinel;
-    CHECK(!fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+    CHECK(!fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
     CHECK(sentinel == 0xA1B2C3D4U && consumed == length);
     CHECK(legendary_area_id[2][2] == 1 && legendary_area_song_is_available(SNG_ELBERETH));
     guid64 guid; bool seen;
     CHECK(legendary_area_get_save_record(1, &guid, &seen) && seen);
     op_ptr->opt[OPT_meta_legendary_places] = false;
-    CHECK(!fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+    CHECK(!fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
     CHECK(!legendary_area_song_is_available(SNG_ELBERETH));
     decode(encoded, plain, length);
     size_t start = 0;
@@ -350,9 +351,9 @@ static void test_places(void)
     CHECK(!fixture_read_dungeon(encoded, old_length, 24, &sentinel, &consumed));
     CHECK(sentinel == 0xA1B2C3D4U && consumed == old_length && !legendary_area_id[2][2]);
     plain[start+2] = 99; encode(plain, encoded, length);
-    CHECK(fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+    CHECK(fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
     plain[start+2] = 1; plain[start+5+active*11] = 0; encode(plain, encoded, length);
-    CHECK(fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+    CHECK(fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
     puts("Legendary places: opt-in, depth/fit/quest protection, grants, exit/toggle stop, v25/v24 streams and corrupt blocks PASS.");
 }
 

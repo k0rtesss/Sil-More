@@ -65,7 +65,7 @@ def source_inventory():
     if item_wrapper:
         assert 'observe(id, type, name, detail);' in item_wrapper.group(1), 'Item observation wrapper no longer delegates the lesson ID'
         assert 'offered_item_actions[i] = true' in item_wrapper.group(1), 'Item candidate tracking is missing'
-    observer_names = r'(?:observe|world_observe|observe_item_action)'
+    observer_names = r'(?:observe|observe_at|world_observe|observe_item_action)'
     direct = set(re.findall(r'\b' + observer_names + r'\(\s*"([a-z0-9_.-]+)"', combined))
     for expression in re.findall(r'\b' + observer_names + r'\(\s*([^,]+),', combined):
         direct.update(re.findall(r'"([a-z0-9_.-]+)"', expression))
@@ -95,7 +95,7 @@ def source_inventory():
         block = nearby.group(1)
         hazards = re.search(r'const int hazards\[\]\s*=\s*\{([^}]+)\}', block)
         ids = re.search(r'const char \*hazard_ids\[\]\s*=\s*\{([^}]+)\}', block)
-        assert hazards and ids and 'observe(hazard_ids[i]' in block, 'Nearby hazard producer is missing'
+        assert hazards and ids and 'observe_at(hazard_ids[i]' in block, 'Nearby hazard producer is missing'
         hazard_ids = re.findall(r'"(world\.[a-z]+)"', ids.group(1))
         assert len(top_level_expressions(hazards.group(1))) == len(hazard_ids), 'Hazard IDs/features are out of alignment'
         direct.update(hazard_ids)

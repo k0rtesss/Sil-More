@@ -37,11 +37,12 @@ size_t fixture_write_player(byte* buffer, size_t capacity, int old)
 READER = r'''
 #include "fs/load.c"
 #include <assert.h>
-int fixture_read_player(const byte* buffer, size_t length, int extra)
+static int fixture_read_player_version(const byte* buffer, size_t length,
+    int major, int minor, int patch, int extra)
 {
     fff = SDL_IOFromConstMem(buffer, length); assert(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 8; sf_extra = extra;
+    sf_major = major; sf_minor = minor; sf_patch = patch; sf_extra = extra;
     /* FEATURE_FLAGS */
     savefile_has_varda_quest = true;
     int result = load_read_extra();
@@ -52,6 +53,16 @@ int fixture_read_player(const byte* buffer, size_t length, int extra)
     SDL_CloseIO(fff); fff = NULL;
     return result;
 }
+int fixture_read_player(const byte* buffer, size_t length, int extra)
+{
+    return fixture_read_player_version(buffer, length, 0, 9, 8, extra);
+}
+int fixture_read_current_player(const byte* buffer, size_t length)
+{
+    return fixture_read_player_version(buffer, length, VERSION_MAJOR,
+        VERSION_MINOR, VERSION_PATCH, VERSION_EXTRA);
+}
+
 '''
 
 CHARACTER = r'''
@@ -647,6 +658,7 @@ extern void check_calculation_display(cptr output);
 extern void check_sdl_skill_display(cptr output, cptr fonts);
 extern size_t fixture_write_player(byte* buffer, size_t capacity, int old);
 extern int fixture_read_player(const byte* buffer, size_t length, int extra);
+extern int fixture_read_current_player(const byte* buffer, size_t length);
 static term test_term;
 char fixture_input_key = ' ';
 char (*fixture_input_action)(void);
@@ -728,7 +740,7 @@ static void check_player_save(void)
     memset(p_ptr->insight_stat_invested, 0, sizeof(p_ptr->insight_stat_invested));
     memset(p_ptr->insight_ability_upgraded, 0xFF, sizeof(p_ptr->insight_ability_upgraded));
     p_ptr->innate_ability[S_MEL][MEL_TWO_WEAPON] = false;
-    assert(fixture_read_player(buffer, new_size, VERSION_EXTRA) == 0);
+    assert(fixture_read_current_player(buffer, new_size) == 0);
     assert(p_ptr->insight_points == 1234 && p_ptr->insight_milestones == INSIGHT_MILESTONE_SONG);
     assert(p_ptr->insight_monster_types == (RF3_ORC | RF3_RAUKO));
     for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i + 1);
@@ -746,7 +758,10 @@ static void check_player_save(void)
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
     size_t v28_size = fixture_write_player(buffer, 1024*1024, 2);
-    assert(new_size - v28_size == sizeof(u32b) + S_MAX * ABILITIES_MAX);
+    /* Later layouts add monster-family rewards, one-time upgrades, and the
+     * .31 per-partition atmosphere lane. */
+    assert(new_size - v28_size
+        == sizeof(u32b) + S_MAX * ABILITIES_MAX + PARTITION_META_MAX);
     assert(fixture_read_player(buffer, v28_size, 28) == 0);
     assert(p_ptr->insight_points == 1234 && p_ptr->insight_milestones == INSIGHT_MILESTONE_SONG);
     assert(p_ptr->insight_monster_types == 0);

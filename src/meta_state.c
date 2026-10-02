@@ -6,6 +6,7 @@
 #include "meta_state.h"
 #include "metarun.h"
 #include "score/score_guid.h"
+#include "score/score_paths.h"
 
 #include <SDL3/SDL.h>
 #include <string.h>
@@ -2133,6 +2134,25 @@ static bool meta_dungeon_load_callback(const meta_state_record_meta* meta,
 bool meta_state_init(void)
 {
     meta_monster_log_validation_once();
+#ifndef SIL_USE_LOCAL_DATA
+    /* Install databases used to be written outside the user profile. Their
+     * numeric Tale IDs do not identify an owner, so retain them for verified
+     * recovery instead of importing another user's memories automatically. */
+    for (int kind = 0; kind < META_STATE_DB_KIND_MAX; kind++) {
+        char legacy[1024], current[1024];
+        if (path_build(legacy, sizeof(legacy), ANGBAND_DIR_APEX,
+                meta_state_db_leaf(kind))
+            && meta_state_build_db_path(kind, current, sizeof(current))
+            && strcmp(legacy, current) != 0
+            && !SDL_GetPathInfo(current, NULL)
+            && SDL_GetPathInfo(legacy, NULL))
+        {
+            log_warn("meta_state: legacy memories preserved at '%s'; not "
+                "imported into '%s' because Tale IDs do not identify the "
+                "owning user", legacy, current);
+        }
+    }
+#endif
     return true;
 }
 
@@ -2180,7 +2200,10 @@ bool meta_state_build_db_path(meta_state_db_kind kind, char* path, size_t len)
     if (!leaf || !path || !len)
         return false;
 
-    return path_build(path, len, ANGBAND_DIR_APEX, leaf);
+    /* Standard installations keep persistent records in the user's meta
+     * directory.  The install apex may be read-only or shared by users;
+     * numeric Tale IDs cannot establish ownership of its legacy records. */
+    return score_build_meta_path(path, len, leaf);
 }
 
 u32b meta_state_current_metarun_id(void)
@@ -2198,39 +2221,6 @@ bool meta_state_record_is_active(const meta_state_record_meta* meta)
     if (!meta)
         return false;
     return (meta->flags & (META_STATE_RECORD_DELETED | META_STATE_RECORD_DISABLED)) == 0;
-}
-
-bool meta_state_clear_current_metarun_files(void)
-{
-    bool ok = true;
-
-    meta_state_reset_character();
-
-    for (int i = 0; i < META_STATE_DB_KIND_MAX; i++) {
-        char path[1024];
-        SDL_PathInfo info;
-
-        if (!meta_state_build_db_path((meta_state_db_kind)i, path, sizeof(path))) {
-            ok = false;
-            continue;
-        }
-
-        if (!SDL_GetPathInfo(path, &info) || info.type != SDL_PATHTYPE_FILE)
-            continue;
-
-        safe_setuid_grab();
-        bool removed = SDL_RemovePath(path);
-        safe_setuid_drop();
-
-        if (!removed) {
-            log_warn("meta_state: failed to remove %s: %s", path, SDL_GetError());
-            ok = false;
-        } else {
-            log_info("meta_state: removed %s for new metarun", path);
-        }
-    }
-
-    return ok;
 }
 
 bool meta_state_append_current_record(meta_state_db_kind kind,

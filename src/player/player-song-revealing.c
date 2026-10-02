@@ -142,6 +142,17 @@ static void song_reveal_carried_items(void)
                 && player_equipment_slot_counts_as_equipped(i),
             0);
     }
+
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+        (void)player_try_identify_smithing_object(
+            player_carried_extra_entry_at(i), false, 0);
+
+    for (int i = 0; i < player_quiver_store_entry_count(); i++)
+        (void)player_try_identify_smithing_object(
+            player_quiver_store_entry_at(i),
+            player_quiver_counts_as_equipped()
+                && QUIVER_INDEX + i == player_quiver_selected_arrow_slot(),
+            0);
 }
 
 void sing_song_of_revealing(int score)

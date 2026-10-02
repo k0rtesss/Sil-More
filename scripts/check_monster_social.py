@@ -8,11 +8,14 @@ import check_monster_scent_save as persistence
 
 TESTS = r'''
 #include "monster/monster-social.h"
+#include "monster/monster-routine.h"
 #include "cave/cave-events.h"
 #include "melee/melee-process.h"
 #include "melee/melee-attack.h"
 
 static int social_orc;
+size_t fixture_write_v19_dungeon(byte*, size_t, size_t*);
+size_t fixture_write_v18_dungeon(byte*, size_t, size_t*);
 
 static void social_fight(monster_type* a, monster_type* b)
 {
@@ -232,11 +235,21 @@ static void test_social_lifecycle_and_save(void)
     size_t block_size = 4 + (MON_GROUP_MAX-1)*(MON_GROUP_MAX-2)/2 + MON_SOCIAL_RECORD_BYTES*(mon_max-1);
     size_t routine_size = 4;
     for (int i = 1; i < mon_max; i++) routine_size += 6 + 2 * mon_list[i].routine.count;
-    size_t block = dungeon_size - block_size - routine_size;
+    size_t block = 0;
+    int matches = 0;
+    for (size_t i = 0; i + block_size + routine_size + 2 <= dungeon_size; i++)
+        if (plain[i] == (MON_SOCIAL_SAVE_MAGIC & 255)
+            && plain[i+1] == (MON_SOCIAL_SAVE_MAGIC >> 8)
+            && plain[i+block_size] == (MON_ROUTINE_SAVE_MAGIC & 255)
+            && plain[i+block_size+1] == (MON_ROUTINE_SAVE_MAGIC >> 8)
+            && plain[i+block_size+routine_size] == 0x23
+            && plain[i+block_size+routine_size+1] == 0xCA)
+        { block = i; matches++; }
+    assert(matches == 1);
     assert(plain[block] == (MON_SOCIAL_SAVE_MAGIC & 255));
     u32b sentinel; size_t consumed;
     social_map();
-    assert(!fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+    assert(!fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
     assert(sentinel == 0xA1B2C3D4U && consumed == length);
     a = &mon_list[cave_m_idx[12][10]]; b = &mon_list[cave_m_idx[12][11]];
     assert(a->social_group == 8 && b->social_group == 9);
@@ -254,10 +267,12 @@ static void test_social_lifecycle_and_save(void)
     mon_max = old_max;
     assert(monster_social_relation(a, b) == MON_REL_NEUTRAL);
 
-    /* Reject every truncation of the new block; no leaked partial diplomacy. */
-    for (size_t cut = block; cut < dungeon_size; cut++) {
+    /* Reject every truncation of diplomacy/routines, matching their original
+     * span. Wrath follows complete relationships and has separate tests. */
+    size_t social_end = block + block_size + routine_size;
+    for (size_t cut = block; cut < social_end; cut++) {
         social_map();
-        assert(fixture_read_dungeon(encoded, cut, VERSION_EXTRA, &sentinel, &consumed));
+        assert(fixture_read_current_dungeon(encoded, cut, &sentinel, &consumed));
         assert(monster_group_relation(8, 9) == MON_REL_NEUTRAL);
     }
     size_t record = block + 4 + (MON_GROUP_MAX-1)*(MON_GROUP_MAX-2)/2;
@@ -266,30 +281,29 @@ static void test_social_lifecycle_and_save(void)
     for (size_t i = 0; i < N_ELEMENTS(corrupt); i++) {
         byte old = plain[corrupt[i]]; plain[corrupt[i]] = 255;
         encode(plain, modified, length); social_map();
-        assert(fixture_read_dungeon(modified, length, VERSION_EXTRA, &sentinel, &consumed));
+        assert(fixture_read_current_dungeon(modified, length, &sentinel, &consumed));
         assert(monster_group_relation(8, 9) == MON_REL_NEUTRAL);
         plain[corrupt[i]] = old;
     }
-    /* Strip appended per-monster fields to create an actual v19 social block. */
-    size_t legacy_end = record;
-    for (int i = 0; i < 2; i++) {
-        memcpy(plain + legacy_end, plain + record + MON_SOCIAL_RECORD_BYTES*i, 5);
-        legacy_end += 5;
-    }
-    memmove(plain + legacy_end, plain + dungeon_size, 8);
-    encode(plain, modified, legacy_end + 8); social_map();
-    assert(!fixture_read_dungeon(modified, legacy_end + 8, 19, &sentinel, &consumed));
-    assert(sentinel == 0xA1B2C3D4U && consumed == legacy_end + 8);
+    printf("Social persistence: %zu truncations and %zu corrupt fields rejected.\n",
+        social_end - block, N_ELEMENTS(corrupt));
+    /* Write historical typed lanes without later area/routine/Wrath blocks. */
+    social_map();
+    assert(!fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
+    size_t legacy_size;
+    size_t legacy_length = fixture_write_v19_dungeon(modified, sizeof(modified), &legacy_size);
+    social_map();
+    assert(!fixture_read_dungeon(modified, legacy_length, 19, &sentinel, &consumed));
+    assert(sentinel == 0xA1B2C3D4U && consumed == legacy_length);
     a = &mon_list[cave_m_idx[12][10]]; b = &mon_list[cave_m_idx[12][11]];
     assert(a->social_state == MON_SOCIAL_FIGHT && b->social_state == MON_SOCIAL_FIGHT);
     assert(a->social_timer == MON_SOCIAL_DISPUTE_ACTIONS && !a->social_focus && !a->social_player_threat);
-    decode(encoded, plain, length);
     /* Version 18 has identical earlier lanes but no social block. */
-    memmove(plain + block, plain + dungeon_size, 8);
-    encode(plain, modified, block + 8); social_map();
+    legacy_length = fixture_write_v18_dungeon(modified, sizeof(modified), &legacy_size);
+    social_map();
     monster_group_set_relation(8, 9, MON_REL_HOSTILE);
-    assert(!fixture_read_dungeon(modified, block + 8, 18, &sentinel, &consumed));
-    assert(sentinel == 0xA1B2C3D4U && consumed == block + 8);
+    assert(!fixture_read_dungeon(modified, legacy_length, 18, &sentinel, &consumed));
+    assert(sentinel == 0xA1B2C3D4U && consumed == legacy_length);
     assert(monster_group_relation(8, 9) == MON_REL_NEUTRAL);
     for (int i = 1; i < mon_max; i++)
         assert(!mon_list[i].social_group && !mon_list[i].social_rival);
@@ -554,7 +568,7 @@ static void test_social_response_persistence(void)
     assert(monster_social_valid(d));
     size_t size, length = fixture_write_dungeon(encoded, sizeof(encoded), &size);
     social_map(); u32b sentinel; size_t consumed;
-    assert(!fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+    assert(!fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
     assert(consumed == length && sentinel == 0xA1B2C3D4U);
     a = &mon_list[cave_m_idx[12][10]]; b = &mon_list[cave_m_idx[12][11]];
     c = &mon_list[cave_m_idx[11][10]]; d = &mon_list[cave_m_idx[dy][dx]];
@@ -603,7 +617,7 @@ static void test_social_simulation(void)
             s32b saved_playerturn = playerturn, saved_turn = turn;
             social_map(); /* Real loading begins with an empty monster/object list. */
             playerturn = saved_playerturn; turn = saved_turn;
-            assert(!fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed));
+            assert(!fixture_read_current_dungeon(encoded, length, &sentinel, &consumed));
             assert(consumed == length && sentinel == 0xA1B2C3D4U);
         }
     }
@@ -638,4 +652,5 @@ static void test_monster_social(void)
 
 if __name__ == "__main__":
     persistence.OUT = persistence.ROOT / "scripts/output/monster-social"
-    persistence.main(TESTS, "    test_monster_social();")
+    persistence.main(TESTS, "    test_monster_social();",
+        ((19, "d6bb1948"), (18, "4312c882")))

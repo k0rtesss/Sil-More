@@ -3516,7 +3516,6 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
     log_debug("Config file content length: %zu bytes", strlen(content));
     
     cJSON* root = cJSON_Parse(content);
-    free(content);
     
     if (!root) {
         const char* error_ptr = cJSON_GetErrorPtr();
@@ -3525,8 +3524,10 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         } else {
             log_error("JSON parse error (no error pointer available)");
         }
+        free(content);
         return SDL_CONFIG_LOAD_PARSE_FAILED;
     }
+    free(content);
     
     log_debug("JSON parsed successfully");
 

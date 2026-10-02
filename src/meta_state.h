@@ -166,7 +166,6 @@ void meta_state_reset_character(void);
 
 bool meta_state_init(void);
 void meta_state_shutdown(void);
-bool meta_state_clear_current_metarun_files(void);
 
 bool meta_state_build_db_path(meta_state_db_kind kind, char* path, size_t len);
 u32b meta_state_current_metarun_id(void);

@@ -2808,15 +2808,59 @@ static void rd_combat_history(void)
 /*
  * Actually read the savefile
  */
+static errr rd_savefile_checksums(void)
+{
+    u32b expected_value = v_check;
+    u32b expected_encoded;
+    u32b saved_value = 0, saved_encoded = 0;
+    u32b start = load_byte_offset;
+
+    /* Dead characters and older dungeon formats do not pass through the
+     * newest dungeon block's footer check. Validate every save here. */
+    if (!load_only_checksums_remain())
+    {
+        note("Invalid savefile checksum footer length");
+        return -1;
+    }
+
+    rd_u32b(&saved_value);
+    if (load_byte_offset - start != 4)
+    {
+        note("Truncated savefile value checksum");
+        return -1;
+    }
+    if (saved_value != expected_value)
+    {
+        log_error("Invalid checksum: expected %u, got %u",
+            expected_value, saved_value);
+        note("Invalid checksum");
+        return -1;
+    }
+
+    /* The encoded checksum includes the preceding value-checksum bytes. */
+    expected_encoded = x_check;
+    rd_u32b(&saved_encoded);
+    if (load_byte_offset - start != 8)
+    {
+        note("Truncated savefile encoded checksum");
+        return -1;
+    }
+    if (saved_encoded != expected_encoded)
+    {
+        log_error("Invalid encoded checksum: expected %u, got %u",
+            expected_encoded, saved_encoded);
+        note("Invalid encoded checksum");
+        return -1;
+    }
+    return 0;
+}
+
 static errr rd_savefile_new_aux(void)
 {
     int i;
 
     byte tmp8u;
     u16b tmp16u;
-
-    u32b n_x_check, n_v_check;
-    u32b o_x_check, o_v_check;
 
     savefile_has_runtime_overrides = savefile_version_at_least(0, 9, 0, 3);
     savefile_has_monster_shatter = savefile_version_at_least(0, 9, 0, 4);
@@ -3049,40 +3093,7 @@ static errr rd_savefile_new_aux(void)
         }
     }
 
-    /* Save the checksum */
-    n_v_check = v_check;
-
-    /* Read the old checksum */
-    rd_u32b(&o_v_check);
-
-    log_debug("Checksum validation: expected=%u, file=%u", n_v_check, o_v_check);
-
-    /* Verify */
-    if (o_v_check != n_v_check)
-    {
-        log_error("Invalid checksum: expected %u, got %u", n_v_check, o_v_check);
-        note("Invalid checksum");
-        return (-1);
-    }
-
-    /* Save the encoded checksum */
-    n_x_check = x_check;
-
-    /* Read the checksum */
-    rd_u32b(&o_x_check);
-
-    log_debug("Encoded checksum validation: expected=%u, file=%u", n_x_check, o_x_check);
-
-    /* Verify */
-    if (o_x_check != n_x_check)
-    {
-        log_error("Invalid encoded checksum: expected %u, got %u", n_x_check, o_x_check);
-        note("Invalid encoded checksum");
-        return (-1);
-    }
-
-    /* Success */
-    return (0);
+    return rd_savefile_checksums();
 }
 
 /*

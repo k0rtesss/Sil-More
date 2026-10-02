@@ -5,6 +5,7 @@ Build standard first. Uses temporary template caches, never player saves.
 """
 from pathlib import Path
 import os
+import re
 import shlex
 import subprocess
 import tempfile
@@ -14,6 +15,26 @@ from check_monster_scent_save import WRITER, READER
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build-standard'
 OUT = ROOT / 'scripts/output/quartz-walls'
+LEGACY_V21_REF = '1d36f6cf'
+
+LEGACY_WRITER = r'''
+void fixture_legacy_v21_wr_dungeon(void);
+size_t fixture_write_v21_dungeon(byte* buffer, size_t capacity, size_t* dungeon_size)
+{
+    /* This fixture exercises terrain, not object/monster record evolution. */
+    assert(o_max == 1 && mon_max == 1);
+    fff = SDL_IOFromMem(buffer, capacity); assert(fff);
+    xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
+    fixture_legacy_v21_wr_dungeon();
+    *dungeon_size = (size_t)SDL_TellIO(fff);
+    save_wr_u32b(0xA1B2C3D4U);
+    save_wr_u32b(0x10203040U);
+    size_t length = (size_t)SDL_TellIO(fff);
+    assert(!write_error && length == *dungeon_size + 8);
+    SDL_CloseIO(fff); fff = NULL;
+    return length;
+}
+'''
 
 TESTS = r'''
 int checks;
@@ -171,7 +192,9 @@ static void test_environment(void)
     puts("Environment: visible damage before erosion collapse; ruins cannot grow quartz PASS");
 }
 size_t fixture_write_dungeon(byte*,size_t,size_t*);
+size_t fixture_write_v21_dungeon(byte*,size_t,size_t*);
 int fixture_read_dungeon(const byte*,size_t,int,u32b*,size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 static void test_save(void)
 {
     static byte buffer[262144];size_t dungeon,length,consumed;u32b sentinel;
@@ -180,7 +203,7 @@ static void test_save(void)
     cave_event_emit(CAVE_EVENT_MINERAL,10,10,8);
     length=fixture_write_dungeon(buffer,sizeof(buffer),&dungeon);
     fresh_map();turn=1000;
-    CHECK(!fixture_read_dungeon(buffer,length,VERSION_EXTRA,&sentinel,&consumed));
+    CHECK(!fixture_read_current_dungeon(buffer,length,&sentinel,&consumed));
     CHECK(consumed==length&&sentinel==0xA1B2C3D4U);
     CHECK(cave_feat[10][10]==FEAT_CRACKED_QUARTZ&&cave_feat[10][11]==FEAT_DAMAGED_WALL);
     CHECK(cave_wall_bold(10,10)&&!cave_floor_bold(10,11));
@@ -189,10 +212,11 @@ static void test_save(void)
     for(int mode=QUAD_MODE_ROOMY;mode<=QUAD_MODE_CAVEY;mode++){
         clean(mode,12);stone(FEAT_QUARTZ);cave_set_feat(10,11,FEAT_QUARTZ);
         cave_info[10][11]|=CAVE_ICKY;cave_environment_seed();
-        length=fixture_write_dungeon(buffer,sizeof(buffer),&dungeon);
+        length=fixture_write_v21_dungeon(buffer,sizeof(buffer),&dungeon);
         /* Partition metadata lives in the player header, outside this dungeon fixture. */
         clean(mode,12);character_dungeon=false;
         CHECK(!fixture_read_dungeon(buffer,length,21,&sentinel,&consumed));
+        CHECK(consumed==length&&sentinel==0xA1B2C3D4U);
         CHECK(cave_feat[10][11]==FEAT_DAMAGED_WALL);
         CHECK(cave_feat[10][10]==(mode==QUAD_MODE_CAVEY?FEAT_QUARTZ:FEAT_DAMAGED_WALL));
         CHECK(cave_environment_cell_at(10,11)->known_feat==FEAT_DAMAGED_WALL);
@@ -267,7 +291,20 @@ def main():
     interaction = OUT / 'interact.c'
     interaction.write_text('#include "cmd/world/cmd-interact.c"\n'
                            'bool test_tunnel(int y,int x){return do_cmd_tunnel_aux(y,x);}\n', encoding='utf-8')
-    writer = OUT / 'writer.c'; writer.write_text(WRITER, encoding='utf-8')
+    writer = OUT / 'writer.c'; writer.write_text(WRITER + LEGACY_WRITER, encoding='utf-8')
+    legacy_defines = subprocess.check_output(['git', '-c', 'core.fsmonitor=false',
+        'show', f'{LEGACY_V21_REF}:src/defines.h'], cwd=ROOT, text=True)
+    assert [int(re.search(r'^#define VERSION_' + part + r'\s+(\d+)',
+        legacy_defines, re.M)[1]) for part in ('MAJOR', 'MINOR', 'PATCH', 'EXTRA')] == [0, 9, 8, 21]
+    # Use the actual .21 writer so Legendary Areas (.25) and Wrath (.23)
+    # never enter a legacy stream. Environment bytes have the same layout;
+    # the fixture above explicitly has no evolving item/monster records.
+    legacy_source = subprocess.check_output(['git', '-c', 'core.fsmonitor=false',
+        'show', f'{LEGACY_V21_REF}:src/fs/save-dungeon.c'], cwd=ROOT, text=True)
+    legacy_source = legacy_source.replace('void wr_dungeon(void)',
+        'void fixture_legacy_v21_wr_dungeon(void)')
+    legacy_writer = OUT / 'legacy-v21-writer.c'
+    legacy_writer.write_text(legacy_source, encoding='utf-8')
     reader = OUT / 'reader.c'; reader.write_text(READER, encoding='utf-8')
     objects = shlex.split((BUILD / 'CMakeFiles/sil-more.dir/objects1.rsp').read_text())
     objects = [p for p in objects if not p.endswith(('/src/main.c.obj', '/src/cmd/world/cmd-interact.c.obj', '/src/fs/save.c.obj', '/src/fs/load.c.obj'))]
@@ -278,7 +315,7 @@ def main():
                                  'C:/msys64/mingw64/bin', 'C:/msys64/usr/bin', env['PATH']])
     exe = OUT / 'check.exe'
     subprocess.run(['C:/msys64/mingw64/bin/cc.exe', '-DUSE_SDL', '-std=c17', '-O0', '-g',
-                    '@CMakeFiles/sil-more.dir/includes_C.rsp', str(source), str(interaction), str(visual), str(writer), str(reader), '@' + str(response),
+                    '@CMakeFiles/sil-more.dir/includes_C.rsp', str(source), str(interaction), str(visual), str(writer), str(legacy_writer), str(reader), '@' + str(response),
                     '@CMakeFiles/sil-more.dir/linkLibs.rsp', '-Wl,--wrap=skill_check',
                     '-Wl,--wrap=drop_generate_object_profiled', '-o', str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix='data-', dir=OUT) as data:

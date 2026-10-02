@@ -15,6 +15,7 @@ OUT = ROOT / 'scripts/output/catastrophe'
 TESTS = LEGENDARY_MIGRATION + r'''
 size_t fixture_write_dungeon(byte*,size_t,size_t*);
 int fixture_read_dungeon(const byte*,size_t,int,u32b*,size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 static int checks;
 #define CHECK(t) do { checks++; if(!(t)){fprintf(stderr,"FAIL %s:%d: %s\n",__func__,__LINE__,#t);exit(1);} } while(0)
 static int debug_pick=-1,debug_calls,cold_calls;
@@ -489,7 +490,7 @@ static void test_material_save_continuation(void)
         for(int i=0;i<12;i++)action();
         size_t expected_length=fixture_write_dungeon(expected,sizeof(expected),&end);
         catastrophe_reset_run();
-        CHECK(fixture_read_dungeon(encoded,length,VERSION_EXTRA,&sentinel,&consumed)==0);
+        CHECK(fixture_read_current_dungeon(encoded,length,&sentinel,&consumed)==0);
         CHECK(consumed==length && sentinel==0xA1B2C3D4U);
         CHECK(catastrophe_get_state().step==saved.step);
         turn=saved_turn;playerturn=saved_playerturn;
@@ -557,7 +558,7 @@ static void test_save(void)
         next_map[y][x]=cave_feat[y][x];next_cells[y][x]=catastrophe_cell_step(y,x);
     }
     u32b sentinel=0;catastrophe_reset_run();
-    CHECK(fixture_read_dungeon(encoded,length,VERSION_EXTRA,&sentinel,&consumed)==0);
+    CHECK(fixture_read_current_dungeon(encoded,length,&sentinel,&consumed)==0);
     CHECK(sentinel==0xA1B2C3D4U&&consumed==length);
     catastrophe_state after=catastrophe_get_state();
     CHECK(after.chance==before.chance&&after.random==before.random&&after.step==before.step);
@@ -579,7 +580,7 @@ static void test_save(void)
     for(size_t i=0;i<old_length;i++){last^=plain[i];legacy[i]=last;}
     CHECK(fixture_read_dungeon(legacy,old_length,22,&sentinel,&consumed)==0);
     CHECK(!catastrophe_active()&&catastrophe_acquired_count()==0);
-    CHECK(fixture_read_dungeon(encoded,end-1,VERSION_EXTRA,&sentinel,&consumed)!=0);
+    CHECK(fixture_read_current_dungeon(encoded,end-1,&sentinel,&consumed)!=0);
     puts("Production dungeon-tail roundtrip, cells, events, craft, identities, legacy v22 and truncation: PASS");
 }
 '''

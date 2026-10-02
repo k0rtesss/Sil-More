@@ -433,6 +433,8 @@ static bool create_empty_scorefile(const char* path)
     bool empty = false;
     SDL_PathInfo path_info;
     int exclusive_fd;
+    int create_flags = O_WRONLY | O_CREAT | O_EXCL;
+    score_file_header header = {0};
 
     if (!path)
         return false;
@@ -443,21 +445,30 @@ static bool create_empty_scorefile(const char* path)
         SDL_ClearError();
     }
 
-    /* Claim the pathname exclusively before score_file_open() bootstraps its
-     * header.  This prevents a metadata-check failure from ever turning
-     * O_CREAT into truncation of an existing but unreadable ledger. */
+    /* Write the header through the exclusively claimed descriptor. The
+     * ordinary opener intentionally refuses existing invalid/empty files. */
+#ifdef O_BINARY
+    create_flags |= O_BINARY;
+#endif
     safe_setuid_grab();
-    exclusive_fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    exclusive_fd = open(path, create_flags, 0644);
     safe_setuid_drop();
     if (exclusive_fd < 0)
         return false;
-    if (close(exclusive_fd) != 0) {
+    header.version_major = SCORE_FILE_VERSION_MAJOR;
+    header.version_minor = SCORE_FILE_VERSION_MINOR;
+    header.version_patch = SCORE_FILE_VERSION_PATCH;
+    header.version_extra = SCORE_FILE_VERSION_EXTRA;
+    bool written = write(exclusive_fd, &header, sizeof(header))
+        == (ssize_t)sizeof(header);
+    int close_result = close(exclusive_fd);
+    if (!written || close_result != 0) {
         (void)fd_kill(path);
         return false;
     }
     score_file_reset_ctx(&local_ctx);
     previous_ctx = score_file_set_active_ctx(&local_ctx);
-    file = score_file_open(path, O_RDWR | O_CREAT);
+    file = score_file_open(path, O_RDWR);
     if (file) {
         empty = local_ctx.entry_count == 0
             && SDL_GetIOSize(file) == (Sint64)sizeof(score_file_header);

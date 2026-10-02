@@ -60,12 +60,13 @@ size_t fixture_write_monster(const monster_type* monster, byte* buffer,
 READER = r'''
 #include "fs/load.c"
 #include <assert.h>
-int fixture_read_dungeon(const byte* buffer, size_t length, int extra,
+static int fixture_read_dungeon_version(const byte* buffer, size_t length,
+    int major, int minor, int patch, int extra,
     u32b* sentinel, size_t* consumed)
 {
     fff = SDL_IOFromConstMem(buffer, length); assert(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 8; sf_extra = extra;
+    sf_major = major; sf_minor = minor; sf_patch = patch; sf_extra = extra;
     savefile_has_runtime_overrides = savefile_has_monster_shatter = true;
     savefile_has_song_duels = savefile_has_thrall_quest = true;
     savefile_has_thrall_quest_requested = savefile_has_cave_info_hi = true;
@@ -86,12 +87,25 @@ int fixture_read_dungeon(const byte* buffer, size_t length, int extra,
     SDL_CloseIO(fff); fff = NULL;
     return result;
 }
-int fixture_read_monster(const byte* buffer, size_t length, int extra,
+int fixture_read_dungeon(const byte* buffer, size_t length, int extra,
+    u32b* sentinel, size_t* consumed)
+{
+    return fixture_read_dungeon_version(buffer, length, 0, 9, 8, extra,
+        sentinel, consumed);
+}
+int fixture_read_current_dungeon(const byte* buffer, size_t length,
+    u32b* sentinel, size_t* consumed)
+{
+    return fixture_read_dungeon_version(buffer, length, VERSION_MAJOR,
+        VERSION_MINOR, VERSION_PATCH, VERSION_EXTRA, sentinel, consumed);
+}
+static int fixture_read_monster_version(const byte* buffer, size_t length,
+    int major, int minor, int patch, int extra,
     monster_type* monster, u32b* sentinel, size_t* consumed)
 {
     fff = SDL_IOFromConstMem(buffer, length); assert(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 8; sf_extra = extra;
+    sf_major = major; sf_minor = minor; sf_patch = patch; sf_extra = extra;
     savefile_has_runtime_overrides = savefile_has_monster_shatter = true;
     savefile_has_song_duels = savefile_has_thrall_quest = true;
     savefile_has_thrall_quest_requested = savefile_has_cave_info_hi = true;
@@ -104,6 +118,19 @@ int fixture_read_monster(const byte* buffer, size_t length, int extra,
     SDL_CloseIO(fff); fff = NULL;
     return 0;
 }
+int fixture_read_monster(const byte* buffer, size_t length, int extra,
+    monster_type* monster, u32b* sentinel, size_t* consumed)
+{
+    return fixture_read_monster_version(buffer, length, 0, 9, 8, extra,
+        monster, sentinel, consumed);
+}
+int fixture_read_current_monster(const byte* buffer, size_t length,
+    monster_type* monster, u32b* sentinel, size_t* consumed)
+{
+    return fixture_read_monster_version(buffer, length, VERSION_MAJOR,
+        VERSION_MINOR, VERSION_PATCH, VERSION_EXTRA, monster, sentinel, consumed);
+}
+
 '''
 
 LEGENDARY_MIGRATION = r'''
@@ -136,8 +163,10 @@ static size_t strip_legendary_block(byte* data, size_t length, int cells)
 TESTS = LEGENDARY_MIGRATION + r'''
 size_t fixture_write_dungeon(byte*, size_t, size_t*);
 int fixture_read_dungeon(const byte*, size_t, int, u32b*, size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 size_t fixture_write_monster(const monster_type*, byte*, size_t);
 int fixture_read_monster(const byte*, size_t, int, monster_type*, u32b*, size_t*);
+int fixture_read_current_monster(const byte*, size_t, monster_type*, u32b*, size_t*);
 static byte encoded[65536], plain[65536], modified[65536];
 static byte expected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 
@@ -156,7 +185,9 @@ static void encode(const byte* source, byte* target, size_t size)
 /* Find the end of the unchanged v16 lanes; v17 appends ecology here. */
 static size_t fixture_v16_dungeon_end(size_t dungeon_size)
 {
-    if (VERSION_EXTRA < 17) return dungeon_size;
+    /* Extra resets when the release changes; 0.9.9.0 still has ecology. */
+    if (VERSION_MAJOR == 0 && VERSION_MINOR == 9 && VERSION_PATCH == 8
+        && VERSION_EXTRA < 17) return dungeon_size;
     const byte boundary[] = {0,0xF1,0,0,1,0xF1,0,0,2,0xF1,0,0,0x17,0xEC};
     size_t found=0; int matches=0;
     for(size_t i=0;i+sizeof(boundary)<=dungeon_size;i++)
@@ -271,7 +302,7 @@ static void test_current_roundtrip(void)
 
     fresh_map(); scent_when = 17; cave_when[7][7] = 18;
     u32b sentinel; size_t consumed;
-    assert(fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed) == 0);
+    assert(fixture_read_current_dungeon(encoded, length, &sentinel, &consumed) == 0);
     assert(sentinel == 0xA1B2C3D4U && consumed == length);
     assert(p_ptr->cur_map_hgt == 20 && p_ptr->cur_map_wid == 24);
     for (int y = 0; y < 20; y++) for (int x = 0; x < 24; x++)
@@ -298,17 +329,17 @@ static void test_current_roundtrip(void)
     for (size_t n = 0; n < sizeof(truncations)/sizeof(truncations[0]); n++)
     {
         fresh_map();
-        assert(fixture_read_dungeon(encoded, truncations[n], VERSION_EXTRA, &sentinel, &consumed) != 0);
+        assert(fixture_read_current_dungeon(encoded, truncations[n], &sentinel, &consumed) != 0);
     }
     /* Re-encode the changed decoded byte, preserving the rest of the stream. */
     plain[scent_start] = 0;
     encode(plain, modified, length); fresh_map();
-    assert(fixture_read_dungeon(modified, length, VERSION_EXTRA, &sentinel, &consumed) != 0);
+    assert(fixture_read_current_dungeon(modified, length, &sentinel, &consumed) != 0);
     plain[scent_start] = 0xE6;
     byte original_age = plain[scent_start + 2 + 8*24 + 8];
     plain[scent_start + 2 + 8*24 + 8] = 82;
     encode(plain, modified, length); fresh_map();
-    assert(fixture_read_dungeon(modified, length, VERSION_EXTRA, &sentinel, &consumed) != 0);
+    assert(fixture_read_current_dungeon(modified, length, &sentinel, &consumed) != 0);
     plain[scent_start + 2 + 8*24 + 8] = original_age;
     puts("Current reader: five scent header/grid truncations, malformed magic and out-of-range age rejected PASS.");
 }
@@ -355,7 +386,7 @@ static void test_monster_record_legacy_compatibility(void)
     size_t modern_length = fixture_write_monster(&source, encoded, sizeof(encoded));
     u32b sentinel; size_t consumed;
     memset(&restored, 0x55, sizeof(restored));
-    assert(fixture_read_monster(encoded, modern_length, VERSION_EXTRA, &restored,
+    assert(fixture_read_current_monster(encoded, modern_length, &restored,
         &sentinel, &consumed) == 0);
     assert(sentinel == 0xB4C3D2E1U && consumed == modern_length);
     assert(restored.ai.observations[MON_AI_FIRE].value == 2);
@@ -442,7 +473,7 @@ static void test_legacy_absence(void)
 '''
 
 
-def main(extra_tests="", extra_calls=""):
+def main(extra_tests="", extra_calls="", legacy_dungeons=()):
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += '\n#include "monster/monster-ai.h"\n#include "monster/monster-senses.h"\n'
@@ -457,7 +488,49 @@ def main(extra_tests="", extra_calls=""):
     harness += '    puts("Monster dungeon scent persistence integration: PASS.");\n'
     harness += '    SDL_Quit(); return 0;\n}\n'
     sources = []
-    for name, content in (("check.c", harness), ("writer.c", WRITER), ("reader.c", READER)):
+    writer = WRITER
+    for extra, ref in legacy_dungeons:
+        defines = subprocess.check_output(["git", "-c", "core.fsmonitor=false",
+            "show", f"{ref}:src/defines.h"], cwd=ROOT, text=True)
+        version = [int(re.search(r"^#define VERSION_" + part + r"\s+(\d+)",
+            defines, re.M)[1]) for part in ("MAJOR", "MINOR", "PATCH", "EXTRA")]
+        assert version == [0, 9, 8, 20 if extra == 19 else extra]
+        historical = subprocess.check_output(["git", "-c", "core.fsmonitor=false",
+            "show", f"{ref}:src/fs/save-dungeon.c"], cwd=ROOT, text=True)
+        assert historical.count("void wr_dungeon(void)") == 1
+        historical = historical.replace("void wr_dungeon(void)",
+            f"void fixture_legacy_v{extra}_wr_dungeon(void)")
+        if extra == 19:
+            # Diplomacy's .19/.20 revisions were committed together. The .19
+            # grammar has the first five record bytes; omit precisely the
+            # seven typed .20 phase/attention bytes, not arbitrary stream tails.
+            for field, write in (("social_state", "wr_byte"), ("social_timer", "wr_byte"),
+                    ("social_focus", "wr_s16b"), ("social_ally", "wr_s16b"),
+                    ("social_player_threat", "wr_byte")):
+                line = f"        {write}(m->{field});"
+                assert historical.count(line) == 1
+                historical = historical.replace(line, "")
+        old_source = OUT / f"legacy-v{extra}-writer.c"
+        old_source.write_text(historical, encoding="utf-8")
+        sources.append(str(old_source))
+        writer += f"""
+void fixture_legacy_v{extra}_wr_dungeon(void);
+size_t fixture_write_v{extra}_dungeon(byte* buffer, size_t capacity, size_t* size)
+{{
+    /* Item evolution is outside these actor/dungeon fixtures. */
+    assert(o_max == 1);
+    fff = SDL_IOFromMem(buffer, capacity); assert(fff);
+    xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
+    fixture_legacy_v{extra}_wr_dungeon();
+    *size = (size_t)SDL_TellIO(fff);
+    save_wr_u32b(0xA1B2C3D4U); save_wr_u32b(0x10203040U);
+    size_t length = (size_t)SDL_TellIO(fff);
+    assert(!write_error && length == *size + 8);
+    SDL_CloseIO(fff); fff = NULL;
+    return length;
+}}
+"""
+    for name, content in (("check.c", harness), ("writer.c", writer), ("reader.c", READER)):
         source = OUT / name
         source.write_text(content, encoding="utf-8")
         sources.append(str(source))

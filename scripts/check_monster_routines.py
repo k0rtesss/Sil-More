@@ -10,6 +10,7 @@ TESTS = r'''
 #include "level-generation/level-generation-internal.h"
 
 static int routine_race;
+size_t fixture_write_v20_dungeon(byte*, size_t, size_t*);
 static void routine_map(int kind)
 {
     fresh_map();
@@ -68,7 +69,7 @@ static void test_routine_territory(void)
         size_t size, bytes = fixture_write_dungeon(encoded, sizeof(encoded), &size);
         size_t consumed; u32b sentinel;
         routine_map(QUAD_MODE_ROOMY);
-        assert(!fixture_read_dungeon(encoded, bytes, VERSION_EXTRA, &sentinel, &consumed));
+        assert(!fixture_read_current_dungeon(encoded, bytes, &sentinel, &consumed));
         m = &mon_list[cave_m_idx[my][mx]];
         assert(!memcmp(&saved, &m->routine, sizeof(saved)));
         assert(level_partition_index_for_point(m->routine.home_y, m->routine.home_x) == 0);
@@ -135,31 +136,45 @@ static void test_routine_patrol(void)
     size_t size, length_bytes = fixture_write_dungeon(encoded, sizeof(encoded), &size);
     u32b sentinel; size_t consumed;
     routine_map(QUAD_MODE_ROOMY);
-    assert(!fixture_read_dungeon(encoded, length_bytes, VERSION_EXTRA, &sentinel, &consumed));
+    assert(!fixture_read_current_dungeon(encoded, length_bytes, &sentinel, &consumed));
     assert(consumed == length_bytes && sentinel == 0xA1B2C3D4U);
     m = &mon_list[cave_m_idx[my][mx]];
     assert(!memcmp(&saved, &m->routine, sizeof(saved)));
     /* Every truncation, impossible route count and broken closure is rejected. */
-    size_t block = size - 4 - 6 - 2 * saved.count;
     decode(encoded, plain, length_bytes);
+    size_t block = 0, routine_size = 4 + 6 + 2 * saved.count;
+    int matches = 0;
+    for (size_t i = 0; i + routine_size + 2 <= size; i++)
+        if (plain[i] == (MON_ROUTINE_SAVE_MAGIC & 255)
+            && plain[i+1] == (MON_ROUTINE_SAVE_MAGIC >> 8)
+            && plain[i+2] == 2 && plain[i+3] == 0
+            && plain[i+routine_size] == 0x23 && plain[i+routine_size+1] == 0xCA)
+        { block = i; matches++; }
+    assert(matches == 1);
     assert(plain[block] == (MON_ROUTINE_SAVE_MAGIC & 255));
     for (size_t cut = block; cut < size; cut++)
     {
         routine_map(QUAD_MODE_ROOMY);
-        assert(fixture_read_dungeon(encoded, cut, VERSION_EXTRA, &sentinel, &consumed));
+        assert(fixture_read_current_dungeon(encoded, cut, &sentinel, &consumed));
     }
     size_t bad[] = {block, block + 2, block + 8, block + 10};
     for (int i = 0; i < 4; i++)
     {
         byte old = plain[bad[i]]; plain[bad[i]] = 255;
         encode(plain, modified, length_bytes); routine_map(QUAD_MODE_ROOMY);
-        assert(fixture_read_dungeon(modified, length_bytes, VERSION_EXTRA, &sentinel, &consumed));
+        assert(fixture_read_current_dungeon(modified, length_bytes, &sentinel, &consumed));
         plain[bad[i]] = old;
     }
+    printf("Routine persistence: %zu truncations and %zu corrupt fields rejected.\n",
+        size - block, N_ELEMENTS(bad));
     /* Version 20 retains all previous state, with no inferred birth location. */
-    memmove(plain + block, plain + size, 8);
-    encode(plain, modified, block + 8); routine_map(QUAD_MODE_ROOMY);
-    assert(!fixture_read_dungeon(modified, block + 8, 20, &sentinel, &consumed));
+    routine_map(QUAD_MODE_ROOMY);
+    assert(!fixture_read_current_dungeon(encoded, length_bytes, &sentinel, &consumed));
+    size_t legacy_size;
+    size_t legacy_length = fixture_write_v20_dungeon(modified, sizeof(modified), &legacy_size);
+    routine_map(QUAD_MODE_ROOMY);
+    assert(!fixture_read_dungeon(modified, legacy_length, 20, &sentinel, &consumed));
+    assert(consumed == legacy_length && sentinel == 0xA1B2C3D4U);
     m = &mon_list[cave_m_idx[my][mx]];
     assert(!m->routine.territory && !m->routine.style && !m->routine.count);
     puts("Patrol route/progress roundtrip, truncated/corrupt saves and v20 compatibility PASS.");
@@ -210,4 +225,4 @@ static void test_monster_routines(void)
 
 if __name__ == "__main__":
     persistence.OUT = persistence.ROOT / "scripts/output/monster-routines"
-    persistence.main(TESTS, "    test_monster_routines();")
+    persistence.main(TESTS, "    test_monster_routines();", ((20, "d6bb1948"),))

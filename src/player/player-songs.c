@@ -21,6 +21,13 @@ void change_song(int song)
     bool new_song_is_duel;
     bool old_song_is_duel;
 
+    if (song == SNG_EXCHANGE_THEMES
+        && (song_is_duel(p_ptr->song1) || song_is_duel(p_ptr->song2)))
+    {
+        msg_print("That song must remain your main theme.");
+        return;
+    }
+
     if (p_ptr->active_ability[S_SNG][SNG_WOVEN_THEMES]
         && (p_ptr->song1 != SNG_NOTHING) && (song != SNG_NOTHING))
     {

@@ -162,8 +162,12 @@ static bool song_revealing_ident_bonus_applies(const object_type* o_ptr)
     if (!singing(SNG_REVEALING))
         return false;
 
-    if ((o_ptr >= inventory) && (o_ptr < inventory + INVEN_TOTAL))
+    if (player_inventory_handle_for_object(o_ptr) >= 0)
         return true;
+
+    for (int i = 0; i < player_quiver_store_entry_count(); i++)
+        if (o_ptr == player_quiver_store_entry_at(i))
+            return true;
 
     if ((o_ptr >= o_list) && (o_ptr < o_list + o_max))
     {
@@ -649,6 +653,13 @@ void update_lore(u32b update_flags)
     for (i = 0; i < player_quiver_store_entry_count(); i++)
     {
         o_ptr = player_quiver_store_entry_at(i);
+        if (o_ptr && o_ptr->k_idx)
+            update_lore_aux(o_ptr);
+    }
+
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        o_ptr = player_carried_extra_entry_at(i);
         if (o_ptr && o_ptr->k_idx)
             update_lore_aux(o_ptr);
     }

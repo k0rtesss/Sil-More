@@ -27,6 +27,7 @@ SIMULATION = r'''
 #include "cave/cave-water-flow.h"
 size_t fixture_write_dungeon(byte*,size_t,size_t*);
 int fixture_read_dungeon(const byte*,size_t,int,u32b*,size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 static byte snapshot[4*1024*1024];
 static size_t snapshot_length;
 static byte initial[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -88,7 +89,7 @@ static void restore_map(void) {
     u32b sentinel;size_t consumed;
     character_dungeon=false;
     wipe_o_list();wipe_mon_list();
-    assert(!fixture_read_dungeon(snapshot,snapshot_length,VERSION_EXTRA,&sentinel,&consumed));
+    assert(!fixture_read_current_dungeon(snapshot,snapshot_length,&sentinel,&consumed));
     assert(consumed==snapshot_length&&sentinel==0xA1B2C3D4U);
     observer();
 }

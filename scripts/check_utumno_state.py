@@ -90,6 +90,7 @@ size_t fixture_write_options(byte*, size_t);
 void fixture_read_options(const byte*, size_t, int, u32b*, size_t*);
 size_t fixture_write_dungeon(byte*, size_t, size_t*);
 int fixture_read_dungeon(const byte*, size_t, int, u32b*, size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 static byte encoded[65536], plain[65536], modified[65536];
 
 static void check_flags(void)
@@ -176,7 +177,7 @@ static void check_dungeon_depths(void)
         size_t length = fixture_write_dungeon(encoded, sizeof(encoded), &dungeon_size);
         fresh_map();
         u32b sentinel; size_t consumed;
-        assert(fixture_read_dungeon(encoded, length, VERSION_EXTRA, &sentinel, &consumed) == 0);
+        assert(fixture_read_current_dungeon(encoded, length, &sentinel, &consumed) == 0);
         assert(sentinel == 0xA1B2C3D4U && consumed == length);
         assert(p_ptr->depth == depths[i] && p_ptr->py == 6 && p_ptr->px == 7);
         assert(cave_feat[7][7] == FEAT_LAVA && cave_feat[8][7] == FEAT_ICE);
@@ -312,15 +313,18 @@ def main():
         "    rd_bool(&p_ptr->is_dead);"))
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += '\n#include "cave/cave-fixtures.h"\n#include "cave/cave-flood.h"\n'
-    prefix += '#include "cave/cave-water-flow.h"\n'
+    prefix += '#include "cave/cave-water-flow.h"\n#include "cave/cave-environment.h"\n'
     prefix += '#include "player/player-upkeep-internal.h"\n'
     prefix += '#include "score/score_logic.h"\n'
-    helpers = DUNGEON_TESTS[DUNGEON_TESTS.index("static void decode("):
-                            DUNGEON_TESTS.index("static void test_current_roundtrip(")]
+    helpers = ""
+    for name in ("decode", "encode", "fresh_map"):
+        first = DUNGEON_TESTS.index("static void " + name + "(")
+        helpers += DUNGEON_TESTS[first:DUNGEON_TESTS.index("\n}", first) + 2] + "\n"
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
     harness = prefix + fixture_function("terminal_extra") + fixture_function("reset_map")
-    # TESTS needs the helper declarations, and the helper definitions need no test globals.
+    # These helpers use only their arguments and engine state. Do not include
+    # scent offset helpers that depend on that suite's private plaintext buffer.
     harness += helpers + TESTS + init
     harness += """
     check_options(); check_flags(); check_dungeon_depths();
