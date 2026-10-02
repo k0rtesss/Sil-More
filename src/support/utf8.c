@@ -208,6 +208,17 @@ int utf8_safe_prefix_len(cptr str, int len)
 
     while (i < len && str[i])
     {
+        unsigned char lead = (unsigned char)str[i];
+        int expected_len = 1;
+        if (lead >= 0xC2 && lead <= 0xDF) expected_len = 2;
+        else if (lead >= 0xE0 && lead <= 0xEF) expected_len = 3;
+        else if (lead >= 0xF0 && lead <= 0xF4) expected_len = 4;
+
+        /* The bounded decoder treats an incomplete sequence as one invalid
+         * byte. Clipping must leave that entire trailing sequence out. */
+        if (expected_len > len - i)
+            break;
+
         int char_len = utf8_sequence_len_n(str + i, len - i);
 
         if (char_len <= 0 || i + char_len > len)

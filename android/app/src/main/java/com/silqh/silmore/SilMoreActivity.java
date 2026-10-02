@@ -95,7 +95,9 @@ public class SilMoreActivity extends SDLActivity {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 			WindowManager.LayoutParams attrs = getWindow().getAttributes();
 			attrs.layoutInDisplayCutoutMode =
-					WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+					Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+							? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+							: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
 			getWindow().setAttributes(attrs);
 		}
 

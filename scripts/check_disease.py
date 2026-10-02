@@ -46,7 +46,7 @@ def caller_source_guards():
     assert move.index("p_ptr->leaping = true;") < start
     end = move.index("return;", start)
     assert "player_water_movement" not in move[start + len(takeoff):end]
-    ground = "if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x) player_water_movement(cave_feat[py][px], cave_feat[y][x]);"
+    ground = "if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x) { player_water_movement(cave_feat[py][px], cave_feat[y][x]);"
     assert move.index(ground) > end
     land = compact(function("src/dungeon/dungeon-player.c", "land"))
     assert "player_water_movement(FEAT_FLOOR, cave_feat[p_ptr->py][p_ptr->px]);" in land

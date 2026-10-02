@@ -1040,6 +1040,10 @@ int find_broken_item_to_upgrade(void)
             return i;
     }
 
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+        if (object_can_repair_damage(player_carried_extra_entry_at(i)))
+            return CARRIED_EXTRA_INDEX + i;
+
     return -1;
 }
 
@@ -1402,6 +1406,10 @@ static int find_sanctifiable_item(void)
             return i;
     }
 
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+        if (object_is_sanctifiable_item(player_carried_extra_entry_at(i)))
+            return CARRIED_EXTRA_INDEX + i;
+
     return -1;
 }
 
@@ -1474,6 +1482,13 @@ static int count_carried_identify_targets(void)
             count++;
     }
 
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+        if (thrall_object_needs_identify(player_carried_extra_entry_at(i)))
+            count++;
+    for (int i = 0; i < player_quiver_store_entry_count(); i++)
+        if (thrall_object_needs_identify(player_quiver_store_entry_at(i)))
+            count++;
+
     return count;
 }
 
@@ -1512,6 +1527,14 @@ static int count_elven_identify_targets(void)
         }
     }
 
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(i);
+        if (object_is_elven_identify_target(o_ptr)
+            && thrall_object_needs_identify(o_ptr))
+            count++;
+    }
+
     return count;
 }
 
@@ -1544,6 +1567,13 @@ static bool identify_elven_carried_items(void)
         ident(o_ptr);
     }
 
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(i);
+        if (object_is_elven_identify_target(o_ptr))
+            ident(o_ptr);
+    }
+
     strnfmt(dialog_text, sizeof(dialog_text),
         "The elven thrall names old scents, colors, and hidden virtues with a memory no darkness has wholly broken.\n\n"
         "Your carried potions, gems, and herbs are revealed.");
@@ -1560,7 +1590,7 @@ static bool identify_elven_carried_items(void)
 static bool repair_damaged_item_internal(int slot,
     char* old_name, size_t old_name_size, char* new_name, size_t new_name_size)
 {
-    object_type* o_ptr = &inventory[slot];
+    object_type* o_ptr = player_inventory_object(slot);
     object_kind* old_k_ptr;
     object_kind* new_k_ptr;
     s16b new_k_idx;
@@ -1570,7 +1600,7 @@ static bool repair_damaged_item_internal(int slot,
     int dd_delta, ds_delta, pd_delta, ps_delta;
 
     /* Paranoia */
-    if (!o_ptr->k_idx)
+    if (!o_ptr || !o_ptr->k_idx)
         return false;
 
     if (!object_can_repair_damage(o_ptr))
@@ -1726,7 +1756,7 @@ static int count_revealable_artifacts(void)
 
 static bool sanctify_item(int slot)
 {
-    object_type* o_ptr = &inventory[slot];
+    object_type* o_ptr = player_inventory_object(slot);
     bool had_curse;
     bool can_remove_curse;
     bool removed_curse = false;
@@ -2048,6 +2078,10 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
     bool from_supplies = false;
     int supply_idx = -1;
 
+    if (!m_ptr || !thrall_quest_slot_can_be_given(item_slot,
+            m_ptr->thrall_quest_item))
+        return;
+
     if (item_slot >= SUPPLIES_INDEX)
     {
         from_supplies = true;
@@ -2056,7 +2090,7 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
     }
     else
     {
-        o_ptr = &inventory[item_slot];
+        o_ptr = player_inventory_object(item_slot);
     }
 
     /* Paranoia */

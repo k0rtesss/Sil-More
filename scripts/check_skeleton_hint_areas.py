@@ -54,6 +54,9 @@ static u16b info[MAX_DUNGEON_HGT][256];
 u16b (*cave_info)[256]=info;
 static byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 byte (*cave_feat)[MAX_DUNGEON_WID]=features;
+bool object_can_see_floor(int y,int x) {
+    return in_bounds(y,x) && cave_feat[y][x]!=FEAT_DEEP_WATER;
+}
 static int partition[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static hint_message_meta messages[16];
 static byte message_count;
@@ -275,6 +278,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     fixture = OUT / "check.c"
     fixture.write_text(PRELUDE + function("src/cave/cave-geometry.c", "distance")
+                       + function("src/object/object-knowledge.c", "object_is_visible")
                        + implementation + TESTS, encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])

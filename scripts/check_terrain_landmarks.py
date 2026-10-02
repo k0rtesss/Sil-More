@@ -496,7 +496,10 @@ def main():
             stem=map_stem+(f"-system-{data['system']}" if "system" in data else "")
             metrics=measure(data)
             preview_path=args.input/f"preview-{stem}.json"
-            if preview_path.exists():metrics["preview"]=json.loads(preview_path.read_text())
+            # Regenerating a map invalidates older optional room captures;
+            # their center belongs to the previous geometry at this path.
+            if preview_path.exists() and preview_path.stat().st_mtime_ns >= path.stat().st_mtime_ns:
+                metrics["preview"]=json.loads(preview_path.read_text())
             failures=[] if args.baseline else validate(data,metrics)
             metrics["failures"]=failures;reports.append(metrics)
             errors.extend(f"{stem}: {failure}" for failure in failures)

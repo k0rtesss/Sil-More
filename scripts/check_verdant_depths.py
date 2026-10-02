@@ -32,7 +32,7 @@ static void verdant_style_tests(void) {
         assert(parse_style_info(line,&h)==0);
     }
     fclose(file);
-    static const int floor_rows[]={33,36,36,36};
+    static const int floor_rows[]={23,36,36,36};
     static const int floor_cols[]={0,16,0,8};
     static const int floor_counts[]={1,4,4,4};
     for(int i=40;i<=43;i++) {
@@ -168,7 +168,7 @@ static void chasm_tests(void) {
     /* Chasms use only their three authored fill variants; adjacent floors keep
      * the ordinary material selected by their own style. */
     cave_feat[10][12]=FEAT_FLOOR; cave_info[10][12]=CAVE_MARK|CAVE_SEEN;
-    assert(floor_tile_index(10,12)==((33<<8)|0));
+    assert(floor_tile_index(10,12)==((23<<8)|0));
     use_graphics=GRAPHICS_NONE;
     f_info[FEAT_CHASM].d_char='%'; f_info[FEAT_CHASM].d_attr=TERM_L_DARK;
     map_info(10,11,&a,&c,&ta,&tc); assert(c=='%');

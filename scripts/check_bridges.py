@@ -136,8 +136,15 @@ static int read_features(void) {
 static void bridge_save(void) {
     fixture_sf_major=VERSION_MAJOR;fixture_sf_minor=VERSION_MINOR;fixture_sf_patch=VERSION_PATCH;
     fixture_sf_extra=VERSION_EXTRA;assert(bridge_savefile_version_supported());
-    assert(!bridge_savefile_version_at_most(VERSION_MAJOR,VERSION_MINOR,VERSION_PATCH,VERSION_EXTRA-1));
-    fixture_sf_extra=VERSION_EXTRA-1;assert(bridge_savefile_version_supported());
+    byte previous[]={VERSION_MAJOR,VERSION_MINOR,VERSION_PATCH,VERSION_EXTRA};
+    for(int i=3;i>=0;i--)if(previous[i]){
+        previous[i]--;for(int j=i+1;j<4;j++)previous[j]=255;break;
+    }
+    assert(!bridge_savefile_version_at_most(previous[0],previous[1],previous[2],previous[3]));
+    fixture_sf_major=previous[0];fixture_sf_minor=previous[1];
+    fixture_sf_patch=previous[2];fixture_sf_extra=previous[3];
+    assert(bridge_savefile_version_supported());
+    fixture_sf_major=VERSION_MAJOR;fixture_sf_minor=VERSION_MINOR;fixture_sf_patch=VERSION_PATCH;
     fixture_sf_extra=VERSION_EXTRA+1;assert(!bridge_savefile_version_supported());
     bridge_map();p_ptr->cur_map_hgt=32;p_ptr->cur_map_wid=64;
     for(int y=0;y<32;y++)for(int x=0;x<64;x++)

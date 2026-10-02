@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "dungeon-internal.h"
 #include "metarun/metarun-files.h"
+#include "supplies.h"
 
 /*
  * Hack - Know inventory upon death
@@ -14,15 +15,31 @@ static void death_knowledge(void)
     object_type* o_ptr;
 
     /* Hack -- Know everything in the inven/equip */
-    for (i = 0; i < INVEN_TOTAL; i++)
+    for (i = 0; i < INVEN_TOTAL + player_carried_extra_entry_count(); i++)
     {
-        o_ptr = &inventory[i];
+        o_ptr = i < INVEN_TOTAL ? &inventory[i]
+            : player_carried_extra_entry_at(i - INVEN_TOTAL);
 
         /* Skip non-objects */
-        if (!o_ptr->k_idx)
+        if (!o_ptr || !o_ptr->k_idx)
             continue;
 
         /* Aware and Known */
+        object_aware(o_ptr);
+        object_known(o_ptr);
+    }
+
+    for (i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        o_ptr = player_quiver_store_entry_at(i);
+        if (!o_ptr || !o_ptr->k_idx) continue;
+        object_aware(o_ptr);
+        object_known(o_ptr);
+    }
+    for (i = 0; i < supplies_entry_count(); i++)
+    {
+        o_ptr = supplies_entry_at(i);
+        if (!o_ptr || !o_ptr->k_idx) continue;
         object_aware(o_ptr);
         object_known(o_ptr);
     }

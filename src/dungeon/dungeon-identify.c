@@ -2,6 +2,26 @@
 
 #include "angband.h"
 #include "dungeon-internal.h"
+#include "supplies.h"
+
+static int identification_carried_count(void)
+{
+    return INVEN_TOTAL + player_carried_extra_entry_count()
+        + player_quiver_store_entry_count() + supplies_entry_count();
+}
+
+static object_type* identification_carried_object(int ordinal)
+{
+    if (ordinal < INVEN_TOTAL)
+        return &inventory[ordinal];
+    ordinal -= INVEN_TOTAL;
+    if (ordinal < player_carried_extra_entry_count())
+        return player_carried_extra_entry_at(ordinal);
+    ordinal -= player_carried_extra_entry_count();
+    if (ordinal < player_quiver_store_entry_count())
+        return player_quiver_store_entry_at(ordinal);
+    return supplies_entry_at(ordinal - player_quiver_store_entry_count());
+}
 
 /*
  * Return a "feeling" (or NULL) about an item.  Method 1 (Weak).
@@ -121,13 +141,13 @@ void pseudo_id_everything(void)
         /* Pseudo-id it */
         pseudo_id(o_ptr);
     }
-    for (i = 0; i < INVEN_TOTAL; i++)
+    for (i = 0; i < identification_carried_count(); i++)
     {
         /* Get the object */
-        o_ptr = &inventory[i];
+        o_ptr = identification_carried_object(i);
 
         /* Ignore empty objects */
-        if (!o_ptr->k_idx)
+        if (!o_ptr || !o_ptr->k_idx)
             continue;
 
         /* Ignore known objects */
@@ -136,12 +156,6 @@ void pseudo_id_everything(void)
 
         /* Pseudo-id it */
         pseudo_id(o_ptr);
-    }
-    for (i = 0; i < player_quiver_store_entry_count(); i++)
-    {
-        o_ptr = player_quiver_store_entry_at(i);
-        if (o_ptr && o_ptr->k_idx && !object_known_p(o_ptr))
-            pseudo_id(o_ptr);
     }
 
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
@@ -169,13 +183,13 @@ void id_everything(void)
         /* Identify it */
         ident(o_ptr);
     }
-    for (i = 0; i < INVEN_TOTAL; i++)
+    for (i = 0; i < identification_carried_count(); i++)
     {
         /* Get the object */
-        o_ptr = &inventory[i];
+        o_ptr = identification_carried_object(i);
 
         /* Ignore empty objects */
-        if (!o_ptr->k_idx)
+        if (!o_ptr || !o_ptr->k_idx)
             continue;
 
         /* Ignore known objects */
@@ -184,12 +198,6 @@ void id_everything(void)
 
         /* Identify it */
         ident(o_ptr);
-    }
-    for (i = 0; i < player_quiver_store_entry_count(); i++)
-    {
-        o_ptr = player_quiver_store_entry_at(i);
-        if (o_ptr && o_ptr->k_idx && !object_known_p(o_ptr))
-            ident(o_ptr);
     }
 
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
@@ -232,13 +240,13 @@ void id_known_specials(void)
             }
         }
     }
-    for (i = 0; i < INVEN_TOTAL; i++)
+    for (i = 0; i < identification_carried_count(); i++)
     {
         /* Get the object */
-        o_ptr = &inventory[i];
+        o_ptr = identification_carried_object(i);
 
         /* Ignore empty objects */
-        if (!o_ptr->k_idx)
+        if (!o_ptr || !o_ptr->k_idx)
             continue;
 
         /* Automatically identify any special items you have seen before */
@@ -261,23 +269,6 @@ void id_known_specials(void)
         }
     }
 
-    for (i = 0; i < player_quiver_store_entry_count(); i++)
-    {
-        o_ptr = player_quiver_store_entry_at(i);
-        if (o_ptr && o_ptr->k_idx && object_has_ego(o_ptr)
-            && !object_known_p(o_ptr))
-        {
-            bool all_aware = true;
-            byte ego_pfx = object_ego_prefix(o_ptr);
-            byte ego_sfx = object_ego_suffix(o_ptr);
-            if (ego_pfx && !e_info[ego_pfx].aware)
-                all_aware = false;
-            if (ego_sfx && !e_info[ego_sfx].aware)
-                all_aware = false;
-            if (!object_uses_smithing_difficulty(o_ptr) && all_aware)
-                ident(o_ptr);
-        }
-    }
 
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
     handle_stuff();

@@ -879,8 +879,7 @@ static void do_cmd_wiz_last_event(void)
 
     /* Pick an exact legal teleport landing first. Floods, collapses and
      * occupied construction sites may leave the event grid unusable.
-     * A bounded search also avoids teleport_player_to's unbounded fallback
-     * when there is no naked floor anywhere on the level. */
+     * Restrict this shortcut to safe landing spots near the actual event. */
     for (int y = MAX(1, event.y - MAX_SIGHT);
          y < MIN(p_ptr->cur_map_hgt - 1, event.y + MAX_SIGHT + 1); y++)
         for (int x = MAX(1, event.x - MAX_SIGHT);

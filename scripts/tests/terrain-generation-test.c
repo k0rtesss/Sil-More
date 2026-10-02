@@ -11,6 +11,11 @@ void terrain_landmark_reset(void) {}
 bool place_terrain_landmark(void) { return false; }
 bool terrain_history_active(void) { return false; }
 bool terrain_history_started(void) { return false; }
+void cave_water_flow_generation_plan_reset(void) {}
+void cave_water_flow_generation_plan_cell(int y,int x,int feature,
+    bool channel,bool basin,bool outlet) {
+    (void)y;(void)x;(void)feature;(void)channel;(void)basin;(void)outlet;
+}
 int terrain_history_count(void) { return 0; }
 const terrain_landmark_stats* terrain_landmark_system_stats(int system) {
     (void)system; return terrain_landmark_last_stats();

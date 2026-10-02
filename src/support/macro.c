@@ -157,11 +157,18 @@ void text_to_ascii(char* buf, size_t len, cptr str)
 {
     char* s = buf;
 
+    if (!buf || len == 0)
+        return;
+    if (!str) {
+        buf[0] = '\0';
+        return;
+    }
+
     /* Analyze the "ascii" string */
     while (*str)
     {
         /* Check if the buffer is long enough */
-        if (s >= buf + len - 1)
+        if ((size_t)(s - buf) >= len - 1)
             break;
 
         /* Backslash codes */
@@ -180,7 +187,9 @@ void text_to_ascii(char* buf, size_t len, cptr str)
                 /* Terminate before appending the trigger */
                 *s = '\0';
 
-                s += trigger_text_to_ascii(buf, len, &str);
+                size_t offset = trigger_text_to_ascii(buf, len, &str);
+                if (offset)
+                    s = buf + offset;
             }
 
             /* Hack -- simple way to specify Escape */
@@ -256,7 +265,7 @@ void text_to_ascii(char* buf, size_t len, cptr str)
             /* Oops */
             else
             {
-                *s = *str;
+                *s++ = *str;
             }
 
             /* Skip the final char */
@@ -293,7 +302,7 @@ void text_to_ascii(char* buf, size_t len, cptr str)
 static size_t trigger_ascii_to_text(char* buf, size_t max, cptr* strptr)
 {
     cptr str = *strptr;
-    char key_code[100];
+    char key_code[100] = {0};
     int i;
     cptr tmp;
     size_t current_len = strlen(buf);
@@ -316,7 +325,7 @@ static size_t trigger_ascii_to_text(char* buf, size_t max, cptr* strptr)
         case '&':
 
             /* Read modifier */
-            while (strchr(macro_modifier_chr, *str))
+            while (*str && strchr(macro_modifier_chr, *str))
             {
                 tmp = strchr(macro_modifier_chr, *str);
                 j = (int)(tmp - macro_modifier_chr);
@@ -375,14 +384,22 @@ void ascii_to_text(char* buf, size_t len, cptr str)
 {
     char* s = buf;
 
+    if (!buf || len == 0)
+        return;
+    if (!str) {
+        buf[0] = '\0';
+        return;
+    }
+
     /* Analyze the "ascii" string */
     while (*str)
     {
         byte i = (byte)(*str++);
 
-        /* Check if the buffer is long enough */
-        /* HACK - always assume worst case (hex-value + '\0') */
-        if (s >= buf + len - 5)
+        /* Reserve the complete escape and its terminator. */
+        size_t needed = i >= 127 ? 4 :
+            (i <= 32 || i == '\\' || i == '^' ? 2 : 1);
+        if (needed >= len - (size_t)(s - buf))
             break;
 
         if (i == ESCAPE)
@@ -447,7 +464,7 @@ void ascii_to_text(char* buf, size_t len, cptr str)
                 *s++ = '_';
             }
             else
-                s += offset;
+                s = buf + offset;
         }
         else if (i < 32)
         {

@@ -555,10 +555,9 @@ void place_trap(int y, int x)
     if (!in_bounds(y, x))
         return;
 
-    /* Require empty, clean, floor grid */
-    if (!cave_naked_bold(y, x)
-        && !(FEAT_IS_BRIDGE(cave_feat[y][x]) && cave_clean_bold(y, x)
-            && cave_empty_bold(y, x)))
+    /* Traps replace the terrain feature. A bridge must retain its deck and
+     * underlying water/chasm/lava identity, so only ordinary floors qualify. */
+    if (!cave_naked_bold(y, x))
         return;
 
     bool prefer_web = (p_ptr->depth >= 8)

@@ -69,6 +69,7 @@ int main(int argc, char** argv)
     SDL_strlcpy(arts[1].name, "Remembered blade", sizeof(arts[1].name));
 #ifdef TEST_MEMORY_DB
     maxima limits = {0};
+    op_ptr->opt[OPT_meta_artefact_memory] = true;
     limits.art_max = 2;
     z_info = &limits; a_info = arts; metar.id = 123;
     assert(metarun_record_artefact_revealed(1));

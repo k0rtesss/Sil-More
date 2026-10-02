@@ -556,6 +556,19 @@ static void quantity_prompt_draw(cptr prompt, cptr action, int current,
     Term_fresh();
 }
 
+static int quantity_from_digits(cptr digits, int max)
+{
+    int value = 0;
+    for (; *digits; digits++)
+    {
+        int digit = *digits - '0';
+        if (value > max / 10 || (value == max / 10 && digit > max % 10))
+            return max;
+        value = value * 10 + digit;
+    }
+    return value;
+}
+
 static s16b get_quantity_aux(cptr prompt, cptr action, int max,
     int touch_category, bool force_prompt)
 {
@@ -771,7 +784,7 @@ static s16b get_quantity_aux(cptr prompt, cptr action, int max,
                 if (entry_len > 0)
                 {
                     entry_buf[--entry_len] = '\0';
-                    current = entry_len ? MAX(0, MIN(atoi(entry_buf), max)) : 0;
+                    current = quantity_from_digits(entry_buf, max);
                 }
                 else
                 {
@@ -786,7 +799,7 @@ static s16b get_quantity_aux(cptr prompt, cptr action, int max,
                     {
                         entry_buf[entry_len++] = (char)ch;
                         entry_buf[entry_len] = '\0';
-                        current = MAX(0, MIN(atoi(entry_buf), max));
+                        current = quantity_from_digits(entry_buf, max);
                     }
                     else
                     {

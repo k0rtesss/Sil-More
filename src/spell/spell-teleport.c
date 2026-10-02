@@ -294,37 +294,40 @@ void teleport_player_to(int ny, int nx)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
+    int y = -1, x = -1;
+    int nearest = MAX_DUNGEON_HGT + MAX_DUNGEON_WID;
+    int ties = 0;
 
-    int y, x;
+    if (!in_bounds(ny, nx))
+        return;
 
-    int dis = 0, ctr = 0;
+    /* Search the finite map for the nearest usable square. Random rejection
+     * cannot terminate when there is no naked floor, or at radius zero when
+     * the requested square is on the map boundary. */
+    for (int ty = 1; ty < p_ptr->cur_map_hgt - 1; ty++)
+        for (int tx = 1; tx < p_ptr->cur_map_wid - 1; tx++)
+        {
+            if (!cave_naked_bold(ty, tx))
+                continue;
+            int radius = MAX(ABS(ty - ny), ABS(tx - nx));
+            if (radius > nearest)
+                continue;
+            if (radius < nearest)
+            {
+                nearest = radius;
+                ties = 0;
+            }
+            if (one_in_(++ties))
+            {
+                y = ty;
+                x = tx;
+            }
+        }
 
-    /* Initialize */
-    y = py;
-    x = px;
-
-    /* Find a usable location */
-    while (1)
+    if (y < 0)
     {
-        /* Pick a nearby legal location */
-        while (1)
-        {
-            y = rand_spread(ny, dis);
-            x = rand_spread(nx, dis);
-            if (in_bounds_fully(y, x))
-                break;
-        }
-
-        /* Accept "naked" floor grids */
-        if (cave_naked_bold(y, x))
-            break;
-
-        /* Occasionally advance the distance */
-        if (++ctr > (4 * dis * dis + 4 * dis + 1))
-        {
-            ctr = 0;
-            dis++;
-        }
+        log_warn("teleport_player_to: no legal destination near (%d,%d)", ny, nx);
+        return;
     }
 
     /* Sound */
@@ -352,54 +355,73 @@ void teleport_player_to(int ny, int nx)
  */
 void teleport_towards(int oy, int ox, int ny, int nx)
 {
-    int y, x;
-
-    int dist;
-    int ctr = 0;
+    int y = -1, x = -1;
     int min = 2, max = 4;
 
-    /* Find a usable location */
-    while (true)
+    if (!in_bounds_fully(oy, ox) || cave_m_idx[oy][ox] <= 0
+        || !in_bounds(ny, nx))
+        return;
+
+    /* Keep the usual 2-4 grid preference, but bound both random searches. */
+    for (int round = 0; y < 0 && round < 16; round++)
     {
-        /* Pick a nearby legal location */
-        while (true)
+        for (int probe = 0; probe < 16; probe++)
         {
-            y = rand_spread(ny, max);
-            x = rand_spread(nx, max);
-            if (in_bounds_fully(y, x))
-                break;
-        }
-
-        /* Consider all empty grids */
-        if (cave_empty_bold(y, x))
-        {
-            /*Don't allow monster to teleport onto glyphs*/
-            if (cave_glyph(y, x))
+            int ty = rand_spread(ny, max);
+            int tx = rand_spread(nx, max);
+            if (!in_bounds_fully(ty, tx)
+                || !cave_empty_bold(ty, tx) || cave_glyph(ty, tx))
                 continue;
-
-            /* Calculate distance between target and current grid */
-            dist = distance(ny, nx, y, x);
-
-            /* Accept grids that are the right distance away. */
-            if ((dist >= min) && (dist <= max))
+            int dist = distance(ny, nx, ty, tx);
+            if (dist >= min && dist <= max)
+            {
+                y = ty;
+                x = tx;
                 break;
+            }
         }
+        max++;
+        if (max > 5)
+            min = 0;
+    }
 
-        /* Occasionally relax the constraints */
-        if (++ctr > 15)
-        {
-            ctr = 0;
-
-            max++;
-            if (max > 5)
-                min = 0;
-        }
+    if (y < 0)
+    {
+        int nearest = MAX_DUNGEON_HGT + MAX_DUNGEON_WID;
+        int ties = 0;
+        for (int ty = 1; ty < p_ptr->cur_map_hgt - 1; ty++)
+            for (int tx = 1; tx < p_ptr->cur_map_wid - 1; tx++)
+            {
+                if (!cave_empty_bold(ty, tx) || cave_glyph(ty, tx))
+                    continue;
+                int dist = distance(ny, nx, ty, tx);
+                if (dist > nearest)
+                    continue;
+                if (dist < nearest)
+                {
+                    nearest = dist;
+                    ties = 0;
+                }
+                if (one_in_(++ties))
+                {
+                    y = ty;
+                    x = tx;
+                }
+            }
+    }
+    if (y < 0)
+    {
+        log_warn("teleport_towards: no legal destination near (%d,%d)", ny, nx);
+        return;
     }
 
     /* Sound at the monster's departure grid. */
     sound_at(MSG_TPOTHER, oy, ox);
 
     /* Move monster */
+    monster_type* m_ptr = &mon_list[cave_m_idx[oy][ox]];
+    m_ptr->target_y = m_ptr->target_x = 0;
+    monster_abilities_forced_movement(m_ptr);
     monster_swap(oy, ox, y, x);
 
     /* Handle stuff XXX XXX XXX */
@@ -487,4 +509,3 @@ void teleport_player_level()
         p_ptr->leaving = true;
     }
 }
-

@@ -53,7 +53,9 @@ int fixture_read_partition_meta(const byte* buffer, size_t length, int extra,
 {
     fff = SDL_IOFromConstMem(buffer, length); assert(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 8; sf_extra = extra;
+    sf_major = VERSION_MAJOR; sf_minor = VERSION_MINOR;
+    sf_patch = extra < 0 ? VERSION_PATCH : 8;
+    sf_extra = extra < 0 ? VERSION_EXTRA : extra;
     savefile_has_partition_meta = savefile_version_at_least(0, 9, 1, 7);
     savefile_has_partition_meta_types = savefile_version_at_least(0, 9, 1, 9);
     int result = load_read_partition_meta();
@@ -579,7 +581,7 @@ static void test_save_load(void)
     assert(length == 86);
 
     u32b sentinel, decoded; size_t consumed;
-    assert(!fixture_read_partition_meta(encoded, length, VERSION_EXTRA,
+    assert(!fixture_read_partition_meta(encoded, length, -1,
         &sentinel, &consumed, &decoded));
     assert(sentinel == 0xA1B2C3D4U && consumed == length && decoded == length);
     partition_meta_save restored = {0};
@@ -611,7 +613,7 @@ static void test_save_load(void)
     {
         set_atmospheres(CAVE_ATMOSPHERE_HUSHED, CAVE_ATMOSPHERE_ECHOING,
             CAVE_ATMOSPHERE_DRAUGHTY);
-        assert(fixture_read_partition_meta(encoded, cut, VERSION_EXTRA,
+        assert(fixture_read_partition_meta(encoded, cut, -1,
             &sentinel, &consumed, &decoded) != 0);
     }
     decode_stream(encoded, plain, length);
@@ -619,7 +621,7 @@ static void test_save_load(void)
     encode_stream(plain, modified, length);
     set_atmospheres(CAVE_ATMOSPHERE_HUSHED, CAVE_ATMOSPHERE_ECHOING,
         CAVE_ATMOSPHERE_DRAUGHTY);
-    assert(fixture_read_partition_meta(modified, length, VERSION_EXTRA,
+    assert(fixture_read_partition_meta(modified, length, -1,
         &sentinel, &consumed, &decoded) != 0);
     puts("Partition atmosphere save: 82-byte current block, v30 alignment/defaults, every tail truncation and invalid kind rejection PASS.");
 }
