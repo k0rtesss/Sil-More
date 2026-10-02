@@ -83,15 +83,18 @@ static void icy_surface_connectivity_tests(void) {
             assert(liquid_transition_mask(10,11,features[kind])==mask);
             assert(ice_only_transition_mask(10,11)==frozen);
         }
-    for(int i=0;i<8;i++)cave_info[10+melt_dy[i]][11+melt_dx[i]]=0;
-    assert(liquid_transition_mask(10,11,FEAT_DEEP_WATER)==0);
-    assert(ice_only_transition_mask(10,11)==0);
+    for(int i=0;i<8;i++) {
+        cave_feat[10+melt_dy[i]][11+melt_dx[i]]=features[i%4];
+        cave_info[10+melt_dy[i]][11+melt_dx[i]]=0;
+    }
+    assert(liquid_transition_mask(10,11,FEAT_DEEP_WATER)==255);
+    assert(ice_only_transition_mask(10,11)==(1|2|16|32));
     SDL_Surface* unknown=melt_sample(0,NULL,0);
     for(int i=0;i<8;i++)cave_feat[10+melt_dy[i]][11+melt_dx[i]]=FEAT_FLOOR;
     SDL_Surface* absent=melt_sample(0,NULL,0);
-    assert(same_surface(unknown,absent));
+    assert(!same_surface(unknown,absent));
     SDL_DestroySurface(unknown);SDL_DestroySurface(absent);
-    puts("All 256 masks x four feature rotations x four centers connect ice/melting/shallow/deep externally and keep a separate ice-only rim; hidden neighbors reveal no pixels: PASS");
+    puts("All 256 masks x four feature rotations x four centers connect ice/melting/shallow/deep with a separate ice-only rim, including hidden neighbors: PASS");
 
     icy_channel_reset();cave_feat[10][11]=FEAT_ICE;
     for(int i=0;i<8;i++)cave_feat[10+melt_dy[i]][11+melt_dx[i]]=FEAT_WATER;

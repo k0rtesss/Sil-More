@@ -35,13 +35,18 @@ static const int material_edge_dx[8] = {
     0, 1, 1, 1, 0, -1, -1, -1
 };
 
+static bool material_edge_in_bounds(int y, int x)
+{
+    return p_ptr && in_bounds(y, x)
+        && (unsigned)y < (unsigned)p_ptr->cur_map_hgt
+        && (unsigned)x < (unsigned)p_ptr->cur_map_wid;
+}
+
 static bool material_edge_cell_visible(int y, int x)
 {
     u16b info;
 
-    if (!p_ptr || !in_bounds(y, x)
-        || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
-        || (unsigned)x >= (unsigned)p_ptr->cur_map_wid)
+    if (!material_edge_in_bounds(y, x))
         return false;
 
     info = cave_info[y][x];
@@ -203,7 +208,7 @@ static bool material_edge_describe(int y, int x, byte ta, char tc,
     byte feat;
     int style;
 
-    if (!out || !material_edge_cell_visible(y, x)
+    if (!out || !material_edge_in_bounds(y, x)
         || !(ta & TILE_FLAG) || !(((byte)tc) & TILE_FLAG)
         || !cave_color)
         return false;
@@ -263,9 +268,8 @@ static bool material_edge_sources_differ(const material_edge_source* a,
             || a->material_id != b->material_id);
 }
 
-/* Fill neighbours with the terrain layer returned by map_info(), rather than
- * reconstructing an atlas coordinate from cave_feat.  That preserves custom
- * floor/wall art and the current style selection. */
+/* Physical neighbour artwork preserves custom styles without making the
+ * boundary shape depend on which neighbouring cells are displayed. */
 static int material_edge_collect(int y, int x, byte ta, char tc,
     material_edge_source* current, material_edge_source neighbours[8],
     bool collect_sources)
@@ -273,6 +277,7 @@ static int material_edge_collect(int y, int x, byte ta, char tc,
     int count = 0;
 
     if (!current || !neighbours || !p_ptr || p_ptr->image
+        || !material_edge_cell_visible(y, x)
         || !material_edge_describe(y, x, ta, tc, current))
         return 0;
 
@@ -287,12 +292,12 @@ static int material_edge_collect(int y, int x, byte ta, char tc,
         neighbours[i].material_id = 0;
         neighbours[i].row = neighbours[i].col = 0;
 
-        if (!material_edge_cell_visible(ny, nx))
+        if (!material_edge_in_bounds(ny, nx))
             continue;
 
         /* p_ptr->image is rejected above because map_info() may randomize
          * hallucinated styles while resolving this terrain source. */
-        map_info_terrain(ny, nx, &nta, &ntc);
+        map_info_actual_terrain(ny, nx, &nta, &ntc);
         if (!material_edge_describe(ny, nx, nta, ntc, &neighbours[i]))
             continue;
 
@@ -336,8 +341,8 @@ static int material_edge_width(int y, int x, int along, bool horizontal)
 
 /* Quarter-cell contour resolver. Cardinal edges define the two side cuts;
  * a missing diagonal makes a concave notch only when BOTH intervening cells
- * are known and on the same physical plane. A corner never reaches through
- * walls, liquids, doors or unknown cells. There is one donor, not a stack of
+ * are on the same physical plane. A corner never reaches through
+ * walls, liquids or doors. There is one donor, not a stack of
  * translucent strips, even at a junction of three or four materials. */
 static int material_edge_owner(int y, int x, int px, int py,
     const material_edge_source* current, const material_edge_source n[8],

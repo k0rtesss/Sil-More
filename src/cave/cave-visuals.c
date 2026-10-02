@@ -343,8 +343,8 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
     if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR && feat != FEAT_SUNLIGHT)
         return false;
 
-    /* Shores depend only on known neighboring terrain. In restricted views,
-     * remembered hazards outside current sight must not reveal their banks. */
+    /* Physical shores stay fixed as sight changes. The caller still decides
+     * whether this floor cell itself is displayed. */
     for (int radius = 1; radius <= 2; radius++) {
         bool have_border = false;
         byte border_row = 0, border_col = 0;
@@ -354,11 +354,7 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
                 byte row, col;
                 /* Search the closest ring globally before any outer-bank rule. */
                 if ((ABS(dy) != radius && ABS(dx) != radius) || !in_bounds(ny, nx)) continue;
-                u16b known = cave_info[ny][nx];
-                if (!(known & (CAVE_MARK | CAVE_SEEN))
-                    || ((p_ptr->rage || g_labyrinth_view_active) && !(known & CAVE_SEEN)))
-                    continue;
-                int border_feat = cave_environment_display_underlay(ny, nx);
+                int border_feat = cave_environment_actual_underlay(ny, nx);
                 if (cave_water_has_icy_shore(ny, nx)) border_feat = FEAT_ICE;
                 /* Ordinary water meets the existing floor. Its SDL edge
                  * samples that floor instead of manufacturing a sand bank. */
@@ -797,7 +793,7 @@ static bool monster_alert_icon_visible(const monster_type* m_ptr)
 }
 
 static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
-    char* tcp, bool terrain_only)
+    char* tcp, bool terrain_only, bool physical)
 {
     byte a = TERM_DARK; // these are defaults to soothe compilation warnings
     char c = ' '; //
@@ -826,10 +822,13 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
     m_idx = cave_m_idx[y][x];
 
     /* Feature */
-    feat = cave_environment_known_feature(y, x);
+    feat = physical ? cave_feat[y][x] : cave_environment_known_feature(y, x);
 
     /* Cave flags */
     info = cave_info[y][x];
+    /* Sample actual neighbour artwork without changing discovery flags or
+     * inspecting actors. Only pixels inside an already displayed cell use it. */
+    if (physical) info |= CAVE_MARK | CAVE_SEEN;
 
     bool hide_square = false;
     bool rage_active = false;
@@ -839,7 +838,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
         hide_square = true;
 
     // 'rage' visuals (red filter, rage tiles, etc.) - labyrinth uses the hide-only behavior above.
-    if ((!p_ptr->is_dead) && p_ptr->rage)
+    if (!physical && (!p_ptr->is_dead) && p_ptr->rage)
         rage_active = true;
 
     // hiding squares out of line of sight during rage
@@ -1310,7 +1309,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
 
 void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 {
-    map_info_aux(y, x, ap, cp, tap, tcp, false);
+    map_info_aux(y, x, ap, cp, tap, tcp, false, false);
 }
 
 /*
@@ -1328,17 +1327,39 @@ void map_info_terrain(int y, int x, byte* tap, char* tcp)
     if (!tap || !tcp)
         return;
 
-    map_info_aux(y, x, &a, &c, tap, tcp, true);
+    map_info_aux(y, x, &a, &c, tap, tcp, true, false);
 }
 
-/* Terrain sampling for a feature whose foreground sprite must not be copied
- * into a neighboring surface. Callers first apply map visibility gates. */
-void map_info_floor_terrain(int y, int x, byte* tap, char* tcp)
+/* Visibility-free terrain sampling for connections inside a displayed tile.
+ * Never use this to decide which map cells or foreground features to reveal. */
+void map_info_actual_terrain(int y, int x, byte* tap, char* tcp)
+{
+    byte a = TERM_DARK;
+    char c = ' ';
+    if (!tap || !tcp) return;
+    map_info_aux(y, x, &a, &c, tap, tcp, true, true);
+}
+
+static void map_info_floor_terrain_aux(int y, int x, byte* tap, char* tcp,
+    bool physical)
 {
     if (!tap || !tcp || !in_bounds(y, x)) return;
+    u16b info = cave_info[y][x];
+    if (physical) info |= CAVE_MARK | CAVE_SEEN;
     cave_feature_visual(&f_info[FEAT_FLOOR], tap, tcp);
-    (void)apply_style_floor_graphics(y, x, FEAT_FLOOR, cave_info[y][x], tap, tcp);
-    special_lighting_floor(tap, tcp, cave_info[y][x], cave_light[y][x]);
+    (void)apply_style_floor_graphics(y, x, FEAT_FLOOR, info, tap, tcp);
+    special_lighting_floor(tap, tcp, info, cave_light[y][x]);
+}
+
+/* Terrain sampling without copying a feature's foreground sprite. */
+void map_info_floor_terrain(int y, int x, byte* tap, char* tcp)
+{
+    map_info_floor_terrain_aux(y, x, tap, tcp, false);
+}
+
+void map_info_actual_floor_terrain(int y, int x, byte* tap, char* tcp)
+{
+    map_info_floor_terrain_aux(y, x, tap, tcp, true);
 }
 
 /*

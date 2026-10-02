@@ -165,18 +165,30 @@ static bool chasm_has_animated_neighbor(int y, int x)
     return false;
 }
 
+static byte actual_liquid(int y, int x)
+{
+    if (!p_ptr || !in_bounds(y, x)
+        || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
+        || (unsigned)x >= (unsigned)p_ptr->cur_map_wid)
+        return 0;
+    byte feat = cave_environment_actual_underlay(y, x);
+    return feat == FEAT_WATER || feat == FEAT_DEEP_WATER || feat == FEAT_LAVA
+        || FEAT_IS_ICE(feat) || feat == FEAT_POISON || feat == FEAT_CHASM
+        ? feat : 0;
+}
+
 static bool ice_has_water_neighbor(int y, int x)
 {
     for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)
-            if ((dy || dx) && liquid_is_water(visible_liquid(y + dy, x + dx)))
+            if ((dy || dx) && liquid_is_water(actual_liquid(y + dy, x + dx)))
                 return true;
     return false;
 }
 
-/* Raw clockwise eight-neighbor masks index the atlas. Unknown terrain always
- * contributes zero, regardless of its feature, so shore shapes reveal nothing
- * beyond explored terrain. Bridges connect through their liquid underlay. */
+/* Raw clockwise eight-neighbor masks index the atlas. Connections follow the
+ * physical surface, including bridge underlays, independently of visibility.
+ * visible_liquid() still gates whether the center cell is drawn. */
 static byte liquid_transition_mask(int y, int x, byte feat)
 {
     static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
@@ -184,7 +196,7 @@ static byte liquid_transition_mask(int y, int x, byte feat)
     byte mask = 0;
     for (int i = 0; i < 8; i++)
     {
-        byte neighbor = visible_liquid(y + dy[i], x + dx[i]);
+        byte neighbor = actual_liquid(y + dy[i], x + dx[i]);
         if (neighbor == feat
             || ((liquid_is_water(feat) || FEAT_IS_ICE(feat))
                 && (liquid_is_water(neighbor) || FEAT_IS_ICE(neighbor))))
@@ -201,7 +213,7 @@ static byte ice_only_transition_mask(int y, int x)
     static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
     byte mask = 0;
     for (int i = 0; i < 8; i++)
-        if (FEAT_IS_ICE(visible_liquid(y + dy[i], x + dx[i])))
+        if (FEAT_IS_ICE(actual_liquid(y + dy[i], x + dx[i])))
             mask |= (byte)(1u << i);
     return mask;
 }
@@ -224,15 +236,14 @@ static void draw_chasm_fill(int y, int x, const SDL_FRect* dst, bool live)
     sdl_chasm_transition_draw(y, x, dst);
 }
 
-/* Treat every non-deep neighbor, including unknown terrain, as connected
- * shoal. Only known deep water may introduce a depth boundary. */
+/* Shallow/deep boundaries follow actual depth, including unseen neighbours. */
 static byte water_depth_transition_mask(int y, int x)
 {
     static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
     static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
     byte mask = 255;
     for (int i = 0; i < 8; i++)
-        if (visible_liquid(y + dy[i], x + dx[i]) == FEAT_DEEP_WATER)
+        if (actual_liquid(y + dy[i], x + dx[i]) == FEAT_DEEP_WATER)
             mask &= (byte)~(1u << i);
     return mask;
 }
@@ -264,7 +275,7 @@ static SDL_Texture* load_transition_atlas(SDL_Texture** texture,
  * cell beside ice can display snow: its stored style must not cut a dirt seam
  * into another snow tile. Match the existing material families and variants
  * instead of inferring the visible surface from cave_color. */
-static bool visible_material_floor_style(int y, int x, int* style_out)
+static bool material_floor_style(int y, int x, int* style_out, bool physical)
 {
     u16b info;
     byte feat;
@@ -272,21 +283,24 @@ static bool visible_material_floor_style(int y, int x, int* style_out)
         || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
         || (unsigned)x >= (unsigned)p_ptr->cur_map_wid)
         return false;
-    feat = cave_environment_display_underlay(y, x);
+    feat = physical ? cave_environment_actual_underlay(y, x)
+        : cave_environment_display_underlay(y, x);
     if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR
         && feat != FEAT_SUNLIGHT)
         return false;
     info = cave_info[y][x];
-    if (!(info & CAVE_SEEN) && (!(info & CAVE_MARK) || cave_light[y][x] <= 0))
+    if (!physical && !(info & CAVE_SEEN)
+        && (!(info & CAVE_MARK) || cave_light[y][x] <= 0))
         return false;
-    if (!p_ptr->is_dead && (p_ptr->rage || g_labyrinth_view_active)
+    if (!physical && !p_ptr->is_dead && (p_ptr->rage || g_labyrinth_view_active)
         && !(info & CAVE_SEEN))
         return false;
 
     int style = -1;
     byte a = 0;
     char c = 0;
-    map_info_terrain(y, x, &a, &c);
+    if (physical) map_info_actual_terrain(y, x, &a, &c);
+    else map_info_terrain(y, x, &a, &c);
     if (!(a & TILE_FLAG) || !((byte)c & TILE_FLAG)) return false;
     const int materials[] = { CAVE_STYLE_SNOW, CAVE_STYLE_BASALT, CAVE_STYLE_DIRT };
     for (int i = 0; i < (int)N_ELEMENTS(materials); i++)
@@ -316,7 +330,7 @@ static bool visible_material_floor_style(int y, int x, int* style_out)
 static int visible_elemental_floor_style(int y, int x)
 {
     int style;
-    if (!visible_material_floor_style(y, x, &style))
+    if (!material_floor_style(y, x, &style, false))
         return -1;
     return (style == CAVE_STYLE_SNOW || style == CAVE_STYLE_BASALT)
         ? style : -1;
@@ -330,12 +344,11 @@ static byte elemental_transition_mask(int y, int x)
     int style[8];
     byte mask = 255;
     for (int i = 0; i < 8; i++)
-        floor[i] = visible_material_floor_style(y + dy[i], x + dx[i], &style[i]);
+        floor[i] = material_floor_style(y + dy[i], x + dx[i], &style[i], true);
     for (int i = 0; i < 8; i++)
     {
-        /* Only a visible dirt surface may expose dirt in this tile. Unknown
-         * cells are not dirt; neither are walls, ice or other floor artwork.
-         * A diagonal must also have two known floor cells to connect through. */
+        /* Only real dirt supplies dirt pixels. A diagonal needs two physical
+         * floor sides; walls and hazards still block it. */
         if (floor[i] && style[i] == CAVE_STYLE_DIRT
             && (!(i & 1) || (floor[i - 1] && floor[(i + 1) % 8])))
             mask &= (byte)~(1u << i);
@@ -555,9 +568,10 @@ static SDL_Texture* load_ice_water_overlay(byte feat)
 }
 
 static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
-    const SDL_FRect* pixels)
+    const SDL_FRect* pixels, bool physical)
 {
-    byte feat = cave_environment_display_underlay(y, x);
+    byte feat = physical ? cave_environment_actual_underlay(y, x)
+        : cave_environment_display_underlay(y, x);
     bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
     if (feat == FEAT_CHASM)
     {
@@ -691,14 +705,14 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
 bool sdl_idle_animation_draw_liquid_piece(int y, int x,
     const SDL_FRect* pixels, const SDL_FRect* dst)
 {
-    byte feat = visible_liquid(y, x);
+    byte feat = actual_liquid(y, x);
     if (!pixels || !dst || !feat || feat == FEAT_CHASM) return false;
-    return draw_liquid_region(y, x, dst, pixels);
+    return draw_liquid_region(y, x, dst, pixels, true);
 }
 
 static bool draw_liquid(int y, int x, const SDL_FRect* dst)
 {
-    return draw_liquid_region(y, x, dst, NULL);
+    return draw_liquid_region(y, x, dst, NULL, false);
 }
 
 static byte fixture_frame_count(byte kind)

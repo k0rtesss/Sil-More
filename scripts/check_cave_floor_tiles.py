@@ -113,11 +113,11 @@ static void floor_tests(void) {
         cave_feat[10+dy[i]][11+dx[i]]=FEAT_LAVA;
         assert(floor_tile(10,11)==((35<<8)|8));
         assert(floor_tile(20,21)==normal);
-        cave_info[10+dy[i]][11+dx[i]]=0; assert(floor_tile(10,11)==normal);
+        cave_info[10+dy[i]][11+dx[i]]=0; assert(floor_tile(10,11)==((35<<8)|8));
         cave_info[10+dy[i]][11+dx[i]]=CAVE_MARK;
         assert(floor_tile(10,11)==((35<<8)|8));
-        p_ptr->rage=1; assert(floor_tile(10,11)==normal); p_ptr->rage=0;
-        g_labyrinth_view_active=true; assert(floor_tile(10,11)==normal);
+        p_ptr->rage=1; assert(floor_tile(10,11)==((35<<8)|8)); p_ptr->rage=0;
+        g_labyrinth_view_active=true; assert(floor_tile(10,11)==((35<<8)|8));
         g_labyrinth_view_active=false;
         cave_info[10+dy[i]][11+dx[i]]=CAVE_MARK|CAVE_SEEN;
         cave_feat[10+dy[i]][11+dx[i]]=FEAT_BRIDGE_LAVA_H;
@@ -128,7 +128,7 @@ static void floor_tests(void) {
     cave_info[10][11]=CAVE_MARK; cave_light[10][11]=0;
     assert(floor_tile(10,11)==((35<<8)|9));
     assert(Rand_state_export()==rng && turn==turns);
-    puts("Stable varied snow, floor/feature/actor underlays, dark variants, eight-way basalt banks, hidden/rage/labyrinth knowledge: PASS");
+    puts("Stable varied snow, floor/feature/actor underlays, dark variants, and physical eight-way basalt banks in hidden/rage/labyrinth views: PASS");
 }
 static void floor_redraw_tests(void) {
     floor_reset(13); cave_feat[9][11]=FEAT_LAVA; cave_info[9][11]=0;

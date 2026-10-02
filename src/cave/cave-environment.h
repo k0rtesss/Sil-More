@@ -61,6 +61,8 @@ int cave_environment_display_underlay(int y, int x);
 /* Physical underlay, independent of observation; encoded terrain is the
  * fallback before the environment has been seeded and for destroyed decks. */
 int cave_environment_live_underlay(int y, int x);
+/* Physical surface for terrain connections, independent of map knowledge. */
+int cave_environment_actual_underlay(int y, int x);
 void cave_environment_observe(int y, int x);
 /* Explicit revelation refreshes remembered terrain without granting sight. */
 void cave_environment_reveal(int y, int x);

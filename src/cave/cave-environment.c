@@ -379,16 +379,9 @@ int cave_environment_known_feature(int y, int x)
     return cave_feat[y][x];
 }
 
-int cave_environment_display_underlay(int y, int x)
+int cave_environment_actual_underlay(int y, int x)
 {
-    int feature = cave_environment_known_feature(y,x);
-    if (state.ready && in_bounds(y,x) && !(cave_info[y][x]&CAVE_SEEN)
-        && (cave_info[y][x]&CAVE_MARK)) return cells[y][x].known_underlay;
-    if (state.ready && in_bounds(y,x) && (cave_info[y][x]&CAVE_SEEN)
-        && (cells[y][x].flags&ENV_BRIDGE) && cells[y][x].integrity
-        && (FEAT_IS_BRIDGE(feature) || feature==cells[y][x].bridge_feat))
-        return cells[y][x].underlay;
-    return cave_bridge_underlay(feature);
+    return cave_environment_live_underlay(y, x);
 }
 
 int cave_environment_live_underlay(int y, int x)
@@ -400,6 +393,13 @@ int cave_environment_live_underlay(int y, int x)
         && (FEAT_IS_BRIDGE(feature) || feature == c->bridge_feat))
         return c->underlay;
     return cave_bridge_underlay(feature);
+}
+
+int cave_environment_display_underlay(int y, int x)
+{
+    if (state.ready && in_bounds(y,x) && !(cave_info[y][x]&CAVE_SEEN)
+        && (cave_info[y][x]&CAVE_MARK)) return cells[y][x].known_underlay;
+    return cave_environment_actual_underlay(y, x);
 }
 
 static void release_supply(environment_cell* c, bool refund)

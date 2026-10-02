@@ -91,26 +91,18 @@ static bool cave_stored_style_has_ice_bank(int y, int x)
     return false;
 }
 
-static bool cave_shore_grid_known(int y, int x)
-{
-    if (!p_ptr || !in_bounds(y, x)) return false;
-    u16b info = cave_info[y][x];
-    return (info & (CAVE_MARK | CAVE_SEEN))
-        && (!(p_ptr->rage || g_labyrinth_view_active) || (info & CAVE_SEEN));
-}
-
 bool cave_water_has_icy_shore(int y, int x)
 {
-    if (!cave_shore_grid_known(y, x)) return false;
-    int feat = cave_environment_display_underlay(y, x);
+    if (!p_ptr || !in_bounds(y, x)) return false;
+    int feat = cave_environment_actual_underlay(y, x);
     if (feat != FEAT_WATER && feat != FEAT_DEEP_WATER) return false;
     if (cave_stored_style_has_ice_bank(y, x)) return true;
     for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)
         {
             int ny = y + dy, nx = x + dx;
-            if ((!dy && !dx) || !cave_shore_grid_known(ny, nx)) continue;
-            feat = cave_environment_display_underlay(ny, nx);
+            if ((!dy && !dx) || !in_bounds(ny, nx)) continue;
+            feat = cave_environment_actual_underlay(ny, nx);
             if (FEAT_IS_ICE(feat)) return true;
             if ((feat == FEAT_FLOOR || feat == FEAT_RAGE_FLOOR
                     || feat == FEAT_SUNLIGHT)

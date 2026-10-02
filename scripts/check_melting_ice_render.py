@@ -80,21 +80,21 @@ static void melt_connection_tests(void) {
         }
         melt_neighbors(center,255,0);
         for(int i=0;i<8;i++)cave_info[10+melt_dy[i]][11+melt_dx[i]]=0;
-        assert(liquid_transition_mask(10,11,center)==0);
+        assert(liquid_transition_mask(10,11,center)==255);
         SDL_Surface* hidden=melt_sample(0,NULL,0);
         melt_neighbors(center,0,0);
         SDL_Surface* absent=melt_sample(0,NULL,0);
-        assert(same_surface(hidden,absent));
+        assert(!same_surface(hidden,absent));
         SDL_DestroySurface(hidden);SDL_DestroySurface(absent);
         melt_neighbors(center,255,1);
         for(int i=0;i<8;i++)cave_info[10+melt_dy[i]][11+melt_dx[i]]=CAVE_MARK;
         assert(liquid_transition_mask(10,11,center)==255);
-        p_ptr->rage=true;assert(liquid_transition_mask(10,11,center)==0);p_ptr->rage=false;
-        g_labyrinth_view_active=true;assert(liquid_transition_mask(10,11,center)==0);
+        p_ptr->rage=true;assert(liquid_transition_mask(10,11,center)==255);p_ptr->rage=false;
+        g_labyrinth_view_active=true;assert(liquid_transition_mask(10,11,center)==255);
         g_labyrinth_view_active=false;
     }
     assert(Rand_state_export()==rng && turn==turns);
-    puts("Mixed solid/melting ice: all 256 eight-neighbor masks, both alternating arrangements and both center types select exact atlas pixels; hidden/remembered neighbors respect visibility: PASS");
+    puts("Mixed solid/melting ice: all 256 eight-neighbor masks and exact atlas pixels stay connected beside hidden/remembered neighbors: PASS");
 
     for(int kind=0;kind<2;kind++) {
         int center=kind?FEAT_MELTING_ICE:FEAT_ICE;
