@@ -237,10 +237,11 @@ static void material_pair_test(const char* label, byte current_feat,
     assert((neighbour_tile >> 8) == expected_neighbour_row);
     assert((neighbour_tile & 255) == expected_neighbour_col
         || (neighbour_tile & 255) == expected_neighbour_col + 2);
-    assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X));
-    edged = material_render_cell(MATERIAL_TEST_Y, MATERIAL_TEST_X, 0, 0,
-        false);
-    assert(material_diff_bounds(plain, edged, &min_x, &min_y, &max_x, &max_y) > 0);
+    bool same_plane = (current_feat == FEAT_FLOOR) == (neighbour_feat == FEAT_FLOOR);
+    assert(sdl_material_edge_at(MATERIAL_TEST_Y, MATERIAL_TEST_X) == same_plane);
+    edged = material_render_cell(MATERIAL_TEST_Y, MATERIAL_TEST_X, 0, 0, false);
+    unsigned changed = material_diff_bounds(plain, edged, &min_x, &min_y, &max_x, &max_y);
+    assert((changed > 0) == same_plane);
     material_assert_center(plain, edged);
     SDL_DestroySurface(plain);
     SDL_DestroySurface(edged);
@@ -598,7 +599,7 @@ static void material_topology_tests(void)
     assert(same_surface(plain, lower));
     SDL_DestroySurface(plain); SDL_DestroySurface(lower);
 
-    /* Wall faces may shade their own pixels, but cannot contain floor color. */
+    /* Floor/wall contacts preserve every authored pixel, with no extra shade. */
     material_pair_setup(FEAT_WALL_EXTRA, MATERIAL_STYLE_IMPORTED,
         FEAT_FLOOR, MATERIAL_STYLE_OLD);
     SDL_Surface* wall = material_render_cell(MATERIAL_TEST_Y,
@@ -611,10 +612,7 @@ static void material_topology_tests(void)
         {
             Uint8 r,g,b,a;
             assert(SDL_ReadSurfacePixel(wall,x,y,&r,&g,&b,&a));
-            assert(a == 255 && r <= wr && g <= wg && b <= wb);
-            /* Neutral modulation permits at most one 8-bit rounding step. */
-            assert(abs((int)r * wg - (int)g * wr) <= wr + wg);
-            assert(abs((int)r * wb - (int)b * wr) <= wr + wb);
+            assert(a == 255 && r == wr && g == wg && b == wb);
         }
     SDL_DestroySurface(wall);
     g_state.tileset = saved_tileset;
@@ -744,54 +742,57 @@ static void material_source_sampling_tests(void)
     puts("Donor texels keep their local coordinates across three-material contours: PASS");
 }
 
-static SDL_Surface* material_native_reference(bool expect_native)
+static void material_elemental_contour_tests(void)
 {
-    SDL_Texture* previous = SDL_GetRenderTarget(g_state.renderer);
-    SDL_Texture* target = SDL_CreateTexture(g_state.renderer,
-        SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,TILE_SIZE,TILE_SIZE);
-    assert(target);
-    SDL_SetRenderTarget(g_state.renderer,target);
-    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
-    SDL_RenderClear(g_state.renderer);
-    byte a,ta; char c,tc;
-    SDL_FRect dst = {0,0,TILE_SIZE,TILE_SIZE};
-    map_info(MATERIAL_TEST_Y,MATERIAL_TEST_X,&a,&c,&ta,&tc);
-    sdl_draw_tileset_sprite(ta,tc,&dst,false);
-    assert(draw_elemental_transition(MATERIAL_TEST_Y,MATERIAL_TEST_X,&dst)
-        == expect_native);
-    SDL_Surface* result = SDL_RenderReadPixels(g_state.renderer,NULL);
-    assert(result);
-    SDL_SetRenderTarget(g_state.renderer,previous);
-    SDL_DestroyTexture(target);
-    return result;
-}
-
-static void material_native_contour_tests(void)
-{
+    SDL_Texture* saved_tileset = g_state.tileset;
+    SDL_Texture* diagnostic = material_test_atlas();
+    int saved_cols = g_state.tileset_cols;
+    const int dy[8] = {-1,-1,0,1,1,1,0,-1};
+    const int dx[8] = {0,1,1,1,0,-1,-1,-1};
+    g_state.tileset = diagnostic; g_state.tileset_cols = 32;
+    int loads = image_loads;
     for (int style = 62; style <= 63; style++)
-    {
-        material_pair_setup(FEAT_FLOOR,style,FEAT_FLOOR,MATERIAL_STYLE_IMPORTED);
-        SDL_Surface* expected = material_native_reference(true);
-        SDL_Surface* actual = material_render_cell(MATERIAL_TEST_Y,
-            MATERIAL_TEST_X,0,0,false);
-        assert(same_surface(expected,actual));
-        SDL_DestroySurface(expected); SDL_DestroySurface(actual);
-    }
-
-    /* A missing optional native atlas must still get a generic contour. */
-    material_pair_setup(FEAT_FLOOR,62,FEAT_FLOOR,MATERIAL_STYLE_IMPORTED);
-    SDL_Texture* saved = snow_dirt_transition_texture;
-    bool saved_attempted = snow_dirt_transition_load_attempted;
-    snow_dirt_transition_texture = NULL;
-    snow_dirt_transition_load_attempted = true;
-    SDL_Surface* plain = material_native_reference(false);
-    SDL_Surface* fallback = material_render_cell(MATERIAL_TEST_Y,
-        MATERIAL_TEST_X,0,0,false);
-    assert(!same_surface(plain,fallback));
-    SDL_DestroySurface(plain); SDL_DestroySurface(fallback);
-    snow_dirt_transition_texture = saved;
-    snow_dirt_transition_load_attempted = saved_attempted;
-    puts("Native snow/basalt contours stay exact; unavailable atlas gets generic fallback: PASS");
+        for (int dark = 0; dark < 2; dark++)
+            for (int mask = 0; mask < 256; mask++)
+            {
+                material_reset(style);
+                Uint8 palette[9][3];
+                u16b info = CAVE_MARK | (dark ? 0 : CAVE_SEEN);
+                for (int i = 0; i < 9; i++)
+                {
+                    int y = MATERIAL_TEST_Y + (i < 8 ? dy[i] : 0);
+                    int x = MATERIAL_TEST_X + (i < 8 ? dx[i] : 0);
+                    material_set_cell(y,x,FEAT_FLOOR,
+                        i < 8 && (mask & (1 << i)) ? MATERIAL_STYLE_IMPORTED : style,info);
+                    material_diagnostic_color(material_tile(y,x),
+                        &palette[i][0],&palette[i][1],&palette[i][2]);
+                }
+                SDL_Surface* actual = material_render_cell(MATERIAL_TEST_Y,
+                    MATERIAL_TEST_X,0,0,false);
+                int changed = 0;
+                for (int y = 0; y < TILE_SIZE; y++)
+                    for (int x = 0; x < TILE_SIZE; x++)
+                    {
+                        Uint8 r,g,b,a; bool found = false;
+                        assert(SDL_ReadSurfacePixel(actual,x,y,&r,&g,&b,&a));
+                        for (int i = 0; i < 9; i++)
+                            if (r == palette[i][0] && g == palette[i][1]
+                                && b == palette[i][2]) found = true;
+                        assert(a == 255 && found);
+                        if (r != palette[8][0] || g != palette[8][1] || b != palette[8][2])
+                        {
+                            changed++;
+                            assert(x < 3 || x >= TILE_SIZE - 3 || y < 3 || y >= TILE_SIZE - 3);
+                        }
+                    }
+                if (!mask) assert(!changed);
+                if (mask == 4) assert(changed);
+                SDL_DestroySurface(actual);
+            }
+    assert(image_loads == loads);
+    g_state.tileset = saved_tileset; g_state.tileset_cols = saved_cols;
+    SDL_DestroyTexture(diagnostic);
+    puts("Snow/basalt x 256 masks x lit/dark: original source texels and variants, no outline atlas or added rim: PASS");
 }
 
 static void material_stress_tests(void)
@@ -1192,7 +1193,7 @@ def main():
         "    material_mask_tests();\n"
         "    material_topology_tests();\n"
         "    material_source_sampling_tests();\n"
-        "    material_native_contour_tests();\n"
+        "    material_elemental_contour_tests();\n"
         "    material_transparency_state_tests();\n"
         "    material_stress_tests();\n"
         "    material_redraw_tests();\n"

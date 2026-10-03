@@ -133,7 +133,7 @@ static void contour_reset(int style,byte feat,unsigned mask) {
 
 static SDL_Surface* contour_donor(int y,int x,bool floor) {
     byte a;char c;
-    if(floor) map_info_actual_floor_terrain(y,x,&a,&c);else map_info_actual_terrain(y,x,&a,&c);
+    if(floor) map_info_floor_terrain(y,x,&a,&c);else map_info_terrain(y,x,&a,&c);
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
         SDL_TEXTUREACCESS_TARGET,16,16);assert(target);
@@ -273,6 +273,102 @@ static void contour_liquid_tests(void) {
     puts("Water/deep water/lava/acid/ice donors match production frames; incremental animation matches full repaint; 1,000 ticks with no new loads/textures/allocations: PASS");
 }
 
+static void contour_lighting_tests(void) {
+    const int styles[]={13,41,42,44};
+    u64b rng=Rand_state_export();
+    for(unsigned style=0;style<N_ELEMENTS(styles);style++)for(unsigned mask=1;mask<256;mask++) {
+        contour_reset(styles[style],FEAT_FLOOR,0);
+        SDL_Surface* base=contour_capture();
+        contour_reset(styles[style],FEAT_FLOOR,mask);
+        SDL_Surface* donor[8]={0};
+        for(int i=0;i<8;i++)if(mask&(1u<<i)) {
+            int y=10+edge_dy[i],x=11+edge_dx[i];
+            cave_info[y][x]=CAVE_MARK;cave_light[y][x]=2;
+            donor[i]=contour_donor(y,x,false);
+        }
+        SDL_Surface* remembered=contour_capture();int changed=0;
+        for(int py=0;py<16;py++)for(int px=0;px<16;px++) {
+            Uint32 pixel=contour_pixel(remembered,px+8,py+8);
+            if(pixel!=contour_pixel(base,px+8,py+8)) {
+                bool found=false;
+                for(int i=0;i<8;i++)if(donor[i])
+                    found|=pixel==contour_pixel(donor[i],px,py);
+                assert(found); /* Exact displayed donor texel, no bright replacement. */
+                changed++;
+            }
+        }
+        assert(changed);
+        for(int mode=0;mode<3;mode++) {
+            for(int i=0;i<8;i++)if(mask&(1u<<i))
+                cave_info[10+edge_dy[i]][11+edge_dx[i]]=mode?CAVE_MARK:0;
+            p_ptr->rage=mode==1;g_labyrinth_view_active=mode==2;
+            SDL_Surface* hidden=contour_capture();
+            assert(same_surface(remembered,hidden));SDL_DestroySurface(hidden);
+        }
+        for(int i=0;i<8;i++)if(donor[i])SDL_DestroySurface(donor[i]);
+        SDL_DestroySurface(base);SDL_DestroySurface(remembered);
+    }
+    assert(Rand_state_export()==rng);edge_reset();
+    puts("Four original/imported materials x 256 chasm masks: remembered donor texels stay exact beside hidden/rage/labyrinth terrain, no bright rims: PASS");
+}
+
+static void forge_border_preview(void) {
+    const int w=22,h=16,scale=3;
+    edge_reset();
+    for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
+        bool wall=x==2||x==19||y==1||y==14;
+        bool floor=(x>=4&&x<=7&&y>=4&&y<=13)
+            ||(x>=4&&x<=13&&y>=4&&y<=5)
+            ||(x>=4&&x<=17&&y>=7&&y<=8)
+            ||(x>=11&&x<=12&&y>=3&&y<=7)
+            ||(x>=6&&x<=11&&y>=11&&y<=13);
+        cave_feat[y][x]=wall?FEAT_WALL_EXTRA:(floor?FEAT_FLOOR:FEAT_CHASM);
+        cave_info[y][x]=CAVE_MARK|(wall?CAVE_WALL:0);
+        cave_color[y][x]=COLOR_STYLE_BASE+41;cave_light[y][x]=2;
+    }
+    SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
+    SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,w*16*scale,h*16*scale);assert(target);
+    SDL_SetRenderTarget(g_state.renderer,target);
+    for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
+        byte a,ta;char c,tc;map_info(y,x,&a,&c,&ta,&tc);
+        SDL_FRect dst={x*16*scale,y*16*scale,16*scale,16*scale};
+        sdl_draw_map_tile_layers_at(y,x,a,c,ta,tc,&dst);
+    }
+    SDL_Surface* result=SDL_RenderReadPixels(g_state.renderer,NULL);assert(result);
+    assert(IMG_SavePNG(result,"scripts/output/chasm-edges-check/forge-borders.png"));
+    SDL_DestroySurface(result);SDL_SetRenderTarget(g_state.renderer,previous);SDL_DestroyTexture(target);
+}
+
+static void water_floor_lighting_tests(void) {
+    const byte liquids[]={FEAT_WATER,FEAT_DEEP_WATER};
+    for(unsigned kind=0;kind<N_ELEMENTS(liquids);kind++) {
+        contour_reset(41,liquids[kind],255);cave_feat[10][11]=liquids[kind];
+        frame_tick=0;SDL_Surface* base=contour_capture();
+        cave_feat[10][12]=FEAT_FLOOR;
+        for(int dark=0;dark<2;dark++) {
+            cave_info[10][12]=CAVE_MARK|(dark?0:CAVE_SEEN);
+            SDL_Surface* donor=contour_donor(10,12,false);
+            SDL_Surface* actual=contour_capture();int changed=0;
+            for(int py=0;py<16;py++)for(int px=0;px<16;px++) {
+                Uint32 pixel=contour_pixel(actual,px+8,py+8);
+                if(pixel!=contour_pixel(base,px+8,py+8)) {
+                    assert(pixel==contour_pixel(donor,px,py));changed++;
+                }
+            }
+            assert(changed);
+            if(dark) {
+                cave_info[10][12]=0;SDL_Surface* hidden=contour_capture();
+                assert(same_surface(actual,hidden));SDL_DestroySurface(hidden);
+            }
+            SDL_DestroySurface(actual);SDL_DestroySurface(donor);
+        }
+        SDL_DestroySurface(base);
+    }
+    edge_reset();
+    puts("Shallow/deep water banks copy exact lit/remembered floor texels, including hidden floors, without a bright outline: PASS");
+}
+
 static void edge_preview(void) {
     const byte mats[][2]={{0,1},{0,4},{33,0},{33,2},{35,0},{35,8},{36,8},{36,16}};
     const int w=10,h=8,scale=2;
@@ -337,7 +433,7 @@ def main():
     idle.OUT = idle.ROOT / "scripts/output/chasm-edges-check"
     idle.HARNESS = idle.HARNESS.replace("scripts/output/idle-animation-check", "scripts/output/chasm-edges-check")
     idle.HARNESS = idle.HARNESS.replace("int main(void) {", floors.TESTS + TESTS + "\nint main(void) {")
-    idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();", "    asynchronous_tests();\n    floor_templates();\n    edge_art_tests();\n    contour_tests();\n    contour_liquid_tests();\n    edge_redraw_tests();\n    edge_preview();\n    contour_preview();")
+    idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();", "    asynchronous_tests();\n    floor_templates();\n    edge_art_tests();\n    contour_tests();\n    contour_liquid_tests();\n    edge_redraw_tests();\n    edge_preview();\n    contour_preview();\n    forge_border_preview();\n    contour_lighting_tests();\n    water_floor_lighting_tests();")
     idle.main()
 
 

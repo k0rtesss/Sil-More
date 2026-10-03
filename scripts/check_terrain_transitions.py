@@ -112,6 +112,9 @@ static void shore_visibility_tests(void) {
         byte feat=features[kind]; shore_map(feat,mask);
         assert(load_liquid_texture(feat));
         assert(load_liquid_transition_texture(feat));
+        if(feat==FEAT_WATER || feat==FEAT_DEEP_WATER)
+            for(int i=0;i<8;i++)
+                cave_info[10+shore_dy[i]][11+shore_dx[i]]=CAVE_MARK;
         SDL_Surface* normal=shore_surface(NULL,0,0,true);
         for(int mode=0;mode<4;mode++) {
             for(int i=0;i<8;i++)
@@ -246,6 +249,11 @@ static void shore_fallback_tests(void) {
     missing_transition=false; sdl_idle_animation_shutdown();
     puts("Missing transition atlases retain original terrain pixels, with failed-load caching: PASS");
 }
+static bool draw_material_connection(int y,int x,const SDL_FRect* dst) {
+    byte a;char c;map_info_terrain(y,x,&a,&c);
+    sdl_draw_tileset_sprite(a,c,dst,false);
+    return sdl_material_edge_draw(y,x,a,c,dst,false);
+}
 static void material_transition_tests(void) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
@@ -255,25 +263,23 @@ static void material_transition_tests(void) {
 
     floor_reset(62);
     SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255); SDL_RenderClear(g_state.renderer);
-    assert(!draw_elemental_transition(10,11,&dst));
+    assert(!draw_material_connection(10,11,&dst));
     cave_color[10][12]=COLOR_STYLE_BASE+44;
     SDL_RenderClear(g_state.renderer);
-    assert(draw_elemental_transition(10,11,&dst));
-    assert(snow_dirt_transition_texture);
+    assert(draw_material_connection(10,11,&dst));
     SDL_Surface* snow=SDL_RenderReadPixels(g_state.renderer,NULL); assert(snow);
 
     /* Hiding the dirt neighbour must leave this displayed edge intact. */
     cave_info[10][12]=0;
     SDL_RenderClear(g_state.renderer);
-    assert(draw_elemental_transition(10,11,&dst));
+    assert(draw_material_connection(10,11,&dst));
     SDL_Surface* hidden=SDL_RenderReadPixels(g_state.renderer,NULL); assert(hidden);
     assert(same_surface(snow,hidden)); SDL_DestroySurface(hidden);
 
     floor_reset(63);
     cave_color[10][12]=COLOR_STYLE_BASE+44;
     SDL_RenderClear(g_state.renderer);
-    assert(draw_elemental_transition(10,11,&dst));
-    assert(basalt_dirt_transition_texture);
+    assert(draw_material_connection(10,11,&dst));
     SDL_Surface* basalt=SDL_RenderReadPixels(g_state.renderer,NULL); assert(basalt);
     assert(!same_surface(snow,basalt));
 
@@ -298,7 +304,7 @@ static void material_transition_tests(void) {
     SDL_DestroySurface(before); SDL_DestroySurface(incremental);
     SDL_DestroySurface(full);
 
-    puts("Snow-on-dirt and basalt-on-dirt use stable authored pixels beside hidden dirt: PASS");
+    puts("Snow/dirt and basalt/dirt connect without outline atlases beside hidden dirt: PASS");
 }
 static void material_bank_transition_tests(void) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
@@ -316,8 +322,8 @@ static void material_bank_transition_tests(void) {
         cave_feat[10][13]=hazard;
         assert((floor_tile(10,12)>>8)==35);
         assert((floor_tile(10,12)&255)==(kind?8:0));
-        assert(elemental_transition_mask(10,11)==255);
-        assert(!draw_elemental_transition(10,11,&dst));
+
+        assert(!draw_material_connection(10,11,&dst));
 
         /* The converse: a bank with stored dirt needs a real transition
          * where the next floor is outside the hazard's bank radius. */
@@ -327,34 +333,34 @@ static void material_bank_transition_tests(void) {
         assert((floor_tile(10,11)>>8)==35);
         assert((floor_tile(10,11)&255)==(kind?8:0));
         assert((floor_tile(10,12)>>8)!=35);
-        assert(elemental_transition_mask(10,11)==(255^4));
-        assert(draw_elemental_transition(10,11,&dst));
+
+        assert(draw_material_connection(10,11,&dst));
 
         /* The edge follows physical dirt even beside unlit remembered floors. */
         floor_reset(style);
         cave_color[10][12]=COLOR_STYLE_BASE+44;
         cave_info[9][11]=0;
-        assert(elemental_transition_mask(10,11)==(255^4));
+
         cave_info[9][11]=CAVE_MARK; cave_light[9][11]=0;
-        assert(elemental_transition_mask(10,11)==(255^4));
+
         cave_info[10][12]=CAVE_MARK; cave_light[10][12]=0;
-        assert(elemental_transition_mask(10,11)==(255^4));
-        assert(draw_elemental_transition(10,11,&dst));
+
+        assert(draw_material_connection(10,11,&dst));
         cave_light[10][12]=2;
-        assert(elemental_transition_mask(10,11)==(255^4));
-        assert(draw_elemental_transition(10,11,&dst));
+
+        assert(draw_material_connection(10,11,&dst));
         p_ptr->rage=1;
-        assert(elemental_transition_mask(10,11)==(255^4));
-        assert(draw_elemental_transition(10,11,&dst));
+
+        assert(draw_material_connection(10,11,&dst));
         p_ptr->rage=0; g_labyrinth_view_active=true;
-        assert(elemental_transition_mask(10,11)==(255^4));
-        assert(draw_elemental_transition(10,11,&dst));
+
+        assert(draw_material_connection(10,11,&dst));
         g_labyrinth_view_active=false;
         cave_info[10][12]=CAVE_MARK|CAVE_SEEN;
         cave_info[10][11]=CAVE_MARK; cave_light[10][11]=0;
-        assert(!draw_elemental_transition(10,11,&dst));
+        assert(!draw_material_connection(10,11,&dst));
         cave_light[10][11]=2;
-        assert(draw_elemental_transition(10,11,&dst));
+        assert(draw_material_connection(10,11,&dst));
 
         /* A lone diagonal dirt cell creates a corner across two physical
          * floor sides, including unseen sides, never across a wall or hazard. Exercise
@@ -362,8 +368,8 @@ static void material_bank_transition_tests(void) {
         for(int diagonal=1;diagonal<8;diagonal+=2) {
             floor_reset(style);
             cave_color[10+shore_dy[diagonal]][11+shore_dx[diagonal]]=COLOR_STYLE_BASE+44;
-            assert(elemental_transition_mask(10,11)==(255^(1<<diagonal)));
-            assert(draw_elemental_transition(10,11,&dst));
+
+            assert(draw_material_connection(10,11,&dst));
             for(int side=0;side<2;side++) for(int blocker=0;blocker<4;blocker++) {
                 floor_reset(style);
                 cave_color[10+shore_dy[diagonal]][11+shore_dx[diagonal]]=COLOR_STYLE_BASE+44;
@@ -373,9 +379,8 @@ static void material_bank_transition_tests(void) {
                 else if(blocker==1) cave_feat[y][x]=hazard;
                 else if(blocker==2) cave_info[y][x]=0;
                 else { cave_info[y][x]=CAVE_MARK; cave_light[y][x]=0; }
-                int expected=blocker<2?255:(255^(1<<diagonal));
-                assert(elemental_transition_mask(10,11)==expected);
-                assert(draw_elemental_transition(10,11,&dst)==(blocker>=2));
+
+                assert(draw_material_connection(10,11,&dst)==(blocker>=2));
             }
         }
     }
@@ -417,7 +422,7 @@ static void material_bank_redraw_tests(void) {
         cave_color[10][12]=COLOR_STYLE_BASE+44;
         cave_feat[10][13]=kind?FEAT_LAVA:FEAT_ICE;
         cave_info[10][13]=0;
-        assert(elemental_transition_mask(10,11)==255);
+        assert(!sdl_material_edge_at(10,11));
         Term->total_erase=true; prt_map(); Term_fresh();
         byte a,ta; char c,tc; map_info(10,11,&a,&c,&ta,&tc);
         SDL_Surface* before=capture(100+kind*3); assert(before);
@@ -428,7 +433,7 @@ static void material_bank_redraw_tests(void) {
         lite_spot(10,13); Term_fresh();
         byte a2,ta2; char c2,tc2; map_info(10,11,&a2,&c2,&ta2,&tc2);
         assert(a==a2 && c==c2 && ta==ta2 && tc==tc2);
-        assert(elemental_transition_mask(10,11)==255);
+        assert(!sdl_material_edge_at(10,11));
         SDL_Surface* changed=capture(101+kind*3); assert(changed);
         force_map_redraw(); Term_fresh();
         SDL_Surface* full=capture(102+kind*3); assert(full);
@@ -437,7 +442,7 @@ static void material_bank_redraw_tests(void) {
         SDL_DestroySurface(before); SDL_DestroySurface(changed); SDL_DestroySurface(full);
 
         cave_set_feat(10,13,FEAT_FLOOR); Term_fresh();
-        assert(elemental_transition_mask(10,11)==(255^4));
+        assert(sdl_material_edge_at(10,11));
         changed=capture(106+kind*2); assert(changed);
         force_map_redraw(); Term_fresh();
         full=capture(107+kind*2); assert(full);

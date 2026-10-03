@@ -97,7 +97,7 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
              * water. Only exposed dry floor supplies a receding shoreline. */
             if (!cave_floorlike_bold(ny, nx) || FEAT_IS_BRIDGE(cave_feat[ny][nx]))
                 continue;
-            map_info_actual_floor_terrain(ny, nx, &n[i].a, &n[i].c);
+            map_info_actual_floor_appearance(ny, nx, &n[i].a, &n[i].c);
         }
         else
         {
@@ -107,8 +107,8 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
             if (feat == FEAT_OPEN || feat == FEAT_BROKEN
                 || (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)
                 || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3)
-                map_info_actual_floor_terrain(ny, nx, &n[i].a, &n[i].c);
-            else map_info_actual_terrain(ny, nx, &n[i].a, &n[i].c);
+                map_info_actual_floor_appearance(ny, nx, &n[i].a, &n[i].c);
+            else map_info_actual_terrain_appearance(ny, nx, &n[i].a, &n[i].c);
         }
         if (!(n[i].a & TILE_FLAG) || !((byte)n[i].c & TILE_FLAG)) continue;
         n[i].state = 2;

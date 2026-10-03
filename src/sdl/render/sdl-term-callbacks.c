@@ -1882,9 +1882,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, false);
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
     } else if (terrain_tile && !illusion_wall) {
-        /* Authored terrain contours own their floor pixels. Generic contacts
-         * may add wall shading, but must not repaint these contours. A failed
-         * atlas load leaves the generic material fallback available. */
+        /* Liquid and bridge layers own their surface pixels. Ordinary floor
+         * materials use the same outline-free connection pass. */
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, fixture_drawn);
     }

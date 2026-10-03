@@ -793,7 +793,7 @@ static bool monster_alert_icon_visible(const monster_type* m_ptr)
 }
 
 static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
-    char* tcp, bool terrain_only, bool physical)
+    char* tcp, bool terrain_only, bool physical, bool preserve_lighting)
 {
     byte a = TERM_DARK; // these are defaults to soothe compilation warnings
     char c = ' '; //
@@ -826,9 +826,11 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
 
     /* Cave flags */
     info = cave_info[y][x];
+    u16b lighting_info = info;
     /* Sample actual neighbour artwork without changing discovery flags or
      * inspecting actors. Only pixels inside an already displayed cell use it. */
     if (physical) info |= CAVE_MARK | CAVE_SEEN;
+    if (!preserve_lighting) lighting_info = info;
 
     bool hide_square = false;
     bool rage_active = false;
@@ -869,7 +871,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
             (void)apply_style_floor_graphics(y, x, feat, info, &a, &c);
 
             /* Skip special light for the player tile. */
-            special_lighting_floor(&a, &c, info, cave_light[y][x]);
+            special_lighting_floor(&a, &c, lighting_info, cave_light[y][x]);
         }
 
         /* Unknown */
@@ -1076,11 +1078,11 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
                 }
 
                 /* Standard lighting effects (darkens unlit walls). */
-                special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
+                special_lighting_wall(&a, &c, feat, lighting_info, cave_light[y][x]);
             }
 #else
             /* Depth-based walls disabled, use standard lighting only */
-            special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
+            special_lighting_wall(&a, &c, feat, lighting_info, cave_light[y][x]);
 #endif /* DEPTH_BASED_WALLS */
 
             apply_flood_trap_variant_visual(y, x, &a, &c);
@@ -1123,7 +1125,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
         cave_feature_visual(floor_ptr, &terrain_a, &terrain_c);
 
         (void)apply_style_floor_graphics(y, x, floor_feat, info, &terrain_a, &terrain_c);
-        special_lighting_floor(&terrain_a, &terrain_c, info, cave_light[y][x]);
+        special_lighting_floor(&terrain_a, &terrain_c, lighting_info, cave_light[y][x]);
     }
 
     (*tap) = terrain_a;
@@ -1309,7 +1311,7 @@ static void map_info_aux(int y, int x, byte* ap, char* cp, byte* tap,
 
 void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 {
-    map_info_aux(y, x, ap, cp, tap, tcp, false, false);
+    map_info_aux(y, x, ap, cp, tap, tcp, false, false, false);
 }
 
 /*
@@ -1327,7 +1329,7 @@ void map_info_terrain(int y, int x, byte* tap, char* tcp)
     if (!tap || !tcp)
         return;
 
-    map_info_aux(y, x, &a, &c, tap, tcp, true, false);
+    map_info_aux(y, x, &a, &c, tap, tcp, true, false, false);
 }
 
 /* Visibility-free terrain sampling for connections inside a displayed tile.
@@ -1337,29 +1339,47 @@ void map_info_actual_terrain(int y, int x, byte* tap, char* tcp)
     byte a = TERM_DARK;
     char c = ' ';
     if (!tap || !tcp) return;
-    map_info_aux(y, x, &a, &c, tap, tcp, true, true);
+    map_info_aux(y, x, &a, &c, tap, tcp, true, true, false);
+}
+
+/* Connections follow physical terrain, but copying its pixels must preserve
+ * the source tile's lighting. Forcing CAVE_SEEN for both visibility and light
+ * paints a bright rim around remembered floors next to chasms or water. */
+void map_info_actual_terrain_appearance(int y, int x, byte* tap, char* tcp)
+{
+    byte a = TERM_DARK;
+    char c = ' ';
+    if (!tap || !tcp) return;
+    map_info_aux(y, x, &a, &c, tap, tcp, true, true, true);
 }
 
 static void map_info_floor_terrain_aux(int y, int x, byte* tap, char* tcp,
-    bool physical)
+    bool physical, bool preserve_lighting)
 {
     if (!tap || !tcp || !in_bounds(y, x)) return;
     u16b info = cave_info[y][x];
+    u16b lighting_info = info;
     if (physical) info |= CAVE_MARK | CAVE_SEEN;
+    if (!preserve_lighting) lighting_info = info;
     cave_feature_visual(&f_info[FEAT_FLOOR], tap, tcp);
     (void)apply_style_floor_graphics(y, x, FEAT_FLOOR, info, tap, tcp);
-    special_lighting_floor(tap, tcp, info, cave_light[y][x]);
+    special_lighting_floor(tap, tcp, lighting_info, cave_light[y][x]);
 }
 
 /* Terrain sampling without copying a feature's foreground sprite. */
 void map_info_floor_terrain(int y, int x, byte* tap, char* tcp)
 {
-    map_info_floor_terrain_aux(y, x, tap, tcp, false);
+    map_info_floor_terrain_aux(y, x, tap, tcp, false, false);
 }
 
 void map_info_actual_floor_terrain(int y, int x, byte* tap, char* tcp)
 {
-    map_info_floor_terrain_aux(y, x, tap, tcp, true);
+    map_info_floor_terrain_aux(y, x, tap, tcp, true, false);
+}
+
+void map_info_actual_floor_appearance(int y, int x, byte* tap, char* tcp)
+{
+    map_info_floor_terrain_aux(y, x, tap, tcp, true, true);
 }
 
 /*

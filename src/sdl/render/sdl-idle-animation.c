@@ -73,10 +73,6 @@ static SDL_Texture* water_depth_transition_texture;
 static SDL_Texture* water_bank_overlay_texture;
 static bool water_depth_transition_load_attempted;
 static bool water_bank_overlay_load_attempted;
-static SDL_Texture* snow_dirt_transition_texture;
-static SDL_Texture* basalt_dirt_transition_texture;
-static bool snow_dirt_transition_load_attempted;
-static bool basalt_dirt_transition_load_attempted;
 static SDL_Texture* ice_water_shallow_texture;
 static SDL_Texture* ice_water_deep_texture;
 static SDL_Texture* ice_water_bank_texture;
@@ -269,127 +265,6 @@ static SDL_Texture* load_transition_atlas(SDL_Texture** texture,
         SDL_SetTextureBlendMode(*texture, SDL_BLENDMODE_BLEND);
     }
     return *texture;
-}
-
-/* Resolve the displayed floor, including data-driven shore overrides. A dirt
- * cell beside ice can display snow: its stored style must not cut a dirt seam
- * into another snow tile. Match the existing material families and variants
- * instead of inferring the visible surface from cave_color. */
-static bool material_floor_style(int y, int x, int* style_out, bool physical)
-{
-    u16b info;
-    byte feat;
-    if (!p_ptr || p_ptr->image || !in_bounds(y, x)
-        || (unsigned)y >= (unsigned)p_ptr->cur_map_hgt
-        || (unsigned)x >= (unsigned)p_ptr->cur_map_wid)
-        return false;
-    feat = physical ? cave_environment_actual_underlay(y, x)
-        : cave_environment_display_underlay(y, x);
-    if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR
-        && feat != FEAT_SUNLIGHT)
-        return false;
-    info = cave_info[y][x];
-    if (!physical && !(info & CAVE_SEEN)
-        && (!(info & CAVE_MARK) || cave_light[y][x] <= 0))
-        return false;
-    if (!physical && !p_ptr->is_dead && (p_ptr->rage || g_labyrinth_view_active)
-        && !(info & CAVE_SEEN))
-        return false;
-
-    int style = -1;
-    byte a = 0;
-    char c = 0;
-    if (physical) map_info_actual_terrain(y, x, &a, &c);
-    else map_info_terrain(y, x, &a, &c);
-    if (!(a & TILE_FLAG) || !((byte)c & TILE_FLAG)) return false;
-    const int materials[] = { CAVE_STYLE_SNOW, CAVE_STYLE_BASALT, CAVE_STYLE_DIRT };
-    for (int i = 0; i < (int)N_ELEMENTS(materials); i++)
-    {
-        int index = materials[i];
-        if (!style_info || !z_info || index >= z_info->style_max
-            || !style_info[index].name) continue;
-        const style_type* source = &style_info[index];
-        for (int variant = 0; variant < MAX(1, MIN(8, source->floor_count)); variant++)
-        {
-            byte row = source->floor_count ? source->floor_rowv[variant] : source->floor_row;
-            byte col = source->floor_count ? source->floor_colv[variant] : source->floor_col;
-            if ((a & TILE_INDEX_MASK) == row
-                && (((byte)c & TILE_INDEX_MASK) == col
-                    || ((byte)c & TILE_INDEX_MASK) == col + 1))
-            {
-                style = index;
-                break;
-            }
-        }
-        if (style >= 0) break;
-    }
-    if (style_out) *style_out = style;
-    return true;
-}
-
-static int visible_elemental_floor_style(int y, int x)
-{
-    int style;
-    if (!material_floor_style(y, x, &style, false))
-        return -1;
-    return (style == CAVE_STYLE_SNOW || style == CAVE_STYLE_BASALT)
-        ? style : -1;
-}
-
-static byte elemental_transition_mask(int y, int x)
-{
-    static const int dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
-    static const int dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
-    bool floor[8];
-    int style[8];
-    byte mask = 255;
-    for (int i = 0; i < 8; i++)
-        floor[i] = material_floor_style(y + dy[i], x + dx[i], &style[i], true);
-    for (int i = 0; i < 8; i++)
-    {
-        /* Only real dirt supplies dirt pixels. A diagonal needs two physical
-         * floor sides; walls and hazards still block it. */
-        if (floor[i] && style[i] == CAVE_STYLE_DIRT
-            && (!(i & 1) || (floor[i - 1] && floor[(i + 1) % 8])))
-            mask &= (byte)~(1u << i);
-    }
-    return mask;
-}
-
-static SDL_Texture* load_elemental_transition_texture(int style)
-{
-    if (style == CAVE_STYLE_SNOW)
-        return load_transition_atlas(&snow_dirt_transition_texture,
-            &snow_dirt_transition_load_attempted,
-            "lib/xtra/graf/transition_snow_on_dirt.png", 1);
-    if (style == CAVE_STYLE_BASALT)
-        return load_transition_atlas(&basalt_dirt_transition_texture,
-            &basalt_dirt_transition_load_attempted,
-            "lib/xtra/graf/transition_basalt_on_dirt.png", 1);
-    return NULL;
-}
-
-static bool draw_elemental_transition(int y, int x, const SDL_FRect* dst)
-{
-    int style = visible_elemental_floor_style(y, x);
-    if (style < 0)
-        return false;
-    /* A fully connected cell already has the correct variant from F:TILE;
-     * skipping it preserves the four snow floor variants and avoids replacing
-     * a solid basalt tile with a single atlas sample. */
-    byte mask = elemental_transition_mask(y, x);
-    if (mask == 255)
-        return false;
-
-    SDL_Texture* transition = load_elemental_transition_texture(style);
-    if (!transition)
-        return false;
-    SDL_FRect src = { (mask % 16) * TILE_SIZE,
-        (mask / 16) * TILE_SIZE, TILE_SIZE, TILE_SIZE };
-    bool live = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
-    int light = live ? 255 : 96;
-    SDL_SetTextureColorMod(transition, light, light, light);
-    return SDL_RenderTexture(g_state.renderer, transition, &src, dst);
 }
 
 static SDL_Texture* load_liquid_transition_texture(byte feat)
@@ -880,12 +755,6 @@ void sdl_idle_animation_shutdown(void)
     SDL_DestroyTexture(lava_transition_texture);
     lava_transition_texture = NULL;
     lava_transition_load_attempted = false;
-    SDL_DestroyTexture(snow_dirt_transition_texture);
-    snow_dirt_transition_texture = NULL;
-    snow_dirt_transition_load_attempted = false;
-    SDL_DestroyTexture(basalt_dirt_transition_texture);
-    basalt_dirt_transition_texture = NULL;
-    basalt_dirt_transition_load_attempted = false;
     SDL_DestroyTexture(poison_texture);
     poison_texture = NULL;
     poison_load_attempted = false;
@@ -935,8 +804,6 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
         if (FEAT_IS_BRIDGE(cave_environment_known_feature(y, x))) sdl_draw_bridge_deck(y, x, dst);
         return drawn;
     }
-    if (g_state.use_tiles && draw_elemental_transition(y, x, dst))
-        return true;
     byte kind = visible_fixture(y, x);
     bool live;
     bool animate;
