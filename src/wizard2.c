@@ -2302,8 +2302,8 @@ static void do_cmd_wiz_forget(void)
     // clear the cheat flags
     p_ptr->noscore = 0x0000;
 
-    /* Forget turns */
-    turn = 1;
+    /* Reset the player's counters while keeping the world clock monotonic.
+     * Dungeon events and environmental deadlines still use that clock. */
     playerturn = 1;
     min_depth_counter = 0;
 
