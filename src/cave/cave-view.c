@@ -1145,6 +1145,12 @@ static void update_view_aux(bool generation_preview)
         {
             fast_cave_info[g] &= ~(CAVE_SEEN);
         }
+
+        /* Veil gives adjacent awareness through the existing LOS. Keep the
+         * actual light buffer and ambient glow unchanged so this cannot emit
+         * light, affect monster sight, or reveal any more distant terrain. */
+        if (player_dark_adjacency(y, x))
+            fast_cave_info[g] |= CAVE_SEEN;
     }
 
     /*** Step 3 -- Complete the algorithm ***/

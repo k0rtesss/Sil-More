@@ -15,7 +15,7 @@ int player_permanent_stat(int stat)
 
     if (!p_ptr || stat < 0 || stat >= A_MAX) return 0;
     value = p_ptr->stat_base[stat];
-    for (size_t i = 0; i < N_ELEMENTS(skill); ++i)
+    for (size_t i = 0; !insight_reworked_enabled() && i < N_ELEMENTS(skill); ++i)
     {
         if (attribute[i] == stat && p_ptr->innate_ability[skill[i]][ability[i]]
             && p_ptr->active_ability[skill[i]][ability[i]])
@@ -43,6 +43,9 @@ int smithing_effective_stat(int stat)
 int ability_required_skill(const ability_type* ability, int skill)
 {
     if (!ability || skill < 0 || skill >= S_MAX) return 0;
+    if (insight_reworked_enabled())
+        return MAX(ability->policy_skill_req[skill],
+            skill == ability->policy_skill ? ability->policy_level : 0);
     return MAX(ability->skill_req[skill],
         skill == ability->skilltype
             && !(insight_system_enabled() && ability->insight_branch)
@@ -64,6 +67,7 @@ bool ability_skill_requirements_met(const ability_type* ability)
 bool ability_stat_requirements_met(const ability_type* ability)
 {
     if (!ability) return false;
+    if (insight_reworked_enabled()) return true;
     for (int i = 0; i < A_MAX; ++i)
         if (ability->stat_req[i] > 0
             && (ability->skilltype == S_SMT ? smithing_effective_stat(i)
@@ -82,11 +86,17 @@ int ability_stat_score_scaled(const ability_type* ability, bool permanent)
     if (!ability || !p_ptr) return 0;
     for (int i = 0; i < A_MAX; ++i)
         if (ability->stat_score_weight_set[i])
-            scaled += ability->stat_score_weight[i]
-                * (permanent
-                    ? (ability->skilltype == S_SMT ? smithing_effective_stat(i)
-                                                   : player_permanent_stat(i))
-                    : p_ptr->stat_use[i]);
+        {
+            int value = permanent
+                ? (ability->skilltype == S_SMT ? smithing_effective_stat(i)
+                                               : player_permanent_stat(i))
+                : p_ptr->stat_use[i];
+            if (insight_reworked_enabled() && ability->skilltype == S_SMT
+                && (ability->abilitynum == SMT_ENCHANTMENT
+                    || ability->abilitynum == SMT_EXPERTISE
+                    || ability->abilitynum == SMT_ARTEFACT)) value = MAX(0, value);
+            scaled += ability->stat_score_weight[i] * value;
+        }
     return scaled;
 }
 
@@ -154,6 +164,14 @@ int smithing_mastery_stat_bonus_scaled(int abilitynum)
 {
     if (!p_ptr || !b_info || !z_info || abilitynum < 0 || abilitynum >= ABILITIES_MAX
         || !p_ptr->active_ability[S_SMT][abilitynum]) return 0;
+    if (insight_reworked_enabled())
+    {
+        int stat = abilitynum == SMT_EXPERTISE ? A_DEX : A_GRA;
+        if (abilitynum != SMT_EXPERTISE && abilitynum != SMT_ENCHANTMENT
+            && abilitynum != SMT_ARTEFACT) return 0;
+        return (abilitynum == SMT_ENCHANTMENT ? 50 : 100)
+            * MAX(0, smithing_effective_stat(stat));
+    }
     if (insight_ability_upgrade_cost(S_SMT, abilitynum)
         && !p_ptr->insight_ability_upgraded[S_SMT][abilitynum]) return 0;
     return ability_stat_score_scaled(&b_info[ability_index(S_SMT, abilitynum)], true);

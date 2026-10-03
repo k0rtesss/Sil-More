@@ -211,6 +211,14 @@ void wr_extra(void)
         for (int ability = 0; ability < ABILITIES_MAX; ++ability)
             wr_byte(p_ptr->insight_ability_upgraded[i][ability] ? 1 : 0);
 
+    /* 0.9.9.1: freeze progression policy and preserve the light toggle. */
+    byte ruleset = p_ptr->insight_ruleset;
+    if (ruleset < INSIGHT_RULESET_CLASSIC || ruleset > INSIGHT_RULESET_REWORKED)
+        ruleset = insight_system_enabled()
+            ? INSIGHT_RULESET_LEGACY : INSIGHT_RULESET_CLASSIC;
+    wr_byte(ruleset);
+    wr_byte(p_ptr->light_dimmed ? 1 : 0);
+
     /* Reserved: legacy item-quality squelch array (now unused) */
     for (i = 0; i < LEGACY_ITEM_QUALITY_BYTES; i++)
         wr_byte(0);

@@ -640,6 +640,7 @@ void do_cmd_fire(int quiver)
         if (shot >= selected_arrows)
             break;
         bool hit_wall = false;
+        bool attack_resolved = false;
         bool ghost_arrow = false;
         bool warding_girdle_triggered = false;
         int missed_monsters = 0;
@@ -781,8 +782,14 @@ void do_cmd_fire(int quiver)
                 m_ptr = &mon_list[cave_m_idx[y][x]];
                 r_ptr = &r_info[m_ptr->r_idx];
 
+                bool silent_kill_candidate = insight_reworked_enabled()
+                    && p_ptr->active_ability[S_STL][STL_SILENT_PASSAGE]
+                    && m_ptr->alertness < ALERTNESS_ALERT;
+                attack_resolved = true;
+
                 if (abort_for_mercy(m_ptr))
                 {
+                    player_attack_audible = true;
                     return;
                 }
 
@@ -1104,6 +1111,8 @@ void do_cmd_fire(int quiver)
                     // hit the monster, check for death
                     p_ptr->killed_enemy_with_arrow = mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1);
+                    if (!p_ptr->killed_enemy_with_arrow || !silent_kill_candidate)
+                        player_attack_audible = true;
                     if (!p_ptr->killed_enemy_with_arrow)
                         monster_poison_brand(cave_m_idx[y][x], i_ptr,
                             j_ptr, net_dam);
@@ -1244,6 +1253,7 @@ void do_cmd_fire(int quiver)
                 else
                 {
                     quest_beta_bow_miss();
+                    player_attack_audible = true;
                     // there is at least one target left on the trajectory
                     targets_remaining = true;
                 }
@@ -1259,6 +1269,10 @@ void do_cmd_fire(int quiver)
             warding_girdle_spawn_glyphs(y, x, last_step_dy, last_step_dx);
             warding_girdle_triggered = true;
         }
+
+        /* An empty or blocked shot has no quiet killing hit. */
+        if (!attack_resolved)
+            player_attack_audible = true;
 
         if (!object_known_p(j_ptr) && noticed_radiance)
         {
@@ -1801,6 +1815,7 @@ void do_cmd_throw(bool automatic)
     object_type object_type_body;
 
     bool hit_body = false;
+    bool attack_resolved = false;
     bool hit_wall = false;
     bool treat_as_throwing = false;
     bool has_throwing_ability = false;
@@ -2294,6 +2309,11 @@ void do_cmd_throw(bool automatic)
             m_ptr = &mon_list[cave_m_idx[y][x]];
             r_ptr = &r_info[m_ptr->r_idx];
 
+            bool silent_kill_candidate = insight_reworked_enabled()
+                && p_ptr->active_ability[S_STL][STL_SILENT_PASSAGE]
+                && m_ptr->alertness < ALERTNESS_ALERT;
+            attack_resolved = true;
+
             bool potion_effect = potion_has_thrown_effect(i_ptr);
             bool fatal_blow = false;
             int dist = distance(p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx);
@@ -2751,6 +2771,8 @@ void do_cmd_throw(bool automatic)
                 }
 
                 display_hit(y, x, net_dam, GF_HURT, fatal_blow);
+                if (!fatal_blow || !silent_kill_candidate || potion_effect)
+                    player_attack_audible = true;
                 if (thrown_hit)
                 {
                     apply_weapon_combat_effects(
@@ -2813,6 +2835,7 @@ void do_cmd_throw(bool automatic)
             }
             else
             {
+                player_attack_audible = true;
                 if (power_throw_hit)
                 {
                     update_combat_rolls_no_damage();
@@ -2834,6 +2857,9 @@ void do_cmd_throw(bool automatic)
         msg_print("The bottle breaks.");
         (void)thrown_potion_effects(i_ptr, y, x);
     }
+
+    if (!attack_resolved)
+        player_attack_audible = true;
 
     /* Have to set this here as well, just in case... */
     /* Monsters might notice */

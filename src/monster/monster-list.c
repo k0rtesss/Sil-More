@@ -119,6 +119,9 @@ void delete_monster_idx(int i)
 {
     int x, y;
 
+    if (silent_passage_exchange_target == i)
+        silent_passage_exchange_target = 0;
+
     monster_type* m_ptr = &mon_list[i];
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
@@ -270,6 +273,9 @@ static void compact_monsters_aux(int i1, int i2)
     /* Hack -- Update the target */
     if (p_ptr->target_who == i1)
         p_ptr->target_who = i2;
+
+    if (silent_passage_exchange_target == i1)
+        silent_passage_exchange_target = i2;
 
     /* Hack -- Update the health bar */
     if (p_ptr->health_who == i1)
@@ -435,6 +441,8 @@ void wipe_mon_list(void)
 {
     int i;
 
+    silent_passage_exchange_target = 0;
+
     monster_social_reset();
 
     /* Delete all the monsters */
@@ -571,4 +579,3 @@ s16b monster_lookup_guid_text(const char* text)
 
     return monster_lookup_guid(guid);
 }
-

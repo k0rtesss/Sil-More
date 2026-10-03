@@ -75,11 +75,14 @@ static const struct keybind_entry command_secondary_keybinds[] = {
     {KTRL('E'), NULL, "Toggle inventory / equipment pane", "\005", false},
     {KTRL('S'), NULL, "Save game", "\023", false},
     {KTRL('X'), "\003", "Save and quit", "\030", false},
+    /* Keep new-mode-only commands last so legacy catalogs retain their size. */
+    {KTRL('L'), NULL, "Dim / restore light", "\014", false},
 };
 
 #define COMMAND_PRIMARY_KEYBIND_COUNT \
     ((int)N_ELEMENTS(command_primary_keybinds))
 #define COMMAND_SECONDARY_KEYBIND_COUNT \
-    ((int)N_ELEMENTS(command_secondary_keybinds))
+    ((int)N_ELEMENTS(command_secondary_keybinds) \
+        - (insight_reworked_enabled() ? 0 : 1))
 
 #endif

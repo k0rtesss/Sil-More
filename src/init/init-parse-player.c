@@ -976,37 +976,40 @@ errr parse_c_info(char* buf, header* head)
     {
         char *t = buf + 2; /* Skip 'C:' */
         int   pair = 0;
-        char *stat_start, *ability_start;
+        char *end;
+        char *comment = strchr(t, '#');
 
         if (!ph_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+        /* Inline comments are prose, never colon-separated grant data. */
+        if (comment) *comment = '\0';
+        for (int slot = 0; slot < CHARACTER_ABILITY_MAX; ++slot)
+        {
+            ph_ptr->a_adj[slot][0] = -1;
+            ph_ptr->a_adj[slot][1] = -1;
+        }
 
         /* Debug: which character we're parsing into */
         log_debug("Parsing abilities for character \"%s\" from line: %s",
                 head->name_ptr + ph_ptr->name, buf);
 
         /* Read up to CHARACTER_ABILITY_MAX of ":stat:ability" pairs */
-        while (pair < CHARACTER_ABILITY_MAX && t && *t)
+        while (*t)
         {
-            /* Find first colon for stat */
-            if (*t == ':') t++; /* Skip leading colon if present */
-            stat_start = t;
-            
-            t = strchr(t, ':');
-            if (!t) break;
-            *t++ = '\0';
-            
-            if (!*stat_start) break; /* Empty stat */
-            ph_ptr->a_adj[pair][0] = (s16b)atoi(stat_start);
-
-            /* Find second colon for ability */
-            ability_start = t;
-            t = strchr(t, ':');
-            if (t) {
-                *t++ = '\0';
-            }
-            
-            if (!*ability_start) break; /* Empty ability */
-            ph_ptr->a_adj[pair][1] = (s16b)atoi(ability_start);
+            long skill, ability;
+            while (isspace((unsigned char)*t)) ++t;
+            if (!*t) break;
+            if (pair >= CHARACTER_ABILITY_MAX) return PARSE_ERROR_GENERIC;
+            skill = strtol(t, &end, 10);
+            if (end == t || *end != ':' || skill < 0 || skill >= S_MAX)
+                return PARSE_ERROR_GENERIC;
+            t = end + 1;
+            ability = strtol(t, &end, 10);
+            if (end == t || ability < 0 || ability >= ABILITIES_MAX)
+                return PARSE_ERROR_GENERIC;
+            while (isspace((unsigned char)*end)) ++end;
+            if (*end && *end != ':') return PARSE_ERROR_GENERIC;
+            ph_ptr->a_adj[pair][0] = (s16b)skill;
+            ph_ptr->a_adj[pair][1] = (s16b)ability;
 
             log_debug("  parsed slot %d -> stat=%d ability=%d",
                     pair,
@@ -1015,8 +1018,9 @@ errr parse_c_info(char* buf, header* head)
 
             pair++;
             
-            /* If no more colons, we're done */
-            if (!t) break;
+            if (!*end) break;
+            t = end + 1;
+            if (!*t) return PARSE_ERROR_GENERIC;
         }
 
         log_debug("  total %d ability pairs parsed", pair);

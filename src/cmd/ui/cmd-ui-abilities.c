@@ -109,6 +109,9 @@ bool prereqs(int skilltype, int abilitynum);
 
 static bool ability_uses_insight_points(int skilltype, int abilitynum)
 {
+    if (insight_reworked_enabled())
+        return b_info[ability_index(skilltype, abilitynum)].policy_kind
+            == ABILITY_POLICY_INSIGHT;
     return insight_system_enabled()
         && (b_info[ability_index(skilltype, abilitynum)].insight_cost > 0
             || b_info[ability_index(skilltype, abilitynum)].insight_branch
@@ -117,6 +120,8 @@ static bool ability_uses_insight_points(int skilltype, int abilitynum)
 
 static bool ability_in_insight_branch(const ability_type* ability)
 {
+    if (insight_reworked_enabled())
+        return ability && ability->policy_kind == ABILITY_POLICY_INSIGHT;
     for (int depth = 0; ability_is_stage(ability) && depth < ABILITIES_MAX; ++depth)
         ability = ability_stage_parent(ability);
     return insight_system_enabled() && ability && ability->insight_branch;
@@ -124,6 +129,8 @@ static bool ability_in_insight_branch(const ability_type* ability)
 
 static int ability_purchase_insight_cost(int skilltype, int abilitynum)
 {
+    if (insight_reworked_enabled())
+        return ability_policy_insight_price(&b_info[ability_index(skilltype, abilitynum)]);
     if (!ability_uses_insight_points(skilltype, abilitynum)) return 0;
     const ability_type* ability = &b_info[ability_index(skilltype, abilitynum)];
     if (ability_is_stage(ability)) return ability->stage_cost;
@@ -151,6 +158,7 @@ static int ability_purchase_exp_cost(int skilltype)
 
 static int ability_purchase_xp(const ability_type* ability)
 {
+    if (insight_reworked_enabled()) return ability_policy_xp_price(ability);
     if (ability_in_insight_branch(ability) || ability_is_stage(ability)) return 0;
     if (!insight_system_enabled())
         return ability_purchase_exp_cost(ability->skilltype);
@@ -190,8 +198,8 @@ static void ability_menu_sort_entries_by_level(ability_type* entries[],
         int j = i - 1;
 
         while ((j >= 0)
-            && (ability_required_skill(entry, entry->skilltype)
-                < ability_required_skill(entries[j], entries[j]->skilltype)))
+            && (ability_required_skill(entry, ability_learning_skill(entry))
+                < ability_required_skill(entries[j], ability_learning_skill(entries[j]))))
         {
             entries[j + 1] = entries[j];
             attrs[j + 1] = attrs[j];
@@ -1056,6 +1064,8 @@ static bool prereq_abilities_met(const ability_type* b_ptr)
 {
     int i;
 
+    if (insight_reworked_enabled()) return ability_policy_prerequisites_met(b_ptr);
+
     /* An Insight upgrade replaces the old alternative routes with its full chain.
      * Neither Quick Study nor an inactive opposing choice can bypass this. */
     if (ability_is_stage(b_ptr))
@@ -1088,6 +1098,8 @@ bool prereqs(int skilltype, int abilitynum)
     ability_type* b_ptr;
 
     b_ptr = &b_info[ability_index(skilltype, abilitynum)];
+
+    if (!ability_policy_available(b_ptr)) return false;
 
     if (!ability_skill_requirements_met(b_ptr))
     {
@@ -3292,7 +3304,10 @@ static void ability_browser_build_summary(int skilltype, char* summary,
     {
         strnfmt(next_skill, sizeof(next_skill), "%d XP",
             ability_browser_next_skill_cost(skilltype));
-        if (insight_system_enabled())
+        if (insight_reworked_enabled())
+            SDL_strlcpy(ability_price, "500/800 XP base or 1/2 Insight",
+                sizeof(ability_price));
+        else if (insight_system_enabled())
             SDL_strlcpy(ability_price, "300 - 50 x affinity per rank",
                 sizeof(ability_price));
         else
@@ -3823,12 +3838,12 @@ static void ability_browser_sort_entries(ability_browser_entry entries[],
     for (int i = 1; i < count; i++)
     {
         ability_browser_entry entry = entries[i];
-        int level = ability_required_skill(entry.b_ptr, entry.b_ptr->skilltype);
+        int level = ability_required_skill(entry.b_ptr, ability_learning_skill(entry.b_ptr));
         int j = i - 1;
 
         while (j >= 0
-            && (level < ability_required_skill(entries[j].b_ptr, entries[j].b_ptr->skilltype)
-                || (level == ability_required_skill(entries[j].b_ptr, entries[j].b_ptr->skilltype)
+            && (level < ability_required_skill(entries[j].b_ptr, ability_learning_skill(entries[j].b_ptr))
+                || (level == ability_required_skill(entries[j].b_ptr, ability_learning_skill(entries[j].b_ptr))
                     && entry.abilitynum < entries[j].abilitynum)))
         {
             entries[j + 1] = entries[j];
@@ -3864,18 +3879,19 @@ static int ability_browser_collect_entries(int skilltype,
         ability_type* b_ptr = &b_info[i];
         ability_browser_entry* entry;
 
-        if (!b_ptr->name)
+        if (!b_ptr->name || !ability_policy_available(b_ptr))
             continue;
         if (skilltype == ABILITY_BROWSER_INSIGHT
             ? !ability_in_insight_branch(b_ptr)
-            : b_ptr->skilltype != skilltype || ability_in_insight_branch(b_ptr))
+            : ability_learning_skill(b_ptr) != skilltype
+                || (!insight_reworked_enabled() && ability_in_insight_branch(b_ptr)))
             continue;
         if (b_ptr->abilitynum >= ABILITIES_MAX)
             continue;
         if (skilltype == S_SPC
             && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
             continue;
-        if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
+        if (b_ptr->skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
             continue;
         if (count >= max_entries)
             break;
@@ -3890,26 +3906,26 @@ static int ability_browser_collect_entries(int skilltype,
             && (p_ptr->bane_type > 0))
         {
             strnfmt(entry->name, sizeof(entry->name), "%s-%s",
-                bane_name[p_ptr->bane_type], b_name + b_ptr->name);
+                bane_name[p_ptr->bane_type], ability_display_name(b_ptr));
         }
         else if ((skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
             && (p_ptr->oath_type > 0))
         {
             strnfmt(entry->name, sizeof(entry->name), "%s: %s",
-                b_name + b_ptr->name, oath_name_short(p_ptr->oath_type));
+                ability_display_name(b_ptr), oath_name_short(p_ptr->oath_type));
         }
         else
         {
-            SDL_strlcpy(entry->name, b_name + b_ptr->name,
+            SDL_strlcpy(entry->name, ability_display_name(b_ptr),
                 sizeof(entry->name));
         }
     }
 
-    if (skilltype == S_SMT || skilltype == S_ARC || skilltype == S_MEL
+    if (insight_reworked_enabled() || skilltype == S_SMT || skilltype == S_ARC || skilltype == S_MEL
         || skilltype == S_PER)
         ability_browser_sort_entries(entries, count);
 
-    if (insight_system_enabled())
+    if (insight_system_enabled() && !insight_reworked_enabled())
     {
         ability_browser_entry ordered[ABILITY_BROWSER_ENTRIES_MAX];
         bool path[ABILITIES_MAX] = {0};
@@ -4051,7 +4067,7 @@ static void ability_browser_draw_ability_list(
 
         if (skilltype == ABILITY_BROWSER_INSIGHT) level[0] = '\0';
         else strnfmt(level, sizeof(level), "%2d",
-            ability_required_skill(entry->b_ptr, entry->b_ptr->skilltype));
+            ability_required_skill(entry->b_ptr, ability_learning_skill(entry->b_ptr)));
         ability_browser_put_fitted(level_col, y, 2, level_attr, level);
         indent = entry->stage_depth ? MIN(2 * entry->stage_depth, MAX(2, name_w - 8)) : 0;
         if (indent)
@@ -4299,6 +4315,80 @@ static int ability_browser_oath_for_special(int abilitynum)
     }
 }
 
+static void ability_browser_add_policy_requirements(
+    ability_browser_desc_line lines[], int* line_count,
+    const ability_type* ability, int width)
+{
+    char buf[320];
+    int identity_skill = ability->skilltype, local = ability->abilitynum;
+    ability_desc_add_blank(lines, line_count);
+    if (p_ptr->innate_ability[identity_skill][local])
+    {
+        ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Permanently known");
+        ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN,
+            "No learning payment or missing-ancestor debt. Action requirements still apply.", width);
+        return;
+    }
+    ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Learning requirements");
+    int learning_skill = ability_learning_skill(ability);
+    for (int order = 0; order <= S_MAX; ++order)
+    {
+        int skill = order == 0 ? learning_skill : order - 1;
+        if (order && skill == learning_skill) continue;
+        int need = ability_required_skill(ability, skill);
+        if (!need) continue;
+        strnfmt(buf, sizeof(buf), "%s: %d invested (%d now)",
+            skill_names_full[skill], need, p_ptr->skill_base[skill]);
+        ability_desc_add_wrapped(lines, line_count,
+            p_ptr->skill_base[skill] >= need ? TERM_L_GREEN : TERM_L_DARK, buf, width);
+    }
+    for (int required = 0; required < 2; ++required)
+    {
+        int count = required ? ability->policy_and_count : ability->policy_or_count;
+        const byte* skills = required ? ability->policy_and_skill : ability->policy_or_skill;
+        const byte* locals = required ? ability->policy_and_ability : ability->policy_or_ability;
+        if (!required && count)
+            ability_desc_add_line(lines, line_count, TERM_SLATE, "Learn one of:");
+        for (int i = 0; i < count; ++i)
+        {
+            const ability_type* parent = &b_info[ability_index(skills[i], locals[i])];
+            strnfmt(buf, sizeof(buf), "%s%s", required ? "Required: " : "  ",
+                ability_display_name(parent));
+            ability_desc_add_wrapped(lines, line_count,
+                p_ptr->innate_ability[skills[i]][locals[i]] ? TERM_L_GREEN : TERM_L_DARK,
+                buf, width);
+        }
+    }
+    if (identity_skill == S_SNG && local == SNG_WOVEN_THEMES)
+        ability_desc_add_wrapped(lines, line_count, TERM_SLATE,
+            "Know two singable songs permanently.", width);
+    if (identity_skill == S_PER && local == PER_BANE)
+        ability_desc_add_wrapped(lines, line_count, TERM_SLATE,
+            "Four kills of the chosen monster family.", width);
+    if (p_ptr->have_ability[identity_skill][local])
+    {
+        ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN,
+            "Equipment supplies this ability, but cannot teach its descendants.", width);
+        return;
+    }
+    if (ability->policy_kind != ABILITY_POLICY_XP
+        && ability->policy_kind != ABILITY_POLICY_INSIGHT) return;
+    ability_skill_training training;
+    if (!ability_browser_plan_training(ability, &training)) return;
+    char price[80];
+    ability_format_price(price, sizeof(price), ability);
+    strnfmt(buf, sizeof(buf), "Ability: %s. Training: %d XP.",
+        price, training.total_cost);
+    ability_desc_add_wrapped(lines, line_count, TERM_L_WHITE, buf, width);
+    int total_xp = ability_purchase_xp(ability) + training.total_cost;
+    int ip = ability_purchase_insight_cost(identity_skill, local);
+    strnfmt(buf, sizeof(buf), "Available: %ld XP, %ld Insight.",
+        (long)p_ptr->new_exp, (long)p_ptr->insight_points);
+    ability_desc_add_wrapped(lines, line_count,
+        total_xp <= p_ptr->new_exp && ip <= p_ptr->insight_points
+            ? TERM_L_GREEN : TERM_L_DARK, buf, width);
+}
+
 static void ability_browser_add_prerequisites(
     ability_browser_desc_line lines[], int* line_count, int skilltype,
     const ability_type* b_ptr, int width)
@@ -4307,6 +4397,12 @@ static void ability_browser_add_prerequisites(
 
     if (!b_ptr)
         return;
+
+    if (insight_reworked_enabled())
+    {
+        ability_browser_add_policy_requirements(lines, line_count, b_ptr, width);
+        return;
+    }
 
     ability_desc_add_blank(lines, line_count);
     ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Requirements");
@@ -4357,7 +4453,7 @@ static void ability_browser_add_prerequisites(
             const ability_type* candidate = ability_stage_parent_at(b_ptr, i);
             bool path_met = ability_stage_parent_path_met(b_ptr, i);
             strnfmt(buf, sizeof(buf), "Previous stage: %s (%s)",
-                candidate ? b_name + candidate->name : "missing",
+                candidate ? ability_display_name(candidate) : "missing",
                 parent_count > 1 ? (path_met ? "path learned" : "alternative")
                                  : "must be learned");
             ability_desc_add_wrapped(lines, line_count,
@@ -4365,7 +4461,7 @@ static void ability_browser_add_prerequisites(
         }
         if (missing && parent_count == 1 && missing != parent)
         {
-            strnfmt(buf, sizeof(buf), "Earlier stage still needed: %s", b_name + missing->name);
+            strnfmt(buf, sizeof(buf), "Earlier stage still needed: %s", ability_display_name(missing));
             ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
         }
         else if (missing && parent_count > 1)
@@ -4375,7 +4471,7 @@ static void ability_browser_add_prerequisites(
         }
         if (conflict)
         {
-            strnfmt(buf, sizeof(buf), "Other path chosen: %s.", b_name + conflict->name);
+            strnfmt(buf, sizeof(buf), "Other path chosen: %s.", ability_display_name(conflict));
             ability_desc_add_wrapped(lines, line_count, TERM_ORANGE, buf, width);
         }
     }
@@ -4406,7 +4502,7 @@ static void ability_browser_add_prerequisites(
 
             strnfmt(buf, sizeof(buf), "%s%s",
                 (j == 0) ? "Ability: " : "or ",
-                b_name + prereq->name);
+                ability_display_name(prereq));
             ability_desc_add_wrapped(lines, line_count, attr, buf, width);
         }
     }
@@ -4661,6 +4757,47 @@ static void ability_browser_add_current_blocks(
 static void ability_browser_add_progression(ability_browser_desc_line lines[],
     int* line_count, const ability_type* ability, int width)
 {
+    if (insight_reworked_enabled())
+    {
+        char line[320], price[80];
+        ability_format_price(price, sizeof(price), ability);
+        cptr category = ability->policy_kind == ABILITY_POLICY_XP ? "Foundation"
+            : ability->policy_kind == ABILITY_POLICY_INSIGHT
+                ? (ability->policy_cost == 2 ? "Late art" : "Specialization")
+                : "Earned ability";
+        ability_desc_add_blank(lines, line_count);
+        ability_desc_add_heading(lines, line_count, TERM_YELLOW, category);
+        if (ability->policy_kind == ABILITY_POLICY_XP
+            || ability->policy_kind == ABILITY_POLICY_INSIGHT)
+        {
+            strnfmt(line, sizeof(line), "%s learning: %s",
+                skill_names_full[ability_learning_skill(ability)], price);
+            ability_desc_add_wrapped(lines, line_count, TERM_L_WHITE, line, width);
+        }
+        if (ability->policy_role)
+        {
+            strnfmt(line, sizeof(line), "Role: %s", b_text + ability->policy_role);
+            ability_desc_add_wrapped(lines, line_count, TERM_SLATE, line, width);
+        }
+        size_t used = 0;
+        line[0] = '\0';
+        for (int i = 0; i < z_info->b_max; ++i)
+        {
+            const ability_type* child = &b_info[i];
+            if (!child->name || !ability_policy_available(child)) continue;
+            bool linked = false;
+            for (int j = 0; j < child->policy_or_count; ++j)
+                if (child->policy_or_skill[j] == ability->skilltype
+                    && child->policy_or_ability[j] == ability->abilitynum) linked = true;
+            for (int j = 0; j < child->policy_and_count; ++j)
+                if (child->policy_and_skill[j] == ability->skilltype
+                    && child->policy_and_ability[j] == ability->abilitynum) linked = true;
+            if (linked) strnfcat(line, sizeof(line), &used, "%s%s",
+                used ? ", " : "Leads to: ", ability_display_name(child));
+        }
+        if (used) ability_desc_add_wrapped(lines, line_count, TERM_SLATE, line, width);
+        return;
+    }
     if (!insight_system_enabled()) return;
     const ability_type* path[ABILITIES_MAX];
     const ability_type* node = ability;
@@ -4702,7 +4839,7 @@ static void ability_browser_add_progression(ability_browser_desc_line lines[],
             if (!child->name || !ability_stage_has_parent(child, ability)) continue;
             cptr state = p_ptr->innate_ability[child->skilltype][child->abilitynum]
                 ? "learned" : ability_stage_conflict(child) ? "excluded" : "not learned";
-            strnfmt(buf, sizeof(buf), "%s - %d IP (%s)", b_name + child->name,
+            strnfmt(buf, sizeof(buf), "%s - %d IP (%s)", ability_display_name(child),
                 child->stage_cost, state);
             ability_desc_add_wrapped(lines, line_count, TERM_L_WHITE, buf, width);
             if (child->stage_choice_group) choice = true;
@@ -4719,7 +4856,7 @@ static void ability_browser_add_progression(ability_browser_desc_line lines[],
         if (!other->name || !ability_stage_shares_parent(ability, other)
             || !ability_stages_exclusive(ability, other)) continue;
         strnfmt(buf, sizeof(buf), "Exclusive choice: %s OR %s.",
-            b_name + ability->name, b_name + other->name);
+            ability_display_name(ability), ability_display_name(other));
         ability_desc_add_wrapped(lines, line_count, TERM_ORANGE, buf, width);
         if (p_ptr->innate_ability[ability->skilltype][ability->abilitynum]
             && p_ptr->innate_ability[other->skilltype][other->abilitynum])
@@ -4786,7 +4923,7 @@ static int ability_browser_build_description(int skilltype,
             const ability_type* parent = ability_stage_parent_at(b_ptr, parent_index);
             if (!parent) continue;
             strnfcat(parents, sizeof(parents), &used, "%s%s",
-                parent_index ? " or " : "", b_name + parent->name);
+                parent_index ? " or " : "", ability_display_name(parent));
         }
         strnfmt(status, sizeof(status), "Stage %d upgrade of %s.",
             ability_stage_depth(b_ptr) + 1, parents[0] ? parents : "missing parent");
@@ -4796,7 +4933,7 @@ static int ability_browser_build_description(int skilltype,
             const ability_type* other = &b_info[i];
             if (!other->name || !ability_stage_shares_parent(other, b_ptr)
                 || !ability_stages_exclusive(b_ptr, other)) continue;
-            strnfmt(status, sizeof(status), "Choose ONE: this or %s.", b_name + other->name);
+            strnfmt(status, sizeof(status), "Choose ONE: this or %s.", ability_display_name(other));
             ability_desc_add_wrapped(lines, &line_count, TERM_ORANGE, status, width);
         }
     }
@@ -4808,7 +4945,7 @@ static int ability_browser_build_description(int skilltype,
             if (!child->name || !ability_stage_has_parent(child, b_ptr)) continue;
             strnfmt(status, sizeof(status), "%s: %s (%d IP)",
                 child->stage_choice_group ? "Choose one upgrade" : "Upgrade",
-                b_name + child->name, child->stage_cost);
+                ability_display_name(child), child->stage_cost);
             ability_desc_add_wrapped(lines, &line_count, TERM_L_BLUE, status, width);
         }
     }
@@ -4853,8 +4990,8 @@ static int ability_browser_build_description(int skilltype,
     }
     else
     {
-        effect_text = b_ptr->effect
-            ? ability_menu_controller_text(b_text + b_ptr->effect,
+        effect_text = ability_effect_text(b_ptr)[0]
+            ? ability_menu_controller_text(ability_effect_text(b_ptr),
                 effect_controller_text, sizeof(effect_controller_text))
             : NULL;
         desc_text = b_ptr->text
@@ -5443,7 +5580,7 @@ static bool ability_browser_upgrade_choice(int skilltype, int abilitynum)
     }
     const ability_type* ability = &b_info[ability_index(skilltype, abilitynum)];
     strnfmt(prompt, sizeof(prompt), "Unlock %s's Smithing stat bonus for %d IP? ",
-        b_name + ability->name, cost);
+        ability_display_name(ability), cost);
     if (!get_check(prompt) || !insight_upgrade_ability(skilltype, abilitynum)) return false;
     msg_print("Smithing stat bonus unlocked.");
     handle_stuff();
@@ -5461,6 +5598,16 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
     if (skilltype < 0 || skilltype >= S_MAX || abilitynum < 0
         || abilitynum >= ABILITIES_MAX)
     {
+        return false;
+    }
+
+    const ability_type* selected_policy = &b_info[ability_index(skilltype, abilitynum)];
+    if (selected_policy->skilltype != skilltype || selected_policy->abilitynum != abilitynum
+        || !ability_policy_available(selected_policy)
+        || (insight_reworked_enabled() && selected_policy->policy_kind == ABILITY_POLICY_EARNED
+            && !p_ptr->have_ability[skilltype][abilitynum]))
+    {
+        bell("This ability is unavailable in this character's progression rules.");
         return false;
     }
 
@@ -5493,7 +5640,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         const ability_type* missing = ability_stage_missing_parent(b_ptr);
         if (conflict)
         {
-            msg_format("This upgrade is excluded by your choice of %s.", b_name + conflict->name);
+            msg_format("This upgrade is excluded by your choice of %s.", ability_display_name(conflict));
             return false;
         }
         if (missing)
@@ -5501,7 +5648,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             if (ability_stage_parent_count(b_ptr) > 1)
                 msg_print("Learn one of the previous stages before buying this upgrade.");
             else
-                msg_format("Learn %s before buying this upgrade.", b_name + missing->name);
+                msg_format("Learn %s before buying this upgrade.", ability_display_name(missing));
             return false;
         }
         if (!ability_stat_requirements_met(b_ptr))
@@ -5608,16 +5755,16 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             if (banechoice > 0)
             {
                 strnfmt(gain_name, sizeof(gain_name), "%s-%s",
-                    bane_name[banechoice], b_name + b_ptr->name);
+                    bane_name[banechoice], ability_display_name(b_ptr));
             }
             else if (oathchoice > 0)
             {
                 strnfmt(gain_name, sizeof(gain_name), "%s: %s",
-                    b_name + b_ptr->name, oath_name_short(oathchoice));
+                    ability_display_name(b_ptr), oath_name_short(oathchoice));
             }
             else
             {
-                SDL_strlcpy(gain_name, b_name + b_ptr->name,
+                SDL_strlcpy(gain_name, ability_display_name(b_ptr),
                     sizeof(gain_name));
             }
 
@@ -5666,7 +5813,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                     if (!parent) continue;
                     strnfcat(parent_names, sizeof(parent_names), &parent_used,
                         "%s%s", parent_index ? " or " : "",
-                        b_name + parent->name);
+                        ability_display_name(parent));
                 }
                 if (train_skill)
                     strnfmt(prompt, sizeof(prompt),
@@ -5683,7 +5830,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                         || !ability_stage_shares_parent(other, b_ptr)
                         || !ability_stages_exclusive(b_ptr, other)) continue;
                     strnfcat(prompt, sizeof(prompt), &used, "Choosing this excludes %s. ",
-                        b_name + other->name);
+                        ability_display_name(other));
                 }
             }
             if (!get_check(prompt))
@@ -5713,13 +5860,13 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 
         if (banechoice <= 0 && oathchoice <= 0)
         {
-            do_cmd_note(format("(%s)", b_name + b_ptr->name), p_ptr->depth);
+            do_cmd_note(format("(%s)", ability_display_name(b_ptr)), p_ptr->depth);
         }
         else if (oathchoice <= 0)
         {
             p_ptr->bane_type = banechoice;
             do_cmd_note(format("(%s-%s)", bane_name[banechoice],
-                b_name + b_ptr->name), p_ptr->depth);
+                ability_display_name(b_ptr)), p_ptr->depth);
         }
         else
         {
@@ -5745,7 +5892,7 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
                 ability_log_record_gain(S_SPC, oath_special);
             }
 
-            do_cmd_note(format("(%s: %s)", b_name + b_ptr->name,
+            do_cmd_note(format("(%s: %s)", ability_display_name(b_ptr),
                 oath_name_short(oathchoice)), p_ptr->depth);
         }
 
@@ -5803,6 +5950,9 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
 
     p_ptr->redraw |= (PR_EXP | PR_BASIC);
     p_ptr->update |= (PU_BONUS | PU_MANA);
+    if (insight_reworked_enabled() && skilltype == S_STL
+        && abilitynum == STL_VEIL_OF_SHADOWS)
+        p_ptr->update |= PU_TORCH | PU_UPDATE_VIEW | PU_MONSTERS;
     handle_stuff();
     return true;
 }
@@ -6037,7 +6187,7 @@ int abilities_menu2(int skilltype, int* highlight)
         b_ptr = &b_info[i];
 
         /* Skip non-entries */
-        if (!b_ptr->name)
+        if (!b_ptr->name || !ability_policy_available(b_ptr))
             continue;
 
         /* Skip entries for the wrong skill type */
@@ -6184,7 +6334,7 @@ int abilities_menu2(int skilltype, int* highlight)
         {
             char name_buf[80];
             strnfmt(name_buf, sizeof(name_buf), "%s-%s",
-                bane_name[p_ptr->bane_type], (b_name + b_ptr->name));
+                bane_name[p_ptr->bane_type], (ability_display_name(b_ptr)));
             indexed_menu_entry_label(buf, sizeof(buf), i, name_buf);
         }
         else if ((skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
@@ -6192,12 +6342,12 @@ int abilities_menu2(int skilltype, int* highlight)
         {
             char name_buf[80];
             strnfmt(name_buf, sizeof(name_buf), "%s: %s",
-                (b_name + b_ptr->name), oath_name_short(p_ptr->oath_type));
+                (ability_display_name(b_ptr)), oath_name_short(p_ptr->oath_type));
             indexed_menu_entry_label(buf, sizeof(buf), i, name_buf);
         }
         else
         {
-            indexed_menu_entry_label(buf, sizeof(buf), i, (b_name + b_ptr->name));
+            indexed_menu_entry_label(buf, sizeof(buf), i, (ability_display_name(b_ptr)));
         }
 
         Term_putstr(ability_col, display_row, -1, attr, buf);
@@ -6253,7 +6403,7 @@ int abilities_menu2(int skilltype, int* highlight)
                 wipe_screen_from(desc_col);
 
                 /* Display ability name in description area with appropriate color */
-                Term_putstr(desc_col, 1, -1, TERM_YELLOW, b_name + b_ptr->name);
+                Term_putstr(desc_col, 1, -1, TERM_YELLOW, ability_display_name(b_ptr));
 
                 /* Wrap to the active terminal width so compact layouts do not overflow. */
                 text_out_wrap = ability_menu_description_wrap(desc_col);

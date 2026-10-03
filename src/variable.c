@@ -498,6 +498,11 @@ s16b stealth_score = 0;
  * Has the player attacked anyone this round? Has anyone attacked the player?
  */
 bool player_attacked = false;
+/* Separate audible aggression from the action/Concentration bookkeeping. */
+bool player_attack_audible = false;
+/* Only the exchanged creature is exempt from this action's passive sensing. */
+int silent_passage_exchange_target = 0;
+int silent_passage_exchange_stealth = 0;
 bool attacked_player = false;
 
 /*

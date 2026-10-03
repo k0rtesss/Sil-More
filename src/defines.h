@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.9"
 /*
- * Version components (0.9.9.0).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.9.1).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 0
+#define VERSION_EXTRA 1
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -751,6 +751,8 @@
 #define STL_OPPORTUNIST 4
 #define STL_VANISH 5
 #define STL_DEX 6
+#define STL_SILENT_PASSAGE 7
+#define STL_VEIL_OF_SHADOWS 8
 
 /*
  * Perception abilities
@@ -987,6 +989,15 @@
  */
 #define ABILITIES_MAX 20
 #define ABILITY_STAGE_PARENTS_MAX 4
+#define ABILITY_POLICY_UNSET 0
+#define ABILITY_POLICY_XP 1
+#define ABILITY_POLICY_INSIGHT 2
+#define ABILITY_POLICY_EARNED 3
+#define ABILITY_POLICY_RETIRED 4
+#define INSIGHT_RULESET_UNSET 0
+#define INSIGHT_RULESET_CLASSIC 1
+#define INSIGHT_RULESET_LEGACY 2
+#define INSIGHT_RULESET_REWORKED 3
 #define ABILITY_TIMELINE_MAX (S_MAX * ABILITIES_MAX)
 
 /*** Screen Locations ***/

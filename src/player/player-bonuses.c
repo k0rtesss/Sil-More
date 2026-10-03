@@ -446,6 +446,9 @@ void calc_bonuses(void)
         }
     }
 
+    /* Item aggregation must not revive retired/new-path-only powers. */
+    ability_policy_normalize();
+
     /*** Most abilities ***/
 
     if (p_ptr->active_ability[S_MEL][MEL_STR])

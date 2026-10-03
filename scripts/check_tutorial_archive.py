@@ -116,6 +116,7 @@ void msg_print(cptr message) { (void)message; }
 
 static bool waiting;
 static bool managing;
+void tutorial_game_format_view(tutorial_view *view) { (void)view; }
 static int wait_calls;
 static int fresh_calls;
 static int event_calls;

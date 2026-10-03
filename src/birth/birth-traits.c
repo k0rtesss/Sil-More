@@ -134,10 +134,11 @@ int collect_character_starting_abilities(int character, cptr out[],
 {
     int count = 0;
 
-    if (character <= 0)
+    if (!c_info || !z_info || character < 0 || character >= z_info->c_max)
         return 0;
 
-    if (c_info[character].flags_u & UNQ_MIM)
+    if (!insight_reworked_enabled()
+        && (character == 0 || (c_info[character].flags_u & UNQ_MIM)))
         return 0;
 
     for (int slot = 0; slot < CHARACTER_ABILITY_MAX; slot++)
@@ -153,6 +154,12 @@ int collect_character_starting_abilities(int character, cptr out[],
             continue;
 
         name = character_ability_names[stat][ability];
+        if (insight_reworked_enabled() && b_info && b_name)
+        {
+            int idx = ability_index(stat, ability);
+            if (idx >= 0 && idx < z_info->b_max && b_info[idx].name)
+                name = ability_display_name(&b_info[idx]);
+        }
         if (!name)
             continue;
 
@@ -195,17 +202,17 @@ void birth_format_ability_hint(int skill, int ability, char* buf,
     if (!b_ptr->name)
         return;
 
-    name = b_name + b_ptr->name;
-    if (b_ptr->effect)
-        effect = b_text + b_ptr->effect;
+    name = ability_display_name(b_ptr);
+    effect = ability_effect_text(b_ptr);
+    skill = ability_learning_skill(b_ptr);
     if (b_ptr->text)
         lore = b_text + b_ptr->text;
 
     if (effect && effect[0])
-        strnfmt(buf, buflen, "%s (%s): %s", name,
+        strnfmt(buf, buflen, "%s (%s, inherited): %s", name,
             skill_names_full[skill], effect);
     else if (lore && lore[0])
-        strnfmt(buf, buflen, "%s (%s): %s", name,
+        strnfmt(buf, buflen, "%s (%s, inherited): %s", name,
             skill_names_full[skill], lore);
     else
         strnfmt(buf, buflen, "%s (%s): Starting ability.", name,

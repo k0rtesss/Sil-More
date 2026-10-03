@@ -478,6 +478,7 @@ set(SIL_MORE_SOURCES
     src/player/player-skills.c
     src/player/player-smithing.c
     src/player/player-ability-stages.c
+    src/player/player-insight-abilities.c
     src/player/player-upkeep.c
     src/player/player-vitals.c
     src/pane.c

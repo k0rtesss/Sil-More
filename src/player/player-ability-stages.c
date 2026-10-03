@@ -73,7 +73,8 @@ errr ability_stages_validate(void)
 
 bool ability_is_stage(const ability_type* ability)
 {
-    return insight_system_enabled() && ability && ability->stage_cost > 0;
+    return insight_system_enabled() && !insight_reworked_enabled()
+        && ability && ability->stage_cost > 0;
 }
 
 int ability_stage_parent_count(const ability_type* ability)
@@ -246,6 +247,8 @@ void ability_stage_activate(const ability_type* ability)
 
 void ability_stages_normalize(void)
 {
+    ability_policy_normalize();
+    if (insight_reworked_enabled()) return;
     if (!insight_system_enabled() || !b_info || !z_info || !p_ptr) return;
     /* An item cannot supply the alternative to an already learned choice. */
     for (int i = 0; i < z_info->b_max; ++i)

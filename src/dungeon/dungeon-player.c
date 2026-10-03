@@ -366,6 +366,10 @@ void process_player(void)
             /* Cancel */
             p_ptr->stealth_mode = false;
 
+            if (insight_reworked_enabled()
+                && p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS])
+                p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+
             /* Recalculate bonuses */
             p_ptr->update |= (PU_BONUS);
 

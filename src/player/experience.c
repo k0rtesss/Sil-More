@@ -9,7 +9,15 @@
 
 bool insight_system_enabled(void)
 {
+    if (p_ptr && p_ptr->insight_ruleset != INSIGHT_RULESET_UNSET)
+        return p_ptr->insight_ruleset == INSIGHT_RULESET_LEGACY
+            || p_ptr->insight_ruleset == INSIGHT_RULESET_REWORKED;
     return op_ptr && op_ptr->opt[OPT_insight_beta];
+}
+
+bool insight_reworked_enabled(void)
+{
+    return p_ptr && p_ptr->insight_ruleset == INSIGHT_RULESET_REWORKED;
 }
 
 typedef struct insight_monster_type_info
@@ -121,7 +129,8 @@ int insight_stat_increase_cost(int stat)
 {
     if (!p_ptr || !insight_system_enabled() || stat < 0 || stat >= A_MAX
         || p_ptr->stat_base[stat] >= BASE_STAT_MAX) return 0;
-    return birth_stat_increase_cost(p_ptr->insight_stat_invested[stat]);
+    int cost = birth_stat_increase_cost(p_ptr->insight_stat_invested[stat]);
+    return cost > 0 && insight_reworked_enabled() ? MAX(2, cost) : cost;
 }
 
 bool insight_increase_stat(int stat)
@@ -141,9 +150,12 @@ bool insight_increase_stat(int stat)
 int insight_ability_upgrade_cost(int skill, int ability)
 {
     if (!p_ptr || !b_info || !z_info || !insight_system_enabled()
+        || insight_reworked_enabled()
         || skill < 0 || skill >= S_MAX
         || ability < 0 || ability >= ABILITIES_MAX) return 0;
-    const ability_type* entry = &b_info[ability_index(skill, ability)];
+    int index = ability_index(skill, ability);
+    if (index < 0 || index >= z_info->b_max) return 0;
+    const ability_type* entry = &b_info[index];
     if (!entry->name || entry->skilltype != skill || entry->abilitynum != ability)
         return 0;
     return entry->insight_upgrade_cost;

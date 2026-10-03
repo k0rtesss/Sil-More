@@ -438,11 +438,15 @@ static void birth_select_emit_detail(int race, int character, bool affinities_va
         sdl_character_sheet_screen_set_select_ability_rows(n);
         for (i = 0; i < n && i < (int)N_ELEMENTS(ability_lines); i++)
         {
+            int display_skill = ability_skills[i];
+            int idx = ability_index(ability_skills[i], ability_ids[i]);
+            if (idx >= 0 && idx < z_info->b_max)
+                display_skill = ability_learning_skill(&b_info[idx]);
             hint[0] = '\0';
             birth_format_ability_hint(ability_skills[i], ability_ids[i],
                 hint, sizeof(hint));
             sdl_character_sheet_screen_add_select_detail(ability_lines[i],
-                ability_skill_color(ability_skills[i]), hint);
+                ability_skill_color(display_skill), hint);
         }
     }
 

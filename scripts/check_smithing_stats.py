@@ -716,6 +716,8 @@ static void check_coefficients(void)
 }
 static void check_player_save(void)
 {
+    byte previous_ruleset = p_ptr->insight_ruleset;
+    byte previous_dimmed = p_ptr->light_dimmed;
     byte* buffer = calloc(1024*1024, 1); assert(buffer);
     p_ptr->insight_points = 1234;
     p_ptr->insight_milestones = INSIGHT_MILESTONE_SONG;
@@ -734,13 +736,18 @@ static void check_player_save(void)
     p_ptr->morgoth_call_state = SAVEFILE_MORGOTH_CALL_SEEN;
     p_ptr->discovery_lore_flags = DISC_LORE_CHASM;
     op_ptr->opt[OPT_insight_beta] = false;
+    p_ptr->insight_ruleset = INSIGHT_RULESET_CLASSIC;
+    p_ptr->light_dimmed = true;
     size_t new_size = fixture_write_player(buffer, 1024*1024, false);
     p_ptr->insight_points = 0; p_ptr->insight_milestones = 0;
     p_ptr->insight_monster_types = 0;
     memset(p_ptr->insight_stat_invested, 0, sizeof(p_ptr->insight_stat_invested));
     memset(p_ptr->insight_ability_upgraded, 0xFF, sizeof(p_ptr->insight_ability_upgraded));
     p_ptr->innate_ability[S_MEL][MEL_TWO_WEAPON] = false;
+    p_ptr->insight_ruleset = INSIGHT_RULESET_UNSET;
+    p_ptr->light_dimmed = false;
     assert(fixture_read_current_player(buffer, new_size) == 0);
+    assert(p_ptr->insight_ruleset == INSIGHT_RULESET_CLASSIC && p_ptr->light_dimmed);
     assert(p_ptr->insight_points == 1234 && p_ptr->insight_milestones == INSIGHT_MILESTONE_SONG);
     assert(p_ptr->insight_monster_types == (RF3_ORC | RF3_RAUKO));
     for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i + 1);
@@ -758,11 +765,12 @@ static void check_player_save(void)
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
     size_t v28_size = fixture_write_player(buffer, 1024*1024, 2);
-    /* Later layouts add monster-family rewards, one-time upgrades, and the
-     * .31 per-partition atmosphere lane. */
+    /* Later layouts add monster-family rewards, one-time upgrades, the
+     * .31 per-partition atmosphere lane, and .9.1 ruleset/light bytes. */
     assert(new_size - v28_size
-        == sizeof(u32b) + S_MAX * ABILITIES_MAX + PARTITION_META_MAX);
+        == sizeof(u32b) + S_MAX * ABILITIES_MAX + PARTITION_META_MAX + 2);
     assert(fixture_read_player(buffer, v28_size, 28) == 0);
+    assert(p_ptr->insight_ruleset == INSIGHT_RULESET_CLASSIC && !p_ptr->light_dimmed);
     assert(p_ptr->insight_points == 1234 && p_ptr->insight_milestones == INSIGHT_MILESTONE_SONG);
     assert(p_ptr->insight_monster_types == 0);
     for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i + 1);
@@ -779,12 +787,17 @@ static void check_player_save(void)
     size_t old_size = fixture_write_player(buffer, 1024*1024, true);
     p_ptr->insight_points = 9999;
     assert(fixture_read_player(buffer, old_size, LEGACY_WRITER_EXTRA) == 0);
+    assert(p_ptr->insight_ruleset == INSIGHT_RULESET_CLASSIC && !p_ptr->light_dimmed);
     assert(p_ptr->insight_points == 0);
     assert(p_ptr->insight_milestones == 0);
     for (int i = 0; i < A_MAX; ++i) assert(p_ptr->insight_stat_invested[i] == i);
     assert(p_ptr->lamp_oil == 137 && p_ptr->morgoth_call_state == SAVEFILE_MORGOTH_CALL_SEEN);
     assert(p_ptr->discovery_lore_flags == DISC_LORE_CHASM);
     free(buffer);
+    /* Save fixtures pin a character's policy; later isolated legacy formula
+     * tests must retain their incoming UNSET option-driven fixture policy. */
+    p_ptr->insight_ruleset = previous_ruleset;
+    p_ptr->light_dimmed = previous_dimmed;
     puts("Real player save: current currency/ranks/upgrades/monster types roundtrip, v28 defaults, legacy points and complete tail alignment PASS.");
 }
 static void check_settings(cptr directory)

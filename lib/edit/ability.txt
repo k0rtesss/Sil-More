@@ -965,3 +965,16 @@ N:173:Queen of the Stars
 I:8:13:0
 D:Varda's clear starlight rests upon you, bright and unsullied. In the deepest shadow, the memory of the stars answers, kindling a radiance no darkness can wholly devour.
 E:Strengthens Varda's light blessings. Quest reward.
+
+# New Insight techniques: stable appended identities, unavailable to older paths.
+N:174:Silent Passage
+I:3:7:8
+M:1
+D:Passing beneath the Enemy's notice, you leave neither the clamour of an ambush nor an alarmed guard to mark your passage.
+E:Quiet kills and unnoticed exchanges with non-alert enemies. Witnesses and other noises still matter.
+
+N:175:Veil of Shadows
+I:3:8:6
+M:1
+D:You draw a veil over your own radiance and trust the near shapes and movements of the dark while passing quietly through it.
+E:Ctrl-L can dim every personal light source. While sneaking without light, perceive adjacent monsters and features.

@@ -55,6 +55,12 @@ static bool awaiting_checkpoint;
 static tutorial_context active_context;
 static unsigned int revision;
 static char current_menu[80];
+static tutorial_view_formatter view_formatter;
+
+void tutorial_set_view_formatter(tutorial_view_formatter formatter)
+{
+    view_formatter = formatter;
+}
 
 typedef struct tutorial_suspended {
     bool valid;
@@ -738,6 +744,7 @@ static void fill_view(tutorial_view *view, int index, int step_index,
     view->can_continue = step->kind != TUTORIAL_STEP_ACTION;
     view->revision = revision;
     view->level = lesson->level;
+    if (view_formatter) view_formatter(view);
 }
 
 bool tutorial_peek_view(tutorial_view *view)
@@ -870,6 +877,7 @@ void tutorial_reset_tale(void)
 
 void tutorial_shutdown(void)
 {
+    view_formatter = NULL;
     tutorial_flush();
     tutorial_invalidate_context();
     archive_depth = 0;

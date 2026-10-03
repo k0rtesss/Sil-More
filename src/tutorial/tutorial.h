@@ -52,6 +52,11 @@ typedef struct tutorial_view {
     tutorial_mode level;
 } tutorial_view;
 
+/* Optional game adapter for public ruleset text. Called for live, archive and
+ * replay views; change only title/body, preserving lesson actions/progress. */
+typedef void (*tutorial_view_formatter)(tutorial_view *view);
+void tutorial_set_view_formatter(tutorial_view_formatter formatter);
+
 /* Lazy loading also occurs at checkpoint. Reload is useful for content tests.
  * A failed catalogue reload leaves the previous valid catalogue intact. */
 bool tutorial_load_catalogue(const char *path);

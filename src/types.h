@@ -329,6 +329,19 @@ struct ability_type
     byte stage_parent_ability[ABILITY_STAGE_PARENTS_MAX];
     byte stage_cost; /* B: Insight price; zero means standalone/base ability */
     byte stage_choice_group; /* B: nonzero groups are exclusive siblings */
+    /* New Insight policy preserves the original identity and legacy rules. */
+    byte policy_kind; /* X: XP, Insight, earned or retired */
+    u16b policy_cost;
+    byte policy_skill; /* Learning/display skill, independent of saved identity */
+    byte policy_level;
+    byte policy_skill_req[S_MAX];
+    byte policy_or_count, policy_and_count;
+    byte policy_or_skill[ABILITY_STAGE_PARENTS_MAX];
+    byte policy_or_ability[ABILITY_STAGE_PARENTS_MAX];
+    byte policy_and_skill[ABILITY_STAGE_PARENTS_MAX];
+    byte policy_and_ability[ABILITY_STAGE_PARENTS_MAX];
+    byte rework_only; /* M: unavailable to classic and previous Insight runs */
+    u32b policy_name, policy_effect, policy_role;
     byte score_weights_set; /* Explicit S: coefficients, 100 = x1 */
     s16b stat_score_weight[A_MAX];
     s16b skill_score_weight[S_MAX];
@@ -1282,6 +1295,8 @@ struct player_type
     u32b insight_monster_types; /* RF3 race types that already awarded Insight */
     byte insight_stat_invested[A_MAX]; /* Purchased ranks, excluding innate bonuses */
     byte insight_ability_upgraded[S_MAX][ABILITIES_MAX]; /* Purchased extra powers */
+    byte insight_ruleset; /* Birth-selected progression; old runs retain their rules */
+    byte light_dimmed; /* Player-controlled dimming, not removal of the light item */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
     byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
 

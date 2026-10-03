@@ -1501,7 +1501,7 @@ void self_knowledge(void)
         for (k = 0; k < ABILITIES_MAX; k++) {
             if (p_ptr->have_ability[j][k] && !p_ptr->innate_ability[j][k]) {
                 strnfmt(s[i], 80, "Your equipment grants you the ability: %s",
-                        b_name + (&b_info[ability_index(j, k)])->name);
+                        ability_display_name(&b_info[ability_index(j, k)]));
                 t[i][0] = '\0'; // No detail text
                 good[i] = true;
                 i++;

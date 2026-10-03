@@ -759,6 +759,11 @@ static void blitz_auto_assign_stats(int stats[BIRTH_STAT_MAX])
         stats[pick]++;
         cost += birth_stat_current_cost(stats[pick]);
     }
+
+    /* A greedy draw can strand one point at 2/2/2/2. New Insight births
+     * must allocate all 13; the recommended preset always spends exactly 13. */
+    if (insight_reworked_enabled() && cost != MAX_COST)
+        birth_recommended_stats(stats);
 }
 
 static void blitz_auto_assign_skills(void)
@@ -855,11 +860,12 @@ NavResult blitz_auto_build_character(void)
         p_ptr->stat_drain[i] = 0;
     }
 
-    p_ptr->insight_points = insight_system_enabled() ? MAX_COST : 0;
+    bool bank_allocation = insight_system_enabled() && !insight_reworked_enabled();
+    p_ptr->insight_points = bank_allocation ? MAX_COST : 0;
     for (int i = 0; i < A_MAX; i++)
     {
         p_ptr->insight_stat_invested[i] = stats[i];
-        if (insight_system_enabled())
+        if (bank_allocation)
             p_ptr->insight_points -= birth_stat_current_cost(stats[i]);
     }
 

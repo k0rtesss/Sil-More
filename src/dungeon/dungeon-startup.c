@@ -112,6 +112,8 @@ PlayResult play_game(void)
 {
     bool new_game = false;
     bool startup_icky_active = false;
+    /* Loading a dead hero may restore its option; new births use this request. */
+    const bool new_birth_insight = op_ptr && op_ptr->opt[OPT_insight_beta];
 
     log_info("play_game: FUNCTION ENTERED");
 
@@ -318,6 +320,7 @@ PlayResult play_game(void)
         if (character_loaded) break;
 
         /* Wipe the player each time we enter a fresh creation sequence. */
+        op_ptr->opt[OPT_insight_beta] = new_birth_insight;
         if (!resume_character_selection)
             player_wipe();
         else
@@ -369,6 +372,7 @@ PlayResult play_game(void)
                 savefile);
 
             /* Wipe player data - this will restore prace/pcharacter/stats from dead char */
+            op_ptr->opt[OPT_insight_beta] = new_birth_insight;
             player_wipe();
 
             /* Re-initialize global race/character pointers to match restored values */

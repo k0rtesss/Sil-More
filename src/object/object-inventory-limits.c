@@ -94,12 +94,18 @@ static int volume_limit_for_group(enum inventory_limit_group group)
         return -1;
 
     if (p_ptr && group == INV_LIMIT_PACK
-        && p_ptr->active_ability[S_WIL][WIL_CON])
+        && (insight_reworked_enabled()
+            ? p_ptr->innate_ability[S_WIL][WIL_INDOMITABLE]
+                && p_ptr->active_ability[S_WIL][WIL_INDOMITABLE]
+            : p_ptr->active_ability[S_WIL][WIL_CON]))
     {
         limit += INVENTORY_CONSTITUTION_PACK_VOLUME_BONUS;
     }
     if (p_ptr && group == INV_LIMIT_HARNESS
-        && p_ptr->active_ability[S_PER][PER_GRA])
+        && (insight_reworked_enabled()
+            ? p_ptr->innate_ability[S_MEL][MEL_WARDEN]
+                && p_ptr->active_ability[S_MEL][MEL_WARDEN]
+            : p_ptr->active_ability[S_PER][PER_GRA]))
     {
         limit += INVENTORY_GRACE_HARNESS_VOLUME_BONUS;
     }

@@ -122,7 +122,7 @@ void get_extra(void)
 
         int ab = c_info[p_ptr->pcharacter].a_adj[slot][1];
         /* sanity-check bounds */
-        if (stat < S_MAX && ab < ABILITIES_MAX)
+        if (stat >= 0 && stat < S_MAX && ab >= 0 && ab < ABILITIES_MAX)
         {
             p_ptr->innate_ability[stat][ab] = true;
             p_ptr->active_ability[stat][ab] = true;
@@ -177,6 +177,11 @@ void player_wipe(void)
 
     /* Wipe the player */
     memset(p_ptr, 0, sizeof(player_type));
+    /* Freeze the new character's policy before origin previews/allocation.
+     * App settings loaded later cannot change a living hero's rules. */
+    p_ptr->insight_ruleset = op_ptr->opt[OPT_insight_beta]
+        ? INSIGHT_RULESET_REWORKED : INSIGHT_RULESET_CLASSIC;
+    p_ptr->light_dimmed = false;
     catastrophe_reset_run();
 
     turn = 0;
@@ -825,7 +830,7 @@ void finalize_character_creation_selection(void)
 
         if (stat < 0) break;
         ab = c_info[p_ptr->pcharacter].a_adj[slot][1];
-        if (stat < S_MAX && ab < ABILITIES_MAX)
+        if (stat >= 0 && stat < S_MAX && ab >= 0 && ab < ABILITIES_MAX)
         {
             p_ptr->innate_ability[stat][ab] = true;
             p_ptr->active_ability[stat][ab] = true;

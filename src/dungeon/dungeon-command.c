@@ -383,6 +383,13 @@ void process_command(void)
         break;
     }
 
+    /* Cover or restore personal light (new Insight mode only). */
+    case KTRL('L'):
+    {
+        do_cmd_dim_light();
+        break;
+    }
+
     /* Toggle stealth mode */
     case 'S':
     {

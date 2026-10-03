@@ -373,7 +373,7 @@ A:, Lady of the Haladin
 B:You lead fiercely—shieldmaiden of the Haladin, spirit unbowed by shadow.
 F:STL_AFFINITY | PER_AFFINITY | STL_PENALTY
 S:0:1:2:0
-C:2:6  # Blocking :2:1 # Flanking
+C:2:6:2:1  # Flanking and Blocking
 P:0
 D: Proud-hearted shieldmaiden, leader brave of forest-dwelling folk, steadfast in valor, defying darkness beneath shadowed woodland halls. Unyielding in courage, guiding people through peril and loss, spirit unbroken by sorrow, foreshadowing strength in days of despair. Her resolve shapes destiny of mortal hearts bound by fierce independence, remembered as flame undimmed, inspiring resilience amidst ruin; Haleth's name echoing proudly among tales of mortal defiance.
 
@@ -406,7 +406,7 @@ B:You carry tidings—messenger of Ulmo, bearer of destiny to Gondolin.
 F:EVN_AFFINITY | MEL_AFFINITY | FREE | STL_PENALTY
 U:WIL_TUOR
 S:1:1:2:2
-C:5:1  # Channeling # Focused Attack 4:1:
+C:5:1  # Channeling
 P:2
 D: Mortal messenger chosen by Ulmo, guided by wave and whispered dream, bearer of hidden hope to Gondolin, destined to kindle fading valor. Heart bound in love with Eldar princess, bloodline uniting two worlds, foreshadowing renewal beyond ruin, fate entwined with Eldar's end. Bold protector in Gondolin's final flame, escaping shadow's grasp, father to mariner whose star heralds doom and deliverance alike; Tuor, mortal whose legacy shapes fate beyond sorrowful days.
 

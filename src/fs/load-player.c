@@ -411,6 +411,23 @@ errr rd_extra(void)
                     p_ptr->insight_ability_upgraded[i][ability] != 0;
             }
 
+    /* Options were loaded before rd_extra(). Older characters retain the
+     * exact classic/current-Insight policy recorded by their saved option. */
+    p_ptr->insight_ruleset = op_ptr->opt[OPT_insight_beta]
+        ? INSIGHT_RULESET_LEGACY : INSIGHT_RULESET_CLASSIC;
+    p_ptr->light_dimmed = false;
+    if (savefile_version_at_least(0, 9, 9, 1))
+    {
+        byte ruleset, dimmed;
+        rd_byte(&ruleset);
+        rd_byte(&dimmed);
+        if (ruleset >= INSIGHT_RULESET_CLASSIC && ruleset <= INSIGHT_RULESET_REWORKED)
+            p_ptr->insight_ruleset = ruleset;
+        else
+            log_warn("Invalid saved Insight ruleset %u; retaining saved mode", ruleset);
+        p_ptr->light_dimmed = dimmed != 0;
+    }
+
     /* Reserved: legacy item-quality squelch array (now unused) */
     {
         byte legacy_squelch;

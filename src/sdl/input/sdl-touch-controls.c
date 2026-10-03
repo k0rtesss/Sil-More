@@ -72,6 +72,8 @@ void sdl_touch_pane_send_binding(int binding, bool second_panel, bool long_press
 {
     if (binding == GAMEPAD_BIND_NONE)
         return;
+    if (binding == KTRL('L') && !insight_reworked_enabled())
+        return;
 
     if (binding == TOUCH_BIND_TOP_PANEL_OPEN) {
         sdl_touch_top_panel_set_open(true);
@@ -5718,8 +5720,10 @@ int sdl_touch_top_panel_binding_for_slot(int slot, bool long_press)
     if (slot < 0 || slot >= SDL_TOUCH_TOP_PANEL_BUTTON_COUNT)
         return GAMEPAD_BIND_NONE;
 
-    return long_press ? config.touch_top_panel_long_bindings[slot]
-                      : config.touch_top_panel_bindings[slot];
+    int binding = long_press ? config.touch_top_panel_long_bindings[slot]
+                            : config.touch_top_panel_bindings[slot];
+    return binding == KTRL('L') && !insight_reworked_enabled()
+        ? GAMEPAD_BIND_NONE : binding;
 }
 
 static int sdl_touch_top_panel_display_binding_for_slot(int slot)
@@ -5918,6 +5922,10 @@ static bool sdl_touch_top_panel_tile_for_binding(int binding, byte* out_attr,
         break;
     case KTRL('Y'):
         has_tile = false; fallback = "Dbg";
+        break;
+    case KTRL('L'):
+        has_tile = false;
+        fallback = p_ptr && p_ptr->light_dimmed ? "Light" : "Dim";
         break;
     case 'J':
         has_tile = false; fallback = "Set";
@@ -6301,6 +6309,10 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     case 'S':
         SDL_strlcpy(buf,
             "Stealth: enter or leave stealth mode.", buflen);
+        return;
+    case KTRL('L'):
+        SDL_strlcpy(buf,
+            "Dim / Restore: cover your equipped light. Veil of Shadows also suppresses your other personal light sources. Fuel continues to burn.", buflen);
         return;
     case 'b':
         SDL_strlcpy(buf,

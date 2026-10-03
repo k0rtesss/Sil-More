@@ -11550,6 +11550,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             bool touch_only;
             bool preserve_touch_view;
             bool compact_entry_only;
+            bool light_action;
 
             prepare_equipment_group_icons(equip_icons);
             compute_equipment_group_totals(equip_totals);
@@ -11589,6 +11590,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (equip_entry_cur < 0)
                     equip_entry_cur = 0;
             }
+            light_action = insight_reworked_enabled()
+                && (selected_slot == INVEN_LITE
+                    || (equip_column && equip_entry_cnt > 0
+                        && equip_entries[equip_entry_cur].equip_idx == INVEN_LITE))
+                && (inventory[INVEN_LITE].k_idx || p_ptr->light_dimmed
+                    || p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS]);
             if (equip_entry_cnt > 0)
             {
                 SDL_strlcpy(primary_action,
@@ -11745,6 +11752,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             strnfmt(status_buf, sizeof(status_buf), "%s: %d choice%s.",
                 equipment_slot_text(selected_slot), equip_entry_cnt,
                 (equip_entry_cnt == 1) ? "" : "s");
+            if (light_action)
+            {
+                size_t used = strlen(status_buf);
+                strnfcat(status_buf, sizeof(status_buf), &used,
+                    "  Ctrl-L %s light", p_ptr->light_dimmed ? "Restore" : "Dim");
+            }
             if (pack_combat_notice)
             {
                 knowledge_draw_status(&layout, TERM_ORANGE,
@@ -11753,6 +11766,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else
             {
                 knowledge_draw_status(&layout, TERM_L_BLUE, status_buf);
+                if (light_action)
+                    ui_menu_click_add_text_token(SUPPLY_CLICK_LIGHT, 0,
+                        layout.status_row, status_buf,
+                        p_ptr->light_dimmed ? "Restore light" : "Dim light");
             }
 
             Term_erase(0, layout.prompt_row, 255);
@@ -11836,6 +11853,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_DROP,
                     drop_click_mode ? "Drop On" : "Drop",
                     supply_touch_mode_button_attr(drop_click_mode));
+                if (light_action)
+                    ui_menu_click_add_touch_button(SUPPLY_CLICK_LIGHT,
+                        p_ptr->light_dimmed ? "Restore Light" : "Dim Light",
+                        TERM_L_BLUE);
             }
             else
             {
@@ -12014,6 +12035,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                         switch (clicked_choice)
                         {
+                        case SUPPLY_CLICK_LIGHT:
+                            ch = KTRL('L');
+                            click_generated_command = true;
+                            break;
                         case SUPPLY_CLICK_BACK:
                             ch = ESCAPE;
                             click_generated_command = true;
@@ -12077,6 +12102,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             switch (ch)
             {
+            case KTRL('L'):
+                if (light_action && !death_spectator_active())
+                {
+                    do_cmd_dim_light();
+                    acted = true;
+                    refresh_after_close = true;
+                    flag = true;
+                }
+                break;
             case ESCAPE:
                 flag = true;
                 break;

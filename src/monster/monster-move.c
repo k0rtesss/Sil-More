@@ -465,6 +465,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
 {
     int m1 = cave_m_idx[y1][x1];
     int m2 = cave_m_idx[y2][x2];
+    bool quiet_exchange = insight_reworked_enabled() && m1 < 0 && m2 > 0
+        && m2 == silent_passage_exchange_target;
 
     int y, x;
 
@@ -608,6 +610,7 @@ void monster_swap(int y1, int x1, int y2, int x2)
                     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
                     if (!singing(SNG_DISGUISE)
+                        && !(quiet_exchange && cave_m_idx[y][x] == m2)
                         && (m_ptr->alertness >= ALERTNESS_ALERT)
                         && !m_ptr->confused && (m_ptr->stance != STANCE_FLEEING)
                         && monster_abilities_can_react(m_ptr))

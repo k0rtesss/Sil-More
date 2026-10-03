@@ -8084,7 +8084,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
             if (b_ptr->name && b_ptr->skilltype == skill
                 && b_ptr->abilitynum == ability_nums[i])
             {
-                name = b_name + b_ptr->name;
+                name = ability_display_name(b_ptr);
                 break;
             }
         }

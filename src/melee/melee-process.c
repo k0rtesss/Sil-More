@@ -1711,6 +1711,9 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
     int combat_noise_bonus = 0;
     int combat_sight_bonus = 0;
 
+    if (main_roll && (p_ptr->leaving || playerturn == 0 || cheat_timestop))
+        silent_passage_exchange_target = 0;
+
     /* Player is dead or leaving the current level */
     if (p_ptr->leaving)
         return;
@@ -1728,13 +1731,15 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
     {
         if (player_attacked)
         {
-            combat_noise_bonus += 2;
+            if (player_attack_audible || !insight_reworked_enabled())
+                combat_noise_bonus += 2;
             combat_sight_bonus += 2;
             player_attacked = false;
 
             // keep track of this for the ability 'Concentration'
             p_ptr->consecutive_attacks++;
         }
+        player_attack_audible = false;
         if (attacked_player)
         {
             combat_noise_bonus += 2;
@@ -1775,6 +1780,14 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
 
         /* Ignore dead monsters */
         if (!m_ptr->r_idx)
+            continue;
+
+        /* The swap itself supplies neither contact nor a passive detection
+         * roll to its unwary target. Independent noisy events still roll. */
+        if (main_roll && insight_reworked_enabled()
+            && i == silent_passage_exchange_target
+            && !combat_noise_bonus && difficulty >= silent_passage_exchange_stealth
+            && m_ptr->alertness < ALERTNESS_ALERT)
             continue;
 
         /* If character is within detection range (unlimited for most monsters,
@@ -1918,4 +1931,6 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
             }
         }
     }
+    if (main_roll)
+        silent_passage_exchange_target = 0;
 }

@@ -734,6 +734,10 @@ void do_cmd_toggle_stealth(void)
             p_ptr->redraw |= (PR_MAP);
     }
 
+    if (insight_reworked_enabled()
+        && p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS])
+        p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+
     if (pixel_monster_status_icons)
     {
         force_map_redraw();

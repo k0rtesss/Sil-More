@@ -1,121 +1,636 @@
 # File: ability-insight.txt
-#
-# Optional Insight progression overlay for the stable ability.txt records.
-# Keep this file separate so the Insight path can change without rewriting
-# the shared ability identities, prerequisites, learning gates, or effects.
-#
-# N: ability serial : exact ability name from ability.txt
-# K: Insight-point price while the Insight system is enabled
-# U: separate one-time Insight upgrade price
-# L:1 moves an ability to the Insight branch. It suppresses only the primary
-# I: skill gate; explicit R: skill requirements in ability.txt remain active.
-# B: parent skill/ability : Insight price : exclusive sibling group
-#    Repeat B: for alternative parents. All B: lines for one ability share
-#    the same price and choice group. Insight B: replaces P:/A: ability
-#    prerequisites only; skill/stat gates and existing effects remain.
+# Saved ruleset selects either the legacy metadata or the complete new policy.
+# N: exact stable serial/name from ability.txt (never changes identity).
+# Legacy B:/K:/L:/U: retained for existing Insight runs.
+# X: kind:cost:learning-skill:invested-rank (1 XP, 2 IP, 3 earned, 4 retired)
+# G: additional invested skill:rank; O: alternative parents skill/local pairs
+# H: mandatory parents skill/local pairs; J: new-mode name; F: new-mode effect
+# Z: tactical role. No new-policy attribute gates or secondary ability fees.
 
 V:0.9.9
 
+N:0:Power
+X:1:500:0:1
+F:+1 melee damage sides; critical base +1.
+Z:Force
+
+N:1:Finesse
+X:1:500:0:2
+F:Critical base falls from 7 to 5.
+Z:Precision
+
+N:2:Knock Back
+X:1:500:0:3
+F:Strength versus Constitution knockback; grounded targets on ice can move two squares.
+Z:Force
+
+N:3:Throwing
+X:1:800:0:4
+F:+1 throwing attack; half distance penalties; easier thrown criticals; -20% throwing Harness volume; eligible quick-thrown daggers and one free first throwing-weapon change.
+Z:Throwing
+
+N:4:Polearm Mastery
+X:1:800:0:4
+F:+2 polearm attack while melee is active; brace on waiting or ranged-to-melee switching against advancing foes.
+Z:Polearms
+
+N:5:Charge
+X:1:800:0:5
+F:+3 Strength/Dexterity on an attack immediately after moving toward its target.
+Z:Force
+
+N:6:Follow-Through
+X:2:1:0:6
+O:0/0:0/1
+F:Attack another adjacent enemy after a kill.
+Z:Crowd control
+
+N:7:Impale
+X:2:1:0:7
+O:0/0:0/4
+F:Strike through a foe with a polearm or greatsword.
+Z:Polearms
+
 N:8:Subtlety
 B:0/1:1:0
+X:2:1:0:8
+O:0/1
+F:Critical base -2 with a one-handed weapon and empty off-hand.
+Z:Precision
 
 N:9:Whirlwind Attack
 B:0/6:1:0
+X:2:2:0:9
+O:0/4:0/6:5/3
+F:Attack all adjacent foes; requires five open adjacent squares.
+Z:Crowd control
+
+N:10:Zone of Control
+X:2:1:0:10
+O:0/0:0/4
+F:Attack foes moving between adjacent squares after you stayed still.
+Z:Polearms
 
 N:11:Smite
 B:0/0:1:0
 B:0/7:1:0
+X:2:2:0:11
+O:0/0:0/7
+F:Maximize the first two-handed melee hit, then spend a recovery turn.
+Z:Force
+
+N:12:Two Weapon Fighting
+X:2:2:0:12
+O:0/1:2/2:0/15
+F:Add an off-hand attack with the existing -3 Strength/Dexterity penalties.
+Z:Precision
+
+N:13:Rapid Attack
+X:2:2:0:13
+O:0/8:3/4
+F:An extra melee attack at -3 Strength/Dexterity; first melee-to-melee active weapon change before the next action is free.
+Z:Precision
 
 N:14:Strength
 L:1
 K:1
+X:4:0:0:0
+
+N:15:Warden
+X:2:1:0:7
+F:While a bow is active, add floor(max(0, base Melee - base Archery)/2) Archery; with Versatility use ceil(base Melee/3) instead. First melee-to-bow change is free. Adds 6.0 qt Harness capacity when personally learned or inherited and active.
+Z:Hybrid arms
 
 N:16:Power Throw
 B:0/3:1:0
+X:2:1:0:8
+O:0/3
+F:After readying/waiting, throw a Harness spear/hand axe at an adjacent foe and strike in melee; separate attack rolls, successful damage combined, one protection roll.
+Z:Throwing
+
+N:20:Rout
+X:1:500:1:2
+F:+5 Dexterity when shooting fleeing foes.
+Z:Execution
+
+N:21:Fletchery
+X:1:500:1:3
+F:Improve/carve arrows; -20% loose-arrow Pack volume.
+Z:Ammunition
+
+N:22:Point Blank Archery
+X:1:800:1:4
+F:An adjacent target cannot retaliate against the shot; other adjacent alert enemies still can. Allows an active round shield with a shortbow.
+Z:Close shots
+
+N:23:Puncture
+X:1:800:1:5
+F:Deal 5 damage when protection would fully block a shot.
+Z:Armour pressure
+
+N:24:Ambush
+X:1:800:1:6
+G:3:3
+F:Extra critical die against non-alert targets.
+Z:Concealed opening
+
+N:25:Versatility
+X:2:1:1:7
+F:While melee is active, add floor(max(0, base Archery - base Melee)/2) Melee; with Warden use ceil(base Archery/3) instead. First bow-to-melee change is free.
+Z:Hybrid arms
 
 N:26:Crippling Shot
 B:1/3:1:0
+X:2:1:1:8
+O:1/3:1/4
+F:A damaging critical can slow a foe after a Will check. Critical-resistant foes are immune.
+Z:Control
+
+N:27:Deadly Hail
+X:2:2:1:9
+O:1/0:1/3:1/4
+F:Double arrow damage on the turn after an arrow kill.
+Z:Execution
 
 N:28:Dexterity
 L:1
 K:1
+X:4:0:1:0
 
 N:29:Skirmishing
 B:2/0:1:0
+X:2:1:1:6
+O:2/0:2/5
+F:A shot after movement costs half a turn in light armour; first bow-to-bow active weapon change before the next action is free.
+Z:Mobile shots
+
+N:40:Dodging
+X:1:500:2:2
+F:+3 Evasion after movement in light armour.
+Z:Mobility
+
+N:41:Blocking
+X:1:500:2:3
+F:Double shield protection after remaining still.
+Z:Guard
+
+N:42:Parry
+X:1:800:2:4
+F:Double primary melee weapon's Evasion bonus.
+Z:Guard
+
+N:43:Crowd Fighting
+X:1:800:2:5
+F:Halve opponents' surrounding bonus.
+Z:Guard
+
+N:44:Leaping
+X:1:800:2:6
+F:After an approach, jump chasms/traps; not webs or roosts.
+Z:Mobility
+
+N:45:Sprinting
+X:2:1:2:7
+O:2/0:2/4
+F:Gain speed after running in roughly the same direction for 3+ squares in light armour, or 4+ squares otherwise.
+Z:Mobility
 
 N:46:Flanking
 B:2/0:1:0
+X:2:1:2:8
+O:2/0
+F:Attack while stepping around an adjacent foe in light armour.
+Z:Mobility
+
+N:47:Heavy Armour Use
+X:2:1:2:9
+O:2/1:2/3:5/3
+F:Weight-based physical protection; +1 Evasion with mail corslets/hauberks.
+Z:Armour
 
 N:48:Riposte
 B:2/2:1:0
+X:2:2:2:10
+O:2/2
+F:One counterattack per round when a foe misses by enough.
+Z:Guard
+
+N:49:Controlled Retreat
+X:2:1:2:11
+O:2/0:2/1:0/4
+F:Attack while stepping away if you did not move last round.
+Z:Mobility
 
 N:50:Dexterity
 L:1
 K:1
+X:4:0:2:0
+
+N:60:Disguise
+X:1:500:3:3
+F:Halve awake unwary enemies' line-of-sight detection bonus.
+Z:Concealment
+
+N:61:Assassination
+X:1:800:3:4
+F:Add your Stealth score to melee attacks against non-alert foes or foes fooled by Song of Disguise. An unaware foe bumping into you provokes an attack; staying still last turn gives that attack the bonus.
+Z:Ambush
 
 N:62:Cruel Blow
 B:3/1:1:0
+X:2:1:3:5
+O:3/1
+F:Critical hits may confuse foes after a Will check. An equipped item granting Cruel Blow also speeds the minimum depth timer as much as Deep Call, even when disabled.
+Z:Ambush
+
+N:63:Exchange Places
+X:1:800:2:6
+F:Use X to swap with an adjacent foe and suffer its free attack.
+Z:Mobility
+
+N:64:Opportunist
+X:2:1:0:7
+O:3/1:0/5
+F:Attack an adjacent foe moving away.
+Z:Tactical strikes
 
 N:65:Vanish
 B:3/0:1:0
+X:2:2:3:8
+O:3/0
+F:Recover concealment more effectively after breaking line of sight.
+Z:Concealment
 
 N:66:Dexterity
 L:1
 K:1
+X:4:0:3:0
 
 N:80:Quick Study
 L:1
 K:1
+X:1:500:4:1
+J:Appraisal
+F:+5 to identification checks.
+Z:Appraisal
+
+N:81:Focused attack
+X:1:500:4:2
+J:Focused Attack
+F:Attack bonus of Perception/2 after waiting.
+Z:Focus
+
+N:82:Keen Senses
+X:1:800:4:3
+F:See just outside light; +5 spotting invisible foes.
+Z:Senses
 
 N:83:Concentration
 B:4/1:1:0
+X:2:1:4:4
+O:4/1
+F:Same-target attack streak bonus, capped at Perception/2; waiting preserves the streak.
+Z:Focus
 
 N:84:Alchemy
 L:1
 K:1
+X:2:1:4:5
+O:4/0
+F:Identify eligible herbs/potions/gems; disease/cure knowledge; quick splash potions; +50% Revelation/Foes/Treasures gem range.
+Z:Chemistry
+
+N:85:Bane
+X:2:1:4:6
+F:Kill-growing bonus to all skill rolls against a chosen family.
+Z:Hunting
+
+N:86:Outwit
+X:2:1:4:7
+F:Perception check to negate an incoming critical's extra damage.
+Z:Senses
 
 N:87:Resonance
 B:4/2:1:0
+X:2:1:4:8
+O:4/2
+F:Detect unseen enemies; double identification's Perception term while counting Grace once.
+Z:Senses
+
+N:88:Master Hunter
+X:2:1:4:9
+H:4/5
+F:+1 attack per previous kill of the same monster type, capped at Perception/2.
+Z:Hunting
 
 N:89:Grace
 L:1
 K:1
+X:4:0:4:0
+
+N:90:Rewire Traps
+X:2:1:4:7
+O:4/2
+F:Disarmed suitable traps become safe for you and hazardous to monsters.
+Z:Traps
+
+N:100:Curse Breaking
+X:1:500:5:1
+F:Break curses on removal; identification bonus, especially cursed items; Sanctity gems can break jinxed egos.
+Z:Resolve
 
 N:101:Channeling
 B:4/4:1:0
 L:1
 K:1
+X:2:1:5:5
+F:Identify staves and horns and transfer charges safely.
+Z:Devices
+
+N:102:Strength in Adversity
+X:1:800:5:3
+F:+1 Strength, Dexterity and Grace at half HP or below; +3 at quarter HP or below.
+Z:Resolve
+
+N:103:Formidable
+X:1:800:5:4
+F:Melee kills scare witnesses; foes ignore injury-driven morale weakness.
+Z:Morale
+
+N:104:Inner Light
+X:1:800:5:5
+F:+2 light intensity inside the existing radius.
+Z:Light
+
+N:105:Indomitable
+X:2:2:5:8
+F:Resist fear, confusion, stun, hallucination and poison; hunger falls to one third its normal rate. Adds 6.0 qt Pack capacity when personally learned or inherited and active.
+Z:Endurance
+
+N:106:Oath
+X:3:0:8:0
+F:Swear a binding vow for a reward. Breaking the vow has consequences.
+Z:Vows
+
+N:108:Vengeance
+X:2:1:5:8
+O:5/2:4/3
+F:An extra damage die on the next melee hit after melee injury; nonstacking.
+Z:Resolve
 
 N:109:Majesty
 B:5/3:1:0
+X:2:2:5:9
+O:5/3:5/4
+F:Reduce foe morale according to the Will difference.
+Z:Morale
 
 N:110:Constitution
 L:1
 K:1
+X:4:0:5:0
+
+N:120:Weaponsmith
+X:1:800:6:2
+F:Craft weapons and gain weapon identification knowledge.
+Z:Crafts
+
+N:121:Armoursmith
+X:1:800:6:3
+F:Craft armour and gain armour identification knowledge.
+Z:Crafts
+
+N:122:Jeweller
+X:1:800:6:4
+F:Craft jewellery/horns/lights and gain relevant identification knowledge.
+Z:Crafts
 
 N:123:Enchantment
 U:1
+X:2:1:6:5
+O:6/0:6/1:6/2
+F:Enchant items and identify enchantments. Adds half your nonnegative crafting Grace to Smithing while active.
+Z:Mastery
 
 N:124:Expertise
 U:1
+X:2:1:6:6
+O:6/0:6/1:6/2
+F:Halve forge time and waive ordinary item XP/stat costs. Adds your nonnegative crafting Dexterity to Smithing while active.
+Z:Mastery
 
 N:125:Artifice
 B:6/3:1:0
 U:1
+X:2:2:6:10
+O:6/0:6/1:6/2
+H:6/3
+F:Make custom artefacts and gain strong identification knowledge. Adds your nonnegative crafting Grace to Smithing while active.
+Z:Great craft
+
+N:126:Masterpiece
+X:2:2:6:12
+O:6/0:6/1:6/2
+H:6/3
+F:Exceed effective capacity by sacrificing base Smithing ranks. Recipes still require their craft and material knowledge.
+Z:Great craft
 
 N:127:Grace
 L:1
 K:1
+X:4:0:6:0
+
+N:128:Alloy mastery
+X:2:1:6:6
+O:6/0:6/1:6/2
+J:Alloy Mastery
+F:Use mithril/star iron without the extra alloy surcharge; forge those materials.
+Z:Materials
+
+N:129:Reforging
+X:1:800:6:4
+F:Repair items or bridges, or add a missing prefix. Items require the relevant craft knowledge and capacity at 1.5x their difficulty.
+Z:Crafts
+
+N:140:Song of Elbereth
+X:1:500:7:1
+F:Fear song; foe Will penalty. Voice 1/turn.
+Z:Fear
+
+N:141:Song of Challenge
+X:1:500:7:1
+F:Enrage foes; reduce their Will/Stealth. Voice 1/3 turns.
+Z:Battle
+
+N:142:Song of Delvings
+X:1:500:7:2
+F:Reveal nearby passages/chambers from explored areas. Voice 1/3 turns.
+Z:Exploration
+
+N:143:Song of Freedom
+X:1:800:7:2
+F:Reveal doors, disarm traps, clear rubble and resist slowing. Voice 1/3 turns.
+Z:Exploration
+
+N:144:Song of Silence
+X:1:500:7:3
+F:Muffle sound/detection and calls for allies. Voice 1/3 turns.
+Z:Concealment
+
+N:145:Song of Staunching
+X:1:800:7:3
+F:Stop bleeding immediately and accelerate healing. Voice 1/turn.
+Z:Healing
+
+N:146:Song of Thresholds
+X:1:800:7:4
+F:Seal closed doors against foes. Voice 1/3 turns.
+Z:Wards
+
+N:147:Song of the Trees
+X:2:1:7:5
+F:Scaling light radius; stun/wound dark creatures. Voice 1/3 turns.
+Z:Light
+
+N:148:Woven Themes
+X:2:1:7:6
+F:Sing a minor theme at half Song score alongside your major song. Daeron's minor theme uses full Song; compatible song pairs gain their synergy bonus. Each theme pays its own Voice cost.
+Z:Composition
+
+N:149:Song of Slaying
+X:2:1:7:6
+O:7/1:5/3
+F:Melee critical hits slay foes whose HP is at most twice your effective Song. Voice 1/turn.
+Z:Battle
 
 N:150:Song of Revealing
 B:7/2:1:0
+X:2:1:7:7
+O:7/2:7/7
+F:Find nearby monsters/items; item identification benefit. Voice 1/3 turns.
+Z:Exploration
+
+N:151:Song of Elveness
+X:2:1:7:7
+O:7/3:7/0
+F:Temporary +1 Grace and scaling Evasion while singing. Voice 1/turn.
+Z:Wards
+
+N:152:Song of Staying
+X:2:1:7:7
+O:7/1:7/6
+F:Song/2 Will and [2d2] protection. Voice 1/turn.
+Z:Wards
 
 N:153:Song of Disguise
 B:7/4:1:0
+X:2:1:7:8
+O:7/4:7/3
+F:Resisted concealment against observers; attacks end it. Voice 3/turn.
+Z:Concealment
+
+N:154:Song of Lórien
+X:2:2:7:8
+O:7/4:7/7
+J:Song of Lorien
+F:Gradually put foes to sleep. Voice 1/turn.
+Z:Great song
 
 N:155:Song of Shattering
 B:7/3:1:0
+X:2:2:7:9
+F:Weaken foe weapons/armour/stone bodies; independent destructive composition. Voice 2/turn.
+Z:Great song
+
+N:156:Song of Mastery
+X:2:2:7:10
+O:7/6:7/10
+F:Overwhelm Will to prevent foe actions. Voice 2/turn.
+Z:Great song
 
 N:157:Grace
 L:1
 K:1
+X:4:0:7:0
+
+N:158:Song of Contest
+X:2:2:7:12
+G:5:5
+O:7/12:7/13:7/16
+F:Duel a foe's voice for lasting skill/armour penalties. Voice 7/turn.
+Z:Great song
+
+N:159:Song of Lament
+X:2:2:7:15
+O:7/14:7/18
+F:Permanently reduce target health, damage and resolve. Voice 7/turn.
+Z:Great song
+
+N:160:Mandos' Doom
+X:3:0:8:0
+F:Immune to fear, hallucination, trance, rage, stun and confusion. Quest reward.
+
+N:161:Aulë's Forge
+X:3:0:8:0
+F:Exceed normal Smithing capacity by sacrificing base Smithing ranks, with greater limits than Masterpiece. Quest reward.
+
+N:162:Oath of Mercy
+X:3:0:8:0
+F:+1 Grace conditional on sparing helpless foes.
+
+N:163:Oath of Silence
+X:3:0:8:0
+F:+1 Strength conditional on never singing.
+
+N:164:Oath of Iron
+X:3:0:8:0
+F:+2 Constitution; no ordinary ascent without a Silmaril; keep Utumno's detour exception.
+
+N:165:Nienna's Gift of Mercy
+X:3:0:8:0
+F:Up to +10 Stealth based on the proportion of monsters spared. Quest reward.
+
+N:166:Oath of the Smith
+X:3:0:8:0
+F:+5 Smithing conditional on avoiding others' weapons/armour.
+
+N:167:Oath of the Valorous Heart
+X:3:0:8:0
+F:+1 Dexterity conditional on not attacking fleeing foes.
+
+N:168:Unique Bane
+X:3:0:8:0
+F:+3 attack/Evasion versus uniques.
+
+N:169:Oath of Light
+X:3:0:8:0
+F:+1 light radius and restriction on light-reducing gear.
+
+N:170:Wraith of Orome
+X:3:0:8:0
+F:While raging, each attribute rises by one instead of the normal rage changes. Quest reward.
+J:Wrath of Orome
+
+N:171:Huntsman's Rhythm
+X:3:0:8:0
+F:Two bow hits prime your next spear attack for doubled damage. Quest reward.
+
+N:172:Wrath of Tulkas
+X:3:0:8:0
+F:Gain Smite's two-handed strike and recovery, plus an extra damage die, even without learning Smite. Quest reward.
+
+N:173:Queen of the Stars
+X:3:0:8:0
+F:Strengthens Varda's light blessings. Quest reward.
+
+N:174:Silent Passage
+X:2:1:3:8
+H:3/0:3/3
+F:Direct melee, bow and throwing kills of non-alert foes produce no attack-alert noise. Exchange Places with a non-alert foe provokes no free target attack and does not alert it; witnesses and independent noise remain real.
+Z:Ambush and infiltration
+
+N:175:Veil of Shadows
+X:2:1:3:6
+O:3/0
+F:Dim all personal light with Ctrl-L, including equipment, glowing weapons, songs and special bonuses. While sneaking (S) without personal light, perceive adjacent monsters and features without emitting light; blindness and invisibility checks still apply.
+Z:Dark movement

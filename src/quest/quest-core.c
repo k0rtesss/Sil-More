@@ -345,7 +345,7 @@ void apply_quest_rewards(int quest_idx)
                 int b_idx = ability_index(S_SPC, q_ptr->ability_id);
                 ability_type* b_ptr = b_idx > 0 && b_idx < z_info->b_max ? &b_info[b_idx] : NULL;
                 if (b_ptr && b_ptr->name && b_name) {
-                    msg_format("You have learned %s!", b_name + b_ptr->name);
+                    msg_format("You have learned %s!", ability_display_name(b_ptr));
                     log_trace("Applied special ability: %s (skill=%d, ability=%d)",
                              b_name + b_ptr->name, q_ptr->ability_type, q_ptr->ability_id);
                 } else {
@@ -358,7 +358,7 @@ void apply_quest_rewards(int quest_idx)
                 int b_idx = ability_index(S_SPC, q_ptr->ability_id);
                 ability_type* b_ptr = b_idx > 0 && b_idx < z_info->b_max ? &b_info[b_idx] : NULL;
                 if (b_ptr && b_ptr->name && b_name) {
-                    msg_format("You already possess %s.", b_name + b_ptr->name);
+                    msg_format("You already possess %s.", ability_display_name(b_ptr));
                 } else {
                     msg_print("You already possess this special ability.");
                 }

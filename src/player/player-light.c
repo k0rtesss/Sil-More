@@ -286,6 +286,38 @@ static bool player_has_active_oath(void)
     return p_ptr->active_ability[S_SPC][special_ability];
 }
 
+/* This awareness belongs only to the player: it never adds cave light. */
+bool player_dark_adjacency(int y, int x)
+{
+    return p_ptr && insight_reworked_enabled()
+        && p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS]
+        && p_ptr->stealth_mode && !p_ptr->blind && p_ptr->cur_light <= 0
+        && in_bounds(y, x)
+        && ABS(y - p_ptr->py) <= 1 && ABS(x - p_ptr->px) <= 1
+        && (y != p_ptr->py || x != p_ptr->px)
+        && player_has_los_bold(y, x);
+}
+
+void do_cmd_dim_light(void)
+{
+    if (!insight_reworked_enabled()) return;
+    if (!p_ptr->light_dimmed && !inventory[INVEN_LITE].k_idx
+        && !p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS])
+    {
+        msg_print("You have no equipped light to dim.");
+        return;
+    }
+
+    p_ptr->light_dimmed = !p_ptr->light_dimmed;
+    msg_print(p_ptr->light_dimmed
+        ? (p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS]
+            ? "You veil your light." : "You dim your equipped light.")
+        : "You restore your light.");
+    p_ptr->update |= PU_TORCH | PU_UPDATE_VIEW | PU_MONSTERS;
+    p_ptr->redraw |= PR_LIGHT | PR_MAP;
+    p_ptr->window |= PW_EQUIP;
+}
+
 /*
  * Extract and set the current "lite radius"
  */
@@ -320,6 +352,11 @@ void calc_torch(void)
             continue;
 
         if (!player_equipment_slot_counts_as_equipped(i))
+            continue;
+
+        /* Covering the ordinary light slot leaves every other source alone. */
+        if (i == INVEN_LITE && insight_reworked_enabled()
+            && p_ptr->light_dimmed)
             continue;
 
         if (o_ptr->tval == TV_LIGHT && !quest_challenge_object_allowed(o_ptr))
@@ -455,6 +492,14 @@ void calc_torch(void)
     }
 
     /* Notice changes in the "lite radius" */
+    if (insight_reworked_enabled() && p_ptr->light_dimmed
+        && p_ptr->active_ability[S_STL][STL_VEIL_OF_SHADOWS])
+    {
+        /* Veil suppresses personal emission after all bonuses. Ambient light
+         * and monster/floor-object light are still calculated by update_view. */
+        p_ptr->cur_light = 0;
+    }
+
     if (old_light != p_ptr->cur_light)
     {
         /* Update the visuals */

@@ -119,7 +119,7 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             p_ptr->insight_stat_invested[i] = stats[i];
         }
 
-        /* Bank the unspent allocation for later Insight purchases. */
+        /* Attribute allocation is separate from earned Insight in new runs. */
         for (i = 0; i < stat_count; i++)
             cost += birth_stat_current_cost(stats[i]);
 
@@ -150,7 +150,8 @@ NavResult player_birth_aux_2(int stats[BIRTH_STAT_MAX])
             continue;
         }
 
-        p_ptr->insight_points = insight_enabled ? MAX_COST - cost : 0;
+        p_ptr->insight_points = insight_enabled && !insight_reworked_enabled()
+            ? MAX_COST - cost : 0;
 
         for (i = 0; i < BIRTH_STAT_MAX; i++)
             stat_costs[i] = (i < stat_count)

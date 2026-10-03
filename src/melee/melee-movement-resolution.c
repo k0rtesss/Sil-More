@@ -335,6 +335,13 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
     /* The grid is occupied by the player. */
     if (cave_m_idx[ny][nx] < 0)
     {
+        /* A quiet exchange must not immediately turn into forced contact
+         * recognition when its unwary target wanders into the player. */
+        if (insight_reworked_enabled()
+            && (int)(m_ptr - mon_list) == silent_passage_exchange_target
+            && m_ptr->alertness < ALERTNESS_ALERT)
+            return;
+
         // Unalert monsters normally notice the player instead of attacking.
         if (m_ptr->alertness < ALERTNESS_ALERT)
         {

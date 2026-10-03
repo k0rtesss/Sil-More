@@ -599,7 +599,7 @@ static cptr get_quest_reward_text(int quest_idx)
             if (idx >= 0 && idx < z_info->b_max) {
                 ability_type* b_ptr = &b_info[idx];
                 if (b_ptr->name) {
-                    ability_name = b_name + b_ptr->name;
+                    ability_name = ability_display_name(b_ptr);
                 }
             }
         }

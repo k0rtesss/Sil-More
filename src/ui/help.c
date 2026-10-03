@@ -189,6 +189,10 @@ void binding_action_label(int binding, char* buf, size_t buflen)
     case KTRL('F'):
         SDL_strlcpy(buf, "Choose active arrows (^F)", buflen);
         return;
+    case KTRL('L'):
+        SDL_strlcpy(buf, insight_reworked_enabled()
+            ? "Dim / restore light (^L)" : "Unavailable (^L)", buflen);
+        return;
     case 'f':
         SDL_strlcpy(buf, "Ranged attack (f)", buflen);
         return;
@@ -428,6 +432,10 @@ void binding_action_short(int binding, char* buf, size_t buflen)
         return;
     case KTRL('F'):
         SDL_strlcpy(buf, "Choose active arrows", buflen);
+        return;
+    case KTRL('L'):
+        SDL_strlcpy(buf, !insight_reworked_enabled() ? "Unavailable"
+            : (p_ptr->light_dimmed ? "Restore light" : "Dim light"), buflen);
         return;
     case 'f':
         SDL_strlcpy(buf, "Ranged attack (active weapon)", buflen);

@@ -9498,3 +9498,669 @@ Final deployment verification: build-standard/sil-more.exe and sil-more-windows-
 - Both final parallel incremental builds passed. GCC analyzer completed all 27 modified C translation units at O1; the final capture edit was analyzed again successfully. Remaining ability-token diagnostic is excluded by the preceding full `STAT` prefix comparison. Player-parser null warnings led to the additional header guards. Evidence: `analysis-final/` and `analysis-capture/` under the review output directory.
 - Refreshed deployment executables and verified matching SHA256: standard `01462cc662500a87425a80937bcc470113b5c4944d0484785a6ba9261ed604c0`; portable `b8ae12790fdb60bb14e6968a127e7a06f849553663bd6a3b5a42b49d140efd6e`. Hash records: `scripts/output/review-second-pass/deployment-hashes.json`.
 - Final isolated portable SDL startup with dummy/software drivers reached `initial_menu` without ERROR/FATAL entries. Evidence: `startup-final.log`, adjacent clone log, and final build logs under `scripts/output/review-second-pass/`. No manual gameplay/UI replay, physical controller/touch, mobile SDK/device build/run or listening validation in this pass. `git diff --check` passed. Changes remain uncommitted.
+
+## 2026-10-03: Insight ability progression prototype
+
+Status: design proposal for three representative builds, grounded in current 0.9.9 templates and runtime rules. Gameplay/data files are unchanged. Proposed prices and starting points are candidates for playtesting, not measured balance results.
+
+### Progression contract
+
+- XP pays for invested skill ranks. Insight pays for learning abilities and specializations; the Insight mode has no additional ability XP fee.
+- Keep each ability in its existing skill category. Display the shared Insight balance across categories; payment currency does not determine tree placement.
+- Keep primary invested-skill gates and explicit permanent-stat/cross-skill requirements unless a particular change has a stated gameplay reason.
+- Independent techniques need no unrelated ability prerequisite. Refinements extend their parent's actual decision loop. Advanced techniques expand a style; compositions expand a song repertoire. Combinations require the capabilities they actually combine.
+- An OR prerequisite means alternative access, not mutually exclusive purchases. Use permanent exclusions only for incompatible versions of one behaviour.
+- Every purchase must be useful before the character completes its route. Do not add filler nodes to lengthen a tree.
+
+### Controlled economy for the first prototype
+
+- Give a neutral test character 2 starting IP, independent of birth attribute allocation.
+- Retain the 13-point birth attribute allocation. For these comparisons, spend all 13 points; there is no unused-stat-point bank in the reference character.
+- Base techniques and bounded utility abilities below cost 1 IP. Refinements with additional attacks, action compression, disabling effects, concealment recovery, or major repertoire expansion cost 2 IP. These prices reflect impact, not merely the presence of a parent link.
+- Keep monster-family, vault, quest, artefact and other Insight reward triggers unchanged for the comparison. There are 14 possible family awards; availability and timing are not guaranteed.
+- All budgets below include the proposed 2 starting IP. Compare 4, 7 and 10 total available IP as controlled low, middle and higher budgets, not as predictions for particular depths.
+- Attribute increases remain an alternative expenditure through the existing escalating Attributes route. Exclude the eight separately purchasable skill-stat nodes from new purchases in this prototype to avoid a second cheap attribute price. Preserve existing learned bonuses in any eventual migration.
+- At an invested attribute of 2, the next direct increase costs 3 IP. From 3 it costs 4 IP. Count such spending explicitly when an advanced ability needs a higher permanent stat.
+- A 1 IP base ability can still be a better purchase than a 2 IP refinement in a particular situation. The price distinction does not claim otherwise.
+
+The reference XP formula is the current skill-training rule: reaching rank n from zero costs 50*n*(n+1) XP. The numbers below exclude equipment, origins, curses, special grants, attribute spending and any ability XP charge. "Gate floor" is the XP needed for eligibility, not a sufficient survival build.
+
+### Route A: Nimble duelist
+
+Player loop: manage adjacent space, use a light weapon's critical hits, and choose when movement should also produce an attack.
+
+| Ability | Stable ID | IP | Eligibility and access | Immediate role |
+| --- | ---: | ---: | --- | --- |
+| Finesse | 1 | 1 | Melee 2 | Improve melee critical frequency. |
+| Dodging | 40 | 1 | Evasion 2 | Gain +3 Evasion after moving, in light armour. |
+| Subtlety | 8 | 2 | Melee 8 AND Finesse | Specialize critical hits with a one-handed weapon and an empty other hand. |
+| Flanking | 46 | 2 | Evasion 8 AND permanent Dexterity 2 AND Dodging | Gain an attack when stepping between squares adjacent to an opponent, in light armour. |
+
+Entry: Finesse + Dodging = 2 IP; Melee 2 / Evasion 2 gate floor = 600 XP.
+
+First refinement: choose Flanking for movement-based offence, or Subtlety for the empty-hand critical style. Either first refinement brings the package to 4 IP and its eligibility floor to 3,900 XP.
+
+Full core: Finesse + Dodging + Subtlety + Flanking = 6 IP; Melee 8 / Evasion 8 gate floor = 7,200 XP. Both refinements may be learned; there is no permanent fork.
+
+Optional reactive route: Parry (ID 42, 1 IP, Evasion 4) -> Riposte (ID 48, 2 IP, Evasion 10 AND Parry). Parry is immediately useful without Riposte. This adds 3 IP to the core, taking it to 9 IP and its gate floor to 9,100 XP. Riposte rewards sufficiently large enemy misses; it has no stationary-only condition. It can coexist with Flanking.
+
+Opportunity cost: a duelist with 3 spare IP can buy Parry + Riposte, raise invested Dexterity 2 to 3, or buy situational utilities. Compare those choices directly; do not assume the new attack package automatically wins.
+
+Constraints: light armour, Subtlety's empty off-hand, weapon-dependent Riposte thresholds, and usable adjacent space. Preserve these existing restrictions. Flanking/retreat attacks are suppressed while singing Song of Disguise, so avoid promising that combination as passive free offence.
+
+### Route B: Mobile archer
+
+Player loop: reposition, take a faster shot after moving, and keep shots useful against armour or dangerous pursuers.
+
+| Ability | Stable ID | IP | Eligibility and access | Immediate role |
+| --- | ---: | ---: | --- | --- |
+| Point Blank Archery | 22 | 1 | Archery 4 | The adjacent target does not gain an attack of opportunity from the shot. Other adjacent alert enemies still can. |
+| Dodging | 40 | 1 | Evasion 2 | Moving improves defence in light armour. |
+| Skirmishing | 29 | 2 | Archery 6 AND (Dodging OR Sprinting) | A shot after movement costs half a turn in light armour. Restore the existing Sprinting access alternative. |
+| Puncture | 23 | 1 | Archery 5 | Ensure 5 damage when protection would otherwise block all arrow damage. |
+| Crippling Shot | 26 | 2 | Archery 8 AND (Puncture OR Ambush) | Damaging critical shots can slow a foe after a resisted check. Restore the Ambush alternative. |
+
+Entry: Point Blank Archery + Dodging = 2 IP; Archery 4 / Evasion 2 gate floor = 1,300 XP.
+
+First refinement: add Skirmishing for a 4 IP package; Archery 6 / Evasion 2 gate floor = 2,400 XP. Movement followed by shooting costs 1.5 ordinary action units. The shot records an archery action, so this does not grant indefinitely repeated half-turn shots after one move.
+
+Armour/control core: add Puncture + Crippling Shot for a 7 IP package; Archery 8 / Evasion 2 gate floor = 3,900 XP.
+
+Important correction to the initial comparison: Puncture has a mechanical connection to Crippling Shot. Crippling requires at least one critical bonus die AND positive damage AND a target without critical resistance. Puncture can keep armour from making a critical hit deal zero damage. It does not create the critical dice or bypass critical resistance.
+
+Alternative concealed-opening core: replace Puncture with Ambush (ID 24, 1 IP, Archery 6 AND Stealth 3 AND permanent Dexterity 2). Ambush supplies an additional critical die against non-alert targets, including on the opening shot. The alternative core still costs 7 IP; its gate floor is 4,500 XP because Stealth 3 costs 600 XP. Both access parents remain purchasable.
+
+Optional choices:
+- Fletchery (ID 21, 1 IP, Archery 3): ammunition quality and management.
+- Leaping (ID 44, 1 IP, Evasion 6): terrain-based escape.
+- Sprinting (ID 45, 1 IP, Evasion 7 AND (Dodging OR Leaping)): sustained movement.
+- Deadly Hail (ID 27, 2 IP, Archery 9 AND (Rout OR Puncture)): a double-damage follow-up after an arrow kill. It remains optional and does not require an unrelated new root. With the Puncture core, this gives a 9 IP package.
+
+Opportunity cost: at a 9 IP budget, choose the 7 IP core plus Deadly Hail, or the core plus Leaping and Sprinting, or a different utility/attribute investment. A kill chain and an escape toolkit support different encounter decisions.
+
+Constraints: ammunition, light armour for Skirmishing/Dodging, vulnerable movement routes, shot accuracy, damaging-critical eligibility, and resistant targets. Raising Evasion only to its rank-2 gate is not a sensible survival assumption.
+
+### Route C: Stealth singer
+
+Player loop: avoid alerting enemies, choose an expensive concealment burst when observed, and break line of sight to recover concealment.
+
+| Ability | Stable ID | IP | Eligibility and access | Immediate role |
+| --- | ---: | ---: | --- | --- |
+| Disguise (Stealth) | 60 | 1 | Stealth 3 | Reduce unwary enemies' line-of-sight detection advantage. |
+| Song of Silence | 144 | 1 | Song 3 | Muffle sounds and calls for allies; 1 Voice per 3 turns as a single theme. |
+| Vanish | 65 | 2 | Stealth 8 AND Disguise (Stealth) | Improve the chance of making enemies unwary after leaving line of sight. |
+| Song of Disguise | 153 | 2 | Song 8 AND (Song of Silence OR Song of Freedom) | A resisted concealment composition for observed situations; 3 Voice per turn as a single theme. Restore the existing Freedom access alternative. |
+
+Entry: Disguise (Stealth) + Song of Silence = 2 IP; Stealth 3 / Song 3 gate floor = 1,200 XP.
+
+First development: buy Vanish for recovering concealment after an escape, or Song of Disguise for a Voice-intensive attempt to pass observers. Either gives a 4 IP package and a 4,200 XP gate floor.
+
+Full core: all four abilities = 6 IP; Stealth 8 / Song 8 gate floor = 7,200 XP.
+
+Optional repertoire:
+- Song of Lorien (ID 154, 2 IP): Song 8 AND (Song of Silence OR Song of the Trees); preserve the existing alternative access. It gradually puts opponents to sleep and uses 1 Voice per turn as a single theme.
+- Woven Themes (ID 148, 2 IP): Song 6; sing a minor theme alongside a major theme, with the existing ordinary half-score rule and existing synergy exceptions.
+
+Either addition gives an 8 IP package; both give 10 IP. These are additional compositions/capabilities, not mandatory intermediate nodes or permanent replacements for Silence.
+
+Optional physical ambush route: Assassination (ID 61, 1 IP, Stealth 4) -> Cruel Blow (ID 62, 2 IP, Stealth 5 AND Assassination). This adds 3 IP, taking the core to 9 IP. Effective melee training and equipment are additional investments, not implied by the Stealth requirement.
+
+Opportunity cost: devote the next 2 IP to sleep control, simultaneous themes, or a different capability. Do not force Woven Themes before Song of Disguise becomes useful.
+
+Constraints: Voice, observers' Perception/Will, the increasing observer penalty, line-of-sight escape routes, and enemy awareness. Attacking ends Song of Disguise. Its Voice drain is nine times Silence's long-run authored single-theme rate; measure how long the character can use it in real encounters. Vanish requires leaving line of sight, so avoid presenting it as an instant reset while surrounded.
+
+### Equal-budget comparison
+
+| Total IP available | Nimble duelist | Mobile archer | Stealth singer |
+| ---: | --- | --- | --- |
+| 2 | Finesse + Dodging | Point Blank Archery + Dodging | Stealth Disguise + Silence |
+| 4 | Entry + Flanking OR Subtlety | Entry + Skirmishing | Entry + Vanish OR Song of Disguise |
+| 7 | Full 6 IP core + 1 IP utility/bank | Full 7 IP armour/control or concealed-opening core | Full 6 IP core + 1 IP utility/bank |
+| 10 | Core + Parry/Riposte + 1 spare IP | Core + Deadly Hail + 1 spare IP, OR core + Leaping/Sprinting + 1 spare IP | Core + Lorien + Woven Themes |
+
+These columns show candidates within a budget, not unique optimal purchases. Mixed styles are allowed. No route requires an exclusive whole-skill commitment.
+
+For an illustrative common defence/awareness comparison, add Evasion 8, Will 5 and Perception 3, counting already required ranks once:
+
+| Example core plus common support | Total trained XP from zero | Ability IP |
+| --- | ---: | ---: |
+| Duelist: Melee 8, Evasion 8, Will 5, Perception 3 | 9,300 | 6 |
+| Archer: Archery 8, Evasion 8, Will 5, Perception 3 | 9,300 | 7 |
+| Archer with Ambush: previous row + Stealth 3 | 9,900 | 7 |
+| Singer: Stealth 8, Song 8, Evasion 8, Will 5, Perception 3 | 12,900 | 6 |
+
+This support package is an accounting example, not a claim that these ranks guarantee survival. The singer has a real hybrid XP premium of 3,600 here. Test whether avoidance and control compensate. Do not add another mandatory branch solely to make its tree resemble the weapon trees.
+
+### Acceptance checks for a later playable prototype
+
+1. At the entry budget, each pair is immediately useful with ordinary equipment and no optional discovery. The player may instead spend the two starting points on another style.
+2. At 4 IP, the changed tactical loop is visible: movement attack, faster mobile shot, improved concealment recovery, or a short disguise burst. Each remaining parent is useful independently.
+3. At 7-10 IP, spending choices stay competitive: deeper specialization, a supporting technique, repertoire, survival utility, or an attribute. Record repeat purchases across several players/seeds; a universal first purchase is a balance signal.
+4. Report actual family/reward income at relevant depths, unspent IP and the delay between meeting a skill gate and affording an ability. Do not use the 14-family maximum as observed income.
+5. Try an unlucky run with few optional vault/quest rewards. The first distinctive loop must remain reachable without an optional rare discovery.
+6. Check the archer against high protection, critical resistance, an adjacent target with a second adjacent enemy, narrow escape routes, and ammunition pressure.
+7. Check the duelist with an occupied off-hand, heavy armour, cramped adjacency and weak weapon evasion. Show restrictions correctly instead of granting dormant refinements an unexplained benefit.
+8. Check the singer against several observers, failed disguise checks, depleted Voice, attacks that end disguise, and corridors without a way to break line of sight. Test both major/minor orderings after buying Woven Themes.
+9. Compare a 3 IP attribute increase with the same-budget ability packages. If raw stats dominate consistently, change the shared economy rather than inventing a replacement effect for every existing stat node.
+10. Stop after each purchase for a player-facing explanation: what can the character do now, and what resource/situation limits it?
+
+### Decisions required before engine implementation
+
+- Birth banking: the current implementation converts unused birth stat points to IP. The comparison deliberately excludes that conversion. Set a coherent rule before production; do not let deliberately depressed birth stats buy most of a complete ability route.
+- Point supply: test 2 starter IP and the current discovery income first. Add predictable progression income only if observed unlucky runs have long ability droughts; record an exact schedule and total before adding it.
+- Attribute migration: preserve all shipped ability identities and already earned stats. Consolidating new purchases must also account for any capacity effects attached to current stat abilities.
+- Origin/curse identity: ability-XP discounts from affinities, Minstrel, and ability-cost modifiers need explicit Insight-mode semantics. Do not round a small XP discount into a free 1 IP purchase or silently delete an origin's feature. Existing non-price benefits should be inventoried independently.
+- Quick Study: this prototype requires true prerequisite relationships and does not let it bypass them. Its current prerequisite-bypass description cannot survive a full conversion unchanged; choose and validate its replacement role before enabling the new mode.
+- Remaining abilities and Smithing: assign every ordinary purchasable ability a deliberate price before switching the whole system. Artifice must retain Enchantment AND a relevant crafting ability, plus its skill/stat gates; a stage link cannot discard essential crafting requirements.
+- Presentation/parser: do not use L:1 as a blanket "costs Insight" marker; it suppresses the primary skill gate and moves the entry's presentation branch. Payment, category and learning gates need distinct handling. Preserve OR parents and essential AND requirements together.
+- Runtime/statements: show skill-training XP separately from ability IP, including any required attribute investment. Parent ownership must not be presented as proof that a separate song or technique modifies its parent's runtime effect.
+- Compatibility: preserve Insight-off behaviour, learned abilities, free origin/item/quest grants and stable IDs. Define any save changes only after the prototype rules and conversion policy are settled.
+
+### Source and validation evidence
+
+- Ability identities, existing gates/effects and Voice intervals: lib/edit/ability.txt.
+- Current Insight prices and prerequisite replacement: lib/edit/ability-insight.txt; src/player/player-ability-stages.c; src/cmd/ui/cmd-ui-abilities.c.
+- Skill training and attribute increments: src/birth/birth-skills.c; src/birth/birth-setup.c; src/player/experience.c.
+- Skirmishing's 50 energy shot, action recording, Ambush's extra die, Puncture's armour case and Crippling's positive-damage/critical-resistance checks: src/cmd/combat/cmd-ranged.c.
+- Movement attacks suppressed during Song of Disguise: src/cmd/combat/cmd-combat.c. Player attacks end that song: src/player/player-song-disguise.c.
+- Minor themes and existing Silence synergy exceptions: src/player/player-skills.c.
+- Recalculated all entry/refinement/core/support XP totals from authored ranks. Checked stable IDs, all access alternatives, core IP sums and equal-budget packages. No engine/build/playtest validation is claimed for these proposed rules.
+
+## 2026-10-04: Complete Insight ability system
+
+This is the complete implemented design for new Insight runs. It supersedes the 2026-10-03 three-route prototype, particularly its proposal to spend Insight on basic abilities. It covers all 110 previous ability records and the two appended Stealth abilities. The implementation also incorporates the requested Silent Passage combination and ordinary/full light dimming.
+
+### System decisions
+
+1. Basic techniques and ordinary practices cost XP only. Specialized refinements and late arts cost Insight only. An ability never charges both currencies.
+2. Authored basic prices are 500 XP or 800 XP. They measure the technique's complexity and practical scope, not its required rank, how many abilities the character owns, or how many free starting abilities it has.
+3. Insight prices are 1 IP for focused specializations and 2 IP for substantial late arts. All 52 specialization purchases together cost 68 IP; a character is not expected to purchase the whole catalogue.
+4. Learning eligibility uses invested skill ranks, relevant learned predecessors, and specific earned conditions such as Bane's four kills. Remove ability-learning attribute thresholds in this model. Attributes continue to affect attack, damage, defence, health, Voice, crafting capacity and equipment restrictions.
+5. XP basics have no ability-predecessor tolls. Their invested-rank/cross-skill gates supply training requirements. Independently useful advanced disciplines can have no ability predecessor; every advanced ability need not be called an upgrade.
+6. Permanent origin/quest grants bypass acquisition prices and learning gates. Keep all 51 origins' valid starting grants, do not grant missing ancestors automatically, and do not demand ancestor purchases to activate an inherited ability.
+7. A permanently learned/granted advanced ability is a sufficient anchor for its children even if its own normal purchase parents are absent. Check immediate required knowledge, not a recursively complete ancestor chain. Temporary equipment grants do not satisfy permanent learning prerequisites.
+8. Action requirements remain real: a gifted Artifice does not create an unlearned weapon-crafting permission, Woven Themes still needs two actual songs to weave, and Smite still needs the appropriate weapon. This is distinct from paying to learn the gifted ability again.
+9. Retirement removes the eight named permanent +1 stat nodes. Do not hide the removed +1 rewards in other abilities. Transfer only their independent storage benefits: +6.0 qt Harness to Warden, +6.0 qt Pack to Indomitable.
+10. Storage additions require the recipient to be personally learned or inherited AND active. Item-granted Warden/Indomitable retain their other effects without adding storage. Preserve existing overcapacity handling when an active storage benefit is disabled; never delete carried items.
+11. Keep the eight mechanical skills. Add role labels and XP/Insight filters within them. Move Exchange Places' learning/display category to Evasion and Opportunist's to Melee. Keep their stable ability identities and saved/origin/item bit addresses unchanged.
+12. Use no mandatory class selection, whole-skill exclusive branch or filler nodes. A player may buy compatible alternatives if the resources permit it.
+13. Preserve existing birth/quest vow choices and quest gifts. Oath [106] is already a deprecated Will-menu record, hidden because oath selection occurs at birth; keep it as a non-purchasable legacy access record. Existing vow eligibility, one-oath rules and consequences remain.
+14. Keep most existing mechanics and skill thresholds. Rework only where a relation or acquisition rule has a purpose: pricing, retirement, category corrections, device mastery, Appraisal, essential craft prerequisites and useful Stealth alternatives.
+
+### Why these changes belong together
+
+The current overlay conflates learning currency, prerequisite handling and a second upgrade payment. That can make a renamed stage feel like the same ability sold again. The revised categories have one job each:
+
+| Category | Acquisition | Purpose |
+| --- | --- | --- |
+| Foundations | 500/800 base XP | Broad useful techniques, craft permissions and ordinary songs |
+| Specializations | 1 IP | A focused discipline or refinement that changes a tactical choice |
+| Late arts | 2 IP | A substantial advanced capability with skill/equipment/resource tradeoffs |
+| Vows and gifts | Existing birth/quest/commitment rules | Inherited, earned or binding powers rather than ordinary shopping |
+
+Skill rank still costs XP for competence; that is shown separately from learning the ability. A 1/2 IP specialization adds no XP purchase fee, and a basic cannot hide a mandatory Insight attribute payment in its eligibility.
+
+| Comparator | Verified pattern | Design lesson applied here |
+| --- | --- | --- |
+| Last Epoch | Specializing a known skill opens its own tree; Javelin can become an area attack or a planted standard. [Official specialization rules](https://support.lastepoch.com/hc/en-us/articles/46363203944859-Skill-Specialization), [official skill examples](https://lastepoch.com/skills/) | Functional entry abilities first, followed by changes to timing, targeting or position. Use short branches suitable for a finite dungeon run. |
+| Stoneshard | Its 2021 leveling rework expanded starting paths and made certain converging advanced nodes require all linked abilities. [Developer leveling devlog](https://store.steampowered.com/news/posts/?appids=625960&enddate=1637962098&feed=steam_community_announcements) | Provide broad early access; retain AND when all knowledge is functionally necessary, as with great-work Smithing. Avoid long unrelated prerequisite tolls. |
+| Hades | Official patches separately adjust cross-god boon eligibility and their effects, and expose a boon list during choices. [Supergiant patch notes](https://www.supergiantgames.com/blog/hades-updates/) | Sparse cross-skill combinations and visible destinations help planning. Keep Sil-More's acquisition deterministic. |
+
+These are design judgments drawn from those mechanics, not evidence that any other game proves these exact prices. Keep existing effects when they already support a useful decision: Concentration already preserves waiting, Crippling Shot already has two meaningful routes, and the current Alchemy/Channeling auto-identification responsibilities are different.
+
+The proposed menu should show the learning skill, price currency, unmet invested ranks, predecessor alternatives, and inherited status together. Inherited abilities must show their actual full active effects. Role labels (force/precision, mobility/armour, ambush/infiltration, hunting/chemistry, and repertoire/weaving) aid browsing without introducing classes or another resource.
+
+### Acquisition totals
+
+| Skill / learning category | XP abilities | Insight abilities | IP for every specialization |
+| --- | --- | --- | --- |
+| Melee | 6 | 11 | 15 |
+| Archery | 5 | 4 | 5 |
+| Evasion | 6 | 5 | 6 |
+| Stealth | 2 | 4 | 5 |
+| Perception | 3 | 7 | 7 |
+| Will | 4 | 4 | 6 |
+| Smithing | 4 | 5 | 7 |
+| Song | 7 | 12 | 17 |
+
+- 37 XP abilities, 52 Insight abilities, 15 vow/gift/access records, and 8 retired records = 112 complete dispositions.
+- The 52 Insight abilities include 50 existing abilities and two new Stealth abilities. There are 104 retained/new entries after retiring eight, including the non-purchasable legacy Oath access record.
+- This is an acquisition design, not a claim that a 1 IP ability and a 2 IP ability have precisely measured relative power.
+
+### XP pricing, origin traits and attribute growth
+
+Base XP is the amount printed in the catalogue below. The proposed purchase price is:
+
+    max(250, base_XP
+             - 50 * affinity_level(learning_skill)
+             - 100 * Seafarer
+             - 100 * minstrel_level() [Song basics only]
+             + 100 * ability_cost_curse_delta)
+
+- Reuse actual affinity aggregation: count race and origin flags independently, including simultaneous positive/negative flags and curse copies; normal range -2 through +2. Eärendil retains the existing Will-affinity-3 exception.
+- Seafarer restores an explicit 100 XP basic-learning discount in Insight mode. Its current holders are Círdan, Voronwë, Eärendil, Tuor and Celeborn.
+- Minstrel applies only to Song basics and keeps the existing function's uncapped trait/curse calculation. Daeron's separate full-strength minor-theme trait remains.
+- The 250 XP floor prevents discounts from turning broad public techniques into an escalating sequence of free purchases. No rounding or XP-to-IP conversion is needed.
+- Prices never rise because an origin or an item gave the character another ability. Already owned abilities cost nothing to retain or activate. No discount reduces an Insight price.
+- Missing invested ranks cost normal XP training: rank n from zero costs 50*n*(n+1). The acquisition panel shows this training separately from the ability's price.
+- Starting XP remains the current 5,000 in ordinary runs; special fixed-XP modes keep their existing starting amount.
+- There is no universal starter Insight. Starting individuality comes from the existing origin package and unique traits.
+- Birth's 13 allocation points are for attributes only. Complete the allocation before finalizing birth; do not exchange deliberately weak attributes for ability Insight. Offer the existing full-allocation presets to make completion easy.
+- Direct attribute growth remains separate from the ability tree and uses escalating Insight prices based on invested allocation, with a 2 IP minimum: negative/0 to the next rank costs at least 2; 1->2 costs 2; 2->3 costs 3; 3->4 costs 4; 4->5 costs 5; 5->6 costs 6. Preserve existing investment/cap accounting and origin offsets.
+- Attribute growth improves performance but is never a prerequisite payment for learning an XP technique or an Insight art. Conditional combat stats, temporary sung Grace and binding oath rewards remain; they are not replacements for the retired eight permanent nodes.
+
+### Insight income and whole-run budget
+
+Retain the current reward triggers, each deduplicated at its existing scope:
+
+| Source | Supply |
+| --- | --- |
+| First visible member of a monster family | 1 IP each for 14 authored families; no award for every individual unique |
+| Understanding an artefact difficulty milestone | 1 at 15, 25, 35, 45, 55 and 65; identification/crafting share the once-per-run flags |
+| Greater-vault discovery | 1 per discovered greater vault |
+| Completed Valar quest | 1 per qualifying quest completion |
+| First-thrall gift refusal | Existing one-time 1 IP opportunity |
+| Song-duel milestone | Existing one-time 1 IP reward for overcoming a unique with Contest/Lament |
+| Catastrophe milestone | Existing one-time 1 IP reward, when that optional system produces it |
+
+The fixed family/artefact/one-time reward ceiling is 23 IP, plus vault/quest opportunities. This is a ceiling, not typical income; optional content and seeing all families are not guaranteed. Do not add level-up IP, generic starter IP, repeat-kill IP, or birth-refund IP in this design.
+
+The target is a recognizable build after 1-3 earned Insight decisions and a substantial specialization budget around 4-8 purchases / 5-10 IP later in a run. These are design targets to evaluate, not measured payout or depth predictions. Additional income broadens a build or pays for optional attributes.
+
+Retire the old stat-ability-purchase CATA_ABILITY trigger in the new ruleset along with its eight source abilities. Do not attach a new disaster to buying every mastery. Retain catastrophe triggers from their other authored events and the separate existing milestone reward.
+
+### Complete abilities catalogue
+
+Requirements below apply to PURCHASES. All effects keep their current physical/equipment/resource limits unless an explicit change is described. IDs are existing stable serials; new IDs 174 and 175 are appended records, not reuse of retired slots. OR provides alternative access; AND requires every listed capability.
+
+### Melee
+
+Force, precision, polearms, throwing and hybrid readiness. Opportunist moves here because its action is a melee response to enemy movement.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 0 | Power | 500 XP | Melee 1 | +1 melee damage sides; critical base +1. |
+| 1 | Finesse | 500 XP | Melee 2 | Critical base falls from 7 to 5. |
+| 2 | Knock Back | 500 XP | Melee 3 | Strength versus Constitution knockback; grounded targets on ice can move two squares. |
+| 3 | Throwing | 800 XP | Melee 4 | +1 throwing attack; half distance penalties; easier thrown criticals; -20% throwing Harness volume; eligible quick-thrown daggers and one free first throwing-weapon change. |
+| 4 | Polearm Mastery | 800 XP | Melee 4 | +2 polearm attack while melee is active; brace on waiting or ranged-to-melee switching against advancing foes. |
+| 5 | Charge | 800 XP | Melee 5 | +3 Strength/Dexterity on an attack immediately after moving toward its target. |
+| 6 | Follow-Through | 1 IP | Melee 6; (Power [0] OR Finesse [1]) | Attack another adjacent enemy after a kill. |
+| 7 | Impale | 1 IP | Melee 7; (Power [0] OR Polearm Mastery [4]) | Strike through a foe with a polearm or greatsword. |
+| 8 | Subtlety | 1 IP | Melee 8; Finesse [1] | Critical base -2 with a one-handed weapon and empty off-hand. |
+| 9 | Whirlwind Attack | 2 IP | Melee 9; (Polearm Mastery [4] OR Follow-Through [6] OR Formidable [103]) | Attack all adjacent foes; requires five open adjacent squares. |
+| 10 | Zone of Control | 1 IP | Melee 10; (Power [0] OR Polearm Mastery [4]) | Attack foes moving between adjacent squares after you stayed still. |
+| 11 | Smite | 2 IP | Melee 11; (Power [0] OR Impale [7]) | Maximize the first two-handed melee hit, then spend a recovery turn. |
+| 12 | Two Weapon Fighting | 2 IP | Melee 12; (Finesse [1] OR Parry [42] OR Warden [15]) | Add an off-hand attack with the existing -3 Strength/Dexterity penalties. |
+| 13 | Rapid Attack | 2 IP | Melee 13; (Subtlety [8] OR Opportunist [64]) | An extra melee attack at -3 Strength/Dexterity; first melee-to-melee active weapon change before the next action is free. |
+| 15 | Warden | 1 IP | Melee 7 | While a bow is active, add floor(max(0, base Melee - base Archery)/2) Archery; with Versatility use ceil(base Melee/3) instead. First melee-to-bow change is free; +6.0 qt learned Harness. |
+| 16 | Power Throw | 1 IP | Melee 8; Throwing [3] | After readying/waiting, throw a Harness spear/hand axe at an adjacent foe and strike in melee; separate attack rolls, successful damage combined, one protection roll. |
+| 64 | Opportunist | 1 IP | Melee 7; (Assassination [61] OR Charge [5]) | Attack an adjacent foe moving away. Learning category moves from Stealth to Melee. |
+
+### Archery
+
+Ammunition, close shooting, mobility and finishing. Puncture and Ambush are both real routes into a damaging-critical specialization.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 20 | Rout | 500 XP | Archery 2 | +5 Dexterity when shooting fleeing foes. |
+| 21 | Fletchery | 500 XP | Archery 3 | Improve/carve arrows; -20% loose-arrow Pack volume. |
+| 22 | Point Blank Archery | 800 XP | Archery 4 | Adjacent target cannot retaliate against the shot; other enemies still can. Existing shortbow/shield compatibility. |
+| 23 | Puncture | 800 XP | Archery 5 | Deal 5 damage when protection would fully block a shot. |
+| 24 | Ambush | 800 XP | Archery 6; Stealth 3 | Extra critical die against non-alert targets. |
+| 25 | Versatility | 1 IP | Archery 7 | While melee is active, add floor(max(0, base Archery - base Melee)/2) Melee; with Warden use ceil(base Archery/3) instead. First bow-to-melee change is free. |
+| 26 | Crippling Shot | 1 IP | Archery 8; (Puncture [23] OR Ambush [24]) | A damaging critical can slow a foe; retains Will check and critical-resistance restriction. |
+| 27 | Deadly Hail | 2 IP | Archery 9; (Rout [20] OR Puncture [23] OR Ambush [24]) | Double arrow damage on the turn after an arrow kill; add Ambush as an alternative entry. |
+| 29 | Skirmishing | 1 IP | Archery 6; (Dodging [40] OR Sprinting [45]) | A shot after movement costs half a turn in light armour; first bow-to-bow active weapon change before the next action is free. |
+
+### Existing active-weapon combinations
+
+Retain the full switching interaction rather than reducing Warden/Versatility to a vague hybrid bonus. Every permission below spends the one free first active-weapon change before the next action; it does not permit repeated free switching. Base Melee/Archery in the formulas are invested ranks, never the partner's modified skill total.
+
+| Free direction | Required active abilities |
+| --- | --- |
+| Melee -> bow | Warden |
+| Bow -> melee | Versatility |
+| Melee -> melee | Rapid Attack OR (Warden AND (Throwing OR Versatility)) |
+| Bow -> bow | Skirmishing OR (Versatility AND (Throwing OR Warden)) |
+| Melee <-> throwing | Warden AND Throwing |
+| Bow <-> throwing | Versatility AND Throwing |
+| Throwing -> throwing | Throwing |
+
+With Warden, Versatility and Throwing together, all listed changes are available. Power Throw retains its separate combined-hit timing and keeps the melee weapon active.
+
+### Evasion
+
+Movement, shields, weapon defence and armour. Exchange Places becomes a trained movement technique; its retaliatory attack is its immediate tradeoff.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 40 | Dodging | 500 XP | Evasion 2 | +3 Evasion after movement in light armour. |
+| 41 | Blocking | 500 XP | Evasion 3 | Double shield protection after remaining still. |
+| 42 | Parry | 800 XP | Evasion 4 | Double primary melee weapon's Evasion bonus. |
+| 43 | Crowd Fighting | 800 XP | Evasion 5 | Halve opponents' surrounding bonus. |
+| 44 | Leaping | 800 XP | Evasion 6 | After an approach, jump chasms/traps; not webs or roosts. |
+| 45 | Sprinting | 1 IP | Evasion 7; (Dodging [40] OR Leaping [44]) | Gain speed after sustained running; existing light/heavy armour thresholds. |
+| 46 | Flanking | 1 IP | Evasion 8; Dodging [40] | Attack while stepping around an adjacent foe in light armour. |
+| 47 | Heavy Armour Use | 1 IP | Evasion 9; (Blocking [41] OR Crowd Fighting [43] OR Formidable [103]) | Weight-based physical protection; +1 Evasion with mail corslets/hauberks. |
+| 48 | Riposte | 2 IP | Evasion 10; Parry [42] | One counterattack per round when a foe misses by enough. |
+| 49 | Controlled Retreat | 1 IP | Evasion 11; (Dodging [40] OR Blocking [41] OR Polearm Mastery [4]) | Attack while stepping away if you did not move last round. |
+| 63 | Exchange Places | 800 XP | Evasion 6 | Swap with an adjacent foe and suffer its free attack. Moves from Stealth; remove unrelated parent toll. |
+
+### Stealth
+
+Silent Passage combines quiet finishing and unnoticed exchanges into one specialization. Veil of Shadows supports moving in darkness without personal illumination. These replace the earlier separate Quiet Kill and Slip Past proposal.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 60 | Disguise | 500 XP | Stealth 3 | Halve awake unwary enemies' line-of-sight detection bonus. |
+| 61 | Assassination | 800 XP | Stealth 4 | Stealth-based attack against non-alert/appropriately fooled targets; existing stationary ambush reaction. |
+| 62 | Cruel Blow | 1 IP | Stealth 5; Assassination [61] | Critical hits may confuse after the existing Will check; preserve current item drawback. |
+| 65 | Vanish | 2 IP | Stealth 8; Disguise [60] | Recover concealment more effectively after breaking line of sight. |
+| 174 | Silent Passage | 1 IP | Stealth 8; Disguise [60] AND Exchange Places [63] | A direct melee/bow/throwing kill of a foe non-alert before the hit adds no attack hearing bonus. A swap with a non-alert foe provokes no target attack or forced alert, and skips contact/passive detection caused by the swap. Other witnesses and independent noise still react. |
+| 175 | Veil of Shadows | 1 IP | Stealth 6; Disguise [60] | Ctrl-L suppresses all personal light, including helm/equipment, glowing weapons, songs, oaths and special bonuses. With Veil active, S sneaking and no personal light, perceive adjacent monsters/features through normal LOS without emitting light. Blindness and invisibility checks still apply. |
+
+Every new Insight character can use Ctrl-L to dim/restore the equipped light-slot source. Without Veil, other personal sources stay active. Dimming is a covering action: equipped fuel continues to burn. The state persists in saves, and learning/disabling Veil or changing sneaking mode refreshes sight immediately. Ambient terrain, floor-object and monster light remain real.
+
+### Perception
+
+Practical appraisal and senses lead into focused combat, hunting, chemistry and trap use.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 80 | Appraisal (formerly Quick Study) | 500 XP | Perception 1 | Keep +5 identification; remove prerequisite bypass. Rename to match its role. |
+| 81 | Focused Attack | 500 XP | Perception 2 | Attack bonus of Perception/2 after waiting. |
+| 82 | Keen Senses | 800 XP | Perception 3 | See just outside light; +5 spotting invisible foes. |
+| 83 | Concentration | 1 IP | Perception 4; Focused Attack [81] | Keep same-target attack streak bonus, capped at Perception/2; waiting preserves the streak. |
+| 84 | Alchemy | 1 IP | Perception 5; Appraisal (formerly Quick Study) [80] | Identify eligible herbs/potions/gems; disease/cure knowledge; quick splash potions; +50% Revelation/Foes/Treasures gem range. |
+| 85 | Bane | 1 IP | Perception 6; four kills of the chosen family | Kill-growing bonus to all skill rolls against a chosen family. |
+| 86 | Outwit | 1 IP | Perception 7 | Perception check to negate an incoming critical's extra damage. |
+| 87 | Resonance | 1 IP | Perception 8; Keen Senses [82] | Detect unseen enemies; double identification's Perception term while counting Grace once. |
+| 88 | Master Hunter | 1 IP | Perception 9; Bane [85] | Attack bonus from prior kills of that type, capped at Perception/2; use Bane as the functional foundation. |
+| 90 | Rewire Traps | 1 IP | Perception 7; Keen Senses [82] | Disarmed suitable traps become safe for you and hazardous to monsters. |
+
+### Will
+
+Resolve, morale, light, endurance and devices. Channeling is independent of Alchemy; ordinary device use remains available through existing actions.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 100 | Curse Breaking | 500 XP | Will 1 | Break curses on removal; identification bonus, especially cursed items; Sanctity gems can break jinxed egos. |
+| 101 | Channeling | 1 IP | Will 5 | Identify staves/horns and transfer charges safely. Remove Alchemy prerequisite; this is device mastery. |
+| 102 | Strength in Adversity | 800 XP | Will 3 | Existing conditional +1/+3 Str/Dex/Grace at half/quarter HP; no permanent-stat learning benefit. |
+| 103 | Formidable | 800 XP | Will 4 | Melee kills scare witnesses; foes ignore injury-driven morale weakness. |
+| 104 | Inner Light | 800 XP | Will 5 | +2 light intensity inside the existing radius. |
+| 105 | Indomitable | 2 IP | Will 8 | Resist fear/confusion/stun/hallucination/poison and reduce hunger; additionally +6.0 qt personally learned Pack. |
+| 108 | Vengeance | 1 IP | Will 8; (Strength in Adversity [102] OR Concentration [83]) | An extra damage die on the next melee hit after melee injury; nonstacking. |
+| 109 | Majesty | 2 IP | Will 9; (Formidable [103] OR Inner Light [104]) | Reduce foe morale according to the Will difference. |
+
+### Smithing
+
+Craft permissions are ordinary XP learning; material, enchantment and great-work knowledge use Insight.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 120 | Weaponsmith | 800 XP | Smithing 2 | Craft weapons and gain weapon identification knowledge. |
+| 121 | Armoursmith | 800 XP | Smithing 3 | Craft armour and gain armour identification knowledge. |
+| 122 | Jeweller | 800 XP | Smithing 4 | Craft jewellery/horns/lights and gain relevant identification knowledge. |
+| 123 | Enchantment | 1 IP | Smithing 5; (Weaponsmith [120] OR Armoursmith [121] OR Jeweller [122]) | Enchant items; identify enchantments; unlock the ongoing half nonnegative permanent crafting Grace contribution to Smithing. |
+| 124 | Expertise | 1 IP | Smithing 6; (Weaponsmith [120] OR Armoursmith [121] OR Jeweller [122]) | Halve forge time; waive ordinary item XP/stat costs; unlock the ongoing nonnegative Dexterity Smithing contribution. |
+| 125 | Artifice | 2 IP | Smithing 10; Enchantment [123] AND (Weaponsmith [120] OR Armoursmith [121] OR Jeweller [122]) | Make custom artefacts; strong identification; unlock the ongoing nonnegative Grace Smithing contribution. Retain BOTH crafting and Enchantment. |
+| 126 | Masterpiece | 2 IP | Smithing 12; Enchantment [123] AND (Weaponsmith [120] OR Armoursmith [121] OR Jeweller [122]) | Exceed effective capacity by sacrificing base Smithing ranks; keep material/craft requirements. |
+| 128 | Alloy Mastery | 1 IP | Smithing 6; (Weaponsmith [120] OR Armoursmith [121] OR Jeweller [122]) | Use mithril/star iron without the extra alloy surcharge; forge those materials. |
+| 129 | Reforging | 800 XP | Smithing 4 | Repair items/bridges or add a missing prefix; retain category and 1.5x-difficulty checks. |
+
+### Song
+
+A repertoire of ordinary compositions leads to advanced songs and weaving. Voice costs and major/minor themes constrain use; learning another song does not permanently replace its predecessor.
+
+| ID | Ability | Purchase | Learning requirements | Effect / design decision |
+| --- | --- | --- | --- | --- |
+| 140 | Song of Elbereth | 500 XP | Song 1 | Fear song; foe Will penalty. Voice 1/turn. |
+| 141 | Song of Challenge | 500 XP | Song 1 | Enrage foes; reduce their Will/Stealth. Voice 1/3 turns. |
+| 142 | Song of Delvings | 500 XP | Song 2 | Reveal nearby passages/chambers from explored areas. Voice 1/3 turns. |
+| 143 | Song of Freedom | 800 XP | Song 2 | Reveal doors, disarm traps, clear rubble and resist slowing. Voice 1/3 turns. |
+| 144 | Song of Silence | 500 XP | Song 3 | Muffle sound/detection and calls for allies. Voice 1/3 turns. |
+| 145 | Song of Staunching | 800 XP | Song 3 | Stop bleeding immediately and accelerate healing. Voice 1/turn. |
+| 146 | Song of Thresholds | 800 XP | Song 4 | Seal closed doors against foes. Voice 1/3 turns. |
+| 147 | Song of the Trees | 1 IP | Song 5 | Scaling light radius; stun/wound dark creatures. Voice 1/3 turns. |
+| 148 | Woven Themes | 1 IP | Song 6; know two singable songs | Add a half-score minor theme; retain origin exceptions and existing synergies. |
+| 149 | Song of Slaying | 1 IP | Song 6; (Song of Challenge [141] OR Formidable [103]) | Melee criticals finish foes at the existing HP threshold. Voice 1/turn. |
+| 150 | Song of Revealing | 1 IP | Song 7; (Song of Delvings [142] OR Song of the Trees [147]) | Find nearby monsters/items; item identification benefit. Voice 1/3 turns. |
+| 151 | Song of Elveness | 1 IP | Song 7; (Song of Freedom [143] OR Song of Elbereth [140]) | Temporary +1 Grace and scaling Evasion while singing. Voice 1/turn. |
+| 152 | Song of Staying | 1 IP | Song 7; (Song of Challenge [141] OR Song of Thresholds [146]) | Song/2 Will and [2d2] protection. Voice 1/turn. |
+| 153 | Song of Disguise | 1 IP | Song 8; (Song of Silence [144] OR Song of Freedom [143]) | Resisted concealment against observers; attacks end it. Voice 3/turn. |
+| 154 | Song of Lorien | 2 IP | Song 8; (Song of Silence [144] OR Song of the Trees [147]) | Gradually put foes to sleep. Voice 1/turn. |
+| 155 | Song of Shattering | 2 IP | Song 9 | Weaken foe weapons/armour/stone bodies; independent destructive composition. Voice 2/turn. |
+| 156 | Song of Mastery | 2 IP | Song 10; (Song of Thresholds [146] OR Song of Slaying [149]) | Overwhelm Will to prevent foe actions. Voice 2/turn. |
+| 158 | Song of Contest | 2 IP | Song 12; Will 5; (Song of Staying [152] OR Song of Disguise [153] OR Song of Mastery [156]) | Duel a foe's voice for lasting skill/armour penalties. Voice 7/turn. |
+| 159 | Song of Lament | 2 IP | Song 15; (Song of Lorien [154] OR Song of Contest [158]) | Permanently reduce target health/damage/resolve. Voice 7/turn; replace retired Grace access with Contest. |
+
+### Vows, access and quest gifts
+
+No purchase currency applies here. Preserve the actual quest-option/lineage activation rules; possessing a record does not activate a disabled quest's gift.
+
+| ID | Ability | Acquisition | Effect / design decision |
+| --- | --- | --- | --- |
+| 106 | Oath (legacy access record) | Existing vow access | Keep this deprecated Will purchase hidden; preserve free birth/eligible quest vow choices. Commitment is the cost. |
+| 160 | Mandos' Doom | Quest gift | Retain fear/hallucination/trance/rage/stun/confusion immunity. |
+| 161 | Aule's Forge | Quest gift | Retain greater sacrificial Smithing capacity; supersede Masterpiece. |
+| 162 | Oath of Mercy | Vow | Retain +1 Grace conditional on sparing helpless foes. |
+| 163 | Oath of Silence | Vow | Retain +1 Strength conditional on never singing. |
+| 164 | Oath of Iron | Vow | Retain +2 Constitution; no ordinary ascent without a Silmaril; keep Utumno's detour exception. |
+| 165 | Nienna's Gift of Mercy | Quest gift | Retain kill-ratio-based Stealth for sparing foes. |
+| 166 | Oath of the Smith | Vow | Retain +5 Smithing conditional on avoiding others' weapons/armour. |
+| 167 | Oath of the Valorous Heart | Vow | Retain +1 Dexterity conditional on not attacking fleeing foes. |
+| 168 | Unique Bane | Quest gift | Retain +3 attack/Evasion versus uniques. |
+| 169 | Oath of Light | Vow | Retain +1 light radius and restriction on light-reducing gear. |
+| 170 | Wrath of Orome (currently Wraith of Orome) | Quest gift | Retain rage raising each stat by one instead of normal rage changes; correct the title. |
+| 171 | Huntsman's Rhythm | Quest gift | Retain two bow hits priming a double-damage spear attack. |
+| 172 | Wrath of Tulkas | Quest gift | Retain Smite behaviour even without learned Smite, and its additional damage die; no redundant Smite purchase. |
+| 173 | Queen of the Stars | Quest gift | Retain stronger Varda light blessings. |
+
+The conditional attribute rewards of Mercy, Silence, Iron and the Valorous Heart remain because each is earned through a binding restriction. Strength in Adversity still depends on dangerous HP thresholds; Elveness consumes Voice. None receives the eight removed global +1 rewards.
+
+### Retired permanent-stat nodes
+
+| ID | Retired node | Original skill | Disposition |
+| --- | --- | --- | --- |
+| 14 | Strength | Melee | +1 Strength; no separate extra benefit. |
+| 28 | Dexterity | Archery | +1 Dexterity; no separate extra benefit. |
+| 50 | Dexterity | Evasion | +1 Dexterity; no separate extra benefit. |
+| 66 | Dexterity | Stealth | +1 Dexterity; no separate extra benefit. |
+| 89 | Grace | Perception | +1 Grace removed; +6.0 qt Harness moves to Warden. |
+| 110 | Constitution | Will | +1 Constitution removed; +6.0 qt Pack moves to Indomitable. |
+| 127 | Grace | Smithing | +1 Grace; no separate extra benefit. |
+| 157 | Grace | Song | +1 Grace; no separate extra benefit. |
+
+Only 89 and 110 have independent storage benefits. Other changes to health, Voice, attack, skill scores and permanent crafting stats are derived from their +1 attributes and are intentionally removed. Do not copy those derived effects into new powers.
+
+No current authored object, artefact or ego grants any of these eight nodes; they also lack Smithing T: eligibility. Keep stable serialized records for legacy data, but suppress retired nodes in the new ruleset's purchase, equipment aggregation and effective-stat paths. Older custom/debug item bytes must not revive them. Do not invent item-power remaps.
+
+### Effects and prerequisite corrections
+
+- Concentration's current wait-preservation already makes it a meaningful continuation of Focused Attack. Keep its effect; do not add a new numerical bonus merely to justify the link. The common player_attacked flag supports ranged attacks too.
+- Crippling Shot needs a critical bonus die AND positive damage AND a target without critical resistance, followed by its existing Will check. Puncture can ensure damage against armour; Ambush adds an opening critical die. Keep both routes.
+- Current Alchemy runtime auto-identifies eligible herbs/potions/gems, while Channeling handles eligible staves/horns. The template's claim that Alchemy identifies staves/horns is misleading. Keep Alchemy's gem-range and disease knowledge rather than transferring them for categorization alone.
+- Appraisal retains Quick Study's current +5 identification contribution and deliberately drops its acquisition bypass. Every XP basic is independently learnable; specialized prerequisite knowledge remains meaningful. Voronwë retains this free starting ability and also benefits from Seafarer pricing.
+- Bane is the functional foundation for Master Hunter. Drop the unrelated Focused Attack alternative from the new purchase route, without disabling Celegorm's inherited Master Hunter.
+- Artifice requires Enchantment AND a relevant XP craft permission. Masterpiece also retains Enchantment AND a craft permission. Ordinary forging still checks the target category, material knowledge and actual capacity; a generic stage link cannot erase these essentials.
+- Enchantment, Expertise and Artifice unlock their ongoing Smithing-stat contributions in the full acquired package: 0.5*max(0, crafting GRA), max(0, crafting DEX), and max(0, crafting GRA), respectively. Remove the additional U: fee in this model. The values follow current permanent/effective crafting attributes while the abilities are active; they are not snapshots frozen on the learning turn.
+- Nonnegative mastery additions accompany removal of their learning-stat gates: learning an improvement does not reduce capacity on a character with a negative attribute. Baseline/category stat contributions still reflect the actual attributes. Sum independent scaled terms and floor once after all nonoverlapping terms; do not round half-Grace or category terms prematurely.
+- Preserve Naugrim's positive Smithing-affinity contribution to effective crafting attributes and all origin crafting privileges. Removing the Grace ability does not remove the dwarf identity.
+- Woven Themes has a real use requirement of two singable songs. Its ordinary minor theme remains half-score, with Daeron's existing full-score exception and existing Silence/synergy behaviour.
+- Song of Shattering is a separate destructive composition. Remove the forced Freedom upgrade link; Song 9 and 2 IP are its specialist investment.
+- Lament's removed Grace predecessor becomes Song of Contest as an alternative to Lorien, connecting lasting weakening to a useful advanced voice technique.
+- Silent Passage's quiet finish applies to a direct melee/bow/throwing kill of a target non-alert BEFORE that hit. It does not mute player-facing audio, visual witnesses, footsteps, incidental wall hits, delayed/environmental damage, other attacks in the action or a dying foe's explicit special alarm. A separate player_attack_audible flag preserves player_attacked for concentration and visual witness reactions; any noisy hit or miss keeps the action audible.
+- Silent Passage's exchange suppresses the non-alert target's attack and forced/contact alert, including the immediate passive detection roll caused by the swap. Normal terrain/status checks, unrelated attacks/noise and other enemies' reactions still apply. Alert targets use ordinary Exchange Places behaviour. Target tracking is cleared after perception and on deletion, compaction, level wipe or skipped main rolls.
+- Retain existing restrictions on Flanking/Controlled Retreat while Song of Disguise is active; attacking ends the disguise song. Do not promise a free automatic-attack/disguise combination.
+
+### Every origin's starting package
+
+These are the actual valid parsed grants, not the template's informal inline comments. Proposed ability names are used below. Nominal retained value is informational: it excludes affinity discounts, stats, unique traits and action constraints, so it is not a complete origin balance score.
+
+| Origin ID | Character | Free inherited abilities | Nominal acquisition value |
+| --- | --- | --- | --- |
+| 0 | Houseless | Fletchery [21] | 500 XP / 0 IP |
+| 1 | Fëanor | Artifice [125]; Jeweller [122] | 800 XP / 2 IP |
+| 2 | Fingolfin | Riposte [48]; Majesty [109] | 0 XP / 4 IP |
+| 3 | Finarfin | Song of the Trees [147]; Song of Elveness [151] | 0 XP / 2 IP |
+| 4 | Maedhros | Vengeance [108] | 0 XP / 1 IP |
+| 5 | Curufin | Opportunist [64] | 0 XP / 1 IP |
+| 6 | Fingon | Versatility [25] | 0 XP / 1 IP |
+| 7 | Turgon | Vanish [65]; Song of Disguise [153] | 0 XP / 3 IP |
+| 8 | Galadriel | Outwit [86]; Resonance [87] | 0 XP / 2 IP |
+| 9 | Finrod Felagund | Song of Staying [152]; Song of Disguise [153]; Song of Elveness [151] | 0 XP / 3 IP |
+| 10 | Glorfindel | Controlled Retreat [49]; Rapid Attack [13] | 0 XP / 3 IP |
+| 11 | Etchelion | Impale [7] | 0 XP / 1 IP |
+| 12 | Elu Thingol | Majesty [109]; Song of Mastery [156] | 0 XP / 4 IP |
+| 13 | Círdan | Keen Senses [82]; Alchemy [84] | 800 XP / 1 IP |
+| 14 | Mablung | Smite [11] | 0 XP / 2 IP |
+| 15 | Lúthien | Song of Lorien [154]; Curse Breaking [100] | 500 XP / 2 IP |
+| 16 | Voronwë | Appraisal (formerly Quick Study) [80] | 500 XP / 0 IP |
+| 17 | Beleg | Deadly Hail [27] | 0 XP / 2 IP |
+| 18 | Telchar | Enchantment [123]; Weaponsmith [120] | 800 XP / 1 IP |
+| 19 | Gamil Zirak | Expertise [124] | 0 XP / 1 IP |
+| 20 | Naugladur | Cruel Blow [62] | 0 XP / 1 IP |
+| 21 | King Azaghal | Whirlwind Attack [9] | 0 XP / 2 IP |
+| 22 | Mîm | Song of Silence [144]; Disguise [60]; Assassination [61]; Cruel Blow [62]; Exchange Places [63]; Opportunist [64]; Vanish [65] | 2600 XP / 4 IP |
+| 23 | Beren | Subtlety [8]; Assassination [61] | 800 XP / 1 IP |
+| 24 | Barahir | Zone of Control [10] | 0 XP / 1 IP |
+| 25 | Eärendil | Song of the Trees [147]; Inner Light [104] | 800 XP / 1 IP |
+| 26 | Haleth | Flanking [46]; Blocking [41] | 500 XP / 1 IP |
+| 27 | Hador | Smite [11]; Charge [5]; Knock Back [2] | 1300 XP / 2 IP |
+| 28 | Túrin Turambar | Strength in Adversity [102]; Smite [11]; Follow-Through [6] | 800 XP / 3 IP |
+| 29 | Tuor | Channeling [101] | 0 XP / 1 IP |
+| 30 | Húrin | Formidable [103]; Indomitable [105]; Song of Slaying [149] | 800 XP / 3 IP |
+| 31 | Idril | Resonance [87] | 0 XP / 1 IP |
+| 32 | Gil Galad | Polearm Mastery [4] | 800 XP / 0 IP |
+| 33 | Celeborn | Parry [42] | 800 XP / 0 IP |
+| 34 | Daeron | Woven Themes [148] | 0 XP / 1 IP |
+| 35 | Melian Maia | Song of Mastery [156]; Song of Thresholds [146] | 800 XP / 2 IP |
+| 36 | Celegorm | Master Hunter [88]; Throwing [3] | 800 XP / 1 IP |
+| 37 | Eöl | Two Weapon Fighting [12]; Alloy Mastery [128] | 0 XP / 3 IP |
+| 38 | Amrod | Throwing [3]; Polearm Mastery [4] | 1600 XP / 0 IP |
+| 39 | Amras | Ambush [24] | 800 XP / 0 IP |
+| 40 | Maglor | Song of Lament [159] | 0 XP / 2 IP |
+| 41 | Caranthir | Formidable [103] | 800 XP / 0 IP |
+| 42 | Gwindor | Charge [5] | 800 XP / 0 IP |
+| 43 | Aredhel | Sprinting [45] | 0 XP / 1 IP |
+| 44 | Andreth | Resonance [87] | 0 XP / 1 IP |
+| 45 | Morwen | Strength in Adversity [102] | 800 XP / 0 IP |
+| 46 | Celebrimbor | Jeweller [122] | 800 XP / 0 IP |
+| 47 | Aegnor | Rapid Attack [13] | 0 XP / 2 IP |
+| 48 | Angrod | Zone of Control [10] | 0 XP / 1 IP |
+| 49 | Orodreth | Exchange Places [63] | 800 XP / 0 IP |
+| 50 | Durin | Smite [11]; Jeweller [122]; Expertise [124]; Artifice [125] | 800 XP / 5 IP |
+
+- No origin grants a retired stat node.
+- Haleth's package includes Flanking AND Blocking. The C: record now states both explicitly.
+- Tuor retains valid Channeling. The invalid parsed 1/-1 slot caused by a colon-bearing inline comment was removed, comments are isolated before parsing, and both lower/upper indices are checked. No Focused Attack grant was invented from that comment.
+- Mîm retains all seven valid grants, now visible in the starting preview.
+- Fëanor/Durin's Artifice, Fingolfin's Riposte/Majesty, Turgon's Vanish/Disguise, Beren's Subtlety and other inherited advanced techniques remain functional without buying their normal ancestors.
+- Húrin deliberately gains the newly integrated Pack capacity through inherited Indomitable. Inherited Enchantment/Expertise/Artifice include their full integrated mastery package, including Smithing contributions; there is no hidden U: purchase.
+- Preserve Finrod's Staying, Lúthien's Lorien, Thingol's Mastery, Húrin's Slaying, Turgon's Disguise and Daeron's Woven Themes modifiers. Preserve Fëanor, Telchar, Gamil, Eöl and Celebrimbor's unique forge/material/artifact privileges.
+
+| Race | Current allowed origin IDs |
+| --- | --- |
+| Fëanorians | 1, 4, 5, 36, 38, 39, 40, 41, 46 |
+| Fingolfinrim | 2, 6, 7, 10, 11, 31, 43 |
+| Finarfinrim | 3, 8, 9, 32, 42, 47, 48, 49 |
+| Sindar | 12, 13, 14, 15, 16, 17, 33, 34, 35, 37 |
+| Naugrim | 18, 19, 20, 21, 22, 50 |
+| Edain | 23, 24, 25, 26, 27, 28, 29, 30, 44, 45 |
+
+Houseless 0 is a fallback, not an additional generally selectable origin. Keep existing race/origin selection rules; ability categories do not move race affinities.
+
+### Whole-system build ledgers
+
+These are complete example packages with their prerequisites included. XP is nominal technique learning plus the minimum invested-rank eligibility floor from zero. It excludes inherited grants/discounts, ordinary combat or defensive training not required by a listed ability, equipment and optional attribute growth. A low gate floor is not a claim that the build can survive or perform well at that investment.
+
+| Package | Included abilities | Basic XP | Gate training XP | Total gate + basic XP | Insight |
+| --- | --- | --- | --- | --- | --- |
+| Precision duelist | Finesse [1]; Dodging [40]; Subtlety [8]; Flanking [46]; Rapid Attack [13] | 1000 | 12700 | 13700 | 4 |
+| Heavy controller | Power [0]; Polearm Mastery [4]; Impale [7]; Zone of Control [10]; Smite [11] | 1300 | 6600 | 7900 | 4 |
+| Mobile archer | Point Blank Archery [22]; Dodging [40]; Puncture [23]; Skirmishing [29]; Crippling Shot [26]; Deadly Hail [27] | 2100 | 4800 | 6900 | 4 |
+| Armoured guard | Blocking [41]; Parry [42]; Crowd Fighting [43]; Heavy Armour Use [47]; Riposte [48]; Controlled Retreat [49] | 2100 | 6600 | 8700 | 4 |
+| Shadow hunter | Disguise [60]; Assassination [61]; Exchange Places [63]; Cruel Blow [62]; Vanish [65]; Silent Passage [174]; Veil of Shadows [175] | 2100 | 5700 | 7800 | 5 |
+| Hunter and loremaster | Appraisal (formerly Quick Study) [80]; Focused Attack [81]; Keen Senses [82]; Concentration [83]; Alchemy [84]; Bane [85]; Outwit [86]; Resonance [87]; Master Hunter [88]; Rewire Traps [90] | 1800 | 4500 | 6300 | 7 |
+| Master smith | Weaponsmith [120]; Enchantment [123]; Expertise [124]; Artifice [125]; Masterpiece [126]; Alloy Mastery [128] | 800 | 7800 | 8600 | 7 |
+| Stealth singer | Disguise [60]; Song of Silence [144]; Vanish [65]; Song of Disguise [153]; Woven Themes [148]; Song of Lorien [154] | 1000 | 7200 | 8200 | 6 |
+| Battle singer | Song of Challenge [141]; Song of Thresholds [146]; Song of Slaying [149]; Song of Staying [152]; Song of Mastery [156]; Song of Contest [158] | 1300 | 9300 | 10600 | 6 |
+
+- Precision's 4 IP is Subtlety 1 + Flanking 1 + Rapid Attack 2; gear, penalties and high Melee rank make it a real late investment.
+- Heavy control's 4 IP is Impale 1 + Zone of Control 1 + Smite 2; its ordinary Power/polearm knowledge is paid with XP.
+- Mobile archery's 4 IP is Skirmishing 1 + Crippling Shot 1 + Deadly Hail 2. Replace Puncture with Ambush for the concealment route at the same 800 XP, adding Stealth 3's 600 training XP.
+- Stealth offers Cruel Blow for 1 IP, combined Silent Passage for 1 IP, Veil for 1 IP and Vanish for 2 IP. The complete four-specialization package costs 5 IP; actual attack and movement competence still matter.
+- The full Perception specialist spends 7 IP, including defensive, trap and chemistry choices; a combat build can instead purchase only the relevant 1-3 of these.
+- A complete great-work smith spends 7 IP for five masteries, with only one necessary XP craft permission. Additional craft categories are 800 XP each; attributes improve achievable recipes but do not impose an extra learning fee.
+- A stealth singer spends 6 IP for Vanish 2, Disguise 1, Woven Themes 1 and Lorien 2. Silence remains a useful ordinary XP song. Swap repertoire choices without inventing a mandatory single song chain.
+- Inherited anchors reduce only the fees of abilities already granted; they do not raise subsequent basic prices. Do not automatically add ancestors' separate benefits.
+
+### Compatibility and implementation contract
+
+- Select and store a progression ruleset per character at birth. The configuration choice affects new characters, not the prices/state of a running character.
+- Preserve existing classic/current-Insight runs on their recorded rules rather than silently removing paid stats or demanding repayment. Apply this complete model to new Insight runs. Old saves need a safe ruleset default consistent with their stored mode; use version-selected loading.
+- Classic mode retains its existing purchases, effects, requirements and eight stat nodes. New 174/175 abilities are available only in the new Insight ruleset.
+- Preserve serials, GUIDs and legacy skill/local identities. New Stealth records append at 174/175 with unused Stealth-local slots 7/8; do not reuse retired Dexterity's local slot 6.
+- Separate stable identity, display category, learning skill/ranks and payment type in metadata. Exchange Places remains legacy 3/3; Opportunist remains 3/4. Their future category/learning metadata is Evasion6 and Melee7 respectively.
+- Do not use L:1 as a blanket IP-payment marker: it currently removes the primary gate and moves presentation. Alchemy's Perception5 and Channeling's Will5 must remain explicit in the new policy.
+- Preserve both OR and essential AND prerequisites; full chains cannot block a genuinely inherited anchor. Price/gate preview and purchase validation must use the same policy.
+- Centralize new-ruleset effective ability filtering so old/custom item bytes cannot reactivate retired stat nodes. Do not remap current item powers, since none needs a retired-node substitution.
+- Guard origin parse/grant indices on BOTH lower and upper bounds, and isolate comments from colon parsing. Use Haleth's two valid grants and Tuor's one valid grant as explicit cases.
+- Persist a ruleset marker only with writer/reader updates, version gating and older defaults. Do not guess the next version value before checking the implementation branch.
+- Maintain the drop-analysis/engine difficulty synchronization if actual difficulty formulas are subsequently changed; this proposal's learning fees do not themselves change recipe difficulty.
+
+### Whole-system verification and playtest criteria
+
+Static review in this design pass: all 110 current IDs have exactly one disposition; new 174/175 are unique; every referenced predecessor exists and is live; the graph has no cycle or XP ability-predecessor toll; all 51 valid origin packages resolve; no origin needs a retired node; all example-package predecessor sets and XP/IP sums were checked.
+
+Engine validation covers the mechanical cases below. The whole-run income and survival balance targets still require playtesting:
+- All eight skills and every free-origin package use matching price/requirements/effect previews. Include Mîm, Húrin, Fëanor, Fingolfin, Beren, Daeron, Haleth and Tuor.
+- Inherited anchors unlock children without ancestor debt; equipment grants do not.
+- Neutral/racial/penalized and Eärendil/Seafarer/Minstrel/curse pricing cases use the specified XP formula without influencing Insight prices.
+- Stat retirement affects effective bonuses and item aggregation only in new Insight runs. Storage comes once from personally learned/inherited recipients and handles deactivation without item loss.
+- Silent Passage separates AI hearing from visual reactions and concentration, and handles swap alert changes and other reactions. Dimming and Veil preserve real ambient light, adjacent visibility, blindness, invisibility and fog boundaries.
+- All Smithing craft permissions remain real; full integrated mastery bonuses sum/floor correctly, with negative attributes, dwarf affinity and fractional Grace covered.
+- Measure actual Insight income, unspent points, time until each first specialization, and the frequency of optional attribute versus mastery purchases across several representative and unlucky seeds.
+- Check whether broadly attractive survival/knowledge nodes become routine mandatory purchases. In particular compare Indomitable 2 with a weapon great art 2, and optional +1 attribute growth with a 2 IP advanced technique.
+- Check the lost global stat bonuses against actual late-game health, Voice, attack and craft capacity. The design removes those bonuses intentionally; static budgets do not prove the resulting survival balance.
+- Standard/portable build and focused engine validation results are recorded in the implementation section below. These do not establish live visual, manual gameplay, device or whole-run balance validation.
+
+### Primary source references
+
+- lib/edit/ability.txt and lib/edit/ability-insight.txt: all 112 records, gates/effects/Voice intervals and overlay behaviour.
+- lib/edit/character.txt and lib/edit/race.txt: 51 origin packages, traits and allowed lineage masks.
+- src/birth/birth-setup.c: direct inherited grants and 5,000 ordinary starting XP selection; src/birth/birth-oath.c and cmd-ui-abilities.c: existing birth vows and hidden legacy Oath record.
+- src/init/init-parser-core.c and src/init/init-parse-player.c: colon/comment parsing and malformed Tuor slot.
+- src/player/player-skills.c: affinity/Minstrel and minor-song rules; src/player/player-lore.c: actual identification categories and +5 Appraisal predecessor contribution.
+- src/player/player-smithing.c: permanent/effective crafting attributes, mastery contributions and final flooring.
+- src/object/object-inventory-limits.c: +6.0 qt Harness and Pack capacity.
+- src/cmd/combat/cmd-combat.c, src/cmd/combat/cmd-ranged.c, src/melee/melee-process.c and src/dungeon/dungeon-player.c: timing, critical/damage checks, concentration flags and noise/visibility.
+- src/player/player-song-disguise.c and src/quest/quest-rewards-beta.c: disguise cancellation and quest special activation/Smite behaviour.
+- lib/edit/object.txt, artefact.txt and special.txt; src/cmd/ui/cmd-ui-smithing.c; src/drop_system.c; src/randart.c: no authored/craftable retired stat grants.
+
+### Implementation and validation
+
+- New characters born with Insight enabled store `INSIGHT_RULESET_REWORKED`; classic and earlier Insight characters keep their original rules. `src/player/experience.c` resolves this saved marker independently of later option changes. Version 0.9.9.1 adds the marker and dimmed-light byte to the version-gated player lane. Older saves default from their saved Insight option.
+- `lib/edit/ability-insight.txt` now explicitly assigns all 112 records to XP, Insight, earned access or retirement. `X/G/O/H/J/F/Z` separate payment, learning category, invested ranks, OR/AND knowledge, current name, effect and role. Original identities and legacy `B/K/L/U` metadata remain intact. `src/player/player-insight-abilities.c` centralizes availability, names, prices, immediate prerequisites and effective filtering.
+- The browser shows all eight learning categories and a 52-entry Insight index. Acquisition validates the same policy as the preview, separates skill-training XP from the ability fee, and preserves inherited anchors. Exchange and Opportunist retain their saved Stealth identities while learning under Evasion and Melee. New abilities append at 174/175, Stealth-local 7/8.
+- Eight retired stat powers cannot reactivate through item aggregation. Learned/inherited active Warden and Indomitable supply the two independent +6.0 qt storage benefits. Their item-only grants supply their ordinary effects without storage. Enchantment, Expertise and Artifice integrate ongoing nonnegative crafting-stat terms and need no second upgrade fee; existing final-floor arithmetic remains.
+- Birth spends all 13 attribute points and grants no starter Insight; ordinary 5,000 XP and all 51 valid starting packages remain. Blitz fallback completes stranded allocations. The origin parser ignores inline comments and enforces lower/upper pair bounds. Haleth retains both grants, Tuor retains Channeling only, and Mîm's complete package appears in the preview.
+- Ctrl-L is a new command for reworked Insight characters. Ordinary dimming covers the equipped light slot; active Veil extends it to all personal emission. Fuel burns normally. Veil's adjacent awareness uses normal LOS and player visibility without adding cave light, and obeys blindness/invisibility. Equipment context menus, key help, controller, touch and Quick Access expose the command.
+- Silent Passage tracks attack hearing separately from attack/concentration/visual bookkeeping. Quiet direct melee/bow/throwing finishes do not erase another noisy hit or miss. Non-alert exchanges suppress their target's free attack, forced/contact wake and swap-induced passive roll; independent noise and witnesses remain effective. Tracking is cleared on all relevant monster/level transitions.
+- Live tutorial cards, archive entries and replay use public policy names, effects and learning requirements for the new mode. Classic/older Insight retain authored cards. The adapter changes only title/body, preserving actions, step count and Tale progress; all 112 records have catalogue coverage. Live item descriptions, crafting menus, knowledge, dumps and quest notifications use current names.
+
+Validation commands and coverage:
+
+- `scripts/check_insight_abilities.py`: all 112 dispositions, every 89 purchase, 37 XP/52 Insight/15 earned/8 retired totals, 25,100 nominal XP/68 IP aggregate, exact discounts/floor, atomic training, inherited/item prerequisites, AND/OR, two songs, effective retirement/storage/Smithing, every category and descriptions at 40/60/80/100 columns.
+- `scripts/check_insight_birth_save.py`: all 51 origin packages, 1,000 Blitz seeds, full allocation, frozen modes, attribute prices and version-lane sentinel/default cases.
+- `scripts/check_insight_lighting.py`: ordinary light-slot dimming, helm/weapon/song/oath/special emission suppression, restore, adjacent cells, fog boundaries, blindness/invisibility and ambient/monster lighting through the production engine.
+- `scripts/check_insight_silent_passage.py`: melee/bow/throw finishes and misses, mixed noisy/quiet attacks, hearing versus visual witnesses, concentration, target/witness swap reactions and lifecycle cleanup, plus classic/older Insight isolation. Validation found and corrected an unconditional bow-miss noise marker.
+- `scripts/check_insight_tutorials.py`: all public policy records through production live/archive/replay presentation, currency, moved categories, new/retired nodes, AND/OR, crafting fees and exact classic/older Insight action/text preservation.
+- `scripts/check_ability_requirements.py` and `scripts/check_smithing_stats.py`: existing requirements/stages/purchase/menu behaviour, 1,224 craft-difficulty cases, fractional-stat/final-floor arithmetic, actual current and historical 0.9.8.28/0.9.8.25 writer-reader sentinels, and SDL collectors/renderers. The Smithing harness's serialized-length expectation now includes the two explicit versioned bytes.
+- `scripts/check_birth_defaults.py`, `scripts/check_combat_action_energy.py`, and relevant tutorial core/integration/archive/catalogue checks retain existing behaviour.
+
+Builds: standard and portable SDL3 targets compile successfully with the repository incremental build script. Their launch-folder executables and changed ability/origin/tutorial data are refreshed and compared with the source/build outputs. Executable SHA256: standard `4b45900ea552063fcad11f20b8e834c9827bd760b9e27ce7ec859bc0c40a20b3`; portable `49645d67e9480e4c73d17f29afca70e9de77fefd77e2b52f68def85efad681c1`. An isolated portable SDL launch reaches `initial_menu` without ERROR/FATAL logs (`scripts/output/insight-startup/startup-fa1datpo/log.txt`); it does not open existing player saves or preferences. `git diff --check` passes; the original 638,502-byte notes prefix is preserved (SHA256 `b4df549507aa7ff9d5423791b1846deb5465f09a883c4b03f3ec8cf4f9eb3b40`).
+
+These checks exercise real engine and presentation code with isolated fixtures. Live manual gameplay, device/audio testing and several complete-run balance measurements remain unverified. The income/rarity and survival targets above are playtest criteria, not claims established by compilation or harnesses.

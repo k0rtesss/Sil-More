@@ -431,7 +431,7 @@ cptr option_desc[OPT_MAX] = {
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
     "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
-    "Beta: bank insight points for attributes and abilities; earn them from milestones and monster types", /* OPT_insight_beta */
+    "Beta: new heroes learn foundations with XP and specializations with Insight; each hero keeps its starting rules", /* OPT_insight_beta */
     "Beta: Share revealed artefact knowledge and Easy Identify across characters in this Tale.", /* OPT_meta_artefact_memory */
     "Beta: Remember forged artefacts of difficulty 15 or more for other characters in this Tale.", /* OPT_meta_forged_artefacts */
     "Beta: Remember fallen characters through stronger, unique revenge foes and vengeance bonuses.", /* OPT_meta_revenge */

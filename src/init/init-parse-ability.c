@@ -494,6 +494,80 @@ static errr parse_ability_score_line(ability_type* b_ptr, char* s)
     return (count > 0) ? 0 : (PARSE_ERROR_GENERIC);
 }
 
+/* Explicit new-ruleset fields coexist with legacy B:/L:/K:/U: metadata. */
+static errr parse_ability_policy_line(char* buf, header* head, ability_type* ability)
+{
+    if (!ability) return PARSE_ERROR_MISSING_RECORD_HEADER;
+    char* comment = strchr(buf + 2, '#');
+    if (comment) *comment = '\0';
+    int kind, cost, skill, rank, value;
+    char tail;
+    switch (buf[0])
+    {
+    case 'X':
+        if (ability->policy_kind) return PARSE_ERROR_GENERIC;
+        if (sscanf(buf + 2, "%d:%d:%d:%d%c", &kind, &cost, &skill,
+                &rank, &tail) != 4) return PARSE_ERROR_GENERIC;
+        if (kind < ABILITY_POLICY_XP || kind > ABILITY_POLICY_RETIRED
+            || cost < 0 || cost > 65535 || skill < 0 || skill >= S_MAX
+            || rank < 0 || rank > BASE_SKILL_MAX)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        ability->policy_kind = (byte)kind;
+        ability->policy_cost = (u16b)cost;
+        ability->policy_skill = (byte)skill;
+        ability->policy_level = (byte)rank;
+        return 0;
+    case 'G':
+        if (sscanf(buf + 2, "%d:%d%c", &skill, &rank, &tail) != 2)
+            return PARSE_ERROR_GENERIC;
+        if (skill < 0 || skill >= S_SPC || rank < 0 || rank > BASE_SKILL_MAX)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        ability->policy_skill_req[skill] = MAX(ability->policy_skill_req[skill], rank);
+        return 0;
+    case 'O': case 'H':
+    {
+        byte* count = buf[0] == 'H' ? &ability->policy_and_count : &ability->policy_or_count;
+        byte* skills = buf[0] == 'H' ? ability->policy_and_skill : ability->policy_or_skill;
+        byte* abilities = buf[0] == 'H' ? ability->policy_and_ability : ability->policy_or_ability;
+        char* token = buf + 2;
+        if (!*token) return PARSE_ERROR_GENERIC;
+        while (*token)
+        {
+            char* next = strchr(token, ':');
+            if (next) *next++ = '\0';
+            if (next && !*next) return PARSE_ERROR_GENERIC;
+            if (sscanf(token, "%d/%d%c", &skill, &value, &tail) != 2)
+                return PARSE_ERROR_GENERIC;
+            if (skill < 0 || skill >= S_SPC || value < 0 || value >= ABILITIES_MAX
+                || *count >= ABILITY_STAGE_PARENTS_MAX)
+                return PARSE_ERROR_OUT_OF_BOUNDS;
+            for (int i = 0; i < *count; ++i)
+                if (skills[i] == skill && abilities[i] == value)
+                    return PARSE_ERROR_GENERIC;
+            skills[*count] = (byte)skill;
+            abilities[*count] = (byte)value;
+            ++*count;
+            if (!next) break;
+            token = next;
+        }
+        return 0;
+    }
+    case 'J':
+        if (!buf[2] || ability->policy_name) return PARSE_ERROR_GENERIC;
+        ability->policy_name = add_name(head, buf + 2);
+        return ability->policy_name ? 0 : PARSE_ERROR_OUT_OF_MEMORY;
+    case 'F': case 'Z':
+        return add_text(buf[0] == 'F' ? &ability->policy_effect : &ability->policy_role,
+            head, buf + 2) ? 0 : PARSE_ERROR_OUT_OF_MEMORY;
+    case 'M':
+        if (!ability_req_parse_int(buf + 2, 1, &value))
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        ability->rework_only = (byte)value;
+        return 0;
+    }
+    return PARSE_ERROR_UNDEFINED_DIRECTIVE;
+}
+
 errr parse_b_info(char* buf, header* head)
 {
     int i;
@@ -568,6 +642,11 @@ errr parse_b_info(char* buf, header* head)
         b_ptr->skilltype = skilltype;
         b_ptr->abilitynum = abilitynum;
         b_ptr->level = level;
+    }
+
+    else if (strchr("XGOHJFZM", buf[0]))
+    {
+        return parse_ability_policy_line(buf, head, b_ptr);
     }
 
     /* R: minimum permanent stats/base skills; S: weighted stats/skills. */
@@ -804,11 +883,21 @@ errr parse_b_info(char* buf, header* head)
  * This parser applies the optional ability-insight.txt overlay to the stable
  * ability records after the normal ability template has loaded. */
 static ability_type* insight_overlay_b_ptr;
+static u32b insight_overlay_name_size, insight_overlay_text_size;
+static bool insight_overlay_started;
 
 static errr parse_b_insight_overlay(char* buf, header* head)
 {
     int i;
     char* s;
+
+    if (!insight_overlay_started)
+    {
+        /* init_info_txt resets sizes; append without overwriting base strings. */
+        head->name_size = insight_overlay_name_size;
+        head->text_size = insight_overlay_text_size;
+        insight_overlay_started = true;
+    }
 
     if (buf[0] == 'N')
     {
@@ -841,6 +930,10 @@ static errr parse_b_insight_overlay(char* buf, header* head)
         }
 
         error_idx = i;
+    }
+    else if (strchr("XGOHJFZM", buf[0]))
+    {
+        return parse_ability_policy_line(buf, head, insight_overlay_b_ptr);
     }
     else if (buf[0] == 'K' || buf[0] == 'U')
     {
@@ -946,6 +1039,16 @@ errr init_b_insight_overlay(header* head)
             sizeof(ability->stage_parent_ability));
         ability->stage_cost = 0;
         ability->stage_choice_group = 0;
+        ability->policy_kind = 0;
+        ability->policy_cost = 0;
+        ability->policy_skill = ability->policy_level = 0;
+        memset(ability->policy_skill_req, 0, sizeof(ability->policy_skill_req));
+        ability->policy_or_count = ability->policy_and_count = 0;
+        memset(ability->policy_or_skill, 0, sizeof(ability->policy_or_skill));
+        memset(ability->policy_or_ability, 0, sizeof(ability->policy_or_ability));
+        memset(ability->policy_and_skill, 0, sizeof(ability->policy_and_skill));
+        memset(ability->policy_and_ability, 0, sizeof(ability->policy_and_ability));
+        ability->policy_name = ability->policy_effect = ability->policy_role = 0;
     }
 
     path_build(path, sizeof(path), ANGBAND_DIR_EDIT, "ability-insight.txt");
@@ -956,15 +1059,23 @@ errr init_b_insight_overlay(header* head)
         return 0;
     }
 
-    /* init_info_txt is also used for allocating template strings. Preserve
-     * the already-loaded base header sizes because this overlay adds none. */
+    /* Raw caches allocate exact base sizes. The overlay needs append capacity. */
     name_size = head->name_size;
     text_size = head->text_size;
+    char* names = mem_alloc_array(z_info->fake_name_size, char);
+    char* texts = mem_alloc_array(z_info->fake_text_size, char);
+    memcpy(names, head->name_ptr, name_size);
+    memcpy(texts, head->text_ptr, text_size);
+    mem_free(head->name_ptr);
+    mem_free(head->text_ptr);
+    head->name_ptr = names;
+    head->text_ptr = texts;
+    insight_overlay_name_size = name_size;
+    insight_overlay_text_size = text_size;
+    insight_overlay_started = false;
     insight_overlay_b_ptr = NULL;
     err = init_info_txt(fp, path, head, parse_b_insight_overlay);
     sdl_fclose(fp);
-    head->name_size = name_size;
-    head->text_size = text_size;
 
     if (err)
     {

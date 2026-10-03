@@ -7076,6 +7076,62 @@
       "category": "Special"
     },
     {
+      "id": "ability.174.preview",
+      "title": "Silent Passage",
+      "level": "extended",
+      "priority": 65,
+      "steps": [
+        {
+          "text": "Silent Passage is available only to new Insight characters. Direct melee, bow and throwing kills of non-alert foes produce no attack-alert noise. Exchange Places with a non-alert foe provokes no free target attack and does not alert it; witnesses and independent noises still matter. Read the current learning requirements and price before purchasing.",
+          "kind": "decision",
+          "anchor": "abilities"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Public ability preview or newly available ability; raw serial 174, skill 3, ability slot 7."
+      },
+      "sources": ["lib/edit/ability.txt", "src/player/player-insight-abilities.c", "src/cmd/combat/cmd-combat.c", "src/cmd/item/cmd-item-utility.c"],
+      "ability": {
+        "serial": 174,
+        "skill": 3,
+        "slot": 7,
+        "base_requirement": 8,
+        "mechanics_source": "new Insight policy and owning runtime",
+        "runtime_symbol": "STL_SILENT_PASSAGE",
+        "runtime_sources": ["src/cmd/combat/cmd-combat.c", "src/cmd/item/cmd-item-utility.c"]
+      },
+      "category": "Stealth"
+    },
+    {
+      "id": "ability.175.preview",
+      "title": "Veil of Shadows",
+      "level": "extended",
+      "priority": 65,
+      "steps": [
+        {
+          "text": "Veil of Shadows is available only to new Insight characters. Ctrl-L can dim all personal light sources. While sneaking without personal light, perceive adjacent monsters and features without emitting light; blindness and invisibility checks still apply. Read the current learning requirements and price before purchasing.",
+          "kind": "decision",
+          "anchor": "abilities"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Public ability preview or newly available ability; raw serial 175, skill 3, ability slot 8."
+      },
+      "sources": ["lib/edit/ability.txt", "src/player/player-insight-abilities.c", "src/player/player-light.c"],
+      "ability": {
+        "serial": 175,
+        "skill": 3,
+        "slot": 8,
+        "base_requirement": 6,
+        "mechanics_source": "new Insight policy and owning runtime",
+        "runtime_symbol": "STL_VEIL_OF_SHADOWS",
+        "runtime_sources": ["src/player/player-light.c"]
+      },
+      "category": "Stealth"
+    },
+    {
       "id": "terrain.2",
       "title": "Chasm",
       "level": "extended",

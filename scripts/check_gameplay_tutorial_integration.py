@@ -104,6 +104,11 @@ void sdl_mouse_path_cancel(void) {}
 bool player_pack_action_pending(void) { return pack_pending; }
 bool player_active_weapon_is_melee(void) { return active_weapon_kind==PLAYER_ACTIVE_WEAPON_KIND_MELEE; }
 int ability_index(int skill,int ability) { (void)skill;(void)ability;return 0; }
+bool insight_reworked_enabled(void) { return false; }
+bool ability_policy_available(const ability_type *entry) { return entry && entry->name; }
+cptr ability_display_name(const ability_type *entry) { return b_name + entry->name; }
+cptr ability_effect_text(const ability_type *entry) { (void)entry; return ""; }
+cptr skill_names_full[S_MAX] = {"Melee","Archery","Evasion","Stealth","Perception","Will","Smithing","Song","Special"};
 int player_quiver_arrow_slots(int *slots,int count) { (void)slots;(void)count;return 0; }
 int player_quiver_selected_arrow_slot(void) { return selected_arrow_slot; }
 int player_active_throwing_weapon_slot(void) { return INVEN_WIELD; }

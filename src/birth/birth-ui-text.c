@@ -51,7 +51,16 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
     char warning_buf[160];
     bool confirmed = false;
 
-    if (points_left <= 0 || insight_system_enabled())
+    if (points_left <= 0)
+        return true;
+
+    if (insight_reworked_enabled())
+    {
+        bell("Allocate all attribute points before continuing.");
+        return false;
+    }
+
+    if (insight_system_enabled())
         return true;
 
     Term_get_size(&wid, &hgt);

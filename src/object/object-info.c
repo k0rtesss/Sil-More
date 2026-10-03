@@ -1323,6 +1323,8 @@ static bool describe_abilities(const object_type* o_ptr)
     {
         b_ptr
             = &b_info[ability_index(o_ptr->skilltype[i], o_ptr->abilitynum[i])];
+        if (!ability_policy_available(b_ptr))
+            continue;
         if (o_ptr->skilltype[i] == S_STL
             && o_ptr->abilitynum[i] == STL_CRUEL_BLOW)
         {
@@ -1334,13 +1336,13 @@ static bool describe_abilities(const object_type* o_ptr)
             && o_ptr->bane_type[i] > 0 && o_ptr->bane_type[i] < 9)
         {
             strnfmt(ability_buf[ac], 80, "%s-%s",
-                bane_name[o_ptr->bane_type[i]], b_name + b_ptr->name);
+                bane_name[o_ptr->bane_type[i]], ability_display_name(b_ptr));
             ability[ac] = ability_buf[ac];
             ac++;
         }
         else
         {
-            ability[ac++] = b_name + b_ptr->name;
+            ability[ac++] = ability_display_name(b_ptr);
         }
     }
 

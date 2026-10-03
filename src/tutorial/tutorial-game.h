@@ -5,6 +5,8 @@
 
 /* Integration boundary: callers pass already-known information only. */
 void tutorial_game_start(void);
+/* Public tree metadata only; no world observation or progress mutation. */
+void tutorial_game_format_view(tutorial_view *view);
 /* Generation uses this before tutorial_game_start() to protect a fresh
  * turn-zero opening; it reads the selected mode and Tale history only. */
 bool tutorial_game_start_needs_clear_area(void);

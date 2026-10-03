@@ -3072,6 +3072,9 @@ void py_attack_aux(int y, int x, int attack_type)
     /* Attack once for each legal blow */
     while (num++ < blows)
     {
+        bool silent_kill_candidate = insight_reworked_enabled()
+            && p_ptr->active_ability[S_STL][STL_SILENT_PASSAGE]
+            && m_ptr->alertness < ALERTNESS_ALERT;
         smite = two_handed_melee() && (p_ptr->active_ability[S_MEL][MEL_SMITE]
             || quest_special_ability_active(SPC_TULKAS_WRATH))
             && num == 1
@@ -3413,6 +3416,11 @@ void py_attack_aux(int y, int x, int attack_type)
                 p_ptr->vengeance = 0;
             }
 
+            /* Each blow keeps its own result: a quiet finisher cannot erase
+             * the sound of an earlier miss, wound or another target. */
+            if (!fatal_blow || !silent_kill_candidate)
+                player_attack_audible = true;
+
             // use different colours depending on whether knock back triggered
             if (do_knock_back)
             {
@@ -3524,6 +3532,7 @@ void py_attack_aux(int y, int x, int attack_type)
         else
         {
             quest_beta_melee_miss();
+            player_attack_audible = true;
             // Play weapon swing sound (no result sound for misses, so no
             // scheduling needed)
             u16b weapon_swing_type = weapon_sound_message_type(o_ptr, false);

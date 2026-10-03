@@ -82,6 +82,80 @@ static const condition_lesson conditions[] = {
 #undef CONDITION
 static int previous_conditions[N_ELEMENTS(conditions)];
 
+void tutorial_game_format_view(tutorial_view *view)
+{
+    if (!view || !insight_reworked_enabled()) return;
+    if (!strcmp(view->id, "menu.abilities")) {
+        SDL_strlcpy(view->body,
+            "Foundations cost XP; specializations and late arts cost 1 or 2 Insight. "
+            "Each ability uses one learning currency. Required invested skill ranks cost XP separately. "
+            "Read the selected ability's price and requirements before buying. "
+            "Inherited abilities need no ancestor purchases and include their full active effects. "
+            "Equipment cannot teach prerequisites. Attribute growth is separate, and learning has no attribute thresholds. "
+            "There is no second mastery upgrade fee; browsing and toggling do not purchase abilities.",
+            sizeof(view->body));
+        return;
+    }
+    int serial, consumed = 0;
+    if (sscanf(view->id, "ability.%d.preview%n", &serial, &consumed) != 1
+        || !consumed || view->id[consumed] || !z_info || !b_info
+        || serial < 0 || serial >= z_info->b_max || !b_info[serial].name) return;
+    const ability_type *entry = &b_info[serial];
+    SDL_strlcpy(view->title, ability_display_name(entry), sizeof(view->title));
+    /* Preserve authored follow-up handling cards and their exact step count. */
+    if (view->step != 1) return;
+    if (entry->policy_kind == ABILITY_POLICY_RETIRED) {
+        SDL_strlcpy(view->body,
+            "This permanent +1 attribute ability is retired in this character's Insight rules. "
+            "Optional attribute growth uses Insight separately and is not an ability-learning requirement.",
+            sizeof(view->body));
+        if (serial == 89)
+            SDL_strlcat(view->body, " The +6.0 qt Harness benefit now belongs to personally learned or inherited, active Warden.", sizeof(view->body));
+        if (serial == 110)
+            SDL_strlcat(view->body, " The +6.0 qt Pack benefit now belongs to personally learned or inherited, active Indomitable.", sizeof(view->body));
+        return;
+    }
+    if (entry->rework_only || entry->policy_kind) {
+        if (entry->policy_kind == ABILITY_POLICY_XP)
+            strnfmt(view->body, sizeof(view->body),
+                "Learning: %d base XP, adjusted by origin/affinity discounts and curse modifiers with a 250 XP minimum. ",
+                entry->policy_cost);
+        else if (entry->policy_kind == ABILITY_POLICY_INSIGHT)
+            strnfmt(view->body, sizeof(view->body), "Learning: %d Insight; no ability XP fee. ", entry->policy_cost);
+        else
+            SDL_strlcpy(view->body, "Granted by the existing origin, oath or quest rules; unavailable for ordinary purchase. ", sizeof(view->body));
+        if (entry->policy_kind == ABILITY_POLICY_XP || entry->policy_kind == ABILITY_POLICY_INSIGHT) {
+            for (int skill = 0; skill < S_SPC; ++skill) {
+                int rank = MAX(entry->policy_skill_req[skill],
+                    skill == entry->policy_skill ? entry->policy_level : 0);
+                if (!rank) continue;
+                char requirement[80];
+                strnfmt(requirement, sizeof(requirement), "%s %d invested ranks. ", skill_names_full[skill], rank);
+                SDL_strlcat(view->body, requirement, sizeof(view->body));
+            }
+            for (int required = 0; required < 2; ++required) {
+                int count = required ? entry->policy_and_count : entry->policy_or_count;
+                const byte *skills = required ? entry->policy_and_skill : entry->policy_or_skill;
+                const byte *locals = required ? entry->policy_and_ability : entry->policy_or_ability;
+                if (!count) continue;
+                SDL_strlcat(view->body, required ? "Requires all: " : "Requires one of: ", sizeof(view->body));
+                for (int parent = 0; parent < count; ++parent) {
+                    int index = ability_index(skills[parent], locals[parent]);
+                    if (index < 0 || index >= z_info->b_max) continue;
+                    if (parent) SDL_strlcat(view->body, required ? ", " : " or ", sizeof(view->body));
+                    SDL_strlcat(view->body, ability_display_name(&b_info[index]), sizeof(view->body));
+                }
+                SDL_strlcat(view->body, ". ", sizeof(view->body));
+            }
+            if (serial == 85) SDL_strlcat(view->body, "Bane also requires four kills of the chosen family. ", sizeof(view->body));
+            if (serial == 148) SDL_strlcat(view->body, "Know two singable songs to learn and use Woven Themes. ", sizeof(view->body));
+            SDL_strlcat(view->body, "Inherited grants bypass learning requirements; action requirements still apply. ", sizeof(view->body));
+        }
+        SDL_strlcat(view->body, "Effect while active: ", sizeof(view->body));
+        SDL_strlcat(view->body, ability_effect_text(entry), sizeof(view->body));
+    }
+}
+
 bool tutorial_game_start_needs_clear_area(void)
 {
     tutorial_status opening_status, monster_status;
@@ -172,6 +246,7 @@ static void observe_extra_states(bool seed)
 
 static bool gameplay_available(void)
 {
+    tutorial_set_view_formatter(tutorial_game_format_view);
     return !managing && character_generated && p_ptr && started
         && !run_mode_is_blitz() && !p_ptr->tutorial_deferred
         && !p_ptr->is_dead && !death_spectator_active();
@@ -468,7 +543,8 @@ void tutorial_game_ability(int skill, int ability, bool before_purchase)
     entry = &b_info[index];
     preview_index = tutorial_ability_lesson_index(index);
     strnfmt(id, sizeof(id), "ability.%d.preview", preview_index);
-    observe(id, "ability", b_name + entry->name,
+    if (!ability_policy_available(entry)) return;
+    observe(id, "ability", ability_display_name(entry),
         before_purchase ? "Read the live requirements, effect and price in XP or Insight Points. Continue returns to your purchase decision; it does not buy the ability."
         : "This ability is now available. Read its effect and current activation requirements.");
     if (before_purchase) request_ui_lesson(id);
@@ -1416,6 +1492,7 @@ static int tutorial_archive_collect_cards(tutorial_archive_card *cards,
 
 void tutorial_game_archive(void)
 {
+    tutorial_set_view_formatter(tutorial_game_format_view);
     int offset = 0, topic = -1, card_count, topic_selection = 0;
     int card_selection = 0;
     int topic_counts[N_ELEMENTS(tutorial_archive_topics)] = {0};

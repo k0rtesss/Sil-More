@@ -6691,6 +6691,7 @@ static const int touch_pane_main_action_choices[] = {
     '-', '{', 'E', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b', 'L', 'm',
     KTRL('Q'), '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
+    KTRL('L'),
 };
 
 static const int touch_pane_second_action_choices[] = {
@@ -6712,6 +6713,7 @@ static const int touch_pane_second_action_choices[] = {
     '-', '{', 'E', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b', 'L', 'm',
     KTRL('Q'), '0', '<', '>', '?', 'O', ':', '~', '[', ']', '@',
+    KTRL('L'),
 };
 
 /* Quick-access and thumb buttons share a compact, command-oriented picker.
@@ -6733,6 +6735,7 @@ static const int touch_context_action_choices[] = {
     '-', 't', 'p', 'q',
     'F', KTRL('F'), 'S', 'l', 'b',
     KTRL('Q'), KTRL('Y'), 'J', '0', '?', 'O',
+    KTRL('L'),
 };
 
 static const int touch_pane_visible_button_slots[SDL_TOUCH_PANE_VISIBLE_BUTTON_COUNT] = {
@@ -6758,7 +6761,9 @@ static const int* touch_pane_action_choices_for_panel(int panel, int* count)
     if (count)
         *count = (panel == SDL_TOUCH_PANE_PANEL_SECOND)
             ? (int)N_ELEMENTS(touch_pane_second_action_choices)
-            : (int)N_ELEMENTS(touch_pane_main_action_choices);
+                - (insight_reworked_enabled() ? 0 : 1)
+            : (int)N_ELEMENTS(touch_pane_main_action_choices)
+                - (insight_reworked_enabled() ? 0 : 1);
 
     return (panel == SDL_TOUCH_PANE_PANEL_SECOND)
         ? touch_pane_second_action_choices
@@ -6768,7 +6773,8 @@ static const int* touch_pane_action_choices_for_panel(int panel, int* count)
 static const int* touch_swipe_action_choices(int* count)
 {
     if (count)
-        *count = (int)N_ELEMENTS(touch_pane_main_action_choices);
+        *count = (int)N_ELEMENTS(touch_pane_main_action_choices)
+            - (insight_reworked_enabled() ? 0 : 1);
 
     return touch_pane_main_action_choices;
 }
@@ -7258,7 +7264,8 @@ static const int* touch_control_binding_choices(
     if (binding && (binding->kind == TOUCH_CONTROL_BINDING_TOP_PANEL
             || binding->kind == TOUCH_CONTROL_BINDING_THUMB)) {
         if (count)
-            *count = (int)N_ELEMENTS(touch_context_action_choices);
+            *count = (int)N_ELEMENTS(touch_context_action_choices)
+                - (insight_reworked_enabled() ? 0 : 1);
         return touch_context_action_choices;
     }
 
@@ -13141,9 +13148,11 @@ void do_cmd_controller_settings(void)
         { CONTROLLER_ENTRY_ACTION, '~', "Knowledge browser" },
         { CONTROLLER_ENTRY_ACTION, '[', "Monster list" },
         { CONTROLLER_ENTRY_ACTION, ']', "Object list" },
+        { CONTROLLER_ENTRY_ACTION, KTRL('L'), "Dim / restore light" },
     };
 
-    int entry_count = (int)N_ELEMENTS(entries);
+    int entry_count = (int)N_ELEMENTS(entries)
+        - (insight_reworked_enabled() ? 0 : 1);
 
     screen_save();
 

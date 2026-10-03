@@ -172,12 +172,21 @@ void do_cmd_exchange(void)
     r_ptr = &r_info[m_ptr->r_idx];
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
+    bool quiet_exchange = insight_reworked_enabled()
+        && p_ptr->active_ability[S_STL][STL_SILENT_PASSAGE]
+        && m_ptr->alertness < ALERTNESS_ALERT;
+    if (quiet_exchange)
+    {
+        silent_passage_exchange_target = cave_m_idx[y][x];
+        silent_passage_exchange_stealth = stealth_score;
+    }
+
     /* Message */
     msg_format("You exchange places with %s.", m_name);
     monster_ai_witness(MON_AI_EXCHANGE, 3, y, x);
 
     // attack of opportunity
-    if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
+    if (!quiet_exchange && (m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
         && !(r_ptr->flags2 & (RF2_MINDLESS))
         && monster_abilities_can_react(m_ptr))
     {
@@ -186,7 +195,8 @@ void do_cmd_exchange(void)
     }
 
     // Alert the monster
-    make_alert(m_ptr);
+    if (!quiet_exchange)
+        make_alert(m_ptr);
 
     // Swap positions with the monster
     {

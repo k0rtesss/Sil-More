@@ -251,7 +251,7 @@ errr file_character(cptr name, bool full)
     {
         b_ptr = &b_info[i];
 
-        if (!b_ptr->name)
+        if (!ability_policy_available(b_ptr))
             continue;
 
         if (p_ptr->innate_ability[b_ptr->skilltype][b_ptr->abilitynum])
@@ -260,20 +260,20 @@ errr file_character(cptr name, bool full)
                 && p_ptr->bane_type > 0)
             {
                 SDL_IOprintf(fff, "%s-%s\n", bane_name[p_ptr->bane_type],
-                    (b_name + b_ptr->name));
+                    ability_display_name(b_ptr));
             }
             else if (b_ptr->skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH
                 && p_ptr->oath_type > 0)
             {
                 if (oath_invalid(p_ptr->oath_type))
-                    SDL_IOprintf(fff, "%s: %s (Broken)\n", (b_name + b_ptr->name),
+                    SDL_IOprintf(fff, "%s: %s (Broken)\n", ability_display_name(b_ptr),
                         oath_name[p_ptr->oath_type]);
                 else
-                    SDL_IOprintf(fff, "%s: %s\n", (b_name + b_ptr->name),
+                    SDL_IOprintf(fff, "%s: %s\n", ability_display_name(b_ptr),
                         oath_name[p_ptr->oath_type]);
             }
             else
-                SDL_IOprintf(fff, "%s\n", (b_name + b_ptr->name));
+                SDL_IOprintf(fff, "%s\n", ability_display_name(b_ptr));
         }
     }
 
