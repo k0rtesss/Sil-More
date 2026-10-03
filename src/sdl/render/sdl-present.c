@@ -1543,7 +1543,7 @@ bool sdl_render_saved_screen_left_panel_backdrop(const sdl_view* view)
     return true;
 }
 
-bool sdl_render_current_window_frame(void)
+static bool sdl_render_current_window_contents(void)
 {
     bool show_supporting_panes;
     bool hide_main_menu_supporting_panes;
@@ -1946,8 +1946,18 @@ bool sdl_render_current_window_frame(void)
     if (!hide_main_menu_overlays)
         sdl_gamepad_context_focus_render();
 
-    sdl_gameplay_tutorial_render();
+    return true;
+}
 
+bool sdl_render_current_window_frame(void)
+{
+    if (!sdl_render_current_window_contents())
+        return false;
+
+    /* Tutorials own input before native menus and full-screen views. Draw
+     * their controls above every completed frame, including the early-return
+     * paths, so a menu lesson cannot block input with an invisible card. */
+    sdl_gameplay_tutorial_render();
     return true;
 }
 
