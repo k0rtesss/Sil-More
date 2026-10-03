@@ -41,7 +41,7 @@ function Get-LatestAndroidSdkPackagePath {
         if (-not (Test-Path $root)) { continue }
 
         $latest = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
-            Sort-Object Name -Descending |
+            Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             Select-Object -First 1
 
         if (-not $latest) { continue }
@@ -77,7 +77,7 @@ function Get-LatestNdkPath {
         if (-not (Test-Path $root)) { continue }
 
         $latest = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
-            Sort-Object Name -Descending |
+            Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             Select-Object -First 1
 
         if ($latest) {

@@ -50,7 +50,7 @@ errr parse_cu_info(char *buf, header *head)
     char *s, *t;
 
     /* Current entry */
-    static curse_type *cu_ptr = NULL;
+    curse_type* cu_ptr = PARSED_RECORD(curse_type, head);
 
     /* ------------------------------------------------------------ */
     /* N: idx : name                                                */

@@ -165,7 +165,7 @@ static bool critical_object(int y, int x)
 
 static int origin_heat(int y, int x)
 {
-    int f = cave_bridge_underlay(cave_feat[y][x]);
+    int f = cave_environment_actual_underlay(y, x);
     if (f == FEAT_LAVA) return 12;
     /* A coating or recently frozen pool is not a new cold source. */
     if (FEAT_IS_ICE(f) && FEAT_IS_ICE(cells[y][x].base_feat)
@@ -562,7 +562,12 @@ static void flood_bridge_with_reason(int y,int x,int fluid,int force,const char*
     environment_cell* c=&cells[y][x];
     if(!(c->flags&ENV_BRIDGE)||(c->flags&ENV_PROTECTED)||!c->integrity)return;
     int old_integrity=c->integrity, old_underlay=c->underlay;
-    if(c->underlay!=fluid)c->work=0;
+    if(c->underlay!=fluid) {
+        c->work=0;
+        cave_events_terrain_changed();
+        if(c->underlay==FEAT_LAVA || fluid==FEAT_LAVA)
+            p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
+    }
     c->underlay=fluid;
     cave_environment_observe(y,x);
     int damage=force*(c->material==ENV_BRIDGE_WOOD?3:1);
@@ -679,7 +684,7 @@ static void source_step(int id, int* remaining)
             if(reheat) {
                 bool quenched=false;
                 for(int d=0;d<4;d++) {
-                    int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
+                    int neighbor=cave_environment_actual_underlay(y+dy4[d],x+dx4[d]);
                     quenched|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
                 }
                 if(quenched)continue;
@@ -791,7 +796,7 @@ void cave_environment_process(void)
         } else if(f==FEAT_LAVA) {
             bool water=false;
             for(int d=0;d<4;d++) {
-                int neighbor=cave_bridge_underlay(cave_feat[y+dy4[d]][x+dx4[d]]);
+                int neighbor=cave_environment_actual_underlay(y+dy4[d],x+dx4[d]);
                 /* Ice first melts; only liquid water quenches molten rock. */
                 water|=neighbor==FEAT_WATER||neighbor==FEAT_DEEP_WATER;
             }

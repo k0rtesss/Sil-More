@@ -50,6 +50,7 @@ void object_flags(const object_type *o,u32b *a,u32b *b,u32b *c) {
 }
 static byte bytes[1024];
 static int wp,rp,extra_version;
+static bool current_version;
 static int poison_offset, abilities_offset, ai_offset;
 static bool savefile_has_song_duels=true,savefile_has_monster_shatter=true;
 static bool savefile_has_thrall_quest=true,savefile_has_thrall_quest_requested=true;
@@ -62,7 +63,14 @@ static void wr_s32b(s32b n){wr_u32b((u32b)n);}
 static void rd_u32b(u32b *n){*n=0;for(int i=0;i<4;i++){byte b;rd_byte(&b);*n|=(u32b)b<<(8*i);}}
 static void rd_s32b(s32b *n){u32b u;rd_u32b(&u);*n=(s32b)u;}
 static void strip_bytes(int n){assert(rp+n<=wp);rp+=n;}
-static bool savefile_version_at_least(byte a,byte b,byte c,byte d){assert(a==0&&b==9&&c==8);return extra_version>=d;}
+static bool savefile_version_at_least(byte a,byte b,byte c,byte d){
+    byte actual[]={current_version?VERSION_MAJOR:0,
+        current_version?VERSION_MINOR:9,current_version?VERSION_PATCH:8,
+        current_version?VERSION_EXTRA:extra_version};
+    byte wanted[]={a,b,c,d};
+    for(int i=0;i<4;i++)if(actual[i]!=wanted[i])return actual[i]>wanted[i];
+    return true;
+}
 static void reset(void){
     memset(monsters,0,sizeof(monsters));memset(races,0,sizeof(races));memset(lore,0,sizeof(lore));
     memset(&player,0,sizeof(player));monsters[1].r_idx=1;monsters[1].hp=1000;
@@ -98,7 +106,7 @@ int main(void){
         reset();monster_poison_brand(1,&venom,&venom,damage);assert(monsters[1].poisoned==(damage+1)/2);
     }
     puts("Brands: positive post-armor damage adds ceil(half), zero blocked hit, bow/ammo either or both apply once: PASS");
-    for(int version=2;version<=7;version++)for(int poison=0;poison<=100;poison++){
+    for(int version=2;version<=8;version++)for(int poison=0;poison<=100;poison++){
         monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.thrall_quest_requested=1;
         src.song_will_penalty=7;src.blow_ds_reduction[0]=3;
         src.vengeance=1;src.smite_recovery=2;
@@ -110,7 +118,8 @@ int main(void){
         src.ai.sense.kind=MON_SENSE_SHARED_TRACE;
         src.ai.sense.y=7;src.ai.sense.x=9;src.ai.sense.observed_turn=1234;
         src.ai.cast_reserve=2;src.ai.goal_age=3;
-        wp=rp=0;extra_version=version;wr_monster(&src);
+        wp=rp=0;extra_version=version;current_version=version==8;
+        src.mflag=MFLAG_ACTV;wr_monster(&src);
         if(version<4)wp=poison_offset;
         else if(version<5)wp=abilities_offset;
         else if(version<6)wp=ai_offset;
@@ -129,9 +138,10 @@ int main(void){
         assert(dst.ai.goal_age==(version<6?0:3));
         assert(dst.ai.sense.kind==(version<6?0:MON_SENSE_SHARED_TRACE));
         assert(!dst.ai.cast_checked&&!dst.ai.cast_available);
+        assert(dst.mflag&MFLAG_ACTV);
         byte sentinel;rd_byte(&sentinel);assert(sentinel==0xA5&&rp==wp);
     }
-    puts("Complete monster record: versions 0.9.8.2-7, poison/ability/AI defaults and roundtrip; following record alignment: PASS");
+    puts("Complete monster record: versions 0.9.8.2-7 and current, poison/ability/AI defaults and roundtrip; following record alignment: PASS");
     return 0;
 }
 '''

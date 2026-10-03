@@ -19,7 +19,7 @@ errr parse_f_info(char* buf, header* head)
     char* s;
 
     /* Current entry */
-    static feature_type* f_ptr = NULL;
+    feature_type* f_ptr = PARSED_RECORD(feature_type, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')

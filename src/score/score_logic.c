@@ -36,21 +36,18 @@ score_breakdown score_calculate_breakdown(const high_score* score)
     int silmarils = parse_score_int(score->silmarils, sizeof(score->silmarils), 0);
     int curses = 0;
 
-    if (scores_version_has_curses(score_file_global_ctx())) {
+    const score_file_ctx* ctx = score_file_active_ctx();
+    if (scores_version_has_curses(ctx)) {
         curses = parse_score_int(score->pts, sizeof(score->pts), 0);
         log_trace("calculate_score_breakdown: '%s' pts field='%.*s' parsed as curses=%d (version %d.%d.%d.%d)",
                   score->who, (int)sizeof(score->pts), score->pts, curses,
-                  score_file_global_ctx()->version_major,
-                  score_file_global_ctx()->version_minor,
-                  score_file_global_ctx()->version_patch,
-                  score_file_global_ctx()->version_extra);
+                  ctx->version_major, ctx->version_minor,
+                  ctx->version_patch, ctx->version_extra);
     } else {
         log_trace("calculate_score_breakdown: '%s' pts field ignored (old version %d.%d.%d.%d)",
                   score->who,
-                  score_file_global_ctx()->version_major,
-                  score_file_global_ctx()->version_minor,
-                  score_file_global_ctx()->version_patch,
-                  score_file_global_ctx()->version_extra);
+                  ctx->version_major, ctx->version_minor,
+                  ctx->version_patch, ctx->version_extra);
     }
 
     int uniques_killed = parse_score_int(score->cur_lev, sizeof(score->cur_lev), 0);
@@ -295,5 +292,4 @@ int score_compare(const high_score* a, const high_score* b)
 
     return 0;
 }
-
 

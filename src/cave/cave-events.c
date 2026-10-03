@@ -3,6 +3,7 @@
 #include "cave/cave-bridge.h"
 #include "cave/cave-events.h"
 #include "cave/cave-water-flow.h"
+#include "cave/cave-environment.h"
 
 #define SOUND_CELLS (MAX_DUNGEON_HGT * MAX_DUNGEON_WID)
 #define SOUND_LIFETIME 60
@@ -230,7 +231,7 @@ static void refresh_ambient_fields(void)
         for (xx = 0; xx < p_ptr->cur_map_wid; xx++)
         {
             int feat = cave_feat[yy][xx];
-            int underlay = cave_bridge_underlay(feat);
+            int underlay = cave_environment_actual_underlay(yy, xx);
             bool moving = cave_water_flow_direction(yy, xx)
                 != CAVE_WATER_FLOW_CALM;
             bool flow_metadata_missing = !cave_water_flow_is_valid();

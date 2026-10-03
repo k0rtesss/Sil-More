@@ -11,6 +11,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "sdl-config.h"
+#include "support/utf8.h"
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,6 +122,8 @@ static void file_viewer_draw_prompt(int row, int wid, bool large_file)
  */
 bool show_buffer(cptr main_buffer, int line)
 {
+    if (!main_buffer)
+        return false;
     int i, j, k;
     int dir;
 
@@ -158,19 +161,11 @@ bool show_buffer(cptr main_buffer, int line)
 
         /* Goto the selected line */
         next = 0;
-        for (j = 0; true; j++)
+        for (j = 0; next < line && main_buffer[j]; j++)
         {
             if (main_buffer[j] == '\n')
                 next++;
-
-            if ((next == line) || (main_buffer[j] == '\0'))
-                break;
         }
-
-        // hack: need to step forward a character when not starting with the
-        // first line
-        if (main_buffer[j] == '\n')
-            j++;
 
         /* Dump the next lines of the file */
         for (i = 0; i < hgt - 5;)
@@ -192,12 +187,12 @@ bool show_buffer(cptr main_buffer, int line)
                     break;
                 }
 
-                buf[k] = ch;
-
-                k++;
+                if (k + 1 < (int)sizeof(buf))
+                    buf[k++] = ch;
                 j++;
             }
             buf[k] = '\0';
+            buf[utf8_safe_prefix_len(buf, k)] = '\0';
 
             /* Dump the line */
             Term_putstr(0, i + 2, -1, TERM_WHITE, buf);
@@ -726,4 +721,3 @@ bool show_file(cptr name, cptr what, int line)
     /* Done */
     return (ch != '?');
 }
-

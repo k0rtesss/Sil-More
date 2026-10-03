@@ -25,7 +25,7 @@ static int parse_major_blessing_effect_code(cptr code)
 
 errr parse_mb_info(char *buf, header *head)
 {
-    static major_blessing_type *mb_ptr = NULL;
+    major_blessing_type* mb_ptr = PARSED_RECORD(major_blessing_type, head);
 
     if (buf[0] == 'N')
     {

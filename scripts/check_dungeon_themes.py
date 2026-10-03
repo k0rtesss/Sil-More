@@ -45,8 +45,9 @@ int main(int argc, char** argv)
     /* The normal loader is cached; generation never needs to reread the file. */
     ANGBAND_DIR_EDIT = "no-such-directory";
     assert(terrain_themes_load() == expected);
-    for (int depth = 1; depth <= 20; depth++)
+    for (int depth = 1; depth <= UTUMNO_DEPTH; depth++)
     {
+        if (depth > MORGOTH_DEPTH && depth != UTUMNO_DEPTH) continue;
         const terrain_theme_profile* profile = terrain_theme_for_depth(depth);
         printf("D:%d:%s", depth, profile->name);
         for (int material = 0; material < TERRAIN_THEME_MATERIAL_MAX; material++)
@@ -54,8 +55,9 @@ int main(int argc, char** argv)
         printf(":%d:%d:%d:%d:%d\n", profile->chance, profile->min_length,
             profile->max_length, profile->max_width, profile->pool_chance);
     }
-    for (int depth = 1; depth <= 20; depth++)
+    for (int depth = 1; depth <= UTUMNO_DEPTH; depth++)
     {
+        if (depth > MORGOTH_DEPTH && depth != UTUMNO_DEPTH) continue;
         const terrain_landmark_profile* landmark = terrain_landmark_for_depth(depth);
         printf("M:%d:%d:%d:%d:%d:%d:%d:%d\n", depth, landmark->chance,
             landmark->min_span_percent, landmark->max_span_percent,
@@ -63,8 +65,9 @@ int main(int argc, char** argv)
             landmark->lake_chance, landmark->branch_chance);
     }
     /* A valid record followed by invalid input must never partially commit. */
-    for (int depth = 1; depth <= 20; depth++)
+    for (int depth = 1; depth <= UTUMNO_DEPTH; depth++)
     {
+        if (depth > MORGOTH_DEPTH && depth != UTUMNO_DEPTH) continue;
         const terrain_network_profile* network = terrain_network_for_depth(depth);
         printf("N:%d", depth);
         for (int family = 0; family < TERRAIN_NETWORK_FAMILY_MAX; family++)
@@ -72,17 +75,18 @@ int main(int argc, char** argv)
         printf(":%d:%d:%d:%d:%d\n", network->min_basins, network->max_basins,
             network->min_radius, network->max_radius, network->one_tile_percent);
     }
-    terrain_theme_profile before[20];
+    terrain_theme_profile before[TERRAIN_THEME_DEPTHS];
     memcpy(before, terrain_theme_profiles, sizeof(before));
-    terrain_landmark_profile before_landmarks[20];
+    terrain_landmark_profile before_landmarks[TERRAIN_THEME_DEPTHS];
     memcpy(before_landmarks, terrain_landmark_profiles, sizeof(before_landmarks));
-    terrain_network_profile before_networks[20];
+    terrain_network_profile before_networks[TERRAIN_THEME_DEPTHS];
     memcpy(before_networks, terrain_network_profiles, sizeof(before_networks));
-    terrain_history_profile before_histories[20];
+    terrain_history_profile before_histories[TERRAIN_THEME_DEPTHS];
     memcpy(before_histories, terrain_history_profiles, sizeof(before_histories));
     assert(terrain_history_for_depth(0)->ancient == 0);
-    assert(terrain_history_for_depth(21)->disaster == 0);
-    for (int depth = 1; depth <= 20; depth++) {
+    assert(terrain_history_for_depth(UTUMNO_DEPTH + 1)->disaster == 0);
+    for (int depth = 1; depth <= UTUMNO_DEPTH; depth++) {
+        if (depth > MORGOTH_DEPTH && depth != UTUMNO_DEPTH) continue;
         const terrain_history_profile* history = terrain_history_for_depth(depth);
         printf("H:%d:%d:%d:%d:%d\n", depth, history->ancient, history->disaster,
             history->overflow, history->second_system_chance);
@@ -118,7 +122,7 @@ def main():
     landmark_defaults = [line for line in shipped.splitlines() if line.startswith("M:")]
     network_defaults = [line for line in shipped.splitlines() if line.startswith("N:")]
     history_defaults = [line for line in shipped.splitlines() if line.startswith("H:")]
-    assert len(defaults) == len(landmark_defaults) == len(network_defaults) == 20
+    assert len(defaults) == len(landmark_defaults) == len(network_defaults) == 21
     count = 0
 
     def check(name, content, valid=False, expected=None, landmarks=None, networks=None, histories=None):
@@ -152,7 +156,7 @@ def main():
         ("zero-weights", "H:3:0:0:0:35"), ("high-weight", "H:3:1001:30:25:35"),
         ("high-chance", "H:3:45:30:25:101"), ("negative", "H:3:-1:30:25:35"),
         ("signed", "H:3:+1:30:25:35"), ("extra-field", "H:3:45:30:25:35:1"),
-        ("missing-field", "H:3:45:30:25"), ("bad-depth", "H:21:45:30:25:35"),
+        ("missing-field", "H:3:45:30:25"), ("bad-depth", "H:23:45:30:25:35"),
     ]:
         check("history-" + name, shipped.replace(history_defaults[2], record))
     check("missing", None)

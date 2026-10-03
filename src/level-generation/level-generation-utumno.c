@@ -121,7 +121,6 @@ bool utumno_gen(void)
     current_labyrinth_partitions = 0;
     qv_placed_this_level = false;
     quest_lottery_winner = 0;
-    p_ptr->force_forge = false;
     for (int i = 0; i < PARTITION_META_MAX; ++i)
     {
         current_partition_big_cave_types[i] = BIG_CAVE_NONE;

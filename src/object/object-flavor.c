@@ -38,7 +38,7 @@ static void flavor_assign_fixed(void)
     }
 }
 
-static void flavor_assign_random(byte tval)
+static void flavor_assign_random(byte tval, byte* used)
 {
     int i, j;
     int flavor_count = 0;
@@ -82,7 +82,7 @@ static void flavor_assign_random(byte tval)
                 continue;
 
             /* Skip assigned svals */
-            if (flavor_info[j].sval != SV_UNKNOWN)
+            if (flavor_info[j].sval != SV_UNKNOWN || used[j])
                 continue;
 
             if (choice == 0)
@@ -91,7 +91,7 @@ static void flavor_assign_random(byte tval)
                 k_info[i].flavor = j;
 
                 /* Mark the flavor as used */
-                flavor_info[j].sval = k_info[i].sval;
+                used[j] = 1;
 
                 /* One less flavor to choose from */
                 flavor_count--;
@@ -133,20 +133,30 @@ void flavor_init(void)
 {
     int i;
 
-    u64b saved_state = Rand_state_export();
-    Rand_state_import(seed_flavor);
+    byte* used = mem_alloc_array(z_info->flavor_max, byte);
+    if (!used)
+    {
+        quit("Cannot allocate object flavors");
+        return;
+    }
+    /* Keep authored fixed/random flavor metadata intact between heroes and
+     * loads. Zero is a valid saved flavor seed and must stay deterministic. */
+    u64b saved_state = Rand_state_push(seed_flavor ? seed_flavor : 1);
+    for (i = 0; i < z_info->k_max; i++)
+        k_info[i].flavor = 0;
 
     flavor_assign_fixed();
 
-    flavor_assign_random(TV_RING);
-    flavor_assign_random(TV_AMULET);
-    flavor_assign_random(TV_STAFF);
-    flavor_assign_random(TV_GEM);
-    flavor_assign_random(TV_HORN);
-    flavor_assign_random(TV_FOOD);
-    flavor_assign_random(TV_POTION);
+    flavor_assign_random(TV_RING, used);
+    flavor_assign_random(TV_AMULET, used);
+    flavor_assign_random(TV_STAFF, used);
+    flavor_assign_random(TV_GEM, used);
+    flavor_assign_random(TV_HORN, used);
+    flavor_assign_random(TV_FOOD, used);
+    flavor_assign_random(TV_POTION, used);
 
-    Rand_state_import(saved_state);
+    Rand_state_pop(saved_state);
+    mem_free(used);
 
     /* Analyze every object */
     for (i = 1; i < z_info->k_max; i++)

@@ -431,6 +431,7 @@ SAVE_TEST = r'''
 #include <stdio.h>
 static byte bytes[2048];
 static int write_pos, read_pos, extra_version;
+static bool current_version;
 static int poison_offset, abilities_offset, ai_offset;
 static const bool savefile_has_song_duels=true, savefile_has_monster_shatter=true;
 static const bool savefile_has_thrall_quest=true, savefile_has_thrall_quest_requested=true;
@@ -446,12 +447,17 @@ static void rd_u32b(u32b* x) {u16b a,b;rd_u16b(&a);rd_u16b(&b);*x=a|((u32b)b<<16
 static void rd_s32b(s32b* x) {u32b n;rd_u32b(&n);*x=(s32b)n;}
 static void strip_bytes(int n) {while(n--) {byte b;rd_byte(&b);}}
 static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {
-    assert(a==0&&b==9&&c==8&&d>=2&&d<=7);return extra_version>=d;
+    byte actual[]={current_version?VERSION_MAJOR:0,
+        current_version?VERSION_MINOR:9,current_version?VERSION_PATCH:8,
+        current_version?VERSION_EXTRA:extra_version};
+    byte wanted[]={a,b,c,d};
+    for(int i=0;i<4;i++) if(actual[i]!=wanted[i]) return actual[i]>wanted[i];
+    return true;
 }
 /* The complete production record writer and reader are inserted below. */
 @FUNCTIONS@
 void monster_save_tests(void) {
-    for(int version=1;version<=7;version++) {
+    for(int version=1;version<=8;version++) {
         monster_type before={0}, after={0};
         before.r_idx=3;before.image_r_idx=7;before.fy=14;before.fx=19;
         before.hp=39;before.maxhp=46;before.alertness=ALERTNESS_ALERT;
@@ -465,7 +471,9 @@ void monster_save_tests(void) {
         before.ai.observations[MON_AI_IMPALE].ttl=20;
         before.confused=6;before.song_will_penalty=11;before.thrall_quest_completed=1;
         before.previous_action[0]=6;before.previous_action[1]=8;
-        extra_version=version;write_pos=read_pos=0;wr_monster(&before);
+        extra_version=version;current_version=version==8;
+        before.mflag=MFLAG_ACTV;
+        write_pos=read_pos=0;wr_monster(&before);
         /* Construct each historical tail explicitly, independent of the
          * size of subsequently appended ability and observation records. */
         if(version<4)write_pos=poison_offset;
@@ -486,13 +494,14 @@ void monster_save_tests(void) {
         assert(after.r_idx==3&&after.fx==19&&after.stunned==9&&after.confused==6);
         assert(after.song_will_penalty==11 && after.thrall_quest_completed==1);
         assert(after.previous_action[1]==8);
+        assert(after.mflag&MFLAG_ACTV);
         assert(after.poisoned==(version>=4?17:0));
         assert(after.vengeance==(version>=5?1:0));
         assert(after.smite_recovery==(version>=5?2:0));
         assert(after.ai.cast_reserve==(version>=6?2:0));
         assert(after.ai.observations[MON_AI_IMPALE].value==(version>=7?3:0));
     }
-    puts("Monster save records: versions 0.9.8.1-7, signed debt, old unsigned energy, poison/ability/AI defaults and record alignment: PASS");
+    puts("Monster save records: versions 0.9.8.1-7 and current, signed debt, old unsigned energy, poison/ability/AI defaults and record alignment: PASS");
 }
 '''
 

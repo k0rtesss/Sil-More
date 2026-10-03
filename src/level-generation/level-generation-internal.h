@@ -654,7 +654,7 @@ extern bool vault_template_has_mandos(vault_type *v);
 extern bool vault_template_has_duruin(vault_type *v);
 extern void check_quest_vault_integrity(const char* checkpoint_name);
 extern void process_quest_vault_area(int y0, int x0, vault_type *qv);
-extern bool build_type6(int y0, int x0, bool force_forge);
+extern bool build_type6(int y0, int x0);
 extern bool build_type7(int y0, int x0);
 extern bool mark_g_vault(int y0, int x0, int ymax, int xmax);
 extern bool vault_type8_is_repeated(s16b v_idx);

@@ -192,7 +192,7 @@ void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     }
 }
 
-bool build_type6(int y0, int x0, bool force_forge)
+bool build_type6(int y0, int x0)
 {
     vault_type* v_ptr;
     int tries = 0;
@@ -209,17 +209,8 @@ bool build_type6(int y0, int x0, bool force_forge)
         // log_trace("Vault selection: Trying vault #%d '%s' (type=%d, depth=%d, rarity=%d, flags=0x%x)",
         //           (int)(v_ptr - v_info), v_name + v_ptr->name, v_ptr->typ, v_ptr->depth, v_ptr->rarity, v_ptr->flags);
 
-        // if forcing a forge, then skip vaults without forges in them
-        if (force_forge && !v_ptr->forge)
-        {
-            log_trace("Skipping vault - force_forge=true but vault has no forge");
-            continue;
-        }
-
-        // unless forcing a forge, try additional times to place any vault
-        // marked TEST
-        if ((tries < 1000) && !(v_ptr->flags & (VLT_TEST))
-            && !p_ptr->force_forge)
+        // Try additional times to place any vault marked TEST.
+        if ((tries < 1000) && !(v_ptr->flags & (VLT_TEST)))
         {
             // log_trace("Skipping vault - tries=%d, no TEST flag", tries);
             continue;
@@ -254,7 +245,7 @@ bool build_type6(int y0, int x0, bool force_forge)
         }
     }
 
-    if (!force_forge && one_in_(4))
+    if (one_in_(4))
     {
         level_gen_debug_note_room_name(v_name + v_ptr->name);
         if (try_place_docked_vault(v_ptr, NULL, NULL))

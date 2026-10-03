@@ -5,6 +5,7 @@
 #include "object/object-desc.h"
 #include "object/object-internal.h"
 #include "log/log.h"
+#include "support/utf8.h"
 #include <ctype.h>
 
 
@@ -15,7 +16,7 @@
     do                                                                         \
     {                                                                          \
         /* Copy the char */                                                    \
-        *(T)++ = (C);                                                          \
+        if ((T) < end) *(T)++ = (C);                                            \
                                                                                \
     } while (0)
 
@@ -28,7 +29,7 @@
         cptr s = (S);                                                          \
                                                                                \
         /* Copy the string */                                                  \
-        while (*s)                                                             \
+        while (*s && (T) < end)                                                 \
             *(T)++ = *s++;                                                     \
                                                                                \
     } while (0)
@@ -51,7 +52,7 @@
         while (p >= 1)                                                         \
         {                                                                      \
             /* Dump the digit */                                               \
-            *(T)++ = I2D(n / p);                                               \
+            object_desc_chr_macro(T, I2D(n / p));                               \
                                                                                \
             /* Remove the digit */                                             \
             n = n % p;                                                         \
@@ -77,14 +78,14 @@
             i = 0 - i;                                                         \
                                                                                \
             /* Use a "minus" sign */                                           \
-            *(T)++ = '-';                                                      \
+            object_desc_chr_macro(T, '-');                                      \
         }                                                                      \
                                                                                \
         /* Positive (or zero) */                                               \
         else                                                                   \
         {                                                                      \
             /* Use a "plus" sign */                                            \
-            *(T)++ = '+';                                                      \
+            object_desc_chr_macro(T, '+');                                      \
         }                                                                      \
                                                                                \
         /* Dump the number itself */                                           \
@@ -832,6 +833,8 @@ static void object_desc_prepend_prefix(char* dst, size_t dst_size,
 void object_desc(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode)
 {
+    if (!buf || max == 0)
+        return;
     cptr basenm;
     cptr modstr;
 
@@ -859,7 +862,8 @@ void object_desc(
     char discount_buf[80];
     char special_buf[80];
 
-    char tmp_buf[128];
+    char tmp_buf[1024];
+    char* end = tmp_buf + sizeof(tmp_buf) - 1;
 
     u32b f1, f2, f3;
 
@@ -1209,14 +1213,14 @@ void object_desc(
             /* Add a plural if needed */
             if (o_ptr->number != 1)
             {
-                char k = t[-1];
+                char k = t > tmp_buf ? t[-1] : '\0';
 
                 /* Hack -- "Cutlass-es" and "Torch-es" */
                 if ((k == 's') || (k == 'h'))
-                    *t++ = 'e';
+                    object_desc_chr_macro(t, 'e');
 
                 /* Add an 's' */
-                *t++ = 's';
+                object_desc_chr_macro(t, 's');
             }
         }
 
@@ -1231,7 +1235,7 @@ void object_desc(
         else
         {
             /* Copy */
-            *t++ = *s;
+            object_desc_chr_macro(t, *s);
         }
     }
 
@@ -1672,10 +1676,7 @@ void object_desc(
     }
     else if (o_ptr->discount > 0)
     {
-        char* q = discount_buf;
-        object_desc_num_macro(q, o_ptr->discount);
-        object_desc_str_macro(q, "% off");
-        *q = '\0';
+        strnfmt(discount_buf, sizeof(discount_buf), "%d%% off", o_ptr->discount);
         v = discount_buf;
     }
 
@@ -1686,23 +1687,23 @@ void object_desc(
     if (u || v)
     {
         /* Begin the inscription */
-        *t++ = ' ';
-        *t++ = c1;
+        object_desc_chr_macro(t, ' ');
+        object_desc_chr_macro(t, c1);
 
         /* Standard inscription */
         if (u)
         {
             /* Append the inscription */
             while ((t < b + 75) && *u)
-                *t++ = *u++;
+                object_desc_chr_macro(t, *u++);
         }
 
         /* Special inscription too */
         if (u && v && (t < b + 75))
         {
             /* Separator */
-            *t++ = ',';
-            *t++ = ' ';
+            object_desc_chr_macro(t, ',');
+            object_desc_chr_macro(t, ' ');
         }
 
         /* Special inscription */
@@ -1710,11 +1711,11 @@ void object_desc(
         {
             /* Append the inscription */
             while ((t < b + 75) && *v)
-                *t++ = *v++;
+                object_desc_chr_macro(t, *v++);
         }
 
         /* Terminate the inscription */
-        *t++ = c2;
+        object_desc_chr_macro(t, c2);
     }
 
 object_desc_done:
@@ -1730,6 +1731,7 @@ object_desc_done:
 
     /* Copy the string over */
     SDL_strlcpy(buf, tmp_buf, max);
+    buf[utf8_safe_prefix_len(buf, (int)strlen(buf))] = '\0';
 }
 
 /*
@@ -1869,4 +1871,3 @@ void identify_random_gen(const object_type* o_ptr)
     text_out_indent = 0;
     text_out_wrap = 0;
 }
-

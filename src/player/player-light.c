@@ -230,6 +230,24 @@ bool player_has_inventory_flag3(u32b flag3)
         if (f3 & flag3) return true;
     }
 
+    for (int i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        const object_type* o_ptr = player_carried_extra_entry_at(i);
+        u32b f1, f2, f3;
+        if (!o_ptr || !o_ptr->k_idx) continue;
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (f3 & flag3) return true;
+    }
+
+    for (int i = 0; i < player_quiver_store_entry_count(); i++)
+    {
+        const object_type* o_ptr = player_quiver_store_entry_at(i);
+        u32b f1, f2, f3;
+        if (!o_ptr || !o_ptr->k_idx) continue;
+        object_flags(o_ptr, &f1, &f2, &f3);
+        if (f3 & flag3) return true;
+    }
+
     return false;
 }
 

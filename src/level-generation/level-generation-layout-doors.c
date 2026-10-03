@@ -72,7 +72,7 @@ void ensure_minimum_rooms(void)
         else if (attempt % 3 == 1)
             build_type2(y, x);
         else
-            build_type6(y, x, false);
+            build_type6(y, x);
     }
 
     if (dun->cent_n > before)

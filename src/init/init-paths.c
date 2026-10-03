@@ -960,9 +960,6 @@ void init_file_paths(char* path)
     strcpy(tail, "pref");
     ANGBAND_DIR_PREF = str_dup(path);
 
-    strcpy(tail, "pref");
-    ANGBAND_DIR_PREF = str_dup(path);
-
 #ifdef SIL_USE_LOCAL_DATA
     if (path_build(buf, sizeof(buf), ANGBAND_DIR, "user"))
         ANGBAND_DIR_USER = str_dup(buf);

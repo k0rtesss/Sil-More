@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "log/log.h"
 #include "externs.h"
 
 #include "init.h"
@@ -345,8 +346,17 @@ static char* make_word(void)
     int tries, lnum, vow;
     int c_prev, c_cur, c_next;
     char* cp;
+    int restarts = 0;
 
 startover:
+    if (++restarts > 64 || !n_info)
+    {
+        /* A table with no usable word (for example, only consonants or
+         * missing transitions) must not trap the random-name prompt. */
+        log_warn("make_word: no usable word in the name probability table");
+        SDL_strlcpy(word_buf, "Nameless", sizeof(word_buf));
+        return word_buf;
+    }
     vow = 0;
     lnum = 0;
     tries = 0;
@@ -357,15 +367,19 @@ startover:
     {
     getletter:
         c_next = 0;
+        if (!n_info->ltotal[c_prev][c_cur])
+            goto startover;
         r = rand_int(n_info->ltotal[c_prev][c_cur]);
         totalfreq = n_info->lprobs[c_prev][c_cur][c_next];
 
         /*find the letter*/
-        while (totalfreq <= r)
+        while (totalfreq <= r && c_next < E_WORD)
         {
             c_next++;
             totalfreq += n_info->lprobs[c_prev][c_cur][c_next];
         }
+        if (totalfreq <= r)
+            goto startover;
 
         if (c_next == E_WORD)
         {
@@ -401,6 +415,8 @@ startover:
 
 void make_random_name(char* random_name, size_t max)
 {
+    if (!random_name || max == 0)
+        return;
     /*get the randomly generated word*/
     SDL_strlcpy(random_name, make_word(), max);
 

@@ -131,6 +131,13 @@ static struct sound_config g_sound_config;
 static char g_sound_config_path[1024];
 static bool g_music_force_main_on_next_welcome = false;
 static bool g_sound_loaded_once = false;
+/* Keep the requested background cue across mixer reloads and sound toggles.
+ * Explicit stop calls clear it; temporarily disabled music does not. */
+typedef enum {
+    MUSIC_CUE_NONE, MUSIC_CUE_MAIN, MUSIC_CUE_MAIN_FULL,
+    MUSIC_CUE_DEATH, MUSIC_CUE_AMBIENT
+} music_cue;
+static music_cue g_music_cue = MUSIC_CUE_NONE;
 /* Allocate only for race/action pairs encountered; cache missing folders too. */
 typedef struct monster_sound_entry {
     int race_idx;
@@ -1145,6 +1152,22 @@ static void sdl_sound_preload_water_walk(void)
             sound_state.bank.water_walk_count);
 }
 
+static bool sdl_sound_music_audio_attached(MIX_Audio* audio)
+{
+    MIX_Track* tracks[] = {
+        sound_state.music_main_track, sound_state.music_menu_track,
+        sound_state.music_ambient_track, sound_state.river_loop_track,
+        sound_state.still_water_loop_track, sound_state.torch_loop_track,
+        sound_state.lava_loop_track, sound_state.forge_loop_track,
+        sound_state.bridge_work_loop_track
+    };
+    for (int i = 0; i < (int)N_ELEMENTS(tracks); ++i) {
+        if (tracks[i] && MIX_GetTrackAudio(tracks[i]) == audio)
+            return true;
+    }
+    return false;
+}
+
 static MIX_Audio* sdl_sound_get_music_audio(const char* path)
 {
     if (!path || !path[0]) {
@@ -1169,6 +1192,17 @@ static MIX_Audio* sdl_sound_get_music_audio(const char* path)
         }
     }
     if (free_slot < 0) {
+        /* Nine music/environment tracks share ten cache slots. At least one
+         * cached asset is unattached, even when every track holds an input.
+         * Never evict an asset still attached to a playing or stopped track. */
+        for (int i = 0; i < SDL_SOUND_MAX_MUSIC_CACHE; ++i) {
+            if (!sdl_sound_music_audio_attached(sound_state.music_cache[i].audio)) {
+                free_slot = i;
+                break;
+            }
+        }
+    }
+    if (free_slot < 0) {
         log_warn("Music cache exhausted while loading '%s'", path);
         return NULL;
     }
@@ -1179,6 +1213,8 @@ static MIX_Audio* sdl_sound_get_music_audio(const char* path)
         return NULL;
     }
 
+    if (sound_state.music_cache[free_slot].audio)
+        MIX_DestroyAudio(sound_state.music_cache[free_slot].audio);
     SDL_strlcpy(sound_state.music_cache[free_slot].path, path,
         sizeof(sound_state.music_cache[free_slot].path));
     sound_state.music_cache[free_slot].audio = audio;
@@ -1349,8 +1385,9 @@ static bool sdl_music_play_title_track(const char* primary_path,
     bool fallback_available = false;
 
     if (!sound_state.music_main_enabled) {
-        sdl_music_stop_main();
-        sdl_music_stop_ambient();
+        sdl_music_stop_title_track();
+        sdl_music_stop_track(sound_state.music_menu_track);
+        sdl_music_stop_track(sound_state.music_ambient_track);
         return false;
     }
 
@@ -1399,12 +1436,28 @@ bool sdl_sound_initialize(void)
     return true;
 }
 
+static void sdl_music_restore_background(void)
+{
+    if (!g_sound_config.enabled)
+        return;
+    switch (g_music_cue) {
+    case MUSIC_CUE_MAIN: sdl_music_play_main(); break;
+    case MUSIC_CUE_MAIN_FULL: sdl_music_play_main_full(); break;
+    case MUSIC_CUE_DEATH: sdl_music_play_death(); break;
+    case MUSIC_CUE_AMBIENT: sdl_music_play_ambient(); break;
+    default: break;
+    }
+}
+
 void sdl_sound_reload(void)
 {
     if (!sdl_sound_ensure_mutex())
         return;
 
     SDL_LockMutex(g_sound_mutex);
+    bool resume_menu = sound_state.music_menu_track &&
+        (MIX_TrackPlaying(sound_state.music_menu_track) ||
+            MIX_TrackPaused(sound_state.music_menu_track));
     g_sound_generation++;
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
@@ -1542,12 +1595,16 @@ void sdl_sound_reload(void)
     }
 
     sdl_music_update_volumes();
+    sdl_music_restore_background();
+    if (resume_menu && sound_state.music_main_enabled)
+        sdl_music_play_menu_theme();
     g_sound_loaded_once = true;
     SDL_UnlockMutex(g_sound_mutex);
 }
 
 void sdl_sound_shutdown(void)
 {
+    g_music_cue = MUSIC_CUE_NONE;
     if (g_sound_mutex)
         SDL_LockMutex(g_sound_mutex);
     g_sound_generation++;
@@ -1566,6 +1623,7 @@ void sdl_sound_shutdown(void)
 
 void sdl_music_play_main(void)
 {
+    g_music_cue = MUSIC_CUE_MAIN;
     sdl_sound_stop_environment();
     log_debug("Starting title music: %s", sound_state.music_main_path);
     (void)sdl_music_play_title_track(sound_state.music_main_path, NULL, "main");
@@ -1573,6 +1631,7 @@ void sdl_music_play_main(void)
 
 void sdl_music_play_main_full(void)
 {
+    g_music_cue = MUSIC_CUE_MAIN_FULL;
     sdl_sound_stop_environment();
     log_debug("Starting full title music: %s", sound_state.music_main_full_path);
     (void)sdl_music_play_title_track(sound_state.music_main_full_path,
@@ -1581,6 +1640,7 @@ void sdl_music_play_main_full(void)
 
 void sdl_music_play_death(void)
 {
+    g_music_cue = MUSIC_CUE_DEATH;
     sdl_sound_stop_environment();
     log_debug("Starting death music: %s", sound_state.music_death_path);
     (void)sdl_music_play_title_track(sound_state.music_death_path, NULL, "death");
@@ -1589,8 +1649,10 @@ void sdl_music_play_death(void)
 void sdl_music_play_menu_theme(void)
 {
     sdl_sound_stop_environment();
+    sdl_music_play_ambient();
     if (!sound_state.music_main_enabled) {
-        sdl_music_stop_main();
+        sdl_music_stop_title_track();
+        sdl_music_stop_track(sound_state.music_menu_track);
         return;
     }
 
@@ -1599,7 +1661,6 @@ void sdl_music_play_menu_theme(void)
     }
 
     sdl_music_stop_title_track();
-    sdl_music_play_ambient();
     sdl_music_stop_track(sound_state.music_menu_track);
 
     log_debug("Starting menu theme overlay: %s", sound_state.music_main_full_path);
@@ -1610,8 +1671,9 @@ void sdl_music_play_menu_theme(void)
 
 void sdl_music_play_ambient(void)
 {
+    g_music_cue = MUSIC_CUE_AMBIENT;
     if (!sound_state.music_ambient_enabled) {
-        sdl_music_stop_ambient();
+        sdl_music_stop_track(sound_state.music_ambient_track);
         return;
     }
 
@@ -1632,12 +1694,16 @@ void sdl_music_play_ambient(void)
 
 void sdl_music_stop_main(void)
 {
+    if (g_music_cue != MUSIC_CUE_AMBIENT)
+        g_music_cue = MUSIC_CUE_NONE;
     sdl_music_stop_title_track();
     sdl_music_stop_track(sound_state.music_menu_track);
 }
 
 void sdl_music_stop_ambient(void)
 {
+    if (g_music_cue == MUSIC_CUE_AMBIENT)
+        g_music_cue = MUSIC_CUE_NONE;
     sdl_music_stop_track(sound_state.music_ambient_track);
 }
 
@@ -2338,13 +2404,15 @@ void sdl_sound_save_config(void)
     }
 
     if (!sound_state.music_main_enabled) {
-        sdl_music_stop_main();
+        sdl_music_stop_title_track();
+        sdl_music_stop_track(sound_state.music_menu_track);
     }
     if (!sound_state.music_ambient_enabled) {
-        sdl_music_stop_ambient();
+        sdl_music_stop_track(sound_state.music_ambient_track);
     }
 
     sdl_music_update_volumes();
+    sdl_music_restore_background();
     sdl_sound_update_environment();
     sound_config_save(g_sound_config_path, &g_sound_config);
     log_debug("Sound configuration saved to %s", g_sound_config_path);

@@ -19,7 +19,7 @@ errr parse_st_info(char* buf, header* head)
     char* s;
 
     /* Current entry */
-    static story_type* st_ptr = NULL;
+    story_type* st_ptr = PARSED_RECORD(story_type, head);
 
     /* Process 'N' for "New/Number" */
     if (buf[0] == 'N')

@@ -56,7 +56,7 @@ errr parse_p_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static player_race* pr_ptr = NULL;
+    player_race* pr_ptr = PARSED_RECORD(player_race, head);
     static int cur_equip = 0;
 
     /* Process 'N' for "New/Number/Name" */
@@ -624,7 +624,7 @@ errr parse_c_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static character_profile* ph_ptr = NULL;
+    character_profile* ph_ptr = PARSED_RECORD(character_profile, head);
 
     log_trace("Parsing characters");
 
@@ -700,6 +700,8 @@ errr parse_c_info(char* buf, header* head)
     /* Process 'A' for "Alternate Name" */
     else if (buf[0] == 'A')
     {
+        if (!ph_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
         /* Find the colon before the name */
         s = strchr(buf, ':');
 
@@ -722,6 +724,8 @@ errr parse_c_info(char* buf, header* head)
     /* Process 'B' for "Start String" */
     else if (buf[0] == 'B')
     {
+        if (!ph_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
         /* Find the colon before the name */
         s = strchr(buf, ':');
 

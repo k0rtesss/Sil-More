@@ -377,6 +377,39 @@ errr init_alloc(void)
 
     s16b aux[MAX_DEPTH];
 
+    /* Cached templates bypass the text parsers. Reject an invalid depth before
+     * it can index the fixed allocation-count arrays or replace any table. */
+    for (i = 1; i < z_info->k_max; i++)
+    {
+        for (j = 0; j < 4; j++)
+        {
+            if (k_info[i].chance[j] && k_info[i].locale[j] >= MAX_DEPTH)
+            {
+                log_error("Object kind %d has invalid allocation depth %u", i,
+                    (unsigned)k_info[i].locale[j]);
+                return PARSE_ERROR_OUT_OF_BOUNDS;
+            }
+        }
+    }
+    for (i = 1; i < z_info->r_max; i++)
+    {
+        if (r_info[i].rarity && r_info[i].level >= MAX_DEPTH)
+        {
+            log_error("Monster race %d has invalid allocation depth %u", i,
+                (unsigned)r_info[i].level);
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        }
+    }
+    for (i = 1; i < z_info->e_max; i++)
+    {
+        if (e_info[i].rarity && e_info[i].level >= MAX_DEPTH)
+        {
+            log_error("Ego item %d has invalid allocation depth %u", i,
+                (unsigned)e_info[i].level);
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+        }
+    }
+
     /*** Analyze object allocation info ***/
 
     /* Clear the "aux" array */

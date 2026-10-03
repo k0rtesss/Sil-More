@@ -16,15 +16,21 @@ void editing_buffer_init(
     if (!eb_ptr)
         return;
 
-    if (buf)
-        len = strlen(buf);
+    memset(eb_ptr, 0, sizeof(*eb_ptr));
+    if (max_size == 0)
+        return;
 
     /* Alloc a clean buffer */
     eb_ptr->buf = mem_alloc_array(max_size, char);
+    if (!eb_ptr->buf)
+        return;
+
+    if (buf)
+        len = MIN(strlen(buf), max_size - 1);
 
     /* Copy the initial string, if any */
     if (len > 0)
-        SDL_strlcpy(eb_ptr->buf, buf, sizeof(eb_ptr->buf));
+        SDL_strlcpy(eb_ptr->buf, buf, max_size);
 
     /* Initialize the remaining fields */
     eb_ptr->pos = len;
@@ -44,8 +50,9 @@ void editing_buffer_destroy(editing_buffer* eb_ptr)
     if (eb_ptr && eb_ptr->buf)
     {
         mem_free_null(eb_ptr->buf);
-        eb_ptr->buf = NULL;
     }
+    if (eb_ptr)
+        memset(eb_ptr, 0, sizeof(*eb_ptr));
 }
 
 /*
@@ -53,7 +60,7 @@ void editing_buffer_destroy(editing_buffer* eb_ptr)
  */
 int editing_buffer_put_chr(editing_buffer* eb_ptr, char ch)
 {
-    if (!eb_ptr)
+    if (!eb_ptr || !eb_ptr->buf)
         return 0;
 
     /* Do not have space */
@@ -76,7 +83,7 @@ int editing_buffer_put_chr(editing_buffer* eb_ptr, char ch)
  */
 int editing_buffer_set_position(editing_buffer* eb_ptr, size_t new_pos)
 {
-    if (!eb_ptr)
+    if (!eb_ptr || !eb_ptr->buf)
         return 0;
 
     /* Valid position? */
@@ -125,7 +132,7 @@ int editing_buffer_set_position(editing_buffer* eb_ptr, size_t new_pos)
  */
 void editing_buffer_display(editing_buffer* eb_ptr, int x, int y, byte col)
 {
-    if (!eb_ptr)
+    if (!eb_ptr || !eb_ptr->buf)
         return;
 
     Term_erase(x, y, (int)eb_ptr->max_size);
@@ -151,7 +158,7 @@ void editing_buffer_display(editing_buffer* eb_ptr, int x, int y, byte col)
  */
 int editing_buffer_delete(editing_buffer* eb_ptr)
 {
-    if (!eb_ptr)
+    if (!eb_ptr || !eb_ptr->buf)
         return 0;
 
     /* We are at the end of the buffer */
@@ -172,7 +179,7 @@ int editing_buffer_delete(editing_buffer* eb_ptr)
  */
 void editing_buffer_clear(editing_buffer* eb_ptr)
 {
-    if (!eb_ptr)
+    if (!eb_ptr || !eb_ptr->buf)
         return;
 
     /* Clear the buffer */
@@ -188,9 +195,13 @@ void editing_buffer_clear(editing_buffer* eb_ptr)
  */
 void editing_buffer_get_all(editing_buffer* eb_ptr, char buf[], size_t max_size)
 {
-    size_t i, n = EDITING_BUFFER_LEN(eb_ptr);
-    if (!eb_ptr)
+    size_t i, n;
+    if (!buf || max_size == 0)
         return;
+    buf[0] = '\0';
+    if (!eb_ptr || !eb_ptr->buf)
+        return;
+    n = EDITING_BUFFER_LEN(eb_ptr);
 
     /* Note the use of EDITING_BUFFER_GET to ignore the gap */
     for (i = 0; (i < n) && (i < max_size - 1); i++)
@@ -210,7 +221,7 @@ int editing_buffer_put_str(editing_buffer* eb_ptr, const char* str, int n)
 {
     const char* p_str;
 
-    if (!eb_ptr || !str)
+    if (!eb_ptr || !eb_ptr->buf || !str)
         return 0;
 
     for (p_str = str; *p_str; p_str++)

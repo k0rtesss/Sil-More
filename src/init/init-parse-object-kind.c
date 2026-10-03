@@ -30,7 +30,7 @@ errr parse_k_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static object_kind* k_ptr = NULL;
+    object_kind* k_ptr = PARSED_RECORD(object_kind, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')
@@ -243,6 +243,9 @@ errr parse_k_info(char* buf, header* head)
 
             int depth = atoi(s + 1);
             int rarity = 1;
+
+            if (depth < 0 || depth >= MAX_DEPTH)
+                return PARSE_ERROR_OUT_OF_BOUNDS;
 
             /* Find the slash */
             t = strchr(s + 1, '/');

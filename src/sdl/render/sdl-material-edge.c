@@ -24,6 +24,8 @@ typedef struct material_edge_source {
     unsigned priority;
     byte row;
     byte col;
+    byte light_offset;
+    bool has_light_variant;
 } material_edge_source;
 
 /* Clockwise from north.  Keeping this order fixed is important at corners:
@@ -106,20 +108,24 @@ static int material_edge_style(int y, int x)
  * are lighting variants of one artwork, not another material.  Only fold the
  * pair when it matches the feature's ordinary source coordinate; arbitrary
  * imported source coordinates remain distinct when no style is encoded. */
-static void material_edge_normalize_source(int feat, byte* row, byte* col)
+static bool material_edge_normalize_source(int feat, byte* row, byte* col)
 {
     byte base_row;
     byte base_col;
 
     if (!row || !col || !z_info || !f_info || feat < 0
         || feat >= z_info->f_max)
-        return;
+        return false;
 
     base_row = (byte)(f_info[feat].x_attr & TILE_INDEX_MASK);
     base_col = (byte)((byte)f_info[feat].x_char & TILE_INDEX_MASK);
-    if (*row == base_row
-        && *col == (byte)((base_col + 1) & TILE_INDEX_MASK))
+    if (*row == base_row && (*col == base_col
+        || *col == (byte)((base_col + 1) & TILE_INDEX_MASK)))
+    {
         *col = base_col;
+        return true;
+    }
+    return false;
 }
 
 static material_edge_class material_edge_feature_class(int y, int x,
@@ -186,7 +192,11 @@ static bool material_edge_floor_family(const style_type* style,
         byte col = style->floor_count ? style->floor_colv[i] : style->floor_col;
         unsigned tile = ((unsigned)row << 8) | col;
         if (out->row == row && (out->col == col || out->col == col + 1))
+        {
             matches = true;
+            out->light_offset = (byte)(out->col - col);
+            out->has_light_variant = true;
+        }
         int at = 0;
         while (at < count && tiles[at] < tile) at++;
         if (at < count && tiles[at] == tile) continue;
@@ -223,6 +233,8 @@ static bool material_edge_describe(int y, int x, byte ta, char tc,
 
     out->row = (byte)(ta & TILE_INDEX_MASK);
     out->col = (byte)((byte)tc & TILE_INDEX_MASK);
+    out->light_offset = 0;
+    out->has_light_variant = false;
     style = material_edge_style(y, x);
     if (out->class_id == MATERIAL_EDGE_FLOOR && style_info && z_info)
     {
@@ -246,12 +258,16 @@ static bool material_edge_describe(int y, int x, byte ta, char tc,
             {
                 key_col = s->wall_col;
                 normalized = true;
+                out->has_light_variant = true;
                 break;
             }
         }
     }
     if (!normalized)
-        material_edge_normalize_source(feat, &key_row, &key_col);
+        out->has_light_variant = material_edge_normalize_source(feat,
+            &key_row, &key_col);
+    if (out->has_light_variant)
+        out->light_offset = (byte)((out->col - key_col) & TILE_INDEX_MASK);
     out->priority = ((unsigned)key_row << 8) | key_col;
     /* Match the singleton floor family key as well as unstyled coordinates. */
     out->material_id = (14695981039346656037ULL ^ out->priority) * 1099511628211ULL;
@@ -300,6 +316,17 @@ static int material_edge_collect(int y, int x, byte ta, char tc,
         map_info_actual_terrain(ny, nx, &nta, &ntc);
         if (!material_edge_describe(ny, nx, nta, ntc, &neighbours[i]))
             continue;
+
+        /* Physical sampling intentionally ignores neighbour discovery, and
+         * therefore selects bright artwork. Use the receiving tile's light
+         * variant for its connection pixels as well: bright strips on a
+         * remembered floor otherwise look like raised borders. Only known
+         * lit/dark pairs may shift; arbitrary artwork stays untouched. */
+        if (current->class_id == neighbours[i].class_id
+            && current->has_light_variant && neighbours[i].has_light_variant)
+            neighbours[i].col = (byte)((neighbours[i].col
+                - neighbours[i].light_offset + current->light_offset)
+                & TILE_INDEX_MASK);
 
         if (material_edge_sources_differ(current, &neighbours[i]))
         {

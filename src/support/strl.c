@@ -20,9 +20,11 @@ size_t SDL_strlcpy(char* buf, const char* src, size_t bufsize)
 
 size_t SDL_strlcat(char* buf, const char* src, size_t bufsize)
 {
-    size_t dlen = strlen(buf);
+    size_t dlen = 0;
+    while (dlen < bufsize && buf[dlen])
+        dlen++;
 
-    if (dlen < bufsize - 1)
+    if (dlen < bufsize)
     {
         return dlen + SDL_strlcpy(buf + dlen, src, bufsize - dlen);
     }

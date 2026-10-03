@@ -114,7 +114,6 @@ bool cave_gen(void)
 
     int room_attempts = 0;
 
-    int is_guaranteed_forge_level = false;
     bool duruin_bastion_forced = false;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
     bool is_utumno_level = (p_ptr->depth == UTUMNO_DEPTH);
@@ -242,58 +241,12 @@ bool cave_gen(void)
     if (cheat_room)
         msg_format("Forge count is %d.", p_ptr->forge_count);
 
-    // guarantee a forge at first entrance to levels 2, 6, 10 (or below if skipped via shaft)
-    if (p_ptr->fixed_forge_count < 3)
-    {
-        int next_guaranteed_forge_level = 2 + (p_ptr->fixed_forge_count * 4);
-        is_guaranteed_forge_level = (next_guaranteed_forge_level <= p_ptr->depth);
-        log_trace("Forge forcing check: fixed_forge_count=%d, target_level=%d, current_depth=%d, forcing=%s",
-                 p_ptr->fixed_forge_count, next_guaranteed_forge_level, p_ptr->depth,
-                 is_guaranteed_forge_level ? "true" : "false");
-    }
-
-    if (cheat_room)
-        msg_format("Guaranteed forge: %s.",
-            is_guaranteed_forge_level ? "true" : "false");
-
-    log_trace("cave_gen: before guaranteed forge handling");
-    if (is_guaranteed_forge_level)
-    {
-        int y = rand_range(5, p_ptr->cur_map_hgt - 5);
-        int x = rand_range(5, p_ptr->cur_map_wid - 5);
-        log_trace("cave_gen: attempting guaranteed forge at (%d,%d)", y, x);
-
-        if (cheat_room)
-            msg_format("Trying to force a forge:");
-        p_ptr->force_forge = true;
-        p_ptr->fixed_forge_count++;
-        log_trace("cave_gen: force_forge=true, fixed_forge_count=%d", p_ptr->fixed_forge_count);
-
-        if (!build_type6(y, x, true))
-        {
-            if (cheat_room)
-                msg_format("failed.");
-
-            p_ptr->fixed_forge_count--;
-            return (false);
-        }
-
-        if (cheat_room)
-            msg_format("succeeded.");
-    }
-    log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
-    log_trace("cave_gen: post guaranteed-forge path cent_n=%d", dun->cent_n);
-
     if (!is_morgoth_level && !is_utumno_level)
     {
         /* Quest vault determination - Allow re-placement during level regeneration */
-        log_trace("Quest vault: ENTERING quest vault logic check (quest_vault_used=%d, force_forge=%s, qv_placed_this_level=%s)",
+        log_trace("Quest vault: Starting quest vault check (quest_vault_used=%d, qv_placed_this_level=%s)",
                   p_ptr->quest_vault_used,
-                  p_ptr->force_forge ? "true" : "false",
                   qv_placed_this_level ? "true" : "false");
-        log_trace("Quest vault: Starting quest vault check (quest_vault_used=%d, force_forge=%s)",
-                  p_ptr->quest_vault_used,
-                  p_ptr->force_forge ? "true" : "false");
 
         /* If Varda's quest is active and the bastion is due, force its placement first */
         log_trace("Quest vault check: varda_vault_ready=%d, varda_quest=%d (ACTIVE=%d), varda_vault_placed=%d",
@@ -585,8 +538,6 @@ bool cave_gen(void)
     {
         if (cheat_room)
             msg_format("Not enough rooms (%d < %d).", dun->cent_n, ROOM_MIN);
-        if (p_ptr->force_forge)
-            p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: Only %d rooms generated, minimum %d required", dun->cent_n, ROOM_MIN);
         genlog_fail("NOT ENOUGH ROOMS: %d generated, minimum %d required", dun->cent_n, ROOM_MIN);
         gen_log_level_end(false, dun->cent_n, 1);
@@ -605,8 +556,6 @@ bool cave_gen(void)
     {
         if (cheat_room)
             msg_format("Couldn't connect the rooms.");
-        if (p_ptr->force_forge)
-            p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: connect_rooms_stairs() returned false");
         genlog_fail("CONNECTIVITY FAILED: connect_rooms_stairs() could not link rooms (rooms=%d)", dun->cent_n);
         gen_log_level_end(false, dun->cent_n, 1);
@@ -620,8 +569,6 @@ bool cave_gen(void)
     {
         if (cheat_room)
             msg_format("Morgoth entry tunnels failed to connect.");
-        if (p_ptr->force_forge)
-            p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: connect_morgoth_entry_tunnels() returned false");
         gen_log_level_end(false, dun->cent_n, 1);
         return (false);
@@ -664,7 +611,6 @@ bool cave_gen(void)
     /* place the stairs, traps, rubble, secret doors, and player */
     if (!terrain_history_finish())
     {
-        if (p_ptr->force_forge) p_ptr->fixed_forge_count--;
         genlog_fail("Terrain history could not retain its planned topology");
         return false;
     }
@@ -677,8 +623,6 @@ bool cave_gen(void)
     {
         if (cheat_room)
             msg_format("Couldn't place, rubble, or player.");
-        if (p_ptr->force_forge)
-            p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: place_rubble_player() returned false");
         genlog_fail("PLACEMENT FAILED: place_rubble_player() could not place stairs/player");
         gen_log_level_end(false, dun->cent_n, 1);
@@ -693,8 +637,6 @@ bool cave_gen(void)
     {
         if (cheat_room)
             msg_format("Failed connectivity.");
-        if (p_ptr->force_forge)
-            p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: check_connectivity() returned false");
         gen_log_level_end(false, dun->cent_n, 1);
         return (false);
@@ -1363,7 +1305,6 @@ bool cave_gen(void)
                 p_ptr->depth, min_dist, max_dist);
         }
     }
-    p_ptr->force_forge = false;
 
     if (is_utumno_level && !utumno_finalize_corridors()) return false;
 

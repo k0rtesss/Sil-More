@@ -265,7 +265,17 @@ static int run_history_compute_rating(const score_record_v1* rec)
         return 0;
     high_score temp;
     run_history_build_high_score(rec, &temp);
-    return score_points(&temp);
+    /* runs.db carries current score fields regardless of the score file
+     * that happens to be open when its history is displayed. */
+    score_file_ctx ctx = {0};
+    ctx.version_major = SCORE_FILE_VERSION_MAJOR;
+    ctx.version_minor = SCORE_FILE_VERSION_MINOR;
+    ctx.version_patch = SCORE_FILE_VERSION_PATCH;
+    ctx.version_extra = SCORE_FILE_VERSION_EXTRA;
+    score_file_ctx* previous = score_file_set_active_ctx(&ctx);
+    int rating = score_points(&temp);
+    score_file_set_active_ctx(previous);
+    return rating;
 }
 
 static int compare_scores_qsort(const void* va, const void* vb)
@@ -1457,11 +1467,13 @@ void show_scores_interactive_highlight_from_file(const char* filepath,
 
     score_file_ctx temp_ctx;
     score_file_reset_ctx(&temp_ctx);
+    score_file_ctx* previous_ctx = score_file_set_active_ctx(&temp_ctx);
 
     safe_setuid_grab();
     temp_ctx.fd = score_file_open(filepath, O_RDONLY);
     safe_setuid_drop();
     if (!temp_ctx.fd) {
+        score_file_set_active_ctx(previous_ctx);
         log_warn("show_scores_interactive_highlight_from_file: unable to open %s",
                  filepath);
         show_scores_interactive_highlight(entry);
@@ -1470,7 +1482,6 @@ void show_scores_interactive_highlight_from_file(const char* filepath,
 
     log_debug("show_scores_interactive_highlight_from_file: rendering %s",
               filepath);
-    score_file_ctx* previous_ctx = score_file_set_active_ctx(&temp_ctx);
     show_scores_interactive_highlight(entry);
     score_file_set_active_ctx(previous_ctx);
 
@@ -1618,6 +1629,14 @@ static void run_history_sort_entries(run_history_entry* entries,
               run_history_compare_date_desc);
 }
 
+static void run_history_terminate_strings(score_record_v1* record)
+{
+    record->player_name[sizeof(record->player_name) - 1] = '\0';
+    record->savefile_hint[sizeof(record->savefile_hint) - 1] = '\0';
+    record->cause_of_death[sizeof(record->cause_of_death) - 1] = '\0';
+    record->killer_name[sizeof(record->killer_name) - 1] = '\0';
+}
+
 static int collect_run_history(run_history_entry* out, int capacity)
 {
     if (capacity <= 0 || !out)
@@ -1635,8 +1654,8 @@ static int collect_run_history(run_history_entry* out, int capacity)
         return 0;
 
     score_db_header header;
-    if (SDL_ReadIO(file, &header, sizeof(header)) != sizeof(header) ||
-        memcmp(header.magic, SCORE_DB_MAGIC, sizeof(header.magic)) != 0) {
+    if (!score_runs_validate_history_db(file, &header)
+        || SDL_SeekIO(file, sizeof(header), SDL_IO_SEEK_SET) < 0) {
         SDL_CloseIO(file);
         return 0;
     }
@@ -1650,6 +1669,7 @@ static int collect_run_history(run_history_entry* out, int capacity)
     int stored = 0;
     score_record_v1 temp;
     while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
+        run_history_terminate_strings(&temp);
         s64b detail_offset = (s64b)SDL_TellIO(file);
         if (!run_history_skip_details(file, &detail_offset))
             break;
@@ -1698,14 +1718,15 @@ static bool run_history_find_by_record_id(u32b record_id,
         return false;
 
     score_db_header header;
-    if (SDL_ReadIO(file, &header, sizeof(header)) != sizeof(header) ||
-        memcmp(header.magic, SCORE_DB_MAGIC, sizeof(header.magic)) != 0) {
+    if (!score_runs_validate_history_db(file, &header)
+        || SDL_SeekIO(file, sizeof(header), SDL_IO_SEEK_SET) < 0) {
         SDL_CloseIO(file);
         return false;
     }
 
     score_record_v1 temp;
     while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
+        run_history_terminate_strings(&temp);
         s64b detail_offset = (s64b)SDL_TellIO(file);
 
         if (temp.record_id == record_id) {

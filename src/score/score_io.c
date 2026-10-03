@@ -785,7 +785,7 @@ errr backup_scores_file(const char *filepath)
     SDL_IOStream* fd_test2 = sdl_fopen(backup_path2, "rb");
     if (fd_test2) {
         sdl_fclose(fd_test2);
-        if (fd_move(backup_path2, backup_path3) != 0) {
+        if (!fd_move(backup_path2, backup_path3)) {
             log_error("backup_scores_file: failed to move bak2 to bak3");
         }
     }
@@ -793,7 +793,7 @@ errr backup_scores_file(const char *filepath)
     SDL_IOStream* fd_test1 = sdl_fopen(backup_path1, "rb");
     if (fd_test1) {
         sdl_fclose(fd_test1);
-        if (fd_move(backup_path1, backup_path2) != 0) {
+        if (!fd_move(backup_path1, backup_path2)) {
             log_error("backup_scores_file: failed to move bak1 to bak2");
         }
     }

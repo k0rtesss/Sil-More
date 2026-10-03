@@ -20,7 +20,7 @@ bool room_build_in_bounds(int typ, int y1, int y2, int x1, int x2)
     {
     case 8: return build_type8(y, x);
     case 7: return build_type7(y, x);
-    case 6: return build_type6(y, x, false);
+    case 6: return build_type6(y, x);
     case 2: return build_type2(y, x);
     case 1: return build_type1(y, x);
     default: return false;

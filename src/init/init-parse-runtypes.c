@@ -12,10 +12,9 @@
 #include <ctype.h>
 
 #ifdef ALLOW_TEMPLATES
-static runtype_type *rt_ptr = NULL;
-
 errr parse_rt_info(char *buf, header *head)
 {
+    runtype_type* rt_ptr = PARSED_RECORD(runtype_type, head);
     /* N:<index>:<name> ------------------------------------------- */
     if (buf[0] == 'N')
     {

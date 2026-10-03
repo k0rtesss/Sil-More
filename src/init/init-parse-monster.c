@@ -111,7 +111,7 @@ errr parse_r_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static monster_race* r_ptr = NULL;
+    monster_race* r_ptr = PARSED_RECORD(monster_race, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')
@@ -298,6 +298,9 @@ errr parse_r_info(char* buf, header* head)
         /* Scan for the values */
         if (2 != sscanf(buf + 2, "%d:%d", &lev, &rar))
             return (PARSE_ERROR_GENERIC);
+
+        if (lev < 0 || lev >= MAX_DEPTH)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
 
         /* Save the values */
         r_ptr->level = lev;

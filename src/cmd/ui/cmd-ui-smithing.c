@@ -4304,6 +4304,14 @@ static int find_reforge_target_item(void)
             return i;
     }
 
+    for (i = 0; i < player_carried_extra_entry_count(); i++)
+    {
+        object_type* o_ptr = player_carried_extra_entry_at(i);
+        if (o_ptr && o_ptr->k_idx && (object_can_repair_damage(o_ptr)
+                || object_can_preview_reforge_prefix(o_ptr)))
+            return CARRIED_EXTRA_INDEX + i;
+    }
+
     return -1;
 }
 
@@ -8076,7 +8084,6 @@ int melt_menu_aux(int* highlight)
     int i;
     int num = 0;
     object_type* o_ptr;
-    u32b f1, f2, f3;
     char desc[80];
     char buf[80];
     const int first_row = smith_ui_dense_row0();
@@ -8096,16 +8103,8 @@ int melt_menu_aux(int* highlight)
     // clear bottom of the screen
     wipe_object_description();
 
-    for (i = 0; i < INVEN_TOTAL; i++)
-    {
-        o_ptr = &inventory[i];
-
-        object_flags(o_ptr, &f1, &f2, &f3);
-
-        /* ignore metal items that carry the "can't melt" tag */
-        if ((f3 & (TR3_MITHRIL | TR3_STAR_IRON)) && !(o_ptr->ident & IDENT_CANT_MELT))
-            num++;
-    }
+    while (smith_melt_item_handle_for_choice(num + 1) >= 0)
+        num++;
 
     if (num == 0)
     {
@@ -8128,17 +8127,14 @@ int melt_menu_aux(int* highlight)
         first_row, last_row);
 
     num = 0;
-    for (i = 0; i < INVEN_TOTAL; i++)
+    for (i = 1; ; i++)
     {
         int row;
+        int item = smith_melt_item_handle_for_choice(i);
 
-        o_ptr = &inventory[i];
-        object_flags(o_ptr, &f1, &f2, &f3);
-        if (!((f3 & (TR3_MITHRIL | TR3_STAR_IRON))
-                && !(o_ptr->ident & IDENT_CANT_MELT)))
-        {
-            continue;
-        }
+        if (item < 0)
+            break;
+        o_ptr = player_inventory_object(item);
 
         if (num >= top && num < top + (last_row - first_row + 1))
         {
@@ -8777,13 +8773,14 @@ static bool smith_reforge_item(void)
     item_tester_hook = NULL;
     smithing_redraw_root_after_item_picker();
 
-    if (slot < 0)
+    object_type* target = player_inventory_object(slot);
+    if (!target || !target->k_idx)
         return false;
 
     object_copy(&smith_backup, smith_o_ptr);
     object_copy(&smith2_backup, smith2_o_ptr);
 
-    if (object_can_repair_damage(&inventory[slot]))
+    if (object_can_repair_damage(target))
     {
         if (!cave_forge_bold(p_ptr->py, p_ptr->px))
         {
@@ -8828,14 +8825,14 @@ static bool smith_reforge_item(void)
         cave_feat[p_ptr->py][p_ptr->px] -= 1;
         lite_spot(p_ptr->py, p_ptr->px);
 
-        object_desc(new_name, sizeof(new_name), &inventory[slot], true, 0);
+        object_desc(new_name, sizeof(new_name), target, true, 0);
         msg_format("You repair %s.", new_name);
     }
     else
     {
         reforge_preview_type preview;
 
-        if (!object_can_preview_reforge_prefix(&inventory[slot]))
+        if (!object_can_preview_reforge_prefix(target))
         {
             object_copy(smith_o_ptr, &smith_backup);
             object_copy(smith2_o_ptr, &smith2_backup);
@@ -8845,7 +8842,7 @@ static bool smith_reforge_item(void)
             return false;
         }
 
-        prefix_idx = reforge_prefix_menu(&inventory[slot]);
+        prefix_idx = reforge_prefix_menu(target);
         if (!prefix_idx)
         {
             object_copy(smith_o_ptr, &smith_backup);
@@ -8855,7 +8852,7 @@ static bool smith_reforge_item(void)
             return false;
         }
 
-        if (!reforge_preview_build(&inventory[slot], prefix_idx, &preview)
+        if (!reforge_preview_build(target, prefix_idx, &preview)
             || !preview.affordable)
         {
             object_copy(smith_o_ptr, &smith_backup);
@@ -8866,11 +8863,11 @@ static bool smith_reforge_item(void)
             return false;
         }
 
-        object_desc(old_name, sizeof(old_name), &inventory[slot], true, 0);
-        object_set_ego_prefix(&inventory[slot], prefix_idx);
-        if (!object_apply_ego_affix(&inventory[slot], prefix_idx, true))
+        object_desc(old_name, sizeof(old_name), target, true, 0);
+        object_set_ego_prefix(target, prefix_idx);
+        if (!object_apply_ego_affix(target, prefix_idx, true))
         {
-            object_set_ego_prefix(&inventory[slot], 0);
+            object_set_ego_prefix(target, 0);
             object_copy(smith_o_ptr, &smith_backup);
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
@@ -8879,11 +8876,13 @@ static bool smith_reforge_item(void)
             return false;
         }
 
+        target->unused1 = 2;
+        object_aware(target);
+        object_known(target);
+        object_desc(new_name, sizeof(new_name), target, true, 0);
+        /* Consuming metal can compact the pack or promote an extra entry,
+         * invalidating target. Finish the item before paying those costs. */
         pay_smithing_cost_struct(&preview.cost);
-        inventory[slot].unused1 = 2;
-        object_aware(&inventory[slot]);
-        object_known(&inventory[slot]);
-        object_desc(new_name, sizeof(new_name), &inventory[slot], true, 0);
         msg_format("You reforge %s into %s.", old_name, new_name);
         p_ptr->window |= (PW_INVEN | PW_EQUIP);
     }

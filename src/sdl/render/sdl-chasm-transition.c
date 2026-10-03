@@ -15,6 +15,13 @@ typedef struct chasm_donor {
 static const int chasm_dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 static const int chasm_dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 
+static bool chasm_floorlike(int y, int x)
+{
+    int feat = cave_environment_known_feature(y, x);
+    return feat == FEAT_FLOOR
+        || (FEAT_IS_TRAP(feat) && (cave_info[y][x] & CAVE_HIDDEN));
+}
+
 static bool chasm_in_bounds(int y, int x)
 {
     return p_ptr && in_bounds(y, x)
@@ -26,7 +33,7 @@ static bool chasm_known(int y, int x)
 {
     if (!chasm_in_bounds(y, x)) return false;
     u16b info = cave_info[y][x];
-    if (cave_floorlike_bold(y, x))
+    if (chasm_floorlike(y, x))
     {
         if (!(info & CAVE_SEEN)
             && (!(info & CAVE_MARK) || cave_light[y][x] <= 0)) return false;
@@ -73,7 +80,7 @@ static void terrain_transition_draw(int y, int x, const SDL_FRect* dst,
 {
     if (!dst || !g_state.use_tiles || !g_state.renderer || !g_state.tileset
         || !p_ptr || p_ptr->image || !chasm_known(y, x)
-        || (!water && cave_bridge_underlay(cave_feat[y][x]) != FEAT_CHASM)) return;
+        || (!water && cave_environment_display_underlay(y, x) != FEAT_CHASM)) return;
     chasm_donor n[8] = {0};
     bool any = false;
     for (int i = 0; i < 8; i++)

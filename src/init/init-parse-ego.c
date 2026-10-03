@@ -33,7 +33,7 @@ errr parse_e_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static ego_item_type* e_ptr = NULL;
+    ego_item_type* e_ptr = PARSED_RECORD(ego_item_type, head);
 
     static int cur_t = 0;
 
@@ -112,6 +112,9 @@ errr parse_e_info(char* buf, header* head)
                 buf + 2, "%d:%d:%d:%ld", &level, &rarity, &max_level, &cost))
             return (PARSE_ERROR_GENERIC);
 
+        if (level < 0 || level >= MAX_DEPTH)
+            return PARSE_ERROR_OUT_OF_BOUNDS;
+
         /* Save the values */
         e_ptr->level = level;
         e_ptr->rarity = rarity;
@@ -152,6 +155,8 @@ errr parse_e_info(char* buf, header* head)
 
             int depth = atoi(s + 1);
             int rarity = 1;
+            if (depth < 0 || depth >= MAX_DEPTH)
+                return PARSE_ERROR_OUT_OF_BOUNDS;
             t = strchr(s + 1, '/');
             char* next = strchr(s + 1, ':');
             if (t && (!next || t < next))

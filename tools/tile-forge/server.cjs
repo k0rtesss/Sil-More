@@ -18,7 +18,9 @@ const portArg=process.argv.find(arg=>arg.startsWith('--port='));
 const port=portArg?Number(portArg.slice(7)):8787;
 if (!Number.isInteger(port)||port<0||port>65535) throw new Error('Invalid port. Use --port=8787.');
 const server=http.createServer((req,res)=>{
-  const pathname=new URL(req.url,'http://127.0.0.1').pathname;
+  let pathname;
+  try {pathname=new URL(req.url,'http://127.0.0.1').pathname;}
+  catch {res.writeHead(400);res.end('Invalid request target');return;}
   if(pathname==='/export'&&req.method==='POST'){
     const name=req.headers['x-tile-forge-name'];
     const origin=req.headers.origin;

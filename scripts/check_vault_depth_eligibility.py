@@ -64,6 +64,7 @@ STUBS = r'''
 #define QUEST_MAX_INITIATED_PER_RUN 2
 #define QUEST_ID_AULE 2
 #define QUEST_ID_MANDOS 3
+#define QUEST_ID_VARDA 6
 #define METARUN_QUEST_AULE 2
 #define METARUN_QUEST_MANDOS 3
 #define MANDOS_QUEST_NOT_STARTED 0
@@ -104,6 +105,10 @@ static bool quest_vault_surface_roll_allows(const vault_type *v, int d)
 static bool vault_template_has_duruin(const vault_type *v) { (void)v; return false; }
 static bool vault_template_has_aule(const vault_type *v) { (void)v; return false; }
 static bool vault_template_has_mandos(const vault_type *v) { (void)v; return true; }
+static int quest_followup_vault(int v) { (void)v; return -1; }
+static bool quest_followup_vault_allowed(int v,int d) { (void)v;(void)d;return true; }
+static bool quest_vault_tokens_available(int v) { (void)v;return true; }
+static bool quest_enabled(int q) { (void)q;return true; }
 static bool check_quest_eligibility(int q, int d) { (void)q; (void)d; return true; }
 static bool quest_metarun_blocked(int q, int m) { (void)q; (void)m; return false; }
 static void level_gen_debug_note_quest_vault_name(cptr n) { (void)n; }

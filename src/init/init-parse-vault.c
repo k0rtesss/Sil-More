@@ -27,7 +27,7 @@ errr parse_v_info(char* buf, header* head)
     char *s, *t;
 
     /* Current entry */
-    static vault_type* v_ptr = NULL;
+    vault_type* v_ptr = PARSED_RECORD(vault_type, head);
 
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')

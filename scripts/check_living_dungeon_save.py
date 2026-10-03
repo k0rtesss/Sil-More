@@ -19,6 +19,7 @@ FRESH_MAP = SCENT_TESTS[start:SCENT_TESTS.index('\n}', start) + 2]
 TESTS = r'''
 size_t fixture_write_dungeon(byte*, size_t, size_t*);
 int fixture_read_dungeon(const byte*, size_t, int, u32b*, size_t*);
+int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 static byte encoded[262144], plain[262144], modified[262144], corrupted[262144];
 static environment_cell expected_cells[20][24];
 static environment_source expected_source;
@@ -114,7 +115,7 @@ static void test_current_roundtrip(void)
 {
     make_fixture(); clean_map();
     u32b sentinel; size_t consumed;
-    CHECK(fixture_read_dungeon(encoded,saved_length,VERSION_EXTRA,&sentinel,&consumed)==0);
+    CHECK(fixture_read_current_dungeon(encoded,saved_length,&sentinel,&consumed)==0);
     CHECK(sentinel==0xA1B2C3D4U && consumed==saved_length);
     CHECK(mon_max==2 && cave_m_idx[8][9]==1);
     CHECK(!memcmp(&mon_list[1].world,&expected_world,sizeof(expected_world)));
@@ -181,7 +182,7 @@ static void test_lava_continuation(void)
     environment_source source=*cave_environment_source_at(0);
     clean_map();turn=saved_turn;
     u32b sentinel;size_t consumed;
-    CHECK(fixture_read_dungeon(encoded,length,VERSION_EXTRA,&sentinel,&consumed)==0);
+    CHECK(fixture_read_current_dungeon(encoded,length,&sentinel,&consumed)==0);
     CHECK(sentinel==0xA1B2C3D4U&&consumed==length);
     character_dungeon=true;
     for(int n=0;n<500;n++){turn+=10;cave_environment_process();}
@@ -199,7 +200,7 @@ static void reject_byte(size_t offset, byte value)
     memcpy(corrupted,plain,saved_length); corrupted[offset]=value;
     encode(corrupted,modified,saved_length); clean_map();
     u32b sentinel; size_t consumed;
-    CHECK(fixture_read_dungeon(modified,saved_length,VERSION_EXTRA,&sentinel,&consumed)!=0);
+    CHECK(fixture_read_current_dungeon(modified,saved_length,&sentinel,&consumed)!=0);
 }
 static void test_corruption(void)
 {
@@ -216,13 +217,13 @@ static void test_corruption(void)
     const size_t cuts[]={0,1,12,13,22,23};
     for(unsigned i=0;i<sizeof(cuts)/sizeof(cuts[0]);i++) {
         clean_map(); u32b sentinel; size_t consumed;
-        CHECK(fixture_read_dungeon(encoded,extension_offset+cuts[i],VERSION_EXTRA,&sentinel,&consumed)!=0);
+        CHECK(fixture_read_current_dungeon(encoded,extension_offset+cuts[i],&sentinel,&consumed)!=0);
     }
     const size_t positions[]={cell_offset+3,event_offset+3,event_offset+15,
         world_offset+1,world_offset+8,extension_end-1,extension_end+7};
     for(unsigned i=0;i<sizeof(positions)/sizeof(positions[0]);i++) {
         clean_map(); u32b sentinel; size_t consumed;
-        CHECK(fixture_read_dungeon(encoded,positions[i],VERSION_EXTRA,&sentinel,&consumed)!=0);
+        CHECK(fixture_read_current_dungeon(encoded,positions[i],&sentinel,&consumed)!=0);
     }
     puts("v17: invalid headers, budgets, RLE, cells, events, actor jobs and truncated tails rejected PASS.");
 }

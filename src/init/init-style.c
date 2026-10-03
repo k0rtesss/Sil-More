@@ -39,6 +39,7 @@ static errr parse_style_message_line(char* buf);
 
 errr parse_style_info(char* buf, header* head)
 {
+    stl_ptr = PARSED_RECORD(style_type, head);
     /* Note: L:/U: moved to style-levels.txt for clarity. */
     /* E:<row>:<col> or DY:<row>:<col> - default vein overlay tile (used if a style omits Y:) */
     {

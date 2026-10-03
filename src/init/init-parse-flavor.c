@@ -17,7 +17,7 @@ errr parse_flavor_info(char* buf, header* head)
     int i;
 
     /* Current entry */
-    static flavor_type* flavor_ptr;
+    flavor_type* flavor_ptr = PARSED_RECORD(flavor_type, head);
 
     /* Process 'N' for "Number" */
     if (buf[0] == 'N')

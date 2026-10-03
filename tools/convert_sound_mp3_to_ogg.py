@@ -16,6 +16,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 from typing import Iterator
@@ -119,10 +120,11 @@ def convert_file(
         return destination
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temp_destination = destination.with_name(f"{destination.stem}.tmp.ogg")
-
-    if temp_destination.exists():
-        temp_destination.unlink()
+    # This directory may already contain an unrelated <stem>.tmp.ogg track.
+    # Reserve our own unique path and replace the final output only on success.
+    with tempfile.NamedTemporaryFile(dir=destination.parent,
+            prefix=f".{destination.stem}-", suffix=".tmp.ogg", delete=False) as staging:
+        temp_destination = Path(staging.name)
 
     command = [
         ffmpeg_path,
@@ -142,16 +144,16 @@ def convert_file(
         str(temp_destination),
     ]
 
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0:
-        if temp_destination.exists():
-            temp_destination.unlink()
-        stderr = result.stderr.strip()
-        message = stderr if stderr else "no error output"
-        raise RuntimeError(f"ffmpeg failed: {message}")
-
-    temp_destination.replace(destination)
-    return destination
+    try:
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            message = stderr if stderr else "no error output"
+            raise RuntimeError(f"ffmpeg failed: {message}")
+        temp_destination.replace(destination)
+        return destination
+    finally:
+        temp_destination.unlink(missing_ok=True)
 
 
 def main() -> int:

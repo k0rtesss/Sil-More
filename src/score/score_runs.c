@@ -55,8 +55,7 @@ static bool score_runs_write_record(SDL_IOStream* file,
                                     const score_run_detail_block* details);
 static bool score_runs_write_header(SDL_IOStream* file,
                                      const score_db_header* header);
-static bool score_runs_validate_db(SDL_IOStream* file,
-                                   score_db_header* header);
+static bool score_runs_validate_db(SDL_IOStream* file, score_db_header* header);
 static bool score_runs_restore_backup(const char* path);
 static bool score_runs_preserve_invalid_db(const char* path,
                                            char* preserved,
@@ -866,11 +865,12 @@ bool score_runs_skip_detail_payload(SDL_IOStream* file,
     return SDL_SeekIO(file, skip, SDL_IO_SEEK_CUR) >= 0;
 }
 
-static bool score_runs_validate_db(SDL_IOStream* file,
-                                   score_db_header* header)
+static bool score_runs_validate_db_mode(SDL_IOStream* file,
+    score_db_header* header, bool allow_legacy)
 {
     if (!file || !header || !score_runs_read_header(file, header)
-        || header->version != SCORE_RUNS_DB_VERSION)
+        || (header->version != SCORE_RUNS_DB_VERSION
+            && !(allow_legacy && header->version == 0x00010000u)))
         return false;
 
     Sint64 file_size = SDL_GetIOSize(file);
@@ -895,6 +895,18 @@ static bool score_runs_validate_db(SDL_IOStream* file,
     }
 
     return SDL_TellIO(file) == file_size;
+}
+
+static bool score_runs_validate_db(SDL_IOStream* file, score_db_header* header)
+{
+    return score_runs_validate_db_mode(file, header, false);
+}
+
+bool score_runs_validate_history_db(SDL_IOStream* file, score_db_header* header)
+{
+    /* Schema 1 uses the same fixed record and a versioned detail payload.
+     * Reading it is safe; mutation still requires the current schema. */
+    return score_runs_validate_db_mode(file, header, true);
 }
 
 static bool score_runs_read_detail_header_at(SDL_IOStream* file, Sint64 record_offset,
@@ -2264,5 +2276,3 @@ bool score_runs_snapshot_details(score_run_detail_block* out)
     u16b mon_cap = score_runs_choose_monster_capacity();
     return score_runs_build_details(out, art_cap, mon_cap);
 }
-
-
