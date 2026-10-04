@@ -757,6 +757,11 @@ void sdl_gameplay_tutorial_render(void)
     tutorial_card = (SDL_FRect){card_x,card_bottom,width,height};
     if (has_anchor && anchor.y+anchor.h/2 > screen.y+screen.h/2)
         tutorial_card.y = card_top;
+    /* This is a window overlay, even when the owning menu last drew into a
+     * terminal canvas or left a clip for one row/button. Inheriting either
+     * state can hide the card while its input owner still blocks the menu. */
+    SDL_SetRenderTarget(g_state.renderer, NULL);
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0,0,0,145);
     if (has_anchor) {

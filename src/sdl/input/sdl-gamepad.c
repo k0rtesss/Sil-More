@@ -418,6 +418,20 @@ bool sdl_try_send_movement_event(const SDL_KeyboardEvent* key_event)
         return false;
     }
 
+    /* Keyboard directions move the targeting cursor. Controller and touch
+     * directions use the semantic queue to fire immediately while aiming,
+     * so do not send keyboard bindings through that same path. */
+    if (context == MOVEMENT_INPUT_CONTEXT_TARGETING)
+    {
+        int dir = movement_input_command_legacy_dir(&command);
+
+        if (dir)
+        {
+            Term_keypress((char)('0' + dir));
+            return true;
+        }
+    }
+
     return sdl_submit_movement_command(&command);
 }
 

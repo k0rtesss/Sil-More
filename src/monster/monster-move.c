@@ -427,18 +427,9 @@ void describe_floor_object(void)
     // special explanation the first time you step over the crown
     if ((o_ptr->name1 == ART_MORGOTH_3) && !(p_ptr->crown_hint))
     {
-        if (hjkl_movement)
-        {
-            msg_print("To attempt to prise a Silmaril from the crown, use the "
-                      "'destroy' "
-                      "command ('Ctrl-k').");
-        }
-        else
-        {
-            msg_print("To attempt to prise a Silmaril from the crown, use the "
-                      "'destroy' "
-                      "command (which is 'k' by default).");
-        }
+        msg_print("To prise a Silmaril, open Inventory, select the crown on "
+                  "the floor, and choose Prise a Silmaril. Its floor actions "
+                  "also offer Prise.");
         p_ptr->crown_hint = true;
     }
 }

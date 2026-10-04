@@ -3708,7 +3708,10 @@ void sdl_char_sheet_draw_select_stats(TTF_Font* font, cptr heading,
         return;
 
     {
-        int small_px = sdl_char_sheet_clampi((int)(line_h * 0.72f), 12, 52);
+        /* Line height includes font metrics and spacing; treating it as a
+         * point size can make the compact summary larger than the stats. */
+        float body_px = font ? TTF_GetFontSize(font) : line_h;
+        int small_px = sdl_char_sheet_clampi((int)(body_px * 0.72f), 12, 52);
         TTF_Font* small_font = sdl_story_font_for_height(small_px);
         float small_h = sdl_char_sheet_line_h(small_font, small_px, 1.05f);
         float gap = small_h * 0.55f;
@@ -13723,7 +13726,8 @@ static void sdl_character_sheet_screen_render_canvas(
                         ? MAX(ability_rows_hint, ability_count) + 1 : 0)
 #endif
                     + ((g_sdl_character_sheet_screen.select_rating_count > 0)
-                        ? 4 : 0);
+                        ? g_sdl_character_sheet_screen.select_rating_count + 1
+                        : 0);
                 panels[n].natural_w =
                     sdl_char_sheet_sample_panel_natural_w(ref_font, "Stats",
                         "Constitution\t+99", 0.62f);

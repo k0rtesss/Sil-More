@@ -479,7 +479,15 @@ void tutorial_game_ability(int skill, int ability, bool before_purchase)
 void tutorial_game_wait(void)
 {
     tutorial_view view;
+    bool was_playing, was_leaving, was_dead;
     if (waiting || managing || !gameplay_available()) return;
+    /* Halls and its record menus are still interactive during close_game(),
+     * when playing/leaving already describe a completed quit. Idle and hover
+     * events must not cancel their cards. Only a new lifecycle change during
+     * this wait invalidates the context. */
+    was_playing = p_ptr->playing;
+    was_leaving = p_ptr->leaving;
+    was_dead = p_ptr->is_dead;
     waiting = true;
     if (ui_checkpoint_requested) {
         ui_checkpoint_requested = false;
@@ -513,7 +521,8 @@ void tutorial_game_wait(void)
         }
         Term_fresh();
         Term_xtra(TERM_XTRA_EVENT, 1);
-        if (!p_ptr->playing || p_ptr->leaving || p_ptr->is_dead) {
+        if (p_ptr->playing != was_playing || p_ptr->leaving != was_leaving
+            || p_ptr->is_dead != was_dead) {
             tutorial_invalidate_context();
             break;
         }

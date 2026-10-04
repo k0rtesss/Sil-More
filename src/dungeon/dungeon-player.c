@@ -1030,10 +1030,14 @@ void process_player(void)
         }
     } while (!p_ptr->energy_use && !p_ptr->leaving);
 
-    // if the player is exiting the the game in some manner then stop processing
-    // now
+    /* Paid transitions still count as player actions. Skip upkeep on the old
+     * level, while free quit/save and wizard transitions retain their count. */
     if (p_ptr->leaving)
+    {
+        if (p_ptr->energy_use > 0)
+            playerturn++;
         return;
+    }
 
     /* Do song effects */
     sil_popup_trace_stage("action-upkeep-begin");

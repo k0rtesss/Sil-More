@@ -592,7 +592,8 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
 {
     object_choice_entry* entries;
     int capacity = MAX_FLOOR_STACK + supplies_entry_count()
-        + player_pack_entry_count() + (INVEN_TOTAL - INVEN_WIELD) + 1;
+        + player_pack_entry_count() + player_quiver_store_entry_count()
+        + (INVEN_TOTAL - INVEN_WIELD) + 1;
     int count = 0;
     int selected = -1;
     int floor_list[MAX_FLOOR_STACK];
@@ -627,6 +628,15 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
 
             object_item_select_add_entry(entries, &count,
                 capacity, item);
+        }
+
+        /* Expanded selectors resolve synthetic handles directly. Legacy
+         * command selectors still dispatch summaries/physical slots. */
+        for (int i = 0; inventory_menu_uses_expanded_supplies()
+                && i < player_quiver_store_entry_count(); i++)
+        {
+            object_item_select_add_entry(entries, &count, capacity,
+                QUIVER_INDEX + i);
         }
 
         if (include_equip_in_inventory)
@@ -675,7 +685,9 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
 
             if (o_idx <= 0 || o_idx >= o_max)
                 continue;
-            if (!o_list[o_idx].k_idx || supplies_is_supply_object(&o_list[o_idx]))
+            if (!o_list[o_idx].k_idx
+                || (supplies_is_supply_object(&o_list[o_idx])
+                    && !inventory_menu_uses_expanded_supplies()))
                 continue;
 
             object_item_select_add_entry(entries, &count,
@@ -690,6 +702,26 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
             msg_print(none_msg);
         entries = mem_free(entries);
         return false;
+    }
+
+    /* This is one flat list, so Pack, supplies and equipment cannot each
+     * reuse their own 'a' label. Floor entries retain the '-' shortcut. */
+    {
+        int ordinal = 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (entries[i].item < 0)
+                continue;
+            if (ordinal < 26)
+                strnfmt(entries[i].label, sizeof(entries[i].label), "%c)",
+                    I2A(ordinal));
+            else if (ordinal < 36)
+                strnfmt(entries[i].label, sizeof(entries[i].label), "%c)",
+                    '0' + ordinal - 26);
+            else
+                entries[i].label[0] = '\0';
+            ordinal++;
+        }
     }
 
     if (!object_choice_overlay(reason ? reason : "Choose item", NULL, entries,

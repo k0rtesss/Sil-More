@@ -10798,6 +10798,8 @@ static void supply_register_prompt_clicks(const knowledge_browser_layout* layout
     ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt, "delete");
     ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt,
         "y delete");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt,
+        "y prise a Silmaril");
     ui_menu_click_add_text_token(SUPPLY_CLICK_TAB, 0, row, prompt, "Tab");
     ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "back");
     ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "cancel");
@@ -12277,6 +12279,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char picker_heading[180] = "";
             char picker_detail[180] = "";
             char primary_action[32] = "use";
+            cptr delete_action = "delete";
             byte picker_heading_attr = TERM_L_WHITE + TERM_SHADE;
             byte status_attr = TERM_L_BLUE;
             bool touch_only;
@@ -12549,6 +12552,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 SDL_strlcpy(primary_action, action, sizeof(primary_action));
                 primary_action[0] = (char)tolower((unsigned char)primary_action[0]);
+                object_type* selected_object =
+                    equipment_entry_object(&equip_entries[inv_entry_cur]);
+                if (equip_entries[inv_entry_cur].floor_idx > 0
+                    && selected_object
+                    && selected_object->name1 >= ART_MORGOTH_1
+                    && selected_object->name1 <= ART_MORGOTH_3)
+                {
+                    delete_action = "prise a Silmaril";
+                }
             }
             if (preserve_touch_view)
             {
@@ -13464,7 +13476,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     drop_click_mode ? "Drop On" : "Drop",
                     supply_touch_mode_button_attr(drop_click_mode));
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_DELETE,
-                    delete_click_mode ? "Delete On" : "Delete",
+                    streq(delete_action, "delete")
+                        ? (delete_click_mode ? "Delete On" : "Delete")
+                        : "Prise a Silmaril",
                     supply_touch_mode_button_attr(delete_click_mode));
             }
             else
@@ -13486,19 +13500,19 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 };
 
                 strnfmt(letter_full, sizeof(letter_full),
-                    "letter %s  Dir move  x preview  z drop  y delete  Tab  Esc",
-                    primary_action);
+                    "letter %s  Dir move  x preview  z drop  y %s  Tab  Esc",
+                    primary_action, delete_action);
                 strnfmt(letter_mid, sizeof(letter_mid),
-                    "letter %s  x preview  z drop  y delete  Tab  Esc",
-                    primary_action);
+                    "letter %s  x preview  z drop  y %s  Tab  Esc",
+                    primary_action, delete_action);
                 strnfmt(letter_short, sizeof(letter_short),
                     "letter %s  z drop  Tab  Esc", primary_action);
                 strnfmt(move_full, sizeof(move_full),
-                    "Dir move  x preview  u %s  z drop  y delete  Tab  Esc",
-                    primary_action);
+                    "Dir move  x preview  u %s  z drop  y %s  Tab  Esc",
+                    primary_action, delete_action);
                 strnfmt(move_mid, sizeof(move_mid),
-                    "x preview  u %s  z drop  y delete  Tab  Esc",
-                    primary_action);
+                    "x preview  u %s  z drop  y %s  Tab  Esc",
+                    primary_action, delete_action);
                 strnfmt(move_short, sizeof(move_short),
                     "u %s  z drop  Esc", primary_action);
 
@@ -13760,6 +13774,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                                     : SUPPLY_INTERACTION_DROP);
                             continue;
                         case SUPPLY_CLICK_DELETE:
+                            if (streq(delete_action, "prise a Silmaril"))
+                            {
+                                ch = 'y';
+                                click_generated_command = true;
+                                break;
+                            }
                             supply_set_interaction_mode(&overlay_cache,
                                 &desc_overlay_on, &drop_click_mode,
                                 &delete_click_mode, delete_click_mode

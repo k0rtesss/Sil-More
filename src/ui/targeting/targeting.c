@@ -2013,7 +2013,7 @@ bool target_set_interactive(int mode, int range)
             if (query == ' ')
             {
                 // increment a monster race
-                if (cave_m_idx[y][x])
+                if (cave_m_idx[y][x] > 0)
                     inc_monster = true;
                 // increment an object kind
                 else if (cave_o_idx[y][x])
@@ -2027,7 +2027,7 @@ bool target_set_interactive(int mode, int range)
             if (query == '\t')
             {
                 // reroll a monster race
-                if (cave_m_idx[y][x])
+                if (cave_m_idx[y][x] > 0)
                     reroll_monster = true;
                 // reroll an object kind
                 else if (cave_o_idx[y][x])
@@ -2060,8 +2060,10 @@ bool target_set_interactive(int mode, int range)
                 update_view();
             }
 
-            // numbers move
-            else if (strchr("12346789", query))
+            /* Physical arrows/keypad input carries its direction with the
+             * menu wake key. Keep letters available for monster glyphs. */
+            else if (query == UI_MENU_CLICK_WAKE_KEY
+                || strchr("12346789", query))
             {
                 /* Extract a direction */
                 d = target_dir((char)query);
@@ -2076,6 +2078,13 @@ bool target_set_interactive(int mode, int range)
                 monster_race* r_ptr;
                 monster_race* old_r_ptr;
                 monster_type* m_ptr;
+
+                /* Negative occupancy is the player, never a monster index. */
+                if (cave_m_idx[y][x] < 0)
+                {
+                    bell("Cannot place a monster on the player.");
+                    continue;
+                }
 
                 // recreate a monster of the same type.
                 if (reroll_monster)
@@ -2129,7 +2138,7 @@ bool target_set_interactive(int mode, int range)
                 if (found)
                 {
                     // delete any existing monster
-                    if (cave_m_idx[y][x])
+                    if (cave_m_idx[y][x] > 0)
                     {
                         delete_monster_idx(cave_m_idx[y][x]);
                     }
@@ -2273,7 +2282,7 @@ bool target_set_interactive(int mode, int range)
                 if (found)
                 {
                     // delete any existing monster
-                    if (cave_m_idx[y][x])
+                    if (cave_m_idx[y][x] > 0)
                     {
                         delete_monster_idx(cave_m_idx[y][x]);
                     }

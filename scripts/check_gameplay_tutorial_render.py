@@ -71,7 +71,7 @@ static void fixture_check(bool condition,const char *expression)
         fprintf(stderr,"fixture %s @ %dx%d font %d scroll %d failed: %s\n",
             fixture_id,fixture_width,fixture_height,fixture_font,fixture_scroll,
             expression);
-        abort();
+        exit(EXIT_FAILURE);
     }
 }
 #define fixture_assert(condition) fixture_check((condition),#condition)
@@ -179,8 +179,9 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     ui_menu_click_clear();
     if (character_icky) {
         ui_menu_click_begin();
-        for (int row=2;row<MIN(view->rows-2,10);++row)
-            ui_menu_click_add_full_row(row,row);
+        if (!cJSON_GetObjectItemCaseSensitive(entry,"surface"))
+            for (int row=2;row<MIN(view->rows-2,10);++row)
+                ui_menu_click_add_full_row(row,row);
     }
     tutorial_seen_revision=1; tutorial_was_active=true;
     tutorial_focus=0; tutorial_scroll=scroll;
@@ -204,7 +205,52 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
             radius,(SDL_Color){160,210,190,255});
     }
     drawn_count=0; drawn_hints[0]=drawn_content[0]='\0'; drawn_space=drawn_enter=false;
-    sdl_gameplay_tutorial_render();
+    cJSON *render_state=cJSON_GetObjectItemCaseSensitive(entry,"render_state");
+    if (cJSON_IsString(render_state)) {
+        if (!strcmp(render_state->valuestring,"pane")) {
+            fixture_assert(SDL_SetRenderTarget(g_state.renderer,view->canvas));
+            SDL_SetRenderDrawColor(g_state.renderer,255,0,255,255);
+            SDL_RenderClear(g_state.renderer);
+        }
+        /* Terminal drawing and native menus can leave a pane target or a
+         * narrow clip behind. The tutorial owns the complete window. */
+        SDL_Rect clip={width/2,height-60,4,44};
+        fixture_assert(SDL_SetRenderClipRect(g_state.renderer,&clip));
+    }
+    cJSON *surface=cJSON_GetObjectItemCaseSensitive(entry,"surface");
+    if (cJSON_IsString(surface)) {
+        if (!strcmp(surface->valuestring,"halls")) {
+            sdl_halls_screen_begin("Here are remembered the fates of those who entered Angband.",
+                "Score (highest first) | full memorials | page 1 of 6",true,-1);
+            for (int row=0;row<3;++row)
+                sdl_halls_screen_add_entry(row,"#1","The recorded hero","441 pts",
+                    "Escaped the iron hells of Angband empty-handed.",
+                    "52 turns | 12,850 ft | 25 May 2026","Escaped",TERM_L_BLUE,
+                    "Score increases: descent +200 pts | unique kills +6 pts",
+                    "Score decreases: none | Formula: 306 base x 1.440 = 441 pts",
+                    TERM_GREEN,row==2);
+            const char *actions[]={"Back","Run History","Order: Score","View: Full","Open Hero","Next"};
+            for (int i=0;i<6;++i)
+                sdl_halls_screen_add_action(-i-1,actions[i],TERM_L_WHITE,true);
+        } else if (!strcmp(surface->valuestring,"hints")) {
+            sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_HINTS,"Hints and Quests",
+                "Hints",true,false,0);
+            sdl_hint_quest_menu_add_block("Review the hints you have found.",TERM_L_WHITE,0,0);
+            sdl_hint_quest_menu_add_button(-1,"Back",TERM_L_WHITE);
+            sdl_hint_quest_menu_finish();
+        } else if (!strcmp(surface->valuestring,"tales")) {
+            fixture_assert(sdl_tale_screen_begin("The Tale So Far"));
+            sdl_tale_screen_add_entry("Nienna's Mercy","You awaken in the halls of Angband.");
+            sdl_tale_screen_set_prompt("Press any key to continue",true,true);
+        } else {
+            sdl_character_sheet_screen_begin_select(0,"Options");
+            sdl_character_sheet_screen_add_select_row(0,"Input",TERM_L_WHITE,"Choose input settings.");
+            sdl_character_sheet_screen_add_select_row(1,"Presentation",TERM_L_WHITE,"Choose presentation settings.");
+            sdl_character_sheet_screen_add_select_row(2,"Tutorial cards",TERM_L_BLUE,"Choose tutorial settings.");
+            fixture_assert(sdl_character_sheet_screen_commit_select(0));
+        }
+        fixture_assert(sdl_render_current_window_frame());
+    } else sdl_gameplay_tutorial_render();
     cJSON *forbidden_text=cJSON_GetObjectItemCaseSensitive(entry,"forbidden_text");
     if (cJSON_IsString(forbidden_text))
         fixture_assert(!strstr(drawn_content,forbidden_text->valuestring));
@@ -292,6 +338,19 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
                 fixture_id,tutorial_scroll,tutorial_max_scroll);
         fixture_assert(tutorial_scroll==tutorial_max_scroll);
     }
+    if (tutorial_card.w>0) {
+        Uint8 r,g,b,a;
+        SDL_Rect probe={(int)(tutorial_card.x+2),(int)(tutorial_card.y+2),1,1};
+        fixture_assert(SDL_GetRenderTarget(g_state.renderer)==NULL);
+        fixture_assert(!SDL_RenderClipEnabled(g_state.renderer));
+        pixels=SDL_RenderReadPixels(g_state.renderer,&probe);
+        fixture_assert(pixels!=NULL);
+        /* Check pixels, not only the text layout: an invisible card may
+         * still have valid geometry and consume all of the menu's input. */
+        fixture_assert(SDL_ReadSurfacePixel(pixels,0,0,&r,&g,&b,&a));
+        fixture_assert(r>=16 && r<=22 && g>=21 && g<=28 && b>=28 && b<=38);
+        SDL_DestroySurface(pixels);
+    }
     if (capture) {
         pixels=SDL_RenderReadPixels(g_state.renderer,NULL);
         fixture_assert(pixels!=NULL);
@@ -299,6 +358,12 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         fixture_assert(SDL_SaveBMP(pixels,file));
         SDL_DestroySurface(pixels);
         printf("%s: card %.0fx%.0f; scroll %d/%d\n",file,tutorial_card.w,tutorial_card.h,tutorial_scroll,tutorial_max_scroll);
+    }
+    if (cJSON_IsString(surface)) {
+        sdl_halls_screen_hide();
+        sdl_hint_quest_menu_hide();
+        sdl_tale_screen_hide();
+        sdl_character_sheet_screen_hide();
     }
     sdl_story_font_cache_clear();
     SDL_DestroyTexture(view->canvas); view->canvas=NULL;
@@ -320,6 +385,7 @@ int main(int argc,char **argv)
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS));
     assert(TTF_Init());
     sdl_config_set_defaults(&config);
+    sdl_sync_palette();
     SDL_strlcpy(config.story_font,argv[1],sizeof(config.story_font));
     SDL_strlcpy(config.story_font2,argv[1],sizeof(config.story_font2));
     config.use_unsafe_area=true;
@@ -476,6 +542,20 @@ def main():
                                  "input": device, "font_size": font_size,
                                  "size": size, "expected_scroll": expected_scroll,
                                  "capture": False})
+    # Exercise the complete frame, including native full-screen early returns.
+    for surface in ("halls", "settings", "hints", "tales"):
+        lesson = next(entry for entry in lessons if entry["id"] == "menu." + surface)
+        for size in ([1280, 720], [3840, 2160], [580, 1280]):
+            fixture = make_fixture(lesson, lesson["steps"][0], True, 2, False)
+            fixture.update(surface=surface, size=size, font_size=48,
+                           expected_text=lesson["title"], capture=True)
+            fixtures.append(fixture)
+    for render_state in ("window", "pane"):
+        lesson = next(entry for entry in lessons if entry["id"] == "menu.halls")
+        fixture = make_fixture(lesson, lesson["steps"][0], True, 2, False)
+        fixture.update(render_state=render_state, size=[1280, 720],
+                       expected_text=lesson["title"], capture=False)
+        fixtures.append(fixture)
     # Reproduce the portrait control geometry from the reported overlap. Check
     # every action step with both touch and mouse ownership, not only movement.
     for lesson in lessons:
@@ -510,8 +590,9 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin"] +
-        [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] + [env["PATH"]])
+    env["PATH"] = os.pathsep.join(
+        [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
+        ["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),

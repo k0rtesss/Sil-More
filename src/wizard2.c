@@ -9,6 +9,9 @@
  */
 
 #include "angband.h"
+#include "object/object-inventory-limits.h"
+#include "object/object-internal.h"
+#include "support/screen.h"
 #include "blitz.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
@@ -1530,21 +1533,16 @@ static void do_cmd_wiz_play(void)
     /* Get an item */
     q = "Play with which object? ";
     s = "You have nothing to play with.";
-    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN | USE_FLOOR,
-            q, s, &item))
+    bool old_expand = inventory_menu_set_expand_supplies(true);
+    bool selected = open_inventory_item_select_menu(
+        USE_EQUIP | USE_INVEN | USE_FLOOR, q, s, &item);
+    inventory_menu_set_expand_supplies(old_expand);
+    if (!selected)
         return;
 
-    /* Get the item (in the pack) */
-    if (item >= 0)
-    {
-        o_ptr = &inventory[item];
-    }
-
-    /* Get the item (on the floor) */
-    else
-    {
-        o_ptr = &o_list[0 - item];
-    }
+    o_ptr = inventory_item_to_object_ptr(item);
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
 
     /* Save screen */
     screen_save();
@@ -2351,9 +2349,7 @@ static void do_cmd_wiz_named(int r_idx, bool slp)
     int i, x, y;
 
     /* Paranoia */
-    if (!r_idx)
-        return;
-    if (r_idx >= z_info->r_max - 1)
+    if (r_idx <= 0 || r_idx >= z_info->r_max)
         return;
 
     /* Try 10 times */
@@ -2370,8 +2366,10 @@ static void do_cmd_wiz_named(int r_idx, bool slp)
 
         /* Place it (allow groups) */
         if (place_monster_aux(y, x, r_idx, slp, true))
-            break;
+            return;
     }
+
+    msg_format("Unable to summon %s nearby.", r_name + r_info[r_idx].name);
 }
 
 /*
@@ -2581,7 +2579,9 @@ static void do_cmd_wiz_unlock_all_oaths(void)
 void do_cmd_wiz_look(void)
 {
     /* Look around and modify things */
+    screen_command_prompt_begin();
     target_set_interactive(TARGET_WIZ, 0);
+    screen_command_prompt_end();
 }
 
 /*
@@ -3128,7 +3128,7 @@ static const debug_menu_entry debug_menu_character[] = {
     { 'a', 'a', "Cure all maladies (a)", TERM_L_GREEN },
     { 'e', 'e', "Edit character (e)", TERM_L_WHITE },
     { 'i', 'i', "Identify item (i)", TERM_L_WHITE },
-    { 0, 'I', "Identify all floor items (I)", TERM_L_WHITE },
+    { 'I', 'I', "Identify all floor items (I)", TERM_L_WHITE },
     { 'k', 'k', "Self-knowledge (k)", TERM_L_BLUE },
     { 'x', 'x', "Increase experience (x)", TERM_YELLOW },
     { 'y', 'y', "Grant Unique Bane ability (y)", TERM_VIOLET },
@@ -3152,7 +3152,7 @@ static debug_menu_entry debug_menu_map[] = {
 
 static const debug_menu_entry debug_menu_objects[] = {
     { 'c', 'c', "Create any object (c)", TERM_YELLOW },
-    { 0, 'C', "Create artefact (C)", TERM_YELLOW },
+    { 'C', 'C', "Create artefact (C)", TERM_YELLOW },
     { 'g', 'g', "Create good objects (g)", TERM_L_GREEN },
     { 'v', 'v', "Create very good objects (v)", TERM_L_GREEN },
     { 'n', 'n', "Summon named monster (n)", TERM_ORANGE },
@@ -3659,4 +3659,3 @@ void do_cmd_debug(void)
 #else
 
 #endif
-

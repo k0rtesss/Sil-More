@@ -391,6 +391,44 @@ static void check_main_menu_tutorial(void)
     puts("Main menu tutorial: Continue/Skip before free-command cleanup, suspended action and no game time: PASS");
 }
 
+static void check_menu_wait_lifecycle(void)
+{
+    int energy=p_ptr->energy_use;
+    s32b turns=playerturn;
+    tutorial_set_mode(TUTORIAL_MODE_EXTENDED);
+    /* Quit-to-program and quit-to-title keep their flags set while Halls and
+     * its nested record menus wait for input. Hover/idle events must not
+     * discard an unread card; only Continue/Skip or a new transition may. */
+    for (int scenario=0;scenario<3;++scenario) {
+        end_ui_lessons(); ++test_tale.id; tutorial_sync_tale(); started=true;
+        p_ptr->playing=scenario==0; p_ptr->leaving=scenario!=0;
+        p_ptr->is_dead=false; p_ptr->quit_to_menu=scenario==2;
+        mock_description_events=0; mock_wait_idle_events=3;
+        tutorial_game_menu("halls","Recorded heroes after saving and quitting.");
+        tutorial_game_wait();
+        if (mock_wait_idle_events || mock_description_events!=4
+            || tutorial_lesson_status("menu.halls")!=TUTORIAL_COMPLETED) {
+            fprintf(stderr,"Menu wait discarded an unread Halls card in lifecycle scenario %d\n",scenario);
+            exit(EXIT_FAILURE);
+        }
+    }
+    for (int transition=1;transition<=3;++transition) {
+        end_ui_lessons(); ++test_tale.id; tutorial_sync_tale();
+        p_ptr->playing=true; p_ptr->leaving=p_ptr->is_dead=false;
+        p_ptr->quit_to_menu=false;
+        mock_description_events=0; mock_wait_transition=transition;
+        tutorial_game_menu("inventory","Carried items.");
+        tutorial_game_wait();
+        assert(mock_description_events==1 && !tutorial_is_active());
+        assert(tutorial_lesson_status("menu.inventory")==TUTORIAL_IN_PROGRESS);
+    }
+    p_ptr->playing=true; p_ptr->leaving=p_ptr->is_dead=false;
+    p_ptr->quit_to_menu=false;
+    end_ui_lessons();
+    assert(p_ptr->energy_use==energy && playerturn==turns);
+    puts("Menu wait: stable play/quit/title flags survive idle input; new quit/leave/death cancels: PASS");
+}
+
 static void check_live_checkpoints(void)
 {
     tutorial_view view;
@@ -952,6 +990,7 @@ int main(void)
     check_information_only_movement();
     check_live_checkpoints();
     check_main_menu_tutorial();
+    check_menu_wait_lifecycle();
     check_ranged_tutorial_availability();
     tutorial_shutdown(); SDL_Quit();
     puts("Gameplay tutorial integration: PASS (typed actions, known instruments/remedies, post-cure completion, ranged path safety, movement/oath gates, hidden paid actions, inline/modal description success/failure and visibility, Off replay, level/reload history)");
@@ -997,6 +1036,7 @@ static bool new_paragraph;
 static bool mock_description_capture=true, mock_description_present=true;
 static bool mock_description_skip;
 static int mock_description_events, mock_description_keys;
+static int mock_wait_idle_events, mock_wait_transition;
 static int mock_description_popup_clears;
 s16b character_icky;
 void (*text_out_hook)(byte,cptr);
@@ -1042,6 +1082,14 @@ errr Term_xtra(int event,int value)
     tutorial_view view; (void)event;(void)value;
     assert(++mock_description_events<30);
     assert(tutorial_get_view(&view) && view.can_continue);
+    if (mock_wait_idle_events>0) { --mock_wait_idle_events; return 0; }
+    if (mock_wait_transition) {
+        if (mock_wait_transition==1) p_ptr->playing=false;
+        else if (mock_wait_transition==2) p_ptr->leaving=true;
+        else p_ptr->is_dead=true;
+        mock_wait_transition=0;
+        return 0;
+    }
     if (mock_description_skip) tutorial_skip(); else tutorial_continue();
     tutorial_checkpoint(true); return 0;
 }
@@ -1134,7 +1182,8 @@ def main():
         lessons.append({'id':id,'title':id,'level':'extended',
                         'steps':[{'kind':'info','text':'Detailed terrain context.'}]})
     actual = json.loads((ROOT / 'lib/help/tutorials.json').read_text())['lessons']
-    lessons.append(next(entry for entry in actual if entry['id'] == 'menu.main-menu'))
+    for lesson_id in ('menu.main-menu', 'menu.halls'):
+        lessons.append(next(entry for entry in actual if entry['id'] == lesson_id))
     for lesson_id in ('opening.move', 'combat.first_adjacent'):
         lesson = next(entry for entry in actual if entry['id'] == lesson_id)
         assert all(step['kind'] == 'info' and not step.get('action') for step in lesson['steps'])
