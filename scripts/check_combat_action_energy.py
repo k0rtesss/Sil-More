@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check melee cancellation accounting against freshly compiled combat code."""
+"""Check melee cancellation and reaction accounting with production combat code."""
 from pathlib import Path
 import os
 import shlex
@@ -10,6 +10,15 @@ import check_new_monsters as engine
 
 CHECKS = r'''
 #include "melee/melee-movement.h"
+#include "melee/melee-attack.h"
+static int riposte_messages;
+void __real_msg_print(cptr msg);
+void __wrap_msg_print(cptr msg)
+{
+    if (msg && !strcmp(msg, "You riposte!")) riposte_messages++;
+    __real_msg_print(msg);
+}
+
 bool __wrap_get_check_near(int y, int x, cptr prompt)
 {
     (void)y; (void)x; (void)prompt;
@@ -126,6 +135,38 @@ static void check_attack_energy(void)
     r_info[405].flags1 = third_flags;
     puts("Combat energy: peaceful/refused automatic attacks retain action cost; direct bump and fully refused Rage refund; Rage with a later attack spends its turn: PASS.");
 }
+
+static void check_riposte_terrain(void)
+{
+    const int terrain[] = {FEAT_DEEP_WATER, FEAT_FLOOR, FEAT_WATER,
+        FEAT_BRIDGE_DEEP_WATER_H, FEAT_BRIDGE_DEEP_WATER_V, FEAT_DEEP_WATER};
+    for (int i = 0; i < (int)N_ELEMENTS(terrain); i++)
+    {
+        monster_type* m = combat_fixture(403, 1000);
+        object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+        p_ptr->active_ability[S_EVN][EVN_RIPOSTE] = true;
+        p_ptr->skill_use[S_MEL] = 1000;
+        p_ptr->mdd = p_ptr->mds = 1;
+        p_ptr->leaping = (i == 5);
+        cave_feat[p_ptr->py][p_ptr->px] = terrain[i];
+        m->hp = m->maxhp = 20000;
+        int hp_before = m->hp, messages_before = riposte_messages;
+        p_ptr->energy_use = 400;
+        p_ptr->previous_action[0] = 2;
+        player_attacked = false;
+        assert(make_attack_normal(m));
+        bool allowed = i != 0;
+        assert(p_ptr->ripostes == (allowed ? 1 : 0));
+        assert(riposte_messages - messages_before == (allowed ? 1 : 0));
+        assert((m->hp < hp_before) == allowed && player_attacked == allowed);
+        assert(p_ptr->energy_use == 400 && p_ptr->previous_action[0] == 2);
+        /* A second miss in the same action must not allow another riposte. */
+        assert(make_attack_normal(m));
+        assert(p_ptr->ripostes == (allowed ? 1 : 0));
+        assert(riposte_messages - messages_before == (allowed ? 1 : 0));
+    }
+    puts("Riposte terrain: submerged misses stay silent and retain the allowance/action cost; floor, shallow water, both bridges and airborne reactions work once: PASS.");
+}
 '''
 
 
@@ -135,14 +176,15 @@ def main():
     source = out / "check.c"
     harness = engine.HARNESS.replace(
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
-    harness = harness.replace("    check_combat();", "    check_attack_energy();\n    check_interrupted_monster_move();")
+    harness = harness.replace("    check_combat();", "    check_attack_energy();\n    check_interrupted_monster_move();\n    check_riposte_terrain();")
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     response = out / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects
         if not p.endswith(("/src/main.c.obj", "/src/cmd/combat/cmd-combat.c.obj",
-            "/src/melee/melee-movement-resolution.c.obj"))), encoding="utf-8")
+            "/src/melee/melee-movement-resolution.c.obj",
+            "/src/melee/melee-attack.c.obj"))), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
         *(str(engine.BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
@@ -153,7 +195,9 @@ def main():
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
         str(engine.ROOT / "src/cmd/combat/cmd-combat.c"),
         str(engine.ROOT / "src/melee/melee-movement-resolution.c"), "@" + str(response),
-        "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=get_check_near", "-o", str(exe)],
+        str(engine.ROOT / "src/melee/melee-attack.c"),
+        "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=get_check_near",
+        "-Wl,--wrap=msg_print", "-o", str(exe)],
         cwd=engine.BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=out) as data:
         subprocess.run([str(exe), str(engine.ROOT / "lib/edit"), data],
