@@ -3999,6 +3999,24 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
         SDL_strlcpy(buf, "locked", buflen);
 }
 
+/* Keep displayed shortcuts separate from the browser's commands.  In
+ * particular, i opens skills, q exits, and braces switch skill tabs. */
+static char ability_browser_entry_letter(int index)
+{
+    static const char letters[] = "abcdefghjklmnoprstuvwxyz";
+
+    return index >= 0 && index < (int)sizeof(letters) - 1
+        ? letters[index] : '\0';
+}
+
+static int ability_browser_entry_from_letter(char letter)
+{
+    for (int index = 0; ability_browser_entry_letter(index); ++index)
+        if (ability_browser_entry_letter(index) == letter)
+            return index;
+    return -1;
+}
+
 static void ability_browser_draw_ability_list(
     const ability_browser_layout* layout, int skilltype,
     const ability_browser_entry entries[], int entry_count, int entry_cur,
@@ -4059,7 +4077,15 @@ static void ability_browser_draw_ability_list(
                 layout->ability_col, y + line_idx, layout->ability_w);
         }
 
-        if (selected)
+        if (indexed_menu_letters_enabled())
+        {
+            char letter = ability_browser_entry_letter(idx);
+            if (letter)
+                strnfmt(prefix, sizeof(prefix), "%c) ", letter);
+            else
+                SDL_strlcpy(prefix, selected ? " > " : "   ", sizeof(prefix));
+        }
+        else if (selected)
             indexed_menu_focus_prefix(prefix, sizeof(prefix), idx);
         else
             indexed_menu_normal_prefix(prefix, sizeof(prefix), idx);
@@ -7197,10 +7223,10 @@ void do_cmd_ability_screen(void)
 
         if (sdl_menu_letters_enabled())
         {
-            if (column == 0 && ch >= 'a'
-                && ch < (char)('a' + entry_count))
+            int letter_entry = ability_browser_entry_from_letter((char)ch);
+            if (column == 0 && letter_entry >= 0 && letter_entry < entry_count)
             {
-                entry_cur = (int)(ch - 'a');
+                entry_cur = letter_entry;
                 desc_top = 0;
                 continue;
             }

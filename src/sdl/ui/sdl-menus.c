@@ -932,7 +932,9 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
 
     if (!sdl_narrative_banner_overlay_enabled())
         return false;
-    if (!active_narrative_banner_visible() || character_icky > 0)
+    if (!active_narrative_banner_visible() || character_icky > 0
+        || sdl_question_menu_captures_pointer()
+        || sdl_question_menu_blocks_input())
         return false;
     if (!sdl_narrative_banner_base_layout(&rect, &span_width))
         return false;

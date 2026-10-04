@@ -242,43 +242,50 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         if (steamdeck && which == steamdeck_confirm_key())
             which = '\r';
 
-        /* Explicit option keys take priority over numeric movement keys. */
+        /* Exact shortcuts across both rows and buttons win before aliases.
+         * Menus can deliberately offer distinct c/C or u/U actions. Explicit
+         * shortcuts still take priority over numeric movement keys. */
         {
             bool matched = false;
 
-            for (int i = 0; i < count; i++)
+            for (int pass = 0; pass < 2 && !matched; pass++)
             {
-                if (options[i].key
-                    && (tolower((unsigned char)which)
-                        == tolower((unsigned char)options[i].key)))
+                for (int i = 0; i < count; i++)
                 {
-                    matched = true;
-                    highlight = i;
-                    if (options[i].disabled)
-                        ui_question_unavailable();
-                    else
+                    if (options[i].key && (pass == 0
+                            ? which == options[i].key
+                            : tolower((unsigned char)which)
+                                == tolower((unsigned char)options[i].key)))
                     {
-                        result = i;
-                        done = true;
+                        matched = true;
+                        highlight = i;
+                        if (options[i].disabled)
+                            ui_question_unavailable();
+                        else
+                        {
+                            result = i;
+                            done = true;
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
-            for (int i = 0; !matched && buttons && i < button_count; i++)
-            {
-                if (buttons[i].key
-                    && (tolower((unsigned char)which)
-                        == tolower((unsigned char)buttons[i].key)))
+                for (int i = 0; !matched && buttons && i < button_count; i++)
                 {
-                    matched = true;
-                    if (buttons[i].disabled)
-                        ui_question_unavailable();
-                    else
+                    if (buttons[i].key && (pass == 0
+                            ? which == buttons[i].key
+                            : tolower((unsigned char)which)
+                                == tolower((unsigned char)buttons[i].key)))
                     {
-                        result = buttons[i].choice;
-                        done = true;
+                        matched = true;
+                        if (buttons[i].disabled)
+                            ui_question_unavailable();
+                        else
+                        {
+                            result = buttons[i].choice;
+                            done = true;
+                        }
+                        break;
                     }
-                    break;
                 }
             }
 

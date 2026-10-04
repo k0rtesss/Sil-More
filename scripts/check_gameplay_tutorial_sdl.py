@@ -27,6 +27,7 @@ struct sdl_config config;
 gamepad_input_state g_gamepad_state;
 player_action_menu_state g_player_action_menu;
 player_exchange_target_state g_player_exchange_target;
+pointer_aim_state g_pointer_aim;
 bool g_main_menu_overlay_active, g_touch_pane_yes_no_prompt_active;
 bool g_touch_pane_reset_confirm_active, g_unified_look_active;
 minimap_state g_minimap;
@@ -58,6 +59,7 @@ bool tutorial_game_select_mode(void)
 /* CONFIG_MODE_FUNCTIONS */
 bool sdl_touch_only_device_active(void) { return touch_only; }
 bool steamdeck_controls_active(void) { return config.input_ui_mode==SDL_INPUT_UI_MODE_CONTROLLER; }
+bool insight_reworked_enabled(void) { return false; }
 const char *sdl_gamepad_button_short_label(int b)
 { return b==SDL_GAMEPAD_BUTTON_SOUTH?"A":b==SDL_GAMEPAD_BUTTON_EAST?"B":b==SDL_GAMEPAD_BUTTON_START?"Menu":"View"; }
 void sdl_gamepad_action_binding_short_label(int command,char *buf,size_t size)

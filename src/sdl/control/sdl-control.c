@@ -153,7 +153,9 @@ static cJSON* control_state(bool waiting)
     int width = 0, height = 0;
     int queued = Term ? (Term->key_head + Term->key_size - Term->key_tail)
         % Term->key_size : 0;
-    (void)SDL_GetRenderOutputSize(g_state.renderer, &width, &height);
+    /* The software renderer can report its active pane texture here. The PNG
+     * and client coordinates always cover the full window in pixels. */
+    (void)SDL_GetWindowSizeInPixels(g_state.window, &width, &height);
     bool busy = control_ui_busy();
     cJSON_AddBoolToObject(state, "waiting_for_input", waiting && !queued && !busy);
     cJSON_AddBoolToObject(state, "ui_busy", busy);
@@ -452,7 +454,7 @@ static const char* control_click(void)
     SDL_zero(event);
     if (!config.mouse_enabled)
         return "Mouse input is disabled in the game's input settings";
-    if (!SDL_GetRenderOutputSize(g_state.renderer, &width, &height)
+    if (!SDL_GetWindowSizeInPixels(g_state.window, &width, &height)
         || !control_number(control_request, "x", 0, width - 1, &x)
         || !control_number(control_request, "y", 0, height - 1, &y))
         return error;

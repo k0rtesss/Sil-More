@@ -79,6 +79,9 @@ int main(int argc, char** argv)
     screen_set_startup_touch_pane_hidden(false);
     int last = 0, choice = -1, confirm = -1, custom = -1;
     char name[128] = "";
+    SDL_Texture* small_canvas = SDL_CreateTexture(g_state.renderer,
+        SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 96, 48);
+    assert(small_canvas);
     while (true) {
         char label[256];
         Term_clear();
@@ -117,6 +120,16 @@ int main(int argc, char** argv)
             custom = sdl_touch_tutorial_wait_action(SDL_GetTicksNS() + 90000000ULL);
         } else if (last == 'd') {
             Term_xtra(TERM_XTRA_DELAY, 800);
+        } else if (last == 'v') {
+            /* A native view can leave a supporting pane as the render target
+             * while it waits. Exercise the real mailbox at that boundary. */
+            SDL_Event event;
+            assert(SDL_SetRenderTarget(g_state.renderer, small_canvas));
+            while (Term->key_head == Term->key_tail) {
+                (void)sdl_control_poll(true);
+                if (SDL_WaitEventTimeout(&event, 25))
+                    sdl_handle_event(&g_state, &event);
+            }
         }
     }
 }
@@ -206,6 +219,17 @@ def run_checks(exe: Path, env: dict) -> None:
                              cwd=ROOT, env=env, capture_output=True, text=True,
                              encoding="utf-8", check=True, timeout=20)
         assert json.loads(cli.stdout)["state"]["video_driver"] == "dummy"
+
+        result = expect_ok(control.key("v", output=profile / "small-target.png"))
+        assert struct.unpack(">II", Path(result["screenshot"]).read_bytes()[16:24]) == (
+            result["state"]["width"], result["state"]["height"]), result
+        result = expect_ok(control.observe())
+        assert (result["state"]["width"], result["state"]["height"]) == (
+            response["state"]["width"], response["state"]["height"]), result
+        # This point lies outside the small canvas but inside the observed PNG.
+        result = expect_ok(control.click(result["state"]["width"] - 2,
+                                         result["state"]["height"] - 2))
+        expect_ok(control.key("a"))
 
         for chord, value in [("a", 97), ("A", 65), ("Up", 56), ("KP3", 51),
                              ("Ctrl+a", 1), ("+", 43), (">", 62), ("!", 33)]:

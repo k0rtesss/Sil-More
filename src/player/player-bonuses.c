@@ -1323,6 +1323,9 @@ void calc_bonuses(void)
     // identify {special} items when the type has been seen before
     id_known_specials();
     reorder_pack();
+    /* Every real inventory mutation queues bonus upkeep. Retire legacy
+     * overflow allowance once possessions have left a volume pool. */
+    inven_update_current_pack_limits();
 }
 
 void calc_bonuses_for_preview(void)

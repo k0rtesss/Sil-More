@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "object/object-internal.h"
 #include "quest/quest-challenges.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -1955,9 +1956,9 @@ static bool do_cmd_unquiver_pack_arrow(int item)
     object_copy(&packed, o_ptr);
     packed.pickup = false;
     packed.pickup_slot = -1;
-    /* Loose arrows always use the Pack by type.  Keep their storage marker
-     * neutral so they combine with arrows obtained through ordinary pickup. */
-    packed.storage = OBJECT_STORAGE_NONE;
+    /* Pack arrows need a storage marker: NONE suppresses their volume and
+     * hides them from the inventory browser's storage groups. */
+    packed.storage = OBJECT_STORAGE_PACK;
     if (player_pack_action_start(PLAYER_PACK_ACTION_MOVE_STORAGE, item,
             OBJECT_STORAGE_PACK, false, &packed))
         return true;
@@ -6360,21 +6361,16 @@ void do_cmd_uninscribe(void)
     /* Get an item */
     q = "Un-inscribe which item? ";
     s = "You have nothing to un-inscribe.";
-    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN | USE_FLOOR,
-            q, s, &item))
+    bool old_expand = inventory_menu_set_expand_supplies(true);
+    bool selected = open_inventory_item_select_menu(
+        USE_EQUIP | USE_INVEN | USE_FLOOR, q, s, &item);
+    inventory_menu_set_expand_supplies(old_expand);
+    if (!selected)
         return;
 
-    /* Get the item (in the pack) */
-    if (player_inventory_handle_valid(item))
-    {
-        o_ptr = player_inventory_object(item);
-    }
-
-    /* Get the item (on the floor) */
-    else
-    {
-        o_ptr = &o_list[0 - item];
-    }
+    o_ptr = inventory_item_to_object_ptr(item);
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
 
     /* Nothing to remove */
     if (!o_ptr->obj_note)
@@ -6406,21 +6402,16 @@ void do_cmd_inscribe(void)
     /* Get an item */
     q = "Inscribe which item? ";
     s = "You have nothing to inscribe.";
-    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN | USE_FLOOR,
-            q, s, &item))
+    bool old_expand = inventory_menu_set_expand_supplies(true);
+    bool selected = open_inventory_item_select_menu(
+        USE_EQUIP | USE_INVEN | USE_FLOOR, q, s, &item);
+    inventory_menu_set_expand_supplies(old_expand);
+    if (!selected)
         return;
 
-    /* Get the item (in the pack) */
-    if (player_inventory_handle_valid(item))
-    {
-        o_ptr = player_inventory_object(item);
-    }
-
-    /* Get the item (on the floor) */
-    else
-    {
-        o_ptr = &o_list[0 - item];
-    }
+    o_ptr = inventory_item_to_object_ptr(item);
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
 
     /* Describe the activity */
     if (item < 0)

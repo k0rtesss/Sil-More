@@ -288,6 +288,58 @@ static void check_modern_browser(cptr output)
     Term_resize(80,24);
     puts("Browser: all8 categories, 52-IP index, stable moved identities, all descriptions40/60/80/100 columns, legacy isolation PASS.");
 }
+
+static void check_browser_hotkey_capture(cptr output, cptr label,
+    cptr sequence, cptr selected_name)
+{
+    char path[1024], text[8192], expected[160];
+    strnfmt(path, sizeof(path), "%s/hotkeys-%s.txt", output, label);
+    capture_path = path; input_sequence = sequence; Term_flush();
+    long xp = p_ptr->new_exp, ip = p_ptr->insight_points;
+    do_cmd_ability_screen();
+    assert(!*input_sequence);
+    capture_path = input_sequence = NULL;
+    assert(p_ptr->new_exp == xp && p_ptr->insight_points == ip);
+    FILE* file = fopen(path, "r"); assert(file);
+    size_t size = fread(text, 1, sizeof(text) - 1, file);
+    text[size] = '\0'; fclose(file);
+    strnfmt(expected, sizeof(expected), "%s:", selected_name);
+    assert(strstr(text, expected));
+    assert(!strstr(text, "i) ") && !strstr(text, "q) "));
+    assert(!strstr(text, "{) ") && !strstr(text, "}) "));
+}
+
+static void check_browser_hotkeys(cptr output)
+{
+    modern_reset(); Term_resize(96, 36);
+    p_ptr->insight_ruleset = INSIGHT_RULESET_CLASSIC;
+    check_browser_hotkey_capture(output, "classic-ninth", "j\033", "Warden");
+    check_browser_hotkey_capture(output, "classic-last", "s\033", "Strength");
+    check_browser_hotkey_capture(output, "skills-command", "i\033\033", "Power");
+    input_sequence = "q"; Term_flush(); do_cmd_ability_screen();
+    assert(!*input_sequence); input_sequence = NULL;
+
+    modern_reset();
+    ability_browser_entry entries[ABILITY_BROWSER_ENTRIES_MAX];
+    int count = ability_browser_collect_entries(ABILITY_BROWSER_INSIGHT,
+        entries, ABILITY_BROWSER_ENTRIES_MAX);
+    assert(count > 24);
+    check_browser_hotkey_capture(output, "insight-last-letter",
+        "\t\t\t\t\t\t\t\tz\033", ability_display_name(entries[23].b_ptr));
+    char sequence[ABILITY_BROWSER_ENTRIES_MAX + 16];
+    memset(sequence, '\t', 8);
+    memset(sequence + 8, '2', count - 1);
+    sequence[8 + count - 1] = ESCAPE; sequence[8 + count] = '\0';
+    check_browser_hotkey_capture(output, "insight-overflow", sequence,
+        ability_display_name(entries[count - 1].b_ptr));
+    assert(!ability_browser_entry_letter(24));
+    assert(ability_browser_entry_from_letter('i') < 0);
+    assert(ability_browser_entry_from_letter('q') < 0);
+    assert(ability_browser_entry_from_letter('{') < 0);
+    assert(ability_browser_entry_from_letter('}') < 0);
+    Term_resize(80, 24);
+    puts("Browser hotkeys: actual j/s/z dispatch, i skills, q exit, overflow navigation, labels and unchanged currencies PASS.");
+}
 '''
 
 def main():
@@ -306,6 +358,7 @@ def main():
     check_policy_parser(); check_complete_catalogue(); check_modern_prices_and_atomicity();
     check_modern_inheritance_and_parents(); check_modern_retirement_and_capacity();
     check_modern_browser(argv[3]);
+    check_browser_hotkeys(argv[3]);
     fixture_race.flags=race_flags; rp_ptr=original_race; current_character_profile->flags=origin_flags;
     current_character_profile->flags_u=origin_unique;
     puts("New Insight abilities engine integration PASS.");
