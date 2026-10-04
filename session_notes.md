@@ -1,5 +1,11 @@
 # Session notes
 
+## 2026-10-04: Port gameplay playtest fixes to master
+
+- Selectively ported the two gameplay-discovered fixes and their regression tests from `beb8433e`: unarmed combat previews use the calculated melee values instead of zeroes, and high-score saving interprets SDL3's boolean flush result correctly.
+- Preserved the existing version-revision and silent inventory-reordering edits in six files; their SHA256 hashes were unchanged after applying and validating the port.
+- Standard and portable incremental builds passed. `check_equipment_action_routing.py` and `check_remaining_review_paths.py --case scores` passed on master; scoped whitespace validation passed. Refreshed both Windows deployment executables and verified their hashes against the builds. No gameplay or UI automation was resumed.
+
 ## 2026-09-29: Master 0.9.8 release and tutorial backport
 
 - Merged `6d1335ad8403379985d8c64bb3a2e909d50b32dd` into master with a release merge commit. Retained the snapshot's canonical version 0.9.8 and save revision 22.
@@ -9343,3 +9349,8 @@ The script now fully matches the game's drop generation logic for all item types
 - Staged both executables and refreshed edit/pref/help source files; executable and source-file hashes match. Active source and both staged template sets pass runtime/CMake version gates. Hash receipts: `scripts/output/master-backport/deployment-hashes.json`.
 - Isolated portable executable with fresh writable stores and SDL dummy/software drivers reached `initial_menu` without ERROR/FATAL entries, then was deliberately terminated at the menu. Log: `scripts/output/master-backport/startup-portable/log.txt`. Initial clone setup lacked writable directories; corrected the fixture before the successful run.
 - No manual gameplay, physical controller/touch, Android-device run or audible listening validation. Three gpt-6.1-sol high-reasoning agents reviewed independent persistence/parser, gameplay/terrain, and frontend/tools areas; the frontend agent also independently corrected the stale river/acid renderer fixture. Final integration and scope decisions remained with the parent.
+
+### 2026-10-04: Port quiet inventory sorting to master
+- Ported only the inventory-message changes from 0.9.9 commit beb8433e: reorder_pack is silent, its unused display flag is removed, and both callers/declarations are updated. Automatic sorting and PW_INVEN behavior remain intact.
+- Preserved the existing src/defines.h version edit and untracked release/help files. Standard and portable incremental builds passed; logs: scripts/output/inventory-reorder-master-standard.log and inventory-reorder-master-portable.log. Both deployment executables refreshed and hash-checked; branch edit/pref/help files refreshed.
+- Fresh isolated portable launch reached initial_menu without ERROR/FATAL/CRITICAL entries: scripts/output/inventory-reorder-master-startup/88ee34d9-0456-4b9f-9bc8-cccd0f1b21f4/log.txt. Interactive inventory was not replayed. Scoped diff checks passed.

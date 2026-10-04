@@ -1301,7 +1301,7 @@ void calc_bonuses(void)
 
     // identify {special} items when the type has been seen before
     id_known_specials();
-    reorder_pack(false);
+    reorder_pack();
 }
 
 void calc_bonuses_for_preview(void)

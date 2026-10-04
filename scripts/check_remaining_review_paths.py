@@ -58,6 +58,22 @@ void fixture_display_attributes(char s[][200], char t[][200], bool good[], int c
 }
 void __wrap_msg_print(cptr text) { (void)text; }
 static int score_views;
+static int score_flush_errors;
+static bool simulate_score_flush_failure;
+bool __real_SDL_FlushIO(SDL_IOStream* stream);
+bool __wrap_SDL_FlushIO(SDL_IOStream* stream)
+{
+    if (simulate_score_flush_failure) {
+        SDL_SetError("Simulated score flush failure");
+        return false;
+    }
+    return __real_SDL_FlushIO(stream);
+}
+static void count_score_flush_error(log_Event* event)
+{
+    if (strstr(event->fmt,"Failed to flush high score file"))
+        score_flush_errors++;
+}
 int fixture_run_rating(int curses);
 int fixture_history_probe(void);
 int fixture_capture_tail(char s[][200], char t[][200], bool good[], int count);
@@ -225,6 +241,28 @@ static void check_scores(void)
     fclose(file); show_scores_interactive_highlight_from_file("archive.raw",&score);
     assert(score_views==1 && !memcmp(global,&before,sizeof(before)));
     assert(score_file_active_ctx()==global);
+
+    /* SDL3 flushes return true on success.  Saving a score must not report
+     * an error for a successful flush, and must report a real failure. */
+    score_file_ctx writer={0};
+    score_file_set_active_ctx(&writer);
+    writer.fd=score_file_open("flush.raw",O_RDWR|O_CREAT); assert(writer.fd);
+    assert(log_add_callback(count_score_flush_error,NULL,LOG_ERROR)==0);
+    assert(highscore_add(&score)==0 && score_flush_errors==0);
+    assert(writer.entry_count==1);
+    simulate_score_flush_failure=true;
+    log_set_quiet(true);
+    assert(highscore_add(&score)==0 && score_flush_errors==1);
+    log_set_quiet(false);
+    simulate_score_flush_failure=false;
+    assert(SDL_CloseIO(writer.fd)); writer.fd=NULL;
+    writer.fd=score_file_open("flush.raw",O_RDONLY); assert(writer.fd);
+    high_score stored;
+    assert(writer.entry_count==1 && highscore_seek(0)==0);
+    assert(highscore_read(&stored)==0 && !memcmp(&stored,&score,sizeof(score)));
+    assert(SDL_CloseIO(writer.fd)); writer.fd=NULL;
+    score_file_set_active_ctx(global);
+    assert(!memcmp(global,&before,sizeof(before)));
 }
 static void check_history(void)
 {
@@ -380,7 +418,8 @@ int fixture_history_probe(void)
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe",*defines,"-std=c17","-O0","-g","-fstack-protector-all",
         "@CMakeFiles/sil-more.dir/includes_C.rsp",str(source),str(utility),str(score_ui),
         *(str(ROOT/"src"/(unit+".c")) for unit in units),"@"+str(response),
-        "@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,--wrap=msg_print","-o",str(executable)],
+        "@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,--wrap=msg_print",
+        "-Wl,--wrap=SDL_FlushIO","-o",str(executable)],
         cwd=build,env=env,check=True)
     failed=[]
     for case in CASES if args.case=="all" else (args.case,):

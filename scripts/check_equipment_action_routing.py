@@ -296,6 +296,35 @@ int main(void)
     p_ptr->active_ability[S_MEL][MEL_THROWING] = false;
     assert(!player_can_quick_throw_from_harness(0));
     puts("PASS: Quick Throw covers empty hand, melee handedness, Shortbow, Longbow, throwing and ability gating.");
+
+    /* Putting a weapon away leaves a valid unarmed attack.  Both combat
+     * panels must receive its calculated values rather than fall back to
+     * (+0,0d0).  Previewing must also leave the carried weapon untouched. */
+    memset(held, 0, sizeof(held));
+    set_item(0, 1);
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
+    p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON] = false;
+    p_ptr->skill_use[S_MEL] = 12;
+    p_ptr->mdd = 1;
+    p_ptr->mds = 5;
+    player_type player_snapshot = *p_ptr;
+    memcpy(snapshot, held, sizeof(snapshot));
+    int attack = -1, dd = -1, ds = -1;
+    bool throwing = true;
+    assert(player_active_weapon_stats_preview(PLAYER_ACTIVE_WEAPON_MELEE,
+        &attack, &dd, &ds, &throwing));
+    assert(attack == 12 && dd == 1 && ds == 5 && !throwing);
+    assert(memcmp(&player_snapshot, p_ptr, sizeof(player_snapshot)) == 0);
+    assert(memcmp(snapshot, held, sizeof(snapshot)) == 0);
+    assert(!player_active_weapon_offhand_stats_preview(NULL, NULL, NULL));
+    assert(!player_active_weapon_stats_preview(PLAYER_ACTIVE_WEAPON_RANGED_1,
+        NULL, NULL, NULL, NULL));
+    set_item(INVEN_WIELD, 1);
+    p_ptr->mds = 10;
+    assert(player_active_weapon_stats_preview(PLAYER_ACTIVE_WEAPON_MELEE,
+        &attack, &dd, &ds, &throwing));
+    assert(attack == 12 && dd == 1 && ds == 10 && !throwing);
+    puts("PASS: Unarmed/armed previews report calculated melee stats, preserve state, and do not invent ranged or offhand attacks.");
     return 0;
 }
 '''

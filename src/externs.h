@@ -1714,7 +1714,7 @@ extern void inven_drop(int item, int amt);
 extern void inven_update_current_pack_limits(void);
 extern void inventory_limit_grandfather_current_overflow(void);
 extern void combine_pack(void);
-extern void reorder_pack(bool display_message);
+extern void reorder_pack(void);
 extern void steal_object_from_monster(int y, int x);
 extern byte allow_altered_inventory;
 
