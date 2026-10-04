@@ -6,6 +6,13 @@
 #include "support/movement-input.h"
 #include "tutorial/tutorial.h"
 
+/* Shared by frontend modules and the engine's SDL settings menus. */
+#if defined(__ANDROID__) || defined(SIL_IOS)
+#define SIL_SDL_MOBILE_BUILD 1
+#else
+#define SIL_SDL_MOBILE_BUILD 0
+#endif
+
 #define GAMEPAD_TRIGGER_COUNT 2
 #define GAMEPAD_STICK_DIR_COUNT 4
 #define GAMEPAD_DPAD_SOURCE_COUNT 3

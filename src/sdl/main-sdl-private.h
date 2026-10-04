@@ -19,6 +19,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#include "sdl/control/sdl-control.h"
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -33,12 +34,6 @@
 #endif
 #if defined(SIL_IOS)
 #include "main-sdl-ios.h"
-#endif
-
-#if defined(__ANDROID__) || defined(SIL_IOS)
-#define SIL_SDL_MOBILE_BUILD 1
-#else
-#define SIL_SDL_MOBILE_BUILD 0
 #endif
 
 #if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_MACOS)
@@ -2152,6 +2147,7 @@ void sdl_char_sheet_draw_curled_leaf(SDL_Texture* leaf, SDL_FRect region, float 
 void sdl_character_sheet_screen_begin_page_turn(int dir);
 int sdl_select_page_turn_timeout_ms(Uint64 now_ns);
 bool sdl_character_sheet_screen_birth_sequence_active(void);
+bool sdl_character_sheet_screen_allocation_active(void);
 void sdl_character_sheet_birth_swipe_cancel(void);
 void sdl_character_sheet_birth_swipe_begin(float x, float y, SDL_FingerID finger_id);
 int sdl_character_sheet_birth_swipe_key_for_dir(int dir);

@@ -12763,6 +12763,12 @@ bool sdl_character_sheet_screen_birth_sequence_active(void)
         || g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_SKILLS;
 }
 
+bool sdl_character_sheet_screen_allocation_active(void)
+{
+    return g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_STATS
+        || g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_SKILLS;
+}
+
 static bool sdl_character_sheet_touch_allocation_choice(int choice)
 {
     if (g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_STATS)

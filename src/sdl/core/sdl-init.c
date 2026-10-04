@@ -5,6 +5,8 @@ void sdl_quit_hook(cptr str)
 {
     (void)str; // Unused parameter
 
+    sdl_control_shutdown();
+
 #if SIL_SDL_MOBILE_BUILD
     sdl_mobile_lifecycle_unregister();
 #endif
@@ -598,6 +600,8 @@ errr init_sdl(int argc, char **argv)
 
     log_debug("init_sdl: SDL term opened (tiles_mode=%d higher_pict=%d always_pict=%d)",
             config.tiles, Term->higher_pict, Term->always_pict);
+
+    sdl_control_init(argc, argv);
     
     return 0;
 }

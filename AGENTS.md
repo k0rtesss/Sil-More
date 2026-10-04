@@ -83,6 +83,7 @@ These templates drive gameplay content (monsters, vaults, objects, terrain, ques
   - If you need to force a rebuild after template changes, delete the relevant `*.raw` in the active data folder (`<user-root>/data/` for standard builds, `lib/data/` for portable builds) and rerun.
 
 ## Key Subsystems (Fast Pointers)
+- Direct game automation: `src/sdl/control/sdl-control.c` + `tools/game_control.py`; see `docs/game-control.md`. Opt-in `-- --control-dir <absolute-path>` accepts SDL inputs and returns PNGs without desktop input; the Python launcher also supports `--headless`.
 - Key handling pipeline (SDL -> command): see `docs/key_handling_report.md` and `src/z-term.c`, `src/util.c:inkey()`/`request_command()`.
 - SDL UI configuration: `src/sdl-config.c` reads/writes `sil_sdl.json` (pane layout, scaling, fullscreen, etc.).
 - Sound system: `src/sdl-sound.c` + `src/sound-config.c` read `sound.json` and map events (see `angband_sound_name[]` in `src/variable.c`).

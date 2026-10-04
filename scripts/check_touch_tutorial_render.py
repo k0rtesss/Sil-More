@@ -420,8 +420,10 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin"] +
-        [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] + [env["PATH"]])
+    # Load the pinned SDL DLLs that match this build's import libraries.
+    env["PATH"] = os.pathsep.join(
+        [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
+        ["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     wraps = ["SDL_RenderRect", "SDL_RenderFillRect", "SDL_RenderTexture", "sdl_ui_text_texture",
              "sdl_touch_only_mobile_device_active", "sdl_touch_tutorial_device_available",
              "sdl_touch_pane_current_rect",

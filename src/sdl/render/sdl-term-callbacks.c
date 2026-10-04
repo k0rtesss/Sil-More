@@ -19,6 +19,9 @@ errr callback_sdl_xtra(int n, int v)
             sdl_input_tutorial_maybe_show_deferred();
         sdl_mono_font_prewarm_process_idle();
 
+        if (sdl_control_poll(v != 0))
+            return 0;
+
         if (v) {
             /* The player has ended the session (quit to title / quit program /
              * death) and the command loop is now only waiting to observe
@@ -169,6 +172,7 @@ errr callback_sdl_xtra(int n, int v)
             {
                 timeout_ms = thumb_touch_timeout_ms;
             }
+            timeout_ms = sdl_control_wait_timeout(timeout_ms);
             g_sdl_blocking_key_wait = true;
             {
                 sil_perf_flush();
@@ -342,6 +346,8 @@ errr callback_sdl_xtra(int n, int v)
             
             /* Update music streams */
             sdl_music_update();
+
+            (void)sdl_control_poll(false);
             
             /* Process pending events to prevent "Not Responding" status */
             SDL_Event ev;
@@ -1882,9 +1888,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, false);
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
     } else if (terrain_tile && !illusion_wall) {
-        /* Authored terrain contours own their floor pixels. Generic contacts
-         * may add wall shading, but must not repaint these contours. A failed
-         * atlas load leaves the generic material fallback available. */
+        /* Liquid and bridge layers own their surface pixels. Ordinary floor
+         * materials use the same outline-free connection pass. */
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, fixture_drawn);
     }

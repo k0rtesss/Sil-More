@@ -395,6 +395,33 @@ int main(void)
     assert(held[INVEN_BELT].number == 1 && !player_pack_action_pending());
     puts("PASS: Cancel, cursed Belt, and full Pack leave the equipped item in place.");
 
+    /* Cursed worn Pack apparel must be rejected before paying for Pack
+     * access. A permitted removal still defers and cannot uncurse on cancel. */
+    clear_items(); player_pack_action_reset();
+    held[INVEN_OUTER]=item(3,1,OBJECT_STORAGE_PACK,50);
+    held[INVEN_OUTER].ident |= IDENT_CURSED;
+    p_ptr->equip_cnt=1; p_ptr->inven_cnt=0; p_ptr->energy_use=0;
+    do_cmd_takeoff(&held[INVEN_OUTER],INVEN_OUTER);
+    assert(p_ptr->energy_use==0 && !player_pack_action_pending());
+    assert(held[INVEN_OUTER].k_idx && cursed_p(&held[INVEN_OUTER]));
+    do_cmd_use_item_by_index(INVEN_OUTER);
+    assert(p_ptr->energy_use==0 && !player_pack_action_pending());
+    assert(held[INVEN_OUTER].k_idx && cursed_p(&held[INVEN_OUTER]));
+
+    p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING]=true;
+    do_cmd_use_item_by_index(INVEN_OUTER);
+    assert(p_ptr->energy_use==100 && player_pack_action_turns_left()==2);
+    player_pack_action_cancel();
+    assert(cursed_p(&held[INVEN_OUTER]));
+    held[INVEN_OUTER].ident &= ~IDENT_CURSED;
+    p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING]=false;
+    p_ptr->energy_use=0;
+    do_cmd_use_item_by_index(INVEN_OUTER);
+    assert(p_ptr->energy_use==100 && player_pack_action_turns_left()==2);
+    player_pack_action_cancel();
+    assert(held[INVEN_OUTER].k_idx);
+    puts("PASS: Cursed apparel removal rejects for free; permitted Pack removals retain their delay and cancellation preserves the curse.");
+
     /* Floor-use actions reach their command immediately, even for kinds whose
      * default carried storage is the Pack. Actual Pack pickups still defer. */
     object_type floor_items[2] = {0};

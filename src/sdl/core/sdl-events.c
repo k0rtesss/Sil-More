@@ -379,9 +379,9 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
         return false;
 
     /*
-     * Once the watch is installed, its private event is the sole owner of
-     * lifecycle state changes.  SDL may also enqueue the original lifecycle
-     * event; consume that duplicate without saving or changing foreground
+     * Once the watch is installed, it owns lifecycle dispatch.  SDL may
+     * also enqueue the original lifecycle event; consume that duplicate
+     * without saving or changing foreground
      * state.  Sequence numbers also reject a delayed private event from an
      * older background/foreground transition.
      */
@@ -454,16 +454,23 @@ bool SDLCALL sdl_mobile_lifecycle_event_watch(void* userdata, SDL_Event* ev)
     if (event_index < 0)
         return true;
 
-    /*
-     * SDL may invoke event watches from a non-game thread.  Never inspect or
-     * mutate game state here: post a private wake event so autosave and score
-     * persistence run from the normal SDL/game event loop.
-     */
     SDL_zero(dispatch);
     dispatch.type = g_mobile_lifecycle_dispatch_event;
     dispatch.user.code = (Sint32)ev->type;
     serial = SDL_AddAtomicInt(&g_mobile_lifecycle_dispatch_serial, 1) + 1;
     dispatch.user.data1 = (void*)(intptr_t)serial;
+#ifdef __ANDROID__
+    /* Android pumps lifecycle events on the SDL/game thread just before it
+     * blocks for background suspension. Save here while that thread can
+     * still run; a queued event may otherwise wait until the next resume. */
+    if (SDL_IsMainThread())
+    {
+        (void)sdl_mobile_lifecycle_handle_event(&dispatch);
+        return true;
+    }
+#endif
+    /* Watches can also run on another thread. Only queue work in that case;
+     * game state and persistence still belong to the SDL/game event loop. */
     if (!SDL_PushEvent(&dispatch))
     {
         /*
@@ -1291,6 +1298,8 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
     (void)st;
+    if (sdl_control_handle_event(ev))
+        return;
     sdl_normalize_event_to_render_coords(ev);
     if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
         sdl_gamepad_release_button_modifier(ev->gbutton.button);

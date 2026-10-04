@@ -173,7 +173,8 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
 
     object_desc(o_name, sizeof(o_name), pack_object ? pack_object : o_ptr,
         false, 0);
-    if (pack_object || (kind == PLAYER_PACK_ACTION_PICKUP
+    if (pack_object || kind == PLAYER_PACK_ACTION_TAKEOFF
+        || (kind == PLAYER_PACK_ACTION_PICKUP
             && arg == OBJECT_STORAGE_PACK)
         || (kind == PLAYER_PACK_ACTION_MOVE_STORAGE
             && arg == OBJECT_STORAGE_PACK))

@@ -24,6 +24,8 @@ typedef struct material_edge_source {
     unsigned priority;
     byte row;
     byte col;
+    byte light_offset;
+    bool has_light_variant;
 } material_edge_source;
 
 /* Clockwise from north.  Keeping this order fixed is important at corners:
@@ -106,20 +108,24 @@ static int material_edge_style(int y, int x)
  * are lighting variants of one artwork, not another material.  Only fold the
  * pair when it matches the feature's ordinary source coordinate; arbitrary
  * imported source coordinates remain distinct when no style is encoded. */
-static void material_edge_normalize_source(int feat, byte* row, byte* col)
+static bool material_edge_normalize_source(int feat, byte* row, byte* col)
 {
     byte base_row;
     byte base_col;
 
     if (!row || !col || !z_info || !f_info || feat < 0
         || feat >= z_info->f_max)
-        return;
+        return false;
 
     base_row = (byte)(f_info[feat].x_attr & TILE_INDEX_MASK);
     base_col = (byte)((byte)f_info[feat].x_char & TILE_INDEX_MASK);
-    if (*row == base_row
-        && *col == (byte)((base_col + 1) & TILE_INDEX_MASK))
+    if (*row == base_row && (*col == base_col
+        || *col == (byte)((base_col + 1) & TILE_INDEX_MASK)))
+    {
         *col = base_col;
+        return true;
+    }
+    return false;
 }
 
 static material_edge_class material_edge_feature_class(int y, int x,
@@ -186,7 +192,11 @@ static bool material_edge_floor_family(const style_type* style,
         byte col = style->floor_count ? style->floor_colv[i] : style->floor_col;
         unsigned tile = ((unsigned)row << 8) | col;
         if (out->row == row && (out->col == col || out->col == col + 1))
+        {
             matches = true;
+            out->light_offset = (byte)(out->col - col);
+            out->has_light_variant = true;
+        }
         int at = 0;
         while (at < count && tiles[at] < tile) at++;
         if (at < count && tiles[at] == tile) continue;
@@ -223,6 +233,8 @@ static bool material_edge_describe(int y, int x, byte ta, char tc,
 
     out->row = (byte)(ta & TILE_INDEX_MASK);
     out->col = (byte)((byte)tc & TILE_INDEX_MASK);
+    out->light_offset = 0;
+    out->has_light_variant = false;
     style = material_edge_style(y, x);
     if (out->class_id == MATERIAL_EDGE_FLOOR && style_info && z_info)
     {
@@ -246,12 +258,16 @@ static bool material_edge_describe(int y, int x, byte ta, char tc,
             {
                 key_col = s->wall_col;
                 normalized = true;
+                out->has_light_variant = true;
                 break;
             }
         }
     }
     if (!normalized)
-        material_edge_normalize_source(feat, &key_row, &key_col);
+        out->has_light_variant = material_edge_normalize_source(feat,
+            &key_row, &key_col);
+    if (out->has_light_variant)
+        out->light_offset = (byte)((out->col - key_col) & TILE_INDEX_MASK);
     out->priority = ((unsigned)key_row << 8) | key_col;
     /* Match the singleton floor family key as well as unstyled coordinates. */
     out->material_id = (14695981039346656037ULL ^ out->priority) * 1099511628211ULL;
@@ -301,7 +317,19 @@ static int material_edge_collect(int y, int x, byte ta, char tc,
         if (!material_edge_describe(ny, nx, nta, ntc, &neighbours[i]))
             continue;
 
-        if (material_edge_sources_differ(current, &neighbours[i]))
+        /* Physical sampling intentionally ignores neighbour discovery, and
+         * therefore selects bright artwork. Use the receiving tile's light
+         * variant for its connection pixels as well: bright strips on a
+         * remembered floor otherwise look like raised borders. Only known
+         * lit/dark pairs may shift; arbitrary artwork stays untouched. */
+        if (current->class_id == neighbours[i].class_id
+            && current->has_light_variant && neighbours[i].has_light_variant)
+            neighbours[i].col = (byte)((neighbours[i].col
+                - neighbours[i].light_offset + current->light_offset)
+                & TILE_INDEX_MASK);
+
+        if (current->class_id == neighbours[i].class_id
+            && material_edge_sources_differ(current, &neighbours[i]))
         {
             count++;
             if (!collect_sources) return count;
@@ -370,40 +398,6 @@ static int material_edge_owner(int y, int x, int px, int py,
     return owner;
 }
 
-/* Physical height contacts are separate from material ownership. Preserve the
- * wall's own artwork and solidity; a small south/east face shade and a floor
- * contact shadow supply depth without borrowing floor pixels into a wall. */
-static byte material_edge_shade(int px, int py,
-    const material_edge_source* current, const material_edge_source n[8])
-{
-    int h = px < TILE_SIZE / 2 ? 6 : 2;
-    int v = py < TILE_SIZE / 2 ? 0 : 4;
-    int d = h == 6 ? (v == 0 ? 7 : 5) : (v == 0 ? 1 : 3);
-    int u = px < TILE_SIZE / 2 ? px : TILE_SIZE - 1 - px;
-    int w = py < TILE_SIZE / 2 ? py : TILE_SIZE - 1 - py;
-    byte shade = 255;
-    material_edge_class other = current->class_id == MATERIAL_EDGE_FLOOR
-        ? MATERIAL_EDGE_WALL : MATERIAL_EDGE_FLOOR;
-    if (current->class_id == MATERIAL_EDGE_FLOOR)
-    {
-        if (n[v].class_id == other && w < 2)
-            shade = v == 0 ? (w == 0 ? 176 : 222) : (w == 0 ? 226 : 246);
-        if (n[h].class_id == other && u < 2)
-            shade = MIN(shade, h == 6 ? (u == 0 ? 198 : 234) : (u == 0 ? 218 : 242));
-    }
-    else
-    {
-        if (n[4].class_id == other && py >= TILE_SIZE - 2)
-            shade = py == TILE_SIZE - 1 ? 180 : 218;
-        if (n[2].class_id == other && px == TILE_SIZE - 1)
-            shade = MIN(shade, 218);
-    }
-    if (n[d].class_id == other && u + w < 2
-        && n[h].class_id == current->class_id && n[v].class_id == current->class_id)
-        shade = MIN(shade, 226);
-    return shade;
-}
-
 /* Resolve the small coverage field once, then merge equal pixels into maximal
  * rectangles. SDL's sprite path batches these and uses fast blits on software
  * renderers; triangle rasterization of individual pixel runs is much slower.
@@ -427,55 +421,41 @@ static bool material_edge_draw_sources(int y, int x,
     SDL_SetTextureAlphaMod(g_state.tileset, 255);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
 
-    /* Shade the composited result after material ownership, preserving native
-     * atlas pixels. Choosing a single shade avoids doubled corner shadows. */
-    for (int pass = 0; pass < 2; pass++)
-    {
-        byte coverage[TILE_SIZE][TILE_SIZE];
-        for (int py = 0; py < TILE_SIZE; py++)
-            for (int px = 0; px < TILE_SIZE; px++)
-                coverage[py][px] = pass
-                    ? 255 - material_edge_shade(px, py, current, neighbours)
-                    : 1 + material_edge_owner(y, x, px, py, current, neighbours,
-                        preserve_floor_contour);
-        for (int py = 0; py < TILE_SIZE; py++)
-            for (int px = 0; px < TILE_SIZE; px++)
+    /* Connections contain original texels only. No contact shadow, face
+     * shade, highlight or outline is painted over either material. */
+    byte coverage[TILE_SIZE][TILE_SIZE];
+    for (int py = 0; py < TILE_SIZE; py++)
+        for (int px = 0; px < TILE_SIZE; px++)
+            coverage[py][px] = 1 + material_edge_owner(y, x, px, py,
+                current, neighbours, preserve_floor_contour);
+    for (int py = 0; py < TILE_SIZE; py++)
+        for (int px = 0; px < TILE_SIZE; px++)
+        {
+            byte label = coverage[py][px];
+            if (!label) continue;
+            int right = px + 1, bottom = py + 1;
+            while (right < TILE_SIZE && coverage[py][right] == label) right++;
+            while (bottom < TILE_SIZE)
             {
-                byte label = coverage[py][px];
-                if (!label) continue;
-                int right = px + 1, bottom = py + 1;
-                while (right < TILE_SIZE && coverage[py][right] == label) right++;
-                while (bottom < TILE_SIZE)
-                {
-                    int end = px;
-                    while (end < right && coverage[bottom][end] == label) end++;
-                    if (end != right) break;
-                    bottom++;
-                }
-                for (int yy = py; yy < bottom; yy++)
-                    for (int xx = px; xx < right; xx++) coverage[yy][xx] = 0;
-                SDL_FRect rect = {dst->x + dst->w * px / TILE_SIZE,
-                    dst->y + dst->h * py / TILE_SIZE,
-                    dst->w * (right - px) / TILE_SIZE,
-                    dst->h * (bottom - py) / TILE_SIZE};
-                if (pass)
-                {
-                    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, label);
-                    drawn |= SDL_RenderFillRect(g_state.renderer, &rect);
-                }
-                else
-                {
-                    const material_edge_source* source = &neighbours[label - 1];
-                    SDL_FRect src = {source->col * TILE_SIZE + px,
-                        source->row * TILE_SIZE + py, right - px, bottom - py};
-                    /* Transparent texels mean the same black backing as a
-                     * normal terrain tile, not fragments of the old owner. */
-                    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-                    SDL_RenderFillRect(g_state.renderer, &rect);
-                    drawn |= SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &rect);
-                }
+                int end = px;
+                while (end < right && coverage[bottom][end] == label) end++;
+                if (end != right) break;
+                bottom++;
             }
-    }
+            for (int yy = py; yy < bottom; yy++)
+                for (int xx = px; xx < right; xx++) coverage[yy][xx] = 0;
+            SDL_FRect rect = {dst->x + dst->w * px / TILE_SIZE,
+                dst->y + dst->h * py / TILE_SIZE,
+                dst->w * (right - px) / TILE_SIZE,
+                dst->h * (bottom - py) / TILE_SIZE};
+            const material_edge_source* source = &neighbours[label - 1];
+            SDL_FRect src = {source->col * TILE_SIZE + px,
+                source->row * TILE_SIZE + py, right - px, bottom - py};
+            /* Transparent texels use the normal black terrain backing. */
+            SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+            SDL_RenderFillRect(g_state.renderer, &rect);
+            drawn |= SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &rect);
+        }
     SDL_SetTextureBlendMode(g_state.tileset, texture_blend);
     SDL_SetTextureColorMod(g_state.tileset, tr, tg, tb);
     SDL_SetTextureAlphaMod(g_state.tileset, ta);

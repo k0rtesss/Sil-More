@@ -1856,7 +1856,7 @@ void sdl_touch_tutorial_draw_main_screen_zones(
             "Map / player",
             mouse
                 ? "<a>Left-click:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Right-click:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Mouse Movement:</t> choose On, Off, or Right click only in <t>Mouse Input</t>."
-                : "<a>Tap:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Hold:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Player square:</t> action wheel; <a>Use/Desc</a> act on the floor item, <a>hold</a> them for full item menus.");
+                : "<a>Tap:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Hold:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Player square:</t> <a>hold</a> for the action wheel; <a>tap</a> to use the square. <a>Use/Desc</a> act on the floor item, <a>hold</a> them for full item menus.");
     }
 
     if (sdl_combat_overlay_pane_current_rect(&pane_rect)) {
@@ -2262,7 +2262,7 @@ int sdl_touch_tutorial_wait_action(Uint64 accept_after_ns)
         Uint64 now_ns;
 
         sdl_music_update();
-        if (!SDL_WaitEvent(&ev))
+        if (!sdl_control_wait_modal_event(&ev, accept_after_ns))
             continue;
         now_ns = SDL_GetTicksNS();
 
@@ -2492,7 +2492,7 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
             page = page_count - 1;
 
         sdl_touch_tutorial_draw_page(page, full, page_count, mouse);
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
 
         action = sdl_touch_tutorial_wait_action(accept_after_ns);
@@ -2504,7 +2504,7 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
     tutorial_panel_part = 0;
     tutorial_panel_parts = 1;
     if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
     }
     g_state.need_present = false;
@@ -3135,7 +3135,7 @@ static void birth_coach_run_overlay(int stage)
             sizeof(body));
         birth_coach_draw_step(&screen, mouse, count == 1,
             have_zone ? &zone : NULL, title, body_text);
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
 
         action = sdl_touch_tutorial_wait_action(accept_after_ns);
@@ -3157,7 +3157,7 @@ static void birth_coach_run_overlay(int stage)
 
     /* Restore the underlying screen without the overlay. */
     if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
     }
     g_state.need_present = false;
@@ -3435,7 +3435,7 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         (float)screen.x + (float)screen.w * 0.5f, y,
         (float)screen.w * 0.92f, footer_px, text_color);
 
-    SDL_RenderPresent(g_state.renderer);
+    sdl_control_present_modal(g_state.renderer);
     sdl_restore_render_target(d);
     g_state.need_present = false;
     return true;
@@ -3483,7 +3483,7 @@ int sdl_touch_tutorial_choose_profile(void)
         }
 
         sdl_music_update();
-        if (!SDL_WaitEvent(&ev))
+        if (!sdl_control_wait_modal_event(&ev, accept_after_ns))
             continue;
         now_ns = SDL_GetTicksNS();
 
@@ -3793,8 +3793,8 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
         SDL_strlcpy(buf,
             "Common actions while standing on your square - wait, use an "
             "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
-            "<t>Open it:</t> <a>tap</a> your own square on the <t>map</t>.\n"
-            "<t>Choose:</t> <a>drag</a> to a wedge and lift your finger to run that action.\n"
+            "<t>Open it:</t> <a>press and hold</a> your own square on the <t>map</t>.\n"
+            "<t>Choose:</t> <a>tap</a> a wedge to run that action.\n"
             "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
             "<t>Close:</t> <a>tap</a> the centre, or <a>tap</a> outside the wheel.",
             buflen);
@@ -3895,7 +3895,7 @@ static bool sdl_character_wheel_coach_run(void)
         sdl_touch_tutorial_draw_footer(&screen,
             input == SDL_WHEEL_COACH_INPUT_MOUSE, true);
 
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
         shown = true;
 
@@ -3909,7 +3909,7 @@ static bool sdl_character_wheel_coach_run(void)
 
     sdl_player_action_menu_cancel();
     if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
     }
     g_state.need_present = false;
