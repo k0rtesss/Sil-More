@@ -725,23 +725,22 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
     {
         weapon = &inventory[INVEN_WIELD];
-        if (weapon->k_idx)
+        /* An empty main hand still has calculated unarmed combat stats. */
+        preview->attack = p_ptr->skill_use[S_MEL];
+        preview->dd = p_ptr->mdd;
+        preview->ds = p_ptr->mds;
+        if (weapon->k_idx
+            && p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+            && inventory[INVEN_ARM].k_idx
+            && inventory[INVEN_ARM].tval != TV_SHIELD)
         {
-            preview->attack = p_ptr->skill_use[S_MEL];
-            preview->dd = p_ptr->mdd;
-            preview->ds = p_ptr->mds;
-            if (p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
-                && inventory[INVEN_ARM].k_idx
-                && inventory[INVEN_ARM].tval != TV_SHIELD)
-            {
-                preview->has_offhand = true;
-                preview->offhand_attack = p_ptr->skill_use[S_MEL]
-                    + p_ptr->offhand_mel_mod;
-                preview->offhand_dd = p_ptr->mdd2;
-                preview->offhand_ds = p_ptr->mds2;
-            }
-            available = true;
+            preview->has_offhand = true;
+            preview->offhand_attack = p_ptr->skill_use[S_MEL]
+                + p_ptr->offhand_mel_mod;
+            preview->offhand_dd = p_ptr->mdd2;
+            preview->offhand_ds = p_ptr->mds2;
         }
+        available = true;
     }
     else if (normalize_active_weapon_mode(mode)
         == PLAYER_ACTIVE_WEAPON_RANGED_1)

@@ -26,7 +26,7 @@ void notice_stuff(void)
     if (p_ptr->notice & (PN_REORDER))
     {
         p_ptr->notice &= ~(PN_REORDER);
-        reorder_pack(true);
+        reorder_pack();
     }
 
     if (p_ptr->notice & PN_AUTOINSCRIBE)

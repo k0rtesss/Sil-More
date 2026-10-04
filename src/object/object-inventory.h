@@ -35,7 +35,7 @@ int inven_carry(object_type* o_ptr, bool combine_ammo);
 int inven_takeoff(int item, int amt);
 void inven_drop(int item, int amt);
 void combine_pack(void);
-void reorder_pack(bool display_message);
+void reorder_pack(void);
 void check_artifact_visibility(void);
 
 #endif /* INCLUDED_OBJECT_INVENTORY_H */

@@ -1306,7 +1306,7 @@ int highscore_add(high_score* score)
         }
     }
 
-    if (SDL_FlushIO(highscore_fd) != 0)
+    if (!SDL_FlushIO(highscore_fd))
     {
         log_error("Failed to flush high score file: %s", SDL_GetError());
     }

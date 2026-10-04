@@ -1,5 +1,12 @@
 # Session notes
 
+## 2026-10-04: Windows gameplay playtest repairs
+
+- Played an isolated portable run through character creation, tutorials, keyboard/mouse movement, doors, wolf and Brood spider combat, descent from 50 to 150 ft, ability/skill purchases, item previews, Pearl Gem pickup, weapon stowing, and save/load. Test runtime/checkpoint: `scripts/output/playtest-20261004/`; existing player saves/settings were not opened.
+- Putting the sword away showed `(+0,0d0)` in the combat overlay while the character sheet showed the real unarmed attack `(+12,1d5)`. `src/player/player-active-weapon.c` now returns calculated melee preview values for an empty main hand. The rebuilt game visibly showed `(+12,1d5)` after loading the unarmed checkpoint.
+- Saving the run logged a false high-score flush error: `src/score/score_io.c` treated SDL3's successful boolean flush result as failure. Corrected the condition. The score regression checks successful disk writes, a simulated flush failure, and reopening the stored record.
+- Both added regressions failed before their respective fixes and passed afterward: `check_equipment_action_routing.py` and `check_remaining_review_paths.py --case scores`. Standard/portable incremental builds and scoped whitespace checks passed; both deployed executables were refreshed and hash-verified. The user stopped computer use before further gameplay replay; the isolated game was closed and no more UI input was sent.
+
 ## 2026-09-28: Distinguish damaged-wall and quartz tutorial guidance
 
 - Updated the terrain tutorial cards for quartz (51), damaged wall (104), and cracked quartz (105) to state the visual/material distinction and mineral-reward difference explicitly; added the same reminder to the terrain help legend.
@@ -10164,3 +10171,8 @@ Validation commands and coverage:
 Builds: standard and portable SDL3 targets compile successfully with the repository incremental build script. Their launch-folder executables and changed ability/origin/tutorial data are refreshed and compared with the source/build outputs. Executable SHA256: standard `4b45900ea552063fcad11f20b8e834c9827bd760b9e27ce7ec859bc0c40a20b3`; portable `49645d67e9480e4c73d17f29afca70e9de77fefd77e2b52f68def85efad681c1`. An isolated portable SDL launch reaches `initial_menu` without ERROR/FATAL logs (`scripts/output/insight-startup/startup-fa1datpo/log.txt`); it does not open existing player saves or preferences. `git diff --check` passes; the original 638,502-byte notes prefix is preserved (SHA256 `b4df549507aa7ff9d5423791b1846deb5465f09a883c4b03f3ec8cf4f9eb3b40`).
 
 These checks exercise real engine and presentation code with isolated fixtures. Live manual gameplay, device/audio testing and several complete-run balance measurements remain unverified. The income/rarity and survival targets above are playtest criteria, not claims established by compilation or harnesses.
+
+### 2026-10-04: Quiet automatic inventory sorting
+- Removed the routine "You reorder some items in your pack." message and the unused display-message parameter from reorder_pack and both declarations/callers. Sorting, item state and PW_INVEN redraw behavior remain unchanged; reorder_pack itself consumes no energy.
+- Standard and portable builds passed with build-incremental.ps1; both deployment executables refreshed and hash-checked. Scoped git diff --check passed.
+- Fresh portable launch using isolated data and dummy SDL drivers reached initial_menu with no ERROR/FATAL/CRITICAL log entries. Log: scripts/output/inventory-reorder-startup/71e1b086-384b-4a5a-ba71-249a4319d8f3/log.txt. Interactive inventory use was not replayed.

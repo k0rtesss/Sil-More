@@ -2018,11 +2018,11 @@ static int pack_object_order_compare(const void* lhs, const void* rhs)
 }
 
 /*
- * Reorder items in the pack
+ * Silently reorder items in the pack after inventory changes.
  *
  * Note special handling of the "overflow" slot
  */
-void reorder_pack(bool display_message)
+void reorder_pack(void)
 {
     int count = player_pack_entry_count();
     object_type* ordered;
@@ -2053,10 +2053,6 @@ void reorder_pack(bool display_message)
 
     if (flag)
         p_ptr->window |= PW_INVEN;
-
-    /* Message */
-    if (flag && display_message)
-        msg_print("You reorder some items in your pack.");
 }
 
 /*
