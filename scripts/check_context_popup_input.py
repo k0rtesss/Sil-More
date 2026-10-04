@@ -16,6 +16,7 @@ OUT = ROOT / "scripts/output/context-popup-check"
 HARNESS = r'''
 #include "angband.h"
 #include <assert.h>
+#include "ui/menu-click.h"
 #include "sdl/ui/sdl-question-menu.c"
 #include "sdl/ui/sdl-gameplay-tutorial.c"
 
@@ -184,6 +185,20 @@ int main(void)
     assert(sdl_question_menu_context_hint_active());
     assert(Term_inkey(&key, false, true) == 0 && key == ESCAPE);
     sdl_question_menu_clear();
+    /* Menu-started smithing must leave the outer input wait before consuming
+     * another player command; ordinary menu wake keys must still be skipped. */
+    hjkl_movement = angband_keyset = false;
+    p_ptr->smithing = 3;
+    Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    Term_keypress('Q');
+    request_command();
+    assert(p_ptr->command_cmd == ' ' && p_ptr->smithing == 3);
+    assert(Term_inkey(&key, false, true) == 0 && key == 'Q');
+    p_ptr->smithing = 0;
+    Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    Term_keypress('Q');
+    expect_command('Q', false);
+    puts("PASS: smithing wake returns without extra input; ordinary wake still waits for a command.");
     puts("PASS: Escape dismisses a gameplay hint once and preserves modal/ordinary Escape input.");
     puts("PASS: early hint rejects action/suppression input until command wait;");
     puts("      modal input and forced movement cannot activate stale hints.");

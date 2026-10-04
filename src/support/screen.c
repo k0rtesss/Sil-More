@@ -11,12 +11,31 @@ static int screen_depth = 0;
 static int supporting_panes_hidden_depth = 0;
 static int touch_pane_hidden_depth = 0;
 static int touch_pane_proto_depth = 0;
+static int command_prompt_depth = 0;
 static bool startup_supporting_panes_hidden = false;
 static bool startup_touch_pane_hidden = false;
 
 bool screen_saved_fullscreen_active(void)
 {
     return (startup_supporting_panes_hidden || supporting_panes_hidden_depth > 0);
+}
+
+/* Legacy top-row editors need a clear display without resizing the terminal:
+ * a resize can replace its key queue during a command or macro prefix. */
+void screen_command_prompt_begin(void)
+{
+    command_prompt_depth++;
+}
+
+void screen_command_prompt_end(void)
+{
+    if (command_prompt_depth > 0)
+        command_prompt_depth--;
+}
+
+bool screen_command_prompt_active(void)
+{
+    return command_prompt_depth > 0;
 }
 
 void screen_push_supporting_panes_hidden(void)
@@ -98,7 +117,8 @@ bool screen_touch_pane_proto_active(void)
 void ui_reset_transient_state_for_new_session(void)
 {
     bool pane_depth_changed = supporting_panes_hidden_depth
-        || touch_pane_hidden_depth || touch_pane_proto_depth;
+        || touch_pane_hidden_depth || touch_pane_proto_depth
+        || command_prompt_depth;
 
     ui_menu_click_clear();
     ui_scroll_area_clear();
@@ -108,6 +128,7 @@ void ui_reset_transient_state_for_new_session(void)
     supporting_panes_hidden_depth = 0;
     touch_pane_hidden_depth = 0;
     touch_pane_proto_depth = 0;
+    command_prompt_depth = 0;
     if (pane_depth_changed)
         sdl_refresh_supporting_panes_layout();
 

@@ -4,6 +4,7 @@
 #include "support/input.h"
 #include "support/message.h"
 #include "support/movement-input.h"
+#include "support/screen.h"
 #include "sdl-config.h"
 
 /*
@@ -162,6 +163,15 @@ void request_command(void)
             int mouse_command = 0;
             int mouse_dir = 0;
 
+            /* The SDL menu can accept smithing while this command wait is
+             * blocked. Return a harmless command and let the player loop
+             * perform the newly started work. */
+            if (p_ptr->smithing)
+            {
+                p_ptr->command_cmd = ' ';
+                break;
+            }
+
             /* Consume movement with its queued wake key.  Taking it before
              * inkey(), or after an unrelated key such as Escape, leaves wake
              * keys behind and can replace a Menu press with an older move. */
@@ -198,6 +208,12 @@ void request_command(void)
         if (((ch == 'R') && !angband_keyset) || ((ch == '0') && angband_keyset))
         {
             int old_arg = p_ptr->command_arg;
+            bool got_command = true;
+
+            /* This top-row editor owns input and must remain above the HUD.
+             * Keep the gameplay layout and queued command input intact. */
+            screen_command_prompt_begin();
+            inkey_prompt_input_begin();
 
             /* Reset */
             p_ptr->command_arg = 0;
@@ -280,15 +296,18 @@ void request_command(void)
             if ((ch == ' ') || (ch == '\n') || (ch == '\r'))
             {
                 /* Get a real command */
-                if (!get_com("Command: ", &ch))
+                got_command = get_com("Command: ", &ch);
+                if (!got_command)
                 {
                     /* Clear count */
                     p_ptr->command_arg = 0;
-
-                    /* Continue */
-                    continue;
                 }
             }
+
+            inkey_prompt_input_end();
+            screen_command_prompt_end();
+            if (!got_command)
+                continue;
         }
 
         /* Allow "keymaps" to be bypassed */

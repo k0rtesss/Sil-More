@@ -4,6 +4,7 @@
 #include "sdl-config.h"
 #include "support/input.h"
 #include "support/feedback.h"
+#include "support/screen.h"
 #include "ui/menu-click.h"
 
 /*
@@ -1111,6 +1112,9 @@ bool get_com(cptr prompt, char* command)
     /* Paranoia XXX XXX XXX */
     message_flush();
 
+    /* Render above gameplay overlays without resizing or losing queued keys. */
+    screen_command_prompt_begin();
+
     /* Display a prompt */
     prt(prompt, 0, 0);
 
@@ -1121,6 +1125,7 @@ bool get_com(cptr prompt, char* command)
 
     /* Clear the prompt */
     prt("", 0, 0);
+    screen_command_prompt_end();
 
     /* Save the command */
     *command = ch;

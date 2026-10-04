@@ -2425,8 +2425,6 @@ extern void do_cmd_options_aux(int page, cptr info)
         case ESCAPE:
         case SETTINGS_PREV_OPTION_PAGE:
         case SETTINGS_NEXT_OPTION_PAGE:
-        case '\n':
-        case '\r':
         {
             settings_semantic_menu_hide();
 
@@ -2473,6 +2471,8 @@ extern void do_cmd_options_aux(int page, cptr info)
         case 't':
         case '5':
         case ' ':
+        case '\n':
+        case '\r':
         {
             if ((page != CHALLENGE_PAGE) || (playerturn == 0))
             {
@@ -3715,15 +3715,18 @@ void do_cmd_pane_settings(void)
 #endif
                 [PANE_SETTING_ENABLE_SIDE_PANES] =
                     "Show panes to the side of the map (inventory, monster "
-                    "list, and more). Also toggled in play with Alt+I.",
+                    "list, and more). Alt+I also works in play unless I "
+                    "is bound to movement, which reserves it for its command.",
                 [PANE_SETTING_ENABLE_BOTTOM_PANES] =
                     "Show panes below the map (messages, combat rolls, and "
-                    "more). Also toggled in play with Alt+L.",
+                    "more). Alt+L also works in play unless L is bound "
+                    "to movement, as in Vi Keys, which reserves it for Look.",
                 [PANE_SETTING_FULLSCREEN] =
                     "Run the game fullscreen instead of in a window.",
                 [PANE_SETTING_TILES] =
                     "Draw the map with graphical tiles instead of letters. "
-                    "Also toggled in play with Alt+A.",
+                    "Alt+A also works in play unless A is bound to movement, "
+                    "as in WASD Grid, which reserves it for activating a staff.",
                 [PANE_SETTING_USE_UNSAFE_AREA] =
                     "Let the display extend into a screen notch or rounded "
                     "cutout. Off keeps everything within the safe area.",

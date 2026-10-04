@@ -2767,7 +2767,10 @@ void do_cmd_use_item_by_index(int item)
     if (!tutorial_game_action_allowed(tutorial_action, o_ptr)) return;
     if (handle_iron_crown_silmaril_action(o_ptr, item))
         return;
-    if (!((item < 0) && o_ptr->tval == TV_ARROW)
+    /* Equipped gear routes to takeoff below. Let that handler check curses
+     * and charge for its storage destination rather than delaying Use first. */
+    if (!player_inventory_handle_is_equipped(item)
+        && !((item < 0) && o_ptr->tval == TV_ARROW)
         && player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM, item, 0,
             false, o_ptr))
         return;
@@ -4830,18 +4833,22 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    if (player_pack_action_start(PLAYER_PACK_ACTION_TAKEOFF, item, 0, false,
-            o_ptr))
-        return;
-
     can_break_curse = p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING];
 
-    if (((item == INVEN_QUIVER1) || (item == INVEN_BELT)) && cursed_p(o_ptr))
+    /* Reject an impossible removal before charging for Pack access. Keep
+     * curse breaking itself after the delay, so cancellation cannot uncurse. */
+    if (cursed_p(o_ptr) && (!can_break_curse
+            || item == INVEN_QUIVER1 || item == INVEN_BELT))
     {
         msg_print("You cannot bear to part with it.");
         return;
     }
-    else if (cursed_p(o_ptr) && can_break_curse)
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_TAKEOFF, item, 0, false,
+            o_ptr))
+        return;
+
+    if (cursed_p(o_ptr))
     {
         {
             object_type carry_preview;
@@ -4864,14 +4871,6 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
             /* Uncurse the object */
             uncurse_object(o_ptr);
         }
-    }
-    else if (cursed_p(o_ptr))
-    {
-        /* Oops */
-        msg_print("You cannot bear to part with it.");
-
-        /* Nope */
-        return;
     }
     else if (smith_oath_forbids_object(o_ptr) && inven_carry_okay(o_ptr)
         && !smith_oath_confirm_break())
