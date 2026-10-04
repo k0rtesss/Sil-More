@@ -20,6 +20,37 @@ ROOT = Path(__file__).resolve().parents[1]
 WRITER = r'''
 #include "fs/save.c"
 #include <assert.h>
+static bool fail_save_flush;
+static int save_flush_calls;
+bool __real_SDL_FlushIO(SDL_IOStream* stream);
+bool __wrap_SDL_FlushIO(SDL_IOStream* stream)
+{
+    ++save_flush_calls;
+    if (fail_save_flush)
+        return SDL_SetError("Simulated save flush failure");
+    return __real_SDL_FlushIO(stream);
+}
+bool fixture_write_flush(bool fail)
+{
+    fff = SDL_IOFromDynamicMem(); assert(fff);
+    fail_save_flush = fail;
+    save_flush_calls = 0;
+    bool ok = wr_savefile();
+    assert(save_flush_calls == 1);
+    fail_save_flush = false;
+    assert(SDL_CloseIO(fff)); fff = NULL;
+    return ok;
+}
+bool fixture_save_flush(bool fail)
+{
+    fail_save_flush = fail;
+    save_flush_calls = 0;
+    bool ok = save_player();
+    assert(save_flush_calls == 1);
+    fail_save_flush = false;
+    fff = NULL;
+    return ok;
+}
 size_t fixture_write_full(byte* out, size_t capacity)
 {
     fff = SDL_IOFromMem(out, capacity); assert(fff);
@@ -56,6 +87,8 @@ TESTS = r'''
 #include "fs/io_sdl.h"
 
 size_t fixture_write_full(byte*, size_t);
+bool fixture_write_flush(bool);
+bool fixture_save_flush(bool);
 int fixture_read_full(const byte*, size_t);
 void reset_defaults(metarun*);
 bool start_new_metarun(void);
@@ -117,6 +150,27 @@ static void check_save_footers(void)
 {
     static byte saved[2000000];
     log_set_quiet(true); /* Corrupt fixtures deliberately exercise errors. */
+    reset_map(5);
+    CHECK(fixture_write_flush(false));
+    CHECK(!fixture_write_flush(true));
+    {
+        char previous_path[1024];
+        size_t before_size, after_size;
+        SDL_strlcpy(previous_path, savefile, sizeof(previous_path));
+        SDL_strlcpy(savefile, "flush-preserved.sav", sizeof(savefile));
+        CHECK(fixture_save_flush(false));
+        void* before = SDL_LoadFile(savefile, &before_size);
+        CHECK(before && before_size > 8);
+        CHECK(!fixture_save_flush(true));
+        void* after = SDL_LoadFile(savefile, &after_size);
+        CHECK(after && after_size == before_size);
+        CHECK(!memcmp(before, after, before_size));
+        CHECK(!SDL_IOFromFile("flush-preserved.sav.new", "rb"));
+        CHECK(!SDL_IOFromFile("flush-preserved.sav.old", "rb"));
+        SDL_free(before); SDL_free(after);
+        SDL_strlcpy(savefile, previous_path, sizeof(savefile));
+    }
+    puts("Save stream: successful SDL3 flush accepted; failed flush aborts and preserves the previous save byte-for-byte PASS.");
     for (int dead = 0; dead <= 1; dead++) {
         reset_map(5); p_ptr->is_dead = dead != 0;
         turn = playerturn = 123; Rand_state_init(12345);
@@ -224,7 +278,8 @@ def main():
     exe = out / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", *defines, "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", *sources,
-                    "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-o", str(exe)],
+                    "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+                    "-Wl,--wrap=SDL_FlushIO", "-o", str(exe)],
                    cwd=build, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=out) as data:
         result = subprocess.run([str(exe), str(ROOT / "lib/edit"), data], cwd=data,

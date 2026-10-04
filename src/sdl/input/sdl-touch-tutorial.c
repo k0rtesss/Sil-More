@@ -1856,7 +1856,7 @@ void sdl_touch_tutorial_draw_main_screen_zones(
             "Map / player",
             mouse
                 ? "<a>Left-click:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Right-click:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Mouse Movement:</t> choose On, Off, or Right click only in <t>Mouse Input</t>."
-                : "<a>Tap:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Hold:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Player square:</t> action wheel; <a>Use/Desc</a> act on the floor item, <a>hold</a> them for full item menus.");
+                : "<a>Tap:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Hold:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Player square:</t> <a>hold</a> for the action wheel; <a>tap</a> to use the square. <a>Use/Desc</a> act on the floor item, <a>hold</a> them for full item menus.");
     }
 
     if (sdl_combat_overlay_pane_current_rect(&pane_rect)) {
@@ -3793,8 +3793,8 @@ static cptr sdl_character_wheel_coach_body(int input, char* buf, size_t buflen)
         SDL_strlcpy(buf,
             "Common actions while standing on your square - wait, use an "
             "item, ready your bow, sing, and more - are on this <t>wheel</t>.\n"
-            "<t>Open it:</t> <a>tap</a> your own square on the <t>map</t>.\n"
-            "<t>Choose:</t> <a>drag</a> to a wedge and lift your finger to run that action.\n"
+            "<t>Open it:</t> <a>press and hold</a> your own square on the <t>map</t>.\n"
+            "<t>Choose:</t> <a>tap</a> a wedge to run that action.\n"
             "<t>Second action:</t> a wedge's <t>outer ring</t> holds a related action.\n"
             "<t>Close:</t> <a>tap</a> the centre, or <a>tap</a> outside the wheel.",
             buflen);

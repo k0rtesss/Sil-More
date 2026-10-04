@@ -1301,6 +1301,20 @@ void sdl_screen_back_touch_cancel(void)
     g_screen_back_touch_press.start_time = 0;
 }
 
+static bool sdl_screen_back_gesture_owns_input(void)
+{
+    /* Parent character/ability browsers keep their Back scope while opening
+     * allocation. That screen owns long taps and right-clicks for refunds,
+     * including any parent press armed before the allocation screen opened. */
+    if (sdl_character_sheet_screen_allocation_active())
+    {
+        sdl_screen_back_touch_cancel();
+        g_screen_back_right_button_pending = false;
+        return false;
+    }
+    return sdl_screen_back_gesture_active();
+}
+
 void sdl_screen_back_gesture_begin(void)
 {
     g_screen_back_gesture_depth++;
@@ -1335,7 +1349,7 @@ bool sdl_screen_back_gesture_handle_event(const SDL_Event* ev)
         && g_screen_back_right_button_pending)
     {
         g_screen_back_right_button_pending = false;
-        if (sdl_screen_back_gesture_active())
+        if (sdl_screen_back_gesture_owns_input())
             Term_keypress(ESCAPE);
         return true;
     }
@@ -1360,7 +1374,7 @@ bool sdl_screen_back_gesture_handle_event(const SDL_Event* ev)
         return false;
     }
 
-    if (!sdl_screen_back_gesture_active())
+    if (!sdl_screen_back_gesture_owns_input())
         return false;
 
     switch (ev->type)
@@ -1452,7 +1466,7 @@ int sdl_screen_back_gesture_pending_timeout_ms(Uint64 now_ns)
 {
     Uint64 elapsed;
 
-    if (!sdl_screen_back_gesture_active())
+    if (!sdl_screen_back_gesture_owns_input())
         return -1;
     if (!g_screen_back_touch_press.active)
         return -1;
@@ -1468,7 +1482,7 @@ bool sdl_screen_back_gesture_flush_pending_press(Uint64 now_ns)
 {
     SDL_FingerID finger_id;
 
-    if (!sdl_screen_back_gesture_active())
+    if (!sdl_screen_back_gesture_owns_input())
         return false;
     if (!g_screen_back_touch_press.active)
         return false;

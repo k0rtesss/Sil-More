@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay tutorial presentation and touch input above the native Options menu.
+"""Replay native Options input and nested skill-allocation gesture ownership.
 
 Uses the configured Windows build and the mobile character-screen code with
 catalogue-derived tutorial views. No player saves or settings are opened.
@@ -91,6 +91,87 @@ static void expect_click(int choice)
     fixture_assert(Term_inkey(&key,false,true)!=0);
 }
 
+static void expect_secondary(int choice)
+{
+    int actual=0, action=0;
+    char key=0;
+    fixture_assert(ui_menu_click_take_action(&actual,&action));
+    fixture_assert(actual==choice && action==UI_MENU_CLICK_SECONDARY);
+    fixture_assert(Term_inkey(&key,false,true)==0 && key=='\r');
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+}
+
+static void check_allocation_gestures(void)
+{
+    int old_base[S_MAX]={0}, gains[S_MAX]={0}, costs[S_MAX]={0};
+    char key=0;
+    SDL_strlcpy(fixture_id,"skills.native.long-tap",sizeof(fixture_id));
+    /* Both parent browsers keep their Back scopes while training skills. */
+    sdl_screen_back_gesture_begin();
+    sdl_screen_back_gesture_begin();
+    ui_menu_click_begin();
+    ui_menu_click_set_hover_enabled(true);
+    sdl_character_sheet_screen_show_birth_skills(old_base,gains,costs,S_MEL,1000);
+    /* Isolate input ownership from layout: register a native allocation row. */
+    SDL_FRect row={20,fixture_height/2.0f,fixture_width-40,40};
+    g_sdl_character_sheet_screen.hit_count=1;
+    g_sdl_character_sheet_screen.hits[0]=(sdl_character_sheet_hit){
+        .rect=row,.choice=S_MEL};
+    float x=row.x+row.w/2, y=row.y+row.h/2;
+    touch(SDL_EVENT_FINGER_DOWN,x,y);
+    fixture_assert(g_sdl_character_sheet_screen.touch_press.active);
+    g_sdl_character_sheet_screen.touch_press.start_time-=600000000ULL;
+    if (g_screen_back_touch_press.active)
+        g_screen_back_touch_press.start_time-=600000000ULL;
+    /* Exercise the same timer flush that closed the screen on Android. */
+    fixture_assert(!sdl_screen_back_gesture_flush_pending_press(SDL_GetTicksNS()));
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+    touch(SDL_EVENT_FINGER_UP,x,y);
+    expect_secondary(S_MEL);
+    fixture_assert(sdl_character_sheet_screen_active());
+
+    /* Right-click uses the same refund action and cannot leak Escape on up. */
+    SDL_strlcpy(fixture_id,"skills.native.right-click",sizeof(fixture_id));
+    SDL_Event ev={0};
+    ev.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    ev.button.timestamp=SDL_GetTicksNS();
+    ev.button.windowID=SDL_GetWindowID(g_state.window);
+    ev.button.which=1; ev.button.button=SDL_BUTTON_RIGHT;
+    ev.button.x=x; ev.button.y=y;
+    /* Route through the two real owners without unrelated mouse-cursor art. */
+    fixture_assert(!sdl_screen_back_gesture_handle_event(&ev));
+    fixture_assert(sdl_character_sheet_screen_handle_event(&ev));
+    expect_secondary(S_MEL);
+    ev.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    ev.button.timestamp=SDL_GetTicksNS();
+    fixture_assert(!sdl_screen_back_gesture_handle_event(&ev));
+    fixture_assert(sdl_character_sheet_screen_handle_event(&ev));
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+
+    /* A parent press already armed before allocation cannot cancel it. */
+    g_screen_back_touch_press.active=true;
+    g_screen_back_touch_press.start_time=SDL_GetTicksNS()-600000000ULL;
+    fixture_assert(sdl_screen_back_gesture_pending_timeout_ms(SDL_GetTicksNS())<0);
+    fixture_assert(!g_screen_back_touch_press.active);
+    fixture_assert(!sdl_screen_back_gesture_flush_pending_press(SDL_GetTicksNS()));
+    sdl_character_sheet_screen_hide();
+    ui_menu_click_clear();
+
+    /* Closing allocation restores the parent's original Back gesture. */
+    menu(9);
+    touch(SDL_EVENT_FINGER_DOWN,x,y);
+    g_screen_back_touch_press.start_time-=600000000ULL;
+    fixture_assert(sdl_screen_back_gesture_flush_pending_press(SDL_GetTicksNS()));
+    fixture_assert(Term_inkey(&key,false,true)==0 && key==ESCAPE);
+    touch(SDL_EVENT_FINGER_UP,x,y);
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+    sdl_screen_back_gesture_end();
+    sdl_screen_back_gesture_end();
+    fixture_assert(!sdl_screen_back_gesture_active());
+    sdl_character_sheet_screen_hide();
+    ui_menu_click_clear();
+}
+
 static void check(int width,int height,cptr body)
 {
     fixture_width=width; fixture_height=height; fixture_font=24;
@@ -155,11 +236,14 @@ static void check(int width,int height,cptr body)
     fixture_assert(g_sdl_character_sheet_screen.sheet_scroll>0);
     fixture_assert(!ui_menu_click_has_pending());
     sdl_character_sheet_screen_hide(); ui_menu_click_clear();
+    check_allocation_gestures();
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
     term_nuke(&view->t); term_screen=NULL; Term=NULL;
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
     SDL_DestroyWindow(g_state.window); g_state.window=NULL;
     printf("Native Options %dx%d: tutorial visible, Continue, all rows, Back, Choose, scroll: PASS\n",
+        width,height);
+    printf("Native skill allocation %dx%d: long-tap/right-click refund, stale parent press, parent Back restored: PASS\n",
         width,height);
 }
 

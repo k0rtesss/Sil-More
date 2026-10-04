@@ -10244,10 +10244,8 @@ static int input_option_rows_collect(struct input_option_row* rows,
             get_sdl_input_ui_mode_label(get_sdl_input_ui_mode()));
 #if SIL_SDL_MOBILE_BUILD
         ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
-            "Choose Auto, Touch, or Controller presentation. Auto leaves the "
-            "choice to the game's device and input detection. Touch and "
-            "Controller force an override. Left/Right or Enter changes the "
-            "mode; R resets Auto.");
+            "Auto detects the device. Touch or Controller overrides detection. "
+            "Tap Input UI to cycle modes; choose Auto to reset.");
 #else
         ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
             "Choose Auto, Keyboard, or Controller presentation. Auto leaves "

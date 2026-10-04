@@ -42,7 +42,16 @@ def readOptionalBuildValue = { String name ->
 
 def androidCompileSdk = (readOptionalBuildValue('SIL_MORE_COMPILE_SDK') ?: '36') as Integer
 def androidTargetSdk = (readOptionalBuildValue('SIL_MORE_TARGET_SDK') ?: '36') as Integer
+// Allow a packaging-only update without changing the game's save format.
+def androidVersionCode =
+        (readOptionalBuildValue('SIL_MORE_VERSION_CODE') ?: gameVersionCode.toString()) as Integer
 def buildApk2 = (readOptionalBuildValue('SIL_MORE_APK2') ?: 'false').toBoolean()
+
+if (androidVersionCode < gameVersionCode || androidVersionCode > 2100000000) {
+    throw new GradleException(
+            "Android version code must be between $gameVersionCode and 2100000000."
+    )
+}
 
 if (androidCompileSdk < androidTargetSdk) {
     throw new GradleException(
@@ -93,7 +102,7 @@ android {
         applicationId 'com.silmore.myapp'
         minSdk 21
         targetSdk androidTargetSdk
-        versionCode gameVersionCode
+        versionCode androidVersionCode
         versionName gameVersion
         // Select a distinct launcher label for the APK2 installation while
         // retaining the existing labels for the primary app and debug builds.
@@ -129,7 +138,11 @@ android {
             applicationIdSuffix buildApk2 ? '.debug.apk2' : '.debug'
         }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    new File(repoRoot, 'external/SDL/android-project/app/proguard-rules.pro'),
+                    'proguard-rules.pro'
             if (buildApk2) {
                 applicationIdSuffix '.apk2'
             }

@@ -1,5 +1,16 @@
 # Session notes
 
+## 2026-10-04: Android emulator gameplay and fixes
+
+- Played a new Fingolfin hero from character creation through exploration, combat, damage, a critical hit, failed lockpicking, door bashing, gas-trap disarming, inventory drop/pickup/weapon switching, minimap, tiles, tutorials and settings. Android 35 x86_64 phone emulator, portrait and landscape; early game at 50 ft, about 175 turns. Separate package `com.silmore.playtest.sideload.debug` preserves normal player profiles.
+- Fixed background progress loss in `src/sdl/core/sdl-events.c`: Android's main-thread lifecycle watch now saves before SDL suspends, while worker callbacks retain queued dispatch and serial/duplicate protection. Baseline Home -> background process kill -> reopen lost the last turn (torch 917 restored as 918); patched replay preserved 917. Final portrait replay also preserved the last turn: manual save at 825, Wait to 824, Home, process kill, reopen at 824 (`205-final-last-turn.png` / `207-final-restored-turn.png`).
+- Fixed the boolean SDL3 flush check in `src/fs/save.c`: successful saves no longer report a flush failure; a failed flush aborts activation. The real save transaction regression preserves the previous file byte-for-byte and removes the failed temporary file.
+- Corrected action-wheel touch instructions in `src/sdl/input/sdl-touch-tutorial.c` to hold the player square, then tap an action. Replayed the guide and actual wheel in both orientations.
+- Corrected Pack/Harness tutorial capacity units in `src/tutorial/tutorial-world.c`; the live Harness lesson now agrees with inventory at `1.3/21.0 qt`.
+- Moved the mobile build flag into public `src/sdl-config.h` from `src/sdl/main-sdl-private.h`, restoring Android Quick Touch Button Side settings and mobile Input instructions. Shortened the mobile Input explanation in `src/cmd/ui/cmd-ui-settings.c` so all instructions fit in portrait. Verified the restored choice, reset and complete text on the emulator.
+- Validation: final x86_64 Android APK and standard/portable Windows incremental builds pass; `check_mobile_lifecycle.py`, `check_persistence_review_fixes.py` (65 checks), `check_tutorial_world.py`, `check_touch_tutorial_render.py` and `check_options_tutorial.py` pass. Lifecycle regression exercises main/worker threads, duplicate/stale events, retry and failed queue posting.
+- Fresh screenshots, baseline/fixed APKs and logs: `scripts/output/android-playtest-20261004/`. Evidence: `105-fixed-last-turn.png` / `107-fixed-restored-turn.png`, `131-fixed-harness-units.png`, `167-grimhawk-defeated.png`, `169-trap-disarm-result.png`, `199-fixed-portrait-wheel-guide.png`, `203-final-portrait-input.png`, and `final-background-device.log`. Only emulator gameplay was tested; late-game, physical-device and audible validation remain outside this pass. Unrelated Android packaging and release documentation changes were preserved.
+
 ## 2026-10-04: Port gameplay playtest fixes to master
 
 - Selectively ported the two gameplay-discovered fixes and their regression tests from `beb8433e`: unarmed combat previews use the calculated melee values instead of zeroes, and high-score saving interprets SDL3's boolean flush result correctly.

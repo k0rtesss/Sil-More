@@ -1305,14 +1305,10 @@ static bool wr_savefile(void)
     }
 
     /* Flush the stream to ensure all data is written */
-    int flush_result = SDL_FlushIO(fff);
-    if (flush_result != 0)
+    if (!SDL_FlushIO(fff))
     {
-        /* SDL_FlushIO returns 0 on success or negative on error */
-        log_warn("Save file flush returned %d (SDL Error: '%s') - attempting to continue anyway", 
-                 flush_result, SDL_GetError());
-        /* Don't fail the save just because flush failed - the data might still be written */
-        /* return false; */
+        log_error("Save file flush failed: %s", SDL_GetError());
+        return false;
     }
 
     /* Successful save */
