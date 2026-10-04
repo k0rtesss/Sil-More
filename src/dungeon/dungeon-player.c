@@ -568,6 +568,10 @@ void process_player(void)
         /* Smithing */
         else if (p_ptr->smithing)
         {
+            /* Work may start inside a later command/menu callback. Clear
+             * its accepted hint here before the forge-use count changes. */
+            sdl_question_menu_clear_context_hint();
+
             if (p_ptr->smithing == 1)
             {
                 // Display a message
@@ -770,8 +774,10 @@ void process_player(void)
                 }
             }
 
-            // if the player hasn't used their turn picking something up...
-            if (p_ptr->energy_use < 100)
+            /* A forge popup can start or resume smithing without spending
+             * energy here. Let the next loop iteration perform that work
+             * instead of waiting for another command after acceptance. */
+            if (p_ptr->energy_use < 100 && !p_ptr->smithing)
             {
                 /* Check monster recall */
                 process_player_aux();

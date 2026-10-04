@@ -1221,6 +1221,8 @@ bool sdl_main_screen_set_main_view_scale_target(int scale)
     int old_screen_hgt = 0;
     int old_screen_wid = 0;
     bool preserve_view = character_dungeon && p_ptr;
+    bool keep_player_visible = preserve_view && !character_icky
+        && !g_unified_look_active && panel_contains(p_ptr->py, p_ptr->px);
 
     if (preserve_view)
     {
@@ -1246,6 +1248,11 @@ bool sdl_main_screen_set_main_view_scale_target(int scale)
         (void)modify_panel(
             old_wy + old_screen_hgt / 2 - SCREEN_HGT / 2,
             old_wx + old_screen_wid / 2 - SCREEN_WID / 2);
+        /* Shrinking the viewport can hide a player who was visible before
+         * zooming. Restore visibility during play, but retain an off-player
+         * view that was deliberately panned or selected in Look. */
+        if (keep_player_visible && !panel_contains(p_ptr->py, p_ptr->px))
+            verify_panel();
         Term_keypress(KTRL('R'));
     }
 

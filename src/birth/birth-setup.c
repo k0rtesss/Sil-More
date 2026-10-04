@@ -809,6 +809,11 @@ void finalize_character_creation_selection(void)
 {
     int i, j;
 
+    /* Options can change while choosing a hero, after the initial wipe.
+     * Freeze that choice before applying the origin and allocating skills. */
+    p_ptr->insight_ruleset = op_ptr->opt[OPT_insight_beta]
+        ? INSIGHT_RULESET_REWORKED : INSIGHT_RULESET_CLASSIC;
+
     /* Clear the base values of the skills */
     for (i = 0; i < S_MAX; i++)
         p_ptr->skill_base[i] = 0;

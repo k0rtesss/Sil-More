@@ -461,8 +461,9 @@ void close_game(void)
     /* Grab permissions */
     safe_setuid_grab();
 
-    /* Open the high score file, for reading/writing */
-    highscore_fd = score_file_open(buf, O_RDWR);
+    /* A first Blitz run has no ledger yet; create it before recording the
+     * living character so subsequent switches can resume its save. */
+    highscore_fd = score_file_open(buf, O_RDWR | O_CREAT);
 
     /* Drop permissions */
     safe_setuid_drop();

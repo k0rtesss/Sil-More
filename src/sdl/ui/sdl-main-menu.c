@@ -738,6 +738,11 @@ void sdl_main_menu_overlay_choose(int choice)
     if (restore_command_wait && character_icky == 0)
         inkey_flag = true;
 
+    /* Accepted forge work must return from the outer command wait so the
+     * player loop can advance it without requiring an interrupting key. */
+    if (executed && choice == MAIN_MENU_SMITHING && p_ptr->smithing)
+        Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+
     if (executed && choice == MAIN_MENU_SAVE_QUIT
         && (sdl_quit_transition_active() || death_spectator_active()))
     {

@@ -596,7 +596,8 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         disturb(1, 0);
         if (blind)
             msg_format("%^s breathes.", m_name);
-        msg_format("%^s breathes darkness.", m_name);
+        else
+            msg_format("%^s breathes darkness.", m_name);
         mon_arc(m_idx, GF_DARK, true, r_ptr->spell_power, get_sides(attack), -1,
             r_ptr->spell_power / 2, 60);
 

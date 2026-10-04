@@ -746,7 +746,7 @@ void process_command(void)
     /* Hack -- Unknown command */
     default:
     {
-        msg_print("Type '?' for help.");
+        msg_print("Press Escape and choose Help from the menu.");
         break;
     }
     }

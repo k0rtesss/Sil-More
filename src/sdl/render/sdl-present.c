@@ -2,6 +2,7 @@
 #include "sdl/main-sdl-private.h"
 #include "supplies.h"
 #include "log/perf.h"
+#include "support/screen.h"
 
 typedef struct {
     bool valid;
@@ -1949,10 +1950,41 @@ static bool sdl_render_current_window_contents(void)
     return true;
 }
 
+static void sdl_render_command_prompt_row(void)
+{
+    sdl_view* view = sdl_view_from_term(Term);
+    SDL_FRect source;
+    SDL_FRect destination;
+    SDL_BlendMode old_blend_mode = SDL_BLENDMODE_NONE;
+
+    if (!screen_command_prompt_active() || !view || !view->canvas
+        || view->cols <= 0 || view->cell_w <= 0 || view->cell_h <= 0)
+        return;
+
+    source = (SDL_FRect){0, 0,
+        (float)(view->cols * view->cell_w), (float)view->cell_h};
+    destination = (SDL_FRect){
+        (float)(view->rect.x + view->margin_x),
+        (float)(view->rect.y + view->margin_y), source.w, source.h};
+    SDL_SetRenderTarget(g_state.renderer, NULL);
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    SDL_GetRenderDrawBlendMode(g_state.renderer, &old_blend_mode);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+    SDL_RenderFillRect(g_state.renderer, &destination);
+    SDL_RenderTexture(g_state.renderer, view->canvas, &source, &destination);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, old_blend_mode);
+}
+
 bool sdl_render_current_window_frame(void)
 {
     if (!sdl_render_current_window_contents())
         return false;
+
+    /* The legacy command editor writes row zero in the terminal canvas.
+     * Repaint that row above the native HUD, including native-screen paths,
+     * without changing pane visibility, terminal size, or the input queue. */
+    sdl_render_command_prompt_row();
 
     /* Tutorials own input before native menus and full-screen views. Draw
      * their controls above every completed frame, including the early-return

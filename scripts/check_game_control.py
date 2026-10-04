@@ -265,6 +265,40 @@ def run_checks(exe: Path, env: dict) -> None:
         finally:
             release.join()
 
+        # A valid atomically published request can temporarily deny readers
+        # while allowing deletion (e.g. a Windows file-sharing conflict). The
+        # game must leave it unclaimed instead of reporting malformed JSON.
+        kernel.WriteFile.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32,
+                                     ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p]
+        kernel.FlushFileBuffers.argtypes = [ctypes.c_void_p]
+        request = dict(protocol=1, session=control.session()["session"],
+                       id=uuid.uuid4().hex, expires_at_ms=int((time.time() + 5) * 1000),
+                       op="observe", capture=False)
+        data = json.dumps(request).encode("utf-8")
+        temp = control.directory / "read-busy.tmp"
+        handle = kernel.CreateFileW(str(temp), 0x40000000, 4, None, 2, 0x80, None)
+        assert handle not in (None, ctypes.c_void_p(-1).value)
+        written = ctypes.c_uint32()
+        try:
+            assert kernel.WriteFile(handle, data, len(data), ctypes.byref(written), None)
+            assert written.value == len(data) and kernel.FlushFileBuffers(handle)
+            os.replace(temp, control.directory / "request.json")
+            time.sleep(0.15)
+            assert (control.directory / "request.json").exists(), "Unreadable request was lost"
+            assert read_json(control.directory / "response.json").get("id") != request["id"]
+        finally:
+            kernel.CloseHandle(handle)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            response = read_json(control.directory / "response.json")
+            if response.get("id") == request["id"]:
+                break
+            time.sleep(0.025)
+        else:
+            raise AssertionError("Readable request was not retried")
+        expect_ok(response)
+        assert not response["input_applied"]
+
         for op, fields in [("text", {"text": "not a prompt"}),
                            ("key", {"key": "NoSuchKey"}),
                            ("key", {"key": "a", "modifiers": ["gui"]}),

@@ -113,7 +113,7 @@ PlayResult play_game(void)
     bool new_game = false;
     bool startup_icky_active = false;
     /* Loading a dead hero may restore its option; new births use this request. */
-    const bool new_birth_insight = op_ptr && op_ptr->opt[OPT_insight_beta];
+    bool new_birth_insight = op_ptr && op_ptr->opt[OPT_insight_beta];
 
     log_info("play_game: FUNCTION ENTERED");
 
@@ -352,6 +352,10 @@ PlayResult play_game(void)
                 "quitting from character creation");
             return PLAY_QUIT;
         }
+
+        /* Preserve any birth-option change made on the hero selection screen
+         * before loading a dead save can restore its old options. */
+        new_birth_insight = op_ptr->opt[OPT_insight_beta];
 
         /* Set player name from character BEFORE load_player() so savefile path is correct */
         SDL_strlcpy(op_ptr->full_name, c_name + c_info[p_ptr->pcharacter].name, sizeof(op_ptr->full_name));

@@ -172,7 +172,7 @@ class GameControl:
         return self.request("observe", **options)
 
 
-def launch(control: GameControl, executable: Path, headless: bool) -> dict:
+def launch(control: GameControl, executable: Path, headless: bool, wizard: bool = False) -> dict:
     executable = executable.expanduser().resolve()
     if not executable.is_file():
         raise ControlError(f"Game executable not found: {executable}")
@@ -187,7 +187,8 @@ def launch(control: GameControl, executable: Path, headless: bool) -> dict:
         env.update(SDL_VIDEO_DRIVER="dummy", SDL_RENDER_DRIVER="software",
                    SDL_AUDIO_DRIVER="dummy")
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    process = subprocess.Popen([str(executable), "--", "--windowed",
+    core_args = ["-w"] if wizard else []
+    process = subprocess.Popen([str(executable), *core_args, "--", "--windowed",
                                 "--control-dir", str(control.directory)],
                                cwd=executable.parent, env=env, creationflags=flags,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -218,6 +219,7 @@ def main() -> int:
     start.add_argument("--exe", type=Path,
                        default=ROOT / "sil-more-windows-sdl3" / "sil-more.exe")
     start.add_argument("--headless", action="store_true", help="Use SDL's offscreen software driver")
+    start.add_argument("--wizard", action="store_true", help="Request wizard mode for this game")
     for name in ("observe", "status", "key", "text", "click"):
         command = commands.add_parser(name)
         if name != "status":
@@ -235,7 +237,7 @@ def main() -> int:
     try:
         control = GameControl(args.dir, args.timeout)
         if args.command == "launch":
-            result = launch(control, args.exe, args.headless)
+            result = launch(control, args.exe, args.headless, args.wizard)
         elif args.command == "status":
             result = control.request("status", capture=False)
         else:

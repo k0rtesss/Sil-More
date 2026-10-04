@@ -4,6 +4,9 @@
 #include "h-basic.h"
 
 bool screen_saved_fullscreen_active(void);
+void screen_command_prompt_begin(void);
+void screen_command_prompt_end(void);
+bool screen_command_prompt_active(void);
 void screen_push_supporting_panes_hidden(void);
 void screen_pop_supporting_panes_hidden(void);
 bool screen_supporting_panes_hidden_active(void);

@@ -66,27 +66,45 @@ static bool control_write_json(const char* name, const cJSON* json)
     return ok;
 }
 
-static cJSON* control_read_json(const char* name, bool* found)
+typedef enum control_read_status {
+    CONTROL_READ_MISSING,
+    CONTROL_READ_BUSY,
+    CONTROL_READ_INVALID,
+    CONTROL_READ_OK
+} control_read_status;
+
+static cJSON* control_read_json(const char* name, control_read_status* status)
 {
     char path[1200], data[CONTROL_REQUEST_MAX + 1];
     SDL_IOStream* io;
     size_t size;
-    *found = false;
+    *status = CONTROL_READ_MISSING;
     if (!control_path(path, sizeof(path), name)
         || !SDL_GetPathInfo(path, NULL))
         return NULL;
-    *found = true;
+    *status = CONTROL_READ_BUSY;
     io = SDL_IOFromFile(path, "rb");
     if (!io)
         return NULL;
+    Sint64 expected = SDL_GetIOSize(io);
     size = SDL_ReadIO(io, data, sizeof(data));
     bool ok = SDL_GetIOStatus(io) != SDL_IO_STATUS_ERROR;
     if (!SDL_CloseIO(io))
         ok = false;
-    if (!ok || size > CONTROL_REQUEST_MAX)
+    if (!ok || expected < 0)
         return NULL;
+    *status = CONTROL_READ_INVALID;
+    if (expected > CONTROL_REQUEST_MAX || size > CONTROL_REQUEST_MAX)
+        return NULL;
+    if (size < (size_t)expected) {
+        *status = CONTROL_READ_BUSY;
+        return NULL;
+    }
     data[size] = '\0';
-    return cJSON_ParseWithLengthOpts(data, size + 1, NULL, true);
+    cJSON* json = cJSON_ParseWithLengthOpts(data, size + 1, NULL, true);
+    if (json)
+        *status = CONTROL_READ_OK;
+    return json;
 }
 
 static const char* control_string(const cJSON* json, const char* field)
@@ -490,9 +508,10 @@ void sdl_control_init(int argc, char** argv)
         quit("--control-dir must be an absolute directory path");
     if (!SDL_CreateDirectory(control_dir))
         quit("Cannot create the local control directory");
-    bool found;
-    cJSON* previous = control_read_json("session.json", &found);
-    if (found && (!previous || cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(previous, "running")))) {
+    control_read_status status;
+    cJSON* previous = control_read_json("session.json", &status);
+    if (status != CONTROL_READ_MISSING
+        && (!previous || cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(previous, "running")))) {
         cJSON_Delete(previous);
         quit("Control directory is already in use; choose a fresh directory after a crash");
     }
@@ -591,6 +610,11 @@ int sdl_control_wait_timeout(int timeout_ms)
     return timeout_ms;
 }
 
+bool sdl_control_enabled(void)
+{
+    return control_session[0] != '\0';
+}
+
 bool sdl_control_poll(bool waiting)
 {
     const char* error;
@@ -614,10 +638,12 @@ bool sdl_control_poll(bool waiting)
         return false;
     }
     if (!control_request) {
-        bool found;
+        control_read_status status;
         char path[1200];
-        control_request = control_read_json("request.json", &found);
-        if (!found)
+        control_request = control_read_json("request.json", &status);
+        /* A sharing violation is not malformed JSON. Leave the request in
+         * place until it is readable; claiming it now would lose valid input. */
+        if (status == CONTROL_READ_MISSING || status == CONTROL_READ_BUSY)
             return false;
         /* Claim before any side effects; a flush or subsequent poll cannot
          * replay this request. Only fixed filenames inside the selected dir. */

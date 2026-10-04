@@ -4106,12 +4106,21 @@ static void sdl_char_sheet_draw_birth_points_row(TTF_Font* font, float x,
         return;
 
     strnfmt(status, sizeof(status),
-        (insight_system_enabled() && g_sdl_character_sheet_screen.context
+        (insight_system_enabled() && !insight_reworked_enabled()
+            && g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_BIRTH_STATS)
             ? "Insight points: %d" : "Points Left: %d",
         g_sdl_character_sheet_screen.points_left);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 20,
         TERM_L_BLUE, status, false);
+    if (insight_reworked_enabled()
+        && g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_STATS
+        && g_sdl_character_sheet_screen.points_left > 0
+        && sdl_char_sheet_alloc_row_visible(y, h, line_h, row + 1))
+    {
+        sdl_char_sheet_alloc_text(font, x, y, w, line_h, row + 1, 0, 38,
+            TERM_YELLOW, "Assign all points to continue.", false);
+    }
 }
 
 void sdl_char_sheet_draw_birth_allocation_area(TTF_Font* font,
@@ -4140,8 +4149,14 @@ void sdl_char_sheet_draw_birth_allocation_area(TTF_Font* font,
         sdl_char_sheet_draw_birth_points_row(font, x, y, w, h, line_h,
             stat_count + 1);
 
-    sdl_char_sheet_alloc_text(font, x, y, w, line_h, stat_count + 2, 0, 14,
-        TERM_SLATE, "Skills", false);
+    /* The mandatory-allocation reminder uses the heading row until the
+     * reworked birth budget is spent. Keep the preview skill rows in place. */
+    if (!allocate_stats || !insight_reworked_enabled()
+        || g_sdl_character_sheet_screen.points_left <= 0)
+    {
+        sdl_char_sheet_alloc_text(font, x, y, w, line_h, stat_count + 2, 0, 14,
+            TERM_SLATE, "Skills", false);
+    }
 
     for (int skill = 0; skill < S_MAX; skill++)
     {

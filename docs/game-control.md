@@ -39,6 +39,10 @@ normal saves, scores, and settings. Quit and save through the ordinary game
 commands. A headless launch is windowed; the normal SDL configuration saving
 behavior applies when it exits.
 
+`launch --wizard` passes the game's `-w` option. The normal debug confirmation
+and password prompts still apply. Keyboard and mouse settings remain available
+when the control interface provides those inputs without physical devices.
+
 The default mailbox is `scripts/output/game-control`. Select another directory
 with a global option before the subcommand:
 
@@ -152,6 +156,24 @@ retry mechanism. Malformed JSON replies have an empty ID. Ordinary game input
 and flush semantics still apply, and physical input can interleave with agent
 input in a visible window.
 
+Transient file-sharing or read failures leave requests queued for a later poll;
+they are not claimed or treated as malformed JSON.
+
+## Isolated gameplay testing
+
+```powershell
+python tools/game_playtest.py combat
+```
+
+This copies the portable executable, DLLs and shipped assets into a unique
+folder under `scripts/output/control-playtests`, creates empty writable game
+directories, and launches a headless wizard session. It imports no saved games,
+scores, or user preferences. Use `--normal` for ordinary play. The returned
+JSON identifies the profile, PID, and control directory. Use that exact control
+directory with `game_control.py --dir ...` or import `connect` and `capture`
+from `tools/game_playtest.py` to save observation PNGs and JSON in the profile.
+Keep one game process per profile, including when reusing a saved fixture.
+
 ## Validation
 
 ```powershell
@@ -165,5 +187,7 @@ uses offscreen rendering, and tests PNG dimensions, physical key routing,
 modifiers, native menu clicks, UTF-8 text entry, inventory/equipment overlays,
 standalone modal loops, invalid and expired requests, duplicate rejection,
 Windows publication conflicts, clean shutdown, and the disabled interface.
+The file-sharing checks include a valid request that temporarily denies reads
+while permitting deletion, ensuring it remains queued and is retried safely.
 It also exercises the Python CLI and headless launcher against the real harness.
 It does not load or modify your saved characters or configuration.

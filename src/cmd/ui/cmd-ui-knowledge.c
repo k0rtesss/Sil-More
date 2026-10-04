@@ -3015,7 +3015,9 @@ static bool supply_entry_wrapped_values(
 
     supply_entry_display_name(name, sizeof(name), entry, o_ptr,
         current_group, false);
-    strnfmt(display_name, display_name_len, "%s%s", label_prefix, name);
+    strnfmt(display_name, display_name_len, "%s%s%s",
+        (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
+        label_prefix, name);
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
         SDL_strlcat(display_name, " [floor]", display_name_len);
 
@@ -3025,7 +3027,9 @@ static bool supply_entry_wrapped_values(
     {
         supply_entry_display_name(name, sizeof(name), entry, o_ptr,
             current_group, true);
-        strnfmt(display_name, display_name_len, "%s%s", label_prefix, name);
+        strnfmt(display_name, display_name_len, "%s%s%s",
+            (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
+            label_prefix, name);
         if (entry->floor_idx > 0 && entry->floor_idx < o_max)
             SDL_strlcat(display_name, " [floor]", display_name_len);
         rows = supply_entry_wrapped_row_count(display_name, cols->name_w);
@@ -3576,8 +3580,9 @@ static int display_supply_list(const knowledge_browser_layout* layout, int row,
         supply_entry_display_name(name, sizeof(name), entry, o_ptr,
             current_group, compact_names);
         browser_entry_label_prefix(label_prefix, sizeof(label_prefix), idx);
-        strnfmt(display_name, sizeof(display_name), "%s%s", label_prefix,
-            name);
+        strnfmt(display_name, sizeof(display_name), "%s%s%s",
+            (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
+            label_prefix, name);
         if (entry->floor_idx > 0 && entry->floor_idx < o_max)
             SDL_strlcat(display_name, " [floor]", sizeof(display_name));
         if (selected)
@@ -5293,7 +5298,10 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
             ? " [active]" : " [equipped]", sizeof(name));
     else if (entry->floor_idx > 0 && entry->floor_idx < o_max && !show_source)
         SDL_strlcat(name, " [floor]", sizeof(name));
-    strnfmt(display_name, display_name_len, "%s%s", label_prefix, name);
+    /* Keep the floor shortcut visible alongside the ordinary letter hotkey. */
+    strnfmt(display_name, display_name_len, "%s%s%s",
+        (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
+        label_prefix, name);
     return true;
 }
 
@@ -6391,6 +6399,21 @@ static byte inventory_browser_section_attr(inventory_menu_group group)
     return (group == INVENTORY_MENU_GROUP_PACK)
         ? TERM_L_UMBER
         : TERM_L_BLUE;
+}
+
+/* Floor finds are shown in their destination section, but are not carried. */
+static int inventory_browser_carried_entry_count(
+    const equipment_list_entry* entries, int entry_cnt)
+{
+    int count = 0;
+
+    for (int i = 0; i < entry_cnt; i++)
+    {
+        if (entries[i].floor_idx <= 0)
+            count++;
+    }
+
+    return count;
 }
 
 static void inventory_browser_section_header(inventory_menu_group group,
@@ -12753,15 +12776,24 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (entry_page_rows < 1)
                     entry_page_rows = 1;
                 inventory_browser_section_header(INVENTORY_MENU_GROUP_PACK,
-                    pack_entry_cnt, pack_header, sizeof(pack_header));
+                    inventory_browser_carried_entry_count(equip_entries,
+                        pack_entry_cnt), pack_header, sizeof(pack_header));
                 inventory_browser_section_header(
-                    INVENTORY_MENU_GROUP_HARNESS, harness_entry_cnt,
+                    INVENTORY_MENU_GROUP_HARNESS,
+                    inventory_browser_carried_entry_count(
+                        equip_entries + pack_entry_cnt, harness_entry_cnt),
                     harness_header, sizeof(harness_header));
                 inventory_browser_section_header(
-                    INVENTORY_MENU_GROUP_QUIVER, quiver_entry_cnt,
+                    INVENTORY_MENU_GROUP_QUIVER,
+                    inventory_browser_carried_entry_count(
+                        equip_entries + pack_entry_cnt + harness_entry_cnt,
+                        quiver_entry_cnt),
                     quiver_header, sizeof(quiver_header));
                 inventory_browser_section_header(
-                    INVENTORY_MENU_GROUP_JEWELRY, jewelry_entry_cnt,
+                    INVENTORY_MENU_GROUP_JEWELRY,
+                    inventory_browser_carried_entry_count(
+                        equip_entries + pack_entry_cnt + harness_entry_cnt
+                            + quiver_entry_cnt, jewelry_entry_cnt),
                     jewelry_header, sizeof(jewelry_header));
             }
             else if (inventory_entry_cnt > 0)

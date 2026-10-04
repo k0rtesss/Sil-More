@@ -80,12 +80,17 @@ static player_other options;
 static maxima limits;
 static character_profile profiles[51];
 static player_race race;
+static ego_item_type ego;
 static ability_type abilities[4];
 player_type* p_ptr=&body;
 player_other* op_ptr=&options;
 maxima* z_info=&limits;
 character_profile* c_info=profiles;
 const player_race* rp_ptr=&race;
+player_race* p_info=&race;
+ego_item_type* e_info=&ego;
+char* p_name="fixture race";
+char* c_name="fixture hero";
 character_profile* current_character_profile=&profiles[0];
 ability_type* b_info=abilities;
 char* b_name=NULL;
@@ -94,6 +99,7 @@ static byte stream[1024];
 static int pos, size, warnings;
 static byte version[4];
 void log_log(int level,const char* file,int line,const char* fmt,...) { warnings++; }
+errr Term_clear(void) { return 0; }
 bool quest_challenge_active(int challenge) { return false; }
 bool death_spectator_active(void) { return spectator; }
 int ability_index(int skill,int ability) { return 1; }
@@ -123,6 +129,7 @@ static bool savefile_has_morgoth_call_state=true;
     harness += setup[setup.index("const int birth_stat_costs[11]"):]
     # birth_stat_current_cost ends this production file.
     harness += function(setup, "get_start_xp") + function(setup, "get_extra")
+    harness += function(setup, "finalize_character_creation_selection")
     harness += function(allocation, "birth_skill_specialty_score") + function(allocation, "birth_recommended_stats")
     harness += function(blitz, "blitz_auto_assign_stats")
     harness += traits[traits.index("static const char *character_ability_names"):traits.index("int collect_character_starting_abilities")]
@@ -134,6 +141,16 @@ static bool savefile_has_morgoth_call_state=true;
 static void policy(void)
 {
     limits.b_max=4;
+    /* An option changed on the hero screen must override the initial wipe's
+     * rules, in both directions, before allocation and origin grants. */
+    profiles[0].a_adj[0][0]=-1;
+    for(int mode=0;mode<2;mode++) {
+        options.opt[OPT_insight_beta]=mode;
+        body.insight_ruleset=mode?INSIGHT_RULESET_CLASSIC:INSIGHT_RULESET_REWORKED;
+        finalize_character_creation_selection();
+        assert(body.insight_ruleset==(mode?INSIGHT_RULESET_REWORKED:INSIGHT_RULESET_CLASSIC));
+        assert(insight_system_enabled()==mode);
+    }
     for(int mode=0;mode<2;mode++) {
         options.opt[OPT_insight_beta]=mode;
         body.insight_ruleset=INSIGHT_RULESET_UNSET;
