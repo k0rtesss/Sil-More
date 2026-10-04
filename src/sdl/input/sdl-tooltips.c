@@ -572,11 +572,20 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
         char m_name[80];
         char hp_bar[10];
         char morale_text[24];
+        char state_prefix[24];
+        cptr state_label = "Morale";
         byte morale_attr = TERM_WHITE;
 
         monster_desc(m_name, sizeof(m_name), m_ptr, 0x08);
         sdl_object_tooltip_monster_morale_text(m_ptr, morale_text,
             sizeof(morale_text), &morale_attr);
+        /* The shared status text shows awareness before a creature is alert,
+         * and mindlessness rather than morale for alert mindless creatures. */
+        if (m_ptr->alertness < ALERTNESS_ALERT)
+            state_label = "Awareness";
+        else if (r_info[m_ptr->r_idx].flags2 & RF2_MINDLESS)
+            state_label = "State";
+        strnfmt(state_prefix, sizeof(state_prefix), "%s: ", state_label);
         sdl_object_tooltip_append_part(buf, buflen, attrs, m_name,
             TERM_WHITE);
         if (monster_health_bar_allowed(m_ptr) && m_ptr->maxhp > 0) {
@@ -591,14 +600,18 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
                 health_attr(m_ptr->hp, m_ptr->maxhp));
             if (morale_text[0]) {
                 sdl_object_tooltip_append_text(buf, buflen, attrs,
-                    " Morale: ", TERM_WHITE);
+                    " ", TERM_WHITE);
+                sdl_object_tooltip_append_text(buf, buflen, attrs,
+                    state_prefix, TERM_WHITE);
                 sdl_object_tooltip_append_text(buf, buflen, attrs,
                     morale_text, morale_attr);
             }
             sdl_object_tooltip_append_text(buf, buflen, attrs, "]",
                 TERM_WHITE);
         } else if (morale_text[0]) {
-            sdl_object_tooltip_append_text(buf, buflen, attrs, " [Morale: ",
+            sdl_object_tooltip_append_text(buf, buflen, attrs, " [",
+                TERM_WHITE);
+            sdl_object_tooltip_append_text(buf, buflen, attrs, state_prefix,
                 TERM_WHITE);
             sdl_object_tooltip_append_text(buf, buflen, attrs, morale_text,
                 morale_attr);

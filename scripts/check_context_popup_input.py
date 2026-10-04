@@ -17,6 +17,7 @@ HARNESS = r'''
 #include "angband.h"
 #include <assert.h>
 #include "sdl/ui/sdl-question-menu.c"
+#include "sdl/ui/sdl-gameplay-tutorial.c"
 
 static term test_term;
 
@@ -41,6 +42,16 @@ static void mouse_button(int button)
     event.button.button = button;
     event.button.x = layout.buttons[0].x + layout.buttons[0].w / 2;
     event.button.y = layout.buttons[0].y + layout.buttons[0].h / 2;
+    sdl_handle_event(&g_state, &event);
+}
+
+static void escape_key(void)
+{
+    SDL_Event event = {0};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.windowID = SDL_GetWindowID(g_state.window);
+    event.key.key = SDLK_ESCAPE;
+    event.key.scancode = SDL_SCANCODE_ESCAPE;
     sdl_handle_event(&g_state, &event);
 }
 
@@ -79,6 +90,13 @@ int main(void)
     angband_term[0] = &test_term;
     character_dungeon = true;
     p_ptr->playing = true;
+
+    /* Aiming owns Enter/Escape just like a question or inventory menu. */
+    assert(!tutorial_menu_owns_input());
+    sdl_pointer_aim_select_begin(11, false);
+    assert(tutorial_menu_owns_input());
+    sdl_pointer_aim_select_end();
+    assert(!tutorial_menu_owns_input());
 
     /* Selected actions must work even with hostile keyboard remaps. */
     for (int mode = 0; mode < KEYMAP_MODES; mode++)
@@ -144,6 +162,29 @@ int main(void)
     assert(!sdl_question_menu_layout(&preview_layout));
     assert(!sdl_question_menu_context_hint_active());
     assert(Term_inkey(&key, false, true) != 0);
+
+    /* Back dismisses a gameplay hint without also opening the main menu. */
+    popup('g', "Pack");
+    inkey_flag = true;
+    escape_key();
+    assert(!sdl_question_menu_context_hint_active());
+    assert(Term_inkey(&key, false, true) != 0);
+    escape_key();
+    assert(Term_inkey(&key, false, true) == 0 && key == ESCAPE);
+
+    /* A hint cannot steal cancellation from a modal or early input wait. */
+    popup('g', "Pack");
+    character_icky = 1;
+    escape_key();
+    assert(sdl_question_menu_context_hint_active());
+    assert(Term_inkey(&key, false, true) == 0 && key == ESCAPE);
+    character_icky = 0;
+    inkey_flag = false;
+    escape_key();
+    assert(sdl_question_menu_context_hint_active());
+    assert(Term_inkey(&key, false, true) == 0 && key == ESCAPE);
+    sdl_question_menu_clear();
+    puts("PASS: Escape dismisses a gameplay hint once and preserves modal/ordinary Escape input.");
     puts("PASS: early hint rejects action/suppression input until command wait;");
     puts("      modal input and forced movement cannot activate stale hints.");
     puts("PASS: SDL mouse events and command parser, four keysets, remap isolation,");
@@ -159,15 +200,16 @@ def main():
     source.write_text(HARNESS, encoding="utf-8")
     cmake_dir = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
-    exclude = ("/src/main.c.obj", "/src/sdl/ui/sdl-question-menu.c.obj")
+    exclude = ("/src/main.c.obj", "/src/sdl/ui/sdl-question-menu.c.obj",
+               "/src/sdl/ui/sdl-gameplay-tutorial.c.obj")
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects
                                   if not p.endswith(exclude)), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
         *[str(BUILD / "_deps" / name) for name in
-          ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")], env["PATH"]])
+          ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")],
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env["SDL_VIDEO_DRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     exe = OUT / "check.exe"

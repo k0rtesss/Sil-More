@@ -27,6 +27,7 @@ struct sdl_config config;
 gamepad_input_state g_gamepad_state;
 player_action_menu_state g_player_action_menu;
 player_exchange_target_state g_player_exchange_target;
+pointer_aim_state g_pointer_aim;
 bool g_main_menu_overlay_active, g_touch_pane_yes_no_prompt_active;
 bool g_touch_pane_reset_confirm_active, g_unified_look_active;
 minimap_state g_minimap;
@@ -210,6 +211,21 @@ int main(void)
             assert(sdl_gameplay_tutorial_handle_event(&e));
             assert(key_count==2 && keys[0]=='\\' && keys[1]=='i');
         }
+    }
+    {
+        /* Aim confirmation/cancellation reaches the target selector without
+         * injecting another tutorial command or skipping the lesson. */
+        show(false,"throw","");
+        g_pointer_aim.active=true;
+        e=key_event(SDL_EVENT_KEY_DOWN,SDLK_RETURN,SDL_SCANCODE_RETURN);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        e=key_event(SDL_EVENT_KEY_DOWN,SDLK_ESCAPE,SDL_SCANCODE_ESCAPE);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_SOUTH);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_EAST);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        g_pointer_aim.active=false;
     }
     {
         tutorial_controls labels;
@@ -511,8 +527,8 @@ def main():
     source.write_text(HARNESS.replace("/* CONFIG_MODE_FUNCTIONS */", "\n".join(functions)), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-        str(BUILD / "_deps/SDL"), env["PATH"]])
+        str(BUILD / "_deps/SDL"), "C:/msys64/mingw64/bin",
+        "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
                     "-Wall", "-Wextra", "-Wno-unused-function", "-Wno-old-style-declaration",

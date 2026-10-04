@@ -2801,6 +2801,12 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         }
 
         if (sdl_key_is_escape_or_back(key)) {
+            if (sdl_question_menu_context_hint_active()
+                && inkey_flag && !character_icky)
+            {
+                sdl_question_menu_clear_context_hint();
+                return;
+            }
             Term_keypress(ESCAPE);
             return;
         }

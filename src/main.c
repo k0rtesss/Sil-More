@@ -12,6 +12,7 @@
 #include "externs.h"
 #include "log/bootstrap.h"
 #include "gen-log.h"
+#include "fs/path.h"
 
 /*
  * Some machines have a "main()" function in their "main-xxx.c" file,
@@ -22,6 +23,9 @@
 #include "log/log.h"
 #include "sdl-sound.h"
 #include <SDL3/SDL_filesystem.h>
+#ifdef WINDOWS
+#include <direct.h>
+#endif
 
 /* On iOS, SDL_main.h redefines main -> SDL_main and provides the real main()
  * with UIKit application delegate bootstrap.  This must be included in the
@@ -65,6 +69,36 @@ static void quit_hook(cptr s)
         term_nuke(angband_term[j]);
     }
 }
+
+#ifdef WINDOWS
+static void init_install_working_directory(int argc, char* argv[])
+{
+    const char* base = SDL_GetBasePath();
+    char assets[1024];
+    SDL_PathInfo info;
+    wchar_t* wide_base;
+
+    /* Packaged fonts, tiles and default paths are relative to the install.
+     * Shortcuts and launchers need not start in that directory. A build-tree
+     * executable has no adjacent lib, so retain its caller's data directory.
+     * Explicit data-root overrides also retain their launch directory. */
+    if (getenv("ANGBAND_PATH") || !base
+        || !path_build(assets, sizeof(assets), base, "lib/edit")
+        || !SDL_GetPathInfo(assets, &info)
+        || info.type != SDL_PATHTYPE_DIRECTORY)
+        return;
+
+    for (int i = 1; i < argc && !streq(argv[i], "--"); ++i)
+        if (argv[i][0] == '-' && (argv[i][1] == 'd' || argv[i][1] == 'D'))
+            return;
+
+    wide_base = (wchar_t*)SDL_iconv_string("WCHAR_T", "UTF-8", base,
+        SDL_strlen(base) + 1);
+    if (!wide_base || _wchdir(wide_base) != 0)
+        log_warn("Could not use install directory '%s' for game assets", base);
+    SDL_free(wide_base);
+}
+#endif
 
 /*
  * Initialize and verify the file paths, and the score file.
@@ -276,6 +310,10 @@ int main(int argc, char* argv[])
     
     // Initialize dedicated generation log (generation.txt)
     gen_log_init(argv[0]);
+
+#ifdef WINDOWS
+    init_install_working_directory(argc, argv);
+#endif
 
     /* Initialize character_icky to ensure it starts at 0 */
     character_icky = 0;

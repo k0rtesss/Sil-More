@@ -665,8 +665,8 @@ static char describe_item_with_comparisons_aux(int item_index,
         }
         else if (player_can_treat_as_throwing(base_obj))
         {
-            append_description_slot(slots, &slot_count, N_ELEMENTS(slots),
-                INVEN_QUIVER1);
+            /* Throwing weapons use melee/Harness storage. The old physical
+             * Quiver slot is no longer an equipment destination for them. */
             if (object_is_belt_weapon(base_obj))
             {
                 append_description_slot(slots, &slot_count, N_ELEMENTS(slots),

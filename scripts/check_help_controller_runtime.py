@@ -381,9 +381,9 @@ def main():
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
         str(BUILD / "_deps/SDL"), str(BUILD / "_deps/SDL_ttf"),
-        str(BUILD / "_deps/SDL_image"), str(BUILD / "_deps/SDL_mixer"), env["PATH"]])
+        str(BUILD / "_deps/SDL_image"), str(BUILD / "_deps/SDL_mixer"),
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     compiler = "C:/msys64/mingw64/bin/cc.exe"
     exe = OUT / "check.exe"
     subprocess.run([compiler, "-DUSE_SDL", "-std=c17", "-O0", "-g",

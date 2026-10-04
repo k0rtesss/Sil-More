@@ -756,6 +756,15 @@ static void sdl_sound_fill_missing_events_from_defaults(struct sound_config* con
         return;
     }
 
+    /* Portable installs already use the defaults file directly. There is no
+     * separate user configuration to supplement in that case. */
+    char defaults_path[1024];
+    if (ANGBAND_DIR_PREF && path_build(defaults_path, sizeof(defaults_path),
+            ANGBAND_DIR_PREF, "sound.json")
+        && streq(defaults_path, g_sound_config_path)) {
+        return;
+    }
+
     struct sound_config defaults;
     if (!sdl_sound_load_default_config(&defaults)) {
         log_warn("Could not load default sound event mappings from pref/sound.json");
