@@ -3637,6 +3637,9 @@ void do_cmd_alter(void)
         /* Space/interact here uses the same contextual destination handling
          * as the floor-item UI.  In particular, arrows must offer Quiver or
          * Pack instead of silently falling through to Pack. */
+        /* The selected pickup action charges its own turn. Cancelling the
+         * destination chooser must not inherit alter's default cost. */
+        p_ptr->energy_use = 0;
         (void)floor_context_perform_action(0,
             FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT);
     }

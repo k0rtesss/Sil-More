@@ -17,6 +17,36 @@ extern struct sound_config g_sound_config;
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 
+/* Compact Look rows show awareness before alertness, then morale. Alert
+ * mindless creatures have no morale value to display. Include the separator
+ * here so an omitted value leaves no empty column beside the health bar. */
+static void nearby_monster_status_suffix(monster_type* m_ptr, char* text,
+    size_t text_size, int* color)
+{
+    int value;
+
+    text[0] = '\0';
+    *color = TERM_WHITE;
+    if (m_ptr->alertness < ALERTNESS_ALERT)
+    {
+        *color = m_ptr->alertness < ALERTNESS_UNWARY
+            ? TERM_BLUE : TERM_L_BLUE;
+        value = m_ptr->alertness;
+    }
+    else
+    {
+        char stance[20];
+
+        if (r_info[m_ptr->r_idx].flags2 & RF2_MINDLESS)
+            return;
+        if (!get_alertness_text(m_ptr, sizeof(stance), stance, color))
+            *color = TERM_WHITE;
+        value = m_ptr->morale >= 0
+            ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
+    }
+    strnfmt(text, text_size, " %d", value);
+}
+
 void write_direction_from_player_to_buffer(
     int y, int x, char* buffer, int buffer_size)
 {
@@ -1061,8 +1091,8 @@ static int unified_sidebar_compact_build_entries(
             char name_buf[80];
             char hp_bar[10];
             char suffix[24];
+            char status_suffix[12];
             int morale_color = TERM_WHITE;
-            int morale_num = 0;
             int name_budget;
             bool show_health;
 
@@ -1088,35 +1118,14 @@ static int unified_sidebar_compact_build_entries(
             else
                 hp_bar[0] = '\0';
 
-            if (m_ptr->alertness < ALERTNESS_UNWARY)
-            {
-                morale_color = TERM_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else if (m_ptr->alertness < ALERTNESS_ALERT)
-            {
-                morale_color = TERM_L_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else
-            {
-                char dummy_text[20];
-                if (!get_alertness_text(m_ptr, sizeof(dummy_text), dummy_text,
-                        &morale_color))
-                {
-                    morale_color = TERM_WHITE;
-                }
-
-                morale_num = (m_ptr->morale >= 0)
-                    ? ((m_ptr->morale + 9) / 10)
-                    : (m_ptr->morale / 10);
-            }
+            nearby_monster_status_suffix(m_ptr, status_suffix,
+                sizeof(status_suffix), &morale_color);
 
             if (show_health)
-                strnfmt(suffix, sizeof(suffix), " %s %d", hp_bar,
-                    morale_num);
+                strnfmt(suffix, sizeof(suffix), " %s%s", hp_bar,
+                    status_suffix);
             else
-                strnfmt(suffix, sizeof(suffix), " %d", morale_num);
+                SDL_strlcpy(suffix, status_suffix, sizeof(suffix));
             name_budget = text_width - (int)strlen(suffix);
             if (name_budget < 4)
                 name_budget = 4;
@@ -1615,38 +1624,10 @@ void show_unified_sidebar(unified_look_state* state)
             else
                 hp_bar[0] = '\0';
 
-            /* Create morale number with proper color */
+            /* Create the awareness/morale suffix with its proper color. */
             int morale_color = TERM_WHITE;
-            int morale_num = 0;
-
-            if (m_ptr->alertness < ALERTNESS_UNWARY)
-            {
-                morale_color = TERM_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else if (m_ptr->alertness < ALERTNESS_ALERT)
-            {
-                morale_color = TERM_L_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else
-            {
-                /* Get proper morale display using alertness function */
-                char dummy_text[20];
-                if (!get_alertness_text(m_ptr, sizeof(dummy_text), dummy_text, &morale_color))
-                {
-                    /* Fallback if stance not initialized - use white and calculate from morale */
-                    morale_color = TERM_WHITE;
-                }
-
-                /* Calculate morale number */
-                if (m_ptr->morale >= 0)
-                    morale_num = (m_ptr->morale + 9) / 10;
-                else
-                    morale_num = m_ptr->morale / 10;
-            }
-
-            strnfmt(morale_text, sizeof(morale_text), "%d", morale_num);
+            nearby_monster_status_suffix(m_ptr, morale_text,
+                sizeof(morale_text), &morale_color);
 
             /* Use pictogram (tile) appropriate for graphics mode */
             entity_char[0] = monster_char(r_ptr);
@@ -1661,7 +1642,7 @@ void show_unified_sidebar(unified_look_state* state)
                 strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
             else
                 hp_display[0] = '\0';
-            strnfmt(morale_display, sizeof(morale_display), " %s", morale_text);
+            SDL_strlcpy(morale_display, morale_text, sizeof(morale_display));
 
             /* Calculate available width for the whole line */
             int available_width = term_wid - name_col - 2;

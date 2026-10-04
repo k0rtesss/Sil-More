@@ -30,9 +30,24 @@ static s16b test_drop_near(object_type* object, int chance, int y, int x)
 #include "ui/question.c"
 
 static object_type held[INVEN_TOTAL];
-static object_kind kinds[4];
+static object_kind kinds[6];
 static maxima limits;
 static term test_term;
+static u16b test_cave_info[8][256];
+static byte test_cave_feat[8][MAX_DUNGEON_WID];
+static s16b test_cave_objects[8][MAX_DUNGEON_WID];
+static s16b test_cave_monsters[8][MAX_DUNGEON_WID];
+static int skeleton_searches, chest_opens;
+void __wrap_do_cmd_search_skeleton(int y, int x, s16b o_idx)
+{
+    assert(y==p_ptr->py && x==p_ptr->px && o_idx==1);
+    skeleton_searches++; o_list[o_idx].pval=0;
+}
+bool __wrap_do_cmd_open_chest(int y, int x, s16b o_idx)
+{
+    assert(y==p_ptr->py && x==p_ptr->px && o_idx==1);
+    chest_opens++; o_list[o_idx].pval=0; return true;
+}
 static floor_context_action pack_action = {
     .kind = FLOOR_CONTEXT_ACTION_PACK, .key = 'g', .label = "Pack", .attr = TERM_L_BLUE
 };
@@ -113,11 +128,13 @@ int main(void)
     k_info = kinds;
     z_info = &limits;
     limits.k_max = N_ELEMENTS(kinds);
-    k_name = "\0& Arrow~\0& Dagger~\0& Cloak~\0";
+    k_name = "\0& Arrow~\0& Dagger~\0& Cloak~\0& Skeleton~\0& Chest~\0";
     kinds[1].name = 1; kinds[1].tval = TV_ARROW;
     kinds[2].name = 10; kinds[2].tval = TV_SWORD; kinds[2].sval = SV_DAGGER;
     kinds[3].name = 20; kinds[3].tval = TV_CLOAK;
-    for (int i = 1; i < 4; i++) kinds[i].aware = true;
+    kinds[4].name = 29; kinds[4].tval = TV_SKELETON; kinds[4].sval = SV_SKELETON_ORC;
+    kinds[5].name = 41; kinds[5].tval = TV_CHEST;
+    for (int i = 1; i < 6; i++) kinds[i].aware = true;
     arrows = item(1, 12, OBJECT_STORAGE_PACK, 12);
     dagger = item(2, 1, OBJECT_STORAGE_HARNESS, 10);
 
@@ -377,6 +394,60 @@ int main(void)
     assert(!do_cmd_move_item_to_storage(INVEN_BELT, OBJECT_STORAGE_PACK));
     assert(held[INVEN_BELT].number == 1 && !player_pack_action_pending());
     puts("PASS: Cancel, cursed Belt, and full Pack leave the equipped item in place.");
+
+    /* Floor-use actions reach their command immediately, even for kinds whose
+     * default carried storage is the Pack. Actual Pack pickups still defer. */
+    object_type floor_items[2] = {0};
+    o_list=floor_items; o_max=2;
+    clear_items(); player_pack_action_reset();
+    p_ptr->py=p_ptr->px=3;
+    for (int kind=4; kind<=5; kind++) {
+        floor_items[1]=item(kind,1,OBJECT_STORAGE_PACK,130);
+        floor_items[1].iy=p_ptr->py; floor_items[1].ix=p_ptr->px;
+        floor_items[1].pval=kind==4?1:-1;
+        p_ptr->energy_use=0;
+        do_cmd_use_item_by_index(-1);
+        assert(!player_pack_action_pending() && p_ptr->energy_use==100);
+        assert(floor_items[1].pval==0);
+    }
+    assert(skeleton_searches==1 && chest_opens==1);
+    floor_items[1]=item(1,12,OBJECT_STORAGE_PACK,12);
+    assert(player_pack_action_start(PLAYER_PACK_ACTION_PICKUP,-1,0,false,&floor_items[1]));
+    assert(player_pack_action_pending() && player_pack_action_turns_left()==2);
+    player_pack_action_cancel();
+    floor_items[1]=dagger;
+    assert(player_pack_action_start_forced(PLAYER_PACK_ACTION_PICKUP,-1,
+        OBJECT_STORAGE_PACK,false,&floor_items[1]));
+    assert(player_pack_action_pending() && player_pack_action_turns_left()==2);
+    player_pack_action_cancel();
+    held[0]=item(3,1,OBJECT_STORAGE_PACK,50);
+    assert(player_pack_action_start(PLAYER_PACK_ACTION_USE_ITEM,0,0,false,&held[0]));
+    player_pack_action_cancel();
+    puts("PASS: Floor skeleton/chest use takes one turn; Pack use and both default/explicit Pack pickups keep three turns.");
+
+    /* Space goes through alter/interact-here before the destination chooser.
+     * Cancelling that chooser must not inherit alter's default turn cost. */
+    clear_items(); player_pack_action_reset();
+    kinds[2].flags4 |= TR4_HARNESS_STOWABLE;
+    floor_items[1]=dagger;
+    floor_items[1].iy=p_ptr->py; floor_items[1].ix=p_ptr->px;
+    cave_info=test_cave_info; cave_feat=test_cave_feat;
+    cave_o_idx=test_cave_objects; cave_m_idx=test_cave_monsters;
+    p_ptr->cur_map_hgt=p_ptr->cur_map_wid=8;
+    cave_o_idx[p_ptr->py][p_ptr->px]=1;
+    cave_feat[p_ptr->py][p_ptr->px]=FEAT_FLOOR;
+    cave_info[p_ptr->py][p_ptr->px]=CAVE_MARK | CAVE_SEEN;
+    p_ptr->command_dir=5;
+    p_ptr->energy_use=0;
+    p_ptr->update=p_ptr->notice=p_ptr->redraw=p_ptr->window=0;
+    assert(floor_context_first_item_and_count(NULL)==1);
+    Term_flush(); inkey_next_set("\033");
+    do_cmd_alter();
+    inkey_next_set(NULL);
+    assert(p_ptr->energy_use==0 && !player_pack_action_pending());
+    assert(floor_items[1].number==1 && !held[0].k_idx);
+    puts("PASS: Cancelling interact-here pickup spends no turn and keeps the floor item.");
+
     return 0;
 }
 '''
@@ -414,6 +485,7 @@ def main():
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
         "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+        "-Wl,--wrap=do_cmd_search_skeleton", "-Wl,--wrap=do_cmd_open_chest",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=ROOT, env=env, check=True, timeout=30)
 

@@ -27,7 +27,7 @@ s16b mon_max=2;
 bool character_generated=true;
 static u16b test_info[12][256];
 u16b (*cave_info)[256]=test_info;
-static int fuel=100, carried_silmarils, pack_used, total_limit=100;
+static int fuel=100, carried_silmarils, pack_used, harness_used, total_limit=100;
 static level_partition_kind region;
 static big_cave_type_t cave_type;
 static int8_t test_curses[METAR_CURSE_SLOTS];
@@ -38,7 +38,7 @@ bool death_spectator_active(void) { return false; }
 int player_carried_extra_entry_count(void) { return 0; }
 object_type *player_carried_extra_entry_at(int index) { (void)index;return NULL; }
 int inventory_limit_usage_for_group(enum inventory_limit_group group)
-{ return group==INV_LIMIT_PACK?pack_used:0; }
+{ return group==INV_LIMIT_PACK?pack_used:group==INV_LIMIT_HARNESS?harness_used:0; }
 int inventory_limit_limit_for_group(enum inventory_limit_group group)
 { (void)group;return total_limit; }
 int player_quiver_arrow_count(void) { return 0; }
@@ -54,12 +54,17 @@ int silmarils_possessed(void) { return carried_silmarils; }
 void monster_desc(char *buf,size_t size,const monster_type *m,int mode)
 { (void)mode;SDL_snprintf(buf,size,"Monster %d",m->r_idx); }
 
-static bool pending(const char *id)
+static const tutorial_context *pending_context(const char *id)
 {
     int index=lesson_index(id);
-    if (index>=0 && active==index) return true;
-    for(int i=0;i<queue_count;++i) if(queue[i].lesson==index) return true;
-    return false;
+    if (index>=0 && active==index) return &active_context;
+    for(int i=0;i<queue_count;++i) if(queue[i].lesson==index) return &queue[i].context;
+    return NULL;
+}
+
+static bool pending(const char *id)
+{
+    return pending_context(id)!=NULL;
 }
 
 int main(void)
@@ -78,6 +83,18 @@ int main(void)
     assert(!pending("world.light_low") && !pending("world.light_out"));
     p_ptr->total_weight=200; tutorial_world_checkpoint(); assert(pending("storage.weight"));
     p_ptr->total_weight=0; tutorial_world_checkpoint(); assert(!pending("storage.weight"));
+
+    /* Capacity values are tenths of a quart, just like the inventory display. */
+    pack_used=8; harness_used=13; total_limit=210;
+    tutorial_world_checkpoint();
+    assert(pending("storage.pack") && pending("storage.harness"));
+    assert(!strcmp(pending_context("storage.pack")->text,"Pack space: 0.8/21.0 qt."));
+    assert(!strcmp(pending_context("storage.harness")->text,"Harness space: 1.3/21.0 qt."));
+    pack_used=47; total_limit=205; tutorial_world_checkpoint();
+    assert(!strcmp(pending_context("storage.pack")->text,"Pack space: 4.7/20.5 qt."));
+    assert(!strcmp(pending_context("storage.harness")->text,"Harness space: 1.3/20.5 qt."));
+    tutorial_forget_observation("storage.pack"); tutorial_forget_observation("storage.harness");
+    pack_used=harness_used=0; tutorial_world_checkpoint();
 
     /* Lore must be recorded AND true AND currently visible. A sensed monster
      * outside line of sight cannot retain a card claiming it is visible. */
@@ -121,7 +138,7 @@ int main(void)
     p_ptr->tutorial_deferred=true;
     tutorial_world_checkpoint(); assert(queue_count==0);
     tutorial_shutdown(); SDL_Quit();
-    puts("Tutorial world: current fuel/weight, live known lore and expiry, Normal trait filtering, regions, public quest transitions, legacy deferral: PASS");
+    puts("Tutorial world: current fuel/weight, capacity units, live known lore and expiry, Normal trait filtering, regions, public quest transitions, legacy deferral: PASS");
     return 0;
 }
 '''
@@ -131,7 +148,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for path in OUT.glob("tale-*-tutorials.json"):
         path.unlink()
-    ids = ["world.light_low", "world.light_out", "storage.weight", "monster.rf1_unique",
+    ids = ["world.light_low", "world.light_out", "storage.weight", "storage.pack", "storage.harness", "monster.rf1_unique",
            "monster.rf2_flying", "world.partition.fire", "world.partition.cold",
            "world.partition.poison", "quest.3", "quest.progress"]
     lessons = [{"id": name, "title": name,
@@ -145,8 +162,8 @@ def main():
     source = OUT / "check.c"
     source.write_text(HARNESS.replace("__WORLD_IMPLEMENTATION__", world), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-                                   str(BUILD / "_deps/SDL"), env["PATH"]])
+    env["PATH"] = os.pathsep.join([str(BUILD / "_deps/SDL"), "C:/msys64/mingw64/bin",
+                                   "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
                     "-Wall", "-Wextra", "-Wno-unused-function", "-O2", "-fwhole-program",

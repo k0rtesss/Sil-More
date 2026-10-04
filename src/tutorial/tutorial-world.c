@@ -201,13 +201,13 @@ void tutorial_world_checkpoint(void)
     if (!initialized) { tutorial_world_start(); return; }
     now=snapshot();
     if ((now.pack!=previous.pack || now.pack_limit!=previous.pack_limit) && now.pack>0) {
-        strnfmt(text,sizeof(text),"Pack space: %d/%d.",
-            now.pack,now.pack_limit);
+        strnfmt(text,sizeof(text),"Pack space: %d.%d/%d.%d qt.",
+            now.pack/10,now.pack%10,now.pack_limit/10,now.pack_limit%10);
         world_observe("storage.pack","storage","Pack",text);
     }
     if ((now.harness!=previous.harness || now.harness_limit!=previous.harness_limit) && now.harness>0) {
-        strnfmt(text,sizeof(text),"Harness space: %d/%d.",
-            now.harness,now.harness_limit);
+        strnfmt(text,sizeof(text),"Harness space: %d.%d/%d.%d qt.",
+            now.harness/10,now.harness%10,now.harness_limit/10,now.harness_limit%10);
         world_observe("storage.harness","storage","Harness",text);
     }
     if (now.arrows!=previous.arrows && now.arrows>0) {

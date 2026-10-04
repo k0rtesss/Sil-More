@@ -14,6 +14,33 @@ HARNESS = r'''
 #include <assert.h>
 #include <stdio.h>
 
+static int default_config_warnings;
+static void count_default_config_warning(log_Event* event) {
+    if (strstr(event->fmt,"Could not load default sound event mappings"))
+        default_config_warnings++;
+}
+static void test_default_config(void) {
+    assert(log_add_callback(count_default_config_warning,NULL,LOG_WARN)==0);
+    assert(path_build(g_sound_config_path,sizeof(g_sound_config_path),ANGBAND_DIR_PREF,"sound.json"));
+    sound_config_load(g_sound_config_path,&g_sound_config);
+    struct sound_config original=g_sound_config;
+    assert(sdl_sound_has_any_events(&original));
+    sdl_sound_fill_missing_events_from_defaults(&g_sound_config);
+    assert(default_config_warnings==0 && !memcmp(&g_sound_config,&original,sizeof(original)));
+
+    /* A separate user config still receives missing mappings without losing
+     * the user's unrelated settings. Only the temporary profile is written. */
+    assert(path_build(g_sound_config_path,sizeof(g_sound_config_path),ANGBAND_DIR_USER,"sound.json"));
+    int event=0;
+    while (event<MSG_MAX && !original.events[event][0]) event++;
+    assert(event<MSG_MAX);
+    g_sound_config.events[event][0]='\0'; g_sound_config.volume_master=.37f;
+    sdl_sound_fill_missing_events_from_defaults(&g_sound_config);
+    assert(streq(g_sound_config.events[event],original.events[event]));
+    assert(g_sound_config.volume_master==.37f && default_config_warnings==0);
+    puts("PASS: portable default config emits no false warning; user config still inherits missing mappings and preserves settings.");
+}
+
 static void assert_title(const char* relative) {
     char path[1024];
     sdl_sound_build_path(relative, path, sizeof(path));
@@ -152,6 +179,7 @@ int main(int argc, char** argv) {
     ANGBAND_DIR_XTRA = argv[1]; ANGBAND_DIR_USER = argv[2]; ANGBAND_DIR_PREF = argv[3];
     assert(SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy"));
     assert(SDL_Init(SDL_INIT_AUDIO));
+    test_default_config();
     sound_config_set_defaults(&g_sound_config); g_sound_config.enabled = true;
     test_cache();
     snprintf(g_sound_config_path, sizeof(g_sound_config_path), "%s/sound.json", argv[2]);

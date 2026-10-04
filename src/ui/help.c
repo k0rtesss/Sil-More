@@ -860,9 +860,24 @@ static bool help_movement_shadows_letter(byte key)
 static void help_command_key_label(byte key, char* buf, size_t buflen)
 {
     char raw[2];
+    cptr name = NULL;
 
     if (!buf || !buflen)
         return;
+    switch (key)
+    {
+    case '\t': name = "Tab"; break;
+    case '\r': name = "Enter"; break;
+    case '\b': name = "Backspace"; break;
+    case ' ': name = "Space"; break;
+    case ESCAPE: name = "Esc"; break;
+    default: break;
+    }
+    if (name)
+    {
+        SDL_strlcpy(buf, name, buflen);
+        return;
+    }
     if (help_movement_shadows_letter(key))
     {
         if (isupper((unsigned char)key))

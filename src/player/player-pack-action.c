@@ -144,10 +144,13 @@ static bool player_pack_action_start_internal(player_pack_action_kind kind,
 {
     char o_name[80];
 
+    /* A floor object's default storage describes where it would be carried.
+     * Using it there does not access the Pack; picking it up into Pack does. */
     if (pack_action.completing || kind == PLAYER_PACK_ACTION_NONE
         || !o_ptr || !o_ptr->k_idx
         || (!force_pack
-            && inventory_limit_group_for_object(o_ptr) != INV_LIMIT_PACK))
+            && ((item < 0 && kind != PLAYER_PACK_ACTION_PICKUP)
+                || inventory_limit_group_for_object(o_ptr) != INV_LIMIT_PACK)))
     {
         return false;
     }

@@ -648,10 +648,13 @@ static void describe_monster_live_state(const monster_type* m_ptr)
 
     text_out_c(m_ptr->poisoned > 0 ? TERM_GREEN : TERM_SLATE,
         format("Poison stacks: %d.  ", m_ptr->poisoned));
-    int morale = m_ptr->morale >= 0
-        ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
-    text_out_c(m_ptr->morale < 0 ? TERM_L_RED : TERM_SLATE,
-        format("Morale: %d.  ", morale));
+    if (!(r_info[m_ptr->r_idx].flags2 & RF2_MINDLESS))
+    {
+        int morale = m_ptr->morale >= 0
+            ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
+        text_out_c(m_ptr->morale < 0 ? TERM_L_RED : TERM_SLATE,
+            format("Morale: %d.  ", morale));
+    }
     switch (m_ptr->social_state)
     {
         case MON_SOCIAL_CHALLENGE: text_out("It is confronting a rival.  "); break;

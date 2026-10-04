@@ -87,6 +87,7 @@ static void tutorial_note_input(const SDL_Event *event)
 static bool tutorial_menu_owns_input(void)
 {
     return character_icky || inkey_prompt_input_active()
+        || g_pointer_aim.active
         || g_touch_pane_yes_no_prompt_active
         || g_touch_pane_reset_confirm_active
         || sdl_question_menu_captures_pointer()
@@ -221,7 +222,10 @@ static int tutorial_command(const tutorial_view *view)
     if (strstr(a, "use-item"))
         return !strncmp(view->id,"status.",7) && strstr(view->id,".remedy") ? 'j' : 'u';
     if (strstr(a, "ranged") || strstr(a, "fire")) return 'f';
-    if (strstr(a, "throw")) return 't';
+    /* Normal throws use the active ranged attack. The t command requires
+     * Quick Throw/Power Throw eligibility and may reject a readied weapon. */
+    if (strstr(a, "throw"))
+        return !strcmp(view->id, "item.throwing.use") ? 'f' : 't';
     if (strstr(a, "pickup")) return 'g';
     if (strstr(a, "rest")) return 'Z';
     if (strstr(a, "open-menu")) return 'm';
@@ -300,7 +304,9 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
     } else {
         out->command=tutorial_command(view); out->primary=out->command!=0;
         if (out->primary) {
-            SDL_strlcpy(out->label[0],tutorial_command_label(out->command),sizeof(out->label[0]));
+            const char *label = !strcmp(view->id,"item.throwing.use")
+                ? "Throw active weapon" : tutorial_command_label(out->command);
+            SDL_strlcpy(out->label[0],label,sizeof(out->label[0]));
             if (input==TUTORIAL_INPUT_KEYBOARD)
                 help_describe_command_bindings(out->command,binding,sizeof(binding));
             else if (input==TUTORIAL_INPUT_CONTROLLER)

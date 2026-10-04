@@ -16,6 +16,7 @@ HARNESS = core.HARNESS.split("int main(", 1)[0] + r'''
 __DISEASE_IMPLEMENTATION__
 __GAME_IMPLEMENTATION__
 __RANGED_AIM_IMPLEMENTATION__
+__TUTORIAL_COMMAND_IMPLEMENTATION__
 static bool eat_food(object_type *,bool *);
 static bool quaff_potion(object_type *,bool *);
 static bool use_staff(object_type *,bool *);
@@ -614,8 +615,15 @@ static void check_ranged_tutorial_availability(void)
     offer_item_actions(&inventory[INVEN_WIELD],true);
     assert(pending_lesson("item.throwing.use"));
     tutorial_checkpoint(true);
+    tutorial_view throw_view;
+    assert(tutorial_peek_view(&throw_view));
+    assert(!strcmp(throw_view.id,"item.throwing.use"));
+    assert(tutorial_command(&throw_view)=='f');
+    assert(tutorial_game_command_allowed(tutorial_command(&throw_view),0));
     assert(tutorial_ranged_aim_allowed(3,5,8,true));
     assert(!tutorial_ranged_aim_allowed(2,5,8,true));
+    tutorial_game_action_done("throw",&inventory[INVEN_WIELD]);
+    assert(!pending_lesson("item.throwing.use"));
     tutorial_invalidate_context(); selected_arrow_slot=-1;
     puts("Ranged tutorial availability: active weapon range, blocked/oath-safe paths, ammo, expiry and throwing: PASS");
 }
@@ -623,6 +631,8 @@ static void check_ranged_tutorial_availability(void)
 int main(void)
 {
     tutorial_view view;
+    tutorial_view quick_throw_view={.id="throw",.action="throw"};
+    assert(tutorial_command(&quick_throw_view)=='t');
     object_type staff={.k_idx=1,.tval=TV_STAFF,.sval=SV_STAFF_SLUMBER,.number=1,.pval=CHANNELING_CHARGE_MULTIPLIER,.ident=IDENT_KNOWN};
     object_type horn={.k_idx=4,.tval=TV_HORN,.sval=SV_HORN_TERROR,.number=1};
     object_type potion={.k_idx=2,.tval=TV_POTION,.sval=SV_POTION_ANTIDOTE,.number=1};
@@ -956,7 +966,7 @@ int main(void)
 
 
 def c_function(source, name):
-    match = re.search(r'^(?:static\s+)?(?:void|bool|char)\s+' + re.escape(name)
+    match = re.search(r'^(?:static\s+)?(?:void|bool|char|int)\s+' + re.escape(name)
                       + r'\s*\([^;{]*\)\s*\{', source, re.M)
     assert match, f'Missing source function: {name}'
     return source[match.start():source.index('\n}', match.end()) + 2]
@@ -1150,6 +1160,8 @@ def main():
     game = game.replace('#include "tutorial-game.h"', '#include "tutorial/tutorial-game.h"')
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')
     ranged = (ROOT / "src/cmd/combat/cmd-ranged.c").read_text()
+    tutorial_frontend = (ROOT / "src/sdl/ui/sdl-gameplay-tutorial.c").read_text()
+    tutorial_command = c_function(tutorial_frontend, 'tutorial_command')
     aim_start = ranged.index("static bool tutorial_ranged_aim_allowed(")
     aim = ranged[aim_start:ranged.index("\nstatic int breakage_chance", aim_start)]
     use_source = (ROOT / "src/use-obj.c").read_text()
@@ -1168,14 +1180,15 @@ def main():
     source.write_text(HARNESS.replace("__GAME_IMPLEMENTATION__", game)
                       .replace("__DISEASE_IMPLEMENTATION__", disease)
                       .replace("__RANGED_AIM_IMPLEMENTATION__", aim)
+                      .replace("__TUTORIAL_COMMAND_IMPLEMENTATION__", tutorial_command)
                       .replace("__USE_OBJECT_IMPLEMENTATION__", use_body)
                       .replace("__DESCRIPTION_IMPLEMENTATION__", description)
                       .replace("__MAIN_MENU_IMPLEMENTATION__", MAIN_MENU_STUBS + '\n' +
                                c_function(args.main_menu_source.read_text(encoding='utf-8-sig'),
                                           'sdl_main_menu_overlay_begin')), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-                                   str(BUILD / "_deps/SDL"), env["PATH"]])
+    env["PATH"] = os.pathsep.join([str(BUILD / "_deps/SDL"),
+                                   "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
                     "-Wall", "-Wextra", "-Wno-unused-function", "-O2", "-fwhole-program",

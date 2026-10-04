@@ -2314,7 +2314,9 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
     if (player_active_weapon_mode_is_ranged(mode))
         last_ranged_weapon_mode = (byte)mode;
 
-    if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
+    if (new_kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+        msg_print("Your active weapon is now your throwing weapon.");
+    else if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
         msg_print("Your active weapon is now your melee weapon.");
     else
         msg_print("Your active weapon is now your ranged weapon with the quiver.");
