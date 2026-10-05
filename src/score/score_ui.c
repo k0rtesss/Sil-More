@@ -2691,7 +2691,9 @@ static int run_history_draw_general_panel(const score_record_v1* rec,
     if (!current_run) {
         strnfmt(line, sizeof(line), "Started:     %s", created);
         run_detail_text_view_put(&view, TERM_L_DARK, line);
-        strnfmt(line, sizeof(line), "Completed:   %s", completed);
+        strnfmt(line, sizeof(line), "%s%s",
+            rec->status == SCORE_RECORD_ALIVE ? "Last saved:  " : "Completed:   ",
+            completed);
         run_detail_text_view_put(&view, TERM_L_DARK, line);
     } else {
         strnfmt(line, sizeof(line), "Started:     %s  (Run in progress)", created);

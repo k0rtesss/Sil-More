@@ -1185,6 +1185,8 @@ void do_cmd_unified_look(void)
     bool original_hide_supporting_panes_fullscreen = op_ptr
         ? op_ptr->opt[OPT_hide_supporting_panes_fullscreen] : false;
     int original_wy, original_wx; /* Store original viewport */
+    int original_screen_hgt, original_screen_wid;
+    bool original_player_visible;
     
     /* Clear entry level banner when using look command */
     if (dismiss_active_narrative_banner())
@@ -1214,6 +1216,9 @@ void do_cmd_unified_look(void)
     /* Store original viewport */
     original_wy = p_ptr->wy;
     original_wx = p_ptr->wx;
+    original_screen_hgt = SCREEN_HGT;
+    original_screen_wid = SCREEN_WID;
+    original_player_visible = panel_contains(p_ptr->py, p_ptr->px);
 
     g_suppress_hidden_left_panel_overlay = true;
     g_hide_left_panel = true;
@@ -2521,17 +2526,21 @@ cycle_display_modes:
         p_ptr->window |= (PW_OVERHEAD);
     }
 
-    /* Restore original viewport */
-    bool viewport_changed = (p_ptr->wy != original_wy)
-        || (p_ptr->wx != original_wx);
+    /* Zoom can change the number of cells in the saved view. Restore its
+     * world centre rather than putting the old top-left into a smaller view. */
+    int restored_wy = original_wy + original_screen_hgt / 2 - SCREEN_HGT / 2;
+    int restored_wx = original_wx + original_screen_wid / 2 - SCREEN_WID / 2;
+    bool viewport_changed = (p_ptr->wy != restored_wy)
+        || (p_ptr->wx != restored_wx);
 
     if (viewport_changed)
     {
-        p_ptr->wy = original_wy;
-        p_ptr->wx = original_wx;
+        (void)modify_panel(restored_wy, restored_wx);
         p_ptr->redraw |= (PR_MAP);
         p_ptr->window |= (PW_OVERHEAD);
     }
+    if (original_player_visible && !panel_contains(p_ptr->py, p_ptr->px))
+        verify_panel();
 
     handle_stuff();
 

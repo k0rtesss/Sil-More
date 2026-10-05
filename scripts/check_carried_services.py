@@ -142,9 +142,22 @@ static void check_thrall_services(void)
     for (int i=0;i<choice;i++) Term_keypress('2');
     Term_keypress('\r');
     assert(fixture_reforge());
-    object=player_inventory_object(item);
-    assert(object_ego_prefix(object)==prefix && object->unused1==2);
-    assert(object_known_p(object));
+    assert(player_carried_extra_entry_count()==0);
+    assert(p_ptr->smithing_leftover>0 && smith_o_ptr->number==1);
+    assert(object_ego_prefix(smith_o_ptr)==prefix && smith_o_ptr->unused1==2);
+    assert(fixture_forge_uses()==2);
+    /* Advance to the production completion boundary; exact turn scheduling
+     * and save/resume are covered by check_reforge_work_transaction.py. */
+    p_ptr->smithing=p_ptr->smithing_leftover=1;
+    create_smithing_item();
+    p_ptr->smithing=p_ptr->smithing_leftover=0;
+    object=NULL;
+    for(int i=0;i<player_pack_entry_count();i++) {
+        object_type* candidate=player_inventory_object(player_pack_entry_handle_at(i));
+        if(candidate && candidate->unused1==2 && object_ego_prefix(candidate)==prefix)
+            object=candidate;
+    }
+    assert(object && object_known_p(object));
     assert(fixture_forge_uses()==2);
     puts("Thrall repair/sanctification/identification, item hand-in, forge repair/prefix reforging and melting on synthetic handles PASS.");
 }
