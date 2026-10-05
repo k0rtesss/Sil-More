@@ -230,6 +230,16 @@ void resize(const SDL_Rect* screen)
             && !g_defer_resize_handle_stuff)
         {
             handle_stuff();
+            /* The earlier Term_redraw restored the old cells. Panel updates
+             * above queue the resized map, and an idle inkey() has already
+             * used its one output flush, so present those new cells now. */
+            Term_fresh();
+            if (g_pointer_aim.active && g_pointer_aim.select_mode)
+            {
+                /* Rebuild the selector's footer and cursor for the new term
+                 * geometry without selecting a target or spending a turn. */
+                Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+            }
         }
     }
 
@@ -3097,6 +3107,15 @@ void sdl_text_input_reopen(void)
 {
     if (!g_state.window || g_sdl_text_input_depth == 0)
         return;
+
+    /* A field tap should keep an already-visible keyboard open. Restarting
+     * its active session queues an Android hide and show together, which can
+     * leave the keyboard hidden after the focus callbacks finish. */
+    if (SDL_TextInputActive(g_state.window)
+        && SDL_ScreenKeyboardShown(g_state.window))
+    {
+        return;
+    }
 
     /* On mobile, starting an already-active input session may not restore a
      * keyboard the user dismissed.  Restart it when the field is tapped. */

@@ -243,7 +243,7 @@ static void debug_overlay_number_draw(cptr title, cptr desc, long current,
     sdl_question_menu_set_desc(desc_buf);
 
     strnfmt(line, sizeof(line), "Set to %s%ld",
-        entry && entry[0] ? "typed " : "", current);
+        entry && entry[0] && !streq(entry, "-") ? "typed " : "", current);
     sdl_question_menu_add_entry(DEBUG_NUMBER_ACCEPT, "", line, TERM_L_BLUE);
 
     sdl_question_menu_add_entry(DEBUG_NUMBER_PLUS_1, "+)", "+1",
@@ -381,15 +381,18 @@ static bool debug_overlay_get_long(cptr title, cptr desc, long initial,
 
         case '-':
         case '_':
-            if (min < 0 && entry_len == 0)
+            /* The advertised shortcut always decrements. A pending sign
+             * still lets subsequent digits enter a negative number. */
+            current = debug_overlay_clamp_long(current - 1, min, max);
+            if (min < 0 && (entry_len == 0
+                    || (entry_len == 1 && entry[0] == '-')))
             {
-                entry[entry_len++] = '-';
-                entry[entry_len] = '\0';
-                current = 0;
+                entry_len = 1;
+                entry[0] = '-';
+                entry[1] = '\0';
             }
             else
             {
-                current = debug_overlay_clamp_long(current - 1, min, max);
                 entry_len = 0;
                 entry[0] = '\0';
             }
@@ -1125,7 +1128,7 @@ static const tval_desc tvals[] = { { TV_SWORD, "Sword" },
     { TV_FOOD, "Food" }, { TV_POTION, "Potion" }, { TV_STAFF, "Staff" },
     { TV_HORN, "Horn" }, { TV_CHEST, "Chest" }, { TV_FLASK, "Flask" },
     { TV_SKELETON, "Skeleton" }, { TV_METAL, "Piece of Metal" },
-    { TV_NOTE, "Note" }, { 0, NULL } };
+    { TV_NOTE, "Note" }, { TV_GEM, "Gem" }, { 0, NULL } };
 
 /*
  * Get an object kind for creation (or zero)

@@ -2859,6 +2859,31 @@ static bool handle_peaceful_attack_target(int y, int x, int attack_type)
     return true;
 }
 
+static bool melee_attack_has_permitted_weapon(int attack_type)
+{
+    if (quest_challenge_weapon_allowed(&inventory[INVEN_WIELD]))
+        return true;
+
+    /* Impale and one-blow reactions cannot use the normal offhand blow. */
+    return p_ptr->mds2 > 0 && attack_type != ATT_IMPALE
+        && (is_normal_attack(attack_type) || attack_type == ATT_WHIRLWIND)
+        && quest_challenge_weapon_allowed(&inventory[INVEN_ARM]);
+}
+
+static bool refuse_forbidden_melee_weapons(int attack_type)
+{
+    if (melee_attack_has_permitted_weapon(attack_type))
+        return false;
+
+    msg_print("Your chosen challenge forbids attacking with this weapon.");
+    if (attack_type == ATT_MAIN && !player_attacked)
+    {
+        p_ptr->previous_action[0] = ACTION_NOTHING;
+        p_ptr->energy_use = 0;
+    }
+    return true;
+}
+
 /*
  * Attack the monster at the given location
  *
@@ -2899,6 +2924,7 @@ void py_attack_aux(int y, int x, int attack_type)
     char punctuation[20];
 
     bool abort_attack = false;
+    bool attack_notified = false;
     bool do_knock_back = false;
     bool knocked = false;
     bool charge = false;
@@ -2916,6 +2942,10 @@ void py_attack_aux(int y, int x, int attack_type)
         return;
 
     if (handle_peaceful_attack_target(y, x, attack_type))
+        return;
+
+    /* Refuse before oath/unarmed prompts and attack-only side effects. */
+    if (refuse_forbidden_melee_weapons(attack_type))
         return;
 
     /* Get the monster */
@@ -3036,10 +3066,6 @@ void py_attack_aux(int y, int x, int attack_type)
     // determine the base for the attack_mod
     attack_mod = p_ptr->skill_use[S_MEL];
 
-    /* Monsters might notice */
-    player_attacked = true;
-    tutorial_game_attack(m_ptr);
-
     // Determine the number of attacks
     blows = 1;
     if (p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK])
@@ -3075,19 +3101,8 @@ void py_attack_aux(int y, int x, int attack_type)
         bool silent_kill_candidate = insight_reworked_enabled()
             && p_ptr->active_ability[S_STL][STL_SILENT_PASSAGE]
             && m_ptr->alertness < ALERTNESS_ALERT;
-        smite = two_handed_melee() && (p_ptr->active_ability[S_MEL][MEL_SMITE]
-            || quest_special_ability_active(SPC_TULKAS_WRATH))
-            && num == 1
-            && (attack_type == ATT_MAIN || attack_type == ATT_FLANKING
-                || attack_type == ATT_IMPALE
-                || attack_type == ATT_FOLLOW_THROUGH
-                || attack_type == ATT_WHIRLWIND);
-
         do_knock_back = false;
         knocked = false;
-
-        if (smite)
-            p_ptr->skip_next_turn = true;
 
         // if the previous blow was a charge, undo the charge effects for later
         // blows
@@ -3117,6 +3132,23 @@ void py_attack_aux(int y, int x, int attack_type)
             msg_print("Your chosen challenge forbids attacking with this weapon.");
             continue;
         }
+
+        if (!attack_notified)
+        {
+            player_attacked = true;
+            tutorial_game_attack(m_ptr);
+            attack_notified = true;
+        }
+
+        smite = two_handed_melee() && (p_ptr->active_ability[S_MEL][MEL_SMITE]
+            || quest_special_ability_active(SPC_TULKAS_WRATH))
+            && num == 1
+            && (attack_type == ATT_MAIN || attack_type == ATT_FLANKING
+                || attack_type == ATT_IMPALE
+                || attack_type == ATT_FOLLOW_THROUGH
+                || attack_type == ATT_WHIRLWIND);
+        if (smite)
+            p_ptr->skip_next_turn = true;
 
         if (assassination_bonus_attack(attack_type))
         {
@@ -3703,6 +3735,15 @@ void py_attack(int y, int x, int attack_type)
         return;
     }
 
+    /* Keep peaceful interactions available regardless of weapon policy. */
+    int target_idx = cave_m_idx[y][x];
+    if (target_idx > 0
+        && !(r_info[mon_list[target_idx].r_idx].flags1 & RF1_PEACEFUL)
+        && refuse_forbidden_melee_weapons(attack_type))
+    {
+        return;
+    }
+
     // store the action type
     p_ptr->previous_action[0] = ACTION_MISC;
 
@@ -3793,7 +3834,8 @@ void py_attack(int y, int x, int attack_type)
             }
         }
     }
-    else if (can_impale())
+    else if (can_impale()
+        && quest_challenge_weapon_allowed(&inventory[INVEN_WIELD]))
     {
         yy = y + ddy[dir];
         xx = x + ddx[dir];

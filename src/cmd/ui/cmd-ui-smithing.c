@@ -59,6 +59,14 @@ static smith_alloy_state smith_alloy;
 static smith_alloy_state smith2_alloy;
 static smith_alloy_state smith3_alloy;
 
+/* This work owns a withdrawn item and has already paid its delta costs.
+ * Both the object marker and remaining work are stored in existing saves. */
+static bool smith_pending_reforge(void)
+{
+    return p_ptr->smithing_leftover > 0 && smith_o_ptr->k_idx
+        && smith_o_ptr->unused1 == 2;
+}
+
 // artefact being created
 #define smith_a_name (z_info->art_self_made_max - 1)
 #define smith_a_ptr (&a_info[smith_a_name])
@@ -3856,6 +3864,22 @@ void prt_object_difficulty(void)
     if (smith_o_ptr->tval == 0)
         return;
 
+    if (smith_pending_reforge())
+    {
+        int col = portrait ? COL_SMT1 : COL_SMT4;
+        int row = 2;
+        if (portrait)
+        {
+            row = smith_ui_used_bottom_row() + 1;
+            smith_ui_draw_horizontal_divider(row++);
+        }
+        smith_ui_put_fitted(col, row++, smith_ui_line_width(col),
+            TERM_L_BLUE, "Reforging");
+        smith_ui_put_fitted(col, row, smith_ui_line_width(col),
+            TERM_SLATE, "Costs paid");
+        return;
+    }
+
     if (portrait)
     {
         int divider_row = smith_ui_used_bottom_row() + 1;
@@ -4535,6 +4559,7 @@ static void smithing_cost_delta_positive(const smithing_cost_type* before,
 static bool reforge_preview_build(const object_type* source, int prefix_idx,
     reforge_preview_type* preview)
 {
+    object_type single_source;
     int before_diff = 0;
     int after_diff = 0;
     int turn_multiplier = 10;
@@ -4543,6 +4568,10 @@ static bool reforge_preview_build(const object_type* source, int prefix_idx,
 
     if (!source || !source->k_idx || !preview || prefix_idx <= 0)
         return false;
+
+    object_copy(&single_source, source);
+    single_source.number = 1;
+    source = &single_source;
 
     memset(preview, 0, sizeof(*preview));
     smithing_cost_reset_local(&before_cost);
@@ -8854,6 +8883,14 @@ static void smith_root_build_entries(bool valid[SMT_MENU_MAX],
     valid[SMT_MENU_ACCEPT - 1] = affordable(smith_o_ptr) && at_forge
         && (uses > 0);
 
+    if (smith_pending_reforge())
+    {
+        for (int i = 0; i < SMT_MENU_MAX; ++i)
+            valid[i] = false;
+        /* Acceptance may have consumed the final forge use. */
+        valid[SMT_MENU_ACCEPT - 1] = at_forge;
+    }
+
     valid_attr = (p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH]
                      || p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
                      || p_ptr->active_ability[S_SMT][SMT_JEWELLER])
@@ -8943,6 +8980,8 @@ static cptr smith_root_detail_text(int choice)
     case SMT_MENU_REPAIR:
         return "Repair damaged gear or hammer a prefix onto a found item. Prefix reforging uses one and a half times the difficulty gained.";
     case SMT_MENU_ACCEPT:
+        if (smith_pending_reforge())
+            return "Resume the remaining reforging work; all costs are already paid.";
         return "Commit the design to the forge and spend the listed resources to finish the work.";
     default:
         return "";
@@ -8959,6 +8998,15 @@ static void smith_root_note_for_choice(int choice, bool valid, char* buf,
         return;
 
     buf[0] = '\0';
+
+    if (smith_pending_reforge())
+    {
+        if (choice != SMT_MENU_ACCEPT)
+            SDL_strlcpy(buf, "Finish the current reforging work first.", buflen);
+        else if (!at_forge)
+            SDL_strlcpy(buf, "Resume at a forge; costs are already paid.", buflen);
+        return;
+    }
 
     switch (choice)
     {
@@ -9273,9 +9321,54 @@ static void smithing_redraw_root_after_item_picker(void)
     Term_fresh();
 }
 
+static bool smith_begin_reforge(int slot, int prefix_idx)
+{
+    reforge_preview_type preview;
+    object_type source;
+    object_type* target = player_inventory_object(slot);
+
+    if (smith_pending_reforge() || !target || !target->k_idx
+        || target->number == 0 || !object_can_preview_reforge_prefix(target))
+        return false;
+    if (player_inventory_handle_is_equipped(slot) && cursed_p(target))
+    {
+        msg_print("You cannot remove that cursed item to reforge it.");
+        return false;
+    }
+
+    object_copy(&source, target);
+    /* The operation works on one item, even when its source is a stack. */
+    source.number = 1;
+    if (!reforge_preview_build(&source, prefix_idx, &preview)
+        || !preview.affordable)
+        return false;
+
+    smith_o_ptr->unused1 = 2;
+    smith_o_ptr->pickup = false;
+    smith_o_ptr->pickup_slot = -1;
+    smith_o_ptr->iy = smith_o_ptr->ix = 0;
+    smith_o_ptr->next_o_idx = smith_o_ptr->held_m_idx = 0;
+    smith_clear_alloy_state(&smith_alloy);
+
+    /* Withdraw before payment: consuming metal may compact the source slot. */
+    inven_item_increase(slot, -1);
+    inven_item_optimize(slot);
+    pay_smithing_cost_struct(&preview.cost);
+    p_ptr->smithing_leftover = preview.turns;
+    catastrophe_accept_craft(preview.scaled_difficulty);
+    p_ptr->window |= PW_INVEN | PW_EQUIP;
+    p_ptr->redraw |= PR_BASIC | PR_EQUIPPY;
+    return true;
+}
+
 static bool smith_reforge_item(void)
 {
     if (!tutorial_game_action_allowed("smith", NULL)) return false;
+    if (smith_pending_reforge())
+    {
+        msg_print("Finish your current reforging work first.");
+        return false;
+    }
     int slot = -1;
     int prefix_idx = 0;
     char old_name[80];
@@ -9392,10 +9485,8 @@ static bool smith_reforge_item(void)
         }
 
         object_desc(old_name, sizeof(old_name), target, true, 0);
-        object_set_ego_prefix(target, prefix_idx);
-        if (!object_apply_ego_affix(target, prefix_idx, true))
+        if (!smith_begin_reforge(slot, prefix_idx))
         {
-            object_set_ego_prefix(target, 0);
             object_copy(smith_o_ptr, &smith_backup);
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
@@ -9404,15 +9495,11 @@ static bool smith_reforge_item(void)
             return false;
         }
 
-        target->unused1 = 2;
-        object_aware(target);
-        object_known(target);
-        object_desc(new_name, sizeof(new_name), target, true, 0);
-        /* Consuming metal can compact the pack or promote an extra entry,
-         * invalidating target. Finish the item before paying those costs. */
-        pay_smithing_cost_struct(&preview.cost);
-        msg_format("You reforge %s into %s.", old_name, new_name);
-        p_ptr->window |= (PW_INVEN | PW_EQUIP);
+        /* Keep the accepted item in saved work, rather than the preview backup. */
+        object_copy(smith2_o_ptr, smith_o_ptr);
+        smith2_alloy = smith_alloy;
+        msg_format("You set %s aside for reforging.", old_name);
+        return true;
     }
 
     object_copy(smith_o_ptr, &smith_backup);
@@ -9604,6 +9691,13 @@ void do_cmd_smithing_screen(void)
     {
         actiontype = smithing_menu_aux(&highlight);
 
+        if (smith_pending_reforge() && actiontype > 0
+            && actiontype != SMT_MENU_ACCEPT)
+        {
+            msg_print("Finish your current reforging work first.");
+            continue;
+        }
+
         // if an action has been selected...
         switch (actiontype)
         {
@@ -9711,7 +9805,11 @@ void do_cmd_smithing_screen(void)
                 break;
             }
 
-            smith_reforge_item();
+            if (smith_reforge_item() && smith_pending_reforge())
+            {
+                create = true;
+                leave_menu = true;
+            }
             break;
         }
         case SMT_MENU_ACCEPT:
@@ -9723,7 +9821,7 @@ void do_cmd_smithing_screen(void)
                 break;
             }
 
-            if (smithing_cost.drain > 0)
+            if (!smith_pending_reforge() && smithing_cost.drain > 0)
             {
                 char buf[80];
 
@@ -9773,7 +9871,8 @@ void do_cmd_smithing_screen(void)
         {
             p_ptr->smithing = p_ptr->smithing_leftover;
             /* Older saves did not record the accepted crafting difficulty. */
-            if (catastrophe_get_state().craft_difficulty < 0)
+            if (!smith_pending_reforge()
+                && catastrophe_get_state().craft_difficulty < 0)
                 catastrophe_accept_craft(object_difficulty(smith_o_ptr));
         }
         else
@@ -9847,11 +9946,39 @@ void do_cmd_smithing_screen(void)
     p_ptr->smithing_starting = false;
 }
 
+static void finish_smith_reforge(void)
+{
+    char name[160];
+    catastrophe_crafted(smith_o_ptr);
+    object_aware(smith_o_ptr);
+    object_known(smith_o_ptr);
+    object_desc(name, sizeof(name), smith_o_ptr, true, 3);
+
+    /* Delta costs were paid when this exact item entered the work. */
+    int slot = inven_carry(smith_o_ptr, true);
+    if (player_inventory_handle_valid(slot))
+        msg_format("You have reforged %s (%c).", name, player_inventory_label(slot));
+    else
+    {
+        drop_near(smith_o_ptr, 0, p_ptr->py, p_ptr->px);
+        msg_format("You have reforged %s, but it falls to the floor.", name);
+    }
+    object_wipe(smith_o_ptr);
+    smith_clear_alloy_state(&smith_alloy);
+    p_ptr->update |= PU_BONUS;
+    p_ptr->window |= PW_INVEN | PW_EQUIP;
+}
+
 /*
  * Actually creates the item.
  */
 void create_smithing_item(void)
 {
+    if (smith_o_ptr->k_idx && smith_o_ptr->unused1 == 2)
+    {
+        finish_smith_reforge();
+        return;
+    }
     int slot;
     int artefact_slot = -1;
     int saved_difficulty = 0;

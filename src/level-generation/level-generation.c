@@ -1896,8 +1896,13 @@ if (playerturn == 0) {
     level_gen_screen_begin();
     reset_generation_retry_locks();
 
-    // reset smithing leftover (as there is no access to the old forge)
-    p_ptr->smithing_leftover = 0;
+    /* Ordinary designs belong to the old forge. Reforging owns a withdrawn,
+     * prepaid item, which must remain available to resume at another forge. */
+    if (!(p_ptr->smithing_leftover > 0 && smith_o_ptr->k_idx
+            && smith_o_ptr->unused1 == 2))
+        p_ptr->smithing_leftover = 0;
+    else
+        p_ptr->smithing = 0;
 
     // reset the forced skipping of next turn (a bit rough to miss first turn if
     // you fell down)

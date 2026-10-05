@@ -3949,6 +3949,20 @@ static int ability_browser_collect_entries(int skilltype,
     return count;
 }
 
+static int ability_browser_oath_for_special(int abilitynum)
+{
+    switch (abilitynum)
+    {
+    case SPC_OATH_MERCY: return OATH_MERCY;
+    case SPC_OATH_SILENCE: return OATH_SILENCE;
+    case SPC_OATH_IRON: return OATH_IRON;
+    case SPC_OATH_SMITH: return OATH_SMITH;
+    case SPC_OATH_VALOROUS: return OATH_VALOROUS;
+    case SPC_OATH_LIGHT: return OATH_LIGHT;
+    default: return 0;
+    }
+}
+
 static void ability_browser_entry_state(char* buf, size_t buflen,
     int skilltype, const ability_browser_entry* entry)
 {
@@ -3973,9 +3987,13 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
                 p_ptr->active_ability[skilltype][abilitynum] ? "item" : "off",
                 buflen);
         else if (skilltype == S_SPC)
+        {
+            int oath_id = ability_browser_oath_for_special(abilitynum);
             SDL_strlcpy(buf,
-                p_ptr->active_ability[skilltype][abilitynum] ? "grant" : "lost",
+                p_ptr->active_ability[skilltype][abilitynum] ? "grant"
+                    : (oath_id > 0 && oath_invalid(oath_id)) ? "lost" : "off",
                 buflen);
+        }
         else
             SDL_strlcpy(buf,
                 p_ptr->active_ability[skilltype][abilitynum] ? "on" : "off",
@@ -4325,20 +4343,6 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
 
     ability_menu_append_song_cost(bonus_text, text_size, b_ptr);
     return true;
-}
-
-static int ability_browser_oath_for_special(int abilitynum)
-{
-    switch (abilitynum)
-    {
-    case SPC_OATH_MERCY: return OATH_MERCY;
-    case SPC_OATH_SILENCE: return OATH_SILENCE;
-    case SPC_OATH_IRON: return OATH_IRON;
-    case SPC_OATH_SMITH: return OATH_SMITH;
-    case SPC_OATH_VALOROUS: return OATH_VALOROUS;
-    case SPC_OATH_LIGHT: return OATH_LIGHT;
-    default: return 0;
-    }
 }
 
 static void ability_browser_add_policy_requirements(
@@ -4998,15 +5002,17 @@ static int ability_browser_build_description(int skilltype,
         : 0;
     if (oath_id > 0 && oath_invalid(oath_id))
     {
-        char* death_message = oath_death_message(oath_id);
+        cptr broken_message = (p_ptr->is_dead || death_spectator_active())
+            ? oath_death_message(oath_id)
+            : oath_permanent_message(oath_id);
 
         ability_desc_add_blank(lines, &line_count);
-        if (death_message && death_message[0])
+        if (broken_message && broken_message[0])
         {
             ability_desc_add_heading(lines, &line_count, TERM_RED,
                 "Broken oath");
             ability_desc_add_wrapped(lines, &line_count, TERM_RED,
-                death_message, width);
+                broken_message, width);
         }
         else
         {

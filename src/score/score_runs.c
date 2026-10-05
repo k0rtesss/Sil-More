@@ -2088,6 +2088,9 @@ bool score_runs_record_current_run_with_id(const struct high_score* legacy_score
     if (found) {
         record.record_id = existing.record_id;
         record.chronological_idx = existing.chronological_idx;
+        /* Saving or completing a life must not move its recorded start. */
+        if (existing.created_utc != 0)
+            record.created_utc = existing.created_utc;
         Sint64 replacement_size = score_runs_serialized_record_size(&details);
         bool size_changed = !record_only_update &&
             replacement_size != existing_record_size;

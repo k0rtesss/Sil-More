@@ -30,6 +30,7 @@ static unsigned key_index, key_count;
 static int bells, deleted, placed;
 static bool typed_west;
 static int placed_y, placed_x;
+char __real_inkey_movement_context(u16b context);
 
 char __wrap_inkey_movement_context(u16b context)
 {
@@ -39,6 +40,17 @@ char __wrap_inkey_movement_context(u16b context)
         exit(1);
     }
     char key = keys[key_index++];
+    if (key == '`') {
+        /* Exercise the real reader: its normal path maps backtick to Escape.
+         * The wizard-only raw scope must preserve the actual queued byte. */
+        assert(inkey_base);
+        Term_flush();
+        inkey_xtra = false;
+        inkey_next_set(NULL);
+        assert(Term_keypress('`') == 0);
+        key = __real_inkey_movement_context(context);
+        assert(key == '`');
+    }
     if (typed_west && key == UI_MENU_CLICK_WAKE_KEY) {
         movement_input_command command = {0};
         command.context = MOVEMENT_INPUT_CONTEXT_TARGETING;
@@ -101,6 +113,7 @@ static void run_editor(void)
     assert(p_ptr->py == 5 && p_ptr->px == 5);
     assert(cave_m_idx[5][5] == -1);
     assert(mon_cnt >= 0);
+    assert(!inkey_base);
 }
 static void check_numeric_movement(void)
 {
@@ -174,6 +187,37 @@ static void check_escape(void)
     run_editor();
     assert(!bells && !deleted && !placed && mon_cnt == 0);
 }
+static void check_lava_shortcut(void)
+{
+    const char input[] = {'4', '`', ESCAPE};
+    prepare_editor("Backtick creates lava on an ordinary cell", input, sizeof(input));
+    run_editor();
+    assert(cave_feat[5][4] == FEAT_LAVA);
+    assert(cave_feat[5][5] == FEAT_FLOOR);
+    assert(!bells && !deleted && !placed && mon_cnt == 0);
+
+    const char player[] = {'`', ESCAPE};
+    prepare_editor("Lava edit under player preserves negative occupancy", player, sizeof(player));
+    run_editor();
+    assert(cave_feat[5][5] == FEAT_LAVA && cave_m_idx[5][5] == -1);
+    assert(!bells && !deleted && !placed && mon_cnt == 0);
+
+    r_info[41].d_char = 'h';
+    const char replace[] = {'4', 'h', '`', ESCAPE};
+    prepare_editor("Lava edit replaces an ordinary monster safely", replace, sizeof(replace));
+    run_editor();
+    assert(cave_feat[5][4] == FEAT_LAVA && cave_m_idx[5][4] == 0);
+    assert(placed == 1 && deleted == 1 && mon_cnt == 0 && !bells);
+
+    /* Leaving the editor must restore ordinary Escape aliases. */
+    assert(!inkey_base);
+    Term_flush();
+    inkey_xtra = false;
+    inkey_next_set(NULL);
+    assert(Term_keypress('`') == 0);
+    assert(__real_inkey_movement_context(MOVEMENT_INPUT_CONTEXT_TARGETING) == ESCAPE);
+    assert(!inkey_base);
+}
 '''
 
 
@@ -191,7 +235,7 @@ def main():
         init += '    check_player_edit();\n'
     else:
         init += '    check_numeric_movement(); check_typed_movement(); check_player_edit();\n'
-    init += '    check_normal_monster_edit(); check_escape();\n'
+    init += '    check_normal_monster_edit(); check_escape(); check_lava_shortcut();\n'
     init += '    puts("Wizard targeting integration: PASS."); SDL_Quit(); return 0;\n}\n'
     source = OUT / 'check.c'
     source.write_text(prefix + CHECKS + init, encoding='utf-8')

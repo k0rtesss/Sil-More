@@ -7959,7 +7959,10 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
         else
         {
             sdl_char_sheet_draw_menu_row(best_font, r->label, r->attr,
-                r->choice, x, y, column_width, best_line_h,
+                /* The row drawer reserves its Reset strip itself. */
+                r->choice, x, y,
+                column_width + ((column_count == 1) ? reset_reserve : 0.0f),
+                best_line_h,
                 (column_count == 1) ? value_col_x : 0.0f,
                 r->reset_choice, (column_count == 1) ? reset_reserve : 0.0f);
         }

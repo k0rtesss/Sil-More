@@ -340,6 +340,70 @@ static void check_browser_hotkeys(cptr output)
     Term_resize(80, 24);
     puts("Browser hotkeys: actual j/s/z dispatch, i skills, q exit, overflow navigation, labels and unchanged currencies PASS.");
 }
+
+static void check_oath_descriptions(void)
+{
+    extern bool death_spectator_mode;
+    const int oaths[] = {OATH_MERCY, OATH_SILENCE, OATH_IRON, OATH_VALOROUS};
+    const int abilities[] = {SPC_OATH_MERCY, SPC_OATH_SILENCE,
+        SPC_OATH_IRON, SPC_OATH_VALOROUS};
+    const cptr effects[] = {"+1 Grace", "+1 Dexterity", "+1 Constitution", "+1 Strength"};
+    bool saved_dead = p_ptr->is_dead, saved_spectator = death_spectator_mode;
+    byte saved_oath = p_ptr->oath_type, saved_broken = p_ptr->oaths_broken;
+
+    for (int ruleset = INSIGHT_RULESET_CLASSIC;
+         ruleset <= INSIGHT_RULESET_REWORKED; ++ruleset) {
+        modern_reset(); p_ptr->insight_ruleset = ruleset;
+        long saved_xp = p_ptr->new_exp, saved_ip = p_ptr->insight_points;
+        s32b saved_turn = turn, saved_player_turn = playerturn;
+        ability_browser_entry gift = {0};
+        gift.b_ptr = &b_info[ability_index(S_SPC, SPC_HUNTSMAN_RHYTHM)];
+        gift.abilitynum = SPC_HUNTSMAN_RHYTHM;
+        fixture_learn(S_SPC, gift.abilitynum);
+        char state[32];
+        p_ptr->active_ability[S_SPC][gift.abilitynum] = true;
+        ability_browser_entry_state(state, sizeof(state), S_SPC, &gift);
+        assert(streq(state, "grant"));
+        p_ptr->active_ability[S_SPC][gift.abilitynum] = false;
+        ability_browser_entry_state(state, sizeof(state), S_SPC, &gift);
+        assert(streq(state, "off"));
+        for (int i = 0; i < 4; ++i) {
+            ability_browser_entry entry = {0};
+            entry.b_ptr = &b_info[ability_index(S_SPC, abilities[i])];
+            entry.abilitynum = abilities[i];
+            assert(strstr(ability_effect_text(entry.b_ptr), effects[i]));
+            fixture_learn(S_SPC, abilities[i]);
+            p_ptr->active_ability[S_SPC][abilities[i]] = false;
+            p_ptr->oath_type = oaths[i];
+            p_ptr->oaths_broken = 0;
+            ability_browser_entry_state(state, sizeof(state), S_SPC, &entry);
+            assert(streq(state, "off"));
+            p_ptr->oaths_broken = (byte)(1U << (oaths[i] - 1));
+            ability_browser_entry_state(state, sizeof(state), S_SPC, &entry);
+            assert(streq(state, "lost"));
+            char living[32], dead[32];
+            strnfmt(living, sizeof(living), "%.24s", oath_permanent_message(oaths[i]));
+            strnfmt(dead, sizeof(dead), "%.24s", oath_death_message(oaths[i]));
+            assert(living[0] && dead[0] && !streq(living, dead));
+
+            for (int mode = 0; mode < 3; ++mode) {
+                p_ptr->is_dead = mode == 1;
+                death_spectator_mode = mode == 2;
+                ability_browser_desc_line lines[ABILITY_BROWSER_DESC_MAX_LINES];
+                int count = ability_browser_build_description(S_SPC, &entry, lines, 100);
+                assert(description_has(lines, count, "Broken oath"));
+                assert(description_has(lines, count, mode ? dead : living));
+                assert(!description_has(lines, count, mode ? living : dead));
+            }
+        }
+        assert(p_ptr->new_exp == saved_xp && p_ptr->insight_points == saved_ip);
+        assert(turn == saved_turn && playerturn == saved_player_turn);
+    }
+    p_ptr->is_dead = saved_dead; death_spectator_mode = saved_spectator;
+    p_ptr->oath_type = saved_oath; p_ptr->oaths_broken = saved_broken;
+    puts("Special states: gifts grant/off, intact oath off, broken oath lost; no currency/time mutation PASS.");
+    puts("Oath descriptions: all4 current effects, classic/legacy/reworked, actual living/dead/Final Look presentation PASS.");
+}
 '''
 
 def main():
@@ -359,6 +423,7 @@ def main():
     check_modern_inheritance_and_parents(); check_modern_retirement_and_capacity();
     check_modern_browser(argv[3]);
     check_browser_hotkeys(argv[3]);
+    check_oath_descriptions();
     fixture_race.flags=race_flags; rp_ptr=original_race; current_character_profile->flags=origin_flags;
     current_character_profile->flags_u=origin_unique;
     puts("New Insight abilities engine integration PASS.");

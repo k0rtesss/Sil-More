@@ -914,16 +914,16 @@ D:Harnessing the creative fire of Aulë the Smith, mightiest of craftsmen among 
 E:Exceed normal effective capacity by up to twice your base Smithing. Each 2 points of excess difficulty costs ceil(excess / 2) base Smithing ranks. Supersedes Masterpiece. Quest reward.
 N:162:Oath of Mercy
 I:8:2:0
-D:Swearing the Oath of Mercy, akin to the compassion shown by Finrod Felagund when he befriended Beren in Nargothrond, honouring the bond between all free peoples. Those who vow to spare the helpless are touched by a gentle grace, but the oath is fragile and shatters if its keeper takes the life of a defenceless foe.
-E:+1 Grace. Breaks if you slay a helpless foe.
+D:Swearing the Oath of Mercy, akin to the compassion shown by Finrod Felagund when he befriended Beren in Nargothrond, honouring the bond between all free peoples. Those who vow to harm neither Men nor Elves are touched by a gentle grace, but the oath is fragile and shatters if its keeper wounds one of those kindreds.
+E:+1 Grace. Breaks if you harm a visible Man or Elf.
 N:163:Oath of Silence
 I:8:3:0
 D:Taking the Oath of Silence, a vow of grim resolve like those sworn by the warriors who endured the long marches across Beleriand without complaint or song, husbanding their strength in wordless determination. Such discipline hardens the body but demands that the voice be stilled entirely.
-E:+1 Strength. Breaks if you sing any song.
+E:+1 Dexterity. Breaks if you sing any song.
 N:164:Oath of Iron
 I:8:4:0
 D:Forging the Oath of Iron, unyielding as the vow of Fëanor upon Taniquetil, who swore never to retreat or relent in his pursuit of the Silmarils. Those bound by this oath gain the endurance of the unyielding mountains, but must face every peril without flinching, for to flee is to break their word.
-E:+2 Constitution. Breaks if you flee without one.
+E:+1 Constitution. Breaks if you try to ascend ordinary stairs without a Silmaril. Utumno return stairs are exempt.
 N:165:Nienna's Gift of Mercy
 I:8:5:0
 D:Receiving the Gift of Nienna, the Vala of compassion who wept for every hurt upon the world. Her tears bring wisdom and the quiet strength of pity. Those who show mercy move more gently, their footsteps lightened by the grace of choosing restraint over slaughter.
@@ -934,8 +934,8 @@ D:Binding oneself by the Oath of the Smith, as the great craftsmen of the Noldor
 E:+5 Smithing. Breaks if you pick up weapons or armour made by others.
 N:167:Oath of the Valorous Heart
 I:8:7:0
-D:Upholding the Oath of the Valorous Heart, the honour of heroes like Húrin Thalion who fought without quarter upon the field of the Nirnaeth. Such warriors scorn to strike at a fleeing foe, deeming it beneath their honour, and this code of valour lends swiftness to their arms against those who stand and fight.
-E:+1 Dexterity. Breaks if you attack fleeing enemies.
+D:Upholding the Oath of the Valorous Heart, the honour of heroes like Húrin Thalion who fought without quarter upon the field of the Nirnaeth. Such warriors scorn to strike at a fleeing foe, deeming it beneath their honour, and this code of valour lends strength to their arms against those who stand and fight.
+E:+1 Strength. Breaks if you harm a visible fleeing enemy.
 N:168:Unique Bane
 I:8:8:0
 D:Possessing the hunter's knowledge to exploit the weaknesses of great and terrible foes, as Beren studied the habits of Carcharoth, the mightiest wolf that ever walked, before confronting him at the gates of Angband. Against such singular enemies, hard-won understanding becomes a weapon as sharp as any blade.

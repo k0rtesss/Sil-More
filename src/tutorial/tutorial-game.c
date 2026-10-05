@@ -464,7 +464,7 @@ void tutorial_game_identified(const object_type *item, const char *reason)
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
     observe(reason ? reason : "identification.item", item_type(item), name,
-        "The game has revealed new information about this item. Open its updated description to see what you learned.");
+        "The game has revealed new information about this item.");
     /* Capture the revealed effect before the last consumable disappears.
      * Queue information only; the next safe checkpoint displays the card. */
     if (object_aware_p(item) && (item->tval == TV_POTION || item->tval == TV_FOOD

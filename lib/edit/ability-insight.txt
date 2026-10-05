@@ -576,15 +576,15 @@ F:Exceed normal Smithing capacity by sacrificing base Smithing ranks, with great
 
 N:162:Oath of Mercy
 X:3:0:8:0
-F:+1 Grace conditional on sparing helpless foes.
+F:+1 Grace. Harming a visible Man or Elf breaks the oath.
 
 N:163:Oath of Silence
 X:3:0:8:0
-F:+1 Strength conditional on never singing.
+F:+1 Dexterity conditional on never singing.
 
 N:164:Oath of Iron
 X:3:0:8:0
-F:+2 Constitution; no ordinary ascent without a Silmaril; keep Utumno's detour exception.
+F:+1 Constitution; no ordinary ascent without a Silmaril; keep Utumno's detour exception.
 
 N:165:Nienna's Gift of Mercy
 X:3:0:8:0
@@ -596,7 +596,7 @@ F:+5 Smithing conditional on avoiding others' weapons/armour.
 
 N:167:Oath of the Valorous Heart
 X:3:0:8:0
-F:+1 Dexterity conditional on not attacking fleeing foes.
+F:+1 Strength. Harming a visible fleeing enemy breaks the oath.
 
 N:168:Unique Bane
 X:3:0:8:0

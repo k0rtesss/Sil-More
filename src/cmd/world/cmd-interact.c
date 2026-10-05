@@ -1024,7 +1024,7 @@ void do_cmd_open(void)
         /* Honour a pre-supplied direction, else pick a target interactively */
         if (p_ptr->command_dir)
             dir = p_ptr->command_dir;
-        else if (!get_interact_dir("Open what?", grid_is_open_target, false,
+        else if (!get_interact_dir("Open what?", grid_is_open_target, true,
                      &dir))
             return;
 

@@ -841,6 +841,20 @@ void get_sorted_target_list(int mode, int range)
  *
  * This function must handle blindness/hallucination.
  */
+static char targeting_inkey(int mode)
+{
+    bool old_base = inkey_base;
+    char query;
+
+    /* The wizard editor uses backtick for lava; ordinary input treats it as
+     * Escape. Read literal editor glyphs without changing other targeting. */
+    if (mode & TARGET_WIZ)
+        inkey_base = true;
+    query = inkey_movement_context(MOVEMENT_INPUT_CONTEXT_TARGETING);
+    inkey_base = old_base;
+    return query;
+}
+
 static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool use_story_font)
 {
     s16b this_o_idx, next_o_idx = 0;
@@ -894,7 +908,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
             look_prt(use_story_font, out_val, 0, 0);
             move_cursor_relative(y, x);
-            query = inkey_movement_context(MOVEMENT_INPUT_CONTEXT_TARGETING);
+            query = targeting_inkey(mode);
 
             /* Stop on everything but "return" */
             if ((query != '\n') && (query != '\r'))
@@ -1022,8 +1036,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                         move_cursor_relative(y, x);
 
                         /* Command */
-                        query = inkey_movement_context(
-                            MOVEMENT_INPUT_CONTEXT_TARGETING);
+                        query = targeting_inkey(mode);
                     }
 
                     /* Normal commands */
@@ -1096,8 +1109,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
                     look_prt(use_story_font, out_val, 0, 0);
                     move_cursor_relative(y, x);
-                    query = inkey_movement_context(
-                        MOVEMENT_INPUT_CONTEXT_TARGETING);
+                    query = targeting_inkey(mode);
 
                     /* Stop on everything but "return"/"space" */
                     if ((query != '\n') && (query != '\r') && (query != ' '))
@@ -1178,8 +1190,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
                     look_prt(use_story_font, out_val, 0, 0);
                     move_cursor_relative(y, x);
-                    query = inkey_movement_context(
-                        MOVEMENT_INPUT_CONTEXT_TARGETING);
+                    query = targeting_inkey(mode);
 
                     /* Stop on everything but "return"/"space" */
                     if ((query != '\n') && (query != '\r') && (query != ' '))
@@ -1314,7 +1325,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
             look_prt(use_story_font, out_val, 0, 0);
             move_cursor_relative(y, x);
-            query = inkey_movement_context(MOVEMENT_INPUT_CONTEXT_TARGETING);
+            query = targeting_inkey(mode);
 
             /* Stop on everything but "return"/"space" */
             if ((query != '\n') && (query != '\r') && (query != ' '))
@@ -2234,7 +2245,7 @@ bool target_set_interactive(int mode, int range)
             }
 
             // change the terrain
-            else if (strchr(".;'^+#:%0<>_", query) || inc_terrain)
+            else if (strchr(".;'^+#:%0<>_`", query) || inc_terrain)
             {
                 feature_type* f_ptr;
                 feature_type* old_f_ptr;

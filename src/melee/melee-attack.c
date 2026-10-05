@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "melee/melee-attack.h"
 #include "player/killer.h"
+#include "quest/quest-challenges.h"
 
 
 /*
@@ -2227,6 +2228,8 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
 
                         // allow for ripostes
                         if (player_active_weapon_is_melee()
+                            && !player_submerged_in_deep_water()
+                            && quest_challenge_weapon_allowed(&inventory[INVEN_WIELD])
                             && p_ptr->active_ability[S_EVN][EVN_RIPOSTE]
                             && (p_ptr->ripostes < 1) && !p_ptr->afraid
                             && !p_ptr->confused && !p_ptr->entranced
