@@ -49,7 +49,7 @@ void clear_skills_and_abilities()
     int i, j;
 
     /* Clear the base values of the skills */
-    for (i = 0; i < A_MAX; i++)
+    for (i = 0; i < S_MAX; i++)
         p_ptr->skill_base[i] = 0;
 
     /* Clear the abilities */
@@ -1858,6 +1858,7 @@ extern void do_cmd_options_aux(int page, cptr info)
     bool app_settings_dirty = false;
     bool metarun_settings_dirty = false;
     bool sound_settings_dirty = false;
+    bool previous_fixed_exp = birth_fixed_exp;
     const struct option_group_marker* groups = get_option_groups_for_page(page);
     struct sound_config* sound_cfg = sdl_sound_get_config();
 
@@ -1922,6 +1923,21 @@ extern void do_cmd_options_aux(int page, cptr info)
     /* Interact with the player */
     while (true)
     {
+        bool fixed_exp_active = birth_fixed_exp;
+
+        /* Only a change of starting budget invalidates a new hero's choices.
+         * Visiting other settings must preserve granted or earned experience.
+         * Handle changes before rendering so a row reset follows this path too. */
+        if (playerturn == 0 && fixed_exp_active != previous_fixed_exp)
+        {
+            int total_exp = fixed_exp_active ? PY_FIXED_EXP : PY_START_EXP;
+            p_ptr->new_exp = total_exp;
+            p_ptr->exp = total_exp;
+            check_experience();
+            clear_skills_and_abilities();
+        }
+        previous_fixed_exp = fixed_exp_active;
+
         settings_semantic_menu_begin(info, k);
         if (page == CHALLENGE_PAGE)
         {
@@ -3163,23 +3179,6 @@ extern void do_cmd_options_aux(int page, cptr info)
         }
         }
 
-        if (birth_fixed_exp && playerturn == 0 && p_ptr->exp != PY_FIXED_EXP)
-        {
-            int total_exp = PY_FIXED_EXP;
-            p_ptr->new_exp = total_exp;
-            p_ptr->exp = total_exp;
-            check_experience();
-            clear_skills_and_abilities();
-        }
-        else if (!birth_fixed_exp && playerturn == 0
-            && p_ptr->exp >= PY_FIXED_EXP)
-        {
-            int total_exp = PY_START_EXP;
-            p_ptr->new_exp = total_exp;
-            p_ptr->exp = total_exp;
-            check_experience();
-            clear_skills_and_abilities();
-        }
     }
 }
 

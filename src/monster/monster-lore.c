@@ -706,6 +706,18 @@ static void describe_monster_exp(int r_idx, const monster_lore* l_ptr)
     }
 }
 
+static int monster_lore_encounter_depth(const monster_race* race)
+{
+    /* These reserved guardians inhabit authored areas beyond the ordinary
+     * dungeon. Their threat rank does not describe the encounter location. */
+    if (race->guid == 0x7222d6d7c82f6571ULL
+        || race->guid == 0x23eb4b3c8f754c0aULL)
+        return UTUMNO_DEPTH;
+    if (race->guid == 0xf1f38a4b25dfcc33ULL)
+        return UTUMNO_FORGE_DEPTH;
+    return MIN(race->level, MORGOTH_DEPTH);
+}
+
 static void describe_monster_movement(
     int r_idx, const monster_lore* l_ptr, const monster_type* m_ptr)
 {
@@ -782,15 +794,11 @@ static void describe_monster_movement(
         {
             text_out_c(TERM_YELLOW, "guarding the gates of Angband");
         }
-        else if (r_ptr->level < MORGOTH_DEPTH)
-        {
-            text_out("at depths of ");
-            text_out_c(TERM_YELLOW, format("%d feet", r_ptr->level * 50));
-        }
         else
         {
             text_out("at depths of ");
-            text_out_c(TERM_YELLOW, format("%d feet", MORGOTH_DEPTH * 50));
+            text_out_c(TERM_YELLOW,
+                format("%d feet", monster_lore_encounter_depth(r_ptr) * 50));
         }
         old = true;
     }

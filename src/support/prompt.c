@@ -975,11 +975,10 @@ bool get_check_oath_multiline(cptr prompt)
     /* Paranoia */
     message_flush();
     
-    /* Get terminal size */
-    Term_get_size(&wid, &h);
-    
-    /* Save screen */
+    /* Save gameplay and hide log panes while this full-screen warning is open. */
     screen_save();
+    screen_push_supporting_panes_hidden();
+    Term_get_size(&wid, &h);
     Term_clear();
     
     /* Title */
@@ -990,7 +989,7 @@ bool get_check_oath_multiline(cptr prompt)
         char* desc_ptr = (char*)prompt;
         char line_buffer[80];
         int row = 5;
-        int max_width = 70; /* Leave margins */
+        int max_width = MAX(1, MIN(70, wid - 2));
         
         while (*desc_ptr && row < h - 4) {
             int line_len = 0;
@@ -1011,11 +1010,15 @@ bool get_check_oath_multiline(cptr prompt)
             
             /* Back up to last space if we exceeded width */
             if (line_len >= max_width && *desc_ptr) {
-                while (desc_ptr > line_start && *desc_ptr != ' ') {
-                    desc_ptr--;
-                    line_len--;
+                char* word_break = desc_ptr;
+                while (word_break > line_start && *word_break != ' ')
+                    word_break--;
+                /* An unbroken token must still advance by max_width. */
+                if (word_break > line_start)
+                {
+                    line_len = (int)(word_break - line_start);
+                    desc_ptr = word_break + 1;
                 }
-                if (*desc_ptr == ' ') desc_ptr++; /* Skip the space */
             }
             
             /* Copy the line */
@@ -1088,6 +1091,7 @@ bool get_check_oath_multiline(cptr prompt)
     
     /* Restore screen */
     sdl_touch_pane_end_yes_no_prompt();
+    screen_pop_supporting_panes_hidden();
     screen_load();
     
     /* Normal negation */

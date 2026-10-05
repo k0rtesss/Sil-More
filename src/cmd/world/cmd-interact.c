@@ -128,7 +128,7 @@ static int interaction_roll_high_chance_lock_ms(int lock_ms,
     return MIN(lock_ms, MIN(INTERACTION_ROLL_FAST_MAX_MS, fast_lock_ms));
 }
 
-static void interaction_roll_render_overlay(cptr title, cptr action, int y,
+static void interaction_roll_render_overlay(cptr actor_label, cptr title, cptr action, int y,
     int x, const skill_roll_details* roll, int skill_die, int difficulty_die,
     bool final, bool blocking, int timeout_ms)
 {
@@ -146,7 +146,7 @@ static void interaction_roll_render_overlay(cptr title, cptr action, int y,
     sdl_question_menu_add_text(action, final ? TERM_L_WHITE : TERM_L_BLUE);
 
     interaction_roll_format_total(
-        line, sizeof(line), "You", skill_die, roll->skill_sides, roll->skill);
+        line, sizeof(line), actor_label, skill_die, roll->skill_sides, roll->skill);
     sdl_question_menu_add_text(line, TERM_WHITE);
 
     interaction_roll_format_total(
@@ -308,6 +308,7 @@ static int show_interaction_skill_roll_animation_actor_sided(
     int prev_difficulty_die = 0;
     int result;
     u32b visual_seed;
+    char actor_label[80];
 
     if (!roll)
         roll = &local_roll;
@@ -335,6 +336,12 @@ static int show_interaction_skill_roll_animation_actor_sided(
         handle_stuff();
     }
 
+    /* Pending view updates may change whether the actor is visible. */
+    if (actor == PLAYER)
+        SDL_strlcpy(actor_label, "You", sizeof(actor_label));
+    else
+        monster_desc(actor_label, sizeof(actor_label), actor, 0);
+
     saved_hide_cursor = hide_cursor;
     hide_cursor = true;
     lock_ms = get_sdl_dice_roll_lock_ms();
@@ -359,7 +366,7 @@ static int show_interaction_skill_roll_animation_actor_sided(
         int delay_ms = MIN(INTERACTION_ROLL_ANIM_FRAME_MS,
             lock_ms - elapsed_ms);
 
-        interaction_roll_render_overlay(title, action, y, x, &preview_roll,
+        interaction_roll_render_overlay(actor_label, title, action, y, x, &preview_roll,
             skill_die, difficulty_die, false, true, 0);
         Term_xtra(TERM_XTRA_DELAY, delay_ms);
         elapsed_ms += delay_ms;
@@ -370,7 +377,7 @@ static int show_interaction_skill_roll_animation_actor_sided(
 
     result = skill_check_details_sided(actor, skill, difficulty, NULL,
         skill_sides, difficulty_sides, roll);
-    interaction_roll_render_overlay(title, action, y, x, roll, roll->skill_die,
+    interaction_roll_render_overlay(actor_label, title, action, y, x, roll, roll->skill_die,
         roll->difficulty_die, true, false, overlay_ms);
 
     hide_cursor = saved_hide_cursor;
