@@ -206,6 +206,26 @@ static cJSON* control_state(bool waiting)
     return state;
 }
 
+static bool control_publish_screenshot(const char* temp, const char* path)
+{
+    /* Windows image readers can briefly hold the old PNG without delete
+     * sharing. Retry only publication of this completed frame; the request's
+     * input has already been applied and must never be replayed. */
+#ifdef _WIN32
+    Uint64 deadline = SDL_GetTicksNS() + 250 * SDL_NS_PER_MS;
+    do
+    {
+        if (SDL_RenamePath(temp, path))
+            return true;
+        if (SDL_GetTicksNS() >= deadline)
+            return false;
+        SDL_Delay(CONTROL_POLL_MS);
+    } while (true);
+#else
+    return SDL_RenamePath(temp, path);
+#endif
+}
+
 static bool control_capture(void)
 {
     char path[1200], temp[1200];
@@ -226,7 +246,7 @@ static bool control_capture(void)
         owned = true;
     }
     if (surface) {
-        ok = IMG_SavePNG(surface, temp) && SDL_RenamePath(temp, path);
+        ok = IMG_SavePNG(surface, temp) && control_publish_screenshot(temp, path);
         if (owned)
             SDL_DestroySurface(surface);
     }

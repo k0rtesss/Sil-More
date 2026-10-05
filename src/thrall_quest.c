@@ -1703,7 +1703,7 @@ bool upgrade_broken_item(int slot)
     }
 
     strnfmt(dialog_text, sizeof(dialog_text),
-        "The thrall takes your %s in scarred hands, and his fingers move with an old, half-forgotten surety.\n\n"
+        "The thrall takes %s in scarred hands, and his fingers move with an old, half-forgotten surety.\n\n"
         "He murmurs words under his breath, and a pale light kindles along the metal...\n\n"
         "It is remade as %s!",
         old_name, new_name);
