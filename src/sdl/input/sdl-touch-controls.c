@@ -617,6 +617,7 @@ typedef struct touch_thumb_button_set {
 
 typedef struct touch_target_layout_state {
     bool locked;
+    SDL_Rect screen;
     bool thumb_valid;
     SDL_FRect thumb_rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
     bool wheel_valid;
@@ -628,6 +629,7 @@ typedef struct touch_target_layout_state {
 } touch_target_layout_state;
 
 static touch_target_layout_state g_touch_target_layout;
+static void sdl_touch_target_layout_refresh_viewport(void);
 
 static bool sdl_touch_thumb_description_open(void);
 
@@ -1225,6 +1227,7 @@ static bool sdl_touch_thumb_compute_runtime_rects(
         return false;
     if (!out_rects || rect_count < SDL_TOUCH_THUMB_RUNTIME_CAPACITY)
         return false;
+    sdl_touch_target_layout_refresh_viewport();
     if (g_touch_target_layout.locked) {
         if (!g_touch_target_layout.thumb_valid)
             return false;
@@ -2262,6 +2265,7 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
 
     if (sdl_touch_gameplay_controls_suppressed())
         return false;
+    sdl_touch_target_layout_refresh_viewport();
     if (g_touch_target_layout.locked) {
         if (!g_touch_target_layout.wheel_valid)
             return false;
@@ -2470,6 +2474,28 @@ bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,
     return true;
 }
 
+static void sdl_touch_target_layout_refresh_viewport(void)
+{
+    SDL_Rect screen;
+
+    if (!g_touch_target_layout.locked)
+        return;
+    screen = sdl_get_layout_screen_rect();
+    if (screen.x == g_touch_target_layout.screen.x
+        && screen.y == g_touch_target_layout.screen.y
+        && screen.w == g_touch_target_layout.screen.w
+        && screen.h == g_touch_target_layout.screen.h)
+    {
+        return;
+    }
+
+    /* Keep the snapshot stable across targeting ownership changes, but rebuild
+     * its pixel geometry after a window or safe-area resize. Unlock while
+     * measuring so the layout functions cannot reuse the old snapshot. */
+    g_touch_target_layout.locked = false;
+    sdl_touch_target_layout_begin();
+}
+
 void sdl_touch_target_layout_begin(void)
 {
     touch_target_layout_state snapshot = { 0 };
@@ -2478,6 +2504,7 @@ void sdl_touch_target_layout_begin(void)
      * and which overlay panes report live rectangles.  Snapshot the gameplay
      * geometry before that transition so the wheel and contextual buttons do
      * not jump when choosing a ranged, thrown, song, or other target. */
+    snapshot.screen = sdl_get_layout_screen_rect();
     snapshot.thumb_valid = sdl_touch_thumb_compute_runtime_rects(
         snapshot.thumb_rects, SDL_TOUCH_THUMB_RUNTIME_CAPACITY);
     snapshot.wheel_valid = sdl_touch_round_compute_layout(
@@ -2717,6 +2744,7 @@ void sdl_touch_round_cancel_press(void)
     g_touch_round_press.inner_radius = 0.0f;
     g_touch_round_press.selected_dir = 0;
     g_touch_round_press.button_press = false;
+    g_touch_round_press.direction_dragged = false;
     g_touch_round_press.button_dir = 0;
     g_touch_round_press.start_time = 0;
     g_state.need_present = true;
@@ -2770,6 +2798,7 @@ bool sdl_touch_round_handle_pointer_down(float x, float y,
     g_touch_round_press.inner_radius = inner_radius;
     g_touch_round_press.selected_dir = outer_button ? dir : 0;
     g_touch_round_press.button_press = outer_button;
+    g_touch_round_press.direction_dragged = !outer_button && dir != 0;
     g_touch_round_press.button_dir = outer_button ? dir : 0;
     g_touch_round_press.start_time = SDL_GetTicksNS();
     g_state.need_present = true;
@@ -2823,6 +2852,7 @@ bool sdl_touch_round_handle_pointer_motion(float x, float y,
         }
     } else if (dist >= g_touch_round_press.inner_radius
             * SDL_TOUCH_ROUND_DRAG_THRESHOLD_FRAC) {
+        g_touch_round_press.direction_dragged = true;
         g_touch_round_press.selected_dir = sdl_touch_round_dir_for_delta(dx, dy);
     } else {
         g_touch_round_press.selected_dir = 0;
@@ -2880,7 +2910,10 @@ bool sdl_touch_round_handle_pointer_up(float x, float y,
     } else if (!sdl_touch_round_aim_targeting_active()
         && dist <= g_touch_round_press.inner_radius
             * SDL_TOUCH_ROUND_CENTER_REPEAT_FRAC) {
-        if (press_time < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
+        /* Returning a direction drag to neutral cancels it.  Repeat belongs
+         * only to a tap that stayed inside the neutral disc. */
+        if (!g_touch_round_press.direction_dragged
+            && press_time < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
             dir = g_touch_round_last_dir;
     } else if (dist >= g_touch_round_press.inner_radius
             * SDL_TOUCH_ROUND_DRAG_THRESHOLD_FRAC) {
@@ -3380,6 +3413,7 @@ void sdl_touch_round_render(void)
     press_time = active ? SDL_GetTicksNS() - g_touch_round_press.start_time : 0;
     center_repeat = active && !aim_targeting
         && !g_touch_round_press.button_press
+        && !g_touch_round_press.direction_dragged
         && dist <= inner_radius * SDL_TOUCH_ROUND_CENTER_REPEAT_FRAC
         && press_time < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL
         && g_touch_round_last_dir != 0;

@@ -688,6 +688,7 @@ typedef struct touch_round_press_state {
     float inner_radius;
     int selected_dir;
     bool button_press;
+    bool direction_dragged;
     int button_dir;
     Uint64 start_time;
 } touch_round_press_state;
