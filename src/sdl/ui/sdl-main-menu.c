@@ -34,6 +34,10 @@ typedef struct sdl_main_menu_button_press_state {
 static sdl_popup_notification_state g_popup_notification;
 static sdl_main_menu_button_press_state g_main_menu_button_press;
 static bool g_main_menu_button_disable_prompt_pending;
+static bool g_main_menu_large_touch_active;
+static bool g_main_menu_large_touch_dragged;
+static SDL_FingerID g_main_menu_large_touch_finger;
+static float g_main_menu_large_touch_y;
 
 static bool sdl_main_menu_button_run_pending_disable_prompt(void);
 
@@ -184,9 +188,9 @@ int sdl_main_menu_pane_font_px(void)
         ? sdl_resolve_aux_view_font_size(config.aux_view_font_size)
 #if SIL_SDL_MOBILE_BUILD
         /* Mobile: enlarge popup-menu font one notch (3/4 -> 4/5 of main). */
-        : sdl_auto_font_size_from_main(4, 5);
+        : sdl_ui_font_px(sdl_auto_font_size_from_main(4, 5));
 #else
-        : sdl_auto_font_size_from_main(3, 4);
+        : sdl_ui_font_px(sdl_auto_font_size_from_main(3, 4));
 #endif
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
 
@@ -297,14 +301,17 @@ float sdl_main_menu_draw_text(TTF_Font* font, cptr text, float x,
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return 0.0f;
 
-    texture = sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    texture = config.bigger_font
+        ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
+            &text_w, &text_h)
+        : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return 0.0f;
 
-    if (text_w > 0 && (float)text_w > max_w)
+    if (!config.bigger_font && text_w > 0 && (float)text_w > max_w)
         scale = max_w / (float)text_w;
     max_h = row_h * 0.86f;
-    if (text_h > 0 && (float)text_h * scale > max_h)
+    if (!config.bigger_font && text_h > 0 && (float)text_h * scale > max_h)
         scale = max_h / (float)text_h;
     if (scale > 1.0f)
         scale = 1.0f;
@@ -468,17 +475,19 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
 
     pad_x = (float)font_px * 0.64f;
     pad_y = (float)font_px * 0.22f;
-#if !SIL_SDL_MOBILE_BUILD
     row_h = (float)font_px * 1.12f;
-#endif
     if (pad_x < 11.0f)
         pad_x = 11.0f;
     if (pad_y < 5.0f)
         pad_y = 5.0f;
-#if !SIL_SDL_MOBILE_BUILD
     if (row_h < (float)font_px + 3.0f)
         row_h = (float)font_px + 3.0f;
-#endif
+    if (config.bigger_font) {
+        /* A touch list needs names and comfortable rows; shortcut keys still
+         * work, but their extra column need not consume reading space. */
+        shortcut_w = 0;
+        row_h = MAX(44.0f, (float)text_h * 1.35f);
+    }
 
     shortcut_gap = shortcut_w > 0 ? (float)font_px * 0.38f : 0.0f;
     if (shortcut_w > 0 && shortcut_gap < 5.0f)
@@ -492,7 +501,18 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         max_panel_w = (float)screen.w;
     panel_w = sdl_touch_pane_clampf(panel_w, 1.0f, max_panel_w);
 
+    if (config.bigger_font) {
+        for (int i = 1; i <= MAIN_MENU_MAX; i++) {
+            int width = 0;
+            int height = 0;
+            if (TTF_GetStringSizeWrapped(story_font, main_menu_title(i), 0,
+                    MAX(1, (int)(panel_w - pad_x * 2.0f)), &width, &height))
+                row_h = MAX(row_h, height + 8.0f);
+        }
+    }
+
 #if SIL_SDL_MOBILE_BUILD
+    if (!config.bigger_font)
     {
         float overlay_margin = (float)sdl_overlay_margin_px();
 
@@ -511,20 +531,22 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
         visible_count = MAIN_MENU_MAX;
     }
-#else
-    panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
-    max_panel_h = (float)screen.h - 12.0f;
-    if (max_panel_h < 1.0f)
-        max_panel_h = (float)screen.h;
-    if (panel_h > max_panel_h && max_panel_h > pad_y * 2.0f) {
-        visible_count = (int)((max_panel_h - pad_y * 2.0f) / row_h);
-        if (visible_count < 1)
-            visible_count = 1;
-        if (visible_count > MAIN_MENU_MAX)
-            visible_count = MAIN_MENU_MAX;
-        panel_h = pad_y * 2.0f + row_h * (float)visible_count;
-    }
+    else
 #endif
+    {
+        panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
+        max_panel_h = (float)screen.h - 12.0f;
+        if (max_panel_h < 1.0f)
+            max_panel_h = (float)screen.h;
+        if (panel_h > max_panel_h && max_panel_h > pad_y * 2.0f) {
+            visible_count = (int)((max_panel_h - pad_y * 2.0f) / row_h);
+            if (visible_count < 1)
+                visible_count = 1;
+            if (visible_count > MAIN_MENU_MAX)
+                visible_count = MAIN_MENU_MAX;
+            panel_h = pad_y * 2.0f + row_h * (float)visible_count;
+        }
+    }
 
     sdl_main_menu_overlay_scroll_to_highlight(visible_count);
 
@@ -623,6 +645,7 @@ void sdl_main_menu_overlay_close(void)
         return;
 
     g_main_menu_overlay_active = false;
+    g_main_menu_large_touch_active = false;
     g_main_menu_overlay_hover_choice = 0;
     g_main_menu_pane_hover = false;
     sdl_main_menu_overlay_reset_nav_input();
@@ -976,6 +999,13 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
         panel_w = max_panel_w;
 
     panel_h = (float)font_px * 1.10f + pad_y * 2.0f;
+    if (config.bigger_font) {
+        int width = 0;
+        int height = 0;
+        if (TTF_GetStringSizeWrapped(font, g_popup_notification.text, 0,
+                MAX(1, (int)(panel_w - pad_x * 2.0f)), &width, &height))
+            panel_h = MAX(panel_h, height + pad_y * 2.0f);
+    }
     panel = (SDL_FRect){ .w = panel_w, .h = panel_h };
     if (menu_button_visible) {
         panel.x = menu_rect.x + (menu_rect.w - panel_w) * 0.5f;
@@ -1811,7 +1841,10 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
         }
         return true;
     case SDL_EVENT_MOUSE_BUTTON_UP:
+        return true;
     case SDL_EVENT_MOUSE_WHEEL:
+        if (config.bigger_font && ev->wheel.y != 0.0f)
+            sdl_main_menu_overlay_move(ev->wheel.y > 0.0f ? -1 : 1);
         return true;
     case SDL_EVENT_FINGER_DOWN:
     case SDL_EVENT_FINGER_MOTION:
@@ -1819,6 +1852,30 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
             return true;
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             return true;
+        if (config.bigger_font) {
+            main_menu_pane_layout layout;
+
+            if (ev->type == SDL_EVENT_FINGER_DOWN) {
+                g_main_menu_large_touch_active = true;
+                g_main_menu_large_touch_dragged = false;
+                g_main_menu_large_touch_finger = ev->tfinger.fingerID;
+                g_main_menu_large_touch_y = y;
+            } else if (g_main_menu_large_touch_active
+                && g_main_menu_large_touch_finger == ev->tfinger.fingerID
+                && sdl_main_menu_overlay_layout(&layout)) {
+                float delta = g_main_menu_large_touch_y - y;
+                float step = MAX(24.0f, layout.row_h * 0.7f);
+
+                while (delta >= step || delta <= -step) {
+                    int dir = delta > 0.0f ? 1 : -1;
+                    sdl_main_menu_overlay_move(dir);
+                    g_main_menu_large_touch_y -= dir * step;
+                    delta = g_main_menu_large_touch_y - y;
+                    g_main_menu_large_touch_dragged = true;
+                }
+            }
+            return true;
+        }
         {
             bool in_panel = false;
 
@@ -1833,7 +1890,16 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
             return sdl_main_menu_overlay_handle_pointer_down(x, y);
         return sdl_main_menu_overlay_handle_pointer_motion(x, y);
     case SDL_EVENT_FINGER_UP:
+        if (config.bigger_font && g_main_menu_large_touch_active
+            && g_main_menu_large_touch_finger == ev->tfinger.fingerID) {
+            g_main_menu_large_touch_active = false;
+            if (!g_main_menu_large_touch_dragged
+                && sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+                return sdl_main_menu_overlay_handle_pointer_down(x, y);
+        }
+        return true;
     case SDL_EVENT_FINGER_CANCELED:
+        g_main_menu_large_touch_active = false;
         return true;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP:

@@ -454,6 +454,7 @@ typedef struct sdl_welcome_screen_state {
 typedef enum sdl_character_sheet_context {
     SDL_CHARACTER_SHEET_HIDDEN = 0,
     SDL_CHARACTER_SHEET_LIVE,
+    SDL_CHARACTER_SHEET_DEBUG,
     SDL_CHARACTER_SHEET_BIRTH_PREVIEW,
     SDL_CHARACTER_SHEET_BIRTH_STATS,
     SDL_CHARACTER_SHEET_BIRTH_SKILLS,
@@ -553,6 +554,8 @@ typedef struct sdl_character_sheet_screen_state {
     int skill_costs[S_MAX];
     sdl_character_sheet_live_item live_items[128];
     int live_item_count;
+    int debug_page;
+    int debug_page_count;
     sdl_character_sheet_select_row select_rows[96];
     int select_row_count;
     sdl_character_sheet_select_detail select_detail[80];
@@ -2002,6 +2005,7 @@ void sdl_pop_description_overlay_main_anchor(void);
 void sdl_push_description_overlay_full_main_anchor(void);
 void sdl_pop_description_overlay_full_main_anchor(void);
 int sdl_main_menu_pane_font_px(void);
+int sdl_ui_font_px(int normal_px);
 int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen);
 bool sdl_main_menu_pane_context_visible(void);
 const char* sdl_main_menu_mono_font_path(void);
@@ -2063,6 +2067,8 @@ void sdl_pause_text_screen_set_visible_lines(int visible_lines);
 void sdl_pause_text_screen_hide(void);
 bool sdl_pause_text_screen_active(void);
 void sdl_pause_text_screen_render(void);
+bool sdl_standalone_screen_handle_pointer(float x, float y, int action);
+bool sdl_standalone_screen_handle_key(int key);
 bool sdl_tale_screen_begin(cptr title);
 void sdl_tale_screen_add_entry(cptr heading, cptr body);
 void sdl_tale_screen_set_manuscript(bool enabled);
@@ -2154,6 +2160,8 @@ void sdl_character_sheet_screen_render(void);
 bool sdl_character_sheet_screen_active(void);
 void sdl_character_sheet_screen_hide(void);
 void sdl_character_sheet_screen_begin_live(int focus_choice);
+void sdl_character_sheet_screen_begin_debug(void);
+bool sdl_character_sheet_screen_debug_turn_page(int dir);
 void sdl_character_sheet_screen_begin_birth_preview(void);
 void sdl_character_sheet_screen_add_live_item(int choice, int kind, int skill, int value_kind, cptr label, cptr desc);
 void sdl_character_sheet_screen_show_birth_stats(const int* stats, const int* costs, int selected_stat, int points_left);
@@ -3363,6 +3371,8 @@ int get_sdl_min_main_view_scale(void);
 int get_sdl_terminal_menu_scale_offset(void);
 void set_sdl_terminal_menu_scale_offset(int value);
 bool get_sdl_compact_inventory_menus(void);
+bool get_sdl_bigger_font(void);
+void set_sdl_bigger_font(bool value);
 void set_sdl_compact_inventory_menus(bool value);
 bool get_sdl_show_context_square_popups(void);
 void set_sdl_show_context_square_popups(bool value);

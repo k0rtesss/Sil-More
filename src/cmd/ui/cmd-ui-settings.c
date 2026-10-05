@@ -3324,7 +3324,8 @@ static void sdl_open_config_file(void)
 void do_cmd_pane_settings(void)
 {
     enum {
-        PANE_SETTING_MIN_TERMINAL_SIZE = 0,
+        PANE_SETTING_BIGGER_FONT = 0,
+        PANE_SETTING_MIN_TERMINAL_SIZE,
         PANE_SETTING_MAIN_VIEW_SCALE,
         PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
         PANE_SETTING_COMPACT_INVENTORY_MENUS,
@@ -3383,6 +3384,11 @@ void do_cmd_pane_settings(void)
     {
         int row_width;
         int label_hint;
+        /* These layouts are selected automatically by the larger-text mode. */
+        pane_setting_visible[PANE_SETTING_COMPACT_INVENTORY_MENUS] =
+            !get_sdl_bigger_font();
+        pane_setting_visible[PANE_SETTING_DEBUG_CHARACTER_SHEET] =
+            !get_sdl_bigger_font();
         settings_semantic_menu_begin("General Settings", k);
 
         /* Display current settings */
@@ -3406,7 +3412,12 @@ void do_cmd_pane_settings(void)
             }                                                                  \
         } while (0)
 
-        /* Option 0: Minimum Terminal Size */
+        a = (k == PANE_SETTING_BIGGER_FONT) ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf), "Bigger font",
+            get_sdl_bigger_font() ? "On" : "Off", row_width, 3);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_BIGGER_FONT, 0, a, buf);
+
+        /* Minimum Terminal Size */
         a = (k == PANE_SETTING_MIN_TERMINAL_SIZE) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3668,6 +3679,10 @@ void do_cmd_pane_settings(void)
          * has no description yet). */
         {
             static const char* const pane_setting_desc[PANE_SETTING_COUNT] = {
+                [PANE_SETTING_BIGGER_FONT] =
+                    "Increase all text by 50%. Menus use larger rows, wrapping "
+                    "and scrolling; character information uses pages. "
+                    "Designed for mobile. Off by default.",
                 [PANE_SETTING_MIN_TERMINAL_SIZE] =
                     "Smallest character grid the game will use. Larger minimums "
                     "keep text big but leave less room for side and bottom "
@@ -3684,8 +3699,8 @@ void do_cmd_pane_settings(void)
                     "Supplies. When focus moves to the item list, hide the "
                     "category pane and use its space for item names.",
                 [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
-                    "Choose debug to use the compact terminal character sheet "
-                    "for h/@. "
+                    "Choose debug for a character sheet with larger text and "
+                    "multiple pages. Use arrows or Prev/Next to change pages. "
                     "Choose SDL to return to the current character sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
@@ -3794,6 +3809,9 @@ void do_cmd_pane_settings(void)
                     sdl_config_set_defaults(&def);
                     switch (k)
                     {
+                    case PANE_SETTING_BIGGER_FONT:
+                        set_sdl_bigger_font(def.bigger_font);
+                        break;
                     case PANE_SETTING_MIN_TERMINAL_SIZE:
                         set_sdl_min_terminal_mode(def.min_terminal_mode);
                         break;
@@ -4036,6 +4054,12 @@ void do_cmd_pane_settings(void)
                     !get_sdl_compact_inventory_menus());
                 settings_changed = true;
             }
+            else if (k == PANE_SETTING_BIGGER_FONT)
+            {
+                set_sdl_bigger_font(!get_sdl_bigger_font());
+                settings_changed = true;
+                sdl_apply_config();
+            }
             else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
             {
                 config.debug_character_sheet =
@@ -4223,6 +4247,15 @@ void do_cmd_pane_settings(void)
                     settings_changed = true;
                 }
             }
+            else if (k == PANE_SETTING_BIGGER_FONT)
+            {
+                if (!get_sdl_bigger_font())
+                {
+                    set_sdl_bigger_font(true);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
             else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
             {
                 if (!config.debug_character_sheet)
@@ -4375,6 +4408,15 @@ void do_cmd_pane_settings(void)
                 {
                     set_sdl_compact_inventory_menus(false);
                     settings_changed = true;
+                }
+            }
+            else if (k == PANE_SETTING_BIGGER_FONT)
+            {
+                if (get_sdl_bigger_font())
+                {
+                    set_sdl_bigger_font(false);
+                    settings_changed = true;
+                    sdl_apply_config();
                 }
             }
             else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise Android autosave timing and thread ownership with real SDL events.
+"""Exercise Android autosave/audio timing and thread ownership with real SDL events.
 
 Compiles the production lifecycle watch/dispatcher against the configured
 Windows SDL build. No game saves, profiles, or Android installations are opened.
@@ -32,10 +32,19 @@ static bool g_mobile_lifecycle_autosaved;
 static int attempts;
 static bool save_ok = true;
 static char last_reason[64];
+static bool audio_suspended;
+
+bool sdl_sound_initialize(void) { return true; }
+void sdl_sound_set_suspended(bool suspended)
+{
+    assert(SDL_IsMainThread());
+    audio_suspended = suspended;
+}
 
 bool mobile_autosave_game(const char *reason)
 {
     assert(SDL_IsMainThread());
+    assert(audio_suspended);
     ++attempts;
     SDL_strlcpy(last_reason, reason, sizeof(last_reason));
     return save_ok;
@@ -91,7 +100,7 @@ int main(void)
     /* Android can block before queued events are consumed. The save must
      * already be complete when the main-thread background watch returns. */
     push(SDL_EVENT_WILL_ENTER_BACKGROUND);
-    assert(attempts == 1 && g_mobile_lifecycle_autosaved);
+    assert(attempts == 1 && g_mobile_lifecycle_autosaved && audio_suspended);
     assert(!SDL_strcmp(last_reason, "will enter background"));
     push(SDL_EVENT_DID_ENTER_BACKGROUND);
     push(SDL_EVENT_TERMINATING);
@@ -100,7 +109,9 @@ int main(void)
 
     push(SDL_EVENT_WILL_ENTER_FOREGROUND);
     assert(!g_mobile_lifecycle_autosaved);
+    assert(audio_suspended); /* Wait until foreground entry is complete. */
     push(SDL_EVENT_DID_ENTER_FOREGROUND);
+    assert(!audio_suspended);
     push(SDL_EVENT_WILL_ENTER_BACKGROUND);
     assert(attempts == 2);
     drain();
@@ -123,8 +134,9 @@ int main(void)
     drain();
     push_worker(SDL_EVENT_WILL_ENTER_BACKGROUND);
     assert(attempts == 4 && !g_mobile_lifecycle_autosaved);
+    assert(!audio_suspended);
     drain();
-    assert(attempts == 5 && g_mobile_lifecycle_autosaved);
+    assert(attempts == 5 && g_mobile_lifecycle_autosaved && audio_suspended);
     push_worker(SDL_EVENT_DID_ENTER_BACKGROUND);
     drain();
     assert(attempts == 5);
@@ -137,6 +149,7 @@ int main(void)
     push(SDL_EVENT_DID_ENTER_FOREGROUND);
     drain();
     assert(attempts == 5 && !g_mobile_lifecycle_autosaved);
+    assert(!audio_suspended);
 
     /* If posting the private event fails, the original queued event is a
      * safe main-thread fallback rather than an off-thread save. */
@@ -144,7 +157,7 @@ int main(void)
     push_worker(SDL_EVENT_WILL_ENTER_BACKGROUND);
     assert(attempts == 5 && !g_mobile_lifecycle_autosaved);
     drain();
-    assert(attempts == 6 && g_mobile_lifecycle_autosaved);
+    assert(attempts == 6 && g_mobile_lifecycle_autosaved && audio_suspended);
     SDL_SetEventFilter(NULL, NULL);
 
     sdl_mobile_lifecycle_unregister();
@@ -156,7 +169,7 @@ int main(void)
     drain();
     assert(attempts == 7);
     SDL_Quit();
-    puts("Mobile lifecycle: save before Android pause, duplicate suppression, retry, worker dispatch, stale transitions and queue-failure fallback: PASS");
+    puts("Mobile lifecycle: pause audio/save before Android blocks, resume only on completed foreground entry, duplicate suppression, retry, worker dispatch, stale transitions and queue-failure fallback: PASS");
     return 0;
 }
 '''

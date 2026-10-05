@@ -14,8 +14,10 @@
 #include "log/perf.h"
 
 #include <math.h>
+#include <float.h>
 
 #define SDL_QUESTION_MENU_MAX_COLUMNS 4
+#define SDL_QUESTION_MENU_ACTIONS_LINK_CHOICE (INT_MIN + 7)
 
 typedef struct sdl_question_menu_layout_info {
     SDL_FRect panel;
@@ -25,6 +27,7 @@ typedef struct sdl_question_menu_layout_info {
     SDL_FRect info_rect;
     SDL_FRect close_rect;
     SDL_FRect suppress_rect;
+    SDL_FRect actions_link;
     SDL_FRect scroll_track;
     SDL_FRect scroll_thumb;
     SDL_FRect rows[SDL_QUESTION_MENU_MAX_ENTRIES];
@@ -55,6 +58,7 @@ typedef struct sdl_question_menu_layout_info {
     bool suppress_button;
     bool info_button;
     bool scrollable;
+    bool actions_in_list;
 } sdl_question_menu_layout_info;
 
 typedef struct sdl_question_menu_touch_state {
@@ -73,6 +77,7 @@ typedef struct sdl_question_menu_touch_state {
 static sdl_question_menu_touch_state g_question_menu_touch;
 static bool g_question_menu_touch_scrolled = false;
 static int g_question_menu_pending_navigation = 0;
+static int g_question_menu_internal_scroll;
 
 /* Pixel rect of a map cell on the main view, or false when it is off the
  * current panel.  Shared with the yes/no prompt anchoring. */
@@ -307,6 +312,8 @@ static void sdl_question_menu_draw_text_aux(TTF_Font* font, cptr text,
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
 
+    if (config.bigger_font)
+        wrap = true;
     texture = wrap
         ? sdl_ui_wrapped_text_texture(font, text,
               MAX(1, (int)(max_w + 0.5f)), color, &text_w, &text_h)
@@ -314,9 +321,9 @@ static void sdl_question_menu_draw_text_aux(TTF_Font* font, cptr text,
     if (!texture)
         return;
 
-    if (text_h > 0 && (float)text_h > row_h * 0.94f)
+    if (!config.bigger_font && text_h > 0 && (float)text_h > row_h * 0.94f)
         scale = (row_h * 0.94f) / (float)text_h;
-    if (text_w > 0 && (float)text_w * scale > max_w)
+    if (!config.bigger_font && text_w > 0 && (float)text_w * scale > max_w)
         scale = max_w / (float)text_w;
 
     src = (SDL_FRect){
@@ -411,6 +418,14 @@ static int sdl_question_menu_display_columns(cptr text, bool compact,
     char columns[][SDL_QUESTION_MENU_TEXT_LEN])
 {
     int count = sdl_question_menu_split_columns(text, columns);
+
+    if (config.bigger_font && compact && count > 1) {
+        for (int column = 1; column < count; column++) {
+            SDL_strlcat(columns[0], "  ", SDL_QUESTION_MENU_TEXT_LEN);
+            SDL_strlcat(columns[0], columns[column], SDL_QUESTION_MENU_TEXT_LEN);
+        }
+        return 1;
+    }
 
     if (!compact || count <= 2)
         return count;
@@ -590,6 +605,7 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     float pad_y;
     float row_h;
     float entry_heights[SDL_QUESTION_MENU_MAX_ENTRIES] = { 0 };
+    float header_h;
     float entries_h = 0.0f;
     float divider_gap;
     float text_w = 0.0f;
@@ -607,7 +623,12 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     float button_gap = 0.0f;
     float button_total_w = 0.0f;
     float button_section_h = 0.0f;
+    float action_content_h = 0.0f;
     int button_count;
+    int button_columns = 0;
+    int button_rows = 1;
+    float button_row_h = 0.0f;
+    float button_row_heights[SDL_QUESTION_MENU_MAX_BUTTONS] = { 0 };
     float content_w;
     float desc_h = 0.0f;
     float help_desc_h = 0.0f;
@@ -647,7 +668,7 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
         return false;
     if (!sdl_overlay_pane_anchor_rect(PANE_DESCRIPTION, &anchor))
         return false;
-    compact_table = anchor.h > anchor.w;
+    compact_table = config.bigger_font || anchor.h > anchor.w;
 
     font_px = sdl_main_menu_pane_font_px();
 #if SIL_SDL_MOBILE_BUILD
@@ -656,8 +677,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (g_question_menu.context_hint)
     {
         font_px = (int)((float)font_px * 0.78f + 0.5f);
-        if (font_px < 13)
-            font_px = 13;
+        if (font_px < sdl_ui_font_px(13))
+            font_px = sdl_ui_font_px(13);
     }
     story_font = sdl_story_font_for_height_slot(font_px,
         SDL_STORY_FONT_SLOT_MENU);
@@ -739,6 +760,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     row_h = (float)font_px * 1.24f;
     if (row_h < (float)font_px + 4.0f)
         row_h = (float)font_px + 4.0f;
+    if (config.bigger_font)
+        row_h = MAX(44.0f, (float)TTF_GetFontHeight(story_font) * 1.3f);
     divider_gap = sdl_touch_pane_clampf((float)font_px * 0.3f, 3.0f, 8.0f);
     button_gap = sdl_touch_pane_clampf((float)font_px * 0.42f, 6.0f, 14.0f);
     letter_gap = letter_w > 0.0f
@@ -777,6 +800,9 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (button_count > SDL_QUESTION_MENU_MAX_BUTTONS)
         button_count = SDL_QUESTION_MENU_MAX_BUTTONS;
     out->button_count = button_count;
+    button_columns = button_count;
+    button_row_h = row_h;
+    header_h = row_h;
     if (button_count > 0)
     {
         float button_pad_x = g_question_menu.context_hint
@@ -849,6 +875,47 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
+    if (config.bigger_font) {
+        float available_w = MAX(1.0f, panel_w - pad_x * 2.0f);
+        float title_available = MAX(1.0f, available_w
+            - close_reserve - info_reserve - suppress_reserve);
+        int title_h = sdl_question_menu_wrapped_text_height(story_font,
+            g_question_menu.title, title_available);
+
+        header_h = MAX(row_h, title_h + 6.0f);
+        if (button_count > 0) {
+            float best_h = FLT_MAX;
+            /* Measure the actual draw width.  Choose the least tall grid
+             * whose labels still have a useful reading width. */
+            for (int columns = 1; columns <= button_count; columns++) {
+                float heights[SDL_QUESTION_MENU_MAX_BUTTONS] = { 0 };
+                int rows = (button_count + columns - 1) / columns;
+                float width = (available_w - button_gap * (columns - 1)) / columns;
+                float total = divider_gap + button_gap * (rows - 1);
+                if (columns > 1 && width < font_px * 5.0f)
+                    continue;
+                for (int i = 0; i < button_count; i++) {
+                    float h = MAX(button_row_h,
+                        sdl_question_menu_wrapped_text_height(story_font,
+                            g_question_menu.buttons[i].text, width * 0.84f) + 8.0f);
+                    heights[i / columns] = MAX(heights[i / columns], h);
+                }
+                for (int row = 0; row < rows; row++)
+                    total += heights[row];
+                if (total >= best_h)
+                    continue;
+                best_h = total;
+                button_columns = columns;
+                button_rows = rows;
+                memcpy(button_row_heights, heights, sizeof(heights));
+                for (int i = 0; i < button_count; i++)
+                    button_widths[i] = width;
+            }
+            button_total_w = available_w;
+            button_section_h = best_h;
+        }
+    }
+
     /* The ideal table width may exceed the screen after panel_w is capped.
      * Fit its columns before measuring wrapped row heights, so long weapon
      * and shield names use the actual space available to them. */
@@ -913,6 +980,26 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (max_panel_h < 1.0f)
         max_panel_h = (float)anchor.h;
 
+    if (config.bigger_font && !g_question_menu.help_mode
+        && button_count > 0 && g_question_menu.count > 0
+        && pad_y * 2.0f + header_h + divider_gap + button_section_h
+            + row_h * 2.0f > max_panel_h) {
+        /* On short screens, put secondary actions after the choices in the
+         * same scrolling list.  A fixed Actions button jumps to them. */
+        out->actions_in_list = true;
+        button_columns = 1;
+        button_rows = button_count;
+        action_content_h = divider_gap + button_gap * (button_count - 1);
+        for (int i = 0; i < button_count; i++) {
+            button_widths[i] = panel_w - pad_x * 2.0f;
+            button_row_heights[i] = MAX(button_row_h,
+                sdl_question_menu_wrapped_text_height(story_font,
+                    g_question_menu.buttons[i].text, button_widths[i] * 0.84f) + 8.0f);
+            action_content_h += button_row_heights[i];
+        }
+        button_section_h = row_h + divider_gap;
+    }
+
     if (out->has_desc)
     {
         desc_h = sdl_question_menu_desc_height(story_font,
@@ -934,7 +1021,7 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
                 + divider_gap
                 + 4.0f;
             if (out->has_title)
-                reserved_h += row_h + divider_gap;
+                reserved_h += header_h + divider_gap;
             else if (close_button || suppress_button)
                 reserved_h += row_h + divider_gap;
             reserved_h += button_section_h;
@@ -961,9 +1048,9 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
             help_content_h += divider_gap;
     }
 
-    panel_h = pad_y * 2.0f + entries_h;
+    panel_h = pad_y * 2.0f + entries_h + action_content_h;
     if (header_row)
-        panel_h += row_h + divider_gap;
+        panel_h += header_h + divider_gap;
     if (desc_h > 0.0f)
         panel_h += desc_h + divider_gap;
     panel_h += button_section_h;
@@ -972,7 +1059,7 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
         float help_panel_h = pad_y * 2.0f + help_content_h;
 
         if (header_row)
-            help_panel_h += row_h + divider_gap;
+            help_panel_h += header_h + divider_gap;
         if (help_panel_h > panel_h)
             panel_h = help_panel_h;
     }
@@ -1089,13 +1176,13 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
             .y = rows_top,
             .w = out->panel.w - pad_x * 2.0f
                 - close_reserve - info_reserve - suppress_reserve,
-            .h = row_h,
+            .h = header_h,
         };
         if (out->title_row.w < 1.0f)
             out->title_row.w = 1.0f;
-        out->divider_y = rows_top + row_h + divider_gap * 0.5f;
+        out->divider_y = rows_top + header_h + divider_gap * 0.5f;
         out->has_divider = true;
-        rows_top += row_h + divider_gap;
+        rows_top += header_h + divider_gap;
     }
     else if (out->close_button || out->suppress_button)
     {
@@ -1175,7 +1262,7 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
         }
         else
         {
-            scroll_content_h = entries_h;
+            scroll_content_h = entries_h + action_content_h;
             for (int i = 0; i < g_question_menu.count; i++)
             {
                 if (g_question_menu.entries[i].choice
@@ -1191,7 +1278,7 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
                 + entry_heights[highlight_index];
 
             max_scroll_offset = (int)ceilf(MAX(0.0f,
-                entries_h - rows_h));
+                scroll_content_h - rows_h));
             if (g_question_menu.scroll_offset_ptr)
                 scroll_offset = *g_question_menu.scroll_offset_ptr;
             else
@@ -1223,6 +1310,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
             }
             if (g_question_menu.scroll_offset_ptr)
                 *g_question_menu.scroll_offset_ptr = scroll_offset;
+            if (g_question_menu.scroll_offset_ptr == &g_question_menu_internal_scroll)
+                g_question_menu.scroll_follow_highlight = false;
 
             while (first_entry + 1 < g_question_menu.count
                 && first_entry_top + entry_heights[first_entry]
@@ -1278,13 +1367,20 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     if (button_count > 0)
     {
         float button_area_w = out->panel.w - pad_x * 2.0f;
-        float y = out->panel.y + out->panel.h - pad_y - row_h;
+        float y = out->panel.y + out->panel.h - pad_y
+            - button_section_h + divider_gap;
         float total_w = button_total_w;
         float x;
 
+        if (out->actions_in_list) {
+            out->actions_link = (SDL_FRect){ out->panel.x + pad_x, y,
+                button_area_w, row_h };
+            y = rows_top + entries_h - scroll_offset + divider_gap;
+        }
+
         if (button_area_w < 1.0f)
             button_area_w = 1.0f;
-        if (total_w > button_area_w)
+        if (button_rows == 1 && total_w > button_area_w)
         {
             float fit_w = (button_area_w
                 - button_gap * (float)(button_count - 1))
@@ -1308,11 +1404,20 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
 
         for (int i = 0; i < button_count; i++)
         {
+            float button_y = y;
+            float height = button_row_h;
+            if (config.bigger_font) {
+                x = out->panel.x + pad_x
+                    + (i % button_columns) * (button_widths[i] + button_gap);
+                for (int row = 0; row < i / button_columns; row++)
+                    button_y += button_row_heights[row] + button_gap;
+                height = button_row_heights[i / button_columns];
+            }
             out->buttons[i] = (SDL_FRect){
                 .x = x,
-                .y = y,
+                .y = button_y,
                 .w = button_widths[i],
-                .h = row_h,
+                .h = height,
             };
             x += button_widths[i] + button_gap;
         }
@@ -1599,6 +1704,8 @@ bool sdl_question_menu_activate_context_choice(int choice)
 
 void sdl_question_menu_begin(cptr title)
 {
+    bool keep_scroll = g_question_menu.active && title
+        && streq(title, g_question_menu.title);
     /* The game rebuilds blocking questions after pointer-hover wakeups.  Keep
      * frontend-only chrome and help state stable until the overlay is actually
      * cleared. */
@@ -1623,6 +1730,12 @@ void sdl_question_menu_begin(cptr title)
     g_question_menu.help_open = help_open;
     g_question_menu.help_button_hover = help_button_hover;
     g_question_menu.help_scroll_offset = help_scroll_offset;
+    if (config.bigger_font) {
+        if (!keep_scroll)
+            g_question_menu_internal_scroll = 0;
+        g_question_menu.scroll_offset_ptr = &g_question_menu_internal_scroll;
+        g_question_menu.scroll_follow_highlight = true;
+    }
     if (title)
         SDL_strlcpy(g_question_menu.title, title,
             sizeof(g_question_menu.title));
@@ -1728,6 +1841,8 @@ void sdl_question_menu_set_highlight(int choice)
         return;
 
     g_question_menu.highlight = choice;
+    if (g_question_menu.scroll_offset_ptr == &g_question_menu_internal_scroll)
+        g_question_menu.scroll_follow_highlight = true;
     g_state.need_present = true;
 }
 
@@ -2166,6 +2281,12 @@ void sdl_question_menu_render(void)
         SDL_RenderFillRect(g_state.renderer, &layout.scroll_thumb);
     }
 
+    if (layout.actions_in_list) {
+        SDL_Rect actions_clip = { (int)layout.entries_rect.x,
+            (int)layout.entries_rect.y, (int)layout.entries_rect.w,
+            (int)layout.entries_rect.h };
+        SDL_SetRenderClipRect(g_state.renderer, &actions_clip);
+    }
     for (int i = 0; !g_question_menu.help_open
         && i < layout.button_count; i++)
     {
@@ -2190,6 +2311,17 @@ void sdl_question_menu_render(void)
         SDL_RenderRect(g_state.renderer, &rect);
         sdl_question_menu_draw_text(story_font, button->text, text,
             rect.x + rect.w * 0.08f, rect.y, rect.w * 0.84f, rect.h, true);
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, &clip);
+    if (layout.actions_in_list) {
+        SDL_FRect rect = layout.actions_link;
+        bool at_actions = layout.buttons[0].y <= layout.entries_rect.y + 1.0f;
+        SDL_SetRenderDrawColor(g_state.renderer, 36, 47, 62, 235);
+        SDL_RenderFillRect(g_state.renderer, &rect);
+        sdl_question_menu_draw_text(story_font,
+            at_actions ? "Choices" : "Actions", g_state.palette[TERM_WHITE],
+            rect.x, rect.y, rect.w, rect.h, true);
     }
 
     sdl_question_menu_render_suppress_button(&layout,
@@ -2286,9 +2418,18 @@ static bool sdl_question_menu_choice_at(float x, float y, int* out_choice,
     if (out_in_panel)
         *out_in_panel = true;
 
+    if (layout.actions_in_list && sdl_point_in_frect(&layout.actions_link, x, y)) {
+        if (out_choice)
+            *out_choice = SDL_QUESTION_MENU_ACTIONS_LINK_CHOICE;
+        return true;
+    }
+
     for (int i = 0; !g_question_menu.help_open
         && i < layout.button_count; i++)
     {
+        if (layout.actions_in_list
+            && !sdl_point_in_frect(&layout.entries_rect, x, y))
+            continue;
         if (sdl_point_in_frect(&layout.buttons[i], x, y))
         {
             if (out_choice)
@@ -2394,6 +2535,20 @@ bool sdl_question_menu_handle_pointer(float x, float y, int action)
 
     if (!g_question_menu.active)
         return false;
+    if (config.bigger_font) {
+        sdl_question_menu_layout_info layout;
+        if (sdl_question_menu_layout(&layout) && layout.actions_in_list
+            && sdl_point_in_frect(&layout.actions_link, x, y)) {
+            if (action == UI_MENU_CLICK_PRIMARY && g_question_menu.scroll_offset_ptr) {
+                int offset = *g_question_menu.scroll_offset_ptr;
+                bool at_actions = layout.buttons[0].y <= layout.entries_rect.y + 1.0f;
+                int delta = at_actions ? -offset
+                    : (int)(layout.buttons[0].y - layout.entries_rect.y);
+                (void)sdl_question_menu_scroll_offset_by(&layout, delta);
+            }
+            return true;
+        }
+    }
     if (g_question_menu.blocking_input)
         return true;
     if (g_question_menu.context_hint && (!inkey_flag || character_icky))
@@ -2650,6 +2805,8 @@ bool sdl_question_menu_handle_touch_up(float x, float y,
     {
         return true;
     }
+    if (release_choice == SDL_QUESTION_MENU_ACTIONS_LINK_CHOICE)
+        return sdl_question_menu_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY);
 
     if (!ui_menu_click_handle_choice_action(release_choice,
             UI_MENU_CLICK_PRIMARY, &wake))
@@ -2676,6 +2833,15 @@ bool sdl_question_menu_handle_hover_pointer(float x, float y)
         return false;
     if (g_question_menu.blocking_input)
         return true;
+
+    if (config.bigger_font) {
+        sdl_question_menu_layout_info layout;
+        if (sdl_question_menu_layout(&layout) && layout.actions_in_list
+            && sdl_point_in_frect(&layout.actions_link, x, y)) {
+            (void)ui_menu_click_clear_hover(&wake);
+            return true;
+        }
+    }
 
     info_hit = sdl_question_menu_info_button_at(x, y);
     if (info_hit)

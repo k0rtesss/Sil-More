@@ -1,6 +1,12 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+/* Resolve sizes before measuring a layout; caches accept resolved sizes. */
+int sdl_ui_font_px(int normal_px)
+{
+    return config.bigger_font ? normal_px + (normal_px + 1) / 2 : normal_px;
+}
+
 static Uint64 g_story_font_use_clock;
 
 void sdl_apply_font_settings(TTF_Font* font, bool is_story_font)
@@ -1240,6 +1246,11 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
             d->cell_w = 1;
     } else {
         quit("sdl_view_create: font_size and scale cannot both be zero");
+    }
+
+    if (scale && config.bigger_font) {
+        d->cell_h = sdl_ui_font_px(d->cell_h);
+        d->cell_w = d->cell_h / 2;
     }
 
     d->rect = rect;

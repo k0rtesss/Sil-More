@@ -1083,23 +1083,51 @@ void do_cmd_character_sheet(void)
     /* Forever */
     while (1)
     {
-        if (config.debug_character_sheet)
+        if (config.debug_character_sheet && !get_sdl_bigger_font())
         {
-            int wid = 80;
-            int hgt = 24;
-            const char* prompt = "DEBUG: any key returns to the game";
             bool saved_hide_cursor = hide_cursor;
+            int clicked_choice;
+            int click_action;
+            int dir;
 
-            display_player(DISPLAY_PLAYER_MODE_COMPACT_STATS_SKILLS);
-            Term_get_size(&wid, &hgt);
-            if (hgt > 0)
-                c_put_str(TERM_SLATE, prompt, hgt - 1,
-                    MAX(0, (wid - (int)strlen(prompt)) / 2));
+            ui_menu_click_begin();
+            ui_menu_click_set_hover_enabled(true);
+            ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
+            sdl_character_sheet_screen_begin_debug();
             Term_fresh();
 
             hide_cursor = true;
-            (void)inkey();
+            ch = inkey();
             hide_cursor = saved_hide_cursor;
+
+            if (ui_menu_click_take_action(&clicked_choice, &click_action))
+            {
+                if (click_action == UI_MENU_CLICK_HOVER)
+                    continue;
+                ch = (char)clicked_choice;
+            }
+            else if (ch == UI_MENU_CLICK_WAKE_KEY)
+                continue;
+
+            dir = target_dir(ch);
+            if (ch == '[' || ch == '<' || ch == '-' || dir == 4
+                || dir == 8 || ch == '9')
+            {
+                (void)sdl_character_sheet_screen_debug_turn_page(-1);
+                continue;
+            }
+            if (ch == ']' || ch == '>' || ch == '+' || ch == '='
+                || dir == 6 || dir == 2 || ch == '3')
+            {
+                (void)sdl_character_sheet_screen_debug_turn_page(1);
+                continue;
+            }
+            if (ch == ' ' || ch == '\r' || ch == '\n'
+                || ch == (char)INPUT_BIND_CONFIRM)
+            {
+                if (sdl_character_sheet_screen_debug_turn_page(1))
+                    continue;
+            }
             break;
         }
 
@@ -1209,6 +1237,20 @@ void do_cmd_character_sheet(void)
         }
 
         /* Exit - B button (back) or ESC */
+        if (get_sdl_bigger_font())
+        {
+            int dir = target_dir(ch);
+            if (ch == '[' || ch == '<' || dir == 4 || dir == 8)
+            {
+                (void)sdl_character_sheet_screen_debug_turn_page(-1);
+                continue;
+            }
+            if (ch == ']' || ch == '>' || dir == 6 || dir == 2)
+            {
+                (void)sdl_character_sheet_screen_debug_turn_page(1);
+                continue;
+            }
+        }
         if (ch == ESCAPE || (steamdeck && ch == steamdeck_back_key()))
         {
             sdl_hover_tooltip_clear();

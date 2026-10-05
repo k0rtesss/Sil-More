@@ -13,6 +13,10 @@ void sdl_sound_reload(void);
 /* Release any audio resources owned by the SDL sound subsystem. */
 void sdl_sound_shutdown(void);
 
+/* Pause mobile background audio without changing sound settings. Call from
+ * the SDL/game thread; foreground restores paused music and ambient loops. */
+void sdl_sound_set_suspended(bool suspended);
+
 /* Play the sound mapped to the specified Angband message index. */
 void sdl_sound_handle(int sound_idx);
 void sdl_sound_handle_at(int sound_idx, int y, int x);
