@@ -806,7 +806,7 @@ static int sdl_hint_quest_body_px(const SDL_Rect* screen)
         px = 44;
     if (px > 72)
         px = 72;
-    return px;
+    return sdl_ui_font_px(px);
 }
 
 static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)

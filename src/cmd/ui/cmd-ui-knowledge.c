@@ -4292,6 +4292,8 @@ static bool equipment_slot_accepts_object(int slot, const object_type* o_ptr)
 
     switch (slot)
     {
+    case INVEN_ARM:
+        return do_cmd_can_wield_offhand(o_ptr);
     case INVEN_WIELD:
         return player_can_treat_as_throwing(o_ptr);
     case INVEN_LEFT:
@@ -5835,6 +5837,11 @@ static bool confirm_equipment_entry_action(cptr action,
  * semantic equip operation by making that slot's weapon set active. */
 static bool equipment_ready_after_wield(int selected_slot)
 {
+    /* Pack access has accepted the request but has not moved the item yet.
+     * Its completion owns readiness; cancellation must retain the old set. */
+    if (player_pack_action_pending())
+        return true;
+
     if (selected_slot == INVEN_BOW)
     {
         return player_ready_bow_with_arrow(
@@ -5864,7 +5871,7 @@ static cptr equipment_menu_use_action_text(const equipment_list_entry* entry,
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
         return floor_touch_action_text(floor_action,
             &o_list[entry->floor_idx], entry->floor_idx);
-    if (selected_slot != INVEN_BELT
+    if (selected_slot != INVEN_BELT && selected_slot != INVEN_ARM
         && equipment_entry_has_active_item_menu(entry))
         return equipment_entry_active_action_text(entry);
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
@@ -5909,7 +5916,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         return equipment_ready_after_wield(selected_slot);
     }
 
-    if (selected_slot != INVEN_BELT
+    if (selected_slot != INVEN_BELT && selected_slot != INVEN_ARM
         && equipment_entry_has_active_item_menu(entry))
         return do_cmd_active_item(equipment_entry_item_handle(entry));
 

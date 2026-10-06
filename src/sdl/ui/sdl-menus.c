@@ -348,6 +348,10 @@ bool sdl_depth_menu_pane_handle_pointer(float x, float y)
 
 int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
 {
+    /* Main cells are already enlarged; use the normal reference before the
+     * prompt's own caps, then enlarge the resolved prompt once. */
+    if (config.bigger_font)
+        cell_h /= 1.5f;
 #if SIL_SDL_MOBILE_BUILD
     int font_px = (int)(cell_h * 2.15f);
 
@@ -374,7 +378,7 @@ int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
         font_px = 24;
 #endif
 
-    return font_px;
+    return sdl_ui_font_px(font_px);
 }
 
 void sdl_touch_pane_append_ellipsis(char* line, size_t line_size)
@@ -1730,6 +1734,26 @@ void sdl_touch_pane_draw_arrow(const SDL_FRect* rect, int binding, SDL_Color col
         tip_y - dy * head_len - py * head_len * 0.55f);
 }
 
+static void sdl_touch_pane_draw_readable_label(const SDL_FRect* rect,
+    cptr label, SDL_Color color, int font_px)
+{
+    TTF_Font* font = sdl_story_font_for_height_slot(font_px,
+        SDL_STORY_FONT_SLOT_MENU);
+    int width = 0;
+    int height = 0;
+    float available_w = MAX(1.0f, rect->w - 6.0f);
+    float available_h = MAX(1.0f, rect->h - 4.0f);
+    SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, label,
+        (int)available_w, color, &width, &height);
+    SDL_FRect src = { 0, 0, MIN((float)width, available_w),
+        MIN((float)height, available_h) };
+    SDL_FRect dst = { rect->x + (rect->w - src.w) * 0.5f,
+        rect->y + (rect->h - src.h) * 0.5f, src.w, src.h };
+
+    if (texture)
+        SDL_RenderTexture(g_state.renderer, texture, &src, &dst);
+}
+
 void sdl_touch_pane_draw_button_text_scaled(const SDL_FRect* rect, const char* name,
     const char* symbol, SDL_Color color, float single_text_font_ratio,
     float single_text_height_ratio)
@@ -1775,6 +1799,13 @@ void sdl_touch_pane_draw_button_text_scaled(const SDL_FRect* rect, const char* n
         (int)(rect->h * (have_name ? 0.22f : single_text_font_ratio));
     if (symbol_font_px < 12)
         symbol_font_px = 12;
+
+    if (config.bigger_font) {
+        /* One readable name replaces the name plus duplicate key symbol. */
+        sdl_touch_pane_draw_readable_label(rect, have_name ? name : symbol,
+            color, sdl_ui_font_px(have_name ? name_font_px : symbol_font_px));
+        return;
+    }
 
     /* Resolve both fonts before borrowing either cached texture: loading the
      * second font may evict an older story-font entry. */
@@ -1918,6 +1949,12 @@ void sdl_touch_pane_draw_button_text_px(const SDL_FRect* rect,
         name_px = 8;
     if (symbol_px < 8)
         symbol_px = 8;
+
+    if (config.bigger_font) {
+        sdl_touch_pane_draw_readable_label(rect, have_name ? name : symbol,
+            color, have_name ? name_px : symbol_px);
+        return;
+    }
 
     if (have_name)
         name_font = sdl_story_font_for_height_slot(name_px,
@@ -2554,7 +2591,7 @@ static bool sdl_unified_look_prompt_layout(
 
     screen_margin = sdl_touch_pane_clampf(cell_w * 0.65f, 5.0f, 14.0f);
     base_font_px = sdl_unified_look_log_text_font_px();
-    min_font_px = 5;
+    min_font_px = config.bigger_font ? base_font_px : 5;
     if (base_font_px < min_font_px)
         base_font_px = min_font_px;
 
@@ -2600,7 +2637,8 @@ static bool sdl_unified_look_prompt_layout(
                 if (sdl_unified_look_prompt_try_layout(&candidate, variant,
                         font, &area, g_unified_look_prompt.anchor_row, cell_h,
                         screen_margin, panel_pad, row_gap, button_gap,
-                        button_pad_x, row_h, min_button_w, 1))
+                        button_pad_x, row_h, min_button_w,
+                        config.bigger_font ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1))
                 {
                     fits = true;
                     break;
@@ -2638,7 +2676,8 @@ static bool sdl_unified_look_prompt_layout(
     return sdl_unified_look_prompt_try_layout(out,
         SDL_UNIFIED_LOOK_PROMPT_LABEL_VARIANTS - 1, font, &out->area,
         g_unified_look_prompt.anchor_row, cell_h, screen_margin, panel_pad,
-        row_gap, button_gap, button_pad_x, row_h, min_button_w, 1);
+        row_gap, button_gap, button_pad_x, row_h, min_button_w,
+        config.bigger_font ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1);
 }
 
 void sdl_unified_look_prompt_clear(void)

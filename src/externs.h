@@ -845,6 +845,9 @@ extern void do_cmd_inven_direct(void);
 extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
+extern bool do_cmd_can_wield_offhand(const object_type* o_ptr);
+extern bool player_offhand_weapon_allowed(const object_type* weapon,
+    const object_type* offhand);
 extern bool do_cmd_wield_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot);
 extern bool do_cmd_wield_stack_to_slot(
@@ -991,6 +994,7 @@ extern char* oath_forbidden(int oath_id);
 extern char* oath_reward_text(int oath_id);
 extern void do_cmd_ability_screen(void);
 extern int object_difficulty(object_type* o_ptr);
+extern int smithing_work_difficulty(void);
 extern void do_cmd_smithing_screen(void);
 extern void create_smithing_item(void);
 #define MAIN_MENU_CHARACTER 1
@@ -1906,6 +1910,8 @@ extern bool sdl_halls_screen_active(void);
 extern bool sdl_character_sheet_screen_active(void);
 extern void sdl_character_sheet_screen_hide(void);
 extern void sdl_character_sheet_screen_begin_live(int focus_choice);
+extern void sdl_character_sheet_screen_begin_debug(void);
+extern bool sdl_character_sheet_screen_debug_turn_page(int dir);
 extern void sdl_character_sheet_screen_begin_birth_preview(void);
 extern void sdl_character_sheet_screen_add_live_item(int choice, int kind,
     int skill, int value_kind, cptr label, cptr desc);
@@ -2621,6 +2627,8 @@ extern bool set_sdl_main_view_zoom_scale(int value);
 extern int get_sdl_terminal_menu_scale_offset(void);
 extern void set_sdl_terminal_menu_scale_offset(int value);
 extern bool get_sdl_compact_inventory_menus(void);
+extern bool get_sdl_bigger_font(void);
+extern void set_sdl_bigger_font(bool value);
 extern void set_sdl_compact_inventory_menus(bool value);
 extern bool get_sdl_show_context_square_popups(void);
 extern void set_sdl_show_context_square_popups(bool value);

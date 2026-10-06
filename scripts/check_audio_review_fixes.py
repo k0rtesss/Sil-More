@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check music-cache ownership and settings reloads with real SDL mixer assets."""
+"""Check audio ownership, settings reloads and mobile pauses with real SDL assets."""
 from pathlib import Path
 import os
 import shlex
@@ -13,6 +13,32 @@ HARNESS = r'''
 #include "sdl-sound.c"
 #include <assert.h>
 #include <stdio.h>
+
+/* Use the production Android watch with the real mixer, while autosave remains
+ * a fixture so no player save is opened. SDL headers already selected Windows. */
+static bool g_mobile_lifecycle_watch_registered;
+static bool g_mobile_lifecycle_autosaved;
+static bool background_test_autosave(cptr reason) {
+    (void)reason;
+    assert(SDL_IsMainThread() && g_sound_suspended);
+    return true;
+}
+#define __ANDROID__ 1
+#define mobile_autosave_game background_test_autosave
+__LIFECYCLE_IMPLEMENTATION__
+#undef mobile_autosave_game
+#undef __ANDROID__
+
+static void push_lifecycle(Uint32 type) {
+    SDL_Event event={0}; event.type=type;
+    assert(SDL_PushEvent(&event));
+    /* Android's watch must have applied audio before pumping queued events. */
+    if (type==SDL_EVENT_WILL_ENTER_BACKGROUND || type==SDL_EVENT_DID_ENTER_BACKGROUND)
+        assert(g_sound_suspended);
+    if (type==SDL_EVENT_DID_ENTER_FOREGROUND)
+        assert(!g_sound_suspended);
+    while (SDL_PollEvent(&event)) sdl_mobile_lifecycle_handle_event(&event);
+}
 
 static int default_config_warnings;
 static void count_default_config_warning(log_Event* event) {
@@ -174,16 +200,139 @@ static void test_reload(void) {
     sdl_sound_shutdown();
     puts("PASS: fallback retains full-title intent; shutdown clears playback intent before fresh initialization.");
 }
+static void assert_no_sfx(void) {
+    for (int i=0; i<SDL_SOUND_MAX_ACTIVE_TRACKS; ++i) {
+        assert(!MIX_TrackPlaying(sound_state.sfx_tracks[i]));
+        assert(!MIX_TrackPaused(sound_state.sfx_tracks[i]));
+    }
+}
+static bool delayed_pending(void) {
+    SDL_LockMutex(g_sound_mutex);
+    bool pending = g_delayed_sounds != NULL;
+    SDL_UnlockMutex(g_sound_mutex);
+    return pending;
+}
+static void assert_generated_silence(void) {
+    float mixed[4096];
+    for (int i=0; i<4096; ++i) mixed[i]=1.0f;
+    assert(MIX_Generate(sound_state.mixer,mixed,sizeof(mixed)) >= 0);
+    for (int i=0; i<4096; ++i) assert(mixed[i]==0.0f);
+}
+static SDL_AudioDeviceID mixer_device(void) {
+    return (SDL_AudioDeviceID)SDL_GetNumberProperty(
+        MIX_GetMixerProperties(sound_state.mixer),MIX_PROP_MIXER_DEVICE_NUMBER,0);
+}
+static void test_background_pause(void) {
+    sdl_mobile_lifecycle_register();
+    assert(g_mobile_lifecycle_watch_registered);
+    assert(sdl_sound_load_default_config(&g_sound_config));
+    g_sound_config.enabled=true;
+    assert(sdl_sound_load_from_config(&g_sound_config));
+    assert(MIX_Init()); sound_state.mixer_initialized=true;
+    SDL_AudioSpec spec={.format=SDL_AUDIO_F32,.channels=1,.freq=48000};
+    sound_state.mixer=MIX_CreateMixer(&spec);
+    assert(sound_state.mixer && sdl_sound_create_track_pool());
+    MIX_Track* tracks[]={sound_state.music_ambient_track,sound_state.river_loop_track,
+        sound_state.still_water_loop_track,sound_state.torch_loop_track,
+        sound_state.lava_loop_track,sound_state.forge_loop_track,
+        sound_state.bridge_work_loop_track};
+    const char* assets[]={"music/ambient.ogg",RIVER_LOOP_SOUND_PATH,
+        STILL_WATER_LOOP_SOUND_PATH,TORCH_LOOP_SOUND_PATH,LAVA_LOOP_SOUND_PATH,
+        FORGE_LOOP_SOUND_PATH,BRIDGE_LOOP_WOOD_SOUND_PATH};
+    for (int i=0; i<7; ++i) {
+        char path[1024]; sdl_sound_build_path(assets[i],path,sizeof(path));
+        MIX_Audio* audio=sdl_sound_get_music_audio(path); assert(audio);
+        assert(sdl_sound_play_track_audio(tracks[i],audio,.1f,-1,false));
+    }
+    float mixed[4096];
+    assert(MIX_Generate(sound_state.mixer,mixed,sizeof(mixed)) > 0);
+    sdl_sound_handle(MSG_HIT);
+    assert(MIX_TrackPlaying(sound_state.sfx_tracks[0]));
+    sdl_sound_handle_delayed(MSG_HIT,120);
+    assert(delayed_pending());
+    struct sound_config original=g_sound_config;
+    push_lifecycle(SDL_EVENT_WILL_ENTER_BACKGROUND);
+    push_lifecycle(SDL_EVENT_DID_ENTER_BACKGROUND);
+    assert(!memcmp(&original,&g_sound_config,sizeof(original)));
+    assert_no_sfx();
+    Sint64 positions[7];
+    for (int i=0; i<7; ++i) {
+        assert(MIX_TrackPaused(tracks[i]));
+        positions[i]=MIX_GetTrackPlaybackPosition(tracks[i]);
+    }
+    assert(sdl_sound_ensure_mixer()); /* Acquisition must not unpause audio. */
+    sdl_sound_handle(MSG_HIT);
+    sdl_sound_handle_delayed(MSG_HIT,120);
+    assert_generated_silence();
+    SDL_Delay(180);
+    assert(!delayed_pending()); assert_no_sfx();
+    for (int i=0; i<7; ++i)
+        assert(MIX_GetTrackPlaybackPosition(tracks[i])==positions[i]);
+    push_lifecycle(SDL_EVENT_WILL_ENTER_FOREGROUND);
+    assert(g_sound_suspended);
+    push_lifecycle(SDL_EVENT_DID_ENTER_FOREGROUND);
+    for (int i=0; i<7; ++i) assert(MIX_TrackPlaying(tracks[i]));
+    assert(MIX_Generate(sound_state.mixer,mixed,sizeof(mixed)) > 0);
+    assert_no_sfx();
+
+    /* Invalidate a timer even if the app returns before its due time. */
+    sdl_sound_handle_delayed(MSG_HIT,120); assert(delayed_pending());
+    push_lifecycle(SDL_EVENT_WILL_ENTER_BACKGROUND);
+    push_lifecycle(SDL_EVENT_DID_ENTER_FOREGROUND);
+    SDL_Delay(180);
+    assert(!delayed_pending()); assert_no_sfx();
+    sdl_sound_shutdown();
+    puts("PASS: screen-off silence freezes all seven ambient loops, discards active/delayed effects, and resumes loops without replaying effects after quick unlock.");
+
+    /* A mixer first created (or reloaded) in the background must start paused.
+     * Exercise the actual logical SDL audio device as well as track state. */
+    sdl_sound_set_suspended(true);
+    sound_config_save(g_sound_config_path,&g_sound_config);
+    sdl_sound_reload(); sdl_music_play_menu_theme();
+    assert(SDL_AudioDevicePaused(mixer_device()));
+    assert(MIX_TrackPaused(sound_state.music_menu_track));
+    assert(MIX_TrackPaused(sound_state.music_ambient_track));
+    save_reload();
+    assert(SDL_AudioDevicePaused(mixer_device()));
+    assert(MIX_TrackPaused(sound_state.music_menu_track));
+    assert(MIX_TrackPaused(sound_state.music_ambient_track));
+    sdl_music_stop_main();
+    sdl_sound_set_suspended(false);
+    assert(!SDL_AudioDevicePaused(mixer_device()));
+    assert(MIX_TrackPlaying(sound_state.music_ambient_track));
+    assert(!MIX_TrackPlaying(sound_state.music_menu_track));
+
+    sdl_sound_set_suspended(true);
+    g_sound_config.enabled=false; sdl_sound_save_config();
+    sdl_sound_set_suspended(false);
+    assert(SDL_AudioDevicePaused(mixer_device()));
+    assert(MIX_TrackPaused(sound_state.music_ambient_track));
+    g_sound_config.enabled=true; sdl_sound_save_config();
+    assert(!SDL_AudioDevicePaused(mixer_device()));
+    assert(MIX_TrackPlaying(sound_state.music_ambient_track));
+    sdl_sound_set_suspended(true);
+    g_sound_config.enabled=false; save_reload();
+    assert(!sound_state.mixer);
+    g_sound_config.enabled=true; save_reload();
+    assert(SDL_AudioDevicePaused(mixer_device()));
+    assert(MIX_TrackPaused(sound_state.music_ambient_track));
+    sdl_sound_set_suspended(false);
+    assert(MIX_TrackPlaying(sound_state.music_ambient_track));
+    sdl_sound_shutdown();
+    sdl_mobile_lifecycle_unregister();
+    puts("PASS: background mixer creation/reload, menu cues, explicit stops and master toggles preserve mobile pause independently of sound settings.");
+}
 int main(int argc, char** argv) {
     assert(argc == 4);
+    log_set_quiet(true);
     ANGBAND_DIR_XTRA = argv[1]; ANGBAND_DIR_USER = argv[2]; ANGBAND_DIR_PREF = argv[3];
     assert(SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy"));
-    assert(SDL_Init(SDL_INIT_AUDIO));
+    assert(SDL_Init(SDL_INIT_AUDIO | SDL_INIT_EVENTS));
     test_default_config();
     sound_config_set_defaults(&g_sound_config); g_sound_config.enabled = true;
     test_cache();
     snprintf(g_sound_config_path, sizeof(g_sound_config_path), "%s/sound.json", argv[2]);
-    test_reload(); SDL_Quit();
+    test_reload(); test_background_pause(); SDL_Quit();
     return 0;
 }
 '''
@@ -192,7 +341,11 @@ int main(int argc, char** argv) {
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     source = OUT / "check.c"
-    source.write_text(HARNESS, encoding="utf-8")
+    events = (ROOT / "src/sdl/core/sdl-events.c").read_text(encoding="utf-8-sig")
+    start = events.index("enum {\n    SDL_MOBILE_LIFECYCLE_EVENT_COUNT")
+    end = events.index("\n#endif", events.index("void sdl_mobile_lifecycle_unregister", start))
+    source.write_text(HARNESS.replace("__LIFECYCLE_IMPLEMENTATION__", events[start:end]),
+                      encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
         *(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_mixer", "SDL_image", "SDL_ttf")),
@@ -209,11 +362,11 @@ def main():
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     result = subprocess.run([
         str(exe), str(ROOT / "lib/xtra"), str(OUT), str(ROOT / "lib/pref")],
-        cwd=OUT, env=env, text=True, capture_output=True, timeout=60)
+        cwd=OUT, env=env, text=True, capture_output=True, timeout=120)
     (OUT / "validation.log").write_text(result.stdout + result.stderr, encoding="utf-8")
     print(result.stdout, end="")
     if result.returncode:
-        print(result.stderr)
+        print("\n".join(result.stderr.splitlines()[-20:]))
         result.check_returncode()
 
 

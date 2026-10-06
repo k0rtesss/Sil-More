@@ -345,6 +345,23 @@ static SDL_AtomicInt
     g_mobile_lifecycle_failed_serial[SDL_MOBILE_LIFECYCLE_EVENT_COUNT];
 static int g_mobile_lifecycle_last_dispatch_serial;
 
+static void sdl_mobile_lifecycle_update_audio(Uint32 type)
+{
+    switch (type)
+    {
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+    case SDL_EVENT_TERMINATING:
+        sdl_sound_set_suspended(true);
+        break;
+    case SDL_EVENT_DID_ENTER_FOREGROUND:
+        sdl_sound_set_suspended(false);
+        break;
+    default:
+        break;
+    }
+}
+
 static int sdl_mobile_lifecycle_event_index(Uint32 type)
 {
     switch (type)
@@ -409,6 +426,8 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
         g_mobile_lifecycle_last_dispatch_serial = serial;
     }
 
+    sdl_mobile_lifecycle_update_audio(type);
+
     switch (type)
     {
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
@@ -471,8 +490,8 @@ bool SDLCALL sdl_mobile_lifecycle_event_watch(void* userdata, SDL_Event* ev)
     dispatch.user.data1 = (void*)(intptr_t)serial;
 #ifdef __ANDROID__
     /* Android pumps lifecycle events on the SDL/game thread just before it
-     * blocks for background suspension. Save here while that thread can
-     * still run; a queued event may otherwise wait until the next resume. */
+     * blocks for background suspension. Pause audio and save while that
+     * thread can still run; queued work may wait until the next resume. */
     if (SDL_IsMainThread())
     {
         (void)sdl_mobile_lifecycle_handle_event(&dispatch);
@@ -499,6 +518,9 @@ void sdl_mobile_lifecycle_register(void)
     if (g_mobile_lifecycle_watch_registered)
         return;
 
+    if (!sdl_sound_initialize())
+        return;
+
     if (g_mobile_lifecycle_dispatch_event == 0)
         g_mobile_lifecycle_dispatch_event = SDL_RegisterEvents(1);
     if (g_mobile_lifecycle_dispatch_event == 0)
@@ -511,7 +533,7 @@ void sdl_mobile_lifecycle_register(void)
     if (SDL_AddEventWatch(sdl_mobile_lifecycle_event_watch, NULL))
     {
         g_mobile_lifecycle_watch_registered = true;
-        log_info("Registered mobile lifecycle autosave event watch");
+        log_info("Registered mobile lifecycle autosave and audio event watch");
     }
     else
     {
@@ -1679,7 +1701,10 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             }
             if ((sdl_pause_text_screen_active()
                     || sdl_poetry_screen_active())
-                && sdl_pointer_dismiss_any_key_prompt())
+                && (sdl_standalone_screen_handle_pointer(
+                        (float)ev->button.x, (float)ev->button.y,
+                        UI_MENU_CLICK_PRIMARY)
+                    || sdl_pointer_dismiss_any_key_prompt()))
             {
                 return;
             }
@@ -2104,7 +2129,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         if ((sdl_pause_text_screen_active()
                 || sdl_poetry_screen_active())
-            && sdl_pointer_dismiss_any_key_prompt())
+            && (sdl_standalone_screen_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY)
+                || sdl_pointer_dismiss_any_key_prompt()))
         {
             return;
         }
@@ -2742,6 +2768,9 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     } else if (ev->type == SDL_EVENT_KEY_DOWN) {
         int key = ev->key.key;
+
+        if (sdl_standalone_screen_handle_key(key))
+            return;
 
         if (sdl_keyboard_capture_handle_keydown(&ev->key))
             return;

@@ -261,18 +261,36 @@ static void player_pack_action_complete(player_pack_action_kind kind, int item,
         do_cmd_use_item_by_index(item);
         break;
     case PLAYER_PACK_ACTION_WIELD:
+    {
+        bool wielded = false;
+
         if (arg >= INVEN_WIELD && arg < INVEN_TOTAL)
         {
             if (flag)
-                (void)do_cmd_wield_stack_to_slot(o_ptr, item, arg);
+                wielded = do_cmd_wield_stack_to_slot(o_ptr, item, arg);
             else
-                (void)do_cmd_wield_to_slot(o_ptr, item, arg);
+                wielded = do_cmd_wield_to_slot(o_ptr, item, arg);
         }
         else
         {
             do_cmd_wield(o_ptr, item);
         }
+
+        /* Match explicit Equip's immediate readiness only after the paid
+         * transfer succeeds. Full-stack Throwing owns its separate setup. */
+        if (wielded && !flag)
+        {
+            if (arg == INVEN_BOW)
+                (void)player_ready_bow_with_arrow(
+                    player_quiver_selected_arrow_slot());
+            else if (arg == INVEN_WIELD
+                || (arg == INVEN_ARM
+                    && !player_equipment_slot_is_active(INVEN_ARM)))
+                (void)player_set_active_weapon_mode(
+                    PLAYER_ACTIVE_WEAPON_MELEE, false, false);
+        }
         break;
+    }
     case PLAYER_PACK_ACTION_TAKEOFF:
         do_cmd_takeoff(o_ptr, item);
         break;

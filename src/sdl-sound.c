@@ -156,6 +156,8 @@ static monster_sound_entry* g_monster_sounds;
 static cJSON* g_monster_sound_config;
 static bool g_monster_sound_config_loaded;
 static SDL_Mutex* g_sound_mutex = NULL;
+/* Protected by g_sound_mutex; survives mixer/config reloads. */
+static bool g_sound_suspended;
 static Uint64 g_sound_generation = 1;
 static Uint32 g_sound_diagnostic_event = (Uint32)-1;
 
@@ -936,20 +938,40 @@ static bool sdl_sound_create_track_pool(void)
     return true;
 }
 
-static bool sdl_sound_ensure_mixer(void)
+static bool sdl_sound_update_mixer_pause(void)
+{
+    if (!sound_state.mixer)
+        return true;
+
+    bool paused = g_sound_suspended || !g_sound_config.enabled;
+    if (paused == sound_state.mixer_paused)
+        return true;
+
+    SDL_AudioDeviceID device = (SDL_AudioDeviceID)SDL_GetNumberProperty(
+        MIX_GetMixerProperties(sound_state.mixer), MIX_PROP_MIXER_DEVICE_NUMBER, 0);
+    bool success;
+    if (paused) {
+        /* Stop device output too, including audio already queued for playback. */
+        success = !device || SDL_PauseAudioDevice(device);
+        success = MIX_PauseAllTracks(sound_state.mixer) && success;
+    } else {
+        success = MIX_ResumeAllTracks(sound_state.mixer);
+        success = (!device || SDL_ResumeAudioDevice(device)) && success;
+    }
+    if (success)
+        sound_state.mixer_paused = paused;
+    return success;
+}
+
+static bool sdl_sound_ensure_mixer_locked(void)
 {
     if (!g_sound_config.enabled) {
         return false;
     }
 
     if (sound_state.mixer) {
-        if (sound_state.mixer_paused) {
-            if (!MIX_ResumeAllTracks(sound_state.mixer)) {
-                log_debug("Failed to resume paused tracks: %s", SDL_GetError());
-            } else {
-                sound_state.mixer_paused = false;
-            }
-        }
+        if (!sdl_sound_update_mixer_pause())
+            log_debug("Failed to update mixer pause state: %s", SDL_GetError());
         return true;
     }
 
@@ -997,7 +1019,19 @@ static bool sdl_sound_ensure_mixer(void)
     }
 
     sound_state.mixer_paused = false;
+    if (!sdl_sound_update_mixer_pause())
+        log_debug("Failed to update mixer pause state: %s", SDL_GetError());
     return true;
+}
+
+static bool sdl_sound_ensure_mixer(void)
+{
+    if (!sdl_sound_ensure_mutex())
+        return false;
+    SDL_LockMutex(g_sound_mutex);
+    bool ready = sdl_sound_ensure_mixer_locked();
+    SDL_UnlockMutex(g_sound_mutex);
+    return ready;
 }
 
 static void sdl_sound_destroy_mixer(void)
@@ -1364,7 +1398,7 @@ static bool sdl_sound_play_environment_loop(MIX_Track* track,
     return true;
 }
 
-static bool sdl_sound_play_track_audio(MIX_Track* track, MIX_Audio* audio, float gain,
+static bool sdl_sound_play_track_audio_locked(MIX_Track* track, MIX_Audio* audio, float gain,
     int loops, bool quiet)
 {
     if (!track || !audio) {
@@ -1401,6 +1435,23 @@ static bool sdl_sound_play_track_audio(MIX_Track* track, MIX_Audio* audio, float
 
     SDL_DestroyProperties(options);
     return success;
+}
+
+static bool sdl_sound_play_track_audio(MIX_Track* track, MIX_Audio* audio, float gain,
+    int loops, bool quiet)
+{
+    if (!sdl_sound_ensure_mutex())
+        return false;
+    SDL_LockMutex(g_sound_mutex);
+    /* Lifecycle callbacks may pause between mixer acquisition and playback.
+     * Hold the mixer lock so a new music cue cannot emit even one mixed frame. */
+    MIX_LockMixer(sound_state.mixer);
+    bool played = sdl_sound_play_track_audio_locked(track, audio, gain, loops, quiet);
+    if (played && (g_sound_suspended || !g_sound_config.enabled))
+        played = MIX_PauseTrack(track);
+    MIX_UnlockMixer(sound_state.mixer);
+    SDL_UnlockMutex(g_sound_mutex);
+    return played;
 }
 
 static void sdl_music_stop_track(MIX_Track* track)
@@ -1517,7 +1568,28 @@ static bool sdl_music_play_title_track(const char* primary_path,
 
 bool sdl_sound_initialize(void)
 {
-    return true;
+    return sdl_sound_ensure_mutex();
+}
+
+void sdl_sound_set_suspended(bool suspended)
+{
+    if (!sdl_sound_ensure_mutex())
+        return;
+    SDL_LockMutex(g_sound_mutex);
+    if (g_sound_suspended != suspended) {
+        g_sound_suspended = suspended;
+        if (suspended) {
+            /* Old effects must not play after a quick lock/unlock, even when
+             * their timer fires after returning to the foreground. */
+            g_sound_generation++;
+            for (int i = 0; i < SDL_SOUND_MAX_ACTIVE_TRACKS; ++i)
+                if (sound_state.sfx_tracks[i])
+                    MIX_StopTrack(sound_state.sfx_tracks[i], 0);
+            memset(sfx_spatial, 0, sizeof(sfx_spatial));
+        }
+    }
+    (void)sdl_sound_update_mixer_pause();
+    SDL_UnlockMutex(g_sound_mutex);
 }
 
 static void sdl_music_restore_background(void)
@@ -1695,6 +1767,7 @@ void sdl_sound_shutdown(void)
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
     g_sound_loaded_once = false;
+    g_sound_suspended = false;
     if (g_sound_mutex)
         SDL_UnlockMutex(g_sound_mutex);
     /* Remove outside the mutex: a callback may already be waiting for it. */
@@ -1845,6 +1918,10 @@ void sdl_sound_update_environment(void)
     if (!sdl_sound_ensure_mutex())
         return;
     SDL_LockMutex(g_sound_mutex);
+    if (g_sound_suspended) {
+        SDL_UnlockMutex(g_sound_mutex);
+        return;
+    }
     if (!sdl_sound_ensure_mixer())
     {
         SDL_UnlockMutex(g_sound_mutex);
@@ -1933,6 +2010,7 @@ static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
     bool quiet, bool profile, float gain_scale, const sound_origin* origin)
 {
     if (sound_idx < 0 || sound_idx >= MSG_MAX || !g_sound_config.enabled
+        || g_sound_suspended
         || gain_scale <= 0.0f) {
         return false;
     }
@@ -1987,7 +2065,7 @@ static bool sdl_sound_play_sample_locked(int sound_idx, int sample_idx,
 static bool sdl_sound_play_water_walk_sample_locked(int sample_idx,
     bool quiet, bool profile, float gain_scale, const sound_origin* origin)
 {
-    if (!g_sound_config.enabled || !is_sound_enabled(MSG_WALK)
+    if (!g_sound_config.enabled || g_sound_suspended || !is_sound_enabled(MSG_WALK)
         || sample_idx < 0 || sample_idx >= sound_state.bank.water_walk_count
         || !sdl_sound_ensure_mixer()) {
         return false;
@@ -2194,6 +2272,8 @@ void sdl_sound_monster_at(int race_idx, int action, int y, int x, bool force_idl
     sil_perf_stamp perf = sil_perf_begin();
     SDL_LockMutex(g_sound_mutex);
     sil_perf_end("audio.monster.lock", perf);
+    if (g_sound_suspended)
+        goto finished;
     /* Cosmetic randomness must not consume the dungeon/combat RNG. */
     if (!force_idle && action == MONSTER_SOUND_IDLE
         && SDL_rand(100) >= MONSTER_IDLE_SOUND_CHANCE_PERCENT) {
@@ -2358,7 +2438,7 @@ static void sdl_sound_handle_delayed_with_origin(int sound_idx, Uint32 delay_ms,
 
     SDL_LockMutex(g_sound_mutex);
     sample_count = sound_state.bank.sound_counts[sound_idx];
-    if (!g_sound_config.enabled || !is_sound_enabled(sound_idx)
+    if (!g_sound_config.enabled || g_sound_suspended || !is_sound_enabled(sound_idx)
         || sample_count <= 0 || !sdl_sound_ensure_mixer())
     {
         SDL_UnlockMutex(g_sound_mutex);
@@ -2449,6 +2529,9 @@ struct sound_config* sdl_sound_get_config(void)
 
 void sdl_sound_save_config(void)
 {
+    if (!sdl_sound_ensure_mutex())
+        return;
+    SDL_LockMutex(g_sound_mutex);
     sound_state.enable_combat = g_sound_config.enable_combat;
     sound_state.enable_inventory = g_sound_config.enable_inventory;
     sound_state.enable_walk = g_sound_config.enable_walk;
@@ -2488,14 +2571,11 @@ void sdl_sound_save_config(void)
     use_sound = g_sound_config.enabled;
 
     if (!g_sound_config.enabled) {
-        if (sound_state.mixer && !MIX_PauseAllTracks(sound_state.mixer)) {
+        if (!sdl_sound_update_mixer_pause()) {
             log_debug("Failed to pause mixer tracks: %s", SDL_GetError());
-        } else {
-            sound_state.mixer_paused = sound_state.mixer != NULL;
         }
-    } else if (sdl_sound_ensure_mixer()) {
-        sound_state.mixer_paused = false;
-    }
+    } else
+        (void)sdl_sound_ensure_mixer();
 
     if (!sound_state.music_main_enabled) {
         sdl_music_stop_title_track();
@@ -2510,4 +2590,5 @@ void sdl_sound_save_config(void)
     sdl_sound_update_environment();
     sound_config_save(g_sound_config_path, &g_sound_config);
     log_debug("Sound configuration saved to %s", g_sound_config_path);
+    SDL_UnlockMutex(g_sound_mutex);
 }

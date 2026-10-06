@@ -4749,6 +4749,19 @@ static void smith_report_evaluate(const object_type* object, bool keep_alloy,
     smithing_cost = saved_cost;
 }
 
+/* Read the displayed blueprint rating without replacing the accepted fees or
+ * changing work that will be consumed by create_smithing_item(). */
+int smithing_work_difficulty(void)
+{
+    smith_difficulty_breakdown breakdown;
+    smithing_cost_type cost;
+
+    if (!smith_o_ptr || !smith_o_ptr->k_idx)
+        return 0;
+    smith_report_evaluate(smith_o_ptr, true, &breakdown, &cost);
+    return breakdown.total;
+}
+
 static void smith_report_difficulty(smith_calculation_report* report, int width,
     cptr title, const smith_difficulty_breakdown* breakdown)
 {

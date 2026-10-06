@@ -849,7 +849,7 @@ int sdl_object_tooltip_font_px(void)
 #else
     int font_size = sdl_auto_font_size_from_main(3, 4);
 #endif
-    int font_px = sdl_aux_cell_height_for_font_size(font_size);
+    int font_px = sdl_aux_cell_height_for_font_size(sdl_ui_font_px(font_size));
 
     if (sdl_touch_only_mobile_device_active())
         font_px = MAX(font_px, sdl_main_menu_pane_font_px());
@@ -1419,7 +1419,7 @@ static int sdl_description_overlay_font_px_for_story(bool story)
     if (font_px < 8)
         font_px = 8;
 
-    return font_px;
+    return sdl_ui_font_px(font_px);
 }
 
 int sdl_description_overlay_font_px(void)

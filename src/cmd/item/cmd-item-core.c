@@ -194,6 +194,33 @@ static int forced_wield_slot = -1;
 static bool forced_wield_full_stack = false;
 static bool wield_command_succeeded = false;
 
+/* Match the legacy second-weapon offer for an explicit Off-hand destination.
+ * Shields continue to use their natural slot independently of this policy. */
+bool do_cmd_can_wield_offhand(const object_type* o_ptr)
+{
+    bool grants_two_weapon = false;
+    if (!o_ptr || !o_ptr->k_idx
+        || (o_ptr->tval != TV_SWORD && o_ptr->tval != TV_POLEARM
+            && o_ptr->tval != TV_HAFTED && o_ptr->tval != TV_DIGGING)
+        || (k_info[o_ptr->k_idx].flags3
+            & (TR3_TWO_HANDED | TR3_HAND_AND_A_HALF)))
+        return false;
+
+    if (player_offhand_weapon_allowed(&inventory[INVEN_WIELD], o_ptr))
+        return true;
+
+    if (object_known_p(o_ptr))
+        for (int i = 0; i < o_ptr->abilities; i++)
+            if (o_ptr->skilltype[i] == S_MEL
+                && o_ptr->abilitynum[i] == MEL_TWO_WEAPON)
+                grants_two_weapon = true;
+
+    /* A newly granted ability activates when wielded. Respect an existing
+     * owner's deliberate off toggle instead of charging for an unusable slot. */
+    return grants_two_weapon
+        && !p_ptr->have_ability[S_MEL][MEL_TWO_WEAPON];
+}
+
 static bool forced_wield_slot_accepts_object(const object_type* o_ptr,
     int forced_slot)
 {
@@ -211,6 +238,8 @@ static bool forced_wield_slot_accepts_object(const object_type* o_ptr,
 
     switch (forced_slot)
     {
+    case INVEN_ARM:
+        return do_cmd_can_wield_offhand(o_ptr);
     case INVEN_WIELD:
         return player_can_treat_as_throwing(o_ptr);
     case INVEN_LEFT:
@@ -1354,6 +1383,8 @@ bool open_supplies_menu_with_context(supply_menu_action default_action, int defa
     }
 
     request.action = action;
+    if (action == SUPPLY_MENU_ACTION_USE)
+        request.floor_action = SUPPLY_FLOOR_ACTION_USE;
     request.hotkey_mode = hotkey;
     if (focus && group >= 0 && group < SUPPLY_GROUP_MAX)
     {
@@ -3187,8 +3218,6 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     bool weapon_less_effective = false;
 
-    bool grants_two_weapon = false;
-
     char o_name[80];
 
     bool combine = false;
@@ -3445,7 +3474,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if (is_throwing)
     {
         if ((forced_wield_slot == INVEN_WIELD
-                || forced_wield_slot == INVEN_BELT)
+                || forced_wield_slot == INVEN_BELT
+                || forced_wield_slot == INVEN_ARM)
             && forced_wield_slot_accepts_object(o_ptr, forced_wield_slot))
         {
             slot = forced_wield_slot;
@@ -3640,27 +3670,12 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     }
 
     // Ask about two weapon fighting if necessary
-    for (i = 0; i < o_ptr->abilities; i++)
-    {
-        if ((o_ptr->skilltype[i] == S_MEL)
-            && (o_ptr->abilitynum[i] == MEL_TWO_WEAPON)
-            && object_known_p(o_ptr))
-        {
-            grants_two_weapon = true;
-        }
-    }
     if ((forced_wield_slot < 0) && !paired_weapon_prompt
-        && (p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON] || grants_two_weapon)
-        && ((o_ptr->tval == TV_SWORD) || (o_ptr->tval == TV_POLEARM)
-            || (o_ptr->tval == TV_HAFTED) || (o_ptr->tval == TV_DIGGING)))
+        && do_cmd_can_wield_offhand(o_ptr))
     {
-        if (!(k_info[o_ptr->k_idx].flags3 & (TR3_TWO_HANDED))
-            && !(k_info[o_ptr->k_idx].flags3 & (TR3_HAND_AND_A_HALF)))
+        if (get_check("Do you wish to wield it in your off-hand? "))
         {
-            if (get_check("Do you wish to wield it in your off-hand? "))
-            {
-                slot = INVEN_ARM;
-            }
+            slot = INVEN_ARM;
         }
     }
 

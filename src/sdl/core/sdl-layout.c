@@ -2226,7 +2226,8 @@ bool sdl_combat_overlay_melee_uses_offhand_row(void)
         && player_active_weapon_is_melee()
         && (ROW_MEL - 1) != ROW_LIGHT
         && inventory[INVEN_WIELD].k_idx
-        && p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+        && player_offhand_weapon_allowed(&inventory[INVEN_WIELD],
+            &inventory[INVEN_ARM])
         && inventory[INVEN_ARM].k_idx
         && inventory[INVEN_ARM].tval != TV_SHIELD;
 }
@@ -2623,7 +2624,8 @@ bool sdl_left_panel_pane_runtime_active(void)
 
 bool sdl_left_panel_pane_collapsed(void)
 {
-    return !g_left_panel_pane_expanded;
+    /* Keep the mobile HUD readable; full details remain on the paged sheet. */
+    return config.bigger_font || !g_left_panel_pane_expanded;
 }
 
 int sdl_left_panel_compact_mode_normalized(int mode)
@@ -4306,7 +4308,7 @@ int sdl_resolve_aux_view_font_size(int requested_size)
     if (size > 48)
         size = 48;
 
-    return size;
+    return sdl_ui_font_px(size);
 }
 
 int sdl_resolve_pane_font_size(enum pane_type type, int requested_size)
@@ -4320,7 +4322,7 @@ int sdl_resolve_pane_font_size(enum pane_type type, int requested_size)
     if (size > 48)
         size = 48;
 
-    return size;
+    return sdl_ui_font_px(size);
 }
 
 int sdl_effective_pane_font_size_for_config(const struct pane_config* pc)

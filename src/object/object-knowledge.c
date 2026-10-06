@@ -57,7 +57,10 @@ void object_aware(object_type* o_ptr)
      * normal gameplay actions are still allowed.  Do not let that UI state
      * suppress identification experience.
      */
-    bool quiet_awareness = !character_generated || character_xtra;
+    /* Postmortem revelation grants knowledge, not further progression.
+     * Final Look temporarily clears is_dead for the ordinary game UI. */
+    bool quiet_awareness = !character_generated || character_xtra
+        || p_ptr->is_dead || death_spectator_active();
 
     /* Fully aware of the effects */
     k_info[o_ptr->k_idx].aware = true;

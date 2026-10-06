@@ -115,7 +115,9 @@ static void quest_show_book(cptr title, cptr texts[], int total_texts,
     int target_page_count)
 {
     bool done = false;
+    bool restore_context_hint = sdl_question_menu_context_hint_active();
 
+    sdl_question_menu_clear_context_hint();
     screen_save();
     screen_push_supporting_panes_hidden();
 
@@ -229,6 +231,8 @@ static void quest_show_book(cptr title, cptr texts[], int total_texts,
     sdl_character_sheet_screen_hide();
     screen_pop_supporting_panes_hidden();
     screen_load();
+    if (restore_context_hint)
+        (void)do_cmd_context_square_action_popup();
 }
 
 static int quest_reward_first_enabled(const bool enabled[], int choice_count,
@@ -317,10 +321,13 @@ int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
         initial_choice);
     int result = -1;
     bool done = false;
+    bool restore_context_hint;
 
     if (selection < 0 || !values || !labels)
         return -1;
 
+    restore_context_hint = sdl_question_menu_context_hint_active();
+    sdl_question_menu_clear_context_hint();
     screen_save();
     screen_push_supporting_panes_hidden();
     quest_reward_build_book(title, texts, total_texts, prompt, labels, enabled,
@@ -513,6 +520,7 @@ int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
             screen_pop_supporting_panes_hidden();
             screen_load();
             inspect(values[selection]);
+            sdl_question_menu_clear_context_hint();
             screen_save();
             screen_push_supporting_panes_hidden();
             quest_reward_build_book(title, texts, total_texts, prompt, labels,
@@ -525,6 +533,8 @@ int quest_reward_book_choice(cptr title, cptr texts[], int total_texts,
     sdl_character_sheet_screen_hide();
     screen_pop_supporting_panes_hidden();
     screen_load();
+    if (restore_context_hint)
+        (void)do_cmd_context_square_action_popup();
     return result;
 }
 

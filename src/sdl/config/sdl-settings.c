@@ -18,6 +18,8 @@ void get_sdl_config_info(char* buf, size_t size)
         "Character Sheet Mode: %s\n",
         config.debug_character_sheet ? "debug" : "SDL");
     offset += (size_t)strnfmt(buf + offset, size - offset,
+        "Bigger font: %s\n", config.bigger_font ? "On" : "Off");
+    offset += (size_t)strnfmt(buf + offset, size - offset,
         "Mobile Starting Zoom Offset: %+d\n",
         config.mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -187,7 +189,18 @@ void set_sdl_terminal_menu_scale_offset(int value)
 
 bool get_sdl_compact_inventory_menus(void)
 {
-    return config.compact_inventory_menus;
+    return config.compact_inventory_menus || config.bigger_font;
+}
+
+bool get_sdl_bigger_font(void)
+{
+    return config.bigger_font;
+}
+
+void set_sdl_bigger_font(bool value)
+{
+    config.bigger_font = value;
+    g_state.need_present = true;
 }
 
 void set_sdl_compact_inventory_menus(bool value)

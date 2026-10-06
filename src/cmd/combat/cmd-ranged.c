@@ -1213,7 +1213,7 @@ void do_cmd_fire(int quiver)
                                     monster_skill(m_ptr, S_WIL), m_ptr)
                                 > 0)
                             {
-                                msg_format("Your shot cripples %^s!", m_name);
+                                msg_format("Your shot cripples %s!", m_name);
 
                                 // slow the monster
                                 // The +1 is needed as a turn of this wears off

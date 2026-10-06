@@ -30,6 +30,9 @@ enum {
 static int tutorial_panel_part;
 static int tutorial_panel_parts = 1;
 
+static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
+    float x, float y, float w, cptr title, cptr body, float max_bottom);
+
 static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 {
     /* Keep explanation cards near the gameplay tutorial's readable type size
@@ -37,8 +40,8 @@ static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
     const float scale = sdl_touch_only_mobile_device_active()
         ? 1.45f : 1.14f;
 
-    return (int)sdl_touch_pane_clampf(
-        px * scale, min_px * scale, max_px * scale);
+    return sdl_ui_font_px((int)sdl_touch_pane_clampf(
+        px * scale, min_px * scale, max_px * scale));
 }
 
 static TTF_Font* sdl_touch_tutorial_font_for_height(int font_px)
@@ -141,11 +144,14 @@ float sdl_touch_tutorial_draw_text_line(cptr text, float x, float y,
     if (!font)
         return 0.0f;
 
-    texture = sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    texture = config.bigger_font && max_w > 0.0f
+        ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
+            &text_w, &text_h)
+        : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return 0.0f;
 
-    if (max_w > 0.0f && text_w > 0 && (float)text_w > max_w)
+    if (!config.bigger_font && max_w > 0.0f && text_w > 0 && (float)text_w > max_w)
         scale = max_w / (float)text_w;
 
     dst = (SDL_FRect){
@@ -1283,6 +1289,19 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         return;
     text_w = w - pad * 2.0f;
 
+    if (config.bigger_font) {
+        char body[4096] = "";
+        for (int i = 0; i < line_count; i++) {
+            if (i)
+                SDL_strlcat(body, "\n", sizeof(body));
+            SDL_strlcat(body, lines[i], sizeof(body));
+        }
+        sdl_touch_tutorial_draw_info_panel_before(screen,
+            screen->x + (screen->w - w) * 0.5f, min_y + 8.0f, w,
+            mouse ? "Mouse shortcuts" : "Touch shortcuts", body, footer_top);
+        return;
+    }
+
     min_font_px = mobile_section && screen->h >= 560 ? 16 : 14;
     {
         int low_px = min_font_px;
@@ -1558,13 +1577,14 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
         body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
         h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
         if (title && title[0]) {
-            title_lines = sdl_touch_only_mobile_device_active()
+            title_lines = (config.bigger_font || sdl_touch_only_mobile_device_active())
                 ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
                 : 1;
             title_h = (float)title_lines * (float)title_px * 1.35f;
             h += title_h + 5.0f;
         }
-        if (h <= available_h || body_px <= (screen->h < 560 ? 14 : 16))
+        if (h <= available_h || config.bigger_font
+            || body_px <= (screen->h < 560 ? 14 : 16))
             break;
         body_px--;
         title_px = MIN(title_px, body_px + 6);
@@ -1608,7 +1628,7 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
 
     y = box.y + pad;
     if (title && title[0]) {
-        if (sdl_touch_only_mobile_device_active())
+        if (config.bigger_font || sdl_touch_only_mobile_device_active())
             (void)sdl_touch_tutorial_draw_wrapped_centered(title,
                 box.x + box.w * 0.5f, y, text_w, title_px, title_color);
         else
@@ -2390,7 +2410,7 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
         return;
 
     tutorial_panel_parts = 1;
-    if (page < zone_page_count) tutorial_panel_part = 0;
+    if (page < zone_page_count && !config.bigger_font) tutorial_panel_part = 0;
 
     old_suppress_top_panel = g_touch_tutorial_suppress_runtime_top_panel;
     g_touch_tutorial_suppress_runtime_top_panel = true;
