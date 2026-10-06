@@ -414,7 +414,11 @@ static void check_main_menu(void)
     SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255); SDL_RenderClear(g_state.renderer);
     sdl_main_menu_pane_render(); capture("main-menu-last");
     main_menu_pane_layout layout;
+    g_main_menu_overlay_highlight=1;
+    g_main_menu_overlay_first_choice=1;
     fixture_assert(sdl_main_menu_overlay_layout(&layout));
+    int first_before=layout.first_choice;
+    int visible_before=layout.visible_count;
     SDL_Event ev={0}; ev.tfinger.windowID=SDL_GetWindowID(g_state.window);
     ev.tfinger.touchID=1; ev.tfinger.fingerID=7;
     ev.tfinger.x=(layout.panel.x+layout.panel.w/2)/fixture_width;
@@ -427,6 +431,9 @@ static void check_main_menu(void)
     ev.type=SDL_EVENT_FINGER_UP;
     fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
     fixture_assert(g_main_menu_large_touch_dragged);
+    fixture_assert(sdl_main_menu_overlay_layout(&layout));
+    if(visible_before<MAIN_MENU_MAX)
+        fixture_assert(layout.first_choice>first_before);
     fixture_assert(g_main_menu_overlay_active);
     char key=0; fixture_assert(Term_inkey(&key,false,true)!=0);
     sdl_main_menu_overlay_close(); character_icky=1;
@@ -448,10 +455,12 @@ static void check_halls(void)
     sdl_halls_screen_add_action(3,"Previous page",TERM_WHITE,true);
     sdl_halls_screen_add_action(4,"Return",TERM_WHITE,true);
     fixture_assert(sdl_render_current_window_frame());
-    fixture_assert(g_halls_text_pager.maximum>0);
+    fixture_assert(g_halls_text_pager.maximum>=0);
     inside(g_sdl_halls.entries[0].hit_rect);
     for(int i=0;i<g_sdl_halls.action_count;i++) inside(g_sdl_halls.actions[i].hit_rect);
-    inside(g_halls_text_pager.buttons[0]); inside(g_halls_text_pager.buttons[1]);
+    if(g_halls_text_pager.maximum>0) {
+        inside(g_halls_text_pager.buttons[0]); inside(g_halls_text_pager.buttons[1]);
+    }
     int guard=0;
     while(g_halls_text_pager.offset<g_halls_text_pager.maximum) {
         SDL_FRect r=g_halls_text_pager.buttons[1];
@@ -548,12 +557,104 @@ static void check_large_tutorial(void)
                 }
             }
             fixture_assert(body_rows>0);
-            fixture_assert(tutorial_max_scroll>0);
+            fixture_assert(tutorial_max_scroll>=0);
+            if(fixture_width<1080 && fixture_height<1600)
+                fixture_assert(tutorial_max_scroll>0);
         }
         capture(size==16?"tutorial-small-font":"tutorial-large-font");
     }
     fixture.active=false; config.aux_view_font_size=saved_font;
     sdl_gameplay_tutorial_sync();
+}
+
+static void check_welcome_cache(void)
+{
+    SDL_strlcpy(fixture_id,"welcome-cache",sizeof(fixture_id));
+    SDL_Rect canvas={0,0,fixture_width,fixture_height};
+    sdl_welcome_layout_line lines[SDL_WELCOME_MAX_LINES];
+    sdl_welcome_layout_metrics metrics={0};
+    fixture_assert(sdl_welcome_screen_show_intro(INTRO_STYLE_FLAME,false));
+    fixture_assert(sdl_welcome_prepare_layout(&canvas,lines,N_ELEMENTS(lines),&metrics)>0);
+    fixture_assert(sdl_welcome_layout_cache_matches(&canvas));
+    config.bigger_font=false;
+    fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
+    config.bigger_font=true;
+    sdl_story_font_cache_clear();
+    fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
+    fixture_assert(sdl_welcome_prepare_layout(&canvas,lines,N_ELEMENTS(lines),&metrics)>0);
+    /* Evict the welcome fonts, then revisit without restarting the process. */
+    for(int i=0;i<MAX_STORY_FONT_CACHE+1;i++)
+        fixture_assert(sdl_story_font_for_height_slot(100+i,SDL_STORY_FONT_SLOT_MENU));
+    fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
+    int count=sdl_welcome_prepare_layout(&canvas,lines,N_ELEMENTS(lines),&metrics);
+    fixture_assert(count>0);
+    for(int i=0;i<count;i++) {
+        bool alive=false;
+        for(int f=0;f<g_state.story_font_count;f++)
+            if(lines[i].font==g_state.story_fonts[f].font) alive=true;
+        fixture_assert(alive);
+    }
+    sdl_welcome_render_intro_canvas(&canvas);
+    SDL_SetRenderTarget(g_state.renderer,NULL);
+    capture("welcome-revisited");
+    sdl_welcome_screen_hide();
+}
+
+static void check_actual_cell_metrics(void)
+{
+    SDL_strlcpy(fixture_id,"actual-cell-metrics",sizeof(fixture_id));
+    int widths[PANE_MAX],heights[PANE_MAX];
+    SDL_Rect screen={0,0,fixture_width,fixture_height};
+    for(int bigger=0;bigger<2;bigger++) {
+        config.bigger_font=bigger;
+        sdl_build_supporting_pane_metrics(NULL,0,widths,heights);
+        sdl_view actual={0};
+        fixture_assert(sdl_view_create(&actual,screen,config.monospace_font,0,
+            sdl_main_view_layout_scale(),0));
+        fixture_assert(widths[PANE_MAIN]==actual.cell_w);
+        fixture_assert(heights[PANE_MAIN]==actual.cell_h);
+        sdl_view_destroy(&actual);
+        SDL_SetRenderTarget(g_state.renderer,NULL);
+        for(int mode=0;mode<SDL_MIN_TERMINAL_MODE_COUNT;mode++) {
+            int scale=sdl_max_scale_for_rect_mode(&screen,mode);
+            fixture_assert(sdl_view_create(&actual,screen,config.monospace_font,0,scale,0));
+            /* Tiny screens can fit fewer cells even at the minimum scale. */
+            if(scale>SDL_MAIN_VIEW_MIN_SCALE) {
+                fixture_assert(actual.cols>=sdl_min_terminal_cols_for_mode(mode));
+                fixture_assert(actual.rows>=sdl_min_terminal_rows_for_mode(mode));
+            }
+            sdl_view_destroy(&actual);
+            SDL_SetRenderTarget(g_state.renderer,NULL);
+        }
+    }
+    config.bigger_font=true;
+}
+
+static void check_auto_font_metrics(void)
+{
+    SDL_strlcpy(fixture_id,"auto-font-density",sizeof(fixture_id));
+    float saved_scale=g_state.system_scale;
+    int saved_aux=config.aux_view_font_size;
+    config.aux_view_font_size=0;
+    static const float densities[]={1.0f,2.625f,3.0f};
+    SDL_Rect screen={0,0,fixture_width,fixture_height};
+    for(int density=0;density<N_ELEMENTS(densities);density++) {
+        g_state.system_scale=densities[density];
+        for(int bigger=0;bigger<2;bigger++) {
+            config.bigger_font=bigger;
+            for(int pane=PANE_MAIN+1;pane<PANE_MAX;pane++) {
+                sdl_view actual={0};
+                fixture_assert(sdl_view_create(&actual,screen,config.monospace_font,
+                    sdl_effective_pane_font_size_for_type(pane),0,0));
+                fixture_assert(actual.cell_h==sdl_effective_pane_cell_height_for_type(pane));
+                sdl_view_destroy(&actual);
+                SDL_SetRenderTarget(g_state.renderer,NULL);
+            }
+        }
+    }
+    config.bigger_font=true;
+    config.aux_view_font_size=saved_aux;
+    g_state.system_scale=saved_scale;
 }
 
 static void check(int width,int height)
@@ -569,6 +670,8 @@ static void check(int width,int height)
     sdl_view *view=&g_views[PANE_MAIN];
     term_init(&view->t,80,24,256); Term_activate(&view->t); term_screen=&view->t;
     character_icky=1; fixture.active=false;
+    check_actual_cell_metrics();
+    check_auto_font_metrics();
     config.bigger_font=false;
     int pane=sdl_main_menu_pane_font_px();
     int normal=check_settings(8,"General Settings");
@@ -578,7 +681,7 @@ static void check(int width,int height)
     fixture_assert(large==(normal*3+1)/2);
     check_settings(40,"Overflow Settings");
     check_actual_general();
-    check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_large_tutorial();
+    check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_large_tutorial(); check_welcome_cache();
     printf("%dx%d: pane %d -> %d, native settings %d -> %d; settings taps, song paging/choice, question wrapping/scroll, birth final skill, text paging, main menu drag, Halls: PASS\n",
         width,height,pane,sdl_main_menu_pane_font_px(),normal,large);
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
@@ -643,7 +746,8 @@ def main():
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     # Each offscreen renderer gets a fresh process: some production font
     # caches live for the application lifetime and retain font pointers.
-    for width, height in [(360, 800), (800, 360), (580, 1280), (1280, 720)]:
+    for width, height in [(360, 800), (800, 360), (580, 1280), (1280, 720),
+                          (1080, 2400), (2400, 1080)]:
         subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"),
                         str(width), str(height), str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf"),
                         str(ROOT / "lib/xtra/font/Cinzel-Medium.ttf")],

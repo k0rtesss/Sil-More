@@ -3351,7 +3351,11 @@ static void ability_browser_train_attributes(void)
         for (int row = 0; row < Term->hgt; ++row) Term_erase(0, row, 255);
         strnfmt(text, sizeof(text), "Attributes - %ld insight points",
             (long)p_ptr->insight_points);
-        Term_putstr(1, 0, -1, TERM_L_BLUE, text);
+        sdl_character_sheet_screen_begin_select(selected, text);
+        sdl_character_sheet_screen_set_select_menu_style(true);
+        sdl_character_sheet_screen_set_select_description(
+            "Choose an attribute to increase it. Unused insight points are kept. "
+            "Purchases are permanent.");
         for (int stat = 0; stat < A_MAX; ++stat)
         {
             int cost = insight_stat_increase_cost(stat);
@@ -3361,14 +3365,24 @@ static void ability_browser_train_attributes(void)
             else
                 strnfmt(text, sizeof(text), "%c) %s %d: maximum investment",
                     'a' + stat, names[stat], p_ptr->stat_base[stat]);
-            Term_putstr(1, 2 + stat, -1,
-                selected == stat ? TERM_L_BLUE : TERM_WHITE, text);
-            ui_menu_click_add(stat, 1, 2 + stat, MIN((int)strlen(text), Term->wid - 1));
+            sdl_character_sheet_screen_add_select_row(stat, text,
+                selected == stat ? TERM_L_BLUE : TERM_WHITE, "");
         }
-        Term_putstr(1, 8, -1, TERM_SLATE, "Enter: increase selected attribute. Esc: back.");
-        Term_putstr(1, 10, -1, TERM_SLATE, "Unused insight points are kept. Purchases are permanent.");
-        Term_putstr(1, 12, -1, TERM_WHITE, "[Back]");
-        ui_menu_click_add(-1, 1, 12, 6);
+        if (!sdl_character_sheet_screen_commit_select(selected))
+        {
+            Term_putstr(1, 0, -1, TERM_L_BLUE, "Attributes");
+            for (int stat = 0; stat < A_MAX; ++stat)
+            {
+                int cost = insight_stat_increase_cost(stat);
+                strnfmt(text, sizeof(text), "%c) %s %d: %d IP",
+                    'a' + stat, names[stat], p_ptr->stat_base[stat], cost);
+                Term_putstr(0, 1 + stat, -1,
+                    selected == stat ? TERM_L_BLUE : TERM_WHITE, text);
+                ui_menu_click_add_full_row(stat, 1 + stat);
+            }
+            Term_putstr(0, Term->hgt - 1, -1, TERM_WHITE, "[Back]");
+            ui_menu_click_add(-1, 0, Term->hgt - 1, 6);
+        }
         int ch = inkey();
         int choice, action;
         if (ui_menu_click_take_action(&choice, &action))
@@ -3380,7 +3394,8 @@ static void ability_browser_train_attributes(void)
                 if (!same || action == UI_MENU_CLICK_HOVER) continue;
                 ch = '\r';
             }
-            else if (choice == -1 && action != UI_MENU_CLICK_HOVER) ch = ESCAPE;
+            else if ((choice == -1 || choice == SDL_SELECT_CLICK_CLOSE)
+                && action != UI_MENU_CLICK_HOVER) ch = ESCAPE;
         }
         if (steamdeck) ch = steamdeck_menu_key(ch, 0, 0);
         if (ch == ESCAPE || ch == 'q') done = true;
@@ -3400,9 +3415,11 @@ static void ability_browser_train_attributes(void)
             strnfmt(text, sizeof(text), "Increase %s from %d to %d for %d insight point%s? ",
                 names[selected], p_ptr->stat_base[selected],
                 p_ptr->stat_base[selected] + 1, cost, cost == 1 ? "" : "s");
+            sdl_character_sheet_screen_hide();
             if (get_check(text) && insight_increase_stat(selected)) handle_stuff();
         }
     }
+    sdl_character_sheet_screen_hide();
     ui_menu_click_clear();
     screen_load();
     handle_stuff();

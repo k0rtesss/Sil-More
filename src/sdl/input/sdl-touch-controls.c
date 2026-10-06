@@ -16,6 +16,7 @@ static SDL_FRect g_touch_top_panel_cached_buttons[
     SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
 static Uint64 g_touch_top_panel_cached_generation;
 static bool g_touch_top_panel_cached_layout_valid;
+static bool g_touch_top_panel_layout_computing;
 static int g_touch_top_panel_description_slot = -1;
 static int g_touch_top_panel_controller_focus_slot = -1;
 static SDL_FRect g_touch_top_panel_description_box;
@@ -2004,7 +2005,9 @@ static int sdl_touch_round_collect_obstacles(SDL_Rect* rects, int max_rects)
          * at the wheel boundary.  It must not feed back into wheel placement.
          */
         if (!pane_config[i].enabled || pane == PANE_MAIN
-            || pane == PANE_TOUCH || pane == PANE_OVERLAY_MENU)
+            || pane == PANE_TOUCH || pane == PANE_OVERLAY_MENU
+            || (pane == PANE_STATUS_DEPTH
+                && g_touch_top_panel_layout_computing))
         {
             continue;
         }
@@ -2224,6 +2227,8 @@ static void sdl_touch_round_clip_between_right_stacks(
         SDL_Rect visible;
 
         if (!pane_config[i].enabled || pane == PANE_OVERLAY_MENU
+            || (pane == PANE_STATUS_DEPTH
+                && g_touch_top_panel_layout_computing)
             || (where != PLACE_TOP_RIGHT && where != PLACE_BOTTOM_RIGHT)
             || pane <= PANE_MAIN || pane >= PANE_MAX)
         {
@@ -5419,7 +5424,7 @@ static bool sdl_touch_top_panel_fit_horizontal_stretch(
     return true;
 }
 
-bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
+static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* screen,
     const SDL_Rect* anchor, enum pane_placement where,
     SDL_FRect* button_rects, SDL_FRect* out_panel)
 {
@@ -5709,6 +5714,22 @@ panel_ready:
     }
 
     return true;
+}
+
+bool sdl_touch_top_panel_compute_layout_for_anchor(const SDL_Rect* screen,
+    const SDL_Rect* anchor, enum pane_placement where,
+    SDL_FRect* button_rects, SDL_FRect* out_panel)
+{
+    bool previous = g_touch_top_panel_layout_computing;
+    bool result;
+
+    /* Status & Depth depends on this grid.  Do not let its resulting position
+     * feed back through the wheel into fixed or Stretch button measurements. */
+    g_touch_top_panel_layout_computing = true;
+    result = sdl_touch_top_panel_compute_layout_for_anchor_impl(screen,
+        anchor, where, button_rects, out_panel);
+    g_touch_top_panel_layout_computing = previous;
+    return result;
 }
 
 bool sdl_touch_top_panel_point_to_slot(float x, float y, int* out_slot)

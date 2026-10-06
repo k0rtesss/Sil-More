@@ -4239,8 +4239,7 @@ void do_cmd_help(void)
 
             if (sdl_touch_only_device_active()) {
                 SDL_strlcpy(nav,
-                    "Tap Search to find a topic   swipe or tap left/right   "
-                    "tap Exit to close",
+                    "Search finds topics; swipe pages; Exit closes",
                     sizeof(nav));
             } else if (help_controller_available()
                 && steamdeck_controls_active()) {

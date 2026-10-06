@@ -15508,6 +15508,15 @@ void do_cmd_knowledge_kills(void)
 void do_cmd_knowledge(void)
 {
     char ch;
+    int selected_choice = 1;
+    static cptr choices[] = {
+        "(1) Display known lore browser",
+        "(2) Display supplies overview",
+        "(3) Display names of the fallen",
+        "(4) Display kill counts",
+        "(5) Display character notes file",
+        "(6) Display oath status"
+    };
 
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
@@ -15529,23 +15538,29 @@ void do_cmd_knowledge(void)
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
 
-        /* Ask for a choice */
-        prt("Display current knowledge", 2, 0);
-
-        /* Give some choices */
-        prt("(1) Display known lore browser", 4, 5);
-        prt("(2) Display supplies overview", 5, 5);
-        prt("(3) Display names of the fallen", 6, 5);
-        prt("(4) Display kill counts", 7, 5);
-
-        /*allow the player to see the notes taken if that option is selected*/
-        c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
-        prt("(6) Display oath status", 9, 5);
-        for (int i = 1; i <= 6; i++)
-            ui_menu_click_add_full_row(i, i + 3);
-
-        /* Prompt */
-        prt("Command: ", 11, 0);
+        sdl_character_sheet_screen_begin_select(selected_choice,
+            "Display current knowledge");
+        sdl_character_sheet_screen_set_select_menu_style(true);
+        for (int i = 0; i < (int)N_ELEMENTS(choices); ++i)
+            sdl_character_sheet_screen_add_select_row(i + 1, choices[i],
+                TERM_WHITE, "");
+        if (!sdl_character_sheet_screen_commit_select(selected_choice))
+        {
+            /* Terminal fallback follows the available rows and columns. */
+            int wid, hgt;
+            int first_row;
+            int col;
+            Term_get_size(&wid, &hgt);
+            first_row = hgt >= 13 ? 4 : 1;
+            col = wid >= 45 ? 5 : 0;
+            prt("Display current knowledge", 0, 0);
+            for (int i = 0; i < (int)N_ELEMENTS(choices); ++i)
+            {
+                prt(choices[i], first_row + i, col);
+                ui_menu_click_add_full_row(i + 1, first_row + i);
+            }
+            prt("Command: ", MIN(hgt - 1, first_row + 7), 0);
+        }
 
         /* Prompt */
         ch = inkey();
@@ -15553,19 +15568,36 @@ void do_cmd_knowledge(void)
             int clicked_choice = 0;
             int click_action = UI_MENU_CLICK_PRIMARY;
 
-            if (ui_menu_click_take_action(&clicked_choice, &click_action)
-                && clicked_choice >= 1 && clicked_choice <= 6)
+            if (ui_menu_click_take_action(&clicked_choice, &click_action))
             {
-                if (click_action == UI_MENU_CLICK_HOVER)
+                if (clicked_choice == SDL_SELECT_CLICK_CLOSE)
+                    ch = ESCAPE;
+                else if (clicked_choice == SDL_SELECT_CLICK_PAGE_PREV
+                    || clicked_choice == SDL_SELECT_CLICK_PAGE_NEXT)
+                {
+                    sdl_character_sheet_screen_begin_page_turn(
+                        clicked_choice == SDL_SELECT_CLICK_PAGE_PREV ? -1 : 1);
                     continue;
-                ch = I2D(clicked_choice);
+                }
+                else if (clicked_choice >= 1 && clicked_choice <= 6)
+                {
+                    selected_choice = clicked_choice;
+                    if (click_action == UI_MENU_CLICK_HOVER)
+                        continue;
+                    ch = I2D(clicked_choice);
+                }
             }
         }
+        if (ch == '\r' || ch == '\n' || ch == ' ')
+            ch = I2D(selected_choice);
+        if (ch >= '1' && ch <= '6')
+            selected_choice = D2I(ch);
 
         /* Done */
         if (ch == ESCAPE)
             break;
 
+        sdl_character_sheet_screen_hide();
         ui_menu_click_clear();
         ui_scroll_area_clear();
 
@@ -15619,6 +15651,7 @@ void do_cmd_knowledge(void)
     }
 
     /* Load screen */
+    sdl_character_sheet_screen_hide();
     ui_menu_click_clear();
     ui_scroll_area_clear();
     screen_pop_supporting_panes_hidden();
