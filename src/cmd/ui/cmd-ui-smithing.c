@@ -4366,6 +4366,26 @@ static void smith_eval_object(const object_type* src, int* difficulty,
     smithing_cost = smithing_cost_backup;
 }
 
+/* Read the accepted blueprint's rating without changing its craft bill. */
+int smithing_work_difficulty(void)
+{
+    object_type saved_object;
+    smith_alloy_state saved_alloy;
+    smithing_cost_type saved_cost;
+    int difficulty;
+
+    if (!smith_o_ptr || !smith_o_ptr->k_idx)
+        return 0;
+    saved_object = *smith_o_ptr;
+    saved_alloy = smith_alloy;
+    saved_cost = smithing_cost;
+    difficulty = object_difficulty(smith_o_ptr);
+    *smith_o_ptr = saved_object;
+    smith_alloy = saved_alloy;
+    smithing_cost = saved_cost;
+    return difficulty;
+}
+
 static bool smith_reforge_difficulty_affordable(int difficulty, int* drain_out)
 {
     int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);

@@ -126,8 +126,8 @@ void resize(const SDL_Rect* screen)
     // keep their own minimum sizes, but no longer get removed solely to
     // preserve a minimum main terminal size.
     if (show_supporting_panes) {
-        int cell_w = layout_main_view_scale * TILE_SIZE / 2;
-        int cell_h = layout_main_view_scale * TILE_SIZE;
+        int cell_h = sdl_ui_font_px(layout_main_view_scale * TILE_SIZE);
+        int cell_w = cell_h / 2;
         int min_main_cols = sdl_current_min_terminal_cols();
         int min_main_rows = sdl_current_min_terminal_rows();
         log_debug("Layout cell dimensions: %dx%d (scale=%d, TILE_SIZE=%d, render_scale=%d)",

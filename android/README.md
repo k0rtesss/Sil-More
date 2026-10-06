@@ -45,6 +45,20 @@ In SDL3, the Java shim Activity class is `org.libsdl.app.SDLActivity` (from `SDL
 5. Let Gradle sync complete.
 6. Build/Run the `app` configuration (ABI is set to `arm64-v8a`).
 
+## Emulator testing
+
+Device APKs default to `arm64-v8a`. To build a debug APK for an x86-64
+Android emulator, set the ABI override before running the normal APK helper:
+
+```powershell
+$env:SIL_MORE_ANDROID_ABIS = 'x86_64'
+./build-android-apk.ps1 -Config Debug
+Remove-Item Env:SIL_MORE_ANDROID_ABIS
+```
+
+The Gradle property `-PSIL_MORE_ANDROID_ABIS=x86_64` is equivalent. A
+comma-separated list can build multiple ABIs.
+
 ## Command-line native build (optional)
 
 From repo root (PowerShell):

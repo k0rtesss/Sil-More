@@ -250,8 +250,9 @@ def main():
     response.write_text("\n".join('"' + obj + '"' for obj in objects
                                  if not obj.endswith(excluded)), encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin"] +
-        [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] + [env["PATH"]])
+    env["PATH"] = os.pathsep.join(
+        [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
+        ["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     wraps = ["tutorial_get_view", "tutorial_is_active", "tutorial_revision",
              "get_sdl_gameplay_tutorial_mode", "tutorial_continue", "SDL_WaitEvent",
              "sdl_touch_round_layer_controls_active", "sdl_touch_round_compute_layout",

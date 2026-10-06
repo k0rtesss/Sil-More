@@ -2226,7 +2226,8 @@ bool sdl_combat_overlay_melee_uses_offhand_row(void)
         && player_active_weapon_is_melee()
         && (ROW_MEL - 1) != ROW_LIGHT
         && inventory[INVEN_WIELD].k_idx
-        && p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+        && player_offhand_weapon_allowed(&inventory[INVEN_WIELD],
+            &inventory[INVEN_ARM])
         && inventory[INVEN_ARM].k_idx
         && inventory[INVEN_ARM].tval != TV_SHIELD;
 }
@@ -3146,7 +3147,7 @@ static void sdl_apply_top_right_overlay_blocker_offset(void)
     left = g_pane_rects[PANE_LEFT_PANEL];
     compact_left_blocker = sdl_left_panel_pane_presentation_active()
         && sdl_left_panel_pane_collapsed()
-        && sdl_left_panel_compact_row_mode()
+        && (sdl_left_panel_compact_row_mode() || get_sdl_bigger_font())
         && sdl_rect_has_area(&left)
         && (left_where == PLACE_TOP_LEFT || left_where == PLACE_TOP_CENTER
             || left_where == PLACE_TOP_RIGHT);
@@ -3165,6 +3166,27 @@ static void sdl_apply_top_right_overlay_blocker_offset(void)
             {
                 desired_top = MAX(desired_top, left_bottom);
                 break;
+            }
+        }
+    }
+
+    if (get_sdl_bigger_font()) {
+        /* The weapon/armour overlay is stacked below the measured character
+         * panel. Avoid its painted bounds too, after that stack has reflowed. */
+        for (int i = 0; i < pane_config_count; i++) {
+            const struct pane_config* pc = &pane_config[i];
+            SDL_Rect blocker;
+            if (!pc->enabled || pc->pane == PANE_LEFT_PANEL
+                || (pc->where != PLACE_TOP_LEFT && pc->where != PLACE_TOP_CENTER)
+                || !sdl_overlay_stack_visible_rect(pc->pane, &blocker))
+                continue;
+            for (int pane = 0; pane < PANE_MAX; pane++) {
+                const SDL_Rect* visible = &visible_rects[pane];
+                if (have_visible_rect[pane]
+                    && blocker.x < visible->x + visible->w
+                    && blocker.x + blocker.w > visible->x
+                    && blocker.y + blocker.h > visible->y)
+                    desired_top = MAX(desired_top, blocker.y + blocker.h);
             }
         }
     }
@@ -3197,8 +3219,13 @@ void sdl_apply_top_right_overlay_offset(void)
      * base layout rectangles before calculating the current frame's offsets. */
     sdl_remove_overlay_stack_offsets();
     sdl_remove_top_right_overlay_offset();
-    sdl_apply_top_right_overlay_blocker_offset();
-    sdl_apply_overlay_stack_layout();
+    if (get_sdl_bigger_font()) {
+        sdl_apply_overlay_stack_layout();
+        sdl_apply_top_right_overlay_blocker_offset();
+    } else {
+        sdl_apply_top_right_overlay_blocker_offset();
+        sdl_apply_overlay_stack_layout();
+    }
 }
 
 bool sdl_left_panel_pane_has_border_columns(void)
@@ -4413,8 +4440,8 @@ void sdl_build_supporting_pane_metrics(const struct pane_config* configs,
          * changes how the main term is rendered inside that rectangle. */
         int main_scale = sdl_main_view_layout_scale();
 
-        cell_widths[PANE_MAIN] = main_scale * TILE_SIZE / 2;
-        cell_heights[PANE_MAIN] = main_scale * TILE_SIZE;
+        cell_heights[PANE_MAIN] = sdl_ui_font_px(main_scale * TILE_SIZE);
+        cell_widths[PANE_MAIN] = cell_heights[PANE_MAIN] / 2;
     }
 
     for (int i = 0; i < count; i++) {
@@ -4960,8 +4987,8 @@ void sdl_compute_pruned_split_panes_for_mode_ex(const SDL_Rect* screen,
         g_auto_aux_main_cell_h_override = layout_scale * TILE_SIZE;
     }
 
-    cell_w = scale * TILE_SIZE / 2;
-    cell_h = scale * TILE_SIZE;
+    cell_h = sdl_ui_font_px(scale * TILE_SIZE);
+    cell_w = cell_h / 2;
     sdl_place_active_panes_fitting_main(screen, target_panes, include_side,
         include_bottom, false, &include_side, &include_bottom);
     cols = (cell_w > 0)
@@ -5176,8 +5203,8 @@ int sdl_max_scale_for_rect_mode(const SDL_Rect* rect, int mode)
 
     min_cols = sdl_min_terminal_cols_for_mode(mode);
     min_rows = sdl_min_terminal_rows_for_mode(mode);
-    max_scale_w = (rect->w / min_cols) * 2 / TILE_SIZE;
-    max_scale_h = rect->h / min_rows / TILE_SIZE;
+    max_scale_w = (rect->w / min_cols) * 2 / sdl_ui_font_px(TILE_SIZE);
+    max_scale_h = rect->h / min_rows / sdl_ui_font_px(TILE_SIZE);
     max_scale = (max_scale_w < max_scale_h) ? max_scale_w : max_scale_h;
 
     if (max_scale < SDL_MAIN_VIEW_MIN_SCALE)
@@ -5416,9 +5443,9 @@ void sdl_ensure_window_size_for_min_terminal(const SDL_Rect* screen,
 
     min_scale = sdl_main_view_scale_floor();
     min_width = sdl_current_min_terminal_cols()
-        * (min_scale * TILE_SIZE / 2);
+        * (sdl_ui_font_px(min_scale * TILE_SIZE) / 2);
     min_height = sdl_current_min_terminal_rows()
-        * (min_scale * TILE_SIZE);
+        * sdl_ui_font_px(min_scale * TILE_SIZE);
 
     if (min_width < 1)
         min_width = 1;

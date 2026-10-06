@@ -184,8 +184,9 @@ def main():
     source.write_text(HARNESS.replace("__LIFECYCLE_IMPLEMENTATION__", events[start:end]),
                       encoding="utf-8")
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-                                   str(BUILD / "_deps/SDL"), env["PATH"]])
+    env["PATH"] = os.pathsep.join([str(BUILD / "_deps/SDL"),
+                                   "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
+                                   env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-std=c17", "-Wall", "-Wextra", "-O0",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),

@@ -9,6 +9,13 @@ int sdl_ui_font_px(int normal_px)
 
 static Uint64 g_story_font_use_clock;
 
+static void sdl_story_font_cache_changed(void)
+{
+    g_story_font_generation++;
+    if (g_story_font_generation == 0)
+        g_story_font_generation = 1;
+}
+
 void sdl_apply_font_settings(TTF_Font* font, bool is_story_font)
 {
     // Select settings based on font type
@@ -708,9 +715,7 @@ void sdl_story_font_cache_clear(void)
     g_story_font_use_clock = 0;
     g_state.story_font_cache_valid = false;
     memset(g_state.story_font_cache, 0, sizeof(g_state.story_font_cache));
-    g_story_font_generation++;
-    if (g_story_font_generation == 0)
-        g_story_font_generation = 1;
+    sdl_story_font_cache_changed();
 }
 
 bool sdl_story_font_cache_matches_config(void)
@@ -807,6 +812,7 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
         sdl_ui_text_cache_clear_font(
             g_state.story_fonts[target_index].font);
         TTF_CloseFont(g_state.story_fonts[target_index].font);
+        sdl_story_font_cache_changed();
     } else {
         target_index = g_state.story_font_count++;
     }
@@ -1189,8 +1195,9 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
                     &scale_reference);
         }
         max_scale_for_min_cols = (scale_reference.w / min_cols) * 2
-            / TILE_SIZE;
-        max_scale_for_min_rows = scale_reference.h / min_rows / TILE_SIZE;
+            / sdl_ui_font_px(TILE_SIZE);
+        max_scale_for_min_rows = scale_reference.h / min_rows
+            / sdl_ui_font_px(TILE_SIZE);
 
         if (!runtime_zoom) {
             bottom_rows_for_minimum =
@@ -1200,7 +1207,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
                 if (min_rows < 1)
                     min_rows = 1;
                 max_scale_for_min_rows = scale_reference.h / min_rows
-                    / TILE_SIZE;
+                    / sdl_ui_font_px(TILE_SIZE);
             }
         }
 
@@ -1240,7 +1247,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
 #endif
     } else if (font_size) {
         // Non-integer scaling mode.
-        d->cell_h = g_state.system_scale * font_size;
+        d->cell_h = sdl_aux_cell_height_for_font_size(font_size);
         d->cell_w = d->cell_h / 2;
         if (d->cell_w < 1)
             d->cell_w = 1;
@@ -1279,7 +1286,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
 #if defined(__ANDROID__) || defined(SIL_IOS)
     if (scale) {
         log_info("Mobile main view: scale=%d cell=(%d,%d) cols=%d rows=%d (min=%dx%d %s)",
-                 d->cell_h / TILE_SIZE, d->cell_w, d->cell_h, d->cols, d->rows,
+                 d->cell_h / sdl_ui_font_px(TILE_SIZE), d->cell_w, d->cell_h, d->cols, d->rows,
                  sdl_current_min_terminal_cols(), sdl_current_min_terminal_rows(),
                  sdl_min_terminal_mode_name(config.min_terminal_mode));
     }

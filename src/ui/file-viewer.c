@@ -24,6 +24,57 @@ static void string_lower(char* buf)
         *s = tolower((unsigned char)*s);
 }
 
+/* Term_putstr uses byte-sized cells.  Keep complete UTF-8 sequences together
+ * and prefer word boundaries, without dropping whitespace or line tails. */
+static int file_viewer_wrap_length(cptr text, int length, int width)
+{
+    int fit = utf8_safe_prefix_len(text, MIN(length, MAX(1, width)));
+    int word_end = 0;
+
+    if (fit == 0 && length > 0)
+        fit = utf8_sequence_len_n(text, length);
+    if (fit >= length)
+        return length;
+    for (int i = 1; i <= fit; ++i)
+        if (text[i - 1] == ' ' && (i == length || text[i] != ' '))
+            word_end = i;
+    return word_end > 0 ? word_end : fit;
+}
+
+static int file_viewer_wrapped_rows(cptr text, int length, int width)
+{
+    int rows = 0;
+    do
+    {
+        int count = file_viewer_wrap_length(text, length, width);
+        text += count;
+        length -= count;
+        ++rows;
+    } while (length > 0);
+    return rows;
+}
+
+/* The public entry point and '#' command use source line numbers; scrolling
+ * uses displayed rows so that continuation text is always reachable. */
+static int file_viewer_source_row(cptr path, int source_line, int width)
+{
+    SDL_IOStream* file = sdl_fopen(path, "r");
+    char buf[1024];
+    int row = 0;
+    int source = 0;
+    if (!file)
+        return 0;
+    while (source < source_line && !sdl_fgets(file, buf, sizeof(buf)))
+    {
+        if (prefix(buf, "***** "))
+            continue;
+        row += file_viewer_wrapped_rows(buf, (int)strlen(buf), width);
+        ++source;
+    }
+    sdl_fclose(file);
+    return row;
+}
+
 static void file_viewer_prompt_label(int binding, const char* fallback,
     char* buf, size_t buflen)
 {
@@ -124,85 +175,55 @@ bool show_buffer(cptr main_buffer, int line)
 {
     if (!main_buffer)
         return false;
-    int i, j, k;
     int dir;
-
     char ch;
-
-    int next = 0;
-
-    char buf[1024];
-
     int wid, hgt;
-
-    // get current terminal size
-    Term_get_size(&wid, &hgt);
-    if (hgt <= 0) hgt = 24;
-
-    // count lines in the buffer
     int size = 0;
-    for (j = 0; main_buffer[j] != '\0'; j++) {
-        if (main_buffer[j] == '\n') size++;
-    }
-    // add one more if last line doesn't end with newline
-    if (j > 0 && main_buffer[j-1] != '\n') size++;
+    int page_rows;
+    cptr cursor;
 
-    /* Display the file */
+    Term_get_size(&wid, &hgt);
+    wid = MAX(1, wid);
+    page_rows = MAX(1, hgt - 5);
+
+    /* Count displayed rows, including every continuation of a long line. */
+    for (cursor = main_buffer; *cursor;)
+    {
+        cptr end = strchr(cursor, '\n');
+        int length = end ? (int)(end - cursor) : (int)strlen(cursor);
+        size += file_viewer_wrapped_rows(cursor, length, wid);
+        cursor += length + (end ? 1 : 0);
+    }
+
     while (true)
     {
-        /* Clear screen */
+        int next = 0;
+        int row = 0;
         Term_clear();
+        line = MAX(0, MIN(line, size - page_rows));
 
-        /* Restrict the visible range */
-        if (line > (size - (hgt - 5)))
-            line = size - (hgt - 5);
-        if (line < 0)
-            line = 0;
-
-        /* Goto the selected line */
-        next = 0;
-        for (j = 0; next < line && main_buffer[j]; j++)
+        for (cursor = main_buffer; *cursor && row < page_rows;)
         {
-            if (main_buffer[j] == '\n')
-                next++;
-        }
-
-        /* Dump the next lines of the file */
-        for (i = 0; i < hgt - 5;)
-        {
-            /* Get a line of the file or stop */
-            k = 0;
-            while (true)
+            cptr end = strchr(cursor, '\n');
+            int length = end ? (int)(end - cursor) : (int)strlen(cursor);
+            cptr segment = cursor;
+            int remaining = length;
+            do
             {
-                ch = main_buffer[j];
-
-                if (ch == '\0')
+                int count = file_viewer_wrap_length(segment, remaining, wid);
+                if (next++ >= line)
                 {
-                    break;
+                    Term_putstr(0, row + 2, count, TERM_WHITE, segment);
+                    ++row;
                 }
-
-                if (ch == '\n')
-                {
-                    j++;
-                    break;
-                }
-
-                if (k + 1 < (int)sizeof(buf))
-                    buf[k++] = ch;
-                j++;
-            }
-            buf[k] = '\0';
-            buf[utf8_safe_prefix_len(buf, k)] = '\0';
-
-            /* Dump the line */
-            Term_putstr(0, i + 2, -1, TERM_WHITE, buf);
-
-            /* Count the printed lines */
-            i++;
+                segment += count;
+                remaining -= count;
+            } while (remaining > 0 && row < page_rows);
+            cursor += length + (end ? 1 : 0);
         }
 
         /* Prompt -- small files */
-        if (size <= hgt - 5)
+        if (size <= page_rows)
         {
             file_viewer_draw_prompt(hgt - 2, wid, false);
         }
@@ -239,7 +260,7 @@ bool show_buffer(cptr main_buffer, int line)
         /* Back up one full page */
         if (ch == '9')
         {
-            line = line - (hgt - 5);
+            line = line - (page_rows);
             if (line < 0)
                 line = 0;
         }
@@ -253,7 +274,7 @@ bool show_buffer(cptr main_buffer, int line)
         /* Advance one full page */
         if ((ch == '3') || (ch == ' ') || controller_confirm)
         {
-            line = line + (hgt - 5);
+            line = line + (page_rows);
         }
 
         /* Exit on escape */
@@ -340,6 +361,9 @@ bool show_file(cptr name, cptr what, int line)
     char hook[26][32];
 
     int wid, hgt;
+    int page_rows;
+    int source_line = 0;
+    int requested_line = line;
 
     /* Wipe finder */
     SDL_strlcpy(finder, "", sizeof(finder));
@@ -356,6 +380,8 @@ bool show_file(cptr name, cptr what, int line)
 
     /* Get size */
     Term_get_size(&wid, &hgt);
+    wid = MAX(1, wid);
+    page_rows = MAX(1, hgt - 5);
 
     /* Copy the filename */
     SDL_strlcpy(filename, name, sizeof(filename));
@@ -452,8 +478,11 @@ bool show_file(cptr name, cptr what, int line)
             continue;
         }
 
-        /* Count the "real" lines */
-        next++;
+        /* Source-line entry points still land at the start of that line. */
+        if (!tag && source_line == requested_line)
+            line = next;
+        source_line++;
+        next += file_viewer_wrapped_rows(buf, (int)strlen(buf), wid);
     }
 
     /* Save the number of "real" lines */
@@ -466,99 +495,82 @@ bool show_file(cptr name, cptr what, int line)
         Term_clear();
 
         /* Restrict the visible range */
-        if (line > (size - (hgt - 5)))
-            line = size - (hgt - 5);
+        if (!find && line > (size - page_rows))
+            line = size - (page_rows);
         if (line < 0)
             line = 0;
 
-        /* Re-open the file if needed */
-        if (next > line)
+        /* Restart for each page so a continuation row can be the first row.
+         * Keep source text intact for search and highlight across wrap points. */
+        sdl_fclose(fff);
+        fff = sdl_fopen(path, "r");
+        if (!fff)
+            return true;
+        next = 0;
+
+        for (i = 0; i < page_rows;)
         {
-            /* Close it */
-            sdl_fclose(fff);
+            int length;
+            int offset = 0;
+            bool searching = find != NULL;
+            cptr found;
 
-            /* Hack -- Re-Open the file */
-            fff = sdl_fopen(path, "r");
-
-            /* Oops */
-            if (!fff)
-                return (true);
-
-            /* File has been restarted */
-            next = 0;
-        }
-
-        /* Goto the selected line */
-        while (next < line)
-        {
-            /* Get a line */
             if (sdl_fgets(fff, buf, sizeof(buf)))
                 break;
-
-            /* Skip tags/links */
             if (prefix(buf, "***** "))
                 continue;
 
-            /* Count the lines */
-            next++;
-        }
-
-        /* Dump the next lines of the file */
-        for (i = 0; i < hgt - 5;)
-        {
-            /* Hack -- track the "first" line */
-            if (!i)
-                line = next;
-
-            /* Get a line of the file or stop */
-            if (sdl_fgets(fff, buf, sizeof(buf)))
-                break;
-
-            /* Hack -- skip "special" lines */
-            if (prefix(buf, "***** "))
-                continue;
-
-            /* Count the "real" lines */
-            next++;
-
-            /* Make a copy of the current line for searching */
+            length = (int)strlen(buf);
             SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
-
-            /* Make the line lower case */
             if (!case_sensitive)
                 string_lower(lc_buf);
+            found = searching ? strstr(lc_buf, find) : NULL;
 
-            /* Hack -- keep searching */
-            if (find && !i && !strstr(lc_buf, find))
-                continue;
-
-            /* Hack -- stop searching */
-            find = NULL;
-
-            /* Dump the line */
-            Term_putstr(0, i + 2, -1, TERM_WHITE, buf);
-
-            /* Hilite "shower" */
-            if (shower[0])
+            do
             {
-                cptr str = lc_buf;
-
-                /* Display matches */
-                while ((str = strstr(str, shower)) != NULL)
+                int count = file_viewer_wrap_length(buf + offset,
+                    length - offset, wid);
+                int current = next++;
+                if (current < line)
                 {
-                    int len = strlen(shower);
-
-                    /* Display the match */
-                    Term_putstr(str - lc_buf, i + 2, len, TERM_YELLOW,
-                        &buf[str - lc_buf]);
-
-                    /* Advance */
-                    str += len;
+                    offset += count;
+                    continue;
                 }
-            }
+                if (searching)
+                {
+                    /* Start at the wrapped row containing the match. */
+                    while (found && found - lc_buf < offset)
+                        found = strstr(found + 1, find);
+                    if (!found || found - lc_buf >= offset + MAX(1, count))
+                    {
+                        offset += count;
+                        continue;
+                    }
+                    find = NULL;
+                    searching = false;
+                }
+                if (!i)
+                    line = current;
+                Term_putstr(0, i + 2, count, TERM_WHITE, buf + offset);
 
-            /* Count the printed lines */
-            i++;
+                if (shower[0])
+                {
+                    cptr match = lc_buf;
+                    int match_len = (int)strlen(shower);
+                    while ((match = strstr(match, shower)) != NULL)
+                    {
+                        int begin = MAX(offset, (int)(match - lc_buf));
+                        int end = MIN(offset + count,
+                            (int)(match - lc_buf) + match_len);
+                        if (end > begin)
+                            Term_putstr(begin - offset, i + 2, end - begin,
+                                TERM_YELLOW, buf + begin);
+                        match += match_len;
+                    }
+                }
+                ++i;
+                offset += count;
+            } while (offset < length && i < page_rows);
         }
 
         /* Hack -- failed search */
@@ -590,7 +602,7 @@ bool show_file(cptr name, cptr what, int line)
         }
 
         /* Prompt -- small files */
-        else if (size <= hgt - 5)
+        else if (size <= page_rows)
         {
             file_viewer_draw_prompt(hgt - 2, wid, false);
         }
@@ -600,6 +612,10 @@ bool show_file(cptr name, cptr what, int line)
         {
             file_viewer_draw_prompt(hgt - 2, wid, true);
         }
+
+        ui_scroll_area_begin(0, hgt - 1, SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_keys('8', '2', '6', '4');
+        ui_scroll_area_set_tap_key(ESCAPE);
 
         /* Get a keypress */
         ch = inkey();
@@ -656,7 +672,7 @@ bool show_file(cptr name, cptr what, int line)
             SDL_strlcpy(tmp, "0", sizeof(tmp));
             if (get_string_panel("Go to line", tmp, sizeof(tmp)))
             {
-                line = atoi(tmp);
+                line = file_viewer_source_row(path, MAX(0, atoi(tmp)), wid);
             }
         }
 
@@ -671,13 +687,13 @@ bool show_file(cptr name, cptr what, int line)
         /* Back up one half page */
         if (ch == '_')
         {
-            line = line - ((hgt - 5) / 2);
+            line = line - ((page_rows) / 2);
         }
 
         /* Back up one full page */
         if ((ch == '9') || (ch == '-'))
         {
-            line = line - (hgt - 5);
+            line = line - (page_rows);
         }
 
         /* Back to the top */
@@ -695,13 +711,13 @@ bool show_file(cptr name, cptr what, int line)
         /* Advance one half page */
         if (ch == '+')
         {
-            line = line + ((hgt - 5) / 2);
+            line = line + ((page_rows) / 2);
         }
 
         /* Advance one full page */
         if ((ch == '3') || (ch == ' ') || controller_confirm)
         {
-            line = line + (hgt - 5);
+            line = line + (page_rows);
         }
 
         /* Advance to the bottom */
@@ -714,6 +730,8 @@ bool show_file(cptr name, cptr what, int line)
         if (ch == ESCAPE)
             break;
     }
+
+    ui_scroll_area_clear();
 
     /* Close the file */
     sdl_fclose(fff);

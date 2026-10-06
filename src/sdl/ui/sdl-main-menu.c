@@ -734,6 +734,25 @@ void sdl_main_menu_overlay_move(int delta)
     }
 }
 
+static void sdl_main_menu_overlay_scroll_rows(int delta)
+{
+    main_menu_pane_layout layout;
+    int first;
+    int moved;
+
+    if (!sdl_main_menu_overlay_layout(&layout))
+        return;
+    first = MAX(1, MIN(g_main_menu_overlay_first_choice + delta,
+        MAX(1, MAIN_MENU_MAX - layout.visible_count + 1)));
+    moved = first - g_main_menu_overlay_first_choice;
+    if (!moved)
+        return;
+    g_main_menu_overlay_first_choice = first;
+    g_main_menu_overlay_highlight = MAX(first,
+        MIN(g_main_menu_overlay_highlight + moved, first + layout.visible_count - 1));
+    g_state.need_present = true;
+}
+
 void sdl_main_menu_overlay_choose(int choice)
 {
     bool executed;
@@ -1844,7 +1863,7 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
         return true;
     case SDL_EVENT_MOUSE_WHEEL:
         if (config.bigger_font && ev->wheel.y != 0.0f)
-            sdl_main_menu_overlay_move(ev->wheel.y > 0.0f ? -1 : 1);
+            sdl_main_menu_overlay_scroll_rows(ev->wheel.y > 0.0f ? -1 : 1);
         return true;
     case SDL_EVENT_FINGER_DOWN:
     case SDL_EVENT_FINGER_MOTION:
@@ -1868,7 +1887,7 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
 
                 while (delta >= step || delta <= -step) {
                     int dir = delta > 0.0f ? 1 : -1;
-                    sdl_main_menu_overlay_move(dir);
+                    sdl_main_menu_overlay_scroll_rows(dir);
                     g_main_menu_large_touch_y -= dir * step;
                     delta = g_main_menu_large_touch_y - y;
                     g_main_menu_large_touch_dragged = true;

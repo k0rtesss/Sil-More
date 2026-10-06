@@ -18,6 +18,7 @@ enum {
 
 static bool g_sdl_select_choice_page_only = false;
 static bool g_sdl_select_dynamic_description = false;
+static Uint64 g_sdl_select_menu_session;
 static int g_sdl_select_menu_rows_per_column = 0;
 static int g_sdl_character_sheet_prompt_px;
 static int g_sdl_character_sheet_prompt_slot;
@@ -1016,6 +1017,8 @@ typedef struct sdl_welcome_layout_metrics {
 
 typedef struct sdl_welcome_layout_cache {
     bool valid;
+    bool bigger_font;
+    Uint64 font_generation;
     SDL_Rect canvas;
     sdl_welcome_screen_mode mode;
     int intro_style;
@@ -1033,7 +1036,9 @@ static bool sdl_welcome_layout_cache_matches(const SDL_Rect* canvas)
     if (!canvas || !g_sdl_welcome_layout_cache.valid)
         return false;
 
-    return g_sdl_welcome_layout_cache.canvas.x == canvas->x
+    return g_sdl_welcome_layout_cache.bigger_font == config.bigger_font
+        && g_sdl_welcome_layout_cache.font_generation == g_story_font_generation
+        && g_sdl_welcome_layout_cache.canvas.x == canvas->x
         && g_sdl_welcome_layout_cache.canvas.y == canvas->y
         && g_sdl_welcome_layout_cache.canvas.w == canvas->w
         && g_sdl_welcome_layout_cache.canvas.h == canvas->h
@@ -1948,6 +1953,8 @@ static int sdl_welcome_prepare_layout(const SDL_Rect* canvas,
     if (lines && metrics && count > 0)
     {
         g_sdl_welcome_layout_cache.valid = true;
+        g_sdl_welcome_layout_cache.bigger_font = config.bigger_font;
+        g_sdl_welcome_layout_cache.font_generation = g_story_font_generation;
         g_sdl_welcome_layout_cache.canvas = *canvas;
         g_sdl_welcome_layout_cache.mode = g_sdl_welcome_screen.mode;
         g_sdl_welcome_layout_cache.intro_style =
@@ -4396,6 +4403,7 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
     static const cptr sections[SDL_DEBUG_SHEET_SECTIONS] = {
         "Overview", "Attributes", "Skills", "Traits", "Background"
     };
+    static const cptr action_labels[] = { "Skills", "Powers", "Story", "Help" };
     sdl_char_sheet_line entries[SDL_CHAR_SHEET_MAX_LINES];
     int section_start[SDL_DEBUG_SHEET_SECTIONS + 1];
     int font_px = sdl_ui_font_px(sdl_char_sheet_clampi(
@@ -4413,8 +4421,16 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
     float button_h = MAX(44.0f, line_h * 1.4f);
     bool live = g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_LIVE;
     int action_cols = canvas->w >= canvas->h ? 4 : 2;
-    if (live && get_sdl_bigger_font())
+    if (live && get_sdl_bigger_font()) {
         button_h = MAX(44.0f, font_h * 1.3f);
+        float widest_action = 0.0f;
+        for (size_t i = 0; i < N_ELEMENTS(action_labels); i++)
+            widest_action = MAX(widest_action,
+                sdl_char_sheet_text_width(font, action_labels[i]));
+        if ((width - gap * (action_cols - 1)) / action_cols
+            < widest_action + font_h * 0.3f)
+            action_cols = 2;
+    }
     float footer_y = canvas->y + canvas->h - margin - button_h;
     float actions_h = live ? button_h * (4 / action_cols) + gap : 0.0f;
     bool compact_header = live && get_sdl_bigger_font() && canvas->w >= canvas->h;
@@ -4567,7 +4583,6 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
 
     if (live)
     {
-        static const cptr labels[] = { "Skills", "Powers", "Story", "Help" };
         static const int choices[] = { 'i', 'x', 's', '?' };
         float action_w = (width - gap * (action_cols - 1)) / action_cols;
         for (int i = 0; i < 4; i++)
@@ -4575,7 +4590,7 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
             SDL_FRect rect = { x + (i % action_cols) * (action_w + gap),
                 footer_y - actions_h + (i / action_cols) * button_h,
                 action_w, button_h };
-            (void)sdl_char_sheet_draw_text(font, labels[i], TERM_WHITE,
+            (void)sdl_char_sheet_draw_text(font, action_labels[i], TERM_WHITE,
                 rect.x, rect.y, rect.w, rect.h, true);
             sdl_char_sheet_add_hit(rect, choices[i], "", TERM_WHITE);
         }
@@ -6210,6 +6225,22 @@ static bool sdl_char_sheet_selected_choice_confirmable(void)
         g_sdl_character_sheet_screen.selected_index);
 }
 
+static bool sdl_birth_prompt_stacks(TTF_Font* font, float width)
+{
+#if SIL_SDL_MOBILE_BUILD
+    if (sdl_touch_only_device_active() && font) {
+        float natural = sdl_char_sheet_text_width(font, "Back")
+            + sdl_char_sheet_text_width(font, "Defaults")
+            + sdl_char_sheet_text_width(font, "Confirm");
+        float gap = MAX(8.0f, TTF_GetFontHeight(font) * 0.16f);
+        return natural / 0.84f + gap * 2.0f > width;
+    }
+#endif
+    (void)font;
+    (void)width;
+    return true;
+}
+
 void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     float y, float w, float h)
 {
@@ -6288,6 +6319,9 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
                 == SDL_CHARACTER_SHEET_BIRTH_STATS
             || g_sdl_character_sheet_screen.context
                 == SDL_CHARACTER_SHEET_BIRTH_SKILLS);
+    bool stacked_birth_actions = false;
+    bool large_touch_birth_actions = false;
+    float action_gap = MIN(12.0f, h * 0.06f);
 #if SIL_SDL_MOBILE_BUILD
     float spacing = MAX(8.0f, h * 0.45f);
     bool touch_only = sdl_touch_only_device_active();
@@ -6308,6 +6342,13 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     if (!font)
         return;
+    stacked_birth_actions = beginner_defaults && get_sdl_bigger_font()
+        && sdl_birth_prompt_stacks(font, w);
+#if SIL_SDL_MOBILE_BUILD
+    large_touch_birth_actions = beginner_defaults && get_sdl_bigger_font() && touch_only;
+    if (large_touch_birth_actions)
+        spacing = MAX(8.0f, TTF_GetFontHeight(font) * 0.16f);
+#endif
 
     if (controller)
     {
@@ -6446,10 +6487,16 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
             SDL_strlcpy(beginner_label, "Beginner defaults",
                 sizeof(beginner_label));
 #endif
+        if (large_touch_birth_actions)
+            SDL_strlcpy(beginner_label, "Defaults", sizeof(beginner_label));
         beginner_items[0] = items[0];
         beginner_items[1].label = beginner_label;
         beginner_items[1].choice = -4;
         beginner_items[2] = items[1];
+        if (large_touch_birth_actions) {
+            beginner_items[0].label = "Back";
+            beginner_items[2].label = "Confirm";
+        }
         items = beginner_items;
         item_count = (int)N_ELEMENTS(beginner_items);
     }
@@ -6473,12 +6520,28 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         if (touch_buttons)
             button_pad_x = touch_button_pad_x;
 #endif
-        item_widths[i] += button_pad_x * 2.0f;
+        if (large_touch_birth_actions)
+            item_widths[i] = text_widths[i] / 0.84f;
+        else
+            item_widths[i] += button_pad_x * 2.0f;
         total_w += item_widths[i];
         if (i + 1 < item_count)
             total_w += spacing;
     }
-    if (total_w > w && item_count > 1)
+    if (stacked_birth_actions)
+    {
+        item_widths[0] = item_widths[2] = (w - action_gap) * 0.5f;
+        item_widths[1] = w;
+        total_w = w;
+    }
+    else if (large_touch_birth_actions)
+    {
+        float extra = MAX(0.0f, (w - total_w) / item_count);
+        for (int i = 0; i < item_count; i++)
+            item_widths[i] += extra;
+        total_w = w;
+    }
+    else if (total_w > w && item_count > 1)
     {
         if (beginner_defaults)
         {
@@ -6544,7 +6607,21 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         cptr label = items[i].label;
         int text_w = text_widths[i];
         float item_w = item_widths[i];
+        float item_y = y;
+        float item_h = h;
         int choice = items[i].choice;
+        if (stacked_birth_actions)
+        {
+            item_h = (h - action_gap) * 0.5f;
+            item_y = choice == -4 ? y : y + item_h + action_gap;
+            cursor_x = choice == -2 ? x + item_w + action_gap : x;
+            /* Keep the resolved font size even on the narrowest phones. */
+            if (text_w > item_w * 0.84f)
+            {
+                label = choice == -1 ? "<" : choice == -2 ? "OK" : "Defaults";
+                text_w = sdl_char_sheet_text_width(font, label);
+            }
+        }
         bool button_style = beginner_defaults && choice == -4;
         bool disabled = (choice == -2
             && !sdl_char_sheet_selected_choice_confirmable());
@@ -6568,7 +6645,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         }
 
         {
-            SDL_FRect hit = { cursor_x, y, item_w + 4.0f, h };
+            SDL_FRect hit = { cursor_x, item_y, item_w + 4.0f, item_h };
             if (beginner_defaults)
                 hit.w = item_w;
 #if SIL_SDL_MOBILE_BUILD
@@ -8202,6 +8279,7 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
     SDL_Rect old_clip;
     SDL_Rect clip_rect;
     static int last_selected_index = -1000000;
+    static Uint64 last_menu_session;
     static int last_row_count = -1;
     static int last_rows_per_column = -1;
 
@@ -8459,6 +8537,7 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
         scroll = max_scroll;
     selected_changed =
         (g_sdl_character_sheet_screen.selected_index != last_selected_index)
+        || (last_menu_session != g_sdl_select_menu_session)
         || (row_count != last_row_count)
         || (rows_per_column != last_rows_per_column);
     if (selected_row >= 0 && selected_changed)
@@ -8488,6 +8567,7 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
     g_sdl_character_sheet_screen.select_scroll_rect =
         (SDL_FRect){ content_x, top_y, content_w, row_region_h };
     last_selected_index = g_sdl_character_sheet_screen.selected_index;
+    last_menu_session = g_sdl_select_menu_session;
     last_row_count = row_count;
     last_rows_per_column = rows_per_column;
 
@@ -13716,7 +13796,7 @@ static void sdl_char_sheet_render_big_birth(float x, float y, float width,
     if (selected_row >= 0 && (last_selected != g_sdl_character_sheet_screen.selected_index
             || last_stats != stats || g_sdl_character_sheet_screen.sheet_scroll_max == 0))
     {
-        if (selected_row * row_h < scroll)
+        if (row_h > list_h || selected_row * row_h < scroll)
             scroll = (int)(selected_row * row_h);
         else if ((selected_row + 1) * row_h > scroll + list_h)
             scroll = (int)((selected_row + 1) * row_h - list_h + 0.999f);
@@ -13864,6 +13944,12 @@ static void sdl_character_sheet_screen_render_canvas(
     title_h = sdl_char_sheet_line_h(title_font, title_px, 1.02f);
     prompt_h = sdl_char_sheet_line_h(prompt_font, prompt_px,
         prompt_line_scale);
+    if (get_sdl_bigger_font() && !character_generated && turn == 0
+        && !death_spectator_active()
+        && (g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_STATS
+            || g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_SKILLS)
+        && sdl_birth_prompt_stacks(prompt_font, content_w))
+        prompt_h = prompt_h * 2.0f + MIN(12.0f, prompt_h * 0.12f);
     title_y = (float)canvas.y + margin_top;
     prompt_y = (float)(canvas.y + canvas.h) - margin_bottom - prompt_h;
 
@@ -15164,8 +15250,10 @@ void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title)
     if (!g_state.window || !g_state.renderer)
         return;
 
-    if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
+    if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT
+        || !streq(g_sdl_character_sheet_screen.select_title, title ? title : ""))
     {
+        g_sdl_select_menu_session++;
         g_sdl_character_sheet_screen.sheet_scroll = 0;
         g_sdl_character_sheet_screen.sheet_scroll_max = 0;
         sdl_character_sheet_screen_reset_select_page();

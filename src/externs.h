@@ -839,6 +839,9 @@ extern void do_cmd_inven_direct(void);
 extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
+extern bool do_cmd_can_wield_offhand(const object_type* o_ptr);
+extern bool player_offhand_weapon_allowed(const object_type* weapon,
+    const object_type* offhand);
 extern bool do_cmd_wield_to_slot(
     object_type* default_o_ptr, int default_item, int forced_slot);
 extern bool do_cmd_wield_stack_to_slot(
@@ -985,6 +988,7 @@ extern char* oath_forbidden(int oath_id);
 extern char* oath_reward_text(int oath_id);
 extern void do_cmd_ability_screen(void);
 extern int object_difficulty(object_type* o_ptr);
+extern int smithing_work_difficulty(void);
 extern void do_cmd_smithing_screen(void);
 extern void create_smithing_item(void);
 #define MAIN_MENU_CHARACTER 1

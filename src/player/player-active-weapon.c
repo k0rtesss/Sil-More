@@ -624,6 +624,22 @@ static void active_weapon_preview_activate_item_abilities(
     }
 }
 
+/* Authored paired blades are usable together without learning Two Weapon
+ * Fighting, just as the wield command's paired-weapon offer promises. */
+bool player_offhand_weapon_allowed(const object_type* weapon,
+    const object_type* offhand)
+{
+    if (!offhand || !offhand->k_idx
+        || (offhand->tval != TV_SWORD && offhand->tval != TV_POLEARM
+            && offhand->tval != TV_HAFTED && offhand->tval != TV_DIGGING)
+        || (k_info[offhand->k_idx].flags3
+            & (TR3_TWO_HANDED | TR3_HAND_AND_A_HALF)))
+        return false;
+    return p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+        || (weapon && weapon->k_idx && weapon->name1 && offhand->name1
+            && get_paired_artefact(weapon->name1) == offhand->name1);
+}
+
 static void active_weapon_preview_prepare_melee_equipment(void)
 {
     object_type* weapon = &inventory[INVEN_WIELD];
@@ -639,7 +655,7 @@ static void active_weapon_preview_prepare_melee_equipment(void)
 
     if ((f3 & TR3_TWO_HANDED)
         || (offhand->tval != TV_SHIELD
-            && !p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]))
+            && !player_offhand_weapon_allowed(weapon, offhand)))
     {
         object_type removed;
 
@@ -730,7 +746,7 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
         preview->dd = p_ptr->mdd;
         preview->ds = p_ptr->mds;
         if (weapon->k_idx
-            && p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+            && player_offhand_weapon_allowed(weapon, &inventory[INVEN_ARM])
             && inventory[INVEN_ARM].k_idx
             && inventory[INVEN_ARM].tval != TV_SHIELD)
         {

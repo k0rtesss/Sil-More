@@ -460,8 +460,11 @@ void update_lore_aux(object_type* o_ptr)
         ident(o_ptr);
     }
 
+    /* Postmortem knowledge must not become a new gameplay discovery.  Final
+     * Look restores live UI flags, so its explicit guard is required too. */
     // Mark new identified artefacts/specials and gain experience for them
-    if (object_known_p(o_ptr) && !p_ptr->leaving)
+    if (object_known_p(o_ptr) && !p_ptr->leaving && !p_ptr->is_dead
+        && !death_spectator_active())
     {
         if (o_ptr->name1)
         {

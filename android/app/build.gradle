@@ -46,6 +46,9 @@ def androidTargetSdk = (readOptionalBuildValue('SIL_MORE_TARGET_SDK') ?: '36') a
 def androidVersionCode =
         (readOptionalBuildValue('SIL_MORE_VERSION_CODE') ?: gameVersionCode.toString()) as Integer
 def buildApk2 = (readOptionalBuildValue('SIL_MORE_APK2') ?: 'false').toBoolean()
+// Keep device builds on ARM64; opt into an emulator ABI for local testing.
+def nativeAbis = (readOptionalBuildValue('SIL_MORE_ANDROID_ABIS') ?: 'arm64-v8a')
+        .split(',').collect { it.trim() }.findAll { it }
 
 if (androidVersionCode < gameVersionCode || androidVersionCode > 2100000000) {
     throw new GradleException(
@@ -111,7 +114,7 @@ android {
         ]
 
         ndk {
-            abiFilters 'arm64-v8a'
+            abiFilters.addAll(nativeAbis)
         }
 
         externalNativeBuild {

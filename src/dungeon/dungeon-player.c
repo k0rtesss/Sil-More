@@ -564,6 +564,10 @@ void process_player(void)
 
             if (p_ptr->smithing == 1)
             {
+                /* Creation wipes the blueprint. Preserve its rating without
+                 * replacing the accepted fees or changing the alloy. */
+                int diff = smithing_work_difficulty();
+
                 // Display a message
                 msg_print("You complete your work.");
 
@@ -571,7 +575,6 @@ void process_player(void)
 
                 /* Aulë quest: check for success condition during forging */
                 {
-                    int diff = object_difficulty(smith_o_ptr);
                     p_ptr->aule_last_object_diff = diff;
                     if (diff > 20 && p_ptr->aule_quest == AULE_QUEST_ACTIVE) {
                         p_ptr->aule_quest = AULE_QUEST_SUCCESS;

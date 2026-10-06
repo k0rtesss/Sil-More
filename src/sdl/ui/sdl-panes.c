@@ -1682,6 +1682,35 @@ static int sdl_status_depth_pane_width_before_quick(
     return (int)allowed;
 }
 
+/* If the measured caption cannot fit beside Quick Access, keep its full
+ * width and use the next vertical band.  This also keeps its painted and
+ * pointer rectangles identical when the cached layout is re-anchored. */
+static void sdl_status_depth_pane_avoid_quick(SDL_FRect* panel,
+    const SDL_FRect* quick, enum pane_placement where,
+    const SDL_Rect* screen)
+{
+    float gap = (float)sdl_overlay_inner_gap_px();
+    float y;
+
+    if (!panel || !quick || !screen
+        || panel->x >= quick->x + quick->w
+        || panel->x + panel->w <= quick->x
+        || panel->y >= quick->y + quick->h
+        || panel->y + panel->h <= quick->y)
+    {
+        return;
+    }
+    if (sdl_left_panel_pane_placement_is_bottom(where))
+        y = quick->y - gap - panel->h;
+    else
+        y = quick->y + quick->h + gap;
+    if (y >= (float)screen->y
+        && y + panel->h <= (float)(screen->y + screen->h))
+    {
+        panel->y = y;
+    }
+}
+
 static bool sdl_status_depth_pane_layout_compute(
     status_depth_pane_layout* out)
 {
@@ -1850,6 +1879,9 @@ static bool sdl_status_depth_pane_layout_compute(
 
     out->panel = sdl_overlay_panel_rect(&anchor, pc->where, panel_w,
         panel_h, &screen);
+    if (have_quick_panel)
+        sdl_status_depth_pane_avoid_quick(&out->panel, &quick_panel,
+            pc->where, &screen);
     out->layout_count = layout_count;
     out->row_count = row_count;
     out->content_w = content_w;
@@ -1868,27 +1900,45 @@ bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
     const struct pane_config* pc = sdl_status_depth_pane_config();
     SDL_Rect anchor;
     SDL_Rect screen;
+    bool result = false;
 
     if (!out)
         return false;
     if (g_status_depth_pane_layout_computing)
         return false;
+    /* Both the initial measurement and cached re-anchoring ask Quick Access
+     * for its live anchor, which can itself query this pane's rectangle. */
+    g_status_depth_pane_layout_computing = true;
     if (cached_generation != g_sdl_present_generation) {
-        g_status_depth_pane_layout_computing = true;
         cached_result = sdl_status_depth_pane_layout_compute(&cached_layout);
-        g_status_depth_pane_layout_computing = false;
         cached_generation = g_sdl_present_generation;
     }
     *out = cached_layout;
     if (!cached_result || !pc || !pc->enabled)
-        return false;
+        goto done;
 
     if (!sdl_overlay_pane_anchor_rect(PANE_STATUS_DEPTH, &anchor))
-        return false;
+        goto done;
     screen = sdl_get_layout_screen_rect();
     out->panel = sdl_overlay_panel_rect(&anchor, pc->where,
         (int)(out->panel.w + 0.5f), (int)(out->panel.h + 0.5f), &screen);
-    return true;
+    {
+        SDL_FRect quick_panel;
+        enum pane_placement quick_where;
+        if (sdl_touch_top_panel_current_anchor(NULL, NULL, &quick_where)
+            && pc->where != quick_where
+            && sdl_status_depth_pane_same_horizontal_edge(pc->where,
+                quick_where)
+            && sdl_touch_top_panel_compute_layout(NULL, &quick_panel))
+        {
+            sdl_status_depth_pane_avoid_quick(&out->panel, &quick_panel,
+                pc->where, &screen);
+        }
+    }
+    result = true;
+done:
+    g_status_depth_pane_layout_computing = false;
+    return result;
 }
 
 bool sdl_status_depth_pane_current_rect(SDL_FRect* out)

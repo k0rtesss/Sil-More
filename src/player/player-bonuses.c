@@ -63,7 +63,8 @@ void calc_bonuses(void)
 
     // Remove off-hand weapons if you cannot wield them
     if (!bonuses_preview_active
-        && !p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON])
+        && !player_offhand_weapon_allowed(&inventory[INVEN_WIELD],
+            &inventory[INVEN_ARM]))
     {
         o_ptr = &inventory[INVEN_ARM];
 
@@ -1120,7 +1121,8 @@ void calc_bonuses(void)
             }
         }
 
-        if (p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]
+        if (player_offhand_weapon_allowed(&inventory[INVEN_WIELD],
+                &inventory[INVEN_ARM])
             && (((&inventory[INVEN_ARM])->tval != TV_SHIELD)
                 && ((&inventory[INVEN_ARM])->tval != 0)))
         {
