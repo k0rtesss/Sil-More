@@ -885,7 +885,7 @@ bool g_touch_pane_second_panel = false;
 bool g_touch_pane_ctrl_toggle = false;
 bool g_touch_pane_reset_confirm_active = false;
 bool g_touch_pane_yes_no_prompt_active = false;
-char g_touch_pane_yes_no_prompt_text[SDL_TOUCH_YES_NO_LINE_LEN];
+char g_touch_pane_yes_no_prompt_text[SDL_TOUCH_YES_NO_TEXT_LEN];
 sdl_touch_yes_no_prompt_placement g_touch_pane_yes_no_prompt_placement =
     SDL_TOUCH_YES_NO_PLACEMENT_CENTER;
 sdl_touch_yes_no_prompt_hover g_touch_pane_yes_no_prompt_hover =

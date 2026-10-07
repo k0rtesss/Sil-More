@@ -29,6 +29,9 @@ FIXTURE = r'''
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef SIL_SDL_MOBILE_BUILD
+#define SIL_SDL_MOBILE_BUILD 0
+#endif
 #define MAX(a,b) ((a)>(b)?(a):(b))
 enum pane_type { PANE_MAIN,PANE_LEFT_PANEL,PANE_COMBAT,PANE_ROLLS,PANE_MESSAGES,PANE_MAX };
 enum pane_placement { PLACE_TOP_LEFT,PLACE_TOP_CENTER,PLACE_TOP_RIGHT,PLACE_BOTTOM_LEFT };
@@ -93,14 +96,14 @@ static void check(enum pane_placement where,bool enabled,bool horizontal_overlap
         call_count=0;
         sdl_apply_top_right_overlay_offset();
         assert(calls[0]==1 && calls[1]==2);
-        if(large && enabled) assert(call_count==4 && calls[2]==3 && calls[3]==4);
+        if((large || SIL_SDL_MOBILE_BUILD) && enabled) assert(call_count==4 && calls[2]==3 && calls[3]==4);
         else assert(call_count==3 && calls[2]==3);
-        assert(g_pane_rects[PANE_ROLLS].y==(large && enabled && horizontal_overlap?160:100));
+        assert(g_pane_rects[PANE_ROLLS].y==((large || SIL_SDL_MOBILE_BUILD) && enabled && horizontal_overlap?160:100));
         assert(g_pane_rects[PANE_MESSAGES].y-g_pane_rects[PANE_ROLLS].y==70);
         assert(!memcmp(&g_views[PANE_ROLLS].rect,&g_pane_rects[PANE_ROLLS],sizeof(SDL_Rect)));
         if(previous>=0) assert(previous==g_pane_rects[PANE_ROLLS].y);
         previous=g_pane_rects[PANE_ROLLS].y;
-        if(large && enabled && horizontal_overlap)
+        if((large || SIL_SDL_MOBILE_BUILD) && enabled && horizontal_overlap)
             assert(!intersects(g_pane_rects[PANE_COMBAT],g_pane_rects[PANE_ROLLS]));
     }
     actual_remove_stack(); actual_remove_top_right();
@@ -137,10 +140,12 @@ def main():
                        .replace("/* ACTUAL OFFSET HELPERS */", helpers), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
-    exe = OUT / "check.exe"
-    subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-std=c17", "-O0", str(fixture), "-o", str(exe)],
-                   env=env, check=True)
-    subprocess.run([str(exe)], env=env, check=True)
+    for mobile in (0, 1):
+        exe = OUT / f"check-{mobile}.exe"
+        subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-std=c17", "-O0",
+                        f"-DSIL_SDL_MOBILE_BUILD={mobile}", str(fixture), "-o", str(exe)],
+                       env=env, check=True)
+        subprocess.run([str(exe)], env=env, check=True)
 
 
 if __name__ == "__main__":

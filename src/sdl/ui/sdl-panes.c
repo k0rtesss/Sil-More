@@ -1263,11 +1263,14 @@ void sdl_status_pane_draw_text(TTF_Font* font, cptr text,
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
 
-    texture = sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    texture = config.bigger_font
+        ? sdl_ui_wrapped_text_texture(font, text, MAX(1, (int)max_w), color,
+            &text_w, &text_h)
+        : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return;
 
-    if (text_w > 0 && (float)text_w > max_w)
+    if (!config.bigger_font && text_w > 0 && (float)text_w > max_w)
         scale = max_w / (float)text_w;
 
     dst.w = (float)text_w * scale;
@@ -1426,6 +1429,14 @@ static bool sdl_status_pane_layout_compute(status_pane_layout* out)
     if (layout_count <= 0)
         return false;
 
+    if (config.bigger_font) {
+        for (int i = 0; i < layout_count; i++) {
+            int w = 0, h = 0;
+            if (TTF_GetStringSizeWrapped(font, out->items[i].line, 0,
+                    MAX(1, out->items[i].w - item_pad_x * 2), &w, &h))
+                row_h = MAX(row_h, h);
+        }
+    }
     panel_w = pad_x * 2 + content_w;
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
@@ -1870,6 +1881,14 @@ static bool sdl_status_depth_pane_layout_compute(
 
     if (layout_count <= 0)
         return false;
+    if (config.bigger_font) {
+        for (int i = 0; i < layout_count; i++) {
+            int w = 0, h = 0;
+            if (TTF_GetStringSizeWrapped(font, out->items[i].line, 0,
+                    MAX(1, out->items[i].w), &w, &h))
+                out->row_h = MAX(out->row_h, h);
+        }
+    }
     panel_w = out->pad_x * 2 + content_w;
     panel_h = out->pad_y * 2 + row_count * out->row_h;
     if (panel_w > max_panel_w)

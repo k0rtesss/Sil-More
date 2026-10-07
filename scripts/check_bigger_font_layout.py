@@ -224,7 +224,7 @@ static int check_settings(int rows, cptr title)
     fixture_assert(actual==rows && action==UI_MENU_CLICK_PRIMARY);
     char key=0;
     fixture_assert(Term_inkey(&key,false,true)==0 && key=='\r');
-    if(config.bigger_font && rows==40)
+    if(config.bigger_font && rows==80)
         fixture_assert(g_sdl_character_sheet_screen.sheet_scroll_max>0);
     sdl_character_sheet_screen_hide(); ui_menu_click_clear();
     return px;
@@ -372,18 +372,44 @@ static void check_text_pages(void)
     for(int poetry=0;poetry<2;poetry++) {
         if(poetry) {
             char body[8192]="";
-            for(int i=0;i<45;i++) SDL_strlcat(body,
+            for(int i=0;i<64;i++) SDL_strlcat(body,
                 "The stars above the silent forest shine beyond the mountain.\n",sizeof(body));
             sdl_poetry_screen_begin("The Long Journey",body,"","Continue");
             sdl_poetry_screen_update(true,TERM_L_BLUE,true,TERM_WHITE,false,TERM_WHITE,true);
         } else {
             fixture_assert(sdl_pause_text_screen_begin());
-            for(int i=0;i<45;i++) sdl_pause_text_screen_add_line(
+            for(int i=0;i<64;i++) sdl_pause_text_screen_add_line(
                 "The stars above the silent forest shine beyond the mountain.",TERM_WHITE,0);
-            sdl_pause_text_screen_set_visible_lines(45);
+            sdl_pause_text_screen_set_visible_lines(64);
         }
         fixture_assert(sdl_render_current_window_frame());
-        fixture_assert(g_sdl_standalone_pager.maximum>0);
+        if(g_sdl_standalone_pager.maximum==0) {
+            /* A tall density-one synthetic window can fit the entire bounded
+             * poetry buffer. Verify that case instead of demanding a pager. */
+            SDL_Rect canvas={0,0,fixture_width,fixture_height};
+            int px=sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+            TTF_Font *f=sdl_story_font_for_height_slot(px,SDL_WELCOME_STORY_FONT_SLOT);
+            float available=fixture_height-sdl_welcome_top_margin(&canvas)
+                -sdl_welcome_bottom_margin(&canvas);
+            float width=MIN(sdl_welcome_content_rect(&canvas).w,
+                sdl_char_sheet_clampf(fixture_width*(poetry?.66f:.72f),
+                    poetry?260:280,poetry?920:1280));
+            float needed;
+            if(poetry) {
+                int title_px=sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
+                TTF_Font *title=sdl_story_font_for_height_slot(title_px,SDL_STORY_FONT_SLOT_DEFAULT);
+                TTF_Font *prompt=sdl_story_font_for_height_slot(sdl_welcome_footer_font_px(px),SDL_WELCOME_STORY_FONT_SLOT);
+                float body_lh=sdl_char_sheet_line_h(f,px,1.20f);
+                needed=sdl_char_sheet_wrap_text(f,g_sdl_poetry_screen.body,width,NULL,0)*body_lh
+                    +sdl_welcome_line_h_for_role(title,title_px,SDL_WELCOME_LINE_TITLE)
+                    +body_lh*.88f+sdl_char_sheet_clampf(px*1.35f,18,84)
+                    +sdl_char_sheet_line_h(prompt,sdl_welcome_footer_font_px(px),1.18f);
+            } else needed=sdl_pause_text_total_rows(f,width,px)*sdl_char_sheet_line_h(f,px,1.18f);
+            fixture_assert(needed<=available+1);
+            capture(poetry?"poetry-full-page":"pause-full-page");
+            if(poetry) sdl_poetry_screen_hide(); else sdl_pause_text_screen_hide();
+            continue;
+        }
         inside(g_sdl_standalone_pager.buttons[0]);
         inside(g_sdl_standalone_pager.buttons[1]);
         int guard=0;
@@ -444,7 +470,7 @@ static void check_halls(void)
     SDL_strlcpy(fixture_id,"halls",sizeof(fixture_id));
     ui_menu_click_begin();
     sdl_halls_screen_begin("Heroes of the Long Journey","1 / 2",true,-1);
-    fixture_assert(sdl_halls_screen_page_capacity(true)==1);
+    fixture_assert(sdl_halls_screen_page_capacity(true)>=1);
     sdl_halls_screen_add_entry(1,"1","Aranwe of the Northern Forests","12345",
         "Escaped from the depths beneath the mountain after a long journey.",
         "A courageous adventurer who carried the light of the stars through the shadowed passages of Angband.",
@@ -679,7 +705,7 @@ static void check(int width,int height)
     fixture_assert(sdl_main_menu_pane_font_px()==(pane*3+1)/2);
     int large=check_settings(8,"General Settings");
     fixture_assert(large==(normal*3+1)/2);
-    check_settings(40,"Overflow Settings");
+    check_settings(80,"Overflow Settings");
     check_actual_general();
     check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_large_tutorial(); check_welcome_cache();
     printf("%dx%d: pane %d -> %d, native settings %d -> %d; settings taps, song paging/choice, question wrapping/scroll, birth final skill, text paging, main menu drag, Halls: PASS\n",

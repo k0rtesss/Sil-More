@@ -3707,13 +3707,33 @@ int get_sdl_terminal_menu_scale(void)
     return sdl_terminal_menu_scale_for_mode(menu_mode);
 }
 
+/* A menu is a reading surface, independent of the gameplay map zoom.  Resolve
+ * the mobile 150% body size before choosing its grid; fewer cells require the
+ * menu to wrap/page rather than silently reducing this font to fit 50 columns. */
+int sdl_terminal_menu_font_px(void)
+{
+#if SIL_SDL_MOBILE_BUILD
+    if (g_terminal_menu_scale_depth > 0)
+    {
+        int logical_px = MAX(8, 16 + 2 * config.terminal_menu_scale_offset);
+        return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
+            * sdl_ui_font_px(logical_px)));
+    }
+#endif
+    return 0;
+}
+
+static unsigned int g_terminal_menu_scale_overflow_depth;
+
 static void sdl_push_terminal_menu_scale_value(int target_scale)
 {
     int old_scale = g_terminal_menu_scale_override;
+    int old_font_px = sdl_terminal_menu_font_px();
 
     if (g_terminal_menu_scale_depth
         >= (int)N_ELEMENTS(g_terminal_menu_scale_stack))
     {
+        ++g_terminal_menu_scale_overflow_depth;
         log_warn("terminal menu scale stack is full");
         return;
     }
@@ -3721,7 +3741,8 @@ static void sdl_push_terminal_menu_scale_value(int target_scale)
     g_terminal_menu_scale_stack[g_terminal_menu_scale_depth++] = old_scale;
 
     g_terminal_menu_scale_override = target_scale;
-    if (old_scale != target_scale)
+    if (old_scale != target_scale
+        || old_font_px != sdl_terminal_menu_font_px())
         sdl_apply_config_no_redraw();
 }
 
@@ -3735,8 +3756,16 @@ void sdl_push_terminal_menu_scale(void)
 void sdl_pop_terminal_menu_scale(void)
 {
     int old_scale = g_terminal_menu_scale_override;
+    int old_font_px = sdl_terminal_menu_font_px();
     int restored_scale = 0;
 
+    if (g_terminal_menu_scale_overflow_depth > 0)
+    {
+        --g_terminal_menu_scale_overflow_depth;
+        return;
+    }
+    if (g_terminal_menu_scale_depth <= 0)
+        return;
     if (g_terminal_menu_scale_depth > 0)
     {
         restored_scale =
@@ -3745,7 +3774,8 @@ void sdl_pop_terminal_menu_scale(void)
     }
 
     g_terminal_menu_scale_override = restored_scale;
-    if (old_scale != restored_scale)
+    if (old_scale != restored_scale
+        || old_font_px != sdl_terminal_menu_font_px())
         sdl_apply_config_no_redraw();
 }
 

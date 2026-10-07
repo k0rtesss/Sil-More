@@ -43,14 +43,14 @@ static void sdl_song_menu_draw_text(TTF_Font* font, cptr text,
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
 
-    texture = config.bigger_font
+    texture = (config.bigger_font || SIL_SDL_MOBILE_BUILD)
         ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
             &text_w, &text_h)
         : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return;
 
-    if (!config.bigger_font && text_h > 0 && (float)text_h > row_h * 0.94f)
+    if (!(config.bigger_font || SIL_SDL_MOBILE_BUILD) && text_h > 0 && (float)text_h > row_h * 0.94f)
         scale = (row_h * 0.94f) / (float)text_h;
 
     src = (SDL_FRect){
@@ -115,6 +115,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
     float max_panel_w;
     float max_panel_h;
     float rows_top;
+    float title_h;
 
     if (!out)
         return false;
@@ -127,7 +128,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
 
     font_px = sdl_main_menu_pane_font_px();
 #if SIL_SDL_MOBILE_BUILD
-    font_px = (int)((float)font_px * 1.18f + 0.5f);
+    font_px = sdl_ui_role_font_px(SDL_UI_FONT_BODY);
 #endif
     story_font = sdl_story_font_for_height_slot(font_px,
         SDL_STORY_FONT_SLOT_MENU);
@@ -170,8 +171,11 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
     row_h = (float)font_px * 1.24f;
     if (row_h < (float)font_px + 4.0f)
         row_h = (float)font_px + 4.0f;
-    if (config.bigger_font)
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD))
         row_h = MAX(44.0f, (float)TTF_GetFontHeight(story_font) * 1.3f);
+#if SIL_SDL_MOBILE_BUILD
+    row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
+#endif
     divider_gap = sdl_touch_pane_clampf((float)font_px * 0.3f, 3.0f, 8.0f);
     letter_gap = letter_w > 0.0f
         ? sdl_touch_pane_clampf((float)font_px * 0.38f, 5.0f, 10.0f)
@@ -187,7 +191,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
-    if (config.bigger_font) {
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
         int text_h = 0;
         int wrap_w = MAX(1, (int)(panel_w - pad_x * 2.0f
             - letter_w - letter_gap));
@@ -200,9 +204,21 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         }
     }
 
+    title_h = row_h;
+#if SIL_SDL_MOBILE_BUILD
+    if (out->has_title) {
+        int h = 0, w = 0;
+        TTF_Font* title_font = sdl_story_font_for_height_slot(
+            sdl_ui_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
+        TTF_GetStringSizeWrapped(title_font, g_song_menu.title, 0,
+            MAX(1, (int)(panel_w - pad_x * 2)), &w, &h);
+        title_h = MAX(title_h, h + 6.0f * sdl_ui_density_scale());
+    }
+#endif
+
     panel_h = pad_y * 2.0f + row_h * (float)g_song_menu.count;
     if (out->has_title)
-        panel_h += row_h + divider_gap;
+        panel_h += title_h + divider_gap;
     max_panel_h = (float)anchor.h - (float)margin * 2.0f;
     if (max_panel_h < 1.0f)
         max_panel_h = (float)anchor.h;
@@ -210,8 +226,8 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         panel_h = max_panel_h;
 
     out->visible_count = g_song_menu.count;
-    if (config.bigger_font) {
-        float header_h = out->has_title ? row_h + divider_gap : 0.0f;
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
+        float header_h = out->has_title ? title_h + divider_gap : 0.0f;
         float available_h = max_panel_h - pad_y * 2.0f - header_h;
 
         if (row_h * g_song_menu.count > available_h) {
@@ -255,11 +271,11 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
             .x = out->panel.x + pad_x,
             .y = rows_top,
             .w = out->panel.w - pad_x * 2.0f,
-            .h = row_h,
+            .h = title_h,
         };
-        out->divider_y = rows_top + row_h + divider_gap * 0.5f;
+        out->divider_y = rows_top + title_h + divider_gap * 0.5f;
         out->has_divider = true;
-        rows_top += row_h + divider_gap;
+        rows_top += title_h + divider_gap;
     }
 
     for (int i = 0; i < g_song_menu.count; i++)
@@ -398,7 +414,12 @@ void sdl_song_menu_render(void)
 
     if (layout.has_title)
     {
-        sdl_song_menu_draw_text(story_font, g_song_menu.title,
+        TTF_Font* title_font = story_font;
+#if SIL_SDL_MOBILE_BUILD
+        title_font = sdl_story_font_for_height_slot(
+            sdl_ui_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
+#endif
+        sdl_song_menu_draw_text(title_font, g_song_menu.title,
             g_state.palette[TERM_WHITE], layout.title_row.x,
             layout.title_row.y, layout.title_row.w, layout.title_row.h,
             true);
@@ -502,7 +523,7 @@ bool sdl_song_menu_handle_pointer(float x, float y, int action)
 
     if (!g_song_menu.active)
         return false;
-    if (config.bigger_font) {
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
         sdl_song_menu_layout_info layout;
         if (sdl_song_menu_layout(&layout)
             && (sdl_point_in_frect(&layout.prev, x, y)

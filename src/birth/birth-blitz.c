@@ -67,6 +67,28 @@ static void blitz_pick_random_race_and_character(void)
     current_character_profile = &c_info[p_ptr->pcharacter];
 }
 
+static void blitz_setup_draw_mobile(const blitz_setup* setup, int selected)
+{
+    char rows[5][160];
+    strnfmt(rows[0], sizeof(rows[0]), "Character: %s",
+        blitz_character_mode_name(setup->character_mode));
+    strnfmt(rows[1], sizeof(rows[1]), "Oaths: %s", setup->oaths_enabled ? "Yes" : "No");
+    strnfmt(rows[2], sizeof(rows[2]), "Blessings: %d", setup->blessing_count);
+    strnfmt(rows[3], sizeof(rows[3]), "Curses: %d", setup->curse_count);
+    strnfmt(rows[4], sizeof(rows[4]), "Effect picks: %s",
+        blitz_effect_mode_name(setup->effect_mode));
+    sdl_character_sheet_screen_begin_select(selected, "Blitz Setup");
+    sdl_character_sheet_screen_set_select_menu_style(true);
+    sdl_character_sheet_screen_set_select_confirm_label("Begin");
+    sdl_character_sheet_screen_add_select_heading(
+        "Story progress stays untouched. Left/right changes a value; "
+        "tap a selected value again to change it. Begin starts this Blitz run.");
+    for (int i = 0; i < 5; ++i)
+        sdl_character_sheet_screen_add_select_row(i, rows[i],
+            i == selected ? TERM_L_BLUE : TERM_WHITE, "");
+    sdl_character_sheet_screen_commit_select(selected);
+}
+
 static void blitz_setup_draw(const blitz_setup* setup, int selected)
 {
     char buf[160];
@@ -78,6 +100,12 @@ static void blitz_setup_draw(const blitz_setup* setup, int selected)
     Term_clear();
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
+
+    if (sdl_touch_only_device_active())
+    {
+        blitz_setup_draw_mobile(setup, selected);
+        return;
+    }
 
     c_put_str(TERM_YELLOW, "Blitz Setup", 1, MAX((wid - 11) / 2, 0));
     birth_put_wrapped_text(TERM_SLATE,
@@ -279,6 +307,7 @@ static NavResult blitz_setup_menu(void)
         blitz_setup_clamp(setup);
     }
 
+    if (sdl_touch_only_device_active()) sdl_character_sheet_screen_hide();
     sdl_pop_terminal_menu_scale();
     screen_pop_touch_pane_hidden();
     screen_pop_supporting_panes_hidden();

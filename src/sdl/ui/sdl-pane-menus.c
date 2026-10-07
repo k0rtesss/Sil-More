@@ -565,8 +565,111 @@ int sdl_log_pane_menu_collect(enum pane_type pane,
     return count;
 }
 
+#if SIL_SDL_MOBILE_BUILD
+static float sdl_pane_menu_text_height(TTF_Font* font, cptr text, float width)
+{
+    int w = 0;
+    int h = 0;
+    (void)sdl_ui_wrapped_text_texture(font, text, MAX(1, (int)width),
+        g_state.palette[TERM_WHITE], &w, &h);
+    return (float)MAX(1, h);
+}
+
+static bool sdl_pane_menu_mobile_grid(const SDL_Rect* screen, int count,
+    const char* const* labels, const char* const* hints, float anchor_x,
+    float anchor_y, SDL_FRect* rects, SDL_FRect* out_panel)
+{
+    float dp = sdl_ui_density_scale();
+    float pad = 8.0f * dp;
+    float gap = 4.0f * dp;
+    TTF_Font* label_font = sdl_story_font_for_height_slot(
+        sdl_ui_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+    TTF_Font* hint_font = sdl_story_font_for_height_slot(
+        sdl_ui_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+    float header_h = label_font ? MAX((float)sdl_ui_min_tap_px(),
+        (float)TTF_GetFontHeight(label_font) + pad) : 0;
+    float max_w = (float)screen->w - pad * 2;
+    float max_h = (float)screen->h - pad * 2;
+
+    if (!label_font || !hint_font || count < 1)
+        return false;
+    for (int columns = 1; columns <= count; columns++) {
+        float width = columns == 1 ? MIN(max_w, 360.0f * dp) : max_w;
+        float cell_w = (width - pad * 2 - gap * (columns - 1)) / columns;
+        float heights[MAX_PANE_CONFIGS] = { 0 };
+        int rows = (count + columns - 1) / columns;
+        float height = pad * 2 + header_h;
+        if (cell_w < sdl_ui_min_tap_px())
+            break;
+        for (int i = 0; i < count; i++) {
+            float text_w = cell_w - pad * 2;
+            float row_h = sdl_pane_menu_text_height(label_font, labels[i], text_w);
+            if (hints[i] && hints[i][0])
+                row_h += gap + sdl_pane_menu_text_height(hint_font, hints[i], text_w);
+            row_h = MAX((float)sdl_ui_min_tap_px(), row_h + pad);
+            heights[i / columns] = MAX(heights[i / columns], row_h);
+        }
+        for (int row = 0; row < rows; row++)
+            height += heights[row] + (row ? gap : 0);
+        if (height > max_h)
+            continue;
+        float x = anchor_x > screen->x + screen->w * .5f
+            ? anchor_x - width - gap : anchor_x + gap;
+        float y = anchor_y - header_h * .5f;
+        x = sdl_touch_pane_clampf(x, screen->x + pad,
+            screen->x + screen->w - width - pad);
+        y = sdl_touch_pane_clampf(y, screen->y + pad,
+            screen->y + screen->h - height - pad);
+        if (out_panel)
+            *out_panel = (SDL_FRect){x,y,width,height};
+        float row_y = y + pad + header_h;
+        for (int i = 0; i < count; i++) {
+            int row = i / columns;
+            if (i && i % columns == 0)
+                row_y += heights[row - 1] + gap;
+            rects[i] = (SDL_FRect){x + pad + (cell_w + gap) * (i % columns),
+                row_y,cell_w,heights[row]};
+        }
+        return true;
+    }
+    return false;
+}
+
+static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
+    cptr hint, SDL_Color color)
+{
+    float pad = 8.0f * sdl_ui_density_scale();
+    float gap = 4.0f * sdl_ui_density_scale();
+    TTF_Font* font = sdl_story_font_for_height_slot(
+        sdl_ui_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+    TTF_Font* meta = sdl_story_font_for_height_slot(
+        sdl_ui_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+    int w = 0, h = 0;
+    SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, label,
+        MAX(1,(int)(rect->w - pad * 2)),color,&w,&h);
+    float y = rect->y + pad * .5f;
+    if (texture) {
+        SDL_FRect dst = {rect->x + pad,y,(float)w,(float)h};
+        SDL_RenderTexture(g_state.renderer,texture,NULL,&dst);
+    }
+    y += (float)h + gap;
+    if (hint && hint[0]) {
+        texture = sdl_ui_wrapped_text_texture(meta,hint,
+            MAX(1,(int)(rect->w - pad * 2)),color,&w,&h);
+        if (texture) {
+            SDL_FRect dst = {rect->x + pad,y,(float)w,(float)h};
+            SDL_RenderTexture(g_state.renderer,texture,NULL,&dst);
+        }
+    }
+}
+#endif
+
 int sdl_log_pane_menu_font_px(enum pane_type pane)
 {
+#if SIL_SDL_MOBILE_BUILD
+    (void)pane;
+    return sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
+#endif
     const sdl_view* view = &g_views[pane];
     int font_px = 0;
 
@@ -609,6 +712,25 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
     count = sdl_log_pane_menu_collect(g_log_pane_menu.target_pane, entries);
     if (count <= 0)
         return false;
+
+#if SIL_SDL_MOBILE_BUILD
+    {
+        const char* labels[MAX_PANE_CONFIGS];
+        const char* hints[MAX_PANE_CONFIGS];
+        SDL_FRect rects[MAX_PANE_CONFIGS];
+        for (int i = 0; i < count; i++) {
+            labels[i] = entries[i].label;
+            hints[i] = entries[i].hint;
+        }
+        if (!sdl_pane_menu_mobile_grid(&screen, count, labels, hints,
+                g_log_pane_menu.anchor_x, g_log_pane_menu.anchor_y, rects, out_panel))
+            return false;
+        for (int i = 0; i < count; i++)
+            entries[i].rect = rects[i];
+        *out_count = count;
+        return true;
+    }
+#endif
 
     if (cell_w <= 0.0f)
         cell_w = 8.0f;
@@ -990,21 +1112,28 @@ void sdl_log_pane_menu_render(void)
     SDL_Color hover_border = g_state.palette[TERM_L_BLUE];
     SDL_Color text = g_state.palette[TERM_WHITE];
     float pad;
+#if !SIL_SDL_MOBILE_BUILD
     int font_px;
     int hint_px;
+#endif
 
     if (!g_log_pane_menu.active)
         return;
     if (!sdl_log_pane_menu_layout(entries, &count, &panel))
         return;
 
+#if !SIL_SDL_MOBILE_BUILD
     font_px = sdl_log_pane_menu_font_px(g_log_pane_menu.target_pane);
     hint_px = (font_px * 4) / 5;
     if (hint_px < 10)
         hint_px = 10;
+#endif
 
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
+#if SIL_SDL_MOBILE_BUILD
+    pad = 8.0f * sdl_ui_density_scale();
+#endif
     header = (SDL_FRect){
         .x = panel.x + pad,
         .y = panel.y + pad,
@@ -1030,9 +1159,15 @@ void sdl_log_pane_menu_render(void)
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b,
         150);
     SDL_RenderRect(g_state.renderer, &header);
+#if SIL_SDL_MOBILE_BUILD
+    sdl_pane_menu_mobile_text(&header,
+        g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
+        NULL, text);
+#else
     sdl_touch_pane_draw_button_text_px(&header, NULL,
         g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
         text, font_px, font_px);
+#endif
 
     for (int i = 0; i < count; i++) {
         bool hover = (i == g_log_pane_menu.hover_index);
@@ -1048,8 +1183,12 @@ void sdl_log_pane_menu_render(void)
             hover ? 238 : 166);
         SDL_RenderRect(g_state.renderer, rect);
 
+#if SIL_SDL_MOBILE_BUILD
+        sdl_pane_menu_mobile_text(rect, entries[i].label, entries[i].hint, text);
+#else
         sdl_touch_pane_draw_button_text_px(rect, entries[i].label,
             entries[i].hint, text, font_px, hint_px);
+#endif
     }
 }
 
@@ -1179,6 +1318,25 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
     count = sdl_side_pane_menu_collect(entries);
     if (count <= 0)
         return false;
+
+#if SIL_SDL_MOBILE_BUILD
+    {
+        const char* labels[MAX_PANE_CONFIGS];
+        const char* hints[MAX_PANE_CONFIGS];
+        SDL_FRect rects[MAX_PANE_CONFIGS];
+        for (int i = 0; i < count; i++) {
+            labels[i] = sdl_side_pane_menu_label(entries[i].pane);
+            hints[i] = entries[i].enabled ? "on" : "off";
+        }
+        if (!sdl_pane_menu_mobile_grid(&screen, count, labels, hints,
+                g_side_pane_menu.anchor_x, g_side_pane_menu.anchor_y, rects, out_panel))
+            return false;
+        for (int i = 0; i < count; i++)
+            entries[i].rect = rects[i];
+        *out_count = count;
+        return true;
+    }
+#endif
 
     if (cell_w <= 0.0f)
         cell_w = 8.0f;
@@ -1559,6 +1717,9 @@ void sdl_side_pane_menu_render(void)
 
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
+#if SIL_SDL_MOBILE_BUILD
+    pad = 8.0f * sdl_ui_density_scale();
+#endif
     header = (SDL_FRect){
         .x = panel.x + pad,
         .y = panel.y + pad,
@@ -1582,8 +1743,12 @@ void sdl_side_pane_menu_render(void)
     SDL_RenderFillRect(g_state.renderer, &header);
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b, 150);
     SDL_RenderRect(g_state.renderer, &header);
+#if SIL_SDL_MOBILE_BUILD
+    sdl_pane_menu_mobile_text(&header, "Side Panes", NULL, text);
+#else
     sdl_touch_pane_draw_button_text_scaled(&header, NULL, "Side Panes",
         text, 0.48f, 0.63f);
+#endif
 
     for (int i = 0; i < count; i++) {
         bool hover = (i == g_side_pane_menu.hover_index);
@@ -1605,8 +1770,13 @@ void sdl_side_pane_menu_render(void)
             hover ? 238 : 166);
         SDL_RenderRect(g_state.renderer, rect);
 
+#if SIL_SDL_MOBILE_BUILD
+        sdl_pane_menu_mobile_text(rect, sdl_side_pane_menu_label(entries[i].pane),
+            status, label);
+#else
         sdl_touch_pane_draw_button_text_scaled(rect,
             sdl_side_pane_menu_label(entries[i].pane), status, label,
             0.30f, 0.40f);
+#endif
     }
 }

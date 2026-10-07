@@ -637,7 +637,7 @@ static float tutorial_text_height(const char *text, int font_px, float width)
     int w=0,h=0;
     if (!text[0]) return 0;
     font=sdl_story_font_for_height_slot(font_px,SDL_STORY_FONT_SLOT_TUTORIAL);
-    if (config.bigger_font && font && width > 0
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD) && font && width > 0
         && TTF_GetStringSizeWrapped(font,text,0,(int)width,&w,&h))
         return h;
     if (!font || !TTF_GetStringSize(font,text,0,&w,&h)) return font_px;
@@ -658,12 +658,12 @@ void sdl_gameplay_tutorial_render(void)
     float button_h=44, button_pad, gap, footer_h, footer_y, hint_h[2];
     float label_h[3]={0}, shortcut_h[3]={0};
     int label_px, shortcut_px, hint_px[2], first_button, button_count;
-    int font_px, line_count, visible_lines;
+    int font_px, title_px, line_count, visible_lines;
     char heading[256], normal_lines[48][SDL_TOUCH_TUTORIAL_LINE_LEN];
     static char large_lines[512][SDL_TOUCH_TUTORIAL_LINE_LEN];
-    char (*lines)[SDL_TOUCH_TUTORIAL_LINE_LEN] = config.bigger_font
+    char (*lines)[SDL_TOUCH_TUTORIAL_LINE_LEN] = (config.bigger_font || SIL_SDL_MOBILE_BUILD)
         ? large_lines : normal_lines;
-    int line_capacity = config.bigger_font ? 512 : 48;
+    int line_capacity = (config.bigger_font || SIL_SDL_MOBILE_BUILD) ? 512 : 48;
     char large_body[8192];
     static const cptr large_buttons[3] = { ">", "X", "?" };
     TTF_Font *font;
@@ -678,14 +678,24 @@ void sdl_gameplay_tutorial_render(void)
     margin = MAX(8.0f, MIN(screen.w, screen.h)*0.018f);
     pad = margin;
     font_px = sdl_main_menu_pane_font_px();
+#if SIL_SDL_MOBILE_BUILD
+    margin = pad = 8.0f * sdl_ui_density_scale();
+    font_px = sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+    button_h = sdl_ui_min_tap_px();
+#endif
     /* Keep a readable body row beside the footer on very short displays. */
-    if (!config.bigger_font)
+    if (!(config.bigger_font || SIL_SDL_MOBILE_BUILD))
         font_px = MIN(font_px,MAX(8,(int)((screen.h-2*margin)/10)));
+    title_px = SIL_SDL_MOBILE_BUILD ? sdl_ui_role_font_px(SDL_UI_FONT_TITLE)
+                                  : font_px + 2;
     if (compact_action) pad=4;
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
     if (!font) return;
     line_h = MAX(font_px*1.35f,tutorial_text_height("Ag",font_px,0)+1);
     width = MIN(screen.w-2*margin, MAX(690.0f,font_px*24.0f));
+#if SIL_SDL_MOBILE_BUILD
+    width = MIN(screen.w-2*margin, 760.0f*sdl_ui_density_scale());
+#endif
     card_space = (SDL_FRect){screen.x+(screen.w-width)/2, screen.y+margin,
         width, screen.h-2*margin};
     if (action_step) {
@@ -732,18 +742,25 @@ void sdl_gameplay_tutorial_render(void)
     shortcut_px=MAX(11,(int)(font_px*0.65f));
     hint_px[0]=MAX(12,font_px-3);
     hint_px[1]=MAX(11,font_px-4);
+#if SIL_SDL_MOBILE_BUILD
+    label_px = sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
+    shortcut_px = hint_px[0] = hint_px[1] = sdl_ui_role_font_px(SDL_UI_FONT_META);
+#endif
     button_pad=MAX(4.0f,font_px*0.15f);
     gap=MAX(4.0f,font_px*0.15f);
-    if (config.bigger_font) {
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
         pad = 4.0f;
         button_pad = MAX(2.0f, font_px * 0.08f);
         gap = MAX(2.0f, font_px * 0.08f);
     }
+#if SIL_SDL_MOBILE_BUILD
+    pad = button_pad = gap = 4.0f * sdl_ui_density_scale();
+#endif
     for (int i=first_button;i<3;++i) {
         float text_w=(width-2*pad)/button_count-18;
-        label_h[i]=tutorial_text_height(config.bigger_font
+        label_h[i]=tutorial_text_height((config.bigger_font && !SIL_SDL_MOBILE_BUILD)
             ? large_buttons[i] : controls.label[i],label_px,text_w);
-        shortcut_h[i]=config.bigger_font ? 0
+        shortcut_h[i]=(config.bigger_font || SIL_SDL_MOBILE_BUILD) ? 0
             : tutorial_text_height(controls.shortcut[i],shortcut_px,text_w);
         button_h=MAX(button_h,2*button_pad+label_h[i]
             +(shortcut_h[i]>0?gap+shortcut_h[i]:0));
@@ -752,7 +769,7 @@ void sdl_gameplay_tutorial_render(void)
     hint_h[0]=controls.action_hint[0]?tutorial_text_height("Ag",hint_px[0],width):0;
     hint_h[1]=tutorial_text_height("Ag",hint_px[1],width);
     footer_h=button_h+gap;
-    if (!compact_action && !config.bigger_font)
+    if (!compact_action && !(config.bigger_font || SIL_SDL_MOBILE_BUILD))
         footer_h+=hint_h[0]+hint_h[1]+gap*(hint_h[0]>0?2:1);
     /* The catalogue places live context with {detail}/{subject}. Appending
      * lesson-wide context here repeats it on every page, even unrelated ones. */
@@ -760,8 +777,8 @@ void sdl_gameplay_tutorial_render(void)
     if (!font) return;
     strnfmt(heading,sizeof(heading),"%s  %d/%d",view.title,view.step,view.step_count);
     heading_h = line_h * 1.5f;
-    if (config.bigger_font) {
-        heading_h = tutorial_text_height(heading, font_px + 2, width - 2 * pad) + gap;
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
+        heading_h = tutorial_text_height(heading, title_px, width - 2 * pad) + gap;
         if (heading_h + footer_h + line_h + 2 * pad > card_space.h) {
             /* Very short screens put the title into the scrolling prose. */
             strnfmt(large_body, sizeof(large_body), "%s\n%s", heading, view.body);
@@ -769,9 +786,9 @@ void sdl_gameplay_tutorial_render(void)
         } else
             SDL_strlcpy(large_body, view.body, sizeof(large_body));
     }
-    line_count = sdl_touch_tutorial_wrap_lines(config.bigger_font ? large_body : view.body,
-        font,width-2*pad-(config.bigger_font ? 2 : 0),lines,line_capacity);
-    if (config.bigger_font) {
+    line_count = sdl_touch_tutorial_wrap_lines((config.bigger_font || SIL_SDL_MOBILE_BUILD) ? large_body : view.body,
+        font,width-2*pad-((config.bigger_font || SIL_SDL_MOBILE_BUILD) ? 2 : 0),lines,line_capacity);
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
         /* Include any extra wrap caused by a long word or the truncation
          * ellipsis in the row metric as well as in the actual text draw. */
         for (int i = 0; i < line_count; i++)
@@ -827,8 +844,8 @@ void sdl_gameplay_tutorial_render(void)
     SDL_RenderRect(g_state.renderer,&tutorial_card);
     if (heading_h > 0)
         sdl_touch_tutorial_draw_text_line(heading,tutorial_card.x+pad,tutorial_card.y+pad,
-            width-2*pad-(!config.bigger_font && compact_action && tutorial_max_scroll?100:0),font_px+2,gold,false);
-    if (!config.bigger_font && compact_action && tutorial_max_scroll)
+            width-2*pad-(!(config.bigger_font || SIL_SDL_MOBILE_BUILD) && compact_action && tutorial_max_scroll?100:0),title_px,gold,false);
+    if (!(config.bigger_font || SIL_SDL_MOBILE_BUILD) && compact_action && tutorial_max_scroll)
         sdl_touch_tutorial_draw_text_line(controls.read_hint,
             tutorial_card.x+width-pad-94,tutorial_card.y+pad+2,94,12,muted,false);
     body_y = tutorial_card.y+pad+heading_h;
@@ -841,7 +858,7 @@ void sdl_gameplay_tutorial_render(void)
             MIN(line_count,tutorial_scroll+visible_lines),line_count);
         SDL_strlcat(controls.controls_hint,progress,sizeof(controls.controls_hint));
     }
-    if (!compact_action && !config.bigger_font) {
+    if (!compact_action && !(config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
         footer_y=tutorial_card.y+height-pad-footer_h+gap;
         sdl_touch_tutorial_draw_text_line(controls.action_hint,tutorial_card.x+pad,
             footer_y,width-2*pad,hint_px[0],muted,false);
@@ -859,9 +876,9 @@ void sdl_gameplay_tutorial_render(void)
         SDL_RenderRect(g_state.renderer,&tutorial_buttons[i]);
         float text_y=tutorial_buttons[i].y+(button_h-label_h[i]
             -(shortcut_h[i]>0?gap+shortcut_h[i]:0))/2;
-        sdl_touch_tutorial_draw_text_line(config.bigger_font ? large_buttons[i] : controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
+        sdl_touch_tutorial_draw_text_line((config.bigger_font && !SIL_SDL_MOBILE_BUILD) ? large_buttons[i] : controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
             text_y,tutorial_buttons[i].w-12,label_px,white,true);
-        if (!config.bigger_font && controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
+        if (!(config.bigger_font || SIL_SDL_MOBILE_BUILD) && controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
             tutorial_buttons[i].x+tutorial_buttons[i].w/2,text_y+label_h[i]+gap,
             tutorial_buttons[i].w-12,shortcut_px,gold,true);
     }

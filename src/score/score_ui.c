@@ -104,6 +104,26 @@ static int collect_run_history(run_history_entry* out, int capacity);
 static bool show_run_history_detail_for_score(const high_score* score);
 static bool run_history_prepare_artefact_object(
     const score_run_artefact_v1* entry, object_type* out);
+#if SIL_SDL_MOBILE_BUILD
+static bool score_ui_native_detail_text;
+static void run_history_show_native_list(run_history_entry* entries, int count);
+static void run_history_show_native_detail(const run_history_entry* entry,
+    const score_run_detail_block* details, bool current_run, const char* player,
+    const char* race_name, const char* status, const char* created,
+    const char* completed);
+
+static void score_ui_native_text(byte attr, cptr text)
+{
+    char compact[256];
+    size_t n = 0;
+    for (size_t i = 0; text && text[i] && n + 1 < sizeof(compact); i++) {
+        if (text[i] == ' ' && (n == 0 || compact[n - 1] == ' ')) continue;
+        compact[n++] = text[i];
+    }
+    compact[n] = '\0';
+    sdl_question_menu_add_text(compact, attr == TERM_L_DARK ? TERM_SLATE : attr);
+}
+#endif
 
 /* Final Look deliberately presents live-game UI flags.  Score and run-history
  * code must use the finalized run state instead of those presentation flags. */
@@ -617,6 +637,13 @@ static void run_detail_text_view_put(run_detail_text_view* view, byte attr,
 
     if (!view)
         return;
+#if SIL_SDL_MOBILE_BUILD
+    if (score_ui_native_detail_text) {
+        score_ui_native_text(attr, text);
+        view->logical_row++;
+        return;
+    }
+#endif
 
     relative_row = view->logical_row - view->scroll_top;
     if (relative_row >= 0 && relative_row < view->visible_rows) {
@@ -1843,6 +1870,97 @@ static bool show_run_history_detail_for_score(const high_score* score)
     return true;
 }
 
+#if SIL_SDL_MOBILE_BUILD
+static void run_history_show_native_list(run_history_entry* entries, int count)
+{
+    enum { BACK = -2, SORT = -1, DETAILS = -3, RELOAD = -6 };
+    run_history_sort_order order = RUN_HISTORY_SORT_DATE;
+    int highlight = 0, scroll = 0;
+    bool done = false, follow_highlight = true;
+    screen_save();
+    screen_push_supporting_panes_hidden();
+    run_history_sort_entries(entries, count, order);
+    while (!done) {
+        Term_clear();
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+        sdl_question_menu_begin("Run History");
+        ui_menu_click_set_outside_cancel_enabled(true);
+        sdl_question_menu_set_desc(format("%d recorded runs. Sort: %s. Select a hero to open the complete record.",
+            count, run_history_sort_label(order)));
+        sdl_question_menu_set_scroll_offset_target(&scroll, follow_highlight);
+        for (int i = 0; i < count; i++) {
+            const score_record_v1* rec = &entries[i].record;
+            char date[32], card[256];
+            run_history_format_timestamp(rec->completed_utc, true, date, sizeof(date));
+            strnfmt(card, sizeof(card),
+                "%s\n%s | %s\nDepth: %d ft | Rating: %d\nSilmarils: %u\n%s",
+                rec->player_name[0] ? rec->player_name
+                    : (rec->savefile_hint[0] ? rec->savefile_hint : "Unknown hero"),
+                date, score_run_status_label(rec->status), rec->exit_depth * 50,
+                entries[i].rating, (unsigned)rec->silmarils,
+                rec->cause_of_death[0] ? rec->cause_of_death : "No fate recorded");
+            sdl_question_menu_add_entry(i, "", card, TERM_L_WHITE);
+        }
+        sdl_question_menu_add_button(BACK, "Back", TERM_WHITE);
+        sdl_question_menu_add_button(SORT, format("Sort: %s", run_history_sort_label(order)), TERM_WHITE);
+        sdl_question_menu_add_button(DETAILS, "Details", TERM_WHITE);
+        sdl_question_menu_add_button(RELOAD, "Reload", TERM_WHITE);
+        sdl_question_menu_set_highlight(highlight);
+        sdl_question_menu_finish();
+        Term_fresh();
+        follow_highlight = false;
+        int ch = inkey(), choice = INT_MIN, action = UI_MENU_CLICK_PRIMARY;
+        int navigation = sdl_question_menu_take_navigation();
+        if (navigation) ch = navigation < 0 ? '8' : '2';
+        if (ui_menu_click_take_action(&choice, &action)) {
+            if (choice >= 0 && choice < count) {
+                if (action == UI_MENU_CLICK_HOVER || highlight != choice) {
+                    highlight = choice;
+                    continue;
+                }
+                ch = '\r';
+            } else if (action == UI_MENU_CLICK_HOVER) continue;
+            else if (choice == BACK) ch = ESCAPE;
+            else if (choice == SORT) ch = 'r';
+            else if (choice == DETAILS) ch = '\r';
+            else if (choice == RELOAD) ch = 'u';
+        }
+        sdl_question_menu_clear();
+        ui_menu_click_clear();
+        ch = steamdeck_menu_key(ch, 'p', 'n');
+        if (steamdeck_controls_active()) {
+            if (ch == steamdeck_back_key()) ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key()) ch = '\r';
+            else if (ch == steamdeck_secondary_key()) ch = 'r';
+        }
+        if (ch == ESCAPE || ch == 'q' || ch == 'Q') done = true;
+        else if (ch == 'r' || ch == 'R') {
+            order = order == RUN_HISTORY_SORT_DATE ? RUN_HISTORY_SORT_RATING : RUN_HISTORY_SORT_DATE;
+            run_history_sort_entries(entries, count, order);
+            highlight = scroll = 0;
+        } else if (ch == 'u' || ch == 'U') {
+            run_history_refresh_active_run();
+            int refreshed = collect_run_history(entries, RUN_HISTORY_MAX);
+            if (refreshed <= 0) { done = true; continue; }
+            count = refreshed;
+            run_history_sort_entries(entries, count, order);
+            highlight = MIN(highlight, count - 1);
+            scroll = 0;
+        } else if (ch == '\r' || ch == '\n' || ch == ' ' || ch == '6' || ch == 'y' || ch == 'Y') {
+            run_history_show_detail(&entries[highlight]);
+        } else if (ch == '2' || ch == 'j') { highlight = MIN(count - 1, highlight + 1); follow_highlight = true; }
+        else if (ch == '8' || ch == 'k') { highlight = MAX(0, highlight - 1); follow_highlight = true; }
+        else if (ch == 'n' || ch == 'N' || ch == '3') { highlight = MIN(count - 1, highlight + RUN_HISTORY_ROWS); follow_highlight = true; }
+        else if (ch == 'p' || ch == 'P' || ch == '4' || ch == '7') { highlight = MAX(0, highlight - RUN_HISTORY_ROWS); follow_highlight = true; }
+    }
+    sdl_question_menu_clear();
+    ui_menu_click_clear();
+    screen_pop_supporting_panes_hidden();
+    screen_load();
+}
+#endif
+
 void do_cmd_run_history(void)
 {
     enum {
@@ -1860,6 +1978,10 @@ void do_cmd_run_history(void)
         msg_print("No run history is available.");
         return;
     }
+#if SIL_SDL_MOBILE_BUILD
+    run_history_show_native_list(entries, count);
+    return;
+#endif
     run_history_sort_order sort_order = RUN_HISTORY_SORT_DATE;
     run_history_sort_entries(entries, count, sort_order);
 
@@ -3239,6 +3361,242 @@ static int run_history_draw_monster_panel(const score_run_detail_block* details,
     return rows;
 }
 
+#if SIL_SDL_MOBILE_BUILD
+enum { RUN_NATIVE_VIEW = -7, RUN_NATIVE_PREV_RECORDS = -8,
+    RUN_NATIVE_NEXT_RECORDS = -9, RUN_NATIVE_PAGE_SIZE = 240 };
+
+static int run_history_native_view_picker(run_detail_panel active,
+    bool previous_records, bool next_records)
+{
+    ui_menu_click_begin();
+    sdl_question_menu_begin("Run record sections");
+    ui_menu_click_set_outside_cancel_enabled(true);
+    for (int i = 0; i < RUN_PANEL_COUNT; i++)
+        sdl_question_menu_add_entry(1000 + i, "", run_detail_panel_names[i],
+            i == (int)active ? TERM_L_BLUE : TERM_WHITE);
+    if (active == RUN_PANEL_MONSTERS) {
+        sdl_question_menu_add_entry(1010, "", "Change monster group", TERM_WHITE);
+        sdl_question_menu_add_entry(1011, "", "Change monster sort order", TERM_WHITE);
+    }
+    if (previous_records) sdl_question_menu_add_entry(1012, "", "Previous records", TERM_WHITE);
+    if (next_records) sdl_question_menu_add_entry(1013, "", "Next records", TERM_WHITE);
+    sdl_question_menu_add_button(RUN_DETAIL_CLICK_BACK, "Back", TERM_WHITE);
+    sdl_question_menu_finish();
+    int result = INT_MIN;
+    int options[10], option_count = 0, focus = active;
+    for (int i = 0; i < RUN_PANEL_COUNT; i++) options[option_count++] = 1000 + i;
+    if (active == RUN_PANEL_MONSTERS) { options[option_count++] = 1010; options[option_count++] = 1011; }
+    if (previous_records) options[option_count++] = 1012;
+    if (next_records) options[option_count++] = 1013;
+    while (result == INT_MIN) {
+        sdl_question_menu_set_highlight(options[focus]);
+        Term_fresh();
+        int ch = inkey(), choice = INT_MIN, action;
+        int navigation = sdl_question_menu_take_navigation();
+        if (navigation) ch = navigation < 0 ? '8' : '2';
+        ch = steamdeck_menu_key(ch, '4', '6');
+        if (steamdeck_controls_active()) {
+            if (ch == steamdeck_back_key()) ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key()) ch = '\r';
+        }
+        if (ch == '2' || ch == 'j') { focus = MIN(option_count - 1, focus + 1); continue; }
+        if (ch == '8' || ch == 'k') { focus = MAX(0, focus - 1); continue; }
+        bool picked = ui_menu_click_take_action(&choice, &action);
+        if (!picked && (ch == '\r' || ch == '\n' || ch == ' ')) {
+            choice = options[focus]; action = UI_MENU_CLICK_PRIMARY; picked = true;
+        }
+        if (picked) {
+            if (action == UI_MENU_CLICK_HOVER) continue;
+            if (choice >= 1000 && choice < 1000 + RUN_PANEL_COUNT)
+                result = run_history_detail_tab_choice(choice - 1000);
+            else if (choice == 1010) result = RUN_DETAIL_CLICK_GROUP;
+            else if (choice == 1011) result = RUN_DETAIL_CLICK_SORT;
+            else if (choice == 1012) result = RUN_NATIVE_PREV_RECORDS;
+            else if (choice == 1013) result = RUN_NATIVE_NEXT_RECORDS;
+            else if (choice == RUN_DETAIL_CLICK_BACK) result = 0;
+        } else if (ch == ESCAPE || ch == 'q') result = 0;
+        else if (ch >= '1' && ch < '1' + RUN_PANEL_COUNT)
+            result = run_history_detail_tab_choice(ch - '1');
+    }
+    sdl_question_menu_clear();
+    ui_menu_click_clear();
+    return result;
+}
+
+static void run_history_native_stats(const score_run_detail_block* details)
+{
+    score_ui_native_text(TERM_L_BLUE, "Stats");
+    if (!details->stats_count) score_ui_native_text(TERM_SLATE, "No stat data recorded.");
+    for (int i = 0; details->stats && i < details->stats_count; i++) {
+        const score_run_stat_v1* stat = &details->stats[i];
+        score_ui_native_text(TERM_WHITE, format("%s\nBase: %d | Drain: %d | Current: %d",
+            stat->stat_index < A_MAX ? stat_names_full[stat->stat_index] : "Unknown stat",
+            stat->base, stat->drain, stat->current));
+    }
+    score_ui_native_text(TERM_L_BLUE, "Skills");
+    if (!details->skills_count) score_ui_native_text(TERM_SLATE, "No skill data recorded.");
+    for (int i = 0; details->skills && i < details->skills_count; i++) {
+        const score_run_skill_v1* skill = &details->skills[i];
+        score_ui_native_text(TERM_WHITE, format("%s\nBase: %d | Current: %d\nStat bonus: %d | Item/other bonus: %d",
+            skill->skill_index < S_MAX ? skill_names_full[skill->skill_index] : "Unknown skill",
+            skill->base, skill->current, skill->stat_bonus, skill->item_bonus));
+    }
+}
+
+static void run_history_native_records(const score_run_detail_block* details,
+    run_detail_panel panel, run_monster_group group, run_monster_sort_mode sort,
+    int first, int total)
+{
+    int end = MIN(total, first + RUN_NATIVE_PAGE_SIZE);
+    run_history_monster_row* monsters = NULL;
+    if (panel == RUN_PANEL_MONSTERS)
+        monsters = run_history_build_monster_rows(details, group, sort, &total);
+    if (!total) score_ui_native_text(TERM_SLATE, "No records available in this section.");
+    for (int i = first; i < end; i++) {
+        char card[256];
+        if (panel == RUN_PANEL_ABILITIES) {
+            const score_run_ability_v1* item = &details->abilities[i];
+            cptr ability = "Unknown ability";
+            cptr skill = item->skill_index < S_MAX ? skill_names_full[item->skill_index] : "Unknown skill";
+            if (b_info && b_name && item->skill_index < S_MAX && item->ability_index < ABILITIES_MAX) {
+                ability_type* definition = &b_info[ability_index(item->skill_index, item->ability_index)];
+                if (definition->name) ability = b_name + definition->name;
+            }
+            strnfmt(card, sizeof(card), "%s - %s\nSequence: %u | Turn: %lu\nDepth: %d ft",
+                skill, ability, item->order, (unsigned long)item->player_turn, item->depth * 50);
+        } else if (panel == RUN_PANEL_MILESTONES) {
+            const score_run_milestone_v1* item = &details->milestones[i];
+            char depth[16];
+            strnfmt(card, sizeof(card), "%s\nTurn: %lu | Depth: %s",
+                item->note[0] ? item->note : "No note", (unsigned long)item->player_turn,
+                run_history_format_depth_label(item, depth, sizeof(depth)));
+        } else if (panel == RUN_PANEL_ARTEFACTS) {
+            const score_run_artefact_v1* item = &details->artefacts[i];
+            object_type object;
+            SDL_strlcpy(card, "Unknown artefact", sizeof(card));
+            if (run_history_prepare_artefact_object(item, &object))
+                object_desc(card, sizeof(card), &object, true, 0);
+            else if (a_info && z_info && item->a_idx > 0 && item->a_idx < z_info->art_max)
+                SDL_strlcpy(card, a_info[item->a_idx].name, sizeof(card));
+        } else if (panel == RUN_PANEL_MONSTERS && monsters) {
+            const run_history_monster_row* item = &monsters[i];
+            strnfmt(card, sizeof(card), "%s\nSeen: %u | Slain: %u | Deaths: %u\nMonster depth: %d",
+                run_history_monster_name(item->r_idx), item->seen, item->killed,
+                item->deaths, run_history_monster_level(item));
+        } else continue;
+        sdl_question_menu_add_entry(i, "", card, TERM_L_WHITE);
+    }
+    mem_free(monsters);
+}
+
+static void run_history_show_native_detail(const run_history_entry* entry,
+    const score_run_detail_block* details, bool current_run, const char* player,
+    const char* race_name, const char* status, const char* created,
+    const char* completed)
+{
+    run_detail_panel panel = RUN_PANEL_GENERAL;
+    run_detail_view_state view = {0};
+    int first = 0, scroll = 0;
+    bool done = false, follow_highlight = false;
+    screen_save();
+    while (!done) {
+        run_detail_list_state* selected = run_history_detail_panel_state(&view, panel);
+        int total = run_history_detail_panel_total(details, panel, view.monster_group);
+        first = MAX(0, MIN(first, total > 0 ? ((total - 1) / RUN_NATIVE_PAGE_SIZE) * RUN_NATIVE_PAGE_SIZE : 0));
+        Term_clear();
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+        sdl_question_menu_begin(format("Run #%u: %s", entry->record.record_id, player));
+        ui_menu_click_set_outside_cancel_enabled(true);
+        sdl_question_menu_set_desc(panel == RUN_PANEL_MONSTERS
+            ? format("%s | %s | %s", run_detail_panel_names[panel],
+                run_history_monster_group_labels[view.monster_group],
+                run_history_monster_sort_label(view.monster_group, view.monster_sort_mode))
+            : run_detail_panel_names[panel]);
+        sdl_question_menu_set_scroll_offset_target(&scroll, follow_highlight);
+        if (panel == RUN_PANEL_GENERAL) {
+            score_ui_native_detail_text = true;
+            run_history_draw_general_panel(&entry->record, entry, player, race_name,
+                status, created, completed, current_run, 0, 24, 80);
+            score_ui_native_detail_text = false;
+        } else if (panel == RUN_PANEL_STATS) run_history_native_stats(details);
+        else run_history_native_records(details, panel, view.monster_group,
+            view.monster_sort_mode, first, total);
+        sdl_question_menu_add_button(RUN_DETAIL_CLICK_BACK, "Back", TERM_WHITE);
+        sdl_question_menu_add_button(RUN_NATIVE_VIEW, "View section", TERM_WHITE);
+        if (panel == RUN_PANEL_ARTEFACTS || panel == RUN_PANEL_MONSTERS)
+            sdl_question_menu_add_button(RUN_DETAIL_CLICK_INSPECT, "Inspect", TERM_WHITE);
+        if (panel == RUN_PANEL_MONSTERS)
+            sdl_question_menu_add_button(RUN_DETAIL_CLICK_SORT, "Sort", TERM_WHITE);
+        else if (first + RUN_NATIVE_PAGE_SIZE < total)
+            sdl_question_menu_add_button(RUN_NATIVE_NEXT_RECORDS, "Next records", TERM_WHITE);
+        if (selected) sdl_question_menu_set_highlight(selected->highlight);
+        sdl_question_menu_finish();
+        Term_fresh();
+        follow_highlight = false;
+        int ch = inkey(), choice = INT_MIN, action = UI_MENU_CLICK_PRIMARY;
+        int navigation = sdl_question_menu_take_navigation();
+        if (navigation) ch = navigation < 0 ? '8' : '2';
+        if (ui_menu_click_take_action(&choice, &action)) {
+            if (choice >= 0 && selected && choice < total) {
+                if (action == UI_MENU_CLICK_HOVER || choice != selected->highlight) {
+                    selected->highlight = choice;
+                    continue;
+                }
+                choice = RUN_DETAIL_CLICK_INSPECT;
+            } else if (action == UI_MENU_CLICK_HOVER) continue;
+        }
+        sdl_question_menu_clear();
+        ui_menu_click_clear();
+        ch = steamdeck_menu_key(ch, '4', '6');
+        if (steamdeck_controls_active()) {
+            if (ch == steamdeck_back_key()) ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key()) ch = '\r';
+            else if (ch == steamdeck_secondary_key()) ch = 's';
+            else if (ch == steamdeck_alt_action_key()) ch = 'g';
+        }
+        if (choice == RUN_NATIVE_VIEW) choice = run_history_native_view_picker(panel,
+            first > 0, first + RUN_NATIVE_PAGE_SIZE < total);
+        run_detail_panel next_panel;
+        if (run_history_detail_choice_to_tab(choice, &next_panel)) {
+            panel = next_panel; first = scroll = 0;
+        } else if (choice == RUN_DETAIL_CLICK_BACK || ch == ESCAPE || ch == 'q' || ch == 'Q') done = true;
+        else if (choice == RUN_DETAIL_CLICK_SORT || ch == 's' || ch == 'S') {
+            view.monster_sort_mode = (view.monster_sort_mode + 1) % RUN_MON_SORT_COUNT;
+            scroll = 0;
+        } else if (choice == RUN_DETAIL_CLICK_GROUP || ch == 'g' || ch == 'G') {
+            view.monster_group = (view.monster_group + 1) % RUN_MON_GROUP_COUNT;
+            first = scroll = 0;
+        } else if (!selected && (ch == '2' || ch == '8' || ch == 'n' || ch == 'p')) {
+            float density = MAX(1.0f, SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));
+            int step = (int)(48.0f * density) * ((ch == 'n' || ch == 'p') ? 5 : 1);
+            scroll = MAX(0, scroll + ((ch == '2' || ch == 'n') ? step : -step));
+        } else if (choice == RUN_NATIVE_NEXT_RECORDS || ch == 'n') {
+            if (first + RUN_NATIVE_PAGE_SIZE < total) first += RUN_NATIVE_PAGE_SIZE;
+            scroll = 0;
+        } else if (choice == RUN_NATIVE_PREV_RECORDS || ch == 'p') {
+            first = MAX(0, first - RUN_NATIVE_PAGE_SIZE); scroll = 0;
+        } else if (ch == '4' || ch == 'h') {
+            panel = (panel + RUN_PANEL_COUNT - 1) % RUN_PANEL_COUNT; first = scroll = 0;
+        } else if (ch == '6' || ch == 'l') {
+            panel = (panel + 1) % RUN_PANEL_COUNT; first = scroll = 0;
+        } else if (choice == RUN_DETAIL_CLICK_INSPECT || ch == '\r' || ch == '\n' || ch == ' ' || ch == 'x') {
+            if (panel == RUN_PANEL_ARTEFACTS) run_history_examine_artefact(details, &view.artefacts);
+            else if (panel == RUN_PANEL_MONSTERS)
+                run_history_examine_monster(details, &view.monsters, view.monster_group, view.monster_sort_mode);
+        } else if (selected && total) {
+            if (ch == '2' || ch == 'j') selected->highlight = MIN(total - 1, selected->highlight + 1);
+            else if (ch == '8' || ch == 'k') selected->highlight = MAX(0, selected->highlight - 1);
+            first = (selected->highlight / RUN_NATIVE_PAGE_SIZE) * RUN_NATIVE_PAGE_SIZE;
+            follow_highlight = true;
+        }
+    }
+    sdl_question_menu_clear();
+    ui_menu_click_clear();
+    screen_load();
+}
+#endif
+
 static void run_history_show_detail(const run_history_entry* entry)
 {
     if (!entry)
@@ -3276,6 +3634,13 @@ static void run_history_show_detail(const run_history_entry* entry)
 
     const char* status = score_run_status_label(rec->status);
     const char* race_name = run_history_race_name(rec->race_id);
+
+#if SIL_SDL_MOBILE_BUILD
+    run_history_show_native_detail(entry, &details, current_run, player, race_name,
+        status, created, completed);
+    if (have_details) score_runs_free_details(&details);
+    return;
+#endif
 
     bool panel_has_data[RUN_PANEL_COUNT];
     panel_has_data[RUN_PANEL_GENERAL] = true;

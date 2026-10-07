@@ -1915,6 +1915,7 @@ extern void sdl_character_sheet_screen_show_birth_skills(const int* old_base,
 extern void sdl_character_sheet_screen_begin_select(int focus_choice,
     cptr title);
 extern void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
+extern void sdl_character_sheet_screen_set_select_confirm_label(cptr label);
 extern void sdl_character_sheet_screen_set_select_dynamic_description(
     bool enabled);
 extern int sdl_character_sheet_screen_select_menu_rows_per_column(void);
