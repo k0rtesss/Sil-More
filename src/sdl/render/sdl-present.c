@@ -358,6 +358,8 @@ static Uint64 sdl_left_panel_source_hash(const term* source_term,
         hash = sdl_left_panel_hash_mix(hash,
             (Uint64)metrics->compact_widths[i]);
         hash = sdl_left_panel_hash_mix(hash,
+            (Uint64)metrics->compact_heights[i]);
+        hash = sdl_left_panel_hash_mix(hash,
             (Uint64)metrics->compact_output_cols[i]);
         hash = sdl_left_panel_hash_mix(hash,
             (Uint64)metrics->compact_output_rows[i]);
@@ -949,10 +951,15 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
             int output_col = metrics.compact_output_cols[i];
             int output_row = metrics.compact_output_rows[i];
 
-            if (metrics.compact_row && source_row == ROW_LIGHT) {
+            if (metrics.compact_row
+                && (source_row == ROW_LIGHT || get_sdl_bigger_font())) {
                 sdl_left_panel_compact_light_span span;
+                bool big_row = get_sdl_bigger_font();
 
-                if (sdl_left_panel_compact_light_span_for_term(source_term,
+                if (big_row
+                    ? sdl_left_panel_compact_big_span_for_term(source_term,
+                        scr, source_row, &span)
+                    : sdl_left_panel_compact_light_span_for_term(source_term,
                         scr, &span))
                 {
                     sdl_render_left_panel_source_row_cells(view, source_term,
@@ -962,7 +969,8 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
                         atlas_cell_h, mono_font);
                     sdl_render_left_panel_source_row_cells(view, source_term,
                         scr, source_row, span.text_start, span.text_width,
-                        output_col + span.icon_cols + 1, output_row,
+                        big_row ? output_col : output_col + span.icon_cols + 1,
+                        big_row ? output_row + 1 : output_row,
                         content_x, content_y, metrics.cell_w, metrics.cell_h,
                         font_atlas, atlas_cell_w, atlas_cell_h, mono_font);
                     continue;
@@ -1730,7 +1738,7 @@ static bool sdl_render_current_window_contents(void)
 
             if (pad < 2)
                 pad = 2;
-            blit_off = (float)(pane_log_overlay_left_margin(view->cols)
+            blit_off = (float)(sdl_overlay_log_left_margin(view->cols)
                 * view->cell_w - pad);
             if (blit_off < 0.0f)
                 blit_off = 0.0f;
@@ -1873,7 +1881,7 @@ static bool sdl_render_current_window_contents(void)
                 if (pad < 2)
                     pad = 2;
                 inset = view->margin_x
-                    + pane_log_overlay_left_margin(view->cols) * view->cell_w
+                    + sdl_overlay_log_left_margin(view->cols) * view->cell_w
                     - pad;
 
                 if (inset > 0 && inset < view->rect.w)

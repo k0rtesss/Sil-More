@@ -3233,6 +3233,72 @@ void sdl_pane_profile_apply_tablet_defaults(
         profile->pane_configs[rolls_index].rect.rows = 8;
 }
 
+void sdl_pane_profile_apply_bigger_font_defaults(
+    struct sdl_pane_profile* profile)
+{
+    static const struct pane_config defaults[] = {
+        { .pane = PANE_LEFT_PANEL, .where = PLACE_TOP_CENTER,
+            .enabled = true },
+        { .pane = PANE_ROLLS, .where = PLACE_TOP_CENTER, .enabled = true,
+            .rect.rows = 4 },
+        { .pane = PANE_COMBAT, .where = PLACE_BOTTOM_LEFT, .enabled = true,
+            .rect.rows = PANE_COMBAT_OVERLAY_ROWS,
+            .rect.cols = PANE_COMBAT_OVERLAY_COLS },
+        { .pane = PANE_STATUS_DEPTH, .where = PLACE_BOTTOM_CENTER,
+            .enabled = true, .rect.rows = 1, .rect.cols = 24 },
+        { .pane = PANE_OVERLAY_MENU, .where = PLACE_BOTTOM_CENTER,
+            .enabled = true, .rect.rows = 1, .rect.cols = 4 },
+        { .pane = PANE_DESCRIPTION, .where = PLACE_BOTTOM_CENTER,
+            .enabled = true, .rect.rows = 80, .rect.cols = 160 },
+    };
+    static const int bindings[] = {
+        'j', 'i', 'y', 'h', TOUCH_BIND_TOGGLE_TILES, 'm'
+    };
+
+    if (!profile)
+        return;
+
+    profile->aux_view_font_size = 0;
+    profile->enable_right_panes = false;
+    profile->enable_bottom_panes = false;
+    profile->left_overlays_touch_screen_edge = true;
+    profile->show_overlay_log_border = false;
+    profile->show_main_menu_button = false;
+    profile->left_panel_expanded_on_launch = false;
+    profile->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_ROW;
+    profile->touch_top_panel_arrows_visible = false;
+    profile->touch_top_panel_default_open = true;
+    profile->touch_top_panel_cell_count = N_ELEMENTS(bindings);
+    profile->touch_top_panel_rows = 1;
+    profile->touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+    for (int i = 0; i < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT; i++) {
+        profile->touch_top_panel_bindings[i] = i < (int)N_ELEMENTS(bindings)
+            ? bindings[i] : GAMEPAD_BIND_NONE;
+        profile->touch_top_panel_long_bindings[i] = GAMEPAD_BIND_NONE;
+    }
+
+    for (int i = 0; i < profile->pane_count; i++)
+        profile->pane_configs[i].enabled = false;
+    for (int i = 0; i < (int)N_ELEMENTS(defaults); i++) {
+        int index = sdl_config_profile_find_pane(profile, defaults[i].pane);
+
+        if (index < 0) {
+            if (profile->pane_count >= MAX_PANE_CONFIGS)
+                continue;
+            index = profile->pane_count++;
+        }
+        profile->pane_configs[index] = defaults[i];
+    }
+    sdl_config_profile_set_pane(profile, PANE_LEFT_PANEL, true,
+        PLACE_TOP_CENTER, 1);
+    sdl_config_profile_set_pane(profile, PANE_ROLLS, true,
+        PLACE_TOP_CENTER, 2);
+    sdl_config_profile_set_pane(profile, PANE_STATUS_DEPTH, true,
+        PLACE_BOTTOM_CENTER, 1);
+    sdl_config_profile_set_pane(profile, PANE_OVERLAY_MENU, true,
+        PLACE_BOTTOM_CENTER, 2);
+}
+
 static bool sdl_config_profile_has_enabled_bottom_pane(
     const struct sdl_pane_profile* profile)
 {
@@ -5159,6 +5225,56 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         }
     }
 
+    /* Older files keep their normal-font layouts.  Big text starts with its
+     * own defaults in each orientation, then restores only its saved edits. */
+    if (pane_profiles) {
+        cJSON* profiles = cJSON_GetObjectItemCaseSensitive(root, "paneProfiles");
+        cJSON* bigger = cJSON_GetObjectItemCaseSensitive(profiles, "biggerFont");
+
+        for (int orientation = 0;
+             orientation < SDL_PANE_ORIENTATION_COUNT; orientation++)
+        {
+            cJSON* orientation_obj = cJSON_GetObjectItemCaseSensitive(bigger,
+                orientation == SDL_PANE_ORIENTATION_PORTRAIT
+                    ? "portrait" : "landscape");
+            bool loaded[SDL_MIN_TERMINAL_MODE_COUNT] = { false };
+
+            for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+                int normal = SDL_PANE_PROFILE_INDEX(orientation, mode);
+                int index = SDL_PANE_FONT_PROFILE_INDEX(true, orientation, mode);
+                cJSON* obj = cJSON_GetObjectItemCaseSensitive(orientation_obj,
+                    min_terminal_mode_to_string(mode));
+                char label[64];
+
+                if (index >= profile_count)
+                    continue;
+                sdl_config_copy_pane_profile(&pane_profiles[index],
+                    &pane_profiles[normal]);
+                sdl_pane_profile_apply_bigger_font_defaults(&pane_profiles[index]);
+                if (!cJSON_IsObject(obj))
+                    continue;
+                strnfmt(label, sizeof(label), "biggerFont.%s.%s",
+                    orientation == SDL_PANE_ORIENTATION_PORTRAIT
+                        ? "portrait" : "landscape",
+                    min_terminal_mode_to_string(mode));
+                sdl_config_load_pane_profile(obj, &pane_profiles[index], label);
+                loaded[mode] = true;
+            }
+            for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
+                int index = SDL_PANE_FONT_PROFILE_INDEX(true, orientation, mode);
+                int sibling = SDL_PANE_FONT_PROFILE_INDEX(true, orientation,
+                    1 - mode);
+
+                if (index < profile_count && sibling < profile_count
+                    && !loaded[mode] && loaded[1 - mode])
+                {
+                    sdl_config_copy_pane_profile(&pane_profiles[index],
+                        &pane_profiles[sibling]);
+                }
+            }
+        }
+    }
+
 #if defined(__ANDROID__) || defined(SIL_IOS)
     /* Mobile owns the whole display and permits overlay panes only.  Normalize
      * stale/shared desktop values at the persistence boundary so orientation
@@ -5186,7 +5302,6 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
 {
     int active_mode = config->min_terminal_mode;
     int active_orientation = SDL_PANE_ORIENTATION_LANDSCAPE;
-    int saved_orientation_count = 1;
     int active_profile_index;
     const struct sdl_pane_profile* active_profile = NULL;
     cJSON* root = cJSON_CreateObject();
@@ -5216,7 +5331,6 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
 #if defined(__ANDROID__) || defined(SIL_IOS)
     cJSON_AddBoolToObject(sdl, "mobilePortraitMode",
         config->mobile_portrait_mode);
-    saved_orientation_count = SDL_PANE_ORIENTATION_COUNT;
 #endif
     cJSON_AddNumberToObject(sdl, "auxViewFontSize", config->aux_view_font_size);
     cJSON_AddNumberToObject(sdl, "margin", config->margin);
@@ -5314,8 +5428,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     if (config->mobile_portrait_mode)
         active_orientation = SDL_PANE_ORIENTATION_PORTRAIT;
 #endif
-    active_profile_index = SDL_PANE_PROFILE_INDEX(active_orientation,
-        active_mode);
+    active_profile_index = SDL_PANE_FONT_PROFILE_INDEX(config->bigger_font,
+        active_orientation, active_mode);
     if (pane_profiles && active_profile_index >= 0
         && active_profile_index < profile_count)
     {
@@ -5345,37 +5459,48 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             return false;
         }
 
-        for (int orientation = 0;
-             orientation < saved_orientation_count;
-             orientation++)
+        for (int font_mode = 0;
+             font_mode < SDL_PANE_FONT_MODE_COUNT; font_mode++)
         {
-            const char* orientation_name =
-                orientation == SDL_PANE_ORIENTATION_PORTRAIT
-                    ? "portrait" : "landscape";
-            cJSON* orientation_obj = cJSON_CreateObject();
+            cJSON* font_profiles = font_mode ? cJSON_CreateObject()
+                : pane_profiles_obj;
 
-            if (!orientation_obj)
+            if (!font_profiles)
                 continue;
+            if (font_mode)
+                cJSON_AddItemToObject(pane_profiles_obj, "biggerFont",
+                    font_profiles);
 
-            for (int mode = 0;
-                 mode < SDL_MIN_TERMINAL_MODE_COUNT;
-                 mode++)
+            for (int orientation = 0;
+                 orientation < SDL_PANE_ORIENTATION_COUNT; orientation++)
             {
-                int profile_index = SDL_PANE_PROFILE_INDEX(orientation, mode);
-                cJSON* profile_obj;
+                const char* orientation_name =
+                    orientation == SDL_PANE_ORIENTATION_PORTRAIT
+                        ? "portrait" : "landscape";
+                cJSON* orientation_obj = cJSON_CreateObject();
 
-                if (!pane_profiles || profile_index >= profile_count)
+                if (!orientation_obj)
                     continue;
-                profile_obj = sdl_config_create_pane_profile_object(
-                    &pane_profiles[profile_index]);
-                if (!profile_obj)
-                    continue;
-                cJSON_AddItemToObject(orientation_obj,
-                    min_terminal_mode_to_string(mode), profile_obj);
+                for (int mode = 0;
+                     mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++)
+                {
+                    int profile_index = SDL_PANE_FONT_PROFILE_INDEX(font_mode,
+                        orientation, mode);
+                    cJSON* profile_obj;
+
+                    if (!pane_profiles || profile_index >= profile_count)
+                        continue;
+                    profile_obj = sdl_config_create_pane_profile_object(
+                        &pane_profiles[profile_index]);
+                    if (!profile_obj)
+                        continue;
+                    cJSON_AddItemToObject(orientation_obj,
+                        min_terminal_mode_to_string(mode), profile_obj);
+                }
+
+                cJSON_AddItemToObject(font_profiles, orientation_name,
+                    orientation_obj);
             }
-
-            cJSON_AddItemToObject(pane_profiles_obj, orientation_name,
-                orientation_obj);
         }
 
         cJSON_AddItemToObject(root, "paneProfiles", pane_profiles_obj);

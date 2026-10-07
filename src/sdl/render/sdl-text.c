@@ -759,7 +759,7 @@ int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
         return 0;
 
     margin = (d && sdl_view_is_overlay_log_pane(d))
-        ? pane_log_overlay_left_margin(wid) : 0;
+        ? sdl_overlay_log_left_margin(wid) : 0;
     band_px = (float)(wid - margin) * (float)d->cell_w
         - (float)d->cell_w * 0.25f - SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
 
@@ -834,7 +834,7 @@ static void sdl_render_overlay_log_message_row_px(sdl_view* d, int y,
         return;
 
     margin = sdl_view_is_overlay_log_pane(d)
-        ? pane_log_overlay_left_margin(wid) : 0;
+        ? sdl_overlay_log_left_margin(wid) : 0;
     px = (float)margin * (float)d->cell_w + SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
     right_edge = (float)wid * (float)d->cell_w;
     max_w = right_edge - px - (float)d->cell_w * 0.25f;
@@ -878,7 +878,7 @@ static void sdl_render_combat_roll_row_px(sdl_view* d, int y)
 
     /* Left-align the packed line to the visible band. */
     margin = sdl_view_is_overlay_log_pane(d)
-        ? pane_log_overlay_left_margin(wid) : 0;
+        ? sdl_overlay_log_left_margin(wid) : 0;
     px = (float)margin * cell_w_f + SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
     right_edge = (float)wid * cell_w_f;
 

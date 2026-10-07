@@ -1149,9 +1149,16 @@ void sdl_ensure_default_pane_profiles_present(bool enable_new_panes)
         bool changed = sdl_ensure_default_pane_config_entries(
             profile->pane_configs, &profile->pane_count, enable_new_panes);
 
-        if (!changed || profile_index < SDL_PANE_PROFILE_INDEX(
-                SDL_PANE_ORIENTATION_PORTRAIT,
-                SDL_MIN_TERMINAL_NORMAL))
+        if (profile_index >= SDL_PANE_ORIENTATION_PROFILE_COUNT) {
+            /* Big-text defaults already contain every active HUD pane. */
+            for (int i = old_count; i < profile->pane_count; i++)
+                profile->pane_configs[i].enabled = false;
+            continue;
+        }
+        if (!changed
+            || (profile_index % SDL_PANE_ORIENTATION_PROFILE_COUNT)
+                / SDL_MIN_TERMINAL_MODE_COUNT
+                != SDL_PANE_ORIENTATION_PORTRAIT)
         {
             continue;
         }
@@ -1800,6 +1807,54 @@ bool sdl_left_panel_compact_light_span_for_term(const term* t,
     return true;
 }
 
+/* Big-text row mode puts each label above its value.  Keep the original
+ * coloured cells and source rows so character/song/light actions still work. */
+bool sdl_left_panel_compact_big_span_for_term(const term* t,
+    const term_win* scr, int source_row, sdl_left_panel_compact_light_span* out)
+{
+    int label_cols = 0;
+    int text_start;
+    int text_end;
+    int cols;
+
+    if (!out)
+        return false;
+    if (source_row == ROW_LIGHT) {
+        if (!sdl_left_panel_compact_light_span_for_term(t, scr, out))
+            return false;
+        out->packed_width = MAX(out->icon_cols, out->text_width);
+        return true;
+    }
+    if (!t || !scr || source_row < 0 || source_row >= t->hgt
+        || (source_row != ROW_HP && source_row != ROW_SP)
+        || !scr->c || !scr->c[source_row])
+    {
+        return false;
+    }
+
+    cols = MIN(LEFT_PANEL_CONTENT_WID, t->wid);
+    while (label_cols < cols && scr->c[source_row][label_cols] != ' '
+        && scr->c[source_row][label_cols] != '\0')
+        label_cols++;
+    text_start = label_cols;
+    while (text_start < cols && scr->c[source_row][text_start] == ' ')
+        text_start++;
+    text_end = cols;
+    while (text_end > text_start
+        && (scr->c[source_row][text_end - 1] == ' '
+            || scr->c[source_row][text_end - 1] == '\0'))
+        text_end--;
+    if (label_cols <= 0 || text_end <= text_start)
+        return false;
+    *out = (sdl_left_panel_compact_light_span){
+        .icon_cols = label_cols,
+        .text_start = text_start,
+        .text_width = text_end - text_start,
+        .packed_width = MAX(label_cols, text_end - text_start),
+    };
+    return true;
+}
+
 int sdl_left_panel_compact_source_row_width_for_view(
     const sdl_view* view, int source_row, bool row_mode)
 {
@@ -1809,7 +1864,7 @@ int sdl_left_panel_compact_source_row_width_for_view(
         return 12;
     }
 
-    if (row_mode && source_row == ROW_LIGHT) {
+    if (row_mode && (source_row == ROW_LIGHT || get_sdl_bigger_font())) {
         sdl_left_panel_compact_light_span span;
         const term* source_term;
 
@@ -1818,9 +1873,11 @@ int sdl_left_panel_compact_source_row_width_for_view(
 
         source_term = sdl_left_panel_source_term_for_view(view,
             source_row + 1);
-        if (source_term
-            && sdl_left_panel_compact_light_span_for_term(source_term,
-                source_term->scr, &span))
+        if (source_term && (get_sdl_bigger_font()
+                ? sdl_left_panel_compact_big_span_for_term(source_term,
+                    source_term->scr, source_row, &span)
+                : sdl_left_panel_compact_light_span_for_term(source_term,
+                    source_term->scr, &span)))
         {
             return span.packed_width;
         }
@@ -1838,15 +1895,20 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
     int max_cols = 0;
     int output_row = 0;
     int row_cols = 0;
+    int row_height;
     bool row_mode;
 
     if (!metrics)
         return;
 
     row_mode = sdl_left_panel_compact_row_mode();
+    row_height = row_mode && get_sdl_bigger_font() ? 2 : 1;
     if (view) {
         int cell_h = sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL);
-        row_cols = MAX(1, view->rect.w / MAX(1, cell_h / 2)
+        int visual_w = view->cell_w > 0
+            ? (view->rect.w / view->cell_w) * view->cell_w : view->rect.w;
+
+        row_cols = MAX(1, (visual_w - 1) / MAX(1, cell_h / 2)
             - (sdl_left_panel_pane_has_border_columns() ? 2 : 0));
     }
     if (!row_mode && get_sdl_left_panel_compact_health_bar())
@@ -1869,11 +1931,12 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
 
         metrics->compact_source_rows[i] = source_rows[i];
         metrics->compact_widths[i] = width;
+        metrics->compact_heights[i] = row_height;
         if (row_mode) {
             if (row_cols > 0 && next_col > 0 && next_col + width > row_cols) {
                 max_cols = MAX(max_cols, next_col - 1);
                 next_col = 0;
-                output_row++;
+                output_row += row_height;
             }
             metrics->compact_output_rows[i] = output_row;
             metrics->compact_output_cols[i] = next_col;
@@ -1887,7 +1950,7 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
     }
 
     if (row_mode) {
-        metrics->panel_rows = output_row + 1;
+        metrics->panel_rows = output_row + row_height;
         metrics->content_cols = MAX(max_cols, next_col > 0 ? next_col - 1 : 1);
     } else {
         metrics->panel_rows = metrics->compact_segment_count;
@@ -2525,6 +2588,19 @@ bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols,
         start_row, rows);
 }
 
+int sdl_overlay_log_left_margin(int term_cols)
+{
+    for (int i = 0; i < pane_config_count; i++) {
+        if (config.bigger_font && pane_config[i].pane == PANE_ROLLS
+            && (pane_config[i].where == PLACE_TOP_CENTER
+                || pane_config[i].where == PLACE_BOTTOM_CENTER))
+        {
+            return 0;
+        }
+    }
+    return pane_log_overlay_left_margin(term_cols);
+}
+
 bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols,
     int* start_row, int* rows)
 {
@@ -2563,7 +2639,7 @@ bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols,
     pad = view->cell_w / 8;
     if (pad < 2)
         pad = 2;
-    blit_off = (float)(pane_log_overlay_left_margin(view->cols) * view->cell_w
+    blit_off = (float)(sdl_overlay_log_left_margin(view->cols) * view->cell_w
         - pad);
     if (blit_off < 0.0f)
         blit_off = 0.0f;
@@ -2609,7 +2685,7 @@ bool sdl_overlay_log_pane_current_rect(SDL_Rect* out_rect)
     pad = view->cell_w / 8;
     if (pad < 2)
         pad = 2;
-    blit_off = (float)(pane_log_overlay_left_margin(view->cols) * view->cell_w
+    blit_off = (float)(sdl_overlay_log_left_margin(view->cols) * view->cell_w
         - pad);
     if (blit_off < 0.0f)
         blit_off = 0.0f;
@@ -4198,13 +4274,6 @@ int sdl_build_active_pane_config(struct pane_config* active, bool include_side,
         is_overlay_menu_pane = (effective.pane == PANE_OVERLAY_MENU);
         is_overlay_log_pane = effective.pane == PANE_ROLLS
             && pane_placement_is_overlay(where);
-#if SIL_SDL_MOBILE_BUILD
-        /* Larger phone text needs a short live feed, leaving the dungeon
-         * visible. Full messages and complete rolls remain in History. */
-        if (is_overlay_log_pane && config.bigger_font
-            && sdl_mobile_portrait_layout_active())
-            effective.rect.rows = MIN(effective.rect.rows, 3);
-#endif
         is_status_depth_pane = (effective.pane == PANE_STATUS_DEPTH);
 
         if (effective.pane == PANE_MAIN_MENU)
@@ -4534,10 +4603,14 @@ bool sdl_prune_unusable_panes(struct pane_config* active,
         }
         if (type == PANE_COMBAT && min_rows > PANE_COMBAT_OVERLAY_MIN_ROWS)
             min_rows = PANE_COMBAT_OVERLAY_MIN_ROWS;
-        if (sdl_mobile_portrait_layout_active() && type == PANE_ROLLS) {
-            /* Portrait intentionally wraps the log inside the narrower
-             * right column instead of requiring the landscape combat width. */
-            min_cols = 12;
+        if (type == PANE_ROLLS
+            && (sdl_mobile_portrait_layout_active()
+                || (config.bigger_font && (pc->where == PLACE_TOP_CENTER
+                    || pc->where == PLACE_BOTTOM_CENTER)))) {
+            /* Centered logs wrap across the available screen width. Portrait
+             * corner logs can use a narrower band than the landscape log. */
+            min_cols = config.bigger_font && (pc->where == PLACE_TOP_CENTER
+                || pc->where == PLACE_BOTTOM_CENTER) ? 1 : 12;
         }
 
         if (cols >= min_cols && rows >= min_rows)
@@ -4704,6 +4777,17 @@ void sdl_apply_dynamic_auto_pane_sizes(struct pane_config* active,
 
     sdl_apply_dynamic_inventory_pane_size(active, active_count);
     sdl_apply_dynamic_supply_pane_size(active, active_count);
+
+    for (int i = 0; i < active_count; i++) {
+        if (config.bigger_font && active[i].pane == PANE_ROLLS
+            && (active[i].where == PLACE_TOP_CENTER
+                || active[i].where == PLACE_BOTTOM_CENTER))
+        {
+            int cell_w = MAX(1, cell_widths[PANE_ROLLS]);
+
+            active[i].rect.cols = MAX(1, (screen->w + cell_w - 1) / cell_w);
+        }
+    }
 
     for (int i = 0; i < active_count; i++) {
         if (!active[i].enabled)

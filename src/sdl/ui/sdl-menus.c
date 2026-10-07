@@ -591,7 +591,7 @@ int sdl_narrative_banner_overlay_log_left(void)
     if (view->cell_w <= 0 || view->cols <= 0)
         return 0;
 
-    margin = pane_log_overlay_left_margin(view->cols);
+    margin = sdl_overlay_log_left_margin(view->cols);
     if (margin <= 0)
         return 0;
 

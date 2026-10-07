@@ -291,6 +291,7 @@ typedef struct sdl_left_panel_metrics {
     int compact_output_cols[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
     int compact_output_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
     int compact_widths[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_heights[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
 } sdl_left_panel_metrics;
 
 typedef struct sdl_left_panel_compact_light_span {
@@ -1813,6 +1814,8 @@ bool sdl_left_panel_content_size_for_scratch(const sdl_view* view, int source_ro
 int sdl_left_panel_source_row_width_for_term(const term* t, int source_row);
 int sdl_left_panel_source_row_width_for_view(const sdl_view* view, int source_row);
 bool sdl_left_panel_compact_light_span_for_term(const term* t, const term_win* scr, sdl_left_panel_compact_light_span* out);
+bool sdl_left_panel_compact_big_span_for_term(const term* t,
+    const term_win* scr, int source_row, sdl_left_panel_compact_light_span* out);
 int sdl_left_panel_compact_source_row_width_for_view( const sdl_view* view, int source_row, bool row_mode);
 void sdl_left_panel_compact_metrics_for_view(const sdl_view* view, sdl_left_panel_metrics* metrics);
 bool sdl_left_panel_metrics_for_view(const sdl_view* view, sdl_left_panel_metrics* metrics);
@@ -1836,6 +1839,7 @@ int sdl_left_panel_source_row_for_output_row(int output_row);
 bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
+int sdl_overlay_log_left_margin(int term_cols);
 int sdl_map_overlay_map_coverages(int max_rects, int* start_cols, int* cols, int* start_rows, int* rows);
 bool sdl_overlay_stack_visible_rect(enum pane_type pane, SDL_Rect* out);
 bool sdl_overlay_log_pane_current_rect(SDL_Rect* out_rect);

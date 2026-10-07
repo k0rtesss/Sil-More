@@ -199,7 +199,16 @@ bool get_sdl_bigger_font(void)
 
 void set_sdl_bigger_font(bool value)
 {
+    int saved_zoom_scale;
+
+    if (config.bigger_font == value)
+        return;
+
+    saved_zoom_scale = g_main_view_zoom_scale;
+    sdl_store_active_pane_profile(config.min_terminal_mode);
     config.bigger_font = value;
+    sdl_apply_stored_pane_profile(config.min_terminal_mode);
+    g_main_view_zoom_scale = saved_zoom_scale;
     g_state.need_present = true;
 }
 

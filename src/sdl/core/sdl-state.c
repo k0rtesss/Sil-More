@@ -187,12 +187,14 @@ static int sdl_pane_profile_index_for_mode(int mode)
         return -1;
 
 #if SIL_SDL_MOBILE_BUILD
-    return SDL_PANE_PROFILE_INDEX(config.mobile_portrait_mode
+    return SDL_PANE_FONT_PROFILE_INDEX(config.bigger_font,
+        config.mobile_portrait_mode
             ? SDL_PANE_ORIENTATION_PORTRAIT
             : SDL_PANE_ORIENTATION_LANDSCAPE,
         mode);
 #else
-    return SDL_PANE_PROFILE_INDEX(SDL_PANE_ORIENTATION_LANDSCAPE, mode);
+    return SDL_PANE_FONT_PROFILE_INDEX(config.bigger_font,
+        SDL_PANE_ORIENTATION_LANDSCAPE, mode);
 #endif
 }
 
@@ -255,7 +257,8 @@ void sdl_store_active_pane_profile(int mode)
         int other_orientation = config.mobile_portrait_mode
             ? SDL_PANE_ORIENTATION_LANDSCAPE
             : SDL_PANE_ORIENTATION_PORTRAIT;
-        int other_index = SDL_PANE_PROFILE_INDEX(other_orientation, mode);
+        int other_index = SDL_PANE_FONT_PROFILE_INDEX(config.bigger_font,
+            other_orientation, mode);
 
         g_pane_profiles[other_index].main_view_scale = config.main_view_scale;
     }
@@ -337,6 +340,16 @@ void sdl_seed_all_pane_profiles_from_active(void)
         g_pane_profiles[portrait] = base;
         sdl_pane_profile_apply_portrait_defaults(
             &g_pane_profiles[portrait]);
+        for (int orientation = 0;
+             orientation < SDL_PANE_ORIENTATION_COUNT; orientation++)
+        {
+            int normal = SDL_PANE_PROFILE_INDEX(orientation, mode);
+            int bigger = SDL_PANE_FONT_PROFILE_INDEX(true, orientation, mode);
+
+            g_pane_profiles[bigger] = g_pane_profiles[normal];
+            sdl_pane_profile_apply_bigger_font_defaults(
+                &g_pane_profiles[bigger]);
+        }
     }
 }
 
@@ -711,6 +724,13 @@ void sdl_reset_config_to_resolution_defaults(int screen_width,
             (float)default_main_scales[mode];
         g_pane_profiles[portrait].main_view_scale =
             default_main_scales[mode];
+        for (int orientation = 0;
+             orientation < SDL_PANE_ORIENTATION_COUNT; orientation++)
+        {
+            int bigger = SDL_PANE_FONT_PROFILE_INDEX(true, orientation, mode);
+
+            g_pane_profiles[bigger].main_view_scale = default_main_scales[mode];
+        }
     }
     sdl_log_pane_sync_display_filter_from_config();
 

@@ -252,7 +252,7 @@ bool sdl_left_panel_source_cell_rect(int col, int row, int cols,
                         + (float)(metrics.compact_output_rows[i]
                             * metrics.cell_h),
                     .w = (float)((c1 - c0) * metrics.cell_w),
-                    .h = (float)metrics.cell_h,
+                    .h = (float)(metrics.cell_h * metrics.compact_heights[i]),
                 };
                 sdl_merge_frect_bounds(&r, &have, &x1, &y1, &x2, &y2);
             }
@@ -554,7 +554,8 @@ bool sdl_main_view_point_to_cell(float x, float y, int* out_col, int* out_row)
                     int seg_col = metrics.compact_output_cols[i];
                     int seg_row = metrics.compact_output_rows[i];
 
-                    if (*out_row != seg_row)
+                    if (*out_row < seg_row
+                        || *out_row >= seg_row + metrics.compact_heights[i])
                         continue;
                     if (*out_col < seg_col
                         || *out_col >= seg_col + metrics.compact_widths[i])

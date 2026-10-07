@@ -2992,6 +2992,7 @@ extern bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols,
     int* start_row, int* rows);
 extern bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols,
     int* start_row, int* rows);
+extern int sdl_overlay_log_left_margin(int term_cols);
 extern int sdl_map_overlay_map_coverages(int max_rects, int* start_cols,
     int* cols, int* start_rows, int* rows);
 extern void binding_action_label(int binding, char* buf, size_t buflen);
