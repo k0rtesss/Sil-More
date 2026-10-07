@@ -983,6 +983,9 @@ bool sdl_pointer_activate_welcome_screen_at(float x, float y)
     if (sdl_touch_pane_point_to_slot(x, y, &slot) && slot >= 0)
         return false;
 
+    if (sdl_standalone_screen_handle_pointer(x, y, UI_MENU_CLICK_PRIMARY))
+        return true;
+
     (void)sdl_narrative_portrait_transform_pointer(&x, &y);
 
     if (g_sdl_welcome_screen.mode == SDL_WELCOME_SCREEN_MENU
@@ -996,8 +999,11 @@ bool sdl_pointer_activate_welcome_screen_at(float x, float y)
     return true;
 }
 
+static bool g_welcome_pager_dragged;
+
 void sdl_welcome_touch_cancel_press(void)
 {
+    g_welcome_pager_dragged = false;
     g_welcome_touch_press.active = false;
     g_welcome_touch_press.finger_id = 0;
     g_welcome_touch_press.start_x = 0.0f;
@@ -1056,6 +1062,14 @@ bool sdl_welcome_touch_handle_pointer_motion(float x, float y,
     if (dx <= threshold && dy <= threshold)
         return true;
 
+    if (dy >= dx && sdl_standalone_screen_handle_key(raw_dy < 0 ? ']' : '[')) {
+        g_welcome_pager_dragged = true;
+        g_welcome_touch_press.start_x = x;
+        g_welcome_touch_press.start_y = y;
+        return true;
+    }
+    if (g_welcome_pager_dragged) return true;
+
     start_x = g_welcome_touch_press.start_x;
     start_y = g_welcome_touch_press.start_y;
     sdl_welcome_touch_cancel_press();
@@ -1079,11 +1093,17 @@ bool sdl_welcome_touch_handle_pointer_up(float x, float y,
     float dy;
     float threshold;
     Uint64 elapsed;
+    float raw_x = x, raw_y = y;
 
     if (!g_welcome_touch_press.active
         || g_welcome_touch_press.finger_id != finger_id)
     {
         return false;
+    }
+
+    if (g_welcome_pager_dragged) {
+        sdl_welcome_touch_cancel_press();
+        return true;
     }
 
     (void)sdl_narrative_portrait_transform_pointer(&x, &y);
@@ -1110,7 +1130,7 @@ bool sdl_welcome_touch_handle_pointer_up(float x, float y,
     if (!g_sdl_blocking_key_wait || !sdl_screen_shows_welcome_screen())
         return true;
 
-    (void)sdl_pointer_activate_welcome_screen_at(x, y);
+    (void)sdl_pointer_activate_welcome_screen_at(raw_x, raw_y);
     return true;
 }
 

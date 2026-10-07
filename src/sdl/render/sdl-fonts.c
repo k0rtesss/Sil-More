@@ -7,6 +7,34 @@ int sdl_ui_font_px(int normal_px)
     return config.bigger_font ? normal_px + (normal_px + 1) / 2 : normal_px;
 }
 
+float sdl_ui_density_scale(void)
+{
+    float density = 0.0f;
+    if (g_state.window) {
+        SDL_DisplayID display = SDL_GetDisplayForWindow(g_state.window);
+        if (display)
+            density = SDL_GetDisplayContentScale(display);
+    }
+    if (density <= 0.0f)
+        density = g_state.system_scale;
+    return density > 0.0f ? density : 1.0f;
+}
+
+/* Phone text is sized in logical display units, not in a percentage of the
+ * framebuffer. Resolve the 150% setting once, before measuring or wrapping. */
+int sdl_ui_role_font_px(enum sdl_ui_font_role role)
+{
+    int logical_px = role == SDL_UI_FONT_TITLE ? 20
+        : role == SDL_UI_FONT_META ? 14 : 16;
+    return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
+        * sdl_ui_font_px(logical_px)));
+}
+
+int sdl_ui_min_tap_px(void)
+{
+    return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * 48.0f));
+}
+
 static Uint64 g_story_font_use_clock;
 
 static void sdl_story_font_cache_changed(void)
@@ -1160,9 +1188,15 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
     Uint64 canvas_ns;
     Uint8 bg_alpha;
     bool atlas_was_cached;
+    int menu_font_px = scale ? sdl_terminal_menu_font_px() : 0;
     log_debug("view rect=(%d %d %d %d)", rect.x, rect.y, rect.w, rect.h);
 
-    if (scale) {
+    if (menu_font_px > 0) {
+        /* Full-screen text menus use their own readable font size.  Map
+         * square/minimum-terminal fitting must not shrink menu text. */
+        d->cell_h = menu_font_px;
+        d->cell_w = MAX(1, menu_font_px / 2);
+    } else if (scale) {
         // Integer scaling mode.
 #if defined(__ANDROID__) || defined(SIL_IOS)
         int requested_scale = scale;
@@ -1255,7 +1289,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         quit("sdl_view_create: font_size and scale cannot both be zero");
     }
 
-    if (scale && config.bigger_font) {
+    if (scale && !menu_font_px && config.bigger_font) {
         d->cell_h = sdl_ui_font_px(d->cell_h);
         d->cell_w = d->cell_h / 2;
     }

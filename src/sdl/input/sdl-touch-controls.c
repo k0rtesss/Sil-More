@@ -751,7 +751,8 @@ static bool sdl_touch_thumb_floor_action_label(int binding, char* label,
     }
     if (kind == FLOOR_CONTEXT_ACTION_ITEMS)
     {
-        SDL_strlcpy(label, "Description", label_len);
+        SDL_strlcpy(label, SIL_SDL_MOBILE_BUILD ? "Details" : "Description",
+            label_len);
         return true;
     }
 
@@ -1109,8 +1110,14 @@ bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects)
         button_h = ((float)touch_column.h - gap) / 2.0f;
         if (g_mobile_touch_tablet && button_h > (float)touch_column.w)
             button_h = (float)touch_column.w;
+#if SIL_SDL_MOBILE_BUILD
+        button_h = MAX(button_h, (float)sdl_ui_min_tap_px());
+        if (touch_column.w < sdl_ui_min_tap_px())
+            return false;
+#else
         if (button_h < 28.0f)
             return false;
+#endif
         if (out_rects) {
             float column_h = button_h * 2.0f + gap;
             float top = (float)(touch_column.y + touch_column.h) - column_h;
@@ -1177,6 +1184,9 @@ bool sdl_touch_thumb_compute_rects(SDL_FRect* out_rects)
     min_button_h = (float)screen.h / 14.0f;
     if (min_button_h < 40.0f)
         min_button_h = 40.0f;
+#if SIL_SDL_MOBILE_BUILD
+    min_button_h = MAX(min_button_h, (float)sdl_ui_min_tap_px());
+#endif
     max_button_h = (float)screen.h / 5.0f;
 
     if (avail < min_button_h * 2.0f + inner_gap)
@@ -1281,6 +1291,10 @@ static bool sdl_touch_thumb_compute_runtime_rects(
             grid_w = (float)MAX(left_region.x + left_region.w,
                 right_region.x + right_region.w) - grid_x;
             preferred_w = base[0].w;
+#if SIL_SDL_MOBILE_BUILD
+            preferred_w = MAX(preferred_w,
+                (float)sdl_ui_role_font_px(SDL_UI_FONT_CONTROL) * 5.0f);
+#endif
             columns = (int)((grid_w + gap) / (preferred_w + gap));
             if (columns < 1)
                 columns = 1;
@@ -1289,7 +1303,11 @@ static bool sdl_touch_thumb_compute_runtime_rects(
             /* Description actions may use the combined portrait control width.
              * Prefer four across when every target remains comfortably sized. */
             four_column_w = (grid_w - gap * 3.0f) / 4.0f;
-            if (set.count >= 4 && four_column_w >= 48.0f)
+            if (set.count >= 4 && four_column_w >=
+                    (SIL_SDL_MOBILE_BUILD
+                        ? MAX((float)sdl_ui_min_tap_px(),
+                            (float)sdl_ui_role_font_px(SDL_UI_FONT_CONTROL) * 5.0f)
+                        : 48.0f))
                 columns = 4;
             rows = (set.count + columns - 1) / columns;
             button_w = (grid_w - gap * (float)(columns - 1))
@@ -1301,6 +1319,13 @@ static bool sdl_touch_thumb_compute_runtime_rects(
                     - gap * (float)(rows - 1)) / (float)rows;
                 grid_h = (float)left_region.h;
             }
+#if SIL_SDL_MOBILE_BUILD
+            /* The description reserves these actual bounds; grow the dock
+             * upward rather than making extra actions too small to tap. */
+            button_h = MAX(button_h, MAX((float)sdl_ui_min_tap_px(),
+                (float)sdl_ui_role_font_px(SDL_UI_FONT_CONTROL) * 2.9f + 4.0f));
+            grid_h = button_h * (float)rows + gap * (float)(rows - 1);
+#endif
             grid_y = (float)(left_region.y + left_region.h) - grid_h;
 
             if (button_h <= 0.0f || button_w <= 0.0f)
@@ -1325,6 +1350,12 @@ static bool sdl_touch_thumb_compute_runtime_rects(
             float button_h = (column_h - gap * (float)(set.count - 1))
                 / (float)set.count;
 
+#if SIL_SDL_MOBILE_BUILD
+            button_h = MAX(button_h, MAX((float)sdl_ui_min_tap_px(),
+                (float)sdl_ui_role_font_px(SDL_UI_FONT_CONTROL) * 2.9f + 4.0f));
+            base[0].y = base[1].y + base[1].h
+                - button_h * (float)set.count - gap * (float)(set.count - 1);
+#endif
             if (button_h <= 0.0f)
                 return false;
             for (int slot = 0; slot < set.count; slot++) {
@@ -1363,6 +1394,10 @@ static bool sdl_touch_thumb_compute_runtime_rects(
         min_button_h = (float)screen.h / 14.0f;
         if (min_button_h < 40.0f)
             min_button_h = 40.0f;
+#if SIL_SDL_MOBILE_BUILD
+        min_button_h = MAX(min_button_h, MAX((float)sdl_ui_min_tap_px(),
+            (float)sdl_ui_role_font_px(SDL_UI_FONT_CONTROL) * 2.9f + 4.0f));
+#endif
         max_button_h = (float)screen.h / 5.0f;
 
         rows_fit = (int)((available_h + gap) / (min_button_h + gap));
@@ -1585,7 +1620,11 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
             sdl_touch_thumb_description_open(),
             NULL, ctx, sizeof(ctx)))
     {
-        SDL_strlcpy(buf, ctx, buflen);
+        /* The floor inspector needs a short complete word in the thumb
+         * column.  Its x binding still opens the same description. */
+        SDL_strlcpy(buf, SIL_SDL_MOBILE_BUILD && strcmp(ctx, "Description") == 0
+                ? "Details" : ctx,
+            buflen);
         return;
     }
     binding_action_short(binding, buf, buflen);
@@ -1600,7 +1639,7 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
     bool active = pressed || flashed;
     int tap_binding = sdl_touch_thumb_button_binding(index, false);
     int long_binding = sdl_touch_thumb_button_binding(index, true);
-    char label[32];
+    char label[128];
     char* detail;
 
     /* Translucent body + border, in the style of the movement button-wheel. */
@@ -1622,6 +1661,17 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
 
     text.a = active ? 255 : 245;
     sdl_touch_context_label_for_binding(tap_binding, label, sizeof(label));
+#if SIL_SDL_MOBILE_BUILD
+    if (long_binding != GAMEPAD_BIND_NONE) {
+        char long_label[64];
+        sdl_touch_context_label_for_binding(long_binding, long_label,
+            sizeof(long_label));
+        SDL_strlcat(label, "\n", sizeof(label));
+        SDL_strlcat(label, long_label, sizeof(label));
+    }
+    sdl_touch_pane_draw_button_text_scaled(rect, label, NULL, text, 0, 0);
+    return;
+#endif
     detail = sdl_touch_thumb_description_open() ? strstr(label, " (") : NULL;
 
     if (long_binding != GAMEPAD_BIND_NONE) {
@@ -5177,6 +5227,15 @@ static float sdl_touch_top_panel_available_width(const SDL_Rect* screen,
     return MAX(1.0f, right - left);
 }
 
+#if SIL_SDL_MOBILE_BUILD
+static float sdl_touch_top_panel_min_button_size(void)
+{
+    /* Icon targets are physical controls; font accessibility must not
+     * inflate the whole toolbar or consume the movement wheel's space. */
+    return (float)sdl_ui_min_tap_px();
+}
+#endif
+
 static void sdl_touch_top_panel_button_metrics_for_size(float size,
     float* out_button_size, float* out_gap)
 {
@@ -5190,11 +5249,11 @@ static void sdl_touch_top_panel_button_metrics_for_size(float size,
     icon_size = (float)TILE_SIZE * size;
 
 #if SIL_SDL_MOBILE_BUILD
-    button_size = sdl_touch_pane_clampf(icon_size * 2.75f, 76.0f, 112.0f);
-    if (size > SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT) {
-        button_size += (size - SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT) * 12.0f;
-    }
-    gap = sdl_touch_pane_clampf(button_size * 0.12f, 8.0f, 18.0f);
+    /* Physical touch size follows display density, independently of the
+     * gameplay grid and font accessibility setting. */
+    button_size = MAX(sdl_touch_top_panel_min_button_size(),
+        56.0f * sdl_ui_density_scale() * size / SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT);
+    gap = 4.0f * sdl_ui_density_scale();
 #else
     float pad = sdl_touch_pane_clampf(icon_size * 0.18f, 6.0f, 14.0f);
 
@@ -5252,6 +5311,24 @@ int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen)
     available_w = (float)screen->w - side_margin * 2.0f;
     if (available_w <= 0.0f)
         return 0;
+
+#if SIL_SDL_MOBILE_BUILD
+    {
+        float minimum = sdl_touch_top_panel_min_button_size();
+        int fit_columns = MAX(1, (int)((available_w + gap) / (minimum + gap)));
+        if (columns > fit_columns) {
+            columns = fit_columns;
+            rows = (active_count + columns - 1) / columns;
+        }
+        if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+            button_size = (available_w - gap * (columns - 1)) / columns;
+        else
+            button_size = MIN(button_size,
+                (available_w - gap * (columns - 1)) / columns);
+        panel_h = button_size * rows + gap * (rows - 1);
+        return (int)SDL_ceilf(panel_h);
+    }
+#endif
 
     /*
      * Stretch's gap depends on the fitted button size.  Resolve that small
@@ -5365,6 +5442,9 @@ static bool sdl_touch_top_panel_fit_horizontal_stretch(
         float candidate = (low + high) * 0.5f;
         float candidate_gap = sdl_touch_pane_clampf(candidate * 0.10f,
             6.0f, 18.0f);
+#if SIL_SDL_MOBILE_BUILD
+        candidate_gap = 4.0f * sdl_ui_density_scale();
+#endif
         float grid_w = candidate * (float)columns
             + candidate_gap * (float)(columns - 1);
         float grid_h = candidate * (float)rows
@@ -5479,6 +5559,52 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* s
     configured_size = get_sdl_touch_top_panel_size();
     sdl_touch_top_panel_button_metrics_for_size(configured_size,
         &button_size, &gap);
+
+#if SIL_SDL_MOBILE_BUILD
+    {
+        float minimum = sdl_touch_top_panel_min_button_size();
+        float preferred = button_size;
+        int first_columns = columns;
+        bool fitted = false;
+
+        /* Preserve the configured rows when they leave full touch targets.
+         * Otherwise add rows (or columns for a vertical bar), never shrink
+         * actions below the physical minimum or remove configured slots. */
+        for (int attempt = 0; attempt < active_count; ++attempt) {
+            int candidate_columns = vertical ? first_columns + attempt
+                                             : first_columns - attempt;
+            if (candidate_columns < 1 || candidate_columns > active_count)
+                break;
+            int candidate_rows = (active_count + candidate_columns - 1)
+                / candidate_columns;
+            if (!sdl_touch_top_panel_fit_horizontal_stretch(screen, anchor,
+                    where, candidate_columns, candidate_rows, max_panel_w,
+                    max_panel_h, &button_size, &gap, &panel)
+                || button_size + 0.01f < minimum)
+                continue;
+            columns = candidate_columns;
+            rows = candidate_rows;
+            button_size = MAX(button_size, minimum);
+            if (configured_size != SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+                float left;
+                float right;
+                button_size = MIN(button_size, preferred);
+                panel_w = button_size * columns + gap * (columns - 1);
+                panel_h = button_size * rows + gap * (rows - 1);
+                panel = sdl_overlay_panel_rect(anchor, where,
+                    (int)SDL_ceilf(panel_w), (int)SDL_ceilf(panel_h), screen);
+                sdl_touch_top_panel_available_width(screen, where, panel.y,
+                    panel_h, gap, &left, &right);
+                panel.x = sdl_touch_pane_clampf(panel.x, left, right - panel.w);
+            }
+            fitted = true;
+            break;
+        }
+        if (!fitted)
+            return false;
+        goto panel_ready;
+    }
+#endif
 
     /*
      * A fixed landscape panel is normally scaled with the main view.  If that
@@ -6026,6 +6152,27 @@ static bool sdl_touch_top_panel_render_vector_icon(int binding,
         color.a);
 
     switch (binding) {
+#if SIL_SDL_MOBILE_BUILD
+    case 'o':
+    case 'c':
+        /* Door actions remain recognizable without a multi-line word inside
+         * a dense icon cell.  Tooltips retain the full action description. */
+        box = (SDL_FRect){ x + w * .23f, y + h * .14f,
+            w * .54f, h * .72f };
+        SDL_RenderRect(g_state.renderer, &box);
+        if (binding == 'o') {
+            SDL_RenderLine(g_state.renderer, x + w * .48f, y + h * .34f,
+                x + w * .68f, cy);
+            SDL_RenderLine(g_state.renderer, x + w * .68f, cy,
+                x + w * .48f, y + h * .66f);
+        } else {
+            SDL_RenderLine(g_state.renderer, x + w * .37f, y + h * .34f,
+                x + w * .63f, y + h * .66f);
+            SDL_RenderLine(g_state.renderer, x + w * .63f, y + h * .34f,
+                x + w * .37f, y + h * .66f);
+        }
+        return true;
+#endif
     case 'j':
         box = (SDL_FRect){ x + w * 0.19f, y + h * 0.42f,
             w * 0.62f, h * 0.34f };
@@ -6089,6 +6236,25 @@ static bool sdl_touch_top_panel_render_vector_icon(int binding,
         return false;
     }
 }
+
+#if SIL_SDL_MOBILE_BUILD
+static cptr sdl_touch_top_panel_fitting_fallback(const SDL_FRect* rect,
+    int binding, cptr label, char* glyph, size_t glyph_len)
+{
+    TTF_Font* font = sdl_story_font_for_height_slot(
+        sdl_ui_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+    int width = 0;
+    int height = 0;
+    (void)sdl_ui_wrapped_text_texture(font, label,
+        MAX(1, (int)rect->w - 6), g_state.palette[TERM_WHITE], &width, &height);
+    if (height <= rect->h - 4)
+        return label;
+    /* A keyboard glyph identifies the same binding when its word needs more
+     * room than the icon cell.  Keep the Control font and full tooltip. */
+    sdl_touch_pane_binding_symbol(binding, glyph, glyph_len);
+    return glyph;
+}
+#endif
 
 static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
     int binding, SDL_Color color, bool hover)
@@ -6170,7 +6336,18 @@ static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
         }
     }
 
-    sdl_touch_pane_draw_button_text_scaled(&rect, NULL, fallback, color,
+#if SIL_SDL_MOBILE_BUILD
+    {
+        char glyph[32];
+        fallback = sdl_touch_top_panel_fitting_fallback(button_rect, binding,
+            fallback, glyph, sizeof(glyph));
+        sdl_touch_pane_draw_button_text_scaled(button_rect, NULL, fallback,
+            color, .78f, .82f);
+        return;
+    }
+#endif
+    sdl_touch_pane_draw_button_text_scaled(
+        SIL_SDL_MOBILE_BUILD ? button_rect : &rect, NULL, fallback, color,
 #if SIL_SDL_MOBILE_BUILD
         0.78f, 0.82f
 #else
@@ -6552,7 +6729,7 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
         4.0f, 10.0f);
     max_box_w = (float)screen.w - screen_margin * 2.0f;
     if (persistent) {
-        if (max_box_w > 640.0f)
+        if (!SIL_SDL_MOBILE_BUILD && max_box_w > 640.0f)
             max_box_w = 640.0f;
     } else if (max_box_w > 420.0f) {
         max_box_w = 420.0f;
@@ -6563,7 +6740,7 @@ static void sdl_touch_top_panel_render_tooltip(const SDL_FRect* anchor,
     if (persistent) {
 #if SIL_SDL_MOBILE_BUILD
         control_size = MAX(anchor->h * 0.82f, (float)font_px * 2.20f);
-        control_size = sdl_touch_pane_clampf(control_size, 48.0f, 72.0f);
+        control_size = MAX(control_size, (float)sdl_ui_min_tap_px());
 #else
         control_size = (float)font_px * 1.55f;
         control_size = sdl_touch_pane_clampf(control_size, 30.0f, 42.0f);

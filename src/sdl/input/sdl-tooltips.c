@@ -844,17 +844,16 @@ void sdl_hover_tooltip_clear(void)
 int sdl_object_tooltip_font_px(void)
 {
 #if SIL_SDL_MOBILE_BUILD
-    /* Mobile: enlarge tooltip/character-wheel-description font (3/4 -> 4/5). */
-    int font_size = sdl_auto_font_size_from_main(4, 5);
+    return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
 #else
     int font_size = sdl_auto_font_size_from_main(3, 4);
-#endif
     int font_px = sdl_aux_cell_height_for_font_size(sdl_ui_font_px(font_size));
 
     if (sdl_touch_only_mobile_device_active())
         font_px = MAX(font_px, sdl_main_menu_pane_font_px());
 
     return (font_px > 0) ? font_px : SDL_OBJECT_TOOLTIP_FONT_SIZE;
+#endif
 }
 
 bool sdl_object_tooltip_pointer_hits_term_cell(float x, float y)
@@ -1411,6 +1410,10 @@ void sdl_object_tooltip_render(void)
 
 static int sdl_description_overlay_font_px_for_story(bool story)
 {
+#if SIL_SDL_MOBILE_BUILD
+    (void)story;
+    return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+#endif
     int font_px = get_sdl_terminal_menu_scale() * TILE_SIZE;
 
     if (story)
@@ -2011,6 +2014,10 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
         return false;
 
     header_rows = overlay->interactive ? 1 : 0;
+#if SIL_SDL_MOBILE_BUILD
+    if (overlay->interactive)
+        header_rows = (sdl_ui_min_tap_px() + cell_h - 1) / cell_h;
+#endif
     max_cols = (max_panel_w - pad_x * 2) / cell_w;
     max_rows_no_footer =
         (max_panel_h - pad_y * 2) / cell_h - header_rows;
@@ -2123,6 +2130,9 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (out->close_button)
     {
         float close_size = (float)cell_h;
+#if SIL_SDL_MOBILE_BUILD
+        close_size = MAX(close_size, (float)sdl_ui_min_tap_px());
+#endif
 
         out->close_rect = (SDL_FRect){
             .x = out->panel.x + out->panel.w - (float)pad_x - close_size,

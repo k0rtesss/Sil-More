@@ -65,7 +65,7 @@ enum {
     MINIMAP_MAX_ZOOM_STEP = 8,
     MINIMAP_MAX_TOUCH_FINGERS = 4,
     SDL_STARTUP_ISSUE_MAX = 1024,
-    SDL_TOUCH_YES_NO_MAX_LINES = 8,
+    SDL_TOUCH_YES_NO_MAX_LINES = 64,
     SDL_TOUCH_YES_NO_LINE_LEN = 160,
     SDL_TOUCH_YES_NO_TEXT_LEN = 1024,
     SDL_TOUCH_TUTORIAL_MAX_LINES = 14,
@@ -572,6 +572,7 @@ typedef struct sdl_character_sheet_screen_state {
     int select_trait_rows_hint;
     char select_description[4096];
     char select_title[96];
+    char select_confirm_label[32];
     char select_focus_title[96];
     char select_title_suffix[64];
     byte select_title_suffix_attr;
@@ -2009,6 +2010,15 @@ void sdl_push_description_overlay_full_main_anchor(void);
 void sdl_pop_description_overlay_full_main_anchor(void);
 int sdl_main_menu_pane_font_px(void);
 int sdl_ui_font_px(int normal_px);
+enum sdl_ui_font_role {
+    SDL_UI_FONT_BODY,
+    SDL_UI_FONT_TITLE,
+    SDL_UI_FONT_CONTROL,
+    SDL_UI_FONT_META
+};
+float sdl_ui_density_scale(void);
+int sdl_ui_role_font_px(enum sdl_ui_font_role role);
+int sdl_ui_min_tap_px(void);
 int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen);
 bool sdl_main_menu_pane_context_visible(void);
 const char* sdl_main_menu_mono_font_path(void);
@@ -2173,6 +2183,7 @@ void sdl_select_page_turn_free(void);
 void sdl_character_sheet_screen_reset_select_page(void);
 void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title);
 void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
+void sdl_character_sheet_screen_set_select_confirm_label(cptr label);
 void sdl_character_sheet_screen_begin_book(cptr title);
 void sdl_character_sheet_screen_add_book_paragraph(cptr text);
 void sdl_character_sheet_screen_break_book_page(void);
@@ -3628,6 +3639,7 @@ void sdl_apply_config(void);
 void sdl_apply_config_no_redraw(void);
 int get_sdl_platform_max_main_view_scale(void);
 int get_sdl_terminal_menu_scale(void);
+int sdl_terminal_menu_font_px(void);
 void sdl_push_terminal_menu_scale(void);
 void sdl_pop_terminal_menu_scale(void);
 bool sdl_description_overlay_present(const byte* attrs, const char* chars, const byte* tattrs, const char* tchars, const byte* story, const byte* health, int width, int height, int target_cols, int scroll, bool interactive, int* out_visible_rows, int* out_max_scroll);

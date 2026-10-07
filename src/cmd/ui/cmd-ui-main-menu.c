@@ -19,6 +19,7 @@ extern struct sound_config g_sound_config;
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/story_font.h"
+#include "ui/question.h"
 
 #define MAIN_MENU_LABEL_WIDTH 21
 #define MAIN_MENU_SHORTCUT_WIDTH 6
@@ -431,6 +432,73 @@ static void main_menu_about_draw_spans(int row, int indent, int wrap_right,
     text_out_indent = old_indent;
 }
 
+/* The native book owns wrapping, paging and its Back control. Source credit
+ * lines remain semantic paragraphs, so no terminal footer can erase a tail. */
+static void main_menu_about_mobile_build(const main_menu_about_line* lines)
+{
+    sdl_character_sheet_screen_begin_book("About Sil-More");
+    sdl_character_sheet_screen_set_book_close_button(true);
+    sdl_character_sheet_screen_set_book_close_label("Back");
+    for (int i = 0; lines[i].text; ++i)
+    {
+        byte attr = lines[i].attr;
+        if ((i >= 3 && i <= 8) || i == 15)
+            attr = TERM_YELLOW;
+        sdl_character_sheet_screen_add_book_paragraph_colored(lines[i].text, attr);
+    }
+    sdl_character_sheet_screen_commit_book();
+}
+
+static bool main_menu_mobile_book_wait(void)
+{
+    bool saved_hide_cursor = hide_cursor;
+    bool completed = false;
+    hide_cursor = true;
+    while (1)
+    {
+        int clicked = 0, action = UI_MENU_CLICK_PRIMARY;
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+        int key = inkey();
+        if (ui_menu_click_take_action(&clicked, &action))
+        {
+            ui_menu_click_clear();
+            if (action == UI_MENU_CLICK_HOVER) continue;
+            if (clicked == SDL_SELECT_CLICK_CLOSE) { completed = true; break; }
+            if (clicked == SDL_SELECT_CLICK_PAGE_PREV) key = '4';
+            else if (clicked == SDL_SELECT_CLICK_PAGE_NEXT) key = '6';
+            else continue;
+        }
+        if (key == UI_MENU_CLICK_WAKE_KEY) continue;
+        key = steamdeck_menu_key(key, '4', '6');
+        if (sdl_character_sheet_screen_page_turning()) continue;
+        if (key == ESCAPE || key == 'q' || key == 'Q') break;
+        int page = sdl_character_sheet_screen_select_page();
+        int count = sdl_character_sheet_screen_select_page_count();
+        if (key == '4' && page > 0)
+            sdl_character_sheet_screen_begin_page_turn(-1);
+        else if (key == '8' || key == 'k')
+            (void)sdl_character_sheet_screen_scroll_book(-1);
+        else if (key == '2' || key == 'j')
+            (void)sdl_character_sheet_screen_scroll_book(1);
+        else if (key == '6' || key == ' ' || key == '\r' || key == '\n')
+        {
+            if (page < count - 1) sdl_character_sheet_screen_begin_page_turn(1);
+            else { completed = true; break; }
+        }
+    }
+    hide_cursor = saved_hide_cursor;
+    sdl_character_sheet_screen_hide();
+    ui_menu_click_clear();
+    return completed;
+}
+
+static void main_menu_about_mobile(const main_menu_about_line* lines)
+{
+    main_menu_about_mobile_build(lines);
+    (void)main_menu_mobile_book_wait();
+}
+
 static void main_menu_about(void)
 {
     int wid, hgt;
@@ -475,6 +543,16 @@ static void main_menu_about(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     sdl_push_terminal_menu_scale();
+
+    if (sdl_touch_only_device_active())
+    {
+        main_menu_about_mobile(about_lines);
+        sdl_pop_terminal_menu_scale();
+        screen_pop_supporting_panes_hidden();
+        screen_load();
+        if (p_ptr && p_ptr->playing) sdl_music_stop_main();
+        return;
+    }
 
     Term_get_size(&wid, &hgt);
     if (wid < 1)
@@ -1237,13 +1315,46 @@ static void log_history_wrapped_entry_text(int filter, int idx, char* out,
     log_history_entry_search_text(&log_history_entries[idx], out, out_sz);
 }
 
+static bool log_history_wrap_next(cptr* cursor, int width, char* line,
+    size_t size)
+{
+    cptr text = *cursor;
+    int take = 0, cols = 0, space = -1;
+    if (!text || !*text || size < 2) return false;
+    width = MAX(1, width - 1);
+    while (text[take] && text[take] != '\n')
+    {
+        int bytes = utf8_sequence_len(text + take);
+        int cells = utf8_display_width_n(text + take, bytes);
+        if (cols + cells > width) break;
+        if (text[take] == ' ') space = take;
+        take += bytes;
+        cols += cells;
+    }
+    if (text[take] && text[take] != '\n' && space > 0) take = space;
+    if (!take && text[take] != '\n') take = utf8_sequence_len(text);
+    int copy = MIN(take, (int)size - 1);
+    copy = utf8_safe_prefix_len(text, copy);
+    memcpy(line, text, copy);
+    line[copy] = '\0';
+    text += take;
+    if (*text == '\n') ++text;
+    else while (*text == ' ') ++text;
+    *cursor = text;
+    return true;
+}
+
 static int log_history_wrapped_entry_rows(int filter, int idx, int width)
 {
     char text[256];
     byte attr;
 
     log_history_wrapped_entry_text(filter, idx, text, sizeof(text), &attr);
-    return count_wrapped_lines(text, width, 0);
+    cptr cursor = text;
+    char line[256];
+    int rows = 0;
+    while (log_history_wrap_next(&cursor, width, line, sizeof(line))) ++rows;
+    return MAX(rows, 1);
 }
 
 static void log_history_draw_wrapped_text(int row, int width, byte attr,
@@ -1431,12 +1542,65 @@ static void main_menu_blitz_text_line(int* row, int wrap, byte attr, cptr text)
     *row += count_wrapped_lines(text, wrap, 2) + 1;
 }
 
+static void main_menu_blitz_intro_mobile_build(void)
+{
+    static const main_menu_about_line lines[] = {
+        { TERM_L_WHITE, "Blitz is a self-contained run, played entirely apart from your tale." },
+        { TERM_WHITE, "Use it to play outside of your metaprogress, or to practise freely: nothing you do in Blitz touches your normal tale, saves or score." },
+        { TERM_WHITE, "Blitz keeps its own separate character and score files, so your tale character stays safe and can be resumed at any time." },
+        { TERM_WHITE, "If you already have a living Blitz character, it will be resumed." },
+        { TERM_SLATE, "Switching to Blitz will save your current tale game first." }
+    };
+    sdl_character_sheet_screen_begin_book("Blitz Mode");
+    sdl_character_sheet_screen_set_book_close_button(true);
+    sdl_character_sheet_screen_set_book_close_label("Continue");
+    for (size_t i = 0; i < N_ELEMENTS(lines); ++i)
+        sdl_character_sheet_screen_add_book_paragraph_colored(lines[i].text, lines[i].attr);
+    sdl_character_sheet_screen_commit_book();
+}
+
+static void log_history_draw_wrapped_slice(int row, int width, byte attr,
+    cptr text, cptr highlight, int first_line, int max_rows)
+{
+    cptr cursor = text;
+    char line[256];
+    int index = 0, drawn = 0;
+    while (drawn < max_rows
+        && log_history_wrap_next(&cursor, width, line, sizeof(line)))
+    {
+        if (index++ < first_line) continue;
+        log_history_draw_wrapped_text(row + drawn++, width, attr, line, highlight);
+    }
+}
+
+static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
+{
+    *prompt = MAX(0, hgt - 1 - sdl_touch_menu_button_reserved_rows());
+    *bottom = MAX(0, *prompt - 2);
+    *top = *bottom >= 3 ? 3 : (*bottom >= 2 ? 2 : 0);
+}
+
+static bool main_menu_blitz_confirm_mobile(void)
+{
+    const ui_question_option choices[] = {
+        { 'y', "Yes, save and switch", TERM_L_GREEN, false },
+        { 'n', "No, return to tale", TERM_WHITE, false }
+    };
+    main_menu_blitz_intro_mobile_build();
+    if (!main_menu_mobile_book_wait()) return false;
+    return ui_question_ask_overlay("Switch to Blitz?",
+        "Save your story game and switch to Blitz now?",
+        choices, N_ELEMENTS(choices), UI_QUESTION_GLOBAL,
+        UI_QUESTION_GLOBAL, 1) == 0;
+}
+
 static void do_cmd_start_blitz(void)
 {
     int wid = 80;
     int hgt = 24;
     int row = 2;
     int wrap;
+    bool confirmed;
 
     if (run_mode_is_blitz())
     {
@@ -1459,38 +1623,44 @@ static void do_cmd_start_blitz(void)
     screen_push_touch_pane_hidden();
     sdl_push_terminal_menu_scale();
 
-    Term_clear();
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
+    if (sdl_touch_only_device_active())
+        confirmed = main_menu_blitz_confirm_mobile();
+    else
+    {
+        Term_clear();
+        Term_get_size(&wid, &hgt);
+        if (wid < 1)
+            wid = 80;
+        if (hgt < 1)
+            hgt = 24;
 
-    wrap = MAX(20, wid - 4);
-    c_put_str(TERM_YELLOW, "Blitz Mode", row, MAX((wid - 10) / 2, 0));
-    row += 2;
+        wrap = MAX(20, wid - 4);
+        c_put_str(TERM_YELLOW, "Blitz Mode", row, MAX((wid - 10) / 2, 0));
+        row += 2;
 
-    text_out_hook = text_out_to_screen;
-    text_out_wrap = wrap;
-    text_out_indent = 2;
+        text_out_hook = text_out_to_screen;
+        text_out_wrap = wrap;
+        text_out_indent = 2;
 
-    main_menu_blitz_text_line(&row, wrap, TERM_L_WHITE,
-        "Blitz is a self-contained run, played entirely apart from your "
-        "tale.");
-    main_menu_blitz_text_line(&row, wrap, TERM_WHITE,
-        "Use it to play outside of your metaprogress, or to practise freely: "
-        "nothing you do in Blitz touches your normal tale, saves or score.");
-    main_menu_blitz_text_line(&row, wrap, TERM_WHITE,
-        "Blitz keeps its own separate character and score files, so your tale "
-        "character stays safe and can be resumed at any time.");
-    main_menu_blitz_text_line(&row, wrap, TERM_WHITE,
-        "If you already have a living Blitz character, it will be resumed.");
-    main_menu_blitz_text_line(&row, wrap, TERM_SLATE,
-        "Switching to Blitz will save your current tale game first.");
+        main_menu_blitz_text_line(&row, wrap, TERM_L_WHITE,
+            "Blitz is a self-contained run, played entirely apart from your "
+            "tale.");
+        main_menu_blitz_text_line(&row, wrap, TERM_WHITE,
+            "Use it to play outside of your metaprogress, or to practise freely: "
+            "nothing you do in Blitz touches your normal tale, saves or score.");
+        main_menu_blitz_text_line(&row, wrap, TERM_WHITE,
+            "Blitz keeps its own separate character and score files, so your tale "
+            "character stays safe and can be resumed at any time.");
+        main_menu_blitz_text_line(&row, wrap, TERM_WHITE,
+            "If you already have a living Blitz character, it will be resumed.");
+        main_menu_blitz_text_line(&row, wrap, TERM_SLATE,
+            "Switching to Blitz will save your current tale game first.");
 
-    Term_fresh();
+        Term_fresh();
+        confirmed = get_check_lower("Save your story game and switch to Blitz now? ");
+    }
 
-    if (!get_check_lower("Save your story game and switch to Blitz now? "))
+    if (!confirmed)
     {
         sdl_pop_terminal_menu_scale();
         screen_pop_touch_pane_hidden();
@@ -3077,6 +3247,7 @@ void do_cmd_messages_with_filter(int initial_filter)
     char finder[80];
     int filter = log_history_clamp_filter(initial_filter);
     int hover_filter = -1;
+    int entry_line_top = 0;
 
     /* Clear any active banner before opening message history */
     if (dismiss_active_narrative_banner()) {
@@ -3108,6 +3279,7 @@ void do_cmd_messages_with_filter(int initial_filter)
     {
         int body_top;
         int body_bottom;
+        int prompt_row;
         int visible_rows;
         int max_i;
         int page_rows;
@@ -3119,18 +3291,7 @@ void do_cmd_messages_with_filter(int initial_filter)
         /* Clear screen */
         Term_clear();
 
-        body_top = 3;
-        body_bottom = hgt - 3;
-        if (body_bottom < body_top)
-        {
-            body_top = 2;
-            body_bottom = hgt - 2;
-        }
-        if (body_bottom < body_top)
-        {
-            body_top = 0;
-            body_bottom = hgt - 1;
-        }
+        log_history_layout(hgt, &body_top, &body_bottom, &prompt_row);
 
         visible_rows = body_bottom - body_top + 1;
         if (visible_rows < 1)
@@ -3150,6 +3311,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             i = max_i;
         if (i < 0)
             i = 0;
+        int entry_line_max = n > 0 ? MAX(0,
+            log_history_wrapped_entry_rows(filter, i, wid) - visible_rows) : 0;
+        entry_line_top = MIN(entry_line_top, entry_line_max);
 
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
@@ -3176,11 +3340,14 @@ void do_cmd_messages_with_filter(int initial_filter)
                 i + j, wid);
             int line_y;
 
-            if (used_rows + wrapped_rows > visible_rows)
+            bool continued = j == 0 && wrapped_rows > visible_rows;
+            int drawn_rows = continued
+                ? MIN(visible_rows, wrapped_rows - entry_line_top) : wrapped_rows;
+            if (used_rows + drawn_rows > visible_rows)
                 break;
 
             line_y = notes_mode ? (body_top + used_rows)
-                                : (body_bottom - used_rows - wrapped_rows + 1);
+                                : (body_bottom - used_rows - drawn_rows + 1);
             log_history_wrapped_entry_text(filter, i + j, wrapped_text,
                 sizeof(wrapped_text), &wrapped_attr);
             if (!notes_mode
@@ -3192,10 +3359,11 @@ void do_cmd_messages_with_filter(int initial_filter)
             }
             else
             {
-                log_history_draw_wrapped_text(line_y, wid, wrapped_attr,
-                    wrapped_text, shower);
+                log_history_draw_wrapped_slice(line_y, wid, wrapped_attr,
+                    wrapped_text, shower, continued ? entry_line_top : 0, drawn_rows);
             }
-            used_rows += wrapped_rows;
+            used_rows += drawn_rows;
+            if (continued) { ++j; break; }
         }
 
         range_first = (n > 0) ? (i + 1) : 0;
@@ -3263,18 +3431,18 @@ void do_cmd_messages_with_filter(int initial_filter)
                     variants, N_ELEMENTS(variants));
             }
         }
-        prt(prompt, hgt - 1, 0);
-        ui_menu_click_add_text_token('8', 0, hgt - 1, prompt, "Up");
-        ui_menu_click_add_text_token('2', 0, hgt - 1, prompt, "Down");
-        ui_menu_click_add_text_token('9', 0, hgt - 1, prompt, "PgUp");
-        ui_menu_click_add_text_token('3', 0, hgt - 1, prompt, "PgDn");
-        ui_menu_click_add_text_token('i', 0, hgt - 1, prompt, "filter");
-        ui_menu_click_add_text_token('i', 0, hgt - 1, prompt, "e/i");
-        ui_menu_click_add_text_token('/', 0, hgt - 1, prompt, "/");
-        ui_menu_click_add_text_token('/', 0, hgt - 1, prompt, "find");
-        ui_menu_click_add_text_token('=', 0, hgt - 1, prompt, "=");
-        ui_menu_click_add_text_token('=', 0, hgt - 1, prompt, "highlight");
-        ui_menu_click_add_text_token(ESCAPE, 0, hgt - 1, prompt, "Esc");
+        prt(prompt, prompt_row, 0);
+        ui_menu_click_add_text_token('8', 0, prompt_row, prompt, "Up");
+        ui_menu_click_add_text_token('2', 0, prompt_row, prompt, "Down");
+        ui_menu_click_add_text_token('9', 0, prompt_row, prompt, "PgUp");
+        ui_menu_click_add_text_token('3', 0, prompt_row, prompt, "PgDn");
+        ui_menu_click_add_text_token('i', 0, prompt_row, prompt, "filter");
+        ui_menu_click_add_text_token('i', 0, prompt_row, prompt, "e/i");
+        ui_menu_click_add_text_token('/', 0, prompt_row, prompt, "/");
+        ui_menu_click_add_text_token('/', 0, prompt_row, prompt, "find");
+        ui_menu_click_add_text_token('=', 0, prompt_row, prompt, "=");
+        ui_menu_click_add_text_token('=', 0, prompt_row, prompt, "highlight");
+        ui_menu_click_add_text_token(ESCAPE, 0, prompt_row, prompt, "Esc");
 
         /* Get a command without showing the terminal cursor */
         (void)Term_set_cursor(false);
@@ -3307,6 +3475,7 @@ void do_cmd_messages_with_filter(int initial_filter)
                     }
                     filter = clicked_filter;
                     i = 0;
+                    entry_line_top = 0;
                     continue;
                 }
                 else if (click_action == UI_MENU_CLICK_HOVER)
@@ -3328,6 +3497,7 @@ void do_cmd_messages_with_filter(int initial_filter)
         {
             filter = log_history_previous_filter(filter);
             i = 0;
+            entry_line_top = 0;
             continue;
         }
 
@@ -3335,6 +3505,7 @@ void do_cmd_messages_with_filter(int initial_filter)
         {
             filter = log_history_next_filter(filter);
             i = 0;
+            entry_line_top = 0;
             continue;
         }
 
@@ -3342,6 +3513,7 @@ void do_cmd_messages_with_filter(int initial_filter)
         {
             filter = log_history_next_filter(filter);
             i = 0;
+            entry_line_top = 0;
             continue;
         }
 
@@ -3369,6 +3541,24 @@ void do_cmd_messages_with_filter(int initial_filter)
             case '1': ch = '7'; break;
             default: break;
             }
+        }
+
+        /* Oversized messages keep their continuation inside the reserved body.
+         * Drag/line/page navigation reads the remaining text before moving to
+         * another entry, using the same orientation as the existing log. */
+        if ((ch == '8' || ch == '9' || ch == 'p' || ch == KTRL('P') || ch == ' ')
+            && entry_line_top < entry_line_max)
+        {
+            entry_line_top = MIN(entry_line_max, entry_line_top
+                + (ch == '8' ? 1 : visible_rows));
+            continue;
+        }
+        if ((ch == '2' || ch == '3' || ch == 'n' || ch == KTRL('N'))
+            && entry_line_top > 0)
+        {
+            entry_line_top = MAX(0, entry_line_top
+                - (ch == '2' ? 1 : visible_rows));
+            continue;
         }
 
         /* Hack -- handle show */
@@ -3510,6 +3700,8 @@ void do_cmd_messages_with_filter(int initial_filter)
             /* Go newer (if able) */
             i = (i >= 10) ? (i - 10) : 0;
         }
+
+        if (i != old_i || ch == '1' || ch == '7') entry_line_top = 0;
 
         /* Hack -- Error of some kind */
         if (i == old_i)

@@ -153,6 +153,7 @@ typedef enum smith_ui_scroll_id
     SMITH_SCROLL_ABILITY,
     SMITH_SCROLL_ARTEFACT,
     SMITH_SCROLL_MELT,
+    SMITH_SCROLL_ROOT,
     SMITH_SCROLL_MAX
 } smith_ui_scroll_id;
 
@@ -198,7 +199,7 @@ static int smith_ui_term_hgt(void)
 
 static bool smith_ui_portrait_layout(void)
 {
-    return sdl_mobile_portrait_layout_active();
+    return sdl_mobile_portrait_layout_active() || smith_ui_term_wid() < 60;
 }
 
 static int smith_ui_content_bottom_row(void)
@@ -1148,6 +1149,16 @@ static void smith_ui_put_cost_line(int index0, byte attr, cptr text)
 
     smith_ui_put_fitted(col, smith_ui_cost_item_row(index0),
         smith_ui_line_width(col), attr, text);
+}
+
+static void smith_ui_draw_cost_heading(int col, int row, int count, byte attr)
+{
+    bool overflow = row + 1 + count > smith_ui_content_bottom_row();
+    cptr label = overflow ? "Cost: more in Details" : "Cost:";
+    smith_ui_put_fitted(col, row, smith_ui_line_width(col),
+        overflow ? TERM_L_BLUE : attr, label);
+    if (overflow && row <= smith_ui_content_bottom_row())
+        ui_menu_click_add_text_token(SMITH_CLICK_CALC, col, row, label, label);
 }
 
 static int smith_ui_column_width(int col);
@@ -4138,8 +4149,8 @@ void prt_object_difficulty(void)
         attr = TERM_SLATE;
     else
         attr = TERM_L_DARK;
-    smith_ui_put_fitted(portrait ? COL_SMT1 : COL_SMT4, cost_title_row,
-        smith_ui_line_width(portrait ? COL_SMT1 : COL_SMT4), attr, "Cost:");
+    smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
+        cost_title_row, costs, attr);
 }
 
 /*
@@ -4795,6 +4806,46 @@ static void smith_report_difficulty(smith_calculation_report* report, int width,
         format("Item difficulty: %d", breakdown->total));
 }
 
+static void smith_report_costs(smith_calculation_report* report, int width,
+    const smithing_cost_type* cost, int turns, bool reforge)
+{
+    smith_report_add(report, width, TERM_WHITE, "");
+    smith_report_add(report, width, TERM_YELLOW, "COMPLETE COSTS");
+    if (reforge)
+        smith_report_add(report, width, TERM_WHITE, "Requires Reforging");
+    const int required[] = { cost->weaponsmith, cost->armoursmith,
+        cost->jeweller, cost->enchantment, cost->artifice, cost->alloy_mastery };
+    const char* names[] = { "Weaponsmith", "Armoursmith", "Jeweller",
+        "Enchantment", "Artifice", "Alloy Mastery" };
+    for (size_t i = 0; i < N_ELEMENTS(required); ++i)
+        if (required[i])
+            smith_report_add(report, width, TERM_RED,
+                format("Requires %s", names[i]));
+    smith_report_add(report, width, TERM_WHITE,
+        format("Forge uses: %d", cost->uses));
+    if (cost->drain)
+        smith_report_add(report, width, TERM_WHITE,
+            format("Smithing ranks: %d", cost->drain));
+    if (cost->mithril)
+        smith_report_add(report, width, TERM_WHITE,
+            format("Mithril: %d.%d lb", cost->mithril / 10,
+                ABS(cost->mithril % 10)));
+    if (cost->star_iron)
+        smith_report_add(report, width, TERM_WHITE,
+            format("Star iron: %d.%d lb", cost->star_iron / 10,
+                ABS(cost->star_iron % 10)));
+    const int stats[] = { cost->str, cost->dex, cost->con, cost->gra };
+    const char* stat_names[] = { "Strength", "Dexterity", "Constitution", "Grace" };
+    for (size_t i = 0; i < N_ELEMENTS(stats); ++i)
+        if (stats[i])
+            smith_report_add(report, width, TERM_WHITE,
+                format("%s: %d", stat_names[i], stats[i]));
+    if (cost->exp)
+        smith_report_add(report, width, TERM_WHITE,
+            format("Experience: %d", cost->exp));
+    smith_report_add(report, width, TERM_WHITE, format("Turns: %d", turns));
+}
+
 static void smith_build_calculation_report(smith_calculation_report* report,
     int width, const object_type* reforge_source)
 {
@@ -4932,6 +4983,27 @@ static void smith_build_calculation_report(smith_calculation_report* report,
         smith_report_add(report, width, TERM_L_GREEN, "Within normal capacity; no Smithing ranks are sacrificed.");
     smith_report_add(report, width, TERM_SLATE,
         "Expertise never removes rank sacrifice. Craft permissions, materials, forge uses and other costs still apply.");
+    smithing_cost_type report_cost = after_cost;
+    if (reforge_source)
+    {
+        smithing_cost_delta_positive(&before_cost, &after_cost, &report_cost);
+        report_cost.uses = 1;
+        report_cost.drain = drain;
+        report_cost.weaponsmith = after_cost.weaponsmith;
+        report_cost.armoursmith = after_cost.armoursmith;
+        report_cost.jeweller = after_cost.jeweller;
+        report_cost.enchantment = after_cost.enchantment;
+        report_cost.artifice = after_cost.artifice;
+        report_cost.alloy_mastery = after_cost.alloy_mastery;
+        if (p_ptr->active_ability[S_SMT][SMT_EXPERTISE])
+        {
+            report_cost.str = report_cost.dex = 0;
+            report_cost.con = report_cost.gra = report_cost.exp = 0;
+        }
+    }
+    int turn_multiplier = p_ptr->active_ability[S_SMT][SMT_EXPERTISE] ? 5 : 10;
+    smith_report_costs(report, width, &report_cost,
+        MAX(10, difficulty * turn_multiplier), reforge_source != NULL);
 }
 
 static void smith_show_calculations(const object_type* reforge_source)
@@ -5887,7 +5959,7 @@ int numbers_menu_aux(int* highlight)
             "decrease protection",
             "increase weight",
             "decrease weight",
-            "cycle alloy (none/mithril/star iron)",
+            "Cycle alloy metal",
             "remove alloy bonus",
             "adjust special bonuses",
         };
@@ -6742,6 +6814,8 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
 
     strnfmt(buf, sizeof(buf), "%d Turns", preview->turns);
     smith_ui_put_cost_line(costs, TERM_SLATE, buf);
+    smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
+        smith_ui_cost_title_row(), costs + 1, attr);
 }
 
 static bool reforge_preview_missing_ability(const reforge_preview_type* preview)
@@ -9109,6 +9183,18 @@ static int smith_root_draw_header(void)
     int row = 0;
     int used;
 
+    if (smith_ui_term_hgt() <= 18 || smith_ui_term_wid() < 55)
+    {
+        smith_ui_put_fitted(col, 0, width, TERM_L_WHITE + TERM_SHADE,
+            "Smithing");
+        strnfmt(status, sizeof(status), at_forge
+                ? "Smithing %d | Forge %d uses" : "Smithing %d | Preview",
+            skill + bonus, uses);
+        smith_ui_put_fitted(col, 1, width, TERM_SLATE, status);
+        ui_menu_click_add_full_row(SMITH_CLICK_BACK, 0);
+        return 2;
+    }
+
     SDL_strlcpy(title, "Smithing - Work of the Forge", sizeof(title));
     if (smith_ui_portrait_layout())
         used = smith_ui_put_wrapped(col, row, width,
@@ -9298,10 +9384,13 @@ static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
 
     header_row = smith_root_draw_header();
     action_row = smith_root_draw_chrome(detail_col, list_w, header_row);
+    int last_row = smith_ui_content_bottom_row();
+    int top = smith_ui_configure_list_view(SMITH_SCROLL_ROOT, SMT_MENU_MAX,
+        highlight, action_row, last_row);
 
-    for (int i = 0; i < SMT_MENU_MAX; i++)
+    for (int i = top; i < SMT_MENU_MAX && action_row + i - top <= last_row; i++)
     {
-        smith_root_draw_action(i + 1, action_row + i, list_w,
+        smith_root_draw_action(i + 1, action_row + i - top, list_w,
             highlight == i + 1, menu_attr[i], labels[i]);
     }
 
@@ -9554,7 +9643,9 @@ int smithing_menu_aux(int* highlight)
 
     /* Place cursor at current choice */
     Term_gotoxy(indexed_menu_prefix_col(COL_SMT1),
-        action_row + *highlight - 1);
+        MAX(action_row, MIN(smith_ui_content_bottom_row(),
+            action_row + *highlight - 1
+                - smith_ui_scroll_top[SMITH_SCROLL_ROOT])));
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;

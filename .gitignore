@@ -43,6 +43,7 @@ compile_commands.json
 /android/app/build/
 /android/local.properties
 /scripts/__pycache__
+/scripts/tests/__pycache__/
 /tools/__pycache__
 /.gradle-android
 /web/ui8-demo/samples

@@ -460,6 +460,9 @@ void settings_ui_fit_text(char* buf, size_t buflen, cptr text,
 static cptr settings_ui_pick_label(int max_chars, cptr long_label,
     cptr medium_label, cptr short_label)
 {
+    if (sdl_character_sheet_screen_active() && get_sdl_bigger_font()
+        && long_label && long_label[0])
+        return long_label;
     cptr labels[3] = { long_label, medium_label, short_label };
 
     for (int i = 0; i < 3; i++)
@@ -489,6 +492,10 @@ static void settings_menu_begin_scroll_area(int list_start_row, int visible_rows
 static void settings_ui_format_pair_line(char* buf, size_t buflen, cptr label,
     cptr value, int max_chars, int min_value_chars)
 {
+    if (sdl_character_sheet_screen_active() && get_sdl_bigger_font()) {
+        strnfmt(buf, buflen, "%s: %s", label ? label : "", value ? value : "");
+        return;
+    }
     char label_buf[128];
     char value_buf[96];
     int desired_value;
@@ -604,6 +611,8 @@ static void settings_ui_format_auto_value(char* buf, size_t buflen, int value,
 
 static bool option_menu_use_compact_layout(void)
 {
+    if (sdl_character_sheet_screen_active() && get_sdl_bigger_font())
+        return false;
     return Term && (Term->wid > 0) && (Term->wid <= 60);
 }
 
@@ -3484,6 +3493,10 @@ void do_cmd_pane_settings(void)
         pane_setting_visible[PANE_SETTING_DEBUG_CHARACTER_SHEET] =
             !get_sdl_bigger_font();
         settings_semantic_menu_begin("General Settings", k);
+        sdl_character_sheet_screen_set_select_confirm_label(
+            k == PANE_SETTING_RESET_ALL ? "Reset"
+            : k >= PANE_SETTING_VIEW_PANE_CONFIGURATION
+                    && k <= PANE_SETTING_OPEN_CONFIG_FILE ? "Open" : "Done");
 
         /* Display current settings */
         char buf[96];
@@ -3540,9 +3553,15 @@ void do_cmd_pane_settings(void)
             get_sdl_terminal_menu_scale_offset());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
+#if defined(__ANDROID__) || defined(SIL_IOS)
+                "Menu Text Size",
+                "Menu Text Size",
+                "Menu Text Size"),
+#else
                 "Terminal Menu Scale Offset",
                 "Menu Scale Offset",
                 "Menu Scale"),
+#endif
             value_buf, row_width, 4);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET, 2, a,
             buf);
@@ -3785,9 +3804,15 @@ void do_cmd_pane_settings(void)
                     "Zoom level of the main map. Higher values enlarge the map "
                     "and its font but show less of the level at once.",
                 [PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET] =
+#if defined(__ANDROID__) || defined(SIL_IOS)
+                    "Adjust text size in full-screen list menus independently "
+                    "from dungeon zoom. Zero uses the standard menu size. "
+                    "Bigger font increases this size by 50% too.",
+#else
                     "Scale of full-screen terminal menus relative to the "
                     "largest scale that fits. Set to 0 for the maximum; -1 "
                     "uses one step below it.",
+#endif
                 [PANE_SETTING_COMPACT_INVENTORY_MENUS] =
                     "Use shorter category names in Equipped, Inventory, and "
                     "Supplies. When focus moves to the item list, hide the "
@@ -4015,7 +4040,8 @@ void do_cmd_pane_settings(void)
             {
                 if (save_pane_config_to_json())
                 {
-                    msg_format("Settings saved to %s", config_label);
+                    msg_print("Settings saved.");
+                    log_debug("Settings saved to %s", config_label);
                 }
             }
             done = true;
@@ -4061,7 +4087,8 @@ void do_cmd_pane_settings(void)
             {
                 if (save_pane_config_to_json())
                 {
-                    msg_format("Settings saved to %s", config_label);
+                    msg_print("Settings saved.");
+                    log_debug("Settings saved to %s", config_label);
                 }
             }
             done = true;
@@ -4298,7 +4325,8 @@ void do_cmd_pane_settings(void)
                 {
                     if (save_pane_config_to_json())
                     {
-                        msg_format("Settings saved to %s", config_label);
+                        msg_print("Settings saved.");
+                        log_debug("Settings saved to %s", config_label);
                     }
                 }
                 done = true;
@@ -4703,6 +4731,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
     if (pane_count <= 0)
     {
         settings_semantic_menu_begin("Pane Fonts", -1);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
         sdl_character_sheet_screen_set_select_description(
             "No configurable panes are configured.");
         sdl_character_sheet_screen_commit_select(-1);
@@ -4722,6 +4751,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
         {
             int row_width;
             settings_semantic_menu_begin("Pane Fonts", sel);
+            sdl_character_sheet_screen_set_select_confirm_label("Done");
             row_width = settings_ui_line_width(2);
 
             for (int i = 0; i < pane_count; i++)
@@ -5269,9 +5299,15 @@ static cptr iface_pane_row_description(const struct iface_pane_row* row)
 
     if (row->field == IFACE_PANE_FIELD_MAIN_MENU_BUTTON)
     {
+#if defined(__ANDROID__) || defined(SIL_IOS)
+        return "Show the Menu button at the top right during play. "
+            "Nearby panels move below it when they need more room. This is "
+            "saved separately for portrait and landscape.";
+#else
         return "Show the fixed Menu button at the top center during play. "
             "Top-center panes begin directly below it while enabled. This is "
             "saved separately for portrait and landscape.";
+#endif
     }
 
     if (row->field == IFACE_PANE_FIELD_CONTEXT_SQUARE_POPUPS)
@@ -6407,6 +6443,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
     if (pane_count <= 0)
     {
         settings_semantic_menu_begin("Pane Layout", -1);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
         sdl_character_sheet_screen_set_select_description(
             "No configurable panes are configured.");
         sdl_character_sheet_screen_commit_select(-1);
@@ -6428,6 +6465,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Pane Layout", sel);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
 
         for (int i = 0; i < pane_count; i++)
         {
@@ -8004,6 +8042,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             highlight = total_rows - 1;
 
         settings_semantic_menu_begin("Touch Pane Buttons", highlight);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -8410,6 +8449,7 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
             highlight = 0;
 
         settings_semantic_menu_begin("Quick Access Buttons", highlight);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -8611,6 +8651,7 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Thumb Buttons", highlight);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -8937,6 +8978,7 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Set Touch Profile", highlight);
+        sdl_character_sheet_screen_set_select_confirm_label("Apply");
 
         for (int i = 0; i < (int)N_ELEMENTS(profiles); i++)
         {
@@ -9239,6 +9281,7 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             highlight = total_rows - 1;
 
         settings_semantic_menu_begin("Detailed Touch Controls", highlight);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -9583,6 +9626,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Mouse Input", highlight);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
 
         for (int i = 0; i < MOUSE_SETTING_COUNT; i++)
         {

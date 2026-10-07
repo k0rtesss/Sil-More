@@ -35,6 +35,10 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
 
 static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 {
+#if SIL_SDL_MOBILE_BUILD
+    (void)px; (void)min_px; (void)max_px;
+    return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+#else
     /* Keep explanation cards near the gameplay tutorial's readable type size
      * on touch-only mobile screens; panels measure and wrap at this size. */
     const float scale = sdl_touch_only_mobile_device_active()
@@ -42,6 +46,7 @@ static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
 
     return sdl_ui_font_px((int)sdl_touch_pane_clampf(
         px * scale, min_px * scale, max_px * scale));
+#endif
 }
 
 static TTF_Font* sdl_touch_tutorial_font_for_height(int font_px)
@@ -52,7 +57,7 @@ static TTF_Font* sdl_touch_tutorial_font_for_height(int font_px)
 static int sdl_touch_tutorial_readable_body_px(int suggested_px)
 {
     if (sdl_touch_only_mobile_device_active())
-        return MAX(suggested_px, sdl_main_menu_pane_font_px());
+        return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
     return suggested_px;
 }
 
@@ -144,14 +149,14 @@ float sdl_touch_tutorial_draw_text_line(cptr text, float x, float y,
     if (!font)
         return 0.0f;
 
-    texture = config.bigger_font && max_w > 0.0f
+    texture = (config.bigger_font || SIL_SDL_MOBILE_BUILD) && max_w > 0.0f
         ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
             &text_w, &text_h)
         : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return 0.0f;
 
-    if (!config.bigger_font && max_w > 0.0f && text_w > 0 && (float)text_w > max_w)
+    if (!(config.bigger_font || SIL_SDL_MOBILE_BUILD) && max_w > 0.0f && text_w > 0 && (float)text_w > max_w)
         scale = max_w / (float)text_w;
 
     dst = (SDL_FRect){
@@ -770,7 +775,7 @@ static bool sdl_touch_tutorial_header_compute(const SDL_Rect* screen,
         22.0f, 34.0f);
     out->body_px = sdl_touch_tutorial_readable_body_px(out->body_px);
     if (sdl_touch_only_mobile_device_active())
-        out->title_px = out->body_px + 6;
+        out->title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
     title_font = sdl_touch_tutorial_font_for_height(out->title_px);
     body_font = sdl_touch_tutorial_font_for_height(out->body_px);
     if (!title_font || !body_font)
@@ -909,72 +914,9 @@ static void sdl_touch_tutorial_prompt_label(int binding, const char* fallback,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
-/*
- * Reserve enough room for both footer lines plus a real bottom margin.  The
- * old percentage clamp topped out at exactly two line advances, so the second
- * line's glyphs could extend below the screen at large window sizes.
- */
-static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
+static void sdl_touch_tutorial_footer_text(bool mouse, bool single_page,
+    char* advance_text, size_t advance_size, char* page_text, size_t page_size)
 {
-    int font_px;
-    float line_h;
-    float bottom_pad;
-    float legacy_h;
-
-    if (!screen)
-        return 0.0f;
-
-    font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
-        22.0f, 30.0f);
-    font_px = sdl_touch_tutorial_readable_body_px(font_px);
-    line_h = (float)font_px * 1.30f;
-    bottom_pad = sdl_touch_pane_clampf((float)screen->h * 0.008f,
-        6.0f, 10.0f);
-    legacy_h = sdl_touch_pane_clampf((float)screen->h * 0.090f,
-        54.0f, 78.0f);
-
-    if (sdl_touch_only_mobile_device_active()) {
-        int lines = sdl_touch_tutorial_rich_line_count("Tap for next page",
-            font_px, (float)screen->w * 0.90f)
-            + sdl_touch_tutorial_rich_line_count("Last page: tap to close.",
-                font_px, (float)screen->w * 0.90f);
-        return MAX(legacy_h, line_h * (float)lines + bottom_pad);
-    }
-    return MAX(legacy_h, line_h * 2.0f + bottom_pad);
-}
-
-void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
-    bool single_page)
-{
-    SDL_Color text_color = g_state.palette[TERM_L_WHITE];
-    int font_px;
-    float line_h;
-    float y;
-    char advance_text[160];
-    char page_text[192];
-
-    if (!screen)
-        return;
-
-    single_page = single_page && tutorial_panel_part + 1 >= tutorial_panel_parts;
-
-    font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
-        22.0f, 30.0f);
-    font_px = sdl_touch_tutorial_readable_body_px(font_px);
-    line_h = (float)font_px * 1.30f;
-    y = (float)(screen->y + screen->h)
-        - sdl_touch_tutorial_footer_height(screen);
-
-    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
-        SDL_TOUCH_TUTORIAL_FOOTER_ALPHA);
-    SDL_RenderFillRect(g_state.renderer, &(SDL_FRect){
-        .x = (float)screen->x,
-        .y = y - 8.0f,
-        .w = (float)screen->w,
-        .h = (float)(screen->y + screen->h) - y + 8.0f,
-    });
-
     if (steamdeck_controls_active())
     {
         char confirm_label[16];
@@ -991,10 +933,10 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
         sdl_touch_tutorial_prompt_label(steamdeck_next_page_key(), "R1",
             next_label, sizeof(next_label));
 
-        strnfmt(advance_text, sizeof(advance_text),
+        strnfmt(advance_text, advance_size,
             "<y>%s</y> to <a>%s</a>", confirm_label,
             single_page ? "close" : "continue");
-        strnfmt(page_text, sizeof(page_text),
+        strnfmt(page_text, page_size,
             "<y>%s/%s</y> changes page   <y>%s</y> <a>closes</a>",
             prev_label, next_label, back_label);
     }
@@ -1003,11 +945,11 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
         SDL_strlcpy(advance_text,
             single_page ? "<a>Tap</a> to <a>close</a>"
                         : "<a>Tap</a> for <a>next page</a>",
-            sizeof(advance_text));
+            advance_size);
         SDL_strlcpy(page_text,
             single_page ? "<t>Touch guide</t>"
                         : "<t>Last page: tap to close.</t>",
-            sizeof(page_text));
+            page_size);
     }
     else
     {
@@ -1017,22 +959,98 @@ void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
                                : "<a>Click</a> or <y>Space</y> for <a>next</a>")
                 : (single_page ? "<a>Tap</a> or <y>Space</y> to <a>close</a>"
                                : "<a>Tap</a> or <y>Space</y> for <a>next</a>"),
-            sizeof(advance_text));
+            advance_size);
         SDL_strlcpy(page_text,
             "<y>Left/Right</y> changes page   <y>Esc</y> <a>closes</a>",
-            sizeof(page_text));
+            page_size);
     }
 
     if (tutorial_panel_parts > 1)
-        strnfmt(page_text, sizeof(page_text), "Text %d/%d",
+        strnfmt(page_text, page_size, "Text %d/%d",
             tutorial_panel_part + 1, tutorial_panel_parts);
 
-    line_h = sdl_touch_tutorial_draw_rich_centered(advance_text,
+}
+
+/* Rich text advances by a nominal line height, but the final glyph texture
+ * can be taller. Reserve its actual font extent as well as all wrapped rows. */
+static float sdl_touch_tutorial_footer_text_height(cptr text, int font_px,
+    float width)
+{
+    TTF_Font* font = sdl_touch_tutorial_font_for_height(font_px);
+    float advance = font_px * 1.30f;
+    float height = sdl_touch_tutorial_rich_draw_or_measure(text, 0, 0,
+        width, font_px, g_state.palette[TERM_L_WHITE], true, false);
+    if (font && height > 0)
+        height += MAX(0.0f, MAX((float)TTF_GetFontHeight(font),
+            (float)TTF_GetFontLineSkip(font)) - advance);
+    return height;
+}
+
+/*
+ * Reserve enough room for both footer lines plus a real bottom margin.  The
+ * old percentage clamp topped out at exactly two line advances, so the second
+ * line's glyphs could extend below the screen at large window sizes.
+ */
+static float sdl_touch_tutorial_footer_height(const SDL_Rect* screen)
+{
+    if (!screen) return 0;
+    int font_px = sdl_touch_tutorial_readable_body_px(
+        sdl_touch_tutorial_text_px(screen->h * 0.030f, 22.0f, 30.0f));
+    char advance[160], page[192];
+    sdl_touch_tutorial_footer_text(!sdl_touch_tutorial_device_available(), false,
+        advance, sizeof(advance), page, sizeof(page));
+    float height = sdl_touch_tutorial_footer_text_height(advance,
+        font_px, screen->w * 0.90f)
+        + sdl_touch_tutorial_footer_text_height(page, font_px, screen->w * 0.90f);
+    return height + MAX(8.0f * sdl_ui_density_scale(), 8.0f);
+}
+
+void sdl_touch_tutorial_draw_footer(const SDL_Rect* screen, bool mouse,
+    bool single_page)
+{
+    SDL_Color text_color = g_state.palette[TERM_L_WHITE];
+    int font_px;
+    float y;
+    char advance_text[160];
+    char page_text[192];
+
+    if (!screen)
+        return;
+
+    single_page = single_page && tutorial_panel_part + 1 >= tutorial_panel_parts;
+    /* The preceding illustrated pane can leave its own clip installed.
+     * This footer belongs to the complete safe screen rectangle. */
+    SDL_Rect previous_clip;
+    bool had_clip = SDL_RenderClipEnabled(g_state.renderer);
+    SDL_GetRenderClipRect(g_state.renderer, &previous_clip);
+    SDL_SetRenderClipRect(g_state.renderer, screen);
+
+    font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.030f,
+        22.0f, 30.0f);
+    font_px = sdl_touch_tutorial_readable_body_px(font_px);
+    sdl_touch_tutorial_footer_text(mouse, single_page, advance_text,
+        sizeof(advance_text), page_text, sizeof(page_text));
+    float advance_h = sdl_touch_tutorial_footer_text_height(advance_text,
+        font_px, screen->w * 0.90f);
+    float page_h = sdl_touch_tutorial_footer_text_height(page_text,
+        font_px, screen->w * 0.90f);
+    float bottom_pad = MAX(8.0f * sdl_ui_density_scale(), 8.0f);
+    y = screen->y + screen->h - advance_h - page_h - bottom_pad;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
+        SDL_TOUCH_TUTORIAL_FOOTER_ALPHA);
+    SDL_RenderFillRect(g_state.renderer, &(SDL_FRect){ screen->x,
+        y - bottom_pad * 0.5f, screen->w,
+        screen->y + screen->h - y + bottom_pad * 0.5f });
+
+    (void)sdl_touch_tutorial_draw_rich_centered(advance_text,
         (float)screen->x + (float)screen->w * 0.5f, y,
         (float)screen->w * 0.90f, font_px, text_color);
     (void)sdl_touch_tutorial_draw_rich_centered(page_text,
-        (float)screen->x + (float)screen->w * 0.5f, y + line_h,
+        (float)screen->x + (float)screen->w * 0.5f, y + advance_h,
         (float)screen->w * 0.90f, font_px, text_color);
+    SDL_SetRenderClipRect(g_state.renderer, had_clip ? &previous_clip : NULL);
 }
 
 bool sdl_touch_tutorial_cell_rect(int col, int row, int cols, int rows,
@@ -1289,7 +1307,7 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
         return;
     text_w = w - pad * 2.0f;
 
-    if (config.bigger_font) {
+    if ((config.bigger_font || SIL_SDL_MOBILE_BUILD)) {
         char body[4096] = "";
         for (int i = 0; i < line_count; i++) {
             if (i)
@@ -1450,7 +1468,7 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
         22.0f, 32.0f);
     detail_px = sdl_touch_tutorial_readable_body_px(detail_px);
     if (sdl_touch_only_mobile_device_active())
-        title_px = MAX(title_px, detail_px + 6);
+        title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
     pad = sdl_touch_pane_clampf((float)screen->h * 0.016f, 10.0f, 18.0f);
 
     max_box_w = (float)screen->w - 2.0f * pad;
@@ -1555,7 +1573,7 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
         22.0f, 32.0f);
     body_px = sdl_touch_tutorial_readable_body_px(body_px);
     if (sdl_touch_only_mobile_device_active())
-        title_px = MAX(title_px, body_px + 6);
+        title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
     if (sdl_touch_only_mobile_device_active())
     {
         /* Side-by-side guide panels leave too few words per line on phones.
@@ -1577,13 +1595,13 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
         body_lines = sdl_touch_tutorial_rich_line_count(body, body_px, text_w);
         h = pad * 2.0f + (float)body_lines * (float)body_px * 1.30f;
         if (title && title[0]) {
-            title_lines = (config.bigger_font || sdl_touch_only_mobile_device_active())
+            title_lines = ((config.bigger_font || SIL_SDL_MOBILE_BUILD) || sdl_touch_only_mobile_device_active())
                 ? MAX(1, sdl_touch_tutorial_line_count(title, title_px, text_w))
                 : 1;
             title_h = (float)title_lines * (float)title_px * 1.35f;
             h += title_h + 5.0f;
         }
-        if (h <= available_h || config.bigger_font
+        if (h <= available_h || (config.bigger_font || SIL_SDL_MOBILE_BUILD)
             || body_px <= (screen->h < 560 ? 14 : 16))
             break;
         body_px--;
@@ -1628,7 +1646,7 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
 
     y = box.y + pad;
     if (title && title[0]) {
-        if (config.bigger_font || sdl_touch_only_mobile_device_active())
+        if ((config.bigger_font || SIL_SDL_MOBILE_BUILD) || sdl_touch_only_mobile_device_active())
             (void)sdl_touch_tutorial_draw_wrapped_centered(title,
                 box.x + box.w * 0.5f, y, text_w, title_px, title_color);
         else
@@ -2410,7 +2428,7 @@ void sdl_touch_tutorial_draw_page(int page, bool full, int page_count,
         return;
 
     tutorial_panel_parts = 1;
-    if (page < zone_page_count && !config.bigger_font) tutorial_panel_part = 0;
+    if (page < zone_page_count && !(config.bigger_font || SIL_SDL_MOBILE_BUILD)) tutorial_panel_part = 0;
 
     old_suppress_top_panel = g_touch_tutorial_suppress_runtime_top_panel;
     g_touch_tutorial_suppress_runtime_top_panel = true;
@@ -2952,7 +2970,7 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
 
     detail_px = sdl_touch_tutorial_readable_body_px(detail_px);
     if (mobile)
-        title_px = MAX(title_px, detail_px + 6);
+        title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
 
     box_w = (float)screen->w * 0.64f;
     if (box_w > 1160.0f)
@@ -3241,6 +3259,15 @@ const sdl_touch_tutorial_choice sdl_touch_tutorial_choices[] = {
     },
 };
 
+#if SIL_SDL_MOBILE_BUILD
+static struct {
+    SDL_FRect viewport;
+    SDL_FRect cards[SDL_TOUCH_TUTORIAL_CHOICE_COUNT];
+    float offset, maximum, touch_y;
+    bool dragged, follow_focus;
+} g_touch_profile_list;
+#endif
+
 int sdl_touch_tutorial_current_choice_index(void)
 {
     int profile = get_sdl_touch_profile();
@@ -3276,6 +3303,12 @@ void sdl_touch_tutorial_choice_layout(const SDL_Rect* screen,
         max_w = 980.0f;
     x = (float)screen->x + ((float)screen->w - max_w) * 0.5f;
 
+#if SIL_SDL_MOBILE_BUILD
+    margin = 12.0f * sdl_ui_density_scale();
+    max_w = screen->w - 2 * margin;
+    x = screen->x + margin;
+#endif
+
     top = (float)screen->y + sdl_touch_pane_clampf(
         (float)screen->h * 0.245f, 118.0f, 190.0f)
         + sdl_touch_tutorial_top_reserved_height(screen);
@@ -3288,9 +3321,55 @@ void sdl_touch_tutorial_choice_layout(const SDL_Rect* screen,
         top = (float)screen->y + 88.0f;
 
     gap = sdl_touch_pane_clampf((float)screen->h * 0.018f, 8.0f, 16.0f);
+#if SIL_SDL_MOBILE_BUILD
+    gap = 6.0f * sdl_ui_density_scale();
+    top = sdl_touch_tutorial_header_bottom(screen, "Choose Touch Preset",
+        "Pick the <t>control layout</t> to use now, or <a>replay the tutorial</a> before choosing.",
+        0, 0) + gap;
+#endif
     grid = (screen->w >= 760 && screen->h >= 430)
         && !(sdl_touch_only_mobile_device_active()
             && screen->h > screen->w);
+
+#if SIL_SDL_MOBILE_BUILD
+    {
+        float dp = sdl_ui_density_scale(), heights[SDL_TOUCH_TUTORIAL_CHOICE_COUNT];
+        float total_h = 0, pad = 8.0f * dp;
+        int title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
+        int body_px = sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+        bottom = screen->y + screen->h - sdl_touch_tutorial_footer_height(screen)
+            - 8.0f * dp;
+        g_touch_profile_list.viewport = (SDL_FRect){ x, top, max_w, MAX(1.0f, bottom - top) };
+        for (int i = 0; i < SDL_TOUCH_TUTORIAL_CHOICE_COUNT; i++) {
+            char title[128];
+            strnfmt(title, sizeof(title), "%d. %s%s", i + 1,
+                sdl_touch_tutorial_choices[i].title,
+                i == sdl_touch_tutorial_current_choice_index() ? " (Current)" : "");
+            float title_h = MAX(1, sdl_touch_tutorial_line_count(title,
+                title_px, max_w - 2 * pad)) * title_px * 1.30f;
+            float body_h = sdl_touch_tutorial_rich_draw_or_measure(
+                sdl_touch_tutorial_choices[i].body, 0, 0, max_w - 2 * pad,
+                body_px, g_state.palette[TERM_L_WHITE], false, false);
+            heights[i] = MAX((float)sdl_ui_min_tap_px(),
+                2 * pad + title_h + title_px * 0.12f + body_h);
+            total_h += heights[i] + (i ? gap : 0);
+        }
+        g_touch_profile_list.maximum = MAX(0.0f, total_h - g_touch_profile_list.viewport.h);
+        g_touch_profile_list.offset = sdl_touch_pane_clampf(g_touch_profile_list.offset,
+            0, g_touch_profile_list.maximum);
+        float y = top - g_touch_profile_list.offset;
+        for (int i = 0; i < SDL_TOUCH_TUTORIAL_CHOICE_COUNT; i++) {
+            SDL_FRect card = { x, y, max_w, heights[i] };
+            g_touch_profile_list.cards[i] = card;
+            choice_rects[i] = (SDL_FRect){0};
+            if (SDL_GetRectIntersectionFloat(&card, &g_touch_profile_list.viewport,
+                    &choice_rects[i]) && choice_rects[i].h < sdl_ui_min_tap_px())
+                choice_rects[i] = (SDL_FRect){0};
+            y += heights[i] + gap;
+        }
+        return;
+    }
+#endif
 
     if (grid) {
         card_w = (max_w - gap) * 0.5f;
@@ -3347,11 +3426,14 @@ void sdl_touch_tutorial_draw_choice_card(const SDL_FRect* rect,
         return;
 
     pad = sdl_touch_pane_clampf(rect->h * 0.13f, 8.0f, 17.0f);
+#if SIL_SDL_MOBILE_BUILD
+    pad = 8.0f * sdl_ui_density_scale();
+#endif
     title_px = sdl_touch_tutorial_text_px(rect->h * 0.205f, 17.0f, 28.0f);
     body_px = sdl_touch_tutorial_text_px(rect->h * 0.148f, 13.0f, 21.0f);
     body_px = sdl_touch_tutorial_readable_body_px(body_px);
     if (sdl_touch_only_mobile_device_active())
-        title_px = MAX(title_px, body_px + 6);
+        title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
 
     shadow = *rect;
     shadow.x += 3.0f;
@@ -3426,12 +3508,48 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
             16.0f, 24.0f));
 
     sdl_touch_tutorial_choice_layout(&screen, choice_rects);
+#if SIL_SDL_MOBILE_BUILD
+    if (g_touch_profile_list.follow_focus && highlighted >= 0
+        && highlighted < SDL_TOUCH_TUTORIAL_CHOICE_COUNT) {
+        SDL_FRect card = g_touch_profile_list.cards[highlighted];
+        SDL_FRect viewport = g_touch_profile_list.viewport;
+        if (card.y < viewport.y || card.y + card.h > viewport.y + viewport.h)
+            g_touch_profile_list.offset = sdl_touch_pane_clampf(
+                g_touch_profile_list.offset + card.y - viewport.y,
+                0, g_touch_profile_list.maximum);
+        g_touch_profile_list.follow_focus = false;
+        sdl_touch_tutorial_choice_layout(&screen, choice_rects);
+    }
+    SDL_Rect clip = { (int)g_touch_profile_list.viewport.x,
+        (int)g_touch_profile_list.viewport.y, (int)g_touch_profile_list.viewport.w,
+        (int)g_touch_profile_list.viewport.h };
+    SDL_SetRenderClipRect(g_state.renderer, &clip);
+#endif
     current_index = sdl_touch_tutorial_current_choice_index();
     for (int i = 0; i < (int)N_ELEMENTS(sdl_touch_tutorial_choices); i++) {
-        sdl_touch_tutorial_draw_choice_card(&choice_rects[i],
+        sdl_touch_tutorial_draw_choice_card(
+#if SIL_SDL_MOBILE_BUILD
+            &g_touch_profile_list.cards[i],
+#else
+            &choice_rects[i],
+#endif
             &sdl_touch_tutorial_choices[i], i, highlighted == i,
             current_index == i);
     }
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+
+#if SIL_SDL_MOBILE_BUILD
+    if (g_touch_profile_list.maximum > 0) {
+        SDL_FRect viewport = g_touch_profile_list.viewport;
+        float thumb_h = MAX(12.0f * sdl_ui_density_scale(),
+            viewport.h * viewport.h / (viewport.h + g_touch_profile_list.maximum));
+        SDL_FRect thumb = { viewport.x + viewport.w - 2.0f * sdl_ui_density_scale(),
+            viewport.y + (viewport.h - thumb_h) * g_touch_profile_list.offset
+                / g_touch_profile_list.maximum, 2.0f * sdl_ui_density_scale(), thumb_h };
+        SDL_SetRenderDrawColor(g_state.renderer, 100, 150, 180, 200);
+        SDL_RenderFillRect(g_state.renderer, &thumb);
+    }
+#endif
 
     (void)sdl_touch_tutorial_draw_header(&screen, "Choose Touch Preset",
         "Pick the <t>control layout</t> to use now, or <a>replay the tutorial</a> before choosing.",
@@ -3489,6 +3607,10 @@ int sdl_touch_tutorial_choose_profile(void)
     Uint64 accept_after_ns = SDL_GetTicksNS() + 250000000ULL;
 
     sdl_touch_cancel_all_inputs();
+#if SIL_SDL_MOBILE_BUILD
+    memset(&g_touch_profile_list, 0, sizeof(g_touch_profile_list));
+    g_touch_profile_list.follow_focus = true;
+#endif
 
     for (;;) {
         Uint64 now_ns;
@@ -3521,6 +3643,9 @@ int sdl_touch_tutorial_choose_profile(void)
 
         if (ev.type == SDL_EVENT_KEY_DOWN) {
             SDL_Keycode key = ev.key.key;
+#if SIL_SDL_MOBILE_BUILD
+            g_touch_profile_list.follow_focus = true;
+#endif
 
             if (ev.key.repeat)
                 continue;
@@ -3563,6 +3688,16 @@ int sdl_touch_tutorial_choose_profile(void)
             }
             continue;
         }
+
+#if SIL_SDL_MOBILE_BUILD
+        if (ev.type == SDL_EVENT_MOUSE_WHEEL) {
+            g_touch_profile_list.offset = sdl_touch_pane_clampf(
+                g_touch_profile_list.offset - ev.wheel.y * sdl_ui_min_tap_px(),
+                0, g_touch_profile_list.maximum);
+            redraw = true;
+            continue;
+        }
+#endif
 
         if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             int hit;
@@ -3622,6 +3757,10 @@ int sdl_touch_tutorial_choose_profile(void)
                 highlighted = hit;
                 active_finger = ev.tfinger.fingerID;
                 finger_pressed = true;
+#if SIL_SDL_MOBILE_BUILD
+                g_touch_profile_list.touch_y = y;
+                g_touch_profile_list.dragged = false;
+#endif
                 redraw = true;
             }
             continue;
@@ -3643,6 +3782,18 @@ int sdl_touch_tutorial_choose_profile(void)
 
             if (!sdl_finger_event_to_render_coords(&ev.tfinger, &x, &y))
                 continue;
+#if SIL_SDL_MOBILE_BUILD
+            if (SDL_fabsf(y - g_touch_profile_list.touch_y)
+                    > 6.0f * sdl_ui_density_scale() || g_touch_profile_list.dragged) {
+                g_touch_profile_list.dragged = true;
+                g_touch_profile_list.offset = sdl_touch_pane_clampf(
+                    g_touch_profile_list.offset + g_touch_profile_list.touch_y - y,
+                    0, g_touch_profile_list.maximum);
+                g_touch_profile_list.touch_y = y;
+                redraw = true;
+                continue;
+            }
+#endif
             hit = sdl_touch_tutorial_choice_hit(choice_rects, x, y);
             if (hit != highlighted && hit >= 0) {
                 highlighted = hit;
@@ -3667,7 +3818,11 @@ int sdl_touch_tutorial_choose_profile(void)
             if (!sdl_finger_event_to_render_coords(&ev.tfinger, &x, &y))
                 continue;
             hit = sdl_touch_tutorial_choice_hit(choice_rects, x, y);
-            if (hit >= 0 && hit == pressed_choice)
+            if (hit >= 0 && hit == pressed_choice
+#if SIL_SDL_MOBILE_BUILD
+                && !g_touch_profile_list.dragged
+#endif
+                )
                 return sdl_touch_tutorial_choices[hit].result;
             finger_pressed = false;
             pressed_choice = -1;
@@ -3684,6 +3839,9 @@ int sdl_touch_tutorial_choose_profile(void)
         }
 
         if (ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+#if SIL_SDL_MOBILE_BUILD
+            g_touch_profile_list.follow_focus = true;
+#endif
             if (now_ns < accept_after_ns)
                 continue;
             switch (ev.gbutton.button) {

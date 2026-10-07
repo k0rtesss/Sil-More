@@ -2864,7 +2864,7 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
     layout->title_row = 0;
     layout->summary_row = (layout->term_hgt > 1) ? 1 : 0;
     max_summary_rows = MAX(1, layout->term_hgt - 8);
-    layout->summary_rows = portrait
+    layout->summary_rows = portrait && layout->term_hgt > 18
         ? MIN(ability_browser_wrapped_rows(summary, layout->visible_w),
             max_summary_rows)
         : 1;
@@ -2876,7 +2876,8 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
             ? layout->summary_row + 1
             : layout->summary_row;
     }
-    layout->skill_rows = (portrait && layout->term_hgt > 4) ? 2 : 1;
+    layout->skill_rows = (portrait && layout->term_hgt > 18
+        && layout->visible_w >= 60) ? 2 : 1;
     layout->header_row = (layout->term_hgt
             > layout->skill_row + layout->skill_rows)
         ? layout->skill_row + layout->skill_rows
@@ -2884,15 +2885,18 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
     layout->divider_row = (layout->term_hgt > layout->header_row + 1)
         ? layout->header_row + 1
         : layout->header_row;
+    if (layout->term_hgt <= 18)
+        layout->divider_row = layout->header_row;
     layout->list_row = layout->divider_row + 1;
     layout->prompt_row = layout->term_hgt - 1
         - sdl_touch_menu_button_reserved_rows();
     if (layout->prompt_row < layout->list_row)
         layout->prompt_row = layout->list_row;
-    /* The portrait summary and selected ability row already contain the
+    /* The compact summary and selected ability card already contain the
      * status footer's information.  Reclaim that duplicate row for the
      * stacked information panel so it cannot look like description text. */
-    layout->status_row = (!portrait && layout->prompt_row > layout->list_row)
+    layout->status_row = (!portrait && layout->visible_w >= 55
+            && layout->prompt_row > layout->list_row)
         ? layout->prompt_row - 1
         : layout->prompt_row;
     layout->list_rows = layout->status_row - layout->list_row;
@@ -2928,18 +2932,19 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
     layout->desc_row = layout->list_row;
     layout->desc_rows = layout->list_rows;
 
-    if ((portrait || (insight_system_enabled() && layout->visible_w < 60))
+    if ((portrait || layout->visible_w < 60)
         && layout->list_rows >= 3)
     {
         int ability_rows = MAX(ability_count, 1);
         int desc_rows;
 
-        if (insight_system_enabled())
+        if (insight_system_enabled() || layout->term_hgt <= 18
+            || layout->visible_w < 55)
             ability_rows = MIN(ability_rows, MAX(1, layout->list_rows / 2));
 
-        /* Portrait is tall enough to keep one compact row per ability.  Size
-         * the section to its contents instead of reserving two or three rows
-         * per name and then capping the whole list at six rows. */
+        /* Start with a compact section. Narrow cards measure their final
+         * stride after collecting entries; wider portrait lists can keep
+         * one row per entry. Leave a heading and text row for Information. */
         if (ability_rows > layout->list_rows - 2)
             ability_rows = MAX(1, layout->list_rows - 2);
         desc_rows = layout->list_rows - ability_rows - 1;
@@ -3300,6 +3305,15 @@ static void ability_browser_build_summary(int skilltype, char* summary,
         return;
     }
 
+    if (Term && (Term->wid < 60 || Term->hgt <= 18)
+        && skilltype >= 0 && skilltype < S_MAX)
+    {
+        strnfmt(summary, summary_len, "XP %ld | %s %d (%d)",
+            (long)p_ptr->new_exp, skill_names_full[skilltype],
+            p_ptr->skill_base[skilltype], p_ptr->skill_use[skilltype]);
+        return;
+    }
+
     if (skilltype >= 0 && skilltype < S_MAX && skilltype != S_SPC)
     {
         strnfmt(next_skill, sizeof(next_skill), "%d XP",
@@ -3638,6 +3652,23 @@ static void ability_browser_draw_skill_summary(
 
     for (int row = 0; row < layout->skill_rows; row++)
         Term_erase(layout->skill_col, tab_row + row, layout->skill_w);
+    if (ability_browser_skill_tab_width(token_widths, skill_options, split)
+        > layout->skill_w)
+    {
+        char label[48];
+        int previous = (skill_cur + skill_options - 1) % skill_options;
+        int next = (skill_cur + 1) % skill_options;
+        ability_browser_build_skill_tokens(skill_options, skill_cur, true,
+            tokens, token_widths);
+        strnfmt(label, sizeof(label), "< %s >", tokens[skill_cur]);
+        ability_browser_put_fitted(layout->skill_col, tab_row,
+            layout->skill_w, TERM_L_BLUE, label);
+        ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + previous,
+            layout->skill_col, tab_row, 2);
+        ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + next,
+            layout->skill_col + (int)strlen(label) - 2, tab_row, 2);
+        return;
+    }
     for (int skill = 0; skill < skill_options; skill++)
     {
         bool hovered = (skill == skill_hover);
@@ -4052,6 +4083,38 @@ static int ability_browser_entry_from_letter(char letter)
     return -1;
 }
 
+/* Narrow lists use full-name cards. Use one shared measured stride for this
+ * entry set so rendering, touch hit rows, scroll limits and cursor placement
+ * agree, including two-line authored names with a stage indentation. */
+static void ability_browser_size_entry_cards(ability_browser_layout* layout,
+    const ability_browser_entry entries[], int count)
+{
+    int prefix_w = indexed_menu_letters_enabled() ? 3 : 2;
+    int name_w = MAX(1, layout->ability_w - prefix_w);
+    int name_rows = 1;
+    if (layout->visible_w >= 55)
+        return;
+    for (int i = 0; i < count; ++i)
+    {
+        int indent = entries[i].stage_depth
+            ? MIN(2 * entries[i].stage_depth, MAX(2, name_w - 8)) : 0;
+        name_rows = MAX(name_rows,
+            ability_browser_wrapped_rows(entries[i].name,
+                MAX(1, name_w - indent)));
+    }
+    layout->ability_entry_rows = name_rows + 1;
+    if (layout->stacked)
+    {
+        int rows = MAX(layout->ability_entry_rows,
+            (layout->ability_rows / layout->ability_entry_rows)
+                * layout->ability_entry_rows);
+        layout->ability_rows = rows;
+        layout->desc_header_row = layout->ability_row + rows;
+        layout->desc_row = layout->desc_header_row + 1;
+        layout->desc_rows = MAX(1, layout->status_row - layout->desc_row);
+    }
+}
+
 static void ability_browser_draw_ability_list(
     const ability_browser_layout* layout, int skilltype,
     const ability_browser_entry entries[], int entry_count, int entry_cur,
@@ -4071,9 +4134,11 @@ static void ability_browser_draw_ability_list(
         state_col = layout->ability_col + layout->ability_w;
 
     ability_browser_put_fitted(layout->ability_col, layout->header_row,
-        layout->ability_w, TERM_SLATE, skilltype == ABILITY_BROWSER_INSIGHT
-            ? "    Ability                       State"
-            : "Lvl Ability                       State");
+        layout->ability_w, TERM_SLATE, layout->visible_w < 55
+            ? "Abilities (scroll)"
+            : (skilltype == ABILITY_BROWSER_INSIGHT
+                ? "    Ability                       State"
+                : "Lvl Ability                       State"));
 
     for (int i = 0; i < visible_entries; i++)
     {
@@ -4129,6 +4194,39 @@ static void ability_browser_draw_ability_list(
         if (skilltype == ABILITY_BROWSER_INSIGHT) level[0] = '\0';
         else strnfmt(level, sizeof(level), "%2d",
             ability_required_skill(entry->b_ptr, ability_learning_skill(entry->b_ptr)));
+        if (layout->visible_w < 55)
+        {
+            int card_col = layout->ability_col + prefix_w;
+            int card_w = MAX(1, layout->ability_w - prefix_w);
+            char metadata[64];
+            cptr level_text = level;
+            while (*level_text == ' ')
+                ++level_text;
+            indent = entry->stage_depth
+                ? MIN(2 * entry->stage_depth, MAX(2, card_w - 8)) : 0;
+            if (indent)
+                ability_browser_put_fitted(card_col + indent - 2, y, 2,
+                    row_attr, "> ");
+            name_cursor = entry->name;
+            for (int line_idx = 0; line_idx < entry_rows - 1; ++line_idx)
+            {
+                char line[96];
+                if (!ability_browser_wrap_next(&name_cursor,
+                        MAX(1, card_w - indent), line, sizeof(line)))
+                    line[0] = '\0';
+                ability_browser_put_fitted(card_col + indent, y + line_idx,
+                    MAX(1, card_w - indent), row_attr, line);
+            }
+            ability_browser_entry_state(state, sizeof(state), skilltype, entry);
+            if (skilltype == ABILITY_BROWSER_INSIGHT)
+                SDL_strlcpy(metadata, state, sizeof(metadata));
+            else
+                strnfmt(metadata, sizeof(metadata), "Level %s | %s",
+                    level_text, state);
+            ability_browser_put_fitted(card_col, y + entry_rows - 1,
+                card_w, state_attr, metadata);
+            continue;
+        }
         ability_browser_put_fitted(level_col, y, 2, level_attr, level);
         indent = entry->stage_depth ? MIN(2 * entry->stage_depth, MAX(2, name_w - 8)) : 0;
         if (indent)
@@ -6897,6 +6995,7 @@ void do_cmd_ability_screen(void)
             ABILITY_BROWSER_ENTRIES_MAX);
         ability_browser_build_summary(skilltype, summary, sizeof(summary));
         ability_browser_init_layout(&layout, entry_count, summary);
+        ability_browser_size_entry_cards(&layout, entries, entry_count);
         ability_visible_entries = MAX(1, layout.ability_rows
             / MAX(layout.ability_entry_rows, 1));
 

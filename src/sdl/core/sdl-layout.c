@@ -682,6 +682,9 @@ int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen)
         height = (float)font_px * 1.45f;
     if (max_height > 0.0f && height > max_height)
         height = max_height;
+#if SIL_SDL_MOBILE_BUILD
+    height = MAX(height, (float)sdl_ui_min_tap_px());
+#endif
     return MAX((int)(height + 0.5f), 1);
 }
 
@@ -1833,12 +1836,19 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
     int source_row_count = 0;
     int next_col = 0;
     int max_cols = 0;
+    int output_row = 0;
+    int row_cols = 0;
     bool row_mode;
 
     if (!metrics)
         return;
 
     row_mode = sdl_left_panel_compact_row_mode();
+    if (view) {
+        int cell_h = sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL);
+        row_cols = MAX(1, view->rect.w / MAX(1, cell_h / 2)
+            - (sdl_left_panel_pane_has_border_columns() ? 2 : 0));
+    }
     if (!row_mode && get_sdl_left_panel_compact_health_bar())
         source_rows[source_row_count++] = ROW_NAME + 1;
     source_rows[source_row_count++] = ROW_HP;
@@ -1860,7 +1870,12 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
         metrics->compact_source_rows[i] = source_rows[i];
         metrics->compact_widths[i] = width;
         if (row_mode) {
-            metrics->compact_output_rows[i] = 0;
+            if (row_cols > 0 && next_col > 0 && next_col + width > row_cols) {
+                max_cols = MAX(max_cols, next_col - 1);
+                next_col = 0;
+                output_row++;
+            }
+            metrics->compact_output_rows[i] = output_row;
             metrics->compact_output_cols[i] = next_col;
             next_col += width + 1;
         } else {
@@ -1872,8 +1887,8 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
     }
 
     if (row_mode) {
-        metrics->panel_rows = 1;
-        metrics->content_cols = next_col > 0 ? next_col - 1 : 1;
+        metrics->panel_rows = output_row + 1;
+        metrics->content_cols = MAX(max_cols, next_col > 0 ? next_col - 1 : 1);
     } else {
         metrics->panel_rows = metrics->compact_segment_count;
         metrics->content_cols = max_cols > 0 ? max_cols : LEFT_PANEL_CONTENT_WID;
@@ -2153,11 +2168,10 @@ bool sdl_left_panel_pane_rect_for_metrics(const sdl_view* view,
         y += (float)edge_gap_y;
 
     /* The compact row is measured after generic pane placement and can span
-     * into the fixed Top Center Menu button.  Keep the button as the first
-     * member of that stack and place the row immediately below it; the live
-     * Top Right avoidance then follows this adjusted rectangle. */
-    if (metrics->collapsed && metrics->compact_row
-        && (where == PLACE_TOP_LEFT || where == PLACE_TOP_CENTER
+     * into the Menu button. Place the panel below that button when their
+     * horizontal bounds intersect; the live log avoidance follows the
+     * adjusted character and weapon stack. */
+    if ((where == PLACE_TOP_LEFT || where == PLACE_TOP_CENTER
             || where == PLACE_TOP_RIGHT)
         && sdl_main_menu_pane_button_rect(&menu_button)
         && x < menu_button.x + menu_button.w
@@ -3147,7 +3161,7 @@ static void sdl_apply_top_right_overlay_blocker_offset(void)
     left = g_pane_rects[PANE_LEFT_PANEL];
     compact_left_blocker = sdl_left_panel_pane_presentation_active()
         && sdl_left_panel_pane_collapsed()
-        && (sdl_left_panel_compact_row_mode() || get_sdl_bigger_font())
+        && (sdl_left_panel_compact_row_mode() || get_sdl_bigger_font() || SIL_SDL_MOBILE_BUILD)
         && sdl_rect_has_area(&left)
         && (left_where == PLACE_TOP_LEFT || left_where == PLACE_TOP_CENTER
             || left_where == PLACE_TOP_RIGHT);
@@ -3170,7 +3184,7 @@ static void sdl_apply_top_right_overlay_blocker_offset(void)
         }
     }
 
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_bigger_font() || SIL_SDL_MOBILE_BUILD) {
         /* The weapon/armour overlay is stacked below the measured character
          * panel. Avoid its painted bounds too, after that stack has reflowed. */
         for (int i = 0; i < pane_config_count; i++) {
@@ -3219,7 +3233,7 @@ void sdl_apply_top_right_overlay_offset(void)
      * base layout rectangles before calculating the current frame's offsets. */
     sdl_remove_overlay_stack_offsets();
     sdl_remove_top_right_overlay_offset();
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_bigger_font() || SIL_SDL_MOBILE_BUILD) {
         sdl_apply_overlay_stack_layout();
         sdl_apply_top_right_overlay_blocker_offset();
     } else {
@@ -4184,6 +4198,13 @@ int sdl_build_active_pane_config(struct pane_config* active, bool include_side,
         is_overlay_menu_pane = (effective.pane == PANE_OVERLAY_MENU);
         is_overlay_log_pane = effective.pane == PANE_ROLLS
             && pane_placement_is_overlay(where);
+#if SIL_SDL_MOBILE_BUILD
+        /* Larger phone text needs a short live feed, leaving the dungeon
+         * visible. Full messages and complete rolls remain in History. */
+        if (is_overlay_log_pane && config.bigger_font
+            && sdl_mobile_portrait_layout_active())
+            effective.rect.rows = MIN(effective.rect.rows, 3);
+#endif
         is_status_depth_pane = (effective.pane == PANE_STATUS_DEPTH);
 
         if (effective.pane == PANE_MAIN_MENU)
@@ -4305,11 +4326,19 @@ int sdl_auto_font_size_from_main(int numerator, int denominator)
 
 int sdl_auto_aux_view_font_size(void)
 {
+#if SIL_SDL_MOBILE_BUILD
+    return 16;
+#else
     return sdl_auto_font_size_from_main(2, 3);
+#endif
 }
 
 int sdl_auto_pane_font_size(enum pane_type type)
 {
+#if SIL_SDL_MOBILE_BUILD
+    return (type == PANE_STATUS || type == PANE_STATUS_DEPTH
+            || type == PANE_DEPTH) ? 14 : 16;
+#else
     if (type == PANE_STATUS || type == PANE_STATUS_DEPTH)
         return sdl_auto_font_size_from_main(1, 2);
     if (type == PANE_LEFT_PANEL || type == PANE_COMBAT || type == PANE_LOG)
@@ -4321,6 +4350,7 @@ int sdl_auto_pane_font_size(enum pane_type type)
 #endif
 
     return sdl_auto_aux_view_font_size();
+#endif
 }
 
 int sdl_resolve_aux_view_font_size(int requested_size)

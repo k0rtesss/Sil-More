@@ -48,9 +48,9 @@ static struct map_clearance map_center_clearance(void)
     struct map_clearance clearance;
 
     /*
-     * Recenter Distance is a hard lower bound on every side of the player.
-     * Directional lead is applied when selecting a point within this safe
-     * zone; it must not relax the trailing boundary to make that point fit.
+     * Directional lead respects Recenter Distance on every side of a valid
+     * safe zone. Only the no-zone fallback relaxes effective clearance when
+     * the viewport cannot satisfy it without hiding the player's tile.
      */
     clearance.top = vertical;
     clearance.bottom = vertical;
@@ -271,6 +271,91 @@ static bool map_zone_cache_build(int screen_h, int screen_w,
     return true;
 }
 
+/* Find the closest whole map cell satisfying this clearance.  Use a stable
+ * row-major tie break so repeated idle layout checks choose the same point. */
+static bool map_closest_clear_cell(int screen_h, int screen_w,
+    const struct map_pane_span* spans, int span_count,
+    const struct map_clearance* clearance, int anchor_y, int anchor_x,
+    int* center_y, int* center_x)
+{
+    bool found = false;
+    long long best_distance = 0;
+
+    for (int y = 0; y < screen_h; y++)
+    {
+        for (int x = 0; x < screen_w; x++)
+        {
+            long long dy = (long long)y - anchor_y;
+            long long dx = (long long)x - anchor_x;
+            long long distance = dy * dy + dx * dx;
+            if (!map_zone_cell_clear(y, x, screen_h, screen_w, spans,
+                    span_count, clearance))
+                continue;
+            if (!found || distance < best_distance)
+            {
+                *center_y = y;
+                *center_x = x;
+                best_distance = distance;
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+/* A small viewport may have no cell with the requested clearance.  Relax
+ * only this selection's effective margin, preserving the saved preference.
+ * If UI covers every cell, choose the least-covered cell nearest the anchor
+ * explicitly rather than silently falling back inside a geometric centre. */
+static void map_fallback_safe_center(int screen_h, int screen_w,
+    const struct map_pane_span* spans, int span_count,
+    const struct map_clearance* requested, int anchor_y, int anchor_x,
+    int* center_y, int* center_x)
+{
+    struct map_clearance effective = *requested;
+
+    for (;;)
+    {
+        if (map_closest_clear_cell(screen_h, screen_w, spans, span_count,
+                &effective, anchor_y, anchor_x, center_y, center_x))
+            return;
+        if (effective.top == 0 && effective.bottom == 0
+            && effective.left == 0 && effective.right == 0)
+            break;
+        if (effective.top > 0) effective.top--;
+        if (effective.bottom > 0) effective.bottom--;
+        if (effective.left > 0) effective.left--;
+        if (effective.right > 0) effective.right--;
+    }
+
+    int best_cover_count = span_count + 1;
+    long long best_distance = 0;
+    for (int y = 0; y < screen_h; y++)
+    {
+        for (int x = 0; x < screen_w; x++)
+        {
+            int cover_count = 0;
+            long long dy = (long long)y - anchor_y;
+            long long dx = (long long)x - anchor_x;
+            long long distance = dy * dy + dx * dx;
+            for (int i = 0; i < span_count; i++)
+            {
+                if (x >= spans[i].x1 && x < spans[i].x2
+                    && y >= spans[i].y1 && y < spans[i].y2)
+                    cover_count++;
+            }
+            if (cover_count < best_cover_count
+                || (cover_count == best_cover_count && distance < best_distance))
+            {
+                *center_y = y;
+                *center_x = x;
+                best_cover_count = cover_count;
+                best_distance = distance;
+            }
+        }
+    }
+}
+
 /* Select the visible zone nearest the player's present screen position.  A
  * boundary-triggered recenter can move the target behind the direction of
  * travel, leaving more of the zone visible ahead of the player. */
@@ -374,6 +459,9 @@ static void map_safe_center(int* center_y, int* center_x,
     }
 
 finish:
+    if (!have_zone_center)
+        map_fallback_safe_center(screen_h, screen_w, spans, span_count,
+            &clearance, anchor_y, anchor_x, &cy, &cx);
     if (center_y)
         *center_y = cy;
     if (center_x)
