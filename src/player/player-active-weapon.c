@@ -8,7 +8,6 @@
 static byte last_ranged_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
 static byte pending_active_weapon_mode = PLAYER_ACTIVE_WEAPON_NONE;
 static bool pending_ranged_quiver_only = false;
-static bool free_active_weapon_change_used = false;
 
 enum
 {
@@ -151,7 +150,7 @@ bool player_active_weapon_change_is_free(int old_kind, int new_kind)
     bool rapid_attack;
     bool skirmishing;
 
-    if (free_active_weapon_change_used)
+    if (p_ptr->free_active_weapon_change_used)
         return false;
 
     warden = p_ptr->active_ability[S_MEL][MEL_WARDEN] != 0;
@@ -230,12 +229,14 @@ bool player_active_weapon_wield_change_is_free(int slot,
 
 void player_active_weapon_free_change_commit(void)
 {
-    free_active_weapon_change_used = true;
+    p_ptr->free_active_weapon_change_used = 1;
 }
 
 void player_active_weapon_begin_player_turn(void)
 {
-    free_active_weapon_change_used = false;
+    /* The first restored turn resumes its saved credit before requesting input. */
+    if (!p_ptr->restoring)
+        p_ptr->free_active_weapon_change_used = 0;
 }
 
 void player_active_weapon_sync_loaded_state(void)
@@ -321,7 +322,8 @@ void player_active_weapon_sync_loaded_state(void)
         ? (byte)mode : PLAYER_ACTIVE_WEAPON_RANGED_1;
     pending_active_weapon_mode = PLAYER_ACTIVE_WEAPON_NONE;
     pending_ranged_quiver_only = false;
-    free_active_weapon_change_used = false;
+    p_ptr->free_active_weapon_change_used =
+        p_ptr->free_active_weapon_change_used != 0;
 }
 
 static bool player_switch_needs_turn(int old_mode, int new_mode)
@@ -1826,6 +1828,8 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
 
 static void mark_active_weapon_changed(void)
 {
+    /* Hover text caches the former weapon name and role. */
+    sdl_object_tooltip_clear();
     p_ptr->update |= PU_BONUS;
     p_ptr->redraw |= PR_BASIC | PR_MEL | PR_ARC | PR_ARMOR | PR_EQUIPPY
         | PR_QUIVER | PR_MAP;
@@ -2524,6 +2528,9 @@ static void apply_active_weapon_choice_internal(const active_weapon_choice* choi
     if (!choice || !choice->o_ptr)
         return;
 
+    /* Replacing an item within the same role need not change the mode, but
+     * still invalidates any weapon description cached by the pointer. */
+    sdl_object_tooltip_clear();
     old_mode = player_active_weapon_mode();
     old_kind = player_active_weapon_kind();
     free_choice = player_active_weapon_change_is_free(old_kind, choice->kind);
@@ -2653,7 +2660,23 @@ static void apply_active_weapon_choice_internal(const active_weapon_choice* choi
         return;
     }
 
-    (void)player_set_active_weapon_mode(choice->mode, false, true);
+    /* The throwing marker has already changed.  Recomputing switch eligibility
+     * now can mistake the old throwing role for a bow (or vice versa).  Use the
+     * original roles, as the physical-item replacement branches above do. */
+    (void)player_set_active_weapon_mode(choice->mode, false, false);
+    if (free_choice)
+    {
+        p_ptr->energy_use = 0;
+        p_ptr->previous_action[0] = ACTION_NOTHING;
+        player_active_weapon_free_change_commit();
+    }
+    else
+    {
+        p_ptr->energy_use = 100;
+        p_ptr->previous_action[0]
+            = (choice->mode == PLAYER_ACTIVE_WEAPON_MELEE)
+            ? ACTION_READY_MELEE : ACTION_MISC;
+    }
 }
 
 static void apply_active_weapon_choice(const active_weapon_choice* choice)

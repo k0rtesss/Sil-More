@@ -2338,6 +2338,7 @@ void possible_follow_through(int fy, int fx, int attack_type)
                 monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
 
                 if (m_ptr->ml
+                    && !(r_info[m_ptr->r_idx].flags1 & RF1_PEACEFUL)
                     && (!forgo_attacking_unwary
                         || (m_ptr->alertness >= ALERTNESS_ALERT)))
                 {
@@ -3734,6 +3735,11 @@ void py_attack(int y, int x, int attack_type)
             (void)do_cmd_fire_at_adjacent(y, x);
         return;
     }
+
+    /* A peaceful primary target is an interaction, not the start of a sweep. */
+    if (attack_type == ATT_MAIN
+        && handle_peaceful_attack_target(y, x, attack_type))
+        return;
 
     /* Keep peaceful interactions available regardless of weapon policy. */
     int target_idx = cave_m_idx[y][x];

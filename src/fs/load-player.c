@@ -334,6 +334,7 @@ errr rd_extra(void)
         byte quick_access_prompt_flags = 0;
         s16b lamp_oil = 0;
         byte active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
+        byte free_active_weapon_change_used = 0;
         byte morgoth_call_state = 0;
         u16b insight_milestones = 0;
         s32b insight_points = 0;
@@ -362,7 +363,10 @@ errr rd_extra(void)
             {
                 rd_u16b(&insight_milestones);
                 rd_s32b(&insight_points);
-                strip_bytes(1);
+                if (savefile_version_at_least(0, 9, 9, 3))
+                    rd_byte(&free_active_weapon_change_used);
+                else
+                    strip_bytes(1);
                 if (savefile_version_at_least(0, 9, 8, 30))
                     rd_u32b(&insight_monster_types);
             }
@@ -380,6 +384,8 @@ errr rd_extra(void)
             quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->active_weapon_mode = active_weapon_mode;
+        p_ptr->free_active_weapon_change_used =
+            free_active_weapon_change_used != 0;
         p_ptr->insight_points = MAX(0, MIN(PY_MAX_EXP, insight_points));
         p_ptr->insight_milestones = insight_milestones & INSIGHT_MILESTONE_MASK;
         p_ptr->insight_monster_types = insight_monster_types & RF3_RACE_MASK;

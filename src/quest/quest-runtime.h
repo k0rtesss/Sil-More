@@ -28,6 +28,7 @@ int quest_debug_vault_requested(void);
 void quest_debug_request_vault(int id);
 bool quest_debug_prepare_vault(int id);
 bool quest_varda_radiant_gift(void);
+void varda_quest_begin_player_turn(void);
 int quest_followup_vault(int vault);
 bool quest_followup_vault_allowed(int vault, int depth);
 void quest_followup_vault_placed(int id, int depth);

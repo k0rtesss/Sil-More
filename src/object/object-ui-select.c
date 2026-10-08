@@ -309,6 +309,41 @@ static bool object_choice_label_matches_key(cptr label, int key)
     return tolower((unsigned char)c) == tolower((unsigned char)key);
 }
 
+/* x remains the preview command. Reassign only conflicting overlay labels,
+ * leaving the caller's inventory handles and labels unchanged. */
+static void object_choice_reserve_preview_key(
+    object_choice_entry entries[], int count)
+{
+    static const char shortcuts[] = "abcdefghijklmnopqrstuvwyz0123456789";
+
+    for (int i = 0; i < count; i++)
+    {
+        if (!object_choice_label_matches_key(entries[i].label, 'x'))
+            continue;
+
+        entries[i].label[0] = '\0';
+        for (int key = 0; shortcuts[key]; key++)
+        {
+            bool used = false;
+            for (int j = 0; j < count; j++)
+            {
+                if (object_choice_label_matches_key(
+                        entries[j].label, shortcuts[key]))
+                {
+                    used = true;
+                    break;
+                }
+            }
+            if (!used)
+            {
+                strnfmt(entries[i].label, sizeof(entries[i].label), "%c)",
+                    shortcuts[key]);
+                break;
+            }
+        }
+    }
+}
+
 static void object_choice_inspect(const object_choice_entry* entry)
 {
     if (!entry)
@@ -363,9 +398,10 @@ static void object_choice_show(cptr title, cptr desc,
 }
 
 bool object_choice_overlay(cptr title, cptr desc,
-    const object_choice_entry entries[], int count, int default_index,
+    const object_choice_entry caller_entries[], int count, int default_index,
     int* out_entry)
 {
+    object_choice_entry* entries;
     int highlight;
     bool done = false;
     bool success = false;
@@ -377,8 +413,12 @@ bool object_choice_overlay(cptr title, cptr desc,
     if (out_entry)
         *out_entry = -1;
 
-    if (!entries || count <= 0 || !out_entry)
+    if (!caller_entries || count <= 0 || !out_entry)
         return false;
+
+    entries = mem_alloc_array(count, object_choice_entry);
+    memcpy(entries, caller_entries, (size_t)count * sizeof(*entries));
+    object_choice_reserve_preview_key(entries, count);
 
     highlight = (default_index >= 0 && default_index < count)
         ? default_index
@@ -473,6 +513,26 @@ bool object_choice_overlay(cptr title, cptr desc,
         else if (steamdeck && key == steamdeck_info_key())
             key = 'x';
 
+        /* Displayed shortcuts win over legacy navigation aliases, as in the
+         * shared question selector. Physical arrows/gamepad navigation was
+         * consumed above; x/X remains an explicit preview command. */
+        if (key != 'x' && key != 'X')
+        {
+            bool matched = false;
+            for (int i = 0; i < count; i++)
+            {
+                if (!object_choice_label_matches_key(entries[i].label, key))
+                    continue;
+                *out_entry = i;
+                success = true;
+                done = true;
+                matched = true;
+                break;
+            }
+            if (matched)
+                continue;
+        }
+
         switch (key)
         {
         case ESCAPE:
@@ -524,27 +584,8 @@ bool object_choice_overlay(cptr title, cptr desc,
             break;
 
         default:
-        {
-            bool matched = false;
-
-            for (int i = 0; i < count; i++)
-            {
-                if (!object_choice_label_matches_key(entries[i].label, key))
-                    continue;
-
-                highlight = i;
-                scroll_follow_highlight = true;
-                *out_entry = i;
-                success = true;
-                done = true;
-                matched = true;
-                break;
-            }
-
-            if (!matched)
-                bell("Illegal item choice!");
+            bell("Illegal item choice!");
             break;
-        }
         }
     }
 
@@ -552,6 +593,7 @@ bool object_choice_overlay(cptr title, cptr desc,
     sdl_question_menu_clear();
     ui_menu_click_clear();
     Term_fresh();
+    entries = mem_free(entries);
 
     return success;
 }

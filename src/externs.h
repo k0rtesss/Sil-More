@@ -995,6 +995,11 @@ extern char* oath_reward_text(int oath_id);
 extern void do_cmd_ability_screen(void);
 extern int object_difficulty(object_type* o_ptr);
 extern int smithing_work_difficulty(void);
+extern void smithing_alloy_save_state(
+    byte state[SMITHING_ALLOY_STATE_BYTES]);
+extern void smithing_alloy_load_state(
+    const byte state[SMITHING_ALLOY_STATE_BYTES]);
+extern void smithing_reset_work(void);
 extern void do_cmd_smithing_screen(void);
 extern void create_smithing_item(void);
 #define MAIN_MENU_CHARACTER 1

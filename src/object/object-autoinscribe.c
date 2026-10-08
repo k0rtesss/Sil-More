@@ -129,6 +129,37 @@ void unapply_autoinscription(object_type* o_ptr, cptr note)
     return;
 }
 
+/* Each carried store owns distinct objects. Include ready arrows, Supplies,
+ * and worn items as well as Pack/Harness/Jewelry entries. */
+static void autoinscribe_player_object(
+    object_type* o_ptr, s16b remove_kind, cptr remove_note)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
+
+    if (remove_kind)
+    {
+        if (o_ptr->k_idx == remove_kind)
+            unapply_autoinscription(o_ptr, remove_note);
+    }
+    else
+        apply_autoinscription(o_ptr);
+}
+
+static void autoinscribe_player_items(s16b remove_kind, cptr remove_note)
+{
+    for (int i = 0; i < player_pack_entry_count(); i++)
+        autoinscribe_player_object(
+            player_pack_entry_at(i), remove_kind, remove_note);
+    for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        autoinscribe_player_object(&inventory[i], remove_kind, remove_note);
+    for (int i = 0; i < player_quiver_store_entry_count(); i++)
+        autoinscribe_player_object(
+            player_quiver_store_entry_at(i), remove_kind, remove_note);
+    for (int i = 0; i < supplies_entry_count(); i++)
+        autoinscribe_player_object(supplies_entry_at(i), remove_kind, remove_note);
+}
+
 /*
  *  Removes an autoinscription from the database and from all objects of that
  * kind
@@ -157,16 +188,7 @@ extern void obliterate_autoinscription(s16b kind)
         /* Apply an autoinscription */
         unapply_autoinscription(o_ptr, note);
     }
-    for (i = 0; i < player_pack_entry_count(); i++)
-    {
-        o_ptr = player_pack_entry_at(i);
-
-        // Don't remove inscriptions from different object kinds.
-        if (o_ptr->k_idx != kind)
-            continue;
-
-        unapply_autoinscription(o_ptr, note);
-    }
+    autoinscribe_player_items(kind, note);
 
     remove_autoinscription(kind);
 
@@ -211,18 +233,7 @@ void autoinscribe_ground(void)
 
 void autoinscribe_pack(void)
 {
-    int i;
-
-    for (i = 0; i < player_pack_entry_count(); i++)
-    {
-        object_type* o_ptr = player_pack_entry_at(i);
-
-        /* Skip empty items */
-        if (!o_ptr->k_idx)
-            continue;
-
-        apply_autoinscription(o_ptr);
-    }
+    autoinscribe_player_items(0, NULL);
 }
 
 int add_autoinscription(s16b kind, cptr inscription)

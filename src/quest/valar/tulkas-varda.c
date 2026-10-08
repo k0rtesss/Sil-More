@@ -8,6 +8,8 @@
 #include "quest/quest-internal.h"
 #include "ui/targeting/targeting-internal.h"
 
+static bool varda_interacted_this_player_turn;
+
 static void tulkas_quest_decline(cptr message)
 {
     if (message) {
@@ -610,6 +612,9 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
 /* Followups share the current book/choice UI without completing base Varda. */
 bool quest_varda_radiant_gift(void)
 {
+    if (varda_interacted_this_player_turn) return false;
+    varda_interacted_this_player_turn = true;
+
     int choices[3] = {0};
     int count = build_varda_reward_options(choices, N_ELEMENTS(choices));
     if (!count) {
@@ -756,13 +761,19 @@ void check_varda_quest_completion(int r_idx)
     }
 }
 
+void varda_quest_begin_player_turn(void)
+{
+    varda_interacted_this_player_turn = false;
+}
+
 void varda_quest_interaction(void)
 {
     if (quest_followup_interaction(R_IDX_VARDA)) return;
     if (!quest_enabled(QUEST_ID_VARDA)) return;
-    static s32b last_interaction_turn = -1;
-    if (last_interaction_turn == turn) return;
-    last_interaction_turn = turn;
+    /* A paid action can span several world ticks.  Choosing Later must return
+     * control to the player before the pending reward is offered again. */
+    if (varda_interacted_this_player_turn) return;
+    varda_interacted_this_player_turn = true;
 
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
         if (!quest_can_accept_more()) {

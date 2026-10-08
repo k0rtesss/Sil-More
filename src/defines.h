@@ -54,17 +54,20 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.9"
 /*
- * Version components (0.9.9.2).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.9.4).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 2  /* Prepaid, resumable Reforge work. */
+#define VERSION_EXTRA 4  /* Persist pending smithing alloy metadata. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
+
+/* Pending smithing alloy: type and its four already-applied stat bonuses. */
+#define SMITHING_ALLOY_STATE_BYTES 5
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6

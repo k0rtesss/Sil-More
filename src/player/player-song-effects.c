@@ -270,9 +270,9 @@ void sing_song_of_delvings(int score)
     int range = score + 8;
 
     min_y = MAX(1, py - range);
-    max_y = MIN(MAX_DUNGEON_HGT, py + range + 1);
+    max_y = MIN(p_ptr->cur_map_hgt, py + range + 1);
     min_x = MAX(1, px - range);
-    max_x = MIN(MAX_DUNGEON_WID, px + range + 1);
+    max_x = MIN(p_ptr->cur_map_wid, px + range + 1);
     y_range = max_y - min_y;
     x_range = max_x - min_x;
 
@@ -329,13 +329,13 @@ void sing_song_of_delvings(int score)
                 // within a distance of 5 along an axis, we spot them.
                 int i, j;
                 int start_y = MAX(min_y, y - 5);
-                int end_y = MIN(max_y, y + 5);
+                int end_y = MIN(max_y, y + 6);
                 int start_x = MAX(min_x, x - 5);
-                int end_x = MIN(max_x, x + 5);
+                int end_x = MIN(max_x, x + 6);
 
                 for (j = start_y; j < end_y; ++j)
                 {
-                    if (delvings[(j * x_range) + dx] == true)
+                    if (delvings[((j - min_y) * x_range) + dx] == true)
                     {
                         if (cave_trap_bold(y, x))
                             reveal_trap(y, x);
@@ -346,7 +346,7 @@ void sing_song_of_delvings(int score)
 
                 for (i = start_x; i < end_x; ++i)
                 {
-                    if (delvings[(dy * x_range) + i] == true)
+                    if (delvings[(dy * x_range) + (i - min_x)] == true)
                     {
                         if (cave_trap_bold(y, x))
                             reveal_trap(y, x);

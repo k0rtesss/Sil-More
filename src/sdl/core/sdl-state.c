@@ -130,6 +130,18 @@ int sdl_main_view_scale_floor_for_mode(int mode)
         mode = SDL_MIN_TERMINAL_NORMAL;
 
     platform_max = g_platform_max_main_view_scale[mode];
+#if !SIL_SDL_MOBILE_BUILD
+    /* A desktop window can be smaller than the display used to choose the
+     * preferred floor.  Allow scale 1 when scale 2 cannot fit its terminal. */
+    if (g_state.window) {
+        SDL_Rect screen = sdl_get_layout_screen_rect();
+        if (sdl_rect_has_area(&screen)) {
+            int window_max = sdl_max_scale_for_rect_mode(&screen, mode);
+            if (window_max < platform_max)
+                platform_max = window_max;
+        }
+    }
+#endif
     if (platform_max <= SDL_MAIN_VIEW_MIN_SCALE)
         return SDL_MAIN_VIEW_MIN_SCALE;
 

@@ -177,6 +177,8 @@ void player_wipe(void)
 
     /* Wipe the player */
     memset(p_ptr, 0, sizeof(player_type));
+    /* Smithing blueprints and alloy metadata live outside player_type. */
+    smithing_reset_work();
     /* Freeze the new character's policy before origin previews/allocation.
      * App settings loaded later cannot change a living hero's rules. */
     p_ptr->insight_ruleset = op_ptr->opt[OPT_insight_beta]

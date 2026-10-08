@@ -561,7 +561,21 @@ void sdl_control_shutdown(void)
         if (!control_response)
             control_reply(control_input_applied && control_event_next > 0
                 ? NULL : "Game is shutting down", false);
-        for (int i = 0; control_response && i < 10; i++) {
+        /* Readers can hold the previous reply across shutdown. Keep the
+         * completed response until their transient lock clears, bounded by
+         * both two monotonic seconds and the request's remaining deadline. */
+        Uint64 retry_ns = 2000000000ULL;
+        double deadline;
+        SDL_Time now;
+        if (control_number(control_request, "expires_at_ms", 1, 1e15, &deadline)
+            && SDL_GetCurrentTime(&now))
+        {
+            double remaining_ns = (deadline - (double)now / 1000000.0) * 1000000.0;
+            if (remaining_ns < (double)retry_ns)
+                retry_ns = remaining_ns > 0 ? (Uint64)remaining_ns : 0;
+        }
+        Uint64 retry_start = SDL_GetTicksNS();
+        while (control_response && SDL_GetTicksNS() - retry_start < retry_ns) {
             SDL_Delay(10);
             control_finish_reply();
         }

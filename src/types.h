@@ -1376,6 +1376,7 @@ struct player_type
     byte stealth_mode; /* Stealth mode */
     byte climbing; /* The player is climbing over a chasm */
     byte active_weapon_mode; /* PLAYER_ACTIVE_WEAPON_* */
+    byte free_active_weapon_change_used; /* One free ready per paid player turn. */
 
     byte self_made_arts; /* Number of self-made artefacts so far */
 

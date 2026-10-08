@@ -163,10 +163,18 @@ void request_command(void)
             int mouse_command = 0;
             int mouse_dir = 0;
 
-            /* The SDL menu can accept smithing while this command wait is
-             * blocked. Return a harmless command and let the player loop
-             * perform the newly started work. */
-            if (p_ptr->smithing)
+            /* A modal Options action can end the game without using energy.
+             * Return without inventing a floor action or consuming typeahead. */
+            if (p_ptr->leaving)
+            {
+                p_ptr->command_cmd = 0;
+                break;
+            }
+
+            /* A modal SDL menu can spend energy or accept smithing while
+             * this command wait is blocked. Keep any accepted energy and
+             * return a harmless command so the player loop resolves it. */
+            if (p_ptr->energy_use > 0 || p_ptr->smithing)
             {
                 p_ptr->command_cmd = ' ';
                 break;

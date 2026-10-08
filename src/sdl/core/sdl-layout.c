@@ -5307,7 +5307,10 @@ int sdl_max_scale_for_layout(const SDL_Rect* screen, int mode)
     min_cols = sdl_min_terminal_cols_for_mode(mode);
     min_rows = sdl_min_terminal_rows_for_mode(mode);
 
-    for (int scale = SDL_MAIN_VIEW_MAX_SCALE;
+    /* The gameplay sidebar contributes logical columns, but is hidden on
+     * title and character-creation screens.  A saved scale must also fit
+     * their full-window terminal or the next play_game() rejects the size. */
+    for (int scale = sdl_max_scale_for_rect_mode(screen, mode);
          scale >= SDL_MAIN_VIEW_MIN_SCALE; scale--) {
         int cols = 0;
         int rows = 0;
@@ -5446,7 +5449,11 @@ bool sdl_mode_scale_fits_window(const SDL_Rect* screen, int mode,
     config.min_terminal_mode = mode;
     sdl_compute_pruned_split_panes_for_mode_ex(screen, mode, scale, true,
         panes, NULL, NULL, &local_cols, &local_rows, &local_rows_with_bottom);
-    fits = (local_cols >= sdl_min_terminal_cols_for_mode(mode)
+    SDL_Rect full_screen = *screen;
+    if (sdl_mobile_portrait_layout_active() && screen->h > screen->w)
+        sdl_mobile_portrait_scale_reference_rect(screen, &full_screen);
+    fits = (scale <= sdl_max_scale_for_rect_mode(&full_screen, mode)
+        && local_cols >= sdl_min_terminal_cols_for_mode(mode)
         && local_rows_with_bottom >= sdl_min_terminal_rows_for_mode(mode));
 
     config = saved_config;

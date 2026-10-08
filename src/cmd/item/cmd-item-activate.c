@@ -1118,6 +1118,7 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     object_type* o_ptr = NULL;
     object_type* sanctity_target_o_ptr = NULL;
     bool use_charge;
+    int old_action;
 
     int supply_index = supplies_current_action();
     bool from_supplies = (supply_index >= 0);
@@ -1209,6 +1210,7 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     p_ptr->energy_use = 100;
 
     // store the action type
+    old_action = p_ptr->previous_action[0];
     p_ptr->previous_action[0] = ACTION_MISC;
 
     /* Not identified yet */
@@ -1219,6 +1221,16 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
         use_charge = use_sanctity_gem_on(sanctity_target_o_ptr, &ident);
     else
         use_charge = use_object(o_ptr, &ident);
+
+    /* These effects begin only after selecting a target. Cancelling the
+     * picker (or finding no eligible target) is not a gem use. */
+    if (!use_charge && (o_ptr->sval == SV_GEM_UNDERSTANDING
+            || o_ptr->sval == SV_GEM_RECHARGING))
+    {
+        p_ptr->energy_use = 0;
+        p_ptr->previous_action[0] = old_action;
+        return;
+    }
 
     // Break the truce
     break_truce(false);

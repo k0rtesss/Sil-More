@@ -50,6 +50,12 @@ static int artefact_y, artefact_x, artefact_count;
 void __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
     assert(id==ART_DURIN);(void)identify;
     artefact_y=y;artefact_x=x;artefact_count++;
+    /* This sparse fixture has no artefact metadata, but must preserve the
+     * real drop's floor occupancy: the final vault pass cannot trap an item. */
+    object_type item;
+    object_wipe(&item);
+    item.k_idx=1;item.tval=TV_MAIL;item.sval=SV_MAIL_CORSLET;item.number=1;
+    assert(floor_carry(y,x,&item)>0);
 }
 
 static bool status_has_label(const status_pane_entry* entries, int count,
@@ -406,8 +412,12 @@ void vault_water_tests(void) {
     style_info[0].wall_row=@WALL_ROW@;style_info[0].wall_col=@WALL_COL@;
     style_info[0].floor_row=@FLOOR_ROW@;style_info[0].floor_col=@FLOOR_COL@;
     style_info[0].floor_count=0;
-    for(int rotation=0;rotation<2;rotation++)for(int seed=0;seed<8;seed++) {
-        water_map(23,23,FEAT_WALL_EXTRA);Rand_state_init(seed);artefact_count=0;
+    const u64b seeds[]={1,2,3,4,5,6,7,8,83};
+    z_info->o_max=64; /* Matches the isolated water fixture's object pool. */
+    for(int rotation=0;rotation<2;rotation++)for(int s=0;s<9;s++) {
+        water_map(23,23,FEAT_WALL_EXTRA);
+        memset(o_list,0,z_info->o_max*sizeof(*o_list));o_max=1;o_cnt=0;
+        Rand_state_init(seeds[s]);artefact_count=0;
         assert(build_vault(11,11,&vault,rotation));
         int wet=0;
         for(int y=0;y<23;y++)for(int x=0;x<23;x++) {
@@ -416,9 +426,12 @@ void vault_water_tests(void) {
         }
         assert(wet==@WET@&&artefact_count==1);
         assert(cave_feat[artefact_y][artefact_x]==FEAT_FLOOR);
-        if(!rotation&&seed==0)water_preview("scripts/output/water-check/kheled-zaram.png",2);
+        int object=cave_o_idx[artefact_y][artefact_x];
+        assert(object>0&&o_list[object].tval==TV_MAIL&&o_list[object].number==1);
+        assert(o_list[object].iy==artefact_y&&o_list[object].ix==artefact_x);
+        if(!rotation&&s==0)water_preview("scripts/output/water-check/kheled-zaram.png",2);
     }
-    puts("Kheled-Zaram: actual vault builder, 16 rotations/reflections, lake tiles and dry Durin artefact square: PASS");
+    puts("Kheled-Zaram: actual vault builder, 18 deterministic rotations/reflections including seed83, lake tiles and occupied dry Durin artefact square: PASS");
     style_info[0].wall_row=0;style_info[0].wall_col=4;
     style_info[0].floor_row=0;style_info[0].floor_col=1;
 }

@@ -197,7 +197,8 @@ void wr_extra(void)
     }
     wr_u16b(p_ptr->insight_milestones);
     wr_s32b(p_ptr->insight_points);
-    wr_byte(0);
+    /* 0.9.9.3: preserve ready credit in a formerly reserved whole byte. */
+    wr_byte(p_ptr->free_active_weapon_change_used != 0);
 
     /* Version 0.9.8.30: one-time Insight rewards for monster families. */
     wr_u32b(p_ptr->insight_monster_types & RF3_RACE_MASK);

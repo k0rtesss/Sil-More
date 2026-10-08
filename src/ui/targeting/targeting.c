@@ -2007,7 +2007,8 @@ bool target_set_interactive(int mode, int range)
             x2 = x;
 
             // prepare the relevant prompt
-            SDL_strlcpy(info, "<space>, <tab>, <dir>", sizeof(info));
+            SDL_strlcpy(info,
+                "Space/Tab, Ctrl+W water, Ctrl+F ice, dir", sizeof(info));
 
             /* Describe and Prompt (enable "TARGET_LOOK") */
             query = target_set_interactive_aux(y, x, mode | TARGET_LOOK, info, use_story_look);
@@ -2245,7 +2246,8 @@ bool target_set_interactive(int mode, int range)
             }
 
             // change the terrain
-            else if (strchr(".;'^+#:%0<>_`", query) || inc_terrain)
+            else if (strchr(".;'^+#:%0<>_`", query) || inc_terrain
+                || query == KTRL('W') || query == KTRL('F'))
             {
                 feature_type* f_ptr;
                 feature_type* old_f_ptr;
@@ -2280,6 +2282,8 @@ bool target_set_interactive(int mode, int range)
 
                         // stop when you find one
                         if (f_ptr->d_char == query
+                            || (query == KTRL('W') && i == FEAT_WATER)
+                            || (query == KTRL('F') && i == FEAT_ICE)
                             || (query == '_' && i == FEAT_WATER)
                             || (query == '`' && i == FEAT_LAVA))
                         {

@@ -6078,7 +6078,15 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             msg_print("Ability switched off.");
 
             if ((skilltype == S_SNG) && (abilitynum == SNG_WOVEN_THEMES))
+            {
+                int previous_trees_bonus = singing(SNG_TREES)
+                    ? ability_bonus(S_SNG, SNG_TREES) : 0;
                 p_ptr->song2 = SNG_NOTHING;
+                int trees_bonus = singing(SNG_TREES)
+                    ? ability_bonus(S_SNG, SNG_TREES) : 0;
+                if (trees_bonus != previous_trees_bonus)
+                    p_ptr->update |= PU_TORCH;
+            }
         }
         else
         {

@@ -55,6 +55,7 @@ typedef const char *cptr;typedef unsigned char byte;
 #define INVEN_TOTAL 12
 #define TV_RING 1
 #define TV_AMULET 2
+#define TV_HORN 51
 #define TR3_TWO_HANDED 1
 #define QUIVER_INDEX 100
 #define SUPPLIES_INDEX 200
@@ -199,7 +200,7 @@ int main(void){
  /* Actual production dispatcher opens Choose Item Setup. Cancel returns false,
   * so focus/selection/scroll remain available for the explicit Categories input. */
  int column=1,group_cur=2,group_top=1,entry_cur=3,entry_top=1;char failure[80]={0};
- sword.obj.number=1;assert(!inventory_page_use_entry(&sword,0,failure,sizeof(failure)));
+ sword.obj.number=1;assert(!inventory_page_use_entry(&sword,0,failure,sizeof(failure),NULL));
  assert(entry_dialogs==1&&world_actions==0&&column==1);
  assert(supply_take_category_return(SUPPLY_CLICK_CATEGORY_RETURN,UI_MENU_CLICK_PRIMARY,&column));
  assert(column==0&&group_cur==2&&group_top==1&&entry_cur==3&&entry_top==1&&world_actions==0);

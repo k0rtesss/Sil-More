@@ -13,10 +13,22 @@
 #include "supplies.h"
 #include <math.h>
 
+static int trees_song_light_bonus(void)
+{
+    return singing(SNG_TREES) ? ability_bonus(S_SNG, SNG_TREES) : 0;
+}
+
+static void update_trees_song_light(int previous_bonus)
+{
+    if (trees_song_light_bonus() != previous_bonus)
+        p_ptr->update |= PU_TORCH;
+}
+
 void change_song(int song)
 {
     if (song != SNG_NOTHING && !tutorial_game_action_allowed("song", NULL)) return;
     int song_to_change;
+    int previous_trees_bonus = trees_song_light_bonus();
     int old_song;
     bool new_song_is_duel;
     bool old_song_is_duel;
@@ -89,6 +101,7 @@ void change_song(int song)
     {
         p_ptr->song2 = p_ptr->song1;
         p_ptr->song1 = old_song;
+        update_trees_song_light(previous_trees_bonus);
 
         msg_print("You change the order of your themes.");
 
@@ -435,6 +448,8 @@ void change_song(int song)
         p_ptr->song2 = song;
     }
 
+    update_trees_song_light(previous_trees_bonus);
+
     if ((song_to_change == 1) && new_song_is_duel && (song != SNG_NOTHING))
     {
         monster_type* m_ptr = song_duel_get_target(song);
@@ -561,6 +576,7 @@ static bool player_can_sustain_song(int song)
 void sing(void)
 {
     int type;
+    int previous_trees_bonus = trees_song_light_bonus();
     int song = p_ptr->song1; // a default to soothe compilation warnings
     int score = 0;
     int effective_score = 0;
@@ -578,14 +594,21 @@ void sing(void)
         return;
     }
 
-    // abort song if out of voice, lost the ability to weave themes, or lost
-    // either song ability
+    // Losing a minor theme or its weaving source does not invalidate the
+    // independently sustained main theme (as with switching Woven Themes off).
+    if ((p_ptr->song2 != SNG_NOTHING)
+        && (!p_ptr->active_ability[S_SNG][SNG_WOVEN_THEMES]
+            || !player_can_sustain_song(p_ptr->song2)))
+    {
+        p_ptr->song2 = SNG_NOTHING;
+        p_ptr->redraw |= PR_SONG;
+        p_ptr->update |= PU_BONUS;
+        update_trees_song_light(previous_trees_bonus);
+    }
+
+    // Abort both themes if voice or the main song itself is unavailable.
     if ((p_ptr->csp < 1)
-        || ((p_ptr->song2 != SNG_NOTHING)
-            && !p_ptr->active_ability[S_SNG][SNG_WOVEN_THEMES])
-        || (!player_can_sustain_song(p_ptr->song1))
-        || ((p_ptr->song2 != SNG_NOTHING)
-            && !player_can_sustain_song(p_ptr->song2)))
+        || (!player_can_sustain_song(p_ptr->song1)))
     {
         /* Stop singing */
         if (song_disguise_is_active())
