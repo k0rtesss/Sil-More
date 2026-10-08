@@ -266,6 +266,7 @@ static bool show_buffer_normal(cptr main_buffer, int line)
         }
 
         ui_scroll_area_begin(0, hgt - 1, SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_indicator(line, MAX(0, size - (hgt - 5)));
         ui_scroll_area_set_keys('8', '2', '6', '4');
         ui_scroll_area_set_tap_key(ESCAPE);
 
@@ -385,6 +386,7 @@ bool show_buffer(cptr main_buffer, int line)
         }
 
         ui_scroll_area_begin(0, hgt - 1, SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_indicator(line, MAX(0, size - page_rows));
         ui_scroll_area_set_keys('8', '2', '6', '4');
         ui_scroll_area_set_tap_key(ESCAPE);
 
@@ -1203,6 +1205,7 @@ bool show_file(cptr name, cptr what, int line)
         }
 
         ui_scroll_area_begin(0, hgt - 1, SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_indicator(line, MAX(0, size - page_rows));
         ui_scroll_area_set_keys('8', '2', '6', '4');
         ui_scroll_area_set_tap_key(ESCAPE);
 

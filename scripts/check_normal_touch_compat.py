@@ -246,6 +246,34 @@ def compare(before, after, where=""):
         assert before == after, f"{where}: before={before}, now={after}"
 
 
+def compare_record(before, after, width, height):
+    where = f"{width}x{height}:{before['kind']}:{before['id']}"
+    shifted = {f"quick-touch-{scale}-{row}-0" for scale in (2, 6) for row in (0, 1)}
+    if (width, height) != (1080, 2400) or before["kind"] != "hud" or before["id"] not in shifted:
+        compare(before, after, where)
+        return
+
+    # Correcting the normal portrait toolbar's outer-edge reservation moves
+    # these four Wait/Rest fixtures up 37px. Require exactly that translation,
+    # unchanged control dimensions/content, and identical surrounding pixels.
+    import math
+    from PIL import Image, ImageChops, ImageDraw
+
+    expected = dict(before)
+    expected["thumb"] = [[x, y - 37, w, h] for x, y, w, h in before["thumb"]]
+    expected["pixels"] = after["pixels"]
+    compare(expected, after, where)
+    images = [Image.open(OUT / f"{name}-{width}x{height}-{before['id']}.png").convert("RGBA")
+              for name in ("before", "current")]
+    for old, new in zip(before["thumb"], after["thumb"]):
+        boxes = [(math.floor(x) - 2, math.floor(y) - 2,
+                  math.ceil(x + w) + 2, math.ceil(y + h) + 2) for x, y, w, h in (old, new)]
+        assert images[0].crop(boxes[0]).tobytes() == images[1].crop(boxes[1]).tobytes(), where
+        for image, (x0, y0, x1, y1) in zip(images, boxes):
+            ImageDraw.Draw(image).rectangle((x0, y0, x1 - 1, y1 - 1), fill=(24, 30, 36, 255))
+    assert ImageChops.difference(images[0], images[1]).convert("RGB").getbbox() is None, where
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     source = OUT / "check.c"
@@ -291,8 +319,9 @@ def main():
             records.append([json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")])
         assert len(records[0]) == len(records[1]) == 104
         for old, new in zip(*records):
-            compare(old, new, f"{w}x{h}:{old['kind']}:{old['id']}")
-        print(f"Normal {w}x{h} @{scale}: 96 Quick Access grids + 8 Quick Touch/character renders match {BEFORE}; pixels and hit tests PASS", flush=True)
+            compare_record(old, new, w, h)
+        extra = "; four Quick Touch controls translate up 37px with identical local pixels" if (w, h) == (1080, 2400) else ""
+        print(f"Normal {w}x{h} @{scale}: 96 Quick Access grids + 8 Quick Touch/character renders verified against {BEFORE}{extra}; pixels and hit tests PASS", flush=True)
 
 
 if __name__ == "__main__":

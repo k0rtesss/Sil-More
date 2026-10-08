@@ -866,6 +866,10 @@ void sdl_gameplay_tutorial_render(void)
         sdl_touch_tutorial_draw_text_line(lines[i+tutorial_scroll],tutorial_card.x+pad,
             body_y+i*line_h,width-2*pad,font_px,white,false);
     if (tutorial_max_scroll) {
+        SDL_FRect viewport = { tutorial_card.x + pad, body_y,
+            width - pad - 3.0f * sdl_ui_density_scale(), visible_lines * line_h };
+        sdl_ui_render_scroll_indicator(viewport, tutorial_scroll,
+            tutorial_max_scroll, visible_lines);
         char progress[48];
         strnfmt(progress,sizeof(progress)," | %d-%d/%d",tutorial_scroll+1,
             MIN(line_count,tutorial_scroll+visible_lines),line_count);

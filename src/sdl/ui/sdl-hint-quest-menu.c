@@ -1560,6 +1560,10 @@ void sdl_hint_quest_menu_render(void)
     }
     SDL_SetRenderClipRect(g_state.renderer, NULL);
     sdl_hint_quest_draw_footer(&layout, body_font);
+    SDL_FRect indicator = layout.body;
+    indicator.w += 6.0f * sdl_ui_density_scale();
+    sdl_ui_render_scroll_indicator(indicator, g_hint_quest.scroll_y,
+        g_hint_quest.max_scroll_y, indicator.h);
 
     if (g_hint_quest.scroll_y > 0.5f)
     {

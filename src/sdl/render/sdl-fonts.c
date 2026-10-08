@@ -1307,7 +1307,8 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
      * that padding is reserved.  The content stays flush with the top.
      */
     if (sdl_view_is_overlay_log_pane(d)) {
-        int vmargin = pane_log_overlay_vertical_padding_px(d->cell_h);
+        int vmargin = config.bigger_font ? 0
+            : pane_log_overlay_vertical_padding_px(d->cell_h);
         int avail = rect.h - vmargin;
         int config_index = sdl_pane_config_index_in_array(pane_config,
             pane_config_count, PANE_ROLLS);
@@ -1341,6 +1342,10 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         : (rect.h - d->rows * d->cell_h) / 2;
     if (d->margin_y < 0)
         d->margin_y = 0;
+    if (config.bigger_font) {
+        d->margin_x = 0;
+        d->margin_y = 0;
+    }
     log_debug("view cols=%d rows=%d cell=(%d, %d) margin=(%d, %d)",
         d->cols, d->rows, d->cell_w, d->cell_h,
         d->margin_x, d->margin_y);

@@ -3331,6 +3331,10 @@ void do_cmd_messages_with_filter(int initial_filter)
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        /* Use one unit throughout the range. A sole oversized message has
+         * an internal row offset instead of an entry offset. */
+        ui_scroll_area_set_indicator(max_i > 0 ? i : entry_line_top,
+            max_i > 0 ? max_i : entry_line_max);
         if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER))
         {

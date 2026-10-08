@@ -2652,6 +2652,58 @@ static const char* sdl_minimap_hint_destination_label(
     }
 }
 
+/* Map text uses the same resolved sizes as other accessible menus. Keep it
+ * inside the map viewport so wrapping cannot cover the controls or footer. */
+static void sdl_minimap_draw_large_text_box(const char* text, float anchor_x,
+    float anchor_y, bool above, SDL_Color accent, enum sdl_ui_font_role role)
+{
+    SDL_FRect viewport = g_minimap.viewport_rect;
+    float pad = SDL_ceilf(sdl_ui_density_scale() * 6.0f);
+    int wrap_w = (int)MIN(viewport.w - pad * 4.0f,
+        360.0f * sdl_ui_density_scale());
+    TTF_Font* font = sdl_main_menu_mono_font_for_height(
+        sdl_ui_role_font_px(role));
+    SDL_Color color = {(byte)MIN(255, accent.r + 70),
+        (byte)MIN(255, accent.g + 70), (byte)MIN(255, accent.b + 70), 255};
+    int text_w = 0;
+    int text_h = 0;
+    SDL_Texture* texture;
+    SDL_FRect box;
+    SDL_FRect dst;
+
+    if (!font || !text || !text[0] || wrap_w <= 0)
+        return;
+    if (anchor_x < viewport.x || anchor_x > viewport.x + viewport.w
+        || anchor_y < viewport.y || anchor_y > viewport.y + viewport.h)
+        return;
+    texture = sdl_ui_wrapped_text_texture(font, text, wrap_w, color,
+        &text_w, &text_h);
+    if (!texture)
+        return;
+    if ((float)text_h + pad * 4.0f > viewport.h) {
+        texture = sdl_ui_wrapped_text_texture(font, text,
+            (int)(viewport.w - pad * 4.0f), color, &text_w, &text_h);
+        if (!texture)
+            return;
+    }
+    box.w = (float)text_w + pad * 2.0f;
+    box.h = (float)text_h + pad * 2.0f;
+    box.x = sdl_minimap_clampf(anchor_x - box.w * 0.5f,
+        viewport.x + pad, viewport.x + viewport.w - box.w - pad);
+    box.y = above ? anchor_y - box.h - pad : anchor_y - box.h * 0.5f;
+    box.y = sdl_minimap_clampf(box.y, viewport.y + pad,
+        viewport.y + viewport.h - box.h - pad);
+    dst = (SDL_FRect){box.x + pad, box.y + pad,
+        (float)text_w, (float)text_h};
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r / 8, accent.g / 8,
+        accent.b / 8, 240);
+    SDL_RenderFillRect(g_state.renderer, &box);
+    SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b, 255);
+    SDL_RenderRect(g_state.renderer, &box);
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+}
+
 static void sdl_minimap_draw_hint_destination_label(const char* label,
     float anchor_x, float anchor_y, float grid_h, const SDL_FRect* map_dst,
     bool exact, SDL_Color accent)
@@ -2672,6 +2724,12 @@ static void sdl_minimap_draw_hint_destination_label(const char* label,
     float max_box_w;
     const float pad_x = 3.0f;
     const float pad_y = 2.0f;
+
+    if (get_sdl_bigger_font() && g_minimap.active) {
+        sdl_minimap_draw_large_text_box(label, anchor_x, anchor_y, exact,
+            accent, SDL_UI_FONT_META);
+        return;
+    }
 
     if (!label || !label[0] || !map_dst || !d || !d->font_atlas)
         return;
@@ -2782,6 +2840,11 @@ void sdl_minimap_draw_hint_destinations(const SDL_FRect* map_dst, int min_y,
                 label_x, label_y, false, accent
             };
         }
+    }
+    if (get_sdl_bigger_font() && g_minimap.active) {
+        SDL_Rect viewport_clip = sdl_frect_to_clip_rect(&g_minimap.viewport_rect);
+        SDL_SetRenderClipRect(g_state.renderer,
+            had_clip ? &old_clip : &viewport_clip);
     }
     for (int i = 0; i < label_count; ++i) {
         sdl_minimap_draw_hint_destination_label(labels[i].text, labels[i].x,
@@ -3089,23 +3152,6 @@ void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h,
         return;
     }
 
-    max_text_cols = d->cols - 4;
-    if (max_text_cols < 8)
-        return;
-
-    strnfmt(display, sizeof(display), "%s", tip);
-    len = (int)strlen(display);
-    if (len > max_text_cols)
-    {
-        int keep = max_text_cols - 3;
-        if (keep < 1)
-            keep = 1;
-        strnfmt(display, sizeof(display), "%.*s...", keep, tip);
-        len = (int)strlen(display);
-    }
-    if (len <= 0)
-        return;
-
     map_rows = max_y - min_y + 1;
     map_cols = max_x - min_x + 1;
     if (map_rows <= 0 || map_cols <= 0)
@@ -3117,6 +3163,25 @@ void sdl_minimap_draw_focus_tip(sdl_view* d, int canvas_w, int canvas_h,
         * grid_w;
     anchor_y = map_dst->y + ((float)(g_minimap.focus_y - min_y) + 0.5f)
         * grid_h;
+
+    if (get_sdl_bigger_font()) {
+        sdl_minimap_draw_large_text_box(tip, anchor_x, anchor_y, true,
+            (SDL_Color){80, 245, 130, 255}, SDL_UI_FONT_BODY);
+        return;
+    }
+
+    max_text_cols = d->cols - 4;
+    if (max_text_cols < 8)
+        return;
+    strnfmt(display, sizeof(display), "%s", tip);
+    len = (int)strlen(display);
+    if (len > max_text_cols) {
+        int keep = MAX(1, max_text_cols - 3);
+        strnfmt(display, sizeof(display), "%.*s...", keep, tip);
+        len = (int)strlen(display);
+    }
+    if (len <= 0)
+        return;
 
     box_cols = len + 2;
     if (box_cols > d->cols)
@@ -4324,6 +4389,7 @@ bool sdl_display_pixel_map(int* cy, int* cx)
     float base_x = 0.0f;
     float base_y = 0.0f;
     SDL_FRect map_dst;
+    SDL_FRect viewport;
 
     if (!Term || !p_ptr || !g_state.renderer)
         return false;
@@ -4343,9 +4409,12 @@ bool sdl_display_pixel_map(int* cy, int* cx)
     source_w = map_cols * TILE_SIZE;
     source_h = map_rows * TILE_SIZE;
     canvas_w = d->cols * d->cell_w;
-    canvas_h = (d->rows > 1 ? d->rows - 1 : d->rows) * d->cell_h;
+    canvas_h = (get_sdl_bigger_font() && g_minimap.active ? d->rows
+        : (d->rows > 1 ? d->rows - 1 : d->rows)) * d->cell_h;
     if (source_w <= 0 || source_h <= 0 || canvas_w <= 0 || canvas_h <= 0)
         return false;
+    sdl_minimap_layout_controls(d, canvas_w, canvas_h);
+    viewport = g_minimap.viewport_rect;
 
     restore_target = SDL_GetRenderTarget(g_state.renderer);
     if (!sdl_minimap_map_texture_cache_matches(min_y, min_x, max_y, max_x))
@@ -4405,8 +4474,8 @@ bool sdl_display_pixel_map(int* cy, int* cx)
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
     SDL_RenderClear(g_state.renderer);
 
-    scale_x = (float)canvas_w / (float)source_w;
-    scale_y = (float)canvas_h / (float)source_h;
+    scale_x = viewport.w / (float)source_w;
+    scale_y = viewport.h / (float)source_h;
     scale = (scale_x < scale_y) ? scale_x : scale_y;
     if (g_minimap.active && g_minimap.default_zoom_pending) {
         g_minimap.zoom_step = sdl_minimap_default_zoom_step(scale, d);
@@ -4437,8 +4506,8 @@ bool sdl_display_pixel_map(int* cy, int* cx)
         if (center_y < min_y || center_y > max_y
             || center_x < min_x || center_x > max_x)
         {
-            map_dst.x = ((float)canvas_w - map_dst.w) * 0.5f;
-            map_dst.y = ((float)canvas_h - map_dst.h) * 0.5f;
+            map_dst.x = viewport.x + (viewport.w - map_dst.w) * 0.5f;
+            map_dst.y = viewport.y + (viewport.h - map_dst.h) * 0.5f;
             g_minimap.pan_x = 0.0f;
             g_minimap.pan_y = 0.0f;
         }
@@ -4449,21 +4518,21 @@ bool sdl_display_pixel_map(int* cy, int* cx)
             float player_src_y = ((float)(center_y - min_y) + 0.5f)
                 * (float)TILE_SIZE * scale;
 
-            base_x = (float)canvas_w * 0.5f - player_src_x;
-            base_y = (float)canvas_h * 0.5f - player_src_y;
+            base_x = viewport.x + viewport.w * 0.5f - player_src_x;
+            base_y = viewport.y + viewport.h * 0.5f - player_src_y;
             map_dst.x = base_x + g_minimap.pan_x;
             map_dst.y = base_y + g_minimap.pan_y;
-            if (map_dst.w <= (float)canvas_w)
-                map_dst.x = ((float)canvas_w - map_dst.w) * 0.5f;
+            if (map_dst.w <= viewport.w)
+                map_dst.x = viewport.x + (viewport.w - map_dst.w) * 0.5f;
             else
                 map_dst.x = sdl_minimap_clampf(map_dst.x,
-                    (float)canvas_w - map_dst.w, 0.0f);
+                    viewport.x + viewport.w - map_dst.w, viewport.x);
 
-            if (map_dst.h <= (float)canvas_h)
-                map_dst.y = ((float)canvas_h - map_dst.h) * 0.5f;
+            if (map_dst.h <= viewport.h)
+                map_dst.y = viewport.y + (viewport.h - map_dst.h) * 0.5f;
             else
                 map_dst.y = sdl_minimap_clampf(map_dst.y,
-                    (float)canvas_h - map_dst.h, 0.0f);
+                    viewport.y + viewport.h - map_dst.h, viewport.y);
 
             g_minimap.pan_x = map_dst.x - base_x;
             g_minimap.pan_y = map_dst.y - base_y;
@@ -4473,6 +4542,11 @@ bool sdl_display_pixel_map(int* cy, int* cx)
         map_dst.y = ((float)canvas_h - map_dst.h) * 0.5f;
     }
     sdl_minimap_store_map_layout(&map_dst, min_y, min_x, max_y, max_x);
+    if (get_sdl_bigger_font() && g_minimap.active) {
+        SDL_Rect clip = {(int)viewport.x, (int)viewport.y,
+            (int)viewport.w, (int)viewport.h};
+        SDL_SetRenderClipRect(g_state.renderer, &clip);
+    }
     SDL_RenderTexture(g_state.renderer, map_texture, NULL, &map_dst);
 
     SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 80);
@@ -4530,6 +4604,7 @@ bool sdl_display_pixel_map(int* cy, int* cx)
         max_y, max_x);
 
     if (g_minimap.active) {
+        SDL_SetRenderClipRect(g_state.renderer, NULL);
         sdl_minimap_draw_controls(d, canvas_w, canvas_h);
         sdl_minimap_draw_prompt(d, canvas_w, canvas_h);
     }

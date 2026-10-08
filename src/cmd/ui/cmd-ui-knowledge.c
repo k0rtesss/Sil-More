@@ -4108,6 +4108,8 @@ static void knowledge_touch_scroll_region(
     ui_scroll_area_set_keys('8', '2', '6', '4');
     if (sdl_touch_tutorial_device_available() && offset)
         ui_scroll_area_set_offset_target(offset, max_offset);
+    if (offset)
+        ui_scroll_area_set_indicator(*offset, max_offset);
 }
 
 static void knowledge_begin_touch_scroll_area_offset(
@@ -9227,7 +9229,8 @@ static void knowledge_register_prompt_clicks(
         layout->prompt_row, prompt, "R1");
 }
 
-static void knowledge_begin_clicks(const knowledge_browser_layout* layout)
+static void knowledge_begin_clicks(const knowledge_browser_layout* layout,
+    int* top, int count)
 {
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
@@ -9235,6 +9238,7 @@ static void knowledge_begin_clicks(const knowledge_browser_layout* layout)
     ui_menu_click_set_touch_exit_button(true);
     ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
     knowledge_begin_touch_scroll_area(layout, SDL_TOUCH_MENU_CATEGORY_OTHER);
+    ui_scroll_area_set_indicator(*top, MAX(0, count - layout->list_rows));
     knowledge_register_tabs(layout);
     knowledge_enable_horizontal_page_swipe(layout,
         SDL_TOUCH_MENU_CATEGORY_OTHER, layout->tabs_row, '[', ']');
@@ -10493,7 +10497,9 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_draw_frame(&draw_layout, page, !single_column, list_label,
                 state.tabs_focus);
             if (single_column || !draw_layout.stacked)
-                knowledge_begin_clicks(&draw_layout);
+                knowledge_begin_clicks(&draw_layout,
+                    state.column[page] == 0 ? &state.group_top[page] : &state.entry_top[page],
+                    state.column[page] == 0 ? artefact_grp_cnt : artefact_cnt);
             else
                 knowledge_begin_grouped_clicks(&draw_layout,
                     &state.group_top[page], artefact_grp_cnt,
@@ -10642,7 +10648,9 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_draw_frame(&draw_layout, page, !single_column, list_label,
                 state.tabs_focus);
             if (single_column || !draw_layout.stacked)
-                knowledge_begin_clicks(&draw_layout);
+                knowledge_begin_clicks(&draw_layout,
+                    state.column[page] == 0 ? &state.group_top[page] : &state.entry_top[page],
+                    state.column[page] == 0 ? object_grp_cnt : object_cnt);
             else
                 knowledge_begin_grouped_clicks(&draw_layout,
                     &state.group_top[page], object_grp_cnt,
@@ -10814,7 +10822,9 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_draw_frame(&draw_layout, page, !single_column, list_label,
                 state.tabs_focus);
             if (single_column || !draw_layout.stacked)
-                knowledge_begin_clicks(&draw_layout);
+                knowledge_begin_clicks(&draw_layout,
+                    state.column[page] == 0 ? &state.group_top[page] : &state.entry_top[page],
+                    state.column[page] == 0 ? monster_grp_cnt : monster_cnt);
             else
                 knowledge_begin_grouped_clicks(&draw_layout,
                     &state.group_top[page], monster_grp_cnt,
@@ -10932,7 +10942,7 @@ void do_cmd_knowledge_browser_page(int page)
                 curse_cnt, layout.list_rows);
             knowledge_draw_frame(&layout, page, false, "Known curses",
                 state.tabs_focus);
-            knowledge_begin_clicks(&layout);
+            knowledge_begin_clicks(&layout, &state.entry_top[page], curse_cnt);
             knowledge_display_curses(&layout, curse_idx, curse_cnt,
                 state.entry_cur[page], state.entry_top[page]);
             knowledge_register_visible_rows(KNOWLEDGE_CLICK_ENTRY_BASE,

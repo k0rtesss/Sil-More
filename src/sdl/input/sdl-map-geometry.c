@@ -530,7 +530,7 @@ bool sdl_main_view_point_to_cell(float x, float y, int* out_col, int* out_row)
 
         if (!sdl_left_panel_metrics_for_view(view, &metrics))
             return false;
-        if (grid_w <= (float)metrics.total_w)
+        if (grid_w < (float)(metrics.total_w + (config.bigger_font ? 0 : 1)))
             return false;
         if (!sdl_left_panel_pane_rect_for_metrics(view, &metrics,
                 &panel_rect))

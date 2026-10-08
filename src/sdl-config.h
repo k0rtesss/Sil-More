@@ -244,7 +244,7 @@ struct sdl_config {
     bool compact_inventory_menus;
     // Enlarge all UI text and use readable, reflowed mobile menu layouts.
     bool bigger_font;
-    // Use the large-text, paginated debug character sheet in SDL.
+    // Use the paginated Big font character sheet (legacy JSON key retained).
     bool debug_character_sheet;
     // Extra scale steps applied when mobile gameplay first appears.
     int mobile_starting_zoom_offset;
@@ -404,7 +404,7 @@ void sdl_pane_profile_apply_portrait_defaults(
 void sdl_pane_profile_apply_tablet_defaults(
     struct sdl_pane_profile* profile, int orientation);
 void sdl_pane_profile_apply_bigger_font_defaults(
-    struct sdl_pane_profile* profile);
+    struct sdl_pane_profile* profile, int orientation);
 
 // Set default configuration values
 void sdl_config_set_defaults(struct sdl_config* config);

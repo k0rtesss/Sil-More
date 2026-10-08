@@ -1385,30 +1385,11 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
         out->scrollable = max_scroll_offset > 0;
         if (out->scrollable)
         {
-            float track_w = sdl_touch_pane_clampf(
-                (float)font_px * 0.12f, 3.0f, 6.0f);
-            float thumb_h = rows_h * rows_h
-                / MAX(scroll_content_h, rows_h);
-            float min_thumb_h = sdl_touch_pane_clampf(
-                (float)font_px * 0.8f, 18.0f, 34.0f);
-
-            if (thumb_h < min_thumb_h)
-                thumb_h = min_thumb_h;
-            if (thumb_h > rows_h)
-                thumb_h = rows_h;
-            out->scroll_track = (SDL_FRect){
-                .x = out->panel.x + out->panel.w - track_w - 2.0f,
-                .y = rows_top,
-                .w = track_w,
-                .h = rows_h,
-            };
-            out->scroll_thumb = (SDL_FRect){
-                .x = out->scroll_track.x,
-                .y = rows_top + (rows_h - thumb_h)
-                    * ((float)scroll_offset / (float)max_scroll_offset),
-                .w = track_w,
-                .h = thumb_h,
-            };
+            SDL_FRect viewport = { out->panel.x, rows_top,
+                out->panel.w - 2.0f * sdl_ui_density_scale(), rows_h };
+            sdl_ui_scroll_indicator_layout(viewport, scroll_offset,
+                max_scroll_offset, rows_h, &out->scroll_track,
+                &out->scroll_thumb);
         }
     }
 
@@ -2351,9 +2332,9 @@ void sdl_question_menu_render(void)
     SDL_SetRenderClipRect(g_state.renderer, &clip);
     if (layout.scrollable)
     {
-        SDL_SetRenderDrawColor(g_state.renderer, 120, 130, 145, 70);
+        SDL_SetRenderDrawColor(g_state.renderer, 120, 130, 145, 100);
         SDL_RenderFillRect(g_state.renderer, &layout.scroll_track);
-        SDL_SetRenderDrawColor(g_state.renderer, 150, 190, 235, 205);
+        SDL_SetRenderDrawColor(g_state.renderer, 150, 190, 235, 235);
         SDL_RenderFillRect(g_state.renderer, &layout.scroll_thumb);
     }
 

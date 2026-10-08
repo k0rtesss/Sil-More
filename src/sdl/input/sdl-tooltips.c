@@ -2932,6 +2932,13 @@ void sdl_description_overlay_render(void)
     sdl_description_overlay_render_close_button(&layout,
         overlay->close_hover);
 
+    SDL_FRect indicator = { layout.text_x, layout.text_y,
+        layout.panel.x + layout.panel.w - 3.0f * sdl_ui_density_scale()
+            - layout.text_x,
+        layout.visible_rows * layout.cell_h };
+    sdl_ui_render_scroll_indicator(indicator, layout.scroll,
+        layout.max_scroll, layout.visible_rows);
+
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 
     if (!cached)

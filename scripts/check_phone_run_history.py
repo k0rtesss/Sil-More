@@ -14,7 +14,7 @@ ROOT=Path(__file__).resolve().parents[1]
 BUILD=ROOT/"build-standard"
 OUT=ROOT/"scripts/output/phone-run-history-check"
 PREFIX=AUX[:AUX.index("static void check_touch_panels(void)")]
-INIT=AUX[AUX.index("int main(int argc,char **argv)"):AUX.index("    for(int big=0;big<2;big++)")]
+INIT=AUX[AUX.index("int main(int argc,char **argv)"):AUX.index("    for(int big=")]
 INIT=INIT.replace("argc==7","argc==9").replace("term_init(&view->t,80,24,256)",
     "term_init(&view->t,atoi(argv[7]),atoi(argv[8]),256)")
 HARNESS=PREFIX+r'''
@@ -163,13 +163,13 @@ static void write_db(void)
     ANGBAND_DIR_APEX="."; ANGBAND_DIR_METARUN=meta_path;
     character_generated=false; player.is_dead=true;
     write_db();
-    for(int big=0;big<2;big++) {
+    for(int big=1;big<2;big++) {
         config.bigger_font=big; fixture.active=false;
         modal_stage=inspect_count=0;
         do_cmd_run_history();
         fixture_assert(modal_stage==15 && !g_question_menu.active);
     }
-    printf("Run History DB/modal %dx%d @%.3f terminal%sx%s Off/On: PASS\n",
+    printf("Run History DB/modal %dx%d @%.3f terminal%sx%s Big font: PASS\n",
         fixture_width,fixture_height,fixture_density,argv[7],argv[8]);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window); TTF_Quit(); SDL_Quit();

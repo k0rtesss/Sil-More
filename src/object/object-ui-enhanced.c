@@ -1280,6 +1280,7 @@ void show_inven_enhanced(void)
         }
 
         int clear_rows = 0;
+        ui_scroll_area_set_indicator(scroll_top, MAX(0, k - visible_rows));
         for (int row_idx = scroll_top; row_idx < k && clear_rows < visible_rows;
              row_idx++)
         {

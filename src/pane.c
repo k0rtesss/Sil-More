@@ -446,7 +446,7 @@ static void layout_side_group(enum pane_placement where,
 
 static int pane_corner_secondary_pixels(const struct pane_config* config,
     enum pane_placement where, const int* cell_widths, const int* cell_heights,
-    int margin_px, const SDL_Rect* area)
+    int margin_px, const SDL_Rect* area, bool edge_padding)
 {
     int requested;
     int minimum;
@@ -470,7 +470,8 @@ static int pane_corner_secondary_pixels(const struct pane_config* config,
     cell_px = pane_secondary_cell_px(config->pane, where, cell_widths,
         cell_heights);
     pixels = cells * cell_px + margin_px;
-    if (config->pane == PANE_ROLLS && pane_placement_is_overlay(where))
+    if (edge_padding && config->pane == PANE_ROLLS
+        && pane_placement_is_overlay(where))
         pixels += pane_log_overlay_vertical_padding_px(cell_px);
     return pixels;
 }
@@ -509,7 +510,7 @@ static int pane_overlay_edge_gap(int area_px, int content_px, int margin_px)
 static void layout_overlay_group(enum pane_placement where,
     const struct pane_config* config, int count, SDL_Rect* panes,
     const SDL_Rect* area, const int* cell_widths, const int* cell_heights,
-    int margin_px)
+    int margin_px, bool edge_padding)
 {
     int active_count = pane_group_count(config, count, where);
     int pane_widths[MAX_PANE_CONFIGS] = { 0 };
@@ -541,7 +542,7 @@ static void layout_overlay_group(enum pane_placement where,
             split_px = pane_w;
 
         pane_px = pane_corner_secondary_pixels(&config[i], where, cell_widths,
-            cell_heights, margin_px, area);
+            cell_heights, margin_px, area, edge_padding);
         remaining_px = area->h - total_h;
         if (remaining_px < 0)
             remaining_px = 0;
@@ -794,9 +795,19 @@ void place_panes(const struct pane_config* config, int count, SDL_Rect* panes,
     const SDL_Rect* window, const int* cell_widths, const int* cell_heights,
     int margin)
 {
+    place_panes_ex(config, count, panes, window, cell_widths, cell_heights,
+        margin, true);
+}
+
+void place_panes_ex(const struct pane_config* config, int count, SDL_Rect* panes,
+    const SDL_Rect* window, const int* cell_widths, const int* cell_heights,
+    int margin, bool edge_padding)
+{
     SDL_Rect main = *window;
     bool side_first = pane_layout_has_side_touch_pane(config, count);
 
+    if (!edge_padding)
+        margin = 0;
     if (!side_first) {
         layout_bottom_group(PLACE_DOUBLE_BOTTOM, config, count, panes, &main,
             cell_widths, cell_heights, margin);
@@ -821,21 +832,21 @@ void place_panes(const struct pane_config* config, int count, SDL_Rect* panes,
     }
 
     layout_overlay_group(PLACE_TOP_LEFT, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_TOP_CENTER, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_TOP_RIGHT, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_LEFT_CENTER, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_RIGHT_CENTER, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_BOTTOM_LEFT, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_BOTTOM_CENTER, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
     layout_overlay_group(PLACE_BOTTOM_RIGHT, config, count, panes, &main,
-        cell_widths, cell_heights, margin);
+        cell_widths, cell_heights, margin, edge_padding);
 
     panes[PANE_MAIN] = main;
 }

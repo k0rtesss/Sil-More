@@ -1191,6 +1191,12 @@ void sdl_main_menu_pane_render(void)
                     MAIN_MENU_TEXT_LEFT);
             }
         }
+        SDL_FRect viewport = layout.rows[layout.first_choice];
+        viewport.x = layout.panel.x;
+        viewport.w = layout.panel.w - 2.0f * sdl_ui_density_scale();
+        viewport.h = layout.visible_count * layout.row_h;
+        sdl_ui_render_scroll_indicator(viewport, layout.first_choice - 1,
+            MAIN_MENU_MAX - layout.visible_count, layout.visible_count);
         return;
     }
 

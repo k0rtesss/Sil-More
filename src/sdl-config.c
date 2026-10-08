@@ -3234,13 +3234,13 @@ void sdl_pane_profile_apply_tablet_defaults(
 }
 
 void sdl_pane_profile_apply_bigger_font_defaults(
-    struct sdl_pane_profile* profile)
+    struct sdl_pane_profile* profile, int orientation)
 {
     static const struct pane_config defaults[] = {
-        { .pane = PANE_LEFT_PANEL, .where = PLACE_TOP_CENTER,
-            .enabled = true },
-        { .pane = PANE_ROLLS, .where = PLACE_TOP_CENTER, .enabled = true,
+        { .pane = PANE_ROLLS, .where = PLACE_TOP_LEFT, .enabled = true,
             .rect.rows = 4 },
+        { .pane = PANE_LEFT_PANEL, .where = PLACE_TOP_LEFT,
+            .enabled = true },
         { .pane = PANE_COMBAT, .where = PLACE_BOTTOM_LEFT, .enabled = true,
             .rect.rows = PANE_COMBAT_OVERLAY_ROWS,
             .rect.cols = PANE_COMBAT_OVERLAY_COLS },
@@ -3289,14 +3289,38 @@ void sdl_pane_profile_apply_bigger_font_defaults(
         }
         profile->pane_configs[index] = defaults[i];
     }
-    sdl_config_profile_set_pane(profile, PANE_LEFT_PANEL, true,
-        PLACE_TOP_CENTER, 1);
     sdl_config_profile_set_pane(profile, PANE_ROLLS, true,
-        PLACE_TOP_CENTER, 2);
+        PLACE_TOP_LEFT, 1);
+    sdl_config_profile_set_pane(profile, PANE_LEFT_PANEL, true,
+        PLACE_TOP_LEFT, 2);
+    if (orientation == SDL_PANE_ORIENTATION_LANDSCAPE) {
+        profile->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_COLUMN;
+        sdl_config_profile_set_pane(profile, PANE_ROLLS, true,
+            PLACE_TOP_RIGHT, 1);
+    }
     sdl_config_profile_set_pane(profile, PANE_STATUS_DEPTH, true,
         PLACE_BOTTOM_CENTER, 1);
     sdl_config_profile_set_pane(profile, PANE_OVERLAY_MENU, true,
         PLACE_BOTTOM_CENTER, 2);
+}
+
+static void sdl_pane_profile_upgrade_bigger_font_hud(
+    struct sdl_pane_profile* profile)
+{
+    int left = sdl_config_profile_find_pane(profile, PANE_LEFT_PANEL);
+    int rolls = sdl_config_profile_find_pane(profile, PANE_ROLLS);
+
+    /* Recognize the previous big-text default without replacing custom pane
+     * positions, font sizes, enabled states, or touch-control settings. */
+    if (profile->left_panel_compact_mode != SDL_LEFT_PANEL_COMPACT_ROW
+        || left < 0 || rolls <= left
+        || profile->pane_configs[left].where != PLACE_TOP_CENTER
+        || profile->pane_configs[rolls].where != PLACE_TOP_CENTER)
+        return;
+
+    sdl_config_profile_set_pane_where_order(profile, rolls, PLACE_TOP_LEFT, 1);
+    left = sdl_config_profile_find_pane(profile, PANE_LEFT_PANEL);
+    sdl_config_profile_set_pane_where_order(profile, left, PLACE_TOP_LEFT, 2);
 }
 
 static bool sdl_config_profile_has_enabled_bottom_pane(
@@ -5250,7 +5274,8 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     continue;
                 sdl_config_copy_pane_profile(&pane_profiles[index],
                     &pane_profiles[normal]);
-                sdl_pane_profile_apply_bigger_font_defaults(&pane_profiles[index]);
+                sdl_pane_profile_apply_bigger_font_defaults(&pane_profiles[index],
+                    orientation);
                 if (!cJSON_IsObject(obj))
                     continue;
                 strnfmt(label, sizeof(label), "biggerFont.%s.%s",
@@ -5258,6 +5283,7 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                         ? "portrait" : "landscape",
                     min_terminal_mode_to_string(mode));
                 sdl_config_load_pane_profile(obj, &pane_profiles[index], label);
+                sdl_pane_profile_upgrade_bigger_font_hud(&pane_profiles[index]);
                 loaded[mode] = true;
             }
             for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
@@ -6234,5 +6260,4 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
         }
     }
 }
-
 

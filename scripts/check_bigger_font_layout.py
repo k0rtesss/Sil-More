@@ -547,6 +547,62 @@ static void check_live_sheet(void)
     sdl_character_sheet_screen_hide(); ui_menu_click_clear();
 }
 
+static void check_bottom_buttons(void)
+{
+    SDL_strlcpy(fixture_id,"bottom-buttons",sizeof(fixture_id));
+    sdl_view *view=&g_views[PANE_MAIN];
+    SDL_Rect saved_rect=view->rect;
+    int saved_w=view->cell_w,saved_h=view->cell_h;
+    int saved_cols=view->cols,saved_rows=view->rows;
+    int saved_x=view->margin_x,saved_y=view->margin_y;
+    bool saved_ready=view->term_ready;
+    view->rect=(SDL_Rect){0,0,fixture_width,fixture_height};
+    view->cell_w=4; view->cell_h=8;
+    view->cols=fixture_width/4; view->rows=fixture_height/8;
+    view->margin_x=view->margin_y=0; view->term_ready=true;
+    int px=sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
+    for(int toggled=0;toggled<2;toggled++) {
+        ui_menu_click_begin(); ui_menu_click_set_touch_exit_button(true);
+        ui_menu_click_add_touch_button('p',toggled?"Hide Info":"Preview",TERM_DARK);
+        ui_menu_click_add_touch_button('d',toggled?"Drop On":"Drop",TERM_DARK);
+        sdl_touch_menu_button_layout_entry buttons[SDL_TOUCH_MENU_BUTTON_MAX];
+        int count=sdl_touch_menu_button_layout(buttons,N_ELEMENTS(buttons));
+        fixture_assert(count==3);
+        fixture_assert(sdl_touch_exit_button_font_px(buttons[0].rect.h)==px);
+        TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_MENU);
+        float text_h=0;
+        for(int i=0;i<count;i++) {
+            inside(buttons[i].rect);
+            int w=0,h=0;
+            fixture_assert(TTF_GetStringSizeWrapped(font,buttons[i].label,0,
+                (int)buttons[i].rect.w,&w,&h));
+            fixture_assert(w<=buttons[i].rect.w+1 && h<=buttons[i].rect.h);
+            text_h=MAX(text_h,h);
+            fixture_assert(sdl_touch_exit_button_handle_pointer(
+                buttons[i].rect.x+buttons[i].rect.w/2,
+                buttons[i].rect.y+buttons[i].rect.h/2));
+            if(i<count-1) {
+                int choice=0,action=0;
+                fixture_assert(ui_menu_click_take_action(&choice,&action));
+                fixture_assert(choice==buttons[i].choice && action==UI_MENU_CLICK_PRIMARY);
+            }
+            char key;
+            while(Term_inkey(&key,false,true)==0) {}
+        }
+        float expected=MAX((float)sdl_ui_min_tap_px(),text_h+sdl_ui_density_scale()*8);
+        fixture_assert(fabsf(buttons[0].rect.h-expected)<.1f);
+        int reserved=sdl_touch_menu_button_reserved_rows();
+        fixture_assert(fixture_height-reserved*view->cell_h<=buttons[0].rect.y);
+        SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
+        SDL_RenderClear(g_state.renderer); sdl_touch_exit_button_render();
+        capture(toggled?"bottom-buttons-toggled":"bottom-buttons");
+    }
+    ui_menu_click_clear();
+    view->rect=saved_rect; view->cell_w=saved_w; view->cell_h=saved_h;
+    view->cols=saved_cols; view->rows=saved_rows;
+    view->margin_x=saved_x; view->margin_y=saved_y; view->term_ready=saved_ready;
+}
+
 static void check_large_tutorial(void)
 {
     SDL_strlcpy(fixture_id,"large-tutorial",sizeof(fixture_id));
@@ -711,7 +767,7 @@ static void check(int width,int height)
     fixture_assert(large==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
     check_settings(80,"Overflow Settings");
     check_actual_general();
-    check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_large_tutorial(); check_welcome_cache();
+    check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_bottom_buttons(); check_large_tutorial(); check_welcome_cache();
     printf("%dx%d: pane %d -> %d, native settings %d -> %d; settings taps, song paging/choice, question wrapping/scroll, birth final skill, text paging, main menu drag, Halls: PASS\n",
         width,height,pane,sdl_main_menu_pane_font_px(),normal,large);
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();

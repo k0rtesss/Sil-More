@@ -30,6 +30,8 @@ typedef struct ui_scroll_area_entry
     int tap_key;
     int* offset_ptr;
     int offset_max;
+    int indicator_offset;
+    int indicator_max;
     bool page_mode;
     bool horizontal_page_mode;
 } ui_scroll_area_entry;
@@ -710,6 +712,8 @@ bool ui_scroll_area_add_cols(int left_col, int right_col, int top_row,
     entry->tap_key = 0;
     entry->offset_ptr = NULL;
     entry->offset_max = 0;
+    entry->indicator_offset = 0;
+    entry->indicator_max = 0;
     entry->page_mode = false;
     entry->horizontal_page_mode = false;
     ui_scroll_area_current = ui_scroll_area_entry_count - 1;
@@ -947,6 +951,38 @@ bool ui_scroll_area_has_offset_target(void)
     ui_scroll_area_entry* entry = ui_scroll_area_current_entry();
 
     return entry && entry->offset_ptr != NULL;
+}
+
+/* Publish bounds without changing how the menu handles a drag. */
+void ui_scroll_area_set_indicator(int offset, int max_offset)
+{
+    ui_scroll_area_entry* entry = ui_scroll_area_current_entry();
+    if (!entry) return;
+    entry->indicator_offset = offset;
+    entry->indicator_max = MAX(0, max_offset);
+}
+
+int ui_scroll_area_count(void)
+{
+    return ui_scroll_area_entry_count;
+}
+
+bool ui_scroll_area_get_indicator(int index, int* left, int* right,
+    int* top, int* bottom, int* offset, int* maximum)
+{
+    if (index < 0 || index >= ui_scroll_area_entry_count)
+        return false;
+    const ui_scroll_area_entry* entry = &ui_scroll_area_entries[index];
+    int max_offset = entry->offset_ptr ? entry->offset_max : entry->indicator_max;
+    if (entry->page_mode || max_offset <= 0)
+        return false;
+    *left = entry->left_col;
+    *right = entry->right_col;
+    *top = entry->top_row;
+    *bottom = entry->bottom_row;
+    *offset = entry->offset_ptr ? *entry->offset_ptr : entry->indicator_offset;
+    *maximum = max_offset;
+    return true;
 }
 
 bool ui_scroll_area_offset_scroll(int delta)

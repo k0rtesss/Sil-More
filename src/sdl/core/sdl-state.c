@@ -360,7 +360,7 @@ void sdl_seed_all_pane_profiles_from_active(void)
 
             g_pane_profiles[bigger] = g_pane_profiles[normal];
             sdl_pane_profile_apply_bigger_font_defaults(
-                &g_pane_profiles[bigger]);
+                &g_pane_profiles[bigger], orientation);
         }
     }
 }

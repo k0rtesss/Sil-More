@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render debug-sheet pages and replay navigation without opening player files."""
+"""Render Big font character-sheet pages and replay navigation without player files."""
 from pathlib import Path
 import os
 import shlex
@@ -26,15 +26,26 @@ static SDL_FRect text_rects[256];
 static int text_count;
 static char all_text[65536];
 SDL_Texture *__real_sdl_ui_text_texture(TTF_Font *,cptr,SDL_Color,int *,int *);
-SDL_Texture *__wrap_sdl_ui_text_texture(TTF_Font *font,cptr text,SDL_Color color,int *w,int *h)
+static void measure_text(SDL_Texture *texture,TTF_Font *font,cptr text,int w,int h)
 {
-    SDL_Texture *texture=__real_sdl_ui_text_texture(font,text,color,w,h);
     if (checking_text && texture) {
-        measured_texture=texture; measured_w=*w; measured_h=*h;
+        measured_texture=texture; measured_w=w; measured_h=h;
         fixture_assert(TTF_GetFontHeight(font)>=28);
         SDL_strlcat(all_text,text,sizeof(all_text));
         SDL_strlcat(all_text,"\n",sizeof(all_text));
     }
+}
+SDL_Texture *__wrap_sdl_ui_text_texture(TTF_Font *font,cptr text,SDL_Color color,int *w,int *h)
+{
+    SDL_Texture *texture=__real_sdl_ui_text_texture(font,text,color,w,h);
+    measure_text(texture,font,text,*w,*h);
+    return texture;
+}
+SDL_Texture *__real_sdl_ui_wrapped_text_texture(TTF_Font *,cptr,int,SDL_Color,int *,int *);
+SDL_Texture *__wrap_sdl_ui_wrapped_text_texture(TTF_Font *font,cptr text,int width,SDL_Color color,int *w,int *h)
+{
+    SDL_Texture *texture=__real_sdl_ui_wrapped_text_texture(font,text,width,color,w,h);
+    measure_text(texture,font,text,*w,*h);
     return texture;
 }
 bool __real_SDL_RenderTexture(SDL_Renderer *,SDL_Texture *,const SDL_FRect *,const SDL_FRect *);
@@ -118,11 +129,12 @@ static void gamepad(SDL_GamepadButton button,char expected)
     fixture_assert(Term_inkey(&key,false,true)!=0);
 }
 
-static void check(int width,int height)
+static void check(int width,int height,bool big)
 {
+    config.bigger_font=big;
     fixture_width=width; fixture_height=height; all_text[0]='\0';
     SDL_strlcpy(fixture_id,"debug-character-sheet",sizeof(fixture_id));
-    g_state.window=SDL_CreateWindow("Debug sheet fixture",width,height,SDL_WINDOW_HIDDEN);
+    g_state.window=SDL_CreateWindow("Big font character sheet fixture",width,height,SDL_WINDOW_HIDDEN);
     fixture_assert(g_state.window!=NULL);
     g_state.renderer=SDL_CreateRenderer(g_state.window,"software");
     fixture_assert(g_state.renderer!=NULL);
@@ -138,6 +150,7 @@ static void check(int width,int height)
     int pages=g_sdl_character_sheet_screen.debug_page_count;
     int px=g_sdl_character_sheet_screen.last_body_px;
     fixture_assert(pages>=5 && px>=28);
+    fixture_assert(px==sdl_char_sheet_clampi((int)(MIN(width,height)*.065f),28,56));
     fixture_assert(!sdl_character_sheet_screen_debug_turn_page(-1));
     for (int page=0;page<pages;++page) {
         fixture_assert(g_sdl_character_sheet_screen.debug_page==page);
@@ -148,7 +161,7 @@ static void check(int width,int height)
             if (text_rects[i].y<close.y)
                 fixture_assert(text_rects[i].y+text_rects[i].h<close.y);
         char path[96];
-        strnfmt(path,sizeof(path),"debug-sheet-%dx%d-%02d.png",width,height,page+1);
+        strnfmt(path,sizeof(path),"big-font-sheet-%dx%d-%s-%02d.png",width,height,big?"on":"off",page+1);
         SDL_Surface *pixels=SDL_RenderReadPixels(g_state.renderer,NULL);
         fixture_assert(pixels && IMG_SavePNG(pixels,path));
         SDL_DestroySurface(pixels);
@@ -187,6 +200,7 @@ static void check(int width,int height)
     sdl_character_sheet_screen_begin_debug(); frame();
     fixture_assert(g_sdl_character_sheet_screen.debug_page==0);
     sdl_character_sheet_screen_hide();
+    config.bigger_font=false;
     sdl_character_sheet_screen_begin_live(-1);
     fixture_assert(g_sdl_character_sheet_screen.context==SDL_CHARACTER_SHEET_LIVE);
     fixture_assert(!sdl_character_sheet_screen_debug_turn_page(1));
@@ -196,8 +210,8 @@ static void check(int width,int height)
     term_nuke(&view->t); term_screen=NULL; Term=NULL;
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
     SDL_DestroyWindow(g_state.window); g_state.window=NULL;
-    printf("Debug sheet %dx%d: %d pages, %dpx body, no shrinking/overlap/clipping; keyboard, mouse, touch, controller: PASS\n",
-        width,height,pages,px);
+    printf("Big font character sheet %dx%d (mode %s): %d pages, %dpx body, no shrinking/overlap/clipping; keyboard, mouse, touch, controller: PASS\n",
+        width,height,big?"on":"off",pages,px);
 }
 
 int main(int argc,char **argv)
@@ -232,8 +246,10 @@ int main(int argc,char **argv)
         "Every name and every line must stay readable, even on a small screen. END_OF_HISTORY",sizeof(player.history));
     turn=1234; playerturn=98765;
     for (int i=0;i<16;++i) g_state.palette[i]=(SDL_Color){angband_color_table[i][1],angband_color_table[i][2],angband_color_table[i][3],255};
-    check(1920,1080); check(1280,720); check(768,576);
-    check(580,1280); check(360,800); check(800,360); check(320,568);
+    for (int big=0;big<2;big++) {
+        check(1920,1080,big); check(1280,720,big); check(768,576,big);
+        check(580,1280,big); check(360,800,big); check(800,360,big); check(320,568,big);
+    }
     TTF_Quit(); SDL_Quit(); return 0;
 }
 '''
@@ -258,7 +274,7 @@ def main():
              "sdl_touch_round_layer_controls_active", "sdl_touch_round_compute_layout",
              "sdl_touch_thumb_current_bounds", "sdl_map_grid_cell_rect",
              "sdl_touch_only_device_active", "sdl_get_layout_screen_rect",
-             "sdl_ui_text_texture", "SDL_RenderTexture"]
+             "sdl_ui_text_texture", "sdl_ui_wrapped_text_texture", "SDL_RenderTexture"]
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),

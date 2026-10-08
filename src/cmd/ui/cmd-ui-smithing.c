@@ -1502,6 +1502,7 @@ static int smith_ui_configure_list_view(smith_ui_scroll_id id, int count,
 
     if (touch_only)
         ui_scroll_area_set_offset_target(top, max_top);
+    ui_scroll_area_set_indicator(*top, max_top);
 
     return *top;
 }

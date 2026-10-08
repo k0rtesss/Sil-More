@@ -3489,8 +3489,8 @@ void do_cmd_pane_settings(void)
                 "Character Sheet Mode",
                 "Character Sheet",
                 "Sheet Mode"),
-            config.debug_character_sheet ? "debug" : "SDL",
-            row_width, 5);
+            config.debug_character_sheet ? "Big font" : "SDL",
+            row_width, 8);
         ADD_PANE_SETTING_ROW(PANE_SETTING_DEBUG_CHARACTER_SHEET, 4, a, buf);
 
         /* Extra zoom applied when mobile gameplay starts. */
@@ -3725,9 +3725,10 @@ void do_cmd_pane_settings(void)
                     "Supplies. When focus moves to the item list, hide the "
                     "category pane and use its space for item names.",
                 [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
-                    "Choose debug for a character sheet with larger text and "
-                    "multiple pages. Use arrows or Prev/Next to change pages. "
-                    "Choose SDL to return to the current character sheet.",
+                    "Choose Big font character sheet for separate pages of "
+                    "attributes, skills, traits and background, using normal-sized text. "
+                    "Use arrows or Prev/Next to change pages. Bigger font mode "
+                    "selects this sheet automatically. Choose SDL for the standard sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
                     "Set to 0 to start at the configured main-map scale. The "
@@ -11407,6 +11408,7 @@ static void do_cmd_movement_keybinds(void)
 
         settings_ui_put_fitted(1, 2, TERM_WHITE,
             "Movement Bindings");
+        ui_scroll_area_set_indicator(top, MAX(0, entry_count - visible_rows));
         strnfmt(preset_line, sizeof(preset_line), "Preset: %s",
             sdl_config_movement_preset_label(config.movement_keyboard_preset));
         settings_ui_put_fitted(2, 2, TERM_SLATE, preset_line);

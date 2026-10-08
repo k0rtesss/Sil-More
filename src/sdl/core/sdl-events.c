@@ -1473,6 +1473,9 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     } else if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
             return;
+        if (sdl_welcome_touch_handle_pointer_motion(ev->motion.x,
+                ev->motion.y, -1))
+            return;
         if (sdl_tale_screen_handle_hover_pointer((float)ev->motion.x,
             (float)ev->motion.y))
         {
@@ -1633,6 +1636,9 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         }
         sdl_mouse_path_handle_motion((float)ev->motion.x, (float)ev->motion.y);
     } else if (ev->type == SDL_EVENT_MOUSE_WHEEL) {
+        if (sdl_standalone_screen_drag(ev->wheel.mouse_x, ev->wheel.mouse_y,
+                -ev->wheel.y * sdl_ui_min_tap_px()))
+            return;
         if (sdl_unified_look_handle_map_zoom_wheel(&ev->wheel))
             return;
         if (sdl_main_map_handle_zoom_wheel(&ev->wheel))
@@ -1691,6 +1697,10 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             {
                 return;
             }
+            if (get_sdl_bigger_font()
+                && sdl_welcome_touch_handle_pointer_down(ev->button.x,
+                    ev->button.y, -1))
+                return;
             if (sdl_pointer_activate_welcome_screen_at((float)ev->button.x,
                 (float)ev->button.y))
             {
@@ -1977,6 +1987,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
     } else if (ev->type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        if (ev->button.which != SDL_TOUCH_MOUSEID
+            && ev->button.button == SDL_BUTTON_LEFT
+            && sdl_welcome_touch_handle_pointer_up(ev->button.x,
+                ev->button.y, -1))
+            return;
         if (sdl_description_overlay_consume_mouse_release(&ev->button))
             return;
         if (ev->button.which != SDL_TOUCH_MOUSEID

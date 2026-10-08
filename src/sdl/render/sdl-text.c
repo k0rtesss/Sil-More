@@ -1,6 +1,53 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+/* The viewport and scroll values may use pixels, rows or entries.  Keep the
+ * rail visible at either end so it also advertises that dragging is possible. */
+bool sdl_ui_scroll_indicator_layout(SDL_FRect viewport, float offset,
+    float maximum, float visible, SDL_FRect* track, SDL_FRect* thumb)
+{
+    float dp = sdl_ui_density_scale();
+    float width = MAX(3.0f, 3.0f * dp);
+    float thumb_h;
+
+    if (track) *track = (SDL_FRect){ 0 };
+    if (thumb) *thumb = (SDL_FRect){ 0 };
+    if (maximum <= 0 || visible <= 0 || viewport.w < width
+        || viewport.h <= 0)
+        return false;
+
+    SDL_FRect rail = { viewport.x + viewport.w - width, viewport.y,
+        width, viewport.h };
+    thumb_h = MIN(viewport.h, MAX(18.0f * dp,
+        viewport.h * visible / (visible + maximum)));
+    SDL_FRect grip = { rail.x, rail.y + (rail.h - thumb_h)
+        * MAX(0.0f, MIN(offset, maximum)) / maximum, width, thumb_h };
+    if (track) *track = rail;
+    if (thumb) *thumb = grip;
+    return true;
+}
+
+void sdl_ui_render_scroll_indicator(SDL_FRect viewport, float offset,
+    float maximum, float visible)
+{
+    SDL_FRect track, thumb;
+    SDL_BlendMode blend;
+    Uint8 r, g, b, a;
+
+    if (!g_state.renderer || !sdl_ui_scroll_indicator_layout(viewport,
+            offset, maximum, visible, &track, &thumb))
+        return;
+    SDL_GetRenderDrawColor(g_state.renderer, &r, &g, &b, &a);
+    SDL_GetRenderDrawBlendMode(g_state.renderer, &blend);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(g_state.renderer, 120, 130, 145, 100);
+    SDL_RenderFillRect(g_state.renderer, &track);
+    SDL_SetRenderDrawColor(g_state.renderer, 150, 190, 235, 235);
+    SDL_RenderFillRect(g_state.renderer, &thumb);
+    SDL_SetRenderDrawColor(g_state.renderer, r, g, b, a);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, blend);
+}
+
 /* Stable proportional UI labels used to be rasterized and uploaded on every
  * present.  Cache white glyph textures and tint them at draw time instead. */
 enum {
@@ -768,7 +815,7 @@ int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
     margin = (d && sdl_view_is_overlay_log_pane(d))
         ? sdl_overlay_log_left_margin(wid) : 0;
     band_px = (float)(wid - margin) * (float)d->cell_w
-        - (float)d->cell_w * 0.25f - SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
+        - SDL_OVERLAY_LOG_TEXT_RIGHT_PAD(d) - SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
 
     if (!font || band_px <= 0.0f)
     {
@@ -844,7 +891,7 @@ static void sdl_render_overlay_log_message_row_px(sdl_view* d, int y,
         ? sdl_overlay_log_left_margin(wid) : 0;
     px = (float)margin * (float)d->cell_w + SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
     right_edge = (float)wid * (float)d->cell_w;
-    max_w = right_edge - px - (float)d->cell_w * 0.25f;
+    max_w = right_edge - px - SDL_OVERLAY_LOG_TEXT_RIGHT_PAD(d);
     if (max_w <= 0.0f)
         return;
 

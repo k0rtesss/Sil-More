@@ -2305,6 +2305,7 @@ void do_cmd_run_history(void)
 
         ui_scroll_area_begin(first_entry_row, footer_row - 1,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_indicator(page_offset, last_page_offset);
         ui_scroll_area_set_keys('8', '2', 'n', 'p');
 
         (void)Term_set_cursor(false);
@@ -3840,6 +3841,16 @@ static void run_history_show_detail(const run_history_entry* entry)
                 scroll_first_row + scroll_rows - 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_scroll_area_set_keys('8', '2', '6', '4');
+            if (panel == RUN_PANEL_GENERAL)
+                ui_scroll_area_set_indicator(view.general_top,
+                    MAX(0, general_total_lines - text_rows));
+            else if (panel == RUN_PANEL_STATS)
+                ui_scroll_area_set_indicator(view.stats_top,
+                    MAX(0, stats_total_lines - text_rows));
+            else
+                ui_scroll_area_set_indicator(
+                    run_history_detail_panel_state(&view, panel)->top,
+                    MAX(0, active_list_total - active_list_rows));
         }
         if (ui_scroll_area_add_cols(0, term_wid - 1, 0, 0,
                 SDL_TOUCH_MENU_CATEGORY_OTHER))

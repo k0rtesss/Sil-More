@@ -987,6 +987,7 @@ bool sdl_pointer_activate_welcome_screen_at(float x, float y)
 }
 
 static bool g_welcome_pager_dragged;
+static float g_welcome_pager_last_y;
 
 void sdl_welcome_touch_cancel_press(void)
 {
@@ -1003,7 +1004,8 @@ bool sdl_welcome_touch_handle_pointer_down(float x, float y,
 {
     int slot = -1;
 
-    if (!sdl_screen_shows_welcome_screen())
+    if (!sdl_screen_shows_welcome_screen()
+        && !(get_sdl_bigger_font() && sdl_pause_text_screen_active()))
         return false;
     if (sdl_touch_pane_point_to_slot(x, y, &slot) && slot >= 0)
         return false;
@@ -1015,6 +1017,7 @@ bool sdl_welcome_touch_handle_pointer_down(float x, float y,
     g_welcome_touch_press.finger_id = finger_id;
     g_welcome_touch_press.start_x = x;
     g_welcome_touch_press.start_y = y;
+    g_welcome_pager_last_y = y;
     g_welcome_touch_press.start_time = SDL_GetTicksNS();
     return true;
 }
@@ -1046,16 +1049,19 @@ bool sdl_welcome_touch_handle_pointer_motion(float x, float y,
     dy = (raw_dy < 0.0f) ? -raw_dy : raw_dy;
 
     threshold = sdl_touch_swipe_threshold_px();
-    if (dx <= threshold && dy <= threshold)
+    if (!g_welcome_pager_dragged && dx <= threshold && dy <= threshold)
         return true;
 
-    if (dy >= dx && sdl_standalone_screen_handle_key(raw_dy < 0 ? ']' : '[')) {
+    if ((g_welcome_pager_dragged || dy >= dx)
+        && sdl_standalone_screen_drag(g_welcome_touch_press.start_x,
+            g_welcome_touch_press.start_y, g_welcome_pager_last_y - y)) {
         g_welcome_pager_dragged = true;
-        g_welcome_touch_press.start_x = x;
-        g_welcome_touch_press.start_y = y;
+        g_welcome_pager_last_y = y;
         return true;
     }
     if (g_welcome_pager_dragged) return true;
+    if (sdl_pause_text_screen_active())
+        return true;
 
     start_x = g_welcome_touch_press.start_x;
     start_y = g_welcome_touch_press.start_y;
@@ -1109,6 +1115,12 @@ bool sdl_welcome_touch_handle_pointer_up(float x, float y,
     sdl_welcome_touch_cancel_press();
     if (dx > threshold || dy > threshold)
         return true;
+    if (sdl_pause_text_screen_active()) {
+        if (!sdl_standalone_screen_handle_pointer(raw_x, raw_y,
+                UI_MENU_CLICK_PRIMARY))
+            (void)sdl_pointer_dismiss_any_key_prompt();
+        return true;
+    }
     if (elapsed >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
     {
         (void)sdl_welcome_screen_cycle_intro(1);
@@ -2152,7 +2164,9 @@ bool sdl_minimap_handle_control_point(float x, float y)
         return true;
     }
 
-    return false;
+    /* The header and help bar own their pixels even between buttons. */
+    return get_sdl_bigger_font()
+        && !sdl_minimap_point_in_rect(x, y, &g_minimap.viewport_rect);
 }
 
 bool sdl_minimap_hint_source_marker_rect(const hint_message_meta* meta,
@@ -2216,6 +2230,9 @@ bool sdl_minimap_grid_at_canvas_point(float x, float y,
         return false;
     if (!g_minimap.map_layout_valid)
         return false;
+    if (get_sdl_bigger_font()
+        && !sdl_minimap_point_in_rect(x, y, &g_minimap.viewport_rect))
+        return false;
     if (!sdl_minimap_point_in_rect(x, y, &g_minimap.map_rect))
         return false;
 
@@ -2250,6 +2267,9 @@ bool sdl_minimap_hint_source_at_canvas_point(float x, float y,
     int grid_x = -1;
 
     if (!g_minimap.skeleton_hints_visible || !g_minimap.map_layout_valid)
+        return false;
+    if (get_sdl_bigger_font()
+        && !sdl_minimap_point_in_rect(x, y, &g_minimap.viewport_rect))
         return false;
 
     count = hint_messages_count_for_save();
@@ -2999,6 +3019,15 @@ bool sdl_minimap_handle_gamepad_axis(const SDL_GamepadAxisEvent* ev)
     return true;
 }
 
+static const char* sdl_minimap_large_prompt(void)
+{
+    if (steamdeck_controls_active())
+        return "D-pad: pan   L1/R1: zoom\nY: hints   A/B: close";
+    if (sdl_touch_only_device_active())
+        return "Drag to pan. Pinch or +/- to zoom.\nEye: hints   X: close";
+    return "Drag/arrows: pan   +/-/wheel: zoom\nH: hints   Esc: close";
+}
+
 void sdl_minimap_layout_controls(const sdl_view* d, int canvas_w,
     int canvas_h)
 {
@@ -3011,11 +3040,50 @@ void sdl_minimap_layout_controls(const sdl_view* d, int canvas_w,
     g_minimap.zoom_in_rect = (SDL_FRect){0};
     g_minimap.skeleton_hints_rect = (SDL_FRect){0};
     g_minimap.close_rect = (SDL_FRect){0};
+    g_minimap.viewport_rect = (SDL_FRect){0, 0, (float)canvas_w,
+        (float)canvas_h};
+    g_minimap.prompt_rect = (SDL_FRect){0};
     g_minimap.zoom_out_enabled = g_minimap.zoom_step > 0;
     g_minimap.zoom_in_enabled = g_minimap.zoom_step < MINIMAP_MAX_ZOOM_STEP;
 
     if (!g_minimap.active || !d || canvas_w <= 0 || canvas_h <= 0)
         return;
+
+    if (get_sdl_bigger_font()) {
+        TTF_Font* font = sdl_main_menu_mono_font_for_height(
+            sdl_ui_role_font_px(SDL_UI_FONT_META));
+        int text_h = 0;
+        int columns;
+        int rows;
+        SDL_FRect* buttons[] = {&g_minimap.close_rect,
+            &g_minimap.skeleton_hints_rect, &g_minimap.zoom_in_rect,
+            &g_minimap.zoom_out_rect};
+
+        margin = MAX(1.0f, SDL_ceilf(sdl_ui_density_scale() * 8.0f));
+        gap = margin;
+        size = MAX((float)sdl_ui_min_tap_px(),
+            SDL_ceilf(sdl_ui_density_scale() * 64.0f));
+        columns = (int)(((float)canvas_w - margin * 2.0f + gap)
+            / (size + gap));
+        columns = MAX(1, MIN(4, columns));
+        rows = (4 + columns - 1) / columns;
+        for (int i = 0; i < 4; i++) {
+            *buttons[i] = (SDL_FRect){
+                (float)canvas_w - margin - size
+                    - (float)(i % columns) * (size + gap),
+                margin + (float)(i / columns) * (size + gap), size, size};
+        }
+        if (font)
+            TTF_GetStringSizeWrapped(font, sdl_minimap_large_prompt(), 0,
+                MAX(1, canvas_w - (int)(margin * 2.0f)), NULL, &text_h);
+        g_minimap.prompt_rect = (SDL_FRect){0,
+            (float)canvas_h - (float)text_h - margin * 2.0f,
+            (float)canvas_w, (float)text_h + margin * 2.0f};
+        g_minimap.viewport_rect.y = margin + (float)rows * (size + gap);
+        g_minimap.viewport_rect.h = MAX(1.0f,
+            g_minimap.prompt_rect.y - g_minimap.viewport_rect.y);
+        return;
+    }
 
     margin = (float)d->cell_h * 0.5f;
     if (margin < 12.0f)
@@ -3195,6 +3263,12 @@ void sdl_minimap_draw_controls(sdl_view* d, int canvas_w, int canvas_h)
         return;
 
     sdl_minimap_layout_controls(d, canvas_w, canvas_h);
+    if (get_sdl_bigger_font()) {
+        SDL_FRect header = {0, 0, (float)canvas_w,
+            g_minimap.viewport_rect.y};
+        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+        SDL_RenderFillRect(g_state.renderer, &header);
+    }
     sdl_minimap_draw_button(&g_minimap.zoom_out_rect,
         g_minimap.zoom_out_enabled, 0);
     sdl_minimap_draw_button(&g_minimap.zoom_in_rect,
@@ -3215,6 +3289,24 @@ void sdl_minimap_draw_prompt(sdl_view* d, int canvas_w, int canvas_h)
 
     if (!g_minimap.active || !d || d->rows <= 0 || d->cols <= 0)
         return;
+
+    if (get_sdl_bigger_font()) {
+        TTF_Font* font = sdl_main_menu_mono_font_for_height(
+            sdl_ui_role_font_px(SDL_UI_FONT_META));
+        int text_w = 0;
+        int text_h = 0;
+        float pad = SDL_ceilf(sdl_ui_density_scale() * 8.0f);
+        SDL_Texture* texture = sdl_ui_wrapped_text_texture(font,
+            sdl_minimap_large_prompt(), MAX(1, canvas_w - (int)(pad * 2.0f)),
+            text, &text_w, &text_h);
+        SDL_FRect dst = {((float)canvas_w - (float)text_w) * 0.5f,
+            g_minimap.prompt_rect.y + pad, (float)text_w, (float)text_h};
+        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+        SDL_RenderFillRect(g_state.renderer, &g_minimap.prompt_rect);
+        if (texture)
+            SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        return;
+    }
 
     row = d->rows - 1;
     if (row < 0)
@@ -4908,4 +5000,3 @@ bool sdl_character_panel_flush_pending_press(Uint64 now_ns)
     sdl_character_panel_cancel_press();
     return sdl_main_screen_handle_character_panel_secondary_pointer(x, y);
 }
-

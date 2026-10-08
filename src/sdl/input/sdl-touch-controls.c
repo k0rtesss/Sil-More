@@ -5148,7 +5148,8 @@ static float sdl_touch_top_panel_available_width(const SDL_Rect* screen,
         return 0.0f;
 
     screen_w = (float)screen->w;
-    side_margin = sdl_touch_pane_clampf(screen_w * 0.02f, 6.0f, 18.0f);
+    side_margin = config.bigger_font ? (float)SDL_BIG_TEXT_SIDE_PAD_PX
+        : sdl_touch_pane_clampf(screen_w * 0.02f, 6.0f, 18.0f);
     left = (float)screen->x + side_margin;
     right = (float)(screen->x + screen->w) - side_margin;
 
@@ -5217,6 +5218,25 @@ static float sdl_touch_top_panel_available_width(const SDL_Rect* screen,
                 left = p_right + gap;
         } else if (p_left - gap < right) {
             right = p_left - gap;
+        }
+    }
+
+    /* Portrait Quick Touch already occupies a control lane which reserves
+     * Quick Access's stack height. Landscape buttons instead float beside
+     * the character panel and must bound this span just like overlay panes.
+     * Keep that dependency one-way so Stretch cannot move its own obstacle. */
+    if (!sdl_mobile_portrait_layout_active()) {
+        SDL_FRect thumb;
+
+        if (sdl_touch_thumb_current_bounds(&thumb)
+            && thumb.y < band_bottom && thumb.y + thumb.h > band_top)
+        {
+            float thumb_center = thumb.x + thumb.w * 0.5f;
+
+            if (thumb_center <= center)
+                left = MAX(left, thumb.x + thumb.w + gap);
+            else
+                right = MIN(right, thumb.x - gap);
         }
     }
 
@@ -5349,8 +5369,8 @@ int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen)
     sdl_touch_top_panel_button_metrics_for_size(configured_size,
         &button_size, &gap);
 
-    side_margin = sdl_touch_pane_clampf((float)screen->w * 0.02f,
-        6.0f, 18.0f);
+    side_margin = config.bigger_font ? (float)SDL_BIG_TEXT_SIDE_PAD_PX
+        : sdl_touch_pane_clampf((float)screen->w * 0.02f, 6.0f, 18.0f);
     available_w = (float)screen->w - side_margin * 2.0f;
     if (available_w <= 0.0f)
         return 0;
@@ -5410,26 +5430,32 @@ static bool sdl_touch_top_panel_vertical_placement(
     return where == PLACE_LEFT_CENTER || where == PLACE_RIGHT_CENTER;
 }
 
-static bool sdl_touch_top_panel_fixed_overlaps_left_combat(
+static bool sdl_touch_top_panel_fixed_needs_clear_span(
     const SDL_Rect* screen, const SDL_Rect* anchor, enum pane_placement where,
     float panel_w, float panel_h)
 {
 #if SIL_SDL_MOBILE_BUILD
     SDL_Rect combat;
     SDL_FRect panel;
+    SDL_FRect thumb;
     float combat_center;
     float panel_center;
 
     if (!screen || !anchor || sdl_mobile_portrait_layout_active())
         return false;
+
+    panel = sdl_overlay_panel_rect(anchor, where,
+        (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
+    if (sdl_touch_thumb_current_bounds(&thumb)
+        && SDL_HasRectIntersectionFloat(&panel, &thumb))
+        return true;
+
     if (!sdl_combat_overlay_pane_current_rect(&combat)
         || combat.w <= 0 || combat.h <= 0)
     {
         return false;
     }
 
-    panel = sdl_overlay_panel_rect(anchor, where,
-        (int)(panel_w + 0.5f), (int)(panel_h + 0.5f), screen);
     if (panel.x + panel.w <= (float)combat.x
         || panel.x >= (float)(combat.x + combat.w)
         || panel.y + panel.h <= (float)combat.y
@@ -5583,7 +5609,8 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* s
     if (active_count <= 0)
         return false;
 
-    side_margin = sdl_touch_pane_clampf(screen_w * 0.02f, 6.0f, 18.0f);
+    side_margin = config.bigger_font ? (float)SDL_BIG_TEXT_SIDE_PAD_PX
+        : sdl_touch_pane_clampf(screen_w * 0.02f, 6.0f, 18.0f);
     max_panel_w = screen_w - side_margin * 2.0f;
     max_panel_h = (float)screen->h - side_margin * 2.0f;
     vertical = sdl_touch_top_panel_vertical_placement(where);
@@ -5652,8 +5679,8 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* s
 
     /*
      * A fixed landscape panel is normally scaled with the main view.  If that
-     * footprint reaches into the left-side Combat pane, use Stretch for this
-     * layout so Quick Access fills the measured clear span beside Combat.
+     * footprint reaches into Quick Touch or the left-side Combat pane, use
+     * the bounded Stretch fit for this layout and its measured clear span.
      * Keep the saved fixed size intact for layouts where it fits.
      */
     if (!vertical && configured_size != SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
@@ -5662,7 +5689,7 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* s
         float fixed_panel_h = button_size * (float)rows
             + gap * (float)(rows - 1);
 
-        if (sdl_touch_top_panel_fixed_overlaps_left_combat(screen, anchor,
+        if (sdl_touch_top_panel_fixed_needs_clear_span(screen, anchor,
                 where, fixed_panel_w, fixed_panel_h))
         {
             configured_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;

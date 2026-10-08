@@ -64,15 +64,19 @@ static void defaults(void) {
     sdl_apply_stored_pane_profile(config.min_terminal_mode);
 }
 static void check_default(struct sdl_pane_profile *p) {
-    assert(p->left_panel_compact_mode==SDL_LEFT_PANEL_COMPACT_ROW);
+    bool portrait=((p-g_pane_profiles)%SDL_PANE_ORIENTATION_PROFILE_COUNT)
+        /SDL_MIN_TERMINAL_MODE_COUNT==SDL_PANE_ORIENTATION_PORTRAIT;
+    assert(p->left_panel_compact_mode==(portrait
+        ? SDL_LEFT_PANEL_COMPACT_ROW : SDL_LEFT_PANEL_COMPACT_COLUMN));
     assert(!p->left_panel_expanded_on_launch && !p->show_main_menu_button);
     assert(p->touch_top_panel_cell_count==6 && p->touch_top_panel_rows==1);
     assert(p->touch_top_panel_bindings[5]=='m');
     assert(!p->touch_top_panel_arrows_visible && p->touch_top_panel_default_open);
     struct pane_config *left=find(p,PANE_LEFT_PANEL),*log=find(p,PANE_ROLLS);
-    assert(left->enabled && left->where==PLACE_TOP_CENTER);
-    assert(log->enabled && log->where==PLACE_TOP_CENTER && log->rect.rows==4);
-    assert(left<log);
+    assert(left->enabled && left->where==PLACE_TOP_LEFT);
+    assert(log->enabled && log->where==(portrait ? PLACE_TOP_LEFT : PLACE_TOP_RIGHT)
+        && log->rect.rows==4);
+    assert(log<left);
     assert(find(p,PANE_STATUS_DEPTH)->enabled);
     assert(find(p,PANE_STATUS_DEPTH)<find(p,PANE_OVERLAY_MENU));
     assert(!find(p,PANE_LOG)->enabled);
@@ -149,6 +153,20 @@ static void check_persistence(void) {
     assert(g_pane_profiles[SDL_PANE_FONT_PROFILE_INDEX(true,1,0)].touch_top_panel_cell_count==13);
     assert(g_pane_profiles[SDL_PANE_FONT_PROFILE_INDEX(true,1,1)].touch_top_panel_cell_count==13);
     assert(g_pane_profiles[SDL_PANE_FONT_PROFILE_INDEX(true,0,0)].touch_top_panel_cell_count==6);
+    FILE *prior=fopen("prior-big-hud.json","wb"); assert(prior);
+    fputs("{\"paneProfiles\":{\"biggerFont\":{\"landscape\":{\"NORMAL\":{"
+        "\"leftPanelCompactMode\":\"ROW\",\"touchTopPanelCellCount\":9,\"panes\":["
+        "{\"type\":\"LEFT_PANEL\",\"where\":\"TOP_CENTER\",\"enabled\":true,\"fontSize\":31},"
+        "{\"type\":\"ROLLS\",\"where\":\"TOP_CENTER\",\"enabled\":true,\"rows\":4}]}}}}}",prior);
+    fclose(prior);
+    defaults();
+    assert(sdl_config_load("prior-big-hud.json",&config,g_pane_profiles,
+        SDL_PANE_PROFILE_COUNT,NULL)==SDL_CONFIG_LOAD_OK);
+    struct sdl_pane_profile *updated=&g_pane_profiles[SDL_PANE_FONT_PROFILE_INDEX(true,0,0)];
+    assert(find(updated,PANE_ROLLS)<find(updated,PANE_LEFT_PANEL));
+    assert(find(updated,PANE_ROLLS)->where==PLACE_TOP_LEFT);
+    assert(find(updated,PANE_LEFT_PANEL)->where==PLACE_TOP_LEFT);
+    assert(find(updated,PANE_LEFT_PANEL)->font_size==31 && updated->touch_top_panel_cell_count==9);
     puts("Profiles: eight independent layouts, live toggle/rotation/terminal size, restart, legacy preservation PASS");
 }
 
@@ -158,6 +176,10 @@ static void inside(SDL_FRect r) {
 }
 static void check_bottom_center_stack(void) {
     large_values=false;
+    bool saved_thumb=config.touch_thumb_enabled;
+    /* Isolate ordered Combat/Quick Access panes here. Their interaction with
+     * Quick Touch is covered by check_quick_touch_toolbar_border.py. */
+    config.touch_thumb_enabled=false;
     struct pane_config baseline[MAX_PANE_CONFIGS];
     int count=pane_config_count;
     memcpy(baseline,pane_config,sizeof(baseline));
@@ -174,6 +196,10 @@ static void check_bottom_center_stack(void) {
         for(int i=0;i<count;i++) {
             if(pane_config[i].pane==PANE_COMBAT) combat_index=i;
             if(pane_config[i].pane==PANE_LEFT_PANEL) pane_config[i].font_size=0;
+            /* This fixture exercises the separate bottom Combat/Quick Access
+             * stack. Leave room for two minimum-size button rows on short
+             * landscape displays; the default top log is checked below. */
+            if(pane_config[i].pane==PANE_ROLLS) pane_config[i].enabled=false;
         }
         assert(combat_index>=0);
         struct pane_config moving=pane_config[combat_index];
@@ -263,6 +289,7 @@ static void check_bottom_center_stack(void) {
     }
     memcpy(pane_config,baseline,sizeof(baseline));
     config.bigger_font=true;
+    config.touch_thumb_enabled=saved_thumb;
     printf("Big-font Bottom Center %dx%d: Combat before/after Quick Access, 1/2 rows, fixed/Stretch, unchanged by successor and stable across frames PASS\n",width,height);
 }
 static void check_compact_combat_states(void) {
@@ -300,6 +327,11 @@ static void check_compact_combat_states(void) {
             assert(sdl_left_panel_metrics_for_view(view,&metrics));
             assert(metrics.compact_segment_count==(mode?5:4)+(jewelry==1));
             assert(metrics.panel_rows==(narrow?2:1));
+            if(!narrow && metrics.total_w%view->cell_w==0) {
+                view->rect.w=metrics.total_w; view->cols=view->rect.w/view->cell_w;
+                assert(sdl_left_panel_metrics_for_view(view,&metrics));
+                assert(metrics.panel_rows==1 && metrics.total_w==view->rect.w);
+            }
             for(int i=3;i<metrics.compact_segment_count;i++) {
                 SDL_FRect r;
                 int source_row=metrics.compact_source_rows[i];
@@ -346,10 +378,51 @@ static void check_compact_combat_states(void) {
     sdl_left_panel_source_invalidate();
     puts("Compact combat: dynamic 1/2 rows, melee/offhand/ranged/quiver, matching/unmatched jewelry and first/last cell taps PASS");
 }
+static void check_safe_area_edges(void) {
+    sdl_view *view=&g_views[PANE_MAIN];
+    SDL_Rect saved_rect=view->rect, saved_safe=g_state.safe_area;
+    int saved_cols=view->cols, saved_rows=view->rows;
+    bool saved_unsafe=config.use_unsafe_area;
+    g_state.safe_area=(SDL_Rect){11,23,width-33,height-47};
+    for(int unsafe=0;unsafe<2;unsafe++) {
+        config.use_unsafe_area=unsafe;
+        SDL_Rect area=sdl_get_layout_screen_rect();
+        view->rect=area; view->cols=area.w/view->cell_w; view->rows=area.h/view->cell_h;
+        sdl_reset_top_right_overlay_offset();
+        sdl_left_panel_source_invalidate(); g_sdl_present_generation++;
+        sdl_place_active_panes(&area,g_pane_rects,false,false,true);
+        assert(g_pane_rects[PANE_ROLLS].x==area.x && g_pane_rects[PANE_ROLLS].y==area.y);
+        assert(g_pane_rects[PANE_ROLLS].h==4*sdl_effective_pane_cell_height_for_type(PANE_ROLLS));
+        sdl_left_panel_metrics metrics; SDL_FRect panel, hp;
+        assert(sdl_left_panel_metrics_for_view(view,&metrics));
+        assert(sdl_left_panel_pane_rect_for_metrics(view,&metrics,&panel));
+        assert(panel.x==area.x && panel.y==area.y+g_pane_rects[PANE_ROLLS].h);
+        g_pane_rects[PANE_LEFT_PANEL]=(SDL_Rect){panel.x,panel.y,panel.w,panel.h};
+        assert(sdl_left_panel_source_cell_rect(0,ROW_HP,12,1,&hp));
+        assert(hp.x==area.x+SDL_BIG_TEXT_SIDE_PAD_PX);
+        int col,row;
+        assert(sdl_main_view_point_to_cell(hp.x+1,hp.y+1,&col,&row) && row==ROW_HP);
+        if(height>width) {
+            SDL_Rect left,right;
+            assert(sdl_mobile_portrait_control_regions(&left,&right));
+            assert(left.x==area.x+SDL_BIG_TEXT_SIDE_PAD_PX);
+            assert(right.x+right.w==area.x+area.w-SDL_BIG_TEXT_SIDE_PAD_PX);
+        }
+    }
+    view->rect=saved_rect; view->cols=saved_cols; view->rows=saved_rows;
+    g_state.safe_area=saved_safe; config.use_unsafe_area=saved_unsafe;
+    sdl_left_panel_source_invalidate();
+    puts("Big-text borders: safe/full area respected, small horizontal inset, no vertical padding, taps PASS");
+}
 static void check_layout(char **argv) {
     defaults(); set_sdl_bigger_font(true);
     set_sdl_mobile_portrait_mode(height>width);
-    config.use_unsafe_area=true;
+    /* Exercise the optional row HUD at every size; defaults are checked above. */
+    config.left_panel_compact_mode=SDL_LEFT_PANEL_COMPACT_ROW;
+    for(int i=0;i<pane_config_count;i++) if(pane_config[i].pane==PANE_ROLLS)
+        pane_config[i].where=PLACE_TOP_LEFT;
+    config.use_unsafe_area=false;
+    config.margin=6; /* Big text must ignore even a saved generous inset. */
     config.input_ui_mode=SDL_INPUT_UI_MODE_PLATFORM;
     SDL_strlcpy(config.monospace_font,argv[4],sizeof(config.monospace_font));
     SDL_strlcpy(config.story_font,argv[5],sizeof(config.story_font));
@@ -358,6 +431,19 @@ static void check_layout(char **argv) {
     g_state.window=SDL_CreateWindow("Big-font HUD fixture",width,height,SDL_WINDOW_HIDDEN);
     assert(g_state.window);
     g_state.renderer=SDL_CreateRenderer(g_state.window,"software"); assert(g_state.renderer);
+    g_state.safe_area=(SDL_Rect){11,23,width-33,height-47};
+    SDL_Rect full=sdl_get_layout_screen_rect();
+    assert(!memcmp(&full,&g_state.safe_area,sizeof(full)));
+    config.bigger_font=false;
+    SDL_Rect safe=sdl_get_layout_screen_rect();
+    assert(!memcmp(&safe,&g_state.safe_area,sizeof(safe)));
+    config.bigger_font=true;
+    config.use_unsafe_area=true;
+    full=sdl_get_layout_screen_rect();
+    assert(full.x==0 && full.y==0 && full.w==width && full.h==height);
+    config.use_unsafe_area=false;
+    g_state.safe_area=full;
+    assert(sdl_overlay_margin_px()==0 && sdl_overlay_inner_gap_px()==0);
     g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
     g_direct_touch_present=true;
     config.touch_profile=SDL_TOUCH_PROFILE_ROUND_WHEEL;
@@ -394,13 +480,14 @@ static void check_layout(char **argv) {
         SDL_FRect panel;
         assert(sdl_left_panel_pane_rect_for_metrics(view,&metrics,&panel)); inside(panel);
         assert(metrics.compact_row && metrics.compact_segment_count==4);
+        assert(metrics.separator_w==SDL_BIG_TEXT_SIDE_PAD_PX);
         if(values<2) assert(metrics.cell_h==sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL));
         int single_cols=metrics.compact_segment_count-1;
         for(int i=0;i<metrics.compact_segment_count;i++) single_cols+=metrics.compact_widths[i];
         int natural_cell_w=sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL)/2;
         int visual_w=sdl_main_view_visual_cols(view)*view->cell_w;
-        int single_width=(single_cols+(sdl_left_panel_pane_has_border_columns()?2:0))*natural_cell_w;
-        assert(metrics.panel_rows==(single_width<visual_w?1:2));
+        int single_width=single_cols*natural_cell_w+2*SDL_BIG_TEXT_SIDE_PAD_PX;
+        assert(metrics.panel_rows==(single_width<=visual_w?1:2));
         assert(metrics.corner_h==metrics.panel_rows*metrics.cell_h);
         assert(sdl_combat_overlay_in_compact_row());
         assert(!sdl_rect_has_area(&g_pane_rects[PANE_COMBAT]));
@@ -413,6 +500,10 @@ static void check_layout(char **argv) {
         assert(sdl_view_create(log,g_pane_rects[PANE_ROLLS],config.monospace_font,
             sdl_effective_pane_font_size_for_type(PANE_ROLLS),0,0));
         assert(log->rows==4);
+        assert(log->rect.y==0 && log->rect.h==4*log->cell_h);
+        assert(log->margin_x==0 && log->margin_y==0);
+        assert(SDL_OVERLAY_LOG_TEXT_LEFT_PAD(log)==SDL_BIG_TEXT_SIDE_PAD_PX
+            && SDL_OVERLAY_LOG_TEXT_RIGHT_PAD(log)==SDL_BIG_TEXT_SIDE_PAD_PX);
         assert(term_init(&log->t,log->cols,log->rows,16)==0);
         log->t.data=(void *)(uintptr_t)PANE_ROLLS; log->term_ready=true;
         Term_activate(&log->t);
@@ -422,8 +513,9 @@ static void check_layout(char **argv) {
         TTF_Font *font=sdl_story_font_for_height_slot(log->cell_h,SDL_STORY_FONT_SLOT_LOG);
         assert(font);
         for(int i=0;i<MIN(4,lines);i++)
-            sdl_render_story_text_free_px(log,font,4,i,message+offsets[i],lengths[i],
-                g_state.palette[TERM_WHITE],log->cols*log->cell_w-8);
+            sdl_render_story_text_free_px(log,font,SDL_OVERLAY_LOG_TEXT_LEFT_PAD(log),i,
+                message+offsets[i],lengths[i],g_state.palette[TERM_WHITE],
+                log->cols*log->cell_w-SDL_OVERLAY_LOG_TEXT_LEFT_PAD(log)-SDL_OVERLAY_LOG_TEXT_RIGHT_PAD(log));
         Term_activate(&view->t);
         SDL_SetRenderTarget(g_state.renderer,NULL);
         sdl_apply_top_right_overlay_offset();
@@ -433,7 +525,9 @@ static void check_layout(char **argv) {
         assert(sdl_overlay_log_left_margin(log->cols)==pane_log_overlay_left_margin(log->cols));
         config.bigger_font=true;
         assert(band.w>=width-log->cell_w);
-        assert(band.y>=panel.y+panel.h);
+        assert(panel.y>=band.y+band.h);
+        assert(panel.x==screen.x && band.x==screen.x);
+        assert(band.y==screen.y && panel.y==band.y+band.h);
         assert(log->rows==4 && log->rect.h>=4*log->cell_h);
         SDL_FRect log_rect={band.x,band.y,band.w,band.h}; inside(log_rect);
         SDL_SetRenderDrawColor(g_state.renderer,24,30,36,255); SDL_RenderClear(g_state.renderer);
@@ -459,6 +553,8 @@ static void check_layout(char **argv) {
         enum pane_placement quick_where;
         assert(sdl_touch_top_panel_current_anchor(&screen,&anchor,&quick_where));
         assert(sdl_touch_top_panel_compute_layout(buttons,&quick)); inside(quick);
+        assert(quick.x>=screen.x+SDL_BIG_TEXT_SIDE_PAD_PX-1);
+        assert(quick.x+quick.w<=screen.x+screen.w-SDL_BIG_TEXT_SIDE_PAD_PX+1);
         for(int i=0;i<6;i++) {
             inside(buttons[i]);
             assert(buttons[i].w>=sdl_ui_min_tap_px() && buttons[i].h>=sdl_ui_min_tap_px());
@@ -494,6 +590,7 @@ static void check_layout(char **argv) {
         term_nuke(&log->t); log->term_ready=false;
     }
     printf("HUD %dx%d @%.3f: combined character/combat, dynamic 1/2 rows, value taps, full-width log, six reachable cells PASS\n",width,height,density);
+    check_safe_area_edges();
     check_compact_combat_states();
     check_bottom_center_stack();
 }

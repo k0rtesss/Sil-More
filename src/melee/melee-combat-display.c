@@ -1580,6 +1580,7 @@ void do_cmd_combat_history_legacy(void)
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_indicator(i, max_i);
         if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER))
         {

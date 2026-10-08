@@ -2176,6 +2176,10 @@ extern void ui_scroll_area_set_offset_target(int* offset, int max_offset);
 extern bool ui_scroll_area_has_offset_target(void);
 extern bool ui_scroll_area_offset_scroll(int delta);
 extern bool ui_scroll_area_take_touch_scrolled(void);
+extern void ui_scroll_area_set_indicator(int offset, int max_offset);
+extern int ui_scroll_area_count(void);
+extern bool ui_scroll_area_get_indicator(int index, int* left, int* right,
+    int* top, int* bottom, int* offset, int* maximum);
 extern void ui_key_wait_dismiss_begin(int key);
 extern void ui_key_wait_dismiss_clear(void);
 extern bool ui_key_wait_dismiss_is_active(void);

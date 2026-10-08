@@ -1261,7 +1261,8 @@ static bool sdl_render_main_view_with_left_panel_metrics(const sdl_view* view,
     source_h = visual_rows * view->cell_h;
     visual_w = visual_cols * view->cell_w;
     canvas_w = view->cols * view->cell_w;
-    if (visual_w <= metrics.total_w || visual_rows <= 0
+    if (visual_w < metrics.total_w + (config.bigger_font ? 0 : 1)
+        || visual_rows <= 0
         || metrics.corner_h <= 0)
     {
         return false;
@@ -1565,6 +1566,24 @@ bool sdl_render_saved_screen_left_panel_backdrop(const sdl_view* view)
     return true;
 }
 
+static void sdl_render_terminal_scroll_indicators(void)
+{
+    for (int index = 0; index < ui_scroll_area_count(); index++)
+    {
+        int left, right, top, bottom, offset, maximum;
+        SDL_FRect viewport;
+        if (!ui_scroll_area_get_indicator(index, &left, &right, &top,
+                &bottom, &offset, &maximum))
+            continue;
+        right = MIN(right, g_views[PANE_MAIN].cols - 1);
+        bottom = MIN(bottom, g_views[PANE_MAIN].rows - 1);
+        if (sdl_main_cell_rect(left, top, right - left + 1,
+                bottom - top + 1, &viewport))
+            sdl_ui_render_scroll_indicator(viewport, offset, maximum,
+                bottom - top + 1);
+    }
+}
+
 static bool sdl_render_current_window_contents(void)
 {
     bool show_supporting_panes;
@@ -1770,8 +1789,8 @@ static bool sdl_render_current_window_contents(void)
             /* Bottom-anchor the content above its single panel-backed bottom
              * margin.  The pane allocation reserves no matching top margin,
              * so the first configured row begins at the top of the band. */
-            int bottom_margin =
-                pane_log_overlay_vertical_margin_px(view->cell_h);
+            int bottom_margin = config.bigger_font ? 0
+                : pane_log_overlay_vertical_margin_px(view->cell_h);
             float band_top = (float)view->rect.y;
             float band_bottom = (float)(view->rect.y + view->rect.h);
 
@@ -1821,6 +1840,9 @@ static bool sdl_render_current_window_contents(void)
         if (i == PANE_MAIN)
             (void)sdl_render_saved_screen_left_panel_backdrop(view);
     }
+
+    if (!hide_main_menu_overlays)
+        sdl_render_terminal_scroll_indicators();
 
     if (!hide_main_menu_overlays) {
         sdl_side_map_pane_render();

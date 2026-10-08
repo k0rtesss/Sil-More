@@ -871,6 +871,10 @@ static void sdl_halls_render_big_entry(sdl_halls_entry* entry, SDL_FRect card,
         (void)sdl_halls_draw_text(font, i ? ">" : "<",
             enabled ? TERM_WHITE : TERM_SLATE, rect, 0);
     }
+    SDL_FRect viewport = { card.x, card.y + pad, card.w - pad * 0.5f,
+        available_h };
+    sdl_ui_render_scroll_indicator(viewport, g_halls_text_pager.offset,
+        g_halls_text_pager.maximum, available_h);
 }
 
 static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
@@ -1402,16 +1406,9 @@ static void sdl_halls_render_mobile(const SDL_Rect* canvas,
         sdl_halls_mobile_text(g_sdl_halls.empty_text[0]
             ? g_sdl_halls.empty_text : "No recorded heroes yet.", TERM_SLATE,
             SDL_UI_FONT_BODY, x, layout->body_top, width, true);
-    if (g_halls_mobile.maximum > 0)
-    {
-        float thumb_h = MAX(12.0f * dp, layout->body_h * layout->body_h / total_h);
-        SDL_FRect thumb = { x + width - 2.0f * dp,
-            layout->body_top + (layout->body_h - thumb_h)
-                * g_halls_mobile.offset / g_halls_mobile.maximum,
-            2.0f * dp, thumb_h };
-        SDL_SetRenderDrawColor(g_state.renderer, 100, 150, 180, 200);
-        SDL_RenderFillRect(g_state.renderer, &thumb);
-    }
+    sdl_ui_render_scroll_indicator(
+        (SDL_FRect){ x, layout->body_top, width, layout->body_h },
+        g_halls_mobile.offset, g_halls_mobile.maximum, layout->body_h);
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 
     int columns, rows, index = 0;

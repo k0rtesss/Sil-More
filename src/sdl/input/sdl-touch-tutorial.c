@@ -3690,16 +3690,9 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
 #if SIL_SDL_MOBILE_BUILD
     if (get_sdl_bigger_font())
     {
-        if (g_touch_profile_list.maximum > 0) {
-            SDL_FRect viewport = g_touch_profile_list.viewport;
-            float thumb_h = MAX(12.0f * sdl_ui_density_scale(),
-                viewport.h * viewport.h / (viewport.h + g_touch_profile_list.maximum));
-            SDL_FRect thumb = { viewport.x + viewport.w - 2.0f * sdl_ui_density_scale(),
-                viewport.y + (viewport.h - thumb_h) * g_touch_profile_list.offset
-                    / g_touch_profile_list.maximum, 2.0f * sdl_ui_density_scale(), thumb_h };
-            SDL_SetRenderDrawColor(g_state.renderer, 100, 150, 180, 200);
-            SDL_RenderFillRect(g_state.renderer, &thumb);
-        }
+        sdl_ui_render_scroll_indicator(g_touch_profile_list.viewport,
+            g_touch_profile_list.offset, g_touch_profile_list.maximum,
+            g_touch_profile_list.viewport.h);
     }
 #endif
 
