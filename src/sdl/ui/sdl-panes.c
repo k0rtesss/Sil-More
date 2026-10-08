@@ -292,7 +292,7 @@ bool sdl_combat_overlay_connected_to_left_panel(bool* out_combat_below)
     if (out_combat_below)
         *out_combat_below = false;
 
-    if (!pc
+    if (!pc || sdl_combat_overlay_in_compact_row()
         || !sdl_left_panel_pane_presentation_active()
         || !sdl_combat_overlay_pane_presentation_active()
         || !sdl_combat_overlay_adjacent_to_left_panel(pc->where,
@@ -327,7 +327,7 @@ bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
 
     if (out_rect)
         *out_rect = (SDL_Rect){ 0 };
-    if (!pc || !pc->enabled)
+    if (!pc || !pc->enabled || sdl_combat_overlay_in_compact_row())
         return false;
     if (screen_saved_fullscreen_active())
         return false;

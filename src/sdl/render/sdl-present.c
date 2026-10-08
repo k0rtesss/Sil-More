@@ -351,6 +351,20 @@ static Uint64 sdl_left_panel_source_hash(const term* source_term,
         hash = sdl_left_panel_hash_mix(hash, (Uint64)p_ptr->chp);
         hash = sdl_left_panel_hash_mix(hash, (Uint64)p_ptr->mhp);
     }
+    if (sdl_combat_overlay_in_compact_row()) {
+        char label[JEWELRY_PRESET_NAME_MAX + 16];
+        int preset = sdl_combat_overlay_jewelry_preset_label(label,
+            sizeof(label));
+        const object_type* ring = preset >= 0
+            ? jewelry_preset_object(preset, JEWELRY_PRESET_SLOT_LEFT) : NULL;
+        hash = sdl_left_panel_hash_mix(hash, (Uint64)preset);
+        for (const char* ch = label; *ch; ch++)
+            hash = sdl_left_panel_hash_mix(hash, (Uint64)(byte)*ch);
+        if (ring && ring->k_idx) {
+            hash = sdl_left_panel_hash_mix(hash, object_attr(ring));
+            hash = sdl_left_panel_hash_mix(hash, (byte)object_char(ring));
+        }
+    }
 
     for (int i = 0; i < metrics->compact_segment_count; i++) {
         hash = sdl_left_panel_hash_mix(hash,
@@ -841,6 +855,10 @@ static int sdl_left_panel_source_rows_for_render(
     return source_rows;
 }
 
+static void sdl_combat_overlay_render_jewelry_preset_row(int panel_cols,
+    int dest_row, const SDL_Rect* content, int cell_w, int cell_h,
+    SDL_Texture* font_atlas, int atlas_cell_w, int atlas_cell_h);
+
 static bool sdl_render_left_panel_pane_from_cells_with_metrics(
     const sdl_view* view, const SDL_FRect* dst_left,
     const sdl_left_panel_metrics* prepared_metrics)
@@ -951,6 +969,18 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
             int output_col = metrics.compact_output_cols[i];
             int output_row = metrics.compact_output_rows[i];
 
+            if (source_row == PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW) {
+                SDL_Rect content = {
+                    .x = (int)content_x + output_col * metrics.cell_w,
+                    .y = (int)content_y,
+                };
+                sdl_combat_overlay_render_jewelry_preset_row(
+                    metrics.compact_widths[i], output_row, &content,
+                    metrics.cell_w, metrics.cell_h, font_atlas,
+                    atlas_cell_w, atlas_cell_h);
+                continue;
+            }
+
             if (metrics.compact_row
                 && (config.bigger_font || source_row == ROW_LIGHT)) {
                 sdl_left_panel_compact_light_span span;
@@ -1021,16 +1051,6 @@ bool sdl_render_left_panel_pane_from_cells(const sdl_view* view,
         NULL);
 }
 
-static int sdl_combat_overlay_equipped_jewelry_preset(void)
-{
-    for (int preset = 0; preset < JEWELRY_PRESET_MAX; preset++) {
-        if (jewelry_preset_is_equipped(preset))
-            return preset;
-    }
-
-    return -1;
-}
-
 static void sdl_combat_overlay_render_jewelry_preset_row(int panel_cols,
     int dest_row, const SDL_Rect* content, int cell_w, int cell_h,
     SDL_Texture* font_atlas, int atlas_cell_w, int atlas_cell_h)
@@ -1038,8 +1058,8 @@ static void sdl_combat_overlay_render_jewelry_preset_row(int panel_cols,
     char full_label[JEWELRY_PRESET_NAME_MAX + 16];
     char label[PANE_COMBAT_OVERLAY_COLS + 1];
     const object_type* ring;
-    const char* name;
-    int preset = sdl_combat_overlay_equipped_jewelry_preset();
+    int preset = sdl_combat_overlay_jewelry_preset_label(full_label,
+        sizeof(full_label));
     int icon_cols;
     int text_cols;
     size_t copy_size;
@@ -1047,12 +1067,6 @@ static void sdl_combat_overlay_render_jewelry_preset_row(int panel_cols,
     /* Presets exist, but none matches the currently equipped jewelry. */
     if (preset < 0 || panel_cols <= 0 || !content)
         return;
-
-    name = jewelry_preset_name(preset);
-    if (name && name[0])
-        strnfmt(full_label, sizeof(full_label), "%d:%s", preset + 1, name);
-    else
-        strnfmt(full_label, sizeof(full_label), "Set %d", preset + 1);
 
     ring = jewelry_preset_object(preset, JEWELRY_PRESET_SLOT_LEFT);
     icon_cols = ring && ring->k_idx ? MIN(2, panel_cols) : 0;
@@ -2075,4 +2089,3 @@ void sdl_present_if_needed(sdl_view* d)
         sil_popup_trace_stage("presentation-failed");
     SIL_PERF_PHASE("render.restore", sdl_restore_render_target(d));
 }
-

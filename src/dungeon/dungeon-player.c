@@ -268,6 +268,7 @@ void process_player(void)
     sil_popup_trace_stage("next-player-processing");
 
     player_active_weapon_begin_player_turn();
+    varda_quest_begin_player_turn();
 
     // reset the number of times you have riposted since last turn
     p_ptr->ripostes = 0;

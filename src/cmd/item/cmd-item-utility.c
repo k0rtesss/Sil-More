@@ -172,6 +172,14 @@ void do_cmd_exchange(void)
     r_ptr = &r_info[m_ptr->r_idx];
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
+    /* Confusion can select a different creature with different restrictions. */
+    if ((r_ptr->flags1 & (RF1_NEVER_MOVE))
+        || (r_ptr->flags1 & (RF1_HIDDEN_MOVE)))
+    {
+        msg_format("You cannot get past %s.", m_name);
+        return;
+    }
+
     /* Message */
     msg_format("You exchange places with %s.", m_name);
     monster_ai_witness(MON_AI_EXCHANGE, 3, y, x);

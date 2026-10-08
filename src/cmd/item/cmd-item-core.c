@@ -12,7 +12,7 @@
 #include "sdl-config.h"
 #include "ui/question.h"
 
-static void prise_silmaril(void);
+static bool prise_silmaril(void);
 static bool floor_context_is_pickup_destination(
     floor_context_action_kind kind);
 
@@ -1886,7 +1886,8 @@ static bool handle_iron_crown_silmaril_action(object_type* o_ptr, int item)
     if (!get_check("Will you try to prise a Silmaril from the Iron Crown? "))
         return true;
 
-    prise_silmaril();
+    if (!prise_silmaril())
+        return true;
 
     p_ptr->energy_use = 100;
     p_ptr->previous_action[0] = ACTION_MISC;
@@ -5201,7 +5202,7 @@ void shatter_weapon(int silnum)
     }
 }
 
-static void prise_silmaril(void)
+static bool prise_silmaril(void)
 {
     object_type* o_ptr;
     object_type* w_ptr;
@@ -5212,6 +5213,7 @@ static void prise_silmaril(void)
     cptr freed_msg = NULL; // default to soothe compiler warnings
 
     bool freed = false;
+    bool final_jewel_freed = false;
 
     int slot = 0;
 
@@ -5261,7 +5263,7 @@ static void prise_silmaril(void)
         msg_print(
             "To take another Silmaril will kindle a fury beyond measure.");
         if (!get_check("Will you dare to claim it? "))
-            return;
+            return false;
 
         break;
     }
@@ -5277,7 +5279,7 @@ static void prise_silmaril(void)
             "Looking into the hallowed light of the final Silmaril, you are "
             "filled with a strange dread.");
         if (!get_check("Are you sure you wish to proceed? "))
-            return;
+            return false;
 
         break;
     }
@@ -5431,6 +5433,7 @@ static void prise_silmaril(void)
         {
             // change its type to that of the crown with one less silmaril
             o_ptr->name1--;
+            final_jewel_freed = (o_ptr->name1 == ART_MORGOTH_0);
 
             // get the details of this new crown
             a_ptr = &a_info[o_ptr->name1];
@@ -5466,7 +5469,7 @@ static void prise_silmaril(void)
                 {
                     log_warn("Silmaril pickup returned an invalid inventory handle: %d",
                         slot);
-                    return;
+                    return true;
                 }
 
                 /* Describe the object */
@@ -5568,7 +5571,7 @@ static void prise_silmaril(void)
     }
 
     // check for taking of final Silmaril
-    if (o_ptr->name1 == ART_MORGOTH_0)
+    if (final_jewel_freed)
     {
         log_debug("prise_silmaril: final silmaril taken! Calling anger_morgoth(4)");
         msg_print("You hear a cry of vengeance echo through the iron hells.");
@@ -5579,6 +5582,8 @@ static void prise_silmaril(void)
     
     log_debug("prise_silmaril: complete, freed=%s, final morgoth_state=%d", 
              freed ? "true" : "false", p_ptr->morgoth_state);
+    /* A real attempt pays even when its blow fails or the weapon shatters. */
+    return true;
 }
 
 bool do_cmd_delete_item_by_index(int item)

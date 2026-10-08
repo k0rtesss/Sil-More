@@ -207,7 +207,7 @@ int main(void)
     assert(streq(equipment_menu_use_action_text(&entry, INVEN_BOW,
         SUPPLY_FLOOR_ACTION_DEFAULT), "Make active"));
     assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
+        failure, sizeof(failure), NULL));
     assert(active_calls == 2);
     puts("PASS: Main-hand and bow Make active open the focused setup menu.");
 
@@ -222,7 +222,7 @@ int main(void)
         SUPPLY_FLOOR_ACTION_DEFAULT), "Make active"));
     reset_calls();
     assert(inventory_page_use_entry(&reserved, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
+        failure, sizeof(failure), NULL));
     assert(active_calls == 1 && item_seen == INVEN_WIELD);
     reset_calls();
     assert(equipment_menu_use_entry(&reserved, INVEN_WIELD,
@@ -231,7 +231,7 @@ int main(void)
     reset_calls();
     confirmation = false;
     assert(!inventory_page_use_entry(&reserved, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
+        failure, sizeof(failure), NULL));
     assert(p_ptr->active_weapon_mode == PLAYER_ACTIVE_WEAPON_RANGED_1);
     char where[80];
     assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Harness"));
@@ -249,7 +249,7 @@ int main(void)
     assert(player_carried_extra_load(&held[0]));
     entry.item_idx = CARRIED_EXTRA_INDEX;
     assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
+        failure, sizeof(failure), NULL));
     assert(item_seen == CARRIED_EXTRA_INDEX);
     entry.item_idx = 0;
     player_carried_extra_reset_store();
@@ -257,7 +257,7 @@ int main(void)
     assert(streq(inventory_page_use_action_text(&entry,
         SUPPLY_FLOOR_ACTION_DEFAULT), "Move to Harness"));
     assert(inventory_page_use_entry(&entry, SUPPLY_FLOOR_ACTION_DEFAULT,
-        failure, sizeof(failure)));
+        failure, sizeof(failure), NULL));
     assert(storage_seen == OBJECT_STORAGE_HARNESS);
     puts("PASS: Extra storage uses the same route; Pack transfer explicitly says Move to Harness.");
 

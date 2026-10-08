@@ -773,6 +773,7 @@ void sdl_main_menu_overlay_choose(int choice)
 {
     bool executed;
     bool restore_command_wait;
+    bool leaving_before_action;
 
     if (choice < 1 || choice > MAIN_MENU_MAX)
         return;
@@ -787,6 +788,7 @@ void sdl_main_menu_overlay_choose(int choice)
     sdl_main_menu_overlay_close();
     log_debug("sdl main menu overlay: executing choice %d", choice);
     restore_command_wait = inkey_flag;
+    leaving_before_action = p_ptr->leaving;
     executed = do_cmd_main_menu_execute_choice(choice);
     /* The SDL overlay can execute modal screens while request_command() is
      * still blocked in an outer inkey(). Those modal screens call inkey()
@@ -796,10 +798,19 @@ void sdl_main_menu_overlay_choose(int choice)
     if (restore_command_wait && character_icky == 0)
         inkey_flag = true;
 
-    /* Accepted forge work must return from the outer command wait so the
-     * player loop can advance it without requiring an interrupting key. */
-    if (executed && choice == MAIN_MENU_SMITHING && p_ptr->smithing)
-        Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    /* Modal actions can spend energy, start work, or end the session while
+     * this outer command wait is blocked. Let the player loop resolve that
+     * change before accepting another command. Quit and Blitz have their
+     * own transition wakes below. */
+    if (executed && (p_ptr->energy_use > 0
+            || (choice == MAIN_MENU_SMITHING && p_ptr->smithing)
+            || (!leaving_before_action && p_ptr->leaving
+                && choice != MAIN_MENU_SAVE_QUIT && choice != MAIN_MENU_BLITZ)))
+    {
+        /* Animation can queue typeahead while the modal action runs. Pay the
+         * accepted action first, retaining that input for the next command. */
+        Term_key_push(UI_MENU_CLICK_WAKE_KEY);
+    }
 
     if (executed && choice == MAIN_MENU_SAVE_QUIT
         && (sdl_quit_transition_active() || death_spectator_active()))

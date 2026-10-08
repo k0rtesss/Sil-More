@@ -54,15 +54,18 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.8.26).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8.27).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 26 /* Prepaid, resumable Reforge work. */
+#define VERSION_EXTRA 27 /* Saved weapon-ready credit and smithing alloy state. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
+
+/* Pending smithing alloy: type and its four already-applied stat bonuses. */
+#define SMITHING_ALLOY_STATE_BYTES 5
 
 /* Marker before the serialized supplies block in 0.9.6+ savefiles. */
 #define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
@@ -1946,6 +1949,7 @@
  * Bit flags for the "p_ptr->update" variable
  */
 #define PU_BONUS 0x00000001L /* Calculate bonuses */
+#define PU_TORCH 0x00000002L /* Calculate light after bonuses, before visibility */
 /* xxx (many) */
 #define PU_HP 0x00000010L /* Calculate chp and mhp */
 #define PU_MANA 0x00000020L /* Calculate csp and msp */

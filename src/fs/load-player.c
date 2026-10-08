@@ -289,6 +289,7 @@ errr rd_extra(void)
         byte quick_access_prompt_flags = 0;
         s16b lamp_oil = 0;
         byte active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
+        byte free_active_weapon_change_used = 0;
         byte morgoth_call_state = 0;
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
@@ -310,7 +311,11 @@ errr rd_extra(void)
         if (savefile_has_morgoth_call_state)
         {
             rd_byte(&morgoth_call_state);
-            strip_bytes(7);
+            strip_bytes(6);
+            if (savefile_version_at_least(0, 9, 8, 27))
+                rd_byte(&free_active_weapon_change_used);
+            else
+                strip_bytes(1);
         }
         else
         {
@@ -323,6 +328,8 @@ errr rd_extra(void)
             quick_access_prompt_flags & QUICK_ACCESS_PROMPT_MASK;
         p_ptr->lamp_oil = lamp_oil;
         p_ptr->active_weapon_mode = active_weapon_mode;
+        p_ptr->free_active_weapon_change_used =
+            free_active_weapon_change_used != 0;
         if (savefile_has_morgoth_call_state)
         {
             p_ptr->morgoth_call_state =

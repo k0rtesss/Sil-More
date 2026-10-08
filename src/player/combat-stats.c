@@ -334,7 +334,8 @@ int axe_bonus(const object_type* o_ptr)
 }
 
 /*
- * Bonus for people with polearm affinity
+ * Polearm Mastery applies only while the melee role is active.  A Harness
+ * polearm used for Power Throw still qualifies while the main weapon is melee.
  */
 int polearm_bonus(const object_type* o_ptr)
 {
@@ -345,7 +346,9 @@ int polearm_bonus(const object_type* o_ptr)
     /* Extract the flags */
     object_flags(o_ptr, &f1, &f2, &f3);
 
-    if (p_ptr->active_ability[S_MEL][MEL_POLEARMS] && (f3 & (TR3_POLEARM)))
+    if (player_active_weapon_is_melee()
+        && p_ptr->active_ability[S_MEL][MEL_POLEARMS]
+        && (f3 & (TR3_POLEARM)))
     {
         bonus += 2;
     }

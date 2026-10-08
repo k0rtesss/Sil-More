@@ -101,7 +101,7 @@ static void check_attack_energy(void)
     p_ptr->mdd = p_ptr->mds = 1;
     p_ptr->energy_use = 100;
     player_attacked = false;
-    py_attack(10, 10, ATT_MAIN);
+    py_attack(9, 11, ATT_MAIN);
     assert(player_attacked && combat_number > 0);
     assert(p_ptr->energy_use == 100);
 
@@ -110,7 +110,7 @@ static void check_attack_energy(void)
     mon_list[cave_m_idx[11][11]].ml = true;
     p_ptr->energy_use = 100;
     player_attacked = false;
-    py_attack(10, 10, ATT_MAIN);
+    py_attack(9, 11, ATT_MAIN);
     assert(!player_attacked && p_ptr->energy_use == 0);
 
     /* The same refusal on an automatic strike retains its triggering action. */

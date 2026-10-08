@@ -3149,7 +3149,7 @@ static debug_menu_entry debug_menu_map[] = {
     { 'm', 'm', "Magic mapping (m)", TERM_L_GREEN },
     { 'w', 'w', "Light the level (w)", TERM_L_GREEN },
     { 'i', '~', "Toggle illusory wall dots (i)", TERM_YELLOW },
-    { 'l', 'l', "Wizard look (l)", TERM_L_WHITE },
+    { 'l', 'l', "Wizard look (l; Ctrl+W water, Ctrl+F ice)", TERM_L_WHITE },
     { 'q', 'q', "Query the dungeon (q)", TERM_L_WHITE },
 };
 

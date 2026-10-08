@@ -208,7 +208,9 @@ bool sdl_left_panel_source_cell_rect(int col, int row, int cols,
     {
         return false;
     }
-    if (col < 0 || row < 0 || cols <= 0 || rows <= 0)
+    if (col < 0
+        || (row < 0 && row != PANE_COMBAT_OVERLAY_JEWELRY_PRESET_ROW)
+        || cols <= 0 || rows <= 0)
         return false;
     if (!sdl_left_panel_metrics_for_view(view, &metrics))
         return false;
@@ -328,6 +330,16 @@ bool sdl_combat_overlay_cell_rect(int col, int source_row, int cols,
     if (!out)
         return false;
     *out = (SDL_FRect){ 0 };
+    if (sdl_combat_overlay_in_compact_row()) {
+        for (int i = 0; i < sdl_combat_overlay_source_row_count(); i++) {
+            int row;
+            if (sdl_combat_overlay_source_row_at_index(i, &row)
+                && row == source_row)
+                return sdl_left_panel_source_cell_rect(col, source_row,
+                    cols, rows, out);
+        }
+        return false;
+    }
     if (!sdl_combat_overlay_pane_content_rect(&pane))
         return false;
 
@@ -406,6 +418,27 @@ bool sdl_combat_overlay_point_to_cell(float x, float y, int* out_col,
         return false;
     *out_col = 0;
     *out_source_row = 0;
+    if (sdl_combat_overlay_in_compact_row()) {
+        for (int i = 0; i < sdl_combat_overlay_source_row_count(); i++) {
+            SDL_FRect cell;
+            int row;
+            if (sdl_combat_overlay_source_row_at_index(i, &row)
+                && sdl_combat_overlay_cell_rect(0, row,
+                    PANE_COMBAT_OVERLAY_COLS, 1, &cell)
+                && x >= cell.x && x < cell.x + cell.w
+                && y >= cell.y && y < cell.y + cell.h)
+            {
+                sdl_left_panel_metrics metrics;
+                if (!sdl_left_panel_metrics_for_view(&g_views[PANE_MAIN],
+                        &metrics))
+                    return false;
+                *out_col = (int)((x - cell.x) / (float)metrics.cell_w);
+                *out_source_row = row;
+                return true;
+            }
+        }
+        return false;
+    }
     if (!sdl_combat_overlay_pane_content_rect(&pane))
         return false;
     if (x < (float)pane.x || y < (float)pane.y

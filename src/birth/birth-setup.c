@@ -171,6 +171,8 @@ void player_wipe(void)
 
     /* Wipe the player */
     memset(p_ptr, 0, sizeof(player_type));
+    /* Smithing blueprints and alloy metadata live outside player_type. */
+    smithing_reset_work();
 
     turn = 0;
     playerturn = 0;

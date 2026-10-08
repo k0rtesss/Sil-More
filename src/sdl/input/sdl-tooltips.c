@@ -239,6 +239,11 @@ bool sdl_mouse_grid_has_marked_object(int y, int x, object_type** out_obj)
  * long-press popup via sdl_object_tooltip_begin/end_persistent.
  */
 static bool g_object_tooltip_persistent_scope = false;
+/* Only mouse-motion hover follows the pointer. Game-driven Look/aim and
+ * pinned touch tooltips own their map coordinates independently. */
+static bool g_object_tooltip_motion_owned = false;
+static float g_object_tooltip_motion_x;
+static float g_object_tooltip_motion_y;
 
 void sdl_object_tooltip_begin_persistent(void)
 {
@@ -263,6 +268,7 @@ static Uint64 sdl_object_tooltip_expiry(bool touch)
 
 void sdl_object_tooltip_clear(void)
 {
+    g_object_tooltip_motion_owned = false;
     if (!g_object_tooltip.active)
         return;
 
@@ -667,6 +673,7 @@ bool sdl_object_tooltip_show_grid(int map_y, int map_x, bool touch)
     Uint64 expires_at = sdl_object_tooltip_expiry(touch);
     bool persistent = touch && expires_at == 0;
 
+    g_object_tooltip_motion_owned = false;
     if (!sdl_object_tooltip_format_grid(map_y, map_x, name, sizeof(name),
             NULL))
     {
@@ -923,7 +930,12 @@ void sdl_object_tooltip_handle_mouse_motion(float x, float y)
         return;
     }
 
-    (void)sdl_object_tooltip_show_grid(map_y, map_x, false);
+    if (sdl_object_tooltip_show_grid(map_y, map_x, false))
+    {
+        g_object_tooltip_motion_owned = true;
+        g_object_tooltip_motion_x = x;
+        g_object_tooltip_motion_y = y;
+    }
 }
 
 int sdl_object_tooltip_pending_timeout_ms(Uint64 now_ns)
@@ -1207,6 +1219,27 @@ void sdl_object_tooltip_render(void)
 
     if (g_touch_tutorial_suppress_runtime_top_panel || !g_object_tooltip.active)
         return;
+    if (g_object_tooltip_motion_owned && !g_object_tooltip.touch
+        && !g_object_tooltip.term_cell && !g_object_tooltip.screen_rect
+        && !g_unified_look_active
+        && !(g_pointer_aim.active && g_pointer_aim.select_mode))
+    {
+        int map_y;
+        int map_x;
+
+        /* Camera and layout changes can move a different grid beneath a
+         * stationary pointer without generating another motion event. */
+        if (g_pointer_aim.active || g_player_action_menu.active
+            || g_player_exchange_target.active
+            || !sdl_main_view_point_to_map(g_object_tooltip_motion_x,
+                g_object_tooltip_motion_y, &map_y, &map_x)
+            || map_y != g_object_tooltip.map_y
+            || map_x != g_object_tooltip.map_x)
+        {
+            sdl_object_tooltip_clear();
+            return;
+        }
+    }
     if (g_object_tooltip.touch && g_object_tooltip.expires_at
         && SDL_GetTicksNS() >= g_object_tooltip.expires_at)
     {
@@ -3571,7 +3604,10 @@ bool sdl_mouse_recall_process_pending(void)
         char desc[sizeof(g_object_tooltip.text)];
 
         if (sdl_object_tooltip_format_grid(y, x, desc, sizeof(desc), NULL)) {
-            msg_format("You see %s.", desc);
+            size_t len = strlen(desc);
+            cptr ending = (len && strchr(".!?", desc[len - 1])) ? "" : ".";
+
+            msg_format("You see %s%s", desc, ending);
             return true;
         }
     }

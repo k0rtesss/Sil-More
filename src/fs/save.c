@@ -1148,6 +1148,13 @@ static bool wr_savefile(void)
     log_debug("Writing smithing item");
     log_trace("[save:%06u] === BEGIN SMITHING ITEM ===", (unsigned)save_byte_offset);
     wr_item(smith_o_ptr);
+    {
+        byte alloy[SMITHING_ALLOY_STATE_BYTES];
+
+        smithing_alloy_save_state(alloy);
+        for (int i = 0; i < SMITHING_ALLOY_STATE_BYTES; i++)
+            wr_byte(alloy[i]);
+    }
     log_trace("[save:%06u] === END SMITHING ITEM ===", (unsigned)save_byte_offset);
 
     /* Write the inventory */

@@ -33,7 +33,13 @@ void update_stuff(void)
         /* Match generation's initial visibility before any encounter or
          * tutorial observation; process_player() has not run calc_torch yet. */
         if (playerturn == 0 && !p_ptr->restoring)
-            calc_torch();
+            p_ptr->update |= PU_TORCH;
+    }
+
+    if (p_ptr->update & PU_TORCH)
+    {
+        p_ptr->update &= ~PU_TORCH;
+        calc_torch();
     }
 
     if (p_ptr->update & (PU_HP))

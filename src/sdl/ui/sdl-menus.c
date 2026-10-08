@@ -944,6 +944,7 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     if (!sdl_narrative_banner_overlay_enabled())
         return false;
     if (!active_narrative_banner_visible() || character_icky > 0
+        || g_touch_pane_yes_no_prompt_active
         || sdl_question_menu_captures_pointer()
         || sdl_question_menu_blocks_input())
         return false;
@@ -3501,7 +3502,8 @@ void sdl_unified_look_sidebar_render(void)
             if (item->health_m_idx > 0
                 && item->health_m_idx < mon_max
                 && item->health_len > 0
-                && mon_list[item->health_m_idx].r_idx)
+                && mon_list[item->health_m_idx].r_idx
+                && mon_list[item->health_m_idx].maxhp > 0)
             {
                 const monster_type* m_ptr =
                     &mon_list[item->health_m_idx];

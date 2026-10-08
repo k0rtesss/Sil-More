@@ -8163,7 +8163,8 @@ static void inventory_storage_move_failure_text(const object_type* o_ptr,
 }
 
 static bool inventory_page_use_entry(equipment_list_entry* entry,
-    supply_floor_action floor_action, char* failure, size_t failure_len)
+    supply_floor_action floor_action, char* failure, size_t failure_len,
+    int* deferred_horn_item)
 {
     supply_list_entry supply_entry = {0};
 
@@ -8189,6 +8190,12 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
                 inventory_page_use_action_text(entry, floor_action), entry))
         {
             return false;
+        }
+        if (deferred_horn_item
+            && inventory[entry->equip_idx].tval == TV_HORN)
+        {
+            *deferred_horn_item = entry->equip_idx;
+            return true;
         }
         do_cmd_use_item_by_index(entry->equip_idx);
         return true;
@@ -8225,6 +8232,12 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
                     failure, failure_len);
             }
             return moved;
+        }
+        if (deferred_horn_item && o_ptr && o_ptr->tval == TV_HORN)
+        {
+            /* Aiming needs the gameplay screen restored by our caller. */
+            *deferred_horn_item = entry->item_idx;
+            return true;
         }
         do_cmd_use_item_by_index(entry->item_idx);
         return true;
@@ -11730,6 +11743,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     bool item_select_mode = false;
     int focus_floor_o_idx = -1;
     int deferred_animated_gem_supply_idx = -1;
+    int deferred_horn_item = -1;
     supply_floor_action floor_action = SUPPLY_FLOOR_ACTION_DEFAULT;
     supply_overlay_cache overlay_cache = { false, -1, -1, -1, -1, -1 };
     bool prev_single_column = false;
@@ -12231,6 +12245,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 char move_full[160];
                 char move_mid[128];
                 char move_short[96];
+                /* Item letters retain priority over browser action keys. */
+                cptr use_key = browser_entry_index_from_label('u',
+                    equip_entry_cnt) >= 0 ? "Space" : "u";
+                cptr preview_key = browser_entry_index_from_label('x',
+                    equip_entry_cnt) >= 0 ? "Ctrl+x" : "x";
                 const char* letter_variants[] = {
                     letter_full, letter_mid, letter_short
                 };
@@ -12239,21 +12258,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 };
 
                 strnfmt(letter_full, sizeof(letter_full),
-                    "letter %s  Dir move  x preview  u %s  z drop  Tab  Esc",
-                    primary_action, primary_action);
+                    "letter %s  Dir move  %s preview  %s %s  z drop  Tab  Esc",
+                    primary_action, preview_key, use_key, primary_action);
                 strnfmt(letter_mid, sizeof(letter_mid),
-                    "letter %s  x preview  u %s  z drop  Tab  Esc",
-                    primary_action, primary_action);
+                    "letter %s  %s preview  %s %s  z drop  Tab  Esc",
+                    primary_action, preview_key, use_key, primary_action);
                 strnfmt(letter_short, sizeof(letter_short),
-                    "letter %s  u %s  z drop  Esc", primary_action,
-                    primary_action);
+                    "%s %s  %s preview  z drop  Esc", use_key,
+                    primary_action, preview_key);
                 strnfmt(move_full, sizeof(move_full),
-                    "Dir move  x preview  u %s  z drop  Tab  Esc",
-                    primary_action);
+                    "Dir move  %s preview  %s %s  z drop  Tab  Esc",
+                    preview_key, use_key, primary_action);
                 strnfmt(move_mid, sizeof(move_mid),
-                    "x preview  u %s  z drop  Tab  Esc", primary_action);
+                    "%s preview  %s %s  z drop  Tab  Esc", preview_key,
+                    use_key, primary_action);
                 strnfmt(move_short, sizeof(move_short),
-                    "u %s  z drop  Esc", primary_action);
+                    "%s %s  %s preview  z drop  Esc", use_key,
+                    primary_action, preview_key);
 
                 if (indexed_menu_letters_enabled())
                 {
@@ -12508,6 +12529,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 redraw = true;
                 break;
 
+            case KTRL('X'):
             case 'X':
             case 'x':
             {
@@ -12651,6 +12673,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char picker_detail[180] = "";
             char primary_action[32] = "use";
             cptr delete_action = "delete";
+            cptr preview_key;
             byte picker_heading_attr = TERM_L_WHITE + TERM_SHADE;
             byte status_attr = TERM_L_BLUE;
             bool touch_only;
@@ -12843,6 +12866,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else
                 inventory_entry_cnt = collect_inventory_page_entries(
                     selected_group, equip_entries, equip_capacity, request);
+            preview_key = browser_entry_index_from_label('x',
+                inventory_entry_cnt) >= 0 ? "Ctrl+x" : "x";
             inventory_choice_cnt = (storage_exchange_mode || replacement_mode
                     || slot_pick_mode || item_select_mode)
                 ? inventory_entry_cnt
@@ -13748,11 +13773,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else
                 {
+                    char full[112], short_hint[80];
                     const char* variants[] = {
-                        "Choose: Dir/mouse move  Enter select  x preview  Esc cancel",
-                        "Enter select  x preview  Esc cancel",
-                        "Enter select  Esc cancel"
+                        full, short_hint
                     };
+                    strnfmt(full, sizeof(full),
+                        "Choose: Dir/mouse move  Enter select  %s preview  Esc cancel", preview_key);
+                    strnfmt(short_hint, sizeof(short_hint),
+                        "Enter select  %s preview  Esc cancel", preview_key);
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
                         N_ELEMENTS(variants));
@@ -13876,22 +13904,31 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     move_full, move_mid, move_short
                 };
 
+                cptr use_key = browser_entry_index_from_label('u',
+                    inventory_entry_cnt) >= 0 ? "Space" : "u";
+                cptr delete_key = browser_entry_index_from_label('y',
+                    inventory_entry_cnt) >= 0 ? "Ctrl+y" : "y";
+                cptr short_delete = streq(delete_action, "delete")
+                    ? "delete" : "prise";
                 strnfmt(letter_full, sizeof(letter_full),
-                    "letter %s  Dir move  x preview  z drop  y %s  Tab  Esc",
-                    primary_action, delete_action);
+                    "letter %s  Dir move  %s preview  %s %s  z drop  %s %s  Tab  Esc",
+                    primary_action, preview_key, use_key, primary_action,
+                    delete_key, delete_action);
                 strnfmt(letter_mid, sizeof(letter_mid),
-                    "letter %s  x preview  z drop  y %s  Tab  Esc",
-                    primary_action, delete_action);
+                    "%s %s  %s preview  z drop  %s %s  Esc",
+                    use_key, primary_action, preview_key, delete_key, delete_action);
                 strnfmt(letter_short, sizeof(letter_short),
-                    "letter %s  z drop  Tab  Esc", primary_action);
+                    "%s %s  %s preview  %s %s  Esc",
+                    use_key, "use", preview_key, delete_key, short_delete);
                 strnfmt(move_full, sizeof(move_full),
-                    "Dir move  x preview  u %s  z drop  y %s  Tab  Esc",
-                    primary_action, delete_action);
+                    "Dir move  %s preview  %s %s  z drop  %s %s  Tab  Esc",
+                    preview_key, use_key, primary_action, delete_key, delete_action);
                 strnfmt(move_mid, sizeof(move_mid),
-                    "x preview  u %s  z drop  y %s  Tab  Esc",
-                    primary_action, delete_action);
+                    "%s %s  %s preview  z drop  %s %s  Esc",
+                    use_key, primary_action, preview_key, delete_key, delete_action);
                 strnfmt(move_short, sizeof(move_short),
-                    "u %s  z drop  Esc", primary_action);
+                    "%s %s  %s preview  %s %s  Esc",
+                    use_key, "use", preview_key, delete_key, short_delete);
 
                 if (indexed_menu_letters_enabled())
                 {
@@ -14301,6 +14338,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 break;
 
 
+            case KTRL('X'):
             case 'X':
             case 'x':
             {
@@ -14454,7 +14492,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                     if (inventory_page_use_entry(&equip_entries[inv_entry_cur],
                             floor_action, inventory_action_notice,
-                            sizeof(inventory_action_notice)))
+                            sizeof(inventory_action_notice),
+                            &deferred_horn_item))
                     {
                         acted = true;
                         refresh_after_close = true;
@@ -14500,6 +14539,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 break;
 
+            case KTRL('Y'):
             case 'y':
             case 'Y':
                 if (storage_exchange_mode || replacement_mode
@@ -15079,16 +15119,33 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 "Dir move  u equip  s save  n name  c clear  Tab  Esc",
                 "u equip  s save  n name  c clear  Esc"
             };
-            static const char* letter_variants[] = {
-                "letter use  Dir move  x preview  z drop  Tab  Esc",
-                "letter use  x preview  z drop  Tab  Esc",
-                "letter use  z drop  Esc"
+            char letter_full[160], letter_mid[128], letter_short[96];
+            char move_full[160], move_mid[128], move_short[96];
+            cptr preview_key = browser_entry_index_from_label('x', entry_cnt)
+                >= 0 ? "Ctrl+x" : "x";
+            cptr use_key = browser_entry_index_from_label('u', entry_cnt)
+                >= 0 ? "Space" : "u";
+            const char* letter_variants[] = {
+                letter_full, letter_mid, letter_short
             };
-            static const char* move_variants[] = {
-                "Dir move  x preview  u use  z drop  Tab  Esc",
-                "x preview  u use  z drop  Tab  Esc",
-                "u use  z drop  Esc"
+            const char* move_variants[] = {
+                move_full, move_mid, move_short
             };
+            strnfmt(letter_full, sizeof(letter_full),
+                "letter use  Dir move  %s preview  %s use  z drop  Tab  Esc",
+                preview_key, use_key);
+            strnfmt(letter_mid, sizeof(letter_mid),
+                "letter use  %s preview  %s use  z drop  Tab  Esc",
+                preview_key, use_key);
+            strnfmt(letter_short, sizeof(letter_short),
+                "%s use  %s preview  z drop  Esc", use_key, preview_key);
+            strnfmt(move_full, sizeof(move_full),
+                "Dir move  %s preview  %s use  z drop  Tab  Esc",
+                preview_key, use_key);
+            strnfmt(move_mid, sizeof(move_mid),
+                "%s preview  %s use  z drop  Tab  Esc", preview_key, use_key);
+            strnfmt(move_short, sizeof(move_short),
+                "%s use  %s preview  z drop  Esc", use_key, preview_key);
 
             if (grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS)
             {
@@ -15411,6 +15468,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             }
             break;
 
+        case KTRL('X'):
         case 'X':
         case 'x':
         {
@@ -15751,21 +15809,31 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     screen_pop_supporting_panes_hidden();
     screen_load();
 
-    if (deferred_animated_gem_supply_idx >= 0)
+    if (deferred_horn_item >= 0 || deferred_animated_gem_supply_idx >= 0)
     {
-        object_type* o_ptr;
-
         /*
-         * Publish the restored gameplay frame before starting the synchronous
-         * projection animation.
+         * Aiming and projection animations must begin on the restored map,
+         * after releasing the browser's presentation ownership.
          */
         sdl_present_batch_end();
-        o_ptr = supplies_entry_at(deferred_animated_gem_supply_idx);
-        if (o_ptr && o_ptr->k_idx)
+
+        if (deferred_horn_item >= 0)
         {
-            supplies_begin_action(deferred_animated_gem_supply_idx);
-            do_cmd_use_gem(o_ptr, SUPPLIES_INDEX);
-            supplies_end_action();
+            object_type* o_ptr = player_inventory_object(deferred_horn_item);
+
+            if (o_ptr && o_ptr->k_idx && o_ptr->tval == TV_HORN)
+                do_cmd_use_item_by_index(deferred_horn_item);
+        }
+        else
+        {
+            object_type* o_ptr = supplies_entry_at(deferred_animated_gem_supply_idx);
+
+            if (o_ptr && o_ptr->k_idx)
+            {
+                supplies_begin_action(deferred_animated_gem_supply_idx);
+                do_cmd_use_gem(o_ptr, SUPPLIES_INDEX);
+                supplies_end_action();
+            }
         }
     }
 
@@ -15776,7 +15844,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         handle_stuff();
         Term_fresh();
     }
-    if (deferred_animated_gem_supply_idx < 0)
+    if (deferred_horn_item < 0 && deferred_animated_gem_supply_idx < 0)
         sdl_present_batch_end();
 
     (void)self_knowledge_display_pending();

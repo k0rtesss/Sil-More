@@ -1001,7 +1001,11 @@ static bool sdl_narrative_banner_consume_input_event(const SDL_Event* ev)
 {
     bool back_input;
 
-    if (!active_narrative_banner_visible())
+    /* A retained gameplay banner must not take Back from a saved screen or
+     * modal question that hides the banner's visual panel. */
+    if (character_icky > 0 || g_touch_pane_yes_no_prompt_active
+        || sdl_question_menu_captures_pointer()
+        || !active_narrative_banner_visible())
         return false;
     back_input = sdl_event_is_narrative_banner_back_input(ev);
     if (!active_narrative_banner_consumes_input() && !back_input)

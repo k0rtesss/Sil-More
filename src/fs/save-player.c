@@ -180,7 +180,8 @@ void wr_extra(void)
     }
     wr_u32b(0L);
     wr_u16b(0U);
-    wr_byte(0);
+    /* 0.9.8.27: preserve ready credit in the final reserved whole byte. */
+    wr_byte(p_ptr->free_active_weapon_change_used != 0);
 
     /* Reserved: legacy item-quality squelch array (now unused) */
     for (i = 0; i < LEGACY_ITEM_QUALITY_BYTES; i++)

@@ -1759,6 +1759,89 @@ static int smith_alloy_weight_required(const object_type* o_ptr)
     return (total_weight + 3) / 4;
 }
 
+void smithing_alloy_save_state(byte state[SMITHING_ALLOY_STATE_BYTES])
+{
+    if (!state)
+        return;
+
+    memset(state, 0, SMITHING_ALLOY_STATE_BYTES);
+    if (!smith_o_ptr || !smith_o_ptr->k_idx)
+        return;
+
+    state[0] = (byte)smith_alloy.type;
+    state[1] = smith_alloy.bonus_att;
+    state[2] = smith_alloy.bonus_ds;
+    state[3] = smith_alloy.bonus_evn;
+    state[4] = smith_alloy.bonus_ps;
+}
+
+void smithing_alloy_load_state(const byte state[SMITHING_ALLOY_STATE_BYTES])
+{
+    byte expected[SMITHING_ALLOY_STATE_BYTES] = { 0 };
+    int cat;
+
+    /* Metarun loading can reuse this process for another character. */
+    smith_clear_alloy_state(&smith_alloy);
+    smith_clear_alloy_state(&smith2_alloy);
+    smith_clear_alloy_state(&smith3_alloy);
+    if (!state)
+        return;
+
+    if (state[0] == SMITH_ALLOY_NONE)
+    {
+        if (memcmp(state, expected, sizeof(expected)) != 0)
+            log_warn("Ignoring invalid saved smithing alloy bonuses.");
+        return;
+    }
+
+    if (state[0] > SMITH_ALLOY_STAR_IRON || smith_pending_reforge()
+        || !smith_alloy_applicable(smith_o_ptr))
+    {
+        log_warn("Ignoring invalid saved smithing alloy type %u.",
+            (unsigned)state[0]);
+        return;
+    }
+
+    cat = smith_item_category(smith_o_ptr);
+    expected[0] = state[0];
+    if (cat == CAT_WEAPON)
+        expected[state[0] == SMITH_ALLOY_MITHRIL ? 1 : 2] = 1;
+    else
+        expected[state[0] == SMITH_ALLOY_MITHRIL ? 3 : 4] = 1;
+
+    if (memcmp(state, expected, sizeof(expected)) != 0)
+    {
+        log_warn("Ignoring invalid saved smithing alloy bonuses.");
+        return;
+    }
+
+    /* The object reader already restored these bonuses on the blueprint.
+     * Restore their accounting metadata without applying them again. */
+    smith_alloy.type = (smith_alloy_type)state[0];
+    smith_alloy.bonus_att = state[1];
+    smith_alloy.bonus_ds = state[2];
+    smith_alloy.bonus_evn = state[3];
+    smith_alloy.bonus_ps = state[4];
+}
+
+void smithing_reset_work(void)
+{
+    object_wipe(smith_o_ptr);
+    object_wipe(smith2_o_ptr);
+    object_wipe(smith3_o_ptr);
+    smithing_alloy_load_state(NULL);
+    if (a_info && z_info && z_info->art_self_made_max >= 2
+        && z_info->art_self_made_max <= z_info->art_max)
+    {
+        /* These are draft definitions, rather than completed artefacts. */
+        for (int i = z_info->art_self_made_max - 2;
+             i < z_info->art_self_made_max; i++)
+            artefact_wipe(i);
+    }
+    memset(&smithing_cost, 0, sizeof(smithing_cost));
+    enchant_then_numbers = false;
+}
+
 /*
  * A structure to hold a flag and its smithing category
  */
@@ -2543,6 +2626,10 @@ bool melt_metal_item(int item_num)
                 if (!get_check(prompt))
                     return (false);
             }
+
+            /* Browsing or declining a melt must retain interrupted work.
+             * Only the confirmed conversion abandons that work. */
+            p_ptr->smithing_leftover = 0;
 
             {
                 int slot;
@@ -9509,9 +9596,6 @@ void do_cmd_smithing_screen(void)
 
             if (meltable_metal_items_carried())
             {
-                // this is not a resumption of smithing an item
-                p_ptr->smithing_leftover = 0;
-
                 melt_menu();
             }
             else

@@ -268,7 +268,7 @@ typedef struct sdl_view {
     bool term_ready;
 } sdl_view;
 
-#define SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX 4
+#define SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX (4 + PANE_COMBAT_OVERLAY_MAX_ROWS)
 
 typedef struct sdl_left_panel_metrics {
     bool collapsed;
@@ -1826,6 +1826,8 @@ bool sdl_saved_screen_left_panel_pane_active(void);
 bool sdl_left_panel_pane_presentation_active(void);
 bool sdl_left_panel_pane_renders_character_panel(void);
 bool sdl_combat_overlay_pane_presentation_active(void);
+bool sdl_combat_overlay_in_compact_row(void);
+int sdl_combat_overlay_jewelry_preset_label(char* label, size_t size);
 bool sdl_combat_overlay_melee_uses_offhand_row(void);
 int sdl_combat_overlay_source_row_count(void);
 bool sdl_combat_overlay_source_row_at_index(int index, int* out_row);

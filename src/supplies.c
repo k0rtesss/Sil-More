@@ -250,6 +250,8 @@ bool jewelry_preset_objects_match(const object_type* a, const object_type* b)
         return false;
     if (a->pval != b->pval || a->weight != b->weight)
         return false;
+    if (cursed_p(a) != cursed_p(b))
+        return false;
     if (a->name1 != b->name1)
         return false;
     if (object_ego_prefix(a) != object_ego_prefix(b)

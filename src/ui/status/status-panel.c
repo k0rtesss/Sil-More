@@ -933,14 +933,15 @@ void prt_char_health_graphic(void)
 }
 
 /*
- * Peaceful monsters are not combat targets, so do not represent them with a
- * combat health meter in any UI.
+ * Peaceful monsters are not combat targets.  A health meter also requires a
+ * positive maximum, including for creatures created by wizard commands.
  */
 bool monster_health_bar_allowed(const monster_type* m_ptr)
 {
     const monster_race* r_ptr;
 
-    if (!m_ptr || !m_ptr->r_idx || m_ptr->r_idx >= z_info->r_max)
+    if (!m_ptr || !m_ptr->r_idx || m_ptr->r_idx >= z_info->r_max
+        || m_ptr->maxhp <= 0)
         return false;
 
     r_ptr = &r_info[m_ptr->r_idx];

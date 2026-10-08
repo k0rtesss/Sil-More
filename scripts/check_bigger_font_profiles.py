@@ -21,6 +21,7 @@ HARNESS = r'''
 static int width, height;
 static float density;
 static bool large_values;
+static int weapon_fixture;
 void sdl_ios_request_orientation(bool portrait) {}
 void sdl_ios_install_orientation_observer(SDL_Window *window) {}
 bool sdl_ios_get_safe_area_insets(SDL_Window *window,
@@ -39,8 +40,14 @@ void __wrap_prt_frame_basic(void) {
     Term_putstr(0, ROW_SP, -1, TERM_L_GREEN,
         large_values ? "Vce  999:999" : "Voice  49:49");
     Term_putstr(0, ROW_LIGHT, -1, TERM_YELLOW, "oo     987");
-    Term_putstr(0, ROW_MEL, -1, TERM_WHITE, "(+7,2d6)");
-    Term_putstr(0, ROW_ARC, -1, TERM_WHITE, "(+3,1d7)");
+    if(weapon_fixture==2) {
+        Term_putstr(0, ROW_ARC, -1, TERM_WHITE, "(+3,1d7)");
+        Term_putstr(0, ROW_QUIVER, -1, TERM_WHITE, "oo 18|24/24");
+    } else {
+        if(weapon_fixture==1)
+            Term_putstr(0, ROW_MEL-1, -1, TERM_WHITE, "(+7,2d6)");
+        Term_putstr(0, ROW_MEL, -1, TERM_WHITE, "(+7,2d6)");
+    }
 }
 
 static struct pane_config *find(struct sdl_pane_profile *p, enum pane_type type) {
@@ -160,7 +167,7 @@ static void check_bottom_center_stack(void) {
     for(int stretch=0;stretch<2;stretch++) {
         memcpy(pane_config,baseline,sizeof(baseline));
         config.bigger_font=big;
-        config.left_panel_compact_mode=SDL_LEFT_PANEL_COMPACT_ROW;
+        config.left_panel_compact_mode=SDL_LEFT_PANEL_COMPACT_COLUMN;
         config.touch_top_panel_rows=rows;
         config.touch_top_panel_size=stretch?SDL_TOUCH_TOP_PANEL_SIZE_STRETCH:3;
         int combat_index=-1,quick_index=-1;
@@ -258,6 +265,87 @@ static void check_bottom_center_stack(void) {
     config.bigger_font=true;
     printf("Big-font Bottom Center %dx%d: Combat before/after Quick Access, 1/2 rows, fixed/Stretch, unchanged by successor and stable across frames PASS\n",width,height);
 }
+static void check_compact_combat_states(void) {
+    sdl_view *view=&g_views[PANE_MAIN];
+    SDL_Rect saved_rect=view->rect;
+    int saved_cols=view->cols;
+    object_kind *saved_kinds=k_info;
+    static object_kind kinds[4];
+    k_info=kinds;
+    kinds[1].x_attr=TERM_WHITE; kinds[1].x_char=')';
+    kinds[2].x_attr=TERM_L_GREEN; kinds[2].x_char='=';
+    inventory[INVEN_WIELD]=(object_type){.k_idx=1,.tval=TV_SWORD};
+    inventory[INVEN_LEFT]=(object_type){.k_idx=2,.tval=TV_RING};
+    inventory[INVEN_RIGHT]=inventory[INVEN_LEFT];
+    inventory[INVEN_NECK]=(object_type){.k_idx=3,.tval=TV_AMULET};
+    p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]=true;
+    for(int i=0;i<pane_config_count;i++) if(pane_config[i].pane==PANE_LEFT_PANEL)
+        pane_config[i].font_size=0;
+    for(int mode=0;mode<3;mode++) for(int jewelry=0;jewelry<3;jewelry++) {
+        weapon_fixture=mode;
+        p_ptr->active_weapon_mode=mode==2?PLAYER_ACTIVE_WEAPON_RANGED_1:PLAYER_ACTIVE_WEAPON_MELEE;
+        inventory[INVEN_ARM]=mode==1?inventory[INVEN_WIELD]:(object_type){0};
+        jewelry_presets_reset();
+        inventory[INVEN_LEFT].pval=0;
+        if(jewelry) {
+            assert(jewelry_preset_store_current(0));
+            assert(jewelry_preset_set_name(0,"Jewelry"));
+            if(jewelry==2) inventory[INVEN_LEFT].pval=1;
+        }
+        for(int narrow=0;narrow<2;narrow++) {
+            view->rect.w=narrow?240:4096;
+            view->cols=view->rect.w/view->cell_w;
+            sdl_left_panel_source_invalidate(); g_sdl_present_generation++;
+            sdl_left_panel_metrics metrics;
+            assert(sdl_left_panel_metrics_for_view(view,&metrics));
+            assert(metrics.compact_segment_count==(mode?5:4)+(jewelry==1));
+            assert(metrics.panel_rows==(narrow?2:1));
+            for(int i=3;i<metrics.compact_segment_count;i++) {
+                SDL_FRect r;
+                int source_row=metrics.compact_source_rows[i];
+                if(!sdl_combat_overlay_cell_rect(0,source_row,12,1,&r)) {
+                    fprintf(stderr,"missing combat cell: mode%d jewelry%d narrow%d source%d\n",mode,jewelry,narrow,source_row);
+                    assert(0);
+                }
+                assert(metrics.compact_output_cols[i]+metrics.compact_widths[i]<=metrics.content_cols);
+                for(int last=0;last<2;last++) {
+                    int col,row;
+                    float x=r.x+(last?r.w-.5f:.5f);
+                    assert(sdl_combat_overlay_point_to_cell(x,r.y+r.h/2,&col,&row));
+                    assert(row==source_row);
+                    assert(col==(last?metrics.compact_widths[i]-1:0));
+                }
+            }
+            SDL_FRect hp;
+            assert(sdl_left_panel_source_cell_rect(0,ROW_HP,12,1,&hp));
+            int col,row;
+            assert(!sdl_combat_overlay_point_to_cell(hp.x+1,hp.y+1,&col,&row));
+        }
+        if(mode==2 && jewelry==1) {
+            view->rect=saved_rect; view->cols=saved_cols;
+            sdl_left_panel_source_invalidate();
+            sdl_left_panel_metrics metrics; SDL_FRect panel;
+            assert(sdl_left_panel_metrics_for_view(view,&metrics));
+            assert(sdl_left_panel_pane_rect_for_metrics(view,&metrics,&panel));
+            SDL_SetRenderTarget(g_state.renderer,NULL);
+            SDL_SetRenderDrawColor(g_state.renderer,24,30,36,255); SDL_RenderClear(g_state.renderer);
+            assert(sdl_render_left_panel_pane_from_cells(view,&panel));
+            SDL_Rect crop={0,0,width,(int)(panel.y+panel.h)};
+            SDL_Surface *pixels=SDL_RenderReadPixels(g_state.renderer,&crop); assert(pixels);
+            char path[160]; strnfmt(path,sizeof(path),"combat-jewelry-%dx%d.png",width,height);
+            assert(IMG_SavePNG(pixels,path)); SDL_DestroySurface(pixels);
+        }
+    }
+    jewelry_presets_reset();
+    inventory[INVEN_LEFT]=(object_type){0}; inventory[INVEN_RIGHT]=(object_type){0};
+    inventory[INVEN_NECK]=(object_type){0}; inventory[INVEN_ARM]=(object_type){0};
+    inventory[INVEN_WIELD]=(object_type){0};
+    p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON]=false;
+    p_ptr->active_weapon_mode=PLAYER_ACTIVE_WEAPON_MELEE;
+    weapon_fixture=0; k_info=saved_kinds; view->rect=saved_rect; view->cols=saved_cols;
+    sdl_left_panel_source_invalidate();
+    puts("Compact combat: dynamic 1/2 rows, melee/offhand/ranged/quiver, matching/unmatched jewelry and first/last cell taps PASS");
+}
 static void check_layout(char **argv) {
     defaults(); set_sdl_bigger_font(true);
     set_sdl_mobile_portrait_mode(height>width);
@@ -305,11 +393,21 @@ static void check_layout(char **argv) {
         assert(sdl_left_panel_metrics_for_view(view,&metrics));
         SDL_FRect panel;
         assert(sdl_left_panel_pane_rect_for_metrics(view,&metrics,&panel)); inside(panel);
-        assert(metrics.compact_row && metrics.compact_segment_count==3);
+        assert(metrics.compact_row && metrics.compact_segment_count==4);
         if(values<2) assert(metrics.cell_h==sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL));
-        assert(metrics.panel_rows==1);
-        assert(metrics.corner_h==metrics.cell_h);
-        for(int i=0;i<3;i++) assert(metrics.compact_output_rows[i]==0);
+        int single_cols=metrics.compact_segment_count-1;
+        for(int i=0;i<metrics.compact_segment_count;i++) single_cols+=metrics.compact_widths[i];
+        int natural_cell_w=sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL)/2;
+        int visual_w=sdl_main_view_visual_cols(view)*view->cell_w;
+        int single_width=(single_cols+(sdl_left_panel_pane_has_border_columns()?2:0))*natural_cell_w;
+        assert(metrics.panel_rows==(single_width<visual_w?1:2));
+        assert(metrics.corner_h==metrics.panel_rows*metrics.cell_h);
+        assert(sdl_combat_overlay_in_compact_row());
+        assert(!sdl_rect_has_area(&g_pane_rects[PANE_COMBAT]));
+        for(int i=0;i<metrics.compact_segment_count;i++) {
+            assert(metrics.compact_output_rows[i]<metrics.panel_rows);
+            assert(metrics.compact_output_cols[i]+metrics.compact_widths[i]<=metrics.content_cols);
+        }
         g_pane_rects[PANE_LEFT_PANEL]=(SDL_Rect){panel.x,panel.y,panel.w,panel.h};
         sdl_view *log=&g_views[PANE_ROLLS];
         assert(sdl_view_create(log,g_pane_rects[PANE_ROLLS],config.monospace_font,
@@ -378,9 +476,15 @@ static void check_layout(char **argv) {
         assert(!SDL_GetRectIntersectionFloat(&quick,&log_rect,&contact)
             || contact.h<=1 || contact.w<=1);
         SDL_Rect combat;
-        assert(sdl_combat_overlay_pane_current_rect(&combat));
-        SDL_FRect combat_rect={combat.x,combat.y,combat.w,combat.h};
+        assert(!sdl_combat_overlay_pane_current_rect(&combat));
+        SDL_FRect combat_rect;
+        assert(sdl_combat_overlay_cell_rect(0,ROW_MEL,12,1,&combat_rect));
         inside(combat_rect);
+        assert(combat_rect.x>=panel.x && combat_rect.x+combat_rect.w<=panel.x+panel.w);
+        assert(combat_rect.y>=panel.y && combat_rect.y+combat_rect.h<=panel.y+panel.h);
+        int col,row;
+        assert(sdl_combat_overlay_point_to_cell(combat_rect.x+combat_rect.w/2,
+            combat_rect.y+combat_rect.h/2,&col,&row) && row==ROW_MEL);
         assert(!SDL_GetRectIntersectionFloat(&status.panel,&combat_rect,&contact)
             || contact.h<=1 || contact.w<=1);
         char path[160]; strnfmt(path,sizeof(path),"hud-%dx%d-%.3f-%d.png",width,height,density,values);
@@ -389,7 +493,8 @@ static void check_layout(char **argv) {
         SDL_DestroyTexture(log->canvas); log->canvas=NULL;
         term_nuke(&log->t); log->term_ready=false;
     }
-    printf("HUD %dx%d @%.3f: compact single character row, value taps, full-width four-row log, six reachable cells PASS\n",width,height,density);
+    printf("HUD %dx%d @%.3f: combined character/combat, dynamic 1/2 rows, value taps, full-width log, six reachable cells PASS\n",width,height,density);
+    check_compact_combat_states();
     check_bottom_center_stack();
 }
 int main(int argc,char **argv) {

@@ -7,6 +7,8 @@
 #include "quest/quest-internal.h"
 #include "ui/targeting/targeting-internal.h"
 
+static bool varda_interacted_this_player_turn;
+
 static void tulkas_quest_decline(cptr message)
 {
     if (message) {
@@ -727,11 +729,17 @@ void check_varda_quest_completion(int r_idx)
     }
 }
 
+void varda_quest_begin_player_turn(void)
+{
+    varda_interacted_this_player_turn = false;
+}
+
 void varda_quest_interaction(void)
 {
-    static s32b last_interaction_turn = -1;
-    if (last_interaction_turn == turn) return;
-    last_interaction_turn = turn;
+    /* A paid action can span several world ticks. Choosing Later must return
+     * control to the player before the pending reward is offered again. */
+    if (varda_interacted_this_player_turn) return;
+    varda_interacted_this_player_turn = true;
 
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
         if (!quest_can_accept_more()) {
