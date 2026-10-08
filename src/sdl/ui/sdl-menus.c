@@ -1781,10 +1781,20 @@ static void sdl_touch_pane_draw_readable_label(const SDL_FRect* rect,
         SDL_STORY_FONT_SLOT_MENU);
     int width = 0;
     int height = 0;
-    float available_w = MAX(1.0f, rect->w - 6.0f);
-    float available_h = MAX(1.0f, rect->h - 4.0f);
-    SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, label,
+    float available_w = MAX(1.0f, rect->w - 12.0f);
+    float available_h = MAX(1.0f, rect->h - 8.0f);
+    TTF_HorizontalAlignment previous_alignment;
+    SDL_Texture* texture;
+
+    if (!font)
+        return;
+    /* Center each wrapped line as well as the block.  Restore the shared font
+     * so paragraphs elsewhere retain their own alignment. */
+    previous_alignment = TTF_GetFontWrapAlignment(font);
+    TTF_SetFontWrapAlignment(font, TTF_HORIZONTAL_ALIGN_CENTER);
+    texture = sdl_ui_wrapped_text_texture(font, label,
         (int)available_w, color, &width, &height);
+    TTF_SetFontWrapAlignment(font, previous_alignment);
     SDL_FRect src = { 0, 0, MIN((float)width, available_w),
         MIN((float)height, available_h) };
     SDL_FRect dst = { rect->x + (rect->w - src.w) * 0.5f,
