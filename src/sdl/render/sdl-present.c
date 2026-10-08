@@ -952,12 +952,11 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
             int output_row = metrics.compact_output_rows[i];
 
             if (metrics.compact_row
-                && (source_row == ROW_LIGHT || get_sdl_bigger_font())) {
+                && (config.bigger_font || source_row == ROW_LIGHT)) {
                 sdl_left_panel_compact_light_span span;
-                bool big_row = get_sdl_bigger_font();
 
-                if (big_row
-                    ? sdl_left_panel_compact_big_span_for_term(source_term,
+                if (config.bigger_font
+                    ? sdl_left_panel_compact_row_span_for_term(source_term,
                         scr, source_row, &span)
                     : sdl_left_panel_compact_light_span_for_term(source_term,
                         scr, &span))
@@ -969,8 +968,8 @@ static bool sdl_render_left_panel_pane_from_cells_with_metrics(
                         atlas_cell_h, mono_font);
                     sdl_render_left_panel_source_row_cells(view, source_term,
                         scr, source_row, span.text_start, span.text_width,
-                        big_row ? output_col : output_col + span.icon_cols + 1,
-                        big_row ? output_row + 1 : output_row,
+                        output_col + span.icon_cols + (config.bigger_font ? 0 : 1),
+                        output_row,
                         content_x, content_y, metrics.cell_w, metrics.cell_h,
                         font_atlas, atlas_cell_w, atlas_cell_h, mono_font);
                     continue;
@@ -2076,5 +2075,4 @@ void sdl_present_if_needed(sdl_view* d)
         sil_popup_trace_stage("presentation-failed");
     SIL_PERF_PHASE("render.restore", sdl_restore_render_target(d));
 }
-
 

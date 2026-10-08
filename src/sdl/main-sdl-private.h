@@ -1814,7 +1814,7 @@ bool sdl_left_panel_content_size_for_scratch(const sdl_view* view, int source_ro
 int sdl_left_panel_source_row_width_for_term(const term* t, int source_row);
 int sdl_left_panel_source_row_width_for_view(const sdl_view* view, int source_row);
 bool sdl_left_panel_compact_light_span_for_term(const term* t, const term_win* scr, sdl_left_panel_compact_light_span* out);
-bool sdl_left_panel_compact_big_span_for_term(const term* t,
+bool sdl_left_panel_compact_row_span_for_term(const term* t,
     const term_win* scr, int source_row, sdl_left_panel_compact_light_span* out);
 int sdl_left_panel_compact_source_row_width_for_view( const sdl_view* view, int source_row, bool row_mode);
 void sdl_left_panel_compact_metrics_for_view(const sdl_view* view, sdl_left_panel_metrics* metrics);
@@ -3061,6 +3061,7 @@ bool sdl_gamepad_flush_pending_sticks(Uint64 now_ns, bool force);
 void sdl_gamepad_clear_pending_confirm(void);
 bool sdl_gamepad_confirm_long_press_available(int binding);
 bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects, SDL_FRect* out_panel);
+bool sdl_touch_top_panel_layout_excludes_pane(enum pane_type pane);
 bool sdl_gamepad_handle_confirm_long_press_button( int button, int binding, bool down);
 int sdl_gamepad_pending_confirm_timeout_ms(Uint64 now_ns);
 bool sdl_gamepad_flush_pending_confirm(Uint64 now_ns);

@@ -15,7 +15,12 @@ enum {
     SDL_HALLS_MAX_ACTIONS = 8,
     SDL_HALLS_TEXT_LEN = 256,
     SDL_HALLS_DESKTOP_FULL_MIN_ENTRIES = 3,
-    SDL_HALLS_DESKTOP_BRIEF_MIN_ENTRIES = 7
+    SDL_HALLS_DESKTOP_BRIEF_MIN_ENTRIES = 7,
+    SDL_HALLS_MOBILE_LANDSCAPE_FULL_ENTRIES = 2,
+    SDL_HALLS_MOBILE_LANDSCAPE_BRIEF_ENTRIES = 5,
+    SDL_HALLS_MOBILE_LANDSCAPE_HI_FULL_ENTRIES = 3,
+    SDL_HALLS_MOBILE_LANDSCAPE_HI_BRIEF_ENTRIES = 7,
+    SDL_HALLS_MOBILE_LANDSCAPE_HI_SHORT_SIDE = 1200
 };
 
 typedef struct sdl_halls_entry {
@@ -215,7 +220,7 @@ static void sdl_halls_measure_layout(const SDL_Rect* canvas,
 
     memset(layout, 0, sizeof(*layout));
     short_side = sdl_halls_short_side(canvas);
-    if (mobile)
+    if (mobile && get_sdl_bigger_font())
     {
         float dp = sdl_ui_density_scale();
         int columns, rows;
@@ -240,6 +245,24 @@ static void sdl_halls_measure_layout(const SDL_Rect* canvas,
             - layout->margin_bottom - layout->header_h - layout->footer_h
             - layout->header_body_gap - layout->body_footer_gap);
         return;
+    }
+    else if (mobile)
+    {
+        layout->margin_x = sdl_halls_clampf((float)canvas->w * 0.055f,
+            18.0f, 92.0f);
+        layout->margin_top = sdl_halls_clampf((float)canvas->h * 0.025f,
+            10.0f, 32.0f);
+        layout->margin_bottom = sdl_halls_clampf((float)canvas->h * 0.022f,
+            9.0f, 28.0f);
+        layout->content_w = MIN((float)canvas->w
+            - layout->margin_x * 2.0f, 1600.0f);
+        layout->header_h = sdl_halls_clampf((float)canvas->h * 0.27f,
+            148.0f, 300.0f);
+        layout->header_body_gap = sdl_halls_clampf(short_side * 0.030f,
+            12.0f, 28.0f);
+        layout->body_footer_gap = 0.0f;
+        layout->footer_h = sdl_halls_clampf((float)canvas->h * 0.12f,
+            64.0f, 112.0f);
     }
     else
     {
@@ -288,6 +311,13 @@ static float sdl_halls_target_card_h(const SDL_Rect* canvas, bool detailed)
 {
     float short_side = sdl_halls_short_side(canvas);
 
+    if (sdl_halls_mobile_layout() && !get_sdl_bigger_font())
+    {
+        return detailed
+            ? sdl_halls_clampf(short_side * 0.300f, 210.0f, 480.0f)
+            : sdl_halls_clampf(short_side * 0.090f, 72.0f, 220.0f);
+    }
+
     return detailed ? MAX(short_side * 0.200f, 150.0f)
                     : MAX(short_side * 0.080f, 72.0f);
 }
@@ -303,7 +333,7 @@ static int sdl_halls_capacity_for_layout(const SDL_Rect* canvas,
 
     /* Choose a readable page density in display units; overflow remains
      * scrollable when individual memorial fields wrap onto extra lines. */
-    if (sdl_halls_mobile_layout())
+    if (sdl_halls_mobile_layout() && get_sdl_bigger_font())
     {
         float dp = sdl_ui_density_scale();
         float line = sdl_halls_mobile_text_h("Aglar", SDL_UI_FONT_BODY,
@@ -313,6 +343,22 @@ static int sdl_halls_capacity_for_layout(const SDL_Rect* canvas,
         return sdl_halls_clampi((int)((layout->body_h + layout->gap)
             / (target + layout->gap)), 1, SDL_HALLS_MAX_ENTRIES);
     }
+    if (sdl_halls_mobile_layout() && canvas->w >= canvas->h)
+    {
+        bool high_resolution =
+            sdl_halls_short_side(canvas)
+            >= (float)SDL_HALLS_MOBILE_LANDSCAPE_HI_SHORT_SIDE;
+
+        if (high_resolution)
+            return detailed
+                ? SDL_HALLS_MOBILE_LANDSCAPE_HI_FULL_ENTRIES
+                : SDL_HALLS_MOBILE_LANDSCAPE_HI_BRIEF_ENTRIES;
+
+        return detailed
+            ? SDL_HALLS_MOBILE_LANDSCAPE_FULL_ENTRIES
+            : SDL_HALLS_MOBILE_LANDSCAPE_BRIEF_ENTRIES;
+    }
+
     if (get_sdl_bigger_font())
         return 1;
 
@@ -1103,9 +1149,68 @@ static TTF_Font* sdl_halls_actions_font(float action_w, float inset,
         SDL_STORY_FONT_SLOT_MENU);
 }
 
+static void sdl_halls_render_actions_normal(const SDL_Rect* canvas, float content_x,
+    float content_w, float y, float h)
+{
+    bool mobile = sdl_halls_mobile_layout();
+    float short_side = sdl_halls_short_side(canvas);
+    float gap = mobile
+        ? sdl_halls_clampf(content_w * 0.010f, 5.0f, 14.0f)
+        : MAX(short_side * 0.008f, 7.0f);
+    float action_w;
+    int max_font_px = mobile
+        ? sdl_halls_clampi((int)(h * 0.50f), 24, 48)
+        : MAX((int)(short_side * 0.024f), 18);
+    int min_font_px = mobile ? 18
+        : MAX((int)(short_side * 0.016f), 13);
+    TTF_Font* font;
+    int enabled_count = 0;
+    int i;
+
+    for (i = 0; i < g_sdl_halls.action_count; i++)
+        if (g_sdl_halls.actions[i].enabled)
+            enabled_count++;
+    if (enabled_count <= 0)
+        return;
+
+    action_w = (content_w - gap * (float)(enabled_count - 1))
+        / (float)enabled_count;
+    font = sdl_halls_actions_font(action_w, gap, h, min_font_px,
+        max_font_px);
+    for (i = 0; i < g_sdl_halls.action_count; i++)
+    {
+        sdl_halls_action* action = &g_sdl_halls.actions[i];
+        bool hovered;
+        SDL_Color border;
+        SDL_FRect box;
+
+        if (!action->enabled)
+            continue;
+        hovered = (action->choice == g_sdl_halls.hover_choice);
+        action->hit_rect = (SDL_FRect){ content_x, y, action_w, h };
+        content_x += action_w + gap;
+        border = sdl_halls_color(hovered ? TERM_L_BLUE : TERM_BLUE,
+            hovered ? 230 : 115);
+        SDL_SetRenderDrawColor(g_state.renderer, hovered ? 12 : 3,
+            hovered ? 20 : 8, hovered ? 32 : 15, 240);
+        SDL_RenderFillRect(g_state.renderer, &action->hit_rect);
+        SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g,
+            border.b, border.a);
+        SDL_RenderRect(g_state.renderer, &action->hit_rect);
+        box = action->hit_rect;
+        box.x += gap;
+        box.w -= gap * 2.0f;
+        (void)sdl_halls_draw_text(font, action->label, action->attr, box, 0);
+    }
+}
+
 static void sdl_halls_render_actions(const SDL_Rect* canvas, float content_x,
     float content_w, float y, float h)
 {
+    if (!get_sdl_bigger_font()) {
+        sdl_halls_render_actions_normal(canvas, content_x, content_w, y, h);
+        return;
+    }
     bool mobile = sdl_halls_mobile_layout();
     float short_side = sdl_halls_short_side(canvas);
     float gap = mobile
@@ -1368,7 +1473,7 @@ void sdl_halls_screen_render(void)
 
     sdl_halls_measure_layout(&canvas, &layout);
     mobile = sdl_halls_mobile_layout();
-    if (mobile)
+    if (mobile && get_sdl_bigger_font())
     {
         sdl_halls_render_mobile(&canvas, &layout);
         return;
@@ -1598,7 +1703,8 @@ static bool sdl_halls_touch_press_motion(float x, float y,
         g_sdl_halls.touch_press_dragged = true;
     }
 
-    if (sdl_halls_mobile_layout() && g_sdl_halls.touch_press_dragged
+    if (get_sdl_bigger_font() && sdl_halls_mobile_layout()
+        && g_sdl_halls.touch_press_dragged
         && sdl_halls_point_in_rect(g_sdl_halls.touch_press_start_x,
             g_sdl_halls.touch_press_start_y, &g_halls_mobile.body))
     {
@@ -1683,7 +1789,8 @@ bool sdl_halls_screen_handle_pointer_event(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_MOUSE_WHEEL:
-        if (sdl_halls_mobile_layout() && g_halls_mobile.maximum > 0)
+        if (get_sdl_bigger_font() && sdl_halls_mobile_layout()
+            && g_halls_mobile.maximum > 0)
         {
             g_halls_mobile.offset = sdl_halls_clampf(g_halls_mobile.offset
                 - ev->wheel.y * sdl_ui_min_tap_px(), 0, g_halls_mobile.maximum);

@@ -2083,7 +2083,7 @@ static void supply_init_columns(const knowledge_browser_layout* layout,
         cols->name_col = layout->list_col + (use_bigtile ? 2 : 1);
     }
 
-    if (layout->term_wid < 55)
+    if (get_sdl_bigger_font() && layout->term_wid < 55)
     {
         cols->show_qty = false;
         cols->show_weight = false;
@@ -3047,7 +3047,7 @@ static bool supply_entry_wrapped_values(
         label_prefix, name);
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
         SDL_strlcat(display_name, " [floor]", display_name_len);
-    if (layout->term_wid < 55)
+    if (get_sdl_bigger_font() && layout->term_wid < 55)
         supply_entry_append_metadata(entry, o_ptr, current_group,
             display_name, display_name_len);
 
@@ -3062,7 +3062,7 @@ static bool supply_entry_wrapped_values(
             label_prefix, name);
         if (entry->floor_idx > 0 && entry->floor_idx < o_max)
             SDL_strlcat(display_name, " [floor]", display_name_len);
-        if (layout->term_wid < 55)
+        if (get_sdl_bigger_font() && layout->term_wid < 55)
             supply_entry_append_metadata(entry, o_ptr, current_group,
                 display_name, display_name_len);
         rows = supply_entry_wrapped_row_count(display_name, cols->name_w);
@@ -3808,6 +3808,8 @@ static bool supply_take_category_return(int choice, int action, int* column)
 static void supply_draw_category_return(const knowledge_browser_layout* layout,
     int first_row, bool slots, cptr context)
 {
+    if (!get_sdl_bigger_font())
+        return;
     int last_row;
     if (!layout)
         return;
@@ -3879,7 +3881,7 @@ static bool supply_page_header_uses_wrapped_title(
 
 static bool supply_page_tabs_need_paging(const knowledge_browser_layout* layout)
 {
-    return layout && supply_browser_page_tab_col(SUPPLY_MENU_PAGE_SUPPLIES)
+    return get_sdl_bigger_font() && layout && supply_browser_page_tab_col(SUPPLY_MENU_PAGE_SUPPLIES)
             + supply_browser_page_token_width(SUPPLY_MENU_PAGE_SUPPLIES)
         > layout->term_wid;
 }
@@ -3903,7 +3905,7 @@ static void supply_draw_page_summary(const knowledge_browser_layout* layout,
     if (!layout)
         return;
 
-    if (layout->term_wid < 55 && text
+    if (get_sdl_bigger_font() && layout->term_wid < 55 && text
         && (streq(text, "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds")
             || streq(text, "Active combat gear, worn items, and Belt equipment")))
     {
@@ -5130,7 +5132,7 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
     if (list_right <= cols->name_col)
         list_right = cols->name_col + 1;
 
-    if (layout->term_wid < 55)
+    if (get_sdl_bigger_font() && layout->term_wid < 55)
     {
         cols->name_w = MAX(1, list_right - cols->name_col);
         cols->inline_metadata = true;
@@ -6681,7 +6683,8 @@ static void inventory_browser_group_status(inventory_menu_group group,
 
     inventory_browser_weight_status(weight, sizeof(weight));
 
-    if (Term && (Term->wid < 80 || sdl_touch_only_device_active()))
+    if (get_sdl_bigger_font() && Term
+        && (Term->wid < 80 || sdl_touch_only_device_active()))
     {
         if (group == INVENTORY_MENU_GROUP_PACK
             || group == INVENTORY_MENU_GROUP_HARNESS)
@@ -6756,6 +6759,8 @@ static void inventory_browser_group_status(inventory_menu_group group,
 static void inventory_browser_reserve_status(knowledge_browser_layout* layout,
     inventory_menu_group group)
 {
+    if (!get_sdl_bigger_font())
+        return;
     char summary[384];
     inventory_browser_group_status(group, 0, summary, sizeof(summary));
     int wanted = equipment_entry_wrapped_rows(summary, layout->term_wid);
@@ -11190,10 +11195,94 @@ static void supply_overlay_avoid_selection(
 /* Keep the familiar two-column browser on desktop and landscape.  On a real
  * mobile portrait viewport, categories/slots and entries get separate,
  * full-width vertical bands so item names retain useful width. */
+static void knowledge_init_inventory_portrait_layout_normal(
+    knowledge_browser_layout* layout, int max_group_len, bool has_groups,
+    int portrait_header_rows)
+{
+    int body_rows;
+    int group_rows;
+    int entry_rows;
+    int extra_top_rows;
+
+    knowledge_init_layout(layout, max_group_len, has_groups);
+    if (!layout || !sdl_mobile_portrait_layout_active())
+        return;
+
+    /* Portrait status summaries are often wider than the viewport.  Reserve
+     * a second row above the prompt so every Inventory tab can wrap them. */
+    if (layout->status_row > layout->list_row)
+    {
+        layout->status_row--;
+        layout->status_rows++;
+    }
+
+    /* Keep the usual roomy portrait header, but grow it when a picker has
+     * more wrapped instruction/detail rows so neither string is clipped. */
+    extra_top_rows = 3;
+    if (portrait_header_rows > layout->header_row)
+    {
+        extra_top_rows = MAX(extra_top_rows,
+            portrait_header_rows - layout->header_row);
+    }
+    extra_top_rows = MIN(extra_top_rows,
+        MAX(0, layout->status_row - layout->list_row - 2));
+    layout->header_row += extra_top_rows;
+    layout->divider_row += extra_top_rows;
+    layout->list_row += extra_top_rows;
+    layout->list_rows = layout->status_row - layout->list_row;
+    if (layout->list_rows < 1)
+        layout->list_rows = 1;
+    layout->group_row = layout->list_row;
+    layout->group_rows = layout->list_rows;
+    layout->entry_header_row = layout->header_row;
+    layout->entry_row = layout->list_row;
+    layout->entry_rows = layout->list_rows;
+
+    if (!has_groups)
+        return;
+
+    body_rows = layout->list_rows;
+    if (body_rows < 4)
+        return;
+
+    group_rows = (body_rows * 2) / 5;
+    if (body_rows >= 6 && group_rows < 3)
+        group_rows = 3;
+    if (group_rows < 1)
+        group_rows = 1;
+    if (group_rows > 6)
+        group_rows = 6;
+
+    /* Leave a blank row after the upper list, then reserve one row for the
+     * lower list's divider and labels. */
+    entry_rows = body_rows - group_rows - 2;
+    if (entry_rows < 1)
+    {
+        entry_rows = 1;
+        group_rows = MAX(1, body_rows - entry_rows - 2);
+    }
+
+    layout->stacked = true;
+    layout->group_col = 0;
+    layout->group_w = layout->term_wid;
+    layout->divider_col = -1;
+    layout->list_col = 0;
+    layout->list_w = layout->term_wid;
+    layout->group_row = layout->list_row;
+    layout->group_rows = group_rows;
+    layout->entry_header_row = layout->group_row + group_rows + 1;
+    layout->entry_row = layout->entry_header_row + 1;
+    layout->entry_rows = entry_rows;
+}
+
 static void knowledge_init_inventory_portrait_layout(
     knowledge_browser_layout* layout, int max_group_len, bool has_groups,
     int portrait_header_rows)
 {
+    if (!get_sdl_bigger_font()) {
+        knowledge_init_inventory_portrait_layout_normal(layout, max_group_len, has_groups, portrait_header_rows);
+        return;
+    }
     int body_rows;
     int group_rows;
     int entry_rows;
@@ -11958,7 +12047,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (layout.stacked)
             {
                 Term_putstr(0, layout.header_row, layout.term_wid, TERM_SLATE,
-                    "Slot (scroll up/down)");
+                    get_sdl_bigger_font() ? "Slot (scroll up/down)" : "Slot");
                 knowledge_draw_stacked_entry_divider(&layout);
                 Term_putstr(0, layout.entry_header_row, layout.term_wid,
                     TERM_SLATE, equipment_slot_text(selected_slot));
@@ -12571,7 +12660,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             bool inventory_one_page = !replacement_mode
                 && !storage_exchange_mode && !slot_pick_mode
                 && !item_select_mode
-                && (!Term || (Term->wid >= 55 && Term->hgt >= 22));
+                && (!get_sdl_bigger_font() || !Term
+                    || (Term->wid >= 55 && Term->hgt >= 22));
 
             prepare_inventory_browser_group_icons(inventory_icons);
             if (storage_exchange_mode)
@@ -13167,7 +13257,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else if (layout.stacked)
             {
                 Term_putstr(0, layout.header_row, layout.term_wid, TERM_SLATE,
-                    "Category (scroll up/down)");
+                    get_sdl_bigger_font() ? "Category (scroll up/down)" : "Category");
                 knowledge_draw_stacked_entry_divider(&layout);
                 Term_putstr(0, layout.entry_header_row, layout.term_wid,
                     TERM_SLATE,
@@ -15779,8 +15869,132 @@ void do_cmd_knowledge_kills(void)
 /*
  * Interact with "knowledge"
  */
+static void do_cmd_knowledge_normal(void)
+{
+    char ch;
+
+    /* File type is "TEXT" */
+    FILE_TYPE(FILE_TYPE_TEXT);
+
+    /* Clear any active banner before opening knowledge menu */
+    if (dismiss_active_narrative_banner()) {
+        do_cmd_redraw();
+    }
+
+    /* Save screen */
+    screen_save();
+    screen_push_supporting_panes_hidden();
+
+    /* Interact until done */
+    while (1)
+    {
+        /* Clear screen */
+        Term_clear();
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+
+        /* Ask for a choice */
+        prt("Display current knowledge", 2, 0);
+
+        /* Give some choices */
+        prt("(1) Display known lore browser", 4, 5);
+        prt("(2) Display supplies overview", 5, 5);
+        prt("(3) Display names of the fallen", 6, 5);
+        prt("(4) Display kill counts", 7, 5);
+
+        /*allow the player to see the notes taken if that option is selected*/
+        c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
+        prt("(6) Display oath status", 9, 5);
+        for (int i = 1; i <= 6; i++)
+            ui_menu_click_add_full_row(i, i + 3);
+
+        /* Prompt */
+        prt("Command: ", 11, 0);
+
+        /* Prompt */
+        ch = inkey();
+        {
+            int clicked_choice = 0;
+            int click_action = UI_MENU_CLICK_PRIMARY;
+
+            if (ui_menu_click_take_action(&clicked_choice, &click_action)
+                && clicked_choice >= 1 && clicked_choice <= 6)
+            {
+                if (click_action == UI_MENU_CLICK_HOVER)
+                    continue;
+                ch = I2D(clicked_choice);
+            }
+        }
+
+        /* Done */
+        if (ch == ESCAPE)
+            break;
+
+        ui_menu_click_clear();
+        ui_scroll_area_clear();
+
+        /* Known lore browser */
+        if (ch == '1')
+        {
+            do_cmd_knowledge_browser_page(g_knowledge_last_page);
+        }
+
+        /* Scores */
+        else if (ch == '2')
+        {
+            do_cmd_knowledge_supplies(NULL);
+        }
+
+        /* Scores */
+        else if (ch == '3')
+        {
+            sdl_push_terminal_menu_scale();
+            show_scores_interactive();
+            sdl_pop_terminal_menu_scale();
+        }
+
+        /* Kill counts */
+        else if (ch == '4')
+        {
+            do_cmd_knowledge_kills();
+        }
+
+        /* Notes file, if one exists */
+        else if (ch == '5')
+        {
+            /* Spawn */
+            do_cmd_knowledge_notes();
+        }
+
+        /* Oath status */
+        else if (ch == '6')
+        {
+            do_cmd_knowledge_oaths();
+        }
+
+        /* Unknown option */
+        else
+        {
+            bell("Illegal command for knowledge!");
+        }
+
+        /* Flush messages */
+        message_flush();
+    }
+
+    /* Load screen */
+    ui_menu_click_clear();
+    ui_scroll_area_clear();
+    screen_pop_supporting_panes_hidden();
+    screen_load();
+}
+
 void do_cmd_knowledge(void)
 {
+    if (!get_sdl_bigger_font()) {
+        do_cmd_knowledge_normal();
+        return;
+    }
     char ch;
     int selected_choice = 1;
     static cptr choices[] = {

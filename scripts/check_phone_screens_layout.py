@@ -21,7 +21,7 @@ HARNESS = BASE.replace(
     'check_songs(); check_questions();', ''
 ).replace('check_halls();', '').replace('check_large_tutorial();', '').replace(
     '    fixture_assert(px>0);',
-    '    fixture_assert(px==sdl_ui_role_font_px(SDL_UI_FONT_BODY));\n'
+    '    if(config.bigger_font) { fixture_assert(px==sdl_ui_role_font_px(SDL_UI_FONT_BODY));\n'
     '    for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {\n'
     '        const sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];\n'
     '        if(hit->choice>=1001 || hit->choice==-1 || hit->choice==-2) {\n'
@@ -32,7 +32,7 @@ HARNESS = BASE.replace(
     'hit->rect.y+hit->rect.h<list.y+list.h-2.f))\n'
     '                { if(hit->rect.h+1<sdl_ui_min_tap_px()) fprintf(stderr,"min target choice%d rect %f,%f,%f,%f list %f,%f,%f,%f\\n", hit->choice,hit->rect.x,hit->rect.y,hit->rect.w,hit->rect.h,list.x,list.y,list.w,list.h); fixture_assert(hit->rect.h+1>=sdl_ui_min_tap_px()); }\n'
     '        }\n'
-    '    }'
+    '    }}'
 )
 
 
@@ -42,7 +42,7 @@ static void check_terminal_footer(void)
     sdl_view saved = g_views[PANE_MAIN];
     bool saved_big = config.bigger_font;
     SDL_strlcpy(fixture_id,"terminal-footer",sizeof(fixture_id));
-    for(int big=0;big<2;big++) {
+    for(int big=1;big<2;big++) {
         config.bigger_font=big;
         sdl_view *view=&g_views[PANE_MAIN];
         view->rect=(SDL_Rect){0,0,fixture_width,fixture_height};

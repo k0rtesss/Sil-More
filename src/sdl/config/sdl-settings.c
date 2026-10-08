@@ -3722,7 +3722,7 @@ int get_sdl_terminal_menu_scale(void)
 int sdl_terminal_menu_font_px(void)
 {
 #if SIL_SDL_MOBILE_BUILD
-    if (g_terminal_menu_scale_depth > 0)
+    if (config.bigger_font && g_terminal_menu_scale_depth > 0)
     {
         int logical_px = MAX(8, 16 + 2 * config.terminal_menu_scale_offset);
         return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()

@@ -2700,9 +2700,145 @@ static int ability_browser_wrapped_rows(cptr text, int width)
     return MAX(rows, 1);
 }
 
+static void ability_browser_init_layout_normal(ability_browser_layout* layout,
+    int ability_count, cptr summary)
+{
+    int min_ability_w = 28;
+    int min_desc_w = 26;
+    int ability_w;
+    int visible_col;
+    int visible_w;
+    int max_summary_rows;
+    bool portrait;
+
+    Term_get_size(&layout->term_wid, &layout->term_hgt);
+
+    if (layout->term_wid < 1)
+        layout->term_wid = 80;
+    if (layout->term_hgt < 1)
+        layout->term_hgt = 24;
+
+    visible_col = sdl_main_view_visible_col0();
+    visible_w = sdl_main_view_visible_cols();
+    if (visible_col < 0 || visible_col >= layout->term_wid)
+        visible_col = 0;
+    if (visible_w <= 0 || visible_col + visible_w > layout->term_wid)
+        visible_w = layout->term_wid - visible_col;
+    if (visible_w < 1)
+    {
+        visible_col = 0;
+        visible_w = layout->term_wid;
+    }
+
+    layout->visible_col = visible_col;
+    layout->visible_w = visible_w;
+    portrait = sdl_mobile_portrait_layout_active();
+    layout->title_row = 0;
+    layout->summary_row = (layout->term_hgt > 1) ? 1 : 0;
+    max_summary_rows = MAX(1, layout->term_hgt - 8);
+    layout->summary_rows = portrait
+        ? MIN(ability_browser_wrapped_rows(summary, layout->visible_w),
+            max_summary_rows)
+        : 1;
+    layout->skill_row = layout->summary_row + layout->summary_rows;
+    if (layout->skill_row >= layout->term_hgt)
+    {
+        layout->summary_rows = 1;
+        layout->skill_row = (layout->term_hgt > layout->summary_row + 1)
+            ? layout->summary_row + 1
+            : layout->summary_row;
+    }
+    layout->skill_rows = (portrait && layout->term_hgt > 4) ? 2 : 1;
+    layout->header_row = (layout->term_hgt
+            > layout->skill_row + layout->skill_rows)
+        ? layout->skill_row + layout->skill_rows
+        : layout->summary_row;
+    layout->divider_row = (layout->term_hgt > layout->header_row + 1)
+        ? layout->header_row + 1
+        : layout->header_row;
+    layout->list_row = layout->divider_row + 1;
+    layout->prompt_row = layout->term_hgt - 1
+        - sdl_touch_menu_button_reserved_rows();
+    if (layout->prompt_row < layout->list_row)
+        layout->prompt_row = layout->list_row;
+    /* The portrait summary and selected ability row already contain the
+     * status footer's information.  Reclaim that duplicate row for the
+     * stacked information panel so it cannot look like description text. */
+    layout->status_row = (!portrait && layout->prompt_row > layout->list_row)
+        ? layout->prompt_row - 1
+        : layout->prompt_row;
+    layout->list_rows = layout->status_row - layout->list_row;
+    if (layout->list_rows < 1)
+        layout->list_rows = 1;
+
+    ability_w = (layout->visible_w >= 96) ? 43 : 38;
+    if (layout->visible_w < 75)
+        ability_w = 34;
+    if (layout->visible_w < 55)
+        ability_w = 30;
+
+    if (ability_w > layout->visible_w - min_desc_w - 3)
+        ability_w = layout->visible_w - min_desc_w - 3;
+    if (ability_w < min_ability_w)
+        ability_w = min_ability_w;
+
+    layout->skill_col = layout->visible_col;
+    layout->skill_w = layout->visible_w;
+    layout->skill_divider_col = -1;
+    layout->ability_col = layout->visible_col;
+    layout->ability_w = ability_w;
+    layout->ability_divider_col = layout->ability_col + layout->ability_w + 1;
+    layout->desc_col = layout->ability_divider_col + 2;
+    layout->desc_w = layout->visible_col + layout->visible_w - layout->desc_col;
+    if (layout->desc_w < 1)
+        layout->desc_w = 1;
+    layout->stacked = false;
+    layout->ability_row = layout->list_row;
+    layout->ability_rows = layout->list_rows;
+    layout->ability_entry_rows = 1;
+    layout->desc_header_row = layout->header_row;
+    layout->desc_row = layout->list_row;
+    layout->desc_rows = layout->list_rows;
+
+    if (portrait && layout->list_rows >= 3)
+    {
+        int ability_rows = MAX(ability_count, 1);
+        int desc_rows;
+
+        /* Portrait is tall enough to keep one compact row per ability.  Size
+         * the section to its contents instead of reserving two or three rows
+         * per name and then capping the whole list at six rows. */
+        if (ability_rows > layout->list_rows - 2)
+            ability_rows = MAX(1, layout->list_rows - 2);
+        desc_rows = layout->list_rows - ability_rows - 1;
+        if (desc_rows < 1)
+        {
+            desc_rows = 1;
+            ability_rows = MAX(1, layout->list_rows - desc_rows - 1);
+        }
+
+        layout->stacked = true;
+        layout->ability_col = layout->visible_col;
+        layout->ability_w = layout->visible_w;
+        layout->ability_divider_col = -1;
+        layout->desc_col = layout->visible_col;
+        layout->desc_w = layout->visible_w;
+        layout->ability_row = layout->list_row;
+        layout->ability_rows = ability_rows;
+        layout->ability_entry_rows = 1;
+        layout->desc_header_row = layout->ability_row + ability_rows;
+        layout->desc_row = layout->desc_header_row + 1;
+        layout->desc_rows = desc_rows;
+    }
+}
+
 static void ability_browser_init_layout(ability_browser_layout* layout,
     int ability_count, cptr summary)
 {
+    if (!get_sdl_bigger_font()) {
+        ability_browser_init_layout_normal(layout, ability_count, summary);
+        return;
+    }
     int min_ability_w = 28;
     int min_desc_w = 26;
     int ability_w;
@@ -3112,7 +3248,7 @@ static void ability_browser_build_summary(int skilltype, char* summary,
     if (!summary || summary_len == 0)
         return;
 
-    if (Term && (Term->wid < 60 || Term->hgt <= 18)
+    if (get_sdl_bigger_font() && Term && (Term->wid < 60 || Term->hgt <= 18)
         && skilltype >= 0 && skilltype < S_MAX)
     {
         strnfmt(summary, summary_len, "XP %ld | %s %d (%d)",
@@ -3351,8 +3487,9 @@ static void ability_browser_draw_skill_summary(
 
     for (int row = 0; row < layout->skill_rows; row++)
         Term_erase(layout->skill_col, tab_row + row, layout->skill_w);
-    if (ability_browser_skill_tab_width(token_widths, skill_options, split)
-        > layout->skill_w)
+    if (get_sdl_bigger_font()
+        && ability_browser_skill_tab_width(token_widths, skill_options, split)
+            > layout->skill_w)
     {
         char label[48];
         int previous = (skill_cur + skill_options - 1) % skill_options;
@@ -3745,7 +3882,7 @@ static void ability_browser_size_entry_cards(ability_browser_layout* layout,
     int prefix_w = indexed_menu_letters_enabled() ? 3 : 2;
     int name_w = MAX(1, layout->ability_w - prefix_w);
     int name_rows = 1;
-    if (layout->visible_w >= 55)
+    if (!get_sdl_bigger_font() || layout->visible_w >= 55)
         return;
     for (int i = 0; i < count; ++i)
     {
@@ -3784,7 +3921,7 @@ static void ability_browser_draw_ability_list(
         state_col = layout->ability_col + layout->ability_w;
 
     ability_browser_put_fitted(layout->ability_col, layout->header_row,
-        layout->ability_w, TERM_SLATE, layout->visible_w < 55
+        layout->ability_w, TERM_SLATE, get_sdl_bigger_font() && layout->visible_w < 55
             ? "Abilities (scroll)" : "Lvl Ability                       State");
 
     for (int i = 0; i < visible_entries; i++)
@@ -3838,7 +3975,7 @@ static void ability_browser_draw_ability_list(
         Term_putstr(layout->ability_col, y, prefix_w, prefix_attr, prefix);
 
         strnfmt(level, sizeof(level), "%2d", entry->b_ptr->level);
-        if (layout->visible_w < 55)
+        if (get_sdl_bigger_font() && layout->visible_w < 55)
         {
             int card_col = layout->ability_col + prefix_w;
             int card_w = MAX(1, layout->ability_w - prefix_w);

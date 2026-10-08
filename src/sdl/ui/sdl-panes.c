@@ -1947,7 +1947,7 @@ static bool sdl_status_depth_pane_layout_compute(
 
     out->panel = sdl_overlay_panel_rect(&anchor, pc->where, panel_w,
         panel_h, &screen);
-    if (have_quick_panel)
+    if (config.bigger_font && have_quick_panel)
         sdl_status_depth_pane_avoid_quick(&out->panel, &quick_panel,
             pc->where, &screen);
     out->layout_count = layout_count;
@@ -1981,6 +1981,8 @@ bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
         cached_result = sdl_status_depth_pane_layout_compute(&cached_layout);
         cached_generation = g_sdl_present_generation;
     }
+    if (!config.bigger_font)
+        g_status_depth_pane_layout_computing = false;
     *out = cached_layout;
     if (!cached_result || !pc || !pc->enabled)
         goto done;
@@ -1993,7 +1995,8 @@ bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
     {
         SDL_FRect quick_panel;
         enum pane_placement quick_where;
-        if (sdl_touch_top_panel_current_anchor(NULL, NULL, &quick_where)
+        if (config.bigger_font
+            && sdl_touch_top_panel_current_anchor(NULL, NULL, &quick_where)
             && pc->where != quick_where
             && sdl_status_depth_pane_same_horizontal_edge(pc->where,
                 quick_where)
@@ -2148,4 +2151,3 @@ void sdl_pop_description_overlay_full_main_anchor(void)
     if (g_description_overlay_full_main_anchor_depth > 0)
         g_description_overlay_full_main_anchor_depth--;
 }
-

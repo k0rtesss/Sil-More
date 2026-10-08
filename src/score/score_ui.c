@@ -1979,8 +1979,10 @@ void do_cmd_run_history(void)
         return;
     }
 #if SIL_SDL_MOBILE_BUILD
-    run_history_show_native_list(entries, count);
-    return;
+    if (get_sdl_bigger_font()) {
+        run_history_show_native_list(entries, count);
+        return;
+    }
 #endif
     run_history_sort_order sort_order = RUN_HISTORY_SORT_DATE;
     run_history_sort_entries(entries, count, sort_order);
@@ -3636,10 +3638,12 @@ static void run_history_show_detail(const run_history_entry* entry)
     const char* race_name = run_history_race_name(rec->race_id);
 
 #if SIL_SDL_MOBILE_BUILD
-    run_history_show_native_detail(entry, &details, current_run, player, race_name,
-        status, created, completed);
-    if (have_details) score_runs_free_details(&details);
-    return;
+    if (get_sdl_bigger_font()) {
+        run_history_show_native_detail(entry, &details, current_run, player, race_name,
+            status, created, completed);
+        if (have_details) score_runs_free_details(&details);
+        return;
+    }
 #endif
 
     bool panel_has_data[RUN_PANEL_COUNT];

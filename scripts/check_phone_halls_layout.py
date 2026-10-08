@@ -172,9 +172,11 @@ int main(int argc,char **argv)
             if(!big) base[role]=px;
             else assert(abs(px-(int)SDL_ceilf(base[role]*1.5f))<=1);
         }
-        for(int actions=4;actions<=7;actions++) {check(true,actions);check(false,actions);}
+        /* Normal mode is pixel-compared with pre-feature sources by
+         * check_normal_ui_compat.py. These assertions cover the big-font grid. */
+        if(big) for(int actions=4;actions<=7;actions++) {check(true,actions);check(false,actions);}
     }
-    printf("Halls %dx%d @%.3f: Off/On, Full/Brief, 4/5/6/7 actions, balanced grid/ink/taps/scroll PASS\n",width,height,density);
+    printf("Halls %dx%d @%.3f: Big font, Full/Brief, 4/5/6/7 actions, balanced grid/ink/taps/scroll PASS\n",width,height,density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear();
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window);
     TTF_Quit(); SDL_Quit(); return 0;

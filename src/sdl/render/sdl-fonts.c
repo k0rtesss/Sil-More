@@ -1281,7 +1281,9 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
 #endif
     } else if (font_size) {
         // Non-integer scaling mode.
-        d->cell_h = sdl_aux_cell_height_for_font_size(font_size);
+        d->cell_h = config.bigger_font
+            ? sdl_aux_cell_height_for_font_size(font_size)
+            : (int)(g_state.system_scale * font_size);
         d->cell_w = d->cell_h / 2;
         if (d->cell_w < 1)
             d->cell_w = 1;

@@ -33,6 +33,7 @@ harness = r"""
 #include <stdint.h>
 typedef struct {float x,y,w,h;} SDL_FRect;
 typedef struct {int x,y,w,h;} SDL_Rect;
+static struct {bool bigger_font;} config = {true};
 enum pane_placement {PLACE_TOP_LEFT,PLACE_TOP_CENTER,PLACE_TOP_RIGHT,
     PLACE_BOTTOM_LEFT,PLACE_BOTTOM_CENTER,PLACE_BOTTOM_RIGHT};
 static int sdl_overlay_inner_gap_px(void) {return 8;}
@@ -51,6 +52,9 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect *s
 dependency_harness = r"""
 typedef uint64_t Uint64;
 typedef struct { SDL_FRect panel; } status_depth_pane_layout;
+/* This fixture contains Status/Depth and Quick Access; there is no Combat pane. */
+static void sdl_status_depth_pane_avoid_combat(SDL_FRect *r,
+    enum pane_placement where,const SDL_Rect *screen) {}
 struct pane_config { bool enabled; enum pane_placement where; };
 #define PANE_STATUS_DEPTH 1
 static bool g_status_depth_pane_layout_computing;

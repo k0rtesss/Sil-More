@@ -19,6 +19,7 @@ types=typedef(A,'ability_browser_layout')+typedef(A,'ability_browser_entry')
 types+=typedef(S,'smithing_cost_type')+typedef(S,'smith_calculation_report')
 parts=[function(A,m) for m in ['static int ability_browser_wrap_take(',
  'static bool ability_browser_wrap_next(', 'static int ability_browser_wrapped_rows(',
+ 'static void ability_browser_init_layout_normal(',
  'static void ability_browser_init_layout(', 'static char ability_browser_entry_letter(',
  'static void ability_browser_size_entry_cards(', 'static void ability_browser_draw_ability_list(']]
 parts += [function(S,m) for m in ['static void smith_report_add(',
@@ -34,6 +35,7 @@ harness=r'''
 #include <stdlib.h>
 #include <stdarg.h>
 typedef const char *cptr;typedef unsigned char byte;
+static bool get_sdl_bigger_font(void) {return true;}
 typedef struct {int level;cptr state;} ability_type;
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))

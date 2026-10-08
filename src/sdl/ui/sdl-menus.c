@@ -342,10 +342,9 @@ bool sdl_depth_menu_pane_handle_pointer(float x, float y)
 int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
 {
 #if SIL_SDL_MOBILE_BUILD
-    (void)cell_h;
-    (void)screen_h;
-    return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
-#else
+    if (get_sdl_bigger_font())
+        return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+#endif
     /* Main cells are already enlarged; use the normal reference before the
      * prompt's own caps, then enlarge the resolved prompt once. */
     if (config.bigger_font)
@@ -377,7 +376,6 @@ int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
 #endif
 
     return sdl_ui_font_px(font_px);
-#endif
 }
 
 void sdl_touch_pane_append_ellipsis(char* line, size_t line_size)
@@ -723,7 +721,10 @@ int sdl_narrative_banner_font_px(const SDL_Rect* rect)
         return 0;
 
 #if SIL_SDL_MOBILE_BUILD
-    return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+    if (get_sdl_bigger_font())
+    {
+        return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+    }
 #endif
     /* Use the same font size as the message log pane. */
     font_px = sdl_effective_pane_cell_height_for_type(PANE_LOG);
@@ -746,10 +747,10 @@ float sdl_narrative_banner_line_h(TTF_Font* font, int font_px)
 static float sdl_narrative_banner_close_size(float line_h)
 {
 #if SIL_SDL_MOBILE_BUILD
-    return MAX(line_h, (float)sdl_ui_min_tap_px());
-#else
-    return sdl_touch_pane_clampf(line_h, 22.0f, 44.0f);
+    if (get_sdl_bigger_font())
+        return MAX(line_h, (float)sdl_ui_min_tap_px());
 #endif
+    return sdl_touch_pane_clampf(line_h, 22.0f, 44.0f);
 }
 
 static float sdl_narrative_banner_close_gap(float line_h)
@@ -1060,7 +1061,8 @@ void sdl_narrative_banner_draw_line(TTF_Font* font, cptr text,
     if (!texture)
         return;
 
-    if (!SIL_SDL_MOBILE_BUILD && text_w > 0 && (float)text_w > max_w)
+    if (!(SIL_SDL_MOBILE_BUILD && config.bigger_font)
+        && text_w > 0 && (float)text_w > max_w)
         scale = max_w / (float)text_w;
 
     dst = (SDL_FRect){
@@ -1400,7 +1402,8 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
         return false;
 
 #if SIL_SDL_MOBILE_BUILD
-    screen = sdl_get_layout_screen_rect();
+    if (get_sdl_bigger_font())
+        screen = sdl_get_layout_screen_rect();
 #endif
     prompt_text = g_touch_pane_yes_no_prompt_text[0]
         ? g_touch_pane_yes_no_prompt_text
@@ -1410,11 +1413,19 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
     prompt_text_w = sdl_touch_pane_story_text_width(prompt_font, prompt_text);
 
 #if SIL_SDL_MOBILE_BUILD
+    if (get_sdl_bigger_font()) {
     margin = 12.0f * sdl_ui_density_scale();
     button_gap = 12.0f * sdl_ui_density_scale();
     row_gap = 12.0f * sdl_ui_density_scale();
     button_w = MAX((float)sdl_ui_min_tap_px(), (float)prompt_font_px * 4.0f);
     button_h = MAX((float)sdl_ui_min_tap_px(), (float)prompt_font_px * 1.6f);
+    } else {
+    margin = sdl_touch_pane_clampf(cell_h * 1.45f, 24.0f, 46.0f);
+    button_gap = sdl_touch_pane_clampf(cell_w * 1.90f, 18.0f, 34.0f);
+    row_gap = sdl_touch_pane_clampf(cell_h * 1.10f, 18.0f, 34.0f);
+    button_w = sdl_touch_pane_clampf(cell_w * 13.50f, 136.0f, 220.0f);
+    button_h = sdl_touch_pane_clampf(cell_h * 3.80f, 72.0f, 112.0f);
+    }
 #else
     margin = sdl_touch_pane_clampf(cell_h * 0.75f, 12.0f, 24.0f);
     button_gap = sdl_touch_pane_clampf(cell_w, 10.0f, 18.0f);
@@ -1690,17 +1701,20 @@ bool sdl_touch_pane_handle_yes_no_prompt_pointer(float x, float y)
     }
 
 #if SIL_SDL_MOBILE_BUILD
-    if (g_yes_no_prompt_pages > 1) {
-        SDL_FRect prompt;
-        SDL_FRect yes;
-        SDL_FRect no;
-        if (sdl_touch_pane_yes_no_prompt_layout(NULL, &prompt, &yes, &no)
-            && x >= prompt.x && x < prompt.x + prompt.w
-            && y >= prompt.y && y < prompt.y + prompt.h)
-        {
-            g_yes_no_prompt_page = (g_yes_no_prompt_page + 1)
-                % g_yes_no_prompt_pages;
-            g_state.need_present = true;
+    if (get_sdl_bigger_font())
+    {
+        if (g_yes_no_prompt_pages > 1) {
+            SDL_FRect prompt;
+            SDL_FRect yes;
+            SDL_FRect no;
+            if (sdl_touch_pane_yes_no_prompt_layout(NULL, &prompt, &yes, &no)
+                && x >= prompt.x && x < prompt.x + prompt.w
+                && y >= prompt.y && y < prompt.y + prompt.h)
+            {
+                g_yes_no_prompt_page = (g_yes_no_prompt_page + 1)
+                    % g_yes_no_prompt_pages;
+                g_state.need_present = true;
+            }
         }
     }
 #endif
@@ -1826,7 +1840,7 @@ void sdl_touch_pane_draw_button_text_scaled(const SDL_FRect* rect, const char* n
     if (symbol_font_px < 12)
         symbol_font_px = 12;
 
-    if (SIL_SDL_MOBILE_BUILD || config.bigger_font) {
+    if (config.bigger_font) {
         /* One readable name replaces the name plus duplicate key symbol. */
         sdl_touch_pane_draw_readable_label(rect, have_name ? name : symbol,
             color, SIL_SDL_MOBILE_BUILD
@@ -1978,7 +1992,7 @@ void sdl_touch_pane_draw_button_text_px(const SDL_FRect* rect,
     if (symbol_px < 8)
         symbol_px = 8;
 
-    if (SIL_SDL_MOBILE_BUILD || config.bigger_font) {
+    if (config.bigger_font) {
         sdl_touch_pane_draw_readable_label(rect, have_name ? name : symbol,
             color, SIL_SDL_MOBILE_BUILD
                 ? sdl_ui_role_font_px(SDL_UI_FONT_CONTROL)
@@ -2100,47 +2114,51 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
     line_h = (float)font_px * 1.42f;
     if (line_h < 24.0f)
         line_h = 24.0f;
-    if (!SIL_SDL_MOBILE_BUILD && line_h * (float)line_count > rect->h)
+    if (!(SIL_SDL_MOBILE_BUILD && config.bigger_font)
+        && line_h * (float)line_count > rect->h)
         line_h = rect->h / (float)line_count;
     if (line_h < 10.0f)
         line_h = 10.0f;
 
     shown_lines = line_count;
 #if SIL_SDL_MOBILE_BUILD
+    if (get_sdl_bigger_font())
     {
-        int capacity = MAX(1, (int)(rect->h / line_h));
-        g_yes_no_prompt_pages = 1;
-        if (line_count > capacity) {
-            float hint_h = (float)sdl_ui_role_font_px(SDL_UI_FONT_META) * 1.3f;
-            capacity = MAX(1, (int)((rect->h - hint_h) / line_h));
-            g_yes_no_prompt_pages = (line_count + capacity - 1) / capacity;
-            g_yes_no_prompt_page %= g_yes_no_prompt_pages;
-            first_line = g_yes_no_prompt_page * capacity;
-            shown_lines = MIN(capacity, line_count - first_line);
-            {
-                char hint[80];
-                int width = 0;
-                int height = 0;
-                TTF_Font* hint_font = sdl_story_font_for_height_slot(
-                    sdl_ui_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
-                SDL_Texture* hint_texture;
-                strnfmt(hint, sizeof(hint), "Tap text: page %d/%d",
-                    g_yes_no_prompt_page + 1, g_yes_no_prompt_pages);
-                hint_texture = sdl_ui_text_texture(hint_font, hint, color, &width, &height);
-                if (hint_texture) {
-                    SDL_FRect hint_dst = { rect->x, rect->y + rect->h - hint_h,
-                        (float)width, (float)height };
-                    SDL_RenderTexture(g_state.renderer, hint_texture, NULL, &hint_dst);
+        {
+            int capacity = MAX(1, (int)(rect->h / line_h));
+            g_yes_no_prompt_pages = 1;
+            if (line_count > capacity) {
+                float hint_h = (float)sdl_ui_role_font_px(SDL_UI_FONT_META) * 1.3f;
+                capacity = MAX(1, (int)((rect->h - hint_h) / line_h));
+                g_yes_no_prompt_pages = (line_count + capacity - 1) / capacity;
+                g_yes_no_prompt_page %= g_yes_no_prompt_pages;
+                first_line = g_yes_no_prompt_page * capacity;
+                shown_lines = MIN(capacity, line_count - first_line);
+                {
+                    char hint[80];
+                    int width = 0;
+                    int height = 0;
+                    TTF_Font* hint_font = sdl_story_font_for_height_slot(
+                        sdl_ui_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+                    SDL_Texture* hint_texture;
+                    strnfmt(hint, sizeof(hint), "Tap text: page %d/%d",
+                        g_yes_no_prompt_page + 1, g_yes_no_prompt_pages);
+                    hint_texture = sdl_ui_text_texture(hint_font, hint, color, &width, &height);
+                    if (hint_texture) {
+                        SDL_FRect hint_dst = { rect->x, rect->y + rect->h - hint_h,
+                            (float)width, (float)height };
+                        SDL_RenderTexture(g_state.renderer, hint_texture, NULL, &hint_dst);
+                    }
                 }
+            } else {
+                g_yes_no_prompt_page = 0;
             }
-        } else {
-            g_yes_no_prompt_page = 0;
         }
     }
 #endif
     total_h = line_h * (float)shown_lines;
     start_y = rect->y + (rect->h - total_h) * 0.5f;
-    if (start_y < rect->y || (SIL_SDL_MOBILE_BUILD && g_yes_no_prompt_pages > 1))
+    if (start_y < rect->y || (SIL_SDL_MOBILE_BUILD && config.bigger_font && g_yes_no_prompt_pages > 1))
         start_y = rect->y;
 
     for (int i = first_line; i < first_line + shown_lines; i++) {
@@ -2166,7 +2184,7 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
         max_h = line_h;
         scale_w = (text_w > 0) ? (max_w / (float)text_w) : 1.0f;
         scale_h = (text_h > 0) ? (max_h / (float)text_h) : 1.0f;
-        scale = SIL_SDL_MOBILE_BUILD ? 1.0f
+        scale = SIL_SDL_MOBILE_BUILD && config.bigger_font ? 1.0f
             : ((scale_w < scale_h) ? scale_w : scale_h);
         if (scale > 1.0f)
             scale = 1.0f;
@@ -2362,7 +2380,10 @@ void sdl_touch_pane_render_yes_no_prompt(void)
 static int sdl_unified_look_log_text_font_px(void)
 {
 #if SIL_SDL_MOBILE_BUILD
-    return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+    if (get_sdl_bigger_font())
+    {
+        return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+    }
 #endif
     const sdl_view* log_view = &g_views[PANE_LOG];
     const sdl_view* rolls_view = &g_views[PANE_ROLLS];
@@ -2660,7 +2681,7 @@ static bool sdl_unified_look_prompt_layout(
 
     screen_margin = sdl_touch_pane_clampf(cell_w * 0.65f, 5.0f, 14.0f);
     base_font_px = sdl_unified_look_log_text_font_px();
-    min_font_px = (SIL_SDL_MOBILE_BUILD || config.bigger_font) ? base_font_px : 5;
+    min_font_px = config.bigger_font ? base_font_px : 5;
     if (base_font_px < min_font_px)
         base_font_px = min_font_px;
 
@@ -2696,8 +2717,11 @@ static bool sdl_unified_look_prompt_layout(
             min_button_w = sdl_touch_pane_clampf((float)font_px * 2.2f,
                 14.0f, 58.0f);
 #if SIL_SDL_MOBILE_BUILD
-            row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
-            min_button_w = MAX(min_button_w, (float)sdl_ui_min_tap_px());
+            if (get_sdl_bigger_font())
+            {
+                row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
+                min_button_w = MAX(min_button_w, (float)sdl_ui_min_tap_px());
+            }
 #endif
 
             for (int variant = 0;
@@ -2711,7 +2735,7 @@ static bool sdl_unified_look_prompt_layout(
                         font, &area, g_unified_look_prompt.anchor_row, cell_h,
                         screen_margin, panel_pad, row_gap, button_gap,
                         button_pad_x, row_h, min_button_w,
-                        (SIL_SDL_MOBILE_BUILD || config.bigger_font)
+                        config.bigger_font
                             ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1))
                 {
                     fits = true;
@@ -2751,7 +2775,7 @@ static bool sdl_unified_look_prompt_layout(
         SDL_UNIFIED_LOOK_PROMPT_LABEL_VARIANTS - 1, font, &out->area,
         g_unified_look_prompt.anchor_row, cell_h, screen_margin, panel_pad,
         row_gap, button_gap, button_pad_x, row_h, min_button_w,
-        (SIL_SDL_MOBILE_BUILD || config.bigger_font)
+        config.bigger_font
                             ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1);
 }
 
@@ -3155,7 +3179,10 @@ static bool sdl_unified_look_sidebar_layout(
 
     out->row_h = (float)out->font_px * 1.28f;
 #if SIL_SDL_MOBILE_BUILD
-    out->row_h = MAX(out->row_h, (float)sdl_ui_min_tap_px());
+    if (get_sdl_bigger_font())
+    {
+        out->row_h = MAX(out->row_h, (float)sdl_ui_min_tap_px());
+    }
 #endif
     if (out->row_h < (float)out->font_px + 4.0f)
         out->row_h = (float)out->font_px + 4.0f;

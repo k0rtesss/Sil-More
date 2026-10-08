@@ -544,7 +544,7 @@ static void main_menu_about(void)
     screen_push_supporting_panes_hidden();
     sdl_push_terminal_menu_scale();
 
-    if (sdl_touch_only_device_active())
+    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
     {
         main_menu_about_mobile(about_lines);
         sdl_pop_terminal_menu_scale();
@@ -1350,6 +1350,8 @@ static int log_history_wrapped_entry_rows(int filter, int idx, int width)
     byte attr;
 
     log_history_wrapped_entry_text(filter, idx, text, sizeof(text), &attr);
+    if (!get_sdl_bigger_font())
+        return count_wrapped_lines(text, width, 0);
     cptr cursor = text;
     char line[256];
     int rows = 0;
@@ -1562,6 +1564,10 @@ static void main_menu_blitz_intro_mobile_build(void)
 static void log_history_draw_wrapped_slice(int row, int width, byte attr,
     cptr text, cptr highlight, int first_line, int max_rows)
 {
+    if (!get_sdl_bigger_font()) {
+        log_history_draw_wrapped_text(row, width, attr, text, highlight);
+        return;
+    }
     cptr cursor = text;
     char line[256];
     int index = 0, drawn = 0;
@@ -1575,6 +1581,14 @@ static void log_history_draw_wrapped_slice(int row, int width, byte attr,
 
 static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
 {
+    if (!get_sdl_bigger_font()) {
+        *prompt = hgt - 1;
+        *top = 3;
+        *bottom = hgt - 3;
+        if (*bottom < *top) { *top = 2; *bottom = hgt - 2; }
+        if (*bottom < *top) { *top = 0; *bottom = hgt - 1; }
+        return;
+    }
     *prompt = MAX(0, hgt - 1 - sdl_touch_menu_button_reserved_rows());
     *bottom = MAX(0, *prompt - 2);
     *top = *bottom >= 3 ? 3 : (*bottom >= 2 ? 2 : 0);
@@ -1623,7 +1637,7 @@ static void do_cmd_start_blitz(void)
     screen_push_touch_pane_hidden();
     sdl_push_terminal_menu_scale();
 
-    if (sdl_touch_only_device_active())
+    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
         confirmed = main_menu_blitz_confirm_mobile();
     else
     {
@@ -3310,7 +3324,7 @@ void do_cmd_messages_with_filter(int initial_filter)
             i = max_i;
         if (i < 0)
             i = 0;
-        int entry_line_max = n > 0 ? MAX(0,
+        int entry_line_max = get_sdl_bigger_font() && n > 0 ? MAX(0,
             log_history_wrapped_entry_rows(filter, i, wid) - visible_rows) : 0;
         entry_line_top = MIN(entry_line_top, entry_line_max);
 
@@ -3339,7 +3353,8 @@ void do_cmd_messages_with_filter(int initial_filter)
                 i + j, wid);
             int line_y;
 
-            bool continued = j == 0 && wrapped_rows > visible_rows;
+            bool continued = get_sdl_bigger_font()
+                && j == 0 && wrapped_rows > visible_rows;
             int drawn_rows = continued
                 ? MIN(visible_rows, wrapped_rows - entry_line_top) : wrapped_rows;
             if (used_rows + drawn_rows > visible_rows)

@@ -35,10 +35,10 @@ int __wrap_player_current_movement_energy(void) { return 100; }
 int __wrap_player_current_movement_speed(void) { return 2; }
 void __wrap_prt_frame_basic(void) {
     Term_putstr(0, ROW_HP, -1, TERM_WHITE,
-        large_values ? "Hth  999/999" : "Health 41/41");
+        large_values ? "Hth  999/999" : "Health 49/61");
     Term_putstr(0, ROW_SP, -1, TERM_L_GREEN,
-        large_values ? "Vce  999:999" : "Voice    7:7");
-    Term_putstr(0, ROW_LIGHT, -1, TERM_YELLOW, "oo    2999");
+        large_values ? "Vce  999:999" : "Voice  49:49");
+    Term_putstr(0, ROW_LIGHT, -1, TERM_YELLOW, "oo     987");
     Term_putstr(0, ROW_MEL, -1, TERM_WHITE, "(+7,2d6)");
     Term_putstr(0, ROW_ARC, -1, TERM_WHITE, "(+3,1d7)");
 }
@@ -149,6 +149,115 @@ static void inside(SDL_FRect r) {
     assert(r.w>0 && r.h>0 && r.x>=-1 && r.y>=-1);
     assert(r.x+r.w<=width+1 && r.y+r.h<=height+1);
 }
+static void check_bottom_center_stack(void) {
+    large_values=false;
+    struct pane_config baseline[MAX_PANE_CONFIGS];
+    int count=pane_config_count;
+    memcpy(baseline,pane_config,sizeof(baseline));
+    for(int big=1;big<2;big++)
+    for(int after=0;after<2;after++)
+    for(int rows=1;rows<=2;rows++)
+    for(int stretch=0;stretch<2;stretch++) {
+        memcpy(pane_config,baseline,sizeof(baseline));
+        config.bigger_font=big;
+        config.left_panel_compact_mode=SDL_LEFT_PANEL_COMPACT_ROW;
+        config.touch_top_panel_rows=rows;
+        config.touch_top_panel_size=stretch?SDL_TOUCH_TOP_PANEL_SIZE_STRETCH:3;
+        int combat_index=-1,quick_index=-1;
+        for(int i=0;i<count;i++) {
+            if(pane_config[i].pane==PANE_COMBAT) combat_index=i;
+            if(pane_config[i].pane==PANE_LEFT_PANEL) pane_config[i].font_size=0;
+        }
+        assert(combat_index>=0);
+        struct pane_config moving=pane_config[combat_index];
+        moving.where=PLACE_BOTTOM_CENTER;
+        memmove(&pane_config[combat_index],&pane_config[combat_index+1],
+            (count-combat_index-1)*sizeof(moving));
+        for(int i=0;i<count-1;i++)
+            if(pane_config[i].pane==PANE_OVERLAY_MENU) quick_index=i;
+        assert(quick_index>=0);
+        int insertion=quick_index+after;
+        memmove(&pane_config[insertion+1],&pane_config[insertion],
+            (count-1-insertion)*sizeof(moving));
+        pane_config[insertion]=moving;
+        sdl_left_panel_source_invalidate();
+        SDL_Rect screen={0,0,width,height};
+        sdl_reset_top_right_overlay_offset();
+        g_touch_pane_hidden_layout_active=sdl_touch_pane_hidden_mode_active();
+        g_touch_pane_proto_layout_active=sdl_touch_pane_proto_mode_active();
+        sdl_place_active_panes(&screen,g_pane_rects,false,false,true);
+        assert(sdl_rect_has_area(&g_pane_rects[PANE_DESCRIPTION]));
+        sdl_left_panel_metrics metrics; SDL_FRect left;
+        assert(sdl_left_panel_metrics_for_view(&g_views[PANE_MAIN],&metrics));
+        assert(sdl_left_panel_pane_rect_for_metrics(&g_views[PANE_MAIN],&metrics,&left));
+        g_pane_rects[PANE_LEFT_PANEL]=(SDL_Rect){left.x,left.y,left.w,left.h};
+        SDL_FRect without_combat={0};
+        if(after) {
+            pane_config[insertion].enabled=false;
+            g_sdl_present_generation++;
+            sdl_apply_top_right_overlay_offset();
+            assert(sdl_touch_top_panel_compute_layout(NULL,&without_combat));
+            pane_config[insertion].enabled=true;
+            sdl_reset_top_right_overlay_offset();
+            sdl_place_active_panes(&screen,g_pane_rects,false,false,true);
+            g_pane_rects[PANE_LEFT_PANEL]=(SDL_Rect){left.x,left.y,left.w,left.h};
+        }
+        SDL_FRect first={0};
+        for(int frame=0;frame<3;frame++) {
+            g_sdl_present_generation++;
+            sdl_apply_top_right_overlay_offset();
+            SDL_FRect buttons[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT],quick,contact;
+            SDL_Rect combat;
+            assert(sdl_touch_top_panel_compute_layout(buttons,&quick)); inside(quick);
+            assert(sdl_combat_overlay_pane_current_rect(&combat));
+            SDL_FRect combat_rect={combat.x,combat.y,combat.w,combat.h}; inside(combat_rect);
+            if((height>width && SDL_fabsf(quick.x+quick.w/2-width/2.f)>1)
+                || (after && combat.y+combat.h>quick.y+1)
+                || (!after && quick.y+quick.h>combat.y+1))
+                fprintf(stderr,"stack %dx%d big%d after%d rows%d stretch%d frame%d: quick %.1f,%.1f %.1fx%.1f combat %d,%d %dx%d\n",
+                    width,height,big,after,rows,stretch,frame,quick.x,quick.y,
+                    quick.w,quick.h,combat.x,combat.y,combat.w,combat.h);
+            if(height>width) assert(SDL_fabsf(quick.x+quick.w/2-width/2.f)<=1);
+            if(after) {
+                assert(SDL_fabsf(quick.x-without_combat.x)<=1);
+                assert(SDL_fabsf(quick.y-without_combat.y)<=1);
+                assert(SDL_fabsf(quick.w-without_combat.w)<=1);
+                assert(SDL_fabsf(quick.h-without_combat.h)<=1);
+            }
+            assert(!SDL_GetRectIntersectionFloat(&quick,&combat_rect,&contact)
+                || contact.w<=1 || contact.h<=1);
+            if(after) assert(combat.y+combat.h<=quick.y+1);
+            else assert(quick.y+quick.h<=combat.y+1);
+            if(rows==1) for(int i=1;i<6;i++) assert(buttons[i].y==buttons[0].y);
+            for(int i=0;i<6;i++) {
+                inside(buttons[i]);
+                assert(buttons[i].w>=sdl_ui_min_tap_px() && buttons[i].h>=sdl_ui_min_tap_px());
+                int slot=-1;
+                assert(sdl_touch_top_panel_point_to_slot(buttons[i].x+buttons[i].w/2,
+                    buttons[i].y+buttons[i].h/2,&slot) && slot==i);
+            }
+            if(frame) {
+                assert(SDL_fabsf(first.x-quick.x)<=1 && SDL_fabsf(first.y-quick.y)<=1);
+                assert(SDL_fabsf(first.w-quick.w)<=1 && SDL_fabsf(first.h-quick.h)<=1);
+            } else first=quick;
+            if(after && big && rows==1 && stretch && frame==2) {
+                SDL_SetRenderTarget(g_state.renderer,NULL);
+                SDL_SetRenderDrawColor(g_state.renderer,24,30,36,255); SDL_RenderClear(g_state.renderer);
+                assert(sdl_render_left_panel_pane_from_cells(&g_views[PANE_MAIN],&left));
+                sdl_touch_round_render();
+                sdl_status_depth_pane_render();
+                sdl_combat_overlay_pane_render();
+                sdl_touch_top_panel_render_buttons(buttons);
+                char path[160]; strnfmt(path,sizeof(path),"bottom-center-3-%dx%d.png",width,height);
+                SDL_Surface *pixels=SDL_RenderReadPixels(g_state.renderer,NULL); assert(pixels);
+                assert(IMG_SavePNG(pixels,path)); SDL_DestroySurface(pixels);
+            }
+        }
+    }
+    memcpy(pane_config,baseline,sizeof(baseline));
+    config.bigger_font=true;
+    printf("Big-font Bottom Center %dx%d: Combat before/after Quick Access, 1/2 rows, fixed/Stretch, unchanged by successor and stable across frames PASS\n",width,height);
+}
 static void check_layout(char **argv) {
     defaults(); set_sdl_bigger_font(true);
     set_sdl_mobile_portrait_mode(height>width);
@@ -162,6 +271,11 @@ static void check_layout(char **argv) {
     assert(g_state.window);
     g_state.renderer=SDL_CreateRenderer(g_state.window,"software"); assert(g_state.renderer);
     g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
+    g_direct_touch_present=true;
+    config.touch_profile=SDL_TOUCH_PROFILE_ROUND_WHEEL;
+    config.touch_round_movement_enabled=true;
+    g_touch_pane_hidden_layout_active=sdl_touch_pane_hidden_mode_active();
+    g_touch_pane_proto_layout_active=sdl_touch_pane_proto_mode_active();
     sdl_view *view=&g_views[PANE_MAIN];
     assert(term_init(&view->t,80,24,16)==0); view->t.data=(void *)(uintptr_t)PANE_MAIN;
     Term_activate(&view->t); term_screen=&view->t;
@@ -181,15 +295,21 @@ static void check_layout(char **argv) {
         sdl_left_panel_source_invalidate();
         g_sdl_present_generation++;
         SDL_Rect screen={0,0,width,height};
+        sdl_reset_top_right_overlay_offset();
         sdl_place_active_panes(&screen,g_pane_rects,false,false,true);
+        SDL_Rect fitted[PANE_MAX];
+        sdl_place_active_panes_fitting_main(&screen,fitted,false,false,true,NULL,NULL);
+        assert(sdl_rect_has_area(&fitted[PANE_DESCRIPTION]));
+        assert(!memcmp(fitted,g_pane_rects,sizeof(fitted)));
         sdl_left_panel_metrics metrics;
         assert(sdl_left_panel_metrics_for_view(view,&metrics));
         SDL_FRect panel;
         assert(sdl_left_panel_pane_rect_for_metrics(view,&metrics,&panel)); inside(panel);
         assert(metrics.compact_row && metrics.compact_segment_count==3);
-        assert(metrics.cell_h==sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL));
-        assert(values==2 ? metrics.panel_rows>=2 : metrics.panel_rows==2);
-        if(values==2 && height>width) assert(metrics.panel_rows>2);
+        if(values<2) assert(metrics.cell_h==sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL));
+        assert(metrics.panel_rows==1);
+        assert(metrics.corner_h==metrics.cell_h);
+        for(int i=0;i<3;i++) assert(metrics.compact_output_rows[i]==0);
         g_pane_rects[PANE_LEFT_PANEL]=(SDL_Rect){panel.x,panel.y,panel.w,panel.h};
         sdl_view *log=&g_views[PANE_ROLLS];
         assert(sdl_view_create(log,g_pane_rects[PANE_ROLLS],config.monospace_font,
@@ -228,11 +348,11 @@ static void check_layout(char **argv) {
             SDL_FRect cell;
             assert(sdl_left_panel_source_cell_rect(0,metrics.compact_source_rows[i],
                 LEFT_PANEL_CONTENT_WID,1,&cell));
-            assert(cell.h==2*metrics.cell_h);
-            for(int line=0;line<2;line++) {
+            assert(cell.h==metrics.cell_h);
+            for(int part=0;part<2;part++) {
                 int col,row;
-                assert(sdl_main_view_point_to_cell(cell.x+2,
-                    cell.y+(line+.5f)*metrics.cell_h,&col,&row));
+                assert(sdl_main_view_point_to_cell(part?cell.x+cell.w-2:cell.x+2,
+                    cell.y+.5f*metrics.cell_h,&col,&row));
                 assert(g_last_main_cell_hit_left_panel && row==metrics.compact_source_rows[i]);
             }
         }
@@ -269,7 +389,8 @@ static void check_layout(char **argv) {
         SDL_DestroyTexture(log->canvas); log->canvas=NULL;
         term_nuke(&log->t); log->term_ready=false;
     }
-    printf("HUD %dx%d @%.3f: readable two-line character row, label/value taps, full-width four-row log, six reachable cells PASS\n",width,height,density);
+    printf("HUD %dx%d @%.3f: compact single character row, value taps, full-width four-row log, six reachable cells PASS\n",width,height,density);
+    check_bottom_center_stack();
 }
 int main(int argc,char **argv) {
     assert(argc==7); setbuf(stdout,NULL); log_set_quiet(true);
@@ -279,7 +400,10 @@ int main(int argc,char **argv) {
     static maxima limits; static player_type player; static player_other options;
     static object_type items[INVEN_TOTAL];
     static byte features[32][MAX_DUNGEON_WID];
-    cave_feat=features;
+    static s16b floor_objects[32][MAX_DUNGEON_WID];
+    static s16b monsters[32][MAX_DUNGEON_WID];
+    static u16b info[32][256];
+    cave_feat=features; cave_o_idx=floor_objects; cave_m_idx=monsters; cave_info=info;
     z_info=&limits; p_ptr=&player; op_ptr=&options; inventory=items;
     player.playing=true; player.song1=player.song2=SNG_NOTHING;
     player.chp=player.mhp=41; player.csp=player.msp=7;
@@ -318,7 +442,7 @@ def main():
                    + ["@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
                       "-Wl," + ",".join("--wrap=" + w for w in wraps), "-o", str(exe)],
                    cwd=BUILD, env=env, check=True)
-    for w, h, scale in [(360,800,1), (800,360,1), (720,1600,2), (1600,720,2),
+    for w, h, scale in [(360,800,1), (800,360,1), (580,1280,1.5), (720,1600,2), (1600,720,2),
                          (1080,2400,2.75), (2400,1080,2.75), (1280,720,1)]:
         subprocess.run([str(exe), str(w), str(h), str(scale),
                         str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf"),

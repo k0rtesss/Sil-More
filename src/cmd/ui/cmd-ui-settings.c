@@ -3459,9 +3459,9 @@ void do_cmd_pane_settings(void)
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
 #if defined(__ANDROID__) || defined(SIL_IOS)
-                "Menu Text Size",
-                "Menu Text Size",
-                "Menu Text Size"),
+                get_sdl_bigger_font() ? "Menu Text Size" : "Terminal Menu Scale Offset",
+                get_sdl_bigger_font() ? "Menu Text Size" : "Menu Scale Offset",
+                get_sdl_bigger_font() ? "Menu Text Size" : "Menu Scale"),
 #else
                 "Terminal Menu Scale Offset",
                 "Menu Scale Offset",

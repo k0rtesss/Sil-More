@@ -184,9 +184,11 @@ bool sdl_main_menu_overlay_hides_supporting_panes(void)
 
 int sdl_main_menu_pane_font_px(void)
 {
+    /* A phone alone does not opt into the accessibility menu design. */
 #if SIL_SDL_MOBILE_BUILD
-    return sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
-#else
+    if (get_sdl_bigger_font())
+        return sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
+#endif
     int font_size = (config.aux_view_font_size > 0)
         ? sdl_resolve_aux_view_font_size(config.aux_view_font_size)
 #if SIL_SDL_MOBILE_BUILD
@@ -201,7 +203,6 @@ int sdl_main_menu_pane_font_px(void)
         font_px = 8;
 
     return font_px;
-#endif
 }
 
 typedef struct main_menu_pane_layout {
@@ -382,7 +383,7 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
     if (out) {
         *out = sdl_overlay_panel_rect(&anchor,
 #if SIL_SDL_MOBILE_BUILD
-            PLACE_TOP_RIGHT,
+            config.bigger_font ? PLACE_TOP_RIGHT : PLACE_TOP_CENTER,
 #else
             PLACE_TOP_CENTER,
 #endif
@@ -498,8 +499,10 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         row_h = MAX(44.0f, (float)text_h * 1.35f);
     }
 #if SIL_SDL_MOBILE_BUILD
-    shortcut_w = 0;
-    row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
+    if (get_sdl_bigger_font()) {
+        shortcut_w = 0;
+        row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
+    }
 #endif
 
     shortcut_gap = shortcut_w > 0 ? (float)font_px * 0.38f : 0.0f;
@@ -524,6 +527,28 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         }
     }
 
+#if SIL_SDL_MOBILE_BUILD
+    if (!get_sdl_bigger_font())
+    {
+        float overlay_margin = (float)sdl_overlay_margin_px();
+
+        max_panel_h = (float)screen.h - overlay_margin * 2.0f;
+        if (max_panel_h < 1.0f)
+            max_panel_h = (float)screen.h;
+
+        panel_h = max_panel_h;
+        row_h = (panel_h - pad_y * 2.0f) / (float)MAIN_MENU_MAX;
+        /* Keep the empty vertical gap between adjacent labels no larger than
+         * the rendered label height. */
+        if (row_h > (float)text_h * 2.0f)
+            row_h = (float)text_h * 2.0f;
+        if (row_h < 1.0f)
+            row_h = 1.0f;
+        panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
+        visible_count = MAIN_MENU_MAX;
+    }
+    else
+#endif
     {
         panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
         max_panel_h = (float)screen.h - 12.0f;
@@ -1853,7 +1878,7 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
     case SDL_EVENT_MOUSE_BUTTON_UP:
         return true;
     case SDL_EVENT_MOUSE_WHEEL:
-        if ((config.bigger_font || SIL_SDL_MOBILE_BUILD) && ev->wheel.y != 0.0f)
+        if (config.bigger_font && ev->wheel.y != 0.0f)
             sdl_main_menu_overlay_scroll_rows(ev->wheel.y > 0.0f ? -1 : 1);
         return true;
     case SDL_EVENT_FINGER_DOWN:
@@ -1862,7 +1887,7 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
             return true;
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             return true;
-        if (config.bigger_font || SIL_SDL_MOBILE_BUILD) {
+        if (config.bigger_font) {
             main_menu_pane_layout layout;
 
             if (ev->type == SDL_EVENT_FINGER_DOWN) {
@@ -1900,7 +1925,7 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
             return sdl_main_menu_overlay_handle_pointer_down(x, y);
         return sdl_main_menu_overlay_handle_pointer_motion(x, y);
     case SDL_EVENT_FINGER_UP:
-        if ((config.bigger_font || SIL_SDL_MOBILE_BUILD) && g_main_menu_large_touch_active
+        if (config.bigger_font && g_main_menu_large_touch_active
             && g_main_menu_large_touch_finger == ev->tfinger.fingerID) {
             g_main_menu_large_touch_active = false;
             if (!g_main_menu_large_touch_dragged

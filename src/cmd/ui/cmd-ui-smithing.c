@@ -174,7 +174,7 @@ static int smith_ui_touch_drag_sink;
 /* Controller B uses a gameplay binding, so normalize it to menu Back here. */
 static char smithing_menu_key(char ch)
 {
-    if (ch == '?')
+    if (get_sdl_bigger_font() && ch == '?')
     {
         smith_show_cost_details();
         return 0;
@@ -204,7 +204,8 @@ static int smith_ui_term_hgt(void)
 
 static bool smith_ui_portrait_layout(void)
 {
-    return sdl_mobile_portrait_layout_active() || smith_ui_term_wid() < 60;
+    return sdl_mobile_portrait_layout_active()
+        || (get_sdl_bigger_font() && smith_ui_term_wid() < 60);
 }
 
 static int smith_ui_content_bottom_row(void)
@@ -1319,7 +1320,8 @@ static bool smith_ui_take_click_action(int* choice, int* action)
 
 static void smith_ui_draw_cost_heading(int col, int row, int count, byte attr)
 {
-    bool overflow = row + 1 + count > smith_ui_content_bottom_row();
+    bool overflow = get_sdl_bigger_font()
+        && row + 1 + count > smith_ui_content_bottom_row();
     cptr label = overflow ? "Cost: more in Details" : "Cost:";
     smith_ui_put_fitted(col, row, smith_ui_line_width(col),
         overflow ? TERM_L_BLUE : attr, label);
@@ -1422,7 +1424,8 @@ static void smith_ui_draw_navigation_prompt(bool root_menu)
 
 static void smith_ui_begin_touch_scroll_area(bool root_menu)
 {
-    ui_menu_click_add_touch_button(SMITH_CLICK_CALC, "Details", TERM_DARK);
+    if (get_sdl_bigger_font())
+        ui_menu_click_add_touch_button(SMITH_CLICK_CALC, "Details", TERM_DARK);
     int bottom_row = smith_ui_content_bottom_row();
 
     if (bottom_row < 1)
@@ -5626,7 +5629,7 @@ int numbers_menu_aux(int* highlight)
         SMT_NUM_MENU_MAX, *highlight, first_row, last_row);
 
     {
-        static cptr number_menu_labels[SMT_NUM_MENU_MAX] = {
+        const cptr number_menu_labels[SMT_NUM_MENU_MAX] = {
             "increase attack bonus",
             "decrease attack bonus",
             "increase damage sides",
@@ -5637,7 +5640,8 @@ int numbers_menu_aux(int* highlight)
             "decrease protection",
             "increase weight",
             "decrease weight",
-            "Cycle alloy metal",
+            get_sdl_bigger_font() ? "Cycle alloy metal"
+                : "cycle alloy (none/mithril/star iron)",
             "remove alloy bonus",
             "adjust special bonuses",
         };
@@ -6483,8 +6487,9 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
 
     strnfmt(buf, sizeof(buf), "%d Turns", preview->turns);
     smith_ui_put_cost_line(costs, TERM_SLATE, buf);
-    smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
-        smith_ui_cost_title_row(), costs + 1, attr);
+    if (get_sdl_bigger_font())
+        smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
+            smith_ui_cost_title_row(), costs + 1, attr);
 }
 
 static bool reforge_preview_missing_ability(const reforge_preview_type* preview)
@@ -8814,7 +8819,8 @@ static int smith_root_draw_header(void)
     int row = 0;
     int used;
 
-    if (smith_ui_term_hgt() <= 18 || smith_ui_term_wid() < 55)
+    if (get_sdl_bigger_font()
+        && (smith_ui_term_hgt() <= 18 || smith_ui_term_wid() < 55))
     {
         smith_ui_put_fitted(col, 0, width, TERM_L_WHITE + TERM_SHADE,
             "Smithing");
@@ -9002,8 +9008,11 @@ static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
     header_row = smith_root_draw_header();
     action_row = smith_root_draw_chrome(detail_col, list_w, header_row);
     int last_row = smith_ui_content_bottom_row();
-    int top = smith_ui_configure_list_view(SMITH_SCROLL_ROOT, SMT_MENU_MAX,
-        highlight, action_row, last_row);
+    int top = get_sdl_bigger_font()
+        ? smith_ui_configure_list_view(SMITH_SCROLL_ROOT, SMT_MENU_MAX,
+            highlight, action_row, last_row) : 0;
+    if (!get_sdl_bigger_font())
+        last_row = action_row + SMT_MENU_MAX;
 
     for (int i = top; i < SMT_MENU_MAX && action_row + i - top <= last_row; i++)
     {
@@ -9259,9 +9268,10 @@ int smithing_menu_aux(int* highlight)
 
     /* Place cursor at current choice */
     Term_gotoxy(indexed_menu_prefix_col(COL_SMT1),
-        MAX(action_row, MIN(smith_ui_content_bottom_row(),
-            action_row + *highlight - 1
-                - smith_ui_scroll_top[SMITH_SCROLL_ROOT])));
+        get_sdl_bigger_font()
+            ? MAX(action_row, MIN(smith_ui_content_bottom_row(),
+                action_row + *highlight - 1 - smith_ui_scroll_top[SMITH_SCROLL_ROOT]))
+            : action_row + *highlight - 1);
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;

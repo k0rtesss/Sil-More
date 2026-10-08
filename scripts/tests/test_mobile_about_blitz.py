@@ -68,6 +68,7 @@ static int steamdeck_confirm_key(void){return 13;}
 static int steamdeck_back_key(void){return ESCAPE;}
 static int steamdeck_menu_key(int k,int l,int r){return k;}
 static bool sdl_touch_only_device_active(void){return true;}
+static bool get_sdl_bigger_font(void){return true;}
 static void screen_save(void){restores++;}
 static void screen_load(void){restores--;}
 static void screen_push_supporting_panes_hidden(void){pane_depth++;}

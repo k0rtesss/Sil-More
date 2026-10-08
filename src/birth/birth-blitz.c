@@ -101,7 +101,7 @@ static void blitz_setup_draw(const blitz_setup* setup, int selected)
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
 
-    if (sdl_touch_only_device_active())
+    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
     {
         blitz_setup_draw_mobile(setup, selected);
         return;
@@ -307,7 +307,8 @@ static NavResult blitz_setup_menu(void)
         blitz_setup_clamp(setup);
     }
 
-    if (sdl_touch_only_device_active()) sdl_character_sheet_screen_hide();
+    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+        sdl_character_sheet_screen_hide();
     sdl_pop_terminal_menu_scale();
     screen_pop_touch_pane_hidden();
     screen_pop_supporting_panes_hidden();
@@ -898,4 +899,3 @@ NavResult blitz_auto_build_character(void)
 
     return NAV_OK;
 }
-

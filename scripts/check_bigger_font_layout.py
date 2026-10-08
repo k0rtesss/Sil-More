@@ -672,7 +672,9 @@ static void check_auto_font_metrics(void)
                 sdl_view actual={0};
                 fixture_assert(sdl_view_create(&actual,screen,config.monospace_font,
                     sdl_effective_pane_font_size_for_type(pane),0,0));
-                fixture_assert(actual.cell_h==sdl_effective_pane_cell_height_for_type(pane));
+                int expected=bigger?sdl_effective_pane_cell_height_for_type(pane)
+                    :(int)(g_state.system_scale*sdl_effective_pane_font_size_for_type(pane));
+                fixture_assert(actual.cell_h==expected);
                 sdl_view_destroy(&actual);
                 SDL_SetRenderTarget(g_state.renderer,NULL);
             }
@@ -702,9 +704,11 @@ static void check(int width,int height)
     int pane=sdl_main_menu_pane_font_px();
     int normal=check_settings(8,"General Settings");
     config.bigger_font=true;
-    fixture_assert(sdl_main_menu_pane_font_px()==(pane*3+1)/2);
+    /* Phone big-font menus use semantic reading sizes. Normal menus retain
+     * their original fitted fonts, verified against pre-feature sources. */
+    fixture_assert(sdl_main_menu_pane_font_px()==sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
     int large=check_settings(8,"General Settings");
-    fixture_assert(large==(normal*3+1)/2);
+    fixture_assert(large==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
     check_settings(80,"Overflow Settings");
     check_actual_general();
     check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_large_tutorial(); check_welcome_cache();
