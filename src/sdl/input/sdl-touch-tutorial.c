@@ -3094,6 +3094,7 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         22.0f, 36.0f);
     bool mobile = sdl_touch_only_mobile_device_active();
     int n = 0;
+    int page_lines = 0;
 
     max_box_w = (float)screen->w - pad * 2.0f;
     if (max_box_w <= 40.0f)
@@ -3119,17 +3120,52 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
     if (box_w > max_box_w)
         box_w = max_box_w;
 
+    box.x = (float)screen->x + ((float)screen->w - box_w) * 0.5f;
+    box.y = min_y;
+    avail_h = footer_top - min_y;
+    if (config.bigger_font && zone && zone->w > 1.0f && zone->h > 1.0f)
+    {
+        /* Read a few lines at a time beside the real control. In portrait
+         * use the larger clear band above/below it; landscape can use a side
+         * column when a wheel occupies most of the screen height. */
+        float below_y = MAX(min_y, zone->y + zone->h + pad);
+        float above_bottom = MIN(footer_top, zone->y - pad);
+        float below_h = footer_top - below_y;
+        float above_h = above_bottom - min_y;
+        float one_line_h = pad * 2.0f + title_px * 1.30f + 6.0f
+            + detail_px * 1.30f;
+        if (MAX(above_h, below_h) >= one_line_h)
+        {
+            if (below_h >= above_h) {
+                box.y = below_y;
+                avail_h = below_h;
+            } else {
+                avail_h = above_h;
+            }
+        }
+        else if (screen->w > screen->h)
+        {
+            float left_w = zone->x - screen->x - pad * 2.0f;
+            float right_x = zone->x + zone->w + pad;
+            float right_w = screen->x + screen->w - pad - right_x;
+            if (MAX(left_w, right_w) >= MAX(200.0f, detail_px * 5.0f))
+            {
+                box_w = MAX(left_w, right_w);
+                box.x = right_w >= left_w ? right_x : screen->x + pad;
+            }
+        }
+    }
+
     text_w = box_w - pad * 2.0f;
     if (text_w < 40.0f)
         return;
 
-    avail_h = footer_top - min_y;
-    if (avail_h < (float)screen->h * 0.40f)
+    if (!config.bigger_font && avail_h < (float)screen->h * 0.40f)
         avail_h = (float)screen->h * 0.82f;
 
     /* Fit the complete wrapped explanation without shrinking it to the old
      * tiny mobile floor.  A wider box leaves room for the larger type. */
-    {
+    if (!config.bigger_font) {
         int initial_title_px = title_px;
         int title_gap = MAX(initial_title_px - detail_px, 8);
         int min_px = mobile ? sdl_touch_tutorial_readable_body_px(32) : 18;
@@ -3169,10 +3205,24 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
             text_w)) * (float)title_px * 1.30f
         : (float)title_px * 1.25f;
     box_h = pad * 2.0f + title_h + 6.0f + (float)n * line_h;
+    if (config.bigger_font)
+    {
+        float fixed_h = pad * 2.0f + title_h + 6.0f;
+        page_lines = MAX(1, (int)((avail_h - fixed_h) / line_h));
+        tutorial_panel_parts = MAX(1, (n + page_lines - 1) / page_lines);
+        tutorial_panel_part = MIN(tutorial_panel_part, tutorial_panel_parts - 1);
+        box_h = fixed_h + MIN(page_lines,
+            n - tutorial_panel_part * page_lines) * line_h;
+    }
+    else
+    {
+        tutorial_panel_part = 0;
+        tutorial_panel_parts = 1;
+    }
 
     /* Place beside the block: below it if there is room, else above, else at the
      * top of the free area; centred when no block is supplied. */
-    if (zone && zone->w > 1.0f && zone->h > 1.0f) {
+    if (!config.bigger_font && zone && zone->w > 1.0f && zone->h > 1.0f) {
         box.x = zone->x + zone->w * 0.5f - box_w * 0.5f;
         if (zone->y + zone->h + box_h + pad <= footer_top)
             box.y = zone->y + zone->h + pad;
@@ -3180,7 +3230,7 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
             box.y = zone->y - box_h - pad;
         else
             box.y = min_y;
-    } else {
+    } else if (!config.bigger_font) {
         box.x = (float)screen->x + ((float)screen->w - box_w) * 0.5f;
         box.y = min_y;
     }
@@ -3211,8 +3261,13 @@ static void birth_coach_draw_callout(const SDL_Rect* screen,
         (void)sdl_touch_tutorial_draw_text_line(title,
             box.x + box.w * 0.5f, y, text_w, title_px, title_color, true);
     y += title_h + 6.0f;
-    (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
-        detail_px, text_color);
+    if (config.bigger_font)
+        (void)sdl_touch_tutorial_rich_draw_lines(body, box.x + pad, y, text_w,
+            detail_px, text_color, false, true,
+            tutorial_panel_part * page_lines, page_lines);
+    else
+        (void)sdl_touch_tutorial_draw_rich(body, box.x + pad, y, text_w,
+            detail_px, text_color);
 }
 
 /* Draw one step: dim the screen, frame the target block, and pin a detailed
@@ -3261,6 +3316,8 @@ static void birth_coach_run_overlay(int stage)
         return;
 
     mouse = !sdl_touch_tutorial_device_available();
+    tutorial_panel_part = 0;
+    tutorial_panel_parts = 1;
     sdl_touch_cancel_all_inputs();
     d = sdl_view_from_term(Term);
     /* Brief guard so the tap/click that opened the coach does not dismiss it. */
@@ -3312,16 +3369,8 @@ static void birth_coach_run_overlay(int stage)
         /* Re-arm the guard so a held key/tap does not skip several steps. */
         accept_after_ns = SDL_GetTicksNS() + 90000000ULL;
 
-        if (action == 2) {
-            break;                       /* Esc / quit closes the tour */
-        } else if (action > 0) {
-            if (idx + 1 >= count)
-                break;                   /* past the last step -> close */
-            idx++;
-        } else if (action < 0) {
-            if (idx > 0)
-                idx--;                   /* page back */
-        }
+        if (sdl_touch_tutorial_navigate(&idx, count, action))
+            break;
         /* action == 0: window resize or redraw request -> draw again */
     }
 
@@ -3332,6 +3381,8 @@ static void birth_coach_run_overlay(int stage)
     }
     g_state.need_present = false;
     sdl_touch_cancel_all_inputs();
+    tutorial_panel_part = 0;
+    tutorial_panel_parts = 1;
 }
 
 void birth_coach_show(int stage)
@@ -4159,6 +4210,7 @@ static bool sdl_character_wheel_coach_run(void)
     int input;
     bool shown = false;
     bool gameplay_was_visible;
+    int page = 0;
 
     if (!g_state.window || !g_state.renderer)
         return false;
@@ -4171,6 +4223,8 @@ static bool sdl_character_wheel_coach_run(void)
     }
 
     input = sdl_character_wheel_coach_input();
+    tutorial_panel_part = 0;
+    tutorial_panel_parts = 1;
     d = sdl_view_from_term(Term);
     sdl_touch_cancel_all_inputs();
     /* Brief guard so the tap/click that began the turn does not dismiss it. */
@@ -4225,8 +4279,8 @@ static bool sdl_character_wheel_coach_run(void)
         action = sdl_touch_tutorial_wait_action(accept_after_ns);
         /* Re-arm the guard so a held key/tap does not skip ahead. */
         accept_after_ns = SDL_GetTicksNS() + 90000000ULL;
-        if (action != 0)
-            break;       /* any confirm/back/cancel closes this single page */
+        if (sdl_touch_tutorial_navigate(&page, 1, action))
+            break;
         /* action == 0: window resize or redraw request -> draw again */
     }
 
@@ -4237,6 +4291,8 @@ static bool sdl_character_wheel_coach_run(void)
     }
     g_state.need_present = false;
     sdl_touch_cancel_all_inputs();
+    tutorial_panel_part = 0;
+    tutorial_panel_parts = 1;
     sdl_device_tutorial_restore_gameplay(gameplay_was_visible);
     return shown;
 }

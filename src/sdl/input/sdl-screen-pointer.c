@@ -1005,7 +1005,7 @@ bool sdl_welcome_touch_handle_pointer_down(float x, float y,
     int slot = -1;
 
     if (!sdl_screen_shows_welcome_screen()
-        && !(get_sdl_bigger_font() && sdl_pause_text_screen_active()))
+        && !(get_sdl_menu_bigger_font() && sdl_pause_text_screen_active()))
         return false;
     if (sdl_touch_pane_point_to_slot(x, y, &slot) && slot >= 0)
         return false;
@@ -1062,7 +1062,7 @@ bool sdl_welcome_touch_handle_pointer_motion(float x, float y,
     if (g_welcome_pager_dragged) return true;
     /* Enlarged welcome screens advance only on a short tap. Suppress the
      * legacy horizontal swipe actions, including drags outside the text. */
-    if (get_sdl_bigger_font() && sdl_welcome_screen_active()) {
+    if (get_sdl_menu_bigger_font() && sdl_welcome_screen_active()) {
         g_welcome_pager_dragged = true;
         return true;
     }
@@ -2171,7 +2171,7 @@ bool sdl_minimap_handle_control_point(float x, float y)
     }
 
     /* The header and help bar own their pixels even between buttons. */
-    return get_sdl_bigger_font()
+    return get_sdl_menu_bigger_font()
         && !sdl_minimap_point_in_rect(x, y, &g_minimap.viewport_rect);
 }
 
@@ -2236,7 +2236,7 @@ bool sdl_minimap_grid_at_canvas_point(float x, float y,
         return false;
     if (!g_minimap.map_layout_valid)
         return false;
-    if (get_sdl_bigger_font()
+    if (get_sdl_menu_bigger_font()
         && !sdl_minimap_point_in_rect(x, y, &g_minimap.viewport_rect))
         return false;
     if (!sdl_minimap_point_in_rect(x, y, &g_minimap.map_rect))
@@ -2274,7 +2274,7 @@ bool sdl_minimap_hint_source_at_canvas_point(float x, float y,
 
     if (!g_minimap.skeleton_hints_visible || !g_minimap.map_layout_valid)
         return false;
-    if (get_sdl_bigger_font()
+    if (get_sdl_menu_bigger_font()
         && !sdl_minimap_point_in_rect(x, y, &g_minimap.viewport_rect))
         return false;
 
@@ -3055,9 +3055,9 @@ void sdl_minimap_layout_controls(const sdl_view* d, int canvas_w,
     if (!g_minimap.active || !d || canvas_w <= 0 || canvas_h <= 0)
         return;
 
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
         TTF_Font* font = sdl_main_menu_mono_font_for_height(
-            sdl_ui_role_font_px(SDL_UI_FONT_META));
+            sdl_menu_role_font_px(SDL_UI_FONT_META));
         int text_h = 0;
         int columns;
         int rows;
@@ -3269,7 +3269,7 @@ void sdl_minimap_draw_controls(sdl_view* d, int canvas_w, int canvas_h)
         return;
 
     sdl_minimap_layout_controls(d, canvas_w, canvas_h);
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
         SDL_FRect header = {0, 0, (float)canvas_w,
             g_minimap.viewport_rect.y};
         SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
@@ -3296,9 +3296,9 @@ void sdl_minimap_draw_prompt(sdl_view* d, int canvas_w, int canvas_h)
     if (!g_minimap.active || !d || d->rows <= 0 || d->cols <= 0)
         return;
 
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
         TTF_Font* font = sdl_main_menu_mono_font_for_height(
-            sdl_ui_role_font_px(SDL_UI_FONT_META));
+            sdl_menu_role_font_px(SDL_UI_FONT_META));
         int text_w = 0;
         int text_h = 0;
         float pad = SDL_ceilf(sdl_ui_density_scale() * 8.0f);

@@ -34,6 +34,8 @@ static SDL_FRect cards[8], footer;
 static int card_count, active_card = -1, texture_count;
 static char drawn_words[8192];
 static bool fixture_render_ok = true;
+static float fixture_density=1;
+float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display) { return fixture_density; }
 static int direction_count, direction_sent;
 static bool direction_ctrl, direction_run;
 
@@ -66,7 +68,7 @@ bool __wrap_SDL_RenderRect(SDL_Renderer *renderer, const SDL_FRect *r)
     SDL_GetRenderDrawColor(renderer, &red, &green, &blue, &alpha);
     active_card = -1;
     if (red == 255 && green == 255 && blue == 0
-        && (alpha == 230 || alpha == 235 || alpha == 236)) {
+        && (alpha == 230 || alpha == 235 || alpha == 236 || alpha == 242)) {
         check(card_count < 8, "too many cards");
         active_card = card_count;
         cards[card_count++] = *r;
@@ -370,6 +372,49 @@ static void wheel_gestures(void)
     }
     puts("Wheel step, long press, inner drag, outer-rim run, and center repeat: PASS");
 }
+
+static void large_coach(int width, int height, float density, bool wheel)
+{
+    fixture_screen=(SDL_Rect){0,0,width,height};
+    fixture_mobile=true; fixture_font=48; fixture_page=0;
+    g_state.system_scale=density; fixture_density=density; config.bigger_font=true;
+    g_state.window=SDL_CreateWindow("Large coach fixture",width,height,SDL_WINDOW_HIDDEN);
+    check(g_state.window!=NULL,"coach window");
+    g_state.renderer=SDL_CreateRenderer(g_state.window,"software");
+    check(g_state.renderer!=NULL,"coach renderer");
+    SDL_FRect zone=width<height
+        ? (SDL_FRect){100,14,width-140,height*.45f}
+        : (SDL_FRect){width*.40f,20,height-40,height-40};
+    char body[2048], all_words[32768]="";
+    cptr text=wheel?sdl_character_wheel_coach_body(SDL_WHEEL_COACH_INPUT_TOUCH,body,sizeof(body))
+        :birth_coach_body_for_step(&birth_coach_stats_step,body,sizeof(body));
+    int page=0, rendered=0;
+    tutorial_panel_part=0; tutorial_panel_parts=1;
+    for(;;) {
+        card_count=0; active_card=-1; drawn_words[0]=0;
+        footer=(SDL_FRect){0};
+        birth_coach_draw_callout(&fixture_screen,&zone,
+            wheel?"Action wheel":"Assign attributes",text,MIN(120,width<height?height*.12f:40));
+        sdl_touch_tutorial_draw_footer(&fixture_screen,false,true);
+        check(card_count==1,"coach card missing");
+        check(cards[0].y+cards[0].h<=footer.y,"coach overlaps footer");
+        if(wheel) check(!SDL_HasRectIntersectionFloat(&zone,&cards[0]),"coach covers action wheel");
+        SDL_strlcat(all_words,drawn_words,sizeof(all_words));
+        check(++rendered<64,"coach continuation did not finish");
+        if(sdl_touch_tutorial_navigate(&page,1,1)) break;
+    }
+    if(height<=1280 || width>height)
+        check(rendered>1,"large coach did not paginate");
+    check(strstr(all_words,wheel?"outside":"budget")!=NULL,"last instruction disappeared");
+    if(rendered>1) check(strstr(all_words,"Text")!=NULL,"coach continuation not labelled");
+    sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
+    SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
+    SDL_DestroyWindow(g_state.window); g_state.window=NULL;
+    tutorial_panel_part=0; tutorial_panel_parts=1;
+    config.bigger_font=false; g_state.system_scale=1; fixture_density=1;
+    printf("Large %s coach %dx%d @%.1f: %d complete pages, clear wheel/footer: PASS\n",
+        wheel?"wheel":"attributes",width,height,density,rendered);
+}
 int main(int argc, char **argv)
 {
     maxima limits = {0}; player_type player = {0};
@@ -403,6 +448,15 @@ int main(int argc, char **argv)
         paint(1280, 720, false, 24, 0, profile);
     }
     wheel_gestures();
+    large_coach(720,1280,2,false);
+    large_coach(720,1280,2,true);
+    large_coach(1280,720,2,true);
+    large_coach(360,640,1,false);
+    large_coach(1080,2400,2.75f,false);
+    large_coach(1080,2400,2.75f,true);
+    large_coach(2400,1080,2.75f,true);
+    large_coach(720,1600,2,false);
+    large_coach(720,1600,2,true);
     TTF_Quit(); SDL_Quit();
     return 0;
 }
@@ -433,7 +487,7 @@ def main():
              "sdl_view_is_overlay_log_pane",
              "sdl_main_cell_rect", "sdl_touch_top_panel_compute_layout_for_display",
              "sdl_touch_round_compute_layout", "sdl_render_current_window_frame"]
-    wraps.append("sdl_gamepad_send_direction_mods")
+    wraps.extend(["sdl_gamepad_send_direction_mods","SDL_GetDisplayContentScale"])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),

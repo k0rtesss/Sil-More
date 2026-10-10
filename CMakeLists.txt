@@ -393,6 +393,7 @@ set(SIL_MORE_SOURCES
     src/sdl/ui/sdl-pane-menus.c
     src/sdl/ui/sdl-panes.c
     src/sdl/ui/sdl-screens.c
+    src/sdl/ui/sdl-menu-font.c
     src/sdl/ui/sdl-song-menu.c
     src/sdl/ui/sdl-gameplay-tutorial.c
     src/sdl/ui/sdl-question-menu.c

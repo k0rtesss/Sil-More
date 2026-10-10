@@ -4651,7 +4651,7 @@ void sdl_build_supporting_pane_metrics(const struct pane_config* configs,
          * changes how the main term is rendered inside that rectangle. */
         int main_scale = sdl_main_view_layout_scale();
 
-        cell_heights[PANE_MAIN] = sdl_ui_font_px(main_scale * TILE_SIZE);
+        cell_heights[PANE_MAIN] = sdl_main_view_font_px(main_scale * TILE_SIZE);
         cell_widths[PANE_MAIN] = cell_heights[PANE_MAIN] / 2;
     }
 
@@ -5244,7 +5244,7 @@ void sdl_compute_pruned_split_panes_for_mode_ex(const SDL_Rect* screen,
         g_auto_aux_main_cell_h_override = layout_scale * TILE_SIZE;
     }
 
-    cell_h = sdl_ui_font_px(scale * TILE_SIZE);
+    cell_h = sdl_main_view_font_px(scale * TILE_SIZE);
     cell_w = cell_h / 2;
     sdl_place_active_panes_fitting_main(screen, target_panes, include_side,
         include_bottom, false, &include_side, &include_bottom);
@@ -5460,8 +5460,8 @@ int sdl_max_scale_for_rect_mode(const SDL_Rect* rect, int mode)
 
     min_cols = sdl_min_terminal_cols_for_mode(mode);
     min_rows = sdl_min_terminal_rows_for_mode(mode);
-    max_scale_w = (rect->w / min_cols) * 2 / sdl_ui_font_px(TILE_SIZE);
-    max_scale_h = rect->h / min_rows / sdl_ui_font_px(TILE_SIZE);
+    max_scale_w = (rect->w / min_cols) * 2 / sdl_main_view_font_px(TILE_SIZE);
+    max_scale_h = rect->h / min_rows / sdl_main_view_font_px(TILE_SIZE);
     max_scale = (max_scale_w < max_scale_h) ? max_scale_w : max_scale_h;
 
     if (max_scale < SDL_MAIN_VIEW_MIN_SCALE)
@@ -5707,9 +5707,9 @@ void sdl_ensure_window_size_for_min_terminal(const SDL_Rect* screen,
 
     min_scale = sdl_main_view_scale_floor();
     min_width = sdl_current_min_terminal_cols()
-        * (sdl_ui_font_px(min_scale * TILE_SIZE) / 2);
+        * (sdl_main_view_font_px(min_scale * TILE_SIZE) / 2);
     min_height = sdl_current_min_terminal_rows()
-        * sdl_ui_font_px(min_scale * TILE_SIZE);
+        * sdl_main_view_font_px(min_scale * TILE_SIZE);
 
     if (min_width < 1)
         min_width = 1;
@@ -5991,6 +5991,45 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
 
     log_info("First-start mobile orientation: landscape");
     return false;
+}
+
+bool sdl_prompt_mobile_startup_bigger_font(void)
+{
+    if (g_startup_device_class != SDL_STARTUP_DEVICE_MOBILE_TOUCH
+        || sdl_mobile_device_is_tablet())
+        return false;
+
+    enum { NORMAL_FONT = 0, BIG_FONT = 1 };
+    SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT
+            | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
+            NORMAL_FONT, "Normal font (recommended)"},
+        {0, BIG_FONT, "Big font"},
+    };
+    SDL_MessageBoxData messagebox = {
+        .flags = SDL_MESSAGEBOX_INFORMATION | SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT,
+        .window = g_state.window,
+        .title = "Choose Font Size",
+        .message = "Normal font is recommended for a more beautiful game.\n\n"
+            "Big font makes the game less beautiful, but can help if smaller "
+            "text is difficult for you to read.\n\n"
+            "You can always change this in General Settings > Big Font, "
+            "for everything together or one menu at a time.\n\n"
+            "Big font shows a B button in menu corners. Tap B to switch "
+            "that menu between normal and big text in real time. "
+            "Normal font starts with B hidden. You can turn B on or off "
+            "in General Settings > Big Font.",
+        .numbuttons = N_ELEMENTS(buttons),
+        .buttons = buttons,
+    };
+    int choice = NORMAL_FONT;
+    if (!SDL_ShowMessageBox(&messagebox, &choice)) {
+        log_warn("SDL_ShowMessageBox failed during first-start font selection: %s",
+            SDL_GetError());
+        return false;
+    }
+    log_info("First-start mobile font size: %s", choice == BIG_FONT ? "big" : "normal");
+    return choice == BIG_FONT;
 }
 
 #endif

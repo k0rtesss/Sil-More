@@ -235,6 +235,45 @@ typedef struct gamepad_dpad_source_override {
     int source;
 } gamepad_dpad_source_override;
 
+/* Stable keys for independently sized reading surfaces.  These are UI config,
+ * not savefile fields; keep their JSON names stable. */
+enum sdl_menu_font {
+    SDL_MENU_FONT_NONE = -1,
+    SDL_MENU_FONT_MAIN = 0,
+    SDL_MENU_FONT_INVENTORY, /* Equipped, Inventory, Jewelry, and Supplies tabs. */
+    SDL_MENU_FONT_ABILITIES,
+    SDL_MENU_FONT_CHARACTER,
+    SDL_MENU_FONT_SMITHING,
+    SDL_MENU_FONT_SETTINGS,
+    SDL_MENU_FONT_KNOWLEDGE,
+    SDL_MENU_FONT_HELP,
+    SDL_MENU_FONT_MESSAGES,
+    SDL_MENU_FONT_SCORES,
+    SDL_MENU_FONT_SONGS,
+    SDL_MENU_FONT_QUESTS,
+    SDL_MENU_FONT_BIRTH,
+    SDL_MENU_FONT_NARRATIVE,
+    SDL_MENU_FONT_QUESTIONS,
+    SDL_MENU_FONT_LOG_OPTIONS,
+    SDL_MENU_FONT_PANE_OPTIONS,
+    SDL_MENU_FONT_LOOK,
+    SDL_MENU_FONT_COUNT
+};
+const char* sdl_menu_font_key(enum sdl_menu_font menu);
+const char* sdl_menu_font_label(enum sdl_menu_font menu);
+bool get_sdl_menu_bigger_font(void);
+bool get_sdl_menu_bigger_font_for(enum sdl_menu_font menu);
+void set_sdl_menu_bigger_font(enum sdl_menu_font menu, bool value);
+void set_sdl_all_bigger_fonts(bool value);
+bool get_sdl_show_menu_font_button(void);
+void set_sdl_show_menu_font_button(bool value);
+void sdl_refresh_terminal_menu_scale(void);
+void sdl_push_terminal_menu_scale_for(enum sdl_menu_font menu);
+void sdl_set_terminal_menu_font(enum sdl_menu_font menu);
+enum sdl_menu_font sdl_terminal_menu_font(void);
+void sdl_question_menu_set_font_menu(enum sdl_menu_font menu);
+void sdl_character_sheet_screen_set_font_menu(enum sdl_menu_font menu);
+
 // SDL-specific configuration structure
 struct sdl_config {
     int main_view_scale;
@@ -242,8 +281,10 @@ struct sdl_config {
     int terminal_menu_scale_offset;
     // Use focus-dependent compact layouts for Inventory-style browsers.
     bool compact_inventory_menus;
-    // Enlarge all UI text and use readable, reflowed mobile menu layouts.
+    // Enlarge gameplay UI text. Menus have independent choices below.
     bool bigger_font;
+    bool menu_bigger_font[SDL_MENU_FONT_COUNT];
+    bool show_menu_font_button;
     // Use the paginated Big font character sheet (legacy JSON key retained).
     bool debug_character_sheet;
     // Extra scale steps applied when mobile gameplay first appears.

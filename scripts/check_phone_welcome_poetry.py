@@ -82,9 +82,27 @@ static void welcome(void)
         fixture_assert(count>0);
         for(int i=0;i<count;i++) {
             int w=0,h=0;
+            cptr text=sdl_welcome_display_text(lines[i].source->text);
             fixture_assert(TTF_GetStringSizeWrapped(lines[i].font,
-                sdl_welcome_display_text(lines[i].source->text),0,(int)lines[i].box.w,&w,&h));
+                text,0,config.bigger_font?(int)lines[i].box.w:0,&w,&h));
             fixture_assert(lines[i].box.h+1>=h);
+            if(i>0)
+                fixture_assert(lines[i].box.y>=lines[i-1].box.y+lines[i-1].box.h);
+            if(strchr(text,'\n')) {
+                int authored_lines=1;
+                for(cptr p=text;*p;p++) if(*p=='\n') authored_lines++;
+                fixture_assert(h>=TTF_GetFontHeight(lines[i].font)
+                    +(authored_lines-1)*TTF_GetFontLineSkip(lines[i].font));
+                if(!config.bigger_font) {
+                    SDL_FRect actual=sdl_welcome_draw_text_box(lines[i].font,text,
+                        lines[i].source->attr,lines[i].box,lines[i].centered);
+                    if(SDL_fabsf(actual.w-w)>1 || SDL_fabsf(actual.h-h)>1)
+                        fprintf(stderr,"style %d block %d: measured %dx%d, drawn %.1fx%.1f, box %.1fx%.1f\n",
+                            style,i,w,h,actual.w,actual.h,lines[i].box.w,lines[i].box.h);
+                    fixture_assert(SDL_fabsf(actual.h-h)<=1);
+                    fixture_assert(SDL_fabsf(actual.w-w)<=1);
+                }
+            }
             TTF_Font* expected=sdl_story_font_for_height_slot(
                 sdl_welcome_font_px_for_role(metrics.base_px,lines[i].source->role),
                 sdl_welcome_slot_for_role(lines[i].source->role));
@@ -263,7 +281,11 @@ static void poetry(void)
         angband_color_table[i][1]=angband_color_table[i][2]=angband_color_table[i][3]=220;
     }
     indicator();
-    for(int big=0;big<2;big++) {config.bigger_font=big;fixture.active=false;welcome();if(big) poetry();}
+    for(int big=0;big<2;big++) {
+        config.bigger_font=big;
+        for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=big;
+        fixture.active=false;welcome();if(big) poetry();
+    }
     printf("Welcome/poetry %dx%d @%.3f: Off/On, all intros, corner close, short taps, continuous/suppressed drags, big text1:1/prompts PASS\n",
         fixture_width,fixture_height,fixture_density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);

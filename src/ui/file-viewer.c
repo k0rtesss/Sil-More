@@ -7,6 +7,7 @@
  */
 #include "angband.h"
 #include "ui/file-viewer.h"
+#include "ui/menu-click.h"
 #include "fs/io_sdl.h"
 #include "externs.h"
 #include "log/log.h"
@@ -172,6 +173,22 @@ static void file_viewer_draw_prompt(int row, int wid, bool large_file)
  * Based on show_file.
  */
 /* Preserve normal-mode file layout and navigation before big-font reflow. */
+typedef struct file_viewer_redraw {
+    bool restart;
+    int line;
+} file_viewer_redraw;
+static file_viewer_redraw* current_viewer_redraw;
+
+static bool file_viewer_restart_at(int line)
+{
+    if (!current_viewer_redraw)
+        return false;
+    current_viewer_redraw->restart = true;
+    current_viewer_redraw->line = line;
+    ui_scroll_area_clear();
+    return true;
+}
+
 static bool show_buffer_normal(cptr main_buffer, int line)
 {
     if (!main_buffer)
@@ -272,6 +289,9 @@ static bool show_buffer_normal(cptr main_buffer, int line)
 
         /* Get a keypress */
         ch = inkey();
+        if (ch == UI_MENU_CLICK_WAKE_KEY && file_viewer_restart_at(line)) {
+            return true;
+        }
         ch = (char)steamdeck_menu_key(ch, '9', '3');
 
         dir = target_dir(ch);
@@ -320,9 +340,9 @@ static bool show_buffer_normal(cptr main_buffer, int line)
     return (true);
 }
 
-bool show_buffer(cptr main_buffer, int line)
+static bool show_buffer_sized(cptr main_buffer, int line)
 {
-    if (!get_sdl_bigger_font())
+    if (!get_sdl_menu_bigger_font())
         return show_buffer_normal(main_buffer, line);
     if (!main_buffer)
         return false;
@@ -392,6 +412,9 @@ bool show_buffer(cptr main_buffer, int line)
 
         /* Get a keypress */
         ch = inkey();
+        if (ch == UI_MENU_CLICK_WAKE_KEY && file_viewer_restart_at(line)) {
+            return true;
+        }
         ch = (char)steamdeck_menu_key(ch, '9', '3');
 
         dir = target_dir(ch);
@@ -776,6 +799,10 @@ static bool show_file_normal(cptr name, cptr what, int line)
 
         /* Get a keypress */
         ch = inkey();
+        if (ch == UI_MENU_CLICK_WAKE_KEY && file_viewer_restart_at(line)) {
+            sdl_fclose(fff);
+            return true;
+        }
         ch = (char)steamdeck_menu_key(ch, '9', '3');
         bool controller_confirm =
             steamdeck_controls_active() && (ch == '\r' || ch == '\n');
@@ -895,9 +922,9 @@ static bool show_file_normal(cptr name, cptr what, int line)
     return (ch != '?');
 }
 
-bool show_file(cptr name, cptr what, int line)
+static bool show_file_sized(cptr name, cptr what, int line)
 {
-    if (!get_sdl_bigger_font())
+    if (!get_sdl_menu_bigger_font())
         return show_file_normal(name, what, line);
     int i, k, n;
 
@@ -1211,6 +1238,10 @@ bool show_file(cptr name, cptr what, int line)
 
         /* Get a keypress */
         ch = inkey();
+        if (ch == UI_MENU_CLICK_WAKE_KEY && file_viewer_restart_at(line)) {
+            sdl_fclose(fff);
+            return true;
+        }
         ch = (char)steamdeck_menu_key(ch, '9', '3');
         bool controller_confirm =
             steamdeck_controls_active() && (ch == '\r' || ch == '\n');
@@ -1330,4 +1361,41 @@ bool show_file(cptr name, cptr what, int line)
 
     /* Done */
     return (ch != '?');
+}
+
+/* Preserve the caller's reading surface when a viewer opens inside a menu. */
+bool show_buffer(cptr main_buffer, int line)
+{
+    enum sdl_menu_font menu = sdl_terminal_menu_font();
+    sdl_push_terminal_menu_scale_for(menu == SDL_MENU_FONT_NONE ? SDL_MENU_FONT_HELP : menu);
+    file_viewer_redraw redraw = { false, line };
+    file_viewer_redraw* previous = current_viewer_redraw;
+    current_viewer_redraw = &redraw;
+    bool result;
+    do {
+        redraw.restart = false;
+        result = show_buffer_sized(main_buffer, line);
+        line = redraw.line;
+    } while (redraw.restart);
+    current_viewer_redraw = previous;
+    sdl_pop_terminal_menu_scale();
+    return result;
+}
+
+bool show_file(cptr name, cptr what, int line)
+{
+    enum sdl_menu_font menu = sdl_terminal_menu_font();
+    sdl_push_terminal_menu_scale_for(menu == SDL_MENU_FONT_NONE ? SDL_MENU_FONT_HELP : menu);
+    file_viewer_redraw redraw = { false, line };
+    file_viewer_redraw* previous = current_viewer_redraw;
+    current_viewer_redraw = &redraw;
+    bool result;
+    do {
+        redraw.restart = false;
+        result = show_file_sized(name, what, line);
+        line = redraw.line;
+    } while (redraw.restart);
+    current_viewer_redraw = previous;
+    sdl_pop_terminal_menu_scale();
+    return result;
 }

@@ -434,6 +434,9 @@ errr init_sdl(int argc, char **argv)
         bool startup_portrait =
             g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
             && sdl_prompt_mobile_startup_portrait_mode();
+        bool startup_bigger_font =
+            g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
+            && sdl_prompt_mobile_startup_bigger_font();
 
         config.mobile_portrait_mode = startup_portrait;
         if (startup_portrait) {
@@ -452,6 +455,10 @@ errr init_sdl(int argc, char **argv)
 #endif
         sdl_apply_first_start_device_defaults(g_startup_device_class);
 #if SIL_SDL_MOBILE_BUILD
+        if (g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH) {
+            set_sdl_all_bigger_fonts(startup_bigger_font);
+            set_sdl_show_menu_font_button(startup_bigger_font);
+        }
         {
             int quick_access_count = get_sdl_touch_top_panel_cell_count();
             bool has_main_menu_shortcut = false;

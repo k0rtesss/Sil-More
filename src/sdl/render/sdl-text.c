@@ -161,8 +161,8 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     if (!g_state.renderer || !font || !text_value || !text_value[0])
         return NULL;
 
-    wrap_alignment = wrap_width > 0 ? TTF_GetFontWrapAlignment(font)
-                                   : TTF_HORIZONTAL_ALIGN_LEFT;
+    wrap_alignment = wrap_width > 0 || strchr(text_value, '\n')
+        ? TTF_GetFontWrapAlignment(font) : TTF_HORIZONTAL_ALIGN_LEFT;
 
     for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
         sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
@@ -185,7 +185,8 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
         return entry->texture;
     }
 
-    surface = wrap_width > 0
+    /* Zero width preserves forced verse/stanza breaks without soft wrapping. */
+    surface = wrap_width > 0 || strchr(text_value, '\n')
         ? TTF_RenderText_Blended_Wrapped(font, text_value, 0, white,
             wrap_width)
         : TTF_RenderText_Blended(font, text_value, 0, white);

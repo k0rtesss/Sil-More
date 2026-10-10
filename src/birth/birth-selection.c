@@ -515,8 +515,8 @@ static bool get_player_race(bool open_on_choice_page)
     /* Group headings: Noldor (its lineages), then the other peoples. */
     if (num > 0)
         headings[0] =
-            "The Noldor \xe2\x80\x94 exiled High Elves of three royal houses, "
-            "whose names you may take:";
+            "The Noldor \xe2\x80\x94 exiled High Elves\n"
+            "of three royal houses, whose names you may take:";
     if (noldor_count > 0 && noldor_count < num)
         headings[noldor_count] = "The other free peoples of Beleriand:";
 

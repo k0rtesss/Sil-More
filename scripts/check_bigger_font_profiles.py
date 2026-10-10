@@ -83,6 +83,17 @@ static void check_default(struct sdl_pane_profile *p) {
 }
 static void check_persistence(void) {
     defaults();
+    /* The startup tutorial reapplies the movement profile after Big Text. */
+    set_sdl_bigger_font(true);
+    for(int profile=0;profile<SDL_TOUCH_PROFILE_COUNT;profile++) {
+        sdl_touch_apply_profile(profile);
+        assert(config.touch_top_panel_cell_count==6);
+        assert(config.touch_top_panel_bindings[5]=='m');
+    }
+    config.touch_top_panel_cell_count=10;
+    sdl_touch_apply_profile(SDL_TOUCH_PROFILE_ROUND_WHEEL);
+    assert(config.touch_top_panel_cell_count==10);
+    defaults();
     for(int i=SDL_PANE_ORIENTATION_PROFILE_COUNT;i<SDL_PANE_PROFILE_COUNT;i++)
         check_default(&g_pane_profiles[i]);
     /* Each terminal size contains four independent font/orientation layouts. */

@@ -549,6 +549,7 @@ typedef struct menu_scroll_drag_state {
 
 typedef struct sdl_character_sheet_screen_state {
     sdl_character_sheet_context context;
+    enum sdl_menu_font font_menu;
     int focus_choice;
     int selected_index;
     int points_left;
@@ -1050,6 +1051,8 @@ typedef struct sdl_question_menu_button_state {
  * questions centre on the map view. */
 typedef struct sdl_question_menu_state {
     bool active;
+    enum sdl_menu_font font_menu;
+    SDL_FRect header_controls;
     bool blocking_input;
     bool nonblocking;
     bool context_hint;
@@ -2019,6 +2022,19 @@ void sdl_push_description_overlay_full_main_anchor(void);
 void sdl_pop_description_overlay_full_main_anchor(void);
 int sdl_main_menu_pane_font_px(void);
 int sdl_ui_font_px(int normal_px);
+int sdl_menu_font_px(int normal_px);
+int sdl_menu_base_aux_font_size(void);
+int sdl_menu_auto_font_size_from_main(int numerator, int denominator);
+int sdl_main_view_font_px(int normal_px);
+enum sdl_menu_font sdl_menu_font_current(void);
+enum sdl_menu_font sdl_character_sheet_menu_font(void);
+int sdl_menu_font_set_render_context(int menu);
+SDL_Rect sdl_menu_content_rect(SDL_Rect rect);
+SDL_FRect sdl_menu_font_button_bounds(void);
+void sdl_menu_font_button_render(void);
+void sdl_menu_font_button_clear_avoid_rects(void);
+void sdl_menu_font_button_avoid_rect(SDL_FRect rect);
+bool sdl_menu_font_button_handle_event(const SDL_Event* ev);
 enum sdl_ui_font_role {
     SDL_UI_FONT_BODY,
     SDL_UI_FONT_TITLE,
@@ -2027,6 +2043,7 @@ enum sdl_ui_font_role {
 };
 float sdl_ui_density_scale(void);
 int sdl_ui_role_font_px(enum sdl_ui_font_role role);
+int sdl_menu_role_font_px(enum sdl_ui_font_role role);
 int sdl_ui_min_tap_px(void);
 int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen);
 bool sdl_main_menu_pane_context_visible(void);
@@ -4346,6 +4363,7 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
     int screen_width, int screen_height);
 #if SIL_SDL_MOBILE_BUILD
 bool sdl_prompt_mobile_startup_portrait_mode(void);
+bool sdl_prompt_mobile_startup_bigger_font(void);
 #endif
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
 sdl_startup_device_class sdl_prompt_desktop_startup_input_device(

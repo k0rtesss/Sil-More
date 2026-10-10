@@ -1885,6 +1885,7 @@ static void run_history_show_native_list(run_history_entry* entries, int count)
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         sdl_question_menu_begin("Run History");
+        sdl_question_menu_set_font_menu(SDL_MENU_FONT_SCORES);
         ui_menu_click_set_outside_cancel_enabled(true);
         sdl_question_menu_set_desc(format("%d recorded runs. Sort: %s. Select a hero to open the complete record.",
             count, run_history_sort_label(order)));
@@ -1979,7 +1980,7 @@ void do_cmd_run_history(void)
         return;
     }
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font_for(SDL_MENU_FONT_SCORES)) {
         run_history_show_native_list(entries, count);
         return;
     }
@@ -1993,7 +1994,7 @@ void do_cmd_run_history(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SCORES);
 
     while (!done) {
         int term_wid = 80;
@@ -3510,6 +3511,7 @@ static void run_history_show_native_detail(const run_history_entry* entry,
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         sdl_question_menu_begin(format("Run #%u: %s", entry->record.record_id, player));
+        sdl_question_menu_set_font_menu(SDL_MENU_FONT_SCORES);
         ui_menu_click_set_outside_cancel_enabled(true);
         sdl_question_menu_set_desc(panel == RUN_PANEL_MONSTERS
             ? format("%s | %s | %s", run_detail_panel_names[panel],
@@ -3639,7 +3641,7 @@ static void run_history_show_detail(const run_history_entry* entry)
     const char* race_name = run_history_race_name(rec->race_id);
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font_for(SDL_MENU_FONT_SCORES)) {
         run_history_show_native_detail(entry, &details, current_run, player, race_name,
             status, created, completed);
         if (have_details) score_runs_free_details(&details);
@@ -3665,7 +3667,7 @@ static void run_history_show_detail(const run_history_entry* entry)
     int stats_total_lines = 0;
 
     screen_save();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SCORES);
 
     while (!done) {
         bool steamdeck = steamdeck_controls_active();

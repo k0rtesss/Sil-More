@@ -1067,7 +1067,6 @@ void do_cmd_character_sheet(void)
     char ch;
     int focus_item = -1;
     bool focus_from_pointer = false;
-    bool big_font_sheet = config.debug_character_sheet || get_sdl_bigger_font();
 
     /* Clear any active banner before opening character sheet */
     if (dismiss_active_narrative_banner()) {
@@ -1078,12 +1077,15 @@ void do_cmd_character_sheet(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_CHARACTER);
     sdl_screen_back_gesture_begin();
 
     /* Forever */
     while (1)
     {
+        /* Large text uses the live paginated sheet, including skill hits and
+         * action buttons. Only the explicit debug view is read-only. */
+        bool big_font_sheet = config.debug_character_sheet;
         if (big_font_sheet)
         {
             bool saved_hide_cursor = hide_cursor;
@@ -1097,6 +1099,8 @@ void do_cmd_character_sheet(void)
             hide_cursor = true;
             ch = inkey();
             hide_cursor = saved_hide_cursor;
+            if (ch == UI_MENU_CLICK_WAKE_KEY)
+                continue;
             if (ui_menu_click_take_action(&choice, &action))
             {
                 if (action == UI_MENU_CLICK_HOVER)
@@ -1222,7 +1226,7 @@ void do_cmd_character_sheet(void)
         }
 
         /* Exit - B button (back) or ESC */
-        if (get_sdl_bigger_font())
+        if (get_sdl_menu_bigger_font())
         {
             int dir = target_dir(ch);
             if (ch == '[' || ch == '<' || dir == 4 || dir == 8)

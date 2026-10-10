@@ -126,7 +126,7 @@ void resize(const SDL_Rect* screen)
     // keep their own minimum sizes, but no longer get removed solely to
     // preserve a minimum main terminal size.
     if (show_supporting_panes) {
-        int cell_h = sdl_ui_font_px(layout_main_view_scale * TILE_SIZE);
+        int cell_h = sdl_main_view_font_px(layout_main_view_scale * TILE_SIZE);
         int cell_w = cell_h / 2;
         int min_main_cols = sdl_current_min_terminal_cols();
         int min_main_rows = sdl_current_min_terminal_rows();
@@ -1350,6 +1350,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     if (sdl_try_handle_touch_mouse_fallback_event(st, ev))
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
+        return;
+    if (sdl_menu_font_button_handle_event(ev))
         return;
     if (ev->type == SDL_EVENT_KEY_DOWN
         || ev->type == SDL_EVENT_FINGER_DOWN

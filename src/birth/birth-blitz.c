@@ -1,6 +1,7 @@
 /* File: birth/birth-blitz.c */
 
 #include "angband.h"
+#include "sdl-config.h"
 #include "birth/birth-internal.h"
 
 static cptr blitz_character_mode_name(byte mode)
@@ -101,7 +102,7 @@ static void blitz_setup_draw(const blitz_setup* setup, int selected)
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
 
-    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
     {
         blitz_setup_draw_mobile(setup, selected);
         return;
@@ -191,7 +192,7 @@ static NavResult blitz_setup_menu(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_BIRTH);
 
     while (1)
     {
@@ -307,7 +308,7 @@ static NavResult blitz_setup_menu(void)
         blitz_setup_clamp(setup);
     }
 
-    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
         sdl_character_sheet_screen_hide();
     sdl_pop_terminal_menu_scale();
     screen_pop_touch_pane_hidden();
@@ -714,7 +715,7 @@ NavResult blitz_configure_effects(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_BIRTH);
 
     for (int i = 0; i < setup->curse_count; i++)
     {

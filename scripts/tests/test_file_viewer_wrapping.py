@@ -14,7 +14,7 @@ viewer = (ROOT / "src/ui/file-viewer.c").read_text()
 utf8 = (ROOT / "src/support/utf8.c").read_text()
 utf8 = "\n".join(line for line in utf8.splitlines() if not line.startswith("#include"))
 helpers = viewer[viewer.index("static void string_lower"):viewer.index("static void file_viewer_prompt_label")]
-functions = viewer[viewer.index("static bool show_buffer_normal("):]
+functions = viewer[viewer.index("typedef struct file_viewer_redraw"):]
 harness = r"""
 #include <assert.h>
 #include <ctype.h>
@@ -35,6 +35,7 @@ typedef FILE SDL_IOStream;
 #define TERM_SLATE 3
 #define SDL_TOUCH_MENU_CATEGORY_OTHER 0
 #define ESCAPE 27
+#define UI_MENU_CLICK_WAKE_KEY 28
 #define I2D(x) ((x)+'0')
 #define A2I(x) ((x)-'a')
 #define log_debug(...) ((void)0)
@@ -49,7 +50,11 @@ static char screens[1024][32][128];
 static byte colors[1024][32][128];
 static const char *keys,*answer="";
 /* Reflow belongs to big font; normal UI has a historical pixel comparison. */
-static bool get_sdl_bigger_font(void) {return true;}
+static bool get_sdl_menu_bigger_font(void) {return true;}
+enum sdl_menu_font {SDL_MENU_FONT_NONE=-1,SDL_MENU_FONT_HELP};
+static enum sdl_menu_font sdl_terminal_menu_font(void) {return SDL_MENU_FONT_NONE;}
+static void sdl_push_terminal_menu_scale_for(enum sdl_menu_font menu) {}
+static void sdl_pop_terminal_menu_scale(void) {}
 bool show_buffer(cptr text,int line);
 bool show_file(cptr name,cptr what,int line);
 static void Term_get_size(int *w,int *h) {*w=width;*h=height;}
@@ -68,6 +73,7 @@ static void ui_scroll_area_begin(int a,int b,int c) {}
 static void ui_scroll_area_set_keys(int a,int b,int c,int d) {}
 static void ui_scroll_area_set_tap_key(int a) {}
 static void ui_scroll_area_clear(void) {}
+static void ui_scroll_area_set_indicator(int offset,int maximum) {}
 static int inkey(void) {assert(*keys);return (unsigned char)*keys++;}
 static int steamdeck_menu_key(int k,int a,int b) {return k;}
 static bool steamdeck_controls_active(void) {return false;}
@@ -135,6 +141,10 @@ int main(void) {
     write_file("TAILabcdefghijklmnopTAIL\n");answer="TAIL";
     reset("//\033",4,6);show_file("viewer.txt","Test",0);
     assert(errors==1 && !strcmp(screens[1][2],"TAIL"));
+    reset("\034\033",12,6);show_file("viewer.txt","Test",0);
+    assert(frame>=1);
+    reset("\034\033",12,6);show_buffer("Long help paragraph for the B button",0);
+    assert(frame>=1);
     remove("viewer.txt");puts("file viewer narrow-width regression checks passed");
     return 0;
 }

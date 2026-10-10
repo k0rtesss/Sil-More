@@ -7,6 +7,20 @@ int sdl_ui_font_px(int normal_px)
     return config.bigger_font ? normal_px + (normal_px + 1) / 2 : normal_px;
 }
 
+int sdl_menu_font_px(int normal_px)
+{
+    return get_sdl_menu_bigger_font()
+        ? normal_px + (normal_px + 1) / 2 : normal_px;
+}
+
+int sdl_main_view_font_px(int normal_px)
+{
+    enum sdl_menu_font menu = sdl_terminal_menu_font();
+    bool big = menu == SDL_MENU_FONT_NONE ? config.bigger_font
+        : get_sdl_menu_bigger_font_for(menu);
+    return big ? normal_px + (normal_px + 1) / 2 : normal_px;
+}
+
 float sdl_ui_density_scale(void)
 {
     float density = 0.0f;
@@ -28,6 +42,14 @@ int sdl_ui_role_font_px(enum sdl_ui_font_role role)
         : role == SDL_UI_FONT_META ? 14 : 16;
     return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
         * sdl_ui_font_px(logical_px)));
+}
+
+int sdl_menu_role_font_px(enum sdl_ui_font_role role)
+{
+    int logical_px = role == SDL_UI_FONT_TITLE ? 20
+        : role == SDL_UI_FONT_META ? 14 : 16;
+    return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
+        * sdl_menu_font_px(logical_px)));
 }
 
 int sdl_ui_min_tap_px(void)
@@ -1189,6 +1211,8 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
     Uint8 bg_alpha;
     bool atlas_was_cached;
     int menu_font_px = scale ? sdl_terminal_menu_font_px() : 0;
+    if (scale && g_terminal_menu_scale_depth > 0)
+        rect = sdl_menu_content_rect(rect);
     log_debug("view rect=(%d %d %d %d)", rect.x, rect.y, rect.w, rect.h);
 
     if (menu_font_px > 0) {
@@ -1229,9 +1253,9 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
                     &scale_reference);
         }
         max_scale_for_min_cols = (scale_reference.w / min_cols) * 2
-            / sdl_ui_font_px(TILE_SIZE);
+            / sdl_main_view_font_px(TILE_SIZE);
         max_scale_for_min_rows = scale_reference.h / min_rows
-            / sdl_ui_font_px(TILE_SIZE);
+            / sdl_main_view_font_px(TILE_SIZE);
 
         if (!runtime_zoom) {
             bottom_rows_for_minimum =
@@ -1241,7 +1265,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
                 if (min_rows < 1)
                     min_rows = 1;
                 max_scale_for_min_rows = scale_reference.h / min_rows
-                    / sdl_ui_font_px(TILE_SIZE);
+                    / sdl_main_view_font_px(TILE_SIZE);
             }
         }
 
@@ -1291,8 +1315,8 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         quit("sdl_view_create: font_size and scale cannot both be zero");
     }
 
-    if (scale && !menu_font_px && config.bigger_font) {
-        d->cell_h = sdl_ui_font_px(d->cell_h);
+    if (scale && !menu_font_px) {
+        d->cell_h = sdl_main_view_font_px(d->cell_h);
         d->cell_w = d->cell_h / 2;
     }
 
@@ -1342,7 +1366,7 @@ bool sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         : (rect.h - d->rows * d->cell_h) / 2;
     if (d->margin_y < 0)
         d->margin_y = 0;
-    if (config.bigger_font) {
+    if (scale ? sdl_main_view_font_px(16) > 16 : config.bigger_font) {
         d->margin_x = 0;
         d->margin_y = 0;
     }

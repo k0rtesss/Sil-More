@@ -174,7 +174,7 @@ static int smith_ui_touch_drag_sink;
 /* Controller B uses a gameplay binding, so normalize it to menu Back here. */
 static char smithing_menu_key(char ch)
 {
-    if (get_sdl_bigger_font() && ch == '?')
+    if (get_sdl_menu_bigger_font() && ch == '?')
     {
         smith_show_cost_details();
         return 0;
@@ -205,7 +205,7 @@ static int smith_ui_term_hgt(void)
 static bool smith_ui_portrait_layout(void)
 {
     return sdl_mobile_portrait_layout_active()
-        || (get_sdl_bigger_font() && smith_ui_term_wid() < 60);
+        || (get_sdl_menu_bigger_font() && smith_ui_term_wid() < 60);
 }
 
 static int smith_ui_content_bottom_row(void)
@@ -1320,7 +1320,7 @@ static bool smith_ui_take_click_action(int* choice, int* action)
 
 static void smith_ui_draw_cost_heading(int col, int row, int count, byte attr)
 {
-    bool overflow = get_sdl_bigger_font()
+    bool overflow = get_sdl_menu_bigger_font()
         && row + 1 + count > smith_ui_content_bottom_row();
     cptr label = overflow ? "Cost: more in Details" : "Cost:";
     smith_ui_put_fitted(col, row, smith_ui_line_width(col),
@@ -1424,7 +1424,7 @@ static void smith_ui_draw_navigation_prompt(bool root_menu)
 
 static void smith_ui_begin_touch_scroll_area(bool root_menu)
 {
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
         ui_menu_click_add_touch_button(SMITH_CLICK_CALC, "Details", TERM_DARK);
     int bottom_row = smith_ui_content_bottom_row();
 
@@ -5728,7 +5728,7 @@ int numbers_menu_aux(int* highlight)
             "decrease protection",
             "increase weight",
             "decrease weight",
-            get_sdl_bigger_font() ? "Cycle alloy metal"
+            get_sdl_menu_bigger_font() ? "Cycle alloy metal"
                 : "cycle alloy (none/mithril/star iron)",
             "remove alloy bonus",
             "adjust special bonuses",
@@ -6575,7 +6575,7 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
 
     strnfmt(buf, sizeof(buf), "%d Turns", preview->turns);
     smith_ui_put_cost_line(costs, TERM_SLATE, buf);
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
         smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
             smith_ui_cost_title_row(), costs + 1, attr);
 }
@@ -8907,7 +8907,7 @@ static int smith_root_draw_header(void)
     int row = 0;
     int used;
 
-    if (get_sdl_bigger_font()
+    if (get_sdl_menu_bigger_font()
         && (smith_ui_term_hgt() <= 18 || smith_ui_term_wid() < 55))
     {
         smith_ui_put_fitted(col, 0, width, TERM_L_WHITE + TERM_SHADE,
@@ -9096,10 +9096,10 @@ static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
     header_row = smith_root_draw_header();
     action_row = smith_root_draw_chrome(detail_col, list_w, header_row);
     int last_row = smith_ui_content_bottom_row();
-    int top = get_sdl_bigger_font()
+    int top = get_sdl_menu_bigger_font()
         ? smith_ui_configure_list_view(SMITH_SCROLL_ROOT, SMT_MENU_MAX,
             highlight, action_row, last_row) : 0;
-    if (!get_sdl_bigger_font())
+    if (!get_sdl_menu_bigger_font())
         last_row = action_row + SMT_MENU_MAX;
 
     for (int i = top; i < SMT_MENU_MAX && action_row + i - top <= last_row; i++)
@@ -9356,7 +9356,7 @@ int smithing_menu_aux(int* highlight)
 
     /* Place cursor at current choice */
     Term_gotoxy(indexed_menu_prefix_col(COL_SMT1),
-        get_sdl_bigger_font()
+        get_sdl_menu_bigger_font()
             ? MAX(action_row, MIN(smith_ui_content_bottom_row(),
                 action_row + *highlight - 1 - smith_ui_scroll_top[SMITH_SCROLL_ROOT]))
             : action_row + *highlight - 1);
@@ -9471,7 +9471,7 @@ void do_cmd_smithing_screen(void)
     /* Save screen */
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SMITHING);
 
     /* Clear screen */
     Term_clear();

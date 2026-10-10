@@ -13,7 +13,7 @@ from check_gameplay_tutorial_render import HARNESS as CARD_HARNESS
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
-OUT = ROOT / "scripts/output/bigger-font-check"
+OUT = ROOT / "scripts/output/bigger-font-check" / ("run-" + str(os.getpid()))
 
 HARNESS = CARD_HARNESS[:CARD_HARNESS.index("static void field(")].replace(
     "float scale=w>width && width>0?width/w:1;",
@@ -28,6 +28,17 @@ HARNESS = CARD_HARNESS[:CARD_HARNESS.index("static void field(")].replace(
 #include "sdl/ui/sdl-question-menu.c"
 #include "sdl/ui/sdl-main-menu.c"
 #include "sdl/ui/sdl-halls-screen.c"
+#include "sdl/ui/sdl-menu-font.c"
+#include "cJSON.h"
+
+static void fixture_set_all_fonts(bool big) {
+    config.bigger_font=big;
+    for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++)
+        config.menu_bigger_font[menu]=big;
+}
+bool __wrap_save_pane_config_to_json(void) {
+    return sdl_config_save("button-menu-fonts.json", &config, NULL, 0);
+}
 
 bool __wrap_sdl_touch_only_device_active(void) { return true; }
 SDL_Rect __wrap_sdl_get_layout_screen_rect(void)
@@ -46,17 +57,87 @@ static void capture(cptr name)
 
 static bool capture_actual_general;
 static int actual_general_frames;
+static int actual_big_font_frames;
+static SDL_FRect visible_button_scroll;
+static sdl_character_sheet_hit visible_button_hits[SDL_CHAR_SHEET_HIT_MAX];
+static int visible_button_hit_count;
 static void inside(SDL_FRect r);
 bool __real_sdl_character_sheet_screen_commit_select(int choice);
 bool __wrap_sdl_character_sheet_screen_commit_select(int choice)
 {
     bool result=__real_sdl_character_sheet_screen_commit_select(choice);
+    if(capture_actual_general && result
+        && !strcmp(g_sdl_character_sheet_screen.select_title,"General Settings")) {
+        fixture_assert(g_sdl_character_sheet_screen.select_row_count>8);
+        fixture_assert(strstr(g_sdl_character_sheet_screen.select_rows[0].label,"Big Font"));
+        fixture_assert(g_sdl_character_sheet_screen.select_rows[0].reset_choice<0);
+        for(int i=1;i<g_sdl_character_sheet_screen.select_row_count;i++)
+            fixture_assert(!strstr(g_sdl_character_sheet_screen.select_rows[i].label,"Big font:"));
+        fixture_assert(sdl_render_current_window_frame()); capture("actual-general-settings");
+        actual_general_frames++;
+        fixture_assert(Term_keypress(actual_general_frames==1?' ':ESCAPE)==0);
+        return result;
+    }
     if(capture_actual_general && result) {
-        fixture_assert(!strcmp(g_sdl_character_sheet_screen.select_title,"General Settings"));
+        fixture_assert(!strcmp(g_sdl_character_sheet_screen.select_title,"Big Font"));
+        int step=actual_big_font_frames++;
+        static const int keys[]={' ','6','4','2','6','2','n','y','2','6','2','6','4',ESCAPE};
+        fixture_assert(step<N_ELEMENTS(keys));
+        fixture_assert(g_sdl_character_sheet_screen.select_row_count==SDL_MENU_FONT_COUNT+3);
+        fixture_assert(strstr(g_sdl_character_sheet_screen.select_rows[3+SDL_MENU_FONT_INVENTORY].label,"Inventory (all tabs)"));
+        for(int i=3;i<g_sdl_character_sheet_screen.select_row_count;i++) {
+            const char *label=g_sdl_character_sheet_screen.select_rows[i].label;
+            fixture_assert(strncmp(label,"Equipment\t",10) && strncmp(label,"Jewelry\t",8) && strncmp(label,"Supplies\t",9));
+        }
+        if(step>=11) {
+            fixture_assert(strstr(g_sdl_character_sheet_screen.select_description,"Equipped"));
+            fixture_assert(strstr(g_sdl_character_sheet_screen.select_description,"Jewelry"));
+            fixture_assert(strstr(g_sdl_character_sheet_screen.select_description,"Supplies"));
+            fixture_assert(config.menu_bigger_font[SDL_MENU_FONT_INVENTORY]==(step==12));
+        }
+        if(step==1 || step==3 || step==4) {
+            fixture_assert(!config.bigger_font);
+            for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++)
+                fixture_assert(!config.menu_bigger_font[menu]);
+        } else if(step==2) {
+            fixture_assert(config.bigger_font);
+            for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++)
+                fixture_assert(config.menu_bigger_font[menu]);
+        } else if(step>=5) {
+            fixture_assert(config.bigger_font);
+            fixture_assert(strstr(g_sdl_character_sheet_screen.select_rows[0].label,"Mixed"));
+            fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_SETTINGS]);
+            fixture_assert(config.menu_bigger_font[SDL_MENU_FONT_MAIN]==(step>=10));
+        }
+        if(step) {
+            fixture_assert(sdl_render_current_window_frame());
+            fixture_assert(config.show_menu_font_button==(step!=7));
+            if(step==6) {
+                capture("actual-big-font-button-visible");
+                visible_button_scroll=g_sdl_character_sheet_screen.select_scroll_rect;
+                visible_button_hit_count=g_sdl_character_sheet_screen.hit_count;
+                memcpy(visible_button_hits,g_sdl_character_sheet_screen.hits,
+                    visible_button_hit_count*sizeof(visible_button_hits[0]));
+            }
+            if(step==7) {
+                capture("actual-big-font-button-hidden");
+                fixture_assert(!memcmp(&visible_button_scroll,
+                    &g_sdl_character_sheet_screen.select_scroll_rect,sizeof(visible_button_scroll)));
+                fixture_assert(visible_button_hit_count==g_sdl_character_sheet_screen.hit_count);
+                for(int i=0;i<visible_button_hit_count;i++) {
+                    fixture_assert(visible_button_hits[i].choice==g_sdl_character_sheet_screen.hits[i].choice);
+                    fixture_assert(!memcmp(&visible_button_hits[i].rect,
+                        &g_sdl_character_sheet_screen.hits[i].rect,sizeof(SDL_FRect)));
+                }
+            }
+            if(step==10) capture("actual-big-font-mixed");
+            fixture_assert(Term_keypress(keys[step])==0);
+            return result;
+        }
         fixture_assert(g_sdl_character_sheet_screen.select_row_count>8);
         fixture_assert(g_sdl_character_sheet_screen.select_description[0]);
         fixture_assert(sdl_render_current_window_frame());
-        capture("actual-general-settings");
+        capture("actual-big-font-settings");
         const sdl_character_sheet_select_row *first=&g_sdl_character_sheet_screen.select_rows[0];
         fixture_assert(first->choice==0 && strstr(first->label,"On"));
         fixture_assert(first->reset_choice>=0);
@@ -110,8 +191,7 @@ bool __wrap_sdl_character_sheet_screen_commit_select(int choice)
             if(ink<=8) fprintf(stderr,"actual General footer choice%d has only%d ink pixels\n",hit->choice,ink);
             fixture_assert(ink>8);
         }
-        actual_general_frames++;
-        fixture_assert(Term_keypress(ESCAPE)==0);
+        fixture_assert(Term_keypress(keys[step])==0);
     }
     return result;
 }
@@ -120,12 +200,21 @@ static void check_actual_general(void)
 {
     SDL_strlcpy(fixture_id,"actual-general",sizeof(fixture_id));
     int before=actual_general_frames;
+    struct sdl_config saved_config=config;
+    struct sdl_pane_profile saved_profiles[SDL_PANE_PROFILE_COUNT];
+    memcpy(saved_profiles,g_pane_profiles,sizeof(saved_profiles));
     capture_actual_general=true;
     do_cmd_pane_settings();
     capture_actual_general=false;
-    fixture_assert(actual_general_frames==before+1);
+    fixture_assert(actual_general_frames==before+2);
+    fixture_assert(actual_big_font_frames==14);
     fixture_assert(!sdl_character_sheet_screen_active());
     fixture_assert(config.bigger_font);
+    fixture_assert(config.menu_bigger_font[SDL_MENU_FONT_MAIN]);
+    fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_SETTINGS]);
+    puts("Big Font settings: nested category, All on/off, individual UI/menu toggles and Mixed state: PASS");
+    config=saved_config;
+    memcpy(g_pane_profiles,saved_profiles,sizeof(saved_profiles));
 }
 
 static void inside(SDL_FRect r)
@@ -157,26 +246,67 @@ static void check_config(void)
     struct sdl_config_load_info info={0};
     sdl_config_set_defaults(&original);
     fixture_assert(!original.bigger_font);
+    fixture_assert(!original.show_menu_font_button);
+    original.show_menu_font_button=true;
+    for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++)
+        fixture_assert(!original.menu_bigger_font[menu]);
     original.bigger_font=true;
+    original.menu_bigger_font[SDL_MENU_FONT_INVENTORY]=true;
+    original.menu_bigger_font[SDL_MENU_FONT_SETTINGS]=false;
     fixture_assert(sdl_config_save("roundtrip.json",&original,NULL,0));
     sdl_config_set_defaults(&loaded);
     sdl_config_load("roundtrip.json",&loaded,NULL,0,&info);
     fixture_assert(loaded.bigger_font);
+    fixture_assert(loaded.show_menu_font_button);
+    fixture_assert(loaded.menu_bigger_font[SDL_MENU_FONT_INVENTORY]);
+    fixture_assert(!loaded.menu_bigger_font[SDL_MENU_FONT_SETTINGS]);
     original.bigger_font=false;
+    original.show_menu_font_button=false;
     fixture_assert(sdl_config_save("roundtrip.json",&original,NULL,0));
     sdl_config_set_defaults(&loaded);
     sdl_config_load("roundtrip.json",&loaded,NULL,0,&info);
     fixture_assert(!loaded.bigger_font);
+    fixture_assert(!loaded.show_menu_font_button);
+    fixture_assert(loaded.menu_bigger_font[SDL_MENU_FONT_INVENTORY]);
     FILE *old=fopen("old-config.json","wb");
     fixture_assert(old!=NULL);
     fputs("{\"sdl\":{\"auxViewFontSize\":24}}",old); fclose(old);
     sdl_config_set_defaults(&loaded);
     sdl_config_load("old-config.json",&loaded,NULL,0,&info);
     fixture_assert(!loaded.bigger_font);
-    config.bigger_font=false; fixture_assert(sdl_ui_font_px(19)==19);
-    config.bigger_font=true; fixture_assert(sdl_ui_font_px(19)==29);
-    config.bigger_font=false;
-    puts("Config: default Off, old config Off, On/Off roundtrip, odd pixel scaling: PASS");
+    fixture_assert(!loaded.show_menu_font_button);
+    for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++)
+        fixture_assert(!loaded.menu_bigger_font[menu]);
+    old=fopen("legacy-big-config.json","wb"); fixture_assert(old!=NULL);
+    fputs("{\"sdl\":{\"biggerFont\":true}}",old); fclose(old);
+    sdl_config_set_defaults(&loaded);
+    sdl_config_load("legacy-big-config.json",&loaded,NULL,0,&info);
+    for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++)
+        fixture_assert(loaded.menu_bigger_font[menu]);
+    /* The former tab-specific choices cannot override the shared inventory key. */
+    old=fopen("inventory-tab-config.json","wb"); fixture_assert(old!=NULL);
+    fputs("{\"sdl\":{\"biggerFont\":true,\"menuBiggerFont\":{\"inventory\":false,\"equipment\":true,\"jewelry\":true,\"supplies\":true,\"help\":true}}}",old); fclose(old);
+    sdl_config_set_defaults(&loaded);
+    sdl_config_load("inventory-tab-config.json",&loaded,NULL,0,&info);
+    fixture_assert(!loaded.menu_bigger_font[SDL_MENU_FONT_INVENTORY]);
+    fixture_assert(loaded.menu_bigger_font[SDL_MENU_FONT_HELP]);
+    fixture_assert(sdl_config_save("inventory-tab-config.json",&loaded,NULL,0));
+    old=fopen("inventory-tab-config.json","rb"); fixture_assert(old!=NULL);
+    fseek(old,0,SEEK_END); long length=ftell(old); rewind(old);
+    char *json=malloc(length+1); fixture_assert(json!=NULL);
+    fixture_assert(fread(json,1,length,old)==length); json[length]=0; fclose(old);
+    cJSON *document=cJSON_Parse(json); fixture_assert(document!=NULL);
+    cJSON *fonts=cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(document,"sdl"),"menuBiggerFont");
+    fixture_assert(cJSON_GetArraySize(fonts)==SDL_MENU_FONT_COUNT);
+    fixture_assert(cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(fonts,"inventory")));
+    fixture_assert(!cJSON_GetObjectItemCaseSensitive(fonts,"equipment"));
+    fixture_assert(!cJSON_GetObjectItemCaseSensitive(fonts,"jewelry"));
+    fixture_assert(!cJSON_GetObjectItemCaseSensitive(fonts,"supplies"));
+    cJSON_Delete(document); free(json);
+    fixture_set_all_fonts(false); fixture_assert(sdl_ui_font_px(19)==19);
+    fixture_set_all_fonts(true); fixture_assert(sdl_ui_font_px(19)==29);
+    fixture_set_all_fonts(false);
+    puts("Config: separate UI/menu defaults and roundtrips, shared inventory key, legacy choice retained: PASS");
 }
 
 static int check_settings(int rows, cptr title)
@@ -188,6 +318,7 @@ static int check_settings(int rows, cptr title)
         "View Pane Configuration", "Reset Settings to Defaults"};
     ui_menu_click_begin(); ui_menu_click_set_hover_enabled(true);
     sdl_character_sheet_screen_begin_select(1,title);
+    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
     sdl_character_sheet_screen_set_select_menu_style(true);
     for(int i=0;i<rows;i++) {
         sdl_character_sheet_screen_add_select_row(i+1,labels[i%8],TERM_WHITE,"");
@@ -261,6 +392,52 @@ static void check_songs(void)
     fixture_assert(actual==SDL_SONG_MENU_MAX_ENTRIES-1 && action==UI_MENU_CLICK_PRIMARY);
     fixture_assert(Term_inkey(&key,false,true)==0);
     sdl_song_menu_clear(); ui_menu_click_clear();
+}
+
+static void check_settings_rotation(void)
+{
+    if(fixture_width!=360 || fixture_height!=800) return;
+    SDL_strlcpy(fixture_id,"settings-rotation",sizeof(fixture_id));
+    ui_menu_click_begin();
+    sdl_character_sheet_screen_begin_select(8,"General Settings");
+    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
+    sdl_character_sheet_screen_set_select_menu_style(true);
+    for(int i=0;i<24;i++) {
+        char text[120];
+        strnfmt(text,sizeof(text),"Long setting name at row %d\tOn",i);
+        sdl_character_sheet_screen_add_select_row(i,i==8?"Orientation\tportrait":text,TERM_WHITE,"");
+    }
+    sdl_character_sheet_screen_set_select_description("Choose portrait or landscape. The selected row should stay fully visible after rotation.");
+    fixture_assert(sdl_character_sheet_screen_commit_select(8));
+    fixture_assert(sdl_render_current_window_frame());
+    bool found=false;
+    for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
+        sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];
+        if(hit->choice!=8) continue;
+        g_sdl_character_sheet_screen.sheet_scroll+=(int)(hit->rect.y
+            -g_sdl_character_sheet_screen.select_scroll_rect.y+hit->rect.h*.5f);
+        found=true; break;
+    }
+    fixture_assert(found);
+    fixture_width=800; fixture_height=360;
+    fixture_assert(SDL_SetWindowSize(g_state.window,800,360));
+    g_state.safe_area=(SDL_Rect){0,0,800,360};
+    fixture_assert(sdl_render_current_window_frame());
+    found=false;
+    for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
+        sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];
+        if(hit->choice!=8) continue;
+        inside(hit->rect);
+        fixture_assert(hit->rect.h>=sdl_ui_min_tap_px()-1);
+        fixture_assert(hit->rect.y>=g_sdl_character_sheet_screen.select_scroll_rect.y);
+        found=true;
+    }
+    fixture_assert(found); capture("settings-rotated-selected");
+    sdl_character_sheet_screen_hide(); ui_menu_click_clear();
+    fixture_width=360; fixture_height=800;
+    fixture_assert(SDL_SetWindowSize(g_state.window,360,800));
+    g_state.safe_area=(SDL_Rect){0,0,360,800};
+    puts("Big-font settings rotation: rewrapped selection stays fully visible: PASS");
 }
 
 static void check_questions(void)
@@ -351,6 +528,16 @@ static void check_character_allocation(void)
     sdl_character_sheet_screen_show_birth_skills(base,gain,costs,S_MEL,5000);
     fixture_assert(sdl_render_current_window_frame());
     fixture_assert(g_sdl_character_sheet_screen.last_body_px>0);
+    g_sdl_character_sheet_screen.hover_choice=S_MEL;
+    sdl_char_sheet_render_hover_tooltip();
+    fixture_assert(g_sdl_char_sheet_hover_tooltip_rect.h>0);
+    fixture_assert(g_sdl_char_sheet_hover_tooltip_rect.y
+        >=g_sdl_character_sheet_screen.select_scroll_rect.y);
+    fixture_assert(g_sdl_char_sheet_hover_tooltip_rect.y+g_sdl_char_sheet_hover_tooltip_rect.h
+        <=g_sdl_character_sheet_screen.select_scroll_rect.y
+            +g_sdl_character_sheet_screen.select_scroll_rect.h);
+    g_sdl_character_sheet_screen.hover_choice=SDL_CHAR_SHEET_NO_HOVER;
+    fixture_assert(sdl_render_current_window_frame());
     capture("character-skills");
     fixture_assert(g_sdl_character_sheet_screen.hit_count>0);
     sdl_character_sheet_screen_show_birth_skills(base,gain,costs,S_SNG,5000);
@@ -511,7 +698,8 @@ static void check_live_sheet(void)
     capture("character-live-overview");
     static const int actions[]={'i','x','s','?',ESCAPE};
     static const cptr labels[]={"Skills","Powers","Story","Help","Back"};
-    TTF_Font *font=sdl_main_menu_mono_font_for_height(g_sdl_character_sheet_screen.last_body_px);
+    TTF_Font *font=sdl_story_font_for_height_slot(
+        g_sdl_character_sheet_screen.last_body_px,SDL_STORY_FONT_SLOT_DEFAULT);
     for(int a=0;a<5;a++) {
         bool found=false;
         for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
@@ -658,9 +846,9 @@ static void check_welcome_cache(void)
     fixture_assert(sdl_welcome_screen_show_intro(INTRO_STYLE_FLAME,false));
     fixture_assert(sdl_welcome_prepare_layout(&canvas,lines,N_ELEMENTS(lines),&metrics)>0);
     fixture_assert(sdl_welcome_layout_cache_matches(&canvas));
-    config.bigger_font=false;
+    fixture_set_all_fonts(false);
     fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
-    config.bigger_font=true;
+    fixture_set_all_fonts(true);
     sdl_story_font_cache_clear();
     fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
     fixture_assert(sdl_welcome_prepare_layout(&canvas,lines,N_ELEMENTS(lines),&metrics)>0);
@@ -688,7 +876,7 @@ static void check_actual_cell_metrics(void)
     int widths[PANE_MAX],heights[PANE_MAX];
     SDL_Rect screen={0,0,fixture_width,fixture_height};
     for(int bigger=0;bigger<2;bigger++) {
-        config.bigger_font=bigger;
+        fixture_set_all_fonts(bigger);
         sdl_build_supporting_pane_metrics(NULL,0,widths,heights);
         sdl_view actual={0};
         fixture_assert(sdl_view_create(&actual,screen,config.monospace_font,0,
@@ -709,7 +897,7 @@ static void check_actual_cell_metrics(void)
             SDL_SetRenderTarget(g_state.renderer,NULL);
         }
     }
-    config.bigger_font=true;
+    fixture_set_all_fonts(true);
 }
 
 static void check_auto_font_metrics(void)
@@ -723,7 +911,7 @@ static void check_auto_font_metrics(void)
     for(int density=0;density<N_ELEMENTS(densities);density++) {
         g_state.system_scale=densities[density];
         for(int bigger=0;bigger<2;bigger++) {
-            config.bigger_font=bigger;
+            fixture_set_all_fonts(bigger);
             for(int pane=PANE_MAIN+1;pane<PANE_MAX;pane++) {
                 sdl_view actual={0};
                 fixture_assert(sdl_view_create(&actual,screen,config.monospace_font,
@@ -736,9 +924,267 @@ static void check_auto_font_metrics(void)
             }
         }
     }
-    config.bigger_font=true;
+    fixture_set_all_fonts(true);
     config.aux_view_font_size=saved_aux;
     g_state.system_scale=saved_scale;
+}
+
+
+static void font_button_mouse(bool down, float x, float y)
+{
+    SDL_Event ev={0};
+    ev.type=down?SDL_EVENT_MOUSE_BUTTON_DOWN:SDL_EVENT_MOUSE_BUTTON_UP;
+    ev.button.button=SDL_BUTTON_LEFT;
+    ev.button.x=x; ev.button.y=y;
+    fixture_assert(sdl_menu_font_button_handle_event(&ev));
+}
+
+static bool actual_inventory_active, actual_inventory_initial, actual_inventory_ui;
+static int actual_inventory_frames;
+static bool actual_character_active;
+char __real_inkey(void);
+char __wrap_inkey(void)
+{
+    if(actual_character_active) {
+        fixture_assert(g_sdl_character_sheet_screen.context==SDL_CHARACTER_SHEET_LIVE);
+        g_suppress_layout_refresh_present=false;
+        fixture_assert(sdl_render_current_window_frame());
+        static const int actions[]={'i','x','s','?',ESCAPE};
+        for(int a=0;a<N_ELEMENTS(actions);a++) {
+            bool found=false;
+            for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++)
+                if(g_sdl_character_sheet_screen.hits[i].choice==actions[a]) {
+                    found=true; inside(g_sdl_character_sheet_screen.hits[i].rect);
+                }
+            fixture_assert(found);
+        }
+        capture("actual-character-big-font");
+        g_suppress_layout_refresh_present=true;
+        return ESCAPE;
+    }
+    if(!actual_inventory_active) return __real_inkey();
+    int step=actual_inventory_frames++;
+    fixture_assert(step<8);
+    int tab=step/2, phase=step%2;
+    static const char *names[]={"Equipped","Inventory","Jewelry","Supplies"};
+    char selected[40],paged[40];
+    strnfmt(selected,sizeof(selected),"[%s]",names[tab]);
+    strnfmt(paged,sizeof(paged),"< %s >",names[tab]);
+    bool found=false;
+    for(int row=0;row<Term->hgt;row++) {
+        char text[512]; int length=MIN(Term->wid,(int)sizeof(text)-1);
+        for(int col=0;col<length;col++) { byte attr; char ch; Term_what(col,row,&attr,&ch); text[col]=ch?ch:' '; }
+        text[length]=0;
+        if(strstr(text,selected) || strstr(text,paged)) found=true;
+    }
+    fixture_assert(found);
+    bool big=actual_inventory_initial ^ (tab%2!=0) ^ (phase!=0);
+    fixture_assert(sdl_menu_font_current()==SDL_MENU_FONT_INVENTORY);
+    fixture_assert(config.bigger_font==actual_inventory_ui);
+    fixture_assert(get_sdl_menu_bigger_font()==big);
+    fixture_assert(get_sdl_compact_inventory_menus()==big);
+    fixture_assert(sdl_main_view_font_px(19)==(big?29:19));
+    if(!phase) {
+        SDL_FRect button=sdl_menu_font_button_rect();
+        float x=button.x+button.w*.5f,y=button.y+button.h*.5f;
+        font_button_mouse(true,x,y); font_button_mouse(false,x,y);
+        fixture_assert(get_sdl_menu_bigger_font()==!big);
+        fixture_assert(config.bigger_font==actual_inventory_ui);
+        Term_flush(); /* Return the wake directly to the real browser loop. */
+        return UI_MENU_CLICK_WAKE_KEY;
+    }
+    struct sdl_config loaded; struct sdl_config_load_info info={0};
+    sdl_config_set_defaults(&loaded);
+    sdl_config_load("button-menu-fonts.json",&loaded,NULL,0,&info);
+    fixture_assert(loaded.menu_bigger_font[SDL_MENU_FONT_INVENTORY]==big);
+    fixture_assert(loaded.bigger_font==actual_inventory_ui);
+    return tab==3?ESCAPE:KTRL('N');
+}
+
+static void check_actual_inventory_fonts(void)
+{
+    SDL_strlcpy(fixture_id,"shared-inventory-fonts",sizeof(fixture_id));
+    struct sdl_config saved=config;
+    bool saved_suppress=g_suppress_layout_refresh_present;
+    g_suppress_layout_refresh_present=true; /* Empty inventory, no live dungeon. */
+    for(int ui=0;ui<2;ui++) for(int initial=0;initial<2;initial++) {
+        fixture_set_all_fonts(false); config.bigger_font=ui;
+        set_sdl_menu_bigger_font(SDL_MENU_FONT_INVENTORY,initial);
+        set_sdl_show_menu_font_button(true);
+        actual_inventory_ui=ui; actual_inventory_initial=initial;
+        actual_inventory_frames=0; actual_inventory_active=true;
+        supply_menu_request request={.focus_page=true,.page=SUPPLY_MENU_PAGE_EQUIPPED};
+        fixture_assert(!do_cmd_knowledge_supplies(&request));
+        actual_inventory_active=false;
+        fixture_assert(actual_inventory_frames==8);
+        fixture_assert(sdl_terminal_menu_font()==SDL_MENU_FONT_NONE);
+        fixture_assert(get_sdl_menu_bigger_font_for(SDL_MENU_FONT_INVENTORY)==initial);
+        Term_flush();
+    }
+    config=saved; g_suppress_layout_refresh_present=saved_suppress;
+    puts("Shared inventory font: real Equipped/Inventory/Jewelry/Supplies tab switching, B on/off on every tab, UI independence and persistence: PASS");
+}
+
+static void check_actual_character_actions(void)
+{
+    static byte terrain[1][MAX_DUNGEON_WID];
+    byte (*saved_terrain)[MAX_DUNGEON_WID]=cave_feat;
+    cave_feat=terrain; /* Live skill descriptions inspect the player's terrain. */
+    SDL_strlcpy(fixture_id,"actual-character-actions",sizeof(fixture_id));
+    fixture_set_all_fonts(true); config.debug_character_sheet=false;
+    bool saved_suppress=g_suppress_layout_refresh_present;
+    g_suppress_layout_refresh_present=true;
+    actual_character_active=true;
+    Term_flush(); ui_menu_click_clear();
+    do_cmd_character_sheet();
+    actual_character_active=false;
+    fixture_assert(!sdl_character_sheet_screen_active());
+    fixture_assert(sdl_terminal_menu_font()==SDL_MENU_FONT_NONE);
+    g_suppress_layout_refresh_present=saved_suppress;
+    cave_feat=saved_terrain;
+    puts("Big-font character command: live paginated sheet exposes Skills, Powers, Story, Help and Back: PASS");
+}
+
+static void check_independent_menu_fonts(void)
+{
+    SDL_strlcpy(fixture_id,"independent-menu-fonts",sizeof(fixture_id));
+    fixture_set_all_fonts(false); config.bigger_font=true;
+    Term_flush(); ui_menu_click_clear();
+    ui_menu_click_begin(); ui_menu_click_set_hover_enabled(true);
+    sdl_character_sheet_screen_begin_select(0,"General Settings");
+    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
+    sdl_character_sheet_screen_set_select_menu_style(true);
+    sdl_character_sheet_screen_add_select_row(0,"Big font: Settings\tOff",TERM_WHITE,"");
+    fixture_assert(sdl_character_sheet_screen_commit_select(0));
+    fixture_assert(sdl_menu_font_current()==SDL_MENU_FONT_SETTINGS);
+    fixture_assert(sdl_ui_font_px(19)==29 && sdl_menu_font_px(19)==19);
+    set_sdl_menu_bigger_font(SDL_MENU_FONT_SETTINGS,true);
+    fixture_assert(!get_sdl_compact_inventory_menus());
+    set_sdl_menu_bigger_font(SDL_MENU_FONT_SETTINGS,false);
+    set_sdl_menu_bigger_font(SDL_MENU_FONT_INVENTORY,true);
+    fixture_assert(sdl_menu_font_px(19)==19);
+    set_sdl_menu_bigger_font(SDL_MENU_FONT_SETTINGS,true);
+    fixture_assert(sdl_menu_font_px(19)==29 && config.bigger_font);
+    fixture_assert(sdl_render_current_window_frame());
+    SDL_FRect button=sdl_menu_font_button_rect();
+    SDL_Rect content=sdl_menu_content_rect((SDL_Rect){0,0,fixture_width,fixture_height});
+    fixture_assert(content.x==0 && content.y==0 && content.w==fixture_width && content.h==fixture_height);
+    fixture_assert(button.h<=40*sdl_ui_density_scale()+1);
+    float x=button.x+button.w*.5f,y=button.y+button.h*.5f;
+    font_button_mouse(true,x,y); font_button_mouse(false,x,y);
+    fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_SETTINGS]);
+    fixture_assert(config.bigger_font && config.menu_bigger_font[SDL_MENU_FONT_INVENTORY]);
+    fixture_assert(sdl_character_sheet_screen_active());
+    fixture_assert(g_sdl_character_sheet_screen.selected_index==0);
+    fixture_assert(sdl_menu_font_px(19)==19);
+    char key=0; int choice=-9,action=-9;
+    fixture_assert(Term_inkey(&key,false,true)==0 && key==UI_MENU_CLICK_WAKE_KEY);
+    fixture_assert(ui_menu_click_take_action(&choice,&action));
+    fixture_assert(choice==0 && action==UI_MENU_CLICK_HOVER);
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+    fixture_assert(sdl_render_current_window_frame()); capture("settings-ui-big-menu-normal");
+    ui_menu_click_clear();
+
+    /* A choice popup over Settings reflows without waking its background menu. */
+    ui_menu_click_begin(); ui_menu_click_set_hover_enabled(true);
+    sdl_question_menu_begin("Font choice fixture");
+    sdl_question_menu_add_entry(1,"a)","Keep this selection",TERM_WHITE);
+    sdl_question_menu_add_entry(2,"b)","Second selection",TERM_WHITE);
+    g_question_menu.highlight=1;
+    fixture_assert(sdl_menu_font_px(19)==19);
+    button=sdl_menu_font_button_rect(); x=button.x+button.w*.5f; y=button.y+button.h*.5f;
+    font_button_mouse(true,x,y);
+    font_button_mouse(false,1,fixture_height-1); /* Drag out cancels. */
+    fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    font_button_mouse(true,x,y); font_button_mouse(false,x,y);
+    fixture_assert(config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    fixture_assert(g_question_menu.active && g_question_menu.highlight==1);
+    fixture_assert(!ui_menu_click_has_pending());
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+    SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
+    SDL_RenderClear(g_state.renderer);
+    sdl_question_menu_render(); sdl_menu_font_button_render();
+    capture("questions-big-ui-big");
+    sdl_question_menu_layout_info layout;
+    fixture_assert(sdl_question_menu_layout(&layout));
+    button=sdl_menu_font_button_rect();
+    fixture_assert(!SDL_HasRectIntersectionFloat(&button,&g_question_menu.header_controls));
+    config.bigger_font=false;
+    fixture_assert(sdl_menu_font_px(19)==29 && sdl_ui_font_px(19)==19);
+    sdl_question_menu_render(); sdl_menu_font_button_render();
+    capture("questions-big-ui-normal");
+
+    button=sdl_menu_font_button_rect(); x=button.x+button.w*.5f; y=button.y+button.h*.5f;
+    SDL_Event ev={0}; ev.type=SDL_EVENT_FINGER_DOWN;
+    ev.tfinger.windowID=SDL_GetWindowID(g_state.window);
+    ev.tfinger.touchID=17; ev.tfinger.fingerID=23;
+    ev.tfinger.x=x/fixture_width; ev.tfinger.y=y/fixture_height;
+    fixture_assert(sdl_menu_font_button_handle_event(&ev));
+    ev.type=SDL_EVENT_FINGER_UP; ev.tfinger.fingerID=24;
+    fixture_assert(!sdl_menu_font_button_handle_event(&ev));
+    fixture_assert(config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    ev.tfinger.fingerID=23;
+    fixture_assert(sdl_menu_font_button_handle_event(&ev));
+    fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    fixture_assert(g_question_menu.active && g_question_menu.highlight==1);
+    fixture_assert(!ui_menu_click_has_pending());
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+    struct sdl_config loaded; struct sdl_config_load_info info={0};
+    sdl_config_set_defaults(&loaded);
+    sdl_config_load("button-menu-fonts.json",&loaded,NULL,0,&info);
+    fixture_assert(!loaded.bigger_font && loaded.menu_bigger_font[SDL_MENU_FONT_INVENTORY]);
+    fixture_assert(!loaded.menu_bigger_font[SDL_MENU_FONT_SETTINGS]);
+    fixture_assert(!loaded.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+
+    /* Hide removes drawing and hit interception, while the menu keeps its canvas. */
+    set_sdl_show_menu_font_button(false);
+    SDL_Rect without=sdl_menu_content_rect((SDL_Rect){0,0,fixture_width,fixture_height});
+    fixture_assert(without.y==0 && without.h==fixture_height);
+    SDL_SetRenderDrawColor(g_state.renderer,2,3,5,255); SDL_RenderClear(g_state.renderer);
+    sdl_menu_font_button_render();
+    SDL_Surface *hidden=SDL_RenderReadPixels(g_state.renderer,NULL);
+    Uint8 red,green,blue,alpha;
+    fixture_assert(hidden && SDL_ReadSurfacePixel(hidden,(int)x,(int)y,&red,&green,&blue,&alpha));
+    fixture_assert(red==2 && green==3 && blue==5);
+    SDL_DestroySurface(hidden);
+    ev=(SDL_Event){0}; ev.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    ev.button.button=SDL_BUTTON_LEFT; ev.button.x=x; ev.button.y=y;
+    fixture_assert(!sdl_menu_font_button_handle_event(&ev));
+    ev.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    fixture_assert(!sdl_menu_font_button_handle_event(&ev));
+    fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    fixture_assert(save_pane_config_to_json());
+    sdl_config_set_defaults(&loaded);
+    sdl_config_load("button-menu-fonts.json",&loaded,NULL,0,&info);
+    fixture_assert(!loaded.show_menu_font_button);
+    set_sdl_show_menu_font_button(true);
+    SDL_Rect with=sdl_menu_content_rect((SDL_Rect){0,0,fixture_width,fixture_height});
+    fixture_assert(!memcmp(&with,&without,sizeof(with)));
+    /* The smaller visible square retains its outer tap margin. */
+    button=sdl_menu_font_button_rect(); x=button.x-2*sdl_ui_density_scale(); y=button.y+button.h*.5f;
+    font_button_mouse(true,x,y); font_button_mouse(false,x,y);
+    fixture_assert(config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    font_button_mouse(true,x,y); font_button_mouse(false,x,y);
+    fixture_assert(!config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]);
+    sdl_question_menu_clear(); sdl_character_sheet_screen_hide(); ui_menu_click_clear();
+
+    /* A nested terminal browser restores its parent's independently sized grid. */
+    bool saved_suppress=g_suppress_layout_refresh_present;
+    g_suppress_layout_refresh_present=true; /* No dungeon is loaded in this fixture. */
+    fixture_assert(sdl_terminal_menu_font()==SDL_MENU_FONT_NONE);
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_INVENTORY);
+    fixture_assert(sdl_main_view_font_px(19)==29);
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_ABILITIES);
+    fixture_assert(sdl_main_view_font_px(19)==19);
+    sdl_pop_terminal_menu_scale();
+    fixture_assert(sdl_terminal_menu_font()==SDL_MENU_FONT_INVENTORY);
+    fixture_assert(sdl_main_view_font_px(19)==29);
+    sdl_pop_terminal_menu_scale();
+    fixture_assert(sdl_terminal_menu_font()==SDL_MENU_FONT_NONE);
+    fixture_assert(sdl_main_view_font_px(19)==19);
+    fixture_set_all_fonts(true); Term_flush();
+    g_suppress_layout_refresh_present=saved_suppress;
+    puts("Independent fonts: UI/menu separation, floating corner, hidden state, smaller button/tap margin, mouse/touch/drag/cancel, no command or close, persistence, nested browser restore: PASS");
 }
 
 static void check(int width,int height)
@@ -754,20 +1200,26 @@ static void check(int width,int height)
     sdl_view *view=&g_views[PANE_MAIN];
     term_init(&view->t,80,24,256); Term_activate(&view->t); term_screen=&view->t;
     character_icky=1; fixture.active=false;
+    set_sdl_show_menu_font_button(true); /* Explicitly enable the control for its layout fixtures. */
     check_actual_cell_metrics();
     check_auto_font_metrics();
-    config.bigger_font=false;
+    fixture_set_all_fonts(false);
     int pane=sdl_main_menu_pane_font_px();
     int normal=check_settings(8,"General Settings");
-    config.bigger_font=true;
+    fixture_set_all_fonts(true);
     /* Phone big-font menus use semantic reading sizes. Normal menus retain
      * their original fitted fonts, verified against pre-feature sources. */
     fixture_assert(sdl_main_menu_pane_font_px()==sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
     int large=check_settings(8,"General Settings");
     fixture_assert(large==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
     check_settings(80,"Overflow Settings");
-    check_actual_general();
     check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_bottom_buttons(); check_large_tutorial(); check_welcome_cache();
+    check_independent_menu_fonts();
+    check_actual_inventory_fonts();
+    check_actual_character_actions();
+    check_settings_rotation();
+    check_actual_general();
+    g_suppress_layout_refresh_present=true; /* No dungeon is loaded after the native settings resize. */
     printf("%dx%d: pane %d -> %d, native settings %d -> %d; settings taps, song paging/choice, question wrapping/scroll, birth final skill, text paging, main menu drag, Halls: PASS\n",
         width,height,pane,sdl_main_menu_pane_font_px(),normal,large);
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
@@ -790,6 +1242,7 @@ int main(int argc,char **argv)
     SDL_strlcpy(config.monospace_font,argv[4],sizeof(config.monospace_font));
     config.input_ui_mode=SDL_INPUT_UI_MODE_PLATFORM; config.use_unsafe_area=true;
     g_state.system_scale=1; z_info=&limits; p_ptr=&player; op_ptr=&options; inventory=items;
+    fixture_assert(messages_init()==0);
     player.playing=true; character_generated=character_dungeon=true;
     player.song1=player.song2=SNG_NOTHING;
     for(int i=0;i<16;i++) g_state.palette[i]=(SDL_Color){220,220,220,255};
@@ -805,13 +1258,14 @@ int main(int argc,char **argv)
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    print("Layout artifacts:", OUT, flush=True)
     source = OUT / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     excluded = ("/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
                 "/src/sdl/ui/sdl-screens.c.obj", "/src/sdl/ui/sdl-song-menu.c.obj",
                 "/src/sdl/ui/sdl-question-menu.c.obj", "/src/sdl/ui/sdl-main-menu.c.obj",
-                "/src/sdl/ui/sdl-halls-screen.c.obj")
+                "/src/sdl/ui/sdl-halls-screen.c.obj", "/src/sdl/ui/sdl-menu-font.c.obj")
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects
                                  if not obj.endswith(excluded)), encoding="utf-8")
@@ -824,7 +1278,7 @@ def main():
              "sdl_touch_round_layer_controls_active", "sdl_touch_round_compute_layout",
              "sdl_touch_thumb_current_bounds", "sdl_map_grid_cell_rect",
              "sdl_touch_only_device_active", "sdl_get_layout_screen_rect",
-             "sdl_character_sheet_screen_commit_select"]
+             "sdl_character_sheet_screen_commit_select", "save_pane_config_to_json", "inkey"]
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),

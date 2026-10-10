@@ -2835,7 +2835,7 @@ static void ability_browser_init_layout_normal(ability_browser_layout* layout,
 static void ability_browser_init_layout(ability_browser_layout* layout,
     int ability_count, cptr summary)
 {
-    if (!get_sdl_bigger_font()) {
+    if (!get_sdl_menu_bigger_font()) {
         ability_browser_init_layout_normal(layout, ability_count, summary);
         return;
     }
@@ -3248,7 +3248,7 @@ static void ability_browser_build_summary(int skilltype, char* summary,
     if (!summary || summary_len == 0)
         return;
 
-    if (get_sdl_bigger_font() && Term && (Term->wid < 60 || Term->hgt <= 18)
+    if (get_sdl_menu_bigger_font() && Term && (Term->wid < 60 || Term->hgt <= 18)
         && skilltype >= 0 && skilltype < S_MAX)
     {
         strnfmt(summary, summary_len, "XP %ld | %s %d (%d)",
@@ -3487,7 +3487,7 @@ static void ability_browser_draw_skill_summary(
 
     for (int row = 0; row < layout->skill_rows; row++)
         Term_erase(layout->skill_col, tab_row + row, layout->skill_w);
-    if (get_sdl_bigger_font()
+    if (get_sdl_menu_bigger_font()
         && ability_browser_skill_tab_width(token_widths, skill_options, split)
             > layout->skill_w)
     {
@@ -3882,7 +3882,7 @@ static void ability_browser_size_entry_cards(ability_browser_layout* layout,
     int prefix_w = indexed_menu_letters_enabled() ? 3 : 2;
     int name_w = MAX(1, layout->ability_w - prefix_w);
     int name_rows = 1;
-    if (!get_sdl_bigger_font() || layout->visible_w >= 55)
+    if (!get_sdl_menu_bigger_font() || layout->visible_w >= 55)
         return;
     for (int i = 0; i < count; ++i)
     {
@@ -3921,7 +3921,7 @@ static void ability_browser_draw_ability_list(
         state_col = layout->ability_col + layout->ability_w;
 
     ability_browser_put_fitted(layout->ability_col, layout->header_row,
-        layout->ability_w, TERM_SLATE, get_sdl_bigger_font() && layout->visible_w < 55
+        layout->ability_w, TERM_SLATE, get_sdl_menu_bigger_font() && layout->visible_w < 55
             ? "Abilities (scroll)" : "Lvl Ability                       State");
 
     for (int i = 0; i < visible_entries; i++)
@@ -3975,7 +3975,7 @@ static void ability_browser_draw_ability_list(
         Term_putstr(layout->ability_col, y, prefix_w, prefix_attr, prefix);
 
         strnfmt(level, sizeof(level), "%2d", entry->b_ptr->level);
-        if (get_sdl_bigger_font() && layout->visible_w < 55)
+        if (get_sdl_menu_bigger_font() && layout->visible_w < 55)
         {
             int card_col = layout->ability_col + prefix_w;
             int card_w = MAX(1, layout->ability_w - prefix_w);
@@ -6212,7 +6212,7 @@ void do_cmd_ability_screen(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_ABILITIES);
     sdl_screen_back_gesture_begin();
 
     while (!done)

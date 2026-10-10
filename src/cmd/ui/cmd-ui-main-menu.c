@@ -542,9 +542,10 @@ static void main_menu_about(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
 
-    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+about_font_redraw:
+    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
     {
         main_menu_about_mobile(about_lines);
         sdl_pop_terminal_menu_scale();
@@ -716,6 +717,8 @@ static void main_menu_about(void)
     hide_cursor = true;
     ch = inkey();
     hide_cursor = saved_hide_cursor;
+    if (ch == UI_MENU_CLICK_WAKE_KEY)
+        goto about_font_redraw;
     (void)ch;
 
     sdl_pop_terminal_menu_scale();
@@ -1366,7 +1369,7 @@ static int log_history_wrapped_entry_rows(int filter, int idx, int width)
     byte attr;
 
     log_history_wrapped_entry_text(filter, idx, text, sizeof(text), &attr);
-    if (!get_sdl_bigger_font()
+    if (!get_sdl_menu_bigger_font()
         && (filter == LOG_HISTORY_FILTER_NOTES
             || log_history_entries[idx].kind != LOG_HISTORY_ENTRY_COMBAT))
         return count_wrapped_lines(text, width, 0);
@@ -1626,7 +1629,7 @@ static void main_menu_blitz_intro_mobile_build(void)
 static void log_history_draw_wrapped_slice(int row, int width, byte attr,
     cptr text, cptr highlight, int first_line, int max_rows)
 {
-    if (!get_sdl_bigger_font()) {
+    if (!get_sdl_menu_bigger_font()) {
         log_history_draw_wrapped_text(row, width, attr, text, highlight);
         return;
     }
@@ -1643,7 +1646,7 @@ static void log_history_draw_wrapped_slice(int row, int width, byte attr,
 
 static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
 {
-    if (!get_sdl_bigger_font()) {
+    if (!get_sdl_menu_bigger_font()) {
         *prompt = hgt - 1;
         *top = 3;
         *bottom = hgt - 3;
@@ -1697,9 +1700,9 @@ static void do_cmd_start_blitz(void)
      * window-mode scale. */
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_BIRTH);
 
-    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
         confirmed = main_menu_blitz_confirm_mobile();
     else
     {
@@ -3344,7 +3347,7 @@ void do_cmd_messages_with_filter(int initial_filter)
     /* Save screen */
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_MESSAGES);
 
     /* Get size after any hidden-pane layout change */
     Term_get_size(&wid, &hgt);
@@ -3386,7 +3389,7 @@ void do_cmd_messages_with_filter(int initial_filter)
             i = max_i;
         if (i < 0)
             i = 0;
-        int entry_line_max = get_sdl_bigger_font() && n > 0 ? MAX(0,
+        int entry_line_max = get_sdl_menu_bigger_font() && n > 0 ? MAX(0,
             log_history_wrapped_entry_rows(filter, i, wid) - visible_rows) : 0;
         entry_line_top = MIN(entry_line_top, entry_line_max);
 
@@ -3419,7 +3422,7 @@ void do_cmd_messages_with_filter(int initial_filter)
                 i + j, wid);
             int line_y;
 
-            bool continued = get_sdl_bigger_font()
+            bool continued = get_sdl_menu_bigger_font()
                 && j == 0 && wrapped_rows > visible_rows;
             int drawn_rows = continued
                 ? MIN(visible_rows, wrapped_rows - entry_line_top) : wrapped_rows;

@@ -13,6 +13,29 @@
 
 // JSON-based configuration system using cJSON library
 
+static const char* const menu_font_keys[SDL_MENU_FONT_COUNT] = {
+    "main", "inventory", "abilities",
+    "character", "smithing", "settings", "knowledge", "help", "messages",
+    "scores", "songs", "quests", "birth", "narrative", "questions",
+    "logOptions", "paneOptions", "look"
+};
+static const char* const menu_font_labels[SDL_MENU_FONT_COUNT] = {
+    "Main menu", "Inventory (all tabs)", "Abilities",
+    "Character sheet", "Smithing", "Settings", "Knowledge", "Help", "Messages",
+    "Halls of Mandos", "Songs", "Quests", "Character creation", "Story pages",
+    "Questions and choices", "Log menu", "Pane menu", "Look"
+};
+
+const char* sdl_menu_font_key(enum sdl_menu_font menu)
+{
+    return menu >= 0 && menu < SDL_MENU_FONT_COUNT ? menu_font_keys[menu] : "";
+}
+
+const char* sdl_menu_font_label(enum sdl_menu_font menu)
+{
+    return menu >= 0 && menu < SDL_MENU_FONT_COUNT ? menu_font_labels[menu] : "";
+}
+
 static bool sdl_config_gamepad_dpad_source_is_valid(int source)
 {
     return source >= GAMEPAD_DPAD_SOURCE_STANDARD
@@ -3684,6 +3707,23 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         if (cJSON_IsBool(item)) {
             config->bigger_font = cJSON_IsTrue(item);
         }
+        /* Retain the old all-text choice on first load, then persist each
+         * menu separately. Changing the UI toggle never changes these. */
+        cJSON* menu_fonts = cJSON_GetObjectItemCaseSensitive(sdl,
+            "menuBiggerFont");
+        for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++) {
+            item = cJSON_GetObjectItemCaseSensitive(menu_fonts,
+                sdl_menu_font_key(menu));
+            config->menu_bigger_font[menu] = cJSON_IsBool(item)
+                ? cJSON_IsTrue(item) : config->bigger_font;
+        }
+        if (!cJSON_IsObject(menu_fonts) && config->debug_character_sheet)
+            config->menu_bigger_font[SDL_MENU_FONT_CHARACTER] = true;
+        config->debug_character_sheet = false;
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "showMenuFontButton");
+        if (cJSON_IsBool(item))
+            config->show_menu_font_button = cJSON_IsTrue(item);
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "mobileStartingZoomOffset");
@@ -5353,6 +5393,11 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddBoolToObject(sdl, "debugCharacterSheet",
         config->debug_character_sheet);
     cJSON_AddBoolToObject(sdl, "biggerFont", config->bigger_font);
+    cJSON_AddBoolToObject(sdl, "showMenuFontButton", config->show_menu_font_button);
+    cJSON* menu_fonts = cJSON_AddObjectToObject(sdl, "menuBiggerFont");
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+        cJSON_AddBoolToObject(menu_fonts, sdl_menu_font_key(menu),
+            config->menu_bigger_font[menu]);
     cJSON_AddNumberToObject(sdl, "mobileStartingZoomOffset",
         config->mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -6076,6 +6121,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->compact_inventory_menus = false;
     config->debug_character_sheet = false;
     config->bigger_font = false;
+    memset(config->menu_bigger_font, 0, sizeof(config->menu_bigger_font));
+    config->show_menu_font_button = false;
     config->mobile_starting_zoom_offset =
         SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;
     config->mobile_portrait_mode = false;

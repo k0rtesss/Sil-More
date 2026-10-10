@@ -3960,7 +3960,7 @@ void do_cmd_help_menu(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
     Term_clear();
@@ -4122,7 +4122,7 @@ void do_cmd_help(void)
     /* Save screen */
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
 
@@ -4219,7 +4219,7 @@ void do_cmd_help(void)
 
             if (sdl_touch_only_device_active()) {
                 SDL_strlcpy(nav,
-                    get_sdl_bigger_font()
+                    get_sdl_menu_bigger_font()
                         ? "Search finds topics; swipe pages; Exit closes"
                         : "Tap Search to find a topic   swipe or tap left/right   "
                           "tap Exit to close",

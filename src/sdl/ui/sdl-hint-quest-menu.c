@@ -231,7 +231,7 @@ static void sdl_hint_quest_draw_text(TTF_Font* font, cptr text,
     }
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         if (!wrapped && sdl_touch_pane_story_text_width(font, text) > rect->w)
             wrapped = true;
@@ -797,10 +797,10 @@ static void sdl_hint_quest_draw_contextual_text(TTF_Font* font,
 static int sdl_hint_quest_body_px(const SDL_Rect* screen)
 {
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         (void)screen;
-        return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+        return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     }
 #endif
     float short_side;
@@ -820,7 +820,7 @@ static int sdl_hint_quest_body_px(const SDL_Rect* screen)
         px = 44;
     if (px > 72)
         px = 72;
-    return sdl_ui_font_px(px);
+    return sdl_menu_font_px(px);
 }
 
 static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
@@ -843,16 +843,16 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
         return false;
     *out = (sdl_hint_quest_layout){ 0 };
 
-    screen = sdl_get_layout_screen_rect();
+    screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
     if (screen.w <= 0 || screen.h <= 0)
         return false;
     portrait = screen.h > screen.w;
     out->body_px = sdl_hint_quest_body_px(&screen);
     out->title_px = (int)((float)out->body_px * 1.18f + 0.5f);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
-        out->title_px = sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
+        out->title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
     }
 #endif
     out->line_h = (float)out->body_px * 1.22f;
@@ -898,7 +898,7 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
         8.0f, 18.0f);
     title_h = (float)out->title_px * 1.22f;
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         {
             int text_h = 0;
@@ -920,7 +920,7 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
         footer_h = MAX(46.0f, (float)out->body_px * 1.56f);
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         if (g_hint_quest.show_tabs)
             tabs_h = MAX((float)out->body_px * 2.9f + 4.0f, (float)sdl_ui_min_tap_px());
@@ -1138,7 +1138,7 @@ static float sdl_hint_quest_block_height(TTF_Font* font,
         float height = (float)measured_h
             + ((block->choice != 0) ? layout->card_pad_y * 2.0f : 0.0f);
 #if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_bigger_font())
+        if (get_sdl_menu_bigger_font())
         {
             if (block->choice != 0)
                 height = MAX(height, (float)sdl_ui_min_tap_px());
@@ -1327,7 +1327,7 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
     gap = sdl_touch_pane_clampf((float)layout->body_px * 0.42f,
         7.0f, 16.0f);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         gap = sdl_touch_pane_clampf((float)layout->body_px * 0.40f,
             8.0f, 18.0f);
@@ -1366,10 +1366,10 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
             .h = layout->footer.h
         };
 #if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_bigger_font())
+        if (get_sdl_menu_bigger_font())
         {
             {
-                SDL_Rect screen = sdl_get_layout_screen_rect();
+                SDL_Rect screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
                 int columns = screen.h > screen.w ? 2 : g_hint_quest.button_count;
                 int rows = (g_hint_quest.button_count + columns - 1) / columns;
                 float row_h = (layout->footer.h - gap * (rows - 1)) / rows;
@@ -1890,7 +1890,7 @@ bool sdl_hint_quest_menu_handle_event(const SDL_Event* ev)
 
     case SDL_EVENT_MOUSE_WHEEL:
     {
-        SDL_Rect screen = sdl_get_layout_screen_rect();
+        SDL_Rect screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
 
         sdl_hint_quest_scroll_by(-(float)ev->wheel.y * 3.0f
             * (float)sdl_hint_quest_body_px(&screen));

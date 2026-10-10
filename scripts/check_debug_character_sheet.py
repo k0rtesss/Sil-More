@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render Big font character-sheet pages and replay navigation without player files."""
+"""Render responsive character-sheet pages and replay navigation without player files."""
 from pathlib import Path
 import os
 import shlex
@@ -15,6 +15,9 @@ HARNESS = CARD_HARNESS[:CARD_HARNESS.index("static void field(")] + r'''
 #include "sdl/ui/sdl-screens.c"
 
 static float fixture_density=1.0f;
+static bool sample_case;
+static bool fit_case;
+static int fixture_top_inset, fixture_bottom_inset;
 float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display) { return fixture_density; }
 #ifdef SIL_IOS
 void sdl_ios_request_orientation(bool portrait) {}
@@ -26,25 +29,42 @@ bool sdl_ios_get_safe_area_insets(SDL_Window *window,
 void __wrap_tutorial_continue(void) { fixture.active=false; }
 bool __wrap_sdl_touch_only_device_active(void) { return false; }
 SDL_Rect __wrap_sdl_get_layout_screen_rect(void)
-{ return (SDL_Rect){0,0,fixture_width,fixture_height}; }
+{ return (SDL_Rect){0,fixture_top_inset,fixture_width,
+    fixture_height-fixture_top_inset-fixture_bottom_inset}; }
 
 static SDL_Texture *measured_texture;
 static int measured_w, measured_h;
 static char measured_text[256];
 static bool checking_text;
 static SDL_FRect text_rects[256];
+static char text_names[256][256];
+static char frame_text[16384];
 static int text_count;
 static char all_text[65536];
+static int primary_draws, secondary_draws;
 SDL_Texture *__real_sdl_ui_text_texture(TTF_Font *,cptr,SDL_Color,int *,int *);
 static void measure_text(SDL_Texture *texture,TTF_Font *font,cptr text,int w,int h)
 {
     if (checking_text && texture) {
         measured_texture=texture; measured_w=w; measured_h=h;
         SDL_strlcpy(measured_text,text,sizeof(measured_text));
-        fixture_assert(TTF_GetFontHeight(font)>=(SIL_SDL_MOBILE_BUILD
+        fixture_assert(!TTF_FontIsFixedWidth(font));
+        bool secondary=false;
+        for (int i=0;i<g_state.story_font_count;i++)
+            if (g_state.story_fonts[i].font==font) {
+                if (g_state.story_fonts[i].slot==SDL_STORY_FONT_SLOT_DEFAULT) primary_draws++;
+                if (g_state.story_fonts[i].slot==SDL_STORY_FONT_SLOT_CHAR_NUM) {
+                    secondary_draws++; secondary=true;
+                }
+            }
+        if (isdigit((unsigned char)text[0]) || text[0]=='+' || text[0]=='-')
+            fixture_assert(secondary);
+        fixture_assert(streq(text,"B") || TTF_GetFontHeight(font)>=(SIL_SDL_MOBILE_BUILD
             ? (int)SDL_ceilf(fixture_density*24) : 42));
         SDL_strlcat(all_text,text,sizeof(all_text));
         SDL_strlcat(all_text,"\n",sizeof(all_text));
+        SDL_strlcat(frame_text,text,sizeof(frame_text));
+        SDL_strlcat(frame_text,"\n",sizeof(frame_text));
     }
 }
 SDL_Texture *__wrap_sdl_ui_text_texture(TTF_Font *font,cptr text,SDL_Color color,int *w,int *h)
@@ -71,11 +91,20 @@ bool __wrap_SDL_RenderTexture(SDL_Renderer *renderer,SDL_Texture *texture,
                 measured_w,measured_h,dst->w,dst->h);
         fixture_assert(dst->w>=measured_w-1.0f && dst->h>=measured_h-1.0f);
         fixture_assert(dst->x>=0 && dst->y>=0);
+        fixture_assert(dst->y>=fixture_top_inset);
         fixture_assert(dst->x+dst->w<=fixture_width+1);
         fixture_assert(dst->y+dst->h<=fixture_height+1);
-        for (int i=0;i<text_count;++i)
+        fixture_assert(dst->y+dst->h<=fixture_height-fixture_bottom_inset+1);
+        for (int i=0;i<text_count;++i) {
+            if (SDL_HasRectIntersectionFloat(dst,&text_rects[i]))
+                printf("Overlap '%s' [%.1f %.1f %.1f %.1f] / '%s' [%.1f %.1f %.1f %.1f], page %d\n",
+                    measured_text,dst->x,dst->y,dst->w,dst->h,text_names[i],
+                    text_rects[i].x,text_rects[i].y,text_rects[i].w,text_rects[i].h,
+                    g_sdl_character_sheet_screen.debug_page);
             fixture_assert(!SDL_HasRectIntersectionFloat(dst,&text_rects[i]));
+        }
         fixture_assert(text_count<256);
+        SDL_strlcpy(text_names[text_count],measured_text,sizeof(text_names[text_count]));
         text_rects[text_count++]=*dst;
     }
     return __real_SDL_RenderTexture(renderer,texture,src,dst);
@@ -83,10 +112,19 @@ bool __wrap_SDL_RenderTexture(SDL_Renderer *renderer,SDL_Texture *texture,
 
 static void frame(void)
 {
-    text_count=0; measured_texture=NULL; checking_text=true;
+    text_count=0; measured_texture=NULL; checking_text=true; frame_text[0]='\0';
     fixture_assert(sdl_render_current_window_frame());
     checking_text=false;
+    if (text_count<5)
+        printf("Sparse frame: %d texts, context %d, page %d/%d, %d rows, text: %s\n",
+            text_count,g_sdl_character_sheet_screen.context,
+            g_sdl_character_sheet_screen.debug_page,g_sdl_character_sheet_screen.debug_page_count,
+            g_debug_sheet_row_count,frame_text);
     fixture_assert(text_count>=5); /* Section heading, content, and three controls. */
+    fixture_assert(!strstr(frame_text,"Big font"));
+    if (fixture_height>fixture_width*1.5f && fixture_width>=360)
+        fixture_assert(strstr(frame_text,"Character sheet") ||
+            (strstr(frame_text,"Character") && strstr(frame_text,"sheet")));
 }
 
 static SDL_FRect control(int choice)
@@ -144,12 +182,67 @@ static void gamepad(SDL_GamepadButton button,char expected)
     fixture_assert(Term_inkey(&key,false,true)!=0);
 }
 
+static void swipe_event(float dx,float dy,char expected,bool cancel,bool second_finger)
+{
+    SDL_Event ev={0}; char key=0;
+    int page=g_sdl_character_sheet_screen.debug_page;
+    float x=fixture_width*.5f;
+    float y=fixture_top_inset+(fixture_height-fixture_top_inset-fixture_bottom_inset)*.4f;
+    ev.type=SDL_EVENT_FINGER_DOWN;
+    ev.tfinger.windowID=SDL_GetWindowID(g_state.window);
+    ev.tfinger.fingerID=71;
+    ev.tfinger.x=x/fixture_width; ev.tfinger.y=y/fixture_height;
+    sdl_handle_event(&g_state,&ev);
+    fixture_assert(sdl_screen_back_gesture_pending_timeout_ms(SDL_GetTicksNS())<0);
+    if (second_finger) {
+        ev.tfinger.fingerID=72; sdl_handle_event(&g_state,&ev);
+        ev.type=SDL_EVENT_FINGER_UP; sdl_handle_event(&g_state,&ev);
+        ev.tfinger.fingerID=71;
+    }
+    ev.type=SDL_EVENT_FINGER_MOTION;
+    ev.tfinger.x=(x+dx)/fixture_width; ev.tfinger.y=(y+dy)/fixture_height;
+    for (int i=0;i<3;i++) sdl_handle_event(&g_state,&ev);
+    fixture_assert(Term_inkey(&key,false,true)!=0); /* Commit on release. */
+    ev.type=cancel?SDL_EVENT_FINGER_CANCELED:SDL_EVENT_FINGER_UP;
+    sdl_handle_event(&g_state,&ev);
+    fixture_assert(!ui_menu_click_has_pending());
+    if (expected) {
+        fixture_assert(Term_inkey(&key,false,true)==0 && key==expected);
+        fixture_assert(sdl_character_sheet_screen_debug_turn_page(expected==']'?1:-1));
+        fixture_assert(g_sdl_character_sheet_screen.debug_page==page+(expected==']'?1:-1));
+        frame();
+    } else fixture_assert(g_sdl_character_sheet_screen.debug_page==page);
+    fixture_assert(Term_inkey(&key,false,true)!=0);
+    fixture_assert(!g_sdl_character_sheet_screen.birth_swipe.active);
+}
+
+static void check_swipes(void)
+{
+    float distance=fixture_width*.35f;
+    g_sdl_character_sheet_screen.debug_page=0; frame();
+    swipe_event(distance,0,0,false,false); /* First-page boundary. */
+    swipe_event(-distance,0,']',false,false);
+    swipe_event(distance,0,'[',false,false);
+    swipe_event(-distance,0,0,true,false); /* Cancel even after crossing threshold. */
+    swipe_event(sdl_character_sheet_swipe_threshold_px()*.2f,0,0,false,false);
+    float start_y=fixture_top_inset+(fixture_height-fixture_top_inset-fixture_bottom_inset)*.4f;
+    SDL_FRect next=control(']');
+    swipe_event(0,next.y+next.h*.5f-start_y,0,false,false); /* End a vertical drag on Next. */
+    swipe_event(-distance,0,']',false,true);
+    swipe_event(distance,0,'[',false,false);
+    g_sdl_character_sheet_screen.debug_page=g_sdl_character_sheet_screen.debug_page_count-1;
+    frame(); swipe_event(-distance,0,0,false,false); /* Last-page boundary. */
+    swipe_event(distance,0,'[',false,false);
+}
+
 static void check(int width,int height,bool big)
 {
     config.bigger_font=big;
+    primary_draws=secondary_draws=0;
+    config.menu_bigger_font[SDL_MENU_FONT_CHARACTER]=big;
     fixture_width=width; fixture_height=height; all_text[0]='\0';
     SDL_strlcpy(fixture_id,"debug-character-sheet",sizeof(fixture_id));
-    g_state.window=SDL_CreateWindow("Big font character sheet fixture",width,height,SDL_WINDOW_HIDDEN);
+    g_state.window=SDL_CreateWindow("Character sheet fixture",width,height,SDL_WINDOW_HIDDEN);
     fixture_assert(g_state.window!=NULL);
     g_state.renderer=SDL_CreateRenderer(g_state.window,"software");
     fixture_assert(g_state.renderer!=NULL);
@@ -164,24 +257,45 @@ static void check(int width,int height,bool big)
     frame();
     int pages=g_sdl_character_sheet_screen.debug_page_count;
     int px=g_sdl_character_sheet_screen.last_body_px;
+    if (fit_case) {
+        int overview_pages=0, skill_pages=0;
+        for (int page=0;page<pages;page++) {
+            if (g_debug_sheet_page_section[page]==0) overview_pages++;
+            if (g_debug_sheet_page_section[page]==2) skill_pages++;
+        }
+        printf("Fit case %dx%d inset %d/%d: overview %d pages, skills %d pages\n",
+            width,height,fixture_top_inset,fixture_bottom_inset,overview_pages,skill_pages);
+        fixture_assert(overview_pages==1 && skill_pages==1);
+        fixture_assert(strstr(frame_text,"Voice") && strstr(frame_text,"41 / 41"));
+    }
+    bool seen[SDL_DEBUG_SHEET_MAX_ROWS]={0};
     fixture_assert(pages>=5);
 #if SIL_SDL_MOBILE_BUILD
     fixture_assert(px==(int)SDL_ceilf(fixture_density*24));
 #else
-    int normal_px=sdl_char_sheet_clampi((int)(MIN(width,height)*.065f),28,56);
+    int normal_px=sdl_char_sheet_clampi((int)(MIN(g_debug_sheet_canvas.w,g_debug_sheet_canvas.h)*.065f),28,56);
     fixture_assert(px==normal_px+(normal_px+1)/2);
 #endif
     fixture_assert(!sdl_character_sheet_screen_debug_turn_page(-1));
+    if (width>height) {
+        /* Landscape uses both halves of the viewport for the overview. */
+        fixture_assert(g_debug_sheet_column_start[0][1]>g_debug_sheet_page_start[0]);
+        fixture_assert(g_debug_sheet_column_start[0][2]>g_debug_sheet_column_start[0][1]);
+    }
     for (int page=0;page<pages;++page) {
         fixture_assert(g_sdl_character_sheet_screen.debug_page==page);
         fixture_assert(g_sdl_character_sheet_screen.last_body_px==px);
+        for (int row=g_debug_sheet_page_start[page];row<g_debug_sheet_page_start[page+1];row++) {
+            fixture_assert(!seen[row]); seen[row]=true;
+        }
         SDL_FRect close=control(ESCAPE);
         fixture_assert(close.h>=44);
         for (int i=0;i<text_count;++i)
             if (text_rects[i].y<close.y)
                 fixture_assert(text_rects[i].y+text_rects[i].h<close.y);
-        char path[96];
-        strnfmt(path,sizeof(path),"big-font-sheet-%dx%d-%s-%02d.png",width,height,big?"on":"off",page+1);
+        char path[112];
+        strnfmt(path,sizeof(path),"%scharacter-sheet-%dx%d-%s-%02d.png",fit_case?"fit-":sample_case?"sample-":"",
+            width,height,big?"on":"off",page+1);
         SDL_Surface *pixels=SDL_RenderReadPixels(g_state.renderer,NULL);
         fixture_assert(pixels && IMG_SavePNG(pixels,path));
         SDL_DestroySurface(pixels);
@@ -191,15 +305,42 @@ static void check(int width,int height,bool big)
         }
     }
     fixture_assert(!sdl_character_sheet_screen_debug_turn_page(1));
-    fixture_assert(strstr(all_text,"Perception") && strstr(all_text,"Smithing"));
+    fixture_assert(primary_draws>0 && secondary_draws>0);
+    char joined_text[65536]; int joined_count=0;
+    for (const char *c=all_text;*c;c++)
+        if (!isspace((unsigned char)*c)) joined_text[joined_count++]=*c;
+    joined_text[joined_count]='\0';
+    fixture_assert(strstr(joined_text,"Perception") && strstr(joined_text,"Smithing"));
     fixture_assert(strstr(all_text,"Voice") && strstr(all_text,"Offhand"));
-    fixture_assert(strstr(all_text,"Attributes") && strstr(all_text,"Traits"));
+    fixture_assert((strstr(all_text,"Attributes") || strstr(all_text,"Stats"))
+        && strstr(all_text,"Traits"));
     /* Enlarged trait names may wrap or span a page boundary. */
-    fixture_assert(strstr(all_text,"Creator of") && strstr(all_text,"Angrist")
-        && strstr(all_text,"Background"));
-    fixture_assert(strstr(all_text,"END_OF_HISTORY"));
+    if (!sample_case)
+        fixture_assert(strstr(all_text,"Creator of") && strstr(all_text,"Angrist"));
+    fixture_assert(strstr(all_text,"Background") || strstr(all_text,"Story"));
+    int history_start=0;
+    for (int page=0;page<pages;page++)
+        if (g_debug_sheet_page_section[page]==4) { history_start=g_debug_sheet_page_start[page]; break; }
+    char history_text[16384]="";
+    for (int i=0;i<g_debug_sheet_row_count;i++) {
+        fixture_assert(seen[i]);
+        if (i<history_start) continue;
+        for (const char *c=g_debug_sheet_rows[i].text;*c;c++)
+            if (!isspace((unsigned char)*c)) {
+                size_t len=strlen(history_text);
+                if (len+1<sizeof(history_text)) { history_text[len]=*c; history_text[len+1]='\0'; }
+            }
+    }
+    fixture_assert(strstr(history_text,"END_OF_HISTORY"));
     key_event(SDLK_PAGEUP,'['); key_event(SDLK_PAGEDOWN,']');
     key_event(SDLK_LEFT,'['); key_event(SDLK_RIGHT,']');
+    for (int direction=-1;direction<=1;direction+=2) {
+        SDL_Event wheel={0}; char key=0;
+        wheel.type=SDL_EVENT_MOUSE_WHEEL; wheel.wheel.which=1; wheel.wheel.y=direction;
+        sdl_handle_event(&g_state,&wheel);
+        fixture_assert(Term_inkey(&key,false,true)==0 && key==(direction>0?'[':']'));
+        fixture_assert(Term_inkey(&key,false,true)!=0);
+    }
     gamepad(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,'[');
     gamepad(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,']');
     gamepad(SDL_GAMEPAD_BUTTON_DPAD_LEFT,'[');
@@ -210,19 +351,33 @@ static void check(int width,int height,bool big)
     fixture_assert(sdl_character_sheet_screen_debug_turn_page(-1));
     frame(); pointer_event(']',false); pointer_event(']',true);
     pointer_event(ESCAPE,false); pointer_event(ESCAPE,true);
+    check_swipes();
 
-    /* Reflow a late page after a rotation; reopening starts at the overview. */
+    /* Rotation preserves both the Skills section and the visible skill. */
+    for (int page=0;page<pages;page++)
+        if (g_debug_sheet_page_section[page]==2)
+            g_sdl_character_sheet_screen.debug_page=page;
+    frame();
+    int section=g_debug_sheet_page_section[g_sdl_character_sheet_screen.debug_page];
+    int anchor=g_debug_sheet_rows[g_debug_sheet_page_start[g_sdl_character_sheet_screen.debug_page]].entry_index;
     fixture_width=height; fixture_height=width;
     fixture_assert(SDL_SetWindowSize(g_state.window,height,width));
     g_state.safe_area=(SDL_Rect){0,0,height,width};
     frame();
     fixture_assert(g_sdl_character_sheet_screen.debug_page
         <g_sdl_character_sheet_screen.debug_page_count);
+    fixture_assert(g_debug_sheet_page_section[g_sdl_character_sheet_screen.debug_page]==section);
+    bool anchor_visible=false;
+    int rotated_page=g_sdl_character_sheet_screen.debug_page;
+    for (int row=g_debug_sheet_page_start[rotated_page];row<g_debug_sheet_page_start[rotated_page+1];row++)
+        if (g_debug_sheet_rows[row].entry_index==anchor) anchor_visible=true;
+    fixture_assert(anchor_visible);
     sdl_character_sheet_screen_hide();
     sdl_character_sheet_screen_begin_debug(); frame();
     fixture_assert(g_sdl_character_sheet_screen.debug_page==0);
     sdl_character_sheet_screen_hide();
     config.bigger_font=false;
+    config.menu_bigger_font[SDL_MENU_FONT_CHARACTER]=false;
     sdl_character_sheet_screen_begin_live(-1);
     fixture_assert(g_sdl_character_sheet_screen.context==SDL_CHARACTER_SHEET_LIVE);
     fixture_assert(!sdl_character_sheet_screen_debug_turn_page(1));
@@ -232,7 +387,7 @@ static void check(int width,int height,bool big)
     term_nuke(&view->t); term_screen=NULL; Term=NULL;
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
     SDL_DestroyWindow(g_state.window); g_state.window=NULL;
-    printf("Big font character sheet %dx%d (mode %s): %d pages, %dpx body, no shrinking/overlap/clipping; keyboard, mouse, touch, controller: PASS\n",
+    printf("Character sheet %dx%d (mode %s): %d pages, %dpx body, responsive columns/rotation, no shrinking/overlap/clipping; keyboard, mouse, touch/swipe, controller: PASS\n",
         width,height,big?"on":"off",pages,px);
 }
 
@@ -241,11 +396,13 @@ int main(int argc,char **argv)
     maxima limits={0}; player_type player={0};
     player_race race={0}; character_profile hero={0};
     object_type items[INVEN_TOTAL]={0};
-    fixture_assert(argc==2); setbuf(stdout,NULL); log_set_quiet(true);
+    fixture_assert(argc==4); setbuf(stdout,NULL); log_set_quiet(true);
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
     fixture_assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS)); fixture_assert(TTF_Init());
     sdl_config_set_defaults(&config);
     SDL_strlcpy(config.monospace_font,argv[1],sizeof(config.monospace_font));
+    SDL_strlcpy(config.story_font,argv[2],sizeof(config.story_font));
+    SDL_strlcpy(config.story_font2,argv[3],sizeof(config.story_font2));
     config.use_unsafe_area=true; g_state.system_scale=1;
     z_info=&limits; p_ptr=&player; p_info=&race; c_info=&hero; c_name="";
     inventory=items;
@@ -279,6 +436,38 @@ int main(int argc,char **argv)
         check(580,1280,big); check(360,800,big); check(800,360,big); check(320,568,big);
 #endif
     }
+#if SIL_SDL_MOBILE_BUILD
+    /* Reproduce the reported scores, then exercise mixed widths and signs. */
+    sample_case=true; fixture_density=1.5f;
+    hero.flags_u=UNQ_MEL_MAEDHROS;
+    SDL_strlcpy(op_ptr->full_name,"Maedhros the Red",sizeof(op_ptr->full_name));
+    player.new_exp=890; player.exp=5090; player.total_weight=83; player.depth=1;
+    const int base[]={5,0,5,0,3,3,0,0};
+    const int gear[]={0,0,1,0,0,0,0,0};
+    const int misc[]={1,0,0,-1,1,2,1,0};
+    for (int i=0;i<8;i++) {
+        player.skill_base[i]=base[i]; player.skill_stat_mod[i]=4;
+        player.skill_equip_mod[i]=gear[i]; player.skill_misc_mod[i]=misc[i];
+        player.skill_use[i]=base[i]+4+gear[i]+misc[i];
+    }
+    check(580,1280,true); check(1280,580,true);
+    fit_case=true; fixture_top_inset=64; fixture_bottom_inset=16;
+    player.csp=41; player.msp=41;
+    check(582,1280,true);
+    fixture_density=2.75f; fixture_top_inset=132; fixture_bottom_inset=24;
+    check(1080,2400,true);
+    fit_case=false; fixture_top_inset=fixture_bottom_inset=0;
+    sample_case=false; fixture_density=1.0f;
+    hero.flags_u=~0u;
+    player.skill_base[S_MEL]=94; player.skill_equip_mod[S_MEL]=7;
+    player.skill_misc_mod[S_MEL]=0; player.skill_use[S_MEL]=105;
+    player.skill_stat_mod[S_STL]=-2; player.skill_use[S_STL]=-3;
+    check(360,800,true); check(800,360,true);
+    /* Configured proportional faces can have very different column metrics. */
+    SDL_strlcpy(config.story_font,argv[3],sizeof(config.story_font));
+    SDL_strlcpy(config.story_font2,argv[2],sizeof(config.story_font2));
+    check(360,800,true); check(800,360,true);
+#endif
     TTF_Quit(); SDL_Quit(); return 0;
 }
 '''
@@ -286,7 +475,10 @@ int main(int argc,char **argv)
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    source = OUT / "check.c"
+    # Keep compilation independent of another check using the same build tree.
+    work = OUT / f"run-{os.getpid()}"
+    work.mkdir()
+    source = work / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     env = os.environ.copy()
@@ -304,15 +496,15 @@ def main():
                       "src/sdl/config/sdl-settings.c", "src/sdl/render/sdl-fonts.c",
                       "src/sdl-config.c", "src/sdl/input/sdl-touch-controls.c",
                       "src/sdl/ui/sdl-panes.c"]
-    for mobile in (False, True):
+    for mobile in (True, False):
         modules = mobile_sources if mobile else []
         excluded = tuple("/" + p + ".obj" for p in modules) + (
             "/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
             "/src/sdl/ui/sdl-screens.c.obj")
-        response = OUT / "objects.rsp"
+        response = work / "objects.rsp"
         response.write_text("\n".join('"' + obj + '"' for obj in objects
                                      if not obj.endswith(excluded)), encoding="utf-8")
-        exe = OUT / ("check-mobile.exe" if mobile else "check.exe")
+        exe = work / ("check-mobile.exe" if mobile else "check.exe")
         command = ["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g"]
         if mobile:
             command.append("-DSIL_IOS")
@@ -323,7 +515,9 @@ def main():
         subprocess.run(command, cwd=BUILD, env=env, check=True)
         output = OUT / ("mobile" if mobile else "desktop")
         output.mkdir(exist_ok=True)
-        subprocess.run([str(exe), str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf")],
+        subprocess.run([str(exe), str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf"),
+                        str(ROOT / "lib/xtra/font/Cinzel-Medium.ttf"),
+                        str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
                        cwd=output, env=env, check=True, timeout=60)
 
 
