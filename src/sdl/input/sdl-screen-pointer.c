@@ -1060,6 +1060,12 @@ bool sdl_welcome_touch_handle_pointer_motion(float x, float y,
         return true;
     }
     if (g_welcome_pager_dragged) return true;
+    /* Enlarged welcome screens advance only on a short tap. Suppress the
+     * legacy horizontal swipe actions, including drags outside the text. */
+    if (get_sdl_bigger_font() && sdl_welcome_screen_active()) {
+        g_welcome_pager_dragged = true;
+        return true;
+    }
     if (sdl_pause_text_screen_active())
         return true;
 

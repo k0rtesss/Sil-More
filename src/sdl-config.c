@@ -3262,7 +3262,8 @@ void sdl_pane_profile_apply_bigger_font_defaults(
     profile->enable_right_panes = false;
     profile->enable_bottom_panes = false;
     profile->left_overlays_touch_screen_edge = true;
-    profile->show_overlay_log_border = false;
+    profile->show_overlay_log_border =
+        orientation == SDL_PANE_ORIENTATION_PORTRAIT;
     profile->show_main_menu_button = false;
     profile->left_panel_expanded_on_launch = false;
     profile->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_ROW;

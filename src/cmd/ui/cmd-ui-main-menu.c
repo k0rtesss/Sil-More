@@ -1271,15 +1271,31 @@ static void log_history_entry_search_text(const log_history_entry* entry,
         int net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
         int net_dam = roll->dam - roll->prot;
         char dice[48];
+        char attacker[3] = { '?', '\0', '\0' };
+        char defender[3] = { '?', '\0', '\0' };
+
+        /* Tile indices are not text (or UTF-8). Reserve printable cells for
+         * them; the wrapped renderer replaces these with the stored icons. */
+        if (!(roll->attacker_attr & 0x80)
+            && !((byte)roll->attacker_char & 0x80))
+            attacker[0] = roll->attacker_char;
+        if (!(roll->defender_attr & 0x80)
+            && !((byte)roll->defender_char & 0x80))
+            defender[0] = roll->defender_char;
+        if (use_bigtile && !graphics_are_ascii())
+        {
+            attacker[1] = '?';
+            defender[1] = '?';
+        }
 
         if (net_dam < 0)
             net_dam = 0;
 
         log_history_format_damage_dice(roll, dice, sizeof(dice));
         strnfmt(out, out_sz,
-            "Combat %c to %c att %+d hit %d evn %+d damage %s net %d "
+            "Combat %s to %s att %+d hit %d evn %+d damage %s net %d "
             "protection %d",
-            roll->attacker_char, roll->defender_char, roll->att, net_att,
+            attacker, defender, roll->att, net_att,
             roll->evn, dice, net_dam, roll->prot);
     }
 }
@@ -1350,7 +1366,9 @@ static int log_history_wrapped_entry_rows(int filter, int idx, int width)
     byte attr;
 
     log_history_wrapped_entry_text(filter, idx, text, sizeof(text), &attr);
-    if (!get_sdl_bigger_font())
+    if (!get_sdl_bigger_font()
+        && (filter == LOG_HISTORY_FILTER_NOTES
+            || log_history_entries[idx].kind != LOG_HISTORY_ENTRY_COMBAT))
         return count_wrapped_lines(text, width, 0);
     cptr cursor = text;
     char line[256];
@@ -1389,6 +1407,50 @@ static void log_history_draw_wrapped_text(int row, int width, byte attr,
     text_out_to_screen(attr, cursor);
     text_out_wrap = old_wrap;
     text_out_indent = old_indent;
+}
+
+static void log_history_draw_wrapped_combat(const log_history_entry* entry,
+    int row, int width, cptr highlight, int first_line, int max_rows)
+{
+    char text[256];
+    char line[256];
+    cptr cursor = text;
+    int tile_width = use_bigtile && !graphics_are_ascii() ? 2 : 1;
+    int icon_cols[] = { sizeof("Combat ") - 1,
+        sizeof("Combat ") - 1 + tile_width + sizeof(" to ") - 1 };
+    byte attrs[] = { entry->roll->attacker_attr, entry->roll->defender_attr };
+    char chars[] = { entry->roll->attacker_char, entry->roll->defender_char };
+    int index = 0;
+    int drawn = 0;
+
+    log_history_entry_search_text(entry, text, sizeof(text));
+    while (drawn < max_rows)
+    {
+        int start = (int)(cursor - text);
+        if (!log_history_wrap_next(&cursor, width, line, sizeof(line)))
+            break;
+        if (index++ < first_line)
+            continue;
+
+        /* Erase the placeholders before drawing text, then queue icons into
+         * the same cells. Never pass a graphical tile byte to text output. */
+        for (size_t i = 0; i < N_ELEMENTS(icon_cols); i++)
+        {
+            int col = icon_cols[i] - start;
+            if (col >= 0 && col + tile_width <= (int)strlen(line))
+                memset(line + col, ' ', tile_width);
+        }
+        log_history_draw_wrapped_text(row + drawn, width, TERM_WHITE,
+            line, highlight);
+        for (size_t i = 0; i < N_ELEMENTS(icon_cols); i++)
+        {
+            int col = icon_cols[i] - start;
+            if (col >= 0 && col + tile_width <= (int)strlen(line))
+                log_history_put_tile_scrolled(&col, row + drawn, 0,
+                    attrs[i], chars[i]);
+        }
+        drawn++;
+    }
 }
 
 static int log_history_wrapped_last_page_start(int filter, int count,
@@ -3369,11 +3431,15 @@ void do_cmd_messages_with_filter(int initial_filter)
             log_history_wrapped_entry_text(filter, i + j, wrapped_text,
                 sizeof(wrapped_text), &wrapped_attr);
             if (!notes_mode
-                && log_history_entries[i + j].kind == LOG_HISTORY_ENTRY_COMBAT
-                && wrapped_rows == 1)
+                && log_history_entries[i + j].kind == LOG_HISTORY_ENTRY_COMBAT)
             {
-                log_history_draw_combat_entry(&log_history_entries[i + j],
-                    line_y, 0);
+                if (wrapped_rows == 1)
+                    log_history_draw_combat_entry(&log_history_entries[i + j],
+                        line_y, 0);
+                else
+                    log_history_draw_wrapped_combat(&log_history_entries[i + j],
+                        line_y, wid, shower, continued ? entry_line_top : 0,
+                        drawn_rows);
             }
             else
             {

@@ -1610,6 +1610,14 @@ static float sdl_welcome_bottom_margin(const SDL_Rect* canvas)
     return sdl_char_sheet_clampf((float)canvas->h * 0.055f, 18.0f, 60.0f);
 }
 
+static SDL_FRect sdl_welcome_close_rect(const SDL_Rect* canvas)
+{
+    float margin = 8.0f * sdl_ui_density_scale();
+    float size = (float)sdl_ui_min_tap_px();
+    return (SDL_FRect){ canvas->x + canvas->w - margin - size,
+        canvas->y + margin, size, size };
+}
+
 void sdl_poetry_sequence_layout_begin(void)
 {
     SDL_Rect canvas = sdl_get_window_pixel_rect();
@@ -1668,21 +1676,16 @@ static float sdl_welcome_footer_height_for_base(int base_px, float width,
     float gap = line_h * 0.36f;
     float height = line_h;
 
-#if SIL_SDL_MOBILE_BUILD
     if (get_sdl_bigger_font()) {
         if (g_sdl_welcome_screen.mode == SDL_WELCOME_SCREEN_MENU) {
-            line_h = MAX((float)sdl_ui_min_tap_px(),
-                line_h + 8.0f * sdl_ui_density_scale());
-            height = line_h;
-            if (g_sdl_welcome_screen.show_wizard)
-                height += gap + sdl_welcome_complete_text_h(font,
-                    "Resurrecting a character is a form of cheating.", width, 0);
+            line_h = sdl_welcome_complete_text_h(font,
+                "Resurrecting a character is a form of cheating.", width, line_h);
+            height = g_sdl_welcome_screen.show_wizard ? line_h : 0;
         } else {
             height = line_h = sdl_welcome_complete_text_h(font,
                 g_sdl_welcome_screen.status, width, line_h);
         }
     } else
-#endif
     {
         if (g_sdl_welcome_screen.mode == SDL_WELCOME_SCREEN_MENU
             && g_sdl_welcome_screen.show_wizard)
@@ -1850,11 +1853,20 @@ static bool sdl_welcome_measure_layout_for_base(const SDL_Rect* canvas,
 
     top_margin = sdl_welcome_top_margin(canvas);
     bottom_margin = sdl_welcome_bottom_margin(canvas);
+    if (get_sdl_bigger_font()
+        && g_sdl_welcome_screen.mode == SDL_WELCOME_SCREEN_MENU) {
+        SDL_FRect close = sdl_welcome_close_rect(canvas);
+        top_margin = MAX(top_margin, close.y + close.h - canvas->y
+            + 8.0f * sdl_ui_density_scale());
+    }
     if (!sdl_welcome_action_footer_gap_for_base(base_px, &intro_footer_gap))
     {
         intro_footer_gap = sdl_char_sheet_clampf((float)base_px * 1.35f,
             18.0f, 84.0f);
     }
+    if (get_sdl_bigger_font()
+        && g_sdl_welcome_screen.mode == SDL_WELCOME_SCREEN_MENU && footer_h == 0)
+        intro_footer_gap = 0;
     available_h = (float)canvas->h - top_margin - bottom_margin;
     need_h = intro_h + intro_footer_gap + footer_h;
     fits = fit_w <= content.w && need_h <= available_h;
@@ -2149,39 +2161,30 @@ void sdl_welcome_render_menu_footer_canvas(const SDL_Rect* canvas)
 
     sdl_welcome_screen_clear_hits();
 
-#if SIL_SDL_MOBILE_BUILD
     if (get_sdl_bigger_font())
     {
-        {
-            float gap = 6.0f * sdl_ui_density_scale();
-            float hint_h = g_sdl_welcome_screen.show_wizard
-                ? sdl_welcome_complete_text_h(metrics.footer_font, wizard_line,
-                    metrics.footer_w, 0) : 0;
-            float y = metrics.footer_top;
-            if (hint_h > 0) {
-                sdl_welcome_draw_text_box(metrics.footer_font, wizard_line, TERM_SLATE,
-                    (SDL_FRect){ metrics.footer_x, y, metrics.footer_w, hint_h }, true);
-                y += hint_h + metrics.footer_gap;
-            }
-            float width = (metrics.footer_w - gap) * 0.5f;
-            for (int i = 0; i < 2; i++) {
-                SDL_FRect rect = { metrics.footer_x + i * (width + gap), y,
-                    width, metrics.footer_line_h };
-                bool hover = i ? g_sdl_welcome_screen.hover_quit : g_sdl_welcome_screen.hover_continue;
-                SDL_SetRenderDrawColor(g_state.renderer, 8, 20, 32, 255);
-                SDL_RenderFillRect(g_state.renderer, &rect);
-                SDL_SetRenderDrawColor(g_state.renderer, 70, 120, 160, 255);
-                SDL_RenderRect(g_state.renderer, &rect);
-                sdl_welcome_draw_text_box(metrics.footer_font,
-                    i ? "Quit" : (g_sdl_welcome_screen.new_metarun ? "Begin" : "Continue"),
-                    hover ? TERM_L_BLUE : TERM_L_WHITE, rect, true);
-                if (i) g_sdl_welcome_screen.quit_rect = rect;
-                else g_sdl_welcome_screen.continue_rect = rect;
-            }
-            return;
+        SDL_FRect close = sdl_welcome_close_rect(canvas);
+        bool hover = g_sdl_welcome_screen.hover_quit;
+        SDL_SetRenderDrawColor(g_state.renderer, 8, 20, 32, 255);
+        SDL_RenderFillRect(g_state.renderer, &close);
+        SDL_SetRenderDrawColor(g_state.renderer, 70, 120, 160, 255);
+        SDL_RenderRect(g_state.renderer, &close);
+        float pad = close.w * 0.33f;
+        SDL_Color icon = sdl_welcome_color(hover ? TERM_L_BLUE : TERM_L_WHITE, 255);
+        SDL_SetRenderDrawColor(g_state.renderer, icon.r, icon.g, icon.b, icon.a);
+        for (int i = 0; i < MAX(1, (int)SDL_ceilf(sdl_ui_density_scale())); i++) {
+            SDL_RenderLine(g_state.renderer, close.x + pad, close.y + pad + i,
+                close.x + close.w - pad, close.y + close.h - pad + i);
+            SDL_RenderLine(g_state.renderer, close.x + pad, close.y + close.h - pad + i,
+                close.x + close.w - pad, close.y + pad + i);
         }
+        g_sdl_welcome_screen.quit_rect = close;
+        if (g_sdl_welcome_screen.show_wizard)
+            sdl_welcome_draw_text_box(metrics.footer_font, wizard_line, TERM_SLATE,
+                (SDL_FRect){ metrics.footer_x, metrics.footer_top,
+                    metrics.footer_w, metrics.footer_line_h }, true);
+        return;
     }
-#endif
 
     sdl_welcome_compose_menu_line(menu_line, sizeof(menu_line),
         quit_command, sizeof(quit_command), &primary_token);
@@ -4576,19 +4579,19 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
     bool paged_sheet = g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_DEBUG;
     int font_px = sdl_char_sheet_clampi(
         (int)(MIN(canvas->w, canvas->h) * 0.065f), 28, 56);
-    if (!paged_sheet)
-        font_px = sdl_ui_font_px(font_px);
+    /* Selecting the Big font sheet also enlarges text when the global
+     * Bigger font setting is off. Apply the 150% size exactly once. */
+    font_px = paged_sheet ? font_px + (font_px + 1) / 2 : sdl_ui_font_px(font_px);
 #if SIL_SDL_MOBILE_BUILD
-    /* This sheet uses normal-mode text sizes even when Bigger font selects it. */
-    font_px = paged_sheet ? MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * 16.0f))
+    font_px = paged_sheet ? MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * 24.0f))
         : sdl_ui_role_font_px(SDL_UI_FONT_BODY);
 #endif
     int title_px =
 #if SIL_SDL_MOBILE_BUILD
-        paged_sheet ? MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * 20.0f))
+        paged_sheet ? MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * 30.0f))
             : sdl_ui_role_font_px(SDL_UI_FONT_TITLE);
 #else
-        font_px + 6;
+        font_px + (paged_sheet ? 9 : 6);
 #endif
     TTF_Font* font = sdl_main_menu_mono_font_for_height(font_px);
     TTF_Font* title_font = sdl_main_menu_mono_font_for_height(title_px);
@@ -4606,6 +4609,18 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
         "Big font character sheet", width, title_lines, N_ELEMENTS(title_lines)) : 1;
     float title_line_h = title_h;
     title_h *= MAX(1, title_count);
+    float subtitle_h = line_h;
+    if (paged_sheet)
+    {
+        for (int i = 0; i < SDL_DEBUG_SHEET_SECTIONS; i++)
+        {
+            char subtitle[80];
+            strnfmt(subtitle, sizeof(subtitle), "%s  %d/%d", sections[i],
+                SDL_DEBUG_SHEET_MAX_ROWS, SDL_DEBUG_SHEET_MAX_ROWS);
+            subtitle_h = MAX(subtitle_h, line_h * sdl_char_sheet_wrap_text(
+                font, subtitle, width, NULL, 0));
+        }
+    }
     float x = canvas->x + (canvas->w - width) * 0.5f;
     float top = canvas->y + margin;
     float gap = font_h * 0.5f;
@@ -4628,7 +4643,15 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
     float footer_y = canvas->y + canvas->h - margin - button_h;
     float actions_h = live ? button_h * (4 / action_cols) + gap : 0.0f;
     bool compact_header = live && get_sdl_bigger_font() && canvas->w >= canvas->h;
-    float body_y = top + title_h + (compact_header ? 0.0f : line_h) + gap;
+    float body_y = top + title_h + (compact_header ? 0.0f : subtitle_h) + gap;
+    if (paged_sheet && body_y + line_h + gap > footer_y)
+    {
+        /* Short windows use the section and page counter as their heading.
+         * Keep at least one full-size content row above navigation. */
+        title_count = 0;
+        title_h = 0.0f;
+        body_y = top + subtitle_h + gap;
+    }
     int rows_per_page = MAX(1,
         (int)((footer_y - actions_h - gap - body_y) / line_h));
     int page_count = 0;
@@ -4742,10 +4765,19 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
         return;
     strnfmt(subtitle, sizeof(subtitle), "%s  %d/%d",
         sections[g_debug_sheet_page_section[page]], page + 1, page_count);
-    (void)sdl_char_sheet_draw_text(font, subtitle, TERM_SLATE,
-        compact_header ? x + width * 0.42f : x,
-        compact_header ? top : top + title_h,
-        compact_header ? width * 0.58f : width, line_h, false);
+    if (paged_sheet)
+    {
+        char lines[4][SDL_CHAR_SHEET_TEXT_LEN];
+        int count = sdl_char_sheet_wrap_text(font, subtitle, width, lines, N_ELEMENTS(lines));
+        for (int i = 0; i < count; i++)
+            (void)sdl_char_sheet_draw_text(font, lines[i], TERM_SLATE,
+                x, top + title_h + i * line_h, width, line_h, false);
+    }
+    else
+        (void)sdl_char_sheet_draw_text(font, subtitle, TERM_SLATE,
+            compact_header ? x + width * 0.42f : x,
+            compact_header ? top : top + title_h,
+            compact_header ? width * 0.58f : width, line_h, false);
 
     for (int i = g_debug_sheet_page_start[page];
          i < g_debug_sheet_page_start[page + 1]; i++)
@@ -4796,12 +4828,20 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
             sdl_char_sheet_add_hit(rect, choices[i], "", TERM_WHITE);
         }
     }
+    static const cptr labels[] = { "Prev", "Next", "Back" };
+    float nav_gap = gap;
+    if (paged_sheet)
+    {
+        float label_w = 0.0f;
+        for (int i = 0; i < 3; i++)
+            label_w = MAX(label_w, sdl_char_sheet_text_width(font, labels[i]));
+        nav_gap = MIN(gap, MAX(0.0f, (width - 3.0f * label_w) * 0.5f));
+    }
     for (int i = 0; i < 3; i++)
     {
-        static const cptr labels[] = { "< Prev", "Next >", "Back" };
         static const int choices[] = { '[', ']', ESCAPE };
-        float button_w = (width - gap * 2.0f) / 3.0f;
-        SDL_FRect rect = { x + i * (button_w + gap), footer_y, button_w, button_h };
+        float button_w = (width - nav_gap * 2.0f) / 3.0f;
+        SDL_FRect rect = { x + i * (button_w + nav_gap), footer_y, button_w, button_h };
         bool enabled = (i == 2) || (i == 0 ? page > 0 : page + 1 < page_count);
         bool focused = enabled && sdl_char_sheet_choice_focused(choices[i]);
 
@@ -5003,7 +5043,7 @@ static float sdl_standalone_pager_begin(TTF_Font* font, float x, float width,
     nav_h = MAX(nav_h, (float)sdl_ui_min_tap_px());
 #endif
     gap = nav_h * 0.12f;
-    /* Welcome is one continuous sheet, with its actions fixed below it. */
+    /* Welcome is one continuous sheet with a separate corner close button. */
     bool welcome = sdl_welcome_screen_active();
     if (!welcome)
         available_h = MAX(1.0f, available_h - nav_h - gap);

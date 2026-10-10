@@ -14,6 +14,15 @@ OUT = ROOT / "scripts/output/debug-character-sheet"
 HARNESS = CARD_HARNESS[:CARD_HARNESS.index("static void field(")] + r'''
 #include "sdl/ui/sdl-screens.c"
 
+static float fixture_density=1.0f;
+float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display) { return fixture_density; }
+#ifdef SIL_IOS
+void sdl_ios_request_orientation(bool portrait) {}
+void sdl_ios_install_orientation_observer(SDL_Window *window) {}
+bool sdl_ios_get_safe_area_insets(SDL_Window *window,
+    int *left,int *right,int *top,int *bottom) { return false; }
+#endif
+
 void __wrap_tutorial_continue(void) { fixture.active=false; }
 bool __wrap_sdl_touch_only_device_active(void) { return false; }
 SDL_Rect __wrap_sdl_get_layout_screen_rect(void)
@@ -21,6 +30,7 @@ SDL_Rect __wrap_sdl_get_layout_screen_rect(void)
 
 static SDL_Texture *measured_texture;
 static int measured_w, measured_h;
+static char measured_text[256];
 static bool checking_text;
 static SDL_FRect text_rects[256];
 static int text_count;
@@ -30,7 +40,9 @@ static void measure_text(SDL_Texture *texture,TTF_Font *font,cptr text,int w,int
 {
     if (checking_text && texture) {
         measured_texture=texture; measured_w=w; measured_h=h;
-        fixture_assert(TTF_GetFontHeight(font)>=28);
+        SDL_strlcpy(measured_text,text,sizeof(measured_text));
+        fixture_assert(TTF_GetFontHeight(font)>=(SIL_SDL_MOBILE_BUILD
+            ? (int)SDL_ceilf(fixture_density*24) : 42));
         SDL_strlcat(all_text,text,sizeof(all_text));
         SDL_strlcat(all_text,"\n",sizeof(all_text));
     }
@@ -54,6 +66,9 @@ bool __wrap_SDL_RenderTexture(SDL_Renderer *renderer,SDL_Texture *texture,
 {
     if (checking_text && texture==measured_texture && dst) {
         /* A large font that is scaled back down would fail these checks. */
+        if (dst->w<measured_w-1.0f || dst->h<measured_h-1.0f)
+            printf("Shrunk '%s': %dx%d -> %.1fx%.1f\n",measured_text,
+                measured_w,measured_h,dst->w,dst->h);
         fixture_assert(dst->w>=measured_w-1.0f && dst->h>=measured_h-1.0f);
         fixture_assert(dst->x>=0 && dst->y>=0);
         fixture_assert(dst->x+dst->w<=fixture_width+1);
@@ -71,7 +86,7 @@ static void frame(void)
     text_count=0; measured_texture=NULL; checking_text=true;
     fixture_assert(sdl_render_current_window_frame());
     checking_text=false;
-    fixture_assert(text_count>5);
+    fixture_assert(text_count>=5); /* Section heading, content, and three controls. */
 }
 
 static SDL_FRect control(int choice)
@@ -149,8 +164,13 @@ static void check(int width,int height,bool big)
     frame();
     int pages=g_sdl_character_sheet_screen.debug_page_count;
     int px=g_sdl_character_sheet_screen.last_body_px;
-    fixture_assert(pages>=5 && px>=28);
-    fixture_assert(px==sdl_char_sheet_clampi((int)(MIN(width,height)*.065f),28,56));
+    fixture_assert(pages>=5);
+#if SIL_SDL_MOBILE_BUILD
+    fixture_assert(px==(int)SDL_ceilf(fixture_density*24));
+#else
+    int normal_px=sdl_char_sheet_clampi((int)(MIN(width,height)*.065f),28,56);
+    fixture_assert(px==normal_px+(normal_px+1)/2);
+#endif
     fixture_assert(!sdl_character_sheet_screen_debug_turn_page(-1));
     for (int page=0;page<pages;++page) {
         fixture_assert(g_sdl_character_sheet_screen.debug_page==page);
@@ -174,7 +194,9 @@ static void check(int width,int height,bool big)
     fixture_assert(strstr(all_text,"Perception") && strstr(all_text,"Smithing"));
     fixture_assert(strstr(all_text,"Voice") && strstr(all_text,"Offhand"));
     fixture_assert(strstr(all_text,"Attributes") && strstr(all_text,"Traits"));
-    fixture_assert(strstr(all_text,"Creator of Angrist") && strstr(all_text,"Background"));
+    /* Enlarged trait names may wrap or span a page boundary. */
+    fixture_assert(strstr(all_text,"Creator of") && strstr(all_text,"Angrist")
+        && strstr(all_text,"Background"));
     fixture_assert(strstr(all_text,"END_OF_HISTORY"));
     key_event(SDLK_PAGEUP,'['); key_event(SDLK_PAGEDOWN,']');
     key_event(SDLK_LEFT,'['); key_event(SDLK_RIGHT,']');
@@ -247,8 +269,15 @@ int main(int argc,char **argv)
     turn=1234; playerturn=98765;
     for (int i=0;i<16;++i) g_state.palette[i]=(SDL_Color){angband_color_table[i][1],angband_color_table[i][2],angband_color_table[i][3],255};
     for (int big=0;big<2;big++) {
+#if SIL_SDL_MOBILE_BUILD
+        fixture_density=1; check(360,800,big); check(800,360,big);
+        fixture_density=1.5f; check(580,1280,big); check(1280,580,big);
+        fixture_density=2; check(720,1600,big); check(1600,720,big);
+        fixture_density=2.75f; check(1080,2400,big); check(2400,1080,big);
+#else
         check(1920,1080,big); check(1280,720,big); check(768,576,big);
         check(580,1280,big); check(360,800,big); check(800,360,big); check(320,568,big);
+#endif
     }
     TTF_Quit(); SDL_Quit(); return 0;
 }
@@ -260,11 +289,6 @@ def main():
     source = OUT / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
-    excluded = ("/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
-                "/src/sdl/ui/sdl-screens.c.obj")
-    response = OUT / "objects.rsp"
-    response.write_text("\n".join('"' + obj + '"' for obj in objects
-                                 if not obj.endswith(excluded)), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(
         [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
@@ -274,14 +298,33 @@ def main():
              "sdl_touch_round_layer_controls_active", "sdl_touch_round_compute_layout",
              "sdl_touch_thumb_current_bounds", "sdl_map_grid_cell_rect",
              "sdl_touch_only_device_active", "sdl_get_layout_screen_rect",
-             "sdl_ui_text_texture", "sdl_ui_wrapped_text_texture", "SDL_RenderTexture"]
-    exe = OUT / "check.exe"
-    subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
-                    "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),
-                    "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl," + ",".join("--wrap=" + w for w in wraps),
-                    "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    subprocess.run([str(exe), str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf")],
-                   cwd=OUT, env=env, check=True, timeout=60)
+             "sdl_ui_text_texture", "sdl_ui_wrapped_text_texture", "SDL_RenderTexture",
+             "SDL_GetDisplayContentScale"]
+    mobile_sources = ["src/sdl/core/sdl-state.c", "src/sdl/core/sdl-layout.c",
+                      "src/sdl/config/sdl-settings.c", "src/sdl/render/sdl-fonts.c",
+                      "src/sdl-config.c", "src/sdl/input/sdl-touch-controls.c",
+                      "src/sdl/ui/sdl-panes.c"]
+    for mobile in (False, True):
+        modules = mobile_sources if mobile else []
+        excluded = tuple("/" + p + ".obj" for p in modules) + (
+            "/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
+            "/src/sdl/ui/sdl-screens.c.obj")
+        response = OUT / "objects.rsp"
+        response.write_text("\n".join('"' + obj + '"' for obj in objects
+                                     if not obj.endswith(excluded)), encoding="utf-8")
+        exe = OUT / ("check-mobile.exe" if mobile else "check.exe")
+        command = ["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g"]
+        if mobile:
+            command.append("-DSIL_IOS")
+        command += ["@CMakeFiles/sil-more.dir/includes_C.rsp", str(source)]
+        command += [str(ROOT / p) for p in modules]
+        command += ["@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+                    "-Wl," + ",".join("--wrap=" + w for w in wraps), "-o", str(exe)]
+        subprocess.run(command, cwd=BUILD, env=env, check=True)
+        output = OUT / ("mobile" if mobile else "desktop")
+        output.mkdir(exist_ok=True)
+        subprocess.run([str(exe), str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf")],
+                       cwd=output, env=env, check=True, timeout=60)
 
 
 if __name__ == "__main__":

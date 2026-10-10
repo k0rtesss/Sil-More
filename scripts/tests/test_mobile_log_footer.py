@@ -33,7 +33,9 @@ fixtures=r'''
 #define TERM_L_DARK 8
 #define TERM_SHADE 0
 typedef short s16b;
-typedef struct {int kind,message_age;} log_history_entry;
+typedef struct {byte attacker_attr,defender_attr;char attacker_char,defender_char;} combat_roll;
+static combat_roll roll={0x81,0x82,(char)0x8a,(char)0x8b};
+typedef struct {int kind,message_age;combat_roll*roll;} log_history_entry;
 typedef struct {cptr text;int len;} log_history_note_line;
 static log_history_entry log_history_entries[3];static log_history_note_line log_history_note_lines[3];
 static cptr text[]={"FIRST A very long recorded message with all words and numbers 12345 retained. A very long recorded message with all words and numbers 12345 retained. A very long recorded message with all words and numbers 12345 retained. LASTTAIL",
@@ -50,12 +52,17 @@ static bool dismiss_active_narrative_banner(void){return false;}
 static void do_cmd_redraw(void){}
 static int log_history_clamp_filter(int i){return i;}
 static int log_history_collect_notes(void){for(int i=0;i<3;i++)log_history_note_lines[i]=(log_history_note_line){text[i],strlen(text[i])};return 3;}
-static int log_history_collect_entries(log_history_entry*e,int n,int f){for(int i=0;i<3;i++)e[i]=(log_history_entry){i==1?1:0,i};return 3;}
+static int log_history_collect_entries(log_history_entry*e,int n,int f){for(int i=0;i<3;i++)e[i]=(log_history_entry){i==1?1:0,i,&roll};return 3;}
 static cptr message_str(s16b age){return text[age];}
 static byte message_color(s16b age){return TERM_WHITE;}
 static void log_history_entry_search_text(const log_history_entry*e,char*s,size_t n){strnfmt(s,n,"%s",text[e->message_age]);}
 static void log_history_draw_combat_entry(const log_history_entry*e,int y,int offset){assert(y<=body_bottom_seen);strncat(reached,text[e->message_age],sizeof(reached)-strlen(reached)-1);}
+static bool use_bigtile=true;
+static bool graphics_are_ascii(void){return false;}
+static int icon_count;
+static void Term_queue_char(int x,int y,byte a,char c,byte ta,char tc){assert(x>=0&&x<test_w&&y>=0&&y<=body_bottom_seen);if(a==roll.attacker_attr||a==roll.defender_attr)icon_count++;else assert(a==255);}
 static void ui_scroll_area_begin(int top,int bottom,int cat){body_bottom_seen=bottom;assert(bottom<test_h-1-reserved);}
+static void ui_scroll_area_set_indicator(int current,int maximum){assert(current>=0&&current<=maximum);}
 static bool ui_scroll_area_add_cols(int a,int b,int c,int d,int e){return true;}
 static void ui_scroll_area_set_keys(int a,int b,int c,int d){}
 static void ui_scroll_area_set_horizontal_page_mode(bool b){}
@@ -80,21 +87,23 @@ static bool get_string_panel(cptr title,char*b,size_t n){return false;}
 static void bell(cptr t){}
 static void queue(int key,int click){events[event_count]=key;clicks[event_count]=click;actions[event_count++]=UI_MENU_CLICK_PRIMARY;}
 '''
-parts=[function(x) for x in ['static void log_history_wrapped_entry_text(', 'static bool log_history_wrap_next(',
+parts=[function(x) for x in ['static void log_history_put_tile_scrolled(', 'static void log_history_wrapped_entry_text(', 'static bool log_history_wrap_next(',
  'static int log_history_wrapped_entry_rows(', 'static void log_history_draw_wrapped_text(',
+ 'static void log_history_draw_wrapped_combat(',
  'static int log_history_wrapped_last_page_start(', 'static void log_history_draw_wrapped_slice(',
  'static void log_history_layout(', 'void do_cmd_messages_with_filter(']]
 main=r'''
 int main(void){
  const int sizes[][3]={{30,12,3},{30,30,3},{77,17,3},{80,24,0}};
  for(size_t size=0;size<N_ELEMENTS(sizes);size++)for(int filter=0;filter<4;filter++){
-  test_w=sizes[size][0];test_h=sizes[size][1];reserved=sizes[size][2];reached[0]=0;event_count=event_pos=0;
+  test_w=sizes[size][0];test_h=sizes[size][1];reserved=sizes[size][2];reached[0]=0;event_count=event_pos=0;icon_count=0;
   int top,bottom,prompt;log_history_layout(test_h,&top,&bottom,&prompt);assert(top<=bottom&&bottom<prompt&&prompt<test_h-reserved);
   for(int i=0;i<40;i++)queue(filter==3?'2':'8',-999);
   queue(filter==3?'1':'7',-999);queue(0,ESCAPE);
   do_cmd_messages_with_filter(filter);
   assert(strstr(reached,"FIRST")&&strstr(reached,"LASTTAIL")&&strstr(reached,"COMBATTAIL")&&strstr(reached,"OLDESTTAIL"));
   assert(prompt_seen==prompt&&!restores&&!scale_depth&&!pane_depth&&!saves&&!launches);
+  if(filter!=3 && test_w==30)assert(icon_count>=2);
  }
  puts("Actual Log/Combat/Notes caller: populated wrapping, oversized tails, reserved hint/body and Exit passed");
 }

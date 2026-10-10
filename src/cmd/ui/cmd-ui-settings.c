@@ -3726,7 +3726,7 @@ void do_cmd_pane_settings(void)
                     "category pane and use its space for item names.",
                 [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
                     "Choose Big font character sheet for separate pages of "
-                    "attributes, skills, traits and background, using normal-sized text. "
+                    "attributes, skills, traits and background, using 50% larger text. "
                     "Use arrows or Prev/Next to change pages. Bigger font mode "
                     "selects this sheet automatically. Choose SDL for the standard sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
@@ -6264,10 +6264,10 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
         if (get_sdl_show_overlay_log_border()
             != (get_sdl_mobile_portrait_mode()
-                ? false : def.show_overlay_log_border))
+                ? get_sdl_bigger_font() : def.show_overlay_log_border))
         {
             set_sdl_show_overlay_log_border(get_sdl_mobile_portrait_mode()
-                ? false : def.show_overlay_log_border);
+                ? get_sdl_bigger_font() : def.show_overlay_log_border);
             changed = true;
         }
         break;

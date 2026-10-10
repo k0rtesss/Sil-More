@@ -71,9 +71,9 @@ static void welcome(void)
 {
     SDL_Rect canvas={0,0,fixture_width,fixture_height};
     SDL_strlcpy(fixture_id,"welcome-full-size",sizeof(fixture_id));
-    for(int style=0;style<INTRO_STYLE_MAX;style++) {
+    for(int style=0;style<INTRO_STYLE_MAX;style++) for(int variant=0;variant<2;variant++) {
         fixture_assert(sdl_welcome_screen_show_intro(style,true));
-        fixture_assert(sdl_welcome_screen_show_menu(true,false));
+        fixture_assert(sdl_welcome_screen_show_menu(variant==0,variant==1));
         g_sdl_standalone_pager.offset=0;
         start_capture(); sdl_welcome_screen_render_canvas(&canvas); stop_capture();
         sdl_welcome_layout_line lines[SDL_WELCOME_MAX_LINES];
@@ -90,14 +90,20 @@ static void welcome(void)
                 sdl_welcome_slot_for_role(lines[i].source->role));
             fixture_assert(TTF_GetFontSize(expected)==TTF_GetFontSize(lines[i].font));
         }
-        inside(g_sdl_welcome_screen.continue_rect); inside(g_sdl_welcome_screen.quit_rect);
+        inside(g_sdl_welcome_screen.quit_rect);
         if(config.bigger_font) {
-            ink(g_sdl_welcome_screen.continue_rect,sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
             ink(g_sdl_welcome_screen.quit_rect,sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
-            fixture_assert(g_sdl_welcome_screen.continue_rect.h>=sdl_ui_min_tap_px());
-        }
+            fixture_assert(g_sdl_welcome_screen.continue_rect.w==0);
+            fixture_assert(g_sdl_welcome_screen.continue_rect.h==0);
+            SDL_FRect close=g_sdl_welcome_screen.quit_rect;
+            fixture_assert(close.h>=sdl_ui_min_tap_px() && close.w>=sdl_ui_min_tap_px());
+            fixture_assert(close.x>canvas.w*.5f && close.y<close.h);
+            fixture_assert(close.y+close.h<metrics.top);
+            if(variant==1)
+                fixture_assert(metrics.intro_bottom==canvas.h-sdl_welcome_bottom_margin(&canvas));
+        } else inside(g_sdl_welcome_screen.continue_rect);
         fixture_assert(!SDL_HasRectIntersectionFloat(&g_sdl_welcome_screen.continue_rect,&g_sdl_welcome_screen.quit_rect));
-        char name[96]; strnfmt(name,sizeof(name),"welcome-style%d-start",style); capture(name);
+        char name[96]; strnfmt(name,sizeof(name),"welcome-style%d-variant%d-start",style,variant); capture(name);
         if(g_sdl_standalone_pager.maximum>0) {
             fixture_assert(g_sdl_standalone_pager.buttons[0].w==0);
             fixture_assert(g_sdl_standalone_pager.buttons[1].w==0);
@@ -152,15 +158,56 @@ static void welcome(void)
             fixture_assert(last.box.y>=metrics.top-1);
             fixture_assert(last.box.y+last.box.h<=viewport.y+viewport.h+1);
             ink(last.box,sdl_welcome_font_px_for_role(metrics.base_px,last.source->role));
-            strnfmt(name,sizeof(name),"welcome-style%d-end",style); capture(name);
+            strnfmt(name,sizeof(name),"welcome-style%d-variant%d-end",style,variant); capture(name);
         }
         Term_flush(); g_sdl_blocking_key_wait=true;
-        SDL_FRect button=g_sdl_welcome_screen.continue_rect;
-        fixture_assert(sdl_pointer_activate_welcome_screen_at(button.x+button.w/2,button.y+button.h/2));
-        char key=0; fixture_assert(Term_inkey(&key,false,true)==0 && key=='\r');
-        button=g_sdl_welcome_screen.quit_rect;
-        fixture_assert(sdl_pointer_activate_welcome_screen_at(button.x+button.w/2,button.y+button.h/2));
-        fixture_assert(Term_inkey(&key,false,true)==0 && key==ESCAPE);
+        char key=0;
+        if(config.bigger_font) {
+            SDL_FRect close=g_sdl_welcome_screen.quit_rect;
+            float x=canvas.w*.5f,y=(metrics.top+metrics.intro_bottom)*.5f;
+            /* Every drag stays on the welcome screen, including sideways,
+             * reversed, corner-button and bottom-margin drags. */
+            for(int gesture=0;gesture<5;gesture++) {
+                float sx=gesture==3?close.x+close.w*.5f:x;
+                float sy=gesture==3?close.y+close.h*.5f
+                    :gesture==4?canvas.h-1:y;
+                float delta=2*sdl_touch_swipe_threshold_px();
+                float end_x=sx+(gesture==0?delta:gesture==1?-delta:0);
+                float end_y=sy+(gesture>=2?delta:0);
+                fixture_assert(sdl_welcome_touch_handle_pointer_down(sx,sy,7));
+                fixture_assert(sdl_welcome_touch_handle_pointer_motion(end_x,end_y,7));
+                fixture_assert(Term_inkey(&key,false,true)!=0);
+                fixture_assert(sdl_welcome_touch_handle_pointer_motion(sx,sy,7));
+                fixture_assert(sdl_welcome_touch_handle_pointer_up(sx,sy,7));
+                fixture_assert(Term_inkey(&key,false,true)!=0);
+            }
+            for(int mouse=0;mouse<2;mouse++) for(int quit=0;quit<2;quit++) {
+                float tx=quit?close.x+close.w*.5f:x;
+                float ty=quit?close.y+close.h*.5f:y;
+                SDL_Event event={0};
+                if(mouse) {
+                    event.type=SDL_EVENT_MOUSE_BUTTON_DOWN; event.button.which=1;
+                    event.button.button=SDL_BUTTON_LEFT; event.button.x=tx; event.button.y=ty;
+                } else {
+                    event.type=SDL_EVENT_FINGER_DOWN; event.tfinger.touchID=1; event.tfinger.fingerID=7;
+                    event.tfinger.windowID=SDL_GetWindowID(g_state.window);
+                    event.tfinger.x=tx/fixture_width; event.tfinger.y=ty/fixture_height;
+                }
+                sdl_handle_event(&g_state,&event);
+                fixture_assert(Term_inkey(&key,false,true)!=0);
+                event.type=mouse?SDL_EVENT_MOUSE_BUTTON_UP:SDL_EVENT_FINGER_UP;
+                sdl_handle_event(&g_state,&event);
+                fixture_assert(Term_inkey(&key,false,true)==0 && key==(quit?ESCAPE:'\r'));
+                fixture_assert(Term_inkey(&key,false,true)!=0);
+            }
+        } else {
+            SDL_FRect button=g_sdl_welcome_screen.continue_rect;
+            fixture_assert(sdl_pointer_activate_welcome_screen_at(button.x+button.w/2,button.y+button.h/2));
+            fixture_assert(Term_inkey(&key,false,true)==0 && key=='\r');
+            button=g_sdl_welcome_screen.quit_rect;
+            fixture_assert(sdl_pointer_activate_welcome_screen_at(button.x+button.w/2,button.y+button.h/2));
+            fixture_assert(Term_inkey(&key,false,true)==0 && key==ESCAPE);
+        }
     }
     fixture_assert(sdl_welcome_screen_show_loading("Loading the next chapter of this long and remembered tale..."));
     start_capture(); sdl_welcome_screen_render_canvas(&canvas); stop_capture(); capture("welcome-loading");
@@ -217,7 +264,7 @@ static void poetry(void)
     }
     indicator();
     for(int big=0;big<2;big++) {config.bigger_font=big;fixture.active=false;welcome();if(big) poetry();}
-    printf("Welcome/poetry %dx%d @%.3f: Off/On indicators, all intros/actions, continuous drag, big text1:1/prompts PASS\n",
+    printf("Welcome/poetry %dx%d @%.3f: Off/On, all intros, corner close, short taps, continuous/suppressed drags, big text1:1/prompts PASS\n",
         fixture_width,fixture_height,fixture_density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window); TTF_Quit(); SDL_Quit();
@@ -225,15 +272,19 @@ static void poetry(void)
 '''
 
 
-def main():
-    OUT.mkdir(parents=True,exist_ok=True)
-    source=OUT/"check.c"; source.write_text(HARNESS,encoding="utf-8")
+def main(mobile=True):
+    output=OUT if mobile else OUT/"desktop"
+    output.mkdir(parents=True,exist_ok=True)
+    harness=HARNESS if mobile else HARNESS.replace(
+        "#define SIL_SDL_MOBILE_BUILD 1", "#define SIL_SDL_MOBILE_BUILD 0"
+    ).replace("if(big) poetry();", "").replace("Welcome/poetry %", "Welcome %")
+    source=output/"check.c"; source.write_text(harness,encoding="utf-8")
     objects=shlex.split((BUILD/"CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     excluded=("/src/main.c.obj","/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
         "/src/sdl/input/sdl-touch-tutorial.c.obj","/src/sdl/render/sdl-fonts.c.obj",
         "/src/sdl/ui/sdl-song-menu.c.obj","/src/sdl/ui/sdl-question-menu.c.obj",
         "/src/sdl/ui/sdl-screens.c.obj","/src/sdl/input/sdl-screen-pointer.c.obj")
-    response=OUT/"objects.rsp"
+    response=output/"objects.rsp"
     response.write_text("\n".join('"'+obj+'"' for obj in objects if not obj.endswith(excluded)))
     env=os.environ.copy();env["PATH"]=os.pathsep.join(
         [str(BUILD/"_deps"/dep) for dep in ["SDL","SDL_ttf","SDL_image","SDL_mixer"]]
@@ -244,16 +295,20 @@ def main():
         "sdl_touch_only_mobile_device_active","sdl_get_layout_screen_rect","sdl_overlay_pane_anchor_rect",
         "SDL_GetDisplayContentScale","sdl_terminal_menu_font_px","sdl_mobile_lifecycle_handle_event",
         "sdl_touch_tutorial_device_available","SDL_RenderTexture","sdl_touch_pane_point_to_slot"]
-    exe=OUT/"check.exe"
+    exe=output/"check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe","-DUSE_SDL","-std=c17","-O0","-g",
         "@CMakeFiles/sil-more.dir/includes_C.rsp",str(source),"@"+str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,"+",".join("--wrap="+w for w in wraps),
         "-o",str(exe)],cwd=BUILD,env=env,check=True)
-    for width,height,density in [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
+    sizes=[(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)] if mobile else [
+        (360,800,1),(720,1280,1),(1080,1920,1)]
+    for width,height,density in sizes:
         for w,h in [(width,height),(height,width)]:
             subprocess.run([str(exe),str(w),str(h),str(density),
                 str(ROOT/"lib/xtra/font/EBGaramond-Regular.ttf"),str(ROOT/"lib/xtra/font/Cinzel-Medium.ttf"),
-                str(ROOT/"lib/xtra/font/VictorMono-Medium.ttf")],cwd=OUT,env=env,check=True,timeout=60)
+                str(ROOT/"lib/xtra/font/VictorMono-Medium.ttf")],cwd=output,env=env,check=True,timeout=60)
 
 
-if __name__=="__main__": main()
+if __name__=="__main__":
+    main()
+    main(mobile=False)
