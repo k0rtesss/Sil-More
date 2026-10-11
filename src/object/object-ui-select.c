@@ -642,6 +642,8 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
     int floor_num = 0;
     bool include_equip_in_inventory =
         (mode & USE_INVEN) && (mode & USE_EQUIP);
+    bool include_quiver = inventory_menu_uses_expanded_supplies()
+        || (mode & USE_QUIVER);
     bool old_include_equip =
         inventory_menu_set_include_equip(include_equip_in_inventory);
 
@@ -672,9 +674,9 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
                 capacity, item);
         }
 
-        /* Expanded selectors resolve synthetic handles directly. Legacy
-         * command selectors still dispatch summaries/physical slots. */
-        for (int i = 0; inventory_menu_uses_expanded_supplies()
+        /* Only commands that support synthetic Quiver handles opt in.
+         * Legacy supply summaries do not require expanded-supplies mode. */
+        for (int i = 0; include_quiver
                 && i < player_quiver_store_entry_count(); i++)
         {
             object_item_select_add_entry(entries, &count, capacity,

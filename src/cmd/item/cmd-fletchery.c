@@ -593,7 +593,8 @@ static bool fletchery_choose_source(fletch_choice_t* out_choice)
     item_tester_full = false;
     item_tester_hook = item_tester_hook_fletchery_source;
 
-    if (!open_inventory_item_select_menu(USE_INVEN | USE_EQUIP | USE_FLOOR,
+    if (!open_inventory_item_select_menu(
+            USE_INVEN | USE_EQUIP | USE_FLOOR | USE_QUIVER,
             "Choose fletchery source.",
             "You have nothing suitable for fletchery.", &selection))
     {
