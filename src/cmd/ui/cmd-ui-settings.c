@@ -12860,6 +12860,16 @@ static bool controller_capture_matches_action(int binding, int modifier, int typ
     return controller_binding_matches_action(binding, type, id);
 }
 
+static bool controller_capture_is_cancel(bool controller_ui, int modifier,
+    int type, int id)
+{
+    if (modifier != GAMEPAD_BIND_NONE)
+        return false;
+    return (controller_ui && type == GAMEPAD_CAPTURE_BUTTON
+            && id == SDL_GAMEPAD_BUTTON_EAST)
+        || controller_binding_matches_action(ESCAPE, type, id);
+}
+
 static bool controller_first_nonstick_physical_binding(int binding, int* out_type,
     int* out_id)
 {
@@ -13643,8 +13653,8 @@ void do_cmd_controller_settings(void)
                 bool waiting = true;
                 while (waiting) {
                     if (sdl_gamepad_capture_poll(&cap_type, &cap_id, &cap_modifier)) {
-                        if (cap_modifier == GAMEPAD_BIND_NONE
-                            && controller_binding_matches_action(ESCAPE, cap_type, cap_id)) {
+                        if (controller_capture_is_cancel(steamdeck,
+                                cap_modifier, cap_type, cap_id)) {
                             sdl_gamepad_capture_cancel();
                             waiting = false;
                             break;

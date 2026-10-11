@@ -73,7 +73,8 @@ int main(int argc, char **argv)
 '''
 
 
-def build_and_launch(deadzone: int = 12000, seed_profile: Path | None = None) -> dict:
+def build_and_launch(deadzone: int = 12000, seed_profile: Path | None = None,
+                     headless: bool = True) -> dict:
     build = ROOT / "build-portable"
     out = ROOT / "scripts/output/control-playtests" / ("goal-gamepad-" + uuid.uuid4().hex[:8])
     out.mkdir(parents=True)
@@ -115,7 +116,7 @@ def build_and_launch(deadzone: int = 12000, seed_profile: Path | None = None) ->
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-o", str(exe)],
                    cwd=build, env=env, check=True)
     control = GameControl(out / "control", timeout=30)
-    result = launch(control, exe, headless=True, wizard=False)
+    result = launch(control, exe, headless=headless, wizard=False)
     result.update(profile=str(out), control=str(control.directory))
     (out / "playtest.json").write_text(json.dumps(result, indent=2))
     return result

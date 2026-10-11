@@ -765,8 +765,20 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     out->has_title = (g_question_menu.title[0] != '\0');
     if (out->has_title)
     {
-        title_w = sdl_question_menu_text_width(story_font,
-            g_question_menu.title, font_px);
+        TTF_Font* title_font = story_font;
+        int title_px = font_px;
+#if SIL_SDL_MOBILE_BUILD
+        if (get_sdl_menu_bigger_font())
+        {
+            title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
+            title_font = sdl_story_font_for_height_slot(title_px,
+                SDL_STORY_FONT_SLOT_DEFAULT);
+        }
+#endif
+        /* Size the header with the font used to draw it. Measuring the
+         * smaller body font can split even a short title within a word. */
+        title_w = sdl_question_menu_text_width(title_font,
+            g_question_menu.title, title_px);
     }
 
     margin = sdl_overlay_margin_px();

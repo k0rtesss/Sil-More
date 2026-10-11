@@ -2131,6 +2131,9 @@ extern bool ui_menu_click_outside_cancel_enabled(void);
 extern void ui_menu_click_set_touch_exit_button(bool enabled);
 extern bool ui_menu_click_touch_exit_button_active(void);
 extern int sdl_touch_menu_button_reserved_rows(void);
+#ifdef USE_SDL
+extern int sdl_menu_font_button_available_columns(int row, int columns);
+#endif
 extern void ui_menu_click_add_touch_button(int choice, cptr label, byte attr);
 extern int ui_menu_click_touch_button_count(void);
 extern bool ui_menu_click_touch_button_get(int index, int* choice,

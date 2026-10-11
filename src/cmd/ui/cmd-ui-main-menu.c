@@ -1037,27 +1037,78 @@ static int log_history_draw_filter(int row, int col, cptr label, int filter,
     return col + (int)strlen(token) + 1;
 }
 
-static void log_history_draw_filters(int active_filter, int hover_filter,
-    int term_wid)
+typedef struct log_history_filter_control {
+    cptr label;
+    int filter;
+    int row;
+    int col;
+} log_history_filter_control;
+
+static int log_history_filter_layout(int term_wid,
+    log_history_filter_control controls[4])
 {
-    int col = 0;
+    const log_history_filter_control defaults[4] = {
+        {"All", LOG_HISTORY_FILTER_ALL, 0, 0},
+        {"Log", LOG_HISTORY_FILTER_MESSAGES, 0, 0},
+        {"Combat", LOG_HISTORY_FILTER_COMBAT, 0, 0},
+        {"Notes", LOG_HISTORY_FILTER_NOTES, 0, 0}
+    };
+    int row = 1;
+    int col = 8;
+    int ignored_wid, hgt;
+    Term_get_size(&ignored_wid, &hgt);
+    int prompt_row = hgt - 1 - (get_sdl_menu_bigger_font()
+        ? sdl_touch_menu_button_reserved_rows() : 0);
 
     if (term_wid < 1)
         term_wid = 80;
+    for (int compact = 0; compact < 2; compact++)
+    {
+        row = compact ? 0 : 1;
+        col = compact ? 0 : 8;
+        for (int i = 0; i < 4; i++)
+        {
+            int width = (int)strlen(defaults[i].label) + 2;
+            int available = term_wid;
+#ifdef USE_SDL
+            available = sdl_menu_font_button_available_columns(row, term_wid);
+#endif
+            if (col + width > available)
+            {
+                row++;
+                col = 0;
+            }
+            controls[i] = defaults[i];
+            controls[i].row = row;
+            controls[i].col = col;
+            col += width + 1;
+        }
+        /* Keep the title and prefix unless removing them is necessary to
+         * leave a summary row and at least one body row above the prompt. */
+        if (row + 2 < prompt_row)
+            break;
+    }
+    return row;
+}
 
-    Term_putstr(0, 0, term_wid, TERM_L_WHITE + TERM_SHADE, "Logs");
-    Term_erase(0, 1, 255);
+static void log_history_draw_filters(int active_filter, int hover_filter,
+    int term_wid)
+{
+    log_history_filter_control controls[4];
+    int last_row = log_history_filter_layout(term_wid, controls);
 
-    Term_putstr(0, 1, -1, TERM_WHITE, "Filter: ");
-    col = 8;
-    col = log_history_draw_filter(1, col, "All", LOG_HISTORY_FILTER_ALL,
-        active_filter, hover_filter);
-    col = log_history_draw_filter(1, col, "Log",
-        LOG_HISTORY_FILTER_MESSAGES, active_filter, hover_filter);
-    col = log_history_draw_filter(1, col, "Combat",
-        LOG_HISTORY_FILTER_COMBAT, active_filter, hover_filter);
-    (void)log_history_draw_filter(1, col, "Notes",
-        LOG_HISTORY_FILTER_NOTES, active_filter, hover_filter);
+    bool compact = controls[0].row == 0;
+    for (int row = 0; row <= last_row; row++)
+        Term_erase(0, row, 255);
+
+    if (!compact)
+    {
+        Term_putstr(0, 0, term_wid, TERM_L_WHITE + TERM_SHADE, "Logs");
+        Term_putstr(0, 1, -1, TERM_WHITE, "Filter: ");
+    }
+    for (int i = 0; i < 4; i++)
+        (void)log_history_draw_filter(controls[i].row, controls[i].col,
+            controls[i].label, controls[i].filter, active_filter, hover_filter);
 }
 
 static bool log_history_filter_key(char ch)
@@ -1643,17 +1694,21 @@ static void log_history_draw_wrapped_slice(int row, int width, byte attr,
 
 static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
 {
+    int wid, ignored_hgt;
+    log_history_filter_control controls[4];
+    Term_get_size(&wid, &ignored_hgt);
+    int body_top = log_history_filter_layout(wid, controls) + 2;
     if (!get_sdl_menu_bigger_font()) {
         *prompt = hgt - 1;
-        *top = 3;
+        *top = body_top;
         *bottom = hgt - 3;
-        if (*bottom < *top) { *top = 2; *bottom = hgt - 2; }
-        if (*bottom < *top) { *top = 0; *bottom = hgt - 1; }
+        if (*bottom < *top) *bottom = *prompt - 1;
         return;
     }
     *prompt = MAX(0, hgt - 1 - sdl_touch_menu_button_reserved_rows());
     *bottom = MAX(0, *prompt - 2);
-    *top = *bottom >= 3 ? 3 : (*bottom >= 2 ? 2 : 0);
+    *top = body_top;
+    if (*bottom < *top) *bottom = *prompt - 1;
 }
 
 static bool main_menu_blitz_confirm_mobile(void)
@@ -3363,6 +3418,10 @@ void do_cmd_messages_with_filter(int initial_filter)
         int range_last;
         int old_i;
         int used_rows = 0;
+
+        /* Font toggles and rotation can resize the terminal while this
+         * browser remains open. Use one current size for filters and body. */
+        Term_get_size(&wid, &hgt);
 
         /* Clear screen */
         Term_clear();

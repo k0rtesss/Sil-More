@@ -214,6 +214,24 @@ SDL_FRect sdl_menu_font_button_bounds(void)
     return sdl_menu_font_button_rect();
 }
 
+int sdl_menu_font_button_available_columns(int row, int columns)
+{
+    SDL_FRect cell;
+    SDL_FRect button = sdl_menu_font_button_bounds();
+    SDL_Rect screen = sdl_get_layout_screen_rect();
+    SDL_FRect visible = {screen.x, screen.y, screen.w, screen.h};
+
+    if (columns < 1)
+        return 1;
+    if (button.w <= 0 || !SDL_HasRectIntersectionFloat(&button, &visible)
+        || !sdl_main_cell_rect(0, row, 1, 1, &cell) || cell.w <= 0)
+        return columns;
+    SDL_FRect line = {cell.x, cell.y, cell.w * columns, cell.h};
+    if (!SDL_HasRectIntersectionFloat(&button, &line))
+        return columns;
+    return MAX(1, MIN(columns, (int)SDL_floorf((button.x - cell.x) / cell.w)));
+}
+
 void sdl_menu_font_button_render(void)
 {
     enum sdl_menu_font menu = sdl_menu_font_current();

@@ -9,6 +9,7 @@ import os
 import shlex
 import subprocess
 import tempfile
+import argparse
 from check_monster_scent_save import ENGINE_FIXTURE, fixture_function
 from check_reforge_work_transaction import CHECKS as WORK_CHECKS, SMITH
 
@@ -17,6 +18,22 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/smithing-cost-details"
 EXTRA = r'''
 #include <assert.h>
+void fixture_type_shortcut(int expected)
+{
+    int highlight = 1;
+    assert(create_tval_menu_aux(&highlight) == expected);
+    assert(highlight == expected);
+    int first = smith_ui_dense_row0();
+    int last = smith_ui_list_bottom_row(first, false);
+    int top = smith_ui_configure_list_view(SMITH_SCROLL_TVAL,
+        MAX_SMITHING_TVALS, highlight, first, last);
+    int row = first + highlight - 1 - top;
+    assert(row >= first && row <= last);
+    byte attr; char glyph;
+    assert(!Term_what(indexed_menu_prefix_col(COL_SMT2), row, &attr, &glyph));
+    assert(attr == smith_ui_selected_attr(TERM_WHITE));
+    assert(glyph == 'a' + expected - 1);
+}
 void fixture_details(int item, int prefix, int mode)
 {
     const object_type* source = NULL;
@@ -96,8 +113,11 @@ void fixture_details(int item, int prefix, int mode)
 }
 '''
 CHECKS = r'''
+#include "sdl-config.h"
 extern void fixture_details(int,int,int);
-bool __wrap_sdl_touch_only_device_active(void) { return true; }
+extern void fixture_type_shortcut(int);
+static bool fixture_touch_only = true;
+bool __wrap_sdl_touch_only_device_active(void) { return fixture_touch_only; }
 static void details_checks(void)
 {
     scenario = "read-only Smithing Details";
@@ -122,11 +142,26 @@ static void details_checks(void)
         }
     }
     puts("Smithing Details: actual preview bill, keyboard/click/hover, paid remaining work, empty blueprint and unchanged resources/turns PASS");
+    fixture_touch_only = false;
+    scenario = "Smithing keyboard type highlight";
+    set_sdl_input_ui_mode(SDL_INPUT_UI_MODE_PLATFORM);
+    const int heights[] = { 24, 12 };
+    for (int h = 0; h < 2; h++)
+    {
+        if (Term->wid != 80 || Term->hgt != heights[h])
+            assert(!Term_resize(80, heights[h]));
+        keys = "g"; fixture_type_shortcut(7); assert(!*keys);
+        keys = "q"; fixture_type_shortcut(17); assert(!*keys);
+    }
+    puts("Smithing type shortcuts repaint selected Ring/Boots parent row, including offscreen choices PASS");
 }
 '''
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--type-baseline", action="store_true")
+    args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += fixture_function("terminal_extra") + "\n" + fixture_function("reset_map") + "\n"
@@ -136,7 +171,17 @@ def main():
     source.write_text(prefix + WORK_CHECKS[:WORK_CHECKS.index("static void checks(void)")]
                       + CHECKS + init + "details_checks(); SDL_Quit(); return 0;\n}\n", encoding="utf-8")
     smith = OUT / "smith.c"
-    smith.write_text(SMITH + EXTRA, encoding="utf-8")
+    smith_wrapper = SMITH
+    if args.type_baseline:
+        body = (ROOT / "src/cmd/ui/cmd-ui-smithing.c").read_text(encoding="utf-8")
+        old = "if (valid[*highlight - 1])\n            ch = '\\r';"
+        assert body.count(old) == 1
+        baseline = OUT / "smith-type-baseline.c"
+        baseline.write_text(body.replace(old,
+            "if (valid[*highlight - 1])\n            return (*highlight);"), encoding="utf-8")
+        smith_wrapper = SMITH.replace('"cmd/ui/cmd-ui-smithing.c"',
+            '"' + baseline.as_posix() + '"')
+    smith.write_text(smith_wrapper + EXTRA, encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     response = OUT / "objects.rsp"
     excluded = ("/src/main.c.obj", "/src/cmd/ui/cmd-ui-smithing.c.obj")
