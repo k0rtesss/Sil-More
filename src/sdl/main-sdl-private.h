@@ -3124,6 +3124,7 @@ int steamdeck_alt_action_key(void);
 int steamdeck_secondary_key(void);
 void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev);
 void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev);
+void sdl_gamepad_handle_blocked_event(const SDL_Event* ev);
 void sdl_gamepad_context_focus_clear(void);
 void sdl_gamepad_context_focus_render(void);
 void sdl_gamepad_release_button_modifier(int button);

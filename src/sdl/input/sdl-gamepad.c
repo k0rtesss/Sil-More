@@ -829,23 +829,41 @@ void sdl_gamepad_send_shoulder_combo(void)
     sdl_gamepad_send_key(binding, false);
 }
 
+/* The native confirmation panel draws Yes by default (hover NONE), then
+ * highlights the same choice for pointer and controller input. Navigation
+ * never answers the question: only a subsequent physical A/B press does. */
+static bool sdl_gamepad_yes_no_navigate(int navigation)
+{
+    if (!g_touch_pane_yes_no_prompt_active)
+        return false;
+    if (navigation)
+    {
+        g_touch_pane_yes_no_prompt_hover = navigation < 0
+            ? SDL_TOUCH_YES_NO_HOVER_YES : SDL_TOUCH_YES_NO_HOVER_NO;
+        g_state.need_present = true;
+    }
+    return true;
+}
+
 void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
 {
     if (dir < 1 || dir > 9)
         return;
 
+    if (sdl_gamepad_yes_no_navigate((dir == 4 || dir >= 7) ? -1
+            : (dir == 6 || dir <= 3) ? 1 : 0))
+        return;
+
+    /* A picker owns navigation even while the gameplay modifier that opened
+     * it remains held. Keep directions distinct from typed quantity digits
+     * and numbered shortcuts before considering modified world actions. */
+    int navigation = (dir == 4 || dir >= 7) ? -1
+        : (dir == 6 || dir <= 3) ? 1 : 0;
+    if (navigation && sdl_question_menu_queue_navigation(navigation))
+        return;
+
     if (!shift && !ctrl && !alt)
     {
-        /* Prompts distinguish navigation from typed quantity digits and
-         * numbered shortcuts. Keep the resolved D-pad direction semantic,
-         * just like stick and physical-arrow input, before emitting '2'/'8'. */
-        int navigation = (dir == 4 || dir >= 7) ? -1
-            : (dir == 6 || dir <= 3) ? 1 : 0;
-        if (navigation && sdl_question_menu_queue_navigation(navigation))
-        {
-            return;
-        }
-
         if (sdl_submit_legacy_keypad_movement(
                 (dir == 5) ? MOVEMENT_INPUT_ACTION_WAIT
                            : MOVEMENT_INPUT_ACTION_MOVE_DIR,
@@ -959,7 +977,8 @@ static bool sdl_gamepad_send_ui_direction(int dir)
         int navigation = (dir == GAMEPAD_STICK_DIR_UP
             || dir == GAMEPAD_STICK_DIR_LEFT) ? -1 : 1;
 
-        if (sdl_question_menu_queue_navigation(navigation))
+        if (sdl_gamepad_yes_no_navigate(navigation)
+            || sdl_question_menu_queue_navigation(navigation))
             return true;
     }
 
@@ -1273,6 +1292,78 @@ void sdl_gamepad_clear_pending_shoulder(void)
     g_gamepad_state.shoulder_pending = false;
     g_gamepad_state.shoulder_pending_button = 0;
     g_gamepad_state.shoulder_pending_time = 0;
+}
+
+/* A blocking animation discards actions, but releases must still retire held
+ * input. Do not use ordinary dispatch here: releasing a pending confirm,
+ * shoulder or direction can itself send a command. */
+void sdl_gamepad_handle_blocked_event(const SDL_Event* ev)
+{
+    if (!ev)
+        return;
+
+    sdl_gamepad_clear_dpad_state();
+    sdl_gamepad_clear_pending_sticks();
+    sdl_gamepad_clear_pending_shoulder();
+    sdl_gamepad_clear_pending_confirm();
+    g_gamepad_focus_chord_pending = false;
+    g_gamepad_focus_chord_used = false;
+
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+    {
+        sdl_gamepad_release_button_modifier(ev->gbutton.button);
+        if (ev->gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
+            g_gamepad_state.left_shoulder_down = false;
+        else if (ev->gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
+            g_gamepad_state.right_shoulder_down = false;
+    }
+    else if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
+    {
+        switch (ev->gaxis.axis)
+        {
+        case SDL_GAMEPAD_AXIS_LEFTX: g_gamepad_state.left_x = ev->gaxis.value; break;
+        case SDL_GAMEPAD_AXIS_LEFTY: g_gamepad_state.left_y = ev->gaxis.value; break;
+        case SDL_GAMEPAD_AXIS_RIGHTX: g_gamepad_state.right_x = ev->gaxis.value; break;
+        case SDL_GAMEPAD_AXIS_RIGHTY: g_gamepad_state.right_y = ev->gaxis.value; break;
+        case SDL_GAMEPAD_AXIS_LEFT_TRIGGER:
+        case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
+        {
+            int index = ev->gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
+            bool pressed = ev->gaxis.value >= MAX(config.gamepad_trigger_threshold, 0);
+            if (!pressed && g_gamepad_trigger_modifiers[index])
+            {
+                sdl_gamepad_apply_modifier(g_gamepad_trigger_modifiers[index], false);
+                g_gamepad_trigger_modifiers[index] = 0;
+            }
+            if (index == 0)
+                g_gamepad_state.left_trigger_down = pressed;
+            else
+                g_gamepad_state.right_trigger_down = pressed;
+            break;
+        }
+        default: break;
+        }
+    }
+
+    /* A stick held across the animation must return to neutral before it can
+     * move again. Retire binding modifiers before forgetting their direction. */
+    for (int stick = 0; stick < 2; stick++)
+    {
+        int* binding_dir = stick ? &g_gamepad_state.right_dir
+            : &g_gamepad_state.left_bind_dir;
+        int* bindings = stick ? config.gamepad_right_stick_bindings
+            : config.gamepad_left_stick_bindings;
+        if (g_gamepad_stick_binding_modifier_active[stick]
+            && *binding_dir >= 0 && *binding_dir < GAMEPAD_STICK_DIR_COUNT)
+            sdl_gamepad_apply_modifier(bindings[*binding_dir], false);
+        g_gamepad_stick_binding_modifier_active[stick] = false;
+        *binding_dir = -1;
+    }
+    g_gamepad_state.left_dir = 0;
+    g_gamepad_state.left_ui_dir = sdl_gamepad_axis_to_cardinal_dir(
+        g_gamepad_state.left_x, g_gamepad_state.left_y, MAX(config.gamepad_deadzone, 0));
+    g_gamepad_state.right_ui_dir = sdl_gamepad_axis_to_cardinal_dir(
+        g_gamepad_state.right_x, g_gamepad_state.right_y, MAX(config.gamepad_deadzone, 0));
 }
 
 void sdl_gamepad_set_pending_shoulder(int button)
@@ -2562,6 +2653,28 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         sdl_gamepad_release_button_modifier(button);
     }
 
+    /* Confirmations own the physical pad even over another native surface.
+     * Do not consult gameplay bindings, including modifier/NONE bindings. */
+    if (g_touch_pane_yes_no_prompt_active)
+    {
+        sdl_gamepad_clear_dpad_state();
+        sdl_gamepad_clear_pending_sticks();
+        sdl_gamepad_clear_pending_shoulder();
+        if (down)
+        {
+            int dir = sdl_gamepad_button_ui_direction(button);
+            if (dir >= 0)
+                (void)sdl_gamepad_send_ui_direction(dir);
+            else if (sdl_gamepad_button_is_ui_confirm(button))
+                Term_keypress(g_touch_pane_yes_no_prompt_hover
+                    == SDL_TOUCH_YES_NO_HOVER_NO ? 'n' : 'y');
+            else if (sdl_gamepad_button_is_ui_back(button)
+                || button == SDL_GAMEPAD_BUTTON_START)
+                Term_keypress(ESCAPE);
+        }
+        return;
+    }
+
     if (sdl_minimap_handle_gamepad_button(button, down))
         return;
 
@@ -2873,7 +2986,8 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
 
     sdl_gamepad_mark_auto_ui();
 
-    if (sdl_minimap_handle_gamepad_axis(ev))
+    if (!g_touch_pane_yes_no_prompt_active
+        && sdl_minimap_handle_gamepad_axis(ev))
         return;
 
     if (ev->axis <= SDL_GAMEPAD_AXIS_RIGHTY) {
@@ -2892,8 +3006,8 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
             *y = ev->value;
         int deadzone = MAX(config.gamepad_deadzone, 0);
         int dir = sdl_gamepad_axis_to_cardinal_dir(*x, *y, deadzone);
-        bool native_overlay = g_player_action_menu.active
-            || g_player_exchange_target.active;
+        bool native_overlay = !g_touch_pane_yes_no_prompt_active
+            && (g_player_action_menu.active || g_player_exchange_target.active);
         bool modal = sdl_movement_input_is_modal()
             || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
                 && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON);

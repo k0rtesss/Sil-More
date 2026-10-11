@@ -19,9 +19,53 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--portrait-baseline', action='store_true')
+    parser.add_argument('--resize-baseline', action='store_true')
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     checks = CHECKS[:CHECKS.index('static void check(void)')]
+    event_source = (ROOT / 'src/sdl/core/sdl-events.c').read_text()
+    wake_start = event_source.index('    /* Inventory draws into the terminal')
+    wake_end = event_source.index('    // Don\'t strictly need this', wake_start)
+    resize_wake = '' if args.resize_baseline else event_source[wake_start:wake_end]
+    resize_policy = r'''
+static int resize_target_hgt, resize_wake_count;
+static bool resize_click_active=true, resize_question;
+static enum sdl_menu_font resize_terminal=SDL_MENU_FONT_INVENTORY;
+static enum sdl_menu_font resize_current=SDL_MENU_FONT_INVENTORY;
+static enum sdl_menu_font resize_terminal_font(void) {return resize_terminal;}
+static enum sdl_menu_font resize_current_font(void) {return resize_current;}
+static bool resize_clicks(void) {return resize_click_active;}
+static bool resize_question_active(void) {return resize_question;}
+static int resize_keypress(int key) {
+    assert(key==UI_MENU_CLICK_WAKE_KEY);resize_wake_count++;return 0;
+}
+#define sdl_terminal_menu_font resize_terminal_font
+#define sdl_menu_font_current resize_current_font
+#define ui_menu_click_is_active resize_clicks
+#define sdl_question_menu_is_active resize_question_active
+#define Term_keypress resize_keypress
+static void emit_resize_wake(void) {
+RESIZE_WAKE
+}
+#undef sdl_terminal_menu_font
+#undef sdl_menu_font_current
+#undef ui_menu_click_is_active
+#undef sdl_question_menu_is_active
+#undef Term_keypress
+static void check_resize_policy(void) {
+    resize_wake_count=0;emit_resize_wake();assert(resize_wake_count==1);
+    resize_question=true;emit_resize_wake();assert(resize_wake_count==1);
+    resize_question=false;resize_current=SDL_MENU_FONT_QUESTIONS;
+    emit_resize_wake();assert(resize_wake_count==1);
+    resize_current=SDL_MENU_FONT_INVENTORY;resize_click_active=false;
+    emit_resize_wake();assert(resize_wake_count==1);
+    resize_click_active=true;resize_terminal=SDL_MENU_FONT_NONE;
+    emit_resize_wake();assert(resize_wake_count==1);
+    resize_terminal=SDL_MENU_FONT_INVENTORY;
+}
+'''.replace('RESIZE_WAKE', resize_wake)
+    checks = checks.replace('static int browser_width=120;',
+        resize_policy + '\nstatic int browser_width=120;')
     checks = checks.replace('static int browser_width=120;', '''
 static int browser_width=120, browser_height=40, reserved_rows;
 static bool bigger, touch, pack_fixture, portrait;
@@ -43,6 +87,12 @@ int __wrap_sdl_touch_menu_button_reserved_rows(void) { return reserved_rows; }
     checks = checks.replace('Term->hgt!=40', 'Term->hgt!=browser_height').replace(
         'Term_resize(browser_width,40)', 'Term_resize(browser_width,browser_height)')
     checks = checks.replace('    assert(pos<count);', '''
+    if(resize_target_hgt && pos==2) {
+        browser_height=resize_target_hgt;resize_target_hgt=0;
+        assert(!Term_resize(browser_width,browser_height));
+        resize_wake_count=0;emit_resize_wake();assert(resize_wake_count==1);
+        return UI_MENU_CLICK_WAKE_KEY;
+    }
     assert(pos<count);
     bool arrow_visible=false;
     int visible_index=-1;
@@ -69,6 +119,7 @@ int __wrap_sdl_touch_menu_button_reserved_rows(void) { return reserved_rows; }
     checks += r'''
 static void check(void)
 {
+    check_resize_policy();
     const int preview[]={'!'};
     const int next_preview[]={'2','!'};
     const int sizes[][3]={{51,10,4},{51,11,4},{51,12,4},{51,16,4},
@@ -82,6 +133,16 @@ static void check(void)
         run(3,true,next_preview,2,0,2);
         printf("Inventory %s visible row/click IDs/preview/clocks %dx%d reserved=%d big=%d portrait=%d PASS.\n",
             pack_fixture?"Pack":"Quiver",browser_width,browser_height,reserved_rows,bigger,portrait);
+    }
+    /* Resize while entry 2 is selected, then preview through the rebuilt
+     * browser. Its identity, registered click ID, stacks and clocks survive. */
+    portrait=false;reserved_rows=4;touch=true;bigger=true;browser_width=51;
+    for(int pack=0;pack<2;pack++)for(int shrink=0;shrink<2;shrink++) {
+        pack_fixture=pack;browser_height=shrink?13:10;
+        resize_target_hgt=shrink?10:13;
+        run(3,true,next_preview,2,0,2);
+        assert(!resize_target_hgt);
+        puts("Inventory live resize retains selected stack, row IDs and clocks PASS.");
     }
 }
 '''

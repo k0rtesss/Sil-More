@@ -243,6 +243,18 @@ void resize(const SDL_Rect* screen)
         }
     }
 
+    /* Inventory draws into the terminal and waits in inkey(). Repainting its
+     * saved cells after resize leaves the old rows and click regions beneath
+     * the relocated touch footer. Wake the browser's harmless redraw path;
+     * native questions/confirmations and ordinary dungeon input own their
+     * own event policy and must not receive this synthetic menu input. */
+    if (sdl_terminal_menu_font() == SDL_MENU_FONT_INVENTORY
+        && sdl_menu_font_current() == SDL_MENU_FONT_INVENTORY
+        && ui_menu_click_is_active() && !sdl_question_menu_is_active())
+    {
+        Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+    }
+
     // Don't strictly need this as `sdl_view_create` already sets this flag.
     g_state.need_present = true;
     sdl_update_cursor_visibility();
@@ -1163,6 +1175,13 @@ bool sdl_yes_no_prompt_handle_modal_event(const SDL_Event* ev)
 
     switch (ev->type)
     {
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+        sdl_gamepad_handle_button(&ev->gbutton);
+        return true;
+    case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+        sdl_gamepad_handle_axis(&ev->gaxis);
+        return true;
     case SDL_EVENT_MOUSE_MOTION:
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
             return false;
@@ -1389,9 +1408,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         case SDL_EVENT_FINGER_UP:
         case SDL_EVENT_FINGER_MOTION:
         case SDL_EVENT_FINGER_CANCELED:
+            return;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
         case SDL_EVENT_GAMEPAD_BUTTON_UP:
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+            sdl_gamepad_handle_blocked_event(ev);
             return;
         default:
             break;
