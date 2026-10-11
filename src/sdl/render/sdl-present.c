@@ -1979,6 +1979,10 @@ static bool sdl_render_current_window_contents(void)
      * buttons stay on top and visible while a description is open. */
     if (!hide_main_menu_overlays)
         sdl_touch_thumb_render();
+    /* Banner hit testing yields to Quick Touch, so its text must stay below
+     * those buttons as well as below modal questions. */
+    if (!hide_main_menu_overlays)
+        sdl_narrative_banner_render();
     if (!g_touch_tutorial_suppress_runtime_top_panel)
         sdl_touch_top_panel_render();
     /* Question/roll popups are opaque foreground panels.  Keep them above
@@ -1990,8 +1994,6 @@ static bool sdl_render_current_window_contents(void)
         && sdl_question_menu_context_hint_active()
         && sdl_object_tooltip_uses_screen_rect())
         sdl_object_tooltip_render();
-    if (!hide_main_menu_overlays)
-        sdl_narrative_banner_render();
     sdl_touch_exit_button_render();
 
     if (!hide_main_menu_overlays)

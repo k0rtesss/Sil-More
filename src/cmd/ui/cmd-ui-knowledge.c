@@ -11218,6 +11218,26 @@ static void supply_overlay_avoid_selection(
 /* Keep the familiar two-column browser on desktop and landscape.  On a real
  * mobile portrait viewport, categories/slots and entries get separate,
  * full-width vertical bands so item names retain useful width. */
+static void knowledge_inventory_reclaim_empty_body(knowledge_browser_layout* layout)
+{
+    /* The generic layout clamps its row count to one even when a tall touch
+     * footer leaves no space before the status.  Reuse a header spacer so
+     * that this is a real item row, rather than one overwritten by status. */
+    int reclaim = MAX(0, layout->list_row + 1 - layout->status_row);
+    reclaim = MIN(reclaim, MAX(0, layout->header_row - 1));
+    if (!reclaim)
+        return;
+    layout->header_row -= reclaim;
+    layout->divider_row -= reclaim;
+    layout->list_row -= reclaim;
+    layout->list_rows = MAX(1, layout->status_row - layout->list_row);
+    layout->group_row = layout->list_row;
+    layout->group_rows = layout->list_rows;
+    layout->entry_header_row = layout->header_row;
+    layout->entry_row = layout->list_row;
+    layout->entry_rows = layout->list_rows;
+}
+
 static void knowledge_init_inventory_portrait_layout_normal(
     knowledge_browser_layout* layout, int max_group_len, bool has_groups,
     int portrait_header_rows)
@@ -11228,12 +11248,13 @@ static void knowledge_init_inventory_portrait_layout_normal(
     int extra_top_rows;
 
     knowledge_init_layout(layout, max_group_len, has_groups);
+    knowledge_inventory_reclaim_empty_body(layout);
     if (!layout || !sdl_mobile_portrait_layout_active())
         return;
 
     /* Portrait status summaries are often wider than the viewport.  Reserve
      * a second row above the prompt so every Inventory tab can wrap them. */
-    if (layout->status_row > layout->list_row)
+    if (layout->status_row - layout->list_row >= 3)
     {
         layout->status_row--;
         layout->status_rows++;
@@ -11313,6 +11334,7 @@ static void knowledge_init_inventory_portrait_layout(
     int separator_rows;
 
     knowledge_init_layout(layout, max_group_len, has_groups);
+    knowledge_inventory_reclaim_empty_body(layout);
     if (!layout || (!sdl_mobile_portrait_layout_active()
             && layout->term_wid >= 55))
         return;
@@ -12727,6 +12749,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             bool inventory_one_page = !replacement_mode
                 && !storage_exchange_mode && !slot_pick_mode
                 && !item_select_mode
+                && (!Term || Term->hgt >= 22)
                 && (!get_sdl_menu_bigger_font() || !Term
                     || (Term->wid >= 55 && Term->hgt >= 22));
 
@@ -12850,6 +12873,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             /* Ordinary Inventory and slot-pick use full-width list layouts. */
             knowledge_init_inventory_portrait_layout(&layout, inv_max,
                 !inventory_one_page && !slot_pick_mode, picker_header_rows);
+            if (inventory_one_page && layout.entry_rows < 14)
+            {
+                /* Four section lists need one row each, nine section
+                 * separators, and the space below the page summary. */
+                inventory_one_page = false;
+                knowledge_init_inventory_portrait_layout(&layout, inv_max,
+                    true, picker_header_rows);
+            }
             inventory_browser_reserve_status(&layout,
                 (inventory_one_page || slot_pick_mode) ? INVENTORY_MENU_GROUP_ALL
                     : inventory_browser_groups[MAX(0, MIN(inv_grp_cur,
