@@ -43,14 +43,14 @@ static void sdl_song_menu_draw_text(TTF_Font* font, cptr text,
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
 
-    texture = config.bigger_font
+    texture = get_sdl_menu_bigger_font()
         ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
             &text_w, &text_h)
         : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return;
 
-    if (!config.bigger_font && text_h > 0 && (float)text_h > row_h * 0.94f)
+    if (!get_sdl_menu_bigger_font() && text_h > 0 && (float)text_h > row_h * 0.94f)
         scale = (row_h * 0.94f) / (float)text_h;
 
     src = (SDL_FRect){
@@ -125,10 +125,11 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         return false;
     if (!sdl_overlay_pane_anchor_rect(PANE_DESCRIPTION, &anchor))
         return false;
+    anchor = sdl_menu_content_rect(anchor);
 
     font_px = sdl_main_menu_pane_font_px();
 #if SIL_SDL_MOBILE_BUILD
-    font_px = config.bigger_font ? sdl_ui_role_font_px(SDL_UI_FONT_BODY)
+    font_px = get_sdl_menu_bigger_font() ? sdl_menu_role_font_px(SDL_UI_FONT_BODY)
         : (int)((float)font_px * 1.18f + 0.5f);
 #endif
     story_font = sdl_story_font_for_height_slot(font_px,
@@ -172,10 +173,10 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
     row_h = (float)font_px * 1.24f;
     if (row_h < (float)font_px + 4.0f)
         row_h = (float)font_px + 4.0f;
-    if (config.bigger_font)
+    if (get_sdl_menu_bigger_font())
         row_h = MAX(44.0f, (float)TTF_GetFontHeight(story_font) * 1.3f);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
         row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
 #endif
     divider_gap = sdl_touch_pane_clampf((float)font_px * 0.3f, 3.0f, 8.0f);
@@ -193,7 +194,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
-    if (config.bigger_font) {
+    if (get_sdl_menu_bigger_font()) {
         int text_h = 0;
         int wrap_w = MAX(1, (int)(panel_w - pad_x * 2.0f
             - letter_w - letter_gap));
@@ -208,10 +209,10 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
 
     title_h = row_h;
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font() && out->has_title) {
+    if (get_sdl_menu_bigger_font() && out->has_title) {
         int h = 0, w = 0;
         TTF_Font* title_font = sdl_story_font_for_height_slot(
-            sdl_ui_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
+            sdl_menu_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
         TTF_GetStringSizeWrapped(title_font, g_song_menu.title, 0,
             MAX(1, (int)(panel_w - pad_x * 2)), &w, &h);
         title_h = MAX(title_h, h + 6.0f * sdl_ui_density_scale());
@@ -228,7 +229,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         panel_h = max_panel_h;
 
     out->visible_count = g_song_menu.count;
-    if (config.bigger_font) {
+    if (get_sdl_menu_bigger_font()) {
         float header_h = out->has_title ? title_h + divider_gap : 0.0f;
         float available_h = max_panel_h - pad_y * 2.0f - header_h;
 
@@ -418,9 +419,9 @@ void sdl_song_menu_render(void)
     {
         TTF_Font* title_font = story_font;
 #if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_bigger_font())
+        if (get_sdl_menu_bigger_font())
             title_font = sdl_story_font_for_height_slot(
-            sdl_ui_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
+            sdl_menu_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
 #endif
         sdl_song_menu_draw_text(title_font, g_song_menu.title,
             g_state.palette[TERM_WHITE], layout.title_row.x,
@@ -526,7 +527,7 @@ bool sdl_song_menu_handle_pointer(float x, float y, int action)
 
     if (!g_song_menu.active)
         return false;
-    if (config.bigger_font) {
+    if (get_sdl_menu_bigger_font()) {
         sdl_song_menu_layout_info layout;
         if (sdl_song_menu_layout(&layout)
             && (sdl_point_in_frect(&layout.prev, x, y)

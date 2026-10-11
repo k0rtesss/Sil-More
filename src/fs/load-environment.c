@@ -1,10 +1,12 @@
 #include "angband.h"
 #include "externs.h"
 #include "fs/load-internal.h"
+#include "log/log.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
 #include "monster/monster-world.h"
 #include "level-generation/level-generation-terrain-vaults.h"
+#include <limits.h>
 
 static environment_cell read_cell(void)
 {
@@ -41,6 +43,20 @@ errr load_read_environment(void)
     environment_state s = {0};
     rd_u16b(&magic); rd_bool(&s.ready); rd_u32b(&s.random); rd_s32b(&s.last_turn);
     rd_byte(&s.source_count); rd_byte(&s.mineral_budget);
+    /* The old wizard Forget command reset both clocks and cleared noscore,
+     * leaving the live dungeon on its original timeline. Recover that exact
+     * legacy reset from the saved environment clock; keep normal future-time
+     * validation for every other save. The serialized layout is unchanged. */
+    if (!savefile_version_at_least(0, 9, 8, 25)
+        && magic == 0xEC17 && load_byte_offset - start == 13
+        && turn == 1 && playerturn == 1 && min_depth_counter == 0
+        && p_ptr->noscore == 0 && s.last_turn > turn
+        && s.last_turn <= INT_MAX - 100000)
+    {
+        log_warn("Recovering the world clock after legacy wizard Forget: "
+            "saved turn=%d, dungeon turn=%d", turn, s.last_turn);
+        turn = s.last_turn;
+    }
     if (magic != 0xEC17 || load_byte_offset-start != 13 || !cave_environment_restore_state(s))
         return invalid_environment();
     for (int i = 0; i < s.source_count; i++) {

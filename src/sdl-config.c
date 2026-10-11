@@ -14,6 +14,29 @@
 
 // JSON-based configuration system using cJSON library
 
+static const char* const menu_font_keys[SDL_MENU_FONT_COUNT] = {
+    "main", "inventory", "abilities",
+    "character", "smithing", "settings", "knowledge", "help", "messages",
+    "scores", "songs", "quests", "birth", "narrative", "questions",
+    "logOptions", "paneOptions", "look"
+};
+static const char* const menu_font_labels[SDL_MENU_FONT_COUNT] = {
+    "Main menu", "Inventory (all tabs)", "Abilities",
+    "Character sheet", "Smithing", "Settings", "Knowledge", "Help", "Messages",
+    "Halls of Mandos", "Songs", "Quests", "Character creation", "Story pages",
+    "Questions and choices", "Log menu", "Pane menu", "Look"
+};
+
+const char* sdl_menu_font_key(enum sdl_menu_font menu)
+{
+    return menu >= 0 && menu < SDL_MENU_FONT_COUNT ? menu_font_keys[menu] : "";
+}
+
+const char* sdl_menu_font_label(enum sdl_menu_font menu)
+{
+    return menu >= 0 && menu < SDL_MENU_FONT_COUNT ? menu_font_labels[menu] : "";
+}
+
 static bool sdl_config_gamepad_dpad_source_is_valid(int source)
 {
     return source >= GAMEPAD_DPAD_SOURCE_STANDARD
@@ -3252,13 +3275,13 @@ void sdl_pane_profile_apply_tablet_defaults(
 }
 
 void sdl_pane_profile_apply_bigger_font_defaults(
-    struct sdl_pane_profile* profile)
+    struct sdl_pane_profile* profile, int orientation)
 {
     static const struct pane_config defaults[] = {
-        { .pane = PANE_LEFT_PANEL, .where = PLACE_TOP_CENTER,
-            .enabled = true },
-        { .pane = PANE_ROLLS, .where = PLACE_TOP_CENTER, .enabled = true,
+        { .pane = PANE_ROLLS, .where = PLACE_TOP_LEFT, .enabled = true,
             .rect.rows = 4 },
+        { .pane = PANE_LEFT_PANEL, .where = PLACE_TOP_LEFT,
+            .enabled = true },
         { .pane = PANE_COMBAT, .where = PLACE_BOTTOM_LEFT, .enabled = true,
             .rect.rows = PANE_COMBAT_OVERLAY_ROWS,
             .rect.cols = PANE_COMBAT_OVERLAY_COLS },
@@ -3280,7 +3303,8 @@ void sdl_pane_profile_apply_bigger_font_defaults(
     profile->enable_right_panes = false;
     profile->enable_bottom_panes = false;
     profile->left_overlays_touch_screen_edge = true;
-    profile->show_overlay_log_border = false;
+    profile->show_overlay_log_border =
+        orientation == SDL_PANE_ORIENTATION_PORTRAIT;
     profile->show_main_menu_button = false;
     profile->left_panel_expanded_on_launch = false;
     profile->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_ROW;
@@ -3307,14 +3331,38 @@ void sdl_pane_profile_apply_bigger_font_defaults(
         }
         profile->pane_configs[index] = defaults[i];
     }
-    sdl_config_profile_set_pane(profile, PANE_LEFT_PANEL, true,
-        PLACE_TOP_CENTER, 1);
     sdl_config_profile_set_pane(profile, PANE_ROLLS, true,
-        PLACE_TOP_CENTER, 2);
+        PLACE_TOP_LEFT, 1);
+    sdl_config_profile_set_pane(profile, PANE_LEFT_PANEL, true,
+        PLACE_TOP_LEFT, 2);
+    if (orientation == SDL_PANE_ORIENTATION_LANDSCAPE) {
+        profile->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_COLUMN;
+        sdl_config_profile_set_pane(profile, PANE_ROLLS, true,
+            PLACE_TOP_RIGHT, 1);
+    }
     sdl_config_profile_set_pane(profile, PANE_STATUS_DEPTH, true,
         PLACE_BOTTOM_CENTER, 1);
     sdl_config_profile_set_pane(profile, PANE_OVERLAY_MENU, true,
         PLACE_BOTTOM_CENTER, 2);
+}
+
+static void sdl_pane_profile_upgrade_bigger_font_hud(
+    struct sdl_pane_profile* profile)
+{
+    int left = sdl_config_profile_find_pane(profile, PANE_LEFT_PANEL);
+    int rolls = sdl_config_profile_find_pane(profile, PANE_ROLLS);
+
+    /* Recognize the previous big-text default without replacing custom pane
+     * positions, font sizes, enabled states, or touch-control settings. */
+    if (profile->left_panel_compact_mode != SDL_LEFT_PANEL_COMPACT_ROW
+        || left < 0 || rolls <= left
+        || profile->pane_configs[left].where != PLACE_TOP_CENTER
+        || profile->pane_configs[rolls].where != PLACE_TOP_CENTER)
+        return;
+
+    sdl_config_profile_set_pane_where_order(profile, rolls, PLACE_TOP_LEFT, 1);
+    left = sdl_config_profile_find_pane(profile, PANE_LEFT_PANEL);
+    sdl_config_profile_set_pane_where_order(profile, left, PLACE_TOP_LEFT, 2);
 }
 
 static bool sdl_config_profile_has_enabled_bottom_pane(
@@ -3677,6 +3725,23 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         if (cJSON_IsBool(item)) {
             config->bigger_font = cJSON_IsTrue(item);
         }
+        /* Retain the old all-text choice on first load, then persist each
+         * menu separately. Changing the UI toggle never changes these. */
+        cJSON* menu_fonts = cJSON_GetObjectItemCaseSensitive(sdl,
+            "menuBiggerFont");
+        for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++) {
+            item = cJSON_GetObjectItemCaseSensitive(menu_fonts,
+                sdl_menu_font_key(menu));
+            config->menu_bigger_font[menu] = cJSON_IsBool(item)
+                ? cJSON_IsTrue(item) : config->bigger_font;
+        }
+        if (!cJSON_IsObject(menu_fonts) && config->debug_character_sheet)
+            config->menu_bigger_font[SDL_MENU_FONT_CHARACTER] = true;
+        config->debug_character_sheet = false;
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "showMenuFontButton");
+        if (cJSON_IsBool(item))
+            config->show_menu_font_button = cJSON_IsTrue(item);
 
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "mobileStartingZoomOffset");
@@ -5268,7 +5333,8 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     continue;
                 sdl_config_copy_pane_profile(&pane_profiles[index],
                     &pane_profiles[normal]);
-                sdl_pane_profile_apply_bigger_font_defaults(&pane_profiles[index]);
+                sdl_pane_profile_apply_bigger_font_defaults(&pane_profiles[index],
+                    orientation);
                 if (!cJSON_IsObject(obj))
                     continue;
                 strnfmt(label, sizeof(label), "biggerFont.%s.%s",
@@ -5276,6 +5342,7 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                         ? "portrait" : "landscape",
                     min_terminal_mode_to_string(mode));
                 sdl_config_load_pane_profile(obj, &pane_profiles[index], label);
+                sdl_pane_profile_upgrade_bigger_font_hud(&pane_profiles[index]);
                 loaded[mode] = true;
             }
             for (int mode = 0; mode < SDL_MIN_TERMINAL_MODE_COUNT; mode++) {
@@ -5344,6 +5411,11 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddBoolToObject(sdl, "debugCharacterSheet",
         config->debug_character_sheet);
     cJSON_AddBoolToObject(sdl, "biggerFont", config->bigger_font);
+    cJSON_AddBoolToObject(sdl, "showMenuFontButton", config->show_menu_font_button);
+    cJSON* menu_fonts = cJSON_AddObjectToObject(sdl, "menuBiggerFont");
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+        cJSON_AddBoolToObject(menu_fonts, sdl_menu_font_key(menu),
+            config->menu_bigger_font[menu]);
     cJSON_AddNumberToObject(sdl, "mobileStartingZoomOffset",
         config->mobile_starting_zoom_offset);
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -6067,6 +6139,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->compact_inventory_menus = false;
     config->debug_character_sheet = false;
     config->bigger_font = false;
+    memset(config->menu_bigger_font, 0, sizeof(config->menu_bigger_font));
+    config->show_menu_font_button = false;
     config->mobile_starting_zoom_offset =
         SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT;
     config->mobile_portrait_mode = false;

@@ -49,10 +49,10 @@ static void chasm_surface_tests(void) {
     for(int variant=0;variant<3;variant++)SDL_DestroySurface(variants[variant]);
     shore_map(FEAT_CHASM,0);cave_feat[9][11]=FEAT_BRIDGE_CHASM_H;
     assert(liquid_transition_mask(10,11,FEAT_CHASM)==1);
-    cave_info[9][11]=0;assert(liquid_transition_mask(10,11,FEAT_CHASM)==0);
+    cave_info[9][11]=0;assert(liquid_transition_mask(10,11,FEAT_CHASM)==1);
     cave_info[10][11]=0;assert(!visible_liquid(10,11));
     idle_cell cell={.liquid_feat=FEAT_CHASM};assert(!cell_can_animate(&cell));
-    puts("Chasms: chasm_1/2/3 fill variants, connected rendering, bridge underlay and knowledge gating: PASS");
+    puts("Chasms: chasm_1/2/3 fill variants, physical bridge underlay and center discovery gating: PASS");
 }
 static SDL_Surface* wet_expected(SDL_Texture* texture,int mask,int frame,int light,bool deep_fallback) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
@@ -189,13 +189,13 @@ static void wet_depth_tests(void) {
     shore_map(FEAT_WATER,255);cave_feat[9][11]=FEAT_BRIDGE_DEEP_WATER_H;
     assert(water_depth_transition_mask(10,11)==254);cave_info[9][11]=0;
     SDL_Surface* hidden=shore_surface(NULL,0,0,true);
-    assert(water_depth_transition_mask(10,11)==255);
+    assert(water_depth_transition_mask(10,11)==254);
     cave_feat[9][11]=FEAT_FLOOR;SDL_Surface* absent=shore_surface(NULL,0,0,true);
-    assert(same_surface(hidden,absent));SDL_DestroySurface(hidden);SDL_DestroySurface(absent);
+    assert(!same_surface(hidden,absent));SDL_DestroySurface(hidden);SDL_DestroySurface(absent);
     cave_feat[9][11]=FEAT_DEEP_WATER;cave_info[9][11]=CAVE_MARK;
     assert(water_depth_transition_mask(10,11)==254);
-    p_ptr->rage=1;assert(water_depth_transition_mask(10,11)==255);p_ptr->rage=0;
-    g_labyrinth_view_active=true;assert(water_depth_transition_mask(10,11)==255);g_labyrinth_view_active=false;
+    p_ptr->rage=1;assert(water_depth_transition_mask(10,11)==254);p_ptr->rage=0;
+    g_labyrinth_view_active=true;assert(water_depth_transition_mask(10,11)==254);g_labyrinth_view_active=false;
     assert(Rand_state_export()==rng&&turn==turns);
     shore_map(FEAT_WATER,255);cave_feat[9][11]=FEAT_DEEP_WATER;cave_info[9][11]=0;
     Term->total_erase=true;prt_map();Term_fresh();
@@ -205,7 +205,7 @@ static void wet_depth_tests(void) {
     cave_set_feat(9,11,FEAT_WATER);Term_fresh();changed=capture(132);
     force_map_redraw();Term_fresh();full=capture(133);assert(same_surface(changed,full));
     SDL_DestroySurface(changed);SDL_DestroySurface(full);
-    puts("Freshwater depth composition: all depth masks and mixed land masks, diagonals/bridges, hidden-depth gating and discovery/removal repaint: PASS");
+    puts("Freshwater depth composition: all depth masks and mixed land masks, physical hidden depths/bridges and discovery/removal repaint: PASS");
 }
 static void wet_knowledge_tests(void) {
     for(int kind=0;kind<3;kind++) {
@@ -220,19 +220,59 @@ static void wet_knowledge_tests(void) {
             cave_feat[9][11]=FEAT_WATER;assert(liquid_transition_mask(10,11,feat)==254);
             cave_feat[9][11]=FEAT_BRIDGE_POISON_H;assert(liquid_transition_mask(10,11,feat)==255);
         }
+        shore_map(feat,255);
+        SDL_Surface* seen=shore_surface(NULL,0,0,true);
         for(int i=0;i<8;i++) cave_info[10+shore_dy[i]][11+shore_dx[i]]=0;
-        assert(liquid_transition_mask(10,11,feat)==0);
+        assert(liquid_transition_mask(10,11,feat)==255);
         SDL_Surface* hidden=shore_surface(NULL,0,0,true);
+        assert(same_surface(seen,hidden));SDL_DestroySurface(seen);
         for(int i=0;i<8;i++) cave_feat[10+shore_dy[i]][11+shore_dx[i]]=FEAT_FLOOR;
-        SDL_Surface* absent=shore_surface(NULL,0,0,true);assert(same_surface(hidden,absent));
+        assert(liquid_transition_mask(10,11,feat)==0);
+        SDL_Surface* absent=shore_surface(NULL,0,0,true);assert(!same_surface(hidden,absent));
         SDL_DestroySurface(hidden);SDL_DestroySurface(absent);
         shore_map(feat,255);
         for(int i=0;i<8;i++) cave_info[10+shore_dy[i]][11+shore_dx[i]]=CAVE_MARK;
-        p_ptr->rage=1;assert(liquid_transition_mask(10,11,feat)==0);p_ptr->rage=0;
-        g_labyrinth_view_active=true;assert(liquid_transition_mask(10,11,feat)==0);
+        p_ptr->rage=1;assert(liquid_transition_mask(10,11,feat)==255);p_ptr->rage=0;
+        g_labyrinth_view_active=true;assert(liquid_transition_mask(10,11,feat)==255);
         g_labyrinth_view_active=false;
+        cave_info[10][11]=0;assert(!visible_liquid(10,11));
+        cave_info[10][11]=CAVE_MARK;
+        p_ptr->rage=1;assert(!visible_liquid(10,11));p_ptr->rage=0;
+        g_labyrinth_view_active=true;assert(!visible_liquid(10,11));g_labyrinth_view_active=false;
     }
-    puts("Shallow/deep share connectivity through bridges; acid separate; unknown pixels and rage/labyrinth hide knowledge: PASS");
+    puts("Shallow/deep share physical bridge connectivity; acid separate; neighbor discovery preserves contours and center rage/labyrinth gates remain intact: PASS");
+}
+static void wet_center_memory_tests(void) {
+    for(int kind=0;kind<3;kind++) {
+        cave_environment_reset();shore_map(wet_features[kind],255);
+        cave_water_flow_reset();
+        cave_info[10][11]=CAVE_MARK;
+        /* Restore an isolated saved memory state without requiring this SDL
+         * fixture to initialize the complete level generator. */
+        assert(cave_environment_restore_state((environment_state){
+            .random=1,.last_turn=turn,.ready=true}));
+        assert(cave_environment_restore_cell(10,11,(environment_cell){
+            .base_feat=wet_features[kind],.known_feat=wet_features[kind],
+            .known_underlay=wet_features[kind],.integrity=100}));
+        byte a;char c_before;
+        map_info_terrain(10,11,&a,&c_before);
+        SDL_Surface* remembered=shore_surface(NULL,0,0,true);
+        int replacement=kind==2?FEAT_WATER:FEAT_POISON;
+        cave_set_feat(10,11,replacement);
+        assert(cave_environment_known_feature(10,11)==wet_features[kind]);
+        assert(visible_liquid(10,11)==wet_features[kind]);
+        byte a_after;char c_after;map_info_terrain(10,11,&a_after,&c_after);
+        assert(a==a_after&&c_before==c_after);
+        SDL_Surface* unseen=shore_surface(NULL,0,0,true);
+        assert(same_surface(remembered,unseen));
+        cave_info[10][11]|=CAVE_SEEN;cave_environment_observe(10,11);
+        assert(visible_liquid(10,11)==replacement);
+        SDL_Surface* observed=shore_surface(NULL,0,0,true);
+        assert(!same_surface(remembered,observed));
+        SDL_DestroySurface(remembered);SDL_DestroySurface(unseen);SDL_DestroySurface(observed);
+    }
+    cave_environment_reset();
+    puts("Shallow/deep/acid remembered center identity and exact pixels survive unseen replacement; observation updates both: PASS");
 }
 static void wet_bank_tests(void) {
     u64b rng=Rand_state_export();s32b turns=turn;
@@ -250,11 +290,11 @@ static void wet_bank_tests(void) {
             } else assert(inner==normal && outer==normal);
             assert(floor_tile(y,x+3)==normal);
             for(int n=0;n<5;n++)assert(floor_tile(y,x+1)==inner&&floor_tile(y,x+2)==outer);
-            cave_info[y][x]=0;assert(floor_tile(y,x+1)==normal&&floor_tile(y,x+2)==normal);
+            cave_info[y][x]=0;assert(floor_tile(y,x+1)==inner&&floor_tile(y,x+2)==outer);
             cave_info[y][x]=CAVE_MARK;p_ptr->rage=1;
-            assert(floor_tile(y,x+1)==normal&&floor_tile(y,x+2)==normal);p_ptr->rage=0;
+            assert(floor_tile(y,x+1)==inner&&floor_tile(y,x+2)==outer);p_ptr->rage=0;
             g_labyrinth_view_active=true;
-            assert(floor_tile(y,x+1)==normal&&floor_tile(y,x+2)==normal);g_labyrinth_view_active=false;
+            assert(floor_tile(y,x+1)==inner&&floor_tile(y,x+2)==outer);g_labyrinth_view_active=false;
         }
         if(feat==FEAT_POISON)assert(inner_seen==15);
     }
@@ -290,7 +330,7 @@ static void wet_bank_tests(void) {
         && cave_flood_stage_at(10,10)==CAVE_FLOOD_STAGE_COMPLETE);
     assert(floor_tile(10,7)==acid_normal_three);
     assert(Rand_state_export()==rng&&turn==turns);
-    puts("Water retains the original floor; natural acid retains its bank; acid floods stay bankless: PASS");
+    puts("Water retains original floor; natural acid banks follow physical neighbors through hidden/rage/labyrinth views; acid floods stay bankless: PASS");
 }
 static void wet_redraw_tests(void) {
     for(int kind=0;kind<3;kind++) {
@@ -407,7 +447,7 @@ static void wet_preview(void) {
     cave_water_flow_reset();
 }
 static void floor_shore_tests(void) {
-    /* Walls/unknown terrain must contribute no pixels, and changing the
+    /* Walls contribute no pixels regardless of discovery, and changing the
      * adjacent floor must change the edge without changing its wet centre. */
     for(int kind=0;kind<2;kind++) {
         int feat=wet_features[kind];shore_map(feat,0);cave_water_flow_reset();
@@ -434,14 +474,14 @@ static void floor_shore_tests(void) {
         SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
             SDL_TEXTUREACCESS_TARGET,16,16);assert(target);SDL_SetRenderTarget(g_state.renderer,target);
         for(int y=0;y<16;y+=4)for(int x=0;x<16;x+=4) {
-            SDL_FRect piece={x,y,4,4};assert(draw_liquid_region(10,11,&piece,&piece));
+            SDL_FRect piece={x,y,4,4};assert(draw_liquid_region(10,11,&piece,&piece,true));
         }
         SDL_Surface* pieces=SDL_RenderReadPixels(g_state.renderer,NULL);assert(pieces);
         assert(same_surface(changed,pieces));SDL_DestroySurface(pieces);
         SDL_SetRenderTarget(g_state.renderer,previous);SDL_DestroyTexture(target);
         SDL_DestroySurface(wall);SDL_DestroySurface(floor);SDL_DestroySurface(changed);
     }
-    puts("Water edges use actual floor styles; walls/unknown cells add no rim; cropped donors match whole tiles: PASS");
+    puts("Water edges use physical floor styles; walls add no rim regardless of discovery; cropped donors match whole tiles: PASS");
 }
 static void flood_preview(void) {
     const int w=13,h=11,scale=3;
@@ -491,7 +531,7 @@ def main():
     idle.HARNESS = idle.HARNESS.replace("    asynchronous_tests();",
         "    asynchronous_tests();\n    floor_templates();\n"
         "    f_info[FEAT_WATER].x_char=f_info[FEAT_DEEP_WATER].x_char=f_info[FEAT_POISON].x_char=(char)(TILE_FLAG|1);\n"
-        "    chasm_surface_tests();\n    wet_atlas_tests();\n    wet_depth_tests();\n    wet_knowledge_tests();\n    wet_bank_tests();\n    wet_redraw_tests();\n"
+        "    chasm_surface_tests();\n    wet_atlas_tests();\n    wet_depth_tests();\n    wet_knowledge_tests();\n    wet_center_memory_tests();\n    wet_bank_tests();\n    wet_redraw_tests();\n"
         "    wet_direction_tests();\n    wet_layer_tests();\n    wet_fallback_tests();\n    wet_preview();\n    floor_shore_tests();\n    flood_preview();")
     idle.main()
 

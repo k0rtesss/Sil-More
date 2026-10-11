@@ -105,7 +105,7 @@ static void checks(void)
 """
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
-    legacy=subprocess.check_output(["git","-c",f"safe.directory={ROOT.as_posix()}","show","HEAD:src/fs/save-player.c"],cwd=ROOT).decode()
+    legacy=subprocess.check_output(["git","-c",f"safe.directory={ROOT.as_posix()}","show","1e687cca:src/fs/save-player.c"],cwd=ROOT).decode()
     # Keep the genuine previous writer body and its tutorial helper; shared partition writer stays production.
     helper=legacy[legacy.index("static void wr_tutorial_character_state"):legacy.index("void save_write_partition_meta")]
     body=legacy[legacy.index("void wr_extra(void)"):legacy.index("void wr_randarts(void)")]

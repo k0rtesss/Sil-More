@@ -1102,30 +1102,47 @@ void do_cmd_character_sheet(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_CHARACTER);
     sdl_screen_back_gesture_begin();
 
     /* Forever */
     while (1)
     {
-        if (config.debug_character_sheet && !get_sdl_bigger_font())
+        /* Large text uses the live paginated sheet, including skill hits and
+         * action buttons. Only the explicit debug view is read-only. */
+        bool big_font_sheet = config.debug_character_sheet;
+        if (big_font_sheet)
         {
-            int wid = 80;
-            int hgt = 24;
-            const char* prompt = "DEBUG: any key returns to the game";
             bool saved_hide_cursor = hide_cursor;
+            int choice = 0, action = UI_MENU_CLICK_PRIMARY;
 
-            display_player(DISPLAY_PLAYER_MODE_COMPACT_STATS_SKILLS);
-            Term_get_size(&wid, &hgt);
-            if (hgt > 0)
-                c_put_str(TERM_SLATE, prompt, hgt - 1,
-                    MAX(0, (wid - (int)strlen(prompt)) / 2));
+            ui_menu_click_begin();
+            ui_menu_click_set_hover_enabled(true);
+            ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
+            sdl_character_sheet_screen_begin_debug();
             Term_fresh();
-
             hide_cursor = true;
-            (void)inkey();
+            ch = inkey();
             hide_cursor = saved_hide_cursor;
-            break;
+            if (ch == UI_MENU_CLICK_WAKE_KEY)
+                continue;
+            if (ui_menu_click_take_action(&choice, &action))
+            {
+                if (action == UI_MENU_CLICK_HOVER)
+                    continue;
+                ch = (char)choice;
+            }
+            int dir = target_dir(ch);
+            if (ch == '[' || ch == '<' || dir == 4 || dir == 8)
+                (void)sdl_character_sheet_screen_debug_turn_page(-1);
+            else if (ch == ']' || ch == '>' || ch == ' '
+                || dir == 6 || dir == 2)
+                (void)sdl_character_sheet_screen_debug_turn_page(1);
+            else if (ch == ESCAPE || ch == 'q' || ch == 'Q'
+                || ch == '\r' || ch == '\n'
+                || (steamdeck_controls_active() && ch == steamdeck_back_key()))
+                break;
+            continue;
         }
 
         bool steamdeck = steamdeck_controls_active();
@@ -1234,7 +1251,7 @@ void do_cmd_character_sheet(void)
         }
 
         /* Exit - B button (back) or ESC */
-        if (get_sdl_bigger_font())
+        if (get_sdl_menu_bigger_font())
         {
             int dir = target_dir(ch);
             if (ch == '[' || ch == '<' || dir == 4 || dir == 8)

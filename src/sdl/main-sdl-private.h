@@ -89,7 +89,10 @@ enum {
 
 /* Left padding (in pixels) between the overlay log band's edge and its text,
  * scaled to the pane's cell width so the messages do not hug the border. */
-#define SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d) ((float)(d)->cell_w * 0.6f)
+/* A small horizontal inset protects text and controls on curved displays. */
+#define SDL_BIG_TEXT_SIDE_PAD_PX (config.bigger_font ? MAX(1, (int)(g_state.system_scale * 6.0f + 0.5f)) : 0)
+#define SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d) (config.bigger_font ? (float)SDL_BIG_TEXT_SIDE_PAD_PX : (float)(d)->cell_w * 0.6f)
+#define SDL_OVERLAY_LOG_TEXT_RIGHT_PAD(d) (config.bigger_font ? (float)SDL_BIG_TEXT_SIDE_PAD_PX : (float)(d)->cell_w * 0.25f)
 
 /* Shared by the game-start narrative banner and transient notifications. */
 #define SDL_NARRATIVE_BANNER_FADE_MS 1000
@@ -548,6 +551,7 @@ typedef struct menu_scroll_drag_state {
 
 typedef struct sdl_character_sheet_screen_state {
     sdl_character_sheet_context context;
+    enum sdl_menu_font font_menu;
     int focus_choice;
     int selected_index;
     int points_left;
@@ -1049,6 +1053,8 @@ typedef struct sdl_question_menu_button_state {
  * questions centre on the map view. */
 typedef struct sdl_question_menu_state {
     bool active;
+    enum sdl_menu_font font_menu;
+    SDL_FRect header_controls;
     bool blocking_input;
     bool nonblocking;
     bool context_hint;
@@ -1282,6 +1288,8 @@ typedef struct minimap_state {
     SDL_FRect zoom_in_rect;
     SDL_FRect skeleton_hints_rect;
     SDL_FRect close_rect;
+    SDL_FRect viewport_rect;
+    SDL_FRect prompt_rect;
     bool zoom_out_enabled;
     bool zoom_in_enabled;
     bool skeleton_hints_visible;
@@ -2016,6 +2024,19 @@ void sdl_push_description_overlay_full_main_anchor(void);
 void sdl_pop_description_overlay_full_main_anchor(void);
 int sdl_main_menu_pane_font_px(void);
 int sdl_ui_font_px(int normal_px);
+int sdl_menu_font_px(int normal_px);
+int sdl_menu_base_aux_font_size(void);
+int sdl_menu_auto_font_size_from_main(int numerator, int denominator);
+int sdl_main_view_font_px(int normal_px);
+enum sdl_menu_font sdl_menu_font_current(void);
+enum sdl_menu_font sdl_character_sheet_menu_font(void);
+int sdl_menu_font_set_render_context(int menu);
+SDL_Rect sdl_menu_content_rect(SDL_Rect rect);
+SDL_FRect sdl_menu_font_button_bounds(void);
+void sdl_menu_font_button_render(void);
+void sdl_menu_font_button_clear_avoid_rects(void);
+void sdl_menu_font_button_avoid_rect(SDL_FRect rect);
+bool sdl_menu_font_button_handle_event(const SDL_Event* ev);
 enum sdl_ui_font_role {
     SDL_UI_FONT_BODY,
     SDL_UI_FONT_TITLE,
@@ -2024,6 +2045,7 @@ enum sdl_ui_font_role {
 };
 float sdl_ui_density_scale(void);
 int sdl_ui_role_font_px(enum sdl_ui_font_role role);
+int sdl_menu_role_font_px(enum sdl_ui_font_role role);
 int sdl_ui_min_tap_px(void);
 int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen);
 bool sdl_main_menu_pane_context_visible(void);
@@ -2088,6 +2110,7 @@ bool sdl_pause_text_screen_active(void);
 void sdl_pause_text_screen_render(void);
 bool sdl_standalone_screen_handle_pointer(float x, float y, int action);
 bool sdl_standalone_screen_handle_key(int key);
+bool sdl_standalone_screen_drag(float start_x, float start_y, float delta_y);
 bool sdl_tale_screen_begin(cptr title);
 void sdl_tale_screen_add_entry(cptr heading, cptr body);
 void sdl_tale_screen_set_manuscript(bool enabled);
@@ -3662,6 +3685,10 @@ SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text, SDL_Color color,
 SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text,
     int wrap_width, SDL_Color color, int* out_width, int* out_height);
 void sdl_ui_text_cache_clear(void);
+bool sdl_ui_scroll_indicator_layout(SDL_FRect viewport, float offset,
+    float maximum, float visible, SDL_FRect* track, SDL_FRect* thumb);
+void sdl_ui_render_scroll_indicator(SDL_FRect viewport, float offset,
+    float maximum, float visible);
 void sdl_ui_text_cache_clear_font(TTF_Font* font);
 void sdl_hint_quest_context_cache_clear(void);
 void sdl_render_mono_utf8_glyph(TTF_Font* font, float cell_w, float cell_h, float origin_x, float origin_y, int x, int y, int cell_offset, int cell_span, const char* s, int len, SDL_Color col);
@@ -4338,6 +4365,7 @@ bool sdl_prompt_reset_sdl_defaults(const char* issue_summary,
     int screen_width, int screen_height);
 #if SIL_SDL_MOBILE_BUILD
 bool sdl_prompt_mobile_startup_portrait_mode(void);
+bool sdl_prompt_mobile_startup_bigger_font(void);
 #endif
 #if SIL_SDL_DESKTOP_HANDHELD_BUILD
 sdl_startup_device_class sdl_prompt_desktop_startup_input_device(

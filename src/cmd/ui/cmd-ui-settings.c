@@ -460,7 +460,7 @@ void settings_ui_fit_text(char* buf, size_t buflen, cptr text,
 static cptr settings_ui_pick_label(int max_chars, cptr long_label,
     cptr medium_label, cptr short_label)
 {
-    if (sdl_character_sheet_screen_active() && get_sdl_bigger_font()
+    if (sdl_character_sheet_screen_active() && get_sdl_menu_bigger_font()
         && long_label && long_label[0])
         return long_label;
     cptr labels[3] = { long_label, medium_label, short_label };
@@ -492,7 +492,7 @@ static void settings_menu_begin_scroll_area(int list_start_row, int visible_rows
 static void settings_ui_format_pair_line(char* buf, size_t buflen, cptr label,
     cptr value, int max_chars, int min_value_chars)
 {
-    if (sdl_character_sheet_screen_active() && get_sdl_bigger_font()) {
+    if (sdl_character_sheet_screen_active() && get_sdl_menu_bigger_font()) {
         strnfmt(buf, buflen, "%s: %s", label ? label : "", value ? value : "");
         return;
     }
@@ -611,7 +611,7 @@ static void settings_ui_format_auto_value(char* buf, size_t buflen, int value,
 
 static bool option_menu_use_compact_layout(void)
 {
-    if (sdl_character_sheet_screen_active() && get_sdl_bigger_font())
+    if (sdl_character_sheet_screen_active() && get_sdl_menu_bigger_font())
         return false;
     return Term && (Term->wid > 0) && (Term->wid <= 60);
 }
@@ -1006,6 +1006,7 @@ static void settings_semantic_menu_begin(cptr title, int selected_choice)
     ui_menu_click_set_hover_enabled(true);
 
     sdl_character_sheet_screen_begin_select(selected_choice, title ? title : "");
+    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
     sdl_character_sheet_screen_set_select_menu_style(true);
 }
 
@@ -3424,10 +3425,124 @@ static void sdl_open_config_file(void)
     msg_format("Opened %s", sdl_config_path_leaf(config_path));
 }
 
+
+static void do_cmd_big_font_settings(bool* settings_changed)
+{
+    enum { FONT_ALL = 0, FONT_UI, FONT_SHOW_BUTTON, FONT_MENU_FIRST,
+        FONT_COUNT = FONT_MENU_FIRST + SDL_MENU_FONT_COUNT };
+    int selected = FONT_ALL;
+    bool changed = false;
+    screen_save();
+    for (;;) {
+        bool all_on = get_sdl_bigger_font();
+        bool any_on = all_on;
+        for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++) {
+            all_on &= get_sdl_menu_bigger_font_for(menu);
+            any_on |= get_sdl_menu_bigger_font_for(menu);
+        }
+        settings_semantic_menu_begin("Big Font", selected);
+        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        for (int row = 0; row < FONT_COUNT; row++) {
+            cptr label = row == FONT_ALL ? "All fonts" : row == FONT_UI ? "UI"
+                : row == FONT_SHOW_BUTTON ? "Show B button"
+                : sdl_menu_font_label(row - FONT_MENU_FIRST);
+            cptr value = row == FONT_ALL ? (all_on ? "On" : any_on ? "Mixed" : "Off")
+                : (row == FONT_UI ? get_sdl_bigger_font()
+                    : row == FONT_SHOW_BUTTON ? get_sdl_show_menu_font_button()
+                    : get_sdl_menu_bigger_font_for(row - FONT_MENU_FIRST)) ? "On" : "Off";
+            settings_semantic_add_pair_row(row, label, value,
+                row == selected ? TERM_L_BLUE : TERM_WHITE);
+            sdl_character_sheet_screen_set_last_select_row_reset(
+                SETTINGS_CLICK_RESET_ROW_BASE + row);
+        }
+        sdl_character_sheet_screen_set_select_description(selected == FONT_ALL
+            ? "Switch the UI and every menu on or off together. Mixed means "
+              "some use larger text. Tap or press Space to switch; Left is off, Right is on."
+            : selected == FONT_UI
+                ? "Enlarge gameplay UI text by 50%. Each menu keeps its own font choice."
+                : selected == FONT_SHOW_BUTTON
+                    ? "Show B in menu corners to switch between normal and big text in real time. You can turn it on or off here."
+                : selected == FONT_MENU_FIRST + SDL_MENU_FONT_INVENTORY
+                    ? "Use the same font size for Equipped, Inventory, Jewelry, and Supplies. Tap B on any tab to change all four."
+                : "Enlarge this menu's text by 50%. You can also tap B in its corner.");
+        sdl_character_sheet_screen_commit_select(selected);
+        bool saved_hide_cursor = hide_cursor;
+        hide_cursor = true;
+        int key = inkey();
+        hide_cursor = saved_hide_cursor;
+        int choice = 0, action = UI_MENU_CLICK_PRIMARY;
+        bool click_generated = false;
+        if (ui_menu_click_take_action(&choice, &action)) {
+            if (action == UI_MENU_CLICK_HOVER) {
+                if (choice >= 0 && choice < FONT_COUNT)
+                    selected = choice;
+                continue;
+            }
+            if (choice == SETTINGS_CLICK_RETURN)
+                key = ESCAPE;
+            else if (choice >= SETTINGS_CLICK_RESET_ROW_BASE
+                && choice < SETTINGS_CLICK_RESET_ROW_BASE + FONT_COUNT) {
+                selected = choice - SETTINGS_CLICK_RESET_ROW_BASE;
+                key = 'n';
+            } else if (choice >= 0 && choice < FONT_COUNT) {
+                selected = choice;
+                key = action == UI_MENU_CLICK_SECONDARY ? 'n' : ' ';
+            }
+            click_generated = true;
+        }
+        key = settings_menu_key(key, 0, 0, click_generated);
+        if (key == ESCAPE || key == '\r' || key == '\n')
+            break;
+        if (key == UI_MENU_CLICK_WAKE_KEY)
+            continue;
+        int direction = target_dir(key);
+        if (direction == 8 || key == '-') {
+            selected = (selected + FONT_COUNT - 1) % FONT_COUNT;
+            continue;
+        }
+        if (direction == 2) {
+            selected = (selected + 1) % FONT_COUNT;
+            continue;
+        }
+        bool value;
+        if (key == '0')
+            value = false;
+        else if (direction == 4 || key == 'n')
+            value = false;
+        else if (direction == 6 || key == 'y')
+            value = true;
+        else if (key == ' ' || key == 't' || key == '5')
+            value = selected == FONT_ALL ? !all_on : selected == FONT_UI
+                ? !get_sdl_bigger_font()
+                : selected == FONT_SHOW_BUTTON ? !get_sdl_show_menu_font_button()
+                : !get_sdl_menu_bigger_font_for(selected - FONT_MENU_FIRST);
+        else
+            continue;
+        bool old_ui_font = get_sdl_bigger_font();
+        if (selected == FONT_ALL)
+            set_sdl_all_bigger_fonts(value);
+        else if (selected == FONT_UI)
+            set_sdl_bigger_font(value);
+        else if (selected == FONT_SHOW_BUTTON)
+            set_sdl_show_menu_font_button(value);
+        else
+            set_sdl_menu_bigger_font(selected - FONT_MENU_FIRST, value);
+        if (old_ui_font != get_sdl_bigger_font())
+            sdl_apply_config_no_redraw();
+        changed = true;
+        if (settings_changed)
+            *settings_changed = true;
+    }
+    if (changed)
+        save_pane_config_to_json();
+    settings_semantic_menu_hide();
+    screen_load();
+}
+
 void do_cmd_pane_settings(void)
 {
     enum {
-        PANE_SETTING_BIGGER_FONT = 0,
+        PANE_SETTING_BIG_FONT = 0,
         PANE_SETTING_MIN_TERMINAL_SIZE,
         PANE_SETTING_MAIN_VIEW_SCALE,
         PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
@@ -3489,12 +3604,13 @@ void do_cmd_pane_settings(void)
         int label_hint;
         /* These layouts are selected automatically by the larger-text mode. */
         pane_setting_visible[PANE_SETTING_COMPACT_INVENTORY_MENUS] =
-            !get_sdl_bigger_font();
+            !get_sdl_menu_bigger_font_for(SDL_MENU_FONT_INVENTORY);
         pane_setting_visible[PANE_SETTING_DEBUG_CHARACTER_SHEET] =
-            !get_sdl_bigger_font();
+            false; /* Replaced by the character-sheet font toggle above. */
         settings_semantic_menu_begin("General Settings", k);
         sdl_character_sheet_screen_set_select_confirm_label(
-            k == PANE_SETTING_RESET_ALL ? "Reset"
+            k == PANE_SETTING_BIG_FONT ? "Open"
+            : k == PANE_SETTING_RESET_ALL ? "Reset"
             : k >= PANE_SETTING_VIEW_PANE_CONFIGURATION
                     && k <= PANE_SETTING_OPEN_CONFIG_FILE ? "Open" : "Done");
 
@@ -3513,16 +3629,17 @@ void do_cmd_pane_settings(void)
                 settings_semantic_line_from_menu_line(semantic_line,           \
                     sizeof(semantic_line), (TEXT));                            \
                 settings_semantic_add_row((CHOICE), semantic_line, (ATTR));    \
-                if ((CHOICE) < PANE_SETTING_VIEW_PANE_CONFIGURATION)           \
+                if ((CHOICE) != PANE_SETTING_BIG_FONT                         \
+                    && (CHOICE) < PANE_SETTING_VIEW_PANE_CONFIGURATION)           \
                     sdl_character_sheet_screen_set_last_select_row_reset(      \
                         SETTINGS_CLICK_RESET_ROW_BASE + (CHOICE));             \
             }                                                                  \
         } while (0)
 
-        a = (k == PANE_SETTING_BIGGER_FONT) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf), "Bigger font",
-            get_sdl_bigger_font() ? "On" : "Off", row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_BIGGER_FONT, 0, a, buf);
+        a = (k == PANE_SETTING_BIG_FONT) ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf), "Big Font",
+            "Configure", row_width, 9);
+        ADD_PANE_SETTING_ROW(PANE_SETTING_BIG_FONT, 0, a, buf);
 
         /* Minimum Terminal Size */
         a = (k == PANE_SETTING_MIN_TERMINAL_SIZE) ? TERM_L_BLUE : TERM_WHITE;
@@ -3554,9 +3671,9 @@ void do_cmd_pane_settings(void)
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
 #if defined(__ANDROID__) || defined(SIL_IOS)
-                get_sdl_bigger_font() ? "Menu Text Size" : "Terminal Menu Scale Offset",
-                get_sdl_bigger_font() ? "Menu Text Size" : "Menu Scale Offset",
-                get_sdl_bigger_font() ? "Menu Text Size" : "Menu Scale"),
+                get_sdl_menu_bigger_font() ? "Menu Text Size" : "Terminal Menu Scale Offset",
+                get_sdl_menu_bigger_font() ? "Menu Text Size" : "Menu Scale Offset",
+                get_sdl_menu_bigger_font() ? "Menu Text Size" : "Menu Scale"),
 #else
                 "Terminal Menu Scale Offset",
                 "Menu Scale Offset",
@@ -3584,8 +3701,8 @@ void do_cmd_pane_settings(void)
                 "Character Sheet Mode",
                 "Character Sheet",
                 "Sheet Mode"),
-            config.debug_character_sheet ? "debug" : "SDL",
-            row_width, 5);
+            config.debug_character_sheet ? "Pages" : "SDL",
+            row_width, 8);
         ADD_PANE_SETTING_ROW(PANE_SETTING_DEBUG_CHARACTER_SHEET, 4, a, buf);
 
         /* Extra zoom applied when mobile gameplay starts. */
@@ -3792,12 +3909,9 @@ void do_cmd_pane_settings(void)
          * has no description yet). */
         {
             static const char* const pane_setting_desc[PANE_SETTING_COUNT] = {
-                [PANE_SETTING_BIGGER_FONT] =
-                    "Increase all text by 50%. Menus use larger rows, wrapping "
-                    "and scrolling; character information uses pages. "
-                    "Normal and bigger text save separate pane layouts and "
-                    "Quick Access settings for each orientation. "
-                    "Designed for mobile. Off by default.",
+                [PANE_SETTING_BIG_FONT] =
+                    "Set larger text for the gameplay UI and each menu. "
+                    "The All fonts toggle switches everything on or off.",
                 [PANE_SETTING_MIN_TERMINAL_SIZE] =
                     "Smallest character grid the game will use. Larger minimums "
                     "keep text big but leave less room for side and bottom "
@@ -3820,9 +3934,10 @@ void do_cmd_pane_settings(void)
                     "Supplies. When focus moves to the item list, hide the "
                     "category pane and use its space for item names.",
                 [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
-                    "Choose debug for a character sheet with larger text and "
-                    "multiple pages. Use arrows or Prev/Next to change pages. "
-                    "Choose SDL to return to the current character sheet.",
+                    "Choose Pages for separate character sheet pages of "
+                    "attributes, skills, traits and background, using 50% larger text. "
+                    "Use arrows or Prev/Next to change pages. Bigger font mode "
+                    "selects this sheet automatically. Choose SDL for the standard sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
                     "Set to 0 to start at the configured main-map scale. The "
@@ -3896,7 +4011,6 @@ void do_cmd_pane_settings(void)
             };
             cptr d = (k >= 0 && k < PANE_SETTING_COUNT)
                 ? pane_setting_desc[k] : NULL;
-
             sdl_character_sheet_screen_set_select_description(d ? d : "");
             sdl_character_sheet_screen_commit_select(k);
         }
@@ -3930,9 +4044,6 @@ void do_cmd_pane_settings(void)
                     sdl_config_set_defaults(&def);
                     switch (k)
                     {
-                    case PANE_SETTING_BIGGER_FONT:
-                        set_sdl_bigger_font(def.bigger_font);
-                        break;
                     case PANE_SETTING_MIN_TERMINAL_SIZE:
                         set_sdl_min_terminal_mode(def.min_terminal_mode);
                         break;
@@ -4054,6 +4165,12 @@ void do_cmd_pane_settings(void)
         case '\r':
         {
             /* Enter activates the current option for actions; otherwise accept/exit. */
+            if (k == PANE_SETTING_BIG_FONT)
+            {
+                settings_semantic_menu_hide();
+                do_cmd_big_font_settings(&settings_changed);
+                break;
+            }
             if (k == PANE_SETTING_VIEW_PANE_CONFIGURATION) /* Supporting Pane Layout */
             {
                 settings_semantic_menu_hide();
@@ -4177,11 +4294,10 @@ void do_cmd_pane_settings(void)
                     !get_sdl_compact_inventory_menus());
                 settings_changed = true;
             }
-            else if (k == PANE_SETTING_BIGGER_FONT)
+            else if (k == PANE_SETTING_BIG_FONT)
             {
-                set_sdl_bigger_font(!get_sdl_bigger_font());
-                settings_changed = true;
-                sdl_apply_config();
+                settings_semantic_menu_hide();
+                do_cmd_big_font_settings(&settings_changed);
             }
             else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
             {
@@ -4341,6 +4457,11 @@ void do_cmd_pane_settings(void)
         {
             /* Increase value or set to yes */
             int val;
+            if (k == PANE_SETTING_BIG_FONT) {
+                settings_semantic_menu_hide();
+                do_cmd_big_font_settings(&settings_changed);
+                break;
+            }
 
             if (k == PANE_SETTING_MAIN_VIEW_SCALE) /* Main View Scale */
             {
@@ -4369,15 +4490,6 @@ void do_cmd_pane_settings(void)
                 {
                     set_sdl_compact_inventory_menus(true);
                     settings_changed = true;
-                }
-            }
-            else if (k == PANE_SETTING_BIGGER_FONT)
-            {
-                if (!get_sdl_bigger_font())
-                {
-                    set_sdl_bigger_font(true);
-                    settings_changed = true;
-                    sdl_apply_config();
                 }
             }
             else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
@@ -4505,6 +4617,11 @@ void do_cmd_pane_settings(void)
         {
             /* Decrease value or set to no */
             int val;
+            if (k == PANE_SETTING_BIG_FONT) {
+                settings_semantic_menu_hide();
+                do_cmd_big_font_settings(&settings_changed);
+                break;
+            }
 
             if (k == PANE_SETTING_MAIN_VIEW_SCALE) /* Main View Scale */
             {
@@ -4532,15 +4649,6 @@ void do_cmd_pane_settings(void)
                 {
                     set_sdl_compact_inventory_menus(false);
                     settings_changed = true;
-                }
-            }
-            else if (k == PANE_SETTING_BIGGER_FONT)
-            {
-                if (get_sdl_bigger_font())
-                {
-                    set_sdl_bigger_font(false);
-                    settings_changed = true;
-                    sdl_apply_config();
                 }
             }
             else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
@@ -6358,10 +6466,10 @@ static bool iface_pane_row_reset_to_default(const struct iface_pane_row* row)
     case IFACE_PANE_FIELD_OVERLAY_LOG_BORDER:
         if (get_sdl_show_overlay_log_border()
             != (get_sdl_mobile_portrait_mode()
-                ? false : def.show_overlay_log_border))
+                ? get_sdl_bigger_font() : def.show_overlay_log_border))
         {
             set_sdl_show_overlay_log_border(get_sdl_mobile_portrait_mode()
-                ? false : def.show_overlay_log_border);
+                ? get_sdl_bigger_font() : def.show_overlay_log_border);
             changed = true;
         }
         break;
@@ -10712,8 +10820,14 @@ void do_cmd_options(void)
     int highlight = 1;
     int input_highlight = 1;
     int queued_choice = 0;
+    int original_width = 0;
+    int original_height = 0;
+    bool original_tiles = use_bigtile;
+    bool original_portrait = get_sdl_mobile_portrait_mode();
 
     bool return_to_game = false;
+
+    Term_get_size(&original_width, &original_height);
 
     /* Clear any active banner before opening options */
     if (dismiss_active_narrative_banner()) {
@@ -10724,7 +10838,7 @@ void do_cmd_options(void)
     screen_save();
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SETTINGS);
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
 
@@ -10847,7 +10961,28 @@ void do_cmd_options(void)
     if (p_ptr && p_ptr->playing)
         sdl_music_stop_main();
     if (p_ptr)
+    {
+        int width = 0;
+        int height = 0;
+        bool projection_changed;
+
+        Term_get_size(&width, &height);
+        projection_changed = width != original_width
+            || height != original_height || use_bigtile != original_tiles
+            || get_sdl_mobile_portrait_mode() != original_portrait;
+        /* A resized saved screen still contains cells from the old map
+         * projection. Rebuild the live map after restoring the final view. */
+        if (projection_changed && character_dungeon && p_ptr->playing) {
+            p_ptr->update |= PU_PANEL;
+            p_ptr->redraw |= PR_MAP;
+        }
         handle_stuff();
+        if (projection_changed && character_dungeon && p_ptr->playing
+            && !character_icky && Term)
+        {
+            Term_fresh();
+        }
+    }
     if (sdl_touch_settings_tutorial_requested()
         || sdl_mouse_settings_tutorial_requested()
         || sdl_character_wheel_settings_tutorial_requested()
@@ -11525,6 +11660,7 @@ static void do_cmd_movement_keybinds(void)
 
         settings_ui_put_fitted(1, 2, TERM_WHITE,
             "Movement Bindings");
+        ui_scroll_area_set_indicator(top, MAX(0, entry_count - visible_rows));
         strnfmt(preset_line, sizeof(preset_line), "Preset: %s",
             sdl_config_movement_preset_label(config.movement_keyboard_preset));
         settings_ui_put_fitted(2, 2, TERM_SLATE, preset_line);

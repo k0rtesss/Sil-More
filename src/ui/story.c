@@ -216,8 +216,6 @@ static void print_story_sdl(const int* sel_idx, int start, int total,
 
     for (;;)
     {
-        int page_entries = sdl_tale_screen_current_page_entry_count();
-
         if (!fast_forward)
         {
             story_semantic_prompt_text(false, prompt, sizeof(prompt));
@@ -228,6 +226,7 @@ static void print_story_sdl(const int* sel_idx, int start, int total,
             sdl_tale_screen_set_prompt("", false, false);
         }
 
+        int page_entries = sdl_tale_screen_current_page_entry_count();
         for (int position = 0; position < page_entries; position++)
         {
             int entry = sdl_tale_screen_current_page_entry_at(position);

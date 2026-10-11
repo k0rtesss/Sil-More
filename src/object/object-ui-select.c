@@ -1653,6 +1653,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 ui_scroll_area_begin(1, click_rows,
                     SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
                 ui_scroll_area_set_keys('8', '2', '6', '4');
+                if (p_ptr->command_wrk == USE_INVEN)
+                    ui_scroll_area_set_indicator(inventory_menu_scroll_offset,
+                        MAX(0, vis_inven_cnt - display_rows));
                 if (p_ptr->command_wrk == (USE_INVEN)
                     && sdl_touch_only_device_active())
                 {

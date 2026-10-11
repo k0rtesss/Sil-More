@@ -18,7 +18,11 @@ void get_sdl_config_info(char* buf, size_t size)
         "Character Sheet Mode: %s\n",
         config.debug_character_sheet ? "debug" : "SDL");
     offset += (size_t)strnfmt(buf + offset, size - offset,
-        "Bigger font: %s\n", config.bigger_font ? "On" : "Off");
+        "Big font: UI: %s\n", config.bigger_font ? "On" : "Off");
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT && offset < size; menu++)
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Big font: %s: %s\n", sdl_menu_font_label(menu),
+            config.menu_bigger_font[menu] ? "On" : "Off");
     offset += (size_t)strnfmt(buf + offset, size - offset,
         "Mobile Starting Zoom Offset: %+d\n",
         config.mobile_starting_zoom_offset);
@@ -189,7 +193,8 @@ void set_sdl_terminal_menu_scale_offset(int value)
 
 bool get_sdl_compact_inventory_menus(void)
 {
-    return config.compact_inventory_menus || config.bigger_font;
+    return config.compact_inventory_menus
+        || get_sdl_menu_bigger_font_for(SDL_MENU_FONT_INVENTORY);
 }
 
 bool get_sdl_bigger_font(void)
@@ -420,10 +425,30 @@ void sdl_reset_main_view_zoom(void)
     sdl_apply_config_no_redraw();
 }
 
+static bool g_saved_menu_camera_valid;
+static bool g_saved_menu_player_visible;
+static int g_saved_menu_wy, g_saved_menu_wx;
+static int g_saved_menu_py, g_saved_menu_px, g_saved_menu_depth;
+
 void sdl_suspend_main_view_zoom_for_saved_screen(void)
 {
     int saved_zoom = 0;
     bool keep_zoom = sdl_main_view_zoom_keep_for_saved_screen();
+
+    if (g_main_view_zoom_suspended_depth == 0)
+    {
+        g_saved_menu_camera_valid = !keep_zoom && character_dungeon
+            && !character_icky && p_ptr && p_ptr->playing;
+        if (g_saved_menu_camera_valid)
+        {
+            g_saved_menu_wy = p_ptr->wy;
+            g_saved_menu_wx = p_ptr->wx;
+            g_saved_menu_py = p_ptr->py;
+            g_saved_menu_px = p_ptr->px;
+            g_saved_menu_depth = p_ptr->depth;
+            g_saved_menu_player_visible = panel_contains(p_ptr->py, p_ptr->px);
+        }
+    }
 
     if (g_main_view_zoom_suspended_depth
         < (int)N_ELEMENTS(g_main_view_zoom_suspended_stack))
@@ -443,12 +468,19 @@ void sdl_suspend_main_view_zoom_for_saved_screen(void)
         return;
 
     g_main_view_zoom_scale = 0;
+    /* screen_save() has not raised character_icky yet. Do not move the
+     * dungeon camera to suit the temporary, unzoomed menu grid. Its queued
+     * panel update belongs to the restored gameplay size. */
+    bool old_defer = g_defer_resize_handle_stuff;
+    g_defer_resize_handle_stuff = true;
     sdl_apply_config_no_redraw();
+    g_defer_resize_handle_stuff = old_defer;
 }
 
 bool sdl_resume_main_view_zoom_for_saved_screen(void)
 {
     int saved_zoom;
+    bool changed = false;
 
     if (g_main_view_zoom_suspended_depth <= 0)
         return false;
@@ -457,17 +489,35 @@ bool sdl_resume_main_view_zoom_for_saved_screen(void)
         g_main_view_zoom_suspended_stack[--g_main_view_zoom_suspended_depth];
     g_main_view_zoom_suspended_stack[g_main_view_zoom_suspended_depth] = 0;
 
-    if (saved_zoom <= 0)
-        return false;
+    if (saved_zoom > 0)
+    {
+        g_main_view_zoom_scale = saved_zoom;
+        sdl_clamp_main_view_zoom_to_current_layout();
+        sdl_apply_config_no_redraw();
+        changed = true;
+    }
 
-    g_main_view_zoom_scale = saved_zoom;
-    sdl_clamp_main_view_zoom_to_current_layout();
-    sdl_apply_config_no_redraw();
+    if (g_main_view_zoom_suspended_depth == 0 && g_saved_menu_camera_valid)
+    {
+        /* Nested skill/item menus can process panel updates at their reading
+         * size. Restore the original world viewport after the final resize.
+         * A real move or level transition keeps its new camera instead. */
+        if (character_dungeon && p_ptr && p_ptr->playing
+            && p_ptr->py == g_saved_menu_py && p_ptr->px == g_saved_menu_px
+            && p_ptr->depth == g_saved_menu_depth)
+        {
+            changed |= modify_panel(g_saved_menu_wy, g_saved_menu_wx);
+            if (g_saved_menu_player_visible
+                && !panel_contains(p_ptr->py, p_ptr->px))
+                verify_panel();
+        }
+        g_saved_menu_camera_valid = false;
+    }
 
-    if (character_dungeon)
+    if (changed && character_dungeon)
         Term_keypress(KTRL('R'));
 
-    return true;
+    return changed;
 }
 
 int get_sdl_aux_view_font_size(void)
@@ -2413,7 +2463,12 @@ void sdl_touch_apply_profile(int profile)
     int pane_placement = SDL_TOUCH_PANE_PLACEMENT_RIGHT;
     bool pane_default_open = true;
     bool top_panel_default_open = false;
-    int top_panel_cell_count = SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT;
+    /* Big Text owns its Quick Access layout independently of the movement
+     * profile.  The startup tutorial reapplies Round Wheel after selecting
+     * Big Text; keep its six cells (and any later custom count) intact. */
+    int top_panel_cell_count = config.bigger_font
+        ? get_sdl_touch_top_panel_cell_count()
+        : SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT;
     int movement_mode = SDL_TOUCH_MOVEMENT_ON;
     bool round_enabled = false;
     int zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_MARKERS;
@@ -2429,7 +2484,6 @@ void sdl_touch_apply_profile(int profile)
     case SDL_TOUCH_PROFILE_ROUND_WHEEL:
         pane_default_open = false;
         top_panel_default_open = true;
-        top_panel_cell_count = SDL_TOUCH_TOP_PANEL_CELL_COUNT_DEFAULT;
         movement_mode = SDL_TOUCH_MOVEMENT_ON;
         round_enabled = true;
         zone_overlay_mode = SDL_TOUCH_ZONE_OVERLAY_OFF;
@@ -3534,10 +3588,12 @@ void sdl_apply_config_impl(bool request_redraw)
     }
 
     recovery_ns = SDL_GetTicksNS();
-    (void)sdl_recover_layout_for_current_window("settings change", true, NULL);
+    if (request_redraw || g_terminal_menu_scale_depth <= 0)
+        (void)sdl_recover_layout_for_current_window("settings change", true, NULL);
     recovery_ns = SDL_GetTicksNS() - recovery_ns;
     sdl_refresh_safe_area();
-    sdl_clamp_main_view_zoom_to_current_layout();
+    if (request_redraw || g_terminal_menu_scale_depth <= 0)
+        sdl_clamp_main_view_zoom_to_current_layout();
     g_auto_aux_main_cell_h_override = config.main_view_scale * TILE_SIZE;
     story_ns = SDL_GetTicksNS();
     sdl_load_story_fonts();
@@ -3707,7 +3763,7 @@ static int sdl_terminal_menu_scale_for_mode(int menu_mode)
 
 int get_sdl_terminal_menu_scale(void)
 {
-#if defined(SDL_PLATFORM_ANDROID) || defined(SDL_PLATFORM_IOS)
+#if SIL_SDL_MOBILE_BUILD
     int menu_mode = config.min_terminal_mode;
 #else
     int menu_mode = SDL_MIN_TERMINAL_NORMAL;
@@ -3722,22 +3778,55 @@ int get_sdl_terminal_menu_scale(void)
 int sdl_terminal_menu_font_px(void)
 {
 #if SIL_SDL_MOBILE_BUILD
-    if (config.bigger_font && g_terminal_menu_scale_depth > 0)
+    if (g_terminal_menu_scale_depth > 0
+        && get_sdl_menu_bigger_font_for(sdl_terminal_menu_font()))
     {
         int logical_px = MAX(8, 16 + 2 * config.terminal_menu_scale_offset);
         return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
-            * sdl_ui_font_px(logical_px)));
+            * (logical_px + (logical_px + 1) / 2)));
     }
 #endif
     return 0;
 }
 
 static unsigned int g_terminal_menu_scale_overflow_depth;
+static enum sdl_menu_font g_terminal_menu_fonts[16];
 
-static void sdl_push_terminal_menu_scale_value(int target_scale)
+enum sdl_menu_font sdl_terminal_menu_font(void)
+{
+    return g_terminal_menu_scale_depth > 0
+        ? g_terminal_menu_fonts[g_terminal_menu_scale_depth - 1]
+        : SDL_MENU_FONT_NONE;
+}
+
+void sdl_refresh_terminal_menu_scale(void)
+{
+    if (g_terminal_menu_scale_depth > 0)
+        g_terminal_menu_scale_override = get_sdl_terminal_menu_scale();
+}
+
+void sdl_set_terminal_menu_font(enum sdl_menu_font menu)
+{
+    if (g_terminal_menu_scale_depth <= 0 || menu < 0
+        || menu >= SDL_MENU_FONT_COUNT || sdl_terminal_menu_font() == menu)
+        return;
+    bool changed = get_sdl_menu_bigger_font_for(sdl_terminal_menu_font())
+        != get_sdl_menu_bigger_font_for(menu);
+    g_terminal_menu_fonts[g_terminal_menu_scale_depth - 1] = menu;
+    if (changed) {
+        sdl_refresh_terminal_menu_scale();
+        sdl_apply_config_no_redraw();
+    }
+}
+
+static void sdl_push_terminal_menu_scale_value(int target_scale,
+    enum sdl_menu_font menu)
 {
     int old_scale = g_terminal_menu_scale_override;
     int old_font_px = sdl_terminal_menu_font_px();
+    bool old_big = sdl_main_view_font_px(16) > 16;
+    bool first_menu = g_terminal_menu_scale_depth == 0;
+    enum sdl_menu_font old_menu = sdl_terminal_menu_font();
 
     if (g_terminal_menu_scale_depth
         >= (int)N_ELEMENTS(g_terminal_menu_scale_stack))
@@ -3747,19 +3836,29 @@ static void sdl_push_terminal_menu_scale_value(int target_scale)
         return;
     }
 
+    g_terminal_menu_fonts[g_terminal_menu_scale_depth] = menu;
     g_terminal_menu_scale_stack[g_terminal_menu_scale_depth++] = old_scale;
 
+    if (target_scale <= 0)
+        target_scale = get_sdl_terminal_menu_scale();
     g_terminal_menu_scale_override = target_scale;
-    if (old_scale != target_scale
+    if (first_menu || old_menu != menu
+        || old_big != (sdl_main_view_font_px(16) > 16)
+        || old_scale != target_scale
         || old_font_px != sdl_terminal_menu_font_px())
         sdl_apply_config_no_redraw();
 }
 
 void sdl_push_terminal_menu_scale(void)
 {
-    int target_scale = get_sdl_terminal_menu_scale();
+    enum sdl_menu_font menu = sdl_terminal_menu_font();
+    sdl_push_terminal_menu_scale_for(menu == SDL_MENU_FONT_NONE
+        ? SDL_MENU_FONT_SETTINGS : menu);
+}
 
-    sdl_push_terminal_menu_scale_value(target_scale);
+void sdl_push_terminal_menu_scale_for(enum sdl_menu_font menu)
+{
+    sdl_push_terminal_menu_scale_value(0, menu);
 }
 
 void sdl_pop_terminal_menu_scale(void)
@@ -3767,6 +3866,8 @@ void sdl_pop_terminal_menu_scale(void)
     int old_scale = g_terminal_menu_scale_override;
     int old_font_px = sdl_terminal_menu_font_px();
     int restored_scale = 0;
+    bool old_big = sdl_main_view_font_px(16) > 16;
+    enum sdl_menu_font old_menu = sdl_terminal_menu_font();
 
     if (g_terminal_menu_scale_overflow_depth > 0)
     {
@@ -3783,7 +3884,12 @@ void sdl_pop_terminal_menu_scale(void)
     }
 
     g_terminal_menu_scale_override = restored_scale;
-    if (old_scale != restored_scale
+    if (g_terminal_menu_scale_depth > 0)
+        sdl_refresh_terminal_menu_scale();
+    if (g_terminal_menu_scale_depth == 0
+        || old_menu != sdl_terminal_menu_font()
+        || old_big != (sdl_main_view_font_px(16) > 16)
+        || old_scale != restored_scale
         || old_font_px != sdl_terminal_menu_font_px())
         sdl_apply_config_no_redraw();
 }

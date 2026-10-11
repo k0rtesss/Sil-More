@@ -542,9 +542,10 @@ static void main_menu_about(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
 
-    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+about_font_redraw:
+    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
     {
         main_menu_about_mobile(about_lines);
         sdl_pop_terminal_menu_scale();
@@ -716,6 +717,8 @@ static void main_menu_about(void)
     hide_cursor = true;
     ch = inkey();
     hide_cursor = saved_hide_cursor;
+    if (ch == UI_MENU_CLICK_WAKE_KEY)
+        goto about_font_redraw;
     (void)ch;
 
     sdl_pop_terminal_menu_scale();
@@ -1271,15 +1274,31 @@ static void log_history_entry_search_text(const log_history_entry* entry,
         int net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
         int net_dam = roll->dam - roll->prot;
         char dice[48];
+        char attacker[3] = { '?', '\0', '\0' };
+        char defender[3] = { '?', '\0', '\0' };
+
+        /* Tile indices are not text (or UTF-8). Reserve printable cells for
+         * them; the wrapped renderer replaces these with the stored icons. */
+        if (!(roll->attacker_attr & 0x80)
+            && !((byte)roll->attacker_char & 0x80))
+            attacker[0] = roll->attacker_char;
+        if (!(roll->defender_attr & 0x80)
+            && !((byte)roll->defender_char & 0x80))
+            defender[0] = roll->defender_char;
+        if (use_bigtile && !graphics_are_ascii())
+        {
+            attacker[1] = '?';
+            defender[1] = '?';
+        }
 
         if (net_dam < 0)
             net_dam = 0;
 
         log_history_format_damage_dice(roll, dice, sizeof(dice));
         strnfmt(out, out_sz,
-            "Combat %c to %c att %+d hit %d evn %+d damage %s net %d "
+            "Combat %s to %s att %+d hit %d evn %+d damage %s net %d "
             "protection %d",
-            roll->attacker_char, roll->defender_char, roll->att, net_att,
+            attacker, defender, roll->att, net_att,
             roll->evn, dice, net_dam, roll->prot);
     }
 }
@@ -1350,7 +1369,9 @@ static int log_history_wrapped_entry_rows(int filter, int idx, int width)
     byte attr;
 
     log_history_wrapped_entry_text(filter, idx, text, sizeof(text), &attr);
-    if (!get_sdl_bigger_font())
+    if (!get_sdl_menu_bigger_font()
+        && (filter == LOG_HISTORY_FILTER_NOTES
+            || log_history_entries[idx].kind != LOG_HISTORY_ENTRY_COMBAT))
         return count_wrapped_lines(text, width, 0);
     cptr cursor = text;
     char line[256];
@@ -1389,6 +1410,50 @@ static void log_history_draw_wrapped_text(int row, int width, byte attr,
     text_out_to_screen(attr, cursor);
     text_out_wrap = old_wrap;
     text_out_indent = old_indent;
+}
+
+static void log_history_draw_wrapped_combat(const log_history_entry* entry,
+    int row, int width, cptr highlight, int first_line, int max_rows)
+{
+    char text[256];
+    char line[256];
+    cptr cursor = text;
+    int tile_width = use_bigtile && !graphics_are_ascii() ? 2 : 1;
+    int icon_cols[] = { sizeof("Combat ") - 1,
+        sizeof("Combat ") - 1 + tile_width + sizeof(" to ") - 1 };
+    byte attrs[] = { entry->roll->attacker_attr, entry->roll->defender_attr };
+    char chars[] = { entry->roll->attacker_char, entry->roll->defender_char };
+    int index = 0;
+    int drawn = 0;
+
+    log_history_entry_search_text(entry, text, sizeof(text));
+    while (drawn < max_rows)
+    {
+        int start = (int)(cursor - text);
+        if (!log_history_wrap_next(&cursor, width, line, sizeof(line)))
+            break;
+        if (index++ < first_line)
+            continue;
+
+        /* Erase the placeholders before drawing text, then queue icons into
+         * the same cells. Never pass a graphical tile byte to text output. */
+        for (size_t i = 0; i < N_ELEMENTS(icon_cols); i++)
+        {
+            int col = icon_cols[i] - start;
+            if (col >= 0 && col + tile_width <= (int)strlen(line))
+                memset(line + col, ' ', tile_width);
+        }
+        log_history_draw_wrapped_text(row + drawn, width, TERM_WHITE,
+            line, highlight);
+        for (size_t i = 0; i < N_ELEMENTS(icon_cols); i++)
+        {
+            int col = icon_cols[i] - start;
+            if (col >= 0 && col + tile_width <= (int)strlen(line))
+                log_history_put_tile_scrolled(&col, row + drawn, 0,
+                    attrs[i], chars[i]);
+        }
+        drawn++;
+    }
 }
 
 static int log_history_wrapped_last_page_start(int filter, int count,
@@ -1564,7 +1629,7 @@ static void main_menu_blitz_intro_mobile_build(void)
 static void log_history_draw_wrapped_slice(int row, int width, byte attr,
     cptr text, cptr highlight, int first_line, int max_rows)
 {
-    if (!get_sdl_bigger_font()) {
+    if (!get_sdl_menu_bigger_font()) {
         log_history_draw_wrapped_text(row, width, attr, text, highlight);
         return;
     }
@@ -1581,7 +1646,7 @@ static void log_history_draw_wrapped_slice(int row, int width, byte attr,
 
 static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
 {
-    if (!get_sdl_bigger_font()) {
+    if (!get_sdl_menu_bigger_font()) {
         *prompt = hgt - 1;
         *top = 3;
         *bottom = hgt - 3;
@@ -1635,9 +1700,9 @@ static void do_cmd_start_blitz(void)
      * window-mode scale. */
     screen_push_supporting_panes_hidden();
     screen_push_touch_pane_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_BIRTH);
 
-    if (get_sdl_bigger_font() && sdl_touch_only_device_active())
+    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
         confirmed = main_menu_blitz_confirm_mobile();
     else
     {
@@ -3283,7 +3348,7 @@ void do_cmd_messages_with_filter(int initial_filter)
     /* Save screen */
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_MESSAGES);
 
     /* Get size after any hidden-pane layout change */
     Term_get_size(&wid, &hgt);
@@ -3325,13 +3390,17 @@ void do_cmd_messages_with_filter(int initial_filter)
             i = max_i;
         if (i < 0)
             i = 0;
-        int entry_line_max = get_sdl_bigger_font() && n > 0 ? MAX(0,
+        int entry_line_max = get_sdl_menu_bigger_font() && n > 0 ? MAX(0,
             log_history_wrapped_entry_rows(filter, i, wid) - visible_rows) : 0;
         entry_line_top = MIN(entry_line_top, entry_line_max);
 
         page_rows = (visible_rows > 1) ? (visible_rows - 1) : 1;
         ui_scroll_area_begin(body_top, body_bottom,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        /* Use one unit throughout the range. A sole oversized message has
+         * an internal row offset instead of an entry offset. */
+        ui_scroll_area_set_indicator(max_i > 0 ? i : entry_line_top,
+            max_i > 0 ? max_i : entry_line_max);
         if (ui_scroll_area_add_cols(0, wid - 1, 1, 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER))
         {
@@ -3354,7 +3423,7 @@ void do_cmd_messages_with_filter(int initial_filter)
                 i + j, wid);
             int line_y;
 
-            bool continued = get_sdl_bigger_font()
+            bool continued = get_sdl_menu_bigger_font()
                 && j == 0 && wrapped_rows > visible_rows;
             int drawn_rows = continued
                 ? MIN(visible_rows, wrapped_rows - entry_line_top) : wrapped_rows;
@@ -3366,11 +3435,15 @@ void do_cmd_messages_with_filter(int initial_filter)
             log_history_wrapped_entry_text(filter, i + j, wrapped_text,
                 sizeof(wrapped_text), &wrapped_attr);
             if (!notes_mode
-                && log_history_entries[i + j].kind == LOG_HISTORY_ENTRY_COMBAT
-                && wrapped_rows == 1)
+                && log_history_entries[i + j].kind == LOG_HISTORY_ENTRY_COMBAT)
             {
-                log_history_draw_combat_entry(&log_history_entries[i + j],
-                    line_y, 0);
+                if (wrapped_rows == 1)
+                    log_history_draw_combat_entry(&log_history_entries[i + j],
+                        line_y, 0);
+                else
+                    log_history_draw_wrapped_combat(&log_history_entries[i + j],
+                        line_y, wid, shower, continued ? entry_line_top : 0,
+                        drawn_rows);
             }
             else
             {

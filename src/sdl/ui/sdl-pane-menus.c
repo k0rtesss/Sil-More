@@ -583,9 +583,9 @@ static bool sdl_pane_menu_mobile_grid(const SDL_Rect* screen, int count,
     float pad = 8.0f * dp;
     float gap = 4.0f * dp;
     TTF_Font* label_font = sdl_story_font_for_height_slot(
-        sdl_ui_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+        sdl_menu_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
     TTF_Font* hint_font = sdl_story_font_for_height_slot(
-        sdl_ui_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+        sdl_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
     float header_h = label_font ? MAX((float)sdl_ui_min_tap_px(),
         (float)TTF_GetFontHeight(label_font) + pad) : 0;
     float max_w = (float)screen->w - pad * 2;
@@ -641,9 +641,9 @@ static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
     float pad = 8.0f * sdl_ui_density_scale();
     float gap = 4.0f * sdl_ui_density_scale();
     TTF_Font* font = sdl_story_font_for_height_slot(
-        sdl_ui_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+        sdl_menu_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
     TTF_Font* meta = sdl_story_font_for_height_slot(
-        sdl_ui_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+        sdl_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
     int w = 0, h = 0;
     SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, label,
         MAX(1,(int)(rect->w - pad * 2)),color,&w,&h);
@@ -667,10 +667,10 @@ static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
 int sdl_log_pane_menu_font_px(enum pane_type pane)
 {
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         (void)pane;
-        return sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
+        return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
     }
 #endif
     const sdl_view* view = &g_views[pane];
@@ -688,13 +688,15 @@ int sdl_log_pane_menu_font_px(enum pane_type pane)
     if (font_px < 8)
         font_px = 8;
 
-    return font_px;
+    if (config.bigger_font)
+        font_px = font_px * 2 / 3;
+    return sdl_menu_font_px(font_px);
 }
 
 bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
     int* out_count, SDL_FRect* out_panel)
 {
-    SDL_Rect screen = sdl_get_layout_screen_rect();
+    SDL_Rect screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
     int count;
     float cell_w = (float)g_views[PANE_MAIN].cell_w;
     float font_px;
@@ -717,7 +719,7 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
         return false;
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         {
             const char* labels[MAX_PANE_CONFIGS];
@@ -1134,7 +1136,7 @@ void sdl_log_pane_menu_render(void)
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
         pad = 8.0f * sdl_ui_density_scale();
 #endif
     header = (SDL_FRect){
@@ -1163,7 +1165,7 @@ void sdl_log_pane_menu_render(void)
         150);
     SDL_RenderRect(g_state.renderer, &header);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
         sdl_pane_menu_mobile_text(&header,
             g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
             NULL, text);
@@ -1190,7 +1192,7 @@ void sdl_log_pane_menu_render(void)
         SDL_RenderRect(g_state.renderer, rect);
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
         sdl_pane_menu_mobile_text(rect, entries[i].label, entries[i].hint, text);
     } else
 #endif
@@ -1306,7 +1308,7 @@ bool sdl_side_pane_menu_point_to_side_pane(float x, float y,
 bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
     int* out_count, SDL_FRect* out_panel)
 {
-    SDL_Rect screen = sdl_get_layout_screen_rect();
+    SDL_Rect screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
     int count;
     float cell_w = (float)g_views[PANE_MAIN].cell_w;
     float cell_h = (float)g_views[PANE_MAIN].cell_h;
@@ -1329,7 +1331,7 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
         return false;
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
     {
         {
             const char* labels[MAX_PANE_CONFIGS];
@@ -1730,7 +1732,7 @@ void sdl_side_pane_menu_render(void)
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
         pad = 8.0f * sdl_ui_density_scale();
 #endif
     header = (SDL_FRect){
@@ -1757,7 +1759,7 @@ void sdl_side_pane_menu_render(void)
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b, 150);
     SDL_RenderRect(g_state.renderer, &header);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
     sdl_pane_menu_mobile_text(&header, "Side Panes", NULL, text);
     } else
 #endif
@@ -1787,7 +1789,7 @@ void sdl_side_pane_menu_render(void)
         SDL_RenderRect(g_state.renderer, rect);
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font()) {
         sdl_pane_menu_mobile_text(rect, sdl_side_pane_menu_label(entries[i].pane),
             status, label);
     } else

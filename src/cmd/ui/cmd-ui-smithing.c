@@ -200,7 +200,7 @@ static int smith_ui_term_hgt(void)
 static bool smith_ui_portrait_layout(void)
 {
     return sdl_mobile_portrait_layout_active()
-        || (get_sdl_bigger_font() && smith_ui_term_wid() < 60);
+        || (get_sdl_menu_bigger_font() && smith_ui_term_wid() < 60);
 }
 
 static int smith_ui_content_bottom_row(void)
@@ -1154,7 +1154,7 @@ static void smith_ui_put_cost_line(int index0, byte attr, cptr text)
 
 static void smith_ui_draw_cost_heading(int col, int row, int count, byte attr)
 {
-    bool overflow = get_sdl_bigger_font()
+    bool overflow = get_sdl_menu_bigger_font()
         && row + 1 + count > smith_ui_content_bottom_row();
     cptr label = overflow ? "Cost: more in Details" : "Cost:";
     smith_ui_put_fitted(col, row, smith_ui_line_width(col),
@@ -1346,6 +1346,7 @@ static int smith_ui_configure_list_view(smith_ui_scroll_id id, int count,
 
     if (touch_only)
         ui_scroll_area_set_offset_target(top, max_top);
+    ui_scroll_area_set_indicator(*top, max_top);
 
     return *top;
 }
@@ -5009,6 +5010,15 @@ static void smith_build_calculation_report(smith_calculation_report* report,
             "Category extras: heavy metal 0.5 STR + 0.5 DEX; mail/light craft DEX; jewellery GRA.");
         return;
     }
+    if (smith_pending_reforge() && !reforge_source)
+    {
+        smithing_cost_type paid_cost = { 0 };
+        smith_report_add(report, width, TERM_L_BLUE,
+            "Costs already paid. Only the remaining work is required.");
+        smith_report_costs(report, width, &paid_cost,
+            p_ptr->smithing_leftover, false);
+        return;
+    }
     int extra_scaled = smithing_category_stat_bonus_scaled(smith_o_ptr);
     int all_stats = smithing_stat_bonus(smith_o_ptr);
     int forge = forge_bonus(p_ptr->py, p_ptr->px);
@@ -6048,7 +6058,7 @@ int numbers_menu_aux(int* highlight)
             "decrease protection",
             "increase weight",
             "decrease weight",
-            get_sdl_bigger_font() ? "Cycle alloy metal"
+            get_sdl_menu_bigger_font() ? "Cycle alloy metal"
                 : "cycle alloy (none/mithril/star iron)",
             "remove alloy bonus",
             "adjust special bonuses",
@@ -6904,7 +6914,7 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
 
     strnfmt(buf, sizeof(buf), "%d Turns", preview->turns);
     smith_ui_put_cost_line(costs, TERM_SLATE, buf);
-    if (get_sdl_bigger_font())
+    if (get_sdl_menu_bigger_font())
         smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
             smith_ui_cost_title_row(), costs + 1, attr);
 }
@@ -9274,7 +9284,7 @@ static int smith_root_draw_header(void)
     int row = 0;
     int used;
 
-    if (get_sdl_bigger_font()
+    if (get_sdl_menu_bigger_font()
         && (smith_ui_term_hgt() <= 18 || smith_ui_term_wid() < 55))
     {
         smith_ui_put_fitted(col, 0, width, TERM_L_WHITE + TERM_SHADE,
@@ -9477,10 +9487,10 @@ static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
     header_row = smith_root_draw_header();
     action_row = smith_root_draw_chrome(detail_col, list_w, header_row);
     int last_row = smith_ui_content_bottom_row();
-    int top = get_sdl_bigger_font()
+    int top = get_sdl_menu_bigger_font()
         ? smith_ui_configure_list_view(SMITH_SCROLL_ROOT, SMT_MENU_MAX,
             highlight, action_row, last_row) : 0;
-    if (!get_sdl_bigger_font())
+    if (!get_sdl_menu_bigger_font())
         last_row = action_row + SMT_MENU_MAX;
 
     for (int i = top; i < SMT_MENU_MAX && action_row + i - top <= last_row; i++)
@@ -9738,7 +9748,7 @@ int smithing_menu_aux(int* highlight)
 
     /* Place cursor at current choice */
     Term_gotoxy(indexed_menu_prefix_col(COL_SMT1),
-        get_sdl_bigger_font()
+        get_sdl_menu_bigger_font()
             ? MAX(action_row, MIN(smith_ui_content_bottom_row(),
                 action_row + *highlight - 1 - smith_ui_scroll_top[SMITH_SCROLL_ROOT]))
             : action_row + *highlight - 1);
@@ -9859,7 +9869,7 @@ void do_cmd_smithing_screen(void)
     /* Save screen */
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SMITHING);
 
     /* Clear screen */
     Term_clear();

@@ -73,6 +73,32 @@ static void check_exit(bool panned,bool change_zoom,bool zoom_out)
     } else assert(p_ptr->wy==wy && p_ptr->wx==wx);
     printf("%s / zoom %s: original view, player visibility and free exit PASS\n",scenario,change_zoom?"changed":"unchanged");
 }
+
+static void check_saved_menu_camera(bool panned,bool moved)
+{
+    scenario="Nested saved-menu camera";
+    memset(p_ptr,0,sizeof(*p_ptr)); reset_map(1);
+    p_ptr->py=p_ptr->px=44; p_ptr->playing=true;
+    character_dungeon=character_generated=true; character_icky=0;
+    zoom_scale=1; (void)Term_resize(80,24);
+    p_ptr->wy=panned?4:32; p_ptr->wx=4;
+    int wy=p_ptr->wy,wx=p_ptr->wx;
+    turn=81; playerturn=8; Term_flush();
+    screen_save(); screen_save();
+    /* A child menu's panel update changes the viewport while reading. */
+    (void)modify_panel(38,12);
+    screen_load_quiet();
+    assert(character_icky==1 && p_ptr->wy==38 && p_ptr->wx==12);
+    if(moved) p_ptr->py=45;
+    screen_load_quiet();
+    assert(character_icky==0 && !screen_saved_fullscreen_active());
+    if(moved) assert(p_ptr->wy==38 && p_ptr->wx==12);
+    else assert(p_ptr->wy==wy && p_ptr->wx==wx);
+    assert(turn==81 && playerturn==8);
+    Term_flush();
+    printf("Nested saved-menu camera / %s: free exit, original view or real move retained PASS\n",
+        moved?"player moved":panned?"deliberately panned":"visible player");
+}
 '''
 
 
@@ -86,7 +112,9 @@ def main():
     source = OUT / 'check.c'
     source.write_text(prefix + CHECKS + init +
         '    check_exit(false,false,false); check_exit(false,true,false); check_exit(true,true,false);\n'
-        '    check_exit(false,true,true); check_exit(true,true,true); SDL_Quit(); return 0;\n}\n', encoding='utf-8')
+        '    check_exit(false,true,true); check_exit(true,true,true);\n'
+        '    check_saved_menu_camera(false,false); check_saved_menu_camera(true,false);\n'
+        '    check_saved_menu_camera(false,true); SDL_Quit(); return 0;\n}\n', encoding='utf-8')
     objects = shlex.split((BUILD / 'CMakeFiles/sil-more.dir/objects1.rsp').read_text())
     response = OUT / 'objects.rsp'
     response.write_text('\n'.join('"' + p + '"' for p in objects if not p.endswith('/src/main.c.obj')), encoding='utf-8')

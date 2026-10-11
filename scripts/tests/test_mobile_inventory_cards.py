@@ -37,7 +37,7 @@ harness=r"""
 #include <string.h>
 #include <stdarg.h>
 typedef const char *cptr;typedef unsigned char byte;
-static bool get_sdl_bigger_font(void) {return true;}
+static bool get_sdl_menu_bigger_font(void) {return true;}
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define ABS(x) abs(x)

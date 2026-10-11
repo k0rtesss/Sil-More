@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare actual normal UI pixels and hit rectangles to pre-big-font sources.
+"""Compare ported normal UI pixels and hit rectangles to pinned master sources.
 
 Compiles the pinned historical UI into an isolated fixture. No user saves or
 settings are opened. Covers phone portrait/landscape and desktop render paths,
@@ -14,7 +14,8 @@ import sys
 
 import check_normal_touch_compat as base
 
-ROOT, BUILD, BEFORE = base.ROOT, base.BUILD, base.BEFORE
+ROOT, BUILD = base.ROOT, base.BUILD
+BEFORE = "9e18d2ab"  # Master frontend being ported, including its normal-menu updates.
 OUT = ROOT / "scripts/output/normal-ui-compat"
 DESKTOP = "--desktop" in sys.argv
 if DESKTOP:
@@ -30,13 +31,13 @@ includes = "\n#ifdef ORIGINAL\n" + "\n".join(
 includes += "\n#else\n" + "\n".join(
     '#include "' + p.removeprefix("src/") + '"' for p in UI) + "\n#endif\n"
 HARNESS = base.HARNESS[:base.HARNESS.index("static void grid(void)")]
+# This baseline already implements the font/menu APIs that the older touch
+# comparison supplies as compatibility shims.
+start = HARNESS.index("int sdl_ui_font_px(")
+end = HARNESS.index("#else", start)
+HARNESS = HARNESS[:start] + HARNESS[end:]
 HARNESS += includes + r'''
-#ifdef ORIGINAL
-void sdl_character_sheet_screen_set_select_confirm_label(cptr label) { }
-bool sdl_character_sheet_screen_debug_turn_page(int dir) { return false; }
-bool sdl_standalone_screen_handle_key(int key) { return false; }
-bool sdl_standalone_screen_handle_pointer(float x,float y,int action) { return false; }
-#endif
+
 bool __wrap_sdl_mobile_lifecycle_handle_event(const SDL_Event *ev) { return false; }
 SDL_Rect __wrap_sdl_get_layout_screen_rect(void) { return (SDL_Rect){0,0,width,height}; }
 bool __wrap_sdl_overlay_pane_anchor_rect(int pane,SDL_Rect *r) {

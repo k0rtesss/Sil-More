@@ -68,14 +68,15 @@ static int steamdeck_confirm_key(void){return 13;}
 static int steamdeck_back_key(void){return ESCAPE;}
 static int steamdeck_menu_key(int k,int l,int r){return k;}
 static bool sdl_touch_only_device_active(void){return true;}
-static bool get_sdl_bigger_font(void){return true;}
+static bool get_sdl_menu_bigger_font(void){return true;}
 static void screen_save(void){restores++;}
 static void screen_load(void){restores--;}
 static void screen_push_supporting_panes_hidden(void){pane_depth++;}
 static void screen_pop_supporting_panes_hidden(void){pane_depth--;}
 static void screen_push_touch_pane_hidden(void){pane_depth++;}
 static void screen_pop_touch_pane_hidden(void){pane_depth--;}
-static void sdl_push_terminal_menu_scale(void){scale_depth++;}
+enum {SDL_MENU_FONT_BIRTH,SDL_MENU_FONT_HELP};
+static void sdl_push_terminal_menu_scale_for(int menu){scale_depth++;}
 static void sdl_pop_terminal_menu_scale(void){scale_depth--;}
 static void ui_menu_click_begin(void){}
 static void ui_menu_click_clear(void){}

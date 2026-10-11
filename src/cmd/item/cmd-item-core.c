@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "quest/quest-challenges.h"
 #include "tutorial/tutorial-game.h"

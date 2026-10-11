@@ -35,7 +35,7 @@ harness=r'''
 #include <stdlib.h>
 #include <stdarg.h>
 typedef const char *cptr;typedef unsigned char byte;
-static bool get_sdl_bigger_font(void) {return true;}
+static bool get_sdl_menu_bigger_font(void) {return true;}
 typedef struct {int level;cptr state;} ability_type;
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -104,7 +104,7 @@ int main(void){
  ability_browser_entry entries[]={
   {.b_ptr=&facts[0],.name="Strength in Adversity",.attr=5},
   {.b_ptr=&facts[1],.name="Polearm Mastery",.attr=5},
-  {.b_ptr=&facts[2],.name="Oath of the Valorous Heart",.stage_depth=2,.attr=5}};
+  {.b_ptr=&facts[2],.name="Oath of the Valorous Heart forever",.attr=5}};
  for(int h=12;h<=30;h+=18) for(int p=0;p<2;p++){
   height=h;portrait=p;ability_browser_layout l;
   ability_browser_init_layout(&l,3,"Choose an ability");
@@ -118,7 +118,7 @@ int main(void){
    char text[2048];collect(text,sizeof(text),l.ability_row,3);
    if(i==0)assert(strstr(text,"Strength in Adversity")&&strstr(text,"Level 10 | 500 XP"));
    if(i==1)assert(strstr(text,"Polearm Mastery")&&strstr(text,"Level 5 | 0 XP"));
-   if(i==2)assert(strstr(text,"Oath of the Valorous")&&strstr(text,"Heart")&&strstr(text,"Level 12 | locked"));
+   if(i==2)assert(strstr(text,"Oath of the Valorous")&&strstr(text,"Heart")&&strstr(text,"forever")&&strstr(text,"Level 12 | locked"));
    assert(click_count==MIN(3-i,visible)*3);
    for(int r=0;r<3;r++){assert(click_id[r]==1000+i);assert(click_rows[r]==l.ability_row+r);}
   }

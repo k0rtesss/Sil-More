@@ -1261,7 +1261,8 @@ static bool sdl_render_main_view_with_left_panel_metrics(const sdl_view* view,
     source_h = visual_rows * view->cell_h;
     visual_w = visual_cols * view->cell_w;
     canvas_w = view->cols * view->cell_w;
-    if (visual_w <= metrics.total_w || visual_rows <= 0
+    if (visual_w < metrics.total_w + (config.bigger_font ? 0 : 1)
+        || visual_rows <= 0
         || metrics.corner_h <= 0)
     {
         return false;
@@ -1565,6 +1566,32 @@ bool sdl_render_saved_screen_left_panel_backdrop(const sdl_view* view)
     return true;
 }
 
+static void sdl_render_terminal_scroll_indicators(void)
+{
+    for (int index = 0; index < ui_scroll_area_count(); index++)
+    {
+        int left, right, top, bottom, offset, maximum;
+        SDL_FRect viewport;
+        if (!ui_scroll_area_get_indicator(index, &left, &right, &top,
+                &bottom, &offset, &maximum))
+            continue;
+        right = MIN(right, g_views[PANE_MAIN].cols - 1);
+        bottom = MIN(bottom, g_views[PANE_MAIN].rows - 1);
+        if (sdl_main_cell_rect(left, top, right - left + 1,
+                bottom - top + 1, &viewport))
+            sdl_ui_render_scroll_indicator(viewport, offset, maximum,
+                bottom - top + 1);
+    }
+}
+
+static void sdl_render_menu_with_font(enum sdl_menu_font menu,
+    void (*render)(void))
+{
+    int previous = sdl_menu_font_set_render_context(menu);
+    render();
+    sdl_menu_font_set_render_context(previous);
+}
+
 static bool sdl_render_current_window_contents(void)
 {
     bool show_supporting_panes;
@@ -1587,32 +1614,32 @@ static bool sdl_render_current_window_contents(void)
         return false;
 
     if (sdl_pause_text_screen_active()) {
-        sdl_pause_text_screen_render();
+        sdl_render_menu_with_font(SDL_MENU_FONT_NARRATIVE, sdl_pause_text_screen_render);
         return true;
     }
 
     if (sdl_tale_screen_active()) {
-        sdl_tale_screen_render();
+        sdl_render_menu_with_font(SDL_MENU_FONT_NARRATIVE, sdl_tale_screen_render);
         return true;
     }
 
     if (sdl_poetry_screen_active()) {
-        sdl_poetry_screen_render();
+        sdl_render_menu_with_font(SDL_MENU_FONT_NARRATIVE, sdl_poetry_screen_render);
         return true;
     }
 
     if (sdl_halls_screen_active()) {
-        sdl_halls_screen_render();
+        sdl_render_menu_with_font(SDL_MENU_FONT_SCORES, sdl_halls_screen_render);
         return true;
     }
 
     if (sdl_hint_quest_menu_active()) {
-        sdl_hint_quest_menu_render();
+        sdl_render_menu_with_font(SDL_MENU_FONT_QUESTS, sdl_hint_quest_menu_render);
         return true;
     }
 
     if (sdl_welcome_screen_active()) {
-        sdl_welcome_screen_render();
+        sdl_render_menu_with_font(SDL_MENU_FONT_MAIN, sdl_welcome_screen_render);
         /* The yes/no confirm is modal and must stay visible above any
          * full-screen surface (see sdl_yes_no_prompt_handle_modal_event). */
         sdl_touch_pane_render_yes_no_prompt();
@@ -1624,7 +1651,7 @@ static bool sdl_render_current_window_contents(void)
     }
 
     if (sdl_character_sheet_screen_active()) {
-        sdl_character_sheet_screen_render();
+        sdl_render_menu_with_font(sdl_character_sheet_menu_font(), sdl_character_sheet_screen_render);
         sdl_touch_pane_render_yes_no_prompt();
         /* In-menu value pickers (ui_question_ask_overlay) draw on top of the
          * settings/character-sheet screen without repainting it, so render the
@@ -1770,8 +1797,8 @@ static bool sdl_render_current_window_contents(void)
             /* Bottom-anchor the content above its single panel-backed bottom
              * margin.  The pane allocation reserves no matching top margin,
              * so the first configured row begins at the top of the band. */
-            int bottom_margin =
-                pane_log_overlay_vertical_margin_px(view->cell_h);
+            int bottom_margin = config.bigger_font ? 0
+                : pane_log_overlay_vertical_margin_px(view->cell_h);
             float band_top = (float)view->rect.y;
             float band_bottom = (float)(view->rect.y + view->rect.h);
 
@@ -1821,6 +1848,9 @@ static bool sdl_render_current_window_contents(void)
         if (i == PANE_MAIN)
             (void)sdl_render_saved_screen_left_panel_backdrop(view);
     }
+
+    if (!hide_main_menu_overlays)
+        sdl_render_terminal_scroll_indicators();
 
     if (!hide_main_menu_overlays) {
         sdl_side_map_pane_render();
@@ -1936,14 +1966,13 @@ static bool sdl_render_current_window_contents(void)
     sdl_touch_hidden_indicator_render();
     /* The Main Menu is the topmost gameplay pane.  Draw it after pane borders
      * and touch controls so neither can obscure its panel or labels. */
-    sdl_main_menu_pane_render();
+    sdl_render_menu_with_font(SDL_MENU_FONT_MAIN, sdl_main_menu_pane_render);
     sdl_touch_pane_render_reset_prompt();
-    sdl_touch_pane_render_yes_no_prompt();
-    sdl_log_pane_menu_render();
-    sdl_side_pane_menu_render();
-    sdl_unified_look_sidebar_render();
-    sdl_unified_look_prompt_render();
-    sdl_song_menu_render();
+    sdl_render_menu_with_font(SDL_MENU_FONT_LOG_OPTIONS, sdl_log_pane_menu_render);
+    sdl_render_menu_with_font(SDL_MENU_FONT_PANE_OPTIONS, sdl_side_pane_menu_render);
+    sdl_render_menu_with_font(SDL_MENU_FONT_LOOK, sdl_unified_look_sidebar_render);
+    sdl_render_menu_with_font(SDL_MENU_FONT_LOOK, sdl_unified_look_prompt_render);
+    sdl_render_menu_with_font(SDL_MENU_FONT_SONGS, sdl_song_menu_render);
     if (!hide_main_menu_overlays)
         sdl_description_overlay_render();
     /* Drawn after the description popup (and its dimming backdrop) so the thumb
@@ -1967,6 +1996,10 @@ static bool sdl_render_current_window_contents(void)
 
     if (!hide_main_menu_overlays)
         sdl_gamepad_context_focus_render();
+
+    /* Confirmations own input even when gameplay shortcuts remain visible.
+     * Keep their buttons above those shortcuts and every gameplay overlay. */
+    sdl_touch_pane_render_yes_no_prompt();
 
     return true;
 }
@@ -2006,6 +2039,7 @@ bool sdl_render_current_window_frame(void)
      * Repaint that row above the native HUD, including native-screen paths,
      * without changing pane visibility, terminal size, or the input queue. */
     sdl_render_command_prompt_row();
+    sdl_menu_font_button_render();
 
     /* Tutorials own input before native menus and full-screen views. Draw
      * their controls above every completed frame, including the early-return

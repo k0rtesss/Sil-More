@@ -5,6 +5,9 @@ param(
     [ValidateRange(1, 100)]
     [int]$CompileSdk = 36,
 
+    [ValidateRange(1, 2100000000)]
+    [int]$VersionCode,
+
     [string]$KeystorePath = $env:SIL_MORE_RELEASE_STORE_FILE,
 
     [string]$KeystoreAlias = $env:SIL_MORE_RELEASE_KEY_ALIAS,
@@ -315,6 +318,10 @@ try {
 
     $gradleArgs += "-PSIL_MORE_COMPILE_SDK=$CompileSdk"
 
+    if ($VersionCode -gt 0) {
+        $gradleArgs += "-PSIL_MORE_VERSION_CODE=$VersionCode"
+    }
+
     if ($Clean) {
         $gradleArgs += 'clean'
     }
@@ -323,6 +330,9 @@ try {
 
     Write-Host "Building Play Store app bundle..." -ForegroundColor Cyan
     Write-Host "Version: $version" -ForegroundColor Cyan
+    if ($VersionCode -gt 0) {
+        Write-Host "Android version code: $VersionCode" -ForegroundColor Cyan
+    }
     Write-Host "Target SDK: $TargetSdk" -ForegroundColor Cyan
     Write-Host "Compile SDK: $CompileSdk" -ForegroundColor Cyan
     Write-Host "Keystore: $keystoreFile" -ForegroundColor Cyan
@@ -371,11 +381,30 @@ try {
         }
     }
 
-    if ([System.IO.Path]::GetFullPath($bundlePath).TrimEnd('\') -ne $OutputPath.TrimEnd('\')) {
-        Copy-Item -LiteralPath $bundlePath -Destination $OutputPath -Force
+    # Export the mapping embedded in this exact bundle so the files cannot
+    # become mismatched after another variant or release is built.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $bundleArchive = [System.IO.Compression.ZipFile]::OpenRead($bundlePath)
+    try {
+        $mappingEntry = $bundleArchive.GetEntry('BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map')
+        if (-not $mappingEntry -or $mappingEntry.Length -eq 0) {
+            throw "R8 deobfuscation mapping is missing from app bundle: $bundlePath"
+        }
+
+        if ([System.IO.Path]::GetFullPath($bundlePath).TrimEnd('\') -ne $OutputPath.TrimEnd('\')) {
+            Copy-Item -LiteralPath $bundlePath -Destination $OutputPath -Force
+        }
+
+        $mappingOutputPath = [System.IO.Path]::ChangeExtension($OutputPath, '.mapping.txt')
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($mappingEntry, $mappingOutputPath, $true)
+    }
+    finally {
+        $bundleArchive.Dispose()
     }
 
     Write-Host "App bundle created: $OutputPath" -ForegroundColor Green
+    Write-Host "Deobfuscation mapping: $mappingOutputPath" -ForegroundColor Green
+    Write-Host 'Google Play imports this mapping automatically when the app bundle is uploaded.' -ForegroundColor Green
 }
 finally {
     foreach ($entry in $previousEnvironment.GetEnumerator()) {

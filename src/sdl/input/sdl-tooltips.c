@@ -1561,7 +1561,20 @@ int sdl_description_overlay_max_cols(void)
 
 int sdl_description_overlay_capture_cols(int terminal_cols, bool interactive)
 {
-    int max_cols = sdl_description_overlay_max_cols();
+    bool old_active = g_description_overlay.active;
+    bool old_interactive = g_description_overlay.interactive;
+    int max_cols;
+
+    /* Capture runs inside character_icky before the popup is presented.  Its
+     * interactive thumb controls must already reserve their eventual space,
+     * or the captured lines are wider than the panel that displays them. */
+    if (interactive) {
+        g_description_overlay.active = true;
+        g_description_overlay.interactive = true;
+    }
+    max_cols = sdl_description_overlay_max_cols();
+    g_description_overlay.active = old_active;
+    g_description_overlay.interactive = old_interactive;
 
     if (interactive && sdl_mobile_portrait_layout_active() && max_cols > 0)
         return max_cols;
@@ -2947,6 +2960,13 @@ void sdl_description_overlay_render(void)
     sdl_description_overlay_render_close_button(&layout,
         overlay->close_hover);
 
+    SDL_FRect indicator = { layout.text_x, layout.text_y,
+        layout.panel.x + layout.panel.w - 3.0f * sdl_ui_density_scale()
+            - layout.text_x,
+        layout.visible_rows * layout.cell_h };
+    sdl_ui_render_scroll_indicator(indicator, layout.scroll,
+        layout.max_scroll, layout.visible_rows);
+
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 
     if (!cached)
@@ -3538,6 +3558,9 @@ bool sdl_map_touch_flush_pending_press(Uint64 now_ns)
     map_y = g_map_touch_press.map_y;
     map_x = g_map_touch_press.map_x;
     sdl_map_touch_cancel_press();
+    /* This gesture now owns a contextual action. Its popup can consume the
+     * release, so the parallel map drag must end before opening that popup. */
+    sdl_main_map_cancel_drag();
     g_map_touch_selected = false;
 
     if (map_y == p_ptr->py && map_x == p_ptr->px)

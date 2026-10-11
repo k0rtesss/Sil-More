@@ -22,9 +22,14 @@ settings='src/sdl/config/sdl-settings.c'
 knowledge='src/cmd/ui/cmd-ui-knowledge.c'
 abilities='src/cmd/ui/cmd-ui-abilities.c'
 smithing='src/cmd/ui/cmd-ui-smithing.c'
-parts=[function('src/sdl/render/sdl-fonts.c','int sdl_ui_font_px(')]
+parts=[function('src/sdl/render/sdl-fonts.c','int sdl_ui_font_px('),
+       function('src/sdl/render/sdl-fonts.c','int sdl_main_view_font_px(')]
 parts += [function(settings,x) for x in ['int sdl_terminal_menu_font_px(',
+    'enum sdl_menu_font sdl_terminal_menu_font(',
+    'void sdl_refresh_terminal_menu_scale(',
+    'void sdl_set_terminal_menu_font(',
     'static void sdl_push_terminal_menu_scale_value(',
+    'void sdl_push_terminal_menu_scale_for(',
     'void sdl_push_terminal_menu_scale(', 'void sdl_pop_terminal_menu_scale(']]
 parts += [function(knowledge,x) for x in ['static int equipment_entry_wrap_take(',
     'static bool equipment_entry_wrap_next(', 'static int supply_put_wrapped(',
@@ -88,7 +93,12 @@ typedef int smith_ui_scroll_id;
 typedef enum {SUPPLY_MENU_PAGE_EQUIPPED,SUPPLY_MENU_PAGE_INVENTORY,
  SUPPLY_MENU_PAGE_JEWELRY,SUPPLY_MENU_PAGE_SUPPLIES} supply_menu_page;
 struct {bool bigger_font;int terminal_menu_scale_offset;} config;
-static bool get_sdl_bigger_font(void) {return config.bigger_font;}
+enum sdl_menu_font {SDL_MENU_FONT_NONE=-1,SDL_MENU_FONT_SETTINGS,SDL_MENU_FONT_COUNT};
+static enum sdl_menu_font g_terminal_menu_fonts[16];
+enum sdl_menu_font sdl_terminal_menu_font(void);
+void sdl_push_terminal_menu_scale_for(enum sdl_menu_font menu);
+static bool get_sdl_menu_bigger_font(void) {return config.bigger_font;}
+static bool get_sdl_menu_bigger_font_for(enum sdl_menu_font menu) {return config.bigger_font;}
 static int g_terminal_menu_scale_override,g_terminal_menu_scale_depth;
 static int g_terminal_menu_scale_stack[16];
 static unsigned int g_terminal_menu_scale_overflow_depth;
@@ -144,6 +154,7 @@ static bool ui_scroll_area_add_cols(int l,int r,int t,int b,int category) {
  assert(region_count<2);int i=region_count++;regions[i].left=l;regions[i].right=r;regions[i].top=t;regions[i].bottom=b;return true;
 }
 static void ui_scroll_area_set_keys(int a,int b,int c,int d) {}
+static void ui_scroll_area_set_indicator(int offset,int maximum) {}
 static void ui_scroll_area_set_offset_target(int *top,int max) {
  drag_offset=top;drag_max=max;
  if(region_count){regions[region_count-1].offset=top;regions[region_count-1].max=max;}

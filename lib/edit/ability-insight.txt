@@ -344,7 +344,7 @@ B:4/4:1:0
 L:1
 K:1
 X:2:1:5:5
-F:Identify staves and horns and transfer charges safely.
+F:Identify staves and horns, halve horn Voice costs, and transfer charges safely.
 Z:Devices
 
 N:102:Strength in Adversity

@@ -70,6 +70,10 @@ void ui_scroll_area_set_offset_target(int* offset, int max_offset);
 bool ui_scroll_area_has_offset_target(void);
 bool ui_scroll_area_offset_scroll(int delta);
 bool ui_scroll_area_take_touch_scrolled(void);
+void ui_scroll_area_set_indicator(int offset, int max_offset);
+int ui_scroll_area_count(void);
+bool ui_scroll_area_get_indicator(int index, int* left, int* right,
+    int* top, int* bottom, int* offset, int* maximum);
 
 void ui_key_wait_dismiss_begin(int key);
 void ui_key_wait_dismiss_clear(void);

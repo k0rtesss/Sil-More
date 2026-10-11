@@ -646,6 +646,8 @@ void sdl_mobile_portrait_scale_reference_rect(const SDL_Rect* source,
 
 static int sdl_mobile_portrait_margin(const SDL_Rect* screen)
 {
+    if (config.bigger_font)
+        return 0;
     int margin = sdl_overlay_margin_px();
 
     if (screen && margin < screen->w / 80)
@@ -697,6 +699,7 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
     SDL_Rect screen;
     SDL_FRect menu_button;
     int margin;
+    int side_margin;
     int gap;
     int available_w;
     int left_w;
@@ -720,9 +723,10 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
     if (!sdl_rect_has_area(&screen))
         return false;
     margin = sdl_mobile_portrait_margin(&screen);
+    side_margin = config.bigger_font ? SDL_BIG_TEXT_SIDE_PAD_PX : margin;
     gap = sdl_mobile_portrait_gap(&screen);
 
-    available_w = screen.w - margin * 2;
+    available_w = screen.w - side_margin * 2;
     if (available_w < 56)
         return false;
 
@@ -785,7 +789,11 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
                     &quick_anchor, &quick_where)
                 && quick_where == where && sdl_rect_has_area(&quick_anchor))
             {
-                pane_bottom = quick_anchor.y + quick_anchor.h;
+                /* Quick Access clamps its painted panel inside the outer
+                 * UI margin. Reserve from that same edge, otherwise its
+                 * upward inset can cut into the Quick Touch control lane. */
+                pane_bottom = MIN(quick_anchor.y + quick_anchor.h,
+                    screen.y + screen.h - sdl_overlay_margin_px());
                 pane = (SDL_Rect){
                     .x = quick_anchor.x,
                     .y = pane_bottom - reserved_h,
@@ -854,7 +862,7 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
      * orientation profile to choose which one owns Quick Touch. */
     if (out_left) {
         *out_left = (SDL_Rect){
-            .x = screen.x + margin,
+            .x = screen.x + side_margin,
             .y = dock_y,
             .w = left_w,
             .h = dock_h,
@@ -862,7 +870,7 @@ bool sdl_mobile_portrait_control_regions(SDL_Rect* out_left,
     }
     if (out_right) {
         *out_right = (SDL_Rect){
-            .x = screen.x + margin + left_w + gap,
+            .x = screen.x + side_margin + left_w + gap,
             .y = dock_y,
             .w = right_w,
             .h = dock_h,
@@ -950,6 +958,8 @@ void sdl_left_panel_canvas_destroy(void)
 
 int sdl_overlay_margin_px(void)
 {
+    if (config.bigger_font)
+        return 0;
     int margin_px = (int)(g_state.system_scale * config.margin);
 
     return (margin_px > 0) ? margin_px * 5 : 0;
@@ -957,6 +967,8 @@ int sdl_overlay_margin_px(void)
 
 int sdl_overlay_inner_gap_px(void)
 {
+    if (config.bigger_font)
+        return 0;
     int gap_px = (int)(g_state.system_scale * config.margin);
 
     /* The outer safe margin is intentionally generous.  Neighbouring panes
@@ -1342,7 +1354,8 @@ void sdl_left_panel_pane_cell_size_for_view(const sdl_view* view,
         visual_cols = sdl_main_view_visual_cols_for_width(view->rect.w,
             view->cell_w);
         visual_w = visual_cols * view->cell_w;
-        available_w = visual_w - 1;
+        available_w = visual_w - (config.bigger_font ? 0 : 1)
+            - 2 * SDL_BIG_TEXT_SIDE_PAD_PX;
         max_cell_w = (available_w > 0)
             ? available_w / (content_cols + border_cols)
             : 1;
@@ -1964,7 +1977,8 @@ void sdl_left_panel_compact_metrics_for_view(const sdl_view* view,
             int visual_w = sdl_main_view_visual_cols_for_width(view->rect.w,
                 view->cell_w) * view->cell_w;
             int border_cols = sdl_left_panel_pane_has_border_columns() ? 2 : 0;
-            int available_cols = (visual_w - 1) / cell_w - border_cols;
+            int available_cols = (visual_w - 2 * SDL_BIG_TEXT_SIDE_PAD_PX)
+                / cell_w - border_cols;
 
             if (metrics->content_cols > available_cols
                 && metrics->compact_segment_count > 1)
@@ -2180,9 +2194,8 @@ bool sdl_left_panel_metrics_for_view(const sdl_view* view,
         metrics->cell_h = cell_h;
         metrics->content_cols = content_cols;
         metrics->content_w = content_cols * metrics->cell_w;
-        metrics->separator_w = sdl_left_panel_pane_has_border_columns()
-            ? metrics->cell_w
-            : 0;
+        metrics->separator_w = config.bigger_font ? SDL_BIG_TEXT_SIDE_PAD_PX
+            : (sdl_left_panel_pane_has_border_columns() ? metrics->cell_w : 0);
         metrics->total_w = metrics->content_w
             + (metrics->separator_w * 2);
         metrics->panel_rows = panel_rows;
@@ -2234,7 +2247,8 @@ bool sdl_left_panel_pane_rect_for_metrics(const sdl_view* view,
     visual_rows = sdl_main_view_visual_rows(view);
     visual_w = visual_cols * view->cell_w;
     visual_h = visual_rows * view->cell_h;
-    if (visual_w <= metrics->total_w || visual_h <= 0)
+    if (visual_w < metrics->total_w + (config.bigger_font ? 0 : 1)
+        || visual_h <= 0)
         return false;
 
     where = sdl_left_panel_pane_placement();
@@ -2275,6 +2289,25 @@ bool sdl_left_panel_pane_rect_for_metrics(const sdl_view* view,
         y += (float)((visual_h - metrics->corner_h) / 2);
     else
         y += (float)edge_gap_y;
+
+    if (config.bigger_font
+        && (where == PLACE_TOP_LEFT || where == PLACE_TOP_CENTER
+            || where == PLACE_TOP_RIGHT))
+    {
+        /* The character panel uses measured geometry instead of its nominal
+         * slot. Honor a log placed before it in the same top-edge stack. */
+        for (int i = 0; i < pane_config_count; i++) {
+            if (pane_config[i].pane == PANE_LEFT_PANEL)
+                break;
+            if (pane_config[i].pane == PANE_ROLLS
+                && pane_config[i].enabled && pane_config[i].where == where
+                && sdl_rect_has_area(&g_pane_rects[PANE_ROLLS]))
+            {
+                const SDL_Rect* log = &g_pane_rects[PANE_ROLLS];
+                y = MAX(y, (float)(log->y + log->h));
+            }
+        }
+    }
 
     /* The compact row is measured after generic pane placement and can span
      * into the Menu button. Place the panel below that button when their
@@ -2663,7 +2696,8 @@ int sdl_overlay_log_left_margin(int term_cols)
 {
     for (int i = 0; i < pane_config_count; i++) {
         if (config.bigger_font && pane_config[i].pane == PANE_ROLLS
-            && (pane_config[i].where == PLACE_TOP_CENTER
+            && (pane_config[i].where == PLACE_TOP_LEFT
+                || pane_config[i].where == PLACE_TOP_CENTER
                 || pane_config[i].where == PLACE_BOTTOM_CENTER))
         {
             return 0;
@@ -3394,7 +3428,7 @@ void sdl_apply_top_right_overlay_offset(void)
 
 bool sdl_left_panel_pane_has_border_columns(void)
 {
-    return true;
+    return !config.bigger_font;
 }
 
 int sdl_main_view_visual_cols_for_width(int width_px, int cell_w)
@@ -3666,11 +3700,11 @@ bool sdl_mobile_layout_fits(const SDL_Rect* screen, int scale,
 
     sdl_build_supporting_pane_metrics(active, active_count, cell_widths,
         cell_heights);
-    margin_px = (int)(g_state.system_scale * config.margin);
+    margin_px = config.bigger_font ? 0 : (int)(g_state.system_scale * config.margin);
     sdl_apply_dynamic_auto_pane_sizes(active, active_count, screen, cell_widths,
         cell_heights, margin_px);
-    place_panes(active, active_count, panes, screen, cell_widths, cell_heights,
-        margin_px);
+    place_panes_ex(active, active_count, panes, screen, cell_widths, cell_heights,
+        margin_px, !config.bigger_font);
 
     main_cols = sdl_mobile_pane_cols(panes, cell_widths, PANE_MAIN);
     main_rows = sdl_mobile_pane_rows(panes, cell_heights, PANE_MAIN);
@@ -4617,7 +4651,7 @@ void sdl_build_supporting_pane_metrics(const struct pane_config* configs,
          * changes how the main term is rendered inside that rectangle. */
         int main_scale = sdl_main_view_layout_scale();
 
-        cell_heights[PANE_MAIN] = sdl_ui_font_px(main_scale * TILE_SIZE);
+        cell_heights[PANE_MAIN] = sdl_main_view_font_px(main_scale * TILE_SIZE);
         cell_widths[PANE_MAIN] = cell_heights[PANE_MAIN] / 2;
     }
 
@@ -4683,11 +4717,13 @@ bool sdl_prune_unusable_panes(struct pane_config* active,
             min_rows = PANE_COMBAT_OVERLAY_MIN_ROWS;
         if (type == PANE_ROLLS
             && (sdl_mobile_portrait_layout_active()
-                || (config.bigger_font && (pc->where == PLACE_TOP_CENTER
+                || (config.bigger_font && (pc->where == PLACE_TOP_LEFT
+                    || pc->where == PLACE_TOP_CENTER
                     || pc->where == PLACE_BOTTOM_CENTER)))) {
-            /* Centered logs wrap across the available screen width. Portrait
+            /* Big-text logs wrap across the available screen width. Portrait
              * corner logs can use a narrower band than the landscape log. */
-            min_cols = config.bigger_font && (pc->where == PLACE_TOP_CENTER
+            min_cols = config.bigger_font && (pc->where == PLACE_TOP_LEFT
+                || pc->where == PLACE_TOP_CENTER
                 || pc->where == PLACE_BOTTOM_CENTER) ? 1 : 12;
         }
 
@@ -4858,7 +4894,8 @@ void sdl_apply_dynamic_auto_pane_sizes(struct pane_config* active,
 
     for (int i = 0; i < active_count; i++) {
         if (config.bigger_font && active[i].pane == PANE_ROLLS
-            && (active[i].where == PLACE_TOP_CENTER
+            && (active[i].where == PLACE_TOP_LEFT
+                || active[i].where == PLACE_TOP_CENTER
                 || active[i].where == PLACE_BOTTOM_CENTER))
         {
             int cell_w = MAX(1, cell_widths[PANE_ROLLS]);
@@ -4884,9 +4921,8 @@ void sdl_apply_dynamic_auto_pane_sizes(struct pane_config* active,
     if (touch_idx < 0)
         return;
 
-    place_panes(active, active_count, temp_panes, screen, cell_widths,
-        cell_heights,
-        margin_px);
+    place_panes_ex(active, active_count, temp_panes, screen, cell_widths,
+        cell_heights, margin_px, !config.bigger_font);
 
     if (temp_panes[PANE_TOUCH].w <= 0 || temp_panes[PANE_TOUCH].h <= 0)
         return;
@@ -4990,8 +5026,8 @@ static void sdl_place_big_font_description(const SDL_Rect* screen,
             sdl_effective_pane_cell_height_for_config(pc);
         cell_widths[PANE_DESCRIPTION] = sdl_supporting_pane_cell_width(
             PANE_DESCRIPTION, pc->where, cell_heights[PANE_DESCRIPTION]);
-        place_panes(pc, 1, modal, screen, cell_widths, cell_heights,
-            margin_px);
+        place_panes_ex(pc, 1, modal, screen, cell_widths, cell_heights,
+            margin_px, !config.bigger_font);
         panes[PANE_DESCRIPTION] = modal[PANE_DESCRIPTION];
         break;
     }
@@ -5011,7 +5047,7 @@ void sdl_place_active_panes(const SDL_Rect* screen, SDL_Rect* panes,
 
     memset(panes, 0, sizeof(SDL_Rect) * PANE_MAX);
 
-    margin_px = (int)(g_state.system_scale * config.margin);
+    margin_px = config.bigger_font ? 0 : (int)(g_state.system_scale * config.margin);
     active_count = sdl_build_active_pane_config(active, include_side,
         include_bottom, touch_only);
     sdl_build_supporting_pane_metrics(active, active_count, cell_widths,
@@ -5020,8 +5056,8 @@ void sdl_place_active_panes(const SDL_Rect* screen, SDL_Rect* panes,
         cell_heights, margin_px);
 
     for (int attempt = 0; attempt <= active_count; attempt++) {
-        place_panes(active, active_count, panes, screen, cell_widths,
-            cell_heights, margin_px);
+        place_panes_ex(active, active_count, panes, screen, cell_widths,
+            cell_heights, margin_px, !config.bigger_font);
         sdl_avoid_main_menu_button_for_top_center_panes(active, active_count,
             screen, panes);
         if (!sdl_prune_unusable_panes(active, active_count, panes, cell_widths,
@@ -5080,7 +5116,7 @@ void sdl_place_active_panes_fitting_main(const SDL_Rect* screen,
 
     memset(panes, 0, sizeof(SDL_Rect) * PANE_MAX);
 
-    margin_px = (int)(g_state.system_scale * config.margin);
+    margin_px = config.bigger_font ? 0 : (int)(g_state.system_scale * config.margin);
     active_count = sdl_build_active_pane_config(base, include_side,
         include_bottom, touch_only);
     memcpy(active, base, sizeof(struct pane_config) * active_count);
@@ -5090,8 +5126,8 @@ void sdl_place_active_panes_fitting_main(const SDL_Rect* screen,
         cell_widths, cell_heights, margin_px);
 
     for (int attempt = 0; attempt <= active_count; attempt++) {
-        place_panes(active, active_count, panes, screen, cell_widths,
-            cell_heights, margin_px);
+        place_panes_ex(active, active_count, panes, screen, cell_widths,
+            cell_heights, margin_px, !config.bigger_font);
         sdl_avoid_main_menu_button_for_top_center_panes(active, active_count,
             screen, panes);
         if (!sdl_prune_unusable_panes(active, active_count, panes,
@@ -5208,7 +5244,7 @@ void sdl_compute_pruned_split_panes_for_mode_ex(const SDL_Rect* screen,
         g_auto_aux_main_cell_h_override = layout_scale * TILE_SIZE;
     }
 
-    cell_h = sdl_ui_font_px(scale * TILE_SIZE);
+    cell_h = sdl_main_view_font_px(scale * TILE_SIZE);
     cell_w = cell_h / 2;
     sdl_place_active_panes_fitting_main(screen, target_panes, include_side,
         include_bottom, false, &include_side, &include_bottom);
@@ -5424,8 +5460,8 @@ int sdl_max_scale_for_rect_mode(const SDL_Rect* rect, int mode)
 
     min_cols = sdl_min_terminal_cols_for_mode(mode);
     min_rows = sdl_min_terminal_rows_for_mode(mode);
-    max_scale_w = (rect->w / min_cols) * 2 / sdl_ui_font_px(TILE_SIZE);
-    max_scale_h = rect->h / min_rows / sdl_ui_font_px(TILE_SIZE);
+    max_scale_w = (rect->w / min_cols) * 2 / sdl_main_view_font_px(TILE_SIZE);
+    max_scale_h = rect->h / min_rows / sdl_main_view_font_px(TILE_SIZE);
     max_scale = (max_scale_w < max_scale_h) ? max_scale_w : max_scale_h;
 
     if (max_scale < SDL_MAIN_VIEW_MIN_SCALE)
@@ -5671,9 +5707,9 @@ void sdl_ensure_window_size_for_min_terminal(const SDL_Rect* screen,
 
     min_scale = sdl_main_view_scale_floor();
     min_width = sdl_current_min_terminal_cols()
-        * (sdl_ui_font_px(min_scale * TILE_SIZE) / 2);
+        * (sdl_main_view_font_px(min_scale * TILE_SIZE) / 2);
     min_height = sdl_current_min_terminal_rows()
-        * sdl_ui_font_px(min_scale * TILE_SIZE);
+        * sdl_main_view_font_px(min_scale * TILE_SIZE);
 
     if (min_width < 1)
         min_width = 1;
@@ -5955,6 +5991,45 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
 
     log_info("First-start mobile orientation: landscape");
     return false;
+}
+
+bool sdl_prompt_mobile_startup_bigger_font(void)
+{
+    if (g_startup_device_class != SDL_STARTUP_DEVICE_MOBILE_TOUCH
+        || sdl_mobile_device_is_tablet())
+        return false;
+
+    enum { NORMAL_FONT = 0, BIG_FONT = 1 };
+    SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT
+            | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
+            NORMAL_FONT, "Normal font (recommended)"},
+        {0, BIG_FONT, "Big font"},
+    };
+    SDL_MessageBoxData messagebox = {
+        .flags = SDL_MESSAGEBOX_INFORMATION | SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT,
+        .window = g_state.window,
+        .title = "Choose Font Size",
+        .message = "Normal font is recommended for a more beautiful game.\n\n"
+            "Big font makes the game less beautiful, but can help if smaller "
+            "text is difficult for you to read.\n\n"
+            "You can always change this in General Settings > Big Font, "
+            "for everything together or one menu at a time.\n\n"
+            "Big font shows a B button in menu corners. Tap B to switch "
+            "that menu between normal and big text in real time. "
+            "Normal font starts with B hidden. You can turn B on or off "
+            "in General Settings > Big Font.",
+        .numbuttons = N_ELEMENTS(buttons),
+        .buttons = buttons,
+    };
+    int choice = NORMAL_FONT;
+    if (!SDL_ShowMessageBox(&messagebox, &choice)) {
+        log_warn("SDL_ShowMessageBox failed during first-start font selection: %s",
+            SDL_GetError());
+        return false;
+    }
+    log_info("First-start mobile font size: %s", choice == BIG_FONT ? "big" : "normal");
+    return choice == BIG_FONT;
 }
 
 #endif

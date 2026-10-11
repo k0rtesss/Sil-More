@@ -214,6 +214,21 @@ int main(void)
         }
     }
     {
+        /* Aim confirmation/cancellation reaches the target selector without
+         * injecting another tutorial command or skipping the lesson. */
+        show(false,"throw","");
+        g_pointer_aim.active=true;
+        e=key_event(SDL_EVENT_KEY_DOWN,SDLK_RETURN,SDL_SCANCODE_RETURN);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        e=key_event(SDL_EVENT_KEY_DOWN,SDLK_ESCAPE,SDL_SCANCODE_ESCAPE);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_SOUTH);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_EAST);
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && current.active && key_count==0);
+        g_pointer_aim.active=false;
+    }
+    {
         tutorial_controls labels;
         show(false,"use-item","poisoned");
         SDL_strlcpy(current.id,"status.poisoned.remedy",sizeof(current.id));
@@ -513,8 +528,8 @@ def main():
     source.write_text(HARNESS.replace("/* CONFIG_MODE_FUNCTIONS */", "\n".join(functions)), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
-        str(BUILD / "_deps/SDL"), env["PATH"]])
+        str(BUILD / "_deps/SDL"), "C:/msys64/mingw64/bin",
+        "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
                     "-Wall", "-Wextra", "-Wno-unused-function", "-Wno-old-style-declaration",

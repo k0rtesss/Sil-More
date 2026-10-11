@@ -62,14 +62,27 @@ function Get-ApkMetadata {
 function Invoke-ExternalCommand {
     param(
         [string]$FilePath,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [ValidateRange(1, 3600)]
+        [int]$TimeoutSeconds = 120
     )
 
     $stdoutPath = [System.IO.Path]::GetTempFileName()
     $stderrPath = [System.IO.Path]::GetTempFileName()
 
+    $process = $null
     try {
-        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        # -Wait waits for descendants on Windows, including the persistent ADB
+        # server when this command starts it. Wait only for the client instead.
+        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        # Retain the handle so Windows PowerShell can retrieve the exit code
+        # even if the short-lived client exits before WaitForExit is called.
+        $null = $process.Handle
+        $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+        if ($timedOut) {
+            $process.Kill()
+            $process.WaitForExit()
+        }
         $stdout = Get-Content -Path $stdoutPath -Raw
         $stderr = Get-Content -Path $stderrPath -Raw
 
@@ -82,13 +95,18 @@ function Invoke-ExternalCommand {
         }
 
         return [PSCustomObject]@{
-            ExitCode = $process.ExitCode
+            ExitCode = $(if ($timedOut) { -1 } else { $process.ExitCode })
+            TimedOut = $timedOut
             StdOut   = $stdout
             StdErr   = $stderr
             Output   = ($combined -join "`n").Trim()
         }
     }
     finally {
+        if ($process) {
+            if (-not $process.HasExited) { $process.Kill() }
+            $process.Dispose()
+        }
         Remove-Item -Path $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
     }
 }
@@ -96,7 +114,19 @@ function Invoke-ExternalCommand {
 function Get-ConnectedDevices {
     param([string]$Adb)
 
-    $deviceResult = Invoke-ExternalCommand -FilePath $Adb -Arguments @('devices', '-l')
+    Write-Host 'Finding Android devices...' -ForegroundColor Cyan
+    $deviceResult = Invoke-ExternalCommand -FilePath $Adb -Arguments @('devices', '-l') -TimeoutSeconds 15
+    if ($deviceResult.TimedOut) {
+        Write-Warning 'ADB device discovery timed out. Restarting the ADB server and retrying once.'
+        $restartResult = Invoke-ExternalCommand -FilePath $Adb -Arguments @('kill-server') -TimeoutSeconds 10
+        if ($restartResult.TimedOut -or $restartResult.ExitCode -ne 0) {
+            throw "Could not restart the ADB server. Close other ADB tools and retry. $($restartResult.Output)"
+        }
+        $deviceResult = Invoke-ExternalCommand -FilePath $Adb -Arguments @('devices', '-l') -TimeoutSeconds 15
+    }
+    if ($deviceResult.TimedOut) {
+        throw 'ADB device discovery timed out again. Reconnect the device and check USB debugging, then rerun install-android-apk.ps1; no rebuild is required.'
+    }
     if ($deviceResult.ExitCode -ne 0) {
         $details = $deviceResult.Output
         if ($details) {
@@ -364,6 +394,9 @@ Write-Host "Installing $packageLabel to $targetSerial..." -ForegroundColor Cyan
 Write-Host 'Install mode: in-place replacement (-r); existing app data will be preserved.' -ForegroundColor DarkGray
 
 $installResult = Invoke-ExternalCommand -FilePath $adb -Arguments $installArgs
+if ($installResult.TimedOut) {
+    throw 'ADB installation timed out after 120 seconds. Check the device before retrying install-android-apk.ps1; no rebuild is required.'
+}
 if ($installResult.ExitCode -ne 0) {
     throw (New-AdbInstallFailureMessage -ExitCode $installResult.ExitCode -AdbOutput $installResult.Output -ApkMetadata $apkMetadata -TargetSerial $targetSerial -InstalledPackageInfo $installedPackageInfo)
 }

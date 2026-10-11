@@ -101,6 +101,57 @@ static void set_item(int slot, int kind)
     held[slot].pickup_slot = -1;
 }
 
+static void check_floor_rows(void)
+{
+    object_type floor[2] = {0};
+    object_type fake, *display;
+    object_type* previous_floor = o_list;
+    s16b previous_max = o_max;
+    char label[180];
+    byte attr;
+    int rows;
+    equipment_list_entry entry;
+
+    object_copy(&floor[1], &held[0]);
+    o_list = floor;
+    o_max = 2;
+    equipment_entry_clear(&entry);
+    entry.floor_idx = 1;
+    for (int show_source = 0; show_source < 2; show_source++) {
+        assert(equipment_entry_display_values(&entry, 0, show_source,
+            label, sizeof(label), &display, &attr));
+        assert(strncmp(label, "-) a) ", 6) == 0 && display == &floor[1]);
+    }
+
+    supply_list_entry supply = {0};
+    supply.supply_idx = supply.equip_idx = supply.item_idx = -1;
+    supply.k_idx = 1;
+    supply.floor_idx = 1;
+    supply.total = 1;
+    knowledge_browser_layout layout = {.entry_rows = 8};
+    supply_list_columns cols = {.name_w = 12};
+    for (int compact = 0; compact < 2; compact++) {
+        layout.entry_rows = compact ? 1 : 8;
+        assert(supply_entry_wrapped_values(&layout, &cols, &supply, 0,
+            SUPPLY_GROUP_SUPPLY, compact, &fake, label, sizeof(label),
+            &display, &attr, &rows));
+        assert(strncmp(label, "-) a) ", 6) == 0);
+        assert(strstr(label, " [floor]") && display == &floor[1]);
+        assert(rows == (compact ? 1 : supply_entry_wrapped_row_count(label, 12)));
+    }
+
+    equipment_list_entry entries[4] = {0};
+    entries[1].floor_idx = entries[3].floor_idx = 1;
+    assert(inventory_browser_carried_entry_count(entries, 4) == 2);
+    assert(inventory_browser_carried_entry_count(entries + 1, 1) == 0);
+    inventory_browser_section_header(INVENTORY_MENU_GROUP_JEWELRY,
+        inventory_browser_carried_entry_count(entries, 4), label, sizeof(label));
+    assert(streq(label, "Jewelry Pouch (2)"));
+    o_list = previous_floor;
+    o_max = previous_max;
+    puts("PASS: Floor labels retain both shortcuts in equipment and wrapped supplies; floor finds do not inflate carried counts.");
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -122,6 +173,7 @@ int main(void)
     kinds[4].tval = TV_ARROW;
     kinds[5].tval = TV_SHIELD;
     kinds[5].sval = SV_ROUND_SHIELD;
+    limits.k_max = N_ELEMENTS(kinds);
     p_ptr->inven_cnt = 1;
     equipment_list_entry entry;
     equipment_entry_clear(&entry);
@@ -130,6 +182,7 @@ int main(void)
 
     reset_calls();
     set_item(0, 1);
+    check_floor_rows();
     assert(equipment_menu_use_entry(&entry, INVEN_BELT,
         SUPPLY_FLOOR_ACTION_DEFAULT));
     assert(wield_slot_seen == INVEN_BELT && active_calls == 0);

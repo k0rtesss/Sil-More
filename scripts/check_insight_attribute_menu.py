@@ -260,6 +260,7 @@ int main(int argc,char **argv)
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
     fixture_assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS)); fixture_assert(TTF_Init());
     sdl_config_set_defaults(&config); config.bigger_font=true;
+    memset(config.menu_bigger_font,1,sizeof(config.menu_bigger_font));
     SDL_strlcpy(config.story_font,argv[5],sizeof(config.story_font));
     SDL_strlcpy(config.story_font2,argv[1],sizeof(config.story_font2));
     SDL_strlcpy(config.monospace_font,argv[4],sizeof(config.monospace_font));

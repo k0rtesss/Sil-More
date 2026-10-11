@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "support/screen.h"
 #include "quest/quest-runtime.h"
@@ -3785,4 +3786,3 @@ void do_cmd_debug(void)
 #else
 
 #endif
-

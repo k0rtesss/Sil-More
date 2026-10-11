@@ -121,3 +121,7 @@ const char* pane_placement_display_name(enum pane_placement where);
 void place_panes(const struct pane_config* config, int count, SDL_Rect* panes,
     const SDL_Rect* window, const int* cell_widths, const int* cell_heights,
     int margin);
+/* edge_padding=false removes outer insets and the log's bottom padding. */
+void place_panes_ex(const struct pane_config* config, int count, SDL_Rect* panes,
+    const SDL_Rect* window, const int* cell_widths, const int* cell_heights,
+    int margin, bool edge_padding);

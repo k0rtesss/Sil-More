@@ -1885,6 +1885,7 @@ static void run_history_show_native_list(run_history_entry* entries, int count)
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         sdl_question_menu_begin("Run History");
+        sdl_question_menu_set_font_menu(SDL_MENU_FONT_SCORES);
         ui_menu_click_set_outside_cancel_enabled(true);
         sdl_question_menu_set_desc(format("%d recorded runs. Sort: %s. Select a hero to open the complete record.",
             count, run_history_sort_label(order)));
@@ -1979,7 +1980,7 @@ void do_cmd_run_history(void)
         return;
     }
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font_for(SDL_MENU_FONT_SCORES)) {
         run_history_show_native_list(entries, count);
         return;
     }
@@ -1993,7 +1994,7 @@ void do_cmd_run_history(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SCORES);
 
     while (!done) {
         int term_wid = 80;
@@ -2305,6 +2306,7 @@ void do_cmd_run_history(void)
 
         ui_scroll_area_begin(first_entry_row, footer_row - 1,
             SDL_TOUCH_MENU_CATEGORY_OTHER);
+        ui_scroll_area_set_indicator(page_offset, last_page_offset);
         ui_scroll_area_set_keys('8', '2', 'n', 'p');
 
         (void)Term_set_cursor(false);
@@ -3375,7 +3377,7 @@ static int run_history_native_view_picker(run_detail_panel active,
     ui_menu_click_set_outside_cancel_enabled(true);
     for (int i = 0; i < RUN_PANEL_COUNT; i++)
         sdl_question_menu_add_entry(1000 + i, "", run_detail_panel_names[i],
-            i == active ? TERM_L_BLUE : TERM_WHITE);
+            i == (int)active ? TERM_L_BLUE : TERM_WHITE);
     if (active == RUN_PANEL_MONSTERS) {
         sdl_question_menu_add_entry(1010, "", "Change monster group", TERM_WHITE);
         sdl_question_menu_add_entry(1011, "", "Change monster sort order", TERM_WHITE);
@@ -3509,6 +3511,7 @@ static void run_history_show_native_detail(const run_history_entry* entry,
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         sdl_question_menu_begin(format("Run #%u: %s", entry->record.record_id, player));
+        sdl_question_menu_set_font_menu(SDL_MENU_FONT_SCORES);
         ui_menu_click_set_outside_cancel_enabled(true);
         sdl_question_menu_set_desc(panel == RUN_PANEL_MONSTERS
             ? format("%s | %s | %s", run_detail_panel_names[panel],
@@ -3638,7 +3641,7 @@ static void run_history_show_detail(const run_history_entry* entry)
     const char* race_name = run_history_race_name(rec->race_id);
 
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font()) {
+    if (get_sdl_menu_bigger_font_for(SDL_MENU_FONT_SCORES)) {
         run_history_show_native_detail(entry, &details, current_run, player, race_name,
             status, created, completed);
         if (have_details) score_runs_free_details(&details);
@@ -3664,7 +3667,7 @@ static void run_history_show_detail(const run_history_entry* entry)
     int stats_total_lines = 0;
 
     screen_save();
-    sdl_push_terminal_menu_scale();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SCORES);
 
     while (!done) {
         bool steamdeck = steamdeck_controls_active();
@@ -3840,6 +3843,16 @@ static void run_history_show_detail(const run_history_entry* entry)
                 scroll_first_row + scroll_rows - 1,
                 SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_scroll_area_set_keys('8', '2', '6', '4');
+            if (panel == RUN_PANEL_GENERAL)
+                ui_scroll_area_set_indicator(view.general_top,
+                    MAX(0, general_total_lines - text_rows));
+            else if (panel == RUN_PANEL_STATS)
+                ui_scroll_area_set_indicator(view.stats_top,
+                    MAX(0, stats_total_lines - text_rows));
+            else
+                ui_scroll_area_set_indicator(
+                    run_history_detail_panel_state(&view, panel)->top,
+                    MAX(0, active_list_total - active_list_rows));
         }
         if (ui_scroll_area_add_cols(0, term_wid - 1, 0, 0,
                 SDL_TOUCH_MENU_CATEGORY_OTHER))
