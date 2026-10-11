@@ -10572,7 +10572,7 @@ static int input_option_rows_collect(struct input_option_row* rows,
     if (SDL_HasGamepad()) {
         ADD_INPUT_OPTION(INPUT_OPTION_CONTROLLER, 'c', "Controller Settings",
             "Set up the connected game controller or Steam Deck: button "
-            "mapping, sticks, and deadzones.");
+            "mapping, stick movement, and movement delays.");
     }
     if (sdl_touch_tutorial_device_available()) {
         ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', "Touch Tutorial",

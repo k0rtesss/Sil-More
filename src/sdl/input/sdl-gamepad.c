@@ -862,6 +862,16 @@ void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
     if (navigation && sdl_question_menu_queue_navigation(navigation))
         return;
 
+    /* Saved terminal menus own plain directional navigation, even if the
+     * trigger that opened them is still held. Unified Look also consumes
+     * plain directions in both Cursor and Pan mode. Live targeting/direction
+     * prompts are not saved menus; native choices were handled above. */
+    if (character_icky)
+    {
+        Term_keypress('0' + dir);
+        return;
+    }
+
     if (!shift && !ctrl && !alt)
     {
         if (sdl_submit_legacy_keypad_movement(
@@ -1329,7 +1339,7 @@ void sdl_gamepad_handle_blocked_event(const SDL_Event* ev)
         case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
         {
             int index = ev->gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
-            bool pressed = ev->gaxis.value >= MAX(config.gamepad_trigger_threshold, 0);
+            bool pressed = ev->gaxis.value >= MAX(config.gamepad_trigger_threshold, 1);
             if (!pressed && g_gamepad_trigger_modifiers[index])
             {
                 sdl_gamepad_apply_modifier(g_gamepad_trigger_modifiers[index], false);
@@ -2957,9 +2967,7 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         }
 
         if (ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || ev->axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
-            int threshold = config.gamepad_trigger_threshold;
-            if (threshold < 0)
-                threshold = 0;
+            int threshold = MAX(config.gamepad_trigger_threshold, 1);
             bool pressed = (ev->value >= threshold);
 
             if (ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER) {
@@ -3075,9 +3083,8 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
     }
 
     if (ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || ev->axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
-        int threshold = config.gamepad_trigger_threshold;
-        if (threshold < 0)
-            threshold = 0;
+        /* SDL trigger neutral is zero even when accepted calibration is zero. */
+        int threshold = MAX(config.gamepad_trigger_threshold, 1);
         bool pressed = (ev->value >= threshold);
 
         int trigger_index = ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
