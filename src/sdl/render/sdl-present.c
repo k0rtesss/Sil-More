@@ -1968,7 +1968,6 @@ static bool sdl_render_current_window_contents(void)
      * and touch controls so neither can obscure its panel or labels. */
     sdl_render_menu_with_font(SDL_MENU_FONT_MAIN, sdl_main_menu_pane_render);
     sdl_touch_pane_render_reset_prompt();
-    sdl_touch_pane_render_yes_no_prompt();
     sdl_render_menu_with_font(SDL_MENU_FONT_LOG_OPTIONS, sdl_log_pane_menu_render);
     sdl_render_menu_with_font(SDL_MENU_FONT_PANE_OPTIONS, sdl_side_pane_menu_render);
     sdl_render_menu_with_font(SDL_MENU_FONT_LOOK, sdl_unified_look_sidebar_render);
@@ -1997,6 +1996,10 @@ static bool sdl_render_current_window_contents(void)
 
     if (!hide_main_menu_overlays)
         sdl_gamepad_context_focus_render();
+
+    /* Confirmations own input even when gameplay shortcuts remain visible.
+     * Keep their buttons above those shortcuts and every gameplay overlay. */
+    sdl_touch_pane_render_yes_no_prompt();
 
     return true;
 }

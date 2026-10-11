@@ -3025,6 +3025,12 @@ char object_info_screen_multi_with_actions(const object_type** objects,
 
     character_icky++;
 
+    /* The capture width includes the modal touch controls.  Publish their
+     * actions before measuring, so the same buttons exist during capture and
+     * presentation. */
+    object_info_configure_footer(footer,
+        effective_action_count ? effective_actions : NULL,
+        effective_action_count);
     have_capture =
         object_info_screen_capture_build(objects, headings, count, &capture,
             object_info_screen_preferred_capture_width(use_story_font),

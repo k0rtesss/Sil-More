@@ -6454,18 +6454,26 @@ static void sdl_tale_screen_render_canvas(const SDL_Rect* canvas)
         {
             int prefix_len = (int)(split - screen->prompt) + 1;
             int prefix_w = 0;
+            int text_w = 0;
 
             TTF_MeasureString(metrics.prompt_font, screen->prompt,
                 (size_t)prefix_len, 0, &prefix_w, NULL);
-            if ((float)prefix_w < prompt_rect.w)
+            TTF_GetStringSize(metrics.prompt_font, screen->prompt, 0,
+                &text_w, NULL);
+            /* Normal text can be scaled to fit the footer. Apply the same
+             * scale to its touch split so Skip follows the visible label. */
+            float prefix_px = text_w > 0
+                ? prompt_rect.w * (float)prefix_w / (float)text_w
+                : prompt_rect.w;
+            if (prefix_px > 0.0f && prefix_px < prompt_rect.w)
             {
                 g_sdl_tale_screen.prompt_skip_rect = (SDL_FRect){
-                    .x = prompt_rect.x + (float)prefix_w,
+                    .x = prompt_rect.x + prefix_px,
                     .y = prompt_rect.y,
-                    .w = prompt_rect.w - (float)prefix_w,
+                    .w = prompt_rect.w - prefix_px,
                     .h = MAX(prompt_rect.h, metrics.prompt_h),
                 };
-                g_sdl_tale_screen.prompt_next_rect.w = (float)prefix_w;
+                g_sdl_tale_screen.prompt_next_rect.w = prefix_px;
                 g_sdl_tale_screen.prompt_next_rect.h =
                     MAX(prompt_rect.h, metrics.prompt_h);
             }
@@ -9705,11 +9713,10 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
         || (last_menu_session != g_sdl_select_menu_session)
         || (row_count != last_row_count)
         || (rows_per_column != last_rows_per_column)
-        /* Rotation and font changes rewrap earlier rows. Keep the selected
-         * row fully visible even when its choice has not changed. */
-        || (get_sdl_menu_bigger_font()
-            && (content_w != last_content_w || row_region_h != last_row_region_h
-                || best_px != last_body_px));
+        /* Rotation and font changes can hide an unchanged selection in
+         * either font mode. Keep the selected row inside the new viewport. */
+        || content_w != last_content_w || row_region_h != last_row_region_h
+        || best_px != last_body_px;
     if (selected_row >= 0 && selected_changed)
     {
         int visual_row = selected_row % rows_per_column;

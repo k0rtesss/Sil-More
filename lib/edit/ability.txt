@@ -524,7 +524,7 @@ T:34:0:99  # Shields
 N:101:Channeling
 I:5:1:2
 D:Channeling power as the Maiar once aided the Eldar in Valinor, guiding the flow of enchantment through crafted vessels. Those who master this art understand the inner workings of staves and horns instinctively, and can draw forth their power without risk of the wild discharges that imperil the untrained.
-E:Auto-identify staves and horns. Channel charges safely without risk.
+E:Auto-identify staves and horns. Halves the Voice cost of horns. Channel charges safely without risk.
 T:32:0:99  # Helm
 T:45:0:99  # Ring
 

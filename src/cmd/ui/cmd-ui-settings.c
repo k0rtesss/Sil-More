@@ -10709,8 +10709,14 @@ void do_cmd_options(void)
     int highlight = 1;
     int input_highlight = 1;
     int queued_choice = 0;
+    int original_width = 0;
+    int original_height = 0;
+    bool original_tiles = use_bigtile;
+    bool original_portrait = get_sdl_mobile_portrait_mode();
 
     bool return_to_game = false;
+
+    Term_get_size(&original_width, &original_height);
 
     /* Clear any active banner before opening options */
     if (dismiss_active_narrative_banner()) {
@@ -10837,7 +10843,28 @@ void do_cmd_options(void)
     if (p_ptr && p_ptr->playing)
         sdl_music_stop_main();
     if (p_ptr)
+    {
+        int width = 0;
+        int height = 0;
+        bool projection_changed;
+
+        Term_get_size(&width, &height);
+        projection_changed = width != original_width
+            || height != original_height || use_bigtile != original_tiles
+            || get_sdl_mobile_portrait_mode() != original_portrait;
+        /* A resized saved screen still contains cells from the old map
+         * projection. Rebuild the live map after restoring the final view. */
+        if (projection_changed && character_dungeon && p_ptr->playing) {
+            p_ptr->update |= PU_PANEL;
+            p_ptr->redraw |= PR_MAP;
+        }
         handle_stuff();
+        if (projection_changed && character_dungeon && p_ptr->playing
+            && !character_icky && Term)
+        {
+            Term_fresh();
+        }
+    }
     if (sdl_touch_settings_tutorial_requested()
         || sdl_mouse_settings_tutorial_requested()
         || sdl_character_wheel_settings_tutorial_requested()

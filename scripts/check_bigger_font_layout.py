@@ -398,46 +398,52 @@ static void check_settings_rotation(void)
 {
     if(fixture_width!=360 || fixture_height!=800) return;
     SDL_strlcpy(fixture_id,"settings-rotation",sizeof(fixture_id));
-    ui_menu_click_begin();
-    sdl_character_sheet_screen_begin_select(8,"General Settings");
-    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
-    sdl_character_sheet_screen_set_select_menu_style(true);
-    for(int i=0;i<24;i++) {
-        char text[120];
-        strnfmt(text,sizeof(text),"Long setting name at row %d\tOn",i);
-        sdl_character_sheet_screen_add_select_row(i,i==8?"Orientation\tportrait":text,TERM_WHITE,"");
+    for (int big = 0; big < 2; big++) {
+        config.bigger_font=big;
+        for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=big;
+        ui_menu_click_begin();
+        sdl_character_sheet_screen_begin_select(8,"General Settings");
+        sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
+        sdl_character_sheet_screen_set_select_menu_style(true);
+        for(int i=0;i<24;i++) {
+            char text[120];
+            strnfmt(text,sizeof(text),"Long setting name at row %d\tOn",i);
+            sdl_character_sheet_screen_add_select_row(i,i==8?"Orientation\tportrait":text,TERM_WHITE,"");
+        }
+        sdl_character_sheet_screen_set_select_description("Choose portrait or landscape. The selected row should stay fully visible after rotation.");
+        fixture_assert(sdl_character_sheet_screen_commit_select(8));
+        fixture_assert(sdl_render_current_window_frame());
+        bool found=false;
+        for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
+            sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];
+            if(hit->choice!=8) continue;
+            if(big) g_sdl_character_sheet_screen.sheet_scroll+=(int)(hit->rect.y
+                -g_sdl_character_sheet_screen.select_scroll_rect.y+hit->rect.h*.5f);
+            found=true; break;
+        }
+        fixture_assert(found);
+        fixture_width=800; fixture_height=360;
+        fixture_assert(SDL_SetWindowSize(g_state.window,800,360));
+        g_state.safe_area=(SDL_Rect){0,0,800,360};
+        fixture_assert(sdl_render_current_window_frame());
+        found=false;
+        for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
+            sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];
+            if(hit->choice!=8) continue;
+            inside(hit->rect);
+            if(big) fixture_assert(hit->rect.h>=sdl_ui_min_tap_px()-1);
+            fixture_assert(hit->rect.y>=g_sdl_character_sheet_screen.select_scroll_rect.y);
+            found=true;
+        }
+        fixture_assert(found); capture(big?"settings-rotated-selected-big":"settings-rotated-selected-normal");
+        sdl_character_sheet_screen_hide(); ui_menu_click_clear();
+        fixture_width=360; fixture_height=800;
+        fixture_assert(SDL_SetWindowSize(g_state.window,360,800));
+        g_state.safe_area=(SDL_Rect){0,0,360,800};
     }
-    sdl_character_sheet_screen_set_select_description("Choose portrait or landscape. The selected row should stay fully visible after rotation.");
-    fixture_assert(sdl_character_sheet_screen_commit_select(8));
-    fixture_assert(sdl_render_current_window_frame());
-    bool found=false;
-    for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
-        sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];
-        if(hit->choice!=8) continue;
-        g_sdl_character_sheet_screen.sheet_scroll+=(int)(hit->rect.y
-            -g_sdl_character_sheet_screen.select_scroll_rect.y+hit->rect.h*.5f);
-        found=true; break;
-    }
-    fixture_assert(found);
-    fixture_width=800; fixture_height=360;
-    fixture_assert(SDL_SetWindowSize(g_state.window,800,360));
-    g_state.safe_area=(SDL_Rect){0,0,800,360};
-    fixture_assert(sdl_render_current_window_frame());
-    found=false;
-    for(int i=0;i<g_sdl_character_sheet_screen.hit_count;i++) {
-        sdl_character_sheet_hit *hit=&g_sdl_character_sheet_screen.hits[i];
-        if(hit->choice!=8) continue;
-        inside(hit->rect);
-        fixture_assert(hit->rect.h>=sdl_ui_min_tap_px()-1);
-        fixture_assert(hit->rect.y>=g_sdl_character_sheet_screen.select_scroll_rect.y);
-        found=true;
-    }
-    fixture_assert(found); capture("settings-rotated-selected");
-    sdl_character_sheet_screen_hide(); ui_menu_click_clear();
-    fixture_width=360; fixture_height=800;
-    fixture_assert(SDL_SetWindowSize(g_state.window,360,800));
-    g_state.safe_area=(SDL_Rect){0,0,360,800};
-    puts("Big-font settings rotation: rewrapped selection stays fully visible: PASS");
+    config.bigger_font=true;
+    for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=true;
+    puts("Normal/big-font settings rotation: selection stays fully visible: PASS");
 }
 
 static void check_questions(void)

@@ -4801,7 +4801,9 @@ void sdl_mark_tiles_mode_game_redraw(void)
         return;
 
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-    p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA
+    /* Tiles occupy two terminal columns.  Recheck the dungeon panel before
+     * the mode-change redraw so an idle player stays inside the new view. */
+    p_ptr->update |= (PU_PANEL | PU_BONUS | PU_HP | PU_MANA
         | PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS);
     p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_MAP | PR_EQUIPPY | PR_RESIST);
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0

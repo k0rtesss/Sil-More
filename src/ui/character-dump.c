@@ -85,14 +85,29 @@ errr file_character(cptr name, bool full)
     /* Begin dump */
     SDL_IOprintf(fff, "  [%s %s Character Dump]\n\n", VERSION_NAME, VERSION_STRING);
 
-    /* Display player */
+    /* Export a complete sheet independently of the current phone viewport.
+     * The name and first attribute occupy rows 0 and 1, and history may
+     * extend beyond the visible screen.  Keep the caller's screen intact. */
+    term dump_term;
+    term* caller_term = Term;
+    int last_row = 0;
+    term_init(&dump_term, 80, 255, 16);
+    Term_activate(&dump_term);
     display_player(0);
 
-    /* Dump part of the screen */
-    for (y = 2; y < 23; y++)
+    for (y = 0; y < dump_term.hgt; y++)
+    {
+        for (x = 0; x < dump_term.wid; x++)
+        {
+            if (dump_term.scr->c[y][x] != ' ')
+                last_row = y;
+        }
+    }
+
+    for (y = 0; y <= last_row; y++)
     {
         /* Dump each row */
-        for (x = 0; x < 79; x++)
+        for (x = 0; x < dump_term.wid; x++)
         {
             /* Get the attr/char */
             (void)(Term_what(x, y, &a, &c));
@@ -111,6 +126,9 @@ errr file_character(cptr name, bool full)
         /* End the row */
         SDL_IOprintf(fff, "%s\n", buf);
     }
+
+    Term_activate(caller_term);
+    term_nuke(&dump_term);
 
     /* If dead, dump last messages and a mini screenshot */
     if (p_ptr->is_dead)
