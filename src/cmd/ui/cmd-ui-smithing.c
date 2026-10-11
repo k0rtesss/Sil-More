@@ -5315,7 +5315,7 @@ int create_tval_menu_aux(int* highlight)
         *highlight = (int)ch - 'a' + 1;
 
         if (valid[*highlight - 1])
-            return (*highlight);
+            ch = '\r';
         else
             bell("Invalid choice.");
     }
@@ -5325,9 +5325,11 @@ int create_tval_menu_aux(int* highlight)
     {
         if (valid[*highlight - 1])
         {
-            /* The Type panel remains visible behind Subtype.  Repaint it with
-             * the activated row so a direct click/tap does not leave the old
-             * first-row highlight frozen in the parent screen. */
+            /* The Type panel remains visible behind Subtype. Keep shortcut
+             * and pointer activation on the same repaint path, including
+             * bringing an offscreen letter choice into view. */
+            top = smith_ui_configure_list_view(SMITH_SCROLL_TVAL,
+                MAX_SMITHING_TVALS, *highlight, first_row, last_row);
             for (i = top;
                  i < MAX_SMITHING_TVALS
                      && i < top + (last_row - first_row + 1);

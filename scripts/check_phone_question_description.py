@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify complete multi-paragraph question prose and choices at phone density.
+"""Verify complete question prose with enlarged menu fonts at phone density.
 
 --negative disables the description scroll stream in the same source to
 demonstrate that the reachability check detects clipped prose.
@@ -48,7 +48,7 @@ static void description(void)
     fixture_assert(sdl_question_menu_layout(&layout));
     fixture_assert(layout.description_in_list && layout.scrollable);
     fixture_assert(g_question_menu.scroll_offset_ptr && *g_question_menu.scroll_offset_ptr==0);
-    int px=sdl_ui_role_font_px(SDL_UI_FONT_BODY);
+    int px=sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_MENU);
     int w=0,h=0; fixture_assert(TTF_GetStringSizeWrapped(font,prose,0,(int)(layout.entries_rect.w+.5f),&w,&h));
     fixture_assert(SDL_fabsf(layout.scrolling_desc_h-h)<=1);
@@ -95,8 +95,13 @@ static void description(void)
     ui_menu_click_clear();
 }
 ''' + INIT + r'''
-    for(int big=0;big<2;big++) {config.bigger_font=big; fixture.active=false; description();}
-    printf("Question description %dx%d @%.3f Off/On full prose, glyphs, swipe/choice/cancel: PASS\n",
+    config.show_menu_font_button=true;
+    for(int big=0;big<2;big++) {
+        config.bigger_font=big;
+        config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=true;
+        fixture.active=false; description();
+    }
+    printf("Enlarged question description %dx%d @%.3f UI Off/On full prose, glyphs, swipe/choice/cancel: PASS\n",
         fixture_width,fixture_height,fixture_density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window); TTF_Quit(); SDL_Quit();

@@ -14,8 +14,10 @@ harness=next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.As
 harness=harness.replace('static void Term_get_size(int*w,int*h){*w=30;*h=12;}','static int test_w=30,test_h=12,reserved=3; static void Term_get_size(int*w,int*h){*w=test_w;*h=test_h;}')
 harness=harness.replace('static void text_out_to_screen(byte a,cptr t){}','static void text_out_to_screen(byte a,cptr t);')
 fixtures=r'''
+#define USE_SDL
 #define SDL_strlcpy(d,s,n) snprintf(d,n,"%s",s)
 #define KTRL(c) ((c)&31)
+#define SDL_MENU_FONT_MESSAGES SDL_MENU_FONT_HELP
 #define LOG_HISTORY_FILTER_ALL 0
 #define LOG_HISTORY_FILTER_MESSAGES 1
 #define LOG_HISTORY_FILTER_COMBAT 2
@@ -47,6 +49,7 @@ static int utf8_sequence_len(cptr s){return *s?1:0;}
 static int utf8_display_width_n(cptr s,int n){return n;}
 static int utf8_safe_prefix_len(cptr s,int n){return n;}
 static int sdl_touch_menu_button_reserved_rows(void){return reserved;}
+static int sdl_menu_font_button_available_columns(int row,int columns){return row==1?MIN(columns,18):columns;}
 static void tutorial_game_menu(cptr a,cptr b){}
 static bool dismiss_active_narrative_banner(void){return false;}
 static void do_cmd_redraw(void){}
@@ -87,17 +90,26 @@ static bool get_string_panel(cptr title,char*b,size_t n){return false;}
 static void bell(cptr t){}
 static void queue(int key,int click){events[event_count]=key;clicks[event_count]=click;actions[event_count++]=UI_MENU_CLICK_PRIMARY;}
 '''
-parts=[function(x) for x in ['static void log_history_put_tile_scrolled(', 'static void log_history_wrapped_entry_text(', 'static bool log_history_wrap_next(',
+filter_type=SOURCE[SOURCE.index('typedef struct log_history_filter_control {'):SOURCE.index('static int log_history_filter_layout(')]
+parts=[filter_type,function('static int log_history_filter_layout(')]+[function(x) for x in ['static void log_history_put_tile_scrolled(', 'static void log_history_wrapped_entry_text(', 'static bool log_history_wrap_next(',
  'static int log_history_wrapped_entry_rows(', 'static void log_history_draw_wrapped_text(',
  'static void log_history_draw_wrapped_combat(',
  'static int log_history_wrapped_last_page_start(', 'static void log_history_draw_wrapped_slice(',
  'static void log_history_layout(', 'void do_cmd_messages_with_filter(']]
 main=r'''
 int main(void){
- const int sizes[][3]={{30,12,3},{30,30,3},{77,17,3},{80,24,0}};
+ const int sizes[][3]={{30,8,3},{30,9,3},{30,10,3},{30,12,3},{30,30,3},{77,17,3},{80,24,0}};
  for(size_t size=0;size<N_ELEMENTS(sizes);size++)for(int filter=0;filter<4;filter++){
   test_w=sizes[size][0];test_h=sizes[size][1];reserved=sizes[size][2];reached[0]=0;event_count=event_pos=0;icon_count=0;
   int top,bottom,prompt;log_history_layout(test_h,&top,&bottom,&prompt);assert(top<=bottom&&bottom<prompt&&prompt<test_h-reserved);
+  log_history_filter_control controls[4];int last=log_history_filter_layout(test_w,controls);
+  assert(top>last+1);
+  int padding=controls[0].row==0?0:2;
+  for(int f=0;f<4;f++) {
+   assert(controls[f].col+(int)strlen(controls[f].label)+padding<=sdl_menu_font_button_available_columns(controls[f].row,test_w));
+   if(f && controls[f].row==controls[f-1].row)
+    assert(controls[f].col>controls[f-1].col+(int)strlen(controls[f-1].label)+padding);
+  }
   for(int i=0;i<40;i++)queue(filter==3?'2':'8',-999);
   queue(filter==3?'1':'7',-999);queue(0,ESCAPE);
   do_cmd_messages_with_filter(filter);

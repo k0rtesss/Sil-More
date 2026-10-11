@@ -603,7 +603,8 @@ static bool sdl_question_menu_context_square_valid(void)
                 && g_question_menu.anchor_x == p_ptr->px));
 }
 
-static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
+static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
+    float title_top_inset, bool commit_state)
 {
     SDL_Rect anchor;
     SDL_FRect anchor_cell;
@@ -765,8 +766,20 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     out->has_title = (g_question_menu.title[0] != '\0');
     if (out->has_title)
     {
-        title_w = sdl_question_menu_text_width(story_font,
-            g_question_menu.title, font_px);
+        TTF_Font* title_font = story_font;
+        int title_px = font_px;
+#if SIL_SDL_MOBILE_BUILD
+        if (get_sdl_menu_bigger_font())
+        {
+            title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
+            title_font = sdl_story_font_for_height_slot(title_px,
+                SDL_STORY_FONT_SLOT_DEFAULT);
+        }
+#endif
+        /* Size the header with the font used to draw it. Measuring the
+         * smaller body font can split even a short title within a word. */
+        title_w = sdl_question_menu_text_width(title_font,
+            g_question_menu.title, title_px);
     }
 
     margin = sdl_overlay_margin_px();
@@ -940,6 +953,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
             button_section_h = best_h;
         }
     }
+
+    header_h += title_top_inset;
 
     /* The ideal table width may exceed the screen after panel_w is capped.
      * Fit its columns before measuring wrapped row heights, so long weapon
@@ -1214,10 +1229,10 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     {
         out->title_row = (SDL_FRect){
             .x = out->panel.x + pad_x + suppress_reserve,
-            .y = rows_top,
+            .y = rows_top + title_top_inset,
             .w = out->panel.w - pad_x * 2.0f
                 - close_reserve - info_reserve - suppress_reserve,
-            .h = header_h,
+            .h = header_h - title_top_inset,
         };
         if (out->title_row.w < 1.0f)
             out->title_row.w = 1.0f;
@@ -1282,7 +1297,8 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
                 scroll_offset = 0;
             if (scroll_offset > max_scroll_offset)
                 scroll_offset = max_scroll_offset;
-            g_question_menu.help_scroll_offset = scroll_offset;
+            if (commit_state)
+                g_question_menu.help_scroll_offset = scroll_offset;
 
             while (first_entry + 1 < g_question_menu.count
                 && first_entry_top + entry_heights[first_entry]
@@ -1353,11 +1369,12 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
                 if (scroll_offset > max_scroll_offset)
                     scroll_offset = max_scroll_offset;
             }
-            if (g_question_menu.scroll_offset_ptr)
+            if (commit_state && g_question_menu.scroll_offset_ptr)
                 *g_question_menu.scroll_offset_ptr = scroll_offset;
-            if (g_question_menu.scroll_offset_ptr == &g_question_menu_internal_scroll)
+            if (commit_state
+                && g_question_menu.scroll_offset_ptr == &g_question_menu_internal_scroll)
                 g_question_menu.scroll_follow_highlight = false;
-            if (out->description_in_list) {
+            if (commit_state && out->description_in_list) {
                 if (!g_question_description_measured)
                     g_question_menu.scroll_follow_highlight = false;
                 g_question_description_measured = true;
@@ -1474,6 +1491,51 @@ static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
     }
 
     return true;
+}
+
+static SDL_FRect sdl_question_menu_header_controls(
+    const sdl_question_menu_layout_info* layout)
+{
+    SDL_FRect controls = layout->close_button
+        ? (SDL_FRect){layout->close_rect.x - layout->close_rect.w * 0.75f,
+            layout->panel.y, layout->panel.x + layout->panel.w
+                - (layout->close_rect.x - layout->close_rect.w * 0.75f),
+            layout->close_rect.y + layout->close_rect.h - layout->panel.y}
+        : (SDL_FRect){0};
+    SDL_FRect chrome[] = {layout->info_rect, layout->suppress_rect};
+    for (int i = 0; i < (int)N_ELEMENTS(chrome); i++)
+    {
+        if (chrome[i].w <= 0 || chrome[i].h <= 0)
+            continue;
+        if (controls.w <= 0)
+            controls = chrome[i];
+        else
+            SDL_GetRectUnionFloat(&controls, &chrome[i], &controls);
+    }
+    return controls;
+}
+
+static bool sdl_question_menu_layout(sdl_question_menu_layout_info* out)
+{
+    float title_top_inset = 0.0f;
+    for (int pass = 0; pass < 8; pass++)
+    {
+        if (!sdl_question_menu_layout_aux(out, title_top_inset, false))
+            return false;
+        if (!out->has_title || g_question_menu.context_hint)
+            return sdl_question_menu_layout_aux(out, title_top_inset, true);
+        SDL_FRect button = sdl_menu_font_button_bounds_avoiding(
+            sdl_question_menu_header_controls(out));
+        if (button.w <= 0
+            || !SDL_HasRectIntersectionFloat(&button, &out->title_row))
+            return sdl_question_menu_layout_aux(out, title_top_inset, true);
+        /* A tall question can reach the screen's floating font shortcut.
+         * Keep its full reading width and reserve chrome above the title.
+         * Reflow also accounts for the panel moving as its height grows. */
+        title_top_inset += button.y + button.h - out->title_row.y
+            + MAX(2.0f, 4.0f * sdl_ui_density_scale());
+    }
+    return sdl_question_menu_layout_aux(out, title_top_inset, true);
 }
 
 void sdl_question_menu_cancel_touch(void)
@@ -2082,22 +2144,7 @@ void sdl_question_menu_render(void)
         return;
     }
     sil_popup_trace_phase_end("popup-layout", popup_layout_started);
-    g_question_menu.header_controls = layout.close_button
-        ? (SDL_FRect){layout.close_rect.x - layout.close_rect.w * 0.75f,
-            layout.panel.y, layout.panel.x + layout.panel.w
-                - (layout.close_rect.x - layout.close_rect.w * 0.75f),
-            layout.close_rect.y + layout.close_rect.h - layout.panel.y}
-        : (SDL_FRect){0};
-    SDL_FRect chrome[] = {layout.info_rect, layout.suppress_rect};
-    for (int i = 0; i < (int)N_ELEMENTS(chrome); i++) {
-        if (chrome[i].w <= 0 || chrome[i].h <= 0)
-            continue;
-        if (g_question_menu.header_controls.w <= 0)
-            g_question_menu.header_controls = chrome[i];
-        else
-            SDL_GetRectUnionFloat(&g_question_menu.header_controls, &chrome[i],
-                &g_question_menu.header_controls);
-    }
+    g_question_menu.header_controls = sdl_question_menu_header_controls(&layout);
     if (g_question_menu.context_hint)
         sil_popup_trace_stage("popup-layout-complete");
 

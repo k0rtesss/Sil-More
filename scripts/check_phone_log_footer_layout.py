@@ -5,13 +5,18 @@ Uses real phone density, BODY mono cells, the actual log wrapping/layout and
 native action renderer. Actual command scrolling is tested by the C caller test.
 """
 from pathlib import Path
+import os
+import subprocess
 import check_phone_books_layout as books
 from check_phone_about_blitz_layout import function
 
 ROOT=Path(__file__).resolve().parents[1]
 def main():
  source=(ROOT/'src/cmd/ui/cmd-ui-main-menu.c').read_text()
- helpers=function(source,'static bool log_history_wrap_next(')+function(source,'static void log_history_layout(')
+ filter_type=source[source.index('typedef struct log_history_filter_control {'):source.index('static int log_history_filter_layout(')]
+ click_start=source.rindex('enum {',0,source.index('LOG_HISTORY_CLICK_FILTER_ALL ='))
+ click_enum=source[click_start:source.index('};',click_start)+2]
+ helpers=click_enum+filter_type+function(source,'static int log_history_filter_to_click(')+function(source,'static int log_history_draw_filter(')+function(source,'static int log_history_filter_layout(')+function(source,'static void log_history_draw_filters(')+function(source,'static bool log_history_wrap_next(')+function(source,'static void log_history_layout(')
  checks=r'''
 static void check_log_footer(void)
 {
@@ -21,11 +26,37 @@ static void check_log_footer(void)
     view->term_ready=true;view->cell_h=px;view->cell_w=MAX(1,px/2);
     view->cols=fixture_width/view->cell_w;view->rows=fixture_height/view->cell_h;
     view->rect=(SDL_Rect){0,0,fixture_width,fixture_height};
+    view->margin_x=view->margin_y=0;
+    view->canvas=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,fixture_width,fixture_height);
+    fixture_assert(view->canvas);
+    config.menu_bigger_font[SDL_MENU_FONT_MESSAGES]=config.bigger_font;
+    config.show_menu_font_button=true;
+    int old_context=sdl_menu_font_set_render_context(SDL_MENU_FONT_MESSAGES);
     Term_resize(view->cols,view->rows);
     view->font_atlas=sdl_load_ttf_font_cells(config.monospace_font,view->cell_w,view->cell_h,NULL);
     fixture_assert(view->font_atlas);view->font_atlas_cell_w=view->cell_w;view->font_atlas_cell_h=view->cell_h;
     int top,bottom,prompt;log_history_layout(view->rows,&top,&bottom,&prompt);
+    if(top>bottom || bottom>=prompt)
+        fprintf(stderr,"log geometry cols=%d rows=%d font=%d footer=%d top=%d bottom=%d prompt=%d\n",view->cols,view->rows,px,sdl_touch_menu_button_reserved_rows(),top,bottom,prompt);
     expect(top<=bottom && bottom<prompt,"log body does not leave hint row");
+    log_history_filter_control filters[4];
+    int last=log_history_filter_layout(view->cols,filters);
+    expect(top>last+1,"log body intersects filter/header rows");
+    SDL_FRect font_button=sdl_menu_font_button_bounds();
+    int padding=filters[0].row==0?0:2;
+    for(int i=0;i<4;i++) {
+        int cols=strlen(filters[i].label)+padding;
+        SDL_FRect hit;
+        expect(sdl_main_cell_rect(filters[i].col,filters[i].row,cols,1,&hit),"filter cell geometry unavailable");
+        expect(!SDL_HasRectIntersectionFloat(&hit,&font_button),"filter hit/text overlaps B");
+        expect(filters[i].col+cols<=view->cols,"filter clipped at terminal edge");
+        if(i && filters[i].row==filters[i-1].row)
+            expect(filters[i].col>filters[i-1].col+(int)strlen(filters[i-1].label)+padding,"filter hit regions overlap");
+    }
+    config.show_menu_font_button=false;
+    expect(sdl_menu_font_button_available_columns(1,view->cols)==view->cols,"hidden B reserves columns");
+    config.show_menu_font_button=true;
+    expect(sdl_menu_font_button_available_columns(view->rows-1,view->cols)==view->cols,"nonintersecting B reserves columns");
     ui_menu_click_begin();ui_menu_click_set_touch_exit_button(true);
     sdl_touch_menu_button_layout_entry buttons[SDL_TOUCH_MENU_BUTTON_MAX];
     int count=sdl_touch_menu_button_layout(buttons,N_ELEMENTS(buttons));fixture_assert(count==1);
@@ -41,6 +72,15 @@ static void check_log_footer(void)
     int capacity=bottom-top+1;char reached[8192]="";
     for(int start=0;start<=MAX(0,total-capacity);start++) {
         SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);SDL_RenderClear(g_state.renderer);
+        ui_menu_click_begin();ui_menu_click_set_touch_exit_button(true);
+        Term_clear();log_history_draw_filters(LOG_HISTORY_FILTER_ALL,-1,view->cols);
+        Term_putstr(0,top-1,-1,TERM_WHITE,"Log (All, messages)");
+        for(int row=0;row<top;row++)for(int col=0;col<view->cols;col++) {
+            byte attr;char glyph;
+            if(!Term_what(col,row,&attr,&glyph) && glyph!=' ')
+                sdl_render_mono_text(view,col,row,1,&glyph,g_state.palette[attr&15]);
+        }
+        sdl_menu_font_button_render();
         int rows=MIN(capacity,total-start);
         for(int i=0;i<rows;i++) {
             int row=bottom-rows+1+i;
@@ -65,6 +105,8 @@ static void check_log_footer(void)
     expect(turn==before_turn&&p_ptr->energy_use==before_energy,"Exit consumes turn");
     ui_menu_click_clear();
     SDL_DestroyTexture(view->font_atlas);view->font_atlas=NULL;
+    SDL_DestroyTexture(view->canvas);view->canvas=NULL;
+    sdl_menu_font_set_render_context(old_context);
 }
 '''
  books.HARNESS=books.HARNESS.replace('int main(int argc,char **argv)',helpers+checks+'\nint main(int argc,char **argv)')
@@ -72,5 +114,13 @@ static void check_log_footer(void)
  books.HARNESS=books.HARNESS.replace('books/hero/allocation','Log footer')
  books.OUT=ROOT/'scripts/output/phone-log-footer-check'
  books.main()
+ # Short landscape canvases exercise 8/9/10/12 rows at the 48px BODY font.
+ env=os.environ.copy()
+ env['PATH']=os.pathsep.join([str(ROOT/'build-standard'/'_deps'/dep) for dep in
+     ['SDL','SDL_ttf','SDL_image','SDL_mixer']]+['C:/msys64/mingw64/bin','C:/msys64/usr/bin',env.get('PATH','')])
+ for height in [384,432,480,576]:
+  subprocess.run([str(books.OUT/'check.exe'),str(ROOT/'lib/xtra/font/EBGaramond-Regular.ttf'),
+      '720',str(height),str(ROOT/'lib/xtra/font/VictorMono-Medium.ttf'),
+      str(ROOT/'lib/xtra/font/Cinzel-Medium.ttf'),'2','1'],cwd=books.OUT,env=env,check=True,timeout=60)
 
 if __name__=='__main__':main()

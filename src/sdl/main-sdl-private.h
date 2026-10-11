@@ -2031,6 +2031,7 @@ enum sdl_menu_font sdl_character_sheet_menu_font(void);
 int sdl_menu_font_set_render_context(int menu);
 SDL_Rect sdl_menu_content_rect(SDL_Rect rect);
 SDL_FRect sdl_menu_font_button_bounds(void);
+SDL_FRect sdl_menu_font_button_bounds_avoiding(SDL_FRect blocked);
 void sdl_menu_font_button_render(void);
 void sdl_menu_font_button_clear_avoid_rects(void);
 void sdl_menu_font_button_avoid_rect(SDL_FRect rect);

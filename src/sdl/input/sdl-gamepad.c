@@ -1856,8 +1856,14 @@ int sdl_gamepad_capture_binding_for_input(int type, int id)
 bool sdl_gamepad_capture_queue_input(int type, int id)
 {
     int binding = sdl_gamepad_capture_binding_for_input(type, id);
+    bool ui_back_control = steamdeck_controls_active()
+        && type == GAMEPAD_CAPTURE_BUTTON
+        && sdl_gamepad_button_is_ui_back((SDL_GamepadButton)id);
 
-    if (g_gamepad_capture_allow_modifier_combo
+    /* Publish the advertised physical Back control for the capture consumer,
+     * even when its gameplay binding is a modifier. Modified Back remains a
+     * capturable chord, and keyboard UI may still bind Back directly. */
+    if (!ui_back_control && g_gamepad_capture_allow_modifier_combo
         && (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL
             || binding == GAMEPAD_BIND_ALT)) {
         if (g_gamepad_capture_modifier != GAMEPAD_BIND_NONE)

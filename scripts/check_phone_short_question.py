@@ -13,7 +13,8 @@ PREFIX=AUX[:AUX.index("static void check_touch_panels(void)")]
 PREFIX=PREFIX.replace("*rect=(SDL_Rect){0,0,fixture_width,fixture_height};",
     "int top=fixture_height>fixture_width?(int)(68*fixture_density):0; "
     "*rect=(SDL_Rect){0,top,fixture_width,fixture_height-top};")
-INIT=AUX[AUX.index("int main(int argc,char **argv)"):AUX.index("    for(int big=0;big<2;big++)")]
+MAIN_START=AUX.index("int main(int argc,char **argv)")
+INIT=AUX[MAIN_START:AUX.index("    for(int big=", MAIN_START)]
 HARNESS=PREFIX+r'''
 static cptr setup_help="Make this item active, including a compatible Harness shield and arrows where available, or choose where to keep it. [active] marks your current setup. Only active combat gear grants combat bonuses. Changing only arrows is free. Other changes keep their normal turn cost and ability exceptions. Pack actions take three turns.";
 static void background_text(cptr text,float x,float y,int px)
@@ -55,14 +56,17 @@ static void short_question(void)
     sdl_question_menu_set_highlight(0); sdl_question_menu_finish();
     sdl_question_menu_layout_info closed,opened;
     fixture_assert(sdl_question_menu_layout(&closed)); inside(closed.panel);
-    fixture_assert(closed.font_px==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
-    fixture_assert(closed.info_rect.h>=sdl_ui_min_tap_px());
-    fixture_assert(closed.close_rect.h>=sdl_ui_min_tap_px());
+    bool big=get_sdl_menu_bigger_font();
+    if(big) fixture_assert(closed.font_px==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+    else fixture_assert(closed.font_px>0 && closed.font_px<sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+    float min_control=big?sdl_ui_min_tap_px():closed.font_px;
+    fixture_assert(closed.info_rect.h>=min_control);
+    fixture_assert(closed.close_rect.h>=min_control);
     fixture_assert(!g_question_menu.help_open);
-    for(int i=0;i<2;i++) fixture_assert(closed.rows[i].h>=sdl_ui_min_tap_px());
+    for(int i=0;i<2;i++) fixture_assert(closed.rows[i].h>=min_control);
     float content_h=closed.rows[0].h+closed.rows[1].h;
     if(content_h<=closed.entries_rect.h+1) {
-        fixture_assert(closed.entries_rect.h-content_h<=1);
+        if(big) fixture_assert(closed.entries_rect.h-content_h<=1);
         fixture_assert(closed.max_scroll_offset==0);
         fixture_assert(closed.rows[1].y+closed.rows[1].h<=closed.panel.y+closed.panel.h);
     }
@@ -93,7 +97,7 @@ static void short_question(void)
         }
         SDL_FRect hit;
         fixture_assert(SDL_GetRectIntersectionFloat(&opened.rows[i],&opened.entries_rect,&hit));
-        fixture_assert(hit.h>=sdl_ui_min_tap_px());
+        fixture_assert(hit.h>=min_control);
         fixture_assert(sdl_question_menu_handle_pointer(hit.x+hit.w/2,hit.y+hit.h/2,UI_MENU_CLICK_PRIMARY));
         int choice=-1,action=0;
         fixture_assert(ui_menu_click_take_action(&choice,&action));
@@ -101,8 +105,91 @@ static void short_question(void)
     }
     sdl_question_menu_clear(); ui_menu_click_clear();
 }
+static void short_title(void)
+{
+    sdl_question_menu_begin("Password:");
+    sdl_question_menu_add_entry(0,"","It is not mellon",TERM_YELLOW);
+    sdl_question_menu_add_entry(1,"","Confirm",TERM_WHITE);
+    sdl_question_menu_add_entry(2,"","Clear",TERM_WHITE);
+    sdl_question_menu_add_entry(3,"","Cancel",TERM_WHITE);
+    sdl_question_menu_finish();
+    sdl_question_menu_layout_info layout;
+    fixture_assert(sdl_question_menu_layout(&layout)); inside(layout.panel);
+    sdl_question_menu_layout_info without_chrome;
+    fixture_assert(sdl_question_menu_layout_aux(&without_chrome,0,false));
+    if(!get_sdl_menu_bigger_font()) {
+        fixture_assert(SDL_fabsf(layout.panel.h-without_chrome.panel.h)<=1);
+        fixture_assert(SDL_fabsf(layout.title_row.y-without_chrome.title_row.y)<=1);
+    }
+    if(get_sdl_menu_bigger_font()) {
+        TTF_Font *title=sdl_story_font_for_height_slot(
+            sdl_menu_role_font_px(SDL_UI_FONT_TITLE),SDL_STORY_FONT_SLOT_DEFAULT);
+        int w=0,h=0;
+        fixture_assert(TTF_GetStringSize(title,"Password:",0,&w,&h));
+        /* This short title fits on every fixture without reducing its font. */
+        fixture_assert(layout.title_row.w>=w);
+        fixture_assert(layout.title_row.h>=h);
+        fixture_assert(layout.title_row.x+layout.title_row.w<=layout.close_rect.x);
+    }
+    draw("password-title");
+    sdl_question_menu_clear(); ui_menu_click_clear();
+}
+static void quantity_title(void)
+{
+    ui_menu_click_begin();
+    sdl_question_menu_begin("How many do you want to move from Arrows to your Quiver?");
+    int offset=0;
+    sdl_question_menu_set_scroll_offset_target(&offset,true);
+    cptr choices[]={"Move 48","More","Fewer","All (48)","None","Cancel"};
+    for(int i=0;i<6;i++) sdl_question_menu_add_entry(i,"",choices[i],TERM_WHITE);
+    sdl_question_menu_finish();
+    sdl_question_menu_layout_info before,layout;
+    fixture_assert(sdl_question_menu_layout_aux(&before,0,false));
+    fixture_assert(sdl_question_menu_layout(&layout)); inside(layout.panel);
+    SDL_FRect button=sdl_menu_font_button_bounds_avoiding(sdl_question_menu_header_controls(&layout));
+    fixture_assert(!SDL_HasRectIntersectionFloat(&layout.title_row,&button));
+    fixture_assert(!SDL_HasRectIntersectionFloat(&layout.title_row,&layout.close_rect));
+    fixture_assert(layout.title_row.y+layout.title_row.h<=layout.divider_y);
+    fixture_assert(layout.entries_rect.y>=layout.divider_y);
+    if(!get_sdl_menu_bigger_font()) {
+        fixture_assert(SDL_fabsf(layout.panel.h-before.panel.h)<=1);
+        fixture_assert(SDL_fabsf(layout.title_row.y-before.title_row.y)<=1);
+    }
+    inventory_background();sdl_question_menu_render();sdl_menu_font_button_render();capture("quantity-title");
+    if(layout.max_scroll_offset>0) {
+        g_question_menu.scroll_follow_highlight=false;
+        (void)sdl_question_menu_scroll_offset_by(&layout,100000);
+        for(int pass=0;pass<3;pass++) {
+            fixture_assert(sdl_question_menu_layout(&layout));
+            fixture_assert(*g_question_menu.scroll_offset_ptr==layout.max_scroll_offset);
+        }
+    }
+    SDL_FRect last;
+    fixture_assert(SDL_GetRectIntersectionFloat(&layout.rows[5],&layout.entries_rect,&last));
+    fixture_assert(last.h>=layout.row_h);
+    inventory_background();sdl_question_menu_render();sdl_menu_font_button_render();capture("quantity-last-choice");
+    fixture_assert(sdl_question_menu_handle_pointer(last.x+last.w/2,last.y+last.h/2,UI_MENU_CLICK_PRIMARY));
+    int choice=-1,action=0;
+    fixture_assert(ui_menu_click_take_action(&choice,&action));
+    fixture_assert(choice==5 && action==UI_MENU_CLICK_PRIMARY);
+    g_question_menu_internal_scroll=0;
+    sdl_question_menu_set_scroll_offset_target(&g_question_menu_internal_scroll,true);
+    sdl_question_menu_set_highlight(5);
+    fixture_assert(g_question_menu.scroll_follow_highlight);
+    fixture_assert(sdl_question_menu_layout_aux(&before,0,false));
+    fixture_assert(g_question_menu.scroll_follow_highlight && g_question_menu_internal_scroll==0);
+    fixture_assert(sdl_question_menu_layout(&layout));
+    fixture_assert(layout.rows[5].y>=layout.entries_rect.y-1);
+    fixture_assert(layout.rows[5].y+layout.rows[5].h<=layout.entries_rect.y+layout.entries_rect.h+1);
+    sdl_question_menu_clear();ui_menu_click_clear();
+}
 ''' + INIT + r'''
-    for(int big=0;big<2;big++) {config.bigger_font=big; fixture.active=false; short_question();}
+    config.show_menu_font_button=true;
+    for(int big=0;big<2;big++) {
+        config.bigger_font=big;
+        for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=big;
+        fixture.active=false; short_question(); short_title(); quantity_title();
+    }
     printf("Short question %dx%d @%.3f Off/On natural height, Help paging, IDs: PASS\n",
         fixture_width,fixture_height,fixture_density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);

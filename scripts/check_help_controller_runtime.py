@@ -26,8 +26,91 @@ static void expect_key(int expected)
     int result = Term_inkey(&actual, false, true);
     if (expected) {
         assert(result == 0);
+        if ((unsigned char)actual != (unsigned char)expected)
+            fprintf(stderr, "Expected key %d, received %d\n", expected, (unsigned char)actual);
         assert(actual == expected);
     } else assert(result != 0);
+}
+
+bool fixture_capture_is_cancel(bool controller_ui, int modifier, int type, int id);
+void fixture_capture_assign_combo(int binding, int modifier, int type, int id);
+static void check_capture_cancel(void)
+{
+    sdl_config_set_default_gamepad_bindings(&config);
+    const int east_default = config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST];
+    const int bindings[] = { east_default, GAMEPAD_BIND_NONE, GAMEPAD_BIND_SHIFT,
+        GAMEPAD_BIND_CTRL, GAMEPAD_BIND_ALT, 'x', ESCAPE };
+    config.input_ui_mode = SDL_INPUT_UI_MODE_CONTROLLER;
+    g_gamepad_state.pad_count = 1;
+    for (unsigned i = 0; i < N_ELEMENTS(bindings); i++) {
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = bindings[i];
+        assert(sdl_gamepad_capture_begin(true));
+        g_gamepad_capture_arm_time = 0;
+        SDL_GamepadButtonEvent ev = {0};
+        ev.button = SDL_GAMEPAD_BUTTON_EAST; ev.down = true;
+        sdl_gamepad_handle_button(&ev);
+        int type, id, modifier;
+        assert(sdl_gamepad_capture_poll(&type, &id, &modifier));
+        assert(type == GAMEPAD_CAPTURE_BUTTON && id == SDL_GAMEPAD_BUTTON_EAST);
+        assert(modifier == GAMEPAD_BIND_NONE);
+        assert(fixture_capture_is_cancel(true, modifier, type, id));
+        sdl_gamepad_capture_cancel();
+        assert(!g_gamepad_capture_active && !g_gamepad_capture_ready
+            && g_gamepad_capture_modifier == GAMEPAD_BIND_NONE);
+        assert(!sdl_gamepad_shift_active() && !sdl_gamepad_ctrl_active()
+            && !sdl_gamepad_alt_active());
+        assert(config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] == bindings[i]);
+        ev.down = false; sdl_gamepad_handle_button(&ev);
+    }
+    int type, id, modifier;
+    const int modifiers[] = { GAMEPAD_BIND_SHIFT, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_ALT };
+    const int east_bases[] = { GAMEPAD_BIND_NONE, GAMEPAD_BIND_SHIFT,
+        GAMEPAD_BIND_CTRL, GAMEPAD_BIND_ALT };
+    for (unsigned m = 0; m < N_ELEMENTS(modifiers); m++)
+    for (unsigned b = 0; b < N_ELEMENTS(east_bases); b++)
+    for (int release_first = 0; release_first < 2; release_first++) {
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = east_bases[b];
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_SHOULDER] = modifiers[m];
+        assert(sdl_gamepad_capture_begin(true));
+        g_gamepad_capture_arm_time = 0;
+        SDL_GamepadButtonEvent first = {0}, second = {0};
+        first.button = SDL_GAMEPAD_BUTTON_LEFT_SHOULDER; first.down = true;
+        second.button = SDL_GAMEPAD_BUTTON_EAST; second.down = true;
+        sdl_gamepad_handle_button(&first);
+        assert(g_gamepad_capture_modifier == modifiers[m]);
+        sdl_gamepad_handle_button(&second);
+        assert(sdl_gamepad_capture_poll(&type, &id, &modifier));
+        assert(type == GAMEPAD_CAPTURE_BUTTON && id == SDL_GAMEPAD_BUTTON_EAST);
+        assert(modifier == modifiers[m]);
+        assert(!fixture_capture_is_cancel(true, modifier, type, id));
+        fixture_capture_assign_combo('v', modifier, type, id);
+        assert(get_sdl_gamepad_combo_binding(modifier, type, id) == 'v');
+        first.down = second.down = false;
+        sdl_gamepad_handle_button(release_first ? &first : &second);
+        sdl_gamepad_handle_button(release_first ? &second : &first);
+        assert(!g_gamepad_capture_active && !g_gamepad_capture_ready
+            && g_gamepad_capture_modifier == GAMEPAD_BIND_NONE);
+        assert(!g_gamepad_state.left_shoulder_down && !g_gamepad_state.shoulder_pending);
+        assert(!sdl_gamepad_shift_active() && !sdl_gamepad_ctrl_active()
+            && !sdl_gamepad_alt_active());
+    }
+    config.input_ui_mode = SDL_INPUT_UI_MODE_PLATFORM;
+    config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = GAMEPAD_BIND_NONE;
+    assert(sdl_gamepad_capture_begin(true));
+    assert(sdl_gamepad_capture_queue_input(GAMEPAD_CAPTURE_BUTTON, SDL_GAMEPAD_BUTTON_EAST));
+    assert(sdl_gamepad_capture_poll(&type, &id, &modifier));
+    assert(!fixture_capture_is_cancel(false, modifier, type, id));
+    for (unsigned m = 0; m < N_ELEMENTS(modifiers); m++) {
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = modifiers[m];
+        assert(sdl_gamepad_capture_begin(true));
+        assert(!sdl_gamepad_capture_queue_input(GAMEPAD_CAPTURE_BUTTON, SDL_GAMEPAD_BUTTON_EAST));
+        assert(g_gamepad_capture_modifier == modifiers[m]);
+        sdl_gamepad_capture_cancel();
+        assert(g_gamepad_capture_modifier == GAMEPAD_BIND_NONE);
+    }
+    sdl_config_set_default_gamepad_bindings(&config);
+    config.input_ui_mode = SDL_INPUT_UI_MODE_CONTROLLER;
+    puts("Controller capture physical B cancel and 24 modified-East capture/release cases: PASS (base modifiers, clean state, combo assignment, keyboard capture retained)");
 }
 
 static void button(SDL_GamepadButton button, bool down)
@@ -232,12 +315,24 @@ static void check_controller(void)
     dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
     assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true));
     expect_key(0);
+    SDL_GamepadAxisEvent question_axis = {0};
+    g_gamepad_state.left_x = g_gamepad_state.left_y = 0;
+    g_gamepad_state.left_ui_dir = -1;
+    question_axis.axis = SDL_GAMEPAD_AXIS_LEFTX;
+    question_axis.value = 32767;
+    sdl_gamepad_handle_axis(&question_axis);
+    expect_key(UI_MENU_CLICK_WAKE_KEY);
+    assert(sdl_question_menu_take_navigation() == 1);
+    question_axis.value = 0;
+    sdl_gamepad_handle_axis(&question_axis);
+    expect_key(0);
     SDL_Event typed;
     SDL_zero(typed);
     typed.type = SDL_EVENT_KEY_DOWN;
     typed.key.down = true;
     typed.key.key = SDLK_2;
     typed.key.scancode = SDL_SCANCODE_2;
+    typed.key.mod = SDL_KMOD_NONE;
     sdl_handle_event(&g_state, &typed);
     expect_key('2');
     assert(sdl_question_menu_take_navigation() == 0);
@@ -431,6 +526,9 @@ int main(void)
     check_dpad_diagonals();
     check_controller();
     check_main_menu_shortcuts();
+    check_capture_cancel();
+    fixture_check_binding_labels();
+    fixture_check_wizard_debug_routing();
     check_help();
     term_nuke(&t);
     SDL_Quit();
@@ -482,6 +580,69 @@ void check_main_menu_shortcuts(void)
 }
 '''
 
+SETTINGS_CHECK = r'''
+#include <assert.h>
+#include "cmd/ui/cmd-ui-settings.c"
+bool fixture_capture_is_cancel(bool controller_ui, int modifier, int type, int id)
+{
+    return controller_capture_is_cancel(controller_ui, modifier, type, id);
+}
+void fixture_capture_assign_combo(int binding, int modifier, int type, int id)
+{
+    controller_assign_combo_binding(binding, modifier, type, id);
+}
+void fixture_check_binding_labels(void)
+{
+    char label[128];
+    sdl_config_set_default_gamepad_bindings(&config);
+    controller_clear_effective_action_bindings('\r');
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST, GAMEPAD_BIND_CTRL);
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, '\r');
+    set_sdl_gamepad_combo_binding(GAMEPAD_BIND_SHIFT, GAMEPAD_CAPTURE_BUTTON,
+        SDL_GAMEPAD_BUTTON_EAST, '\r');
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "Y (North) +1") == 0);
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, GAMEPAD_BIND_NONE);
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "L2 (Left Trigger) + B (East)") == 0);
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, '\r');
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK, '\r');
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "Y (North) +2") == 0);
+    set_sdl_gamepad_combo_binding(GAMEPAD_BIND_SHIFT, GAMEPAD_CAPTURE_BUTTON,
+        SDL_GAMEPAD_BUTTON_EAST, GAMEPAD_BIND_NONE);
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "Y (North) +1") == 0);
+    controller_clear_effective_action_bindings('\r');
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "(unbound)") == 0);
+    sdl_config_set_default_gamepad_bindings(&config);
+    puts("Controller binding summaries: PASS (direct Y plus L2+B, combo-only, multiple direct, mixed and unbound)");
+}
+'''
+
+WIZARD_CHECK = r'''
+#include "angband.h"
+#include <assert.h>
+void fixture_debug_options_page(int page, cptr title);
+#define do_cmd_options_aux fixture_debug_options_page
+#include "wizard2.c"
+#undef do_cmd_options_aux
+static int captured_options_page = -1;
+void fixture_debug_options_page(int page, cptr title)
+{
+    captured_options_page = page;
+    assert(strcmp(title, "Debug Options") == 0);
+}
+void fixture_check_wizard_debug_routing(void)
+{
+    do_cmd_debug_execute('O');
+    assert(captured_options_page == DEBUG_PAGE);
+    assert(captured_options_page != SOUND_PAGE);
+    puts("Wizard Debug Options routes to named debug page, not Sound: PASS");
+}
+'''
+
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -495,13 +656,18 @@ def main():
         '#include "ui/help.c"\n' + HARNESS[help_start:main_start].replace(
             "static void check_help", "void check_help"), encoding="utf-8")
     source.write_text(HARNESS[:help_start].replace('#include "ui/help.c"', '')
-        + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\n" + HARNESS[main_start:], encoding="utf-8")
+        + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\nvoid fixture_check_binding_labels(void);\nvoid fixture_check_wizard_debug_routing(void);\n" + HARNESS[main_start:], encoding="utf-8")
     menu_source = OUT / "menu-check.c"
     menu_source.write_text(MENU_CHECK, encoding="utf-8")
+    settings_source = OUT / "settings-check.c"
+    settings_source.write_text(SETTINGS_CHECK, encoding="utf-8")
+    wizard_source = OUT / "wizard-check.c"
+    wizard_source.write_text(WIZARD_CHECK, encoding="utf-8")
     cmake_dir = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
     exclude = ("/src/main.c.obj", "/src/ui/help.c.obj", "/src/sdl/input/sdl-gamepad.c.obj",
-               "/src/sdl/ui/sdl-main-menu.c.obj")
+               "/src/sdl/ui/sdl-main-menu.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj",
+               "/src/wizard2.c.obj")
     objects = [p for p in objects if not p.endswith(exclude)]
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
@@ -513,7 +679,7 @@ def main():
     compiler = "C:/msys64/mingw64/bin/cc.exe"
     exe = OUT / "check.exe"
     subprocess.run([compiler, "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source),
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source), str(wizard_source),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=OUT, env=env, check=True, timeout=30)

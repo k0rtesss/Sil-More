@@ -275,12 +275,6 @@ cptr option_text[OPT_MAX] = {
     "chest_trap_minigame", /* OPT_chest_trap_minigame */
     "torch_animation_always", /* OPT_torch_animation_always */
     "utumno_corridors", /* OPT_utumno_corridors */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot: birth_point_based */
     NULL, /* reserved legacy slot: birth_auto_roller */
     NULL, /* reserved legacy slot: birth_maximize */
@@ -324,7 +318,6 @@ cptr option_text[OPT_MAX] = {
     "cheat_light", /* OPT_cheat_light */
     "cheat_skill_rolls", /* OPT_cheat_skill_rolls */
     "cheat_timestop", /* OPT_cheat_timestop */
-    NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -520,12 +513,6 @@ cptr option_desc[OPT_MAX] = {
     "Use guided automatic checks for inspecting, disarming, and opening chests", /* OPT_chest_trap_minigame */
     "Torch and brazier animation", /* OPT_torch_animation_always */
     "Explore the lost corridors of Utumno below Morgoth's throne", /* OPT_utumno_corridors */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
-    NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot: birth_point_based */
     NULL, /* reserved legacy slot: birth_auto_roller */
     NULL, /* reserved legacy slot: birth_maximize */
@@ -568,8 +555,7 @@ cptr option_desc[OPT_MAX] = {
     "Debug: Continually display scent levels", /* OPT_cheat_scent */
     "Debug: Continually display light levels", /* OPT_cheat_light */
     "Debug: Show all skill rolls", /* OPT_cheat_skill_rolls */
-    "Debug: Don't allow monsters to move", /* OPT_timestop */
-    NULL, /* reserved legacy slot */
+    "Debug: Don't allow monsters to move", /* OPT_cheat_timestop */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -781,13 +767,6 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_chest_trap_minigame */
     true, /* OPT_torch_animation_always */
     false, /* OPT_utumno_corridors */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
-    false, /* reserved legacy slot */
     false, /* reserved legacy slot: birth_point_based */
     false, /* reserved legacy slot: birth_auto_roller */
     false, /* reserved legacy slot: birth_maximize */
@@ -832,7 +811,6 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_cheat_light */
     false, /* OPT_cheat_skill_rolls */
     false, /* OPT_cheat_timestop */
-    false, /* reserved legacy slot */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
@@ -909,7 +887,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
-    /* OPT_MAX sentinel uses zero-initialization */
+    /* Remaining reserved option slots are zero-initialized. */
 };
 
 /*

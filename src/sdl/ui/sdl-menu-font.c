@@ -150,7 +150,7 @@ void set_sdl_show_menu_font_button(bool value)
     g_state.need_present = true;
 }
 
-static SDL_FRect sdl_menu_font_button_rect(void)
+static SDL_FRect sdl_menu_font_button_rect_avoiding(SDL_FRect blocked)
 {
     SDL_Rect screen = sdl_get_layout_screen_rect();
     float pad = MAX(2.0f, 4.0f * sdl_ui_density_scale());
@@ -158,11 +158,6 @@ static SDL_FRect sdl_menu_font_button_rect(void)
     size = MIN(size, MIN(screen.w, screen.h) * 0.18f);
     SDL_FRect button = {screen.x + screen.w - size - pad,
         screen.y + pad, size, size};
-    SDL_FRect blocked = {0};
-    if (g_question_menu.active && !g_question_menu.context_hint)
-        blocked = g_question_menu.header_controls;
-    else if (sdl_welcome_screen_active())
-        blocked = g_sdl_welcome_screen.quit_rect;
     SDL_FRect hit = {button.x - pad, button.y - pad,
         button.w + 2 * pad, button.h + 2 * pad};
     if (blocked.w > 0 && SDL_HasRectIntersectionFloat(&hit, &blocked))
@@ -201,6 +196,23 @@ static SDL_FRect sdl_menu_font_button_rect(void)
     return button;
 }
 
+static SDL_FRect sdl_menu_font_button_rect(void)
+{
+    SDL_FRect blocked = {0};
+    if (g_question_menu.active && !g_question_menu.context_hint)
+        blocked = g_question_menu.header_controls;
+    else if (sdl_welcome_screen_active())
+        blocked = g_sdl_welcome_screen.quit_rect;
+    return sdl_menu_font_button_rect_avoiding(blocked);
+}
+
+SDL_FRect sdl_menu_font_button_bounds_avoiding(SDL_FRect blocked)
+{
+    if (!config.show_menu_font_button || sdl_menu_font_current() == SDL_MENU_FONT_NONE)
+        return (SDL_FRect){0};
+    return sdl_menu_font_button_rect_avoiding(blocked);
+}
+
 SDL_Rect sdl_menu_content_rect(SDL_Rect rect)
 {
     /* The corner shortcut is an overlay. Showing it never changes the canvas. */
@@ -212,6 +224,24 @@ SDL_FRect sdl_menu_font_button_bounds(void)
     if (!config.show_menu_font_button || sdl_menu_font_current() == SDL_MENU_FONT_NONE)
         return (SDL_FRect){0};
     return sdl_menu_font_button_rect();
+}
+
+int sdl_menu_font_button_available_columns(int row, int columns)
+{
+    SDL_FRect cell;
+    SDL_FRect button = sdl_menu_font_button_bounds();
+    SDL_Rect screen = sdl_get_layout_screen_rect();
+    SDL_FRect visible = {screen.x, screen.y, screen.w, screen.h};
+
+    if (columns < 1)
+        return 1;
+    if (button.w <= 0 || !SDL_HasRectIntersectionFloat(&button, &visible)
+        || !sdl_main_cell_rect(0, row, 1, 1, &cell) || cell.w <= 0)
+        return columns;
+    SDL_FRect line = {cell.x, cell.y, cell.w * columns, cell.h};
+    if (!SDL_HasRectIntersectionFloat(&button, &line))
+        return columns;
+    return MAX(1, MIN(columns, (int)SDL_floorf((button.x - cell.x) / cell.w)));
 }
 
 void sdl_menu_font_button_render(void)
