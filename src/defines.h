@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.8.27).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8.29).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 27 /* Saved weapon-ready credit and smithing alloy state. */
+#define VERSION_EXTRA 29 /* Saved weapon-ready credit and smithing alloy state. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 

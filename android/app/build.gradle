@@ -103,7 +103,7 @@ android {
 
     defaultConfig {
         applicationId 'com.silmore.myapp'
-        minSdk 21
+        minSdk 24
         targetSdk androidTargetSdk
         versionCode androidVersionCode
         versionName gameVersion
