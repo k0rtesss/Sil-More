@@ -41,6 +41,8 @@ bool inventory_menu_uses_expanded_supplies(void);
 #endif
 static int wanted, offered[64], offered_count, quantity_max;
 static bool cancel_choice;
+static int active_change_reports;
+static char active_change_message[160];
 bool fixture_choice(cptr title,cptr desc,const object_choice_entry entries[],
     int count,int default_index,int *selected)
 {
@@ -56,7 +58,19 @@ bool fixture_choice(cptr title,cptr desc,const object_choice_entry entries[],
 s16b __wrap_get_quantity_action(cptr prompt,cptr action,int max)
 { assert(strstr(prompt,"Convert"));assert(streq(action,"Convert"));quantity_max=max;return 1; }
 void __wrap_handle_stuff(void) { p_ptr->update=p_ptr->redraw=p_ptr->window=0; }
-void __wrap_msg_print(cptr text) { (void)text; }
+static void capture_message(cptr text)
+{
+    if(text && strstr(text,"Your active arrows are now ")) {
+        active_change_reports++;
+        SDL_strlcpy(active_change_message,text,sizeof(active_change_message));
+    }
+}
+void __wrap_msg_print(cptr text) { capture_message(text); }
+void __wrap_msg_format(cptr format,...)
+{
+    char text[256];va_list args;va_start(args,format);
+    vsnprintf(text,sizeof(text),format,args);va_end(args);capture_message(text);
+}
 bool __wrap_tutorial_game_action_allowed(cptr action,const object_type *obj)
 { (void)action;(void)obj;return true; }
 static bool offered_item(int item)
@@ -125,7 +139,9 @@ static void active_selection_checks(void)
             assert(player_quiver_select_arrow(QUIVER_INDEX+(source_active?0:1)));
             wanted=QUIVER_INDEX;do_cmd_fletchery();
             assert(p_ptr->fletch_item==QUIVER_INDEX && p_ptr->fletching==20);
+            active_change_reports=0;active_change_message[0]=0;
             finish_fletching(partial?15:0);
+            assert(active_change_reports==0);
             object_type *selected=inventory_item_to_object_ptr(
                 player_quiver_selected_arrow_slot());
             assert(selected && selected->k_idx);
@@ -149,7 +165,21 @@ static void active_selection_checks(void)
         }
     }
     assert(failures==0);
+    prepare();player_quiver_reset_store();
+    object_type ordinary=fixture_object(TV_ARROW,SV_NORMAL_ARROW,20);
+    ordinary.obj_note=quark_add("exhausted-source");
+    assert(player_quiver_absorb_arrow(&ordinary)==20);
+    object_type spare=fixture_object(TV_ARROW,SV_NORMAL_ARROW,7);
+    spare.att=1;spare.obj_note=quark_add("replacement-ammo");
+    assert(player_quiver_absorb_arrow(&spare)==7);
+    assert(player_quiver_select_arrow(QUIVER_INDEX));
+    active_change_reports=0;active_change_message[0]=0;
+    player_quiver_remove_arrows(QUIVER_INDEX,20);
+    assert(active_change_reports==1 && active_change_message[0]);
+    assert(inventory_item_to_object_ptr(player_quiver_selected_arrow_slot())->obj_note
+        ==quark_add("replacement-ammo"));
     puts("Fletchery active ammo identity: full/partial source improves active result; nonactive work preserves unrelated active stack PASS");
+    puts("Fletchery rebuild omits transient active-ammo announcements; ordinary stack exhaustion still reports replacement PASS");
 }
 static void checks(void)
 {
@@ -253,7 +283,7 @@ def main():
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(adapter),
         str(ROOT / "src/cmd/item/cmd-fletchery.c"), "@" + str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap=" + name for name in
-        ("object_item_select_overlay", "get_quantity_action", "handle_stuff", "msg_print",
+        ("object_item_select_overlay", "get_quantity_action", "handle_stuff", "msg_print", "msg_format",
          "tutorial_game_action_allowed")), "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="fixture-", dir=OUT) as state:
         subprocess.run([str(exe), str(ROOT / "lib/edit"), state], cwd=state,

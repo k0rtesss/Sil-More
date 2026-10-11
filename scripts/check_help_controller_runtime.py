@@ -452,6 +452,68 @@ static void check_controller(void)
     puts("Controller event regression checks: PASS");
 }
 
+static void check_song_controller_owner(void)
+{
+    sdl_config_set_defaults(&config);
+    config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    character_icky=0;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    sdl_gamepad_reset_movement_controls();
+    g_gamepad_state.left_trigger_down=false;
+
+    /* A gameplay modifier held before opening Songs must retire normally. */
+    SDL_GamepadAxisEvent axis={0};
+    axis.axis=SDL_GAMEPAD_AXIS_LEFT_TRIGGER;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);
+    assert(sdl_gamepad_shift_active());
+    sdl_song_menu_begin("Songs");
+    sdl_song_menu_add_entry(0,"","Stop Singing",TERM_WHITE);
+    sdl_song_menu_add_entry(1,"","Song of Elbereth",TERM_WHITE);
+    sdl_song_menu_set_highlight(0);sdl_song_menu_finish();
+    axis.value=0;sdl_gamepad_handle_axis(&axis);
+    assert(!sdl_gamepad_shift_active());expect_key(0);
+    axis.value=32767;sdl_gamepad_handle_axis(&axis);
+    assert(!sdl_gamepad_shift_active());expect_key(0);
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+
+    const int bindings[]={'f',GAMEPAD_BIND_SHIFT,GAMEPAD_BIND_NONE};
+    for(unsigned i=0;i<N_ELEMENTS(bindings);i++) {
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_SOUTH]=bindings[i];
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST]=bindings[i];
+        button(SDL_GAMEPAD_BUTTON_SOUTH,true);expect_key('\r');
+        button(SDL_GAMEPAD_BUTTON_SOUTH,false);expect_key(0);
+        button(SDL_GAMEPAD_BUTTON_EAST,true);expect_key(ESCAPE);
+        button(SDL_GAMEPAD_BUTTON_EAST,false);expect_key(0);
+        assert(!sdl_gamepad_shift_active());
+    }
+    const SDL_GamepadButton directions[]={SDL_GAMEPAD_BUTTON_DPAD_DOWN,
+        SDL_GAMEPAD_BUTTON_DPAD_UP};
+    for(unsigned i=0;i<N_ELEMENTS(directions);i++) {
+        dpad_event(directions[i],true);dpad_event(directions[i],false);
+        (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+        expect_key(i?'8':'2');expect_key(0);
+        int direction=0;
+        assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&direction));
+    }
+    g_gamepad_state.left_ui_dir=-1;
+    g_gamepad_state.left_x=g_gamepad_state.left_y=0;
+    axis.axis=SDL_GAMEPAD_AXIS_LEFTY;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);expect_key('2');
+    sdl_gamepad_handle_axis(&axis);expect_key(0);
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+    g_gamepad_state.right_ui_dir=-1;
+    g_gamepad_state.right_x=g_gamepad_state.right_y=0;
+    config.gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_RIGHT]='q';
+    axis.axis=SDL_GAMEPAD_AXIS_RIGHTX;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);expect_key('6');
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+    sdl_song_menu_clear();sdl_gamepad_reset_movement_controls();
+    sdl_config_set_defaults(&config);
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Native Songs modal owner: remap-safe A/B, D-pad/sticks, held-trigger cleanup and no dungeon movement PASS");
+}
+
 static void check_help(void)
 {
     const int widths[] = {32, 50, 79, 80, 81, 120};
@@ -524,6 +586,7 @@ int main(void)
     term_screen = &t;
     check_dpad_diagonals();
     check_controller();
+    check_song_controller_owner();
     check_main_menu_shortcuts();
     check_capture_cancel();
     fixture_check_binding_labels();

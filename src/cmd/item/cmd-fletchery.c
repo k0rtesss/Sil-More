@@ -842,6 +842,8 @@ void finish_fletching(int turns_left)
         int available_total = 0;
         int improved = 0;
         int remaining_original = 0;
+        int selected_arrow = player_quiver_selected_arrow_slot();
+        bool select_improved_arrows = false;
 
         for (int i = 0; i < slot_count && available_total < source_total; i++)
         {
@@ -854,6 +856,8 @@ void finish_fletching(int turns_left)
                 continue;
 
             remove_amounts[i] = used;
+            if (slot == selected_arrow)
+                select_improved_arrows = true;
             available_total += used;
             log_debug("fletchery:finish slot=%d available=%d remove=%d running_total=%d source_total=%d",
                 slot, available, used, available_total, source_total);
@@ -917,7 +921,7 @@ void finish_fletching(int turns_left)
                 continue;
             if (slots[i] >= QUIVER_INDEX && slots[i] < QUIVER_INDEX_END)
             {
-                player_quiver_remove_arrows(slots[i], remove_amounts[i]);
+                player_quiver_remove_arrows_quiet(slots[i], remove_amounts[i]);
                 continue;
             }
 
@@ -936,6 +940,21 @@ void finish_fletching(int turns_left)
             remainder.number = remaining_original;
             log_fletchery_object_state("finish_remainder_proto", &remainder, -1);
             distribute_fletchered_arrows(&remainder);
+        }
+
+        /* Removing the source compacts the Quiver. Keep its improved arrows
+         * active instead of silently choosing an unrelated neighbouring stack. */
+        if (select_improved_arrows)
+        {
+            for (int i = 0; i < player_quiver_store_entry_count(); i++)
+            {
+                object_type* arrows = player_quiver_store_entry_at(i);
+                if (object_similar(arrows, i_ptr))
+                {
+                    (void)player_quiver_select_arrow(QUIVER_INDEX + i);
+                    break;
+                }
+            }
         }
     }
     else
