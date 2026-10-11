@@ -578,6 +578,15 @@ static bool pane_log_current_term_is_overlay(void)
         && (Term == angband_term[PANE_ROLLS]);
 }
 
+static int pane_log_current_overlay_left_margin(int term_cols)
+{
+#ifdef USE_SDL
+    return sdl_overlay_log_left_margin(term_cols);
+#else
+    return pane_log_overlay_left_margin(term_cols);
+#endif
+}
+
 static void display_overlay_messages_in_pane(void)
 {
     int w, h;
@@ -591,7 +600,7 @@ static void display_overlay_messages_in_pane(void)
         Term_erase(0, r, 255);
     pane_log_row_state_reset(h);
 
-    margin = pane_log_overlay_left_margin(w);
+    margin = pane_log_current_overlay_left_margin(w);
     avail = w - margin;
     if (avail < 1)
         avail = 1;
@@ -656,7 +665,7 @@ static void display_combined_log_in_pane(int filter)
      */
     if (overlay)
         pane_log_row_state_reset(h);
-    margin = overlay ? pane_log_overlay_left_margin(w) : 0;
+    margin = overlay ? pane_log_current_overlay_left_margin(w) : 0;
     avail = w - margin;
     if (avail < 1)
         avail = 1;

@@ -13,6 +13,7 @@ typedef struct sdl_ui_text_cache_entry {
     TTF_Font* font;
     SDL_Renderer* renderer;
     int wrap_width;
+    TTF_HorizontalAlignment wrap_alignment;
     char* text;
     SDL_Texture* texture;
     int width;
@@ -104,6 +105,7 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     char* text_copy;
     size_t pixels;
     SDL_Color white = { 255, 255, 255, 255 };
+    TTF_HorizontalAlignment wrap_alignment;
 
     if (out_width)
         *out_width = 0;
@@ -112,12 +114,16 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     if (!g_state.renderer || !font || !text_value || !text_value[0])
         return NULL;
 
+    wrap_alignment = wrap_width > 0 ? TTF_GetFontWrapAlignment(font)
+                                   : TTF_HORIZONTAL_ALIGN_LEFT;
+
     for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
         sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
 
         if (!entry->valid || entry->font != font
             || entry->renderer != g_state.renderer
             || entry->wrap_width != wrap_width
+            || entry->wrap_alignment != wrap_alignment
             || strcmp(entry->text, text_value) != 0)
         {
             continue;
@@ -184,6 +190,7 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     victim->font = font;
     victim->renderer = g_state.renderer;
     victim->wrap_width = wrap_width;
+    victim->wrap_alignment = wrap_alignment;
     victim->text = text_copy;
     victim->texture = texture;
     victim->width = surface->w;
@@ -759,7 +766,7 @@ int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
         return 0;
 
     margin = (d && sdl_view_is_overlay_log_pane(d))
-        ? pane_log_overlay_left_margin(wid) : 0;
+        ? sdl_overlay_log_left_margin(wid) : 0;
     band_px = (float)(wid - margin) * (float)d->cell_w
         - (float)d->cell_w * 0.25f - SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
 
@@ -834,7 +841,7 @@ static void sdl_render_overlay_log_message_row_px(sdl_view* d, int y,
         return;
 
     margin = sdl_view_is_overlay_log_pane(d)
-        ? pane_log_overlay_left_margin(wid) : 0;
+        ? sdl_overlay_log_left_margin(wid) : 0;
     px = (float)margin * (float)d->cell_w + SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
     right_edge = (float)wid * (float)d->cell_w;
     max_w = right_edge - px - (float)d->cell_w * 0.25f;
@@ -878,7 +885,7 @@ static void sdl_render_combat_roll_row_px(sdl_view* d, int y)
 
     /* Left-align the packed line to the visible band. */
     margin = sdl_view_is_overlay_log_pane(d)
-        ? pane_log_overlay_left_margin(wid) : 0;
+        ? sdl_overlay_log_left_margin(wid) : 0;
     px = (float)margin * cell_w_f + SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
     right_edge = (float)wid * cell_w_f;
 

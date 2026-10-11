@@ -3554,9 +3554,9 @@ void do_cmd_pane_settings(void)
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
 #if defined(__ANDROID__) || defined(SIL_IOS)
-                "Menu Text Size",
-                "Menu Text Size",
-                "Menu Text Size"),
+                get_sdl_bigger_font() ? "Menu Text Size" : "Terminal Menu Scale Offset",
+                get_sdl_bigger_font() ? "Menu Text Size" : "Menu Scale Offset",
+                get_sdl_bigger_font() ? "Menu Text Size" : "Menu Scale"),
 #else
                 "Terminal Menu Scale Offset",
                 "Menu Scale Offset",
@@ -3795,6 +3795,8 @@ void do_cmd_pane_settings(void)
                 [PANE_SETTING_BIGGER_FONT] =
                     "Increase all text by 50%. Menus use larger rows, wrapping "
                     "and scrolling; character information uses pages. "
+                    "Normal and bigger text save separate pane layouts and "
+                    "Quick Access settings for each orientation. "
                     "Designed for mobile. Off by default.",
                 [PANE_SETTING_MIN_TERMINAL_SIZE] =
                     "Smallest character grid the game will use. Larger minimums "
@@ -3876,7 +3878,7 @@ void do_cmd_pane_settings(void)
                     "the game pick a size that fits.",
                 [PANE_SETTING_VIEW_PANE_CONFIGURATION] =
                     "Open the layout editor to move and resize panes for the "
-                    "current orientation. Portrait and landscape layouts are "
+                    "current orientation and font mode. Each layout is "
                     "saved separately; the number in brackets is how many "
                     "panes are configured.",
                 [PANE_SETTING_PANE_FONT_SIZES] =

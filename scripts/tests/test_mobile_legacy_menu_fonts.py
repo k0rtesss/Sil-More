@@ -31,6 +31,7 @@ parts += [function(knowledge,x) for x in ['static int equipment_entry_wrap_take(
     'static void knowledge_draw_status(']]
 parts += [function(knowledge,x) for x in ['static void knowledge_init_layout(',
     'static void knowledge_expand_active_column(', 'static void knowledge_expand_entry_view(',
+    'static void knowledge_init_inventory_portrait_layout_normal(',
     'static void knowledge_init_inventory_portrait_layout(',
     'static void knowledge_touch_scroll_region(', 'static void knowledge_begin_split_touch_scroll_areas(',
     'static void inventory_browser_group_status(',
@@ -41,7 +42,8 @@ parts += [function(knowledge,x) for x in ['static void knowledge_init_layout(',
     'static byte supply_browser_page_tab_attr(', 'static bool supply_page_header_uses_wrapped_title(',
     'static bool supply_page_tabs_need_paging(', 'static void supply_draw_page_header(',
     'static int supply_browser_page_click_choice(', 'static void supply_register_page_tabs(']]
-parts += [function(abilities,x) for x in ['static void ability_browser_init_layout(',
+parts += [function(abilities,x) for x in ['static void ability_browser_init_layout_normal(',
+    'static void ability_browser_init_layout(',
     'static int ability_browser_skill_tab_split(', 'static int ability_browser_skill_tab_width(',
     'static void ability_browser_draw_skill_summary(']]
 parts += [function(smithing,x) for x in ['static int smith_ui_configure_list_view(',
@@ -86,6 +88,7 @@ typedef int smith_ui_scroll_id;
 typedef enum {SUPPLY_MENU_PAGE_EQUIPPED,SUPPLY_MENU_PAGE_INVENTORY,
  SUPPLY_MENU_PAGE_JEWELRY,SUPPLY_MENU_PAGE_SUPPLIES} supply_menu_page;
 struct {bool bigger_font;int terminal_menu_scale_offset;} config;
+static bool get_sdl_bigger_font(void) {return config.bigger_font;}
 static int g_terminal_menu_scale_override,g_terminal_menu_scale_depth;
 static int g_terminal_menu_scale_stack[16];
 static unsigned int g_terminal_menu_scale_overflow_depth;
@@ -199,7 +202,7 @@ int main(void) {
   density=densities[d];config.terminal_menu_scale_offset=0;config.bigger_font=false;
   assert(sdl_terminal_menu_font_px()==0);sdl_push_terminal_menu_scale();
 #if SIL_SDL_MOBILE_BUILD
-  assert(sdl_terminal_menu_font_px()==(int)ceilf(16*density));
+  assert(sdl_terminal_menu_font_px()==0); /* Normal uses the original grid. */
   config.bigger_font=true;assert(sdl_terminal_menu_font_px()==(int)ceilf(24*density));
   config.terminal_menu_scale_offset=-3;assert(sdl_terminal_menu_font_px()==(int)ceilf(15*density));
   config.terminal_menu_scale_offset=2;assert(sdl_terminal_menu_font_px()==(int)ceilf(30*density));

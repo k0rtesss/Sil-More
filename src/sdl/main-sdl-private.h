@@ -270,7 +270,7 @@ typedef struct sdl_view {
     bool term_ready;
 } sdl_view;
 
-#define SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX 4
+#define SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX (4 + PANE_COMBAT_OVERLAY_MAX_ROWS)
 
 typedef struct sdl_left_panel_metrics {
     bool collapsed;
@@ -293,6 +293,7 @@ typedef struct sdl_left_panel_metrics {
     int compact_output_cols[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
     int compact_output_rows[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
     int compact_widths[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
+    int compact_heights[SDL_LEFT_PANEL_COMPACT_SEGMENT_MAX];
 } sdl_left_panel_metrics;
 
 typedef struct sdl_left_panel_compact_light_span {
@@ -1815,6 +1816,8 @@ bool sdl_left_panel_content_size_for_scratch(const sdl_view* view, int source_ro
 int sdl_left_panel_source_row_width_for_term(const term* t, int source_row);
 int sdl_left_panel_source_row_width_for_view(const sdl_view* view, int source_row);
 bool sdl_left_panel_compact_light_span_for_term(const term* t, const term_win* scr, sdl_left_panel_compact_light_span* out);
+bool sdl_left_panel_compact_row_span_for_term(const term* t,
+    const term_win* scr, int source_row, sdl_left_panel_compact_light_span* out);
 int sdl_left_panel_compact_source_row_width_for_view( const sdl_view* view, int source_row, bool row_mode);
 void sdl_left_panel_compact_metrics_for_view(const sdl_view* view, sdl_left_panel_metrics* metrics);
 bool sdl_left_panel_metrics_for_view(const sdl_view* view, sdl_left_panel_metrics* metrics);
@@ -1825,6 +1828,8 @@ bool sdl_saved_screen_left_panel_pane_active(void);
 bool sdl_left_panel_pane_presentation_active(void);
 bool sdl_left_panel_pane_renders_character_panel(void);
 bool sdl_combat_overlay_pane_presentation_active(void);
+bool sdl_combat_overlay_in_compact_row(void);
+int sdl_combat_overlay_jewelry_preset_label(char* label, size_t size);
 bool sdl_combat_overlay_melee_uses_offhand_row(void);
 int sdl_combat_overlay_source_row_count(void);
 bool sdl_combat_overlay_source_row_at_index(int index, int* out_row);
@@ -1838,6 +1843,7 @@ int sdl_left_panel_source_row_for_output_row(int output_row);
 bool sdl_left_panel_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_combat_overlay_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
 bool sdl_overlay_log_pane_map_coverage(int* start_col, int* cols, int* start_row, int* rows);
+int sdl_overlay_log_left_margin(int term_cols);
 int sdl_map_overlay_map_coverages(int max_rects, int* start_cols, int* cols, int* start_rows, int* rows);
 bool sdl_overlay_stack_visible_rect(enum pane_type pane, SDL_Rect* out);
 bool sdl_overlay_log_pane_current_rect(SDL_Rect* out_rect);
@@ -3059,6 +3065,7 @@ bool sdl_gamepad_flush_pending_sticks(Uint64 now_ns, bool force);
 void sdl_gamepad_clear_pending_confirm(void);
 bool sdl_gamepad_confirm_long_press_available(int binding);
 bool sdl_touch_top_panel_compute_layout(SDL_FRect* button_rects, SDL_FRect* out_panel);
+bool sdl_touch_top_panel_layout_excludes_pane(enum pane_type pane);
 bool sdl_gamepad_handle_confirm_long_press_button( int button, int binding, bool down);
 int sdl_gamepad_pending_confirm_timeout_ms(Uint64 now_ns);
 bool sdl_gamepad_flush_pending_confirm(Uint64 now_ns);

@@ -136,8 +136,11 @@
 #define SDL_TOUCH_THUMB_BUTTON_COUNT 2
 #define SDL_MIN_TERMINAL_MODE_COUNT 2
 #define SDL_PANE_ORIENTATION_COUNT 2
-#define SDL_PANE_PROFILE_COUNT \
+#define SDL_PANE_FONT_MODE_COUNT 2
+#define SDL_PANE_ORIENTATION_PROFILE_COUNT \
     (SDL_MIN_TERMINAL_MODE_COUNT * SDL_PANE_ORIENTATION_COUNT)
+#define SDL_PANE_PROFILE_COUNT \
+    (SDL_PANE_ORIENTATION_PROFILE_COUNT * SDL_PANE_FONT_MODE_COUNT)
 #define SDL_LEFT_PANEL_COMPACT_COLUMN 0
 #define SDL_LEFT_PANEL_COMPACT_ROW 1
 #define SDL_LEFT_PANEL_COMPACT_COUNT 2
@@ -182,6 +185,9 @@ enum sdl_pane_orientation {
 
 #define SDL_PANE_PROFILE_INDEX(ORIENTATION, MODE) \
     ((ORIENTATION) * SDL_MIN_TERMINAL_MODE_COUNT + (MODE))
+#define SDL_PANE_FONT_PROFILE_INDEX(BIGGER_FONT, ORIENTATION, MODE) \
+    ((BIGGER_FONT) * SDL_PANE_ORIENTATION_PROFILE_COUNT \
+        + SDL_PANE_PROFILE_INDEX(ORIENTATION, MODE))
 
 enum sdl_config_load_status {
     SDL_CONFIG_LOAD_OK = 0,
@@ -397,6 +403,8 @@ void sdl_pane_profile_apply_portrait_defaults(
     struct sdl_pane_profile* profile);
 void sdl_pane_profile_apply_tablet_defaults(
     struct sdl_pane_profile* profile, int orientation);
+void sdl_pane_profile_apply_bigger_font_defaults(
+    struct sdl_pane_profile* profile);
 
 // Set default configuration values
 void sdl_config_set_defaults(struct sdl_config* config);

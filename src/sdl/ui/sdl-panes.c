@@ -292,7 +292,7 @@ bool sdl_combat_overlay_connected_to_left_panel(bool* out_combat_below)
     if (out_combat_below)
         *out_combat_below = false;
 
-    if (!pc
+    if (!pc || sdl_combat_overlay_in_compact_row()
         || !sdl_left_panel_pane_presentation_active()
         || !sdl_combat_overlay_pane_presentation_active()
         || !sdl_combat_overlay_adjacent_to_left_panel(pc->where,
@@ -327,7 +327,7 @@ bool sdl_combat_overlay_pane_current_rect(SDL_Rect* out_rect)
 
     if (out_rect)
         *out_rect = (SDL_Rect){ 0 };
-    if (!pc || !pc->enabled)
+    if (!pc || !pc->enabled || sdl_combat_overlay_in_compact_row())
         return false;
     if (screen_saved_fullscreen_active())
         return false;
@@ -1722,6 +1722,55 @@ static void sdl_status_depth_pane_avoid_quick(SDL_FRect* panel,
     }
 }
 
+/* The big-text bottom caption shares the edge with Combat. Prefer the clear
+ * side span, keeping the same vertical anchor for the Quick Access stack. */
+static void sdl_status_depth_pane_avoid_combat(SDL_FRect* panel,
+    enum pane_placement where, const SDL_Rect* screen)
+{
+    SDL_Rect combat;
+    enum pane_placement combat_where = 0;
+    float left;
+    float right;
+    float gap;
+
+    if (!config.bigger_font || !panel || !screen
+        || !sdl_left_panel_pane_placement_is_bottom(where))
+        return;
+    for (int i = 0; i < pane_config_count; i++) {
+        if (pane_config[i].pane == PANE_COMBAT) {
+            combat_where = pane_config[i].where;
+            break;
+        }
+    }
+    if (where == combat_where
+        || !sdl_status_depth_pane_same_horizontal_edge(where, combat_where)
+        || !sdl_combat_overlay_pane_current_rect(&combat)
+        || panel->x >= combat.x + combat.w
+        || panel->x + panel->w <= combat.x
+        || panel->y >= combat.y + combat.h
+        || panel->y + panel->h <= combat.y)
+    {
+        return;
+    }
+
+    gap = (float)sdl_overlay_inner_gap_px();
+    left = (float)screen->x;
+    right = (float)(screen->x + screen->w);
+    if (combat.x + combat.w + panel->w <= right) {
+        panel->x = (float)(combat.x + combat.w)
+            + MIN(gap, right - (float)(combat.x + combat.w) - panel->w);
+    } else if (left + panel->w <= combat.x) {
+        panel->x = (float)combat.x - panel->w
+            - MIN(gap, (float)combat.x - left - panel->w);
+    } else {
+        SDL_FRect blocker = {
+            (float)combat.x, (float)combat.y,
+            (float)combat.w, (float)combat.h
+        };
+        sdl_status_depth_pane_avoid_quick(panel, &blocker, where, screen);
+    }
+}
+
 static bool sdl_status_depth_pane_layout_compute(
     status_depth_pane_layout* out)
 {
@@ -1898,7 +1947,7 @@ static bool sdl_status_depth_pane_layout_compute(
 
     out->panel = sdl_overlay_panel_rect(&anchor, pc->where, panel_w,
         panel_h, &screen);
-    if (have_quick_panel)
+    if (config.bigger_font && have_quick_panel)
         sdl_status_depth_pane_avoid_quick(&out->panel, &quick_panel,
             pc->where, &screen);
     out->layout_count = layout_count;
@@ -1932,6 +1981,8 @@ bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
         cached_result = sdl_status_depth_pane_layout_compute(&cached_layout);
         cached_generation = g_sdl_present_generation;
     }
+    if (!config.bigger_font)
+        g_status_depth_pane_layout_computing = false;
     *out = cached_layout;
     if (!cached_result || !pc || !pc->enabled)
         goto done;
@@ -1944,7 +1995,8 @@ bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
     {
         SDL_FRect quick_panel;
         enum pane_placement quick_where;
-        if (sdl_touch_top_panel_current_anchor(NULL, NULL, &quick_where)
+        if (config.bigger_font
+            && sdl_touch_top_panel_current_anchor(NULL, NULL, &quick_where)
             && pc->where != quick_where
             && sdl_status_depth_pane_same_horizontal_edge(pc->where,
                 quick_where)
@@ -1954,6 +2006,7 @@ bool sdl_status_depth_pane_layout(status_depth_pane_layout* out)
                 pc->where, &screen);
         }
     }
+    sdl_status_depth_pane_avoid_combat(&out->panel, pc->where, &screen);
     result = true;
 done:
     g_status_depth_pane_layout_computing = false;
@@ -2098,4 +2151,3 @@ void sdl_pop_description_overlay_full_main_anchor(void)
     if (g_description_overlay_full_main_anchor_depth > 0)
         g_description_overlay_full_main_anchor_depth--;
 }
-

@@ -250,13 +250,13 @@ int main(int argc,char **argv)
     character_icky=1; character_generated=character_dungeon=true; player.playing=true;
     for(int i=0;i<16;i++) g_state.palette[i]=(SDL_Color){220,220,220,255};
     g_state.palette[TERM_DARK]=(SDL_Color){0,0,0,255};
-    for(int big=0;big<2;big++) {
+    for(int big=1;big<2;big++) {
         config.bigger_font=big; fixture.active=false;
         check_songs(); check_questions(); check_large_tutorial(); check_touch_panels();
         check_touch_footer();
         check_question_backdrop();
     }
-    printf("Aux %dx%d @%.3f Off/On songs/questions/tutorials: PASS\n",fixture_width,fixture_height,fixture_density);
+    printf("Aux %dx%d @%.3f Big font songs/questions/tutorials: PASS\n",fixture_width,fixture_height,fixture_density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window); TTF_Quit(); SDL_Quit();
 }

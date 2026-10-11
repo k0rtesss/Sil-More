@@ -457,7 +457,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font *font,cptr prompt,float x,float y,float
     failures = []
     for width, height, density in [(720, 1600, 2), (1080, 2340, 2.75), (1080, 2400, 2.625)]:
         for w, h in [(width, height), (height, width)]:
-            for bigger in [0, 1]:
+            for bigger in [1]:  # Normal designs are covered by check_normal_ui_compat.py.
                 result = subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"), str(w), str(h),
                     str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf"), str(ROOT / "lib/xtra/font/Cinzel-Medium.ttf"),
                     str(density), str(bigger)], cwd=OUT, env=env, timeout=60)

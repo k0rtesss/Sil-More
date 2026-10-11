@@ -96,14 +96,14 @@ static void check(enum pane_placement where,bool enabled,bool horizontal_overlap
         call_count=0;
         sdl_apply_top_right_overlay_offset();
         assert(calls[0]==1 && calls[1]==2);
-        if((large || SIL_SDL_MOBILE_BUILD) && enabled) assert(call_count==4 && calls[2]==3 && calls[3]==4);
+        if(large && enabled) assert(call_count==4 && calls[2]==3 && calls[3]==4);
         else assert(call_count==3 && calls[2]==3);
-        assert(g_pane_rects[PANE_ROLLS].y==((large || SIL_SDL_MOBILE_BUILD) && enabled && horizontal_overlap?160:100));
+        assert(g_pane_rects[PANE_ROLLS].y==(large && enabled && horizontal_overlap?160:100));
         assert(g_pane_rects[PANE_MESSAGES].y-g_pane_rects[PANE_ROLLS].y==70);
         assert(!memcmp(&g_views[PANE_ROLLS].rect,&g_pane_rects[PANE_ROLLS],sizeof(SDL_Rect)));
         if(previous>=0) assert(previous==g_pane_rects[PANE_ROLLS].y);
         previous=g_pane_rects[PANE_ROLLS].y;
-        if((large || SIL_SDL_MOBILE_BUILD) && enabled && horizontal_overlap)
+        if(large && enabled && horizontal_overlap)
             assert(!intersects(g_pane_rects[PANE_COMBAT],g_pane_rects[PANE_ROLLS]));
     }
     actual_remove_stack(); actual_remove_top_right();

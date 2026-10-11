@@ -14,7 +14,7 @@ viewer = (ROOT / "src/ui/file-viewer.c").read_text()
 utf8 = (ROOT / "src/support/utf8.c").read_text()
 utf8 = "\n".join(line for line in utf8.splitlines() if not line.startswith("#include"))
 helpers = viewer[viewer.index("static void string_lower"):viewer.index("static void file_viewer_prompt_label")]
-functions = viewer[viewer.index("bool show_buffer("):]
+functions = viewer[viewer.index("static bool show_buffer_normal("):]
 harness = r"""
 #include <assert.h>
 #include <ctype.h>
@@ -48,6 +48,10 @@ static int width=12,height=8,frame=-1,errors=0;
 static char screens[1024][32][128];
 static byte colors[1024][32][128];
 static const char *keys,*answer="";
+/* Reflow belongs to big font; normal UI has a historical pixel comparison. */
+static bool get_sdl_bigger_font(void) {return true;}
+bool show_buffer(cptr text,int line);
+bool show_file(cptr name,cptr what,int line);
 static void Term_get_size(int *w,int *h) {*w=width;*h=height;}
 static void Term_clear(void) {assert(++frame<1024);}
 static void Term_putstr(int x,int y,int n,int attr,cptr text) {
