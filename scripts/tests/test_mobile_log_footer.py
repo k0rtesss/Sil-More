@@ -104,10 +104,11 @@ int main(void){
   int top,bottom,prompt;log_history_layout(test_h,&top,&bottom,&prompt);assert(top<=bottom&&bottom<prompt&&prompt<test_h-reserved);
   log_history_filter_control controls[4];int last=log_history_filter_layout(test_w,controls);
   assert(top>last+1);
+  int padding=controls[0].row==0?0:2;
   for(int f=0;f<4;f++) {
-   assert(controls[f].col+(int)strlen(controls[f].label)+2<=sdl_menu_font_button_available_columns(controls[f].row,test_w));
+   assert(controls[f].col+(int)strlen(controls[f].label)+padding<=sdl_menu_font_button_available_columns(controls[f].row,test_w));
    if(f && controls[f].row==controls[f-1].row)
-    assert(controls[f].col>controls[f-1].col+(int)strlen(controls[f-1].label)+2);
+    assert(controls[f].col>controls[f-1].col+(int)strlen(controls[f-1].label)+padding);
   }
   for(int i=0;i<40;i++)queue(filter==3?'2':'8',-999);
   queue(filter==3?'1':'7',-999);queue(0,ESCAPE);

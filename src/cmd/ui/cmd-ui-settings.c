@@ -12808,9 +12808,11 @@ static void controller_action_binding_label(int binding, char* buf, size_t bufle
     int id = 0;
     int mod_type = 0;
     int mod_id = 0;
+    int combo_type = 0;
+    int combo_id = 0;
     int direct_count = controller_action_binding_count(binding, &type, &id);
     int combo_count = controller_combo_action_binding_count(binding,
-        &mod_type, &mod_id, &type, &id);
+        &mod_type, &mod_id, &combo_type, &combo_id);
     int total_count = direct_count + combo_count;
 
     if (total_count <= 0) {
@@ -12818,13 +12820,14 @@ static void controller_action_binding_label(int binding, char* buf, size_t bufle
     } else if (total_count == 1 && direct_count == 1) {
         controller_binding_label(type, id, buf, buflen);
     } else if (total_count == 1) {
-        controller_combo_binding_label(mod_type, mod_id, type, id, buf, buflen);
+        controller_combo_binding_label(mod_type, mod_id, combo_type, combo_id,
+            buf, buflen);
     } else {
         if (direct_count > 0) {
             controller_binding_label(type, id, binding_buf, sizeof(binding_buf));
         } else {
-            controller_combo_binding_label(mod_type, mod_id, type, id, binding_buf,
-                sizeof(binding_buf));
+            controller_combo_binding_label(mod_type, mod_id, combo_type,
+                combo_id, binding_buf, sizeof(binding_buf));
         }
         strnfmt(buf, buflen, "%s +%d", binding_buf, total_count - 1);
     }

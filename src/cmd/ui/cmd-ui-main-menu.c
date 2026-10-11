@@ -1017,13 +1017,19 @@ static int log_history_collect_notes(void)
 }
 
 static int log_history_draw_filter(int row, int col, cptr label, int filter,
-    int active_filter, int hover_filter)
+    int active_filter, int hover_filter, bool compact)
 {
     char token[32];
     int click_choice = log_history_filter_to_click(filter);
     byte attr = TERM_YELLOW;
 
-    if (filter == active_filter)
+    if (compact)
+    {
+        SDL_strlcpy(token, label, sizeof(token));
+        if (filter == active_filter)
+            attr = TERM_L_GREEN;
+    }
+    else if (filter == active_filter)
         strnfmt(token, sizeof(token), "[%s]", label);
     else
         strnfmt(token, sizeof(token), " %s ", label);
@@ -1068,7 +1074,7 @@ static int log_history_filter_layout(int term_wid,
         col = compact ? 0 : 8;
         for (int i = 0; i < 4; i++)
         {
-            int width = (int)strlen(defaults[i].label) + 2;
+            int width = (int)strlen(defaults[i].label) + (compact ? 0 : 2);
             int available = term_wid;
 #ifdef USE_SDL
             available = sdl_menu_font_button_available_columns(row, term_wid);
@@ -1108,7 +1114,8 @@ static void log_history_draw_filters(int active_filter, int hover_filter,
     }
     for (int i = 0; i < 4; i++)
         (void)log_history_draw_filter(controls[i].row, controls[i].col,
-            controls[i].label, controls[i].filter, active_filter, hover_filter);
+            controls[i].label, controls[i].filter, active_filter, hover_filter,
+            compact);
 }
 
 static bool log_history_filter_key(char ch)

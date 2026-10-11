@@ -4,6 +4,7 @@
 Build portable first. This links its objects with a wrapper main; production
 input/control protocols stay unchanged. Use pad(profile, button=..., value=...)
 or pad(profile, axis=..., value=...) and GameControl for PNG observations.
+Stick axes rest at 0; virtual trigger axes rest at -32768 and press at 32767.
 """
 from pathlib import Path
 import json
@@ -63,8 +64,12 @@ int main(int argc, char **argv)
     SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
     joystick = SDL_OpenJoystick(id);
     if (!id || !joystick) return 91;
+    /* SDL maps virtual signed trigger axes to the gamepad's unsigned range. */
+    if (!SDL_SetJoystickVirtualAxis(joystick, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, -32768)
+        || !SDL_SetJoystickVirtualAxis(joystick, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, -32768))
+        return 92;
     SDL_Thread *thread = SDL_CreateThread(pump, "QA gamepad", NULL);
-    if (!thread) return 92;
+    if (!thread) return 93;
     int result = sil_game_main(argc, argv);
     SDL_SetAtomicInt(&stopping, 1);
     SDL_WaitThread(thread, NULL);
@@ -123,7 +128,7 @@ def build_and_launch(deadzone: int = 12000, seed_profile: Path | None = None,
 
 
 def pad(profile: str | Path, *, button: int | None = None,
-        axis: int | None = None, value: int = 1) -> None:
+        axis: int | None = None, value: int = 1, settle: float = .12) -> None:
     profile = Path(profile)
     reply = profile / "pad-reply.txt"
     reply.unlink(missing_ok=True)
@@ -137,7 +142,7 @@ def pad(profile: str | Path, *, button: int | None = None,
             raise TimeoutError("Virtual controller did not acknowledge input")
         time.sleep(.01)
     assert reply.read_text() == "1"
-    time.sleep(.12)
+    time.sleep(settle)
 
 
 def tap(profile: str | Path, button: int) -> None:

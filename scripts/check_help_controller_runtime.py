@@ -526,6 +526,8 @@ int main(void)
     check_controller();
     check_main_menu_shortcuts();
     check_capture_cancel();
+    fixture_check_binding_labels();
+    fixture_check_wizard_debug_routing();
     check_help();
     term_nuke(&t);
     SDL_Quit();
@@ -578,6 +580,7 @@ void check_main_menu_shortcuts(void)
 '''
 
 SETTINGS_CHECK = r'''
+#include <assert.h>
 #include "cmd/ui/cmd-ui-settings.c"
 bool fixture_capture_is_cancel(bool controller_ui, int modifier, int type, int id)
 {
@@ -586,6 +589,56 @@ bool fixture_capture_is_cancel(bool controller_ui, int modifier, int type, int i
 void fixture_capture_assign_combo(int binding, int modifier, int type, int id)
 {
     controller_assign_combo_binding(binding, modifier, type, id);
+}
+void fixture_check_binding_labels(void)
+{
+    char label[128];
+    sdl_config_set_default_gamepad_bindings(&config);
+    controller_clear_effective_action_bindings('\r');
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST, GAMEPAD_BIND_CTRL);
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, '\r');
+    set_sdl_gamepad_combo_binding(GAMEPAD_BIND_SHIFT, GAMEPAD_CAPTURE_BUTTON,
+        SDL_GAMEPAD_BUTTON_EAST, '\r');
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "Y (North) +1") == 0);
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, GAMEPAD_BIND_NONE);
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "L2 (Left Trigger) + B (East)") == 0);
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, '\r');
+    set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK, '\r');
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "Y (North) +2") == 0);
+    set_sdl_gamepad_combo_binding(GAMEPAD_BIND_SHIFT, GAMEPAD_CAPTURE_BUTTON,
+        SDL_GAMEPAD_BUTTON_EAST, GAMEPAD_BIND_NONE);
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "Y (North) +1") == 0);
+    controller_clear_effective_action_bindings('\r');
+    controller_action_binding_label('\r', label, sizeof(label));
+    assert(strcmp(label, "(unbound)") == 0);
+    sdl_config_set_default_gamepad_bindings(&config);
+    puts("Controller binding summaries: PASS (direct Y plus L2+B, combo-only, multiple direct, mixed and unbound)");
+}
+'''
+
+WIZARD_CHECK = r'''
+#include "angband.h"
+#include <assert.h>
+void fixture_debug_options_page(int page, cptr title);
+#define do_cmd_options_aux fixture_debug_options_page
+#include "wizard2.c"
+#undef do_cmd_options_aux
+static int captured_options_page = -1;
+void fixture_debug_options_page(int page, cptr title)
+{
+    captured_options_page = page;
+    assert(strcmp(title, "Debug Options") == 0);
+}
+void fixture_check_wizard_debug_routing(void)
+{
+    do_cmd_debug_execute('O');
+    assert(captured_options_page == DEBUG_PAGE);
+    assert(captured_options_page != SOUND_PAGE);
+    puts("Wizard Debug Options routes to named debug page, not Sound: PASS");
 }
 '''
 
@@ -602,15 +655,18 @@ def main():
         '#include "ui/help.c"\n' + HARNESS[help_start:main_start].replace(
             "static void check_help", "void check_help"), encoding="utf-8")
     source.write_text(HARNESS[:help_start].replace('#include "ui/help.c"', '')
-        + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\n" + HARNESS[main_start:], encoding="utf-8")
+        + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\nvoid fixture_check_binding_labels(void);\nvoid fixture_check_wizard_debug_routing(void);\n" + HARNESS[main_start:], encoding="utf-8")
     menu_source = OUT / "menu-check.c"
     menu_source.write_text(MENU_CHECK, encoding="utf-8")
     settings_source = OUT / "settings-check.c"
     settings_source.write_text(SETTINGS_CHECK, encoding="utf-8")
+    wizard_source = OUT / "wizard-check.c"
+    wizard_source.write_text(WIZARD_CHECK, encoding="utf-8")
     cmake_dir = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
     exclude = ("/src/main.c.obj", "/src/ui/help.c.obj", "/src/sdl/input/sdl-gamepad.c.obj",
-               "/src/sdl/ui/sdl-main-menu.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj")
+               "/src/sdl/ui/sdl-main-menu.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj",
+               "/src/wizard2.c.obj")
     objects = [p for p in objects if not p.endswith(exclude)]
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
@@ -622,7 +678,7 @@ def main():
     compiler = "C:/msys64/mingw64/bin/cc.exe"
     exe = OUT / "check.exe"
     subprocess.run([compiler, "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source),
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source), str(wizard_source),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=OUT, env=env, check=True, timeout=30)

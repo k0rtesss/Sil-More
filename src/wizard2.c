@@ -3561,7 +3561,7 @@ static void do_cmd_debug_execute(char cmd)
     case 'O':
     {
         screen_save();
-        do_cmd_options_aux(6, "Debug Options");
+        do_cmd_options_aux(DEBUG_PAGE, "Debug Options");
         screen_load();
         break;
     }
