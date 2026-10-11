@@ -3003,9 +3003,7 @@ bool sdl_minimap_handle_gamepad_axis(const SDL_GamepadAxisEvent* ev)
         return false;
     }
 
-    threshold = config.gamepad_trigger_threshold;
-    if (threshold < 0)
-        threshold = 0;
+    threshold = MAX(config.gamepad_trigger_threshold, 1);
     pressed = (ev->value >= threshold);
 
     if (ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER) {

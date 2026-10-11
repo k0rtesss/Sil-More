@@ -630,6 +630,75 @@ static void check_blocked_controller_state(void)
     puts("Blocking roll dispatcher: neutral trigger/button cleanup, pending action suppression, both stick neutral gates and restored Start PASS");
 }
 
+
+static void check_terminal_held_modifiers(void)
+{
+    sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    const int modifiers[]={GAMEPAD_BIND_SHIFT,GAMEPAD_BIND_CTRL,GAMEPAD_BIND_ALT};
+    const SDL_GamepadButton directions[]={SDL_GAMEPAD_BUTTON_DPAD_UP,
+        SDL_GAMEPAD_BUTTON_DPAD_DOWN,SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+        SDL_GAMEPAD_BUTTON_DPAD_RIGHT};
+    const int keys[]={'8','2','4','6'};
+    int old_font=sdl_menu_font_set_render_context(SDL_MENU_FONT_INVENTORY);
+    character_icky=1;
+    for(int mask=0;mask<8;mask++) {
+        sdl_gamepad_reset_movement_controls();
+        for(int i=0;i<3;i++)if(mask&(1<<i))sdl_gamepad_apply_modifier(modifiers[i],true);
+        for(unsigned d=0;d<N_ELEMENTS(directions);d++) {
+            dpad_event(directions[d],true);dpad_event(directions[d],false);
+            (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+            expect_key(keys[d]);expect_key(0);
+        }
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,true);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);expect_key('3');
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);
+        assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true));expect_key(0);
+        SDL_GamepadAxisEvent axis={0};
+        for(int stick=0;stick<2;stick++) {
+            axis.axis=stick?SDL_GAMEPAD_AXIS_RIGHTY:SDL_GAMEPAD_AXIS_LEFTY;
+            axis.value=32767;sdl_gamepad_handle_axis(&axis);expect_key('2');
+            sdl_gamepad_handle_axis(&axis);expect_key(0);
+            axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+        }
+        dpad_event(SDL_GAMEPAD_BUTTON_EAST,true);expect_key(ESCAPE);
+        dpad_event(SDL_GAMEPAD_BUTTON_EAST,false);expect_key(0);
+        for(int i=0;i<3;i++)if(mask&(1<<i))sdl_gamepad_apply_modifier(modifiers[i],false);
+        movement_input_command command;
+        assert(!movement_input_take_command(MOVEMENT_INPUT_CONTEXT_DUNGEON,&command));
+    }
+    /* Look consumes plain directions in either mode; physical Y still
+     * toggles Cursor/Pan through the existing 's' parser action. */
+    sdl_menu_font_set_render_context(SDL_MENU_FONT_LOOK);
+    sdl_gamepad_send_direction_mods(2,false,true,false);expect_key('2');
+    sdl_gamepad_send_direction_mods(2,true,false,false);expect_key('2');expect_key(0);
+    button(SDL_GAMEPAD_BUTTON_NORTH,true);expect_key('s');
+    button(SDL_GAMEPAD_BUTTON_NORTH,false);expect_key(0);
+    sdl_menu_font_set_render_context(old_font);character_icky=0;
+    /* Outside saved menus, Shift still runs and Ctrl still interacts; Alt
+     * retains its explicit fire macro, including in a direction context. */
+    const int contexts[]={MOVEMENT_INPUT_CONTEXT_DUNGEON,
+        MOVEMENT_INPUT_CONTEXT_DIRECTION_PROMPT,MOVEMENT_INPUT_CONTEXT_TARGETING};
+    for(unsigned c=0;c<N_ELEMENTS(contexts);c++) {
+        movement_input_set_active_context(contexts[c]);
+        for(int shift=0;shift<2;shift++) {
+            sdl_gamepad_send_direction_mods(2,shift,!shift,false);
+            expect_key(UI_MENU_CLICK_WAKE_KEY);
+            movement_input_command command;
+            assert(movement_input_take_command(contexts[c],&command));
+            assert(command.action==(shift?MOVEMENT_INPUT_ACTION_RUN_DIR:MOVEMENT_INPUT_ACTION_INTERACT_DIR));
+            expect_key(0);
+        }
+        sdl_gamepad_send_direction_mods(2,false,false,true);
+        expect_key('\\');expect_key('f');expect_key('2');expect_key(0);
+    }
+    sdl_gamepad_reset_movement_controls();sdl_config_set_defaults(&config);
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Saved terminal pad navigation: all 8 modifier states, D-pad/diagonal/sticks/B, no world queue, Look plain direction/Y mode and live modified routes PASS");
+}
+
 static void check_question_held_modifiers(void)
 {
     sdl_config_set_defaults(&config);config.gamepad_enabled=true;
@@ -800,6 +869,74 @@ static void check_yes_no_controller_owner(void)
     puts("Native Yes/No controller: selected answer, remap-safe A/B, D-pad/both sticks, keyboard y/n, close/release and modal priority PASS");
 }
 
+
+static void check_trigger_calibration_boundaries(void)
+{
+    sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;character_icky=0;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    g_gamepad_state.pad_count=1;
+    const int thresholds[]={0,1,16000,32767};
+    for(unsigned t=0;t<N_ELEMENTS(thresholds);t++)for(int trigger=0;trigger<2;trigger++) {
+        config.gamepad_trigger_threshold=thresholds[t];
+        int effective=MAX(thresholds[t],1);
+        sdl_gamepad_reset_movement_controls();
+        g_gamepad_state.left_trigger_down=g_gamepad_state.right_trigger_down=false;
+        SDL_GamepadAxisEvent axis={0};axis.axis=trigger?SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:SDL_GAMEPAD_AXIS_LEFT_TRIGGER;
+        axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active());
+        axis.value=effective-1;sdl_gamepad_handle_axis(&axis);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active());
+        axis.value=effective;sdl_gamepad_handle_axis(&axis);expect_key(0);
+        assert(trigger?sdl_gamepad_ctrl_active():sdl_gamepad_shift_active());
+        axis.value=32767;sdl_gamepad_handle_axis(&axis);expect_key(0);
+        axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active());
+        assert(!g_gamepad_state.left_trigger_down&&!g_gamepad_state.right_trigger_down);
+
+        /* Capture must not bind a released trigger at accepted threshold 0. */
+        assert(sdl_gamepad_capture_begin(false));g_gamepad_capture_arm_time=0;
+        int type,id,modifier;
+        sdl_gamepad_handle_axis(&axis);assert(!sdl_gamepad_capture_poll(&type,&id,&modifier));
+        axis.value=effective-1;sdl_gamepad_handle_axis(&axis);
+        assert(!sdl_gamepad_capture_poll(&type,&id,&modifier));
+        axis.value=effective;sdl_gamepad_handle_axis(&axis);
+        assert(sdl_gamepad_capture_poll(&type,&id,&modifier));
+        assert(type==GAMEPAD_CAPTURE_TRIGGER&&id==trigger);
+        sdl_gamepad_capture_cancel();axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+
+        /* Real blocked-overlay dispatch retires an already-held modifier. */
+        axis.value=32767;sdl_gamepad_handle_axis(&axis);
+        assert(trigger?sdl_gamepad_ctrl_active():sdl_gamepad_shift_active());
+        sdl_question_menu_begin("Calibration roll");
+        sdl_question_menu_add_entry(0,"","Rolling...",TERM_WHITE);
+        sdl_question_menu_set_blocking_input(true);sdl_question_menu_finish();
+        blocked_axis(axis.axis,0);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active());
+        assert(!g_gamepad_state.left_trigger_down&&!g_gamepad_state.right_trigger_down);
+        blocked_axis(axis.axis,effective);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active());
+        blocked_axis(axis.axis,0);expect_key(0);
+        assert(!g_gamepad_state.left_trigger_down&&!g_gamepad_state.right_trigger_down);
+        sdl_question_menu_clear();
+
+        /* At a zoom bound no rendering is required, but the actual minimap
+         * handler must agree about neutral, activation and release state. */
+        g_minimap.active=true;g_minimap.zoom_step=trigger?MINIMAP_MAX_ZOOM_STEP:0;
+        axis.value=0;assert(sdl_minimap_handle_gamepad_axis(&axis));
+        assert(!(trigger?g_gamepad_state.right_trigger_down:g_gamepad_state.left_trigger_down));
+        axis.value=effective;assert(sdl_minimap_handle_gamepad_axis(&axis));
+        assert(trigger?g_gamepad_state.right_trigger_down:g_gamepad_state.left_trigger_down);
+        axis.value=0;assert(sdl_minimap_handle_gamepad_axis(&axis));
+        assert(!(trigger?g_gamepad_state.right_trigger_down:g_gamepad_state.left_trigger_down));
+        g_minimap.active=false;expect_key(0);
+        assert(config.gamepad_trigger_threshold==thresholds[t]);
+    }
+    sdl_gamepad_reset_movement_controls();sdl_config_set_defaults(&config);
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Trigger accepted calibration boundaries: stored 0/1/16000/32767, both triggers normal/capture/blocked/minimap neutral/press/release PASS");
+}
+
 static void check_help(void)
 {
     const int widths[] = {32, 50, 79, 80, 81, 120};
@@ -875,7 +1012,9 @@ int main(void)
     check_song_controller_owner();
     check_yes_no_controller_owner();
     check_question_held_modifiers();
+    check_terminal_held_modifiers();
     check_blocked_controller_state();
+    check_trigger_calibration_boundaries();
     check_main_menu_shortcuts();
     check_capture_cancel();
     fixture_check_binding_labels();
@@ -1003,6 +1142,10 @@ def main():
         help="Restore unmodified-only question navigation to reproduce held-trigger bypass")
     parser.add_argument("--blocked-state-baseline", action="store_true",
         help="Drop blocked gamepad events without retiring their runtime state")
+    parser.add_argument("--terminal-modifier-baseline", action="store_true",
+        help="Restore modified keypad filtering inside saved terminal menus")
+    parser.add_argument("--trigger-zero-baseline", action="store_true",
+        help="Restore threshold-zero neutral-as-pressed comparison")
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     source = OUT / "check.c"
@@ -1015,7 +1158,7 @@ def main():
         '#include "ui/help.c"\n' + HARNESS[help_start:main_start].replace(
             "static void check_help", "void check_help"), encoding="utf-8")
     harness = HARNESS[:help_start]
-    if args.yes_no_baseline or args.question_modifier_baseline:
+    if args.yes_no_baseline or args.question_modifier_baseline or args.terminal_modifier_baseline or args.trigger_zero_baseline:
         gamepad = (ROOT / "src/sdl/input/sdl-gamepad.c").read_text()
         if args.yes_no_baseline:
             start = gamepad.index("static bool sdl_gamepad_yes_no_navigate(int navigation)")
@@ -1025,6 +1168,13 @@ def main():
             gamepad = gamepad.replace(
                 "if (navigation && sdl_question_menu_queue_navigation(navigation))",
                 "if (!shift && !ctrl && !alt && navigation && sdl_question_menu_queue_navigation(navigation))", 1)
+        if args.terminal_modifier_baseline:
+            start = gamepad.index("    /* Saved terminal menus own plain directional navigation")
+            end = gamepad.index("    if (!shift && !ctrl && !alt)", start)
+            gamepad = gamepad[:start] + gamepad[end:]
+        if args.trigger_zero_baseline:
+            gamepad = gamepad.replace("MAX(config.gamepad_trigger_threshold, 1)",
+                "MAX(config.gamepad_trigger_threshold, 0)")
         (OUT / "yes-no-baseline-gamepad.c").write_text(gamepad, encoding="utf-8")
         harness = harness.replace('#include "sdl/input/sdl-gamepad.c"',
             '#include "yes-no-baseline-gamepad.c"')
@@ -1046,7 +1196,7 @@ def main():
     objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
     exclude = ("/src/main.c.obj", "/src/ui/help.c.obj", "/src/sdl/input/sdl-gamepad.c.obj",
                "/src/sdl/ui/sdl-main-menu.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj",
-               "/src/wizard2.c.obj", "/src/sdl/core/sdl-events.c.obj")
+               "/src/wizard2.c.obj", "/src/sdl/core/sdl-events.c.obj", "/src/sdl/input/sdl-screen-pointer.c.obj")
     objects = [p for p in objects if not p.endswith(exclude)]
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
@@ -1058,7 +1208,7 @@ def main():
     compiler = "C:/msys64/mingw64/bin/cc.exe"
     exe = OUT / "check.exe"
     subprocess.run([compiler, "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source), str(wizard_source), str(events_source),
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source), str(wizard_source), str(events_source), str(ROOT / "src/sdl/input/sdl-screen-pointer.c"),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=OUT, env=env, check=True, timeout=30)
