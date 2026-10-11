@@ -15851,6 +15851,18 @@ static void sdl_character_sheet_screen_render_content(
         float counter_w = 0.0f;
         float counter_h = 0.0f;
         float title_name_h = title_h;
+        SDL_FRect font_button = sdl_menu_font_button_bounds();
+
+        /* The font shortcut overlays the canvas. Reserve its actual header
+         * bounds for book titles as well as hero names, so wrapped text never
+         * runs beneath the shortcut on narrow portrait screens. */
+        if (font_button.w > 0.0f && title_y < font_button.y + font_button.h
+            && title_y + title_h > font_button.y
+            && font_button.x > title_x)
+        {
+            title_w = MIN(title_w, MAX(1.0f, font_button.x - title_x - gap));
+            title_text_w = title_w;
+        }
 
         if (carousel)
         {
@@ -15858,7 +15870,7 @@ static void sdl_character_sheet_screen_render_content(
              * its own space. Navigation shares the metadata row below. */
             arrow_w = (float)sdl_ui_min_tap_px();
             title_x = content_x;
-            title_w = content_w - arrow_w;
+            title_w = MIN(title_w, content_w - arrow_w);
             title_text_w = title_w;
             if (mobile_title_counter[0])
             {

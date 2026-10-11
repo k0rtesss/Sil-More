@@ -835,6 +835,16 @@ void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
 
     if (!shift && !ctrl && !alt)
     {
+        /* Prompts distinguish navigation from typed quantity digits and
+         * numbered shortcuts. Keep the resolved D-pad direction semantic,
+         * just like stick and physical-arrow input, before emitting '2'/'8'. */
+        int navigation = (dir == 4 || dir >= 7) ? -1
+            : (dir == 6 || dir <= 3) ? 1 : 0;
+        if (navigation && sdl_question_menu_queue_navigation(navigation))
+        {
+            return;
+        }
+
         if (sdl_submit_legacy_keypad_movement(
                 (dir == 5) ? MOVEMENT_INPUT_ACTION_WAIT
                            : MOVEMENT_INPUT_ACTION_MOVE_DIR,
@@ -912,7 +922,9 @@ int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone)
     int abs_x = abs(x);
     int abs_y = abs(y);
 
-    if (abs_x < deadzone && abs_y < deadzone)
+    /* Match movement's strict threshold, including a centered stick when
+     * the user disables the deadzone. Recenter must never navigate Right. */
+    if (abs_x <= deadzone && abs_y <= deadzone)
         return -1;
 
     if (abs_x >= abs_y) {
@@ -938,12 +950,13 @@ static bool sdl_gamepad_send_ui_direction(int dir)
 {
     int key = 0;
 
-    /* A question overlay may also expose numbered shortcuts.  Queue vertical
-     * navigation as a semantic action so the D-pad cannot be mistaken for the
+    /* A question overlay may also expose numbered shortcuts. Queue arrow
+     * navigation as a semantic action so a stick cannot be mistaken for the
      * matching number key. */
-    if (dir == GAMEPAD_STICK_DIR_UP || dir == GAMEPAD_STICK_DIR_DOWN)
+    if (dir >= 0 && dir < GAMEPAD_STICK_DIR_COUNT)
     {
-        int navigation = (dir == GAMEPAD_STICK_DIR_UP) ? -1 : 1;
+        int navigation = (dir == GAMEPAD_STICK_DIR_UP
+            || dir == GAMEPAD_STICK_DIR_LEFT) ? -1 : 1;
 
         if (sdl_question_menu_queue_navigation(navigation))
             return true;

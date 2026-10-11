@@ -176,6 +176,7 @@ static void check_controller(void)
     character_icky = 1;
     config.gamepad_enabled = true;
     config.input_ui_mode = SDL_INPUT_UI_MODE_CONTROLLER;
+    log_set_level(LOG_WARN);
     config.gamepad_use_dpad = false;
     for (unsigned b = 0; b < N_ELEMENTS(bindings); b++) {
         for (int j = 0; j < SDL_GAMEPAD_BUTTON_COUNT; j++)
@@ -194,6 +195,54 @@ static void check_controller(void)
         assert(steamdeck_menu_key('[', 'a', 'b') == 'a');
         assert(steamdeck_menu_key(']', 'a', 'b') == 'b');
     }
+
+    /* Enabled movement D-pad input must remain navigation in quantity and
+     * numbered-choice overlays. Two Down taps must not type the number 22. */
+    config.gamepad_use_dpad = true;
+    sdl_question_menu_begin("Drop how many?");
+    sdl_question_menu_add_entry(1002, "", "Drop 3", TERM_WHITE);
+    sdl_question_menu_finish();
+    for (int tap = 0; tap < 2; ++tap) {
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+        (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
+        expect_key(UI_MENU_CLICK_WAKE_KEY);
+        assert(sdl_question_menu_take_navigation() == 1);
+        expect_key(0);
+    }
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, true);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
+    expect_key(UI_MENU_CLICK_WAKE_KEY);
+    assert(sdl_question_menu_take_navigation() == -1);
+    expect_key(0);
+    /* Horizontal arrows have the same semantics as physical arrows, and an
+     * overlapping Down+Right chord resolves to one next navigation action. */
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
+    expect_key(UI_MENU_CLICK_WAKE_KEY);
+    assert(sdl_question_menu_take_navigation() == 1);
+    expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
+    expect_key(UI_MENU_CLICK_WAKE_KEY);
+    assert(sdl_question_menu_take_navigation() == 1);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+    assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true));
+    expect_key(0);
+    SDL_Event typed = {0};
+    typed.type = SDL_EVENT_KEY_DOWN;
+    typed.key.down = true;
+    typed.key.key = SDLK_2;
+    typed.key.scancode = SDL_SCANCODE_2;
+    sdl_handle_event(&g_state, &typed);
+    expect_key('2');
+    assert(sdl_question_menu_take_navigation() == 0);
+    expect_key(0);
+    sdl_question_menu_clear();
+    config.gamepad_use_dpad = false;
     /* B must exit the current modal even if an old gameplay row was focused. */
     g_gamepad_context_focus_kind = SDL_CONTROLLER_FOCUS_LEFT_PANEL;
     g_gamepad_context_focus_id = SDL_PANEL_CLICK_INVENTORY;
@@ -214,6 +263,33 @@ static void check_controller(void)
     sdl_gamepad_handle_axis(&axis);
     expect_key(0);
     g_player_action_menu.active = false;
+
+    /* Zero deadzone still has a neutral center. Releasing the stick must not
+     * send Right (which spends attribute points in character creation). Keep
+     * cardinal navigation consistent with movement at the deadzone boundary. */
+    assert(sdl_gamepad_axis_to_cardinal_dir(0, 0, 0) == -1);
+    assert(sdl_gamepad_axis_to_cardinal_dir(12000, 0, 12000) == -1);
+    assert(sdl_gamepad_axis_to_cardinal_dir(0, -12000, 12000) == -1);
+    assert(sdl_gamepad_axis_to_cardinal_dir(1, 0, 0) == GAMEPAD_STICK_DIR_RIGHT);
+    character_icky = 1;
+    config.gamepad_deadzone = 0;
+    g_gamepad_state.left_x = g_gamepad_state.left_y = 0;
+    g_gamepad_state.left_ui_dir = -1;
+    axis.axis = SDL_GAMEPAD_AXIS_LEFTY;
+    axis.value = 32767;
+    sdl_gamepad_handle_axis(&axis);
+    expect_key('2');
+    axis.value = 0;
+    sdl_gamepad_handle_axis(&axis);
+    expect_key(0);
+    assert(g_gamepad_state.left_ui_dir == -1);
+    axis.value = 32767;
+    sdl_gamepad_handle_axis(&axis);
+    expect_key('2');
+    axis.value = 0;
+    sdl_gamepad_handle_axis(&axis);
+    expect_key(0);
+    config.gamepad_deadzone = 12000;
 
     /* One stick deflection navigates once and must recenter after the modal. */
     character_icky = 1;
@@ -353,12 +429,58 @@ int main(void)
     term_screen = &t;
     check_dpad_diagonals();
     check_controller();
+    check_main_menu_shortcuts();
     check_help();
     term_nuke(&t);
     SDL_Quit();
     return 0;
 }
 '''
+
+MENU_CHECK = r'''
+#include "angband.h"
+#include <assert.h>
+bool fixture_execute_choice(int choice);
+#define do_cmd_main_menu_execute_choice fixture_execute_choice
+#include "sdl/ui/sdl-main-menu.c"
+#undef do_cmd_main_menu_execute_choice
+static int executed_choice;
+bool fixture_execute_choice(int choice) { executed_choice = choice; return false; }
+void check_main_menu_shortcuts(void)
+{
+    const SDL_GamepadButton buttons[] = {
+        SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_BUTTON_NORTH,
+        SDL_GAMEPAD_BUTTON_BACK, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,
+        SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
+    };
+    const int choices[] = { MAIN_MENU_SAVE_QUIT, MAIN_MENU_HINTS_QUESTS,
+        MAIN_MENU_OPTIONS, MAIN_MENU_HALLS_OF_MANDOS, MAIN_MENU_LOG_HISTORY };
+    const char *labels[] = { "X", "Y", "Back", "L1", "R1" };
+    const int remaps[] = { 'x', 'q', GAMEPAD_BIND_SHIFT, GAMEPAD_BIND_NONE };
+    config.gamepad_enabled = true;
+    config.input_ui_mode = SDL_INPUT_UI_MODE_CONTROLLER;
+    for (unsigned r = 0; r < N_ELEMENTS(remaps); ++r) {
+        for (unsigned b = 0; b < N_ELEMENTS(buttons); ++b) {
+            config.gamepad_button_bindings[buttons[b]] = remaps[r];
+            char label[32];
+            main_menu_shortcut_label(choices[b], label, sizeof(label));
+            assert(strcmp(label, labels[b]) == 0);
+            g_main_menu_overlay_active = true;
+            g_main_menu_overlay_highlight = MAIN_MENU_CHARACTER;
+            executed_choice = 0;
+            SDL_Event event = {0};
+            event.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+            event.gbutton.button = buttons[b];
+            event.gbutton.down = true;
+            sdl_handle_event(&g_state, &event);
+            assert(executed_choice == choices[b]);
+            assert(!g_main_menu_overlay_active);
+        }
+    }
+    puts("Native main menu physical shortcut routing: PASS (5 buttons, 4 remaps)");
+}
+'''
+
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -372,10 +494,13 @@ def main():
         '#include "ui/help.c"\n' + HARNESS[help_start:main_start].replace(
             "static void check_help", "void check_help"), encoding="utf-8")
     source.write_text(HARNESS[:help_start].replace('#include "ui/help.c"', '')
-        + "void check_help(void);\n" + HARNESS[main_start:], encoding="utf-8")
+        + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\n" + HARNESS[main_start:], encoding="utf-8")
+    menu_source = OUT / "menu-check.c"
+    menu_source.write_text(MENU_CHECK, encoding="utf-8")
     cmake_dir = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
-    exclude = ("/src/main.c.obj", "/src/ui/help.c.obj", "/src/sdl/input/sdl-gamepad.c.obj")
+    exclude = ("/src/main.c.obj", "/src/ui/help.c.obj", "/src/sdl/input/sdl-gamepad.c.obj",
+               "/src/sdl/ui/sdl-main-menu.c.obj")
     objects = [p for p in objects if not p.endswith(exclude)]
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
@@ -387,7 +512,7 @@ def main():
     compiler = "C:/msys64/mingw64/bin/cc.exe"
     exe = OUT / "check.exe"
     subprocess.run([compiler, "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source),
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=OUT, env=env, check=True, timeout=30)

@@ -14308,10 +14308,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
 
                 if (!found_floor)
+                {
                     bell(inventory_one_page
                         ? "No floor item in inventory."
                         : "No floor item in this category.");
-                continue;
+                    continue;
+                }
+                /* Like an item letter, the floor shortcut both selects the
+                 * first floor entry and runs the current primary action. */
+                ch = (forced_action == SUPPLY_MENU_ACTION_DROP) ? 'z' : 'u';
             }
 
             if ((ch == '\r' || ch == '\n'
@@ -15443,8 +15448,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             }
 
             if (!found_floor)
+            {
                 bell("No floor item in this supply group.");
-            continue;
+                continue;
+            }
+            ch = 'u';
         }
 
         if (!click_generated_command)

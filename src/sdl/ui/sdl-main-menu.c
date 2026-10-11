@@ -1844,6 +1844,28 @@ bool sdl_main_menu_overlay_handle_gamepad_button(
         return true;
     }
 
+    /* These physical shortcuts are advertised alongside their menu rows.
+     * Like confirm/back, they belong to the menu rather than gameplay remaps. */
+    switch (button) {
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
+        sdl_main_menu_overlay_choose(MAIN_MENU_HALLS_OF_MANDOS);
+        break;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+        sdl_main_menu_overlay_choose(MAIN_MENU_LOG_HISTORY);
+        break;
+    case SDL_GAMEPAD_BUTTON_NORTH:
+        sdl_main_menu_overlay_choose(MAIN_MENU_HINTS_QUESTS);
+        break;
+    case SDL_GAMEPAD_BUTTON_BACK:
+        sdl_main_menu_overlay_choose(MAIN_MENU_OPTIONS);
+        break;
+    case SDL_GAMEPAD_BUTTON_WEST:
+        sdl_main_menu_overlay_choose(MAIN_MENU_SAVE_QUIT);
+        break;
+    default:
+        break;
+    }
+
     return true;
 }
 
