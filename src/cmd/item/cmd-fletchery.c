@@ -842,6 +842,8 @@ void finish_fletching(int turns_left)
         int available_total = 0;
         int improved = 0;
         int remaining_original = 0;
+        int selected_arrow = player_quiver_selected_arrow_slot();
+        bool select_improved_arrows = false;
 
         for (int i = 0; i < slot_count && available_total < source_total; i++)
         {
@@ -854,6 +856,8 @@ void finish_fletching(int turns_left)
                 continue;
 
             remove_amounts[i] = used;
+            if (slot == selected_arrow)
+                select_improved_arrows = true;
             available_total += used;
             log_debug("fletchery:finish slot=%d available=%d remove=%d running_total=%d source_total=%d",
                 slot, available, used, available_total, source_total);
@@ -896,11 +900,6 @@ void finish_fletching(int turns_left)
         i_ptr->att = 3;
         log_fletchery_object_state("finish_improved_proto", i_ptr, -1);
 
-        object_type* active_arrows = player_quiver_arrow_object(
-            player_quiver_selected_arrow_slot());
-        bool source_was_active = object_is_quivered_arrow(&source_template)
-            && active_arrows && object_similar(active_arrows, &source_template);
-
         /* Reduce the original source stacks. Delay optimization so pack slots stay stable. */
         for (int i = 0; i < slot_count; i++)
         {
@@ -922,7 +921,7 @@ void finish_fletching(int turns_left)
                 continue;
             if (slots[i] >= QUIVER_INDEX && slots[i] < QUIVER_INDEX_END)
             {
-                player_quiver_remove_arrows(slots[i], remove_amounts[i]);
+                player_quiver_remove_arrows_quiet(slots[i], remove_amounts[i]);
                 continue;
             }
 
@@ -943,23 +942,16 @@ void finish_fletching(int turns_left)
             distribute_fletchered_arrows(&remainder);
         }
 
-        /* Removing the source compacts Quiver handles. Follow the improved
-         * stack by identity, including when it merged with existing arrows. */
-        if (source_was_active)
+        /* Removing the source compacts the Quiver. Keep its improved arrows
+         * active instead of silently choosing an unrelated neighbouring stack. */
+        if (select_improved_arrows)
         {
             for (int i = 0; i < player_quiver_store_entry_count(); i++)
             {
-                int handle = QUIVER_INDEX + i;
-                object_type* arrows = player_quiver_arrow_object(handle);
-                if (arrows && object_similar(arrows, i_ptr))
+                object_type* arrows = player_quiver_store_entry_at(i);
+                if (object_similar(arrows, i_ptr))
                 {
-                    if (player_quiver_select_arrow(handle))
-                    {
-                        char active_name[160];
-                        object_desc(active_name, sizeof(active_name), arrows,
-                            true, 3);
-                        msg_format("Your active arrows are now %s.", active_name);
-                    }
+                    (void)player_quiver_select_arrow(QUIVER_INDEX + i);
                     break;
                 }
             }

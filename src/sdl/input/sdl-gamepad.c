@@ -317,6 +317,7 @@ static bool sdl_prompt_input_is_active(void)
 {
     return g_touch_pane_yes_no_prompt_active
         || sdl_question_menu_captures_pointer()
+        || g_song_menu.active
         || inkey_prompt_input_active();
 }
 

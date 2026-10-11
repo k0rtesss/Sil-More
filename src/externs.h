@@ -1708,6 +1708,7 @@ extern object_type* player_quiver_store_entry_at(int index);
 extern object_type* player_quiver_arrow_object(int handle);
 extern int player_quiver_absorb_arrow(object_type* o_ptr);
 extern void player_quiver_remove_arrows(int handle, int amount);
+extern void player_quiver_remove_arrows_quiet(int handle, int amount);
 extern int player_quiver_arrow_count(void);
 extern int player_quiver_total_weight(void);
 extern int player_quiver_arrow_space(void);

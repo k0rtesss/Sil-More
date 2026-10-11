@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render and operate real confirmations over a retained gameplay narrative.
+"""Render real confirmations/popups over gameplay narrative and Quick Access.
 
-Uses private SDL/template paths and production event dispatch/get_check. The
-committed baseline obscures button pixels and consumes Escape into the banner.
+Uses private SDL/template paths, production event dispatch/get_check and real
+toolbar buttons with synthetic overlap placement. --baseline uses HEAD sources.
 """
 from pathlib import Path
 import argparse
@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/qa9-narrative-modal-priority"
 CHECKS = r'''
+#include "sdl/ui/sdl-question-menu.c"
 extern char g_active_partition_banner_text[1024];
 extern bool g_active_partition_banner_consumes_input;
 extern void do_cmd_help_menu(void);
@@ -23,6 +24,14 @@ static errr (*real_extra)(int,int);
 static int injected,answer_kind;
 static char fallback_key='n';
 static cptr prompt="Leave Duruin's Bastion and fail Varda's quest?";
+static bool overlap_probe,hide_quick_access;
+static SDL_FRect probe_buttons[SDL_TOUCH_TOP_PANEL_BUTTON_COUNT];
+void __real_sdl_touch_top_panel_render(void);
+void __wrap_sdl_touch_top_panel_render(void)
+{
+    if(!overlap_probe) { __real_sdl_touch_top_panel_render();return; }
+    if(!hide_quick_access) sdl_touch_top_panel_render_buttons(probe_buttons);
+}
 static void banner(void)
 {
     SDL_strlcpy(g_active_partition_banner_text,
@@ -52,6 +61,69 @@ static bool same_button(SDL_Surface* a,SDL_Surface* b,SDL_FRect rect)
             if(ar!=br||ag!=bg||ab!=bb)return false;
         }
     return true;
+}
+static bool same_popup_ink(SDL_Surface* a,SDL_Surface* b,SDL_FRect rect)
+{
+    int samples=0;
+    for(int y=(int)rect.y+3;y<(int)(rect.y+rect.h)-3;y++)
+        for(int x=(int)rect.x+3;x<(int)(rect.x+rect.w)-3;x++) {
+            Uint8 ar,ag,ab,aa,br,bg,bb,ba;
+            assert(SDL_ReadSurfacePixel(a,x,y,&ar,&ag,&ab,&aa));
+            assert(SDL_ReadSurfacePixel(b,x,y,&br,&bg,&bb,&ba));
+            /* Normal popup backgrounds are translucent. Compare opaque glyph
+             * pixels, which must remain unchanged regardless of the backdrop. */
+            if(ar!=255 && ag!=255 && ab!=255) continue;
+            samples++;
+            if(ar!=br||ag!=bg||ab!=bb)return false;
+        }
+    assert(samples>10);
+    return true;
+}
+static void check_quick_access_popup_pixels(void)
+{
+    const int sizes[][2]={{360,800},{800,360},{800,576},{1280,720}};
+    g_banner_force_redraw_remaining=0;
+    config.mouse_enabled=true;
+    config.touch_top_panel_cell_count=8;
+    config.touch_top_panel_rows=2;
+    sdl_touch_top_panel_set_open(true);
+    for(int i=0;i<8;i++) config.touch_top_panel_bindings[i]='i';
+    overlap_probe=true;
+    for(unsigned size=0;size<N_ELEMENTS(sizes);size++)
+    for(int bigger=0;bigger<2;bigger++) {
+        assert(SDL_SetWindowSize(g_state.window,sizes[size][0],sizes[size][1]));
+        assert(SDL_SyncWindow(g_state.window));
+        config.bigger_font=bigger;
+        config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=bigger;
+        sdl_apply_config_no_redraw();
+        Term_activate(term_screen);Term_clear();Term_fresh();
+        sdl_question_menu_begin("Foreground question");
+        sdl_question_menu_add_entry(0,"","Accept this choice",TERM_WHITE);
+        sdl_question_menu_add_entry(1,"","Keep the current choice",TERM_WHITE);
+        sdl_question_menu_add_entry(2,"","Cancel",TERM_WHITE);
+        sdl_question_menu_finish();
+        hide_quick_access=true;
+        char name[100];
+        strnfmt(name,sizeof(name),"popup-%dx%d-%d-reference",sizes[size][0],sizes[size][1],bigger);
+        SDL_Surface* reference=frame(name);
+        sdl_question_menu_layout_info layout;
+        assert(sdl_question_menu_layout(&layout));
+        /* Move real native toolbar buttons into the question's reading area.
+         * Only their placement is synthetic; the frame and both renderers are real. */
+        memset(probe_buttons,0,sizeof(probe_buttons));
+        for(int i=0;i<8;i++) probe_buttons[i]=(SDL_FRect){
+            layout.panel.x+8+(i%4)*48,layout.panel.y+8+(i/4)*48,48,48};
+        hide_quick_access=false;
+        strnfmt(name,sizeof(name),"popup-%dx%d-%d-overlap",sizes[size][0],sizes[size][1],bigger);
+        SDL_Surface* overlapping=frame(name);
+        bool visible=same_popup_ink(reference,overlapping,layout.panel);
+        SDL_DestroySurface(reference);SDL_DestroySurface(overlapping);
+        assert(visible);
+        assert(turn==331 && playerturn==33 && p_ptr->chp==100);
+        sdl_question_menu_clear();
+    }
+    overlap_probe=false;
+    puts("Native question pixels remain unobscured by overlapping Quick Access: four sizes, Normal/Bigger fonts, unchanged gameplay PASS.");
 }
 static errr input_extra(int n,int v)
 {
@@ -172,6 +244,8 @@ static void checks(void)
     ordinary=frame("banner-restored");SDL_DestroySurface(ordinary);
     assert(active_narrative_banner_visible());
     puts("Modal confirmation above retained narrative: button pixels, one Escape, Yes/No pointer dispatch, no time or narrative loss PASS.");
+    if(strcmp(SDL_getenv("PRIORITY_CASE"),"input"))
+        check_quick_access_popup_pixels();
 }
 '''
 
@@ -183,7 +257,8 @@ def main():
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     sources = []
-    for relative in ("src/sdl/ui/sdl-menus.c", "src/sdl/core/sdl-events.c"):
+    for relative in ("src/sdl/ui/sdl-menus.c", "src/sdl/core/sdl-events.c",
+                     "src/sdl/render/sdl-present.c"):
         path = ROOT / relative
         if args.baseline:
             path = OUT / (Path(relative).stem + "-baseline.c")
@@ -198,7 +273,8 @@ def main():
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith((
-        "/src/main.c.obj", "/src/sdl/ui/sdl-menus.c.obj", "/src/sdl/core/sdl-events.c.obj"))), encoding="utf-8")
+        "/src/main.c.obj", "/src/sdl/ui/sdl-menus.c.obj", "/src/sdl/core/sdl-events.c.obj",
+        "/src/sdl/ui/sdl-question-menu.c.obj", "/src/sdl/render/sdl-present.c.obj"))), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / p) for p in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin",
@@ -209,7 +285,8 @@ def main():
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), *sources,
-        "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-o", str(exe)],
+        "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+        "-Wl,--wrap=sdl_touch_top_panel_render", "-o", str(exe)],
         cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="fixture-", dir=OUT) as profile:
         subprocess.run([str(exe), "--windowed", "--tiles"], cwd=ROOT,

@@ -857,7 +857,8 @@ int player_quiver_absorb_arrow(object_type* o_ptr)
     return original_number - o_ptr->number;
 }
 
-void player_quiver_remove_arrows(int handle, int amount)
+static void player_quiver_remove_arrows_impl(int handle, int amount,
+    bool report_selection_change)
 {
     object_type* o_ptr = player_quiver_arrow_object(handle);
 
@@ -884,7 +885,8 @@ void player_quiver_remove_arrows(int handle, int amount)
             quiver_selected_arrow_index = index;
         player_quiver_normalize_selected_arrow();
 
-        if (removed_selected && quiver_selected_arrow_index >= 0)
+        if (report_selection_change && removed_selected
+            && quiver_selected_arrow_index >= 0)
         {
             object_type* selected
                 = &quiver_arrow_store[quiver_selected_arrow_index];
@@ -903,6 +905,17 @@ void player_quiver_remove_arrows(int handle, int amount)
 
     p_ptr->redraw |= PR_QUIVER;
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
+}
+
+void player_quiver_remove_arrows(int handle, int amount)
+{
+    player_quiver_remove_arrows_impl(handle, amount, true);
+}
+
+/* Rebuilding a stack is one operation; do not announce the temporary choice. */
+void player_quiver_remove_arrows_quiet(int handle, int amount)
+{
+    player_quiver_remove_arrows_impl(handle, amount, false);
 }
 
 /*
