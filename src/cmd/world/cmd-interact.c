@@ -2384,7 +2384,13 @@ static bool do_cmd_tunnel_aux(int y, int x)
             if (!open_inventory_item_select_menu(USE_INVEN,
                     "Use which digger? ",
                     "You are not carrying a shovel or mattock.", &item))
+            {
+                /* Choosing a tool has not attempted any digging. Both
+                 * Tunnel and Alter may have reserved a turn already. */
+                p_ptr->previous_action[0] = ACTION_NOTHING;
+                p_ptr->energy_use = 0;
                 return (false);
+            }
             else
             {
                 /* Get the object */
@@ -3614,6 +3620,9 @@ void do_cmd_alter(void)
     /* Ascend upwards stairs */
     else if ((dir == 5) && ((feat == FEAT_LESS) || (feat == FEAT_LESS_SHAFT)))
     {
+        /* Confirming travel delegates its cost to the stairs command.
+         * Cancelling must not inherit alter's default action cost. */
+        p_ptr->energy_use = 0;
         /* Ascend */
         if (get_check_near(y, x, "Are you sure you wish to ascend? "))
             do_cmd_go_up();
@@ -3622,6 +3631,8 @@ void do_cmd_alter(void)
     /* Descend downwards stairs */
     else if ((dir == 5) && ((feat == FEAT_MORE) || (feat == FEAT_MORE_SHAFT)))
     {
+        /* The stairs command charges only after its own legality checks. */
+        p_ptr->energy_use = 0;
         /* Descend */
         if (get_check_near(y, x, "Are you sure you wish to descend? "))
             do_cmd_go_down();

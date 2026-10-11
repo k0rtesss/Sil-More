@@ -7,6 +7,7 @@ No game installation, user configuration or saved character is opened.
 """
 from pathlib import Path
 import os
+import argparse
 import shlex
 import subprocess
 
@@ -29,7 +30,11 @@ static void expect_key(int expected)
         if ((unsigned char)actual != (unsigned char)expected)
             fprintf(stderr, "Expected key %d, received %d\n", expected, (unsigned char)actual);
         assert(actual == expected);
-    } else assert(result != 0);
+    } else {
+        if (result == 0)
+            fprintf(stderr, "Expected no key, received %d\n", (unsigned char)actual);
+        assert(result != 0);
+    }
 }
 
 bool fixture_capture_is_cancel(bool controller_ui, int modifier, int type, int id);
@@ -514,6 +519,286 @@ static void check_song_controller_owner(void)
     puts("Native Songs modal owner: remap-safe A/B, D-pad/sticks, held-trigger cleanup and no dungeon movement PASS");
 }
 
+
+
+static void blocked_axis(int axis,int value)
+{
+    SDL_Event event={0};event.type=SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    event.gaxis.axis=axis;event.gaxis.value=value;
+    sdl_handle_event(&g_state,&event);
+}
+
+static void check_blocked_controller_state(void)
+{
+    sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    character_icky=0;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    sdl_gamepad_reset_movement_controls();
+    g_gamepad_state.right_trigger_down=false;
+    blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,32767);
+    assert(sdl_gamepad_ctrl_active());expect_key(0);
+    sdl_question_menu_begin("Bash roll");
+    sdl_question_menu_add_entry(0,"","Rolling...",TERM_WHITE);
+    sdl_question_menu_set_blocking_input(true);sdl_question_menu_finish();
+    assert(sdl_question_menu_blocks_input());
+    /* Already-held trigger retains its modifier until its physical release. */
+    blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,30000);
+    assert(sdl_gamepad_ctrl_active());expect_key(0);
+    g_gamepad_state.dpad_down=g_gamepad_state.dpad_right=true;
+    g_gamepad_state.dpad_dir=3;sdl_gamepad_set_pending_dpad(3);
+    g_gamepad_state.stick_movement[0].pending=true;
+    g_gamepad_state.stick_movement[0].pending_dir=6;
+    sdl_gamepad_set_pending_shoulder(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    g_gamepad_state.confirm_pending=true;
+    g_gamepad_state.confirm_pending_button=SDL_GAMEPAD_BUTTON_SOUTH;
+    g_gamepad_state.confirm_pending_binding=' ';
+    g_gamepad_focus_chord_pending=true;g_gamepad_focus_chord_used=false;
+    blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,0);
+    expect_key(0);
+    assert(!sdl_gamepad_ctrl_active()&&!g_gamepad_state.right_trigger_down);
+    assert(!g_gamepad_state.dpad_up&&!g_gamepad_state.dpad_down
+        &&!g_gamepad_state.dpad_left&&!g_gamepad_state.dpad_right
+        &&!g_gamepad_state.dpad_pending&&!g_gamepad_state.dpad_dir);
+    assert(!g_gamepad_state.stick_movement[0].pending
+        &&!g_gamepad_state.stick_movement[1].pending);
+    assert(!g_gamepad_state.shoulder_pending&&!g_gamepad_state.confirm_pending);
+    assert(!g_gamepad_focus_chord_pending&&!g_gamepad_focus_chord_used);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);expect_key(0);
+    /* Button-bound modifiers retire, but neither release nor a swallowed
+     * fresh button/trigger press dispatches its ordinary binding. */
+    config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST]=GAMEPAD_BIND_SHIFT;
+    g_gamepad_button_modifiers[SDL_GAMEPAD_BUTTON_WEST]=GAMEPAD_BIND_SHIFT;
+    sdl_gamepad_apply_modifier(GAMEPAD_BIND_SHIFT,true);
+    dpad_event(SDL_GAMEPAD_BUTTON_WEST,false);assert(!sdl_gamepad_shift_active());
+    g_gamepad_state.left_shoulder_down=g_gamepad_state.right_shoulder_down=true;
+    dpad_event(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,false);
+    dpad_event(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,false);
+    assert(!g_gamepad_state.left_shoulder_down&&!g_gamepad_state.right_shoulder_down);
+    config.gamepad_trigger_bindings[0]='e';g_gamepad_state.left_trigger_down=false;
+    blocked_axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER,32767);
+    assert(g_gamepad_state.left_trigger_down);expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,true);
+    dpad_event(SDL_GAMEPAD_BUTTON_START,true);expect_key(0);
+    assert(!g_main_menu_overlay_active&&!g_gamepad_state.confirm_pending);
+    blocked_axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER,0);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);
+    dpad_event(SDL_GAMEPAD_BUTTON_START,false);expect_key(0);
+    sdl_question_menu_clear();
+    assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true));
+    assert(!sdl_gamepad_flush_pending_sticks(SDL_GetTicksNS(),true));
+    assert(!sdl_gamepad_flush_pending_shoulder(SDL_GetTicksNS(),true));
+    assert(!sdl_gamepad_flush_pending_confirm(SDL_GetTicksNS()+1000000000ULL));expect_key(0);
+    int direction=0;assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&direction));
+    dpad_event(SDL_GAMEPAD_BUTTON_START,true);expect_key(ESCAPE);
+    dpad_event(SDL_GAMEPAD_BUTTON_START,false);expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);
+    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);expect_move(6);
+    for(int stick=0;stick<2;stick++) {
+        sdl_gamepad_reset_movement_controls();
+        g_gamepad_state.left_x=g_gamepad_state.left_y=0;
+        g_gamepad_state.right_x=g_gamepad_state.right_y=0;
+        g_gamepad_state.left_ui_dir=g_gamepad_state.right_ui_dir=-1;
+        config.gamepad_use_left_stick=config.gamepad_use_right_stick=true;
+        int axis=stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX;
+        int* bindings=stick?config.gamepad_right_stick_bindings:config.gamepad_left_stick_bindings;
+        bindings[GAMEPAD_STICK_DIR_RIGHT]=GAMEPAD_BIND_ALT;
+        if(stick)g_gamepad_state.right_dir=GAMEPAD_STICK_DIR_RIGHT;
+        else g_gamepad_state.left_bind_dir=GAMEPAD_STICK_DIR_RIGHT;
+        g_gamepad_stick_binding_modifier_active[stick]=true;
+        sdl_gamepad_apply_modifier(GAMEPAD_BIND_ALT,true);
+        sdl_question_menu_begin("Bash roll");
+        sdl_question_menu_add_entry(0,"","Rolling...",TERM_WHITE);
+        sdl_question_menu_set_blocking_input(true);sdl_question_menu_finish();
+        blocked_axis(axis,32767);expect_key(0);
+        assert(!sdl_gamepad_alt_active()&&!g_gamepad_stick_binding_modifier_active[stick]);
+        assert((stick?g_gamepad_state.right_x:g_gamepad_state.left_x)==32767);
+        assert((stick?g_gamepad_state.right_ui_dir:g_gamepad_state.left_ui_dir)==GAMEPAD_STICK_DIR_RIGHT);
+        sdl_question_menu_clear();
+        blocked_axis(axis,32000);expect_key(0); /* held jitter cannot walk */
+        blocked_axis(axis,0);expect_key(0);
+        blocked_axis(axis,32767);
+        (void)sdl_gamepad_flush_pending_sticks(SDL_GetTicksNS(),true);expect_move(6);
+        blocked_axis(axis,0);expect_key(0);
+    }
+    sdl_gamepad_reset_movement_controls();sdl_config_set_defaults(&config);
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Blocking roll dispatcher: neutral trigger/button cleanup, pending action suppression, both stick neutral gates and restored Start PASS");
+}
+
+static void check_question_held_modifiers(void)
+{
+    sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    character_icky=0;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    const SDL_GamepadButton directions[]={SDL_GAMEPAD_BUTTON_DPAD_UP,
+        SDL_GAMEPAD_BUTTON_DPAD_DOWN,SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+        SDL_GAMEPAD_BUTTON_DPAD_RIGHT};
+    const int modifiers[]={GAMEPAD_BIND_SHIFT,GAMEPAD_BIND_CTRL,GAMEPAD_BIND_ALT};
+    for(int mask=0;mask<8;mask++) {
+        sdl_gamepad_reset_movement_controls();
+        for(int i=0;i<3;i++)if(mask&(1<<i))sdl_gamepad_apply_modifier(modifiers[i],true);
+        sdl_question_menu_begin("Use which digger?");
+        sdl_question_menu_add_entry(0,"a)","Shovel",TERM_WHITE);
+        sdl_question_menu_add_entry(1,"b)","Mattock",TERM_WHITE);
+        sdl_question_menu_set_highlight(0);sdl_question_menu_finish();
+        for(unsigned d=0;d<N_ELEMENTS(directions);d++) {
+            dpad_event(directions[d],true);dpad_event(directions[d],false);
+            (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+            expect_key(UI_MENU_CLICK_WAKE_KEY);
+            assert(sdl_question_menu_take_navigation()==(d%2?1:-1));expect_key(0);
+        }
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,true);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);
+        expect_key(UI_MENU_CLICK_WAKE_KEY);assert(sdl_question_menu_take_navigation()==1);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);
+        assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true));expect_key(0);
+        dpad_event(SDL_GAMEPAD_BUTTON_EAST,true);expect_key(ESCAPE);
+        dpad_event(SDL_GAMEPAD_BUTTON_EAST,false);expect_key(0);
+        sdl_question_menu_clear();
+        for(int i=0;i<3;i++)if(mask&(1<<i))sdl_gamepad_apply_modifier(modifiers[i],false);
+        (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);expect_key(0);
+        int dir=0;
+        assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&dir));
+    }
+    /* Actual default RT held across opening the Staff picker uses the same
+     * direction snapshot; releasing it later cannot manufacture a command. */
+    sdl_gamepad_reset_movement_controls();g_gamepad_state.right_trigger_down=false;
+    SDL_GamepadAxisEvent axis={0};axis.axis=SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);assert(sdl_gamepad_ctrl_active());
+    sdl_question_menu_begin("Activate which staff?");
+    sdl_question_menu_add_entry(0,"a)","Imprisonment",TERM_WHITE);
+    sdl_question_menu_add_entry(1,"b)","Slumber",TERM_WHITE);
+    sdl_question_menu_finish();
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,true);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);
+    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+    expect_key(UI_MENU_CLICK_WAKE_KEY);assert(sdl_question_menu_take_navigation()==1);expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,true);expect_key('\r');
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);expect_key(0);
+    axis.value=0;sdl_gamepad_handle_axis(&axis);assert(!sdl_gamepad_ctrl_active());expect_key(0);
+    sdl_question_menu_clear();sdl_gamepad_reset_movement_controls();
+    sdl_config_set_defaults(&config);movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Question picker held modifiers: all 8 states, D-pad/diagonal semantics, actual RT snapshot, A/B and no world queue PASS");
+}
+
+static void check_yes_no_controller_owner(void)
+{
+    sdl_config_set_defaults(&config);
+    config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    character_icky=0;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    sdl_gamepad_reset_movement_controls();
+    g_gamepad_state.left_trigger_down=false;
+    SDL_Event event={0};
+    SDL_GamepadAxisEvent axis={0};
+
+    axis.axis=SDL_GAMEPAD_AXIS_LEFT_TRIGGER;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);assert(sdl_gamepad_shift_active());
+    sdl_touch_pane_begin_yes_no_prompt("Travel?");
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+    assert(!sdl_gamepad_shift_active());
+    sdl_touch_pane_end_yes_no_prompt();
+
+    const int bindings[]={'f',GAMEPAD_BIND_SHIFT,GAMEPAD_BIND_CTRL,
+        GAMEPAD_BIND_ALT,GAMEPAD_BIND_NONE};
+    for(unsigned i=0;i<N_ELEMENTS(bindings);i++) {
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_SOUTH]=bindings[i];
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST]=bindings[i];
+        sdl_touch_pane_begin_yes_no_prompt("Travel?");
+        assert(g_touch_pane_yes_no_prompt_hover==SDL_TOUCH_YES_NO_HOVER_NONE);
+        dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,true);expect_key('y');
+        dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);expect_key(0);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);expect_key(0);
+        assert(g_touch_pane_yes_no_prompt_hover==SDL_TOUCH_YES_NO_HOVER_NO);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);expect_key(0);
+        dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,true);expect_key('n');
+        dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);expect_key(0);
+        dpad_event(SDL_GAMEPAD_BUTTON_EAST,true);expect_key(ESCAPE);
+        dpad_event(SDL_GAMEPAD_BUTTON_EAST,false);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active()
+            &&!sdl_gamepad_alt_active());
+        sdl_touch_pane_end_yes_no_prompt();
+    }
+    sdl_touch_pane_begin_yes_no_prompt("Travel?");
+    const SDL_GamepadButton directions[]={SDL_GAMEPAD_BUTTON_DPAD_DOWN,
+        SDL_GAMEPAD_BUTTON_DPAD_UP,SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
+        SDL_GAMEPAD_BUTTON_DPAD_LEFT};
+    for(unsigned i=0;i<N_ELEMENTS(directions);i++) {
+        dpad_event(directions[i],true);expect_key(0);
+        assert(g_touch_pane_yes_no_prompt_hover==(i%2
+            ? SDL_TOUCH_YES_NO_HOVER_YES:SDL_TOUCH_YES_NO_HOVER_NO));
+        dpad_event(directions[i],false);expect_key(0);
+    }
+    /* A held gameplay modifier cannot alter native choice navigation. */
+    g_gamepad_state.left_trigger_down=false;
+    axis.axis=SDL_GAMEPAD_AXIS_LEFT_TRIGGER;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);expect_key(0);
+    assert(!sdl_gamepad_shift_active());
+    for(int stick=0;stick<2;stick++) {
+        for(int dimension=0;dimension<2;dimension++) {
+            event.type=SDL_EVENT_GAMEPAD_AXIS_MOTION;
+            event.gaxis.axis=(stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX)+dimension;
+            event.gaxis.value=32767;sdl_handle_event(&g_state,&event);expect_key(0);
+            assert(g_touch_pane_yes_no_prompt_hover==SDL_TOUCH_YES_NO_HOVER_NO);
+            sdl_handle_event(&g_state,&event);expect_key(0);
+            event.gaxis.value=-32768;sdl_handle_event(&g_state,&event);expect_key(0);
+            assert(g_touch_pane_yes_no_prompt_hover==SDL_TOUCH_YES_NO_HOVER_YES);
+            event.gaxis.value=0;sdl_handle_event(&g_state,&event);expect_key(0);
+        }
+    }
+    /* The movement press that opened the popup may release inside it. */
+    g_gamepad_state.dpad_down=true;g_gamepad_state.dpad_dir=2;
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);expect_key(0);
+    assert(!g_gamepad_state.dpad_up&&!g_gamepad_state.dpad_down
+        &&!g_gamepad_state.dpad_left&&!g_gamepad_state.dpad_right
+        &&!g_gamepad_state.dpad_pending);
+    /* Closing with a stick still held must require neutral before walking. */
+    event.type=SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    event.gaxis.axis=SDL_GAMEPAD_AXIS_LEFTX;event.gaxis.value=32767;
+    sdl_handle_event(&g_state,&event);expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,true);expect_key('n');
+    sdl_touch_pane_end_yes_no_prompt();
+    sdl_handle_event(&g_state,&event);expect_key(0);
+    event.gaxis.value=32000;sdl_handle_event(&g_state,&event);expect_key(0);
+    event.gaxis.value=0;sdl_handle_event(&g_state,&event);expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);expect_key(0);
+    sdl_touch_pane_begin_yes_no_prompt("Travel?");
+    /* An underlying native menu must not steal controller events. */
+    g_main_menu_overlay_active=true;
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);expect_key(0);
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,true);expect_key('n');
+    g_main_menu_overlay_active=false;
+    sdl_touch_pane_end_yes_no_prompt();
+    dpad_event(SDL_GAMEPAD_BUTTON_SOUTH,false);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+    (void)sdl_gamepad_flush_pending_sticks(SDL_GetTicksNS(),true);expect_key(0);
+    int direction=0;
+    assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&direction));
+    assert(!sdl_gamepad_shift_active());
+    sdl_touch_pane_begin_yes_no_prompt("New question?");
+    assert(g_touch_pane_yes_no_prompt_hover==SDL_TOUCH_YES_NO_HOVER_NONE);
+    const SDL_Keycode keys[]={SDLK_Y,SDLK_N};
+    for(unsigned i=0;i<N_ELEMENTS(keys);i++) {
+        memset(&event,0,sizeof(event));event.type=SDL_EVENT_KEY_DOWN;
+        event.key.key=keys[i];event.key.mod=SDL_KMOD_NONE;
+        sdl_handle_event(&g_state,&event);expect_key(i?'n':'y');
+    }
+    sdl_touch_pane_end_yes_no_prompt();sdl_gamepad_reset_movement_controls();
+    sdl_config_set_defaults(&config);
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Native Yes/No controller: selected answer, remap-safe A/B, D-pad/both sticks, keyboard y/n, close/release and modal priority PASS");
+}
+
 static void check_help(void)
 {
     const int widths[] = {32, 50, 79, 80, 81, 120};
@@ -587,6 +872,9 @@ int main(void)
     check_dpad_diagonals();
     check_controller();
     check_song_controller_owner();
+    check_yes_no_controller_owner();
+    check_question_held_modifiers();
+    check_blocked_controller_state();
     check_main_menu_shortcuts();
     check_capture_cancel();
     fixture_check_binding_labels();
@@ -707,6 +995,14 @@ void fixture_check_wizard_debug_routing(void)
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--yes-no-baseline", action="store_true",
+        help="Disable native Yes/No navigation to reproduce keypad-digit leakage")
+    parser.add_argument("--question-modifier-baseline", action="store_true",
+        help="Restore unmodified-only question navigation to reproduce held-trigger bypass")
+    parser.add_argument("--blocked-state-baseline", action="store_true",
+        help="Drop blocked gamepad events without retiring their runtime state")
+    args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     source = OUT / "check.c"
     # externs.h contains legacy typedefs without an include guard, so compile
@@ -717,7 +1013,21 @@ def main():
     help_source.write_text('#include "angband.h"\n#include <assert.h>\n'
         '#include "ui/help.c"\n' + HARNESS[help_start:main_start].replace(
             "static void check_help", "void check_help"), encoding="utf-8")
-    source.write_text(HARNESS[:help_start].replace('#include "ui/help.c"', '')
+    harness = HARNESS[:help_start]
+    if args.yes_no_baseline or args.question_modifier_baseline:
+        gamepad = (ROOT / "src/sdl/input/sdl-gamepad.c").read_text()
+        if args.yes_no_baseline:
+            start = gamepad.index("static bool sdl_gamepad_yes_no_navigate(int navigation)")
+            end = gamepad.index("\nvoid sdl_gamepad_send_direction_mods", start)
+            gamepad = gamepad[:start] + "static bool sdl_gamepad_yes_no_navigate(int navigation) { return false; }\n" + gamepad[end:]
+        if args.question_modifier_baseline:
+            gamepad = gamepad.replace(
+                "if (navigation && sdl_question_menu_queue_navigation(navigation))",
+                "if (!shift && !ctrl && !alt && navigation && sdl_question_menu_queue_navigation(navigation))", 1)
+        (OUT / "yes-no-baseline-gamepad.c").write_text(gamepad, encoding="utf-8")
+        harness = harness.replace('#include "sdl/input/sdl-gamepad.c"',
+            '#include "yes-no-baseline-gamepad.c"')
+    source.write_text(harness.replace('#include "ui/help.c"', '')
         + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\nvoid fixture_check_binding_labels(void);\nvoid fixture_check_wizard_debug_routing(void);\n" + HARNESS[main_start:], encoding="utf-8")
     menu_source = OUT / "menu-check.c"
     menu_source.write_text(MENU_CHECK, encoding="utf-8")
@@ -725,11 +1035,17 @@ def main():
     settings_source.write_text(SETTINGS_CHECK, encoding="utf-8")
     wizard_source = OUT / "wizard-check.c"
     wizard_source.write_text(WIZARD_CHECK, encoding="utf-8")
+    events_source = ROOT / "src/sdl/core/sdl-events.c"
+    if args.blocked_state_baseline:
+        events = events_source.read_text()
+        assert events.count("sdl_gamepad_handle_blocked_event(ev);") == 1
+        events_source = OUT / "blocked-state-baseline-events.c"
+        events_source.write_text(events.replace("sdl_gamepad_handle_blocked_event(ev);", ""))
     cmake_dir = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake_dir / "objects1.rsp").read_text())
     exclude = ("/src/main.c.obj", "/src/ui/help.c.obj", "/src/sdl/input/sdl-gamepad.c.obj",
                "/src/sdl/ui/sdl-main-menu.c.obj", "/src/cmd/ui/cmd-ui-settings.c.obj",
-               "/src/wizard2.c.obj")
+               "/src/wizard2.c.obj", "/src/sdl/core/sdl-events.c.obj")
     objects = [p for p in objects if not p.endswith(exclude)]
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
@@ -741,7 +1057,7 @@ def main():
     compiler = "C:/msys64/mingw64/bin/cc.exe"
     exe = OUT / "check.exe"
     subprocess.run([compiler, "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source), str(wizard_source),
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(help_source), str(menu_source), str(settings_source), str(wizard_source), str(events_source),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=OUT, env=env, check=True, timeout=30)
