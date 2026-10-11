@@ -211,7 +211,6 @@ static void main_menu_controller_label(int choice, char* buf, size_t buflen)
 {
     int type = 0;
     int id = 0;
-    int binding;
     const char* fallback = "";
 
     if (!buf || !buflen)
@@ -222,11 +221,9 @@ static void main_menu_controller_label(int choice, char* buf, size_t buflen)
     if (!main_menu_controller_binding_for_choice(choice, &type, &id, &fallback))
         return;
 
-    binding = (type == GAMEPAD_CAPTURE_TRIGGER)
-        ? get_sdl_gamepad_trigger_binding(id)
-        : get_sdl_gamepad_button_binding(id);
-
-    controller_prompt_label(binding, fallback, buf, buflen);
+    /* Native main-menu shortcuts use these physical buttons regardless of
+     * gameplay remaps, so their labels must not search gameplay bindings. */
+    SDL_strlcpy(buf, fallback, buflen);
 }
 
 void main_menu_shortcut_label(int choice, char* buf, size_t buflen)

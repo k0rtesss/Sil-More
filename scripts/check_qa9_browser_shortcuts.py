@@ -3,6 +3,7 @@
 
 --alias-baseline removes only the new Ctrl aliases, retaining other repairs.
 --footer-baseline restores long verbs in compact Inventory footer variants.
+--floor-baseline restores dash selection without opening the action.
 """
 from pathlib import Path
 import os
@@ -29,6 +30,7 @@ static int stack_count;
 static int browser_width=120;
 static bool controller, pointer_pending;
 static bool supply_page,picker,mixed_harness;
+static int floor_stacks;
 static char footer[256];
 extern errr __real_Term_putstr(int x,int y,int n,byte a,cptr s);
 errr __wrap_Term_putstr(int x,int y,int n,byte a,cptr s)
@@ -107,6 +109,16 @@ static void run(int stacks,bool pad,const int* actions,int actions_count,
             assert(player_quiver_absorb_arrow(&item)==1);item.number=1;
         }
     }
+    for(int i=0;i<floor_stacks;i++){
+        object_prep(&item,lookup_kind(supply_page?TV_POTION:TV_ARROW,
+            supply_page?SV_POTION_MIRUVOR:1));item.number=3;object_aware(&item);object_known(&item);
+        char note[16];strnfmt(note,sizeof(note),"%d",900+i);item.obj_note=quark_add(note);
+        /* Ordinary drops permit only one floor stack; link a synthetic pile
+         * as well to cover legacy/multiple-entry floor selection. */
+        int idx=o_pop();assert(idx>0);object_copy(&o_list[idx],&item);
+        o_list[idx].iy=o_list[idx].ix=2;o_list[idx].marked=true;
+        o_list[idx].next_o_idx=cave_o_idx[2][2];cave_o_idx[2][2]=idx;
+    }
     controller=pad;stack_count=stacks;set_sdl_input_ui_mode(pad?SDL_INPUT_UI_MODE_CONTROLLER:SDL_INPUT_UI_MODE_PLATFORM);
     assert(indexed_menu_letters_enabled()==!pad);
     count=pos=confirmations=previews=preview_note=0;pointer_pending=false;footer[0]=0;
@@ -120,11 +132,14 @@ static void run(int stacks,bool pad,const int* actions,int actions_count,
     if(pos!=count||confirmations!=expected_confirmations)fprintf(stderr,"page=%d width=%d stacks=%d key=%d pos=%d/%d confirms=%d/%d\n",supply_page,browser_width,stacks,actions[0],pos,count,confirmations,expected_confirmations);
     assert(pos==count&&confirmations==expected_confirmations);
     if(picker)assert(chosen==-1);
+    if(previews!=1||preview_note!=expected_note)fprintf(stderr,"floor=%d page=%d previews=%d note=%d expected=%d\n",floor_stacks,supply_page,previews,preview_note,expected_note);
     assert(previews==1&&preview_note==expected_note);
     assert(!player_pack_action_pending()&&!p_ptr->energy_use&&turn==1001&&playerturn==100);
     if(supply_page){assert(supplies_entry_count()==stacks);for(int i=0;i<stacks;i++)assert(supplies_entry_units(i)==1);}
     else if(mixed_harness){assert(player_pack_entry_count()==stacks-1&&inventory[INVEN_WIELD].number==1);}
     else assert(player_quiver_store_entry_count()==stacks&&player_quiver_arrow_count()==stacks);
+    int remaining=0;for(int idx=cave_o_idx[2][2];idx;idx=o_list[idx].next_o_idx){assert(o_list[idx].number==3);remaining++;}
+    assert(remaining==floor_stacks);
 }
 static void check(void)
 {
@@ -139,6 +154,13 @@ static void check(void)
     const int pointer[]={127},pad[]={ '!' };
     for(int page=0;page<2;page++){
         supply_page=page;
+        browser_width=80;
+        const int floor_action[]={'-',KTRL('X')};
+        for(floor_stacks=1;floor_stacks<=2;floor_stacks++)
+            run(1,false,floor_action,2,1,page?0:900+floor_stacks-1);
+        floor_stacks=0;
+        run(1,false,floor_action,2,0,1);
+        printf("%s dash opens first floor action; No preserves all floor stacks/clocks; no-floor preserves selection PASS.\n",page?"Supplies":"Inventory");
         for(int w=0;w<4;w++){
             browser_width=widths[w];
             run(24,false,x,2,1,24);run(24,false,upper,2,1,24);
@@ -157,7 +179,7 @@ static void check(void)
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--alias-baseline",action="store_true");parser.add_argument("--footer-baseline",action="store_true");args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--alias-baseline",action="store_true");parser.add_argument("--footer-baseline",action="store_true");parser.add_argument("--floor-baseline",action="store_true");args=parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index('static const char* guids[]')]
     prefix += fixture_function('terminal_extra') + '\n'
@@ -177,6 +199,15 @@ def main():
         *(str(BUILD / '_deps' / p) for p in ('SDL', 'SDL_ttf', 'SDL_image', 'SDL_mixer')),
         'C:/msys64/mingw64/bin', 'C:/msys64/usr/bin', env['PATH']])
     browser_source=ROOT/'src/cmd/ui/cmd-ui-knowledge.c'
+    if args.floor_baseline:
+        assert not args.alias_baseline and not args.footer_baseline
+        current=browser_source.read_text(encoding='utf-8')
+        old="                ch = (forced_action == SUPPLY_MENU_ACTION_DROP) ? 'z' : 'u';\n            }\n\n            if ((ch == '\\r'"
+        assert current.count(old)==1
+        current=current.replace(old,"                continue;\n            }\n\n            if ((ch == '\\r'")
+        old="            ch = 'u';\n        }\n\n        if (!click_generated_command)"
+        assert current.count(old)==1
+        browser_source=OUT/'browser-floor-baseline.c';browser_source.write_text(current.replace(old,"            continue;\n        }\n\n        if (!click_generated_command)"),encoding='utf-8')
     if args.alias_baseline:
         current=browser_source.read_text(encoding='utf-8')
         split=current.index('            cptr delete_action = "delete";')
