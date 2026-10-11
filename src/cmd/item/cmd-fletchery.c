@@ -593,7 +593,8 @@ static bool fletchery_choose_source(fletch_choice_t* out_choice)
     item_tester_full = false;
     item_tester_hook = item_tester_hook_fletchery_source;
 
-    if (!open_inventory_item_select_menu(USE_INVEN | USE_EQUIP | USE_FLOOR,
+    if (!open_inventory_item_select_menu(
+            USE_INVEN | USE_EQUIP | USE_FLOOR | USE_QUIVER,
             "Choose fletchery source.",
             "You have nothing suitable for fletchery.", &selection))
     {
@@ -895,6 +896,11 @@ void finish_fletching(int turns_left)
         i_ptr->att = 3;
         log_fletchery_object_state("finish_improved_proto", i_ptr, -1);
 
+        object_type* active_arrows = player_quiver_arrow_object(
+            player_quiver_selected_arrow_slot());
+        bool source_was_active = object_is_quivered_arrow(&source_template)
+            && active_arrows && object_similar(active_arrows, &source_template);
+
         /* Reduce the original source stacks. Delay optimization so pack slots stay stable. */
         for (int i = 0; i < slot_count; i++)
         {
@@ -935,6 +941,28 @@ void finish_fletching(int turns_left)
             remainder.number = remaining_original;
             log_fletchery_object_state("finish_remainder_proto", &remainder, -1);
             distribute_fletchered_arrows(&remainder);
+        }
+
+        /* Removing the source compacts Quiver handles. Follow the improved
+         * stack by identity, including when it merged with existing arrows. */
+        if (source_was_active)
+        {
+            for (int i = 0; i < player_quiver_store_entry_count(); i++)
+            {
+                int handle = QUIVER_INDEX + i;
+                object_type* arrows = player_quiver_arrow_object(handle);
+                if (arrows && object_similar(arrows, i_ptr))
+                {
+                    if (player_quiver_select_arrow(handle))
+                    {
+                        char active_name[160];
+                        object_desc(active_name, sizeof(active_name), arrows,
+                            true, 3);
+                        msg_format("Your active arrows are now %s.", active_name);
+                    }
+                    break;
+                }
+            }
         }
     }
     else
