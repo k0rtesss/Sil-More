@@ -1052,6 +1052,7 @@ typedef struct sdl_question_menu_button_state {
  * next to a map grid (the door/trap/wall being asked about); global
  * questions centre on the map view. */
 typedef struct sdl_question_menu_state {
+    bool text_input;
     bool active;
     enum sdl_menu_font font_menu;
     SDL_FRect header_controls;
@@ -1785,6 +1786,7 @@ Uint8 sdl_view_background_alpha(const sdl_view* view);
 bool sdl_rect_has_area(const SDL_Rect* rect);
 SDL_Rect sdl_get_window_pixel_rect(void);
 SDL_Rect sdl_window_rect_to_pixel_rect(const SDL_Rect* rect);
+SDL_Rect sdl_text_input_visible_rect(SDL_Rect rect);
 bool sdl_android_has_controller_device(void);
 SDL_Rect sdl_get_android_display_cutout_rect(void);
 void sdl_refresh_safe_area(void);
@@ -2346,6 +2348,8 @@ void sdl_unified_look_sidebar_add_entry(int choice, int entity_type, int y,
 void sdl_unified_look_sidebar_finish(void);
 void sdl_unified_look_prompt_render(void);
 void sdl_unified_look_sidebar_render(void);
+bool sdl_unified_look_prompt_current_rect(SDL_FRect* out);
+bool sdl_unified_look_sidebar_current_rect(SDL_FRect* out);
 bool sdl_unified_look_prompt_contains_point(float x, float y);
 bool sdl_unified_look_prompt_handle_pointer(float x, float y, int action);
 bool sdl_unified_look_prompt_handle_hover_pointer(float x, float y);
@@ -3130,6 +3134,7 @@ void sdl_gamepad_handle_blocked_event(const SDL_Event* ev);
 void sdl_gamepad_context_focus_clear(void);
 void sdl_gamepad_context_focus_render(void);
 void sdl_gamepad_release_button_modifier(int button);
+void sdl_gamepad_release_axis_modifiers(const SDL_GamepadAxisEvent* ev);
 void sdl_gamepad_reset_modifiers(void);
 void sdl_gamepad_prepare_ui_navigation(void);
 void sdl_gamepad_open(SDL_JoystickID id);

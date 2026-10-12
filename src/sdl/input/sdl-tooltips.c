@@ -566,6 +566,8 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
     int m_idx = 0;
     int object_count = 0;
     cptr feature_name = NULL;
+    bool aim_selection = g_pointer_aim.active && g_pointer_aim.select_mode
+        && !g_pointer_aim.select_location;
 
     if (!buf || !buflen)
         return false;
@@ -642,7 +644,8 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
             if (object_count > 2)
                 continue;
 
-            object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 3);
+            object_desc_floor(o_name, sizeof(o_name), o_ptr, true,
+                aim_selection ? 0 : 3);
             sdl_object_tooltip_append_part(buf, buflen, attrs, o_name,
                 TERM_WHITE);
         }
@@ -659,6 +662,12 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
     if (sdl_object_tooltip_feature_name(y, x, &feature_name))
         sdl_object_tooltip_append_part(buf, buflen, attrs, feature_name,
             TERM_WHITE);
+
+    /* Aiming needs the selected creature, ammunition and terrain.  Ambient
+     * ground/room explanations belong to ordinary inspection; retaining that
+     * prose here can bury combat facts under the native aiming controls. */
+    if (aim_selection)
+        return buf[0] != '\0';
 
     char environment[120];
     if (cave_environment_describe(y, x, environment, sizeof(environment)))
@@ -1148,6 +1157,95 @@ static float sdl_object_tooltip_clamp_box_y(float y, float box_h,
     return (float)screen->y + screen_margin;
 }
 
+/* Test complete measured boxes against the live controls painted after map
+ * inspection.  Keep the original placement if clear, and its original fallback
+ * when no full-size placement fits without covering the player or controls. */
+static bool sdl_object_tooltip_box_clear(const SDL_FRect* box,
+    const SDL_FRect* controls, int count, const SDL_FRect* player,
+    const SDL_Rect* screen, float margin)
+{
+    if (box->x < screen->x + margin || box->y < screen->y + margin
+        || box->x + box->w > screen->x + screen->w - margin
+        || box->y + box->h > screen->y + screen->h - margin
+        || (player && sdl_description_overlay_rects_intersect(box, player)))
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (controls[i].w > 0.0f && controls[i].h > 0.0f
+            && sdl_description_overlay_rects_intersect(box, &controls[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool sdl_object_tooltip_avoid_controls(SDL_FRect* box,
+    const SDL_FRect* controls, int count, const SDL_FRect* player,
+    const SDL_Rect* screen, float margin, float gap)
+{
+    bool blocked = false;
+    for (int i = 0; i < count; i++) {
+        if (controls[i].w > 0.0f && controls[i].h > 0.0f
+            && sdl_description_overlay_rects_intersect(box, &controls[i]))
+            blocked = true;
+    }
+    if (!blocked)
+        return true;
+    for (int i = 0; i < count; i++) {
+        SDL_FRect candidates[4];
+        if (controls[i].w <= 0.0f || controls[i].h <= 0.0f)
+            continue;
+        for (int j = 0; j < 4; j++)
+            candidates[j] = *box;
+        candidates[0].x = controls[i].x + controls[i].w + gap;
+        candidates[1].x = controls[i].x - box->w - gap;
+        candidates[2].y = controls[i].y - box->h - gap;
+        candidates[3].y = controls[i].y + controls[i].h + gap;
+        for (int j = 0; j < 4; j++) {
+            if (sdl_object_tooltip_box_clear(&candidates[j], controls, count,
+                    player, screen, margin)) {
+                *box = candidates[j];
+                return true;
+            }
+        }
+    }
+    for (int i = 0; i < 2; i++) {
+        SDL_FRect candidate = *box;
+        candidate.y = i == 0 ? screen->y + margin
+            : screen->y + screen->h - margin - box->h;
+        if (sdl_object_tooltip_box_clear(&candidate, controls, count, player,
+                screen, margin)) {
+            *box = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Retry only outer vertical padding when a safe full-font band is just too
+ * short.  Horizontal measurement and wrapping never change. */
+static bool sdl_object_tooltip_place_map_box(SDL_FRect* box, float* vertical_pad,
+    const SDL_FRect* controls, int count, const SDL_FRect* player,
+    const SDL_Rect* screen, float margin, float gap)
+{
+    if (sdl_object_tooltip_avoid_controls(box, controls, count, player,
+            screen, margin, gap))
+        return sdl_object_tooltip_box_clear(box, controls, count, player,
+            screen, margin);
+    for (float trial_pad = *vertical_pad; trial_pad > 7.0f;) {
+        SDL_FRect candidate = *box;
+        trial_pad = trial_pad > 8.0f ? trial_pad - 1.0f : 7.0f;
+        candidate.h -= 2.0f * (*vertical_pad - trial_pad);
+        if (sdl_object_tooltip_avoid_controls(&candidate, controls, count,
+                player, screen, margin, gap)
+            && sdl_object_tooltip_box_clear(&candidate, controls, count,
+                player, screen, margin)) {
+            *box = candidate;
+            *vertical_pad = trial_pad;
+            return true;
+        }
+    }
+    return false;
+}
+
 static void sdl_object_tooltip_draw_health_bar(TTF_Font* font,
     const monster_type* m_ptr, float x, float y, float width, float line_h)
 {
@@ -1205,6 +1303,21 @@ static void sdl_object_tooltip_draw_health_bar(TTF_Font* font,
     }
 }
 
+/* Native aiming and Unified Look register click UI while retaining the map.
+ * Look pauses pointer ownership before opening a nested information screen. */
+static bool sdl_object_tooltip_map_context_active(void)
+{
+    if (sdl_mouse_gameplay_context_active())
+        return true;
+    if (!character_generated || !character_dungeon || !p_ptr
+        || !p_ptr->playing || p_ptr->leaving || p_ptr->is_dead
+        || !g_views[PANE_MAIN].term_ready)
+        return false;
+    return (g_pointer_aim.active && g_pointer_aim.select_mode
+               && character_icky == 0)
+        || (sdl_unified_look_pointer_input_active() && character_icky == 1);
+}
+
 void sdl_object_tooltip_render(void)
 {
     char current[sizeof(g_object_tooltip.text)];
@@ -1219,6 +1332,7 @@ void sdl_object_tooltip_render(void)
     SDL_FRect box;
     SDL_FRect player_rect;
     float pad;
+    float vertical_pad;
     float gap;
     float screen_margin;
     float max_box_w;
@@ -1291,7 +1405,7 @@ void sdl_object_tooltip_render(void)
             return;
         }
     } else {
-        if (!sdl_mouse_gameplay_context_active()
+        if (!sdl_object_tooltip_map_context_active()
             || !sdl_object_tooltip_format_grid(g_object_tooltip.map_y,
                 g_object_tooltip.map_x, current, sizeof(current), attrs)
             || !sdl_player_map_rect(g_object_tooltip.map_y,
@@ -1330,6 +1444,7 @@ void sdl_object_tooltip_render(void)
         return;
 
     pad = sdl_touch_pane_clampf((float)font_px * 0.36f, 7.0f, 14.0f);
+    vertical_pad = pad;
     gap = sdl_touch_pane_clampf((float)font_px * 0.28f, 6.0f, 12.0f);
     screen_margin = sdl_touch_pane_clampf(g_state.system_scale * 4.0f,
         4.0f, 10.0f);
@@ -1397,6 +1512,129 @@ void sdl_object_tooltip_render(void)
         }
     }
 
+    if (!g_object_tooltip.term_cell && !g_object_tooltip.screen_rect) {
+        SDL_FRect controls[8];
+        SDL_Rect touch_pane;
+        int count = 0;
+        bool look_owner = sdl_unified_look_pointer_input_active();
+        float cx, cy, radius;
+        bool have_player = sdl_player_map_rect(p_ptr->py, p_ptr->px,
+            &player_rect);
+        if (sdl_touch_thumb_current_bounds(&controls[count]))
+            count++;
+        if (sdl_touch_top_panel_compute_layout(NULL, &controls[count]))
+            count++;
+        if (sdl_touch_pane_current_rect(&touch_pane)) {
+            controls[count++] = (SDL_FRect){ touch_pane.x, touch_pane.y,
+                touch_pane.w, touch_pane.h };
+        }
+        if (sdl_touch_round_layer_config_enabled()
+            && (sdl_mouse_gameplay_context_active()
+                || (g_pointer_aim.active && g_pointer_aim.select_mode
+                    && !g_pointer_aim.select_location))
+            && sdl_touch_round_compute_layout(&cx, &cy, &radius, NULL, NULL)) {
+            controls[count++] = (SDL_FRect){ cx - radius, cy - radius,
+                radius * 2.0f, radius * 2.0f };
+        }
+        /* Menu is separate from Quick Access and remains visible in aim.
+         * Query each piece of chrome under the font context used to paint it. */
+        int previous = sdl_menu_font_set_render_context(SDL_MENU_FONT_MAIN);
+        if (sdl_main_menu_pane_button_rect(&controls[count]))
+            count++;
+        if ((g_pointer_aim.active && g_pointer_aim.select_mode) || look_owner) {
+            sdl_menu_font_set_render_context(SDL_MENU_FONT_LOOK);
+            controls[count] = sdl_menu_font_button_bounds();
+            if (controls[count].w > 0.0f && controls[count].h > 0.0f)
+                count++;
+        }
+        sdl_menu_font_set_render_context(previous);
+        if (((g_pointer_aim.active && g_pointer_aim.select_mode
+                 && !g_pointer_aim.select_location) || look_owner)
+            && sdl_unified_look_prompt_current_rect(&controls[count]))
+            count++;
+        if (look_owner
+            && sdl_unified_look_sidebar_current_rect(&controls[count]))
+            count++;
+        bool placed = sdl_object_tooltip_place_map_box(&box, &vertical_pad,
+            controls, count, have_player ? &player_rect : NULL, &screen,
+            screen_margin, gap);
+        if (!placed && g_pointer_aim.active && g_pointer_aim.select_mode
+            && !g_pointer_aim.select_location) {
+            float widths[N_ELEMENTS(controls) * 2];
+            int width_count = 0;
+            /* Try the widest measured bands beside visible controls first,
+             * retaining the complete brief text, colors and original font. */
+            for (int i = 0; i < count; i++) {
+                float sides[2] = {
+                    controls[i].x - gap - screen.x - screen_margin,
+                    screen.x + screen.w - screen_margin
+                        - controls[i].x - controls[i].w - gap
+                };
+                for (int side = 0; side < 2; side++) {
+                    if (sides[side] > pad * 2.0f + 1.0f && sides[side] < box.w)
+                        widths[width_count++] = sides[side];
+                }
+            }
+            for (int i = 0; i < width_count; i++) {
+                for (int j = i + 1; j < width_count; j++) {
+                    if (widths[j] > widths[i]) {
+                        float swap = widths[i];
+                        widths[i] = widths[j];
+                        widths[j] = swap;
+                    }
+                }
+            }
+            for (int i = 0; i < width_count && !placed; i++) {
+                object_tooltip_text_run candidate_runs[SDL_OBJECT_TOOLTIP_MAX_RUNS];
+                int candidate_lines = 0;
+                float candidate_width = 0.0f;
+                int candidate_count = sdl_object_tooltip_layout_runs(font,
+                    g_object_tooltip.text, attrs, widths[i] - pad * 2.0f,
+                    candidate_runs, SDL_OBJECT_TOOLTIP_MAX_RUNS,
+                    &candidate_lines, &candidate_width);
+                if (candidate_count <= 0)
+                    continue;
+                int end = candidate_runs[candidate_count - 1].start
+                    + candidate_runs[candidate_count - 1].len;
+                while (g_object_tooltip.text[end]
+                    && SDL_isspace((unsigned char)g_object_tooltip.text[end]))
+                    end++;
+                if (g_object_tooltip.text[end])
+                    continue;
+                for (int side = 0; side < 2 && !placed; side++) {
+                    SDL_FRect candidate = {
+                        cell_rect.x + cell_rect.w * 0.5f
+                            - (candidate_width + pad * 2.0f) * 0.5f,
+                        0.0f, candidate_width + pad * 2.0f,
+                        candidate_lines * (float)line_h + pad * 2.0f
+                    };
+                    float candidate_pad = pad;
+                    candidate.x = sdl_touch_pane_clampf(candidate.x,
+                        screen.x + screen_margin,
+                        screen.x + screen.w - screen_margin - candidate.w);
+                    candidate.y = sdl_object_tooltip_clamp_box_y(side == 0
+                            ? cell_rect.y - candidate.h - gap
+                            : cell_rect.y + cell_rect.h + gap,
+                        candidate.h, &screen, screen_margin);
+                    if (!sdl_object_tooltip_place_map_box(&candidate,
+                            &candidate_pad, controls, count,
+                            have_player ? &player_rect : NULL, &screen,
+                            screen_margin, gap))
+                        continue;
+                    /* Commit only a complete text layout with clear bounds. */
+                    SDL_memcpy(runs, candidate_runs,
+                        (size_t)candidate_count * sizeof(runs[0]));
+                    run_count = candidate_count;
+                    line_count = candidate_lines;
+                    box = candidate;
+                    vertical_pad = candidate_pad;
+                    placed = true;
+                }
+            }
+        }
+
+    }
+
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 210);
     SDL_RenderFillRect(g_state.renderer, &box);
@@ -1420,7 +1658,7 @@ void sdl_object_tooltip_render(void)
 
             sdl_object_tooltip_draw_health_bar(font, tooltip_monster,
                 box.x + pad + run->x,
-                box.y + pad + (float)(run->line * line_h),
+                box.y + vertical_pad + (float)(run->line * line_h),
                 width, (float)line_h);
             continue;
         }
@@ -1438,7 +1676,7 @@ void sdl_object_tooltip_render(void)
 
         text_dst = (SDL_FRect){
             .x = box.x + pad + run->x,
-            .y = box.y + pad + (float)(run->line * line_h),
+            .y = box.y + vertical_pad + (float)(run->line * line_h),
             .w = (float)run_w,
             .h = (float)run_h,
         };
@@ -1681,7 +1919,9 @@ cptr sdl_description_overlay_footer_text(
     if (overlay && overlay->footer_text[0])
         return overlay->footer_text;
 
-    return "Esc close  Space page  Dir scroll";
+    return steamdeck_controls_active()
+        ? "B Close  A scroll  D-pad scroll"
+        : "Esc close  Space page  Dir scroll";
 }
 
 static bool sdl_description_overlay_actions_use_touch_dock(
@@ -1783,7 +2023,12 @@ bool sdl_description_overlay_footer_action_label(int key, char* buf,
         return false;
 
     label = token;
-    if (key == ' ' && strncmp(token, "Space", 5) == 0)
+    if ((key == ' ' && strncmp(token, "A ", 2) == 0)
+        || (key == ESCAPE && strncmp(token, "B ", 2) == 0))
+    {
+        label = token + 2;
+    }
+    else if (key == ' ' && strncmp(token, "Space", 5) == 0)
     {
         label = token + 5;
     }

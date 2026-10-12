@@ -203,9 +203,24 @@ def run_checks(exe: Path, env: dict) -> None:
     profile = Path(tempfile.mkdtemp(prefix="session-", dir=OUT))
     control = GameControl(profile / "control")
     env = dict(env, CONTROL_TEST_PROFILE=str(profile))
+    # An older formatter could leave invalid UTF-8 in the last reply. A new
+    # session must retire it before a strict client submits its first request.
+    control.directory.mkdir(parents=True)
+    publish_json(control.directory / "session.json",
+                 {"protocol": 1, "session": "previous", "running": False})
+    (control.directory / "response.json").write_bytes(b'{"old_message":"\xc3"}')
     process = subprocess.Popen([str(exe), "--windowed", "--tiles", "--control-dir",
                                 str(control.directory)], cwd=ROOT, env=env)
     try:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            assert process.poll() is None, "Harness exited during mailbox startup"
+            if read_json(control.directory / "session.json").get("running") is True:
+                break
+            time.sleep(0.025)
+        else:
+            raise AssertionError("Control session did not become ready")
+        assert not (control.directory / "response.json").exists(), "Stale reply survived startup"
         initial = wait_ready(control, process)
         output = profile / "observation.png"
         response = expect_ok(control.observe(output=output))

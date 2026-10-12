@@ -10970,19 +10970,17 @@ void do_cmd_options(void)
         projection_changed = width != original_width
             || height != original_height || use_bigtile != original_tiles
             || get_sdl_mobile_portrait_mode() != original_portrait;
-        /* A resized saved screen still contains cells from the old map
-         * projection. Rebuild the live map after restoring the final view. */
-        if (projection_changed && character_dungeon && p_ptr->playing) {
-            p_ptr->update |= PU_PANEL;
-            p_ptr->redraw |= PR_MAP;
-        }
-        handle_stuff();
-        if (projection_changed && character_dungeon && p_ptr->playing
-            && !character_icky && Term)
+        /* Menu geometry can clip saved cells even when the final dimensions
+         * match the original view. Repair only after restoring its owner. */
+        if (character_generated && character_dungeon && !character_icky)
         {
-            Term_fresh();
+            if (projection_changed)
+                p_ptr->update |= PU_PANEL;
+            p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
+            handle_stuff();
         }
     }
+    Term_fresh();
     if (sdl_touch_settings_tutorial_requested()
         || sdl_mouse_settings_tutorial_requested()
         || sdl_character_wheel_settings_tutorial_requested()

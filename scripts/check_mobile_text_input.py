@@ -15,11 +15,12 @@ HARNESS = r'''
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stddef.h>
 
 #define SDL_PLATFORM_ANDROID 1
 #define SDL_HINT_ENABLE_SCREEN_KEYBOARD "screen-keyboard"
 typedef struct SDL_Window { int unused; } SDL_Window;
-static struct { SDL_Window *window; } g_state;
+static struct { SDL_Window *window; bool need_present; } g_state;
 static bool active, visible;
 static int starts, stops;
 static bool SDL_SetHint(const char *key, const char *value)
@@ -34,6 +35,8 @@ static bool SDL_StopTextInput(SDL_Window *window)
 { assert(window); active = visible = false; stops++; return true; }
 
 __IMPLEMENTATION__
+
+__FRAME_IMPLEMENTATION__
 
 int main(void)
 {
@@ -71,7 +74,9 @@ int main(void)
     sdl_text_input_reopen();
     assert(starts == 3 && stops == 2);
 
-    puts("Mobile text input: visible IME tap, dismissed/Back reopen, nested ownership and final cleanup: PASS");
+    check_frame_notifications();
+
+    puts("Mobile text input: IME tap/Back, nested ownership, queued frame redraw, notification-only events: PASS");
     return 0;
 }
 '''
@@ -82,8 +87,54 @@ def main():
     events = (ROOT / "src/sdl/core/sdl-events.c").read_text(encoding="utf-8-sig")
     start = events.index("static unsigned int g_sdl_text_input_depth")
     implementation = events[start:]
+    layout = (ROOT / "src/sdl/core/sdl-layout.c").read_text(encoding="utf-8-sig")
+    frame_start = layout.index("static void SDLCALL sdl_text_input_frame_redraw")
+    frame = layout[frame_start:layout.index("#endif", frame_start)]
+    event_start = events.index("    if (ev->type == SDL_EVENT_SCREEN_KEYBOARD_SHOWN")
+    event_end = events.index("    if (sdl_control_handle_event", event_start)
+    frame_test = r'''
+#define SDLCALL
+#define JNIEXPORT
+#define JNICALL
+#define SDL_INIT_EVENTS 1
+typedef void JNIEnv;
+typedef void* jclass;
+static bool initialized;
+static void (*queued_frame_callback)(void*);
+static unsigned SDL_WasInit(unsigned flags) { return initialized?flags:0; }
+static bool SDL_RunOnMainThread(void (*callback)(void*),void *data,bool wait)
+{ assert(!data&&!wait&&!queued_frame_callback);queued_frame_callback=callback;return true; }
+''' + frame + r'''
+enum {SDL_EVENT_SCREEN_KEYBOARD_SHOWN=1,SDL_EVENT_SCREEN_KEYBOARD_HIDDEN=2,ESC_KEY=3};
+typedef struct {int type;} SDL_Event;
+static int commands;
+static void frame_event(const SDL_Event *ev)
+{
+''' + events[event_start:event_end] + r'''
+    commands++;
+}
+static void check_frame_notifications(void)
+{
+    g_state.need_present=false;
+    Java_com_silqh_silmore_SilMoreActivity_onTextInputVisibleFrameChanged(NULL,NULL);
+    assert(!queued_frame_callback&&!g_state.need_present);
+    initialized=true;active=true;
+    Java_com_silqh_silmore_SilMoreActivity_onTextInputVisibleFrameChanged(NULL,NULL);
+    assert(queued_frame_callback&&!g_state.need_present);
+    queued_frame_callback(NULL);queued_frame_callback=NULL;
+    assert(g_state.need_present);
+    active=false;g_state.need_present=false;
+    sdl_text_input_frame_redraw(NULL);assert(!g_state.need_present);
+    for(int type=1;type<=2;type++) {
+        SDL_Event ev={type};g_state.need_present=false;frame_event(&ev);
+        assert(g_state.need_present&&!commands);
+    }
+    SDL_Event back={ESC_KEY};frame_event(&back);assert(commands==1);
+}
+'''
     source = OUT / "check.c"
-    source.write_text(HARNESS.replace("__IMPLEMENTATION__", implementation),
+    source.write_text(HARNESS.replace("__IMPLEMENTATION__", implementation)
+                      .replace("__FRAME_IMPLEMENTATION__",frame_test),
                       encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])

@@ -608,13 +608,13 @@ static void check_blocked_controller_state(void)
         bindings[GAMEPAD_STICK_DIR_RIGHT]=GAMEPAD_BIND_ALT;
         if(stick)g_gamepad_state.right_dir=GAMEPAD_STICK_DIR_RIGHT;
         else g_gamepad_state.left_bind_dir=GAMEPAD_STICK_DIR_RIGHT;
-        g_gamepad_stick_binding_modifier_active[stick]=true;
+        g_gamepad_stick_binding_modifiers[stick]=GAMEPAD_BIND_ALT;
         sdl_gamepad_apply_modifier(GAMEPAD_BIND_ALT,true);
         sdl_question_menu_begin("Bash roll");
         sdl_question_menu_add_entry(0,"","Rolling...",TERM_WHITE);
         sdl_question_menu_set_blocking_input(true);sdl_question_menu_finish();
         blocked_axis(axis,32767);expect_key(0);
-        assert(!sdl_gamepad_alt_active()&&!g_gamepad_stick_binding_modifier_active[stick]);
+        assert(!sdl_gamepad_alt_active()&&!g_gamepad_stick_binding_modifiers[stick]);
         assert((stick?g_gamepad_state.right_x:g_gamepad_state.left_x)==32767);
         assert((stick?g_gamepad_state.right_ui_dir:g_gamepad_state.left_ui_dir)==GAMEPAD_STICK_DIR_RIGHT);
         sdl_question_menu_clear();
@@ -696,6 +696,217 @@ static void check_terminal_held_modifiers(void)
     sdl_gamepad_reset_movement_controls();sdl_config_set_defaults(&config);
     movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
     puts("Saved terminal pad navigation: all 8 modifier states, D-pad/diagonal/sticks/B, no world queue, Look plain direction/Y mode and live modified routes PASS");
+}
+
+static void check_trigger_owner_release(void)
+{
+    bool all_clean=true;
+    const int thresholds[]={0,16000};
+    for(unsigned calibration=0;calibration<N_ELEMENTS(thresholds);calibration++)
+    for(int owner=0;owner<2;owner++)for(int trigger=0;trigger<2;trigger++) {
+        sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+        config.gamepad_trigger_threshold=thresholds[calibration];
+        config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+        character_icky=0;inkey_flag=true;g_gamepad_state.pad_count=1;
+        movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+        sdl_gamepad_reset_movement_controls();
+        g_gamepad_state.left_trigger_down=g_gamepad_state.right_trigger_down=false;
+        int axis=trigger?SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:SDL_GAMEPAD_AXIS_LEFT_TRIGGER;
+        int other_axis=trigger?SDL_GAMEPAD_AXIS_LEFT_TRIGGER:SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+        int capture_modifier=trigger?GAMEPAD_BIND_SHIFT:GAMEPAD_BIND_CTRL;
+        blocked_axis(axis,32767);expect_key(0);
+        assert(trigger?sdl_gamepad_ctrl_active():sdl_gamepad_shift_active());
+        if(owner==0) {
+            assert(sdl_gamepad_capture_begin(true));g_gamepad_capture_arm_time=0;
+            assert(g_gamepad_capture_active&&!g_gamepad_capture_ready);
+            blocked_axis(other_axis,32767);expect_key(0);
+            assert(g_gamepad_capture_modifier==capture_modifier);
+        } else {
+            sdl_touch_pane_begin_reset_confirm();assert(g_touch_pane_reset_confirm_active);
+        }
+        blocked_axis(axis,0);expect_key(0);
+        bool down=trigger?g_gamepad_state.right_trigger_down:g_gamepad_state.left_trigger_down;
+        bool clean=!down&&!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active()
+            &&!sdl_gamepad_alt_active();
+        fprintf(stderr,"Inherited %s neutral during %s (threshold %d): down=%d shift=%d ctrl=%d clean=%d\n",
+            trigger?"RT":"LT",owner?"touch reset confirmation":"binding capture",
+            thresholds[calibration],down,sdl_gamepad_shift_active(),sdl_gamepad_ctrl_active(),clean);
+        all_clean &= clean;
+        if(owner==0) {
+            /* A release cannot become a captured control or erase the
+             * capture's explicit chord-selection state. */
+            assert(g_gamepad_capture_active&&!g_gamepad_capture_ready);
+            assert(g_gamepad_capture_modifier==capture_modifier);
+            sdl_gamepad_capture_cancel();
+            blocked_axis(other_axis,0);expect_key(0);
+        } else {
+            dpad_event(SDL_GAMEPAD_BUTTON_EAST,true);
+            assert(!g_touch_pane_reset_confirm_active);
+            dpad_event(SDL_GAMEPAD_BUTTON_EAST,false);expect_key(0);
+        }
+        int direction=0;
+        assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&direction));
+        if(clean) {
+            dpad_event(SDL_GAMEPAD_BUTTON_START,true);expect_key(ESCAPE);
+            dpad_event(SDL_GAMEPAD_BUTTON_START,false);expect_key(0);
+        }
+        sdl_gamepad_reset_movement_controls();
+    }
+    assert(all_clean);
+    /* Retiring one inherited trigger must not clear the other held modifier. */
+    for(int owner=0;owner<2;owner++)for(int shared_modifier=0;shared_modifier<2;shared_modifier++) {
+        sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+        if(shared_modifier)config.gamepad_trigger_bindings[1]=GAMEPAD_BIND_SHIFT;
+        config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+        sdl_gamepad_reset_movement_controls();
+        g_gamepad_state.left_trigger_down=g_gamepad_state.right_trigger_down=false;
+        blocked_axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER,32767);
+        blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,32767);expect_key(0);
+        if(shared_modifier)assert(g_gamepad_state.shift_held==2&&!sdl_gamepad_ctrl_active());
+        else assert(sdl_gamepad_shift_active()&&sdl_gamepad_ctrl_active());
+        if(owner==0) { assert(sdl_gamepad_capture_begin(true));g_gamepad_capture_arm_time=0; }
+        else sdl_touch_pane_begin_reset_confirm();
+        blocked_axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER,0);expect_key(0);
+        if(shared_modifier)assert(g_gamepad_state.shift_held==1&&!sdl_gamepad_ctrl_active());
+        else assert(!sdl_gamepad_shift_active()&&sdl_gamepad_ctrl_active());
+        assert(!g_gamepad_state.left_trigger_down&&g_gamepad_state.right_trigger_down);
+        blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,0);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active());
+        if(owner==0) {
+            assert(g_gamepad_capture_active&&!g_gamepad_capture_ready);
+            sdl_gamepad_capture_cancel();
+        } else sdl_touch_pane_finish_reset_confirm(false);
+    }
+    g_gamepad_state.pad_count=0;sdl_config_set_defaults(&config);
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Inherited LT/RT release: actual dispatcher capture/reset owners retire gameplay modifiers without capture/actions and restore Start PASS");
+}
+
+static void stick_owner_begin(int owner)
+{
+    if(owner==0) { assert(sdl_gamepad_capture_begin(true));g_gamepad_capture_arm_time=0; }
+    else sdl_touch_pane_begin_reset_confirm();
+}
+
+static void stick_owner_end(int owner)
+{
+    if(owner==0)sdl_gamepad_capture_cancel();
+    else sdl_touch_pane_finish_reset_confirm(false);
+}
+
+static void stick_owner_setup(int stick,bool movement)
+{
+    sdl_config_set_defaults(&config);config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    config.gamepad_use_left_stick=config.gamepad_use_right_stick=movement;
+    character_icky=0;inkey_flag=true;g_gamepad_state.pad_count=1;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    sdl_gamepad_reset_movement_controls();
+    g_gamepad_state.left_x=g_gamepad_state.left_y=0;
+    g_gamepad_state.right_x=g_gamepad_state.right_y=0;
+    g_gamepad_state.left_ui_dir=g_gamepad_state.right_ui_dir=-1;
+    g_gamepad_state.left_trigger_down=g_gamepad_state.right_trigger_down=false;
+    int* bindings=stick?config.gamepad_right_stick_bindings:config.gamepad_left_stick_bindings;
+    bindings[GAMEPAD_STICK_DIR_RIGHT]=GAMEPAD_BIND_SHIFT;
+    bindings[GAMEPAD_STICK_DIR_LEFT]=GAMEPAD_BIND_CTRL;
+}
+
+static void check_stick_owner_release(void)
+{
+    bool all_clean=true;
+    for(int owner=0;owner<2;owner++)for(int stick=0;stick<2;stick++)for(int away=0;away<2;away++) {
+        stick_owner_setup(stick,false);
+        int axis=stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX;
+        blocked_axis(axis,32767);expect_key(0);
+        assert(sdl_gamepad_shift_active()&&g_gamepad_stick_binding_modifiers[stick]);
+        stick_owner_begin(owner);
+        blocked_axis(axis,32000);expect_key(0);
+        assert(sdl_gamepad_shift_active()); /* jitter still points Right */
+        blocked_axis(axis,away?-32768:0);expect_key(0);
+        bool clean=!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active()
+            &&!sdl_gamepad_alt_active()&&!g_gamepad_stick_binding_modifiers[stick];
+        fprintf(stderr,"Inherited %s stick %s during %s: shift=%d ctrl=%d active=%d clean=%d\n",
+            stick?"Right":"Left",away?"direction-away":"neutral",owner?"touch reset":"capture",
+            sdl_gamepad_shift_active(),sdl_gamepad_ctrl_active(),g_gamepad_stick_binding_modifiers[stick],clean);
+        all_clean &= clean;
+        if(owner==0) {
+            /* Same-direction capture chose Shift as its chord modifier;
+             * gameplay retirement must not erase that explicit capture. */
+            assert(g_gamepad_capture_modifier==GAMEPAD_BIND_SHIFT);
+            assert(g_gamepad_capture_active&&!g_gamepad_capture_ready);
+        }
+        stick_owner_end(owner);
+        int direction=0;assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&direction));
+        sdl_gamepad_reset_movement_controls();
+    }
+    assert(all_clean);
+    /* A reset popup drops both axis events. The early hook must retain the
+     * still-East Y update before comparing the following X update. */
+    for(int stick=0;stick<2;stick++) {
+        stick_owner_setup(stick,false);
+        int xaxis=stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX;
+        int yaxis=stick?SDL_GAMEPAD_AXIS_RIGHTY:SDL_GAMEPAD_AXIS_LEFTY;
+        blocked_axis(xaxis,32767);expect_key(0);assert(sdl_gamepad_shift_active());
+        stick_owner_begin(1);
+        blocked_axis(yaxis,20000);expect_key(0);assert(sdl_gamepad_shift_active());
+        assert((stick?g_gamepad_state.right_y:g_gamepad_state.left_y)==20000);
+        blocked_axis(xaxis,10000);expect_key(0);assert(!sdl_gamepad_shift_active());
+        assert(!g_gamepad_stick_binding_modifiers[stick]);stick_owner_end(1);
+    }
+    /* Retire the exact applied modifier even if its public binding changes. */
+    const int remaps[]={GAMEPAD_BIND_NONE,GAMEPAD_BIND_SHIFT,GAMEPAD_BIND_CTRL,GAMEPAD_BIND_ALT};
+    for(int owner=0;owner<2;owner++)for(int stick=0;stick<2;stick++)
+    for(unsigned r=0;r<N_ELEMENTS(remaps);r++) {
+        stick_owner_setup(stick,false);
+        int axis=stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX;
+        blocked_axis(axis,32767);expect_key(0);assert(g_gamepad_state.shift_held==1);
+        if(stick)set_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT,remaps[r]);
+        else set_sdl_gamepad_left_stick_binding(GAMEPAD_STICK_DIR_RIGHT,remaps[r]);
+        stick_owner_begin(owner);blocked_axis(axis,0);expect_key(0);
+        assert(!sdl_gamepad_shift_active()&&!sdl_gamepad_ctrl_active()&&!sdl_gamepad_alt_active());
+        assert(!g_gamepad_stick_binding_modifiers[stick]);stick_owner_end(owner);
+    }
+    /* Preserve a separate physical owner of the same modifier. */
+    for(int owner=0;owner<2;owner++)for(int stick=0;stick<2;stick++)for(int other=0;other<2;other++) {
+        stick_owner_setup(stick,false);
+        int axis=stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX;
+        blocked_axis(axis,32767);expect_key(0);
+        if(other==0) {
+            config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST]=GAMEPAD_BIND_SHIFT;
+            config.gamepad_button_combo_bindings[GAMEPAD_MODIFIER_SHIFT][SDL_GAMEPAD_BUTTON_WEST]=GAMEPAD_BIND_NONE;
+            dpad_event(SDL_GAMEPAD_BUTTON_WEST,true);
+        } else {
+            config.gamepad_trigger_bindings[1]=GAMEPAD_BIND_SHIFT;
+            config.gamepad_trigger_combo_bindings[GAMEPAD_MODIFIER_SHIFT][1]=GAMEPAD_BIND_NONE;
+            blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,32767);
+        }
+        expect_key(0);assert(g_gamepad_state.shift_held==2);
+        stick_owner_begin(owner);blocked_axis(axis,0);expect_key(0);
+        assert(g_gamepad_state.shift_held==1&&!g_gamepad_stick_binding_modifiers[stick]);
+        if(other==0)dpad_event(SDL_GAMEPAD_BUTTON_WEST,false);
+        else blocked_axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,0);
+        expect_key(0);assert(!sdl_gamepad_shift_active());
+        stick_owner_end(owner);
+    }
+    /* Movement-enabled sticks own no binding modifier. Their swallowed
+     * deflections/releases cannot clear a held button or submit movement. */
+    for(int owner=0;owner<2;owner++)for(int stick=0;stick<2;stick++) {
+        stick_owner_setup(stick,true);
+        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST]=GAMEPAD_BIND_SHIFT;
+        dpad_event(SDL_GAMEPAD_BUTTON_WEST,true);expect_key(0);
+        assert(g_gamepad_state.shift_held==1);
+        stick_owner_begin(owner);
+        int axis=stick?SDL_GAMEPAD_AXIS_RIGHTX:SDL_GAMEPAD_AXIS_LEFTX;
+        blocked_axis(axis,32767);blocked_axis(axis,0);expect_key(0);
+        assert(g_gamepad_state.shift_held==1&&!g_gamepad_stick_binding_modifiers[stick]);
+        int direction=0;assert(!movement_input_take_legacy_direction(MOVEMENT_INPUT_CONTEXT_DUNGEON,&direction));
+        if(owner==0)assert(g_gamepad_capture_active&&!g_gamepad_capture_ready);
+        dpad_event(SDL_GAMEPAD_BUTTON_WEST,false);expect_key(0);
+        assert(!sdl_gamepad_shift_active());stick_owner_end(owner);
+    }
+    sdl_gamepad_reset_movement_controls();g_gamepad_state.pad_count=0;
+    sdl_config_set_defaults(&config);movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    puts("Inherited stick owner release: capture/reset Left/Right neutral/away, jitter, shared button/trigger counts and movement-stick exclusion PASS");
 }
 
 static void check_question_held_modifiers(void)
@@ -1014,6 +1225,8 @@ int main(void)
     check_terminal_held_modifiers();
     check_blocked_controller_state();
     check_trigger_calibration_boundaries();
+    check_trigger_owner_release();
+    check_stick_owner_release();
     check_main_menu_shortcuts();
     check_capture_cancel();
     fixture_check_binding_labels();
@@ -1141,6 +1354,10 @@ def main():
         help="Restore unmodified-only question navigation to reproduce held-trigger bypass")
     parser.add_argument("--blocked-state-baseline", action="store_true",
         help="Drop blocked gamepad events without retiring their runtime state")
+    parser.add_argument("--trigger-owner-baseline", action="store_true",
+        help="Disable only early trigger release retirement across native input owners")
+    parser.add_argument("--stick-owner-baseline", action="store_true",
+        help="Disable only early stick retirement in generated gamepad source; trigger retirement remains enabled")
     parser.add_argument("--terminal-modifier-baseline", action="store_true",
         help="Restore modified keypad filtering inside saved terminal menus")
     parser.add_argument("--trigger-zero-baseline", action="store_true",
@@ -1157,7 +1374,7 @@ def main():
         '#include "ui/help.c"\n' + HARNESS[help_start:main_start].replace(
             "static void check_help", "void check_help"), encoding="utf-8")
     harness = HARNESS[:help_start]
-    if args.yes_no_baseline or args.question_modifier_baseline or args.terminal_modifier_baseline or args.trigger_zero_baseline:
+    if args.yes_no_baseline or args.question_modifier_baseline or args.terminal_modifier_baseline or args.trigger_zero_baseline or args.stick_owner_baseline or args.trigger_owner_baseline:
         gamepad = (ROOT / "src/sdl/input/sdl-gamepad.c").read_text()
         if args.yes_no_baseline:
             start = gamepad.index("static bool sdl_gamepad_yes_no_navigate(int navigation)")
@@ -1174,6 +1391,20 @@ def main():
         if args.trigger_zero_baseline:
             gamepad = gamepad.replace("MAX(config.gamepad_trigger_threshold, 1)",
                 "MAX(config.gamepad_trigger_threshold, 0)")
+        if args.stick_owner_baseline:
+            start = gamepad.index("void sdl_gamepad_release_axis_modifiers(")
+            end = gamepad.index("\nvoid sdl_gamepad_reset_modifiers(", start)
+            body = gamepad[start:end]
+            old = "if (ev->axis <= SDL_GAMEPAD_AXIS_RIGHTY)"
+            assert body.count(old) == 1
+            gamepad = gamepad[:start] + body.replace(old, "if (false)", 1) + gamepad[end:]
+        if args.trigger_owner_baseline:
+            start = gamepad.index("void sdl_gamepad_release_axis_modifiers(")
+            end = gamepad.index("\nvoid sdl_gamepad_reset_modifiers(", start)
+            body = gamepad[start:end]
+            old = "    if (ev->value >= MAX(config.gamepad_trigger_threshold, 1))"
+            assert body.count(old) == 1
+            gamepad = gamepad[:start] + body.replace(old, "    return;\n" + old, 1) + gamepad[end:]
         (OUT / "yes-no-baseline-gamepad.c").write_text(gamepad, encoding="utf-8")
         harness = harness.replace('#include "sdl/input/sdl-gamepad.c"',
             '#include "yes-no-baseline-gamepad.c"')

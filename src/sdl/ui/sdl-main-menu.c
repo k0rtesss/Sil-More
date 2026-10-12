@@ -804,10 +804,10 @@ void sdl_main_menu_overlay_choose(int choice)
      * this outer command wait is blocked. Let the player loop resolve that
      * change before accepting another command. Quit and Blitz have their
      * own transition wakes below. */
-    if (executed && (p_ptr->energy_use > 0
+    if (executed && choice != MAIN_MENU_SAVE_QUIT && choice != MAIN_MENU_BLITZ
+        && (p_ptr->energy_use > 0
             || (choice == MAIN_MENU_SMITHING && p_ptr->smithing)
-            || (!leaving_before_action && p_ptr->leaving
-                && choice != MAIN_MENU_SAVE_QUIT && choice != MAIN_MENU_BLITZ)))
+            || (!leaving_before_action && p_ptr->leaving)))
     {
         /* Animation can queue typeahead while the modal action runs. Pay the
          * accepted action first, retaining that input for the next command. */

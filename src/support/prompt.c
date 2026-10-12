@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "sdl-config.h"
 #include "support/input.h"
+#include "support/utf8.h"
 #include "support/feedback.h"
 #include "support/screen.h"
 #include "ui/menu-click.h"
@@ -303,6 +304,67 @@ bool term_get_string(cptr prompt, char* buf, size_t len)
 #define STRING_PANEL_CLICK_CANCEL  2004
 #define STRING_PANEL_CLICK_RANDOM  2005
 
+typedef struct string_panel_utf8_state {
+    char bytes[4];
+    int count;
+    int expected;
+} string_panel_utf8_state;
+
+/* SDL queues committed UTF-8 as individual bytes. Keep a codepoint local
+ * until it is complete, valid, and fits in its entirety beside the NUL. */
+static bool string_panel_append_byte(char* buf, size_t len, size_t* used,
+    bool* selected, string_panel_utf8_state* pending, unsigned char byte)
+{
+    if ((byte & 0xc0) == 0x80) {
+        if (!pending->count)
+            return false;
+        pending->bytes[pending->count++] = (char)byte;
+        if (pending->count < pending->expected)
+            return false;
+    } else {
+        pending->count = pending->expected = 0;
+        if (byte >= 0xc2 && byte <= 0xdf)
+            pending->expected = 2;
+        else if (byte >= 0xe0 && byte <= 0xef)
+            pending->expected = 3;
+        else if (byte >= 0xf0 && byte <= 0xf4)
+            pending->expected = 4;
+        else if (byte >= 0x80 || byte < 0x20 || byte == 0x7f)
+            return false;
+        else
+            pending->expected = 1;
+        pending->bytes[0] = (char)byte;
+        pending->count = 1;
+        if (pending->expected > 1)
+            return false;
+    }
+
+    int size = pending->count;
+    pending->count = pending->expected = 0;
+    if (size > 1 && utf8_sequence_len_n(pending->bytes, size) != size)
+        return false;
+    size_t offset = *selected ? 0 : *used;
+    if (offset >= len || (size_t)size >= len - offset)
+        return false;
+    if (*selected) {
+        *used = 0;
+        *selected = false;
+    }
+    memcpy(buf + *used, pending->bytes, (size_t)size);
+    *used += (size_t)size;
+    buf[*used] = '\0';
+    return true;
+}
+
+static void string_panel_add_action(int choice, cptr label, byte attr)
+{
+#if defined(__ANDROID__)
+    sdl_question_menu_add_button(choice, label, attr);
+#else
+    sdl_question_menu_add_entry(choice, "", label, attr);
+#endif
+}
+
 /*
  * Draw the text-entry overlay panel: the prompt is the title, the current
  * text (with a trailing caret) is the highlighted field, followed by explicit
@@ -312,29 +374,38 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category,
     bool allow_random_name, bool default_selected)
 {
     char line[120];
+    cptr panel_title = prompt;
+    cptr random_label = "Random name";
+#if defined(__ANDROID__)
+    if (allow_random_name) {
+        panel_title = "Name:";
+        random_label = "Random";
+    }
+#endif
 
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_outside_cancel_enabled(true);
     ui_menu_click_set_touch_category(touch_category);
 
-    sdl_question_menu_begin(prompt);
+    sdl_question_menu_begin(panel_title);
+    sdl_question_menu_set_text_input(true);
 
     /* Show the current text with a caret (just the caret when empty) */
     strnfmt(line, sizeof(line), "%s_", (text && text[0]) ? text : "");
     sdl_question_menu_add_entry(STRING_PANEL_CLICK_FIELD, "", line,
         default_selected ? TERM_YELLOW : TERM_L_BLUE);
 
-    sdl_question_menu_add_entry(STRING_PANEL_CLICK_CONFIRM, "", "Confirm",
+    string_panel_add_action(STRING_PANEL_CLICK_CONFIRM, "Confirm",
         TERM_L_WHITE);
     if (allow_random_name)
     {
-        sdl_question_menu_add_entry(STRING_PANEL_CLICK_RANDOM, "",
-            "Random name", TERM_L_WHITE);
+        string_panel_add_action(STRING_PANEL_CLICK_RANDOM,
+            random_label, TERM_L_WHITE);
     }
-    sdl_question_menu_add_entry(STRING_PANEL_CLICK_CLEAR, "", "Clear",
+    string_panel_add_action(STRING_PANEL_CLICK_CLEAR, "Clear",
         TERM_L_WHITE);
-    sdl_question_menu_add_entry(STRING_PANEL_CLICK_CANCEL, "", "Cancel",
+    string_panel_add_action(STRING_PANEL_CLICK_CANCEL, "Cancel",
         TERM_SLATE);
 
     sdl_question_menu_set_highlight(STRING_PANEL_CLICK_FIELD);
@@ -357,6 +428,7 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
     bool canceled = false;
     bool default_selected;
     bool saved_hide_cursor = hide_cursor;
+    string_panel_utf8_state pending = {0};
 
     if (!buf || len < 1)
         return false;
@@ -395,19 +467,23 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
                 switch (clicked_choice)
                 {
                 case STRING_PANEL_CLICK_FIELD:
+                    pending.count = pending.expected = 0;
                     /* Refocus the field and reopen a dismissed soft keyboard. */
                     default_selected = false;
                     sdl_text_input_reopen();
                     continue;
                 case STRING_PANEL_CLICK_CONFIRM:
+                    pending.count = pending.expected = 0;
                     ch = '\r';
                     break;
                 case STRING_PANEL_CLICK_CLEAR:
+                    pending.count = pending.expected = 0;
                     k = 0;
                     buf[0] = '\0';
                     default_selected = false;
                     continue;
                 case STRING_PANEL_CLICK_RANDOM:
+                    pending.count = pending.expected = 0;
                     if (allow_random_name)
                     {
                         make_random_name(buf, len);
@@ -416,6 +492,7 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
                     }
                     continue;
                 case STRING_PANEL_CLICK_CANCEL:
+                    pending.count = pending.expected = 0;
                     ch = ESCAPE;
                     break;
                 default:
@@ -430,17 +507,20 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
             break;
 
         case ESCAPE:
+            pending.count = pending.expected = 0;
             canceled = true;
             done = true;
             break;
 
         case '\r':
         case '\n':
+            pending.count = pending.expected = 0;
             done = true;
             break;
 
         case '\b':
         case 0x7F:
+            pending.count = pending.expected = 0;
             if (default_selected)
             {
                 k = 0;
@@ -459,6 +539,7 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
             break;
 
         case '\t':
+            pending.count = pending.expected = 0;
             if (allow_random_name)
             {
                 make_random_name(buf, len);
@@ -468,23 +549,8 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
             break;
 
         default:
-            /* SDL text input supplies UTF-8 one byte at a time through the
-             * terminal queue.  Accept printable ASCII and UTF-8 bytes here;
-             * control characters are handled above or ignored. */
-            if ((unsigned char)ch >= 0x20U && (unsigned char)ch != 0x7FU)
-            {
-                if (default_selected)
-                {
-                    k = 0;
-                    buf[0] = '\0';
-                    default_selected = false;
-                }
-                if (k < len - 1)
-                {
-                    buf[k++] = (char)ch;
-                    buf[k] = '\0';
-                }
-            }
+            (void)string_panel_append_byte(buf, len, &k, &default_selected,
+                &pending, (unsigned char)ch);
             break;
         }
     }

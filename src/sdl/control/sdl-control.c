@@ -3,6 +3,7 @@
 #include "sdl/control/sdl-control.h"
 #include "cJSON.h"
 #include <math.h>
+#include <stdint.h>
 
 /* A single local client atomically publishes request.json. The SDL input pump
  * claims it, routes input through the usual handlers, and publishes a reply at
@@ -37,10 +38,98 @@ static bool control_path(char* out, size_t size, const char* name)
     return path_build(out, size, control_dir, name);
 }
 
+static size_t control_utf8_span(const unsigned char* text, size_t remaining)
+{
+    size_t count;
+    unsigned char first;
+
+    if (!remaining)
+        return 0;
+    first = text[0];
+    if (first < 0x80)
+        return 1;
+    if (first >= 0xc2 && first <= 0xdf)
+        count = 2;
+    else if (first >= 0xe0 && first <= 0xef)
+        count = 3;
+    else if (first >= 0xf0 && first <= 0xf4)
+        count = 4;
+    else
+        return 0;
+    if (remaining < count)
+        return 0;
+    for (size_t i = 1; i < count; i++)
+        if ((text[i] & 0xc0) != 0x80)
+            return 0;
+    if ((first == 0xe0 && text[1] < 0xa0)
+        || (first == 0xed && text[1] >= 0xa0)
+        || (first == 0xf0 && text[1] < 0x90)
+        || (first == 0xf4 && text[1] > 0x8f))
+        return 0;
+    return count;
+}
+
+/* cJSON preserves raw bytes in strings. Old messages can contain an invalid
+ * UTF-8 fragment even after its display formatter has been fixed. Repair only
+ * the serialized reply, leaving message history and other game data intact.
+ * This helper takes ownership of the printed JSON and returns its replacement. */
+static char* control_replace_invalid_utf8(char* data)
+{
+    size_t length;
+    size_t offset = 0;
+    size_t written = 0;
+    char* clean;
+
+    if (!data)
+        return NULL;
+    length = strlen(data);
+    while (offset < length)
+    {
+        size_t count = control_utf8_span((const unsigned char*)data + offset,
+            length - offset);
+        if (!count)
+            break;
+        offset += count;
+    }
+    if (offset == length)
+        return data;
+    if (length > (SIZE_MAX - 1) / 3)
+    {
+        cJSON_free(data);
+        return NULL;
+    }
+    clean = cJSON_malloc(length * 3 + 1);
+    if (!clean)
+    {
+        cJSON_free(data);
+        return NULL;
+    }
+    for (offset = 0; offset < length;)
+    {
+        size_t count = control_utf8_span((const unsigned char*)data + offset,
+            length - offset);
+        if (count)
+        {
+            memcpy(clean + written, data + offset, count);
+            written += count;
+            offset += count;
+        }
+        else
+        {
+            memcpy(clean + written, "\xef\xbf\xbd", 3);
+            written += 3;
+            offset++;
+        }
+    }
+    clean[written] = '\0';
+    cJSON_free(data);
+    return clean;
+}
+
 static bool control_write_json(const char* name, const cJSON* json)
 {
     char path[1200], temp[1200], temp_name[96];
-    char* data = cJSON_PrintUnformatted(json);
+    char* data = control_replace_invalid_utf8(cJSON_PrintUnformatted(json));
     SDL_IOStream* io;
     bool ok;
     if (!data)
@@ -538,6 +627,12 @@ void sdl_control_init(int argc, char** argv)
         quit("Control directory is already in use; choose a fresh directory after a crash");
     }
     cJSON_Delete(previous);
+    /* A stopped older build may have left a malformed reply. Retire it before
+     * exposing this session so strict clients can submit their first request. */
+    char old_reply[1200];
+    if (!control_path(old_reply, sizeof(old_reply), "response.json")
+        || (SDL_GetPathInfo(old_reply, NULL) && !SDL_RemovePath(old_reply)))
+        quit("Cannot retire the previous local control reply");
     SDL_Time now = 0;
     (void)SDL_GetCurrentTime(&now);
     SDL_snprintf(control_session, sizeof(control_session), "%016" SDL_PRIx64 "-%016" SDL_PRIx64,

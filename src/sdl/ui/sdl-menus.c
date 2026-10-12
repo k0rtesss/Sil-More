@@ -2649,6 +2649,96 @@ static bool sdl_unified_look_prompt_try_layout(
     return true;
 }
 
+/* Native aim actions share the map with the wheel and thumb controls.  Move
+ * the complete action bar, including its hit rectangles, into a clear band. */
+#if SIL_SDL_MOBILE_BUILD
+static bool sdl_unified_look_prompt_clear_at(const SDL_FRect* panel,
+    const SDL_FRect* controls, int count, const SDL_FRect* player,
+    const SDL_FRect* area, float margin)
+{
+    if (panel->x < area->x + margin || panel->y < area->y + margin
+        || panel->x + panel->w > area->x + area->w - margin
+        || panel->y + panel->h > area->y + area->h - margin
+        || (player && sdl_description_overlay_rects_intersect(panel, player)))
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (sdl_description_overlay_rects_intersect(panel, &controls[i]))
+            return false;
+    }
+    return true;
+}
+#endif
+
+static bool sdl_unified_look_prompt_place_aim(
+    sdl_unified_look_prompt_layout_info* layout, float margin)
+{
+#if SIL_SDL_MOBILE_BUILD
+    SDL_FRect controls[4], player;
+    SDL_Rect touch_pane;
+    SDL_FRect candidate = layout->panel;
+    bool blocked = false;
+    bool have_player;
+    int count = 0;
+    float cx, cy, radius;
+    if (!g_pointer_aim.active || !g_pointer_aim.select_mode
+        || g_pointer_aim.select_location)
+        return true;
+    have_player = sdl_player_map_rect(p_ptr->py, p_ptr->px, &player);
+    if (sdl_touch_thumb_current_bounds(&controls[count]))
+        count++;
+    if (sdl_touch_top_panel_compute_layout(NULL, &controls[count]))
+        count++;
+    if (sdl_touch_pane_current_rect(&touch_pane))
+        controls[count++] = (SDL_FRect){ touch_pane.x, touch_pane.y,
+            touch_pane.w, touch_pane.h };
+    if (sdl_touch_round_layer_config_enabled()
+        && sdl_touch_round_compute_layout(&cx, &cy, &radius, NULL, NULL))
+        controls[count++] = (SDL_FRect){ cx - radius, cy - radius,
+            radius * 2.0f, radius * 2.0f };
+    for (int i = 0; i < count; i++) {
+        if (sdl_description_overlay_rects_intersect(&layout->panel, &controls[i]))
+            blocked = true;
+    }
+    if (!blocked)
+        return true;
+    /* Keep actions below the player so the selected creature's description
+     * can use the upper map.  Compact labels are tried by the caller when a
+     * full-width bar cannot fit beside the wheel. */
+    for (int i = 0; i < count * 4 + 1; i++) {
+        candidate = layout->panel;
+        if (i < count * 4) {
+            const SDL_FRect* control = &controls[i / 4];
+            switch (i % 4) {
+            case 0: candidate.x = control->x - margin - candidate.w; break;
+            case 1: candidate.x = control->x + control->w + margin; break;
+            case 2: candidate.y = control->y - margin - candidate.h; break;
+            case 3: candidate.y = control->y + control->h + margin; break;
+            }
+        } else {
+            candidate.y = layout->area.y + layout->area.h - margin - candidate.h;
+        }
+        if (have_player && candidate.y < player.y + player.h + margin)
+            continue;
+        if (sdl_unified_look_prompt_clear_at(&candidate, controls, count,
+                have_player ? &player : NULL, &layout->area, margin)) {
+            float dx = candidate.x - layout->panel.x;
+            float dy = candidate.y - layout->panel.y;
+            layout->panel = candidate;
+            for (int j = 0; j < layout->count; j++) {
+                layout->buttons[j].x += dx;
+                layout->buttons[j].y += dy;
+            }
+            return true;
+        }
+    }
+    return false;
+#else
+    (void)layout;
+    (void)margin;
+    return true;
+#endif
+}
+
 static bool sdl_unified_look_prompt_layout(
     sdl_unified_look_prompt_layout_info* out)
 {
@@ -2760,7 +2850,8 @@ static bool sdl_unified_look_prompt_layout(
                         screen_margin, panel_pad, row_gap, button_gap,
                         button_pad_x, row_h, min_button_w,
                         get_sdl_menu_bigger_font()
-                            ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1))
+                            ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1)
+                    && sdl_unified_look_prompt_place_aim(&candidate, screen_margin))
                 {
                     fits = true;
                     break;
@@ -2778,6 +2869,7 @@ static bool sdl_unified_look_prompt_layout(
 
     if (found_layout) {
         *out = best_layout;
+        sdl_unified_look_prompt_place_aim(out, screen_margin);
         return true;
     }
 
@@ -2795,12 +2887,26 @@ static bool sdl_unified_look_prompt_layout(
     row_h = (float)min_font_px + 7.0f;
     min_button_w = 0.0f;
 
-    return sdl_unified_look_prompt_try_layout(out,
+    bool fits = sdl_unified_look_prompt_try_layout(out,
         SDL_UNIFIED_LOOK_PROMPT_LABEL_VARIANTS - 1, font, &out->area,
         g_unified_look_prompt.anchor_row, cell_h, screen_margin, panel_pad,
         row_gap, button_gap, button_pad_x, row_h, min_button_w,
         get_sdl_menu_bigger_font()
                             ? SDL_UNIFIED_LOOK_PROMPT_MAX_BUTTONS : 1);
+    if (fits)
+        sdl_unified_look_prompt_place_aim(out, screen_margin);
+    return fits;
+}
+
+bool sdl_unified_look_prompt_current_rect(SDL_FRect* out)
+{
+    sdl_unified_look_prompt_layout_info layout;
+    int previous = sdl_menu_font_set_render_context(SDL_MENU_FONT_LOOK);
+    bool available = sdl_unified_look_prompt_layout(&layout);
+    sdl_menu_font_set_render_context(previous);
+    if (out)
+        *out = available ? layout.panel : (SDL_FRect){ 0 };
+    return available;
 }
 
 void sdl_unified_look_prompt_clear(void)
@@ -3142,6 +3248,28 @@ static int sdl_unified_look_sidebar_selected_item_index(void)
     return -1;
 }
 
+static float sdl_unified_look_sidebar_available_height(const SDL_FRect* area,
+    float margin, float minimum, float original)
+{
+#if SIL_SDL_MOBILE_BUILD
+    SDL_FRect footer;
+    if (sdl_unified_look_pointer_input_active()
+        && sdl_unified_look_prompt_current_rect(&footer)
+        && footer.x < area->x + area->w - margin
+        && footer.x + footer.w > area->x + margin)
+    {
+        float available = footer.y - margin - (area->y + margin);
+        if (available >= minimum && available < original)
+            return available;
+    }
+#else
+    (void)area;
+    (void)margin;
+    (void)minimum;
+#endif
+    return original;
+}
+
 static bool sdl_unified_look_sidebar_layout(
     sdl_unified_look_sidebar_layout_info* out)
 {
@@ -3234,6 +3362,8 @@ static bool sdl_unified_look_sidebar_layout(
         out->symbol_w = out->row_h + symbol_gap;
     }
 
+    max_panel_h = sdl_unified_look_sidebar_available_height(&out->area,
+        margin, out->row_h + out->pad_y * 2.0f, max_panel_h);
     if (max_panel_h < out->row_h + out->pad_y * 2.0f)
         return false;
 
@@ -3247,6 +3377,26 @@ static bool sdl_unified_look_sidebar_layout(
         visible_capacity = g_unified_look_sidebar.count;
 
     selected_item = sdl_unified_look_sidebar_selected_item_index();
+    /* A short viewport must expose an entry, rather than only the empty
+     * Monsters and Objects headings.  Selection still scrolls every item. */
+    if (selected_item < 0 && visible_capacity < g_unified_look_sidebar.count)
+    {
+        for (int i = visible_capacity; i < g_unified_look_sidebar.count; i++)
+        {
+            if (g_unified_look_sidebar.items[i].kind
+                == SDL_UNIFIED_LOOK_SIDEBAR_ITEM_ENTRY)
+            {
+                bool earlier_entry = false;
+                for (int j = 0; j < visible_capacity; j++)
+                    if (g_unified_look_sidebar.items[j].kind
+                        == SDL_UNIFIED_LOOK_SIDEBAR_ITEM_ENTRY)
+                        earlier_entry = true;
+                if (!earlier_entry)
+                    selected_item = i;
+                break;
+            }
+        }
+    }
     if (selected_item >= 0)
     {
         top_item = selected_item - visible_capacity / 2;
@@ -3414,6 +3564,17 @@ void sdl_unified_look_sidebar_finish(void)
     }
 
     g_state.need_present = true;
+}
+
+bool sdl_unified_look_sidebar_current_rect(SDL_FRect* out)
+{
+    sdl_unified_look_sidebar_layout_info layout;
+    int previous = sdl_menu_font_set_render_context(SDL_MENU_FONT_LOOK);
+    bool available = sdl_unified_look_sidebar_layout(&layout);
+    sdl_menu_font_set_render_context(previous);
+    if (out)
+        *out = available ? layout.panel : (SDL_FRect){ 0 };
+    return available;
 }
 
 void sdl_unified_look_sidebar_render(void)

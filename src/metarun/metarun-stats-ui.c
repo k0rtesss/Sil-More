@@ -586,6 +586,10 @@ static void story_book_sdl_build(bool startup_scene,
 
     /* Page V: click a tale to replace the detail paragraph in place. */
     story_book_sdl_heading("V - The Chronicle of Tales", true);
+    if (!steamdeck_controls_active())
+        sdl_character_sheet_screen_add_book_paragraph_colored(
+            "PageUp/PageDown scroll details. Up/Down select a tale.",
+            TERM_SLATE);
     if (startup_scene) {
         sdl_character_sheet_screen_add_book_paragraph_colored(
             "Blitz is a separate, self-contained run for practice or quick "
@@ -919,6 +923,11 @@ static void story_book_show_sdl(bool startup_scene)
                 done = true;
             } else if (requested_tale == current_run)
                 done = true;
+        }
+        /* Keep detail scrolling distinct from selecting another tale. */
+        else if (key == '9' || key == '3')
+        {
+            (void)sdl_character_sheet_screen_scroll_book(key == '3' ? +1 : -1);
         }
         else if (tales_section && metarun_max > 0
             && (key == '8' || key == 'k' || key == 'K' || key == '-'))

@@ -205,9 +205,9 @@ def main():
         old="                ch = (forced_action == SUPPLY_MENU_ACTION_DROP) ? 'z' : 'u';\n            }\n\n            if ((ch == '\\r'"
         assert current.count(old)==1
         current=current.replace(old,"                continue;\n            }\n\n            if ((ch == '\\r'")
-        old="            ch = 'u';\n        }\n\n        if (!click_generated_command)"
+        old="            ch = 'u';\n        }\n\n        /* Preset rows have numeric names"
         assert current.count(old)==1
-        browser_source=OUT/'browser-floor-baseline.c';browser_source.write_text(current.replace(old,"            continue;\n        }\n\n        if (!click_generated_command)"),encoding='utf-8')
+        browser_source=OUT/'browser-floor-baseline.c';browser_source.write_text(current.replace(old,"            continue;\n        }\n\n        /* Preset rows have numeric names"),encoding='utf-8')
     if args.alias_baseline:
         current=browser_source.read_text(encoding='utf-8')
         split=current.index('            cptr delete_action = "delete";')

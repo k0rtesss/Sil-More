@@ -10,7 +10,7 @@ static bool g_gamepad_focus_chord_pending;
 static bool g_gamepad_focus_chord_used;
 static int g_gamepad_button_modifiers[SDL_GAMEPAD_BUTTON_COUNT];
 static int g_gamepad_trigger_modifiers[GAMEPAD_TRIGGER_COUNT];
-static bool g_gamepad_stick_binding_modifier_active[2];
+static int g_gamepad_stick_binding_modifiers[2];
 
 void sdl_gamepad_release_button_modifier(int button)
 {
@@ -22,12 +22,72 @@ void sdl_gamepad_release_button_modifier(int button)
     }
 }
 
+static void sdl_gamepad_release_stick_modifier(int stick)
+{
+    if (g_gamepad_stick_binding_modifiers[stick])
+    {
+        sdl_gamepad_apply_modifier(g_gamepad_stick_binding_modifiers[stick], false);
+        g_gamepad_stick_binding_modifiers[stick] = 0;
+    }
+}
+
+/* Modal owners may swallow axis input before ordinary gamepad dispatch.
+ * Retire released gameplay modifiers without sending commands or changing
+ * binding capture state. */
+void sdl_gamepad_release_axis_modifiers(const SDL_GamepadAxisEvent* ev)
+{
+    int index;
+
+    if (!ev)
+        return;
+    if (ev->axis <= SDL_GAMEPAD_AXIS_RIGHTY)
+    {
+        int stick = ev->axis >= SDL_GAMEPAD_AXIS_RIGHTX ? 1 : 0;
+        Sint16* x = stick ? &g_gamepad_state.right_x : &g_gamepad_state.left_x;
+        Sint16* y = stick ? &g_gamepad_state.right_y : &g_gamepad_state.left_y;
+        int* binding_dir = stick ? &g_gamepad_state.right_dir
+            : &g_gamepad_state.left_bind_dir;
+
+        if (!g_gamepad_stick_binding_modifiers[stick])
+            return;
+        /* Keep both components current even while a modal owner consumes
+         * events that leave the stick in the same direction. */
+        if (ev->axis == SDL_GAMEPAD_AXIS_LEFTX || ev->axis == SDL_GAMEPAD_AXIS_RIGHTX)
+            *x = ev->value;
+        else
+            *y = ev->value;
+        if (sdl_gamepad_axis_to_cardinal_dir(*x, *y,
+                MAX(config.gamepad_deadzone, 0)) != *binding_dir)
+        {
+            sdl_gamepad_release_stick_modifier(stick);
+            *binding_dir = -1;
+        }
+        return;
+    }
+    if (ev->axis != SDL_GAMEPAD_AXIS_LEFT_TRIGGER
+        && ev->axis != SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
+        return;
+    if (ev->value >= MAX(config.gamepad_trigger_threshold, 1))
+        return;
+
+    index = ev->axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
+    if (g_gamepad_trigger_modifiers[index])
+    {
+        sdl_gamepad_apply_modifier(g_gamepad_trigger_modifiers[index], false);
+        g_gamepad_trigger_modifiers[index] = 0;
+    }
+    if (index == 0)
+        g_gamepad_state.left_trigger_down = false;
+    else
+        g_gamepad_state.right_trigger_down = false;
+}
+
 void sdl_gamepad_reset_modifiers(void)
 {
     memset(g_gamepad_button_modifiers, 0, sizeof(g_gamepad_button_modifiers));
     memset(g_gamepad_trigger_modifiers, 0, sizeof(g_gamepad_trigger_modifiers));
-    memset(g_gamepad_stick_binding_modifier_active, 0,
-        sizeof(g_gamepad_stick_binding_modifier_active));
+    memset(g_gamepad_stick_binding_modifiers, 0,
+        sizeof(g_gamepad_stick_binding_modifiers));
     g_gamepad_state.shift_held = 0;
     g_gamepad_state.ctrl_held = 0;
     g_gamepad_state.alt_held = 0;
@@ -1361,12 +1421,7 @@ void sdl_gamepad_handle_blocked_event(const SDL_Event* ev)
     {
         int* binding_dir = stick ? &g_gamepad_state.right_dir
             : &g_gamepad_state.left_bind_dir;
-        int* bindings = stick ? config.gamepad_right_stick_bindings
-            : config.gamepad_left_stick_bindings;
-        if (g_gamepad_stick_binding_modifier_active[stick]
-            && *binding_dir >= 0 && *binding_dir < GAMEPAD_STICK_DIR_COUNT)
-            sdl_gamepad_apply_modifier(bindings[*binding_dir], false);
-        g_gamepad_stick_binding_modifier_active[stick] = false;
+        sdl_gamepad_release_stick_modifier(stick);
         *binding_dir = -1;
     }
     g_gamepad_state.left_dir = 0;
@@ -2188,35 +2243,8 @@ void sdl_gamepad_prepare_ui_navigation(void)
 {
     sdl_gamepad_context_focus_clear();
     sdl_gamepad_clear_pending_shoulder();
-    if (g_gamepad_stick_binding_modifier_active[0]
-        && g_gamepad_state.left_bind_dir >= 0
-        && g_gamepad_state.left_bind_dir < GAMEPAD_STICK_DIR_COUNT)
-    {
-        int binding = config.gamepad_left_stick_bindings[
-            g_gamepad_state.left_bind_dir];
-
-        if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL
-            || binding == GAMEPAD_BIND_ALT)
-        {
-            sdl_gamepad_apply_modifier(binding, false);
-        }
-    }
-    if (g_gamepad_stick_binding_modifier_active[1]
-        && g_gamepad_state.right_dir >= 0
-        && g_gamepad_state.right_dir < GAMEPAD_STICK_DIR_COUNT)
-    {
-        int binding = config.gamepad_right_stick_bindings[
-            g_gamepad_state.right_dir];
-
-        if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL
-            || binding == GAMEPAD_BIND_ALT)
-        {
-            sdl_gamepad_apply_modifier(binding, false);
-        }
-    }
-
-    g_gamepad_stick_binding_modifier_active[0] = false;
-    g_gamepad_stick_binding_modifier_active[1] = false;
+    sdl_gamepad_release_stick_modifier(0);
+    sdl_gamepad_release_stick_modifier(1);
 
     g_gamepad_state.left_dir = 0;
     g_gamepad_state.left_bind_dir = -1;
@@ -2558,6 +2586,54 @@ static bool sdl_gamepad_context_focus_handle_button(
     return false;
 }
 
+/* Resolve a short directional tap before its current UI owner closes.  A
+ * direction already commits in aim/direction prompts, so Confirm must not
+ * append an Enter that the next owner could mistake for a fresh action. */
+static bool sdl_gamepad_settle_modal_navigation(bool confirm)
+{
+    int directions[3] = {
+        config.gamepad_use_dpad && g_gamepad_state.dpad_pending
+            ? g_gamepad_state.dpad_pending_dir : 0,
+        config.gamepad_use_left_stick && g_gamepad_state.stick_movement[0].pending
+            ? g_gamepad_state.stick_movement[0].pending_dir : 0,
+        config.gamepad_use_right_stick && g_gamepad_state.stick_movement[1].pending
+            ? g_gamepad_state.stick_movement[1].pending_dir : 0,
+    };
+    bool commits = !character_icky && !sdl_question_menu_captures_pointer()
+        && ((g_pointer_aim.active && g_pointer_aim.select_mode
+                && !g_pointer_aim.select_location)
+            || movement_input_active_context() == MOVEMENT_INPUT_CONTEXT_DIRECTION_PROMPT);
+    bool emitted = false;
+
+    sdl_gamepad_clear_dpad_state();
+    sdl_gamepad_clear_pending_sticks();
+    for (int stick = 0; stick < 2; stick++) {
+        if (!sdl_gamepad_stick_moves(stick))
+            continue; /* Preserve held role modifiers on non-movement sticks. */
+        g_gamepad_state.stick_movement[stick].dir = 0;
+        int* ui_dir = stick ? &g_gamepad_state.right_ui_dir
+            : &g_gamepad_state.left_ui_dir;
+        *ui_dir = sdl_gamepad_axis_to_cardinal_dir(
+            stick ? g_gamepad_state.right_x : g_gamepad_state.left_x,
+            stick ? g_gamepad_state.right_y : g_gamepad_state.left_y,
+            MAX(config.gamepad_deadzone, 0));
+    }
+    if (!confirm) {
+        (void)sdl_question_menu_take_navigation();
+        return false;
+    }
+    for (unsigned i = 0; i < N_ELEMENTS(directions); i++) {
+        if (directions[i] < 1 || directions[i] > 9)
+            continue;
+        /* This is UI navigation, independent of held gameplay modifiers. */
+        sdl_gamepad_send_direction_mods(directions[i], false, false, false);
+        emitted = true;
+        if (commits)
+            break;
+    }
+    return commits && emitted;
+}
+
 void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
 {
     if (!ev)
@@ -2708,26 +2784,32 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     if (sdl_gamepad_context_focus_handle_button(button, down))
         return;
 
-    if (down && sdl_gamepad_button_is_ui_confirm(button)
-        && sdl_movement_input_is_modal())
+    bool modal_ui = sdl_gamepad_back_button_is_modal()
+        || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
+            && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    if (down && sdl_gamepad_button_is_ui_confirm(button) && modal_ui)
     {
+        if (sdl_gamepad_settle_modal_navigation(true))
+            return;
         /* Terminal-backed prompts must receive the semantic controller action,
          * not whichever gameplay key happens to be bound to South.  Native and
          * contextual overlays have already had first refusal above. */
-        Term_keypress('\r');
+        Term_keypress(g_description_overlay.active
+                && g_description_overlay.interactive
+                && sdl_description_overlay_has_footer_action(' ')
+            ? ' ' : '\r');
         return;
     }
 
-    if (down && sdl_gamepad_button_is_ui_back(button)
-        && sdl_gamepad_back_button_is_modal())
+    if (down && (sdl_gamepad_button_is_ui_back(button)
+            || button == SDL_GAMEPAD_BUTTON_START) && modal_ui)
     {
+        (void)sdl_gamepad_settle_modal_navigation(false);
         Term_keypress(ESCAPE);
         return;
     }
 
-    if (sdl_gamepad_back_button_is_modal()
-        || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
-            && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON))
+    if (modal_ui)
     {
         int ui_key = 0;
         switch (button)
@@ -3021,10 +3103,7 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
                 && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON);
 
         if (native_overlay || modal) {
-            if (g_gamepad_stick_binding_modifier_active[stick]
-                && *binding_dir >= 0 && *binding_dir < GAMEPAD_STICK_DIR_COUNT)
-                sdl_gamepad_apply_modifier(bindings[*binding_dir], false);
-            g_gamepad_stick_binding_modifier_active[stick] = false;
+            sdl_gamepad_release_stick_modifier(stick);
             *binding_dir = -1;
             g_gamepad_state.stick_movement[stick].dir = 0;
             sdl_gamepad_clear_pending_stick(stick);
@@ -3053,10 +3132,7 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         }
 
         if (dir != *binding_dir) {
-            if (g_gamepad_stick_binding_modifier_active[stick]
-                && *binding_dir >= 0 && *binding_dir < GAMEPAD_STICK_DIR_COUNT)
-                sdl_gamepad_apply_modifier(bindings[*binding_dir], false);
-            g_gamepad_stick_binding_modifier_active[stick] = false;
+            sdl_gamepad_release_stick_modifier(stick);
             *binding_dir = dir;
             if (dir >= 0
                 && sdl_gamepad_single_active_modifier() == GAMEPAD_BIND_NONE
@@ -3073,7 +3149,7 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
                     sdl_gamepad_send_key_raw(combo_binding);
                 else if (binding == GAMEPAD_BIND_SHIFT || binding == GAMEPAD_BIND_CTRL
                     || binding == GAMEPAD_BIND_ALT) {
-                    g_gamepad_stick_binding_modifier_active[stick] = true;
+                    g_gamepad_stick_binding_modifiers[stick] = binding;
                     sdl_gamepad_apply_modifier(binding, true);
                 } else if (binding != GAMEPAD_BIND_NONE)
                     sdl_gamepad_send_key(binding, false);

@@ -197,7 +197,7 @@ static void quantity_title(void)
 '''
 
 
-def main():
+def main(portrait_only=False, cases=None):
     OUT.mkdir(parents=True,exist_ok=True)
     source=OUT/"check.c"; source.write_text(HARNESS,encoding="utf-8")
     objects=shlex.split((BUILD/"CMakeFiles/sil-more.dir/objects1.rsp").read_text())
@@ -220,8 +220,10 @@ def main():
         "@CMakeFiles/sil-more.dir/includes_C.rsp",str(source),"@"+str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,"+",".join("--wrap="+w for w in wraps),
         "-o",str(exe)],cwd=BUILD,env=env,check=True)
-    for width,height,density in [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
+    for width,height,density in cases or [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
         for w,h in [(width,height),(height,width)]:
+            if portrait_only and w>h:
+                continue
             subprocess.run([str(exe),str(w),str(h),str(density),
                 str(ROOT/"lib/xtra/font/EBGaramond-Regular.ttf"),str(ROOT/"lib/xtra/font/Cinzel-Medium.ttf"),
                 str(ROOT/"lib/xtra/font/VictorMono-Medium.ttf")],cwd=OUT,env=env,check=True,timeout=60)

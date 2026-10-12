@@ -12324,10 +12324,41 @@ static bool sdl_char_sheet_narrative_side_lamp_geometry(int body_px,
     float book_w, float region_h, float lh, float* text_w, float* lamp_x,
     float* lamp_w, float* lamp_h);
 
-/* Tale Statistics has persistent chapter links.  In portrait they belong in
- * the leaf as a compact contents band, not in the narrow gutter beside it. */
+/* A chapter gutter can disappear as the enlarged page margins grow. Use the
+ * same inline contents band as portrait books instead of wrapping tiny labels
+ * into overlapping one-line hit rows. */
+static bool sdl_char_sheet_inline_contents(int body_px, float book_w,
+    float content_w)
+{
+    if (g_sdl_narrative_portrait_rendering)
+        return true;
+#if !SIL_SDL_MOBILE_BUILD
+    if (get_sdl_menu_bigger_font())
+    {
+        TTF_Font* body = sdl_story_font_for_height_slot(body_px,
+            SDL_STORY_FONT_SLOT_NARRATIVE);
+        TTF_Font* minimum = sdl_story_font_for_height_slot(9,
+            SDL_STORY_FONT_SLOT_NARRATIVE);
+        float lh = sdl_char_sheet_line_h(body, body_px, 1.28f);
+        float gutter = MAX(0.0f, (content_w - book_w) * 0.5f
+            - lh * SDL_BOOK_MARGIN_H)
+            - MAX(4.0f, lh * 0.42f) - content_w * 0.015f;
+
+        if (sdl_char_sheet_text_width(minimum, "Contents") > gutter)
+            return true;
+        for (int i = 0; i < g_sdl_character_sheet_screen.narrative_contents_count; i++)
+            if (sdl_char_sheet_text_width(minimum,
+                    g_sdl_character_sheet_screen.narrative_contents_label[i]) > gutter)
+                return true;
+    }
+#endif
+    return false;
+}
+
+/* Tale Statistics has persistent chapter links. In portrait or a narrow Big
+ * desktop gutter they belong inside the leaf, in a compact contents band. */
 static float sdl_char_sheet_portrait_contents_height(int body_px,
-    float book_w, int* out_px, int* out_columns)
+    float book_w, float content_w, int* out_px, int* out_columns)
 {
     int count = g_sdl_character_sheet_screen.narrative_contents_count;
     int px;
@@ -12340,10 +12371,14 @@ static float sdl_char_sheet_portrait_contents_height(int body_px,
     float column_w;
     float height;
 
-    if (!g_sdl_narrative_portrait_rendering || count <= 0)
+    if (!sdl_char_sheet_inline_contents(body_px, book_w, content_w) || count <= 0)
         return 0.0f;
 
     px = sdl_char_sheet_clampi((int)((float)body_px * 0.88f), 40, 64);
+#if !SIL_SDL_MOBILE_BUILD
+    if (!g_sdl_narrative_portrait_rendering)
+        px = sdl_menu_font_px(10);
+#endif
 #if SIL_SDL_MOBILE_BUILD
     if (get_sdl_menu_bigger_font())
     {
@@ -12424,7 +12459,7 @@ int sdl_char_sheet_narrative_pack(int body_px, float content_w,
 
     if (region_h < lh)
         region_h = lh;
-    region_h -= sdl_char_sheet_portrait_contents_height(body_px, book_w,
+    region_h -= sdl_char_sheet_portrait_contents_height(body_px, book_w, content_w,
         NULL, NULL);
     if (region_h < lh)
         region_h = lh;
@@ -12608,7 +12643,7 @@ static void sdl_char_sheet_cache_narrative_line_counts(int body_px,
 
     if (region_h < lh)
         region_h = lh;
-    region_h -= sdl_char_sheet_portrait_contents_height(body_px, book_w,
+    region_h -= sdl_char_sheet_portrait_contents_height(body_px, book_w, content_w,
         NULL, NULL);
     if (region_h < lh)
         region_h = lh;
@@ -14445,19 +14480,21 @@ void sdl_char_sheet_render_book_page(int page, float canvas_h,
     if (narrative)
     {
         int contents_count = g_sdl_character_sheet_screen.narrative_contents_count;
+        bool inline_contents = sdl_char_sheet_inline_contents(body_px, book_w,
+            content_w);
         float narrative_text_w = book_w;
         float side_lamp_x = 0.0f;
         float side_lamp_w = 0.0f;
         float side_lamp_h = 0.0f;
         bool side_lamp = false;
 
-        if (contents_count > 0 && g_sdl_narrative_portrait_rendering)
+        if (contents_count > 0 && inline_contents)
         {
             int toc_px = 0;
             int columns = 1;
             TTF_Font* toc_font;
             float toc_h = sdl_char_sheet_portrait_contents_height(body_px,
-                book_w, &toc_px, &columns);
+                book_w, content_w, &toc_px, &columns);
             float toc_lh;
             float toc_y;
             float column_gap;
@@ -14566,7 +14603,7 @@ void sdl_char_sheet_render_book_page(int page, float canvas_h,
 
 #if SIL_SDL_MOBILE_BUILD
         if (get_sdl_menu_bigger_font()) {
-        if (contents_count > 0 && !g_sdl_narrative_portrait_rendering) {
+        if (contents_count > 0 && !inline_contents) {
             /* A phone's short landscape gutter cannot hold every chapter at
              * a readable touch size. Offer the same chapters in a picker. */
             float frame_left = MAX(content_x, book_x - body_lh * SDL_BOOK_MARGIN_H);
@@ -14589,7 +14626,7 @@ void sdl_char_sheet_render_book_page(int page, float canvas_h,
         } else
 #endif
         {
-        if (contents_count > 0 && !g_sdl_narrative_portrait_rendering) {
+        if (contents_count > 0 && !inline_contents) {
             float frame_left = MAX(content_x,
                 book_x - body_lh * SDL_BOOK_MARGIN_H);
             float toc_x = content_x + content_w * 0.015f;
@@ -15926,6 +15963,21 @@ static void sdl_character_sheet_screen_render_content(
             title_name_h = title_h;
             if (carousel)
                 title_h += MAX(counter_h, arrow_w) + gap * .25f;
+            top_y = title_y + title_h + gap;
+            top_h = MAX(1.0f, region_bottom - top_y);
+        }
+#else
+        if (g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_NARRATIVE)
+        {
+            int measured_w = 0, measured_h = 0;
+            SDL_FRect font_button = sdl_menu_font_button_bounds();
+            if (font_button.w > 0.0f && title_y < font_button.y + font_button.h
+                && title_y + title_h > font_button.y && font_button.x > title_x)
+                title_text_w = MIN(title_text_w,
+                    MAX(1.0f, font_button.x - title_x - gap * 0.35f));
+            if (TTF_GetStringSizeWrapped(title_font, title, 0,
+                    MAX(1, (int)title_text_w), &measured_w, &measured_h))
+                title_h = MAX(title_h, (float)measured_h);
             top_y = title_y + title_h + gap;
             top_h = MAX(1.0f, region_bottom - top_y);
         }

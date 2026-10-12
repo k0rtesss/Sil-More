@@ -2,6 +2,7 @@ package com.silqh.silmore;
 
 import android.app.AlertDialog;
 import android.content.pm.ActivityInfo;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.SparseArray;
@@ -19,6 +20,17 @@ import android.widget.TextView;
 import org.libsdl.app.SDLActivity;
 
 public class SilMoreActivity extends SDLActivity {
+	private static native void onTextInputVisibleFrameChanged();
+	// Native text panels use the measured visible area, including the IME.
+	public int getTextInputVisibleBottom() {
+		View decor = getWindow().getDecorView();
+		Rect visible = new Rect();
+		int[] location = new int[2];
+		decor.getWindowVisibleDisplayFrame(visible);
+		decor.getLocationOnScreen(location);
+		return Math.max(0, Math.min(decor.getHeight(), visible.bottom - location[1]));
+	}
+
 	@Override
 	protected void messageboxCreateAndShow(Bundle args) {
 		String title = args.getString("title");
@@ -109,6 +121,8 @@ public class SilMoreActivity extends SDLActivity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		applyFullscreenLayout();
+		getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(
+				() -> onTextInputVisibleFrameChanged());
 	}
 
 	@Override

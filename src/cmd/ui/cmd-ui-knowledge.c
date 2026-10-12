@@ -6431,6 +6431,22 @@ static int inventory_browser_group_index(inventory_menu_group group)
     return 0;
 }
 
+static inventory_menu_group inventory_browser_entry_group(
+    const equipment_list_entry* entry)
+{
+    if (equipment_entry_is_quiver_arrow(entry))
+        return INVENTORY_MENU_GROUP_QUIVER;
+    return inventory_menu_group_for_limit_group(entry->limit_group);
+}
+
+static bool inventory_browser_same_entry(const equipment_list_entry* a,
+    const equipment_list_entry* b)
+{
+    return a->item_idx == b->item_idx && a->supply_idx == b->supply_idx
+        && a->equip_idx == b->equip_idx && a->floor_idx == b->floor_idx
+        && a->placeholder == b->placeholder;
+}
+
 static void inventory_browser_group_limit_status(inventory_menu_group group,
     char* buf, size_t buflen)
 {
@@ -11090,6 +11106,12 @@ static void supply_register_prompt_clicks(const knowledge_browser_layout* layout
         "y delete");
     ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt,
         "y prise a Silmaril");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_PRESET_SAVE, 0, row, prompt,
+        "s save");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_PRESET_NAME, 0, row, prompt,
+        "n name");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_PRESET_CLEAR, 0, row, prompt,
+        "c clear");
     ui_menu_click_add_text_token(SUPPLY_CLICK_TAB, 0, row, prompt, "Tab");
     ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "back");
     ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "cancel");
@@ -11754,6 +11776,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     int inv_quiver_top = 0;
     int inv_jewelry_top = 0;
     int inv_column = 0;
+    bool inv_previous_layout_known = false;
+    bool inv_previous_one_page = false;
+    int inv_previous_entry_count = 0;
     inventory_menu_group inv_focus_group = INVENTORY_MENU_GROUP_ALL;
     bool inv_focus_group_pending = false;
     supply_menu_page page = SUPPLY_MENU_PAGE_SUPPLIES;
@@ -11956,6 +11981,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
     while (!flag)
     {
+        if (page != SUPPLY_MENU_PAGE_INVENTORY)
+            inv_previous_layout_known = false;
         if (page != interaction_page)
         {
             supply_set_interaction_mode(&overlay_cache, &desc_overlay_on,
@@ -12694,6 +12721,14 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
         if (page == SUPPLY_MENU_PAGE_INVENTORY)
         {
+            equipment_list_entry previous_entry;
+            bool ordinary_inventory = !replacement_mode
+                && !storage_exchange_mode && !slot_pick_mode && !item_select_mode;
+            bool previous_entry_valid = ordinary_inventory
+                && inv_previous_layout_known && inv_column
+                && inv_entry_cur >= 0 && inv_entry_cur < inv_previous_entry_count;
+            if (previous_entry_valid)
+                previous_entry = equip_entries[inv_entry_cur];
             int inventory_entry_cnt;
             int inventory_choice_cnt;
             int inventory_totals[INVENTORY_BROWSER_GROUP_COUNT];
@@ -12881,6 +12916,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 knowledge_init_inventory_portrait_layout(&layout, inv_max,
                     true, picker_header_rows);
             }
+            bool preserve_layout_focus = ordinary_inventory
+                && inv_previous_layout_known
+                && inv_previous_one_page != inventory_one_page
+                && previous_entry_valid;
+            if (preserve_layout_focus && !inventory_one_page)
+                inv_grp_cur = inventory_browser_group_index(
+                    inventory_browser_entry_group(&previous_entry));
             inventory_browser_reserve_status(&layout,
                 (inventory_one_page || slot_pick_mode) ? INVENTORY_MENU_GROUP_ALL
                     : inventory_browser_groups[MAX(0, MIN(inv_grp_cur,
@@ -12941,6 +12983,24 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else
                 inventory_entry_cnt = collect_inventory_page_entries(
                     selected_group, equip_entries, equip_capacity, request);
+            /* A resize/font change may replace the combined list with a
+             * category list (or vice versa). Its row index is not an identity. */
+            if (preserve_layout_focus)
+            {
+                inv_focus_group_pending = false;
+                for (i = 0; i < inventory_entry_cnt; i++)
+                {
+                    if (!inventory_browser_same_entry(&previous_entry,
+                            &equip_entries[i]))
+                        continue;
+                    inv_entry_cur = i;
+                    inv_column = 1;
+                    break;
+                }
+            }
+            inv_previous_layout_known = ordinary_inventory;
+            inv_previous_one_page = inventory_one_page;
+            inv_previous_entry_count = inventory_entry_cnt;
             preview_key = browser_entry_index_from_label('x',
                 inventory_entry_cnt) >= 0 ? "Ctrl+x" : "x";
             inventory_choice_cnt = (storage_exchange_mode || replacement_mode
@@ -15486,7 +15546,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             ch = 'u';
         }
 
-        if (!click_generated_command)
+        /* Preset rows have numeric names and explicit save/name/clear keys.
+         * Letter aliases would steal c (clear) and e (Equipped tab). */
+        if (!click_generated_command
+            && grp_idx[grp_cur] != SUPPLY_GROUP_JEWELRY_PRESETS)
         {
             int hotkey_entry = browser_entry_index_from_label(ch, entry_cnt);
 

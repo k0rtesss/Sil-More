@@ -933,6 +933,47 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
         }
     }
 #endif
+    /* On short tabbed pages, navigation already names this book and section.
+     * Reserve two readable body lines before retaining those duplicate
+     * headings. Keep the resolved body font and the tabs/Back actions. */
+    if (g_hint_quest.show_tabs)
+    {
+        float minimum_body_h = out->line_h * 2.0f;
+        float chrome_h = pad_y * 2.0f + title_h + tabs_h + section_h
+            + footer_h + gap * (1.42f + (section_h > 0.0f ? 0.55f : 0.0f)
+                + (footer_h > 0.0f ? 0.55f : 0.0f));
+
+        if (panel_h - chrome_h < minimum_body_h)
+        {
+            title_h = 0.0f;
+            section_h = 0.0f;
+            chrome_h = pad_y * 2.0f + tabs_h + footer_h
+                + gap * (1.0f + (footer_h > 0.0f ? 0.55f : 0.0f));
+            if (panel_h - chrome_h < minimum_body_h)
+            {
+                /* Reclaim decorative space at the smallest terminal size;
+                 * control rows still fit a complete line of the same font. */
+                float control_h = MAX(46.0f, out->line_h);
+
+#if SIL_SDL_MOBILE_BUILD
+                if (get_sdl_menu_bigger_font())
+                    control_h = MAX(control_h, (float)sdl_ui_min_tap_px());
+#endif
+                pad_y = 14.0f;
+                gap = 8.0f;
+                tabs_h = control_h;
+                if (footer_h > 0.0f)
+                {
+                    int rows = 1;
+#if SIL_SDL_MOBILE_BUILD
+                    if (get_sdl_menu_bigger_font() && portrait)
+                        rows = (g_hint_quest.button_count + 1) / 2;
+#endif
+                    footer_h = control_h * rows + gap * (rows - 1);
+                }
+            }
+        }
+    }
     cursor_y = out->panel.y + pad_y;
     out->title = (SDL_FRect){
         .x = out->panel.x + pad_x,
@@ -948,7 +989,8 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
             6.0f, 14.0f);
         float tab_w = (out->title.w - tab_gap * 2.0f) / 3.0f;
 
-        cursor_y += gap * 0.42f;
+        if (title_h > 0.0f)
+            cursor_y += gap * 0.42f;
         for (int i = 0; i < 3; ++i)
         {
             out->tabs[i] = (SDL_FRect){
@@ -1225,15 +1267,17 @@ static void sdl_hint_quest_draw_chrome(const sdl_hint_quest_layout* layout,
     float ornament_t;
 
     sdl_hint_quest_draw_book_leaf(layout);
-    sdl_hint_quest_draw_text(title_font, g_hint_quest.title, gold,
-        &layout->title, true, false);
-    ornament_y = layout->title.y + layout->title.h
-        - MAX(1.0f, (float)layout->body_px * 0.035f);
-    ornament_w = layout->title.w * 0.15f;
     ornament_t = MAX(1.0f, (float)layout->body_px * 0.035f);
-    sdl_hint_quest_draw_center_ornament(
-        layout->title.x + layout->title.w * 0.5f,
-        ornament_y, ornament_w, ornament_t);
+    if (layout->title.h > 0.0f)
+    {
+        sdl_hint_quest_draw_text(title_font, g_hint_quest.title, gold,
+            &layout->title, true, false);
+        ornament_y = layout->title.y + layout->title.h - ornament_t;
+        ornament_w = layout->title.w * 0.15f;
+        sdl_hint_quest_draw_center_ornament(
+            layout->title.x + layout->title.w * 0.5f,
+            ornament_y, ornament_w, ornament_t);
+    }
 
     if (g_hint_quest.show_tabs)
     {
@@ -1282,7 +1326,7 @@ static void sdl_hint_quest_draw_chrome(const sdl_hint_quest_layout* layout,
         }
     }
 
-    if (g_hint_quest.section[0])
+    if (g_hint_quest.section[0] && layout->section.h > 0.0f)
     {
         sdl_hint_quest_draw_text(body_font, g_hint_quest.section, gold,
             &layout->section, false, false);
@@ -1790,6 +1834,23 @@ static void sdl_hint_quest_scroll_by(float delta)
         return;
     g_hint_quest.scroll_y = next;
     sdl_hint_quest_mark_dirty();
+}
+
+bool sdl_hint_quest_menu_scroll(int direction, bool page)
+{
+    SDL_Rect screen;
+    float step;
+    float before;
+
+    if (!g_hint_quest.active || g_hint_quest_turn.active || !direction)
+        return false;
+    screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
+    step = (float)sdl_hint_quest_body_px(&screen) * 1.2f;
+    if (page)
+        step = MAX(step, g_hint_quest.body_rect.h - step);
+    before = g_hint_quest.scroll_y;
+    sdl_hint_quest_scroll_by(direction < 0 ? -step : step);
+    return g_hint_quest.scroll_y != before;
 }
 
 static void sdl_hint_quest_handle_horizontal_swipe(float delta_x)
