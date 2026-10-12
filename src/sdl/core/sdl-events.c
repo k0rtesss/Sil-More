@@ -1353,9 +1353,17 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
     (void)st;
+    if (ev->type == SDL_EVENT_SCREEN_KEYBOARD_SHOWN
+        || ev->type == SDL_EVENT_SCREEN_KEYBOARD_HIDDEN) {
+        /* Recompute native text-panel geometry without synthesizing input. */
+        g_state.need_present = true;
+        return;
+    }
     sdl_normalize_event_to_render_coords(ev);
     if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
         sdl_gamepad_release_button_modifier(ev->gbutton.button);
+    else if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
+        sdl_gamepad_release_axis_modifiers(&ev->gaxis);
     if (sdl_sound_try_handle_event(ev)) {
         return;
     }

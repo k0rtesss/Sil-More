@@ -8126,8 +8126,7 @@ void artefact_ability_menu(int skill)
  */
 void rename_artefact(void)
 {
-    char tmp[20];
-    char old_name[20];
+    char tmp[MAX_LEN_ART_NAME];
     char o_desc[30];
     bool name_selected = false;
     int row = (smith_ui_last_desc_row >= 0) ? smith_ui_last_desc_row
@@ -8136,7 +8135,6 @@ void rename_artefact(void)
 
     // Clear the names
     tmp[0] = '\0';
-    old_name[0] = '\0';
 
     // Clear object name
     Term_erase(0, row, smith_ui_term_wid());
@@ -8151,29 +8149,22 @@ void rename_artefact(void)
     // use old name as a default
     SDL_strlcpy(tmp, smith2_a_ptr->name, sizeof(tmp));
 
-    // save a copy too
-    SDL_strlcpy(old_name, op_ptr->full_name, sizeof(old_name));
-
     /* Prompt for a new name */
     Term_gotoxy(col + strlen(o_desc) + 1, row);
 
     while (!name_selected)
     {
-        if (askfor_name(tmp, sizeof(tmp)))
+        if (!askfor_name(tmp, sizeof(tmp)))
+            return;
+
+        /* The editor owns a local draft. Empty retries and cancellation must
+         * leave both the design and its backup exactly as they were. */
+        if (tmp[0] != '\0')
         {
             SDL_strlcpy(smith2_a_ptr->name, tmp, MAX_LEN_ART_NAME);
             p_ptr->redraw |= (PR_MISC);
-        }
-        else
-        {
-            SDL_strlcpy(smith2_a_ptr->name, old_name, MAX_LEN_ART_NAME);
-            return;
-        }
-
-        if (tmp[0] != '\0')
             name_selected = true;
-        else
-            SDL_strlcpy(smith2_a_ptr->name, old_name, MAX_LEN_ART_NAME);
+        }
     }
 
     // retrieve a backup of the artefact (all the modifications were done to

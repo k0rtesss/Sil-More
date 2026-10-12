@@ -510,6 +510,59 @@ cleanup:
 }
 #endif
 
+#if defined(SDL_PLATFORM_ANDROID)
+static void SDLCALL sdl_text_input_frame_redraw(void* unused)
+{
+    (void)unused;
+    if (g_state.window && SDL_TextInputActive(g_state.window))
+        g_state.need_present = true;
+}
+
+JNIEXPORT void JNICALL
+Java_com_silqh_silmore_SilMoreActivity_onTextInputVisibleFrameChanged(
+    JNIEnv* env, jclass cls)
+{
+    (void)env;
+    (void)cls;
+    /* The IME's final frame arrives after SDL's initial shown event. Queue
+     * only a redraw on the SDL thread; never wake the game with a command. */
+    if (SDL_WasInit(SDL_INIT_EVENTS))
+        (void)SDL_RunOnMainThread(sdl_text_input_frame_redraw, NULL, false);
+}
+#endif
+
+/* Unlike the gameplay safe area, a text panel must avoid the visible IME. */
+SDL_Rect sdl_text_input_visible_rect(SDL_Rect rect)
+{
+#if defined(SDL_PLATFORM_ANDROID)
+    if (!g_state.window || !SDL_TextInputActive(g_state.window)
+        || !SDL_ScreenKeyboardShown(g_state.window))
+        return rect;
+    JNIEnv* env = (JNIEnv*)SDL_GetAndroidJNIEnv();
+    jobject activity = (jobject)SDL_GetAndroidActivity();
+    if (!env || !activity)
+        return rect;
+    jclass cls = (*env)->GetObjectClass(env, activity);
+    jmethodID method = cls ? (*env)->GetMethodID(env, cls,
+        "getTextInputVisibleBottom", "()I") : NULL;
+    int bottom = method ? (*env)->CallIntMethod(env, activity, method) : 0;
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        bottom = 0;
+    }
+    if (cls) (*env)->DeleteLocalRef(env, cls);
+    (*env)->DeleteLocalRef(env, activity);
+    if (bottom > 0) {
+        SDL_Rect visible_units = {0, 0, 1, bottom};
+        SDL_Rect visible_pixels = sdl_window_rect_to_pixel_rect(&visible_units);
+        int clipped_bottom = MIN(rect.y + rect.h, visible_pixels.h);
+        if (clipped_bottom > rect.y)
+            rect.h = clipped_bottom - rect.y;
+    }
+#endif
+    return rect;
+}
+
 void sdl_refresh_safe_area(void)
 {
     SDL_Rect window_pixels = sdl_get_window_pixel_rect();

@@ -245,6 +245,34 @@ static bool hint_quest_tab_key(char ch)
     return (ch == '\t');
 }
 
+static bool quest_status_handle_body_navigation(char ch)
+{
+    /* SDL normalizes Page Up/Down and Home/End to diagonal keypad keys.
+     * Handle them before horizontal tab navigation can change chapters. */
+    if (ch == '1' || ch == '3' || ch == '7' || ch == '9')
+    {
+        quest_status_tabs_focus = false;
+        (void)sdl_hint_quest_menu_scroll((ch == '1' || ch == '3') ? 1 : -1,
+            true);
+        return true;
+    }
+    if (quest_status_tabs_focus)
+        return false;
+    if (ch == '2')
+    {
+        (void)sdl_hint_quest_menu_scroll(1, false);
+        return true;
+    }
+    if (ch == '8')
+    {
+        if (!sdl_hint_quest_menu_scroll(-1, false))
+            quest_status_tabs_focus = true;
+        return true;
+    }
+    /* Horizontal directions belong to the tabs once Up returns focus there. */
+    return ch == '4' || ch == '6';
+}
+
 static bool hint_quest_handle_tab_navigation(char ch, bool* tabs_focus,
     bool can_focus_tabs, hint_quest_page* next_page)
 {
@@ -1190,6 +1218,14 @@ hint_quest_page do_cmd_quest_status_page(void)
         if (ch == UI_MENU_CLICK_WAKE_KEY)
             continue;
         ch = (char)steamdeck_menu_key(ch, 0, 0);
+        if (quest_status_handle_body_navigation(ch))
+            continue;
+        if (ch == '[' || ch == ']')
+        {
+            next_page = (ch == '[') ? HINT_QUEST_PAGE_HINTS
+                : HINT_QUEST_PAGE_THRALLS;
+            break;
+        }
         if (hint_quest_tab_key(ch))
         {
             next_page = HINT_QUEST_PAGE_THRALLS;

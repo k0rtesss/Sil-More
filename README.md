@@ -224,7 +224,7 @@ These instructions are for personal builds and sideloading. For normal play, pre
 3. Install Android Studio plus the Android SDK, NDK, and CMake components from SDK Manager.
 4. Open the `android/` folder in Android Studio.
 5. Let Gradle sync complete.
-6. Build or run the `app` configuration. Use the `sideloadDebug` variant for personal adb installs. Debug builds use a separate package from both the Play/internal-testing app and the release sideload APK, so all copies can coexist. The Gradle project packages the game data from `lib/` into the APK and targets `arm64-v8a`.
+6. Build or run the `app` configuration. Use the `sideloadDebug` variant for personal adb installs. Debug builds use a separate package from both the Play/internal-testing app and the release sideload APK, so all copies can coexist. The Gradle project packages the game data from `lib/` and emits separate `arm64-v8a` and `armeabi-v7a` APKs by default; deploy helpers install the 64-bit APK.
 
 ### Personal APK build from PowerShell
 From the repo root, build a debug APK:

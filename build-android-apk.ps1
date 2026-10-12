@@ -1,6 +1,6 @@
 param(
     [ValidateSet('Debug','Release')]
-    [string]$Config = 'Debug',
+    [string]$Config = 'Release',
 
     [ValidateSet('Sideload','Play')]
     [string]$Delivery = 'Sideload',
@@ -187,7 +187,7 @@ function Get-AndroidAssembleTaskName {
     return "assemble$flavor$buildType"
 }
 
-function Get-AndroidApkPath {
+function Get-AndroidApkPaths {
     param(
         [Parameter(Mandatory = $true)]
         [string]$AndroidDir,
@@ -201,7 +201,14 @@ function Get-AndroidApkPath {
 
     $flavor = $Delivery.ToLowerInvariant()
     $buildType = $Config.ToLowerInvariant()
-    return Join-Path $AndroidDir "app\build\outputs\apk\$flavor\$buildType\app-$flavor-$buildType.apk"
+    $outputDir = Join-Path $AndroidDir "app\build\outputs\apk\$flavor\$buildType"
+    $metadataPath = Join-Path $outputDir 'output-metadata.json'
+    if (-not (Test-Path -LiteralPath $metadataPath)) {
+        return @()
+    }
+
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    return @($metadata.elements | ForEach-Object { Join-Path $outputDir $_.outputFile })
 }
 
 function Get-AndroidApplicationId {
@@ -299,6 +306,10 @@ try {
     }
 
     $gradleArgs = @()
+    $androidAbisOverride = [Environment]::GetEnvironmentVariable('SIL_MORE_ANDROID_ABIS', 'Process')
+    if (-not [string]::IsNullOrWhiteSpace($androidAbisOverride)) {
+        $gradleArgs += "-PSIL_MORE_ANDROID_ABIS=$androidAbisOverride"
+    }
     if ($Apk2) {
         $gradleArgs += '-PSIL_MORE_APK2=true'
     }
@@ -320,12 +331,17 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "Gradle wrapper failed with exit code $LASTEXITCODE"
         }
-        $apkPath = Get-AndroidApkPath -AndroidDir $androidDir -Delivery $Delivery -Config $Config
+        $apkPaths = Get-AndroidApkPaths -AndroidDir $androidDir -Delivery $Delivery -Config $Config
+        if ($apkPaths.Count -eq 0) {
+            throw 'Gradle completed without APK output-metadata.json entries.'
+        }
         $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config -Apk2:$Apk2
         Write-Host "APK build completed via gradlew ($task)." -ForegroundColor Green
         Write-Host "Application ID: $applicationId" -ForegroundColor Green
-        if (Test-Path $apkPath) {
-            Write-Host "APK: $apkPath" -ForegroundColor Green
+        foreach ($apkPath in $apkPaths) {
+            if (Test-Path -LiteralPath $apkPath) {
+                Write-Host "APK: $apkPath" -ForegroundColor Green
+            }
         }
         return
     }
@@ -335,12 +351,17 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "Gradle CLI failed with exit code $LASTEXITCODE"
         }
-        $apkPath = Get-AndroidApkPath -AndroidDir $androidDir -Delivery $Delivery -Config $Config
+        $apkPaths = Get-AndroidApkPaths -AndroidDir $androidDir -Delivery $Delivery -Config $Config
+        if ($apkPaths.Count -eq 0) {
+            throw 'Gradle completed without APK output-metadata.json entries.'
+        }
         $applicationId = Get-AndroidApplicationId -Delivery $Delivery -Config $Config -Apk2:$Apk2
         Write-Host "APK build completed via gradle CLI ($task)." -ForegroundColor Green
         Write-Host "Application ID: $applicationId" -ForegroundColor Green
-        if (Test-Path $apkPath) {
-            Write-Host "APK: $apkPath" -ForegroundColor Green
+        foreach ($apkPath in $apkPaths) {
+            if (Test-Path -LiteralPath $apkPath) {
+                Write-Host "APK: $apkPath" -ForegroundColor Green
+            }
         }
         return
     }

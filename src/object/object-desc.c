@@ -762,6 +762,32 @@ static void object_desc_append_inscription(char* buf, size_t max, const char* ta
     SDL_strlcat(buf, tag, max);
 }
 
+/* Compact names keep their historic byte budget, but an inscription must not
+ * leave a UTF-8 lead byte before the closing brace. Details shows the full note. */
+static char* object_desc_append_compact_inscription(char* text, char* end,
+    cptr inscription)
+{
+    int available;
+    int bytes;
+    bool clipped;
+
+    if (!inscription || text >= end)
+        return text;
+    available = (int)(end - text);
+    bytes = utf8_safe_prefix_len(inscription, available);
+    clipped = inscription[bytes] != '\0';
+    if (clipped && available >= 3)
+        bytes = utf8_safe_prefix_len(inscription, available - 3);
+    memcpy(text, inscription, bytes);
+    text += bytes;
+    if (clipped && available >= 3)
+    {
+        memcpy(text, "...", 3);
+        text += 3;
+    }
+    return text;
+}
+
 static const char* object_desc_curse_inscription(const object_type* o_ptr,
     bool known, u32b f3)
 {
@@ -1694,8 +1720,7 @@ void object_desc(
         if (u)
         {
             /* Append the inscription */
-            while ((t < b + 75) && *u)
-                object_desc_chr_macro(t, *u++);
+            t = object_desc_append_compact_inscription(t, b + 75, u);
         }
 
         /* Special inscription too */
@@ -1710,8 +1735,7 @@ void object_desc(
         if (v)
         {
             /* Append the inscription */
-            while ((t < b + 75) && *v)
-                object_desc_chr_macro(t, *v++);
+            t = object_desc_append_compact_inscription(t, b + 75, v);
         }
 
         /* Terminate the inscription */
@@ -1744,6 +1768,8 @@ object_desc_done:
 void object_desc_floor(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode)
 {
+    if (!buf || max == 0)
+        return;
     const char* u;
     const char* v;
     char discount_buf[80];
@@ -1830,6 +1856,7 @@ void object_desc_floor(
             SDL_strlcat(buf, v, max);
         SDL_strlcat(buf, "}", max);
     }
+    buf[utf8_safe_prefix_len(buf, (int)strlen(buf))] = '\0';
 }
 
 /*

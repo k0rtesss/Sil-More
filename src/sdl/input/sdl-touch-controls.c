@@ -795,6 +795,15 @@ static bool sdl_touch_thumb_fire_targeting_active(void)
         && !g_pointer_aim.select_location;
 }
 
+/* Label the action that the shared ranged command will actually perform. */
+static bool sdl_touch_aim_is_throwing(void)
+{
+    return p_ptr && (p_ptr->command_cmd == 't'
+        || p_ptr->command_cmd == KTRL('T')
+        || ((p_ptr->command_cmd == 'f' || p_ptr->command_cmd == 'F')
+            && player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING));
+}
+
 static bool sdl_touch_round_aim_targeting_active(void)
 {
     return g_pointer_aim.active && g_pointer_aim.select_mode
@@ -1581,9 +1590,17 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
     }
     if (binding == SDL_TOUCH_THUMB_BIND_FIRE_SELECTED) {
         if (sdl_touch_thumb_fire_targeting_active()) {
+#if SIL_SDL_MOBILE_BUILD
+            if (config.bigger_font
+                || get_sdl_menu_bigger_font_for(SDL_MENU_FONT_LOOK)) {
+                SDL_strlcpy(buf, sdl_touch_aim_is_throwing()
+                    ? "Throw" : "Fire", buflen);
+                return;
+            }
+#endif
             SDL_strlcpy(buf,
-                sdl_touch_thumb_ranged_mode_active()
-                    ? "Fire at target" : "Throw at target",
+                sdl_touch_aim_is_throwing()
+                    ? "Throw at target" : "Fire at target",
                 buflen);
             return;
         }
@@ -3565,8 +3582,23 @@ void sdl_touch_round_render(void)
             .w = inner_radius * 1.84f,
             .h = inner_radius * 1.84f,
         };
+        cptr center_label = sdl_touch_aim_is_throwing()
+            ? "Throw direction" : "Fire direction";
+#if SIL_SDL_MOBILE_BUILD
+        if (config.bigger_font
+            || get_sdl_menu_bigger_font_for(SDL_MENU_FONT_LOOK)) {
+            bool throwing = sdl_touch_aim_is_throwing();
+            center_label = throwing ? "Throw" : "Fire";
+            if (throwing) {
+                /* The full inner-circle height fits the two wrapped lines at
+                 * the unchanged enlarged Control font on short phones. */
+                center_arrow.y = cy - inner_radius;
+                center_arrow.h = inner_radius * 2.0f;
+            }
+        }
+#endif
         sdl_touch_pane_draw_button_text_scaled(&center_arrow, NULL,
-            "Fire direction", accent, 0.22f, 0.54f);
+            center_label, accent, 0.22f, 0.54f);
     }
 
     if (ctrl_preview)

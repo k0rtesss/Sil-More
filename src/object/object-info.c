@@ -2408,6 +2408,15 @@ static bool screen_out_head(const object_type* o_ptr)
 
     log_trace("screen_out_head: After printing object name, cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
 
+    /* Compact names may abbreviate the note; Details retains the full text. */
+    if (o_ptr->obj_note && quark_str(o_ptr->obj_note)[0])
+    {
+        text_out("\n\n");
+        text_out_c(TERM_L_BLUE, "Inscription: ");
+        text_out(quark_str(o_ptr->obj_note));
+        has_description = true;
+    }
+
     /* Display the known artefact description */
     if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)
         && a_info[o_ptr->name1].text)
@@ -2843,9 +2852,77 @@ static void object_info_understanding_action_token(char* buf, size_t buflen,
     }
 }
 
+static void object_info_controller_action_token(char* buf, size_t size,
+    const object_info_screen_action* action)
+{
+    cptr token = action->token;
+    cptr label = NULL;
+    char button = 0;
+
+    if (action->key == 'x' && token && strncmp(token, "x ", 2) == 0)
+    {
+        button = 'X';
+        label = token + 2;
+    }
+    else if (action->key == ' ' && token && strncmp(token, "Space ", 6) == 0)
+    {
+        button = 'A';
+        label = token + 6;
+    }
+    else if (action->key == ESCAPE && token && strncmp(token, "Esc ", 4) == 0)
+    {
+        button = 'B';
+        label = token + 4;
+    }
+
+    if (label)
+        strnfmt(buf, size, "%c %s", button, label);
+    else
+        SDL_strlcpy(buf, token ? token : "", size);
+}
+
 static void object_info_configure_footer(cptr footer,
     const object_info_screen_action* actions, int action_count)
 {
+    char controller_footer[160] = "";
+    bool controller = steamdeck_controls_active();
+
+    /* The displayed tokens and pointer hit tokens must change together;
+     * their semantic action keys remain x, Space and Escape. */
+    if (controller && footer && actions && action_count > 0)
+    {
+        cptr text = footer;
+        while (*text)
+        {
+            int matched = -1;
+            for (int i = 0; i < action_count; i++)
+            {
+                cptr token = actions[i].token;
+                if (token && token[0]
+                    && strncmp(text, token, strlen(token)) == 0)
+                {
+                    matched = i;
+                    break;
+                }
+            }
+            if (matched >= 0)
+            {
+                char token[32];
+                object_info_controller_action_token(token, sizeof(token),
+                    &actions[matched]);
+                SDL_strlcat(controller_footer, token,
+                    sizeof(controller_footer));
+                text += strlen(actions[matched].token);
+            }
+            else
+            {
+                char letter[2] = { *text++, '\0' };
+                SDL_strlcat(controller_footer, letter,
+                    sizeof(controller_footer));
+            }
+        }
+        footer = controller_footer;
+    }
     sdl_description_overlay_set_footer(footer, footer && footer[0]);
     sdl_description_overlay_clear_footer_actions();
 
@@ -2853,8 +2930,14 @@ static void object_info_configure_footer(cptr footer,
         return;
 
     for (int i = 0; i < action_count; i++)
+    {
+        char token[32];
+        if (controller)
+            object_info_controller_action_token(token, sizeof(token),
+                &actions[i]);
         sdl_description_overlay_add_footer_action(actions[i].key,
-            actions[i].token);
+            controller ? token : actions[i].token);
+    }
 }
 
 static char object_info_screen_capture_view(

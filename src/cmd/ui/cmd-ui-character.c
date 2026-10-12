@@ -1390,6 +1390,9 @@ void do_cmd_character_sheet(void)
     /* Force redraw after screen restore if skills/abilities were changed */
     p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_EXP);
     handle_stuff();
+    /* Native menus can return inside an inkey() that already flushed once.
+     * Publish the map/status cells repaired at the restored terminal size. */
+    Term_fresh();
 }
 
 /*

@@ -545,11 +545,7 @@ about_font_redraw:
     if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
     {
         main_menu_about_mobile(about_lines);
-        sdl_pop_terminal_menu_scale();
-        screen_pop_supporting_panes_hidden();
-        screen_load();
-        if (p_ptr && p_ptr->playing) sdl_music_stop_main();
-        return;
+        goto about_cleanup;
     }
 
     Term_get_size(&wid, &hgt);
@@ -718,9 +714,19 @@ about_font_redraw:
         goto about_font_redraw;
     (void)ch;
 
+about_cleanup:
     sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
+
+    /* Font changes can clip the saved terminal grid. Repair the restored
+     * gameplay view before publishing it, while leaving nested owners alone. */
+    if (character_generated && character_dungeon && !character_icky)
+    {
+        p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
+        handle_stuff();
+    }
+    Term_fresh();
 
     if (p_ptr && p_ptr->playing)
         sdl_music_stop_main();
@@ -2753,11 +2759,17 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
         }
 
         if (!click_generated_command)
-            ch = (char)steamdeck_menu_key(ch, '\t', '\t');
+            ch = (char)steamdeck_menu_key(ch, '[', ']');
 
         if (next_page != HINT_QUEST_PAGE_EXIT)
             break;
 
+        if (ch == '[' || ch == ']')
+        {
+            next_page = hint_quest_adjacent_page(HINT_QUEST_PAGE_HINTS,
+                ch == '[' ? -1 : 1);
+            break;
+        }
         if (hint_quest_tab_key(ch))
         {
             next_page = HINT_QUEST_PAGE_QUESTS;
@@ -3246,9 +3258,15 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
             }
 
             if (!generated_command)
-                ch = (char)steamdeck_menu_key(ch, '\t', '\t');
+                ch = (char)steamdeck_menu_key(ch, '[', ']');
         }
 
+        if (ch == '[' || ch == ']')
+        {
+            next_page = hint_quest_adjacent_page(HINT_QUEST_PAGE_THRALLS,
+                ch == '[' ? -1 : 1);
+            break;
+        }
         if (hint_quest_tab_key(ch))
         {
             next_page = HINT_QUEST_PAGE_HINTS;
@@ -3537,7 +3555,8 @@ void do_cmd_messages_with_filter(int initial_filter)
                 char prompt_full[160];
                 char prompt_mid[128];
                 char prompt_short[80];
-                const char* variants[3];
+                char prompt_compact[80];
+                const char* variants[4];
 
                 controller_prompt_label(steamdeck_prev_page_key(), "L1",
                     prev_label, sizeof(prev_label));
@@ -3546,16 +3565,19 @@ void do_cmd_messages_with_filter(int initial_filter)
                 controller_prompt_label(steamdeck_back_key(), "B",
                     back_label, sizeof(back_label));
                 strnfmt(prompt_full, sizeof(prompt_full),
-                    "%s/%s page  Up/Down line  / find  = highlight  %s back",
+                    "%s/%s page  Left/Right filter  Up/Down line  / find  = highlight  %s back",
                     prev_label, next_label, back_label);
                 strnfmt(prompt_mid, sizeof(prompt_mid),
-                    "%s/%s page  Up/Down line  / find  %s back",
+                    "Left/Right filter  %s/%s page  Up/Down line  %s back",
                     prev_label, next_label, back_label);
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "%s/%s page  %s back", prev_label, next_label, back_label);
+                    "D-pad L/R filter  %s/%s page  %s back", prev_label, next_label, back_label);
+                strnfmt(prompt_compact, sizeof(prompt_compact),
+                    "D-pad filter %s/%s page %s back", prev_label, next_label, back_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
+                variants[3] = prompt_compact;
                 terminal_prompt_pick_variant(prompt, sizeof(prompt), wid, false,
                     variants, N_ELEMENTS(variants));
             }
@@ -3643,7 +3665,7 @@ void do_cmd_messages_with_filter(int initial_filter)
         }
         ch = (char)steamdeck_menu_key(ch, 'p', 'n');
 
-        if (ch == LOG_HISTORY_PREV_FILTER_KEY)
+        if (ch == LOG_HISTORY_PREV_FILTER_KEY || ch == '4')
         {
             filter = log_history_previous_filter(filter);
             i = 0;
@@ -3651,7 +3673,7 @@ void do_cmd_messages_with_filter(int initial_filter)
             continue;
         }
 
-        if (ch == LOG_HISTORY_NEXT_FILTER_KEY)
+        if (ch == LOG_HISTORY_NEXT_FILTER_KEY || ch == '6')
         {
             filter = log_history_next_filter(filter);
             i = 0;
@@ -3865,6 +3887,15 @@ void do_cmd_messages_with_filter(int initial_filter)
     sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
+    /* Resizing for the log font can clip the saved dungeon buffer. Repair at
+     * the restored gameplay size, then publish even inside an already-flushed
+     * inkey(). Nested menus keep their own restored screen. */
+    if (character_generated && character_dungeon && !character_icky)
+    {
+        p_ptr->redraw |= (PR_MAP | PR_BASIC | PR_EXTRA);
+        handle_stuff();
+    }
+    Term_fresh();
 }
 
 void do_cmd_messages(void)

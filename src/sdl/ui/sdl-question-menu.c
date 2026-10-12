@@ -23,7 +23,9 @@ static char* g_question_full_description;
 
 static cptr sdl_question_menu_description(void)
 {
-    return get_sdl_menu_bigger_font() && g_question_full_description
+    /* The fixed legacy field is only an allocation-failure fallback. Font or
+     * platform changes must not discard the end of the caller's description. */
+    return g_question_full_description
         ? g_question_full_description : g_question_menu.desc;
 }
 
@@ -69,6 +71,7 @@ typedef struct sdl_question_menu_layout_info {
     bool info_button;
     bool scrollable;
     bool actions_in_list;
+    bool inline_text;
 } sdl_question_menu_layout_info;
 
 typedef struct sdl_question_menu_touch_state {
@@ -470,6 +473,25 @@ static float sdl_question_menu_text_width(TTF_Font* font, cptr text,
     return (float)strlen(text) * (float)font_px * 0.55f;
 }
 
+/* An inline editor shows the insertion end without wrapping or shrinking.
+ * The original entry remains intact; advance only at UTF-8 boundaries. */
+static cptr sdl_question_menu_inline_text_tail(TTF_Font* font, cptr text,
+    float width)
+{
+    if (!font || !text)
+        return text;
+    while (*text) {
+        int measured = 0;
+        if (!TTF_GetStringSize(font, text, 0, &measured, NULL)
+            || measured + 2 <= width)
+            break;
+        text++;
+        while (((unsigned char)*text & 0xc0) == 0x80)
+            text++;
+    }
+    return text;
+}
+
 static int sdl_question_menu_wrapped_text_height(TTF_Font* font, cptr text,
     float wrap_w)
 {
@@ -630,6 +652,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     float close_reserve = 0.0f;
     float info_reserve = 0.0f;
     float suppress_reserve = 0.0f;
+    float text_chrome_inset = 0.0f;
     float button_widths[SDL_QUESTION_MENU_MAX_BUTTONS] = { 0 };
     float button_gap = 0.0f;
     float button_total_w = 0.0f;
@@ -662,6 +685,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     bool compact_table;
     int table_column_count = 0;
     bool has_icons = false;
+    bool keyboard_clipped = false;
 
     if (!out)
         return false;
@@ -681,6 +705,11 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         return false;
     if (!g_question_menu.context_hint)
         anchor = sdl_menu_content_rect(anchor);
+    if (g_question_menu.text_input) {
+        SDL_Rect visible = sdl_text_input_visible_rect(anchor);
+        keyboard_clipped = visible.h < anchor.h;
+        anchor = visible;
+    }
     compact_table = get_sdl_menu_bigger_font() || anchor.h > anchor.w;
 
     font_px = sdl_main_menu_pane_font_px();
@@ -783,15 +812,17 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     }
 
     margin = sdl_overlay_margin_px();
+    if (keyboard_clipped)
+        margin = MIN(margin, MAX(4, (int)(8.0f * sdl_ui_density_scale())));
     pad_x = sdl_touch_pane_clampf((float)font_px * 0.68f, 10.0f, 18.0f);
     pad_y = sdl_touch_pane_clampf((float)font_px * 0.55f, 8.0f, 16.0f);
     row_h = (float)font_px * 1.24f;
     if (row_h < (float)font_px + 4.0f)
         row_h = (float)font_px + 4.0f;
-    if (get_sdl_menu_bigger_font())
+    if (get_sdl_menu_bigger_font() || g_question_menu.text_input)
         row_h = MAX(44.0f, (float)TTF_GetFontHeight(story_font) * 1.3f);
 #if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (get_sdl_menu_bigger_font() || g_question_menu.text_input)
         row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
 #endif
     divider_gap = sdl_touch_pane_clampf((float)font_px * 0.3f, 3.0f, 8.0f);
@@ -859,6 +890,59 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         }
     }
 
+    /* A landscape IME can leave less than two full touch rows. Keep the
+     * explicit field label, editor and actions side by side in that case.
+     * Cancel replaces redundant X chrome; ordinary questions keep their
+     * existing stacked layout. Only use this when every target fits. */
+    if (g_question_menu.text_input && keyboard_clipped
+        && g_question_menu.count == 1 && button_count > 0
+        && !sdl_question_menu_description()[0]
+        && anchor.w > anchor.h
+        && anchor.h - margin * 2.0f
+            < row_h * 3.0f + pad_y * 2.0f + divider_gap * 2.0f)
+    {
+        float gap = MAX(4.0f, 4.0f * sdl_ui_density_scale());
+        float edge = gap;
+        float width = anchor.w - edge * 2.0f;
+        SDL_FRect font_button = sdl_menu_font_button_bounds_avoiding((SDL_FRect){0});
+        if (font_button.w > 0 && font_button.y < anchor.y + anchor.h
+            && font_button.y + font_button.h > anchor.y)
+            width = MIN(width, font_button.x - gap - anchor.x - edge);
+        float action_w = 0.0f;
+        float action_widths[SDL_QUESTION_MENU_MAX_BUTTONS] = {0};
+        for (int i = 0; i < button_count; i++) {
+            action_widths[i] = MAX(row_h,
+                sdl_question_menu_text_width(story_font,
+                    g_question_menu.buttons[i].text, font_px)
+                    / 0.84f + MAX(4.0f, font_px * 0.2f));
+            action_w += action_widths[i];
+        }
+        float field_w = width - pad_x * 2.0f - title_w - action_w
+            - gap * (button_count + 1);
+        float height = row_h + edge * 2.0f;
+        if (field_w >= row_h && height + edge * 2.0f <= anchor.h) {
+            out->panel = (SDL_FRect){anchor.x + edge,
+                anchor.y + (anchor.h - height) * 0.5f, width, height};
+            float x = out->panel.x + pad_x;
+            float y = out->panel.y + edge;
+            out->title_row = (SDL_FRect){x, y, title_w, row_h};
+            x += title_w + gap;
+            out->rows[0] = (SDL_FRect){x, y, field_w, row_h};
+            out->entries_rect = out->rows[0];
+            x += field_w + gap;
+            for (int i = 0; i < button_count; i++) {
+                out->buttons[i] = (SDL_FRect){x, y, action_widths[i], row_h};
+                x += action_widths[i] + gap;
+            }
+            out->button_count = button_count;
+            out->inline_text = true;
+            out->visible_count = 1;
+            out->font_px = font_px;
+            out->row_h = row_h;
+            return true;
+        }
+    }
+
     content_w = letter_w + letter_gap + icon_w + text_w;
     if (out->has_title)
     {
@@ -907,10 +991,17 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
-    if (get_sdl_menu_bigger_font()) {
+    if (get_sdl_menu_bigger_font() || g_question_menu.text_input) {
         float available_w = MAX(1.0f, panel_w - pad_x * 2.0f);
         float title_available = MAX(1.0f, available_w
             - close_reserve - info_reserve - suppress_reserve);
+        if (g_question_menu.text_input && title_w > title_available
+            && title_w <= available_w) {
+            /* A short field label can fit intact below its close control. */
+            text_chrome_inset = row_h + divider_gap;
+            close_reserve = info_reserve = suppress_reserve = 0.0f;
+            title_available = available_w;
+        }
         TTF_Font* title_font = story_font;
 #if SIL_SDL_MOBILE_BUILD
         if (get_sdl_menu_bigger_font())
@@ -930,7 +1021,8 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
                 int rows = (button_count + columns - 1) / columns;
                 float width = (available_w - button_gap * (columns - 1)) / columns;
                 float total = divider_gap + button_gap * (rows - 1);
-                if (columns > 1 && width < font_px * 5.0f)
+                if (columns > 1 && width < font_px
+                    * (g_question_menu.text_input ? 3.5f : 5.0f))
                     continue;
                 for (int i = 0; i < button_count; i++) {
                     float h = MAX(button_row_h,
@@ -954,7 +1046,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         }
     }
 
-    header_h += title_top_inset;
+    header_h += title_top_inset + text_chrome_inset;
 
     /* The ideal table width may exceed the screen after panel_w is capped.
      * Fit its columns before measuring wrapped row heights, so long weapon
@@ -1023,7 +1115,8 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     if (get_sdl_menu_bigger_font() && !g_question_menu.help_mode
         && button_count > 0 && g_question_menu.count > 0
         && pad_y * 2.0f + header_h + divider_gap + button_section_h
-            + row_h * 2.0f > max_panel_h) {
+            + row_h * (g_question_menu.text_input ? 1.0f : 2.0f)
+                > max_panel_h) {
         /* On short screens, put secondary actions after the choices in the
          * same scrolling list.  A fixed Actions button jumps to them. */
         out->actions_in_list = true;
@@ -1229,10 +1322,10 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     {
         out->title_row = (SDL_FRect){
             .x = out->panel.x + pad_x + suppress_reserve,
-            .y = rows_top + title_top_inset,
+            .y = rows_top + title_top_inset + text_chrome_inset,
             .w = out->panel.w - pad_x * 2.0f
                 - close_reserve - info_reserve - suppress_reserve,
-            .h = header_h - title_top_inset,
+            .h = header_h - title_top_inset - text_chrome_inset,
         };
         if (out->title_row.w < 1.0f)
             out->title_row.w = 1.0f;
@@ -1848,6 +1941,11 @@ void sdl_question_menu_begin(cptr title)
     g_state.need_present = true;
 }
 
+void sdl_question_menu_set_text_input(bool enabled)
+{
+    g_question_menu.text_input = enabled && SIL_SDL_MOBILE_BUILD;
+}
+
 void sdl_question_menu_set_anchor_grid(int y, int x)
 {
     if (!g_question_menu.active)
@@ -1864,8 +1962,7 @@ void sdl_question_menu_set_desc(cptr text)
     if (!g_question_menu.active)
         return;
     SDL_free(g_question_full_description);
-    g_question_full_description = SIL_SDL_MOBILE_BUILD
-        && get_sdl_menu_bigger_font() && text ? SDL_strdup(text) : NULL;
+    g_question_full_description = text ? SDL_strdup(text) : NULL;
 
     SDL_strlcpy(g_question_menu.desc, text ? text : "",
         sizeof(g_question_menu.desc));
@@ -2056,8 +2153,7 @@ void sdl_question_menu_set_help(cptr text)
     if (!g_question_menu.active)
         return;
     SDL_free(g_question_full_description);
-    g_question_full_description = SIL_SDL_MOBILE_BUILD
-        && get_sdl_menu_bigger_font() && text ? SDL_strdup(text) : NULL;
+    g_question_full_description = text ? SDL_strdup(text) : NULL;
 
     g_question_menu.help_mode = true;
     SDL_strlcpy(g_question_menu.desc, text ? text : "",
@@ -2395,8 +2491,14 @@ void sdl_question_menu_render(void)
             }
             else
             {
-                sdl_question_menu_draw_wrapped_text(story_font, entry->text,
-                    text_color, text_x, row.y, text_w, row.h);
+                if (layout.inline_text)
+                    sdl_question_menu_draw_text(story_font,
+                        sdl_question_menu_inline_text_tail(story_font,
+                            entry->text, text_w), text_color,
+                        text_x, row.y, text_w, row.h, false);
+                else
+                    sdl_question_menu_draw_wrapped_text(story_font, entry->text,
+                        text_color, text_x, row.y, text_w, row.h);
             }
         }
     }

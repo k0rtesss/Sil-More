@@ -2622,6 +2622,7 @@ extern void sdl_song_menu_set_highlight(int choice);
 extern void sdl_song_menu_finish(void);
 extern void sdl_song_menu_clear(void);
 extern void sdl_question_menu_begin(cptr title);
+extern void sdl_question_menu_set_text_input(bool enabled);
 extern void sdl_question_menu_set_anchor_grid(int y, int x);
 extern void sdl_question_menu_set_desc(cptr text);
 extern void sdl_question_menu_set_help(cptr text);
@@ -2663,6 +2664,7 @@ extern void sdl_hint_quest_menu_prepare_leaf_turn(
     hint_quest_page next_page, int direction);
 extern void sdl_hint_quest_menu_hide(void);
 extern bool sdl_hint_quest_menu_active(void);
+extern bool sdl_hint_quest_menu_scroll(int direction, bool page);
 extern void sdl_suspend_main_view_zoom_for_saved_screen(void);
 extern bool sdl_resume_main_view_zoom_for_saved_screen(void);
 extern void sdl_reset_main_view_zoom(void);

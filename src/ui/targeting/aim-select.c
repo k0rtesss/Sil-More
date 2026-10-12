@@ -47,9 +47,18 @@ static void aim_select_show_prompt(bool manual, bool allow_vertical,
     char fire_full[40];
     char cancel_full[40];
     char manual_full[40];
-    char up_full[16];
-    char up_tiny[8];
+    char prev_label[24];
+    char next_label[24];
+    char prev_full[40];
+    char next_full[40];
+    char prev_short[32];
+    char next_short[32];
+    char up_full[40];
+    char up_tiny[24];
+    char down_full[40];
+    char down_tiny[24];
     char up_key = aim_select_up_key();
+    cptr action_verb = "Fire";
 
     if (location_mode)
     {
@@ -97,23 +106,56 @@ static void aim_select_show_prompt(bool manual, bool allow_vertical,
         SDL_strlcpy(manual_label, "x", sizeof(manual_label));
     }
 
-    strnfmt(fire_full, sizeof(fire_full), "%s Fire", fire_label);
+    if (p_ptr && (p_ptr->command_cmd == 't'
+            || p_ptr->command_cmd == KTRL('T')
+            || ((p_ptr->command_cmd == 'f' || p_ptr->command_cmd == 'F')
+                && player_active_weapon_kind()
+                    == PLAYER_ACTIVE_WEAPON_KIND_THROWING)))
+        action_verb = "Throw";
+    strnfmt(fire_full, sizeof(fire_full), "%s %s", fire_label, action_verb);
     strnfmt(cancel_full, sizeof(cancel_full), "%s Cancel", cancel_label);
     strnfmt(manual_full, sizeof(manual_full), "%s %s", manual_label,
         manual ? "Targets" : "Manual");
     strnfmt(up_full, sizeof(up_full), "%c Up", up_key);
     strnfmt(up_tiny, sizeof(up_tiny), "%c", up_key);
+    SDL_strlcpy(down_full, "d Down", sizeof(down_full));
+    SDL_strlcpy(down_tiny, "d", sizeof(down_tiny));
+    if (allow_vertical && steamdeck_controls_active())
+    {
+        target_prompt_label(steamdeck_secondary_key(), "Y", up_tiny,
+            sizeof(up_tiny));
+        target_prompt_label(steamdeck_info_key(), "View", down_tiny,
+            sizeof(down_tiny));
+        strnfmt(up_full, sizeof(up_full), "%s Up", up_tiny);
+        strnfmt(down_full, sizeof(down_full), "%s Down", down_tiny);
+    }
 
     sdl_unified_look_prompt_begin(aim_select_prompt_row());
     sdl_unified_look_prompt_add(
         'f', fire_full, fire_full, fire_full, fire_label);
     sdl_unified_look_prompt_add('x', manual_full, manual_full,
         manual_full, manual_label);
+    if (!manual && temp_n > 1 && steamdeck_controls_active())
+    {
+        target_prompt_label(steamdeck_prev_page_key(), "L1", prev_label,
+            sizeof(prev_label));
+        target_prompt_label(steamdeck_next_page_key(), "R1", next_label,
+            sizeof(next_label));
+        strnfmt(prev_full, sizeof(prev_full), "%s Prev target", prev_label);
+        strnfmt(next_full, sizeof(next_full), "%s Next target", next_label);
+        strnfmt(prev_short, sizeof(prev_short), "%s Prev", prev_label);
+        strnfmt(next_short, sizeof(next_short), "%s Next", next_label);
+        sdl_unified_look_prompt_add('-', prev_full, prev_full,
+            prev_short, prev_label);
+        sdl_unified_look_prompt_add('+', next_full, next_full,
+            next_short, next_label);
+    }
     if (allow_vertical)
     {
         sdl_unified_look_prompt_add(up_key, up_full, up_full, up_full,
             up_tiny);
-        sdl_unified_look_prompt_add('d', "d Down", "d Down", "d Down", "d");
+        sdl_unified_look_prompt_add('d', down_full, down_full, down_full,
+            down_tiny);
     }
     sdl_unified_look_prompt_add(
         ESCAPE, cancel_full, cancel_full, cancel_label, cancel_label);
@@ -310,6 +352,16 @@ static bool target_select(int range, bool allow_vertical, bool location_mode,
                 query = '\r';
             else if (query == steamdeck_alt_action_key())
                 query = 'x';
+            else if (!location_mode && query == steamdeck_prev_page_key())
+                query = '-';
+            else if (!location_mode && query == steamdeck_next_page_key())
+                query = '+';
+            else if (allow_vertical && !location_mode
+                && query == steamdeck_secondary_key())
+                query = up_key;
+            else if (allow_vertical && !location_mode
+                && query == steamdeck_info_key())
+                query = 'd';
         }
 
         if (query == UI_MENU_CLICK_WAKE_KEY)

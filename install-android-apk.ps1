@@ -7,6 +7,9 @@ param(
 
     [switch]$Apk2,
 
+    [ValidateSet('arm64-v8a','armeabi-v7a','x86_64')]
+    [string]$Abi = 'arm64-v8a',
+
     [string]$AdbPath,
 
     [string]$Serial,
@@ -43,7 +46,8 @@ function Get-ApkMetadata {
 
     try {
         $metadata = Get-Content -Path $metadataPath -Raw | ConvertFrom-Json
-        $element = @($metadata.elements)[0]
+        $apkFileName = Split-Path -Leaf $ApkPath
+        $element = @($metadata.elements | Where-Object { $_.outputFile -eq $apkFileName })[0]
         if (-not $element) {
             return $null
         }
@@ -319,12 +323,15 @@ function Get-AndroidApkPath {
         [string]$Delivery,
 
         [Parameter(Mandatory = $true)]
-        [string]$Config
+        [string]$Config,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Abi
     )
 
     $flavor = $Delivery.ToLowerInvariant()
     $buildType = $Config.ToLowerInvariant()
-    return Join-Path $RepoRoot "android\app\build\outputs\apk\$flavor\$buildType\app-$flavor-$buildType.apk"
+    return Join-Path $RepoRoot "android\app\build\outputs\apk\$flavor\$buildType\app-$flavor-$Abi-$buildType.apk"
 }
 
 function Get-AndroidApplicationId {
@@ -356,7 +363,7 @@ function Get-AndroidApplicationId {
 
 $adb = Resolve-AdbPath -Provided $AdbPath
 
-$apk = Get-AndroidApkPath -RepoRoot $PSScriptRoot -Delivery $Delivery -Config $Config
+$apk = Get-AndroidApkPath -RepoRoot $PSScriptRoot -Delivery $Delivery -Config $Config -Abi $Abi
 
 if (-not (Test-Path $apk)) {
     throw "APK not found: $apk`nBuild it first via Android Studio or build-android-apk.ps1 -Config $Config -Delivery $Delivery"
