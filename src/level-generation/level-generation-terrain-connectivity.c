@@ -131,8 +131,8 @@ bool connectivity_rescue_component(
     int *out_target_y, int *out_target_x,
     int *out_carve_count, int *out_boundary_sources)
 {
-    static int prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local int prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     static const int ddy4[4] = {-1, 1, 0, 0};
     static const int ddx4[4] = {0, 0, -1, 1};
     int head = 0;
@@ -285,8 +285,8 @@ bool connectivity_rescue_component(
 bool check_connectivity(void)
 {
     int cave_access[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static byte component[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static int component_cells[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local byte component[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int component_cells[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     int y, x;
 
     // Reset the array used for checking connectivity

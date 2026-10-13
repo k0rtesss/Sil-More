@@ -6,11 +6,11 @@
 #include "cave/cave-bridge.h"
 
 /* Historical layers are a generation plan, not live fluid simulation. */
-static int history_count, history_phase;
-static int history_epochs[TERRAIN_HISTORY_SYSTEMS];
-static coord history_banks[256];
-static int history_bank_count;
-static bool history_started;
+static _Thread_local int history_count, history_phase;
+static _Thread_local int history_epochs[TERRAIN_HISTORY_SYSTEMS];
+static _Thread_local coord history_banks[256];
+static _Thread_local int history_bank_count;
+static _Thread_local bool history_started;
 static int history_ancient_feature(int y, int x);
 
 void terrain_history_reset(void)

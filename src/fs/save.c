@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "blitz.h"
 #include "externs.h"
 #include "monster/monster-ai.h"
@@ -1292,6 +1293,7 @@ static bool wr_savefile(void)
         /* Dump the dungeon */
         log_trace("Writing dungeon...");
         wr_dungeon();
+        level_cache_write();
     }
     else
     {

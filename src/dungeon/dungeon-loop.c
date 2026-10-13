@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-loop.c */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "dungeon-internal.h"
@@ -14,6 +15,7 @@
  */
 void dungeon(void)
 {
+    level_cache_poll();
     monster_type* m_ptr;
     int i;
     int previous_depth = last_music_depth;
@@ -443,6 +445,8 @@ void dungeon(void)
         /* Optional fresh */
         if (fresh_after)
             Term_fresh();
+
+        level_cache_poll();
 
         /* Handle "leaving" */
     if (p_ptr->leaving) {

@@ -5,8 +5,8 @@
 
 #define DEBUG_QUEST_VAULT 0
 #if DEBUG_QUEST_VAULT
-int qv_y1 = -1, qv_x1 = -1, qv_y2 = -1, qv_x2 = -1;
-int qv_h = 0, qv_w = 0;
+_Thread_local int qv_y1 = -1, qv_x1 = -1, qv_y2 = -1, qv_x2 = -1;
+_Thread_local int qv_h = 0, qv_w = 0;
 unsigned short *qv_feat_snapshot = NULL;
 
 void qv_capture(void) {
@@ -110,8 +110,8 @@ vault_monster_spec vault_monster_table[] = {
     {'Q', "f1f38a4b25dfcc33", 0, false, true, true},  /* Nambatur */
 };
 
-int current_build_vault_type = 0;
-bool current_build_vault_exact_token = false;
+_Thread_local int current_build_vault_type = 0;
+_Thread_local bool current_build_vault_exact_token = false;
 
 bool coord_in_morgoth_region(int y, int x, int margin);
 
@@ -397,7 +397,7 @@ static const struct { int vault; char token; const char *guid; } quest_tokens[] 
     {466, 'p', "8a1995b8587aa0a2"}, {466, 't', "78d6c2d78e85ea3d"},
     {467, '_', "bba0d000d9578563"}
 };
-static int quest_vault_permitted_race;
+static _Thread_local int quest_vault_permitted_race;
 
 int quest_vault_token_race(int vault, char token)
 {

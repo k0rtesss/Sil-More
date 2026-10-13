@@ -57,7 +57,7 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
     monster_type* m_ptr, bool pursuit, bool allow_player)
 {
     enum { FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID };
-    static int next[FLOW_CELLS], previous[FLOW_CELLS];
+    static _Thread_local int next[FLOW_CELLS], previous[FLOW_CELLS];
     int heads[FLOW_MAX_DIST];
     int origin = cy * MAX_DUNGEON_WID + cx;
     int entry_cost[3][3] = {{0}};
@@ -152,8 +152,8 @@ static void update_monster_flow(int cy, int cx, int which_flow,
 {
     enum { LABELS = 8, FLOW_CELLS = MAX_DUNGEON_HGT * MAX_DUNGEON_WID,
         FLOW_LABELS = FLOW_CELLS * LABELS };
-    static int next[FLOW_LABELS], previous[FLOW_LABELS];
-    static int poison_damage[FLOW_LABELS], costs[FLOW_LABELS];
+    static _Thread_local int next[FLOW_LABELS], previous[FLOW_LABELS];
+    static _Thread_local int poison_damage[FLOW_LABELS], costs[FLOW_LABELS];
     int heads[FLOW_MAX_DIST];
     int origin = cy * MAX_DUNGEON_WID + cx;
 

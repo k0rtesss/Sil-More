@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "quest/quest-runtime.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -388,47 +389,51 @@ finish_ascent:
     quest_followup_leave(new);
     p_ptr->depth = new;
 
-    /* Reset tulkas quest */
-    if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
+    if (!level_cache_retains(new))
     {
-        p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
-    }
+        /* Reset tulkas quest */
+        if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
+        }
 
-    /* Reset niena quest */
-    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
-        msg_print("You have failed Nienna's mercy quest by leaving the level.");
-    }
+        /* Reset niena quest */
+        if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
+            msg_print("You have failed Nienna's mercy quest by leaving the level.");
+        }
 
-    /* Reset aule quest if active */
-    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Aulë's forge. The quest is lost.");
-    }
-    else if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-    }
+        /* Reset aule quest if active */
+        if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+        {
+            p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+            msg_print("You have abandoned Aulë's forge. The quest is lost.");
+        }
+        else if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
+        {
+            p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+        }
 
-    /* Reset mandos quest if active */
-    if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-        msg_print("You have abandoned the tomb. Mandos' quest is lost.");
-    }
-    else if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-    }
+        /* Reset mandos quest if active */
+        if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+        {
+            p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+            msg_print("You have abandoned the tomb. Mandos' quest is lost.");
+        }
+        else if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        }
 
-    /* Reset Varda quest if she was waiting on the previous level */
-    if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
-        p_ptr->varda_level = 0;
-        /* Encountering a quest giver still counts against the initiated quest cap. */
+        /* Reset Varda quest if she was waiting on the previous level */
+        if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
+            p_ptr->varda_level = 0;
+            /* Encountering a quest giver still counts against the initiated quest cap. */
+        }
+
     }
 
     // another staircase has been used...
@@ -605,51 +610,55 @@ finish_descent:
     quest_followup_leave(new);
     p_ptr->depth = new;
 
-    /* Reset tulkas quest */
-    if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
+    if (!level_cache_retains(new))
     {
-        p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
-    }
+        /* Reset tulkas quest */
+        if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
+        }
 
-    /* Reset Varda quest if she was waiting on the previous level */
-    if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
-        p_ptr->varda_level = 0;
-        /* Encountering a quest giver still counts against the initiated quest cap. */
-    }
+        /* Reset Varda quest if she was waiting on the previous level */
+        if (quest_enabled(QUEST_ID_VARDA) && p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
+            p_ptr->varda_level = 0;
+            /* Encountering a quest giver still counts against the initiated quest cap. */
+        }
 
-    /* Reset aule quest if active */
-    if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Aulë's forge. The quest is lost.");
-    }
-    else if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-    }
+        /* Reset aule quest if active */
+        if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+        {
+            p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+            msg_print("You have abandoned Aulë's forge. The quest is lost.");
+        }
+        else if (quest_enabled(QUEST_ID_AULE) && p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
+        {
+            p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+        }
 
-    /* Reset mandos quest if active */
-    if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-        msg_print("You have abandoned the tomb. Mandos' quest is lost.");
-    }
-    else if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-    }
+        /* Reset mandos quest if active */
+        if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+        {
+            p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+            msg_print("You have abandoned the tomb. Mandos' quest is lost.");
+        }
+        else if (quest_enabled(QUEST_ID_MANDOS) && p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        }
 
-    /* Reset niena quest if active */
-    if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest >= NIENA_QUEST_ACTIVE && p_ptr->niena_quest < NIENA_QUEST_REWARDED)
-    {
-        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Nienna's mercy quest. The quest is lost.");
-    }
-    else if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
+        /* Reset niena quest if active */
+        if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest >= NIENA_QUEST_ACTIVE && p_ptr->niena_quest < NIENA_QUEST_REWARDED)
+        {
+            p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
+            msg_print("You have abandoned Nienna's mercy quest. The quest is lost.");
+        }
+        else if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
+        {
+            p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
+        }
+
     }
 
     // another staircase has been used...

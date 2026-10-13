@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "externs.h"
 #include "fs/save-internal.h"
 #include "fs/load-internal.h"
@@ -67,7 +68,10 @@ errr load_read_catastrophe(void)
             if(!catastrophe_restore_cell(pos/p_ptr->cur_map_wid,pos%p_ptr->cur_map_wid,value))goto invalid;
     }
     if(s.kind&&!catastrophe_cell_step(s.y,s.x))goto invalid;
-    if(!load_only_checksums_remain())goto invalid;
+    /* 0.9.9.5 appends the neighbouring floors after the active dungeon.
+     * The outer save reader validates their framing and the final footer. */
+    if (!load_only_checksums_remain() && !level_cache_reading_floor()
+        && !load_followed_by_level_cache()) goto invalid;
     return 0;
 invalid:
     catastrophe_reset_run();

@@ -4,7 +4,7 @@
 #include "log/log.h"
 #include "tutorial/tutorial.h"
 
-static struct {
+static _Thread_local struct {
     bool active, frame_drawn, first_frame_seen, player_grid_redrawn;
     unsigned int id, frames;
     Uint64 started_ns, io_ns, first_frame_ns;
@@ -164,9 +164,9 @@ typedef struct {
     Uint64 calls, total_ns, max_ns;
 } perf_bucket;
 
-static perf_bucket buckets[48];
-static int bucket_count;
-static Uint64 wait_ns, last_flush_ns;
+static _Thread_local perf_bucket buckets[48];
+static _Thread_local int bucket_count;
+static _Thread_local Uint64 wait_ns, last_flush_ns;
 
 bool sil_perf_enabled(void)
 {

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "support/input.h"
 #include "externs.h"
 #include "support/macro.h"
@@ -302,6 +303,7 @@ void inkey_next_set(cptr keys)
  */
 char inkey(void)
 {
+    level_cache_poll();
     if (!inkey_scan)
         tutorial_game_wait();
     bool cursor_state;
@@ -377,6 +379,8 @@ char inkey(void)
     /* Get a key */
     while (!ch)
     {
+        level_cache_poll();
+        if (inkey_flag && p_ptr->leaving) { ch = ESCAPE; break; }
         /* Hack -- Handle "inkey_scan" */
         if (!inkey_base && inkey_scan && (0 != Term_inkey(&kk, false, false)))
         {

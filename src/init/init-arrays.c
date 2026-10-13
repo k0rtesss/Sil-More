@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "blitz.h"
 #include "cave/cave.h"
 #include "externs.h"
@@ -41,6 +42,7 @@ extern void autoinscribe_init(void)
  */
 extern void re_init_some_things(void)
 {
+    level_cache_clear();
     int i;
 
     run_mode_reset();

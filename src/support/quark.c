@@ -26,6 +26,7 @@
  * The number of quarks (first quark is NULL)
  */
 static s16b quark__num = 1;
+static SDL_SpinLock quark_lock;
 
 /*
  * The array[QUARK_MAX] of pointers to the quarks
@@ -37,33 +38,20 @@ static cptr* quark__str;
  */
 s16b quark_add(cptr str)
 {
-    int i;
-    if (!str || !quark__str)
-        return 0;
-
-    /* Look for an existing quark */
-    for (i = 1; i < quark__num; i++)
-    {
-        /* Check for equality */
-        if (streq(quark__str[i], str))
-            return (i);
+    s16b result = 0;
+    SDL_LockSpinlock(&quark_lock);
+    if (!str || !quark__str) goto done;
+    for (int i = 1; i < quark__num; i++) {
+        if (streq(quark__str[i], str)) { result = i; goto done; }
     }
-
-    /* Hack -- Require room XXX XXX XXX */
-    if (quark__num == QUARK_MAX)
-        return (0);
-
-    /* New quark */
-    i = quark__num;
-
-    /* Add a new quark */
-    quark__str[i] = str_dup(str);
-    if (!quark__str[i])
-        return 0;
-    quark__num++;
-
-    /* Return the index */
-    return (i);
+    if (quark__num == QUARK_MAX) goto done;
+    char* copy = str_dup(str);
+    if (!copy) goto done;
+    result = quark__num++;
+    quark__str[result] = copy;
+done:
+    SDL_UnlockSpinlock(&quark_lock);
+    return result;
 }
 
 /*
@@ -71,19 +59,10 @@ s16b quark_add(cptr str)
  */
 cptr quark_str(s16b i)
 {
-    cptr q;
-    if (!quark__str)
-        return NULL;
-
-    /* Verify */
-    if ((i < 0) || (i >= quark__num))
-        i = 0;
-
-    /* Get the quark */
-    q = quark__str[i];
-
-    /* Return the quark */
-    return (q);
+    SDL_LockSpinlock(&quark_lock);
+    cptr result = quark__str && i >= 0 && i < quark__num ? quark__str[i] : NULL;
+    SDL_UnlockSpinlock(&quark_lock);
+    return result;
 }
 
 /*

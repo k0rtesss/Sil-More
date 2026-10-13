@@ -71,7 +71,7 @@ void terrain_generation_flood(int sy, int sx,
     byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
     const byte (*features)[MAX_DUNGEON_WID])
 {
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     int head = 0, tail = 0;
     memset(reached, 0, sizeof(byte) * MAX_DUNGEON_HGT * MAX_DUNGEON_WID);
     if (!terrain_generation_walkable(sy, sx, features)) return;

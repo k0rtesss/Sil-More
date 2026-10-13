@@ -68,7 +68,7 @@ void place_rooms_randomized(int y1, int y2, int x1, int x2, int depth,
 /* Smallest depth at which a non-quest greater vault can appear */
 int min_nonquest_gv_depth(void)
 {
-    static int cached_min_depth = -1;
+    static _Thread_local int cached_min_depth = -1;
     if (cached_min_depth >= 0)
         return cached_min_depth;
 

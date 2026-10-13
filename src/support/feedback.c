@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "support/feedback.h"
 #include "externs.h"
 #include "sdl-sound.h"
@@ -35,6 +36,7 @@ void bell(cptr reason)
  */
 void sound(int val)
 {
+    if (level_cache_in_worker()) return;
     /* No sound */
     if (!use_sound)
         return;
@@ -45,6 +47,7 @@ void sound(int val)
 
 void sound_at(int val, int y, int x)
 {
+    if (level_cache_in_worker()) return;
     if (use_sound)
         sdl_sound_handle_at(val, y, x);
 }

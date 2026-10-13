@@ -39,21 +39,21 @@ static const int channel_dx[4] = { 0, 1, 0, -1 };
 static const int terrain_features[TERRAIN_THEME_MATERIAL_MAX] = {
     FEAT_WATER, FEAT_CHASM, FEAT_LAVA, FEAT_POISON, FEAT_ICE
 };
-static byte roles[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte protected_cells[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte melting_ice_candidates[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte reserved[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte roles[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte protected_cells[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte melting_ice_candidates[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte reserved[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 /* 1: terrain, 2: an intentional architectural crossing. */
-static byte proposed[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte proposed_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte deep_water_core[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte deep_water_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte deep_water_selected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte deep_water_frontier[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int baseline[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static terrain_generation_stats terrain_stats;
+static _Thread_local byte proposed[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte proposed_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte deep_water_core[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte deep_water_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte deep_water_selected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte deep_water_frontier[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int baseline[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local terrain_generation_stats terrain_stats;
 
 void terrain_generation_reset(void)
 {
@@ -203,7 +203,7 @@ static bool terrain_cell(int y, int x, int pi, bool excavate)
 static int terrain_components(const byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
     int labels[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
 {
-    static int queue[TERRAIN_CELLS];
+    static _Thread_local int queue[TERRAIN_CELLS];
     int count = 0;
     memset(labels, 0, sizeof(int) * TERRAIN_CELLS);
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
@@ -246,7 +246,7 @@ int terrain_generation_components(const byte features[MAX_DUNGEON_HGT][MAX_DUNGE
 
 static bool terrain_preserves_access(void)
 {
-    static int component_match[TERRAIN_CELLS + 1];
+    static _Thread_local int component_match[TERRAIN_CELLS + 1];
     memset(component_match, 0, sizeof(component_match));
     terrain_components(shadow, after);
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
@@ -263,9 +263,9 @@ static bool terrain_preserves_access(void)
 
 /* Bounded A* with a coherent bent preferred course. Its cost field varies in
  * patches, not independently every step; positive costs prevent self-loops. */
-static int route_dist[TERRAIN_CELLS], route_parent[TERRAIN_CELLS];
-static int heap[TERRAIN_CELLS], heap_pos[TERRAIN_CELLS], heap_count;
-static coord route_end;
+static _Thread_local int route_dist[TERRAIN_CELLS], route_parent[TERRAIN_CELLS];
+static _Thread_local int heap[TERRAIN_CELLS], heap_pos[TERRAIN_CELLS], heap_count;
+static _Thread_local coord route_end;
 
 static int route_priority(int cell)
 {
@@ -700,8 +700,8 @@ static int terrain_material(int pi, const terrain_theme_profile* profile)
  * deepening a lake/channel. */
 static void terrain_deepen_water(void)
 {
-    static int core_cells[TERRAIN_CELLS];
-    static int frontier_cells[TERRAIN_CELLS];
+    static _Thread_local int core_cells[TERRAIN_CELLS];
+    static _Thread_local int frontier_cells[TERRAIN_CELLS];
     int deep = 0;
 
     memset(deep_water_core, 0, sizeof(deep_water_core));

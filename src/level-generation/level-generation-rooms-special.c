@@ -32,8 +32,8 @@ bool vault_template_has_duruin(vault_type *v) {
 }
 
 /* Global variables to store quest vault coordinates for monitoring */
-int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
-bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
+_Thread_local int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
+_Thread_local bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
 
 /* DEBUGGING: Function to check if quest vault still exists at monitored coordinates */
 void check_quest_vault_integrity(const char* checkpoint_name) {

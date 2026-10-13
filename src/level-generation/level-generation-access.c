@@ -36,7 +36,7 @@ void flood_access(int y, int x,
     int access_array[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
     bool ignore_rubble_and_chasms)
 {
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     static const int ddy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
     static const int ddx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
     int head = 0;

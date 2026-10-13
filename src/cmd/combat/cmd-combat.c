@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "quest/quest-rewards-beta.h"
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
@@ -1653,7 +1654,7 @@ void hit_trap(int y, int x)
             note_lost_greater_vault();
 
             /* New depth */
-            p_ptr->depth = MIN(p_ptr->depth + 2, MORGOTH_DEPTH);
+            p_ptr->depth = level_cache_chasm_fall_depth(y, x);
 
             /* Leaving */
             p_ptr->leaving = true;

@@ -152,7 +152,7 @@ typedef struct metarun
 } metarun;
 
 /* The *current* meta-run - defined once in variable.c */
-extern metarun metar;
+extern _Thread_local metarun metar;
 
 int8_t* active_curse_stacks(void);
 u64b* active_curses_seen_ptr(void);

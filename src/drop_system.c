@@ -55,9 +55,30 @@ typedef struct
     bool evil; /* EVIL_ITEM alignment flag used for ego/chest composition rules */
 } drop_entry;
 
-static drop_entry* g_drop_entries = NULL;
-static size_t g_drop_count = 0;
-static size_t g_drop_capacity = 0;
+static _Thread_local drop_entry* g_drop_entries = NULL;
+static _Thread_local size_t g_drop_count = 0;
+static _Thread_local size_t g_drop_capacity = 0;
+
+typedef struct drop_catalog_snapshot {
+    size_t count;
+    drop_entry entries[];
+} drop_catalog_snapshot;
+
+void* drop_catalog_copy_for_worker(void)
+{
+    drop_catalog_snapshot* copy = SDL_malloc(sizeof(*copy) + g_drop_count * sizeof(drop_entry));
+    if (!copy) return NULL;
+    copy->count = g_drop_count;
+    if (g_drop_count) SDL_memcpy(copy->entries, g_drop_entries, g_drop_count * sizeof(drop_entry));
+    return copy;
+}
+
+void drop_catalog_use_worker_copy(void* snapshot)
+{
+    drop_catalog_snapshot* copy = snapshot;
+    g_drop_entries = copy->entries;
+    g_drop_count = g_drop_capacity = copy->count;
+}
 
 static int ego_s8(byte v)
 {
@@ -3380,11 +3401,11 @@ static void log_drop_attempt(const drop_request* req, size_t strict_count,
  * Global chest generation context - set by callers (generate.c) before chest generation.
  * Reset to defaults after each generation.
  */
-static int g_chest_vault_type = 0;  /* -1=labyrinth jewelled, 0=default/partition, 6=type6, 7=type7, 8=type8, 9=type9 */
-static int g_chest_mode = 0;        /* 0=default 50/50, 1=always small, 2=always large */
-static int g_chest_material_wood_pct = -1;
-static int g_chest_material_steel_pct = -1;
-static int g_chest_material_jewel_pct = -1;
+static _Thread_local int g_chest_vault_type = 0;  /* -1=labyrinth jewelled, 0=default/partition, 6=type6, 7=type7, 8=type8, 9=type9 */
+static _Thread_local int g_chest_mode = 0;        /* 0=default 50/50, 1=always small, 2=always large */
+static _Thread_local int g_chest_material_wood_pct = -1;
+static _Thread_local int g_chest_material_steel_pct = -1;
+static _Thread_local int g_chest_material_jewel_pct = -1;
 
 static void reset_chest_generation_context(void)
 {

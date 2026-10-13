@@ -11,16 +11,16 @@
 #include "player/killer.h"
 #include <limits.h>
 
-static catastrophe_state wrath;
+static _Thread_local catastrophe_state wrath;
 /* step + 1 at first contact; zero means this catastrophe has not reached it. */
-static u32b reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte visited[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local u32b reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte visited[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 /* Per-action scratch only. Saved cell ages carry the propagation clock. */
-static byte contacted[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
-static guid64* acquired;
-static int acquired_count, acquired_capacity;
-static bool advanced, processing, legacy_baseline;
+static _Thread_local byte contacted[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+static _Thread_local guid64* acquired;
+static _Thread_local int acquired_count, acquired_capacity;
+static _Thread_local bool advanced, processing, legacy_baseline;
 
 static bool playable(void)
 {

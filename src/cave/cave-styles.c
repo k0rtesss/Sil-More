@@ -150,20 +150,35 @@ typedef struct {
 } style_weight_list;
 
 /* For each style, pick one floor/door variant per level/vault */
-static byte g_level_floor_choice[64];  /* index into floor_rowv/colv, 0..count-1 */
-static byte g_level_door_choice[64];
-static byte g_vault_floor_choice[64];
-static byte g_vault_door_choice[64];
-static byte g_hallucination_style_map[64];
-static bool g_hallucination_style_map_ready = false;
+static _Thread_local byte g_level_floor_choice[64];  /* index into floor_rowv/colv, 0..count-1 */
+static _Thread_local byte g_level_door_choice[64];
+static _Thread_local byte g_vault_floor_choice[64];
+static _Thread_local byte g_vault_door_choice[64];
+static _Thread_local byte g_hallucination_style_map[64];
+static _Thread_local bool g_hallucination_style_map_ready = false;
 
 /* Active weighted style lists and selections */
-static style_weight_list g_level_styles;
-static style_weight_list g_vault_styles;
-static style_weight_list* g_active_styles = &g_level_styles;
-static int g_level_primary_style = -1;
-static int g_vault_primary_style = -1;
-static int g_vault_avoid_style = -1;
+static _Thread_local style_weight_list g_level_styles;
+static _Thread_local style_weight_list g_vault_styles;
+static _Thread_local style_weight_list* g_active_styles;
+
+void styles_copy_level_floor_choices(byte* out, int count)
+{
+    SDL_memcpy(out, g_level_floor_choice, MIN(count, 64));
+}
+
+void styles_load_level_floor_choices(const byte* in, int count)
+{
+    if (!in) return;
+    for (int i = 0; i < MIN(count, 64); i++) {
+        int variants = z_info && style_info && i < z_info->style_max
+            ? MAX(1, MIN(8, style_info[i].floor_count)) : 1;
+        g_level_floor_choice[i] = in[i] % variants;
+    }
+}
+static _Thread_local int g_level_primary_style = -1;
+static _Thread_local int g_vault_primary_style = -1;
+static _Thread_local int g_vault_avoid_style = -1;
 
 bool cave_style_index_is_valid(int sidx)
 {

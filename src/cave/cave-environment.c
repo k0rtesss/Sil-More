@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "externs.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
@@ -13,23 +14,23 @@
 
 /* The ecology owns a world clock and random stream. Rendering, opening a menu,
  * and the order in which monsters notice an event cannot advance it. */
-static environment_cell cells[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static environment_source sources[ENV_SOURCES_MAX];
-static environment_state state;
-static s16b next_heat[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+static _Thread_local environment_cell cells[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local environment_source sources[ENV_SOURCES_MAX];
+static _Thread_local environment_state state;
+static _Thread_local s16b next_heat[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
 static const int dy4[4] = {-1, 0, 1, 0}, dx4[4] = {0, 1, 0, -1};
-static bool changing;
-static bool reconcile_lava_fringe;
-static int pending_count;
-static struct {
+static _Thread_local bool changing;
+static _Thread_local bool reconcile_lava_fringe;
+static _Thread_local int pending_count;
+static _Thread_local struct {
     int pulse, water_step, lava_step, acid_step, crack_step, warning;
     int growth_cap, changes, thermal_step, rubble_step;
 } config = {100, 200, 350, 200, 600, 50, 12, 4, 100, 600};
-static bool config_loaded;
+static _Thread_local bool config_loaded;
 
 static int speed_multiplier(byte speed)
 {
@@ -1072,6 +1073,10 @@ bool cave_environment_describe(int y,int x,char* text,size_t size)
         &&sources[c->owner-1].feature==FEAT_LAVA&&liquid(c->base_feat)!=FEAT_LAVA)
         strnfmt(text,size,"Cooled lava crust; renewed flow can cover it again");
     else if(c->work)strnfmt(text,size,"A crossing is being built");
+    if (level_cache_chasm_above(y, x)) {
+        if (text[0]) SDL_strlcat(text, "; a chasm opens overhead", size);
+        else SDL_strlcpy(text, "A chasm opens overhead", size);
+    }
     return text[0]!='\0';
 }
 

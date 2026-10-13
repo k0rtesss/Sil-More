@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "meta_state.h"
 #include "monster/monster-ai.h"
 #include "blitz.h"
@@ -360,6 +361,18 @@ static byte sf_get(void)
     
     /* Return the value */
     return (v);
+}
+
+bool load_followed_by_level_cache(void)
+{
+    if (!savefile_version_at_least(0, 9, 9, 5)) return false;
+    Sint64 position = SDL_TellIO(fff);
+    if (position < 0) return false;
+    byte raw[2] = {0};
+    size_t length = SDL_ReadIO(fff, raw, sizeof(raw));
+    if (SDL_SeekIO(fff, position, SDL_IO_SEEK_SET) != position) return false;
+    return length == 2 && (byte)(raw[0] ^ xor_byte) == 0x43
+        && (byte)(raw[1] ^ raw[0]) == 0x4C;
 }
 
 void rd_byte(byte* ip) { 
@@ -3090,6 +3103,11 @@ static errr rd_savefile_new_aux(void)
         {
             note("Error reading dungeon data");
             return (-1);
+        }
+        if (savefile_version_at_least(0, 9, 9, 5) && level_cache_read())
+        {
+            note("Invalid neighbouring dungeon levels");
+            return -1;
         }
     }
 

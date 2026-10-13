@@ -29,7 +29,7 @@ typedef struct smithing_tval_desc
 
 // object being created
 object_type smith_o_body;
-object_type* smith_o_ptr = &smith_o_body;
+_Thread_local object_type* smith_o_ptr = &smith_o_body;
 
 // backup object
 object_type smith2_o_body;

@@ -537,7 +537,7 @@ typedef struct hint_message_state {
     hint_message_meta meta[HINT_MESSAGE_MAX];
 } hint_message_state;
 
-static hint_message_state g_hint_message_state = {
+static _Thread_local hint_message_state g_hint_message_state = {
     .level_depth = -1
 };
 
@@ -552,8 +552,8 @@ static hint_message_state g_hint_message_state = {
 #define SKELETON_NOTE_UNBOUNDED_CAP 32767
 #define SKEL_HINT_LIMIT_UNLIMITED -1
 
-static skeleton_note_state g_skeleton_note_state = { .level_depth = -1 };
-static int g_skeleton_note_entry_count = -1;
+static _Thread_local skeleton_note_state g_skeleton_note_state = { .level_depth = -1 };
+static _Thread_local int g_skeleton_note_entry_count = -1;
 static const int skeleton_hint_base_weight[SKEL_HINT_MAX]
     = {
         0,  /* NONE */

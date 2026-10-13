@@ -1,6 +1,7 @@
 /* File: cave-map-ui.c */
 
 #include "cave-internal.h"
+#include "level-generation/level-cache.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
@@ -341,6 +342,7 @@ void cave_floor_border_redraw_neighbors(int y, int x)
 
 void lite_spot(int y, int x)
 {
+    if (level_cache_in_worker()) return;
     byte a;
     char c;
     byte ta;

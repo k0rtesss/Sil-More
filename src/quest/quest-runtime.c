@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "externs.h"
 #include "metarun.h"
 #include "quest/quest-runtime.h"
@@ -17,8 +18,8 @@
 #define Q_TEMP_MERCY 8
 extern float calculate_parametric_probability(quest_type *q, int depth);
 
-static u16b pending_vaults;
-static int debug_vault;
+static _Thread_local u16b pending_vaults;
+static _Thread_local int debug_vault;
 static const int orc_targets[] = {54, 76, 84, 85, 95, 105};
 static const int hunt_targets[] = {R_IDX_SCATHA, R_IDX_SMAUG,
     R_IDX_DRAUGLUIN, R_IDX_GOSTIR, R_IDX_SHELOB, R_IDX_THURINGWETHIL};
@@ -383,7 +384,7 @@ void quest_followup_leave(int new_depth)
         quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_SUCCESS);
         complete(QUEST_ID_NIENA_MORGOTH, true);
     }
-    quest_followup_discard_level();
+    if (!level_cache_retains(p_ptr->depth)) quest_followup_discard_level();
 }
 
 /* The map is going away even when a quest is paused. The player's depth may
@@ -391,7 +392,13 @@ void quest_followup_leave(int new_depth)
  * during regeneration. Only committed, unfinished vault objectives are lost. */
 void quest_followup_discard_level(void)
 {
+    quest_followup_discard_depth(-1);
+}
+
+void quest_followup_discard_depth(int depth)
+{
     for (int id = Q_FIRST; id <= Q_LAST; ++id) {
+        if (depth >= 0 && p_ptr->quest_followup_depth[Q_INDEX(id)] != depth) continue;
         byte *flags = &p_ptr->quest_followup_flags[Q_INDEX(id)];
         if (!(*flags & Q_PLACED) || (*flags & Q_FAILED)) continue;
         byte state = quest_get_state(id);

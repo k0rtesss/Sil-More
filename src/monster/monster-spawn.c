@@ -1,6 +1,7 @@
 /* File: monster-spawn.c */
 
 #include "monster-internal.h"
+#include "level-generation/level-cache.h"
 #include "quest/quest-runtime.h"
 extern bool quest_vault_spawn_permitted(int race);
 #include "meta_state.h"
@@ -24,7 +25,7 @@ bool place_monster_one(
 
     cptr name;
 
-    meta_monster_apply_runtime_overrides();
+    if (!level_cache_in_worker()) meta_monster_apply_runtime_overrides();
 
     /* Paranoia */
     if (!in_bounds(y, x))
@@ -477,7 +478,7 @@ static bool place_monster_group(
 /*
  * Hack -- help pick an escort type
  */
-static int place_monster_idx = 0;
+static _Thread_local int place_monster_idx = 0;
 
 /*
  * Check if a quest monster should be allowed to spawn normally

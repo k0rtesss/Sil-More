@@ -11,6 +11,7 @@
  */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "externs.h"
 
 static cptr get_autoinscription(s16b kindIdx)
@@ -73,6 +74,7 @@ int get_autoinscription_index(s16b k_idx)
 /*Put the autoinscription on an object*/
 int apply_autoinscription(object_type* o_ptr)
 {
+    if (level_cache_in_worker()) return 0;
     cptr note = get_autoinscription(o_ptr->k_idx);
     cptr existingInscription = quark_str(o_ptr->obj_note);
 

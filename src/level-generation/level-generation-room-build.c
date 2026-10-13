@@ -450,7 +450,7 @@ bool quest_debug_prepare_vault(int id)
 
 /* Recover special encounters without adding entries to the legacy lottery.
  * Failure to fit leaves the encounter eligible on a subsequent level. */
-static int followup_orc_roll = -1;
+static _Thread_local int followup_orc_roll = -1;
 void reset_followup_vault_roll(void) { followup_orc_roll = -1; }
 
 bool place_followup_quest_vault(void)

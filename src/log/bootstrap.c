@@ -6,6 +6,14 @@
 #include "log.h"
 #include <time.h>
 
+static SDL_Mutex* logger_mutex;
+
+static void logger_lock(bool lock, void* userdata)
+{
+    if (lock) SDL_LockMutex(userdata);
+    else SDL_UnlockMutex(userdata);
+}
+
 #if defined(__ANDROID__) || defined(SIL_IOS)
 #include <SDL3/SDL_filesystem.h>
 #endif
@@ -21,6 +29,8 @@
  */
 void init_logger(bool quiet, const char* exe_path)
 {
+    if (!logger_mutex) logger_mutex = SDL_CreateMutex();
+    if (logger_mutex) log_set_lock(logger_lock, logger_mutex);
 #if defined(__ANDROID__) || defined(SIL_IOS)
     (void)exe_path;
 #endif

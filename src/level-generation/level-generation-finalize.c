@@ -346,8 +346,8 @@ int morgoth_escape_path_step_cost(monster_type* m_ptr, int y, int x)
 void build_morgoth_escape_path_distances(
     int path_dist[MAX_DUNGEON_HGT][MAX_DUNGEON_WID], int max_path)
 {
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
-    static byte in_queue[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local byte in_queue[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     static const int ddy8[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
     static const int ddx8[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
     monster_type morgoth;

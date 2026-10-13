@@ -1,6 +1,7 @@
 /* File: level-generation-rooms-vaults.c */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain-vaults.h"
@@ -132,6 +133,8 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 {
     int planned_h = flip_d ? v_ptr->wid : v_ptr->hgt;
     int planned_w = flip_d ? v_ptr->hgt : v_ptr->wid;
+    if (!level_cache_generation_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
+            y0 - planned_h / 2 + planned_h - 1, x0 - planned_w / 2 + planned_w - 1)) return false;
     if (!terrain_history_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
             y0 - planned_h / 2 + planned_h - 1, x0 - planned_w / 2 + planned_w - 1)) return false;
     int ymax = v_ptr->hgt;

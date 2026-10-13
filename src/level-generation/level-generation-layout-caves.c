@@ -588,8 +588,8 @@ bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_max, int
 int prune_big_cave_detached_components(
     int y1, int y2, int x1, int x2, int style_idx)
 {
-    static u16b component[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local u16b component[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     static const int ddy4[4] = {-1, 1, 0, 0};
     static const int ddx4[4] = {0, 0, -1, 1};
     int next_component = 1;
@@ -705,10 +705,10 @@ bool chasm_mask_has_clearance(
 bool repair_chasm_walkable_connectivity(
     int y1, int y2, int x1, int x2, int bridge_style)
 {
-    static u16b component[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static int component_size[MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 1];
-    static int prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local u16b component[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int component_size[MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 1];
+    static _Thread_local int prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     static const int ddy8[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
     static const int ddx8[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
     static const int ddy4[4] = {-1, 1, 0, 0};

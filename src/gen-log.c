@@ -11,20 +11,20 @@
 FILE *gen_log_file = NULL;
 bool gen_log_initialized = false;
 int gen_log_level_count = 0;
-static gen_log_observer_fn gen_log_observer = NULL;
+static _Thread_local gen_log_observer_fn gen_log_observer = NULL;
 
 /* Summary log (append across sessions) */
 static FILE *gen_summary_file = NULL;
 static char gen_summary_path[1024] = {0};
 
 /* Per-level tracking */
-static int current_depth = 0;
-static int current_attempt = 0;
-static time_t level_start_time = 0;
-static int last_depth = -1;
-static int current_map_hgt = 0;
-static int current_map_wid = 0;
-static char last_failure_reason[1024] = {0};
+static _Thread_local int current_depth = 0;
+static _Thread_local int current_attempt = 0;
+static _Thread_local time_t level_start_time = 0;
+static _Thread_local int last_depth = -1;
+static _Thread_local int current_map_hgt = 0;
+static _Thread_local int current_map_wid = 0;
+static _Thread_local char last_failure_reason[1024] = {0};
 
 /* Store exe path for delayed initialization */
 static char stored_exe_path[1024] = {0};

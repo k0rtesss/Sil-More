@@ -4,7 +4,7 @@
 #include "cave/cave-events.h"
 
 /* 53 KiB at the maximum level size; constant-time lookup while drawing. */
-static byte fixtures[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte fixtures[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 
 void cave_fixtures_clear(void)
 {

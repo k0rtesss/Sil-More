@@ -55,24 +55,24 @@ typedef struct meta_artifact_runtime_slot {
     meta_artifact_record record;
 } meta_artifact_runtime_slot;
 
-extern s32b turn;
+extern _Thread_local s32b turn;
 
-static meta_artifact_record* g_meta_artifact_cache = NULL;
-static u32b g_meta_artifact_cache_count = 0;
-static meta_artifact_runtime_slot g_meta_artifact_runtime_slots[64];
-static u32b g_meta_artifact_runtime_slot_count = 0;
+static _Thread_local meta_artifact_record* g_meta_artifact_cache = NULL;
+static _Thread_local u32b g_meta_artifact_cache_count = 0;
+static _Thread_local meta_artifact_runtime_slot g_meta_artifact_runtime_slots[64];
+static _Thread_local u32b g_meta_artifact_runtime_slot_count = 0;
 
-static meta_monster_record* cached_monster_records = NULL;
-static u32b cached_monster_record_count = 0;
-static bool cached_monster_records_loaded = false;
-static bool cached_monster_runtime_applied = false;
-static bool cached_monster_validation_logged = false;
-static u32b cached_monster_metarun_id = 0;
-static u16b cached_revenge_kills = 0;
-static u16b cached_revenge_bonus = 0;
-static monster_race* revenge_original_races = NULL;
-static byte* revenge_race_applied = NULL;
-static bool revenge_overlay_active = false;
+static _Thread_local meta_monster_record* cached_monster_records = NULL;
+static _Thread_local u32b cached_monster_record_count = 0;
+static _Thread_local bool cached_monster_records_loaded = false;
+static _Thread_local bool cached_monster_runtime_applied = false;
+static _Thread_local bool cached_monster_validation_logged = false;
+static _Thread_local u32b cached_monster_metarun_id = 0;
+static _Thread_local u16b cached_revenge_kills = 0;
+static _Thread_local u16b cached_revenge_bonus = 0;
+static _Thread_local monster_race* revenge_original_races = NULL;
+static _Thread_local byte* revenge_race_applied = NULL;
+static _Thread_local bool revenge_overlay_active = false;
 
 /* Undo only our overlay; leave other races and live population counts alone. */
 static void meta_monster_restore_runtime(void)
@@ -154,10 +154,10 @@ typedef struct legendary_song_observer_state {
     guid64 race_guid[META_DUNGEON_AFFECTED_MONSTER_MAX];
 } legendary_song_observer_state;
 
-static legendary_runtime_area legendary_runtime;
-static legendary_song_observer_state legendary_observer;
-static u16b legendary_player_area_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
-static s32b legendary_mastery_observed_turn = -1;
+static _Thread_local legendary_runtime_area legendary_runtime;
+static _Thread_local legendary_song_observer_state legendary_observer;
+static _Thread_local u16b legendary_player_area_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+static _Thread_local s32b legendary_mastery_observed_turn = -1;
 
 static u32b meta_dungeon_mask_bytes(const meta_dungeon_record* record)
 {
@@ -314,6 +314,35 @@ bool legendary_area_map_ensure(void)
     SDL_memset(legendary_area_id, 0,
         (size_t)MAX_DUNGEON_HGT * sizeof(*legendary_area_id));
     return true;
+}
+
+void* legendary_area_capture_runtime(void)
+{
+    if (!legendary_runtime.active) return NULL;
+    legendary_runtime_area* copy = SDL_malloc(sizeof(*copy));
+    if (!copy) return NULL;
+    *copy = legendary_runtime;
+    copy->area.tile_blob = SDL_malloc(copy->area.tile_blob_size);
+    if (!copy->area.tile_blob) { SDL_free(copy); return NULL; }
+    SDL_memcpy(copy->area.tile_blob, legendary_runtime.area.tile_blob,
+        copy->area.tile_blob_size);
+    return copy;
+}
+
+void legendary_area_restore_runtime(const void* snapshot)
+{
+    const legendary_runtime_area* copy = snapshot;
+    if (!copy) legendary_runtime_area_free();
+    else legendary_runtime_area_copy(copy->area_id, &copy->area, copy->entry_seen);
+    SDL_memset(&legendary_observer, 0, sizeof(legendary_observer));
+}
+
+void legendary_area_free_runtime_snapshot(void* snapshot)
+{
+    legendary_runtime_area* copy = snapshot;
+    if (!copy) return;
+    SDL_free(copy->area.tile_blob);
+    SDL_free(copy);
 }
 
 void legendary_area_map_reset(void)
@@ -3065,4 +3094,95 @@ void meta_dungeon_areas_free(meta_dungeon_area* areas, u32b count)
         mem_free_null(areas[i].tile_blob);
 
     mem_free_null(areas);
+}
+
+/* Generation owns its Tale caches too: changing a beta option or recording a
+ * new memory on the gameplay thread must not invalidate a worker's pointers. */
+typedef struct meta_generation_snapshot {
+    meta_artifact_record* artefacts;
+    meta_monster_record* monsters;
+    monster_race* original_races;
+    byte* applied_races;
+    u32b artefact_count, monster_count, runtime_count, metarun_id;
+    u16b kills, bonus;
+    bool loaded, applied, overlay;
+    meta_artifact_runtime_slot slots[64];
+} meta_generation_snapshot;
+
+static void* meta_generation_copy_array(const void* source, size_t size)
+{
+    if (!source || !size) return NULL;
+    void* copy = SDL_malloc(size);
+    if (copy) SDL_memcpy(copy, source, size);
+    return copy;
+}
+
+void meta_state_free_generation_copy(void* snapshot)
+{
+    meta_generation_snapshot* copy = snapshot;
+    if (!copy) return;
+    SDL_free(copy->artefacts); SDL_free(copy->monsters);
+    SDL_free(copy->original_races); SDL_free(copy->applied_races);
+    SDL_free(copy);
+}
+
+void* meta_state_copy_for_generation(void)
+{
+    meta_generation_snapshot* copy = SDL_calloc(1, sizeof(*copy));
+    if (!copy) return NULL;
+    copy->artefact_count = g_meta_artifact_cache_count;
+    copy->monster_count = cached_monster_record_count;
+    copy->runtime_count = g_meta_artifact_runtime_slot_count;
+    copy->metarun_id = cached_monster_metarun_id;
+    copy->kills = cached_revenge_kills; copy->bonus = cached_revenge_bonus;
+    copy->loaded = cached_monster_records_loaded;
+    copy->applied = cached_monster_runtime_applied;
+    copy->overlay = revenge_overlay_active;
+    SDL_memcpy(copy->slots, g_meta_artifact_runtime_slots, sizeof(copy->slots));
+    copy->artefacts = meta_generation_copy_array(g_meta_artifact_cache,
+        copy->artefact_count * sizeof(*copy->artefacts));
+    copy->monsters = meta_generation_copy_array(cached_monster_records,
+        copy->monster_count * sizeof(*copy->monsters));
+    copy->original_races = meta_generation_copy_array(revenge_original_races,
+        z_info->r_max * sizeof(*copy->original_races));
+    copy->applied_races = meta_generation_copy_array(revenge_race_applied,
+        z_info->r_max * sizeof(*copy->applied_races));
+    if ((copy->artefact_count && !copy->artefacts)
+        || (copy->monster_count && !copy->monsters)
+        || (revenge_original_races && !copy->original_races)
+        || (revenge_race_applied && !copy->applied_races)) {
+        meta_state_free_generation_copy(copy); return NULL;
+    }
+    return copy;
+}
+
+void meta_state_use_generation_copy(void* snapshot)
+{
+    meta_generation_snapshot* copy = snapshot;
+    g_meta_artifact_cache = copy->artefacts;
+    g_meta_artifact_cache_count = copy->artefact_count;
+    cached_monster_records = copy->monsters;
+    cached_monster_record_count = copy->monster_count;
+    revenge_original_races = copy->original_races;
+    revenge_race_applied = copy->applied_races;
+    g_meta_artifact_runtime_slot_count = copy->runtime_count;
+    SDL_memcpy(g_meta_artifact_runtime_slots, copy->slots, sizeof(copy->slots));
+    cached_monster_metarun_id = copy->metarun_id;
+    cached_revenge_kills = copy->kills; cached_revenge_bonus = copy->bonus;
+    cached_monster_records_loaded = copy->loaded;
+    cached_monster_runtime_applied = copy->applied;
+    revenge_overlay_active = copy->overlay;
+    /* Ownership moves into thread-local storage; cleanup also handles caches
+     * which the worker refreshes while generating monster descriptions. */
+    copy->artefacts = NULL; copy->monsters = NULL;
+    copy->original_races = NULL; copy->applied_races = NULL;
+}
+
+void meta_state_finish_generation(void)
+{
+    meta_artifact_cache_clear();
+    meta_monster_cache_free();
+    mem_free_null(revenge_original_races);
+    mem_free_null(revenge_race_applied);
+    g_meta_artifact_runtime_slot_count = 0;
 }

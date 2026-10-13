@@ -9,9 +9,9 @@
  * natural caves / built rooms / ruined floors receive the effect. Corridors
  * and protected vaults retain their normal rules. */
 static byte style_ground[COLOR_STYLE_SLOT_MAX];
-static byte partition_atmospheres[PARTITION_META_MAX];
-static u32b narrated_partitions;
-static cave_atmosphere_kind last_atmosphere;
+static _Thread_local byte partition_atmospheres[PARTITION_META_MAX];
+static _Thread_local u32b narrated_partitions;
+static _Thread_local cave_atmosphere_kind last_atmosphere;
 
 void cave_atmosphere_ground_rules_clear(void)
 {

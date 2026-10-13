@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave.h"
 #include "sdl/main-sdl-private.h"
@@ -173,6 +174,7 @@ errr callback_sdl_xtra(int n, int v)
                 timeout_ms = thumb_touch_timeout_ms;
             }
             timeout_ms = sdl_control_wait_timeout(timeout_ms);
+            level_cache_poll();
             g_sdl_blocking_key_wait = true;
             {
                 sil_perf_flush();
@@ -182,6 +184,8 @@ errr callback_sdl_xtra(int n, int v)
                     ? SDL_WaitEventTimeout(&ev, timeout_ms)
                     : SDL_WaitEvent(&ev);
                 sil_perf_wait_end(input_wait);
+                level_cache_poll();
+                if (p_ptr->leaving && inkey_flag) Term_keypress(ESCAPE);
                 if (got_event) {
                     unsigned int tutorial_before_event = tutorial_revision();
                     unsigned int tutorial_before_input = sdl_gameplay_tutorial_input_epoch();

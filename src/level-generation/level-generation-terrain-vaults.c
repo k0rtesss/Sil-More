@@ -3,10 +3,10 @@
 #include "level-generation/level-generation-terrain-vaults.h"
 
 /* Zero means unowned; storing serial + 1 also works before the first reset. */
-static int vault_ids[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int vault_instances[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int current_instance;
-static byte vault_policies[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int vault_ids[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int vault_instances[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int current_instance;
+static _Thread_local byte vault_policies[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static char vault_symbols[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 
 static bool terrain_vault_in_bounds(int y, int x)

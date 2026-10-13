@@ -1378,7 +1378,7 @@ bool connect_morgoth_entry_tunnels(void)
     if (!morgoth_region_active())
         return true;
 
-    static bool visited[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local bool visited[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     int components_found = 0;
     int components_connected = 0;
 
@@ -1386,7 +1386,7 @@ bool connect_morgoth_entry_tunnels(void)
         for (int x = 0; x < p_ptr->cur_map_wid; ++x)
             visited[y][x] = false;
 
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     static const int ddy4[4] = {-1, 1, 0, 0};
     static const int ddx4[4] = {0, 0, -1, 1};
 

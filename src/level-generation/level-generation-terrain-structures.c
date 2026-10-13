@@ -14,9 +14,9 @@ typedef struct structure_region
     byte scenario;
 } structure_region;
 
-static int owners[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte marks[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte wet[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int owners[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte marks[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte wet[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static structure_region regions[STRUCTURE_CELLS];
 static const int sy[4] = { -1, 0, 1, 0 };
 static const int sx[4] = { 0, 1, 0, -1 };

@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-startup.c */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "dungeon-internal.h"
 #include "metarun/metarun-files.h"
 #include "supplies.h"
@@ -643,6 +644,8 @@ PlayResult play_game(void)
     play_game_pop_startup_icky(&startup_icky_active,
         "entering main game loop");
 
+    level_cache_start();
+
     /* Process */
     while (true)
     {
@@ -687,9 +690,11 @@ PlayResult play_game(void)
             break;
         }
 
+        bool cached_transition = !p_ptr->is_dead && level_cache_change_level();
+
         /* Erase the old cave */
         /* If the character is dead, then we don't erase yet */
-        if (!p_ptr->is_dead)
+        if (!p_ptr->is_dead && !cached_transition)
         {
             log_trace("Cleaning up level data for transition");
             wipe_o_list();
@@ -789,7 +794,10 @@ PlayResult play_game(void)
         /* Make a new level */
         log_info("Generating new dungeon level at depth %d", p_ptr->depth);
         reset_level_entry_tracking();
-        TIME_PHASE("level.generate", generate_cave());
+        if (!cached_transition) {
+            TIME_PHASE("level.generate", generate_cave());
+            level_cache_start();
+        }
         log_debug("New dungeon level generated successfully");
     }
 

@@ -295,6 +295,8 @@ set(SIL_MORE_SOURCES
     src/ui/story.c
     src/format.c
     src/level-generation/level-generation.c
+    src/level-generation/level-cache.c
+    src/level-generation/level-state.c
     src/level-generation/level-generation-utumno.c
     src/level-generation/level-generation-access.c
     src/level-generation/level-generation-finalize.c

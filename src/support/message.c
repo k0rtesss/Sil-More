@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "support/message.h"
 #include "externs.h"
 
@@ -893,6 +894,7 @@ void message_line_reset_column(void)
  */
 static void msg_print_aux(u16b type, cptr msg)
 {
+    if (level_cache_in_worker()) return;
     int n;
     char* t;
     char buf[1024];
@@ -1136,6 +1138,7 @@ void message_format(u16b message_type, s16b extra, cptr fmt, ...)
  */
 void message_flush(void)
 {
+    if (level_cache_in_worker()) return;
     if (!ui_message_line_enabled())
     {
         msg_flag = false;

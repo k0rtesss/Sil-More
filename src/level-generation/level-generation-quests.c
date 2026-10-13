@@ -5,15 +5,15 @@
 
 
 /* Global variable to track pending quest state changes */
-pending_quest_states_t pending_quest_states = {0};
+_Thread_local pending_quest_states_t pending_quest_states = {0};
 
 /* Quest lottery system: determines which quest (if any) "wins" this level */
-int quest_lottery_winner = 0; /* 0=none, quest_id=winner (1=Tulkas, 4=Nienna, etc.) */
-bool quest_lottery_resolved = false; /* true once lottery is run for this level */
-int cached_quest_vault_roll = -1;
-bool cached_gv_level_roll_resolved = false;
-bool cached_gv_level_roll_allowed = false;
-int cached_gv_level_roll_candidates = 0;
+_Thread_local int quest_lottery_winner = 0; /* 0=none, quest_id=winner (1=Tulkas, 4=Nienna, etc.) */
+_Thread_local bool quest_lottery_resolved = false; /* true once lottery is run for this level */
+_Thread_local int cached_quest_vault_roll = -1;
+_Thread_local bool cached_gv_level_roll_resolved = false;
+_Thread_local bool cached_gv_level_roll_allowed = false;
+_Thread_local int cached_gv_level_roll_candidates = 0;
 
 /* Function to run the quest lottery once per level - determines which quest (if any) gets this level */
 /* Roulette quest registry entry */
@@ -77,8 +77,8 @@ bool quest_metarun_blocked(int quest_id, u32b metarun_flag)
 }
 
 /* Roulette quest registry - initialized dynamically based on Y:1 field */
-roulette_quest_entry roulette_quests[8];  /* Max 8 quests from limits.txt */
-int roulette_quest_count = 0;
+_Thread_local roulette_quest_entry roulette_quests[8];  /* Max 8 quests from limits.txt */
+_Thread_local int roulette_quest_count = 0;
 
 /* Parametric formula calculation */
 float calculate_parametric_probability(quest_type* q_ptr, int depth) {

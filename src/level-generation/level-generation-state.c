@@ -92,7 +92,7 @@
 #define WALL_MAX 500
 #define TUNN_MAX 900
 
-bool allow_uniques;
+_Thread_local bool allow_uniques;
 
 /*
  * Maximal number of room types
@@ -109,23 +109,23 @@ bool allow_uniques;
  * Dungeon generation data -- see "cave_gen()"
  */
 dun_data dun_body;
-dun_data* dun = &dun_body;
+_Thread_local dun_data* dun = &dun_body;
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID].
  * Each corridor square it is marked for each room that it connects.
  */
-int cave_corridor1[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-int cave_corridor2[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-bool cave_escape_tunnel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+_Thread_local int cave_corridor1[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+_Thread_local int cave_corridor2[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+_Thread_local bool cave_escape_tunnel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 
 #define LAYOUT_ANCHOR_MAX CENT_MAX
 
 
-layout_anchor_t layout_anchors[LAYOUT_ANCHOR_MAX];
-int layout_anchor_count = 0;
-layout_anchor_kind_t room_anchor_kind[CENT_MAX];
-bool room_anchor_requires_neighbor[CENT_MAX];
+_Thread_local layout_anchor_t layout_anchors[LAYOUT_ANCHOR_MAX];
+_Thread_local int layout_anchor_count = 0;
+_Thread_local layout_anchor_kind_t room_anchor_kind[CENT_MAX];
+_Thread_local bool room_anchor_requires_neighbor[CENT_MAX];
 
 /* Shared guard to prevent room/anchor writes past allocated arrays/connection matrix */
 
@@ -142,15 +142,15 @@ bool room_anchor_requires_neighbor[CENT_MAX];
 /* Special-mode depth gates and caps (tweak to rebalance rarity) */
 
 /* Persist the chosen partition grid for later passes (connectivity, stair guarantees) */
-int current_partition_rows = 0;
-int current_partition_cols = 0;
-int current_partition_count = 0;
-quadrant_mode_t current_partition_modes[25];
-density_level_t current_partition_densities[25];
-big_cave_type_t current_partition_big_cave_types[25];
-int current_partition_bridge_styles[25];
+_Thread_local int current_partition_rows = 0;
+_Thread_local int current_partition_cols = 0;
+_Thread_local int current_partition_count = 0;
+_Thread_local quadrant_mode_t current_partition_modes[25];
+_Thread_local density_level_t current_partition_densities[25];
+_Thread_local big_cave_type_t current_partition_big_cave_types[25];
+_Thread_local int current_partition_bridge_styles[25];
 void reset_partition_population_metadata(void);
-partition_population_meta current_partition_population_meta[25];
+_Thread_local partition_population_meta current_partition_population_meta[25];
 
 void init_partition_chest_recipe(partition_chest_recipe* recipe)
 {
@@ -275,15 +275,15 @@ bool g_big_cave_type_rule_set[32];
 int g_big_cave_type_weight[32][BIG_CAVE_TYPE_MAX];
 
 /* Track labyrinth partition count for boosting monsters and stairs in mazes */
-int current_labyrinth_partitions = 0;
+_Thread_local int current_labyrinth_partitions = 0;
 
 /* Morgoth throne room placement state for the current generation attempt */
-bool morgoth_level_active = false;
-bool morgoth_partition_reserved = false;
-int morgoth_partition_index = -1;
-rectangle morgoth_partition_bounds;
-int morgoth_vault_center_y = 0;
-int morgoth_vault_center_x = 0;
+_Thread_local bool morgoth_level_active = false;
+_Thread_local bool morgoth_partition_reserved = false;
+_Thread_local int morgoth_partition_index = -1;
+_Thread_local rectangle morgoth_partition_bounds;
+_Thread_local int morgoth_vault_center_y = 0;
+_Thread_local int morgoth_vault_center_x = 0;
 
 bool morgoth_region_active(void)
 {

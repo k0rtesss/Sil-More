@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 4  /* Persist pending smithing alloy metadata. */
+#define VERSION_EXTRA 5  /* Retain adjacent floors and vertical connections. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -4470,7 +4470,7 @@ typedef struct unified_look_state {
  * ------------------------------------------------------------------ */
 typedef struct metarun metarun;   /* fwd */
 
-extern metarun metar;      /* current run, defined in metarun.c */
+extern _Thread_local metarun metar; /* Current Tale; workers receive a copy. */
 extern int     meta_fd;   /* open descriptor to meta.raw */
 
 #define STORY_PARTS   3

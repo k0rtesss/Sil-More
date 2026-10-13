@@ -7,29 +7,29 @@
 
 #define SOUND_CELLS (MAX_DUNGEON_HGT * MAX_DUNGEON_WID)
 #define SOUND_LIFETIME 60
-static cave_world_event events[CAVE_EVENTS_MAX];
-static u32b next_serial = 1, revision = 1;
-static byte fields[CAVE_EVENTS_MAX][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static u32b field_revision[CAVE_EVENTS_MAX], field_serial[CAVE_EVENTS_MAX];
-static byte ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte flowing_liquid_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte still_liquid_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lava_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte forge_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte bridge_work_sources[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte bridge_work_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static s32b ambient_turn = -1, last_notice[CAVE_EVENT_MAX];
-static s32b bridge_work_turn = -1, bridge_work_field_turn = -1;
-static u32b bridge_work_revision = 1;
-static u32b bridge_work_field_revision, bridge_work_field_terrain_revision;
-static s32b ambient_notice_turn = -200;
-static bool in_ambient_noise;
-static u32b ambient_revision, announced[CAVE_EVENTS_MAX];
-static int queue[SOUND_CELLS], head, tail, count;
-static byte audio_field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static u32b audio_revision;
-static int audio_y = -1, audio_x = -1;
-static bool queued[MAX_DUNGEON_HGT][MAX_DUNGEON_WID], player_moved;
+static _Thread_local cave_world_event events[CAVE_EVENTS_MAX];
+static _Thread_local u32b next_serial = 1, revision = 1;
+static _Thread_local byte fields[CAVE_EVENTS_MAX][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local u32b field_revision[CAVE_EVENTS_MAX], field_serial[CAVE_EVENTS_MAX];
+static _Thread_local byte ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte flowing_liquid_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte still_liquid_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lava_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte forge_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte bridge_work_sources[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte bridge_work_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local s32b ambient_turn = -1, last_notice[CAVE_EVENT_MAX];
+static _Thread_local s32b bridge_work_turn = -1, bridge_work_field_turn = -1;
+static _Thread_local u32b bridge_work_revision = 1;
+static _Thread_local u32b bridge_work_field_revision, bridge_work_field_terrain_revision;
+static _Thread_local s32b ambient_notice_turn = -200;
+static _Thread_local bool in_ambient_noise;
+static _Thread_local u32b ambient_revision, announced[CAVE_EVENTS_MAX];
+static _Thread_local int queue[SOUND_CELLS], head, tail, count;
+static _Thread_local byte audio_field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local u32b audio_revision;
+static _Thread_local int audio_y = -1, audio_x = -1;
+static _Thread_local bool queued[MAX_DUNGEON_HGT][MAX_DUNGEON_WID], player_moved;
 static const char* event_noise(int kind);
 
 /* A forge's feature value is also its remaining-use counter.  The first

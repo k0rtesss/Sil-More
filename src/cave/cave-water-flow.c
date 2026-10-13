@@ -12,22 +12,22 @@
 #define WATER_FLOW_DIRECTION_MASK 0x07
 #define WATER_FLOW_CELLS (MAX_DUNGEON_HGT * MAX_DUNGEON_WID)
 
-static byte flow_direction[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte flow_lake[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte topology_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte topology_role[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte topology_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte generation_feature[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte generation_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte generation_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte generation_outlet[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte component_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int flow_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int flow_channel_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int flow_channel_owner[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int flow_queue[WATER_FLOW_CELLS];
-static int flow_component[WATER_FLOW_CELLS];
-static bool flow_valid;
+static _Thread_local byte flow_direction[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte flow_lake[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte topology_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte topology_role[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte topology_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte generation_feature[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte generation_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte generation_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte generation_outlet[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte component_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int flow_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int flow_channel_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int flow_channel_owner[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int flow_queue[WATER_FLOW_CELLS];
+static _Thread_local int flow_component[WATER_FLOW_CELLS];
+static _Thread_local bool flow_valid;
 
 static bool map_coord(int y, int x)
 {

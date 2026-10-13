@@ -6,7 +6,7 @@
 #include <time.h>
 #include <stdint.h>
 
-static Uint64 rng_state = 0;
+static _Thread_local Uint64 rng_state = 0;
 
 static Uint64 sanitize_seed(Uint64 seed)
 {

@@ -70,15 +70,15 @@ static const terrain_network_profile terrain_network_defaults[TERRAIN_THEME_DEPT
 static const terrain_network_profile terrain_network_disabled = {
     {0,0,0,0,0},1,1,2,2,0
 };
-static terrain_theme_profile terrain_theme_profiles[TERRAIN_THEME_DEPTHS];
-static terrain_landmark_profile terrain_landmark_profiles[TERRAIN_THEME_DEPTHS];
-static terrain_network_profile terrain_network_profiles[TERRAIN_THEME_DEPTHS];
-static bool terrain_themes_attempted;
-static bool terrain_themes_loaded;
+static _Thread_local terrain_theme_profile terrain_theme_profiles[TERRAIN_THEME_DEPTHS];
+static _Thread_local terrain_landmark_profile terrain_landmark_profiles[TERRAIN_THEME_DEPTHS];
+static _Thread_local terrain_network_profile terrain_network_profiles[TERRAIN_THEME_DEPTHS];
+static _Thread_local bool terrain_themes_attempted;
+static _Thread_local bool terrain_themes_loaded;
 static const terrain_history_profile terrain_history_default = {45, 30, 25, 35};
 static const terrain_history_profile terrain_history_utumno = {100, 0, 0, 100};
 static const terrain_history_profile terrain_history_disabled = {0, 0, 0, 0};
-static terrain_history_profile terrain_history_profiles[TERRAIN_THEME_DEPTHS];
+static _Thread_local terrain_history_profile terrain_history_profiles[TERRAIN_THEME_DEPTHS];
 
 /* Parse unsigned decimal only: no signs, suffixes, overflow or empty fields. */
 static bool terrain_theme_number(const char* text, int low, int high, int* out)

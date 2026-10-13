@@ -12,7 +12,7 @@
 #define QUARREL_ONE_IN 500
 
 /* Level-local diplomacy, independent of the player's allegiance and truce. */
-static byte relations[MON_GROUP_MAX][MON_GROUP_MAX];
+static _Thread_local byte relations[MON_GROUP_MAX][MON_GROUP_MAX];
 
 static bool live_index(int i)
 {

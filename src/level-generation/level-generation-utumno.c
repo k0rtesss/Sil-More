@@ -136,7 +136,7 @@ bool utumno_gen(void)
  * Only floor and unworked granite are replaced, so existing routes stay open. */
 void utumno_shape_frontiers(void)
 {
-    static byte banks[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local byte banks[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     byte widths[(MAX_DUNGEON_HGT + 7) / 8][(MAX_DUNGEON_WID + 7) / 8];
     memset(banks, 0, sizeof(banks));
     for (int y = 0; y < (MAX_DUNGEON_HGT + 7) / 8; y++)
@@ -178,8 +178,8 @@ void utumno_shape_frontiers(void)
  * neither proves that a character can actually enter these guarded doors. */
 static bool utumno_ladder_reachable(int ladder_y, int ladder_x)
 {
-    static byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static coord queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local coord queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     int head = 0, tail = 0;
     memset(reached, 0, sizeof(reached));
     reached[p_ptr->py][p_ptr->px] = 1;

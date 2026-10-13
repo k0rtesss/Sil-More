@@ -63,7 +63,7 @@ bool arg_force_roguelike; /* Command arg -- Request roguelike keyset */
  */
 
 bool character_generated; /* The character exists */
-bool character_dungeon; /* The character has a dungeon */
+_Thread_local bool character_dungeon; /* The character has a dungeon */
 bool character_loaded; /* The character was loaded from a savefile and is living
                         */
 bool character_loaded_dead; /* The character was loaded from a savefile while
@@ -77,23 +77,23 @@ u32b seed_randart; /* Hack -- consistent random artefacts */
 
 u32b seed_flavor; /* Hack -- consistent object colors */
 
-s16b num_repro; /* Current reproducer count */
-s16b object_level; /* Current object creation level */
-s16b monster_level; /* Current monster creation level */
+_Thread_local s16b num_repro; /* Current reproducer count */
+_Thread_local s16b object_level; /* Current object creation level */
+_Thread_local s16b monster_level; /* Current monster creation level */
 
 char summon_kin_type; /* Hack -- See summon_specific() */
 
-s32b turn; /* Current game turn */
-s32b playerturn; /* Current player turn */
-s32b min_depth_counter; /* Updates the min depth over time  */
+_Thread_local s32b turn; /* Current game turn */
+_Thread_local s32b playerturn; /* Current player turn */
+_Thread_local s32b min_depth_counter; /* Updates the min depth over time  */
 
-byte do_feeling; /* Hack -- Level feeling counter */
+_Thread_local byte do_feeling; /* Hack -- Level feeling counter */
 
 bool use_sound; /* The "sound" mode is enabled */
 int use_graphics; /* The "graphics" mode is enabled */
 bool use_bigtile = false;
 
-s16b image_count; /* Grids until next random image    */
+_Thread_local s16b image_count; /* Grids until next random image    */
 /* Optimizes the hallucination code */
 
 s16b signal_count; /* Hack -- Count interrupts */
@@ -106,22 +106,22 @@ bool inkey_scan; /* See the "inkey()" function */
 bool inkey_flag; /* See the "inkey()" function */
 bool hide_cursor; /* See the "inkey()" function */
 
-byte object_generation_mode; /* Hack -- use different depth check, prevent
+_Thread_local byte object_generation_mode; /* Hack -- use different depth check, prevent
                                 embedded chests */
-bool drop_allow_noble; /* When true, noble-tagged entries are eligible for selection */
-bool drop_allow_evil; /* When true, evil-tagged entries are eligible for selection */
-bool drop_allow_noble_from_quality = true; /* When true, GOOD+ quality may include noble-tagged entries */
+_Thread_local bool drop_allow_noble; /* When true, noble-tagged entries are eligible for selection */
+_Thread_local bool drop_allow_evil; /* When true, evil-tagged entries are eligible for selection */
+_Thread_local bool drop_allow_noble_from_quality = true; /* When true, GOOD+ quality may include noble-tagged entries */
 
-bool shimmer_monsters; /* Hack -- optimize multi-hued monsters */
-bool shimmer_objects; /* Hack -- optimize multi-hued objects */
-bool repair_mflag_show; /* Hack -- repair monster flags (show) */
-bool repair_mflag_mark; /* Hack -- repair monster flags (mark) */
+_Thread_local bool shimmer_monsters; /* Hack -- optimize multi-hued monsters */
+_Thread_local bool shimmer_objects; /* Hack -- optimize multi-hued objects */
+_Thread_local bool repair_mflag_show; /* Hack -- repair monster flags (show) */
+_Thread_local bool repair_mflag_mark; /* Hack -- repair monster flags (mark) */
 
-s16b o_max = 1; /* Number of allocated objects */
-s16b o_cnt = 0; /* Number of live objects */
+_Thread_local s16b o_max = 1; /* Number of allocated objects */
+_Thread_local s16b o_cnt = 0; /* Number of live objects */
 
-s16b mon_max = 1; /* Number of allocated monsters */
-s16b mon_cnt = 0; /* Number of live monsters */
+_Thread_local s16b mon_max = 1; /* Number of allocated monsters */
+_Thread_local s16b mon_cnt = 0; /* Number of live monsters */
 
 /*
  *  Most of the extra Sil variables...
@@ -147,10 +147,10 @@ bool command_repeating = false;
  * Dungeon variables
  */
 
-byte feeling; /* Most recent feeling */
-s16b rating; /* Level's current rating */
+_Thread_local byte feeling; /* Most recent feeling */
+_Thread_local s16b rating; /* Level's current rating */
 
-bool good_item_flag; /* true if "Artefact" on this level */
+_Thread_local bool good_item_flag; /* true if "Artefact" on this level */
 
 int closing_flag; /* Dungeon is closing */
 
@@ -373,18 +373,18 @@ const cptr angband_sound_name[MSG_MAX] = {
 /*
  * Array[VIEW_MAX] used by "update_view()"
  */
-int view_n = 0;
-u16b* view_g;
+_Thread_local int view_n = 0;
+_Thread_local u16b* view_g;
 
 /*
  * Arrays[TEMP_MAX] used for various things
  *
  * Note that temp_g shares memory with temp_x and temp_y.
  */
-int temp_n = 0;
-u16b* temp_g;
-byte* temp_y;
-byte* temp_x;
+_Thread_local int temp_n = 0;
+_Thread_local u16b* temp_g;
+_Thread_local byte* temp_y;
+_Thread_local byte* temp_x;
 
 /*
  * Array[DUNGEON_HGT][256] of cave grid info flags (padded)
@@ -392,23 +392,23 @@ byte* temp_x;
  * This array is padded to a width of 256 to allow fast access to elements
  * in the array via "grid" values (see the GRID() macros).
  */
-u16b (*cave_info)[256];
+_Thread_local u16b (*cave_info)[256];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid feature codes
  */
-byte (*cave_feat)[MAX_DUNGEON_WID];
+_Thread_local byte (*cave_feat)[MAX_DUNGEON_WID];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid color codes
  */
-byte (*cave_color)[MAX_DUNGEON_WID];
+_Thread_local byte (*cave_color)[MAX_DUNGEON_WID];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] marking the natural CA-cave footprint.
  * Unlike CAVE_ROOM, this excludes ordinary rooms and connecting corridors.
  */
-byte (*cave_natural)[MAX_DUNGEON_WID];
+_Thread_local byte (*cave_natural)[MAX_DUNGEON_WID];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of rewired-trap difficulty.
@@ -416,18 +416,18 @@ byte (*cave_natural)[MAX_DUNGEON_WID];
  * rewired by the player to catch monsters, and the value is the difficulty a
  * monster must beat to notice/disarm it (derived from the player's rewire roll).
  */
-byte (*cave_rewired)[MAX_DUNGEON_WID];
+_Thread_local byte (*cave_rewired)[MAX_DUNGEON_WID];
 
 /*
  * Active legendary dungeon area map.  Zero means ordinary terrain; non-zero
  * ids refer to runtime meta_dungeon records restored/spawned for this level.
  */
-u16b (*legendary_area_id)[MAX_DUNGEON_WID];
+_Thread_local u16b (*legendary_area_id)[MAX_DUNGEON_WID];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid light level
  */
-s16b (*cave_light)[MAX_DUNGEON_WID];
+_Thread_local s16b (*cave_light)[MAX_DUNGEON_WID];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid object indexes
@@ -440,7 +440,7 @@ s16b (*cave_light)[MAX_DUNGEON_WID];
  * any object is in a grid, and relatively fast determination of which objects
  * are in a grid.
  */
-s16b (*cave_o_idx)[MAX_DUNGEON_WID];
+_Thread_local s16b (*cave_o_idx)[MAX_DUNGEON_WID];
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid monster indexes
@@ -452,7 +452,7 @@ s16b (*cave_o_idx)[MAX_DUNGEON_WID];
  * the player structure, but provides extremely fast determination of which,
  * if any, monster or player is in any given grid.
  */
-s16b (*cave_m_idx)[MAX_DUNGEON_WID];
+_Thread_local s16b (*cave_m_idx)[MAX_DUNGEON_WID];
 
 /*
  * Table of avergae monster power.
@@ -464,30 +464,31 @@ u32b mon_power_ave[MAX_DEPTH][CREATURE_TYPE_MAX];
 /*
  * Arrays[NUM_FLOWS][DUNGEON_HGT][DUNGEON_WID] of cave grid flow "cost" values
  */
-byte cave_cost[MAX_FLOWS][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte main_cave_cost[MAX_FLOWS][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+_Thread_local byte (*cave_cost)[MAX_DUNGEON_HGT][MAX_DUNGEON_WID] = main_cave_cost;
 
 /*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid flow "when" stamps
  */
-byte (*cave_when)[MAX_DUNGEON_WID];
+_Thread_local byte (*cave_when)[MAX_DUNGEON_WID];
 
 /*
  * Current scent age marker.  Counts down from 250 to 0 and then loops.
  */
-int scent_when = 250;
+_Thread_local int scent_when = 250;
 
 /*
  * Centerpoints of the last flow (noise) rebuild and the last flow update.
  */
-byte flow_center_y[MAX_FLOWS];
-byte flow_center_x[MAX_FLOWS];
-byte update_center_y[MAX_FLOWS];
-byte update_center_x[MAX_FLOWS];
+_Thread_local byte flow_center_y[MAX_FLOWS];
+_Thread_local byte flow_center_x[MAX_FLOWS];
+_Thread_local byte update_center_y[MAX_FLOWS];
+_Thread_local byte update_center_x[MAX_FLOWS];
 
 /*
  * Wandering monsters will often pause at their destination for a while
  */
-s16b wandering_pause[MAX_FLOWS];
+_Thread_local s16b wandering_pause[MAX_FLOWS];
 
 /*
  * Represents the modified stealth_score for the player this round.
@@ -508,22 +509,22 @@ bool attacked_player = false;
 /*
  * Array[z_info->o_max] of dungeon objects
  */
-object_type* o_list;
+_Thread_local object_type* o_list;
 
 /*
  * Array[MAX_MONSTERS] of dungeon monsters
  */
-monster_type* mon_list;
+_Thread_local monster_type* mon_list;
 
 /*
  * Array[z_info->r_max] of monster lore
  */
-monster_lore* l_list;
+_Thread_local monster_lore* l_list;
 
 /*
  * Array[INVEN_TOTAL] of objects in the player's inventory
  */
-object_type* inventory;
+_Thread_local object_type* inventory;
 
 /*
  * The size of "alloc_kind_table" (at most z_info->k_max * 4)
@@ -533,7 +534,7 @@ s16b alloc_kind_size;
 /*
  * The array[alloc_kind_size] of entries in the "kind allocator table"
  */
-alloc_entry* alloc_kind_table;
+_Thread_local alloc_entry* alloc_kind_table;
 
 /*
  * The size of the "alloc_ego_table"
@@ -543,7 +544,7 @@ s16b alloc_ego_size;
 /*
  * The array[alloc_ego_size] of entries in the "ego allocator table"
  */
-alloc_entry* alloc_ego_table;
+_Thread_local alloc_entry* alloc_ego_table;
 
 /*
  * The size of "alloc_race_table" (at most z_info->r_max)
@@ -553,7 +554,7 @@ s16b alloc_race_size;
 /*
  * The array[alloc_race_size] of entries in the "race allocator table"
  */
-alloc_entry* alloc_race_table;
+_Thread_local alloc_entry* alloc_race_table;
 
 /*
  * Specify attr/char pairs for visual special effects
@@ -594,7 +595,7 @@ static player_other player_other_body;
 /*
  * Pointer to the player other record
  */
-player_other* op_ptr = &player_other_body;
+_Thread_local player_other* op_ptr = &player_other_body;
 
 /*
  * The player info record (static)
@@ -604,7 +605,7 @@ static player_type player_type_body;
 /*
  * Pointer to the player info record
  */
-player_type* p_ptr = &player_type_body;
+_Thread_local player_type* p_ptr = &player_type_body;
 
 /*
  * Structure (not array) of size limits
@@ -628,7 +629,7 @@ char* f_text;
 /*
  * The object kind arrays
  */
-object_kind* k_info;
+_Thread_local object_kind* k_info;
 char* k_name;
 char* k_text;
 
@@ -642,13 +643,13 @@ char* b_text;
 /*
  * The artefact arrays
  */
-artefact_type* a_info;
+_Thread_local artefact_type* a_info;
 char* a_text;
 
 /*
  * Valar quest artifact reservation
  */
-bool* valar_reserved_artifacts;
+_Thread_local bool* valar_reserved_artifacts;
 
 /*
  * The random name generator tables
@@ -669,7 +670,7 @@ char* e_text;
 /*
  * The monster race arrays
  */
-monster_race* r_info;
+_Thread_local monster_race* r_info;
 monster_race* r_base;
 char* r_name;
 char* r_text;
@@ -884,12 +885,12 @@ void (*ang_sort_swap)(void* u, void* v, int a, int b);
 /*
  * Hack -- function hook to restrict "get_mon_num_prep()" function
  */
-bool (*get_mon_num_hook)(int r_idx);
+_Thread_local bool (*get_mon_num_hook)(int r_idx);
 
 /*
  * Hack -- function hook to restrict "get_obj_num_prep()" function
  */
-bool (*get_obj_num_hook)(int k_idx);
+_Thread_local bool (*get_obj_num_hook)(int k_idx);
 
 void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
@@ -930,7 +931,7 @@ char notes_buffer[NOTES_LENGTH];
  * Cleared when a level is created. {From Oangband} -JG
  */
 byte recent_failed_thefts;
-byte num_trap_on_level;
+_Thread_local byte num_trap_on_level;
 
 /*occasionally allow chance of different inventory in a store*/
 byte allow_altered_inventory;
@@ -965,7 +966,7 @@ char ghost_string[80];
 /*
  * The name of the current greater vault, if any. -DG-
  */
-char g_vault_name[80];
+_Thread_local char g_vault_name[80];
 
 /*
  * While set, the map is drawn with memory hidden (like rage) for labyrinth partitions.
@@ -978,7 +979,7 @@ bool g_labyrinth_view_active = false;
 int meta_fd = -1;
 
 // Current metarun info
-metarun metar;
+_Thread_local metarun metar;
 
 runtype_type *runtype_info = NULL;   /* filled by init_rt_info() */
 

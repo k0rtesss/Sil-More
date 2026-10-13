@@ -1,6 +1,7 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "meta_state.h"
 #include "monster/monster-routine.h"
 #include "cave/cave-environment.h"
@@ -417,6 +418,7 @@ bool cave_gen(void)
         l = 11;
 
     // Square levels: same dimension for both height and width
+    level_cache_generation_size(&l);
     p_ptr->cur_map_hgt = l * (PANEL_HGT);
     p_ptr->cur_map_wid = l * (PANEL_HGT);  // Use PANEL_HGT for both to make square
 
@@ -444,6 +446,7 @@ bool cave_gen(void)
     styles_init_for_level();
     /*start with basic granite*/
     basic_granite();
+    level_cache_generation_reserve();
     log_trace("cave_gen: after styles_init/basic_granite");
 
     log_trace("cave_gen: before connection table init (DUN_ROOMS=%d, conn_size=%zu)", DUN_ROOMS, sizeof(dun->connection));
@@ -871,6 +874,8 @@ bool cave_gen(void)
 
     if (p_ptr->depth == 1 && p_ptr->stairs_taken == 0)
         make_patches_of_sunlight();
+
+    if (!level_cache_generation_links()) return false;
 
     // check dungeon connectivity
     if (!check_connectivity())
@@ -1450,7 +1455,7 @@ bool cave_gen(void)
     // place Morgoth if on the run
     if (p_ptr->on_the_run && !p_ptr->morgoth_slain)
     {
-        static int morgoth_path_dist[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+        static _Thread_local int morgoth_path_dist[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
         bool placed = false;
         int placed_y = 0;
         int placed_x = 0;
@@ -1814,7 +1819,8 @@ void generate_cave(void)
 {
     int y, x, i;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
-    const bool protect_tutorial_start = tutorial_game_start_needs_clear_area();
+    const bool protect_tutorial_start = !level_cache_in_worker()
+        && tutorial_game_start_needs_clear_area();
 
     log_info("generate_cave: Function entry - about to start");
     log_debug("generate_cave: Starting cave generation");
@@ -1891,7 +1897,7 @@ if (playerturn == 0) {
     /* Every replacement of the old map abandons its unfinished quest vaults,
      * including forced exits and regeneration at the same depth. Do this once,
      * before retries can start placing encounters for the new level. */
-    quest_followup_discard_level();
+    if (!level_cache_in_worker()) quest_followup_discard_level();
 
     level_gen_screen_begin();
     reset_generation_retry_locks();
@@ -1912,6 +1918,7 @@ if (playerturn == 0) {
 
     while (true)
     {
+        if (level_cache_generation_cancelled()) return;
         bool okay = true;
         bool quest_vault_placed_this_attempt = false; /* Track if quest vault placed in this attempt */
 
@@ -1929,6 +1936,7 @@ if (playerturn == 0) {
 
         /* Reset quest states that may have been set during previous failed attempts */
         reset_quest_vault_states(preserved_initiated_count);
+        level_cache_generation_preserve_quests();
 
         /* Paranoia: Check that cave_color is allocated */
         if (!cave_color)
@@ -2048,6 +2056,8 @@ if (playerturn == 0) {
                 okay = false;
             }
         }
+
+        if (okay && !level_cache_generation_links()) okay = false;
 
         /* Check the final population, including vaults and special monsters,
          * before accepting the map or committing its pending quest state. */
@@ -2227,7 +2237,7 @@ if (playerturn == 0) {
     }
 
     monster_routine_finish_level();
-    catastrophe_prepare_level();
+    if (!level_cache_in_worker()) catastrophe_prepare_level();
     cave_environment_seed();
     level_gen_screen_finish(true);
 

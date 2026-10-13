@@ -124,8 +124,8 @@ bool morgoth_tunnel_target(int y, int x)
 
 bool connect_morgoth_tunnel_component(int start_y, int start_x)
 {
-    static int prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+    static _Thread_local int prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
     int head = 0;
     int tail = 0;
     int found_y = -1;

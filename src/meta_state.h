@@ -221,7 +221,7 @@ bool meta_dungeon_register_legendary_area(const meta_dungeon_record* record,
                                           u32b tile_blob_size);
 void meta_dungeon_areas_free(meta_dungeon_area* areas, u32b count);
 
-extern u16b (*legendary_area_id)[MAX_DUNGEON_WID];
+extern _Thread_local u16b (*legendary_area_id)[MAX_DUNGEON_WID];
 
 bool meta_dungeon_record_is_valid(const meta_dungeon_record* record,
                                   u32b tile_blob_size);
@@ -231,6 +231,14 @@ bool meta_dungeon_area_cell_at(const meta_dungeon_area* area, int y, int x,
 bool legendary_area_map_ensure(void);
 void legendary_area_map_reset(void);
 void legendary_area_level_reset(void);
+/* In-memory level switching copies the runtime record without database IO. */
+void* legendary_area_capture_runtime(void);
+void legendary_area_restore_runtime(const void* snapshot);
+void legendary_area_free_runtime_snapshot(void* snapshot);
+void* meta_state_copy_for_generation(void);
+void meta_state_use_generation_copy(void* snapshot);
+void meta_state_free_generation_copy(void* snapshot);
+void meta_state_finish_generation(void);
 bool legendary_area_get_save_record(u16b area_id, guid64* record_guid,
                                     bool* entry_seen);
 bool legendary_area_restore_after_load(u16b area_id, guid64 record_guid,

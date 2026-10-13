@@ -18,6 +18,7 @@ void quest_followup_damage(monster_type *monster, int damage, int who);
 void quest_followup_escape(void);
 void quest_followup_leave(int new_depth);
 void quest_followup_discard_level(void);
+void quest_followup_discard_depth(int depth);
 void quest_followup_reset(void);
 bool quest_debug_sandbox(void);
 void quest_debug_start(int id);

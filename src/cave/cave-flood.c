@@ -7,13 +7,13 @@
 /* Stage selects the eight- or sixteen-cell quota for the next player action.
  * A per-action guard keeps a newly triggered flood at its source until the
  * following action. Neither energy cost nor monster turns affect this clock. */
-static byte flood_stage[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static bool flood_new[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static bool flood_surface[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte flood_surface_kind[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte flood_trap_kind[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static u16b flood_path_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int flood_path_queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
+static _Thread_local byte flood_stage[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local bool flood_new[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local bool flood_surface[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte flood_surface_kind[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte flood_trap_kind[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local u16b flood_path_distance[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int flood_path_queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
 
 static void flood_mark_surface_area(int y, int x, int radius, byte kind);
 

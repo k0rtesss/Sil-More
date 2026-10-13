@@ -1,6 +1,7 @@
 /* File: level-generation-screen.c */
 
 #include "angband.h"
+#include "level-generation/level-cache.h"
 #include "level-generation/level-generation-internal.h"
 
 
@@ -9,12 +10,12 @@
 #define LEVEL_GEN_SCREEN_ISSUES 12
 
 
-level_gen_screen_state level_gen_screen = {0};
-char level_gen_debug_last_greater_vault_name[80] = "";
-char level_gen_debug_active_quest_vault_name[80] = "";
-char level_gen_debug_last_quest_vault_name[80] = "";
-char level_gen_debug_questgiver_name[80] = "";
-char level_gen_debug_last_room_name[80] = "";
+_Thread_local level_gen_screen_state level_gen_screen = {0};
+_Thread_local char level_gen_debug_last_greater_vault_name[80] = "";
+_Thread_local char level_gen_debug_active_quest_vault_name[80] = "";
+_Thread_local char level_gen_debug_last_quest_vault_name[80] = "";
+_Thread_local char level_gen_debug_questgiver_name[80] = "";
+_Thread_local char level_gen_debug_last_room_name[80] = "";
 
 const char* level_gen_stage_user_labels[LEVEL_GEN_STAGE_COUNT] = {
     "Planning the level",
@@ -1131,7 +1132,7 @@ void level_gen_screen_begin(void)
 {
     memset(&level_gen_screen, 0, sizeof(level_gen_screen));
 
-    if (!Term)
+    if (level_cache_in_worker() || !Term)
         return;
 
     level_gen_screen.active = true;

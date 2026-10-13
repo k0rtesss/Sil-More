@@ -21,42 +21,42 @@ typedef struct landmark_bridge { coord first; int dy, dx, length; } landmark_bri
 static const int lm_dy[4] = { -1, 0, 1, 0 };
 static const int lm_dx[4] = { 0, 1, 0, -1 };
 static const int lm_features[5] = { FEAT_WATER, FEAT_CHASM, FEAT_LAVA, FEAT_POISON, FEAT_ICE };
-static byte lm_hard[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_built[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_work[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_live[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_taken[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_live_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_live_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_cavity[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_terminal[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_terminal_role[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_live_terminal[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_live_structure[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_hydraulic[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static byte lm_effect_hard[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static terrain_structure_stats lm_structures;
-static coord lm_basins[LM_BASINS];
-static coord lm_merges[8];
-static int lm_basin_count, lm_family, lm_junctions, lm_bridge_savings;
-static int lm_before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int lm_after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static int lm_distance[LM_CELLS], lm_parent[LM_CELLS], lm_heap[LM_CELLS], lm_position[LM_CELLS];
-static int lm_heap_count, lm_feature;
-static coord lm_goal;
-static coord lm_path[LM_PATH];
-static int lm_path_count;
-static landmark_bridge lm_bridges[LM_BRIDGES];
-static int lm_bridge_count;
-static landmark_move lm_moves[LM_MOVES];
-static int lm_move_count;
-static bool lm_partitions[25];
-static terrain_landmark_stats lm_stats;
-static bool lm_preparing, lm_preserve_form;
-static int lm_epoch = TERRAIN_HISTORY_DISASTER;
+static _Thread_local byte lm_hard[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_built[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_work[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_live[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_taken[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_live_basin[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_live_channel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_cavity[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_terminal[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_terminal_role[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_live_terminal[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_live_structure[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_hydraulic[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local byte lm_effect_hard[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local terrain_structure_stats lm_structures;
+static _Thread_local coord lm_basins[LM_BASINS];
+static _Thread_local coord lm_merges[8];
+static _Thread_local int lm_basin_count, lm_family, lm_junctions, lm_bridge_savings;
+static _Thread_local int lm_before[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int lm_after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static _Thread_local int lm_distance[LM_CELLS], lm_parent[LM_CELLS], lm_heap[LM_CELLS], lm_position[LM_CELLS];
+static _Thread_local int lm_heap_count, lm_feature;
+static _Thread_local coord lm_goal;
+static _Thread_local coord lm_path[LM_PATH];
+static _Thread_local int lm_path_count;
+static _Thread_local landmark_bridge lm_bridges[LM_BRIDGES];
+static _Thread_local int lm_bridge_count;
+static _Thread_local landmark_move lm_moves[LM_MOVES];
+static _Thread_local int lm_move_count;
+static _Thread_local bool lm_partitions[25];
+static _Thread_local terrain_landmark_stats lm_stats;
+static _Thread_local bool lm_preparing, lm_preserve_form;
+static _Thread_local int lm_epoch = TERRAIN_HISTORY_DISASTER;
 typedef struct landmark_plan
 {
     bool ready;
@@ -73,8 +73,8 @@ typedef struct landmark_plan
     coord basins[LM_BASINS], merges[8];
     int basin_count, junctions;
 } landmark_plan;
-static landmark_plan lm_plans[TERRAIN_HISTORY_SYSTEMS];
-static int lm_system = -1;
+static _Thread_local landmark_plan lm_plans[TERRAIN_HISTORY_SYSTEMS];
+static _Thread_local int lm_system = -1;
 
 /* Shares the local planner's reversible walking/one-tile-jump graph. */
 extern int terrain_generation_components(
@@ -677,8 +677,8 @@ static bool lm_network_shape(const terrain_landmark_profile* profile,
 
 static void lm_prune_shapes(void)
 {
-    static byte seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static coord queue[LM_CELLS];
+    static _Thread_local byte seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local coord queue[LM_CELLS];
     memset(seen, 0, sizeof(seen));
     int head = 0, tail = 0;
     /* Multiple basins are allowed to be visibly separate. Keep their actual
@@ -739,8 +739,8 @@ static bool lm_wet(int y, int x)
 
 static void lm_raise_basins(void)
 {
-    static byte previous[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static byte throat[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local byte previous[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local byte throat[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     memset(throat, 0, sizeof(throat));
     for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++) for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
         if (lm_channel[y][x] && !lm_basin[y][x])
@@ -806,7 +806,7 @@ static void lm_structure_proposal(void)
     terrain_structure_apply(lm_effect_hard, lm_work, lm_shadow, lm_feature, &lm_structures);
     /* A flooded room with a broad interior is a receiving chamber, not a
      * suddenly wide connector. Classify actual geometry, not scenario labels. */
-    static int receiving[LM_CELLS], areas[LM_CELLS], cores[LM_CELLS];
+    static _Thread_local int receiving[LM_CELLS], areas[LM_CELLS], cores[LM_CELLS];
     memset(receiving, 0, sizeof(receiving)); memset(areas, 0, sizeof(areas)); memset(cores, 0, sizeof(cores));
     for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++) for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
     {
@@ -893,8 +893,8 @@ static bool lm_validate_terminals(void)
 
 static bool lm_access(void)
 {
-    static int match[LM_CELLS + 1];
-    static byte old_component[LM_CELLS + 1];
+    static _Thread_local int match[LM_CELLS + 1];
+    static _Thread_local byte old_component[LM_CELLS + 1];
     memset(match, 0, sizeof(match)); memset(old_component, 0, sizeof(old_component));
     terrain_generation_components(lm_shadow, lm_after);
     bool connected = true;
@@ -924,7 +924,7 @@ static bool lm_access(void)
 static int lm_crossing_distance(coord from, coord to, int limit)
 {
     static short steps[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static coord queue[LM_CELLS];
+    static _Thread_local coord queue[LM_CELLS];
     memset(steps, -1, sizeof(steps));
     int head = 0, tail = 1; queue[0] = from; steps[from.y][from.x] = 0;
     while (head < tail)
@@ -1033,8 +1033,8 @@ static bool lm_bridge(bool required)
 
 static int lm_broad_cores(void)
 {
-    static byte core[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-    static coord queue[LM_CELLS];
+    static _Thread_local byte core[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static _Thread_local coord queue[LM_CELLS];
     memset(core, 0, sizeof(core));
     for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++) for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
     {
@@ -1064,8 +1064,8 @@ static int lm_broad_cores(void)
 
 static bool lm_shape_statistics(const terrain_landmark_profile* profile)
 {
-    static int vault_total[LM_CELLS], vault_changed[LM_CELLS];
-    static int wall_total[LM_CELLS], wall_changed[LM_CELLS];
+    static _Thread_local int vault_total[LM_CELLS], vault_changed[LM_CELLS];
+    static _Thread_local int wall_total[LM_CELLS], wall_changed[LM_CELLS];
     memset(vault_total, 0, sizeof(vault_total)); memset(vault_changed, 0, sizeof(vault_changed));
     memset(wall_total, 0, sizeof(wall_total)); memset(wall_changed, 0, sizeof(wall_changed));
     bool parts[25] = { false };
