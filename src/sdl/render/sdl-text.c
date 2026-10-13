@@ -146,6 +146,12 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     cptr text_value, int wrap_width, SDL_Color color, int* out_width,
     int* out_height)
 {
+    static SDL_GamepadType cached_prompt_type = SDL_GAMEPAD_TYPE_UNKNOWN;
+    SDL_GamepadType prompt_type = sdl_gamepad_prompt_type();
+    if (cached_prompt_type != prompt_type) {
+        sdl_ui_text_cache_clear();
+        cached_prompt_type = prompt_type;
+    }
     sdl_ui_text_cache_entry* victim;
     SDL_Surface* surface;
     SDL_Texture* texture;
@@ -192,6 +198,7 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
         : TTF_RenderText_Blended(font, text_value, 0, white);
     if (!surface)
         return NULL;
+    sdl_controller_glyphs_paint(font, surface, text_value, wrap_width);
     texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
     if (!texture) {
         SDL_DestroySurface(surface);
@@ -338,6 +345,24 @@ void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_C
     SDL_SetTextureAlphaMod(d->font_atlas, 255);
 
     for (int i = 0; i < n; i++) {
+        int marker_length = sdl_controller_glyph_token_length(s+i,n-i);
+        if (marker_length > 0) {
+            TTF_Font* font = sdl_story_font_for_height_slot(d->cell_h,
+                SDL_STORY_FONT_SLOT_MENU);
+            if (font) {
+                char marker[16];
+                memcpy(marker,s+i,(size_t)marker_length);
+                marker[marker_length]='\0';
+                SDL_Texture* texture=sdl_ui_text_texture(font,marker,col,NULL,NULL);
+                if (texture) {
+                    SDL_FRect glyph={(x+i)*d->cell_w,y*d->cell_h,
+                        marker_length*d->cell_w,d->cell_h};
+                    SDL_RenderTexture(g_state.renderer,texture,NULL,&glyph);
+                    i+=marker_length-1;
+                    continue;
+                }
+            }
+        }
         unsigned char ch = (unsigned char)s[i];
         int atlas_cell_w = (d->font_atlas_cell_w > 0)
             ? d->font_atlas_cell_w : d->cell_w;
@@ -565,12 +590,17 @@ void sdl_render_story_text_free(sdl_view* d, TTF_Font* font, int x, int y, int n
     memcpy(text_buf, s, len);
     text_buf[len] = '\0';
 
-    SDL_Surface* text_surface = TTF_RenderText_Blended(font, text_buf, 0, col);
+    SDL_Color white = {255,255,255,255};
+    SDL_Surface* text_surface = TTF_RenderText_Blended(font, text_buf, 0, white);
     if (!text_surface)
         return;
 
+    sdl_controller_glyphs_paint(font,text_surface,text_buf,0);
+
     SDL_Texture* text_texture = SDL_CreateTextureFromSurface(g_state.renderer, text_surface);
     if (text_texture) {
+        SDL_SetTextureColorMod(text_texture,col.r,col.g,col.b);
+        SDL_SetTextureAlphaMod(text_texture,col.a);
         float cell_h_f = (float)d->cell_h;
         float surf_h_f = (float)text_surface->h;
         float scale = (surf_h_f > 0.0f) ? (cell_h_f / surf_h_f) : 1.0f;

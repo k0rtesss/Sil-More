@@ -1306,7 +1306,7 @@ void fixture_check_binding_labels(void)
     assert(strcmp(label, "Y (North) +1") == 0);
     set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, GAMEPAD_BIND_NONE);
     controller_action_binding_label('\r', label, sizeof(label));
-    assert(strcmp(label, "L2 (Left Trigger) + B (East)") == 0);
+    assert(strcmp(label, "LT (Left Trigger) + B (East)") == 0);
     set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, '\r');
     set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK, '\r');
     controller_action_binding_label('\r', label, sizeof(label));

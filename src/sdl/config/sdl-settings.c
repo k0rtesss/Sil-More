@@ -1717,6 +1717,31 @@ bool get_sdl_gamepad_enabled(void)
     return config.gamepad_enabled;
 }
 
+int get_sdl_gamepad_glyph_style(void)
+{
+    return config.gamepad_glyph_style >= 0
+        && config.gamepad_glyph_style < SDL_GAMEPAD_GLYPH_COUNT
+        ? config.gamepad_glyph_style : SDL_GAMEPAD_GLYPH_AUTO;
+}
+
+void set_sdl_gamepad_glyph_style(int style)
+{
+    if (style < 0 || style >= SDL_GAMEPAD_GLYPH_COUNT)
+        style = SDL_GAMEPAD_GLYPH_AUTO;
+    if (config.gamepad_glyph_style == style)
+        return;
+    config.gamepad_glyph_style = style;
+    sdl_ui_text_cache_clear();
+    g_state.need_present = true;
+    if (Term) Term_redraw();
+}
+
+cptr sdl_gamepad_glyph_style_label(int style)
+{
+    static cptr labels[] = {"Auto", "Xbox", "DualShock", "DualSense"};
+    return labels[style >= 0 && style < SDL_GAMEPAD_GLYPH_COUNT ? style : 0];
+}
+
 int get_sdl_input_ui_mode(void)
 {
     if (config.input_ui_mode < SDL_INPUT_UI_MODE_AUTO

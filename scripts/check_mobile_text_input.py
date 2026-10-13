@@ -23,6 +23,11 @@ typedef struct SDL_Window { int unused; } SDL_Window;
 static struct { SDL_Window *window; bool need_present; } g_state;
 static bool active, visible;
 static int starts, stops;
+static bool controller_keyboard;
+static int keyboard_begins, keyboard_ends;
+static void sdl_controller_keyboard_begin(void) { keyboard_begins++; }
+static void sdl_controller_keyboard_end(void) { keyboard_ends++; }
+static bool sdl_controller_keyboard_active(void) { return controller_keyboard; }
 static bool SDL_SetHint(const char *key, const char *value)
 { (void)key; (void)value; return true; }
 static bool SDL_TextInputActive(SDL_Window *window)
@@ -48,6 +53,13 @@ int main(void)
     sdl_text_input_begin();
     sdl_text_input_begin();
     assert(active && starts == 1 && stops == 0);
+    assert(keyboard_begins == 1 && keyboard_ends == 0);
+
+    /* Tapping the in-game controller keyboard must not reopen the mobile IME. */
+    controller_keyboard = true;
+    sdl_text_input_reopen();
+    assert(starts == 1 && stops == 0);
+    controller_keyboard = false;
 
     /* A visible editor must retain its connection/focus on repeated taps. */
     visible = true;
@@ -69,6 +81,7 @@ int main(void)
     assert(active && stops == 1);
     sdl_text_input_end();
     assert(!active && stops == 2);
+    assert(keyboard_ends == 1);
     sdl_text_input_end();
     assert(stops == 2);
     sdl_text_input_reopen();

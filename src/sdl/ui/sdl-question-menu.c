@@ -701,7 +701,9 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         || (g_question_menu.count <= 0
             && g_question_menu.button_count <= 0))
         return false;
-    if (!sdl_overlay_pane_anchor_rect(PANE_DESCRIPTION, &anchor))
+    if (g_question_menu.text_input && sdl_controller_keyboard_active())
+        anchor = sdl_get_layout_screen_rect();
+    else if (!sdl_overlay_pane_anchor_rect(PANE_DESCRIPTION, &anchor))
         return false;
     if (!g_question_menu.context_hint)
         anchor = sdl_menu_content_rect(anchor);
@@ -719,6 +721,9 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     else
         font_px = (int)((float)font_px * 1.18f + 0.5f);
 #endif
+    if (g_question_menu.text_input && sdl_controller_keyboard_active())
+        font_px = MAX(font_px, (int)SDL_ceilf(sdl_ui_density_scale()
+            * sdl_menu_font_px(24)));
     if (g_question_menu.context_hint && !(SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font()))
     {
         font_px = (int)((float)font_px * 0.78f + 0.5f);
@@ -895,9 +900,12 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
      * Cancel replaces redundant X chrome; ordinary questions keep their
      * existing stacked layout. Only use this when every target fits. */
     if (g_question_menu.text_input && keyboard_clipped
-        && g_question_menu.count == 1 && button_count > 0
+        && g_question_menu.count == 1
+        && (button_count > 0 || sdl_controller_keyboard_active())
         && !sdl_question_menu_description()[0]
-        && anchor.w > anchor.h
+        && (sdl_controller_keyboard_active()
+            ? sdl_get_layout_screen_rect().w > sdl_get_layout_screen_rect().h
+            : anchor.w > anchor.h)
         && anchor.h - margin * 2.0f
             < row_h * 3.0f + pad_y * 2.0f + divider_gap * 2.0f)
     {
@@ -1943,7 +1951,7 @@ void sdl_question_menu_begin(cptr title)
 
 void sdl_question_menu_set_text_input(bool enabled)
 {
-    g_question_menu.text_input = enabled && SIL_SDL_MOBILE_BUILD;
+    g_question_menu.text_input = enabled;
 }
 
 void sdl_question_menu_set_anchor_grid(int y, int x)

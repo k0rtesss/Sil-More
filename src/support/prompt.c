@@ -396,6 +396,16 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category,
     sdl_question_menu_add_entry(STRING_PANEL_CLICK_FIELD, "", line,
         default_selected ? TERM_YELLOW : TERM_L_BLUE);
 
+    if (sdl_controller_keyboard_active()) {
+        if (allow_random_name)
+            sdl_question_menu_add_button(STRING_PANEL_CLICK_RANDOM,
+                "<View> Random name", TERM_L_WHITE);
+        sdl_question_menu_set_highlight(STRING_PANEL_CLICK_FIELD);
+        sdl_question_menu_finish();
+        Term_fresh();
+        return;
+    }
+
     string_panel_add_action(STRING_PANEL_CLICK_CONFIRM, "Confirm",
         TERM_L_WHITE);
     if (allow_random_name)
@@ -536,6 +546,13 @@ static bool get_string_panel_aux(cptr prompt, char* buf, size_t len,
                 }
             }
             buf[k] = '\0';
+            break;
+
+        case 0x15: /* Clear from the controller keyboard or Ctrl+U. */
+            pending.count = pending.expected = 0;
+            k = 0;
+            default_selected = false;
+            buf[0] = '\0';
             break;
 
         case '\t':

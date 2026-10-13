@@ -4484,6 +4484,17 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                 config->steamdeck_inv_equip_same_button_cycle ? "true" : "false");
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(gamepad, "buttonIcons");
+        if (cJSON_IsString(item) && item->valuestring) {
+            config->gamepad_glyph_style = SDL_GAMEPAD_GLYPH_AUTO;
+            if (strcmp(item->valuestring, "xbox") == 0)
+                config->gamepad_glyph_style = SDL_GAMEPAD_GLYPH_XBOX;
+            else if (strcmp(item->valuestring, "dualshock") == 0)
+                config->gamepad_glyph_style = SDL_GAMEPAD_GLYPH_DUALSHOCK;
+            else if (strcmp(item->valuestring, "dualsense") == 0)
+                config->gamepad_glyph_style = SDL_GAMEPAD_GLYPH_DUALSENSE;
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useDpad");
         if (cJSON_IsBool(item)) {
             config->gamepad_use_dpad = cJSON_IsTrue(item);
@@ -5606,6 +5617,13 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON* right_stick = NULL;
 
             cJSON_AddBoolToObject(gamepad, "enabled", config->gamepad_enabled);
+            {
+                static cptr styles[] = {"auto", "xbox", "dualshock", "dualsense"};
+                int style = config->gamepad_glyph_style;
+                if (style < 0 || style >= SDL_GAMEPAD_GLYPH_COUNT)
+                    style = SDL_GAMEPAD_GLYPH_AUTO;
+                cJSON_AddStringToObject(gamepad, "buttonIcons", styles[style]);
+            }
             cJSON_AddBoolToObject(gamepad, "steamdeckInvEquipSameButtonCycle",
                 config->steamdeck_inv_equip_same_button_cycle);
             cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
@@ -6233,6 +6251,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
     config->desktop_input_choice = SDL_INPUT_UI_MODE_AUTO;
     config->gamepad_enabled = true;
+    config->gamepad_glyph_style = SDL_GAMEPAD_GLYPH_AUTO;
     config->steamdeck_inv_equip_same_button_cycle = true;
     config->gamepad_use_dpad = true;
     config->gamepad_dpad_diagonal_delay_ms =

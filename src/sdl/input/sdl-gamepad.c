@@ -1560,15 +1560,69 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     return best;
 }
 
+SDL_GamepadType sdl_gamepad_prompt_type(void)
+{
+    switch (get_sdl_gamepad_glyph_style()) {
+    case SDL_GAMEPAD_GLYPH_XBOX: return SDL_GAMEPAD_TYPE_XBOXONE;
+    case SDL_GAMEPAD_GLYPH_DUALSHOCK: return SDL_GAMEPAD_TYPE_PS4;
+    case SDL_GAMEPAD_GLYPH_DUALSENSE: return SDL_GAMEPAD_TYPE_PS5;
+    default: break;
+    }
+    SDL_Gamepad* pad = NULL;
+    for (int i = 0; i < g_gamepad_state.pad_count; ++i) {
+        if (!pad) pad = g_gamepad_state.pads[i].pad;
+        if (g_gamepad_state.pads[i].id == g_active_gamepad_id
+            && g_gamepad_state.pads[i].pad) {
+            pad = g_gamepad_state.pads[i].pad;
+            break;
+        }
+    }
+    if (pad) {
+        SDL_GamepadType type = SDL_GetRealGamepadType(pad);
+        if (type == SDL_GAMEPAD_TYPE_UNKNOWN)
+            type = SDL_GetGamepadType(pad);
+        if (type != SDL_GAMEPAD_TYPE_UNKNOWN)
+            return type;
+    }
+    return SDL_GAMEPAD_TYPE_XBOXONE;
+}
+
+bool sdl_gamepad_playstation_prompts(void)
+{
+    SDL_GamepadType type = sdl_gamepad_prompt_type();
+    return type == SDL_GAMEPAD_TYPE_PS3 || type == SDL_GAMEPAD_TYPE_PS4
+        || type == SDL_GAMEPAD_TYPE_PS5;
+}
+
 const char* sdl_gamepad_button_label(int button)
 {
+    if (sdl_gamepad_playstation_prompts()) {
+        switch (button) {
+        case SDL_GAMEPAD_BUTTON_SOUTH: return "Cross (South)";
+        case SDL_GAMEPAD_BUTTON_EAST: return "Circle (East)";
+        case SDL_GAMEPAD_BUTTON_WEST: return "Square (West)";
+        case SDL_GAMEPAD_BUTTON_NORTH: return "Triangle (North)";
+        case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1 (Left Shoulder)";
+        case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1 (Right Shoulder)";
+        case SDL_GAMEPAD_BUTTON_START:
+            return sdl_gamepad_prompt_type() == SDL_GAMEPAD_TYPE_PS3
+                ? "Start" : "Options";
+        case SDL_GAMEPAD_BUTTON_BACK:
+            return sdl_gamepad_prompt_type() == SDL_GAMEPAD_TYPE_PS5 ? "Create"
+                : sdl_gamepad_prompt_type() == SDL_GAMEPAD_TYPE_PS4 ? "Share" : "Select";
+        case SDL_GAMEPAD_BUTTON_GUIDE: return "PS Button";
+        case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3 (Left Stick Click)";
+        case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3 (Right Stick Click)";
+        default: break;
+        }
+    }
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH: return "A (South)";
     case SDL_GAMEPAD_BUTTON_EAST: return "B (East)";
     case SDL_GAMEPAD_BUTTON_WEST: return "X (West)";
     case SDL_GAMEPAD_BUTTON_NORTH: return "Y (North)";
-    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1 (Left Shoulder)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1 (Right Shoulder)";
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "LB (Left Bumper)";
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "RB (Right Bumper)";
     case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1: return "L4 (Left Paddle 1)";
     case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2: return "L5 (Left Paddle 2)";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
@@ -1577,7 +1631,7 @@ const char* sdl_gamepad_button_label(int button)
     case SDL_GAMEPAD_BUTTON_BACK: return "View / Select";
     case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
-    case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
+    case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";
     case SDL_GAMEPAD_BUTTON_TOUCHPAD: return "Touchpad Click";
     case SDL_GAMEPAD_BUTTON_DPAD_UP: return "D-pad Up";
     case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return "D-pad Down";
@@ -1596,20 +1650,20 @@ const char* sdl_gamepad_button_label(int button)
 const char* sdl_gamepad_button_short_label(int button)
 {
     switch (button) {
-    case SDL_GAMEPAD_BUTTON_SOUTH: return "A";
-    case SDL_GAMEPAD_BUTTON_EAST: return "B";
-    case SDL_GAMEPAD_BUTTON_WEST: return "X";
-    case SDL_GAMEPAD_BUTTON_NORTH: return "Y";
-    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1";
-    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1";
+    case SDL_GAMEPAD_BUTTON_SOUTH: return "<A>";
+    case SDL_GAMEPAD_BUTTON_EAST: return "<B>";
+    case SDL_GAMEPAD_BUTTON_WEST: return "<X>";
+    case SDL_GAMEPAD_BUTTON_NORTH: return "<Y>";
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "<LB>";
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "<RB>";
     case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1: return "L4";
     case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2: return "L5";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4";
     case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5";
-    case SDL_GAMEPAD_BUTTON_START: return "Start";
-    case SDL_GAMEPAD_BUTTON_BACK: return "View";
-    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3";
-    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3";
+    case SDL_GAMEPAD_BUTTON_START: return "<Menu>";
+    case SDL_GAMEPAD_BUTTON_BACK: return "<View>";
+    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "<LS>";
+    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "<RS>";
     case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";
     case SDL_GAMEPAD_BUTTON_TOUCHPAD: return "Touchpad";
     case SDL_GAMEPAD_BUTTON_DPAD_UP: return "D-Up";
@@ -1629,25 +1683,25 @@ const char* sdl_gamepad_button_short_label(int button)
 const char* sdl_gamepad_trigger_label(int index)
 {
     if (index == 0)
-        return "L2 (Left Trigger)";
+        return sdl_gamepad_playstation_prompts() ? "L2 (Left Trigger)" : "LT (Left Trigger)";
     if (index == 1)
-        return "R2 (Right Trigger)";
+        return sdl_gamepad_playstation_prompts() ? "R2 (Right Trigger)" : "RT (Right Trigger)";
     return "Unknown Trigger";
 }
 
 const char* sdl_gamepad_trigger_short_label(int index)
 {
     if (index == 0)
-        return "L2";
+        return "<LT>";
     if (index == 1)
-        return "R2";
+        return "<RT>";
     return "?";
 }
 
 const char* sdl_gamepad_stick_dir_label(int type, int dir, bool short_label)
 {
     const char* stick = (type == GAMEPAD_CAPTURE_RIGHT_STICK) ? "Right Stick" : "Left Stick";
-    const char* stick_short = (type == GAMEPAD_CAPTURE_RIGHT_STICK) ? "RS" : "LS";
+    const char* stick_short = (type == GAMEPAD_CAPTURE_RIGHT_STICK) ? "<RS>" : "<LS>";
     const char* dir_label = "";
     const char* dir_short = "";
 
@@ -1678,7 +1732,8 @@ void sdl_gamepad_binding_label_ex(int type, int id, char* buf, size_t buflen, bo
     } else if (type == GAMEPAD_CAPTURE_LEFT_STICK || type == GAMEPAD_CAPTURE_RIGHT_STICK) {
         SDL_strlcpy(buf, sdl_gamepad_stick_dir_label(type, id, short_label), buflen);
     } else if (type == GAMEPAD_CAPTURE_SHOULDER_COMBO) {
-        SDL_strlcpy(buf, short_label ? "L1+R1" : "L1+R1 Combo", buflen);
+        SDL_strlcpy(buf, short_label ? "<LB>+<RB>"
+            : sdl_gamepad_playstation_prompts() ? "L1+R1 Combo" : "LB+RB Combo", buflen);
     } else {
         SDL_strlcpy(buf, "(unknown)", buflen);
     }
@@ -1971,12 +2026,28 @@ void sdl_gamepad_ui_prompt_label(int binding, cptr fallback, char* buf,
 {
     /* UI prompts name physical controls.  Looking up a dungeon binding here
      * would advertise the wrong button after a remap (or a binding collision). */
-    if (fallback && (streq(fallback, "A") || streq(fallback, "B")
-            || streq(fallback, "X") || streq(fallback, "Y")
-            || streq(fallback, "L1") || streq(fallback, "R1")
-            || streq(fallback, "View") || streq(fallback, "View/Select")))
-    {
-        SDL_strlcpy(buf, fallback, buflen);
+    static const struct { cptr name; int button; } physical[] = {
+        {"A", SDL_GAMEPAD_BUTTON_SOUTH}, {"B", SDL_GAMEPAD_BUTTON_EAST},
+        {"X", SDL_GAMEPAD_BUTTON_WEST}, {"Y", SDL_GAMEPAD_BUTTON_NORTH},
+        {"L1", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
+        {"LB", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
+        {"R1", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},
+        {"RB", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},
+        {"View", SDL_GAMEPAD_BUTTON_BACK}, {"View/Select", SDL_GAMEPAD_BUTTON_BACK},
+        {"Start", SDL_GAMEPAD_BUTTON_START}, {"Menu", SDL_GAMEPAD_BUTTON_START}
+    };
+    for (int i = 0; fallback && i < (int)N_ELEMENTS(physical); ++i) {
+        if (streq(fallback, physical[i].name)) {
+            SDL_strlcpy(buf, sdl_gamepad_button_short_label(physical[i].button), buflen);
+            return;
+        }
+    }
+    if (fallback && (streq(fallback, "L2") || streq(fallback, "LT"))) {
+        SDL_strlcpy(buf, sdl_gamepad_trigger_short_label(0), buflen);
+        return;
+    }
+    if (fallback && (streq(fallback, "R2") || streq(fallback, "RT"))) {
+        SDL_strlcpy(buf, sdl_gamepad_trigger_short_label(1), buflen);
         return;
     }
     sdl_gamepad_action_binding_short_label(binding, buf, buflen);
@@ -2642,8 +2713,10 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     SDL_GamepadButton button = (SDL_GamepadButton)ev->button;
     bool down = ev->down;
 
-    if (down)
+    if (down && g_active_gamepad_id != ev->which) {
         g_active_gamepad_id = ev->which;
+        g_state.need_present = true;
+    }
 
     if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) {
         g_gamepad_state.left_shoulder_down = down;
@@ -2738,6 +2811,9 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     {
         sdl_gamepad_release_button_modifier(button);
     }
+
+    if (sdl_controller_keyboard_handle_button(ev))
+        return;
 
     /* Confirmations own the physical pad even over another native surface.
      * Do not consult gameplay bindings, including modifier/NONE bindings. */
@@ -3001,8 +3077,11 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
     if (!ev)
         return;
 
-    if (abs((int)ev->value) > MAX(config.gamepad_deadzone, 0))
+    if (abs((int)ev->value) > MAX(config.gamepad_deadzone, 0)
+        && g_active_gamepad_id != ev->which) {
         g_active_gamepad_id = ev->which;
+        g_state.need_present = true;
+    }
 
     if (g_gamepad_capture_active) {
         bool capture_armed = (SDL_GetTicksNS() >= g_gamepad_capture_arm_time);
@@ -3075,6 +3154,9 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         return;
 
     sdl_gamepad_mark_auto_ui();
+
+    if (sdl_controller_keyboard_handle_axis(ev))
+        return;
 
     if (!g_touch_pane_yes_no_prompt_active
         && sdl_minimap_handle_gamepad_axis(ev))
@@ -3298,6 +3380,7 @@ void sdl_gamepad_open(SDL_JoystickID id)
     }
 
     log_info("Gamepad opened id %d (%s)", (int)id, SDL_GetGamepadName(pad));
+    g_state.need_present = true;
     sdl_gamepad_mark_auto_ui();
 }
 
@@ -3321,6 +3404,7 @@ void sdl_gamepad_close(SDL_JoystickID id)
                     : 0;
             }
             log_info("Gamepad closed id %d", (int)id);
+            g_state.need_present = true;
             break;
         }
     }

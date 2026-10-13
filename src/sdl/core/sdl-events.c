@@ -1374,11 +1374,13 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     }
 #endif
-    if (sdl_gameplay_tutorial_handle_event(ev))
+    if (!sdl_controller_keyboard_active() && sdl_gameplay_tutorial_handle_event(ev))
         return;
     if (sdl_try_handle_touch_mouse_fallback_event(st, ev))
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
+        return;
+    if (sdl_controller_keyboard_handle_pointer(ev))
         return;
     if (sdl_menu_font_button_handle_event(ev))
         return;
@@ -3171,12 +3173,15 @@ static unsigned int g_sdl_text_input_depth = 0;
 void sdl_text_input_begin(void)
 {
     g_sdl_text_input_depth++;
+    if (g_sdl_text_input_depth == 1)
+        sdl_controller_keyboard_begin();
     if (g_sdl_text_input_depth == 1 && g_state.window)
     {
 #if defined(SDL_PLATFORM_ANDROID)
-        /* Text fields are explicit UI actions.  Always show Android's keyboard
-         * even when SDL also detects a physical keyboard or game controller. */
-        (void)SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "1");
+        /* Touch text fields open the IME.  A controller uses the in-game
+         * keyboard, which remains usable without touch or Steam. */
+        (void)SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD,
+            sdl_controller_keyboard_active() ? "0" : "1");
 #endif
         (void)SDL_StartTextInput(g_state.window);
     }
@@ -3185,6 +3190,9 @@ void sdl_text_input_begin(void)
 void sdl_text_input_reopen(void)
 {
     if (!g_state.window || g_sdl_text_input_depth == 0)
+        return;
+
+    if (sdl_controller_keyboard_active())
         return;
 
     /* A field tap should keep an already-visible keyboard open. Restarting
@@ -3209,6 +3217,8 @@ void sdl_text_input_end(void)
         return;
 
     g_sdl_text_input_depth--;
+    if (g_sdl_text_input_depth == 0)
+        sdl_controller_keyboard_end();
     if (g_sdl_text_input_depth == 0 && g_state.window)
         (void)SDL_StopTextInput(g_state.window);
 }

@@ -3063,7 +3063,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         /* Left and right side controls */
         put_role(ROLE_BODY,
-            "Hold View/Select + D-pad to focus visible UI without a navigation stick.",
+            "Hold <View> + D-pad to focus visible UI without a navigation stick.",
             row++, col);
         put_role(ROLE_BODY,
             "D-pad moves focus; A activates; B returns to play. A View tap keeps its binding.",
@@ -3082,7 +3082,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             sizeof(gameplay_action));
         strnfmt(action_buf, sizeof(action_buf),
             "Previous page in menus; %s in play", gameplay_action);
-        input = "L1 (Bumper)";
+        input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);
@@ -3090,7 +3090,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_trigger_binding(0);
         binding_action_label(binding, action_buf, sizeof(action_buf));
-        input = "L2 (Trigger)";
+        input = sdl_gamepad_trigger_label(0);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);
@@ -3114,7 +3114,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_shoulder_combo_binding();
         binding_action_label(binding, action_buf, sizeof(action_buf));
-        input = "L1+R1 Combo";
+        input = sdl_gamepad_playstation_prompts() ? "L1+R1 Combo" : "LB+RB Combo";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);
@@ -3132,7 +3132,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             sizeof(gameplay_action));
         strnfmt(action_buf, sizeof(action_buf),
             "Next page in menus; %s in play", gameplay_action);
-        input = "R1 (Bumper)";
+        input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);
@@ -3140,7 +3140,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_trigger_binding(1);
         binding_action_label(binding, action_buf, sizeof(action_buf));
-        input = "R2 (Trigger)";
+        input = sdl_gamepad_trigger_label(1);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);
@@ -3164,7 +3164,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_START);
         binding_action_label(binding, action_buf, sizeof(action_buf));
-        input = "Start (Menu)";
+        input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_START);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);
@@ -3172,7 +3172,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
         binding_action_label(binding, action_buf, sizeof(action_buf));
-        input = "View / Select";
+        input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_BACK);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
         put_role(ROLE_BODY, " - ", row, text_col);

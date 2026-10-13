@@ -1920,7 +1920,7 @@ cptr sdl_description_overlay_footer_text(
         return overlay->footer_text;
 
     return steamdeck_controls_active()
-        ? "B Close  A scroll  D-pad scroll"
+        ? "<B> Close  <A> scroll  D-pad scroll"
         : "Esc close  Space page  Dir scroll";
 }
 
@@ -2023,7 +2023,13 @@ bool sdl_description_overlay_footer_action_label(int key, char* buf,
         return false;
 
     label = token;
-    if ((key == ' ' && strncmp(token, "A ", 2) == 0)
+    if ((key == ' ' && strncmp(token, "<A> ", 4) == 0)
+        || (key == ESCAPE && strncmp(token, "<B> ", 4) == 0)
+        || (key == 'x' && strncmp(token, "<X> ", 4) == 0))
+    {
+        label = token + 4;
+    }
+    else if ((key == ' ' && strncmp(token, "A ", 2) == 0)
         || (key == ESCAPE && strncmp(token, "B ", 2) == 0))
     {
         label = token + 2;

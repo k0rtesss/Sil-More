@@ -534,6 +534,12 @@ Java_com_silqh_silmore_SilMoreActivity_onTextInputVisibleFrameChanged(
 /* Unlike the gameplay safe area, a text panel must avoid the visible IME. */
 SDL_Rect sdl_text_input_visible_rect(SDL_Rect rect)
 {
+    if (sdl_controller_keyboard_active()) {
+        SDL_Rect keyboard = sdl_controller_keyboard_rect();
+        if (keyboard.h > 0)
+            rect.h = MAX(1, MIN(rect.y + rect.h, keyboard.y) - rect.y);
+        return rect;
+    }
 #if defined(SDL_PLATFORM_ANDROID)
     if (!g_state.window || !SDL_TextInputActive(g_state.window)
         || !SDL_ScreenKeyboardShown(g_state.window))

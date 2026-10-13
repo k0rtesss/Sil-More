@@ -64,9 +64,9 @@ static void checks(void)
         actions[count++]=all[2];SDL_strlcat(footer,all[2].token,sizeof(footer));
         fixture_footer(footer,actions,count);
         cptr displayed=sdl_description_overlay_footer_text(&g_description_overlay);
-        assert(strstr(displayed,"B Close")&&!strstr(displayed,"Esc")&&!strstr(displayed,"Space"));
-        assert((strstr(displayed,"X Equip...")!=NULL)==!!(mask&1));
-        assert((strstr(displayed,"A Pick Up...")!=NULL)==!!(mask&2));
+        assert(strstr(displayed,"<B> Close")&&!strstr(displayed,"Esc")&&!strstr(displayed,"Space"));
+        assert((strstr(displayed,"<X> Equip...")!=NULL)==!!(mask&1));
+        assert((strstr(displayed,"<A> Pick Up...")!=NULL)==!!(mask&2));
         for(unsigned r=0;r<N_ELEMENTS(remaps);r++)for(int mod=0;mod<4;mod++) {
             config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_SOUTH]=remaps[r];
             config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST]=remaps[r];
@@ -80,9 +80,9 @@ static void checks(void)
             if(mod)sdl_gamepad_apply_modifier(mods[mod],false);
         }
         char label[64];
-        if(mask&1){assert(sdl_description_overlay_footer_action_label('x',label,sizeof(label))&&!strcmp(label,"Equip..."));pointer_action("X Equip...",'x');}
-        if(mask&2){assert(sdl_description_overlay_footer_action_label(' ',label,sizeof(label))&&!strcmp(label,"Pick Up..."));pointer_action("A Pick Up...",' ');}
-        assert(sdl_description_overlay_footer_action_label(ESCAPE,label,sizeof(label))&&!strcmp(label,"Close"));pointer_action("B Close",ESCAPE);
+        if(mask&1){assert(sdl_description_overlay_footer_action_label('x',label,sizeof(label))&&!strcmp(label,"Equip..."));pointer_action("<X> Equip...",'x');}
+        if(mask&2){assert(sdl_description_overlay_footer_action_label(' ',label,sizeof(label))&&!strcmp(label,"Pick Up..."));pointer_action("<A> Pick Up...",' ');}
+        assert(sdl_description_overlay_footer_action_label(ESCAPE,label,sizeof(label))&&!strcmp(label,"Close"));pointer_action("<B> Close",ESCAPE);
         /* Keyboard Return retains scrolling even with explicit pickup. */
         SDL_Event key;memset(&key,0,sizeof(key));key.type=SDL_EVENT_KEY_DOWN;key.key.down=true;key.key.key=SDLK_RETURN;key.key.scancode=SDL_SCANCODE_RETURN;key.key.mod=SDL_KMOD_NONE;
         sdl_handle_event(&g_state,&key);expect('\r');expect(0);
@@ -93,7 +93,7 @@ static void checks(void)
         config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
     }
     fixture_footer(NULL,NULL,0);button(SDL_GAMEPAD_BUTTON_SOUTH);expect('\r');expect(0);
-    assert(strstr(sdl_description_overlay_footer_text(&g_description_overlay),"B Close"));
+    assert(strstr(sdl_description_overlay_footer_text(&g_description_overlay),"<B> Close"));
     /* A stale footer cannot turn a different modal's confirm into pickup. */
     fixture_footer("Space Pick Up",&all[1],1);
     g_description_overlay.interactive=false;button(SDL_GAMEPAD_BUTTON_SOUTH);expect('\r');

@@ -137,7 +137,7 @@ def pad(profile: str | Path, *, button: int | None = None,
     temp.write_text(f"{'b' if button is not None else 'a'} {button if button is not None else axis} {value}")
     temp.replace(request)
     deadline = time.monotonic() + 5
-    while not reply.exists():
+    while not reply.exists() or not reply.read_text().strip():
         if time.monotonic() > deadline:
             raise TimeoutError("Virtual controller did not acknowledge input")
         time.sleep(.01)
