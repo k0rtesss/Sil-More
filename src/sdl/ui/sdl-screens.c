@@ -1427,7 +1427,8 @@ bool sdl_welcome_text_command_range(cptr text, cptr token_a,
 void sdl_welcome_compose_menu_line(char* menu_line, size_t menu_size,
     char* quit_command, size_t quit_command_size, cptr* primary_token)
 {
-    cptr quit_token = steamdeck_controls_active() ? "Back/B" : "Q/Esc";
+    bool controller = steamdeck_controls_active();
+    cptr quit_token = controller ? "<B>" : "Q/Esc";
 
     if (primary_token)
         *primary_token = g_sdl_welcome_screen.new_metarun
@@ -1437,10 +1438,9 @@ void sdl_welcome_compose_menu_line(char* menu_line, size_t menu_size,
         strnfmt(quit_command, quit_command_size, "[%s]", quit_token);
     if (menu_line && menu_size > 0)
     {
-        strnfmt(menu_line, menu_size,
-            g_sdl_welcome_screen.new_metarun
-                ? "[Any key] Begin    [%s] Quit"
-                : "[Any key] Continue  [%s] Quit",
+        strnfmt(menu_line, menu_size, "%s %s    [%s] Quit",
+            controller ? "[<A>]" : "[Any key]",
+            g_sdl_welcome_screen.new_metarun ? "Begin" : "Continue",
             quit_token);
     }
 }
@@ -7112,11 +7112,11 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 #endif
     };
     static const sdl_char_sheet_prompt_item live_controller_items[] = {
-        { "A increase", 'i' },
-        { "X abilities", 'x' },
-        { "Y story", 's' },
-        { "View help", '?' },
-        { "B back", ESCAPE },
+        { "<A> increase", 'i' },
+        { "<X> abilities", 'x' },
+        { "<Y> story", 's' },
+        { "<View> help", '?' },
+        { "<B> back", ESCAPE },
     };
     static const sdl_char_sheet_prompt_item birth_items[] = {
         { "Esc back", -1 },

@@ -2857,26 +2857,26 @@ static void object_info_controller_action_token(char* buf, size_t size,
 {
     cptr token = action->token;
     cptr label = NULL;
-    char button = 0;
+    cptr button = NULL;
 
     if (action->key == 'x' && token && strncmp(token, "x ", 2) == 0)
     {
-        button = 'X';
+        button = "<X>";
         label = token + 2;
     }
     else if (action->key == ' ' && token && strncmp(token, "Space ", 6) == 0)
     {
-        button = 'A';
+        button = "<A>";
         label = token + 6;
     }
     else if (action->key == ESCAPE && token && strncmp(token, "Esc ", 4) == 0)
     {
-        button = 'B';
+        button = "<B>";
         label = token + 4;
     }
 
     if (label)
-        strnfmt(buf, size, "%c %s", button, label);
+        strnfmt(buf, size, "%s %s", button, label);
     else
         SDL_strlcpy(buf, token ? token : "", size);
 }

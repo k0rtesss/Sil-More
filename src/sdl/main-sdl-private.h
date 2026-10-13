@@ -1785,6 +1785,17 @@ bool sdl_rect_has_area(const SDL_Rect* rect);
 SDL_Rect sdl_get_window_pixel_rect(void);
 SDL_Rect sdl_window_rect_to_pixel_rect(const SDL_Rect* rect);
 SDL_Rect sdl_text_input_visible_rect(SDL_Rect rect);
+void sdl_controller_keyboard_begin(void);
+void sdl_controller_keyboard_end(void);
+SDL_Rect sdl_controller_keyboard_rect(void);
+bool sdl_controller_keyboard_handle_button(const SDL_GamepadButtonEvent* ev);
+bool sdl_controller_keyboard_handle_axis(const SDL_GamepadAxisEvent* ev);
+bool sdl_controller_keyboard_handle_pointer(const SDL_Event* ev);
+void sdl_controller_keyboard_render(void);
+void sdl_controller_glyphs_paint(TTF_Font* font, SDL_Surface* surface,
+    cptr text, int wrap_width);
+SDL_GamepadType sdl_gamepad_prompt_type(void);
+int sdl_controller_glyph_token_length(cptr text, int remaining);
 bool sdl_android_has_controller_device(void);
 SDL_Rect sdl_get_android_display_cutout_rect(void);
 void sdl_refresh_safe_area(void);

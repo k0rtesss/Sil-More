@@ -2046,7 +2046,9 @@ bool sdl_render_current_window_frame(void)
     /* Tutorials own input before native menus and full-screen views. Draw
      * their controls above every completed frame, including the early-return
      * paths, so a menu lesson cannot block input with an invisible card. */
-    sdl_gameplay_tutorial_render();
+    if (!sdl_controller_keyboard_active())
+        sdl_gameplay_tutorial_render();
+    sdl_controller_keyboard_render();
     return true;
 }
 

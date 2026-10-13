@@ -12009,6 +12009,7 @@ typedef enum controller_setting_id {
     CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY = 0,
     CONTROLLER_SETTING_LEFT_DELAY,
     CONTROLLER_SETTING_RIGHT_DELAY,
+    CONTROLLER_SETTING_BUTTON_ICONS,
 } controller_setting_id;
 
 typedef struct controller_entry {
@@ -12034,35 +12035,7 @@ static void controller_combo_binding_short_label(int modifier_type,
 
 static const char* controller_gamepad_button_label(int button)
 {
-    switch (button) {
-    case SDL_GAMEPAD_BUTTON_SOUTH: return "A (South)";
-    case SDL_GAMEPAD_BUTTON_EAST: return "B (East)";
-    case SDL_GAMEPAD_BUTTON_WEST: return "X (West)";
-    case SDL_GAMEPAD_BUTTON_NORTH: return "Y (North)";
-    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1 (Left Shoulder)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1 (Right Shoulder)";
-    case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1: return "L4 (Left Paddle 1)";
-    case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2: return "L5 (Left Paddle 2)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
-    case SDL_GAMEPAD_BUTTON_START: return "Start (Menu)";
-    case SDL_GAMEPAD_BUTTON_BACK: return "View / Select";
-    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
-    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
-    case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
-    case SDL_GAMEPAD_BUTTON_TOUCHPAD: return "Touchpad Click";
-    case SDL_GAMEPAD_BUTTON_DPAD_UP: return "D-pad Up";
-    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return "D-pad Down";
-    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return "D-pad Left";
-    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return "D-pad Right";
-    case SDL_GAMEPAD_BUTTON_MISC1: return "Misc1";
-    case SDL_GAMEPAD_BUTTON_MISC2: return "Misc2";
-    case SDL_GAMEPAD_BUTTON_MISC3: return "Misc3";
-    case SDL_GAMEPAD_BUTTON_MISC4: return "Misc4";
-    case SDL_GAMEPAD_BUTTON_MISC5: return "Misc5";
-    case SDL_GAMEPAD_BUTTON_MISC6: return "Misc6";
-    default: return "Unknown Button";
-    }
+    return sdl_gamepad_button_label(button);
 }
 
 static int controller_dpad_diagonal_delay_count(void)
@@ -12094,7 +12067,10 @@ static int controller_dpad_diagonal_delay_index(int value)
 
 static void controller_adjust_setting(int setting_id, int delta)
 {
-    if (setting_id == CONTROLLER_SETTING_LEFT_DELAY
+    if (setting_id == CONTROLLER_SETTING_BUTTON_ICONS) {
+        set_sdl_gamepad_glyph_style((get_sdl_gamepad_glyph_style() + delta
+            + SDL_GAMEPAD_GLYPH_COUNT) % SDL_GAMEPAD_GLYPH_COUNT);
+    } else if (setting_id == CONTROLLER_SETTING_LEFT_DELAY
         || setting_id == CONTROLLER_SETTING_RIGHT_DELAY) {
         int stick = setting_id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1;
         int count = SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS
@@ -12123,77 +12099,28 @@ static void controller_adjust_setting(int setting_id, int delta)
 
 static const char* controller_gamepad_button_short_label(int button)
 {
-    switch (button) {
-    case SDL_GAMEPAD_BUTTON_SOUTH: return "A";
-    case SDL_GAMEPAD_BUTTON_EAST: return "B";
-    case SDL_GAMEPAD_BUTTON_WEST: return "X";
-    case SDL_GAMEPAD_BUTTON_NORTH: return "Y";
-    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1";
-    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1";
-    case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1: return "L4";
-    case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2: return "L5";
-    case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4";
-    case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5";
-    case SDL_GAMEPAD_BUTTON_START: return "Start";
-    case SDL_GAMEPAD_BUTTON_BACK: return "View";
-    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "L3";
-    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "R3";
-    case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide";
-    case SDL_GAMEPAD_BUTTON_TOUCHPAD: return "Touchpad";
-    case SDL_GAMEPAD_BUTTON_DPAD_UP: return "D-Up";
-    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return "D-Down";
-    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return "D-Left";
-    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return "D-Right";
-    case SDL_GAMEPAD_BUTTON_MISC1: return "Misc1";
-    case SDL_GAMEPAD_BUTTON_MISC2: return "Misc2";
-    case SDL_GAMEPAD_BUTTON_MISC3: return "Misc3";
-    case SDL_GAMEPAD_BUTTON_MISC4: return "Misc4";
-    case SDL_GAMEPAD_BUTTON_MISC5: return "Misc5";
-    case SDL_GAMEPAD_BUTTON_MISC6: return "Misc6";
-    default: return "?";
-    }
+    return sdl_gamepad_button_short_label(button);
 }
 
 static const char* controller_gamepad_trigger_label(int index)
 {
-    if (index == 0)
-        return "L2 (Left Trigger)";
-    if (index == 1)
-        return "R2 (Right Trigger)";
-    return "Unknown Trigger";
+    return sdl_gamepad_trigger_label(index);
 }
 
 static const char* controller_gamepad_trigger_short_label(int index)
 {
-    if (index == 0)
-        return "L2";
-    if (index == 1)
-        return "R2";
-    return "?";
+    return sdl_gamepad_trigger_short_label(index);
 }
 
 static const char* controller_gamepad_stick_dir_label(int type, int dir,
     bool short_label)
 {
-    const char* stick = (type == GAMEPAD_CAPTURE_RIGHT_STICK)
-        ? (short_label ? "RS" : "Right Stick")
-        : (short_label ? "LS" : "Left Stick");
-    const char* dir_label = NULL;
-
-    switch (dir) {
-    case GAMEPAD_STICK_DIR_UP: dir_label = short_label ? "Up" : "Up"; break;
-    case GAMEPAD_STICK_DIR_DOWN: dir_label = short_label ? "Down" : "Down"; break;
-    case GAMEPAD_STICK_DIR_LEFT: dir_label = short_label ? "Left" : "Left"; break;
-    case GAMEPAD_STICK_DIR_RIGHT: dir_label = short_label ? "Right" : "Right"; break;
-    default: dir_label = short_label ? "?" : "Unknown"; break;
-    }
-
-    return format("%s %s", stick, dir_label);
+    return sdl_gamepad_stick_dir_label(type, dir, short_label);
 }
 
 static const char* controller_gamepad_combo_label(void)
 {
-    return "L1+R1 Combo";
+    return sdl_gamepad_playstation_prompts() ? "L1+R1 Combo" : "LB+RB Combo";
 }
 
 static void controller_binding_label_ex(int type, int id, char* buf,
@@ -12214,7 +12141,7 @@ static void controller_binding_label_ex(int type, int id, char* buf,
         SDL_strlcpy(buf, controller_gamepad_stick_dir_label(type, id,
             short_label), buflen);
     } else if (type == GAMEPAD_CAPTURE_SHOULDER_COMBO) {
-        SDL_strlcpy(buf, short_label ? "L1+R1" : controller_gamepad_combo_label(),
+        SDL_strlcpy(buf, short_label ? "<LB>+<RB>" : controller_gamepad_combo_label(),
             buflen);
     } else {
         SDL_strlcpy(buf, "(unknown)", buflen);
@@ -12874,7 +12801,7 @@ void controller_prompt_label_no_sticks(int binding, const char* fallback,
         return;
     }
 
-    SDL_strlcpy(buf, fallback ? fallback : "", buflen);
+    sdl_gamepad_ui_prompt_label(binding, fallback, buf, buflen);
 }
 
 void controller_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
@@ -12919,7 +12846,9 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
         }
         break;
     case CONTROLLER_ENTRY_CYCLE:
-        if (entry->id == CONTROLLER_SETTING_LEFT_DELAY
+        if (entry->id == CONTROLLER_SETTING_BUTTON_ICONS) {
+            SDL_strlcpy(buf,sdl_gamepad_glyph_style_label(get_sdl_gamepad_glyph_style()),buflen);
+        } else if (entry->id == CONTROLLER_SETTING_LEFT_DELAY
             || entry->id == CONTROLLER_SETTING_RIGHT_DELAY) {
             int stick = entry->id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1;
             strnfmt(buf, buflen, "%d ms", get_sdl_gamepad_stick_delay_ms(stick));
@@ -13205,6 +13134,7 @@ void do_cmd_controller_settings(void)
 
     static const controller_entry entries[] = {
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_ENABLED, "Controller Input" },
+        { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_BUTTON_ICONS, "Button Icons" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE, "Inv/Equip Same-Button Cycle" },
         { CONTROLLER_ENTRY_TOGGLE, CONTROLLER_TOGGLE_DPAD, "Move with D-pad" },
         { CONTROLLER_ENTRY_CYCLE, CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY, "D-pad Move Delay" },
@@ -13321,6 +13251,10 @@ void do_cmd_controller_settings(void)
                 cptr cycle_desc;
 
                 switch (entries[highlight].id) {
+                case CONTROLLER_SETTING_BUTTON_ICONS:
+                    cycle_desc = "Auto follows the last controller used. Choose Xbox, DualShock, "
+                        "or DualSense if the button icons do not match your controller.";
+                    break;
                 case CONTROLLER_SETTING_LEFT_DELAY:
                 case CONTROLLER_SETTING_RIGHT_DELAY:
                     cycle_desc = "Wait for the second movement axis before a cardinal step. "
@@ -13459,6 +13393,8 @@ void do_cmd_controller_settings(void)
                     || entries[highlight].id == CONTROLLER_SETTING_RIGHT_DELAY) {
                     set_sdl_gamepad_stick_delay_ms(
                         entries[highlight].id == CONTROLLER_SETTING_LEFT_DELAY ? 0 : 1, 0);
+                } else if (entries[highlight].id == CONTROLLER_SETTING_BUTTON_ICONS) {
+                    set_sdl_gamepad_glyph_style(SDL_GAMEPAD_GLYPH_AUTO);
                 }
                 msg_format("Reset %s to default.", entries[highlight].label);
                 message_flush();

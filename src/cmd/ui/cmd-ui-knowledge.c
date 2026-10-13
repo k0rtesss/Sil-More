@@ -9240,9 +9240,9 @@ static void knowledge_register_prompt_clicks(
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_NEXT_PAGE, 0,
         layout->prompt_row, prompt, "Tab");
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_PREV_PAGE, 0,
-        layout->prompt_row, prompt, "L1");
+        layout->prompt_row, prompt, "<LB>");
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_NEXT_PAGE, 0,
-        layout->prompt_row, prompt, "R1");
+        layout->prompt_row, prompt, "<RB>");
 }
 
 static void knowledge_begin_clicks(const knowledge_browser_layout* layout,

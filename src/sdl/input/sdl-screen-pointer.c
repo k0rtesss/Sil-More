@@ -3325,13 +3325,13 @@ void sdl_minimap_draw_prompt(sdl_view* d, int canvas_w, int canvas_h)
 
     if (steamdeck_controls_active()) {
         if (d->cols >= 46)
-            prompt = "Minimap d-pad pan L1/R1 zoom Y hints A/B close";
+            prompt = "Minimap D-pad pan <LB>/<RB> zoom <Y> hints <A>/<B> close";
         else if (d->cols >= 38)
-            prompt = "D-pad pan L1/R1 zoom Y hints A/B close";
+            prompt = "D-pad pan <LB>/<RB> zoom <Y> hints <A>/<B> close";
         else if (d->cols >= 36)
-            prompt = "D-pad pan L1/R1 zoom Y hints B close";
+            prompt = "D-pad pan <LB>/<RB> zoom <Y> hints <B> close";
         else if (d->cols >= 15)
-            prompt = "Y hints B close";
+            prompt = "<Y> hints <B> close";
         else if (d->cols >= 7)
             prompt = "Y hints";
         else

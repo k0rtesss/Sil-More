@@ -74,6 +74,12 @@
 #define SDL_INPUT_UI_MODE_CONTROLLER 2
 #define SDL_INPUT_UI_MODE_COUNT 3
 
+#define SDL_GAMEPAD_GLYPH_AUTO 0
+#define SDL_GAMEPAD_GLYPH_XBOX 1
+#define SDL_GAMEPAD_GLYPH_DUALSHOCK 2
+#define SDL_GAMEPAD_GLYPH_DUALSENSE 3
+#define SDL_GAMEPAD_GLYPH_COUNT 4
+
 #define GAMEPAD_BIND_NONE -1
 #define GAMEPAD_BIND_SHIFT -2
 #define GAMEPAD_BIND_CTRL -3
@@ -368,6 +374,7 @@ struct sdl_config {
     int input_ui_mode;                   // Auto, platform-native touch/keyboard, or controller UI
     int desktop_input_choice;            // Auto = ask; otherwise remembered desktop input choice
     bool gamepad_enabled;                 // Enable gamepad input
+    int gamepad_glyph_style;              // Auto, Xbox, DualShock, or DualSense prompts
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
     int gamepad_dpad_diagonal_delay_ms;   // Wait for a second d-pad direction before sending a cardinal move

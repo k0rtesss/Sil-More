@@ -87,7 +87,7 @@ def main() -> int:
         [
             ("contextual focus", "sdl_gamepad_context_focus_handle_button"),
             ("terminal modal confirm", "Terminal_keypress_placeholder"),
-            ("terminal modal back", "sdl_gamepad_back_button_is_modal"),
+            ("terminal modal back", "sdl_gamepad_settle_modal_navigation(false)"),
             ("D-pad routing", "SDL_GAMEPAD_BUTTON_DPAD_UP"),
             ("bound-button fallback", "handle_bound_button:"),
         ],

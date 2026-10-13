@@ -609,13 +609,13 @@ static void check_blocked_controller_state(void)
         bindings[GAMEPAD_STICK_DIR_RIGHT]=GAMEPAD_BIND_ALT;
         if(stick)g_gamepad_state.right_dir=GAMEPAD_STICK_DIR_RIGHT;
         else g_gamepad_state.left_bind_dir=GAMEPAD_STICK_DIR_RIGHT;
-        g_gamepad_stick_binding_modifier_active[stick]=true;
+        g_gamepad_stick_binding_modifiers[stick]=GAMEPAD_BIND_ALT;
         sdl_gamepad_apply_modifier(GAMEPAD_BIND_ALT,true);
         sdl_question_menu_begin("Bash roll");
         sdl_question_menu_add_entry(0,"","Rolling...",TERM_WHITE);
         sdl_question_menu_set_blocking_input(true);sdl_question_menu_finish();
         blocked_axis(axis,32767);expect_key(0);
-        assert(!sdl_gamepad_alt_active()&&!g_gamepad_stick_binding_modifier_active[stick]);
+        assert(!sdl_gamepad_alt_active()&&!g_gamepad_stick_binding_modifiers[stick]);
         assert((stick?g_gamepad_state.right_x:g_gamepad_state.left_x)==32767);
         assert((stick?g_gamepad_state.right_ui_dir:g_gamepad_state.left_ui_dir)==GAMEPAD_STICK_DIR_RIGHT);
         sdl_question_menu_clear();
@@ -1094,7 +1094,7 @@ void fixture_check_binding_labels(void)
     assert(strcmp(label, "Y (North) +1") == 0);
     set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, GAMEPAD_BIND_NONE);
     controller_action_binding_label('\r', label, sizeof(label));
-    assert(strcmp(label, "L2 (Left Trigger) + B (East)") == 0);
+    assert(strcmp(label, "LT (Left Trigger) + B (East)") == 0);
     set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH, '\r');
     set_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK, '\r');
     controller_action_binding_label('\r', label, sizeof(label));
