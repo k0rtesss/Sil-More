@@ -68,6 +68,9 @@ errr parse_v_info(char* buf, header* head)
         v_ptr->message = 0;
         v_ptr->skeleton_hint = 0;
         v_ptr->style_count = 0;
+        v_ptr->vertical_companion = 0;
+        v_ptr->vertical_layer = 0;
+        v_ptr->vertical_marker_count = 0;
         for (int j = 0; j < 16; ++j)
         {
             v_ptr->style_idx[j] = -1;
@@ -110,6 +113,37 @@ errr parse_v_info(char* buf, header* head)
         v_ptr->hgt = 0;
         v_ptr->wid = 0;
         /* Note: Don't reset color here - it may have been set by a C: line */
+    }
+
+    /* Y:companion:layer (0 upper, 1 lower); P:role:row:column.
+     * Marker role numbers are defined in level-generation-vertical-vaults.h.
+     * Pair reciprocity, dimensions and marker bounds are checked when used,
+     * because the companion record may not have been parsed yet. */
+    else if (buf[0] == 'Y')
+    {
+        int companion, layer;
+        char extra;
+        if (!v_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (sscanf(buf + 2, "%d:%d%c", &companion, &layer, &extra) != 2
+            || companion <= 0 || companion >= head->info_num
+            || companion == error_idx || layer < 0 || layer > 1)
+            return PARSE_ERROR_GENERIC;
+        v_ptr->vertical_companion = (u16b)companion;
+        v_ptr->vertical_layer = (byte)layer;
+    }
+    else if (buf[0] == 'P')
+    {
+        int role, row, col;
+        char extra;
+        if (!v_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        if (sscanf(buf + 2, "%d:%d:%d%c", &role, &row, &col, &extra) != 3
+            || role < 1 || role > 9 || row < 0 || row > 254
+            || col < 0 || col > 254 || v_ptr->vertical_marker_count >= 16)
+            return PARSE_ERROR_GENERIC;
+        int n = v_ptr->vertical_marker_count++;
+        v_ptr->vertical_marker_role[n] = (byte)role;
+        v_ptr->vertical_marker_y[n] = (byte)row;
+        v_ptr->vertical_marker_x[n] = (byte)col;
     }
 
     /* Process 'C' for "Color" (one line only) */

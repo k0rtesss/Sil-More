@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 5  /* Retain adjacent floors and vertical connections. */
+#define VERSION_EXTRA 6  /* Neighbour-inherited vertical regions and reservoirs. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -548,6 +548,9 @@
 /* Internal command queued by the desktop context shortcut popup for putting
  * a floor arrow directly into the Quiver. */
 #define CMD_CONTEXT_FLOOR_QUIVER KTRL('O')
+
+/* Fire through an inspected vertical opening; also accessible as Ctrl-G. */
+#define CMD_VERTICAL_FIRE KTRL('G')
 
 /*
  * Internal command queued by the minus button on the desktop context popup.

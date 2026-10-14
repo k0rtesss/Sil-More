@@ -640,6 +640,15 @@ struct vault_type
     byte style_count;            /* number of entries in arrays below */
     s16b style_idx[16];          /* style indices from style.txt */
     s16b style_weight[16];       /* corresponding weights */
+
+    /* Optional two-floor blueprint. Both records refer to each other and use
+     * identical dimensions; layer 0 is upper, layer 1 is lower. */
+    u16b vertical_companion;
+    byte vertical_layer;
+    byte vertical_marker_count;
+    byte vertical_marker_role[16];
+    byte vertical_marker_y[16];
+    byte vertical_marker_x[16];
 };
 
 /*

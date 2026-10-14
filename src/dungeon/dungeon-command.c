@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-command.c */
 
 #include "angband.h"
+#include "cave/cave-vertical-combat.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
 
@@ -177,7 +178,6 @@ void process_command(void)
     case ' ':
     case '\n':
     case '\r':
-    case '\a':
     {
         break;
     }
@@ -500,6 +500,15 @@ void process_command(void)
     }
 
     /* Make a ranged attack with the active bow or throwing weapon. */
+    case CMD_VERTICAL_FIRE:
+    {
+        int dir = p_ptr->command_dir;
+        if (!dir && cave_vertical_combat_available(p_ptr->py, p_ptr->px)) dir = 5;
+        if (!dir && !get_rep_dir(&dir)) break;
+        if (dir >= 1 && dir <= 9)
+            (void)cave_vertical_combat_interact(p_ptr->py + ddy[dir], p_ptr->px + ddx[dir]);
+        break;
+    }
     case 'f':
     {
         do_cmd_fire(1);

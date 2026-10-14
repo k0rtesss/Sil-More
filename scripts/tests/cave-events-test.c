@@ -3,11 +3,21 @@
 #include "cave/cave-events.h"
 #include "cave/cave-water-flow.h"
 #include "cave/cave-fixtures.h"
+#include "cave/cave-vertical.h"
+#include "cave/cave-bridge.h"
 #include <stdio.h>
 #include <stdarg.h>
 static byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int checks, notices, interruptions;
 static char last_message[256];
+/* The standalone acoustic fixture has no neighbouring-floor cache. */
+static cave_vertical_state vertical;
+const cave_vertical_state* cave_vertical_get(void) { return &vertical; }
+/* These fixtures contain encoded terrain only, without environment jobs. */
+int cave_environment_live_underlay(int y, int x)
+{
+    return cave_bridge_underlay(features[y][x]);
+}
 #define CHECK(t) do { checks++; if (!(t)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,#t); exit(1); } } while (0)
 void msg_format(cptr fmt, ...) { va_list ap; va_start(ap,fmt); vsnprintf(last_message,sizeof(last_message),fmt,ap); va_end(ap); notices++; }
 void msg_print(cptr text) { if(text)msg_format("%s",text); }

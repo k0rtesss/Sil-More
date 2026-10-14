@@ -12,6 +12,7 @@ void level_cache_clear(void);
 bool level_cache_retains(int depth);
 bool level_cache_ready(int depth);
 bool level_cache_request(int depth);
+bool level_cache_transition_pending(void);
 bool level_cache_change_level(void);
 
 /* Called by the generator before population and final access validation. */
@@ -32,5 +33,19 @@ int level_cache_chasm_fall_depth(int y, int x);
 void level_cache_write(void);
 errr level_cache_read(void);
 bool level_cache_reading_floor(void);
+
+/* Main-thread borrowed views. Never retain them across cache polling/travel. */
+struct level_image;
+const struct level_image* level_cache_floor(int depth);
+struct level_image* level_cache_mutable_floor(int depth);
+bool level_cache_vertical_aperture(int y, int x, int* depth, int* target_y,
+    int* target_x);
+bool level_cache_travel_to(int depth, int y, int x);
+bool level_cache_vertical_receive(int depth, u32b identity, int material,
+    int amount);
+void level_cache_process_vertical(void);
+bool level_cache_damage_monster(int depth, int index, int damage,
+    const char* note, int who);
+bool level_cache_transfer_object(int depth, int index, int y, int x);
 
 #endif

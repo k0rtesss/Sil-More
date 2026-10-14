@@ -11,6 +11,7 @@
 
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "cave/cave-vertical.h"
 #include "log/perf.h"
 
 #include <math.h>
@@ -1864,6 +1865,7 @@ void sdl_question_menu_set_controller_focus(int choice)
 bool sdl_question_menu_activate_context_choice(int choice)
 {
     bool found = false;
+    bool passage_pickup = false;
 
     if (!sdl_question_menu_context_hint_active()
         || !inkey_flag || character_icky
@@ -1875,6 +1877,9 @@ bool sdl_question_menu_activate_context_choice(int choice)
         if (g_question_menu.buttons[i].choice == choice)
         {
             found = true;
+            passage_pickup = choice == ' '
+                && streq(g_question_menu.buttons[i].text, "Pick Up")
+                && (cave_vertical_can_travel(false) || cave_vertical_can_travel(true));
             break;
         }
     }
@@ -1882,6 +1887,12 @@ bool sdl_question_menu_activate_context_choice(int choice)
         return false;
 
     sdl_question_menu_clear();
+    if (passage_pickup) {
+        /* Pick Up and travel can coexist on a portal. Queue the selected
+         * destination chooser explicitly instead of reusing /5 travel. */
+        do_cmd_queue_floor_context_action(FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT);
+        return true;
+    }
     /* This is an already selected command, so a keyboard remap must not
      * reinterpret Description or a pickup action as an unrelated command.
      * Space is a shortcut for interact-here, not an engine command: its

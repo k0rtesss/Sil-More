@@ -1164,7 +1164,9 @@ enum {
     SDL_PLAYER_ACTION_CHANGE_STAFF,
     SDL_PLAYER_ACTION_CLOSE_DOOR,
     SDL_PLAYER_ACTION_BASH_DOOR,
-    SDL_PLAYER_ACTION_MAX = 17,
+    SDL_PLAYER_ACTION_ASCEND,
+    SDL_PLAYER_ACTION_DESCEND,
+    SDL_PLAYER_ACTION_MAX = 19,
     SDL_PLAYER_EXCHANGE_MAX_TARGETS = 8,
 };
 
@@ -3278,6 +3280,7 @@ void sdl_idle_animation_invalidate_span(int col, int row, int width);
 void sdl_idle_animation_track(int col, int row, int y, int x,
     byte a, char c, byte ta, char tc);
 bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst);
+bool sdl_vertical_draw_effects(int y, int x, const SDL_FRect* dst);
 bool sdl_idle_animation_draw_liquid_piece(int y, int x,
     const SDL_FRect* pixels, const SDL_FRect* dst);
 void sdl_chasm_transition_draw(int y, int x, const SDL_FRect* dst);

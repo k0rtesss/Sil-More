@@ -7,6 +7,8 @@
 #include "metarun.h"
 #include "sdl-config.h"
 #include "cave/cave-environment.h"
+#include "cave/cave-vertical.h"
+#include "cave/cave-vertical-combat.h"
 #include "cmd/world/cmd-interact-chest.h"
 #include "ui/question.h"
 #include <SDL3/SDL_timer.h>
@@ -15,6 +17,23 @@
 #define INTERACTION_ROLL_BASH_REDUCTION_MS 1000
 #define INTERACTION_ROLL_FAST_CHANCE_MIN_PERCENT 90
 #define INTERACTION_ROLL_FAST_MAX_MS 1000
+
+/* Gate manipulation is dispatched as an ordinary open command so a pointer
+ * popup cannot spend energy or change terrain outside the player action loop. */
+static bool grid_is_vertical_gate(int y, int x)
+{
+    if (!p_ptr || p_ptr->blind || p_ptr->image || !in_bounds(y, x)
+        || !(cave_info[y][x] & CAVE_SEEN)) return false;
+    const cave_vertical_state* state = cave_vertical_get();
+    if (!state) return false;
+    for (int i = 0; i < state->portal_count; i++) {
+        const cave_vertical_portal* portal = &state->portals[i];
+        if (portal->y == y && portal->x == x
+            && (portal->flags & CAVE_VERTICAL_GATE)
+            && !(portal->flags & CAVE_VERTICAL_BROKEN)) return true;
+    }
+    return false;
+}
 
 static int bridge_repair_work_required(const environment_bridge_job* job)
 {
@@ -766,6 +785,7 @@ static int door_minigame_question(int y, int x)
  */
 static bool do_cmd_open_test(int y, int x)
 {
+    if (grid_is_vertical_gate(y, x)) return true;
     /* Must have knowledge */
     if (!(cave_info[y][x] & (CAVE_MARK)))
     {
@@ -804,6 +824,11 @@ bool do_cmd_open_aux(int y, int x)
     skill_roll_details roll;
 
     bool more = false;
+
+    if (grid_is_vertical_gate(y, x)) {
+        (void)cave_vertical_interact(y, x);
+        return false;
+    }
 
     /* Verify legality */
     if (!do_cmd_open_test(y, x))
@@ -1018,6 +1043,9 @@ void do_cmd_open(void)
     {
         /* Count closed doors */
         num_doors = count_feats(&y, &x, is_closed, false);
+        for (int d = 0; d < 9; d++)
+            if (grid_is_vertical_gate(p_ptr->py + ddy_ddd[d],
+                    p_ptr->px + ddx_ddd[d])) num_doors++;
 
         /* Count chests (locked) */
         num_chests = count_chests(&y, &x, false);
@@ -1293,7 +1321,8 @@ static bool grid_is_known_trapped_chest(int y, int x)
 
 static bool grid_is_open_target(int y, int x)
 {
-    return grid_is_known_closed_door(y, x) || grid_is_closed_chest(y, x);
+    return grid_is_known_closed_door(y, x) || grid_is_closed_chest(y, x)
+        || grid_is_vertical_gate(y, x);
 }
 
 static bool grid_is_known_trap(int y, int x)
@@ -1558,6 +1587,8 @@ bool grid_interact_available(int y, int x)
     /* Dark/unknown squares: strike into the darkness */
     if (!(cave_info[y][x] & (CAVE_MARK | CAVE_SEEN)))
         return true;
+    if (grid_is_vertical_gate(y, x)) return true;
+    if (cave_vertical_combat_available(y, x)) return true;
 
     /* Known doors, traps, walls and rubble */
     if (is_open(cave_feat[y][x]) || (cave_feat[y][x] == FEAT_BROKEN))
@@ -1591,7 +1622,7 @@ bool grid_interact_available(int y, int x)
         }
     }
 
-    if (cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
+    if (cave_feat[y][x] == FEAT_CHASM || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
         || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON)
         return true;
     if (cave_environment_bridge_job_at(y, x, &bridge_job)
@@ -1708,6 +1739,15 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
             "there, or your blow may just find a wall.",
             sizeof(desc));
         GRID_Q_ADD('/', 's', "Strike at it", TERM_L_RED);
+    }
+
+    else if (grid_is_vertical_gate(y, x))
+    {
+        SDL_strlcpy(title, "Sluice gate", sizeof(title));
+        SDL_strlcpy(desc, "A gate controls the connected flow. Operating it takes a turn.",
+            sizeof(desc));
+        GRID_Q_ADD('o', 'o', "Operate the sluice", TERM_L_BLUE);
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_WHITE);
     }
 
     /* --- Open / broken doors --- */
@@ -2015,6 +2055,15 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_BLUE);
     }
 
+    else if (feat == FEAT_CHASM)
+    {
+        SDL_strlcpy(title, "Open drop", sizeof(title));
+        SDL_strlcpy(desc,
+            "The ground opens into a drop. Stepping into it risks a fall; "
+            "terrain glimpsed below is on another floor.", sizeof(desc));
+        GRID_Q_ADD(';', 'm', "Move towards it", TERM_L_RED);
+    }
+
     /* --- Molten lava --- */
     else if (feat == FEAT_LAVA)
     {
@@ -2121,11 +2170,18 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         GRID_Q_ADD('.', '.', "Run this way", TERM_L_GREEN);
     }
 
+    if (cave_vertical_combat_available(y, x))
+        GRID_Q_ADD(CMD_VERTICAL_FIRE, 'f', "Shoot through the opening", TERM_L_BLUE);
+
 #undef GRID_Q_ADD
 #undef GRID_Q_ADD_EX
 
     if (count == 0)
         return false;
+
+    char vertical[320];
+    if (cave_vertical_describe(y, x, vertical, sizeof(vertical)))
+        grid_question_append(desc, sizeof(desc), vertical);
 
     choice = ui_question_ask(title, desc, options, count, y, x, 0);
     if ((choice < 0) || (choice >= count) || !commands[choice])
@@ -3543,6 +3599,17 @@ void do_cmd_alter(void)
             msg_print("You cannot repair that bridge now.");
             more = false;
         }
+    }
+    /* Space on the player's passage means travel, even when an item lies
+     * there. The popup exposes that item's action separately. Core travel
+     * owns dangerous-drop/dive confirmation and the ordinary commands retain
+     * quest/oath checks and cost. */
+    else if ((dir == 5) && (cave_vertical_can_travel(false)
+        || cave_vertical_can_travel(true)))
+    {
+        p_ptr->energy_use = 0;
+        if (cave_vertical_can_travel(false)) do_cmd_go_down();
+        else do_cmd_go_up();
     }
     // deal with players who can't see the square
     else if ((dir != 5) && !(is_marked || is_visible))

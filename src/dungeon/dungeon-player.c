@@ -1,6 +1,8 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "cave/cave-vertical.h"
+#include "level-generation/level-generation-vertical-vaults.h"
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
 #include "quest/quest-runtime.h"
@@ -943,6 +945,19 @@ void process_player(void)
         player_poison_terrain_end_action();
         player_melting_ice_end_action();
         cave_flood_end_action();
+        if (p_ptr->energy_use && !p_ptr->leaving && !p_ptr->is_dead) {
+            int vault = vertical_vault_visit(p_ptr->py, p_ptr->px);
+            if (vault > 0) {
+                char note[120];
+                cptr name = v_name + v_info[vault].name;
+                strnfmt(note, sizeof(note), "Discovered %s", name);
+                do_cmd_note(note, p_ptr->depth);
+                describe_greater_vault_entry(name);
+                gain_exp(500);
+                gain_insight_points(1, "You discover a greater vault spanning two floors.");
+            }
+        }
+        cave_vertical_end_action();
 
         /* Significant */
         if (p_ptr->energy_use)

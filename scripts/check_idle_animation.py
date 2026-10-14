@@ -12,6 +12,9 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/idle-animation-check"
+EXTRA_SOURCES = []
+EXCLUDE_OBJECTS = ()
+WRAP_SYMBOLS = ()
 
 HARNESS = r'''
 #include "angband.h"
@@ -956,7 +959,7 @@ def main():
     exclude = ("/src/main.c.obj", "/src/sdl/render/sdl-idle-animation.c.obj",
                "/src/fs/save-dungeon.c.obj", "/src/fs/load-dungeon.c.obj",
                "/src/cmd/ui/cmd-ui-settings.c.obj")
-    objects = [p for p in objects if not p.endswith(exclude)]
+    objects = [p for p in objects if not p.endswith(exclude + EXCLUDE_OBJECTS)]
     rsp = OUT / "objects.rsp"
     rsp.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     env = os.environ.copy()
@@ -967,10 +970,10 @@ def main():
     env["SDL_RENDER_DRIVER"] = "software"
     symbols = ("save_wr_byte", "save_wr_u16b", "load_rd_byte", "load_rd_u16b",
                "load_savefile_version_at_least", "load_note", "sdl_present_if_needed",
-               "ui_question_ask_overlay_buttons")
+               "ui_question_ask_overlay_buttons") + WRAP_SYMBOLS
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), *wrappers,
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), *wrappers, *EXTRA_SOURCES,
         "@" + str(rsp), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         *["-Wl,--wrap=" + s for s in symbols], "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=ROOT, env=env, check=True, timeout=45)

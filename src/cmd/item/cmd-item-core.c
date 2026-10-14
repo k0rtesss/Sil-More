@@ -9,6 +9,7 @@
 #include "log/perf.h"
 #include "metarun.h"
 #include "cave/cave-environment.h"
+#include "cave/cave-vertical.h"
 #include "object/object-ui-select.h"
 #include "sdl-config.h"
 #include "ui/question.h"
@@ -933,6 +934,8 @@ bool do_cmd_context_square_action_popup(void)
     int floor_item = first_floor_item_under_player();
     char title[80];
     environment_bridge_job bridge_job;
+    bool vertical_down = cave_vertical_can_travel(false);
+    bool vertical_up = cave_vertical_can_travel(true);
     bool bridge_repairable = p_ptr->active_ability[S_SMT][SMT_REPAIR]
         && cave_environment_bridge_job_at(p_ptr->py, p_ptr->px,
             &bridge_job)
@@ -955,7 +958,11 @@ bool do_cmd_context_square_action_popup(void)
         return false;
     }
 
-    if (cave_stair_bold(p_ptr->py, p_ptr->px)
+    if (vertical_down || vertical_up)
+    {
+        SDL_strlcpy(title, "Connected passage", sizeof(title));
+    }
+    else if (cave_stair_bold(p_ptr->py, p_ptr->px)
         || cave_forge_bold(p_ptr->py, p_ptr->px))
     {
         cptr feature_name = f_name + f_info[
@@ -992,6 +999,11 @@ bool do_cmd_context_square_action_popup(void)
 
     sdl_question_menu_begin(title);
     sdl_question_menu_set_anchor_grid(p_ptr->py, p_ptr->px);
+    if (vertical_down || vertical_up) {
+        char passage[320];
+        if (cave_vertical_describe(p_ptr->py, p_ptr->px, passage, sizeof(passage)))
+            sdl_question_menu_set_desc(passage);
+    }
 
     if (floor_item && !cave_stair_bold(p_ptr->py, p_ptr->px)
         && !cave_forge_bold(p_ptr->py, p_ptr->px))
@@ -1033,10 +1045,17 @@ bool do_cmd_context_square_action_popup(void)
             }
         }
     }
-    else
+    else if (!vertical_down && !vertical_up)
     {
         sdl_question_menu_add_button(' ', context_label, TERM_L_WHITE);
     }
+
+    /* Queue ordinary travel commands; UI construction never changes levels,
+     * spends energy, or bypasses their quest and oath checks. */
+    if (vertical_down)
+        sdl_question_menu_add_button('>', "Descend", TERM_L_BLUE);
+    if (vertical_up)
+        sdl_question_menu_add_button('<', "Ascend", TERM_L_BLUE);
 
     sdl_question_menu_finish();
     sdl_question_menu_set_context_hint();
@@ -1246,6 +1265,12 @@ bool touch_shortcut_context_action(int binding, bool description_open,
              * crossing beneath the player. */
             key = ' ';
             name = "Repair bridge";
+        } else if (cave_vertical_can_travel(false)) {
+            key = ' ';
+            name = "Descend";
+        } else if (cave_vertical_can_travel(true)) {
+            key = ' ';
+            name = "Ascend";
         } else if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';
@@ -1290,17 +1315,19 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             }
         }
     } else if (binding == '<') {
-        if (!cave_up_stairs_bold(p_ptr->py, p_ptr->px))
+        bool passage = cave_vertical_can_travel(true);
+        if (!passage && !cave_up_stairs_bold(p_ptr->py, p_ptr->px))
             return false;
         /* Keep Space so the interact-here command supplies the confirmation. */
-        key = ' ';
-        name = "Go Up";
+        key = passage ? '<' : ' ';
+        name = passage ? "Ascend" : "Go Up";
     } else if (binding == '>') {
-        if (!cave_down_stairs_bold(p_ptr->py, p_ptr->px))
+        bool passage = cave_vertical_can_travel(false);
+        if (!passage && !cave_down_stairs_bold(p_ptr->py, p_ptr->px))
             return false;
         /* Keep Space so the interact-here command supplies the confirmation. */
-        key = ' ';
-        name = "Go Down";
+        key = passage ? '>' : ' ';
+        name = passage ? "Descend" : "Go Down";
     } else if (binding == 'u') {
         int floor_item = first_floor_item_under_player();
         floor_context_action selected;

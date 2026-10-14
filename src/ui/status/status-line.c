@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "cave/cave-atmosphere.h"
+#include "cave/cave-vertical.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -7,6 +8,33 @@
 #include "supplies.h"
 #include "item_set.h"
 #include "ui/status/status-internal.h"
+
+bool status_vertical_air_text(char* out, size_t out_size, byte* out_attr)
+{
+    if (!out || !out_size) return false;
+    out[0] = '\0';
+    if (!p_ptr || !character_dungeon) return false;
+    const cave_vertical_state* state = cave_vertical_get();
+    if (!state || !state->submerged) return false;
+    strnfmt(out, out_size, "Air %u", (unsigned)state->breath);
+    if (out_attr) *out_attr = state->breath <= 3 ? TERM_RED
+        : state->breath <= 6 ? TERM_ORANGE : TERM_L_BLUE;
+    return true;
+}
+
+int status_vertical_current_strength(byte* out_attr)
+{
+    if (!p_ptr || !character_dungeon || !in_bounds_fully(p_ptr->py, p_ptr->px))
+        return 0;
+    int strength = cave_vertical_current(p_ptr->py, p_ptr->px, NULL);
+    if (out_attr) *out_attr = strength >= 2 ? TERM_ORANGE : TERM_L_BLUE;
+    return strength;
+}
+
+cptr status_vertical_current_label(int strength)
+{
+    return strength >= 3 ? "strong" : strength == 2 ? "swift" : "gentle";
+}
 
 /*
  * Prints player's current song (if any)
@@ -555,6 +583,12 @@ void prt_state(void)
         text[0] = '\0';
     }
 
+    /* Air is an immediate survival limit and owns the legacy state slot
+     * while submerged. SDL/compact layouts keep the other statuses too. */
+    char air[16];
+    if (status_vertical_air_text(air, sizeof(air), &attr))
+        SDL_strlcpy(text, air, sizeof(text));
+
     /* Clear the area first (story font has variable widths) */
     Term_erase(COL_STATE, ROW_STATE, 10);
 
@@ -714,6 +748,20 @@ void prt_terrain(void)
         c_put_str(status_touch_zone_attr(SDL_STATUS_CLICK_MAIN_MENU,
             COL_TERRAIN, 3, TERM_YELLOW), "Sun", ROW_TERRAIN, COL_TERRAIN);
         sdl_story_font_disable();
+    }
+    else
+    {
+        byte attr;
+        int strength = status_vertical_current_strength(&attr);
+        if (strength > 0) {
+            char current[6];
+            strnfmt(current, sizeof(current), "Cur%d", MIN(strength, 9));
+            sdl_story_font_enable();
+            c_put_str(status_touch_zone_attr(SDL_STATUS_CLICK_MAIN_MENU,
+                COL_TERRAIN, (int)strlen(current), attr), current,
+                ROW_TERRAIN, COL_TERRAIN);
+            sdl_story_font_disable();
+        }
     }
 
     prt_partition();
@@ -1174,10 +1222,22 @@ void prt_status_line_compact(void)
 
     Term_erase(0, row, Term->wid);
 
-    status_seg segs[16];
+    status_seg segs[20];
     int seg_count = 0;
     bool fold_song = ui_compact_status_line_handles_song();
     bool fold_wounds = ui_compact_status_line_handles_wounds();
+
+    char air[16] = "";
+    byte air_attr = TERM_L_BLUE;
+    (void)status_vertical_air_text(air, sizeof(air), &air_attr);
+    char current_long[24] = "", current_short[8] = "";
+    byte current_attr = TERM_L_BLUE;
+    int current_strength = status_vertical_current_strength(&current_attr);
+    if (current_strength > 0) {
+        strnfmt(current_long, sizeof(current_long), "Current %s",
+            status_vertical_current_label(current_strength));
+        strnfmt(current_short, sizeof(current_short), "Cur%d", current_strength);
+    }
 
     char hunger_long[16] = "";
     char hunger_short[8] = "";
@@ -1346,6 +1406,7 @@ void prt_status_line_compact(void)
             } \
         } while (0)
 
+    ADD_SEG(air, air, air_attr, true, SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(hunger_long, hunger_short, hunger_attr, hunger_required,
         SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(p_ptr->blind ? "Blind" : "", "Bl", TERM_ORANGE, true,
@@ -1358,6 +1419,8 @@ void prt_status_line_compact(void)
         SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(stun_long, stun_short, stun_attr, true, SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(p_ptr->afraid ? "Afraid" : "", "Af", TERM_ORANGE, true,
+        SDL_STATUS_CLICK_MAIN_MENU);
+    ADD_SEG(current_long, current_short, current_attr, false,
         SDL_STATUS_CLICK_MAIN_MENU);
     ADD_SEG(song_long, song_short, TERM_L_BLUE, false, SDL_STATUS_CLICK_SONG);
     ADD_SEG(state_long, state_short, state_attr, state_required,
@@ -1375,7 +1438,7 @@ void prt_status_line_compact(void)
     if (max_w <= 0)
         return;
 
-    bool include[16];
+    bool include[20];
     for (int i = 0; i < seg_count; i++)
         include[i] = true;
 

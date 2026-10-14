@@ -229,6 +229,9 @@ set(SIL_MORE_SOURCES
     src/cave/cave-water.c
     src/cave/cave-illusion.c
     src/cave/cave-water-flow.c
+    src/cave/cave-vertical.c
+    src/cave/cave-vertical-combat.c
+    src/cave/cave-vertical-actors.c
     src/cave/cave-events.c
     src/cave/cave-environment.c
     src/cave/cave-catastrophe.c
@@ -297,6 +300,7 @@ set(SIL_MORE_SOURCES
     src/level-generation/level-generation.c
     src/level-generation/level-cache.c
     src/level-generation/level-state.c
+    src/level-generation/level-generation-vertical-vaults.c
     src/level-generation/level-generation-utumno.c
     src/level-generation/level-generation-access.c
     src/level-generation/level-generation-finalize.c

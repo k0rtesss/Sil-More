@@ -4,6 +4,7 @@
 #include "cave/cave-events.h"
 #include "cave/cave-water-flow.h"
 #include "cave/cave-environment.h"
+#include "cave/cave-vertical.h"
 
 #define SOUND_CELLS (MAX_DUNGEON_HGT * MAX_DUNGEON_WID)
 #define SOUND_LIFETIME 60
@@ -264,6 +265,29 @@ static void refresh_ambient_fields(void)
                 ambient[yy][xx] = 5;
             if (ambient[yy][xx]) enqueue(yy, xx);
         }
+    /* Falls radiate from the aperture/ceiling as well as their source lip.
+     * This bounded physical-state pass does not consult FOV or reveal map
+     * cells. Playback keeps the ordinary local wall/door-aware propagation. */
+    const cave_vertical_state* vertical = cave_vertical_get();
+    if (vertical) for (int i = 0; i < vertical->portal_count; i++) {
+        const cave_vertical_portal* portal = &vertical->portals[i];
+        int y = portal->y, x = portal->x;
+        if (portal->flags & CAVE_VERTICAL_CLOSED
+            || (portal->kind != CAVE_VERTICAL_FALL
+                && portal->kind != CAVE_VERTICAL_LAVA_FALL
+                && portal->kind != CAVE_VERTICAL_RAPIDS)
+            || y < 0 || x < 0 || y >= p_ptr->cur_map_hgt || x >= p_ptr->cur_map_wid)
+            continue;
+        int underlay = cave_environment_live_underlay(y, x);
+        if (underlay != FEAT_CHASM && underlay != portal->material
+            && !(portal->material == FEAT_WATER && underlay == FEAT_DEEP_WATER))
+            continue;
+        if (portal->material == FEAT_LAVA)
+            lava_ambient[y][x] = CAVE_LAVA_SOUND_RADIUS + 1;
+        else if (portal->material == FEAT_WATER || portal->material == FEAT_DEEP_WATER
+            || portal->material == FEAT_POISON)
+            flowing_liquid_ambient[y][x] = CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1;
+    }
     propagate(ambient, false);
 
     /* Reuse the same wall/door-aware propagation for the river field. This

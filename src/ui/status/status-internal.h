@@ -31,6 +31,9 @@ bool ui_depth_menu_owns_left_panel_depth(void);
 
 bool status_state_text(char* out_long, size_t out_long_sz,
     char* out_short, size_t out_short_sz, byte* out_attr);
+bool status_vertical_air_text(char* out, size_t out_size, byte* out_attr);
+int status_vertical_current_strength(byte* out_attr);
+cptr status_vertical_current_label(int strength);
 byte panel_touch_zone_attr(int action, int row, byte base_attr);
 byte status_touch_zone_attr(int action, int col, int width, byte base_attr);
 void prt_status_line_compact(void);

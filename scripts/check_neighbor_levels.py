@@ -162,6 +162,9 @@ static void checks(void)
     assert(p_ptr->depth == 10 && p_ptr->chp == 100);
     assert(terrain_hash() == terrain);
     wait_for(11); wait_for(9);
+    /* A newly available lower view needs a repaint, without a gameplay tick.
+     * This is the only permitted player-state change from worker delivery. */
+    before_background.redraw |= PR_MAP;
     assert(!memcmp(&before_background, p_ptr, sizeof(*p_ptr)));
     assert(terrain_hash() == terrain);
     assert(p_ptr->depth == 10 && p_ptr->chp == 100);

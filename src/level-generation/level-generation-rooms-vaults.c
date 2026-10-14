@@ -5,6 +5,7 @@
 #include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain-vaults.h"
+#include "level-generation/level-generation-vertical-vaults.h"
 
 /* Fixed lore objects are placed independently of the random loot setting. */
 static bool place_vault_scroll_token(char symbol, int y, int x)
@@ -133,6 +134,8 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 {
     int planned_h = flip_d ? v_ptr->wid : v_ptr->hgt;
     int planned_w = flip_d ? v_ptr->hgt : v_ptr->wid;
+    if (!vertical_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
+            y0 - planned_h / 2 + planned_h - 1, x0 - planned_w / 2 + planned_w - 1)) return false;
     if (!level_cache_generation_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
             y0 - planned_h / 2 + planned_h - 1, x0 - planned_w / 2 + planned_w - 1)) return false;
     if (!terrain_history_vault_fits(y0 - planned_h / 2, x0 - planned_w / 2,
@@ -169,7 +172,8 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     terrain_vault_begin();
 
     // reflections
-    if ((p_ptr->depth > 0) && (p_ptr->depth < MORGOTH_DEPTH))
+    if (!vertical_vault_build_transform(&flip_v, &flip_h)
+        && (p_ptr->depth > 0) && (p_ptr->depth < MORGOTH_DEPTH))
     {
         // reflect it vertically half the time
         if (one_in_(2))
@@ -361,6 +365,13 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
+            /* Deep water has its own authoring token; backtick remains lava. */
+            case '"':
+            {
+                cave_set_feat(y, x, FEAT_DEEP_WATER);
+                break;
+            }
+
             /* Molten lava ('~' is already used for chests). */
             case '`':
             {
@@ -544,6 +555,11 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
 
             if (quest_vault_token_race((int)(v_ptr - v_info), *t) || is_vault_monster_token(*t))
                 continue;
+
+            /* Neighbor-required reconstruction keeps fresh ordinary guards,
+             * but shared reward state forbids minting authored loot again. */
+            if (vertical_vault_suppress_rewards()
+                && strchr("*&!~She5689=", *t)) continue;
 
             if (place_vault_scroll_token(*t, y, x))
                 continue;
@@ -772,7 +788,7 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                     place_monster(y, x, true, true, true);
                     monster_level = original_monster_level;
                 }
-                if (r >= 2)
+                if (r >= 2 && !vertical_vault_suppress_rewards())
                 {
                     /* Vault loot tuning: reduce item clutter based on drop frequency setting */
                     if (!vault_drop_passes(VDG_NORMAL))
@@ -1142,6 +1158,10 @@ bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             {
                 cave_info[y][x] |= (CAVE_GLOW);
             }
+
+            /* Paired circulation is authored: random traps must not replace
+             * its reciprocal stairs or the sluice access route. */
+            if (v_ptr->vertical_companion) continue;
 
             // traps are usually 5 times as likely in vaults, but are 10 times
             // as likely if the TRAPS flag is set

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-vertical.h"
 #include "level-generation/level-cache.h"
 #include "quest/quest-runtime.h"
 #include "tutorial/tutorial-game.h"
@@ -73,7 +74,8 @@ void do_cmd_go_up(void)
     int utumno_destination;
 
     /* Verify stairs */
-    if (!cave_up_stairs_bold(p_ptr->py, p_ptr->px))
+    if (!cave_up_stairs_bold(p_ptr->py, p_ptr->px)
+        && !cave_vertical_can_travel(true))
     {
         msg_print("You see no up staircase here.");
         return;
@@ -153,6 +155,7 @@ void do_cmd_go_up(void)
     }
 
     /* Hack -- take a turn */
+    if (cave_vertical_travel(true)) return;
     p_ptr->energy_use = 100;
 
     // store the action type
@@ -459,7 +462,8 @@ void do_cmd_go_down(void)
     int utumno_destination;
 
     /* Verify stairs */
-    if (!cave_down_stairs_bold(p_ptr->py, p_ptr->px))
+    if (!cave_down_stairs_bold(p_ptr->py, p_ptr->px)
+        && !cave_vertical_can_travel(false))
     {
         msg_print("You see no down staircase here.");
         return;
@@ -517,6 +521,8 @@ void do_cmd_go_down(void)
         msg_print("You will not re-enter that fell pit.");
         return;
     }
+
+    if (cave_vertical_travel(false)) return;
 
     // Store information for the combat rolls window
     combat_roll_special_char

@@ -5,6 +5,7 @@
 #include "quest/quest-runtime.h"
 #include "log/perf.h"
 #include "cave/cave.h"
+#include "cave/cave-vertical-actors.h"
 
 /*
  * Make a monster carry an object
@@ -90,6 +91,11 @@ void m_fall_in_chasm(int fy, int fx)
 
     // paranoia
     if (cave_m_idx[fy][fx] <= 0)
+        return;
+
+    /* Linked spillways own surviving actors and their objects on the lower
+     * resident floor. A loading/capacity deferral must not use legacy removal. */
+    if (cave_vertical_monster_fall(cave_m_idx[fy][fx]))
         return;
 
     m_ptr = &mon_list[cave_m_idx[fy][fx]];

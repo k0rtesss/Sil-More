@@ -5,6 +5,20 @@
 #include "cave/cave-environment.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
+#include "cave/cave-vertical.h"
+
+#ifdef USE_SDL
+static bool vertical_effect_at(int y, int x)
+{
+    cave_vertical_view_info view;
+    return !graphics_are_ascii() && !p_ptr->blind && !p_ptr->image
+        && (cave_info[y][x] & CAVE_SEEN)
+        && cave_vertical_view(y, x, &view)
+        && ((view.flags & (CAVE_VERTICAL_CEILING | CAVE_VERTICAL_PASSAGE))
+            || (view.fluid_feature
+                && (view.flags & (CAVE_VERTICAL_INFLOW | CAVE_VERTICAL_OUTFLOW))));
+}
+#endif
 
 /* These floor styles are visual materials whose edge pixels depend on
  * neighboring material visibility. Keep the IDs stable with the renderer's
@@ -432,7 +446,7 @@ void lite_spot(int y, int x)
         /* Removing a water surface or wall fixture can leave the same base
          * glyph. Repaint its cached pixels even after the feature changed. */
         force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x)
-            || sdl_material_edge_at(y, x);
+            || sdl_material_edge_at(y, x) || vertical_effect_at(y, x);
 #endif
 
         if (!force_visual_redraw && mirror_monster_tile_facing
@@ -529,7 +543,8 @@ void prt_map(void)
 
             bool material_border = false;
 #ifdef USE_SDL
-            material_border = !graphics_are_ascii() && sdl_material_edge_at(y, x);
+            material_border = !graphics_are_ascii()
+                && (sdl_material_edge_at(y, x) || vertical_effect_at(y, x));
 #endif
             if (force_rage_map_filter_refresh || panel_moved || material_border
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)

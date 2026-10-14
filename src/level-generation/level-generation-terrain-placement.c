@@ -231,7 +231,8 @@ bool place_rubble_player(void)
         y = rand_int(p_ptr->cur_map_hgt);
         x = rand_int(p_ptr->cur_map_wid);
         // require empty square that isn't in an interesting room or vault
-        if (cave_naked_bold(y, x) && !(cave_info[y][x] & (CAVE_ICKY)))
+        if (cave_naked_bold(y, x) && !(cave_info[y][x] & (CAVE_ICKY))
+            && !terrain_generation_reserved(y, x))
         {
             // require a room if it is the first level
             if ((playerturn > 0) || (cave_info[y][x] & (CAVE_ROOM)))

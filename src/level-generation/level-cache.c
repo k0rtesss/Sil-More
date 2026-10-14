@@ -5,6 +5,9 @@
 #include "quest/quest-runtime.h"
 #include "meta_state.h"
 #include "metarun.h"
+#include "cave/cave-vertical.h"
+#include "cave/cave-vertical-combat.h"
+#include "level-generation/level-generation-vertical-vaults.h"
 
 /* The fourth slot is only a transient destination for a shaft, fall or wizard
  * jump. After entry the resident set is strictly depth-1, depth, depth+1. */
@@ -25,6 +28,11 @@ typedef struct level_job {
     bool success;
     level_image* image;
     level_link_plan links;
+    cave_vertical_state inherited_vertical[2];
+    vertical_vault_state inherited_vaults[2];
+    int inherited_depth[2];
+    byte inherited_count;
+    bool allow_down;
     player_type before, player;
     player_other options;
     metarun tale;
@@ -51,6 +59,7 @@ static int requested_depth = -1, pending_depth = -1;
 static int pending_y, pending_x;
 static bool pending_rubble, use_pending_origin;
 static _Thread_local level_job* worker_job;
+static void sync_vertical_regions(void);
 
 bool level_cache_in_worker(void) { return worker_job != NULL; }
 bool level_cache_reading_floor(void) { return reading_floor; }
@@ -105,6 +114,31 @@ static bool valid_depth(int depth)
         || depth == UTUMNO_DEPTH || depth == UTUMNO_FORGE_DEPTH;
 }
 
+static void sync_vaults(void)
+{
+    if (!active || worker_job) return;
+    vertical_vault_capture(&active->vertical_vaults);
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
+        level_image* floor = floors[i];
+        if (!floor) continue;
+        for (int p = 0; p < floor->vertical_vaults.count; p++) {
+            vertical_vault_placement* part = &floor->vertical_vaults.placements[p];
+            for (int j = 0; j < LEVEL_CACHE_SLOTS; j++) {
+                if (!floors[j]) continue;
+                for (int q = 0; q < floors[j]->vertical_vaults.count; q++) {
+                    vertical_vault_placement* other = &floors[j]->vertical_vaults.placements[q];
+                    if (other->identity != part->identity) continue;
+                    part->reward_layers |= other->reward_layers;
+                    part->discovered_layers |= other->discovered_layers;
+                    other->reward_layers = part->reward_layers;
+                    other->discovered_layers = part->discovered_layers;
+                }
+            }
+        }
+    }
+    vertical_vault_restore(&active->vertical_vaults);
+}
+
 /* Counts include parked levels. Killing a monster on the active map therefore
  * cannot make the same unique available to an in-flight generation request. */
 static void reserve_floor(const level_image* floor, int sign)
@@ -120,6 +154,40 @@ static void evict_floor(int slot)
 {
     level_image* floor = floors[slot];
     if (!floor || floor == active) return;
+    sync_vaults();
+    sync_vertical_regions();
+    cave_vertical_capture(&active->vertical);
+    for (int i = 0; i < floor->vertical.portal_count; i++) {
+        cave_vertical_portal* p = &floor->vertical.portals[i];
+        level_image* receiver = find_floor(p->peer_depth);
+        if (!p->pending || !(p->flags & CAVE_VERTICAL_DOWN) || !receiver) continue;
+        for (int n = 0; n < receiver->vertical.portal_count; n++) {
+            cave_vertical_portal* incoming = &receiver->vertical.portals[n];
+            if (incoming->identity != p->identity || incoming->y != p->peer_y
+                || incoming->x != p->peer_x || (incoming->flags & CAVE_VERTICAL_DOWN)) continue;
+            int material = p->pending_material ? p->pending_material : p->material;
+            int old_material = incoming->pending_material ? incoming->pending_material : incoming->material;
+            if (incoming->pending && material != old_material
+                && ((material == FEAT_WATER && old_material == FEAT_LAVA)
+                    || (material == FEAT_LAVA && old_material == FEAT_WATER))) {
+                int consumed = MIN(incoming->pending, p->pending);
+                incoming->pending -= consumed; p->pending -= consumed;
+                for (int b = 0; b < receiver->vertical.basin_count; b++)
+                    if (receiver->vertical.basins[b].identity == p->identity
+                        && receiver->vertical.basins[b].depth == receiver->depth) {
+                        receiver->vertical.basins[b].hot = 6;
+                        receiver->vertical.basins[b].flags |= CAVE_VERTICAL_CHANGED;
+                    }
+            }
+            if (!incoming->pending) incoming->pending_material = material;
+            incoming->pending += p->pending;
+            incoming->due = MAX(incoming->due, p->due);
+            p->pending = 0;
+            p->pending_material = 0;
+            break;
+        }
+    }
+    cave_vertical_restore(&active->vertical);
     if (floor->visited) {
         quest_followup_discard_depth(floor->depth);
         for (int i = 1; i < floor->mon_max; i++) {
@@ -167,9 +235,30 @@ static void prepare_links(level_job* next)
 {
     level_link_plan* links = &next->links;
     links->source_depth = active->depth;
+    next->allow_down = !find_floor(next->depth + 1);
     for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
         const level_image* source = floors[i];
         if (!source || ABS(source->depth - next->depth) > 2) continue;
+        if (ABS(source->depth - next->depth) == 1 && next->inherited_count < 2) {
+            int n = next->inherited_count++;
+            next->inherited_depth[n] = source->depth;
+            next->inherited_vertical[n] = source->vertical;
+            next->inherited_vaults[n] = source->vertical_vaults;
+            for (int p = 0; p < source->vertical.portal_count; p++) {
+                const cave_vertical_portal* portal = &source->vertical.portals[p];
+                if (portal->peer_depth != next->depth) continue;
+                links->minimum_hgt = MAX(links->minimum_hgt, portal->peer_y + 5);
+                links->minimum_wid = MAX(links->minimum_wid, portal->peer_x + 5);
+            }
+            for (int p = 0; p < source->vertical_vaults.count; p++) {
+                const vertical_vault_placement* placement = &source->vertical_vaults.placements[p];
+                const vault_type* v = &v_info[placement->upper_template];
+                links->minimum_hgt = MAX(links->minimum_hgt, placement->y
+                    + ((placement->transform & 4) ? v->wid : v->hgt) + 2);
+                links->minimum_wid = MAX(links->minimum_wid, placement->x
+                    + ((placement->transform & 4) ? v->hgt : v->wid) + 2);
+            }
+        }
         for (int y = 1; y < source->hgt - 1; y++)
             for (int x = 1; x < source->wid - 1; x++) {
                 int feat = source->feat[y][x], inverse = 0, target = -1;
@@ -219,6 +308,16 @@ void level_cache_generation_size(int* blocks)
 
 void level_cache_generation_reserve(void)
 {
+    cave_vertical_generation_begin(!worker_job || worker_job->allow_down);
+    vertical_vault_begin(p_ptr->depth, !worker_job || worker_job->allow_down);
+    if (worker_job) {
+        for (int i = 0; i < worker_job->inherited_count; i++) {
+            cave_vertical_generation_inherit(&worker_job->inherited_vertical[i],
+                worker_job->inherited_depth[i], p_ptr->depth);
+            vertical_vault_inherit(&worker_job->inherited_vaults[i], p_ptr->depth);
+        }
+    }
+    cave_vertical_generation_reserve();
     if (!worker_job) return;
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
         for (int x = 1; x < p_ptr->cur_map_wid - 1; x++) {
@@ -233,6 +332,10 @@ void level_cache_generation_reserve(void)
 
 bool level_cache_generation_vault_fits(int y1, int x1, int y2, int x2)
 {
+    bool flip_v, flip_h;
+    if (vertical_vault_build_transform(&flip_v, &flip_h)) return true;
+    if (!vertical_vault_fits(y1, x1, y2, x2)
+        || !cave_vertical_generation_fits(y1, x1, y2, x2)) return false;
     if (!worker_job || p_ptr->depth == 0 || p_ptr->depth == UTUMNO_FORGE_DEPTH) return true;
     for (int y = MAX(1, y1); y <= MIN(p_ptr->cur_map_hgt - 2, y2); y++)
         for (int x = MAX(1, x1); x <= MIN(p_ptr->cur_map_wid - 2, x2); x++)
@@ -282,6 +385,7 @@ static bool reconnect_regions(void)
         for (int y = 1; y < p_ptr->cur_map_hgt - 1 && !disconnected; y++)
             for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
                 if (!access[y][x] && (!authored_endpoint || worker_job->links.feat[y][x])
+                    && (!(cave_info[y][x] & CAVE_ICKY) || worker_job->links.feat[y][x])
                     && cave_floor_bold(y, x)
                     && connection_passable(y, x, authored_endpoint)) { disconnected = true; break; }
         if (!disconnected) { success = true; break; }
@@ -308,6 +412,7 @@ static bool reconnect_regions(void)
                                 || (cave_info[yy][xx] & (CAVE_ICKY | CAVE_G_VAULT)))))) continue;
                     parent[next] = cell;
                     if (passage && cave_floor_bold(yy, xx)
+                        && (!(cave_info[yy][xx] & CAVE_ICKY) || worker_job->links.feat[yy][xx])
                         && (!authored_endpoint || worker_job->links.feat[yy][xx])) { target = next; break; }
                     queue[tail++] = next;
                 }
@@ -357,6 +462,9 @@ bool level_cache_generation_links(void)
                 cave_set_feat(y, x, FEAT_FLOOR);
             if (!links->feat[y][x]) continue;
             if (cave_info[y][x] & CAVE_ICKY) {
+                /* The paired blueprint has already built its exact endpoint.
+                 * Matching inherited stairs are not a breach of protection. */
+                if (feat == links->feat[y][x]) continue;
                 if (p_ptr->depth != 0 && p_ptr->depth != UTUMNO_FORGE_DEPTH) return false;
                 cave_info[y][x] &= ~(CAVE_ICKY | CAVE_G_VAULT);
             }
@@ -390,6 +498,13 @@ void level_cache_generation_finished(void)
                 image->chasm_up[y][x] = worker_job->links.ceiling[y][x];
                 image->chasm_drop[y][x] = worker_job->links.drop[y][x];
             }
+            for (int i = 0; i < cave_vertical_get()->portal_count; i++) {
+                const cave_vertical_portal* portal = &cave_vertical_get()->portals[i];
+                if (portal->kind == CAVE_VERTICAL_LAKE && portal->y == y && portal->x == x
+                    && (portal->flags & CAVE_VERTICAL_DOWN)) image->chasm_drop[y][x] = 1;
+                if (portal->kind == CAVE_VERTICAL_LAKE && portal->y == y && portal->x == x
+                    && !(portal->flags & CAVE_VERTICAL_DOWN)) image->chasm_up[y][x] = 1;
+            }
             if (cave_environment_live_underlay(y, x) != FEAT_CHASM) {
                 image->chasm_drop[y][x] = 0; continue;
             }
@@ -403,10 +518,16 @@ void level_cache_generation_finished(void)
         for (int x = 1; x < p_ptr->cur_map_wid - 1; x++) {
             if (seen[y][x] || cave_environment_live_underlay(y, x) != FEAT_CHASM) continue;
             int head = 0, tail = 0, drop = 0;
+            bool lake_landing = false;
             seen[y][x] = 1; queue[tail++] = y * MAX_DUNGEON_WID + x;
             while (head < tail) {
                 int cell = queue[head++], cy = cell / MAX_DUNGEON_WID, cx = cell % MAX_DUNGEON_WID;
                 if (image->chasm_drop[cy][cx]) drop = image->chasm_drop[cy][cx];
+                for (int p = 0; p < cave_vertical_get()->portal_count; p++) {
+                    const cave_vertical_portal* portal = &cave_vertical_get()->portals[p];
+                    if (portal->kind == CAVE_VERTICAL_LAKE && portal->y == cy && portal->x == cx
+                        && (portal->flags & CAVE_VERTICAL_DOWN)) lake_landing = true;
+                }
                 for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
                     int yy = cy + dy, xx = cx + dx;
                     if (!in_bounds_fully(yy, xx) || seen[yy][xx]
@@ -414,6 +535,7 @@ void level_cache_generation_finished(void)
                     seen[yy][xx] = 1; queue[tail++] = yy * MAX_DUNGEON_WID + xx;
                 }
             }
+            if (lake_landing) drop = 1;
             if (!drop) {
                 drop = 2;
                 while (p_ptr->depth + drop < MORGOTH_DEPTH && percent_chance(50 / (drop - 1))) drop++;
@@ -421,7 +543,7 @@ void level_cache_generation_finished(void)
             }
             for (int i = 0; i < tail; i++) {
                 int cy = queue[i] / MAX_DUNGEON_WID, cx = queue[i] % MAX_DUNGEON_WID;
-                if (!image->chasm_drop[cy][cx]) image->chasm_drop[cy][cx] = drop;
+                if (lake_landing || !image->chasm_drop[cy][cx]) image->chasm_drop[cy][cx] = drop;
             }
         }
     SDL_free(queue);
@@ -549,6 +671,8 @@ static void start_job(int depth)
         || !next->reserved_artefacts || !next->drop_catalog || !next->meta_state) { free_job(next); return; }
     level_cache_generation_finished();
     level_image_capture(active);
+    sync_vaults();
+    sync_vertical_regions();
     prepare_links(next);
     next->thread = SDL_CreateThread(generate_neighbor, "neighbor-level", next);
     if (!next->thread) { free_job(next); return; }
@@ -642,6 +766,8 @@ void level_cache_poll(void)
                     if (art) a_info[art].cur_num = MAX(a_info[art].cur_num, 1);
                 }
                 log_debug("Level cache: depth %d ready", job->depth);
+                sync_vaults();
+                p_ptr->redraw |= PR_MAP;
                 break;
             }
         }
@@ -669,6 +795,11 @@ bool level_cache_request(int depth)
     return find_floor(depth) != NULL;
 }
 
+bool level_cache_transition_pending(void)
+{
+    return !worker_job && pending_depth >= 0;
+}
+
 void level_cache_start(void)
 {
     if (!ready_event_type) ready_event_type = SDL_RegisterEvents(1);
@@ -694,6 +825,7 @@ bool level_cache_change_level(void)
     p_ptr->depth = active->depth;
     level_cache_generation_finished();
     level_image_capture(active);
+    sync_vaults();
     p_ptr->depth = destination;
     if (destination == active->depth) {
         /* Explicit same-depth regeneration (wizard/cheat death) discards it. */
@@ -716,7 +848,16 @@ bool level_cache_change_level(void)
         merge_generated_player(p_ptr, &target->generation_before, &target->generation_after);
         target->pending_player = false;
     }
+    cave_vertical_state transit;
+    cave_vertical_capture(&transit);
     level_image_restore(target);
+    if (transit.submerged) {
+        cave_vertical_state arriving;
+        cave_vertical_capture(&arriving);
+        arriving.submerged = transit.submerged;
+        arriving.breath = transit.breath;
+        cave_vertical_restore(&arriving);
+    }
     cave_m_idx[p_ptr->py][p_ptr->px] = 0;
     if (in_bounds_fully(arrival_y, arrival_x)
         && cave_floor_bold(arrival_y, arrival_x)
@@ -741,6 +882,8 @@ bool level_cache_change_level(void)
     else p_ptr->smithing = 0;
     p_ptr->leaving = false;
     active = target;
+    cave_vertical_combat_reset();
+    cave_vertical_refresh();
     if (!target->visited) {
         for (int i = 1; i < o_max; i++)
             if (o_list[i].k_idx) apply_autoinscription(&o_list[i]);
@@ -757,6 +900,161 @@ bool level_cache_change_level(void)
     return true;
 }
 
+const level_image* level_cache_floor(int depth)
+{
+    return worker_job ? NULL : find_floor(depth);
+}
+
+level_image* level_cache_mutable_floor(int depth)
+{
+    return worker_job || !active || depth == active->depth ? NULL : find_floor(depth);
+}
+
+bool level_cache_travel_to(int depth, int y, int x)
+{
+    if (!valid_depth(depth) || y < 1 || x < 1 || y >= MAX_DUNGEON_HGT - 1
+        || x >= MAX_DUNGEON_WID - 1) return false;
+    pending_y = y; pending_x = x;
+    use_pending_origin = true;
+    p_ptr->create_stair = p_ptr->create_rubble = 0;
+    p_ptr->depth = depth;
+    p_ptr->leaving = true;
+    return true;
+}
+
+bool level_cache_vertical_aperture(int y, int x, int* depth, int* target_y, int* target_x)
+{
+    if (!p_ptr || !in_bounds_fully(y, x) || FEAT_IS_BRIDGE(cave_feat[y][x])) return false;
+    const cave_vertical_state* state = cave_vertical_get();
+    for (int i = 0; i < state->portal_count; i++) {
+        const cave_vertical_portal* p = &state->portals[i];
+        if (p->y != y || p->x != x || (p->flags & CAVE_VERTICAL_CLOSED)
+            || p->kind == CAVE_VERTICAL_STREAM || p->kind == CAVE_VERTICAL_SUMP
+            || p->kind == CAVE_VERTICAL_CONTROL || p->kind == CAVE_VERTICAL_RAPIDS
+            || p->kind == CAVE_VERTICAL_TUBE)
+            continue;
+        if (depth) *depth = p->peer_depth;
+        if (target_y) *target_y = p->peer_y;
+        if (target_x) *target_x = p->peer_x;
+        return true;
+    }
+    if (cave_feat[y][x] != FEAT_CHASM) return false;
+    if (depth) *depth = p_ptr->depth + 1;
+    if (target_y) *target_y = y;
+    if (target_x) *target_x = x;
+    return true;
+}
+
+bool level_cache_vertical_receive(int depth, u32b identity, int material, int amount)
+{
+    if (!active || worker_job) return false;
+    if (depth == active->depth) {
+        cave_vertical_state state;
+        cave_vertical_capture(&state);
+        if (!cave_vertical_receive(&state, depth, identity, material, amount)) return false;
+        return cave_vertical_restore(&state);
+    }
+    level_image* floor = find_floor(depth);
+    return floor && cave_vertical_receive(&floor->vertical, depth, identity, material, amount);
+}
+
+void level_cache_process_vertical(void)
+{
+    if (!active || worker_job) return;
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++)
+        if (floors[i] && floors[i] != active
+            && ABS(floors[i]->depth - active->depth) == 1)
+            cave_vertical_process_image(floors[i]);
+    sync_vertical_regions();
+}
+
+static void sync_vertical_regions(void)
+{
+    if (!active || worker_job) return;
+    cave_vertical_capture(&active->vertical);
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
+        level_image* floor = floors[i];
+        if (!floor) continue;
+        for (int b = 0; b < floor->vertical.basin_count; b++) {
+            cave_vertical_basin* mirror = &floor->vertical.basins[b];
+            level_image* owner = find_floor(mirror->depth);
+            if (!owner || owner == floor) continue;
+            for (int n = 0; n < owner->vertical.basin_count; n++) {
+                const cave_vertical_basin* actual = &owner->vertical.basins[n];
+                if (actual->identity == mirror->identity && actual->depth == mirror->depth)
+                    *mirror = *actual;
+            }
+        }
+        for (int p = 0; p < floor->vertical.portal_count; p++) {
+            cave_vertical_portal* mirror = &floor->vertical.portals[p];
+            level_image* owner = find_floor(mirror->peer_depth);
+            if (!owner) continue;
+            for (int n = 0; n < owner->vertical.portal_count; n++) {
+                const cave_vertical_portal* actual = &owner->vertical.portals[n];
+                if (actual->identity != mirror->identity || actual->kind != mirror->kind
+                    || actual->peer_depth != floor->depth || actual->peer_y != mirror->y
+                    || actual->peer_x != mirror->x) continue;
+                SDL_memcpy(mirror->peer_patch, actual->local_patch, sizeof(mirror->peer_patch));
+                mirror->peer_style = actual->local_style;
+                if (actual->flags & CAVE_VERTICAL_DOWN)
+                    mirror->material = actual->material;
+                if (actual->flags & CAVE_VERTICAL_DOWN)
+                    mirror->flags = (mirror->flags & ~(CAVE_VERTICAL_CLOSED | CAVE_VERTICAL_BROKEN))
+                        | (actual->flags & (CAVE_VERTICAL_CLOSED | CAVE_VERTICAL_BROKEN));
+            }
+        }
+    }
+    cave_vertical_restore(&active->vertical);
+}
+
+bool level_cache_damage_monster(int depth, int index, int damage, const char* note, int who)
+{
+    level_image* floor = level_cache_mutable_floor(depth);
+    if (!floor || index <= 0 || index >= floor->mon_max
+        || !floor->monsters[index].r_idx || damage < 0) return false;
+    /* Resolve canonical death/quest/drop bookkeeping on the owning map. */
+    level_image_capture(active);
+    player_type before = *p_ptr;
+    level_image_restore(floor);
+    bool dead = mon_take_hit(index, damage, note, who);
+    player_type after = *p_ptr;
+    level_image_capture(floor);
+    level_image_restore(active);
+    after.depth = before.depth; after.py = before.py; after.px = before.px;
+    after.cur_map_hgt = before.cur_map_hgt; after.cur_map_wid = before.cur_map_wid;
+    after.wy = before.wy; after.wx = before.wx;
+    after.leaving = before.leaving; after.energy = before.energy;
+    after.energy_use = before.energy_use; after.truce = before.truce;
+    after.target_set = before.target_set; after.target_who = before.target_who;
+    after.target_row = before.target_row; after.target_col = before.target_col;
+    after.health_who = before.health_who;
+    *p_ptr = after;
+    p_ptr->update |= PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS;
+    p_ptr->redraw |= PR_MAP;
+    return dead;
+}
+
+bool level_cache_transfer_object(int depth, int index, int y, int x)
+{
+    level_image* floor = level_cache_mutable_floor(depth);
+    if (!floor || index <= 0 || index >= o_max || !o_list[index].k_idx
+        || o_list[index].held_m_idx || y < 1 || x < 1 || y >= floor->hgt - 1
+        || x >= floor->wid - 1 || FEAT_IS_WALL(floor->feat[y][x])) return false;
+    int slot;
+    for (slot = 1; slot < floor->o_max; slot++)
+        if (!floor->objects[slot].k_idx) break;
+    if (slot == floor->o_max && floor->o_max >= z_info->o_max) return false;
+    object_type moved = o_list[index];
+    moved.iy = y; moved.ix = x;
+    moved.next_o_idx = floor->objects_at[y][x];
+    floor->objects[slot] = moved;
+    floor->objects_at[y][x] = slot;
+    floor->o_max = MAX(floor->o_max, slot + 1);
+    floor->o_cnt++;
+    delete_object_idx(index);
+    return true;
+}
+
 void level_cache_clear(void)
 {
     if (worker_job) return;
@@ -767,11 +1065,16 @@ void level_cache_clear(void)
     }
     for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
         if (floors[i] && floors[i] != active) evict_floor(i);
+    }
+    /* Eviction may hand packets to the active recipient. Keep it alive until
+     * every neighbour has relinquished its ownership. */
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
         level_image_free(floors[i]); floors[i] = NULL;
     }
     active = NULL; running = false;
     requested_depth = pending_depth = -1;
     use_pending_origin = pending_rubble = false;
+    cave_vertical_combat_reset();
 }
 
 #include "fs/save-internal.h"
@@ -824,6 +1127,93 @@ static bool read_generated_player(player_type* player)
 #undef FIELD_SIZE
 }
 
+static void write_regions(const level_image* image)
+{
+    const cave_vertical_state* s = &image->vertical;
+    save_wr_byte(s->portal_count); save_wr_byte(s->basin_count);
+    save_wr_byte(s->breath); save_wr_byte(s->submerged); save_wr_s32b(s->last_turn);
+    for (int i = 0; i < s->portal_count; i++) {
+        const cave_vertical_portal* p = &s->portals[i];
+        save_wr_u32b(p->identity);
+        save_wr_s16b(p->y); save_wr_s16b(p->x); save_wr_s16b(p->peer_depth);
+        save_wr_s16b(p->peer_y); save_wr_s16b(p->peer_x);
+        save_wr_byte(p->kind); save_wr_byte(p->material); save_wr_byte(p->strength);
+        save_wr_byte(p->direction); save_wr_byte(p->flags); save_wr_byte(p->pending_material);
+        save_wr_byte(p->local_style); save_wr_byte(p->peer_style);
+        save_wr_u16b(p->pending); save_wr_s32b(p->due);
+        for (int y = 0; y < CAVE_VERTICAL_PATCH; y++)
+            for (int x = 0; x < CAVE_VERTICAL_PATCH; x++) {
+                save_wr_byte(p->local_patch[y][x]); save_wr_byte(p->peer_patch[y][x]);
+            }
+    }
+    for (int i = 0; i < s->basin_count; i++) {
+        const cave_vertical_basin* b = &s->basins[i];
+        save_wr_u32b(b->identity); save_wr_s16b(b->depth);
+        save_wr_s16b(b->y); save_wr_s16b(b->x);
+        save_wr_u16b(b->volume); save_wr_u16b(b->capacity); save_wr_u16b(b->normal_volume);
+        save_wr_byte(b->material); save_wr_byte(b->radius); save_wr_byte(b->hot); save_wr_byte(b->flags);
+    }
+    save_wr_byte(image->vertical_vaults.count);
+    for (int i = 0; i < image->vertical_vaults.count; i++) {
+        const vertical_vault_placement* p = &image->vertical_vaults.placements[i];
+        save_wr_u32b(p->identity); save_wr_u16b(p->upper_template); save_wr_u16b(p->lower_template);
+        save_wr_s16b(p->upper_depth); save_wr_s16b(p->y); save_wr_s16b(p->x);
+        save_wr_byte(p->transform); save_wr_byte(p->discovered_layers); save_wr_byte(p->reward_layers);
+    }
+}
+
+static bool read_regions(level_image* image)
+{
+    u32b start = load_byte_offset;
+    cave_vertical_state* s = &image->vertical;
+    SDL_memset(s, 0, sizeof(*s));
+    load_rd_byte(&s->portal_count); load_rd_byte(&s->basin_count);
+    load_rd_byte(&s->breath); load_rd_byte(&s->submerged); load_rd_s32b(&s->last_turn);
+    if (s->portal_count > CAVE_VERTICAL_PORTALS || s->basin_count > CAVE_VERTICAL_BASINS)
+        return false;
+    for (int i = 0; i < s->portal_count; i++) {
+        cave_vertical_portal* p = &s->portals[i];
+        load_rd_u32b(&p->identity);
+        load_rd_s16b(&p->y); load_rd_s16b(&p->x); load_rd_s16b(&p->peer_depth);
+        load_rd_s16b(&p->peer_y); load_rd_s16b(&p->peer_x);
+        load_rd_byte(&p->kind); load_rd_byte(&p->material); load_rd_byte(&p->strength);
+        load_rd_byte(&p->direction); load_rd_byte(&p->flags); load_rd_byte(&p->pending_material);
+        load_rd_byte(&p->local_style); load_rd_byte(&p->peer_style);
+        load_rd_u16b(&p->pending); load_rd_s32b(&p->due);
+        for (int y = 0; y < CAVE_VERTICAL_PATCH; y++)
+            for (int x = 0; x < CAVE_VERTICAL_PATCH; x++) {
+                load_rd_byte(&p->local_patch[y][x]); load_rd_byte(&p->peer_patch[y][x]);
+                if (p->local_patch[y][x] >= z_info->f_max || p->peer_patch[y][x] >= z_info->f_max)
+                    return false;
+            }
+    }
+    for (int i = 0; i < s->basin_count; i++) {
+        cave_vertical_basin* b = &s->basins[i];
+        load_rd_u32b(&b->identity); load_rd_s16b(&b->depth);
+        load_rd_s16b(&b->y); load_rd_s16b(&b->x);
+        load_rd_u16b(&b->volume); load_rd_u16b(&b->capacity); load_rd_u16b(&b->normal_volume);
+        load_rd_byte(&b->material); load_rd_byte(&b->radius); load_rd_byte(&b->hot); load_rd_byte(&b->flags);
+    }
+    if (!cave_vertical_restore(s)) return false;
+    load_rd_byte(&image->vertical_vaults.count);
+    if (image->vertical_vaults.count > VERTICAL_VAULT_MAX) return false;
+    for (int i = 0; i < image->vertical_vaults.count; i++) {
+        vertical_vault_placement* p = &image->vertical_vaults.placements[i];
+        load_rd_u32b(&p->identity); load_rd_u16b(&p->upper_template); load_rd_u16b(&p->lower_template);
+        load_rd_s16b(&p->upper_depth); load_rd_s16b(&p->y); load_rd_s16b(&p->x);
+        load_rd_byte(&p->transform); load_rd_byte(&p->discovered_layers); load_rd_byte(&p->reward_layers);
+        if (p->upper_template >= z_info->v_max || p->lower_template >= z_info->v_max
+            || p->transform > 7 || p->discovered_layers > 3 || p->reward_layers > 3
+            || !p->identity || p->upper_depth < 1 || p->upper_depth >= MORGOTH_DEPTH - 1
+            || p->y < 1 || p->x < 1 || p->y >= image->hgt || p->x >= image->wid
+            || (image->depth != p->upper_depth && image->depth != p->upper_depth + 1)) return false;
+    }
+    vertical_vault_restore(&image->vertical_vaults);
+    return vertical_vault_get()->count == image->vertical_vaults.count
+        && load_byte_offset - start == 9u + 126u * s->portal_count
+            + 20u * s->basin_count + 17u * image->vertical_vaults.count;
+}
+
 static void write_vertical(const level_image* image)
 {
     save_wr_byte(image->visited ? 1 : 0);
@@ -864,6 +1254,7 @@ static void write_vertical(const level_image* image)
             save_wr_s16b(dest->id); save_wr_s16b(dest->min_dist); save_wr_s16b(dest->max_dist);
         }
     }
+    write_regions(image);
 }
 
 static bool read_vertical(level_image* image)
@@ -935,6 +1326,10 @@ static bool read_vertical(level_image* image)
             if (load_byte_offset - offset != 11 || dest->kind > HINT_DESTINATION_FIXED_QUEST_SITE) return false;
         }
     }
+    if (savefile_version_at_least(0, 9, 9, 6)) return read_regions(image);
+    SDL_memset(&image->vertical, 0, sizeof(image->vertical));
+    image->vertical.breath = 12; image->vertical.last_turn = turn;
+    SDL_memset(&image->vertical_vaults, 0, sizeof(image->vertical_vaults));
     return true;
 }
 
@@ -947,6 +1342,8 @@ void level_cache_write(void)
     if (!active) { save_wr_byte(0); return; }
     const player_type player = *p_ptr;
     level_image_capture(active);
+    sync_vaults();
+    sync_vertical_regions();
     save_wr_byte(1);
     save_wr_s16b(pending_depth);
     save_wr_s16b(pending_y); save_wr_s16b(pending_x);

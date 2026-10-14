@@ -47,6 +47,8 @@ void level_image_capture(level_image* image)
     image->hgt = p_ptr->cur_map_hgt; image->wid = p_ptr->cur_map_wid;
     image->py = p_ptr->py; image->px = p_ptr->px;
     image->suspended_turn = turn;
+    cave_vertical_capture(&image->vertical);
+    vertical_vault_capture(&image->vertical_vaults);
     legendary_area_free_runtime_snapshot(image->legendary_runtime);
     image->legendary_runtime = legendary_area_capture_runtime();
     image->feeling = feeling; image->do_feeling = do_feeling;
@@ -116,6 +118,8 @@ void level_image_restore(const level_image* image)
     p_ptr->depth = image->depth;
     p_ptr->cur_map_hgt = image->hgt; p_ptr->cur_map_wid = image->wid;
     p_ptr->py = image->py; p_ptr->px = image->px;
+    cave_vertical_restore(&image->vertical);
+    vertical_vault_restore(&image->vertical_vaults);
     p_ptr->truce = image->truce;
     feeling = image->feeling; do_feeling = image->do_feeling;
     rating = image->rating; good_item_flag = image->good_item;
@@ -194,10 +198,7 @@ void level_image_restore(const level_image* image)
     SDL_memcpy(events, image->events, sizeof(events));
     for (int i = 0; i < CAVE_EVENTS_MAX; i++) events[i].turn += elapsed;
     cave_events_restore(events, image->next_event);
-    monster_social_reset();
-    for (int a = 1; a < MON_GROUP_MAX; a++)
-        for (int b = a + 1; b < MON_GROUP_MAX; b++)
-            monster_group_set_relation(a, b, image->relations[a][b]);
+    monster_social_restore_relations(image->relations);
     catastrophe_state run = catastrophe_get_state();
     catastrophe_state local = image->catastrophe;
     local.chance = run.chance;

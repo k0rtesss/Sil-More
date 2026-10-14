@@ -6,6 +6,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "cave/cave-environment.h"
+#include "cave/cave-vertical.h"
 #include "ui/question.h"
 #include <math.h>
 
@@ -819,6 +820,7 @@ void move_player(int dir)
         if (p_ptr->is_dead) return;
         if ((py != y || px != x) && p_ptr->py == y && p_ptr->px == x) {
             player_water_movement(cave_feat[py][px], cave_feat[y][x]);
+            p_ptr->energy_use = cave_vertical_movement_energy(p_ptr->energy_use, py, px, y, x);
             sound(MSG_WALK);
         }
         tutorial_action_finished("move", "", true);

@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "ui/status/status-internal.h"
 
 bool sdl_touch_pane_binding_is_direction(int binding)
 {
@@ -823,6 +824,17 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
 
     movement_energy = player_current_movement_energy();
     movement_speed = player_current_movement_speed();
+
+    /* Keep immediate breathing feedback first, including in a short pane.
+     * Entries wrap through the existing layout at its normal font size. */
+    byte vertical_attr = TERM_L_BLUE;
+    if (status_vertical_air_text(detail, sizeof(detail), &vertical_attr))
+        sdl_status_pane_add(entries, max_entries, &count, "Air",
+            detail + 4, vertical_attr);
+    int current_strength = status_vertical_current_strength(&vertical_attr);
+    if (current_strength > 0)
+        sdl_status_pane_add(entries, max_entries, &count, "Current",
+            status_vertical_current_label(current_strength), vertical_attr);
 
     if (p_ptr->running > 0)
         sdl_status_pane_add_timed(entries, max_entries, &count, "Running",

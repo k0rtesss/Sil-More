@@ -5,6 +5,7 @@
 #include "metarun.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "support/input.h"
+#include "cave/cave-vertical.h"
 
 void do_cmd_target(void)
 {
@@ -1684,6 +1685,9 @@ void do_cmd_unified_look(void)
                     else
                     {
                         log_trace("EXAMINATION: No visible entities at cursor position");
+                        char vertical[320];
+                        if (cave_vertical_describe(y, x, vertical, sizeof(vertical)))
+                            msg_print(vertical);
                     }
                 }
                 unified_look_resume_pointer_handlers();

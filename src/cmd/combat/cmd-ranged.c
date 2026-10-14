@@ -9,6 +9,8 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "ui/question.h"
+#include "cave/cave-vertical-combat.h"
+#include "level-generation/level-cache.h"
 
 #define THROW_PENDING_NONE -9999
 static int throw_pending_slot = THROW_PENDING_NONE;
@@ -523,8 +525,20 @@ void do_cmd_fire(int quiver)
     }
 
     /* Get a direction (or cancel) */
-    if (!get_aim_dir(&dir, tdis))
+    if (!get_aim_dir_vertical(&dir, tdis))
         return;
+
+    if (dir == DIRECTION_UP || dir == DIRECTION_DOWN)
+    {
+        int depth, peer_y, peer_x;
+        if (level_cache_vertical_aperture(p_ptr->py, p_ptr->px,
+                &depth, &peer_y, &peer_x)
+            && ((dir == DIRECTION_DOWN && depth > p_ptr->depth)
+                || (dir == DIRECTION_UP && depth < p_ptr->depth))
+            && cave_vertical_combat_interact(p_ptr->py, p_ptr->px)) return;
+        msg_print("You see no target through an opening in that direction.");
+        return;
+    }
 
     /* Start at the player */
     y = p_ptr->py;

@@ -10780,3 +10780,58 @@ These checks exercise real engine and presentation code with isolated fixtures. 
 - Passed check_controller_keyboard.py, check_controller_contract.py, check_mobile_text_input.py, check_controller_prompt_handoff.py, check_help_controller_runtime.py and check_description_controller_actions.py. New tests cover real text editing, remaps/modifiers, nesting, sticks, symbols, virtual Xbox/DualShock 4/DualSense detection, cached glyph changes on active-device switching, JSON preference round-trip, and 24 rendered normal/Big Font keyboard layouts. Short phone question cases also passed.
 - Real isolated SDL virtual-controller startup/intro/hero/attributes/skills/confirmation paths were replayed. The first full-game run stopped during neighboring-floor generation with an access violation in update_view_aux (RVA 0x3c227; profile scripts/output/control-playtests/goal-gamepad-cc2008cd). The separate neighbor-level fixture passed. The phone long-description fixture fails identically with the HEAD question-menu source; that is a baseline fixture failure, not a passed suite. No physical Xbox, DualShock, DualSense, USB or Bluetooth replay was performed.
 - Steam Input API wizard: No remains correct. The game uses SDL gamepads and a Steam controller profile, with no native Steam Input actions/action-origin calls or Steamworks SDK integration. No store settings were changed. Full playthrough and physical transport support remain unverified.
+
+
+# Vertical gameplay implementation
+
+Objective: implement the complete vertical-region proposal: paired vaults;
+sloping rivers, rapids, waterfalls, linked lakes, tall lake caverns, submerged
+connections; lava falls/tubes and finite reservoir changes; contextual travel,
+visibility/graphics, sound, actor/object transfer and vertical combat.
+
+User cache rule overrides the earlier archival proposal: retain only current
+floor and depth +/-1 (a transition may use a temporary destination). Evicted
+floors regenerate with new surroundings. Inherit only geometry/state required
+by currently neighbouring floors, including reciprocal vault footprints.
+
+Baseline: clean 0.9.9 tree, save version 0.9.9.5. Existing cache has 3 resident
+floors plus one transient destination, matched stairs/shafts/deep chasms.
+
+Implementation split: main owns cave-vertical, cache/generation/save/runtime
+integration. gpt-6.1-sol/high agent vertical_vaults owns paired vault templates,
+parser and placement module. gpt-6.1-sol/high agent vertical_visuals owns SDL
+opening effects and inspection; both independent from cache/runtime edits.
+
+Shared API: src/cave/cave-vertical.h. Compact resident portal records carry
+reciprocal 7x7 terrain patches, reservoir identity/state and transfer endpoints.
+No archive of distant maps. Save compatibility bump: 0.9.9.6.
+
+Implemented and validated: paired Cistern Fortress templates 525/526; stream,
+rapids, fall, lake, sump, lava-fall and cooled-tube connections; bounded basins,
+delayed conserved packets, sluices/destruction/freezing/quenching, diving/air,
+movement/current rules, object/monster transfers and cross-floor physical combat.
+Only adjacent floors retain required geometry/state; eviction reconstruction
+keeps the feature frame/shared history and creates fresh surrounding terrain.
+
+Final integration repairs: preserve per-actor social state during cache restores;
+handle linked holes through the real m_fall_in_chasm chain; deduplicate impact
+while a destination is pending; use receiving terrain/height for fall damage;
+warn for rising/overflowing basins; defer submerged treasure until drainage;
+give deep water its own vault token (double quote), preserving backtick lava.
+The upper sluice's capacity exceeds its lower race, so its finite release
+temporarily floods a lower bank before the bank recedes to normal level.
+
+Passed check_vertical_vaults/cache/water/ui/render, check_neighbor_levels,
+check_level_transition_turns, check_monster_social, test_status_depth_quick_access,
+check_cave_events (186 checks), check_chasm_edges (all 256 contours), and both
+production-source vertical combat/actor fixtures. Cache tests include exact v5
+migration, v6 active+neighbor save lanes/corruption, actual seeded generation and
+eviction, aperture secrecy/lighting, canonical death/XP, ownership and a real
+three-floor sluice sequence with per-tick liquid conservation. Renderer tests
+inject the core sample boundary; the cache suite tests the production reader.
+
+Final build-cmake.bat standard passed. Deployed executable SHA256:
+CF2EF90C4CF84E8FEBAF83F5BF0AEA7ED6407830B6E04C3ED8252B0C1C990F8A.
+Build/deployment executable, vault.txt and limits.txt hashes match. Eight-panel
+preview: scripts/output/vertical-render-check/connected-floors.png. No manual
+balance/physical-device replay, Android build, commit or push was performed.

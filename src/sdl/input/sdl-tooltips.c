@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "cave/cave-atmosphere.h"
 #include "cave/cave-environment.h"
+#include "cave/cave-vertical.h"
 #include "sdl/main-sdl-private.h"
 
 typedef struct description_overlay_touch_scroll_state
@@ -673,6 +674,11 @@ bool sdl_object_tooltip_format_grid(int y, int x, char* out,
     if (cave_environment_describe(y, x, environment, sizeof(environment)))
         sdl_object_tooltip_append_part(buf, buflen, attrs, environment,
             TERM_YELLOW);
+
+    char vertical[320];
+    if (cave_vertical_describe(y, x, vertical, sizeof(vertical)))
+        sdl_object_tooltip_append_part(buf, buflen, attrs, vertical,
+            TERM_L_BLUE);
 
     /* Explain the local rule on visible ground (including otherwise blank
      * floor), without revealing atmospheres through remembered/hidden tiles. */

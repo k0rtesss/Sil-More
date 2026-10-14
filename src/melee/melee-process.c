@@ -12,6 +12,7 @@
 #include "monster/monster-social.h"
 #include "monster/monster-routine.h"
 #include "cave/cave-events.h"
+#include "cave/cave-vertical-actors.h"
 
 int challenge_check(monster_type* m_ptr)
 {
@@ -1617,11 +1618,13 @@ void process_monsters(s16b minimum_energy)
         monster_ai_begin_turn(m_ptr);
         monster_social_tick(m_ptr);
         monster_abilities_begin_action(m_ptr);
+        cave_vertical_monster_begin_action(i);
 
         /* Lava also affects sleeping monsters and those missing their turn. */
         if (monster_lava_begin_action(i))
         {
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            cave_vertical_monster_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
@@ -1635,6 +1638,7 @@ void process_monsters(s16b minimum_energy)
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
             monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
+            cave_vertical_monster_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
@@ -1652,6 +1656,7 @@ void process_monsters(s16b minimum_energy)
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
             monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
+            cave_vertical_monster_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
@@ -1673,6 +1678,7 @@ void process_monsters(s16b minimum_energy)
             finish_monster_ability_action(m_ptr, old_y, old_x, true);
             monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
+            cave_vertical_monster_end_action(i);
             monster_lava_end_action(i);
             continue;
         }
@@ -1682,6 +1688,7 @@ void process_monsters(s16b minimum_energy)
         finish_monster_ability_action(m_ptr, old_y, old_x, m_ptr->skip_this_turn);
         monster_melting_ice_end_action(i);
         monster_poison_terrain_end_action(i);
+        cave_vertical_monster_end_action(i);
         monster_lava_end_action(i);
     }
 }

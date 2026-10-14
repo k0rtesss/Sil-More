@@ -2,6 +2,8 @@
 
 #include "angband.h"
 #include "level-generation/level-cache.h"
+#include "cave/cave-vertical.h"
+#include "level-generation/level-generation-vertical-vaults.h"
 #include "meta_state.h"
 #include "monster/monster-routine.h"
 #include "cave/cave-environment.h"
@@ -470,6 +472,8 @@ bool cave_gen(void)
     current_partition_count = 0;
     /* Utumno reserves its entrance before planning the ordinary geology. */
     if (!is_utumno_level) terrain_history_begin();
+    if (!is_morgoth_level && !is_utumno_level && !vertical_vault_place()) return false;
+    cave_vertical_generation_vaults();
 
     /* Verify dun struct sanity */
     log_trace("cave_gen: sanity check dun ptr=%p cent capacity=%d connection[0][0]=%d piece[0]=%d corner[0]=(y1=%d,x1=%d,y2=%d,x2=%d)",
@@ -876,6 +880,7 @@ bool cave_gen(void)
         make_patches_of_sunlight();
 
     if (!level_cache_generation_links()) return false;
+    if (!cave_vertical_generation_finish()) return false;
 
     // check dungeon connectivity
     if (!check_connectivity())
@@ -1560,6 +1565,7 @@ bool cave_gen(void)
     /* All liquid geometry is final after population and quest placement.  The
      * source-to-outlet graph is kept as level metadata for the renderer. */
     cave_water_flow_build();
+    cave_vertical_flow_build();
 
     /* Level generation successful - log completion */
     genlog_summary("Level %d generation COMPLETE: %d rooms, quest_lottery=%d",

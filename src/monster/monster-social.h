@@ -29,6 +29,7 @@ bool monster_social_allies(const monster_type* a, const monster_type* b);
 bool monster_social_start_feud(int a, int b);
 void monster_social_player_attack(monster_type* m);
 void monster_social_reset(void);
+void monster_social_restore_relations(const byte saved[MON_GROUP_MAX][MON_GROUP_MAX]);
 void monster_social_remap(int old_idx, int new_idx);
 void monster_social_tick(monster_type* m);
 bool monster_social_turn(monster_type* m);

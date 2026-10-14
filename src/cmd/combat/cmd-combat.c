@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "level-generation/level-cache.h"
+#include "cave/cave-vertical.h"
 #include "quest/quest-rewards-beta.h"
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
@@ -1621,6 +1622,7 @@ void hit_trap(int y, int x)
         // not really a trap, but handled here due to similarities
     case FEAT_CHASM:
     {
+        if (cave_vertical_forced_travel(y, x)) break;
         // give several messages so the player has a chance to see it happen
         msg_print("You fall into the darkness!");
         message_flush();

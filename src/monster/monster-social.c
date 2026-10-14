@@ -213,6 +213,13 @@ void monster_social_reset(void)
     }
 }
 
+/* A level snapshot already contains each actor's social state. Restoring its
+ * diplomacy must not reset actors or end personal feuds in neutral groups. */
+void monster_social_restore_relations(const byte saved[MON_GROUP_MAX][MON_GROUP_MAX])
+{
+    memcpy(relations, saved, sizeof(relations));
+}
+
 bool monster_social_valid(const monster_type* m)
 {
     if (m->social_group >= MON_GROUP_MAX || m->social_memory > MON_SOCIAL_MEMORY

@@ -6101,6 +6101,8 @@ static int sdl_touch_top_panel_player_action_kind_for_binding(int binding)
     case KTRL('A'): return SDL_PLAYER_ACTION_CHANGE_STAFF;
     case 'c': return SDL_PLAYER_ACTION_CLOSE_DOOR;
     case 'b': return SDL_PLAYER_ACTION_BASH_DOOR;
+    case '<': return SDL_PLAYER_ACTION_ASCEND;
+    case '>': return SDL_PLAYER_ACTION_DESCEND;
     default:
         return SDL_PLAYER_ACTION_NONE;
     }

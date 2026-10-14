@@ -6,6 +6,8 @@
 #include "cave/cave-events.h"
 #include "cave/cave-atmosphere.h"
 #include "monster/monster-social.h"
+#include "cave/cave-vertical.h"
+#include "level-generation/level-generation-vertical-vaults.h"
 
 /* Scalar run changes made by generation. Keep this list in one place for the
  * deferred commit and its portable, typed save representation. */
@@ -78,6 +80,8 @@ typedef struct level_image {
      * shaft spans at least two floors; each additional floor is less likely. */
     byte chasm_drop[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     byte chasm_up[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    cave_vertical_state vertical;
+    vertical_vault_state vertical_vaults;
 } level_image;
 
 level_image* level_image_new(void);

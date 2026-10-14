@@ -6,6 +6,7 @@
 #include "cave/cave-bridge.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-water-flow.h"
+#include "cave/cave-vertical.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "melee/melee-util.h"
 #include "monster/monster-senses.h"
@@ -994,6 +995,7 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Change the feature */
     cave_feat[y][x] = feat;
     cave_environment_changed(y, x, old_feat, feat);
+    cave_vertical_terrain_changed(y, x, old_feat);
     if (old_feat != feat && old_flow_feature != new_flow_feature)
         cave_water_flow_invalidate_at(y, x);
     if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && cave_when)

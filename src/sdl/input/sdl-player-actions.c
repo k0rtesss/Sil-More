@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "cave/cave-vertical.h"
 
 bool sdl_player_map_rect(int y, int x, SDL_FRect* out_rect)
 {
@@ -135,6 +136,10 @@ static cptr sdl_player_action_menu_description_for_kind(int kind)
                "when you move into them.";
     case SDL_PLAYER_ACTION_BASH_DOOR:
         return "Bash: force open a stuck or locked door.";
+    case SDL_PLAYER_ACTION_ASCEND:
+        return "Ascend: follow the connected passage upstream to the higher floor.";
+    case SDL_PLAYER_ACTION_DESCEND:
+        return "Descend: follow the connected passage to the lower floor; dangerous drops and dives ask before travel.";
     default:
         return "";
     }
@@ -160,6 +165,8 @@ cptr sdl_player_action_menu_fallback_for_kind(int kind)
     case SDL_PLAYER_ACTION_CHANGE_STAFF: return "Staff";
     case SDL_PLAYER_ACTION_CLOSE_DOOR: return "Close";
     case SDL_PLAYER_ACTION_BASH_DOOR: return "Bash";
+    case SDL_PLAYER_ACTION_ASCEND: return "<";
+    case SDL_PLAYER_ACTION_DESCEND: return ">";
     default: return "";
     }
 }
@@ -268,6 +275,12 @@ void sdl_player_action_menu_tile_for_kind(int kind, byte* out_attr,
         break;
     case SDL_PLAYER_ACTION_BASH_DOOR:
         row = SDL_UI_SYMBOL_ROW; col = SDL_UI_SYMBOL_BASH_DOOR;
+        break;
+    case SDL_PLAYER_ACTION_ASCEND:
+        row = 0; col = 22;
+        break;
+    case SDL_PLAYER_ACTION_DESCEND:
+        row = 0; col = 25;
         break;
     default:
         break;
@@ -428,8 +441,17 @@ int sdl_player_action_menu_collect(player_action_menu_entry* entries)
 
     sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_WAIT,
         'z', "Wait");
-    sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_USE,
-        'u', sdl_player_floor_use_action_name());
+    /* A passage replaces Use in the primary ring, keeping its established
+     * geometry and making travel directly reachable by touch/controller. */
+    if (p_ptr && cave_vertical_can_travel(false))
+        sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_DESCEND,
+            '>', "Descend");
+    else if (p_ptr && cave_vertical_can_travel(true))
+        sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_ASCEND,
+            '<', "Ascend");
+    else
+        sdl_player_action_menu_add_entry(entries, &count, SDL_PLAYER_ACTION_USE,
+            'u', sdl_player_floor_use_action_name());
     if (sdl_player_can_ready_weapon_entry()) {
         sdl_player_action_menu_add_entry(entries, &count,
             SDL_PLAYER_ACTION_SHOOT, '\t',
@@ -628,7 +650,9 @@ int sdl_player_action_menu_default_kind(void)
         return SDL_PLAYER_ACTION_NONE;
 
     for (int i = 0; i < count; i++) {
-        if (entries[i].kind == SDL_PLAYER_ACTION_USE)
+        if (entries[i].kind == SDL_PLAYER_ACTION_USE
+            || entries[i].kind == SDL_PLAYER_ACTION_ASCEND
+            || entries[i].kind == SDL_PLAYER_ACTION_DESCEND)
             return entries[i].kind;
     }
 
@@ -1533,6 +1557,14 @@ void sdl_player_action_menu_activate_kind(int kind, bool secondary)
         break;
     case SDL_PLAYER_ACTION_BASH_DOOR:
         command = 'b';
+        break;
+    case SDL_PLAYER_ACTION_ASCEND:
+        if (!p_ptr || !cave_vertical_can_travel(true)) return;
+        command = '<';
+        break;
+    case SDL_PLAYER_ACTION_DESCEND:
+        if (!p_ptr || !cave_vertical_can_travel(false)) return;
+        command = '>';
         break;
     default:
         return;

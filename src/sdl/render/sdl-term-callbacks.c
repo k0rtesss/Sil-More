@@ -1897,6 +1897,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         fixture_drawn = sdl_idle_animation_draw(dy, dx, dst);
         material_edge_drawn = sdl_material_edge_draw(dy, dx, ta, tc, dst, fixture_drawn);
     }
+    if (terrain_tile && !illusion_wall && !fixture_drawn)
+        fixture_drawn = sdl_vertical_draw_effects(dy, dx, dst);
     if (sdl_rage_wall_tint_active(dy, dx) && (cave_m_idx[dy][dx] != 0))
         sdl_draw_rage_tile_filter(ta, tc, dy, dx, dst);
     else if (sdl_rage_floor_tint_active(dy, dx))

@@ -26,6 +26,7 @@ static const struct keybind_entry command_primary_keybinds[] = {
     {'\t', NULL, "Change active weapon", "\t", false},
     {'y', NULL, "Abilities", "y", false},
     {'f', "F", "Ranged attack (active weapon)", "f", false},
+    {CMD_VERTICAL_FIRE, NULL, "Shoot through a vertical opening", "\007", false},
     {'l', NULL, "Look around", "l", false},
     {'T', NULL, "Tunnel / dig", "T", false},
     {'b', NULL, "Bash door", "b", false},

@@ -4,6 +4,8 @@
 #include "quest/quest-runtime.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
+#include "cave/cave-vertical.h"
+#include "cave/cave-vertical-combat.h"
 #include "dungeon-internal.h"
 
 /*
@@ -289,6 +291,7 @@ void process_world(void)
 
     /* Positional loops can change on any actor turn, not just world ticks. */
     sdl_sound_update_environment();
+    cave_vertical_combat_process();
 
     /* Stop now unless the turn count is divisible by 10 */
     if (turn % 10)
@@ -296,6 +299,7 @@ void process_world(void)
 
     cave_environment_process();
     cave_events_process();
+    cave_vertical_process();
 
     /*** Check the Time and Load ***/
     if (!(turn % 1000))

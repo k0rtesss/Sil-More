@@ -31,6 +31,10 @@
 #     type 8  - greater vault
 #     type 9  - Morgoth's vault
 #     type 11 - handcrafted Utumno forge (explicit placement only)
+#     type 12 - paired two-floor blueprint (explicit placement only)
+# Y:companion:layer pairs two equally sized type-12 records (0 upper, 1 lower).
+# P:role:row:column marks vertical infrastructure; roles are listed with the
+# cistern fortress at the end of this file. Shared transforms apply to markers.
 #
 # 'C' is for the wall color (optional). Color values 0-255, where 0
 #     means use the default depth-based color. Common colors:
@@ -85,6 +89,7 @@
 #     0 - forge
 #     7 - chasm
 #     _ - shallow water (passable; slows grounded movement)
+#     " - deep water (swimming terrain)
 #     { - solid ice (can thaw through melting ice into water)
 #     ` - molten lava (lethal without protection; emits light)
 #     1 - monster +1 level
@@ -4374,3 +4379,83 @@ D:##########################....<....##########################
 D:##########################.........##########################
 D:#############################################################
 D:#############################################################
+
+# Two-floor cistern fortress. Y pairs explicit-only type 12 blueprints.
+# P roles: 1 gate, 2 upper basin, 3 lower basin, 4 spillway,
+# 5 outlet, 6 overlook, 7 reciprocal stair, 8 dry approach,
+# 9 submerged reward (one per layer, with no ordinary loot tokens on that layer).
+# Each gallery loops round both sides of the cistern; west service stairs
+# remain dry while the sluice floods the central race and lower settling tank.
+N:525:The Cistern Fortress - Sluice Keep
+X:12:4:6:18
+Y:526:0
+S:*:1
+F:TORCHES | TERRAIN_REPAIRED
+M:A fortified cistern fills the upper keep. A sluice wheel overlooks the settling galleries below; dry service passages circle both banks.
+P:1:11:19
+P:2:6:19
+P:4:10:19
+P:6:10:18
+P:7:18:8
+P:8:11:1
+P:8:11:37
+P:9:6:19
+D:.......................................
+D:.$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$.
+D:.$.......#...................#.......$.
+D:.$.......#.._______________..#.......$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$...1...+.._"""""""""""""_..+...1...$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$###+####.._______________..####+###$.
+D:.$.......#........._.........#.......$.
+D:.........+...................+.........
+D:.$.......#....#.........#....#.......$.
+D:.$.......#...................#.......$.
+D:.$###+####...................####+###$.
+D:.$.......#...................#.......$.
+D:.$../:...#....#.........#....#.......$.
+D:.$.......+...................+...1...$.
+D:.$......>............................$.
+D:.$...................................$.
+D:.$...................................$.
+D:.$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$.
+D:.......................................
+
+N:526:The Cistern Fortress - Settling Galleries
+X:12:5:6:19
+Y:525:1
+S:*:1
+F:TORCHES | TERRAIN_REPAIRED
+M:Water thunders in the settling tank. Two dry galleries circle it; a service stair climbs beside the western barracks.
+P:3:6:19
+P:4:10:19
+P:5:15:19
+P:7:18:8
+P:8:11:1
+P:8:11:37
+D:.......................................
+D:.$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$.
+D:.$.......#...................#.......$.
+D:.$.......#.._______________..#.......$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$...1...+.._"""""""""""""_..+...1...$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$.......#.._"""""""""""""_..#.......$.
+D:.$###+####.._______________..####+###$.
+D:.$.......#........._.........#.......$.
+D:.........+........._.........+.........
+D:.$.......#....#...._....#....#.......$.
+D:.$.......#........._.........#.......$.
+D:.$###+####........._.........####+###$.
+D:.$.......#........._.........#.......$.
+D:.$../:...#....#.........#....#.......$.
+D:.$.......+...................+...2...$.
+D:.$......<.....................~......$.
+D:.$...................................$.
+D:.$...................................$.
+D:.$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$.
+D:.......................................

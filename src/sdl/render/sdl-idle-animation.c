@@ -4,6 +4,7 @@
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-water-flow.h"
+#include "cave/cave-vertical.h"
 #include "sdl/render/sdl-bridge.h"
 
 /* Fixtures share one 160x16 atlas; each animated liquid shares one 64x16 atlas.
@@ -40,6 +41,7 @@ typedef struct idle_cell {
     char c, tc;
     byte frame_steps, phase_steps, drawn_frame, frame_count;
     byte liquid_feat;
+    bool vertical_effect;
 } idle_cell;
 
 static SDL_Texture* fixture_texture;
@@ -87,6 +89,123 @@ static bool ice_water_melting_load_attempted;
 static bool chasm_has_animated_neighbor(int y, int x);
 static bool ice_has_water_neighbor(int y, int x);
 
+/* Every lower-floor read goes through the bounded aperture query. Keep the
+ * frontend gate too: remembered chasm artwork is not a window into a live
+ * neighbouring map, and hallucination must never expose real lower terrain. */
+static bool visible_vertical(int y, int x, cave_vertical_view_info* view)
+{
+    return p_ptr && !p_ptr->blind && !p_ptr->image && in_bounds(y, x)
+        && (unsigned)y < (unsigned)p_ptr->cur_map_hgt
+        && (unsigned)x < (unsigned)p_ptr->cur_map_wid
+        && (cave_info[y][x] & CAVE_SEEN)
+        && cave_vertical_view(y, x, view);
+}
+
+static bool vertical_has_motion(int y, int x)
+{
+    cave_vertical_view_info view;
+    return visible_vertical(y, x, &view)
+        && ((view.flags & (CAVE_VERTICAL_CEILING | CAVE_VERTICAL_PASSAGE))
+            || ((view.fluid_feature == FEAT_WATER || view.fluid_feature == FEAT_DEEP_WATER
+                    || view.fluid_feature == FEAT_LAVA || view.fluid_feature == FEAT_POISON)
+                && (view.flags & (CAVE_VERTICAL_OUTFLOW | CAVE_VERTICAL_INFLOW))));
+}
+
+static void vertical_rect(const SDL_FRect* dst, float x, float y,
+    float w, float h, SDL_Color color)
+{
+    SDL_FRect rect = {dst->x + x * dst->w / 16.0f,
+        dst->y + y * dst->h / 16.0f, w * dst->w / 16.0f,
+        h * dst->h / 16.0f};
+    SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderFillRect(g_state.renderer, &rect);
+}
+
+/* Strokes belong to the fluid, entirely inside this cell. There is no painted
+ * rim or shadow on the walkable bank. The current's source edge feeds a
+ * descending ribbon; ceiling inflows end in foam on the present floor.
+ * A dry overhead opening has a small high-set silhouette and drifting dust,
+ * distinct from a hole in the walkable ground. */
+bool sdl_vertical_draw_effects(int y, int x, const SDL_FRect* dst)
+{
+    cave_vertical_view_info view;
+    if (!dst || !g_state.renderer || !g_state.use_tiles
+        || !visible_vertical(y, x, &view))
+        return false;
+    bool fluid = view.fluid_feature == FEAT_WATER || view.fluid_feature == FEAT_DEEP_WATER
+        || view.fluid_feature == FEAT_LAVA || view.fluid_feature == FEAT_POISON;
+    bool dry_ceiling = !fluid && (view.flags & CAVE_VERTICAL_CEILING);
+    bool passage = (view.flags & CAVE_VERTICAL_PASSAGE) != 0;
+    if (!passage && !dry_ceiling && (!fluid
+            || !(view.flags & (CAVE_VERTICAL_OUTFLOW | CAVE_VERTICAL_INFLOW))))
+        return false;
+    bool lava = view.fluid_feature == FEAT_LAVA;
+    bool acid = view.fluid_feature == FEAT_POISON;
+    SDL_Color body = lava ? (SDL_Color){231, 78, 21, 255}
+        : acid ? (SDL_Color){65, 145, 40, 255} : (SDL_Color){47, 114, 164, 255};
+    SDL_Color light = lava ? (SDL_Color){255, 192, 58, 255}
+        : acid ? (SDL_Color){161, 215, 89, 255} : (SDL_Color){157, 213, 228, 255};
+    SDL_Color tail = lava ? (SDL_Color){142, 39, 19, 255}
+        : acid ? (SDL_Color){30, 80, 31, 255} : (SDL_Color){28, 65, 97, 255};
+    SDL_BlendMode blend;
+    Uint8 r, g, b, a;
+    SDL_GetRenderDrawBlendMode(g_state.renderer, &blend);
+    SDL_GetRenderDrawColor(g_state.renderer, &r, &g, &b, &a);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    int phase = (int)((frame_tick / 8 + (unsigned)x + (unsigned)y) % 4);
+    if (passage) {
+        SDL_Color ink = (view.flags & CAVE_VERTICAL_DRY_TUBE)
+            ? (SDL_Color){222, 215, 186, 255} : (SDL_Color){182, 231, 240, 255};
+        if (view.flags & CAVE_VERTICAL_DRY_TUBE) {
+            vertical_rect(dst, 4, 4, 1, 7, (SDL_Color){77, 72, 66, 255});
+            vertical_rect(dst, 11, 4, 1, 7, (SDL_Color){77, 72, 66, 255});
+            vertical_rect(dst, 5, 3, 6, 1, (SDL_Color){115, 108, 94, 255});
+        }
+        for (int row = 0; row < 5; row++) {
+            int offset = 2 - ABS(row - 2);
+            int px = (view.flags & CAVE_VERTICAL_OUTFLOW) ? 7 + offset : 9 - offset;
+            vertical_rect(dst, px, 6 + row, 2, 1, ink);
+        }
+        if (view.flags & CAVE_VERTICAL_DIVE) {
+            vertical_rect(dst, 4, 3 + phase, 2, 1, ink);
+            vertical_rect(dst, 3, 4 + phase, 1, 2, ink);
+            vertical_rect(dst, 6, 4 + phase, 1, 2, ink);
+            vertical_rect(dst, 4, 6 + phase, 2, 1, ink);
+        } else vertical_rect(dst, 6 + phase, 12, 1, 1, ink);
+    } else if (dry_ceiling) {
+        vertical_rect(dst, 5, 1, 6, 1, (SDL_Color){98, 104, 112, 255});
+        vertical_rect(dst, 4, 2, 2, 1, (SDL_Color){72, 81, 91, 255});
+        vertical_rect(dst, 10, 2, 2, 1, (SDL_Color){72, 81, 91, 255});
+        vertical_rect(dst, 6, 2, 4, 2, (SDL_Color){14, 21, 29, 255});
+        vertical_rect(dst, 6, 5 + phase, 1, 1, (SDL_Color){176, 181, 170, 210});
+        vertical_rect(dst, 10, 8 + phase, 1, 1, (SDL_Color){142, 155, 159, 190});
+        vertical_rect(dst, 7, 12 + phase % 2, 1, 1, (SDL_Color){176, 181, 170, 150});
+    } else {
+        bool incoming = (view.flags & (CAVE_VERTICAL_INFLOW | CAVE_VERTICAL_CEILING)) != 0;
+        if (!incoming) {
+            switch (view.direction) {
+            case 6: vertical_rect(dst, 0, 6, 9, 3, body); break;
+            case 4: vertical_rect(dst, 7, 6, 9, 3, body); break;
+            case 8: vertical_rect(dst, 7, 7, 3, 9, body); break;
+            default: vertical_rect(dst, 6, 0, 3, 9, body); break;
+            }
+        }
+        int top = incoming ? 0 : 7;
+        vertical_rect(dst, 6, top, 4, 13 - top, body);
+        vertical_rect(dst, 7, 13, 2, 3, tail);
+        for (int yy = top + phase; yy < 13; yy += 4)
+            vertical_rect(dst, 7, yy, 1, MIN(2, 13 - yy), light);
+        if (incoming) {
+            vertical_rect(dst, 4, 12, 3, 1, light);
+            vertical_rect(dst, 10, 12, 2, 1, light);
+            vertical_rect(dst, 5 + phase, 14, 2, 1, body);
+        }
+    }
+    SDL_SetRenderDrawBlendMode(g_state.renderer, blend);
+    SDL_SetRenderDrawColor(g_state.renderer, r, g, b, a);
+    return true;
+}
+
 static bool liquid_is_water(byte feat)
 {
     return feat == FEAT_WATER || feat == FEAT_DEEP_WATER;
@@ -113,7 +232,8 @@ static byte liquid_frame_count_at(int y, int x, byte feat)
 {
     /* The void stays static; borrowed water/acid/lava texels advance with
      * their source. Twelve covers both three- and four-frame donor periods. */
-    if (feat == FEAT_CHASM && chasm_has_animated_neighbor(y, x)) return 12;
+    if (feat == FEAT_CHASM && (chasm_has_animated_neighbor(y, x)
+            || vertical_has_motion(y, x))) return 12;
     if (feat == FEAT_ICE && ice_has_water_neighbor(y, x)) return 4;
     if (liquid_has_current(feat) && !cave_water_flow_direction(y, x))
         return WATER_STILL_FRAME_COUNT;
@@ -226,9 +346,27 @@ static int chasm_fill_variant(int y, int x)
 
 static void draw_chasm_fill(int y, int x, const SDL_FRect* dst, bool live)
 {
-    char tile = (char)(TILE_FLAG | chasm_fill_variant(y, x) * 2
-        | (live ? 0 : 1));
-    sdl_draw_tileset_sprite(f_info[FEAT_CHASM].x_attr, tile, dst, false);
+    cave_vertical_view_info view;
+    if (g_state.tileset && visible_vertical(y, x, &view)
+        && (view.flags & CAVE_VERTICAL_BELOW_VISIBLE)
+        && (view.attr & TILE_FLAG) && ((byte)view.chr & TILE_FLAG)) {
+        Uint8 r, g, b, a;
+        SDL_GetTextureColorMod(g_state.tileset, &r, &g, &b);
+        SDL_GetTextureAlphaMod(g_state.tileset, &a);
+        /* Retain the normal tile size and cached style. Uniform depth tint
+         * separates this surface from the current floor and bridge deck. */
+        int light = MAX(56, 128 - MAX(1, view.relative_depth) * 24);
+        SDL_SetTextureColorMod(g_state.tileset, light, light, MIN(255, light + 16));
+        SDL_SetTextureAlphaMod(g_state.tileset, 255);
+        sdl_draw_tileset_sprite(view.attr, view.chr, dst, false);
+        SDL_SetTextureColorMod(g_state.tileset, r, g, b);
+        SDL_SetTextureAlphaMod(g_state.tileset, a);
+    } else {
+        char tile = (char)(TILE_FLAG | chasm_fill_variant(y, x) * 2
+            | (live ? 0 : 1));
+        sdl_draw_tileset_sprite(f_info[FEAT_CHASM].x_attr, tile, dst, false);
+    }
+    sdl_vertical_draw_effects(y, x, dst);
     sdl_chasm_transition_draw(y, x, dst);
 }
 
@@ -801,6 +939,8 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
     if (g_state.use_tiles && visible_liquid(y, x))
     {
         bool drawn = draw_liquid(y, x, dst);
+        if (visible_liquid(y, x) != FEAT_CHASM)
+            sdl_vertical_draw_effects(y, x, dst);
         if (FEAT_IS_BRIDGE(cave_environment_known_feature(y, x))) sdl_draw_bridge_deck(y, x, dst);
         return drawn;
     }
@@ -848,7 +988,8 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
     idle_cell* cell;
     sdl_idle_animation_invalidate_span(col, row, use_bigtile ? 2 : 1);
     byte liquid = visible_liquid(y, x);
-    if ((!liquid && !visible_fixture(y, x))
+    bool vertical = vertical_has_motion(y, x);
+    if ((!liquid && !visible_fixture(y, x) && !vertical)
         || !(ta & TILE_FLAG) || !((byte)tc & TILE_FLAG))
         return;
     if (cell_count == cell_capacity)
@@ -864,12 +1005,13 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
     *cell = (idle_cell){ .col = col, .row = row, .y = y, .x = x,
         .width = use_bigtile ? 2 : 1, .a = a, .ta = ta, .c = c, .tc = tc };
     cell->liquid_feat = liquid;
-    if (liquid)
+    cell->vertical_effect = vertical;
+    if (liquid || vertical)
     {
         cell->frame_steps = 8;
         cell->phase_steps = 0;
         cell->drawn_frame = (!p_ptr->blind && (cave_info[y][x] & CAVE_SEEN))
-            ? (byte)((frame_tick / 8) % liquid_frame_count_at(y, x, liquid)) : 0;
+            ? (byte)((frame_tick / 8) % (liquid ? liquid_frame_count_at(y, x, liquid) : 4)) : 0;
         return;
     }
     byte fixture_kind = visible_fixture(y, x);
@@ -885,7 +1027,7 @@ static bool animation_context_active(void)
 {
     SDL_WindowFlags flags;
     if ((!fixture_texture && !water_texture && !lava_texture && !poison_texture
-            && !melting_ice_texture)
+            && !melting_ice_texture && !g_state.tileset)
         || !cell_count || !g_state.window
         || !g_state.use_tiles || !sdl_mouse_gameplay_context_active()
         || g_minimap.active || g_main_menu_overlay_active
@@ -904,11 +1046,14 @@ static bool animation_context_active(void)
 
 static bool cell_can_animate(const idle_cell* cell)
 {
+    if ((!cell->liquid_feat && !cell->vertical_effect && !fixture_texture)
+        || (cell->vertical_effect && !g_state.tileset)) return false;
     /* Solid ice is static except for open water visible around its edge. */
     if ((cell->liquid_feat == FEAT_ICE
             && !ice_has_water_neighbor(cell->y, cell->x))
         || (cell->liquid_feat == FEAT_CHASM
-            && !chasm_has_animated_neighbor(cell->y, cell->x)))
+            && !chasm_has_animated_neighbor(cell->y, cell->x)
+            && !vertical_has_motion(cell->y, cell->x)))
         return false;
     term* t = term_screen;
     term_win* scr = t ? t->scr : NULL;
@@ -919,6 +1064,7 @@ static bool cell_can_animate(const idle_cell* cell)
         || cell->y != p_ptr->wy + row - ROW_MAP
         || cell->x != p_ptr->wx + (col - COL_MAP) / (use_bigtile ? 2 : 1)
         || !(cell->liquid_feat ? visible_liquid(cell->y, cell->x) == cell->liquid_feat
+            : cell->vertical_effect ? vertical_has_motion(cell->y, cell->x)
                          : visible_fixture(cell->y, cell->x)))
         return false;
     if (cell->liquid_feat
@@ -943,7 +1089,7 @@ static bool cell_can_animate(const idle_cell* cell)
         return false;
     /* Liquids remain visible around transparent actors/items. A fixture is
      * hidden beneath an occupant and needs no idle work there. */
-    if (!cell->liquid_feat
+    if (!cell->liquid_feat && !cell->vertical_effect
         && ((cell->a & TILE_INDEX_MASK) != (cell->ta & TILE_INDEX_MASK)
             || ((byte)cell->c & TILE_INDEX_MASK) != ((byte)cell->tc & TILE_INDEX_MASK)))
         return false;
@@ -992,8 +1138,8 @@ void sdl_idle_animation_update(Uint64 now_ns)
         SDL_FRect dst;
         if (!cell_can_animate(cell))
             continue;
-        frame = cell->liquid_feat ? (byte)((tick / 8)
-            % liquid_frame_count_at(cell->y, cell->x, cell->liquid_feat))
+        frame = (cell->liquid_feat || cell->vertical_effect) ? (byte)((tick / 8)
+            % (cell->liquid_feat ? liquid_frame_count_at(cell->y, cell->x, cell->liquid_feat) : 4))
             : fixture_frame(tick, cell->frame_steps, cell->phase_steps,
                 cell->frame_count);
         if (frame == cell->drawn_frame)
