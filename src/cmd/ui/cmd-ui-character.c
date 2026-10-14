@@ -604,11 +604,11 @@ static void character_sheet_append_curse_hint(char* buf, size_t buflen,
             continue;
 
         desc = blessing
-            ? (cu_info[id].blessing_text ? cu_text + cu_info[id].blessing_text : NULL)
-            : (cu_info[id].text ? cu_text + cu_info[id].text : NULL);
+            ? (cu_info[id].blessing_text ? lore_text(cu_text + cu_info[id].blessing_text) : NULL)
+            : (cu_info[id].text ? lore_text(cu_text + cu_info[id].text) : NULL);
         power = blessing
-            ? (cu_info[id].blessing_power ? cu_text + cu_info[id].blessing_power : NULL)
-            : (cu_info[id].power ? cu_text + cu_info[id].power : NULL);
+            ? (cu_info[id].blessing_power ? lore_text(cu_text + cu_info[id].blessing_power) : NULL)
+            : (cu_info[id].power ? lore_text(cu_text + cu_info[id].power) : NULL);
 
         if (CURSE_SEEN(id) && power && power[0])
         {

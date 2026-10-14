@@ -1013,7 +1013,11 @@ def check_browser_preview_routes():
     assert 'supply_controller_info_key(label, sizeof(label), allow_secondary)' in helper
     assert 'sdl_gameplay_tutorial_set_menu_preview_control(label)' in helper
     browser = c_function(source, 'do_cmd_knowledge_supplies')
-    branches = re.findall(r'supply_update_tutorial_preview\(([^;]+)\);\s*char ch = inkey\(\);', browser)
+    # Compact touch layouts draw their category-return link after publishing
+    # the preview and before waiting; that drawing does not change the state.
+    branches = re.findall(r'supply_update_tutorial_preview\(([^;]+)\);\s*'
+                          r'(?:if\s*\([^;]+?\)\s*supply_draw_category_return\([^;]+?\);\s*)?'
+                          r'char ch = inkey\(\);', browser)
     assert len(branches) == 3, 'Every Equipped/Inventory/Supplies input branch must publish its preview state before waiting'
     assert len(re.findall(r'char ch = inkey\(\);', browser)) == len(branches), 'A browser input branch bypasses preview state publication'
     for branch, availability in zip(branches, ('equip_entry_cnt > 0', 'inventory_entry_cnt > 0', 'entry_cnt > 0')):
@@ -1043,6 +1047,7 @@ void (*text_out_hook)(byte,cptr);
 int text_out_wrap, text_out_indent;
 void text_out_to_screen(byte a,cptr s) { (void)a;(void)s; }
 bool story_object_desc_enabled(void) { return false; }
+bool steamdeck_controls_active(void) { return false; } /* Keyboard action fixture. */
 static bool object_info_blocked_by_hallucination(void) { return p_ptr->image>0; }
 static int object_info_screen_preferred_capture_width(bool story) { (void)story; return 40; }
 static bool object_info_screen_capture_build(const object_type **objects,
@@ -1219,6 +1224,7 @@ def main():
             'object_info_overlay_capture_release', 'object_info_overlay_clear',
             'object_info_overlay_show_multi', 'object_info_screen_key_is_action',
             'object_info_screen_action_key_available', 'object_info_understanding_action_token',
+            'object_info_controller_action_token',
             'object_info_configure_footer', 'object_info_screen_capture_view',
             'object_info_screen_multi_with_actions'))
     source.write_text(HARNESS.replace("__GAME_IMPLEMENTATION__", game)

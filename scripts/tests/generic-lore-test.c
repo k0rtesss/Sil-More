@@ -20,19 +20,54 @@ bool path_build(char* buf, size_t max, cptr path, cptr file)
 SDL_IOStream* sdl_fopen(cptr path, cptr mode)
 { return SDL_IOFromFile(path, mode); }
 
-static void check_catalog(void)
+static void expand_test_tokens(char* out, size_t size, cptr text, bool real)
 {
-    char path[1024];
+    out[0] = '\0';
+    while (*text) {
+        cptr close = *text == '{' ? strchr(text, '}') : NULL;
+        if (close) {
+            char name[64], value[96];
+            size_t length = (size_t)(close - text - 1);
+            assert(length < sizeof(name));
+            memcpy(name, text + 1, length);
+            name[length] = '\0';
+            if (!strcmp(name, "DIR"))
+                SDL_strlcpy(value, real ? "to the north-east" : "to the east", sizeof(value));
+            else if (!strcmp(name, "DIST"))
+                SDL_strlcpy(value, real ? "a long way (25 to 48 squares)" : "somewhere", sizeof(value));
+            else if (!strcmp(name, "MITHRIL"))
+                SDL_strlcpy(value, real ? " or mithril" : "", sizeof(value));
+            else if (real && !strcmp(name, "ART_CAP"))
+                SDL_strlcpy(value, "A suit of armour", sizeof(value));
+            else if (real && (!strcmp(name, "SITE") || !strcmp(name, "SITE_CAP")))
+                SDL_strlcpy(value, "a dragon-lord's hoard", sizeof(value));
+            else if (real && !strcmp(name, "PART"))
+                SDL_strlcpy(value, "a winding labyrinth", sizeof(value));
+            else
+                SDL_snprintf(value, sizeof(value), "value_%s_marker", name);
+            SDL_strlcat(out, value, size);
+            text = close + 1;
+        } else {
+            size_t length = strlen(out);
+            assert(length + 2 < size);
+            out[length] = *text++;
+            out[length + 1] = '\0';
+        }
+    }
+}
+
+static void check_catalog(cptr path)
+{
     size_t size;
-    path_build(path, sizeof(path), ANGBAND_DIR_PREF, "generic_lore.json");
     char* json = SDL_LoadFile(path, &size);
     assert(json);
     cJSON* root = cJSON_ParseWithLength(json, size);
     SDL_free(json);
     assert(root);
     int checked = 0;
-    const char* groups[] = { "terms", "passages" };
-    for (int group = 0; group < 2; ++group) {
+    int templates = 0;
+    const char* groups[] = { "terms", "passages", "descriptions" };
+    for (int group = 0; group < 3; ++group) {
         cJSON* pair;
         cJSON_ArrayForEach(pair, cJSON_GetObjectItemCaseSensitive(root, groups[group])) {
             cptr source = cJSON_GetArrayItem(pair, 0)->valuestring;
@@ -52,16 +87,41 @@ static void check_catalog(void)
                     source, translated, twice);
                 abort();
             }
+            if (group == 2 && strchr(source, '{')) {
+                for (int real = 0; real < 2; ++real) {
+                    char canonical[8192], expected[8192], actual[8192];
+                    char raw[4096], generic[4096];
+                    expand_test_tokens(raw, sizeof(raw), source, real != 0);
+                    expand_test_tokens(generic, sizeof(generic), target, real != 0);
+                    SDL_snprintf(canonical, sizeof(canonical), "Archived warning: %s End of note.", raw);
+                    SDL_snprintf(expected, sizeof(expected), "Archived warning: %s End of note.", generic);
+                    lore_copy(expected, sizeof(expected), expected);
+                    lore_prose_copy(actual, sizeof(actual), canonical);
+                    if (strcmp(expected, actual)) {
+                        fprintf(stderr, "Archived template mismatch:\n%s\nExpected: %s\nActual: %s\n", source, expected, actual);
+                        abort();
+                    }
+                    assert(lore_set_generic(false));
+                    lore_prose_copy(actual, sizeof(actual), canonical);
+                    assert(!strcmp(actual, canonical));
+                    assert(lore_set_generic(true));
+                    SDL_strlcpy(actual, canonical, sizeof(actual));
+                    lore_prose_copy(actual, sizeof(actual), actual);
+                    assert(!strcmp(expected, actual));
+                }
+                ++templates;
+            }
             ++checked;
         }
     }
     cJSON_Delete(root);
     printf("Catalog: %d reversible, idempotent substitutions PASS\n", checked);
+    printf("Archived notes: %d templates, multiword values, aliases and off-mode roundtrip PASS\n", templates);
 }
 
 int main(int argc, char** argv)
 {
-    assert(argc == 2);
+    assert(argc == 3);
     ANGBAND_DIR_PREF = argv[1];
     assert(option_norm[OPT_generic] == false);
     assert(strcmp(option_text[OPT_generic], "generic") == 0);
@@ -120,7 +180,12 @@ int main(int argc, char** argv)
     SDL_CloseIO(stream);
     assert(strstr(dump, themed) == dump && strstr(dump, "Morgoth") == NULL);
     puts("Character export: generic prose, canonical input PASS");
-    check_catalog();
+    assert(!strcmp(lore_text("They resist fear; a sting hurts in this region."),
+        "They resist fear; a sting hurts in this region."));
+    assert(!strcmp(lore_text("{MITHRIL}"), "{MITHRIL}"));
+    assert(!strcmp(lore_text("Sting"), "Needlewake"));
+    assert(!strcmp(lore_text("A sting causes pain."), "A sting causes pain."));
+    check_catalog(argv[2]);
     for (int i = 0; i < 10000; ++i) {
         char dynamic[1024];
         SDL_snprintf(dynamic, sizeof(dynamic), "Morgoth strikes for %d damage. %0900d", i, i);

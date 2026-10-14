@@ -1,0 +1,850 @@
+{
+  "title": "Emberfall abilities",
+  "terms": [],
+  "descriptions": [
+    [
+      "In the manner of the mighty warriors of the Noldor, whose blows felled orcs and trolls alike in the great battles of Beleriand. The hosts of Fingolfin struck with such force that shields splintered and helms were cloven, though such raw power left less room for the subtler arts of swordplay.",
+      "Driving a blade through stacked salvage taught the foundry guards to put their weight behind each stroke. The same commitment breaks a living defense, though it leaves less freedom to adjust the edge."
+    ],
+    [
+      "+1 damage sides to melee attacks. Critical hit base increased by 1.",
+      "Melee attacks gain +1 damage sides, while their critical hit base rises by 1."
+    ],
+    [
+      "Emulating the graceful swordplay of heroes like Fingolfin, who danced before Morgoth's mace in single combat upon the plains of Anfauglith. His blade Ringil found every gap in the Dark Lord's iron crown, striking with precision born of ages of practice in the Blessed Realm.",
+      "A practice blade leaves chalk on the guard plates wherever a strike would have slipped through. You learn to make those narrow marks instead of battering the plates themselves."
+    ],
+    [
+      "Melee critical hit base reduced from 7 to 5.",
+      "The critical hit base for melee becomes 5 instead of 7."
+    ],
+    [
+      "Like the thunderous charges of the Edain lords in the Nirnaeth Arnoediad, where foes were hurled aside in the press of battle. Huor and Húrin drove through the orcish ranks with such force that their enemies stumbled and fell back before them, unable to hold their ground against the fury of the Edain.",
+      "On the intake platforms, a foe pushed out of position can lose the fight before the next blow. You strike through their balance, using your own strength to drive them back."
+    ],
+    [
+      "Chance to knock enemies back one square in melee (two squares from ice for grounded targets), using your Strength vs their Constitution.",
+      "A melee blow can push an enemy back one square, or two squares from ice if the target is grounded. The contest uses your Strength against the enemy's Constitution."
+    ],
+    [
+      "Recalling the deadly casts of spears by the Sindar in the defense of Doriath's borders. The march-wardens of Thingol were trained to hurl their javelins with lethal accuracy across great distances, striking down intruders before they could set foot beneath the enchanted trees of Neldoreth.",
+      "The quay scouts kept short blades and throwing shafts within reach of either hand. Their drill joined the cast, the draw, and the change of weapon into one practiced movement."
+    ],
+    [
+      "+1 attack with throwing weapons. Distance penalties halved. Thrown criticals easier. Throwing weapons use 20% less Harness volume. Harness daggers can be quick-thrown with no melee weapon equipped, or when the active weapon is a one-handed or one-and-a-half-handed melee weapon, a throwing weapon, or a Shortbow. Your first active weapon change before your next action is free when changing between throwing weapons. With Warden, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between bow and throwing or between bows. With both Warden and Versatility, it may be any active weapon change.",
+      "Throwing weapons gain +1 attack; their distance penalties are halved and their critical hits become easier. They occupy 20% less Harness volume. You can quick-throw Harness daggers with no melee weapon equipped, or while your active weapon is a one-handed or one-and-a-half-handed melee weapon, a throwing weapon, or a Shortbow. Before your next action, the first active weapon change is free between throwing weapons. Warden additionally allows that free change between melee and throwing, or between melee weapons. Versatility additionally allows it between bow and throwing, or between bows. Having both Warden and Versatility allows any active weapon change for that first free change."
+    ],
+    [
+      "Mastering the long-hafted weapons akin to those wielded by the guards of Gondolin in the Fall of the Hidden City. The spearmen of Turgon's household held the bridges and narrow ways with their long reach, setting their weapons to receive the charging Balrogs and their orcish thralls.",
+      "A long shaft can close a service passage without a gate. You keep its point steady while an enemy advances, giving their own movement a place to meet your weapon."
+    ],
+    [
+      "+2 attack with polearms while melee is active. Set polearms to receive free attacks on advancing enemies when waiting (z/5), and when switching from ranged to melee.",
+      "While melee is active, polearms gain +2 attack. Waiting with z/5 sets a polearm for free attacks against advancing enemies; switching from ranged to melee also sets it."
+    ],
+    [
+      "In the spirit of the heroic onslaughts of the Noldorin cavalry upon the fields of Ard-galen. When the riders of Fingolfin swept down from Hithlum in the Dagor Aglareb, the momentum of their charge was irresistible, each warrior striking with the combined force of speed and fury.",
+      "The first stride chooses the line of attack; the next carries your body into the blow. You learn to arrive with the weapon, rather than stopping to swing after reaching the foe."
+    ],
+    [
+      "+3 Strength and Dexterity when attacking immediately after moving towards the target.",
+      "An attack made immediately after moving towards its target gains +3 Strength and Dexterity."
+    ],
+    [
+      "As Beleg Cuthalion cleaved through orcish ranks in the woods of Brethil, his blade never pausing between foes. The great warriors of the First Age did not stop to savour a kill but carried the momentum of each stroke into the next, leaving a trail of fallen enemies in their wake.",
+      "A falling opponent briefly opens a lane through a crowded passage. You carry the completed stroke into that opening before the next enemy can close it."
+    ],
+    [
+      "Continue attacking the next adjacent enemy after killing one.",
+      "Killing an enemy lets your attack continue against the next adjacent enemy."
+    ],
+    [
+      "Evoking the piercing thrusts that felled many a foe in the Dagor Bragollach. The spearmen of the Noldor learned to drive their weapons clean through one foe and into the next, for in the close press of battle upon the burning plains, the enemy stood so thick that a single thrust might wound two.",
+      "In a packed doorway, the second rank may be no safer than the first. You aim a long thrust through the nearer body and along the line of the foe behind it."
+    ],
+    [
+      "Strike through opponents to hit an enemy behind them (polearms and greatswords only).",
+      "With a polearm or greatsword, you can strike through an opponent and hit an enemy standing behind them. Other weapons cannot do this."
+    ],
+    [
+      "With the subtle precision of the bladesmen of Nargothrond, who practiced their art in the echoing caverns beside the Narog. Wielding a single blade with the off-hand free, they could weave and feint with such delicacy that their strikes found the smallest gaps in their opponents' defenses.",
+      "An empty hand steadies your stance and conceals the small changes of balance that announce a thrust. The single blade becomes a precise instrument rather than half a pair."
+    ],
+    [
+      "Melee critical hit base reduced by 2 when wielding a one-handed weapon with the other hand free.",
+      "With a one-handed weapon and your other hand free, your melee critical hit base falls by 2."
+    ],
+    [
+      "Like the whirlwind of steel that was Turgon in the defense of Vinyamar, when foes pressed in from all sides. The mightiest of the Noldor could hold a ring of enemies at bay, their blades striking in every direction with deadly arcs.",
+      "A broad maintenance landing offers space that a narrow tunnel cannot. You use that room to turn through the surrounding threats, bringing the blade past each guard in a continuous sweep."
+    ],
+    [
+      "Free attack on all adjacent enemies when you attack one. Requires 5 open adjacent squares. Also works with flanking or retreat attacks.",
+      "Attacking one adjacent enemy grants a free attack against every adjacent enemy, provided 5 adjacent squares are open. Flanking attacks and retreat attacks can trigger it too."
+    ],
+    [
+      "Commanding the battlefield as did the captains of the Union of Maedhros, who held their ground with such authority that no foe dared move freely in their presence. Any servant of Morgoth who tried to slip past the watchful blade of a Noldorin captain earned a swift and punishing stroke.",
+      "Guarding a junction means watching the route a foe intends to take, not merely the square they occupy. From a planted stance, you punish any attempt to cross your reach."
+    ],
+    [
+      "Free attack when an opponent moves between two squares adjacent to you, so long as you did not move on your previous turn.",
+      "If you did not move on the previous turn, an opponent moving between two squares adjacent to you grants you a free attack."
+    ],
+    [
+      "Delivering a smiting blow reminiscent of Ecthelion's fatal strike against Gothmog, Lord of Balrogs, in the fountains of Gondolin. Wielding a great weapon in both hands, the warrior gathers all their might into a single devastating blow that can shatter shields and break the will of the mightiest foes.",
+      "Pile-driving crews learned to spend their whole strength in one descending stroke and recover before lifting again. You apply that deliberate rhythm to a weapon held in both hands."
+    ],
+    [
+      "First melee attack with a two-handed weapon deals maximum damage. Costs a turn to recover afterward.",
+      "Your first melee attack with a two-handed weapon inflicts maximum damage. You must spend a turn recovering afterward."
+    ],
+    [
+      "Wielding dual blades as did the twin sons of Fëanor, Amrod and Amras, in the hunts of Ossiriand. Fighting with a weapon in each hand was a rare art among the Eldar, for it demanded both the dexterity to strike with the off-hand and the strength to guide two blades at once through the fury of combat.",
+      "Two short weapons demand separate judgments of distance, but a shared sense of timing. You train the weaker hand to find an opening while the stronger hand keeps the foe occupied."
+    ],
+    [
+      "Wield a one-handed weapon in off-hand for an extra attack at -3 Strength and Dexterity.",
+      "A one-handed off-hand weapon provides an extra attack. That attack takes -3 Strength and Dexterity."
+    ],
+    [
+      "Striking with the rapidity of Glorfindel's assault upon the Balrog at the fall of Gondolin, where his blade moved faster than mortal eyes could follow. Such speed comes at a cost, for to strike so swiftly one must sacrifice the full force behind each blow, trading power for a flurry of cuts.",
+      "You stop trying to finish every exchange with a single committed blow. Shorter strokes let you strike again quickly and change tools without losing the rhythm."
+    ],
+    [
+      "Extra melee attack at -3 Strength and Dexterity. Your first active weapon change before your next action is free when changing between melee weapons.",
+      "Gain an extra melee attack at -3 Strength and Dexterity. Before your next action, your first active weapon change between melee weapons costs no turn."
+    ],
+    [
+      "Fortified in body as were the sons of Fëanor by their unyielding oaths sworn in the halls of Tirion beneath the light of the Two Trees, their sinews hardened by ages of war across Beleriand.",
+      "Hauling wet cable and lifting jammed sluice bars strengthened more than your grip. The accumulated work now gives every difficult movement a firmer foundation."
+    ],
+    [
+      "+1 Strength.",
+      "Increase Strength by +1."
+    ],
+    [
+      "As the March-wardens of Doriath, who kept the bounds of the Girdle of Melian and ranged its shadowed eaves with bow and blade alike. Beleg Strongbow, captain of that watchful company, was no less deadly with his sword than with his great bow, for a hand long schooled to the close clash of steel does not waver upon the bowstring, and the warrior's eye, trained to read a foe's every movement, guides the arrow as surely as the sword-stroke.",
+      "A watchkeeper cannot choose whether trouble reaches the wall or remains beyond it. Practice with blade and bow lets the habits of close combat guide the longer shot."
+    ],
+    [
+      "Archery bonus of half (base Melee - base Archery) when base Melee exceeds base Archery, or one third of base Melee, rounded up, if you also have Versatility. Base skill means invested skill points, before attributes and other bonuses. Your first active weapon change before your next action is free from melee to bow. With Throwing, it may instead change between melee and throwing or between melee weapons. With Versatility, it may instead change between melee weapons or between bows.",
+      "With Versatility, gain an Archery bonus equal to one third of base Melee, rounded up. Otherwise, if base Melee exceeds base Archery, the bonus is half (base Melee - base Archery). Base skills are invested skill points, excluding attributes and all other bonuses. Before your next action, your first active weapon change from melee to bow is free. With Throwing, that free change may instead be between melee and throwing, or between melee weapons. With Versatility, it may instead be between melee weapons or between bows."
+    ],
+    [
+      "With blade held ready and a spear or axe poised for the cast, you strike as the weapon leaves your hand. The two blows fall together before your foe can turn from one defence to the other.",
+      "You hold the close weapon ready while finding the balance of a second weapon in the casting hand. The throw and the strike arrive together, forcing a foe to answer two threats at once."
+    ],
+    [
+      "After spending a turn readying your melee weapon or waiting, throw a Harness spear or hand axe at an adjacent foe while striking in melee. Roll both attacks separately against Evasion, combine the damage of successful attacks, then roll protection once. Your melee weapon remains active.",
+      "Spend a turn readying your melee weapon or waiting, then throw a Harness spear or hand axe at an adjacent foe while making a melee strike. Each attack rolls separately against Evasion. Add the damage of attacks that succeed, then roll protection once against that combined damage. Your melee weapon stays active."
+    ],
+    [
+      "As the archers of Dorthonion rained death upon fleeing orcs after the Dagor Aglareb, the Glorious Battle. When the servants of Morgoth broke and ran, the bowmen of Angrod and Aegnor pursued them with deadly volleys, for a fleeing foe presents an easy mark to the practiced eye.",
+      "A fleeing creature gives away its next direction with every hurried step. You follow that movement with the bow instead of aiming at where it has already been."
+    ],
+    [
+      "+5 Dexterity when firing at fleeing monsters.",
+      "Shots at fleeing monsters receive +5 Dexterity."
+    ],
+    [
+      "Crafting arrows with the skill of the Green-elves of Ossiriand, who fashioned shafts from the woods of their forested realm. The Laiquendi were renowned for the quality of their arrows, each one shaped with patient care from the straight-grained wood of birch and ash, fletched with feathers gathered from the banks of Gelion.",
+      "The relief crews could not wait for a supply wagon whenever their quivers emptied. You can recover useful shafts from ordinary wooden gear and improve arrows without disturbing their existing treatment."
+    ],
+    [
+      "Use '-' to craft arrows to +3 without changing their affixes (one turn each). Carve 3 arrows from torches, 6 from staves. Loose arrows use 20% less Pack volume.",
+      "Press '-' to craft arrows up to +3, keeping their affixes unchanged and spending one turn per arrow. A torch yields 3 arrows; a staff yields 6. Loose arrows occupy 20% less Pack volume."
+    ],
+    [
+      "Loosing arrows at point-blank range as did the defenders of Menegroth during the ruinous assault of the Dwarves of Nogrod. In the close confines of the Thousand Caves, the elven archers learned to fire even as their enemies bore down upon them, too swift to be struck before the arrow flew.",
+      "On a crowded ferry deck, lowering the bow is often more dangerous than loosing it. You learn to release at close range and keep a small shield ready beside the bow."
+    ],
+    [
+      "When you shoot an adjacent monster, that target does not make an attack of opportunity. Other adjacent alert enemies still can. Point Blank Archery lets you make a round shield active with a shortbow.",
+      "Shooting an adjacent monster prevents that target's attack of opportunity; other adjacent alert enemies may still make theirs. Point Blank Archery also permits an active round shield with a shortbow."
+    ],
+    [
+      "In the manner of the keen-eyed archers of Hithlum, who could find the weakness in any armour. Even the iron-clad Uruk-hai of Angband were not proof against arrows loosed with such knowledge, for every coat of mail has its gaps, and every plate its seam, if one knows where to aim.",
+      "A solid coat of armor still carries the shock of a well-placed arrow. You aim for the rigid joins that transmit that impact when the point itself cannot pass through."
+    ],
+    [
+      "Deal 5 flat damage when enemy armour would fully block your archery damage.",
+      "If enemy armour would completely stop your archery damage, inflict 5 flat damage instead."
+    ],
+    [
+      "Lying in ambush like the hidden bowmen of Thingol's march-wardens within the Girdle of Melian. Concealed among the roots of ancient beeches or behind moss-covered stones, they waited in perfect stillness until unwary foes wandered near, then struck with arrows that seemed to come from the forest itself.",
+      "You prepare the shot while the target still believes itself safe. A sleeping body or an unwary turn offers time to choose a wound that a hurried arrow would miss."
+    ],
+    [
+      "Extra critical damage die when hitting unwary or sleeping monsters with arrows.",
+      "An arrow hit against an unwary or sleeping monster gains an extra critical damage die."
+    ],
+    [
+      "Versatile in arms as was Túrin Turambar, who bore both the great bow of Beleg and the black sword Gurthang in the forests about Nargothrond. The greatest warriors of the First Age disdained no weapon, and their skill with the bow lent sureness to their sword-arm, for a keen eye serves all forms of combat.",
+      "Reading movement through a bow sight teaches the same distances that govern a blade. You carry that judgment between weapons, making the draw part of the approach."
+    ],
+    [
+      "Melee bonus of half (base Archery - base Melee) when base Archery exceeds base Melee, or one third of base Archery, rounded up, if you also have Warden. Base skill means invested skill points, before attributes and other bonuses. Your first active weapon change before your next action is free from bow to melee. With Throwing, it may instead change between bow and throwing or between bows. With Warden, it may instead change between melee weapons or between bows.",
+      "With Warden, gain a Melee bonus equal to one third of base Archery, rounded up. Otherwise, if base Archery exceeds base Melee, the bonus is half (base Archery - base Melee). Base skills are invested skill points, excluding attributes and all other bonuses. Before your next action, your first active weapon change from bow to melee is free. With Throwing, that free change may instead be between bow and throwing, or between bows. With Warden, it may instead be between melee weapons or between bows."
+    ],
+    [
+      "Inflicting crippling wounds akin to those dealt by the archers in the Dagor-nuin-Giliath, the Battle under the Stars, when the host of Fëanor first assailed the armies of Morgoth. Their arrows struck at leg and sinew, leaving their enemies hobbled and slow, easy prey for the swords that followed.",
+      "The quarry hunters marked the joints that carry a creature's weight. You place the arrow to interrupt the next step, trading a simple wound for a chance to hobble pursuit."
+    ],
+    [
+      "Critical hits may temporarily slow monsters (critical level vs monster's Will).",
+      "A critical hit can slow a monster temporarily, testing critical level against the monster's Will."
+    ],
+    [
+      "Unleashing a deadly hail of arrows as in the volleys that broke the host of orcs at the Dagor Aglareb. The bowmen of the Noldor could sustain a withering rate of fire, and the fall of one enemy only spurred them to loose again with greater fury, each arrow drawn and released with terrible swiftness.",
+      "The fall of one target clears your sight and confirms the range. You use that brief certainty to draw the following arrow with an unusually forceful release."
+    ],
+    [
+      "Arrows deal double damage the turn after killing an enemy with an arrow.",
+      "On the turn after you kill an enemy with an arrow, your arrows inflict double damage."
+    ],
+    [
+      "Swift and sure of hand as the great archers of the Noldor who practiced their art beneath the light of the Two Trees in Aman, where their fingers first learned the song of the bowstring.",
+      "Hours at a moving target have taught your hands to correct before conscious thought catches up. The steadiness remains even when the bow is put away."
+    ],
+    [
+      "+1 Dexterity.",
+      "Increase Dexterity by +1."
+    ],
+    [
+      "Skirmishing as did the bowmen of Dorthonion, who yielded ground before a stronger host only to turn and loose again. Unburdened by heavy armour, they flowed across the battlefield, each retreat buying the heartbeat needed for another arrow.",
+      "A scout crossing the open spillways cannot afford to stop for a long exchange. You settle the bow during the step, loose as your feet land, and prepare to move again."
+    ],
+    [
+      "After moving on your previous turn, firing a bow costs half a turn while wearing only light armour. Your first active weapon change before your next action is free when changing between bows.",
+      "If you moved on the previous turn and wear only light armour, firing a bow costs half a turn. Before your next action, your first active weapon change between bows is free."
+    ],
+    [
+      "Dodging blows with the nimbleness of the Laiquendi in the shadowed woods of Ossiriand. The Green-elves moved like wind through leaves, never still long enough for blade or claw to find them, their bodies weaving between the strokes of their slower foes. Such grace is lost beneath the weight of heavy armour.",
+      "The loose plates of a practice rig swing at uneven intervals. You learn to keep your weight moving so that a blow meets the space you have just left."
+    ],
+    [
+      "+3 evasion if you moved on your last turn. Only works while wearing only light armour.",
+      "Moving on your last turn grants +3 evasion, but only while you wear only light armour."
+    ],
+    [
+      "Blocking strikes steadfastly as the shieldmen of the Falathrim held against the waves of foes at the Havens of the Falas. Cirdan's folk learned to plant their feet and set their shields like walls of iron, turning aside the blows of Morgoth's servants through sheer immovable resolve.",
+      "A shield held against a rushing crowd is strongest when the feet behind it do not give way. You brace it as a load-bearing surface rather than waving it after each blow."
+    ],
+    [
+      "Double shield protection if you did not move on your last turn.",
+      "If you did not move on the last turn, your shield's protection is doubled."
+    ],
+    [
+      "Parrying with the skill of the sword-masters of the Noldor, who honed their art in the training halls of Tirion before the Darkening. They learned to use their blades not only for attack but as shields in themselves, catching and turning aside the enemy's steel with practiced ease.",
+      "You study the small deflections that turn an incoming edge away from the body. A weapon properly placed can provide cover as well as an opening to strike."
+    ],
+    [
+      "Double the evasion bonus from your primary melee weapon.",
+      "Your primary melee weapon supplies twice its normal evasion bonus."
+    ],
+    [
+      "Fighting amid crowds as did the warriors in the desperate throng of the Nirnaeth Arnoediad, the Battle of Unnumbered Tears. When enemies pressed in from all sides, the veterans of that terrible day learned to move and fight in the crush, turning the close quarters against their encircling foes.",
+      "A press of bodies is not a single coordinated enemy. You keep one attacker in another's way, denying the surrounding crowd the full use of its numbers."
+    ],
+    [
+      "Halves the surrounding bonus opponents get against you.",
+      "Opponents receive only half their usual surrounding bonus against you."
+    ],
+    [
+      "Leaping across perils as Beren vaulted over the chasms in his desperate flight from Dorthonion after the Dagor Bragollach. With the momentum of a running start, a nimble warrior can clear gaps and hazards that would trap a more cautious soul, though not every obstacle yields to boldness alone.",
+      "Broken catwalks taught the repair crews to judge a gap before reaching its edge. With a prepared stride, you can carry yourself across danger rather than stepping into it."
+    ],
+    [
+      "Leap over chasms and traps if you moved towards them last turn (not roosts or webs).",
+      "After moving towards them on the last turn, you can leap over chasms and traps. This does not allow leaps over roosts or webs."
+    ],
+    [
+      "Sprinting with the endurance of the messengers who bore tidings across Beleriand, running without rest from Hithlum to Nargothrond. Once their stride found its rhythm across open ground, they moved with the tireless speed of the Firstborn, their pace quickening with every stride.",
+      "Your pace settles as each stride finds the line of the last. On an open route, that economy builds into a run that outstrips a series of hurried starts."
+    ],
+    [
+      "Increased speed after running in roughly the same direction for 3+ squares while wearing only light armour, or 4+ squares otherwise.",
+      "Running in roughly one direction increases your speed after 3+ squares in only light armour, or after 4+ squares with any other armour load."
+    ],
+    [
+      "Flanking foes cunningly as in the ambushes set by the outlaws of Túrin's band in the wild lands west of Doriath. Rather than meeting the enemy head-on, they circled to strike from unexpected angles, slipping past a foe's guard to deliver blows where they were least expected.",
+      "Instead of backing straight away from a guarded point, you move across its reach. Light equipment lets the blade answer the change of angle as your feet make it."
+    ],
+    [
+      "Free attack on an opponent when stepping between two squares adjacent to it. Only works while wearing only light armour.",
+      "While wearing only light armour, stepping between two squares adjacent to an opponent gives you a free attack against that opponent."
+    ],
+    [
+      "Bearing heavy armour as did the dwarven allies of the Noldor, clad in mail and plate forged in the great smithies of Belegost. The dwarves of the Blue Mountains were renowned for fighting unbowed beneath the weight of their war-harness, turning the sheer mass of their armour into a bulwark of protection.",
+      "Armorers taught the guard to let a harness receive a blow along its strongest surfaces. You carry its weight without surrendering all freedom to turn, making mass serve protection rather than merely burdening you."
+    ],
+    [
+      "[1dX] extra protection vs physical damage only (not elemental attacks), where X = total armour weight / 15 lbs. +1 evasion with Mail Corslets and Hauberks.",
+      "Gain [1dX] additional protection against physical damage, with X = total armour weight / 15 lbs. This protection does not apply to elemental attacks. Mail Corslets and Hauberks also grant +1 evasion."
+    ],
+    [
+      "Riposting swiftly as Fingon did in his duels upon the plains beneath the Siege of Angband, where the High King's blade would answer every missed stroke with a punishing counter-thrust. To riposte demands patience and a keen eye, waiting for the enemy's weapon to overreach before answering with steel.",
+      "A missed stroke leaves a weapon extended beyond the position that guards its owner. You wait for that overreach and send your answer through the opening it creates."
+    ],
+    [
+      "Free attack when opponent misses by 10+ weapon weight (once per round).",
+      "Once per round, gain a free attack when an opponent misses you by 10+ weapon weight."
+    ],
+    [
+      "Executing a controlled retreat like the ordered withdrawal of the rearguard of Gondolin during the city's fall. Turgon's captains did not flee blindly but gave ground in good order, each warrior turning to deliver a parting blow before stepping back, buying time with disciplined defiance.",
+      "Holding a passage sometimes means giving up its next few feet. You plant yourself long enough to draw an attack, then deliver a parting stroke as you step back."
+    ],
+    [
+      "Free attack when stepping away from an opponent, if you did not move last round.",
+      "If you did not move last round, stepping away from an opponent grants a free attack."
+    ],
+    [
+      "Agile as the feet of Lúthien dancing in the starlit glades of Neldoreth, where she moved with a grace beyond the reach of mortal or elf, her every motion as fluid as the waters of Esgalduin.",
+      "Balance drills on the narrow inspection rails have made your footing quick and deliberate. Your body follows a decision with less wasted motion."
+    ],
+    [
+      "Donning disguise as Beren and Lúthien cloaked themselves in the guises of Draugluin the werewolf and Thuringwethil the vampire-bat to infiltrate Angband. Even among watchful enemies, those who know the art of concealment can dim their presence, becoming unremarkable to careless eyes.",
+      "A worker who looks busy belongs almost anywhere in the lower works. You hide urgency, soften your outline, and let an inattentive watcher supply an ordinary explanation."
+    ],
+    [
+      "Halves line-of-sight detection bonus awake unwary enemies have against you.",
+      "Awake, unwary enemies gain only half their normal line-of-sight detection bonus against you."
+    ],
+    [
+      "Striking from the shadows as the guerrilla fighters of Barahir's outlaw band struck at Morgoth's servants in the highlands of Dorthonion. Those who move unseen learn to exploit the moment of surprise, for a blade guided by stealth finds its mark far more surely than one wielded in open combat.",
+      "You approach without announcing the instant that the fight begins. Against a creature that has not recognized the danger, quiet movement becomes the guide to an accurate stroke."
+    ],
+    [
+      "Melee bonus equal to your Stealth score vs non-alert creatures and monsters fooled by Song of Disguise.",
+      "Against non-alert creatures or monsters deceived by Song of Disguise, add your Stealth score to Melee."
+    ],
+    [
+      "Delivering a cruel blow that echoes the torments inflicted in the pits of Thangorodrim, where Morgoth's servants learned the darkest arts of pain. A well-placed strike to nerve or joint can leave a foe reeling and disoriented, their senses overwhelmed by agony.",
+      "The prison warders catalogued painful places with appalling care. You know how a wound to one of those places can scatter an enemy's thoughts, though tools carrying that knowledge may bring a darker urgency."
+    ],
+    [
+      "Critical hits may confuse monsters (critical level vs monster's Will). If granted by an equipped item, it also speeds the minimum depth timer as much as Deep Call, even when disabled.",
+      "Critical hits can confuse monsters, testing critical level against the monster's Will. When an equipped item grants Cruel Blow, it also accelerates the minimum depth timer by as much as Deep Call, even if Cruel Blow is disabled."
+    ],
+    [
+      "Exchanging places deftly as in the elusive maneuvers of the scouts who served in the March of Maedhros. These bold warriors learned to slip past an enemy with breathtaking agility, trading positions in a moment of daring that left their foe turned about and facing the wrong way.",
+      "You watch the gap beside a foe rather than retreating from the space they occupy. A committed sidestep can trade positions, at the risk of passing directly through their reach."
+    ],
+    [
+      "Use 'X' to swap positions with an adjacent enemy. They get a free attack as you pass.",
+      "Press 'X' to exchange places with an adjacent enemy. The enemy receives a free attack while you pass."
+    ],
+    [
+      "Seizing the moment of an enemy's withdrawal, as the hunters of the First Age learned to punish any foe who dared turn their back. When a servant of Morgoth sought to disengage or retreat, the opportunist's blade would find them before they could escape, making flight as perilous as battle.",
+      "Retreat exposes the movement that a settled guard conceals. You strike during that change, before the adjacent foe has carried itself clear of your reach."
+    ],
+    [
+      "Free attack when an adjacent opponent moves away from you.",
+      "An adjacent opponent moving away from you grants you a free attack."
+    ],
+    [
+      "Vanishing into the shadows as the remnants of the Folk of Haleth faded into the deep woods of Brethil after the ruin of the Nirnaeth Arnoediad. Once beyond the sight of their pursuers, they could still themselves so completely that even keen-eyed hunters would lose their trail and abandon the chase.",
+      "Beyond the last sightline, you break the rhythm that a pursuer expects to follow. A held breath and a still silhouette can turn a search into doubt."
+    ],
+    [
+      "+10 stealth towards making enemies unwary when out of their line of sight.",
+      "While outside enemies' line of sight, gain +10 stealth for attempts to make them unwary."
+    ],
+    [
+      "Fleet and silent as the shadows that moved among the ancient forests of Beleriand before the rising of the Sun, when all the world lay under starlight and the Firstborn walked in silence upon the young earth.",
+      "You practice placing each foot where the floor will neither shift nor answer. That control makes your whole body quicker, not merely quieter."
+    ],
+    [
+      "With the quick understanding of the loremasters of Gondolin, who gathered and preserved the accumulated wisdom of the Noldor within the Hidden City. Their voracious study of all arts and sciences allowed them to grasp new disciplines swiftly, drawing connections that others would miss.",
+      "The surviving technical records were written for workers who had to learn during a crisis. You can connect unfamiliar procedures quickly and recognize the useful detail in a newly found tool."
+    ],
+    [
+      "Take advanced abilities without prerequisites. Modest bonus to identifying items.",
+      "You may learn advanced abilities without their prerequisites. Gain a modest bonus when identifying items."
+    ],
+    [
+      "Focusing your assault with the patient precision of a hawk circling above the fields of Ard-galen. The wisest warriors of the First Age knew that a moment of stillness and observation before striking could reveal openings invisible to the hasty eye, turning keen perception into deadly accuracy.",
+      "A moment without striking is a chance to watch shoulders, feet, and the angle of a weapon. You use that pause to choose the next attack with greater certainty."
+    ],
+    [
+      "+Perception/2 attack bonus if you passed the previous turn.",
+      "Passing the previous turn gives your attack a +Perception/2 bonus."
+    ],
+    [
+      "Sharpening keen senses as those of the great eagles of Manwë who spied upon Morgoth's realm from the peaks of the Crissaegrim. With such awareness one perceives what others cannot: the faintest shadow at the edge of torchlight, the shimmer of creatures cloaked in enchantment.",
+      "Light seldom stops as sharply as an inexperienced watcher assumes. You attend to the movement at its margin and to the slight disturbances that betray a concealed body."
+    ],
+    [
+      "See enemies just beyond light's edge. +5 to spotting invisible creatures.",
+      "You can see enemies just past the edge of your light. Gain +5 when spotting invisible creatures."
+    ],
+    [
+      "Maintaining the unwavering focus of Fëanor as he labored upon the Silmarils, never lifting his gaze from his work until perfection was achieved. In battle, such single-minded attention upon a single foe reveals ever more of their weaknesses, each successive strike more sure than the last.",
+      "Each exchange reveals a little more of the same opponent's rhythm. By staying with that one fight, you turn observation into increasingly accurate attacks."
+    ],
+    [
+      "+1 attack per consecutive round attacking the same enemy (max Perception/2).",
+      "Each consecutive round spent attacking the same enemy adds +1 attack, up to Perception/2."
+    ],
+    [
+      "Understanding the hidden properties of things as did the scholars of the Noldor in Tirion, who studied the nature of every herb and mineral beneath the light of Laurelin. Such knowledge reveals the purpose of elixirs and powders at a glance, and attunes the mind to the resonance of enchanted crystals.",
+      "A field chemist learns a remedy by its preparation, not its label. Your knowledge extends to infected tissue, volatile mixtures, and the crystals used to survey the engine chambers."
+    ],
+    [
+      "Auto-identify herbs, potions, staves, and horns. While diseased, a Gem of Self Knowledge shows the disease name and cure herb. Potions with thrown effects can be quick-thrown, splashing the impact square and every adjacent square. +50% range for Gems of Revelation, Foes, and Treasures.",
+      "Herbs, potions, staves, and horns are identified automatically. During disease, a Gem of Self Knowledge reveals the disease name and its cure herb. Potions that have thrown effects can be quick-thrown; their splash covers the impact square and all adjacent squares. Gems of Revelation, Foes, and Treasures gain +50% range."
+    ],
+    [
+      "Becoming the bane of a particular foe, as Fingon was to the orcs of Dor-lomin and Túrin to the servants of Morgoth in the wild lands. Through long experience fighting a certain breed of enemy, one learns their every habit and weakness, becoming ever more deadly with each encounter.",
+      "You keep a patient record of one kind of enemy: where it looks, how it turns, and what makes it hesitate. Every encounter tests and extends that practical knowledge."
+    ],
+    [
+      "Bonus to all skill rolls vs a chosen enemy type. Bonus increases with kills.",
+      "Choose an enemy type to receive a bonus on all skill rolls against it. Further kills increase the bonus."
+    ],
+    [
+      "Outwitting adversaries as Finrod Felagund discerned the true nature of Sauron's disguises upon Tol-in-Gaurhoth. A warrior with such perceptive cunning can read the intent behind an enemy's most dangerous strike and twist aside at the last moment, turning what should have been a grievous wound into a glancing blow.",
+      "A dangerous blow is often recognizable a fraction of a moment before it lands. You read the attacker's intention and spoil the part of the strike that would make the wound exceptional."
+    ],
+    [
+      "When hit critically, roll Perception vs attacker's Perception to negate all critical damage.",
+      "On receiving a critical hit, roll your Perception against the attacker's Perception. Success removes all critical damage."
+    ],
+    [
+      "Attuning your senses to the hidden resonance of the world, as Melian the Maia hearkened to the deep whispers within her Girdle about Doriath. Such attentiveness perceives the subtle vibrations of all things: the footfall of an unseen enemy, the faint harmonic of enchantment.",
+      "The inspection galleries were designed to carry a footfall farther than a voice. You learn to distinguish those faint returns and read a crafted object through similarly small clues."
+    ],
+    [
+      "Detect unseen enemies each turn. Double the Perception portion of identification; Grace still counts only once.",
+      "Locate unseen enemies every turn. Identification counts the Perception contribution twice, but counts Grace only once."
+    ],
+    [
+      "A master hunter in the manner of Celegorm, who rode with Oromë the Huntsman in the forests of Valinor and later hunted in the vales of Himlad with Huan at his side. Such a hunter knows the ways of their quarry intimately, and each kill deepens their understanding, making the next encounter swifter and more certain.",
+      "The first hunt teaches what a creature can do; later hunts teach when it will do it. Your recollection of each kill helps you place the next attack."
+    ],
+    [
+      "+1 attack per previous kill of the same monster type (max Perception/2).",
+      "Gain +1 attack for each previous kill of the same monster type, to a maximum of Perception/2."
+    ],
+    [
+      "Blessed as the favoured of the Valar in the Undying Lands, where Manwë's eagles bore tidings and the light of the Trees touched all things with grace beyond the measure of Middle-earth.With watchful poise, you bear a greater array of ready weapons without letting strap, scabbard, or haft encumber your movement.",
+      "Sorting a crowded harness without looking has trained a quiet coordination of hand and attention. You can keep more gear ready while preserving that ease."
+    ],
+    [
+      "+1 Grace. +6.0 qt Harness capacity.",
+      "Increase Grace by +1 and Harness capacity by +6.0 qt."
+    ],
+    [
+      "Turning the snares of the Enemy against his own, as the cunning of the Noldor unmade what was wrought to harm them. One who has studied a mechanism well enough to still it can as readily make it speak again, but to a different bidding, sparing the hand that knows its secret and betraying those who trust to their old familiarity.",
+      "A trap is a machine with a narrow understanding of its target. Rather than simply stopping it, you can alter that understanding and leave its dangerous parts working for you."
+    ],
+    [
+      "When you disarm a suitable trap, you instead re-key its mechanism: it no longer harms you, and monsters that cross it may set off its altered workings. The greater your margin on the attempt, the harder foes find it to notice or undo the change.",
+      "When you successfully disarm a suitable trap, re-key it instead: it ceases to harm you, while monsters crossing it may trigger the altered mechanism. A larger success margin makes the change harder for enemies to discover or reverse."
+    ],
+    [
+      "Breaking curses with the strength of will that enabled some of the Noldor to resist the Doom of Mandos. Such resolve shatters the dark enchantments laid upon objects by Morgoth's servants, and the struggle reveals much about the nature of all things touched by malice.",
+      "A curse leaves an imposed pattern beneath a tool's intended workings. You can recognize that pattern, break its hold while removing the item, and use a cleansing gem against a deeper corruption."
+    ],
+    [
+      "Break curses on removal. Significant bonus to identifying items, especially cursed ones. Lets gems of Sanctity break jinxed egos.",
+      "Removing cursed gear breaks its curse. Gain a significant identification bonus, particularly for cursed items. Gems of Sanctity can also break jinxed egos."
+    ],
+    [
+      "Channeling power as the Maiar once aided the Eldar in Valinor, guiding the flow of enchantment through crafted vessels. Those who master this art understand the inner workings of staves and horns instinctively, and can draw forth their power without risk of the wild discharges that imperil the untrained.",
+      "An overloaded channel can spend its operator as readily as its stored charge. You learn to draw power cleanly through staves and horns without paying that hidden risk."
+    ],
+    [
+      "Auto-identify staves and horns. Halves the Voice cost of horns. Channel charges safely without risk.",
+      "Staves and horns are identified automatically. Horns consume half their usual Voice. Channeling charges carries no risk."
+    ],
+    [
+      "Drawing strength in adversity as Beren did amidst the horrors of Nan Dungortheb, where the spawn of Ungoliant assailed him and despair would have claimed a lesser soul. The bloodied warrior, driven to the brink, finds reserves of strength, agility, and resolve that are hidden in times of ease.",
+      "When ordinary reserves fail, you stop spending effort on anything that does not keep you alive. Pain narrows your choices and calls strength, speed, and clarity into the work that remains."
+    ],
+    [
+      "+1 Str/Dex/Gra at 50% HP or below. +3 Str/Dex/Gra at 25% HP or below.",
+      "At 50% HP or below, receive +1 Str/Dex/Gra. At 25% HP or below, receive +3 Str/Dex/Gra."
+    ],
+    [
+      "Appearing formidable as Fingolfin before the gates of Angband, whose wrath was so terrible that the hosts of Morgoth fled before him as he rode alone across Anfauglith. When such a warrior slays a foe, the dread of their prowess spreads among all who witness it, and none can take heart from the warrior's wounds.",
+      "A decisive killing stroke can end more than its own fight. You make it look deliberate, refusing to let the watching enemies read encouragement in your wounds."
+    ],
+    [
+      "Melee kills scare all visible enemies. Enemies ignore your injuries for morale purposes.",
+      "A melee kill frightens every visible enemy. For morale calculations, enemies disregard your injuries."
+    ],
+    [
+      "Kindling an inner light born of the spirit, as the Silmarils held within them the radiance of the Two Trees. The Noldor who dwelt long in the Blessed Realm carried an inner fire that could brighten the darkness about them, the light of Valinor shining through their very being.",
+      "The recall record retains a little charge even between returns. You learn to draw it to the surface, brightening the space your lamp already reaches."
+    ],
+    [
+      "+2 light intensity within your light radius (no radius increase).",
+      "Within your existing light radius, light intensity increases by +2. The radius itself does not grow."
+    ],
+    [
+      "Indomitable in spirit as Húrin Thalion, who alone of all the lords of Men defied Morgoth to his face and endured twenty-eight years of torment upon the heights of Thangorodrim without breaking. Such unconquerable will shields the mind from terror and bewilderment, and sustains the body far beyond its ordinary limits.",
+      "The emergency records teach a sequence for separating fear, disorientation, and bodily need from the task at hand. Rehearsed until instinctive, that discipline keeps you functioning under conditions that would overwhelm you."
+    ],
+    [
+      "Resist fear, confusion, stunning, and hallucination. Hunger reduced to 1/3 normal rate.",
+      "Gain resistance to fear, confusion, stunning, and hallucination. Hunger runs at 1/3 of the normal rate."
+    ],
+    [
+      "Swearing a great oath as did Fëanor and his sons upon Taniquetil, calling Manwë and Varda and the everlasting darkness upon themselves should they fail or falter. Such binding vows carry terrible power, granting strength to those who keep them and ruin to those who break their word.",
+      "The custodians cannot inspect every decision made in the deep. A recorded covenant binds a promised discipline to the aid they release, with a cost if your actions contradict the record."
+    ],
+    [
+      "Swear a great oath for a reward. Breaking the oath has consequences.",
+      "Accept a reward by swearing a great oath. If you break it, consequences follow."
+    ],
+    [
+      "Resisting poison as the hardy Folk of Haleth endured the venoms of Ungoliant's spawn in the passes of the Ered Gorgoroth. Through strength of constitution or long exposure, the body learns to resist the corruption of venom that would fell a lesser soul.",
+      "Repeated work around contaminated sumps has taught you how to withstand their poisonous burden. Your body's defenses answer venom more effectively."
+    ],
+    [
+      "Grants resistance to poison.",
+      "Receive resistance to poison."
+    ],
+    [
+      "Seeking vengeance with the fury that drove the Noldor across the Grinding Ice after the Kinslaying at Alqualondë and the burning of the ships at Losgar. When wounded by a foe, that searing pain becomes fuel for a more devastating return stroke, the desire for retribution lending terrible force to the answering blow.",
+      "An enemy's blow tells you exactly how close they have committed themselves. You carry the shock of the wound into a forceful answer before that opening is lost."
+    ],
+    [
+      "+1 damage die on your next melee hit after being damaged in melee. Does not stack.",
+      "After melee damage harms you, your next successful melee hit gains +1 damage die. Multiple triggers do not stack."
+    ],
+    [
+      "Exuding majesty as Thingol Greycloak did in the halls of Menegroth, he who was tallest and most lordly of all the Children of Ilúvatar. The mere presence of one who carries such authority of spirit can quell the courage of lesser beings, their will to fight withering beneath an overwhelming regal bearing.",
+      "Authority in a crisis is a voice that sounds as though the next decision has already been made. Your bearing makes less resolute opponents question whether they can oppose you at all."
+    ],
+    [
+      "Reduce enemy morale by half the difference between your Will and theirs.",
+      "Lower enemy morale by half the difference between your Will and the enemy's Will."
+    ],
+    [
+      "Enduring as the great pillars of Menegroth carved by the dwarves of Belegost in ages past, which stood unshaken through war and sorrow until the very ruin of Doriath.Long hardship has taught you to travel and fight beneath a fuller, more cumbersome load.",
+      "Long repairs beneath a loaded pack have strengthened your endurance. You can sustain the work of travel and combat with a larger burden."
+    ],
+    [
+      "+1 Constitution. +6.0 qt Pack capacity.",
+      "Increase Constitution by +1 and Pack capacity by +6.0 qt."
+    ],
+    [
+      "Forging weapons in the tradition of the great smiths of Nogrod, who crafted the legendary knife Angrist that Curufin bore, its edge keen enough to cut iron as if it were green wood. To know the making of a weapon is also to understand its nature at a glance.",
+      "You learn the path from stock metal to a balanced edge, testing each stage against the demands of use. That knowledge also makes the workmanship of another weapon easier to read."
+    ],
+    [
+      "Create weapons at the forge. Modest bonus to identifying weapons.",
+      "Forge new weapons and gain a modest bonus to weapon identification."
+    ],
+    [
+      "Crafting armour as the dwarves of Belegost fashioned the Dragon-helm of Dor-lomin for Azaghal their lord, whose coat of mail turned even the fire of Glaurung. To forge armour is to learn how each ring and plate bears the weight of a blow, knowledge that reveals the quality of any harness at a touch.",
+      "A harness fails at its joins before its polished surfaces. Making armor teaches you to distribute a blow across those joins and recognize whether another smith has done the same."
+    ],
+    [
+      "Create armour at the forge. Modest bonus to identifying armour.",
+      "Forge new armour and gain a modest bonus to armour identification."
+    ],
+    [
+      "Working gems and precious metals as the craftsmen of the Noldor fashioned the Nauglamir in the hidden workshops of Nargothrond. The jeweller's art encompasses not only rings and necklaces but also the shaping of crystals and light-bearing vessels, and one versed in this craft recognises such works at once.",
+      "Fine fittings govern the flow of power through the engine's portable instruments. You learn to set stones, form bands, and shape the vessels that carry light or voice."
+    ],
+    [
+      "Create rings, amulets, horns, and light sources. Auto-identify them. Modest jewellery ID bonus.",
+      "Make rings, amulets, horns, and light sources, and identify those item classes automatically. Also gain a modest jewellery identification bonus."
+    ],
+    [
+      "Enchanting items with the artistry of Telchar of Nogrod, greatest of dwarven smiths, whose works were imbued with power beyond their mere substance. The enchanter weaves virtue into the very fabric of their creations, and can discern the enchantments hidden within the works of others.",
+      "A careful sequence of materials and marks can make an ordinary object perform beyond its bare construction. You learn both to establish that pattern and to read it in another maker's work."
+    ],
+    [
+      "Create {special} items. Determine enchantments on items. Modest ID bonus.",
+      "Make {special} items and determine the enchantments on items. Gain a modest identification bonus."
+    ],
+    [
+      "Attaining the effortless mastery of Curufin, most skilled of the sons of Fëanor in the crafts of hand, who could shape metal with a speed and ease that seemed almost careless. Such expertise allows the smith to work without waste, achieving in moments what lesser craftsmen labor over for hours.",
+      "You prepare every operation before heating the metal, eliminating needless corrections and repeated work. The resulting economy spares both your time and the personal cost of forging."
+    ],
+    [
+      "Halve forging time. Negate all experience and stat costs of smithing.",
+      "Forging takes half the usual time. Smithing consumes neither experience nor stats."
+    ],
+    [
+      "Mastering the highest artifice as Fëanor did when he created the Silmarils and the palantiri in the Blessed Realm, works so extraordinary that they could never be duplicated. Such mastery allows the creation of truly unique objects of power, and grants deep insight into the nature of all crafted things.",
+      "The best technical records describe principles rather than a finished pattern. Using those principles, you can construct a unique artifact instead of repeating a workshop model."
+    ],
+    [
+      "Create highly customised artifacts. Significant bonus to identifying items.",
+      "Make highly customised artifacts and receive a significant bonus to item identification."
+    ],
+    [
+      "Crafting a masterpiece that strains the very limits of skill, as the great works of the First Age were wrought only through tremendous sacrifice. The smith pours their very essence into the creation, achieving what should be impossible, though the effort leaves them diminished.",
+      "A masterwork asks more than a familiar process can comfortably give. You can force a difficult design into being, at the expense of some of the skill that made the attempt possible."
+    ],
+    [
+      "Create items beyond normal difficulty limit. Drains Smithing skill per excess difficulty point.",
+      "You may forge items above your normal difficulty limit. Each point of excess difficulty drains Smithing skill."
+    ],
+    [
+      "Inspired as by the touch of Varda Elentari upon the works of the Eldar, whose blessing hallowed the greatest creations of the Noldor in the years before the Darkening.",
+      "Exacting workshop practice has made patience and inspiration easier to summon together. Your attention settles on the right detail when the work demands it."
+    ],
+    [
+      "+1 Grace.",
+      "Increase Grace by +1."
+    ],
+    [
+      "Blending rare metals as the cunning smiths of the First Age did, wedding mithril or star iron to common steel. The dwarves of the Blue Mountains guarded such secrets jealously, for weapons wrought with these metals possessed virtues beyond ordinary counterparts.",
+      "The metal has to be understood while it is still molten. You learn how lumesilver and star iron join a common structure without wasting their special properties."
+    ],
+    [
+      "Alloy weapons and armour with mithril or star iron at no extra cost. Forge mithril/star-iron gear.",
+      "Alloy weapons and armour with lumesilver or star iron for no additional cost. You can also forge lumesilver/star-iron gear."
+    ],
+    [
+      "Reworking worn gear as the patient craftsmen of Nogrod straightened bent mail, renewed old edges, and laid fresh virtue on worthy pieces after hard-fought battles. A smith with this art can restore what was marred in the deeps or add new excellence to found gear without remaking it from nothing.",
+      "Repair begins by finding what is still sound. You can restore a battered tool or broken span, or extend a found item's construction without discarding the work already in it."
+    ],
+    [
+      "Repair damaged items at a forge, restore damaged bridges, or add a missing prefix to a found item. Reforging difficulty is 1.5x the difficulty increase.",
+      "Repair damaged items using a forge. You can also restore damaged bridges or supply a missing prefix to a found item. Reforging difficulty equals 1.5x the increase in difficulty."
+    ],
+    [
+      "In the ethereal strains of the Lay of Leithian, where Lúthien invoked the stars, you chant a hymn to Varda, the Star-queen. Her name was the most feared word in all the pits of Angband, for the servants of Morgoth could not endure the memory of the holy light they had forsaken, and the mere sound of it drove them to flight.",
+      "You sound the evacuation alarm encoded in the old signal records. To hostile ears, its rising intervals suggest that the passage is lost and escape is the only sensible choice."
+    ],
+    [
+      "Causes enemies to flee. Reduces enemy Will by Song/5.",
+      "Drive enemies to flee and lower their Will by Song/5."
+    ],
+    [
+      "Echoing the bold verses of Fingolfin's challenge to Morgoth at the gates of Angband, as preserved in ancient lays. You intone a defiant melody that goads and enrages lesser foes, compelling them to abandon caution and throw themselves recklessly into battle like wolves driven mad by the sound of the hunter's horn.",
+      "This signal mimics the harsh rhythm used to challenge a rival crew across a noisy shaft. Its pressure draws attention away from caution and concealment, inviting a reckless answer."
+    ],
+    [
+      "Reduces enemy Will and Stealth by Song/5 each. Enrages foes into reckless attacks.",
+      "Enemy Will and Stealth each fall by Song/5. Foes become enraged and attack recklessly."
+    ],
+    [
+      "In the deep, resonant chants born of the dwarven songs that echoed through the halls of Nogrod and Belegost in the Blue Mountains, adapted by the elven lorekeepers of Nargothrond's caverns. You weave a low melody that speaks to the stone itself, coaxing it to reveal the hidden ways that wind through the darkness below.",
+      "You sing the survey cadence that once tested empty conduits. Returning tones build a map outward from the passages you already understand."
+    ],
+    [
+      "Gradually reveals surrounding passages and chambers, expanding from explored areas.",
+      "Reveal nearby passages and chambers over time, spreading the revealed area outward from explored ground."
+    ],
+    [
+      "Drawing from the verses of escape and defiance in the great Duel of Song between Finrod and Sauron upon Tol-in-Gaurhoth, where Felagund sang of snares eluded and chains that snap, of the wind unfettered upon the Western Sea and birds flying free above the towers of imprisonment.",
+      "A maintenance sequence orders clamps to release and obstructions to clear. Carried by your voice, the old command loosens hidden catches and resists the forces that would hold you back."
+    ],
+    [
+      "Reveals hidden doors, disarms traps, clears rubble. Grants freedom from slowing effects.",
+      "Expose hidden doors, disarm traps, and clear rubble. Gain freedom from effects that slow you."
+    ],
+    [
+      "In hushed tones akin to Lúthien's enchantment that cloaked her passage through the shadowed realms between Doriath and Angband. You weave a blanket of quiet about yourself, muffling all sounds within its reach, so that the ears of your enemies are confounded and the darkness itself seems to swallow their cries.",
+      "Opposed tones cancel the sounds that would otherwise travel down a service shaft. You sustain that quiet around your passage, smothering both a betraying footstep and a cry for help."
+    ],
+    [
+      "Muffles sounds, making it harder for enemies to detect you or call for allies.",
+      "Dampen sound so enemies have more difficulty detecting you and summoning allies."
+    ],
+    [
+      "With gentle cadences echoing the healing laments sung by the elves upon Tol Galen, the Green Isle in the River Adurant, where Beren and Lúthien dwelt in peace after their return from death. Such melodies carry the memory of renewal and restoration, closing wounds and coaxing life back into weary flesh.",
+      "The infirmary records use a steady vocal pulse to guide the body's repair. You maintain that pulse through the immediate wound and into the slower work of recovery."
+    ],
+    [
+      "Immediately staunches bleeding. Greatly hastens natural healing.",
+      "Stop bleeding at once and greatly accelerate natural healing."
+    ],
+    [
+      "Inspired by the warding spells woven into the great doors of Nargothrond, which Finrod raised by the counsel of Thingol to guard the hidden river-gate. You sing of thresholds sealed against the foe, and doors closed beneath this melody become impassable barriers, sealed by the power of your voice as surely as by bolts of dwarven iron.",
+      "You give a closed door the holding signal intended for a pressure emergency. Its fittings answer the sustained tone, resisting entry while the command remains in force."
+    ],
+    [
+      "Closed doors become sealed barriers, resistant to enemies.",
+      "Closed doors form sealed barriers that resist enemies."
+    ],
+    [
+      "Evoking the radiant verses that tell of the Two Trees of Valinor, Telperion the Silver and Laurelin the Gold, whose mingled light once illuminated the Blessed Realm before Morgoth and Ungoliant brought them to ruin. The memory of that holy radiance lives on in song, and its brilliance sears the creatures of darkness.",
+      "A lamp calibration melody calls stored radiance into a wider field. As your control strengthens, the growing brightness becomes painful to creatures dependent on darkness."
+    ],
+    [
+      "+1 light radius at 0-5 Song, +2 at 6-11, +3 at 12-18, and so on. Creatures of darkness may be stunned or wounded (vs Will).",
+      "Light radius increases by +1 at 0-5 Song, +2 at 6-11, +3 at 12-18, and continues in that progression. Creatures of darkness can be stunned or wounded, resisted by Will."
+    ],
+    [
+      "Weaving themes as in the harmonious lays of Daeron the minstrel, greatest of all bards in Doriath, who could intertwine two melodies into one seamless tapestry of sound. As the Ainur wove many themes together in the Great Music before the World, so too can a skilled singer sustain a second song beneath the first, each reinforcing the other.",
+      "Two maintenance signals can share a line if their rhythms are held apart. You keep a quieter pattern beneath the principal melody without allowing either to dissolve into noise."
+    ],
+    [
+      "Sing a minor theme alongside your major song at half Song score.",
+      "Sustain a minor theme with your major song. The minor theme uses half your Song score."
+    ],
+    [
+      "In grim battle-hymns akin to the chants of the Edain warriors in the Nirnaeth Arnoediad, where the sons of Hador sang as they fought and died in the rearguard of Turgon's retreat. This song carries the finality of death, and when a grievous wound is struck in time with its rhythm, the melody seals the doom of the fallen.",
+      "This battle rhythm places every stroke at the moment an opponent's defenses falter. A sufficiently deep wound, delivered in time with the voice, becomes a final one."
+    ],
+    [
+      "Melee critical hits slay the foe if their HP is at most 2x your Song score.",
+      "A melee critical hit kills its target when the target's HP is at most 2x your Song score."
+    ],
+    [
+      "Adapting the piercing notes of the song of wizardry that Sauron wielded upon Tol-in-Gaurhoth, where he sang of revealing and uncovering, of treachery laid bare. You turn these themes against the darkness itself, chanting to cut through shadow and deceit, so that hidden things are brought to light and nothing may remain concealed.",
+      "You send a search signal through the surrounding chambers and attend to its replies. Moving bodies and worked objects return different traces, revealing both their positions and details of their construction."
+    ],
+    [
+      "Roll Song each turn to reveal nearby monsters and items. Revealed, carried, and equipped items get +1d5 identification.",
+      "Each turn, roll Song to expose nearby monsters and items. Revealed items, carried items, and equipped items receive +1d5 identification."
+    ],
+    [
+      "Bringing forth the ancient magic of the Blessed Realm, as in the laments for the Kinslaying upon the shores of Alqualondë, where grief and beauty were woven inseparably together. You sing of the ageless shores of Valinor and the starlit waters of Eldamar, and the grace of the Elder Days cloaks you like a shining mantle.",
+      "A flowing sequence from the balance-training records steadies your movements without fixing them in place. The melody makes grace feel like a practiced physical rhythm."
+    ],
+    [
+      "+1 Grace. +1 Evasion at 0-7 Song, +2 at 8-15, +3 at 16-24, and so on.",
+      "Gain +1 Grace. Evasion increases by +1 at 0-7 Song, +2 at 8-15, +3 at 16-24, and continues in that progression."
+    ],
+    [
+      "Echoing Felagund's song of staying and resisting in his great contest with Sauron, where he sang of trust unbroken and strength like a standing tower. Even as Sauron's power assailed him, Finrod's voice held firm, a bulwark of will against the tide of darkness, unyielding as the walls of Gondolin.",
+      "The holding cadence once kept crews working together through the shock of a failing pump. You use its measured resistance to steady your mind and shelter your body from harm."
+    ],
+    [
+      "+Song/2 to Will. [2d2] protection against all damage.",
+      "Will gains +Song/2. Receive [2d2] protection against every kind of damage."
+    ],
+    [
+      "Weaving glamour as Lúthien did when she took the form of Thuringwethil and passed the gates of Angband unchallenged, her enchantment so complete that even the Wolves of Sauron took her for one of their own. Such a song wraps the singer in illusion, but watchful eyes may pierce the deception and see truly.",
+      "You repeat the familiar cadence of a working crew, wrapping your presence in the expectation that you belong. Each additional observer makes the deception harder to maintain."
+    ],
+    [
+      "Watchful foes mistake you for their own (your Song vs their Perception and Will each round, at -1 for each foe aware of you).",
+      "Watchful enemies can mistake you for an ally. Each round, test your Song against their Perception and Will, taking -1 for every foe aware of you."
+    ],
+    [
+      "In lulling airs like Lúthien's enchantment that cast Morgoth himself into slumber upon his iron throne, weighed down by the Silmarils upon his crown. As the gardens of Lórien in Valinor bring rest and forgetfulness of care to all who walk among them, so this song enfolds the minds of those who hear it in heavy, inescapable drowsiness.",
+      "The rest-cycle melody lowers the mind's readiness a little at a time. You sustain its unhurried pattern until nearby enemies find remaining alert more difficult than sleeping."
+    ],
+    [
+      "Gradually puts nearby opponents to sleep.",
+      "Nearby opponents are gradually put to sleep."
+    ],
+    [
+      "With discordant blasts like the song of power that Lúthien raised before the towers of Tol-in-Gaurhoth, bringing walls crashing down in ruin. You chant of breaking and sundering, of iron rent and steel unmade, and the weapons and armour of your foes weaken beneath the assault of sound.",
+      "You find the pitch at which a solid structure begins to answer against itself. Repeated discord loosens weapons, armor, and even bodies made of stone."
+    ],
+    [
+      "Shatter enemy weapons and armour, even the stone bodies of stone creatures, weakening their attacks and defenses (resisted by Will).",
+      "Break down enemy weapons and armour, including the stone bodies of stone creatures, reducing their attacks and defenses. Will resists the effect."
+    ],
+    [
+      "Asserting dominion in commanding strains as Morgoth himself bent the wills of his servants through the force of his terrible song. Yet this power may be turned to nobler ends, as Lúthien's voice mastered even the Lord of Wolves. The song overwhelms the minds of lesser beings, binding their will and leaving them unable to act.",
+      "The command sequence presses the same instruction through every competing thought. A mind that cannot resist the pattern loses the freedom to move or act."
+    ],
+    [
+      "May prevent enemy movement or action by overwhelming their minds.",
+      "Overwhelming an enemy's mind can stop its movement or action."
+    ],
+    [
+      "Uplifted as by the Great Music of the Ainur before the foundations of the World were laid, when Ilúvatar revealed to them the themes of creation and each spirit contributed its voice to the Song that shaped all things.",
+      "Listening to the complete signal records teaches you where a melody needs restraint and where it needs conviction. That understanding lends a little more ease to every demanding act."
+    ],
+    [
+      "In verses clashing as in the great Duel of Song between Finrod Felagund and Sauron upon Tol-in-Gaurhoth, where melodies of power swayed like the tides of battle. You challenge a foe to a contest of voices, and if their spirit falters, they are left diminished and shaken.",
+      "You answer a foe's voice with a pattern intended to expose the weaknesses in its own. Losing that exchange leaves the opponent's confidence and defenses durably impaired."
+    ],
+    [
+      "Challenge a foe to a duel of voices. On failure, lasting penalties to their Will, Stealth, Evasion, and Armour.",
+      "Engage a foe in a vocal duel. If the foe fails, it suffers lasting penalties to Will, Stealth, Evasion, and Armour."
+    ],
+    [
+      "Weaving a lament as deep as the tears of Nienna for the marring of Arda, or the sorrowful strains of the Noldolantë that Maglor composed for the fallen. You burden a chosen foe with the accumulated grief of ages, a weight of sorrow so great that it crushes their spirit and drains the vitality from their limbs.",
+      "A descending sequence recalls every effort that ended without relief. Directed at one opponent, that burden settles into its body and resolve rather than passing with the last note."
+    ],
+    [
+      "Permanently reduce a target's health, damage, and resolve.",
+      "Permanently lower one target's health, damage, and resolve."
+    ],
+    [
+      "Bearing the Doom of Mandos, the dread prophecy spoken upon the shores of Araman as the Noldor departed into exile. Though it foretold tears beyond measure, such a doom forges unbreakable resolve, for one already condemned cannot be shaken by lesser terrors.",
+      "A recovered custodial record anchors your responses to a stable internal sequence. Panic, disorientation, and imposed moods can no longer displace that point of reference."
+    ],
+    [
+      "Immune to fear, hallucination, trance, rage, stun, and confusion. Quest reward.",
+      "Quest reward: immunity to fear, hallucination, trance, rage, stun, and confusion."
+    ],
+    [
+      "Harnessing the creative fire of Aulë the Smith, mightiest of craftsmen among the Valar, who shaped the substance of Arda itself and fashioned the Dwarves in secret beneath the mountains. His blessing upon a mortal smith grants mastery at the forge that surpasses all ordinary limits of skill.",
+      "The master forge record permits a design beyond the safe working range of ordinary practice. Its instructions are exact, but the operator must surrender part of their own training to carry them out."
+    ],
+    [
+      "Exceed effective Smithing by up to twice your base Smithing. Each 2 points of excess difficulty cost 1 base Smithing, rounding the cost up. Supersedes Masterpiece. Quest reward.",
+      "Quest reward: exceed effective Smithing by up to twice base Smithing. For each 2 points of excess difficulty, spend 1 base Smithing, rounding the cost upward. This replaces Masterpiece."
+    ],
+    [
+      "Swearing the Oath of Mercy, akin to the compassion shown by Finrod Felagund when he befriended Beren in Nargothrond, honouring the bond between all free peoples. Those who vow to harm neither Men nor Elves are touched by a gentle grace, but the oath is fragile and shatters if its keeper wounds one of those kindreds.",
+      "You register a relief covenant that places people before the quickest route to victory. Its aid depends on refusing harm to those whose lives the agreement protects."
+    ],
+    [
+      "+1 Grace. Breaks if you harm a visible Man or Elf.",
+      "Gain +1 Grace. Harming a visible Man or Elf breaks this oath."
+    ],
+    [
+      "Taking the Oath of Silence, a vow of grim resolve like those sworn by the warriors who endured the long marches across Beleriand without complaint or song, husbanding their strength in wordless determination. Such discipline hardens the body but demands that the voice be stilled entirely.",
+      "You commit to pass through the works without adding your voice to their competing signals. The discipline sharpens your movements, but no song can be reconciled with the promise."
+    ],
+    [
+      "+1 Dexterity. Breaks if you sing any song.",
+      "Gain +1 Dexterity. Singing any song breaks this oath."
+    ],
+    [
+      "Forging the Oath of Iron, unyielding as the vow of Fëanor upon Taniquetil, who swore never to retreat or relent in his pursuit of the Silmarils. Those bound by this oath gain the endurance of the unyielding mountains, but must face every peril without flinching, for to flee is to break their word.",
+      "The descent covenant binds your return to the recovery of a power cell. You accept greater endurance on the condition that ordinary upward routes cannot become an empty-handed retreat."
+    ],
+    [
+      "+1 Constitution. Breaks if you try to ascend ordinary stairs without a Silmaril. Utumno return stairs are exempt.",
+      "Gain +1 Constitution. Attempting to ascend ordinary stairs without a dawnseed breaks the oath. Return stairs from the Sunken Works are exempt."
+    ],
+    [
+      "Receiving the Gift of Nienna, the Vala of compassion who wept for every hurt upon the world. Her tears bring wisdom and the quiet strength of pity. Those who show mercy move more gently, their footsteps lightened by the grace of choosing restraint over slaughter.",
+      "The relief record measures the lives you leave intact as well as the threats you overcome. Practiced restraint makes your approach less alarming, allowing a quieter passage among the creatures below."
+    ],
+    [
+      "Up to +10 stealth based on ratio of monsters spared: 10*(seen-killed)/seen. Quest reward.",
+      "Quest reward: gain up to +10 stealth according to the proportion of monsters spared, calculated as 10*(seen-killed)/seen."
+    ],
+    [
+      "Binding oneself by the Oath of the Smith, as the great craftsmen of the Noldor took pride only in works wrought by their own hands. Curufin and his followers scorned to bear weapons they had not forged themselves, and such dedication to one's own craft brings mastery beyond the reach of those who rely upon the works of others.",
+      "You stake the descent on the reliability of your own workmanship. The covenant supports your craft, but requires you to leave other makers' weapons and armor where they lie."
+    ],
+    [
+      "+5 Smithing. Breaks if you pick up weapons or armour made by others.",
+      "Gain +5 Smithing. Picking up weapons or armour made by others breaks this oath."
+    ],
+    [
+      "Upholding the Oath of the Valorous Heart, the honour of heroes like Húrin Thalion who fought without quarter upon the field of the Nirnaeth. Such warriors scorn to strike at a fleeing foe, deeming it beneath their honour, and this code of valour lends strength to their arms against those who stand and fight.",
+      "You promise to meet resistance without exploiting an enemy's flight. Holding that distinction gives your fighting strength a clear purpose, so long as you honor it when victory is easiest."
+    ],
+    [
+      "+1 Strength. Breaks if you harm a visible fleeing enemy.",
+      "Gain +1 Strength. Harming a visible fleeing enemy breaks this oath."
+    ],
+    [
+      "Possessing the hunter's knowledge to exploit the weaknesses of great and terrible foes, as Beren studied the habits of Carcharoth, the mightiest wolf that ever walked, before confronting him at the gates of Angband. Against such singular enemies, hard-won understanding becomes a weapon as sharp as any blade.",
+      "A custodian releases the case records of singular threats that defeated earlier crews. Their peculiar habits become familiar enough to guide both your attack and your defense."
+    ],
+    [
+      "+3 attack and evasion vs unique monsters. Quest reward.",
+      "Quest reward: gain +3 attack and evasion against unique monsters."
+    ],
+    [
+      "Swearing the Oath of Light, dedicating yourself to the memory of the Two Trees as those faithful Noldor who kept Varda's stars burning even in the deepest darkness of Angband. You refuse any gear that would dim your radiance, and while the oath endures, your inner fire burns brighter against the encroaching shadow.",
+      "You bind yourself to carry a clear signal through the deep. The covenant brightens your own radiance, but rejects equipment that would deliberately obscure it."
+    ],
+    [
+      "+1 inner light intensity. Breaks if you equip gear that reduces your light.",
+      "Gain +1 inner light intensity. Equipping gear that lowers your light breaks this oath."
+    ]
+  ]
+}

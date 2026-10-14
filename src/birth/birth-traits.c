@@ -198,9 +198,9 @@ void birth_format_ability_hint(int skill, int ability, char* buf,
 
     name = b_name + b_ptr->name;
     if (b_ptr->effect)
-        effect = b_text + b_ptr->effect;
+        effect = lore_text(b_text + b_ptr->effect);
     if (b_ptr->text)
-        lore = b_text + b_ptr->text;
+        lore = lore_text(b_text + b_ptr->text);
 
     if (effect && effect[0])
         strnfmt(buf, buflen, "%s (%s): %s", name,

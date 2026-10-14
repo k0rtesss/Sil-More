@@ -586,7 +586,7 @@ cptr* extract_quest_init_texts(int quest_idx, int* count)
     if (!q_ptr->init_text) return NULL;
 
     /* Get the initialization text */
-    full_text = q_text + q_ptr->init_text;
+    full_text = lore_text(q_text + q_ptr->init_text);
     if (!full_text || strlen(full_text) == 0) return NULL;
 
     /* Allocate text array */
@@ -658,7 +658,7 @@ cptr* extract_quest_completion_texts(int quest_idx, int* count)
     if (!q_ptr->completion_text) return NULL;
 
     /* Get the completion text */
-    full_text = q_text + q_ptr->completion_text;
+    full_text = lore_text(q_text + q_ptr->completion_text);
     if (!full_text || strlen(full_text) == 0) return NULL;
 
     /* Allocate text array */

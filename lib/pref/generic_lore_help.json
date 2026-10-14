@@ -1,0 +1,314 @@
+{
+  "title": "Emberfall help",
+  "terms": [],
+  "descriptions": [
+    [
+      "Welcome to Sil-More. Your goal is to recover a Silmaril and escape Angband. Explore carefully. The world waits while you read. Continue advances to the next page; Skip tutorial closes the current tutorial. Mode selects Disabled, Normal or Extended tutorials.",
+      "Welcome to Emberfall. Recover a dawnseed from Karth Vault and carry it out. Take time to inspect your surroundings: reading does not advance the world. Continue opens the next page, Skip tutorial closes this tutorial, and Mode chooses Disabled, Normal or Extended tutorials."
+    ],
+    [
+      "Mithril and star iron are smithing materials. Keep them if you plan to forge or improve equipment. A forge, the relevant abilities and enough Smithing are still needed; the smithing preview lists the materials and other costs.",
+      "Set aside lumesilver and star iron for making or improving equipment. These metals do not replace the need for a forge, suitable abilities, or sufficient Smithing. Consult the smithing preview for the required materials and every other cost."
+    ],
+    [
+      "{detail} Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.",
+      "{detail} Infection assigns a random disease name and a random cure from the ten herbs. It immediately removes 1 Constitution, then removes 1 from a random attribute every 100 player turns, including turns spent resting. With Alchemy, a Gem of Self Knowledge identifies both the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name; after the name is known, each use has a 50% chance to identify the cure herb. These discoveries are saved for this infection only: another infection selects a new name and cure and clears the discoveries. The correct herb cures the disease and restores its penalties, replacing that herb's usual effect and nourishment. Other herbs retain their normal effects. Healing or spring cordial always cures disease."
+    ],
+    [
+      "{detail} Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.",
+      "{detail} While poisoned, you take recurring damage and cannot regenerate Health normally. The next tick costs Health equal to one fifth of your current poison severity, rounded up. Use Antidote or spring cordial to clear the poison; clearing it does not necessarily repair the Health already lost."
+    ],
+    [
+      "{detail} Bleeding deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current bleeding severity, rounded up, as Health. Healing herbs or potions and Miruvor halve bleeding. Song of Staunching stops it when its effect occurs.",
+      "{detail} Bleeding causes recurring damage and blocks normal Health regeneration. At the next tick, lose Health equal to one fifth of current bleeding severity, rounded up. A Healing herb, Healing potion, or spring cordial halves the bleeding. Song of Staunching ends it when the song's effect occurs."
+    ],
+    [
+      "{detail} Stun lowers every skill by 2, or by 4 at severity 50 or more. Above 100, you are knocked out and cannot act. Clarity or Miruvor removes stun; use it while you can still act.",
+      "{detail} Every skill takes a penalty of 2 from stun, increasing to 4 when severity reaches 50 or more. Severity above 100 knocks you out and prevents action. Clarity or spring cordial clears stun, so use a remedy before you lose the ability to act."
+    ],
+    [
+      "Fear prevents normal melee attacks and proper ranged aiming. Retreat or use a known fear remedy if possible. Miruvor and Orcish Liquor remove fear, though Orcish Liquor can also stun you.",
+      "Fear stops ordinary melee attacks and prevents proper ranged aiming. If possible, withdraw or use an identified fear remedy. Spring cordial and Orcish Liquor both clear fear, but Orcish Liquor may also leave you stunned."
+    ],
+    [
+      "Confusion makes movement and aiming unreliable. Clarity or Miruvor cures it. Choose carefully: a direction you enter may lead to a different action while confused.",
+      "While confused, you cannot rely on either movement or aim. A direction you choose may produce a different action. Use Clarity or spring cordial to remove confusion, and allow for that uncertainty until it is gone."
+    ],
+    [
+      "You are blind. Remembered map squares do not show where creatures are now. A potion of True Sight or Miruvor cures blindness. Refuelling a lamp will not restore your sight.",
+      "Blindness prevents you from checking where creatures are now; remembered map squares contain old information. True Sight potions and spring cordial restore sight. Adding fuel to your lamp does not cure blindness."
+    ],
+    [
+      "Hallucination makes the displayed identities of creatures and items unreliable. Clarity, True Sight or Miruvor removes it. Treat apparent names and shapes with caution until it ends.",
+      "Do not trust the apparent names or shapes of items and creatures while hallucinating. Clarity, True Sight, or spring cordial clears the condition and makes those displayed identities reliable again."
+    ],
+    [
+      "{detail} A song has left a temporary Elbereth effect. Inspect your current skill breakdown and condition. A lingering effect can remain distinct from the currently selected song.",
+      "{detail} A previous song has left a temporary Solen effect. Check the condition and your current skill breakdown to see what remains active. A lingering song effect need not be the same as your selected song."
+    ],
+    [
+      "{detail} Voice powers songs and horns. It recovers while you are not singing. A potion of Voice or Miruvor restores it fully; Esgalduin restores one quarter of maximum Voice.",
+      "{detail} Songs and horns consume Voice, which recovers when you are not singing. Voice potions and spring cordial refill it completely. Reedwine instead restores one quarter of maximum Voice."
+    ],
+    [
+      "Healing, Miruvor, or the identified cure herb cures disease and restores the attribute points it took. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.",
+      "You have an identified disease remedy available. Healing, spring cordial, or the identified cure herb removes disease and restores the attribute points it drained. A cure herb does this instead of providing its normal effect or nourishment. Skip if you want to take another action."
+    ],
+    [
+      "Antidote or Miruvor removes poison. It stops future poison damage, though lost Health may still need healing. A known remedy is available now. Skip if you prefer another action.",
+      "An identified poison remedy is available now. Antidote or spring cordial clears the poison and prevents its later damage, but you may still need to heal the Health already lost. Skip if you want another action."
+    ],
+    [
+      "A herb or potion of Healing, or Miruvor, restores Health and halves current bleeding. Check the remaining bleeding afterward. A known remedy is available now. Skip if you prefer another action.",
+      "You can use an identified remedy now: a Healing herb, Healing potion, or spring cordial restores Health and halves the bleeding you currently have. Inspect the remaining severity after use. Skip to choose a different action."
+    ],
+    [
+      "Clarity or Miruvor removes stun. Acting before severity rises above 100 can prevent losing the chance to use a remedy. A known remedy is available now. Skip if you prefer another action.",
+      "An identified remedy can clear stun now: use Clarity or spring cordial before severity rises above 100 and you cannot act. Skip if you prefer to do something else."
+    ],
+    [
+      "Miruvor or Orcish Liquor removes fear. Orcish Liquor can also cause stun, so compare the available choices. A known remedy is available now. Skip if you prefer another action.",
+      "An identified fear remedy is available. Spring cordial and Orcish Liquor remove fear; Orcish Liquor can also cause stun, so weigh that risk when choosing. Skip if you want another action."
+    ],
+    [
+      "Clarity or Miruvor removes confusion so that movement and aiming become reliable again. A known remedy is available now. Skip if you prefer another action.",
+      "You have an identified remedy available. Use Clarity or spring cordial to clear confusion and regain dependable movement and aiming. Skip if you would rather take another action."
+    ],
+    [
+      "True Sight or Miruvor cures blindness. True Sight also grants temporary sight protections. A known remedy is available now. Skip if you prefer another action.",
+      "An identified blindness remedy is available now. True Sight or spring cordial restores sight, and True Sight also provides temporary sight protections. Skip if you prefer a different action."
+    ],
+    [
+      "Clarity, True Sight or Miruvor removes hallucination and makes displayed identities reliable again. A known remedy is available now. Skip if you prefer another action.",
+      "An identified remedy can clear hallucination now. Use Clarity, True Sight, or spring cordial to make displayed item and creature identities dependable again. Skip to choose another action."
+    ],
+    [
+      "Voice or Miruvor restores all Voice. Esgalduin restores one quarter of maximum Voice. Stop singing to allow ordinary Voice recovery. A known remedy is available now. Skip if you prefer another action.",
+      "You can use an identified Voice remedy now. Voice or spring cordial restores the entire reserve; reedwine restores one quarter of maximum Voice. Stop singing if you want normal Voice recovery. Skip if you prefer another action."
+    ],
+    [
+      "Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting; cure it with its cure herb once identified, Healing or Miruvor before a long rest.",
+      "Rest keeps spending turns until its goal is reached or it is interrupted. Enemies still act and the minimum-depth timer still advances. Health and Voice can recover, but poison, bleeding, and starvation block ordinary Health recovery, while singing blocks Voice recovery. Disease also progresses during rest. Before resting for a long time, cure it with its identified cure herb, Healing, or spring cordial."
+    ],
+    [
+      "Forge mithril or star-iron gear, or alloy suitable weapons and armour with those metals. Alloying adds no extra difficulty cost, but still requires the material.",
+      "You can make lumesilver or star-iron equipment, or alloy suitable weapons and armour using either metal. Alloying has no additional difficulty cost; you must still supply the metal."
+    ],
+    [
+      "Mandos' Doom is a quest reward granting immunity to fear, hallucination, trance, rage, stun and confusion.",
+      "Recall Debt is earned as a quest reward. It makes you immune to fear, hallucination, trance, rage, stun, and confusion."
+    ],
+    [
+      "Aulë's Forge improves on Masterpiece. Above your normal smithing limit, spend 1 base Smithing for each 2 excess difficulty points, rounding the cost up. You can reach up to twice your base Smithing beyond the normal limit. This quest reward replaces the less efficient Masterpiece rule.",
+      "Korren's Forge replaces Masterpiece with a more efficient quest reward. For work above your normal smithing limit, pay 1 base Smithing per 2 excess difficulty points, rounding the cost upward. The work may exceed that normal limit by up to twice your base Smithing. Once you have this reward, the less efficient Masterpiece rule no longer applies."
+    ],
+    [
+      "Oath of Mercy grants +1 Grace and forbids attacking or harming Men or Elves. This includes indirect harm. Read the exact oath terms before swearing it.",
+      "Read the Oath of Mercy's exact terms before committing. It gives +1 Grace, but prohibits attacking or harming Men or Elves, including harm delivered indirectly."
+    ],
+    [
+      "Oath of Silence grants +1 Dexterity. Singing breaks it. Plan around other ways to use your skills and resources before accepting the oath.",
+      "Before choosing Oath of Silence, consider how you will use your other skills and resources without song. The oath gives +1 Dexterity and is broken by singing."
+    ],
+    [
+      "Oath of Iron grants +1 Constitution. Until you possess a Silmaril, it forbids going upstairs or leaving the depths. Prepare for a journey without retreat to shallower levels.",
+      "Oath of Iron gives +1 Constitution in exchange for a descent without an empty-handed retreat. Until you have a dawnseed, you cannot go upstairs or leave the depths. Plan to continue without returning to shallower levels."
+    ],
+    [
+      "Nienna's Gift grants up to +10 Stealth according to the share of seen non-unique creatures you have spared. For example, sparing half gives +5. The result rounds up; before seeing any, the bonus is 0. Check the current count and bonus in the character view.",
+      "Ilyra's Gift measures the proportion of seen non-unique creatures you leave alive. Its Stealth bonus can reach +10: sparing half, for example, gives +5. Round the result upward; the bonus is 0 before you have seen any creatures. The character view shows your current count and bonus."
+    ],
+    [
+      "Oath of the Smith grants +5 Smithing. It forbids picking up, wielding or wearing weapons or armour made by others. Prepare your own equipment and read item actions carefully before accepting it.",
+      "Bring equipment you made yourself before choosing Oath of the Smith. The oath adds +5 Smithing, but bars you from picking up, wielding, or wearing weapons or armour made by anyone else. Check item actions carefully while it is in force."
+    ],
+    [
+      "Oath of Valour grants +1 Strength. Harming fleeing enemies breaks it, including through indirect effects. A fleeing creature has lost courage; it is different from a sleeping or unwary creature.",
+      "Oath of Valour gives +1 Strength, but any harm to fleeing enemies breaks it, even through indirect effects. A fleeing creature has lost courage; sleeping and unwary creatures are different states."
+    ],
+    [
+      "Unique Bane is a quest reward granting +3 Attack and Evasion against unique monsters.",
+      "Completing its quest grants Unique Bane. Against unique monsters, this reward provides +3 Attack and Evasion."
+    ],
+    [
+      "Oath of Light grants +1 light radius while valid. Equipping items with Darkness or Unlight breaks it. Check known item properties before changing equipment.",
+      "While Oath of Light remains valid, it grants +1 light radius. Gear with Darkness or Unlight breaks the oath when equipped. Inspect known item properties before making an equipment change."
+    ],
+    [
+      "A flash trap can blind you. A revealed trap is still active, so avoid it or inspect the disarm option. True Sight or Miruvor can cure blindness if it occurs.",
+      "A flash trap may blind you. Revealing it does not deactivate it: go around or inspect the disarm option. If it blinds you, True Sight or spring cordial can restore your sight."
+    ],
+    [
+      "Quartz is a mineral vein, not a damaged wall: its visible crystals identify it. Breaking a vein releases a gem; deep veins may also yield mithril, while meteorite chasms alone can yield star iron. Digging needs a tool rating and Strength of at least 2. An ordinary strike cracks intact quartz; a strong strike shatters it. Clearing the rubble takes another action.",
+      "Visible crystals identify quartz as a mineral vein rather than a damaged wall. Break it to release a gem; a deep vein may additionally provide lumesilver. Only meteorite chasms can provide star iron. Digging requires both a tool rating and Strength of at least 2. A normal strike cracks intact quartz, a strong strike shatters it, and removing the resulting rubble costs another action."
+    ],
+    [
+      "This forge Orodruth has no uses remaining and cannot make another item. Look for a usable forge if you want to continue smithing.",
+      "The Black Kilns forge is exhausted: it has no uses left and cannot produce another item. To keep smithing, find a forge with a use remaining."
+    ],
+    [
+      "This forge Orodruth has limited uses. Inspect the remaining count and your smithing proposal before spending them. It grants +7 effective Smithing while you work here, allowing more difficult items.",
+      "Each use of this Black Kilns forge is limited. Check how many remain and inspect the smithing proposal before committing one. Working here grants +7 effective Smithing, so you can attempt more difficult items."
+    ],
+    [
+      "When healthy, each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.",
+      "For a healthy character, entering each water square on foot makes a 0.5% disease check. Remaining still makes no additional infection roll. A successful leap avoids touching the water and making a water splash, although the landing still makes noise. Rest does not halt disease; its cure herb, Healing, or spring cordial cures it."
+    ],
+    [
+      "Its normal effect is to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.",
+      "Normally, eating this herb infects a healthy character: Constitution falls by -1 immediately, then a random attribute falls by -1 every 100 player turns until the disease is cured. It supplies normal herb nourishment, and resting does not cure the infection. Healing potions or spring cordial cure the disease and restore the attribute penalties it caused. If the herb is the cure for your current disease, eating it instead cures that disease and restores its penalties, without infecting you or providing nourishment. Otherwise the normal effect applies."
+    ],
+    [
+      "Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns. Rest does not cure it; potions of Healing or Miruvor do.",
+      "This food supplies about 2,000 ordinary turns of nourishment and carries a 20% disease chance. Infection causes -1 Constitution immediately, followed by -1 to a random attribute every 100 player turns. Rest does not cure disease. Healing potions and spring cordial do."
+    ],
+    [
+      "{detail} You have obtained a Silmaril. Check the main quest and prepare your route out of Angband. You must still reach the surface with it to complete the escape.",
+      "{detail} You now carry a dawnseed. Consult the main quest and plan your way out of Karth Vault. Recovery alone is not the escape: you must take the dawnseed all the way to the surface."
+    ],
+    [
+      "{detail} You escaped. Review the recovered Silmarils, score and remaining Tale objective. An escape completes this hero's expedition, while the Tale may continue with another hero.",
+      "{detail} Your escape ends this hero's expedition. Review the dawnseeds recovered, your score, and the Tale objective still outstanding. Another hero may continue the same Tale."
+    ],
+    [
+      "{detail} Natural caves have irregular paths and long sight lines. Check exits and cover before approaching enemies. Floor loot favors supplies; you may also find gems and, at suitable depths, mithril.",
+      "{detail} Before crossing a natural cave, study its exits and cover: irregular paths and long sight lines can expose you to enemies. Supplies are favored among floor loot. Gems may also appear, with lumesilver possible at suitable depths."
+    ],
+    [
+      "{detail} A great cave offers long sight lines and many approach routes; distant enemies may see you too. Use cover and keep space to retreat. Loot is mixed, but supplies and gems are more common here than in ordinary halls; mithril may appear at suitable depths.",
+      "{detail} Great caves provide many approach routes and long sight lines in both directions, so distant enemies may spot you. Keep cover and room to withdraw. Their mixed loot favors supplies and gems more than ordinary halls do, and lumesilver can appear at suitable depths."
+    ],
+    [
+      "{detail} Hunt the creature named in Quests, then return to Tulkas for the reward. Check the target's learned attacks before confronting it.",
+      "{detail} Consult Quests for Drevan's named target and review its learned attacks before approaching it. Kill that creature, then return to Drevan to collect the reward."
+    ],
+    [
+      "{detail} Forge a work that meets Aulë's current requirements, then collect the reward. Read the objective and smithing proposal before spending materials. Leaving this level before the reward is granted abandons the quest.",
+      "{detail} Check Korren's present requirements in the objective and review the smithing proposal before using materials. Forge a qualifying work, then receive the reward. If you leave this level before the reward is granted, you abandon the assignment."
+    ],
+    [
+      "{detail} Follow Mandos' objective concerning the bound spirit, then collect the reward. Check Quests for the exact target. Leaving this level before receiving the reward abandons the quest.",
+      "{detail} Check Quests for the exact target involved in Nareth's bound-record assignment. Complete that objective and collect the reward here. Leaving this level before receiving it abandons the quest."
+    ],
+    [
+      "{detail} Find the downward stair without taking a life, then follow the reward instructions before leaving. Avoid effects that can kill, including automatic follow-up attacks. Leaving the level before receiving the reward abandons this trial.",
+      "{detail} Reach the downward stair without killing, then follow the instructions for receiving your reward before you leave. Avoid any effect that could take a life, including automatic follow-up attacks. Leaving this level before the reward is received abandons the trial."
+    ],
+    [
+      "{detail} The hunt counts wolves, spiders, serpents and vampires separately. Check each live total in Quests; killing more of one group does not fill another group's requirement.",
+      "{detail} Track this hunt's totals in Quests. Wolves, spiders, serpents, and vampires have separate counts: extra kills in one category cannot satisfy another category's requirement."
+    ],
+    [
+      "{detail} Check Quests for the revealed destination. Varda's trial is on the first level you reach after 500 ft; slay Duruin before leaving that level or the quest is lost. Plan your descent before entering it; unexplored locations remain unknown.",
+      "{detail} Use Quests to check the revealed destination before descending; unexplored locations are still unknown. Solen's assignment takes place on the first level you reach after 500 ft. You must kill Ashvek before leaving that level, or the quest fails."
+    ],
+    [
+      "A strong critical hit from this creature can confuse you. Check your conditions after being hit; Clarity or Miruvor can cure confusion.",
+      "A powerful critical hit by this creature may leave you confused. Inspect your conditions after a hit and use Clarity or spring cordial if you need to clear confusion."
+    ],
+    [
+      "This creature has a Bane against Noldor. Its relevant skill contests can be stronger against a matching hero.",
+      "A Glasswright hero matches this creature's Bane. Against that matching hero, the creature may receive stronger relevant skill contests."
+    ],
+    [
+      "This creature has a Bane against Sindar. Its relevant skill contests can be stronger against a matching hero.",
+      "A Reedwalker hero matches this creature's Bane. Against that matching hero, the creature may receive stronger relevant skill contests."
+    ],
+    [
+      "Stun severity is at least 50, so every skill is reduced by 4. Above 100, you lose the ability to act. Clarity or Miruvor can remove stun while you can still use an item.",
+      "At stun severity 50 or higher, every skill takes a penalty of 4. Once severity is above 100, you cannot act. Use Clarity or spring cordial to clear stun while item use is still possible."
+    ],
+    [
+      "Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting; cure it with its cure herb once identified, or with Healing or Miruvor.",
+      "Rest consumes turns while you recover. Poison, bleeding, and starvation block normal Health regeneration; singing blocks Voice regeneration. Disease continues through those turns. Cure it with its cure herb after identification, or use Healing or spring cordial."
+    ],
+    [
+      "Bleeding severity is above 100. The next damage tick will cost more than 20 Health, and ordinary Health regeneration is blocked. Healing herbs or potions and Miruvor halve bleeding; one use may leave substantial bleeding. Song of Staunching can stop it.",
+      "Bleeding above severity 100 blocks ordinary Health regeneration and will cost more than 20 Health at the next damage tick. A Healing herb, Healing potion, or spring cordial halves the bleeding, so a single use can still leave a serious amount. Song of Staunching can end it."
+    ],
+    [
+      "You are escaping with a Silmaril. Check the main objective and your route to the surface. This is the escape phase of the expedition; automatic running is a separate movement command.",
+      "You carry a dawnseed during the escape phase. Review the main objective and choose a route to the surface. Automatic running is a separate movement command; it does not define this phase of the expedition."
+    ],
+    [
+      "Poison deals damage over time and prevents ordinary Health regeneration. Move to clean ground before using Antidote or Miruvor, or another exposure can poison you again. A successful airborne crossing avoids contact.",
+      "Poison causes recurring damage and stops ordinary Health regeneration. Get onto clean ground before taking Antidote or spring cordial, or renewed exposure can poison you again. A successful airborne crossing avoids contact."
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
+      "EMBERFALL - HELP [%d/%d]"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: GOAL & HEROES",
+      "EMBERFALL - HELP [%d/%d]: GOAL & HEROES"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: DEPTH & DANGER",
+      "EMBERFALL - HELP [%d/%d]: DEPTH & DANGER"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT & DEFENCE",
+      "EMBERFALL - HELP [%d/%d]: COMBAT & DEFENCE"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT ROLLS EXPLAINED",
+      "EMBERFALL - HELP [%d/%d]: COMBAT ROLLS EXPLAINED"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EARLY TIPS",
+      "EMBERFALL - HELP [%d/%d]: EARLY TIPS"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CHARACTER & ADVANCEMENT",
+      "EMBERFALL - HELP [%d/%d]: CHARACTER & ADVANCEMENT"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EXPLORATION & INFORMATION",
+      "EMBERFALL - HELP [%d/%d]: EXPLORATION & INFORMATION"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES",
+      "EMBERFALL - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CONTROLLER CONTROLS",
+      "EMBERFALL - HELP [%d/%d]: CONTROLLER CONTROLS"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: STORAGE & READINESS",
+      "EMBERFALL - HELP [%d/%d]: STORAGE & READINESS"
+    ],
+    [
+      "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SURVIVAL & CHECKS",
+      "EMBERFALL - HELP [%d/%d]: SURVIVAL & CHECKS"
+    ],
+    [
+      "15 Silmarils",
+      "15 dawnseeds"
+    ],
+    [
+      "Silmaril",
+      "dawnseed"
+    ],
+    [
+      "Valar",
+      "Custodians"
+    ],
+    [
+      "Morgoth's depth",
+      "the regent's level"
+    ],
+    [
+      "- Completed Valar quests can unlock ",
+      "- Finishing custodian assignments can unlock "
+    ],
+    [
+      "- Potions of Healing or Miruvor cure it and restore all disease penalties, leaving unrelated drain unchanged.",
+      "- Healing potions or spring cordial cure disease and restore every penalty it caused. Other attribute drain remains."
+    ],
+    [
+      "- Other herbs act normally. Healing potions and Miruvor always cure disease directly.",
+      "- Herbs other than the cure retain their usual effects; Healing potions and spring cordial always cure disease outright."
+    ]
+  ]
+}

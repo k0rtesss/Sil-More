@@ -2574,10 +2574,6 @@
       "Pevporal"
     ],
     [
-      "region",
-      "Drasukor"
-    ],
-    [
       "rhunen",
       "Nerporav"
     ],
@@ -3050,10 +3046,6 @@
       "Ravaz"
     ],
     [
-      "Sting",
-      "Needlewake"
-    ],
-    [
       "taras",
       "Frevakal"
     ],
@@ -3174,10 +3166,6 @@
       "Ilyra"
     ],
     [
-      "fear",
-      "memoryprints"
-    ],
-    [
       "fuin",
       "Brorashekka"
     ],
@@ -3274,10 +3262,6 @@
       "the Black Sump"
     ],
     [
-      "tuna",
-      "Komeketh"
-    ],
-    [
       "Tuor",
       "Orren"
     ],
@@ -3304,10 +3288,6 @@
     [
       "Vána",
       "Thessa"
-    ],
-    [
-      "bar",
-      "Fredrooth"
     ],
     [
       "elu",
@@ -3354,20 +3334,12 @@
       "Kesket"
     ],
     [
-      "Nan",
-      "Borrath"
-    ],
-    [
       "Rog",
       "Brasken"
     ],
     [
       "sul",
       "Skavakav"
-    ],
-    [
-      "tar",
-      "Jakeval"
     ],
     [
       "tol",
@@ -3400,6 +3372,27 @@
     [
       "Elen síla lúmenn' omentielvo",
       "May the current carry us home"
+    ],
+    [
+      "'Sting'",
+      "'Needlewake'"
+    ],
+    [
+      "\"Sting\"",
+      "\"Needlewake\""
+    ],
+    [
+      "Othrod",
+      "Orrhod"
+    ],
+    [
+      "Scatha",
+      "Skareth"
+    ],
+    [
+      "Sting",
+      "Needlewake",
+      true
     ]
   ],
   "passages": [
@@ -5299,5 +5292,14 @@
       "A… tear? I had forgotten the Eldar could still weep. Forgive me - it has been long since anyone showed me such generosity. The world beyond these walls grows dim in my memory, but the old skills remain. They are etched into my hands deeper than any chain. Take what I offer. It is given freely, from a heart that you have made whole again, if only for a moment.",
       "I am not crying because the work is finished. I am crying because someone came back. Thank you. Give me a moment, and I will teach you what my hands still remember."
     ]
+  ],
+  "includes": [
+    "generic_lore_abilities.json",
+    "generic_lore_monsters.json",
+    "generic_lore_items.json",
+    "generic_lore_descriptions.json",
+    "generic_lore_dialogue.json",
+    "generic_lore_environment.json",
+    "generic_lore_help.json"
   ]
 }

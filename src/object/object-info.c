@@ -2238,7 +2238,7 @@ cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     if (!o_ptr || !o_ptr->k_idx || !k_info[o_ptr->k_idx].text)
         return NULL;
 
-    raw = k_text + k_info[o_ptr->k_idx].text;
+    raw = lore_text(k_text + k_info[o_ptr->k_idx].text);
     if (!object_lore_text_is_structured(raw))
         return raw;
 
@@ -2282,10 +2282,10 @@ static bool screen_out_ego_lore(const object_type* o_ptr)
     ego_sfx = object_ego_suffix(o_ptr);
 
     if (ego_pfx && e_info[ego_pfx].text)
-        prefix_text = e_text + e_info[ego_pfx].text;
+        prefix_text = lore_text(e_text + e_info[ego_pfx].text);
 
     if (ego_sfx && (ego_sfx != ego_pfx) && e_info[ego_sfx].text)
-        suffix_text = e_text + e_info[ego_sfx].text;
+        suffix_text = lore_text(e_text + e_info[ego_sfx].text);
 
     if (!prefix_text && !suffix_text)
         return false;

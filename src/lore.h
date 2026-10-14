@@ -11,7 +11,11 @@ bool lore_init(void);
 void lore_cleanup(void);
 bool lore_set_generic(bool enabled);
 cptr lore_text(cptr canonical);
+bool lore_has_description(cptr canonical);
 void lore_copy(char* dest, size_t size, cptr canonical);
+/* Reassemble archived prose using authored templates while retaining the
+ * canonical saved text and the actual directions/distances inside it. */
+void lore_prose_copy(char* dest, size_t size, cptr canonical);
 struct SDL_IOStream;
 int lore_dump_printf(struct SDL_IOStream* stream, cptr fmt, ...);
 

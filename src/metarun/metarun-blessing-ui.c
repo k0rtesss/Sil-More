@@ -322,7 +322,7 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
 
                 /* Always show description (D:) with wrapping */
                 if (c->text) {
-                    cptr desc = cu_text + c->text;
+                    cptr desc = lore_text(cu_text + c->text);
                     Term_gotoxy(6, line);
                     text_out_c(TERM_L_WHITE, desc);
                     line += count_wrapped_lines(desc, wrap_width, 6);
@@ -333,7 +333,7 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
                 log_debug("blessing_remove_curse: curse %d (%s) seen=%d power=%d",
                           id, curse_display_name(id), is_seen, (c->power != 0));
                 if (is_seen && c->power) {
-                    cptr power = cu_text + c->power;
+                    cptr power = lore_text(cu_text + c->power);
                     Term_gotoxy(6, line);
                     text_out_c(TERM_SLATE, power);
                     line += count_wrapped_lines(power, wrap_width, 6);
@@ -608,11 +608,11 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
 
                 /* Show both poetic description (E:) and mechanical effect (H:) for selected item */
                 if (c->blessing_text) {
-                    cptr desc = cu_text + c->blessing_text;
+                    cptr desc = lore_text(cu_text + c->blessing_text);
                     Term_putstr(6, line++, -1, TERM_L_WHITE, desc);
                 }
                 if (c->blessing_power) {
-                    cptr power = cu_text + c->blessing_power;
+                    cptr power = lore_text(cu_text + c->blessing_power);
                     Term_putstr(6, line++, -1, TERM_L_GREEN, power);
                 }
             } else {

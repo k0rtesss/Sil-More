@@ -33,6 +33,32 @@ static void check_terminal(cptr canonical)
     }
 }
 
+static int checked_fields;
+static void check_field(cptr kind, int id, cptr raw)
+{
+    if (!raw || !raw[0])
+        return;
+    char original[16384];
+    assert(strlen(raw) < sizeof(original));
+    SDL_strlcpy(original, raw, sizeof(original));
+    assert(lore_set_generic(false));
+    assert(lore_text(raw) == raw);
+    assert(lore_set_generic(true));
+    if (!lore_has_description(raw) || !strcmp(raw, lore_text(raw))) {
+        fprintf(stderr, "Missing loaded whole-field rewrite: %s %d: %.100s\n", kind, id, raw);
+        abort();
+    }
+    assert(!strcmp(raw, original));
+    ++checked_fields;
+}
+
+#define CHECK_POOL(KIND, COUNT, INFO, POOL, FIELD) \
+    do { \
+        for (int index = 0; index < (COUNT); ++index) \
+            if ((INFO)[index].FIELD) \
+                check_field(KIND, index, (POOL) + (INFO)[index].FIELD); \
+    } while (0)
+
 int main(int argc, char** argv)
 {
     assert(argc == 3);
@@ -52,6 +78,7 @@ int main(int argc, char** argv)
     assert(!init_p_info() && !init_c_info());
     assert(!init_oath_info() && !init_cu_info() && !init_mb_info());
     assert(!init_h_info() && !init_st_info());
+    assert(!init_quest_info() && !init_skeleton_note_info());
     assert(!init_style_info() && !init_other() && !init_alloc());
     rp_ptr = &p_info[0];
     current_character_profile = &c_info[0];
@@ -60,6 +87,44 @@ int main(int argc, char** argv)
     ANGBAND_DIR_PREF = pref;
     assert(lore_init());
     u64b random_state;
+
+    random_state = Rand_state_export();
+    CHECK_POOL("ability lore", z_info->b_max, b_info, b_text, text);
+    CHECK_POOL("ability effect", z_info->b_max, b_info, b_text, effect);
+    CHECK_POOL("monster", z_info->r_max, r_info, r_text, text);
+    CHECK_POOL("object", z_info->k_max, k_info, k_text, text);
+    CHECK_POOL("ego", z_info->e_max, e_info, e_text, text);
+    CHECK_POOL("artefact", z_info->art_max, a_info, a_text, text);
+    CHECK_POOL("race", z_info->p_max, p_info, p_text, text);
+    CHECK_POOL("character", z_info->c_max, c_info, c_text, text);
+    CHECK_POOL("history", z_info->h_max, h_info, h_text, text);
+    CHECK_POOL("story", z_info->st_max, st_info, st_text, text);
+    CHECK_POOL("curse", z_info->cu_max, cu_info, cu_text, text);
+    CHECK_POOL("blessing", z_info->cu_max, cu_info, cu_text, blessing_text);
+    CHECK_POOL("curse effect", z_info->cu_max, cu_info, cu_text, power);
+    CHECK_POOL("blessing effect", z_info->cu_max, cu_info, cu_text, blessing_power);
+    CHECK_POOL("major blessing", z_info->mb_max, mb_info, mb_text, detail_desc);
+    CHECK_POOL("major blessing summary", z_info->mb_max, mb_info, mb_text, short_desc);
+    CHECK_POOL("major blessing message", z_info->mb_max, mb_info, mb_text, unlock_msg);
+    CHECK_POOL("oath", z_info->oath_max, oath_info, oath_desc_text, text);
+    CHECK_POOL("oath pledge", z_info->oath_max, oath_info, oath_name_text, pledge_text);
+    CHECK_POOL("oath restriction", z_info->oath_max, oath_info, oath_name_text, forbidden_text);
+    CHECK_POOL("oath reward", z_info->oath_max, oath_info, oath_name_text, reward_text);
+    CHECK_POOL("oath confirmation", z_info->oath_max, oath_info, oath_name_text, confirmation_prompt);
+    CHECK_POOL("oath curse", z_info->oath_max, oath_info, oath_name_text, curse_message);
+    CHECK_POOL("oath consequence", z_info->oath_max, oath_info, oath_name_text, permanent_message);
+    CHECK_POOL("oath death", z_info->oath_max, oath_info, oath_name_text, death_message);
+    CHECK_POOL("oath banned", z_info->oath_max, oath_info, oath_desc_text, banned_text);
+    CHECK_POOL("quest title", z_info->quest_max, quest_info, q_text, title_text);
+    CHECK_POOL("quest challenge", z_info->quest_max, quest_info, q_text, challenge_text);
+    CHECK_POOL("quest introduction", z_info->quest_max, quest_info, q_text, init_text);
+    CHECK_POOL("quest completion", z_info->quest_max, quest_info, q_text, completion_text);
+    CHECK_POOL("vault message", z_info->v_max, v_info, v_text, message);
+    CHECK_POOL("vault hint", z_info->v_max, v_info, v_text, skeleton_hint);
+    CHECK_POOL("skeleton note", z_info->skeleton_note_max, skeleton_note_info, skeleton_note_text, text);
+    CHECK_POOL("skeleton companion", z_info->skeleton_note_max, skeleton_note_info, skeleton_note_text, extra_text);
+    assert(random_state == Rand_state_export());
+    printf("Loaded content: %d actual description/effect fields fully rewritten and reversible PASS\n", checked_fields);
 
     int changed = 0;
     for (int i = 1; i < z_info->art_max && i < 256; ++i) {
@@ -134,6 +199,12 @@ int main(int argc, char** argv)
                 lore_text(st_text + st_info[i].text)) != 0);
     assert(random_state == Rand_state_export());
     puts("Parsed story pools and unchanged gameplay RNG PASS");
+    check_generic_ui();
+    check_generic_quest_ui();
+    check_generic_help_ui();
+    char tutorials[1024];
+    assert(path_build(tutorials, sizeof(tutorials), argv[1], "../help/tutorials.json"));
+    check_generic_tutorial_ui(tutorials);
     lore_cleanup();
     term_nuke(&test_term);
     SDL_Quit();

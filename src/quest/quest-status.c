@@ -66,7 +66,7 @@ static cptr get_quest_title(int quest_idx)
 
     if (q_ptr->title_text && q_text) {
         log_trace("QUEST TITLE: Using title_text");
-        return q_text + q_ptr->title_text;
+        return lore_text(q_text + q_ptr->title_text);
     }
 
     /* Fallback to quest name */
@@ -99,7 +99,7 @@ static cptr get_quest_challenge(int quest_idx)
 
     if (q_ptr->challenge_text && q_text) {
         log_trace("QUEST CHALLENGE: Using challenge_text");
-        return q_text + q_ptr->challenge_text;
+        return lore_text(q_text + q_ptr->challenge_text);
     }
 
     log_trace("QUEST CHALLENGE: No valid text found, returning default");
