@@ -116,7 +116,7 @@ static void describe_monster_desc(int r_idx)
     char buf[2048];
 
     /* Simple method */
-    SDL_strlcpy(buf, r_text + r_ptr->text, sizeof(buf));
+    lore_copy(buf, sizeof(buf), r_text + r_ptr->text);
 
     /* Dump it */
     text_out(buf);

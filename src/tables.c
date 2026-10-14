@@ -150,7 +150,7 @@ cptr option_text[OPT_MAX] = {
     "hjkl_movement", /* OPT_hjkl_movement */
     NULL, /* obsolete 0.9.7: quick_messages */
     "angband_keyset", /* OPT_angband_keyset */
-    NULL, /* reserved legacy slot: carry_query */
+    "generic", /* OPT_generic */
     "stop_singing_on_rest", /* OPT_stop_singing_on_rest */
     NULL, /* reserved legacy slot: always_pickup */
     "forgo_attacking_unwary", /* OPT_forgo_attacking_unwary */
@@ -388,7 +388,7 @@ cptr option_desc[OPT_MAX] = {
     "Move with hjkl etc. (use ^ for underlying keys)", /* OPT_hjkl_movement */
     NULL, /* obsolete 0.9.7: quick_messages */
     "Use a keyset more closely based on Angband", /* OPT_angband_keyset */
-    NULL, /* reserved legacy slot: carry_query */
+    "Use generic fantasy names and lore", /* OPT_generic */
     "Stop singing when you use the rest command", /* OPT_stop_singing_on_rest */
     NULL, /* reserved legacy slot: always_pickup */
     "Forgo bonus attacks on non-alert enemies", /* OPT_forgo_attacking_unwary */
@@ -642,7 +642,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_hjkl_movement */
     false, /* obsolete 0.9.7: quick_messages */
     false, /* OPT_angband_keyset */
-    false, /* reserved legacy slot: carry_query */
+    false, /* OPT_generic */
     true, /* OPT_stop_singing_on_rest */
     false, /* reserved legacy slot: always_pickup */
     true, /* OPT_forgo_attacking_unwary */

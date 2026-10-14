@@ -31,6 +31,7 @@ static int g_sdl_char_sheet_hover_tooltip_choice =
     SDL_CHAR_SHEET_NO_HOVER;
 
 static bool sdl_narrative_portrait_adjust_canvas(SDL_Rect* canvas);
+static void sdl_char_sheet_book_body_px_cache_clear(void);
 
 /* Standalone prose keeps its readable font when it is longer than a phone
  * viewport.  Navigation moves the viewport and leaves the prompt fixed. */
@@ -379,6 +380,8 @@ bool sdl_welcome_screen_active(void)
 
 bool sdl_welcome_screen_show_intro(int intro_style, bool show_wizard)
 {
+    if (g_state.window)
+        SDL_SetWindowTitle(g_state.window, lore_text("Sil-more SDL3"));
     if (!sdl_welcome_screen_available())
         return false;
 
@@ -457,6 +460,10 @@ void sdl_welcome_screen_hide(void)
 void sdl_poetry_screen_begin(cptr title, cptr body, cptr transition,
     cptr prompt)
 {
+    title = lore_text(title);
+    body = lore_text(body);
+    transition = lore_text(transition);
+    prompt = lore_text(prompt);
     if (!sdl_welcome_screen_available())
         return;
 
@@ -483,6 +490,7 @@ void sdl_poetry_screen_begin(cptr title, cptr body, cptr transition,
 
 void sdl_poetry_screen_begin_choices(cptr title)
 {
+    title = lore_text(title);
     sdl_poetry_screen_begin(title, "", "", "");
     if (!g_sdl_poetry_screen.active)
         return;
@@ -493,11 +501,14 @@ void sdl_poetry_screen_begin_choices(cptr title)
 
 void sdl_poetry_screen_begin_blocks(cptr title, cptr prompt)
 {
+    title = lore_text(title);
+    prompt = lore_text(prompt);
     sdl_poetry_screen_begin(title, "", "", prompt);
 }
 
 int sdl_poetry_screen_add_block(cptr text, byte attr)
 {
+    text = lore_text(text);
     sdl_poetry_block_state* block;
     int index;
 
@@ -554,6 +565,8 @@ void sdl_poetry_screen_set_block_attr(int block, byte attr)
 
 void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body)
 {
+    label = lore_text(label);
+    body = lore_text(body);
     sdl_poetry_choice_state* item;
 
     if (!g_sdl_poetry_screen.active
@@ -632,6 +645,7 @@ void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha)
 
 void sdl_poetry_screen_set_prompt(cptr prompt, bool visible)
 {
+    prompt = lore_text(prompt);
     if (!g_sdl_poetry_screen.active)
         return;
 
@@ -780,6 +794,7 @@ bool sdl_pause_text_screen_begin(void)
 
 void sdl_pause_text_screen_add_line(cptr text, byte attr, int indent)
 {
+    text = lore_text(text);
     sdl_pause_text_line* line;
 
     if (!g_sdl_pause_text_screen.active
@@ -823,6 +838,7 @@ bool sdl_pause_text_screen_active(void)
 
 bool sdl_tale_screen_begin(cptr title)
 {
+    title = lore_text(title);
     if (!sdl_welcome_screen_available())
         return false;
 
@@ -840,6 +856,8 @@ bool sdl_tale_screen_begin(cptr title)
 
 void sdl_tale_screen_add_entry(cptr heading, cptr body)
 {
+    heading = lore_text(heading);
+    body = lore_text(body);
     sdl_tale_entry* entry;
 
     if (!g_sdl_tale_screen.active
@@ -1092,7 +1110,17 @@ static cptr sdl_welcome_display_text(cptr text)
         return "";
     while (*text == ' ' || *text == '\t')
         text++;
-    return text;
+    return lore_text(text);
+}
+
+void sdl_lore_changed(void)
+{
+    if (g_state.window)
+        SDL_SetWindowTitle(g_state.window, lore_text("Sil-more SDL3"));
+    sdl_ui_text_cache_clear();
+    sdl_welcome_screen_mark_dirty();
+    sdl_char_sheet_book_body_px_cache_clear();
+    g_state.need_present = true;
 }
 
 static int sdl_welcome_font_px_for_role(int base_px,
@@ -2952,6 +2980,7 @@ void sdl_char_sheet_clear_hits(void)
 
 void sdl_char_sheet_add_hit(SDL_FRect rect, int choice, cptr desc, byte attr)
 {
+    desc = lore_text(desc);
     sdl_character_sheet_hit* hit;
 
     if (!sdl_char_sheet_choice_is_valid(choice))
@@ -3331,6 +3360,8 @@ static void sdl_char_sheet_add_trait_line(sdl_char_sheet_line* lines,
 void sdl_char_sheet_add_line(sdl_char_sheet_line* lines, int* count,
     int max_count, cptr text, byte attr, int choice, cptr desc)
 {
+    text = lore_text(text);
+    desc = lore_text(desc);
     sdl_char_sheet_line* line;
 
     if (!lines || !count || *count >= max_count || !text || !text[0])
@@ -6151,6 +6182,7 @@ void sdl_tale_screen_set_typewriter_entry(int active_entry,
 
 void sdl_tale_screen_set_prompt(cptr prompt, bool visible, bool final)
 {
+    prompt = lore_text(prompt);
     if (!g_sdl_tale_screen.active)
         return;
     SDL_strlcpy(g_sdl_tale_screen.prompt, prompt ? prompt : "",
@@ -17049,6 +17081,8 @@ void sdl_character_sheet_screen_begin_birth_preview(void)
 void sdl_character_sheet_screen_add_live_item(int choice, int kind, int skill,
     int value_kind, cptr label, cptr desc)
 {
+    label = lore_text(label);
+    desc = lore_text(desc);
     sdl_character_sheet_live_item* item;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_LIVE
@@ -17175,6 +17209,7 @@ void sdl_character_sheet_screen_set_font_menu(enum sdl_menu_font menu)
 
 void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title)
 {
+    title = lore_text(title);
     if (!g_state.window || !g_state.renderer)
         return;
 
@@ -17250,6 +17285,7 @@ void sdl_character_sheet_screen_set_select_menu_style(bool enabled)
 
 void sdl_character_sheet_screen_set_select_confirm_label(cptr label)
 {
+    label = lore_text(label);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
         return;
 
@@ -17275,6 +17311,7 @@ static void sdl_character_sheet_narrative_layout_changed(void)
 
 void sdl_character_sheet_screen_begin_book(cptr title)
 {
+    title = lore_text(title);
     if (!g_state.window || !g_state.renderer)
         return;
 
@@ -17324,6 +17361,7 @@ void sdl_character_sheet_screen_begin_book(cptr title)
 
 void sdl_character_sheet_screen_add_book_paragraph(cptr text)
 {
+    text = lore_text(text);
     int n;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_NARRATIVE)
@@ -17622,6 +17660,7 @@ static void sdl_char_sheet_draw_story_lamp(float x, float y, float w,
 void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,
     int attr)
 {
+    text = lore_text(text);
     int before = g_sdl_character_sheet_screen.narrative_para_count;
 
     sdl_character_sheet_screen_add_book_paragraph(text);
@@ -17643,6 +17682,7 @@ void sdl_character_sheet_screen_begin_page_turn(int dir)
 /* Add an accent-coloured, pointer-focusable action to a narrative page. */
 void sdl_character_sheet_screen_add_book_action(cptr text, int choice)
 {
+    text = lore_text(text);
     sdl_character_sheet_screen_add_book_action_colored(text, choice,
         TERM_L_BLUE);
 }
@@ -17650,6 +17690,7 @@ void sdl_character_sheet_screen_add_book_action(cptr text, int choice)
 void sdl_character_sheet_screen_add_book_action_colored(cptr text, int choice,
     int attr)
 {
+    text = lore_text(text);
     int before = g_sdl_character_sheet_screen.narrative_para_count;
 
     if (choice < 0)
@@ -17665,6 +17706,7 @@ void sdl_character_sheet_screen_add_book_action_colored(cptr text, int choice,
 void sdl_character_sheet_screen_add_book_contents(cptr label, int choice,
     int page)
 {
+    label = lore_text(label);
     int n;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_NARRATIVE
@@ -17711,6 +17753,7 @@ void sdl_character_sheet_screen_set_book_close_button(bool enabled)
 
 void sdl_character_sheet_screen_set_book_close_label(cptr label)
 {
+    label = lore_text(label);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_NARRATIVE)
         return;
     SDL_strlcpy(g_sdl_character_sheet_screen.narrative_close_label,
@@ -17790,6 +17833,8 @@ void sdl_character_sheet_screen_set_book_page(int page)
 void sdl_character_sheet_screen_add_select_row(int choice, cptr label,
     int attr, cptr desc)
 {
+    label = lore_text(label);
+    desc = lore_text(desc);
     sdl_character_sheet_select_row* row;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
@@ -17850,6 +17895,7 @@ void sdl_character_sheet_screen_set_last_select_row_confirmable(
 /* Book mode: a non-selectable heading/blurb row (e.g. "The Noldor ..."). */
 void sdl_character_sheet_screen_add_select_heading(cptr label)
 {
+    label = lore_text(label);
     sdl_character_sheet_select_row* row;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
@@ -17877,6 +17923,7 @@ void sdl_character_sheet_screen_add_select_heading(cptr label)
  * story/explanation layout (no detail panel, no hover pop-ups). */
 void sdl_character_sheet_screen_set_select_intro(cptr text)
 {
+    text = lore_text(text);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
         return;
     SDL_strlcpy(g_sdl_character_sheet_screen.select_intro, text ? text : "",
@@ -17957,6 +18004,8 @@ bool sdl_character_sheet_screen_page_turning(void)
  * the second-person "trial" voice that brackets the historical text. */
 void sdl_character_sheet_screen_set_select_frame(cptr top, cptr bottom)
 {
+    top = lore_text(top);
+    bottom = lore_text(bottom);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
         return;
     SDL_strlcpy(g_sdl_character_sheet_screen.select_frame_top, top ? top : "",
@@ -17969,6 +18018,8 @@ void sdl_character_sheet_screen_set_select_frame(cptr top, cptr bottom)
 void sdl_character_sheet_screen_set_select_title_detail(cptr title,
     cptr suffix, int suffix_attr)
 {
+    title = lore_text(title);
+    suffix = lore_text(suffix);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
         return;
 
@@ -17984,6 +18035,8 @@ void sdl_character_sheet_screen_set_select_title_detail(cptr title,
 void sdl_character_sheet_screen_add_select_title_candidate(cptr title,
     cptr suffix)
 {
+    title = lore_text(title);
+    suffix = lore_text(suffix);
     sdl_character_sheet_title_candidate* candidate;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
@@ -18007,6 +18060,7 @@ void sdl_character_sheet_screen_add_select_title_candidate(cptr title,
 
 void sdl_character_sheet_screen_begin_select_rating_summary(cptr title)
 {
+    title = lore_text(title);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
         return;
 
@@ -18019,6 +18073,7 @@ void sdl_character_sheet_screen_begin_select_rating_summary(cptr title)
 void sdl_character_sheet_screen_add_select_rating(cptr group, cptr stars,
     int count, int attr, cptr desc)
 {
+    desc = lore_text(desc);
     sdl_character_sheet_select_rating* row;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
@@ -18043,6 +18098,8 @@ void sdl_character_sheet_screen_add_select_rating(cptr group, cptr stars,
 void sdl_character_sheet_screen_add_select_detail(cptr text, int attr,
     cptr desc)
 {
+    text = lore_text(text);
+    desc = lore_text(desc);
     sdl_character_sheet_select_detail* d;
 
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
@@ -18113,6 +18170,7 @@ void sdl_character_sheet_screen_set_select_size_hint(cptr longest_desc)
 
 void sdl_character_sheet_screen_add_select_description_candidate(cptr text)
 {
+    text = lore_text(text);
     int idx;
     const unsigned char* p;
     Uint64 hash;
@@ -18152,6 +18210,7 @@ void sdl_character_sheet_screen_add_select_description_candidate(cptr text)
  * selection feeds only the characters belonging to the selected race. */
 void sdl_character_sheet_screen_add_select_welcome(cptr text)
 {
+    text = lore_text(text);
     int idx = g_sdl_character_sheet_screen.select_welcome_count;
     char first[160];
     cptr body;
@@ -18180,6 +18239,7 @@ void sdl_character_sheet_screen_add_select_welcome(cptr text)
 
 void sdl_character_sheet_screen_set_select_description(cptr text)
 {
+    text = lore_text(text);
     if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_BIRTH_SELECT)
         return;
     SDL_strlcpy(g_sdl_character_sheet_screen.select_description,

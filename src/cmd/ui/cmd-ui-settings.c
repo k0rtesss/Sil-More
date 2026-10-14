@@ -9870,7 +9870,7 @@ static bool other_options_choice_is_disabled(int choice)
 static int other_options_menu(int* highlight)
 {
     int ch;
-    int options = 5;
+    int options = 6;
     int clicked_choice = 0;
     bool death_view = death_spectator_active();
 
@@ -9898,8 +9898,15 @@ static int other_options_menu(int* highlight)
                    : ((*highlight == 3) ? TERM_L_BLUE : TERM_WHITE));
     ADD_OTHER_OPTIONS_ROW(4, "p) Privacy Policy",
         (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE);
-    ADD_OTHER_OPTIONS_ROW(5, "o) Return to Options",
-        (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE);
+    {
+        char label[80];
+        strnfmt(label, sizeof(label), "g) Generic: %s",
+            op_ptr->opt[OPT_generic] ? "On" : "Off");
+        ADD_OTHER_OPTIONS_ROW(5, label,
+            (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE);
+    }
+    ADD_OTHER_OPTIONS_ROW(6, "o) Return to Options",
+        (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE);
 
 #undef ADD_OTHER_OPTIONS_ROW
 
@@ -9912,9 +9919,10 @@ static int other_options_menu(int* highlight)
             "Write a note into your character's journal.",
             "End your current character permanently.",
             "Open the Sil-More privacy policy in your web browser.",
+            "Use the Emberfall setting for names and stories. Applies immediately. Off by default.",
             "Return to the Options menu.",
         };
-        cptr d = (*highlight >= 1 && *highlight <= 5)
+        cptr d = (*highlight >= 1 && *highlight <= 6)
             ? other_options_row_desc[*highlight] : NULL;
 
         sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
@@ -9933,11 +9941,11 @@ static int other_options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 5;
+                clicked_choice = 6;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = 5;
+                clicked_choice = 6;
             if (clicked_choice < 1 || clicked_choice > options)
                 return (0);
             *highlight = clicked_choice;
@@ -9984,11 +9992,17 @@ static int other_options_menu(int* highlight)
         return (4);
     }
 
-    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
-        || (ch == ESCAPE))
+    if ((ch == 'g') || (ch == 'G'))
     {
         *highlight = 5;
         return (5);
+    }
+
+    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
+        || (ch == ESCAPE))
+    {
+        *highlight = 6;
+        return (6);
     }
 
     if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
@@ -10066,6 +10080,22 @@ static void do_cmd_other_options(void)
             break;
         }
         case 5:
+        {
+            if (!lore_set_generic(!op_ptr->opt[OPT_generic]))
+            {
+                msg_print("Could not load generic lore. Update lib/pref/generic_lore.json with the game.");
+                break;
+            }
+            if (!save_pane_config_to_json())
+                msg_print("Generic lore changed, but the setting could not be saved.");
+            p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
+            p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0
+                | PW_MONSTER | PW_OBJECT | PW_MESSAGE;
+            sdl_lore_changed();
+            Term_clear();
+            break;
+        }
+        case 6:
         {
             settings_semantic_menu_hide();
             return_to_options = true;

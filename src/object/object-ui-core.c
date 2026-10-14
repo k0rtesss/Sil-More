@@ -666,7 +666,7 @@ void describe_inventory_menu_entry(int item, char* buf, size_t len)
 
     if (item < 0)
     {
-        object_desc_floor(buf, len, o_ptr, true, 3);
+        object_desc_floor_display(buf, len, o_ptr, true, 3);
         return;
     }
 
@@ -682,15 +682,15 @@ void describe_inventory_menu_entry(int item, char* buf, size_t len)
     if (inventory_menu_include_equip
         && player_equipment_slot_counts_as_equipped(item))
     {
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
         strnfmt(buf, len, "%s: %s", mention_use(item), o_name);
         return;
     }
 
     if (inventory_item_is_supply_entry(item))
-        object_desc(buf, len, o_ptr, true, 3);
+        object_desc_display(buf, len, o_ptr, true, 3);
     else
-        object_desc_floor(buf, len, o_ptr, true, 3);
+        object_desc_floor_display(buf, len, o_ptr, true, 3);
 }
 
 bool item_prompt_is_replace(cptr pmt)
@@ -720,7 +720,7 @@ void log_inventory_selector_state(cptr stage, cptr pmt,
         char label = index_to_label(item);
 
         if (o_ptr && o_ptr->k_idx)
-            object_desc(desc, sizeof(desc), o_ptr, true, 3);
+            object_desc_display(desc, sizeof(desc), o_ptr, true, 3);
         else if (inventory_item_is_supply_summary(item))
             format_supply_summary(desc, sizeof(desc));
         else
@@ -1349,7 +1349,7 @@ void display_inven(void)
         }
 
         /* Obtain an item description */
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
 
         /* Truncate description so weights align cleanly */
         int max_desc = w - offset - 1;
@@ -1496,7 +1496,7 @@ void display_equip(void)
         /* Obtain an item description */
         if (o_ptr->tval)
         {
-            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+            object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
         }
         else
         {
@@ -2490,7 +2490,7 @@ void display_supplies(void)
         Term_putstr(0, row, 3, TERM_WHITE, label);
 
         text_col = draw_item_tile(text_col, row, o_ptr);
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
         attr = weapon_glows(o_ptr)
             ? object_display_color(o_ptr, TERM_L_BLUE)
             : object_display_color(o_ptr,
@@ -2608,7 +2608,7 @@ void show_equip(void)
         else
         {
             /* Description */
-            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+            object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
             out_color[k] = object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
         }
 
@@ -2815,7 +2815,7 @@ void show_floor(const int* floor_list, int floor_num)
             continue;
 
         /* Describe the object */
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
 
         /* Hack -- enforce max length */
         o_name[lim] = '\0';

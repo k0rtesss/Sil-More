@@ -1907,6 +1907,7 @@ void sdl_question_menu_set_font_menu(enum sdl_menu_font menu)
 
 void sdl_question_menu_begin(cptr title)
 {
+    title = lore_text(title);
     SDL_free(g_question_full_description);
     g_question_full_description = NULL;
     bool keep_scroll = g_question_menu.active && title
@@ -1967,6 +1968,7 @@ void sdl_question_menu_set_anchor_grid(int y, int x)
 
 void sdl_question_menu_set_desc(cptr text)
 {
+    text = lore_text(text);
     if (!g_question_menu.active)
         return;
     SDL_free(g_question_full_description);
@@ -2006,6 +2008,7 @@ static void sdl_question_menu_add_entry_aux(int choice, cptr letter,
 
 void sdl_question_menu_add_button(int choice, cptr text, byte attr)
 {
+    text = lore_text(text);
     sdl_question_menu_button_state* button;
 
     if (!g_question_menu.active)
@@ -2026,6 +2029,7 @@ void sdl_question_menu_add_button(int choice, cptr text, byte attr)
 /* Information-only line: rendered like an entry but never hit-tested. */
 void sdl_question_menu_add_text(cptr text, byte attr)
 {
+    text = lore_text(text);
     sdl_question_menu_add_entry(-1, "", text, attr);
 }
 
@@ -2135,12 +2139,14 @@ void sdl_question_menu_set_nonblocking(bool nonblocking)
 void sdl_question_menu_add_entry(int choice, cptr letter, cptr text,
     byte attr)
 {
+    text = lore_text(text);
     sdl_question_menu_add_entry_aux(choice, letter, text, attr, NULL);
 }
 
 void sdl_question_menu_add_object_entry(int choice, cptr letter, cptr text,
     byte attr, const object_type* o_ptr)
 {
+    text = lore_text(text);
     sdl_question_menu_add_entry_aux(choice, letter, text, attr, o_ptr);
 }
 
@@ -2158,6 +2164,7 @@ void sdl_question_menu_set_context_hint(void)
 
 void sdl_question_menu_set_help(cptr text)
 {
+    text = lore_text(text);
     if (!g_question_menu.active)
         return;
     SDL_free(g_question_full_description);

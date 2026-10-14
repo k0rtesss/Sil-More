@@ -31,6 +31,7 @@
 #include "config.h"
 #include "defines.h"
 #include "types.h"
+#include "lore.h"
 #include "supplies.h"
 
 #include <SDL3/SDL.h>

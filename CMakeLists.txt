@@ -243,6 +243,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-view.c
     src/cave/cave-visuals.c
     src/cJSON.c
+    src/lore.c
     src/cmd/combat/cmd-combat.c
     src/cmd/combat/cmd-ranged.c
     src/cmd/item/cmd-fletchery.c

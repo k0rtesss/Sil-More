@@ -2933,6 +2933,7 @@
 #define OPT_hjkl_movement 0
 #define OPT_quick_messages 1 /* obsolete 0.9.7: reusable setting slot */
 #define OPT_angband_keyset 2
+#define OPT_generic 3 /* Presentation only; app-wide, off by default. */
 // reserved legacy slot: carry_query
 #define OPT_stop_singing_on_rest 4
 // reserved legacy slot: always_pickup

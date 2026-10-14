@@ -1398,6 +1398,10 @@ extern bool object_grants_ability(
 extern void strip_name(char* buf, int k_idx);
 extern void object_desc(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
+extern void object_desc_display(
+    char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
+extern void object_desc_floor_display(
+    char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
 extern void object_desc_floor(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
 extern void object_desc_spoil(
@@ -1849,6 +1853,7 @@ extern bool sdl_welcome_screen_set_status(cptr status);
 extern bool sdl_welcome_screen_show_loading(cptr status);
 extern void sdl_welcome_screen_hide(void);
 extern bool sdl_welcome_screen_active(void);
+extern void sdl_lore_changed(void);
 extern void sdl_poetry_screen_begin(cptr title, cptr body,
     cptr transition, cptr prompt);
 extern void sdl_poetry_sequence_layout_begin(void);

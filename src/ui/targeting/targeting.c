@@ -1092,7 +1092,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                         continue;
 
                     /* Obtain an object description */
-                    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+                    object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
 
                     /* Describe the object */
                     if (p_ptr->wizard)
@@ -1173,7 +1173,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     boring = false;
 
                     /* Obtain an object description */
-                    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+                    object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
 
                     /* Describe the object */
                     if (p_ptr->wizard)

@@ -16,6 +16,7 @@
 #include <stdio.h>
 void cleanup_angband(void)
 {
+    lore_cleanup();
     /* Free the macros */
     macro_free();
 

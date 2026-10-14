@@ -70,6 +70,7 @@ static int sdl_popup_notification_timeout_until(Uint64 now_ns,
 
 void sdl_popup_notification_show(cptr text)
 {
+    text = lore_text(text);
     Uint64 now_ns;
     Uint64 fade_ns;
     Uint64 hold_ns;

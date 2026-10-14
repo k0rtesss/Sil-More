@@ -69,6 +69,7 @@ static int file_viewer_source_row(cptr path, int source_line, int width)
     {
         if (prefix(buf, "***** "))
             continue;
+        lore_copy(buf, sizeof(buf), buf);
         row += file_viewer_wrapped_rows(buf, (int)strlen(buf), width);
         ++source;
     }
@@ -1100,6 +1101,7 @@ static bool show_file_sized(cptr name, cptr what, int line)
         if (!tag && source_line == requested_line)
             line = next;
         source_line++;
+        lore_copy(buf, sizeof(buf), buf);
         next += file_viewer_wrapped_rows(buf, (int)strlen(buf), wid);
     }
 
@@ -1138,6 +1140,7 @@ static bool show_file_sized(cptr name, cptr what, int line)
             if (prefix(buf, "***** "))
                 continue;
 
+            lore_copy(buf, sizeof(buf), buf);
             length = (int)strlen(buf);
             SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
             if (!case_sensitive)
@@ -1366,6 +1369,7 @@ static bool show_file_sized(cptr name, cptr what, int line)
 /* Preserve the caller's reading surface when a viewer opens inside a menu. */
 bool show_buffer(cptr main_buffer, int line)
 {
+    main_buffer = lore_text(main_buffer);
     enum sdl_menu_font menu = sdl_terminal_menu_font();
     sdl_push_terminal_menu_scale_for(menu == SDL_MENU_FONT_NONE ? SDL_MENU_FONT_HELP : menu);
     file_viewer_redraw redraw = { false, line };

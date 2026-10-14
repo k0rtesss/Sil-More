@@ -1779,6 +1779,10 @@ static const byte app_text_options[] = {
     OPT_NONE
 };
 
+static const byte app_other_options[] = {
+    OPT_generic, OPT_NONE
+};
+
 static const byte app_gameplay_options[] = {
     OPT_active_weapon_switch_confirm,
     OPT_load_blitz_by_default,
@@ -1841,6 +1845,7 @@ bool option_is_app_persistent(int opt)
     return option_list_contains(app_input_options, opt)
         || option_list_contains(app_interface_options, opt)
         || option_list_contains(app_text_options, opt)
+        || option_list_contains(app_other_options, opt)
         || option_list_contains(app_gameplay_options, opt)
         || option_list_contains(app_visual_options, opt);
 }
@@ -1883,6 +1888,7 @@ static void sdl_config_apply_app_option_defaults(void)
     sdl_config_apply_app_bool_defaults(app_input_options);
     sdl_config_apply_app_bool_defaults(app_interface_options);
     sdl_config_apply_app_bool_defaults(app_text_options);
+    sdl_config_apply_app_bool_defaults(app_other_options);
     sdl_config_apply_app_bool_defaults(app_gameplay_options);
     sdl_config_apply_app_bool_defaults(app_visual_options);
 
@@ -2158,6 +2164,7 @@ void sdl_config_load_app_options(const char* filename)
     sdl_config_load_app_option_group(app_options, "input", app_input_options);
     sdl_config_load_app_option_group(app_options, "interface", app_interface_options);
     sdl_config_load_app_option_group(app_options, "text", app_text_options);
+    sdl_config_load_app_option_group(app_options, "other", app_other_options);
     sdl_config_load_app_option_group(app_options, "gameplay", app_gameplay_options);
     sdl_config_load_app_option_group(app_options, "visual", app_visual_options);
 
@@ -2243,6 +2250,9 @@ void sdl_config_load_app_options(const char* filename)
      * it. */
     op_ptr->opt[OPT_hide_supporting_panes_fullscreen] = true;
 #endif
+
+    if (op_ptr->opt[OPT_generic] && !lore_init())
+        op_ptr->opt[OPT_generic] = false;
 
     cJSON_Delete(root);
 }
@@ -5898,6 +5908,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             sdl_config_save_app_option_group(app_options, "input", app_input_options);
             sdl_config_save_app_option_group(app_options, "interface", app_interface_options);
             sdl_config_save_app_option_group(app_options, "text", app_text_options);
+            sdl_config_save_app_option_group(app_options, "other", app_other_options);
             sdl_config_save_app_option_group(app_options, "gameplay", app_gameplay_options);
             sdl_config_save_app_option_group(app_options, "visual", app_visual_options);
 

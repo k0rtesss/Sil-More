@@ -445,6 +445,7 @@ static int pane_log_wrap_message(cptr msg, int avail,
 static int pane_log_wrap_message_pixels(cptr msg, int fallback_avail,
     char segs[PANE_LOG_WRAP_MAX_SEGS][PANE_LOG_WRAP_SEG_MAX])
 {
+    msg = lore_text(msg);
     int offsets[PANE_LOG_WRAP_MAX_SEGS];
     int lengths[PANE_LOG_WRAP_MAX_SEGS];
     int nseg;

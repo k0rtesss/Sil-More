@@ -672,6 +672,8 @@ void sdl_gameplay_tutorial_render(void)
     sdl_gameplay_tutorial_sync();
     if (tutorial_mode_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
+    lore_copy(view.title, sizeof(view.title), view.title);
+    lore_copy(view.body, sizeof(view.body), view.body);
     tutorial_build_controls(&view,&controls,false);
     action_step=!view.can_continue && !tutorial_reading;
     compact_action=action_step && screen.h<360;
