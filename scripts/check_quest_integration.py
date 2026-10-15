@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Load real templates, roundtrip settings, and build all recovered vaults in engine memory."""
 from pathlib import Path
+import argparse
 import os
 import re
 import shlex
@@ -20,6 +21,33 @@ TESTS = r'''
 #include "blitz.h"
 static int checks;
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); exit(1); } } while(0)
+static int dialogue_lines, dialogue_nonempty, dialogue_calls;
+void __wrap_quest_typewriter_menu(cptr title,cptr texts[],int count,byte a,byte b)
+{
+    (void)title;(void)a;(void)b;
+    ++dialogue_calls; dialogue_lines=count; dialogue_nonempty=0;
+    for(int i=0;i<count;++i) if(texts[i] && texts[i][0]) ++dialogue_nonempty;
+}
+static void nienna_reward_dialogue(void)
+{
+    /* Only the presentation boundary is adapted. Real templates, interaction,
+     * rewards and state transitions run for both empty and populated routes. */
+    int expected=0; cptr *texts=extract_quest_completion_texts(QUEST_ID_NIENA,&expected);
+    CHECK(texts && expected>1); free_quest_texts(texts,expected);
+    for(int seen=0;seen<=2;++seen) {
+        memset(p_ptr,0,sizeof(*p_ptr)); p_ptr->quest_test_sandbox=1;
+        p_ptr->depth=14; p_ptr->niena_quest=NIENA_QUEST_SUCCESS;
+        p_ptr->niena_monsters_seen=seen*10;
+        quest_set_enabled(QUEST_ID_NIENA,true);
+        turn=2000+10*seen; dialogue_calls=dialogue_lines=dialogue_nonempty=0;
+        niena_quest_interaction();
+        CHECK(dialogue_calls==1 && dialogue_lines==expected && dialogue_nonempty>1);
+        CHECK(p_ptr->niena_quest==NIENA_QUEST_REWARDED);
+        CHECK(p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY]);
+        niena_quest_interaction(); CHECK(dialogue_calls==1);
+    }
+    puts("Nienna reward: zero/10/20 creatures, full authored dialogue, reward and once-only completion PASS.");
+}
 static const int opts[] = { OPT_quest_1,OPT_quest_2,OPT_quest_3,OPT_quest_4,
     OPT_quest_5,OPT_quest_6,OPT_quest_7,OPT_quest_8,OPT_quest_9,OPT_quest_10,
     OPT_quest_11,OPT_quest_12,OPT_quest_13,OPT_quest_14,OPT_quest_15,OPT_quest_16,
@@ -159,6 +187,9 @@ def topology():
 
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--baseline-nienna',action='store_true',help='Prove the Nienna dialogue regression against HEAD')
+    args=parser.parse_args()
     topology()
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
@@ -169,7 +200,7 @@ def main():
     harness += '''
     CHECK(init_quest_info()==0);
     for(int id=1;id<=16;++id) CHECK(quest_info[id].name && quest_info[id].vala_id);
-    settings(); vaults(); level_exits();
+    settings(); nienna_reward_dialogue(); vaults(); level_exits();
     printf("Quest engine integration: %d checks PASS (real templates/vault builds, 42 JSON patterns, defaults, Blitz).\\n",checks);
     SDL_Quit(); return 0;
 }
@@ -179,13 +210,18 @@ def main():
     cmake = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     response = OUT / "objects.rsp"
-    response.write_text("\n".join('"'+o+'"' for o in objects if not o.endswith("/src/main.c.obj")))
+    response.write_text("\n".join('"'+o+'"' for o in objects if not o.endswith(("/src/main.c.obj","/src/quest/valar/other-valar.c.obj"))))
+    valar=ROOT/'src/quest/valar/other-valar.c'
+    if args.baseline_nienna:
+        valar=OUT/'baseline-other-valar.c'
+        valar.write_bytes(subprocess.check_output(['git','show','HEAD:src/quest/valar/other-valar.c'],cwd=ROOT))
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / n) for n in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
-        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@"+str(response),
+        "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(valar), "@"+str(response),
+        "-Wl,--wrap=quest_typewriter_menu",
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=OUT) as data:
         result = subprocess.run([str(exe), str(ROOT / "lib/edit"), data], cwd=data,

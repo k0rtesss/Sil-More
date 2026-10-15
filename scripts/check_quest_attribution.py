@@ -11,10 +11,10 @@ HARNESS=r'''
 #include "externs.h"
 #include "quest/quest-runtime.h"
 #include <assert.h>
-static player_type player;player_type *p_ptr=&player;
-static monster_type monsters[4];monster_type *mon_list=monsters;s16b mon_max=4;
-static monster_race races[8];monster_race *r_info=races;
-static monster_lore lore[8];monster_lore *l_list=lore;
+static player_type player;_Thread_local player_type *p_ptr=&player;
+static monster_type monsters[4];_Thread_local monster_type *mon_list=monsters;_Thread_local s16b mon_max=4;
+static monster_race races[8];_Thread_local monster_race *r_info=races;
+static monster_lore lore[8];_Thread_local monster_lore *l_list=lore;
 static int credited_damage,credited_kills,damage_hooks,ambient_hits,hit_displays,last_race;
 void quest_followup_damage(monster_type *m,int damage,int who){
  ++damage_hooks;

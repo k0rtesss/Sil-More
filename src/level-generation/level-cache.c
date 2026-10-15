@@ -3,6 +3,7 @@
 #include "level-generation/level-state.h"
 #include "cave/cave-water-flow.h"
 #include "quest/quest-runtime.h"
+#include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "metarun.h"
 #include "cave/cave-vertical.h"
@@ -58,7 +59,7 @@ static bool reading_floor;
 static Uint32 ready_event_type;
 static int requested_depth = -1, pending_depth = -1;
 static int pending_y, pending_x;
-static bool pending_rubble, use_pending_origin;
+static bool pending_rubble, use_pending_origin, pending_disconnected_stair;
 static _Thread_local level_job* worker_job;
 static void sync_vertical_regions(void);
 
@@ -232,15 +233,28 @@ static void prune_cache(void)
             evict_floor(i);
 }
 
+void level_cache_options_changed(void)
+{
+    if (!running || worker_job) return;
+    if (job) SDL_SetAtomicInt(&job->cancel, 1);
+    /* First-turn changes must also replace already published neighbours.
+     * Keep every visited level, including the current map. */
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++)
+        if (floors[i] && floors[i] != active && !floors[i]->visited)
+            evict_floor(i);
+}
+
 static void prepare_links(level_job* next)
 {
     level_link_plan* links = &next->links;
+    bool disconnected = birth_discon_stair || quest_challenge_active(CHALLENGE_DISCONNECTED);
     links->source_depth = active->depth;
     next->allow_down = !find_floor(next->depth + 1);
     for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
         const level_image* source = floors[i];
         if (!source) continue;
-        links->stair_peer_depths[links->stair_peer_count++] = source->depth;
+        if (!disconnected)
+            links->stair_peer_depths[links->stair_peer_count++] = source->depth;
         if (ABS(source->depth - next->depth) == 1 && next->inherited_count < 2) {
             int n = next->inherited_count++;
             next->inherited_depth[n] = source->depth;
@@ -268,7 +282,7 @@ static void prepare_links(level_job* next)
                 if (feat == FEAT_MORE) { target = source->depth + 1; inverse = FEAT_LESS; }
                 if (feat == FEAT_LESS_SHAFT) { target = source->depth - 2; inverse = FEAT_MORE_SHAFT; }
                 if (feat == FEAT_MORE_SHAFT) { target = source->depth + 2; inverse = FEAT_LESS_SHAFT; }
-                if (target == next->depth) links->feat[y][x] = inverse;
+                if (!disconnected && target == next->depth) links->feat[y][x] = inverse;
                 if (source->depth == next->depth - 1 && source->chasm_drop[y][x]) {
                     links->ceiling[y][x] = 1;
                     links->drop[y][x] = source->chasm_drop[y][x] - 1;
@@ -436,7 +450,10 @@ done:
 
 bool level_cache_generation_links(void)
 {
-    if (!worker_job) return true;
+    if (!worker_job) {
+        quest_challenge_prune_stairs();
+        return true;
+    }
     level_link_plan* links = &worker_job->links;
     /* Handcrafted endpoint maps can be extended with bedrock around their
      * authored area when a neighbouring stair lies beyond their old bounds. */
@@ -491,6 +508,7 @@ bool level_cache_generation_links(void)
                 }
         if (!placed) return false;
     }
+    quest_challenge_prune_stairs();
     return reconnect_regions();
 }
 
@@ -728,6 +746,11 @@ static void merge_generated_player(player_type* live,
 
 static bool generation_conflicts(const level_job* completed)
 {
+    if (completed->options.opt[OPT_quest_challenges_beta] != op_ptr->opt[OPT_quest_challenges_beta]
+        || completed->options.opt[OPT_birth_discon_stair] != birth_discon_stair
+        || completed->options.opt[OPT_birth_no_artefacts] != birth_no_artefacts
+        || completed->options.opt[OPT_adult_no_artefacts] != adult_no_artefacts
+        || completed->player.quest_challenge != p_ptr->quest_challenge) return true;
     for (int option = OPT_meta_artefact_memory; option <= OPT_meta_legendary_places; option++)
         if (completed->options.opt[option] != op_ptr->opt[option]) return true;
     const player_type* before = &completed->before;
@@ -756,7 +779,7 @@ void level_cache_poll(void)
     if (!running || worker_job || !active) return;
     if (job && SDL_GetAtomicInt(&job->done)) {
         SDL_WaitThread(job->thread, NULL);
-        bool conflict = job->success && generation_conflicts(job);
+        bool conflict = job->success && (SDL_GetAtomicInt(&job->cancel) || generation_conflicts(job));
         if (conflict) log_debug("Level cache: regenerating depth %d after a run-state conflict", job->depth);
         if (job->success && !conflict && (ABS(job->depth - active->depth) <= 1
                 || job->depth == requested_depth || job->depth == pending_depth)) {
@@ -816,9 +839,25 @@ void level_cache_start(void)
     active->visited = true;
     floors[0] = active;
     running = true;
+    quest_challenge_prune_stairs();
     level_image_capture(active);
     level_cache_generation_finished();
     level_cache_poll();
+}
+
+static bool ordinary_stair_destination(int feature, int source, int destination)
+{
+    if (source < 0 || source > MORGOTH_DEPTH
+        || destination < 0 || destination > MORGOTH_DEPTH) return false;
+    int step;
+    switch (feature) {
+    case FEAT_LESS: step = -1; break;
+    case FEAT_MORE: step = 1; break;
+    case FEAT_LESS_SHAFT: step = -2; break;
+    case FEAT_MORE_SHAFT: step = 2; break;
+    default: return false;
+    }
+    return destination == source + step;
 }
 
 bool level_cache_change_level(void)
@@ -827,6 +866,10 @@ bool level_cache_change_level(void)
     int destination = p_ptr->depth;
     int arrival_y = use_pending_origin ? pending_y : p_ptr->py;
     int arrival_x = use_pending_origin ? pending_x : p_ptr->px;
+    int departure_feat = cave_feat[p_ptr->py][p_ptr->px];
+    bool disconnected_stair = use_pending_origin ? pending_disconnected_stair
+        : (birth_discon_stair || quest_challenge_active(CHALLENGE_DISCONNECTED))
+            && ordinary_stair_destination(departure_feat, active->depth, destination);
     /* Capture the outgoing map under its actual depth, not the already
      * updated destination stored by the movement command. */
     p_ptr->depth = active->depth;
@@ -844,6 +887,7 @@ bool level_cache_change_level(void)
         pending_depth = requested_depth = destination;
         pending_y = arrival_y; pending_x = arrival_x;
         pending_rubble = p_ptr->create_rubble;
+        pending_disconnected_stair = disconnected_stair;
         p_ptr->create_stair = 0;
         p_ptr->create_rubble = false;
         p_ptr->depth = active->depth;
@@ -866,6 +910,35 @@ bool level_cache_change_level(void)
         cave_vertical_restore(&arriving);
     }
     cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    if (disconnected_stair) {
+        /* Disconnected stairs use an independent landing on every visit.
+         * Physical falls and stream travel still retain their world column. */
+        int candidates = 0;
+        bool niena_level = p_ptr->niena_quest == NIENA_QUEST_ACTIVE;
+        for (int i = 1; i < mon_max && !niena_level; i++)
+            niena_level = mon_list[i].r_idx == R_IDX_NIENA;
+        byte near_down[MAX_DUNGEON_HGT][MAX_DUNGEON_WID] = {{0}};
+        bool found_down = false;
+        if (niena_level)
+            for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+                for (int x = 1; x < p_ptr->cur_map_wid - 1; x++) {
+                    if (cave_feat[y][x] != FEAT_MORE && cave_feat[y][x] != FEAT_MORE_SHAFT) continue;
+                    found_down = true;
+                    for (int yy = MAX(1, y - 86); yy < MIN(p_ptr->cur_map_hgt - 1, y + 87); yy++)
+                        for (int xx = MAX(1, x - 86); xx < MIN(p_ptr->cur_map_wid - 1, x + 87); xx++)
+                            if (distance(y, x, yy, xx) < 87) near_down[yy][xx] = 1;
+                }
+        arrival_y = arrival_x = -1;
+        for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+            for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+                if (cave_naked_bold(y, x) && !(cave_info[y][x] & CAVE_ICKY)
+                    && (playerturn > 0 || (cave_info[y][x] & CAVE_ROOM))
+                    && player_passable(y, x, false)
+                    && (!niena_level || (found_down && !near_down[y][x]))
+                    && one_in_(++candidates)) {
+                    arrival_y = y; arrival_x = x;
+                }
+    }
     if (in_bounds_fully(arrival_y, arrival_x)
         && cave_floor_bold(arrival_y, arrival_x)
         && cave_feat[arrival_y][arrival_x] != FEAT_CHASM) {
@@ -899,7 +972,7 @@ bool level_cache_change_level(void)
         catastrophe_prepare_level(); target->visited = true;
     }
     requested_depth = pending_depth = -1;
-    use_pending_origin = pending_rubble = false;
+    use_pending_origin = pending_rubble = pending_disconnected_stair = false;
     if (job && ABS(job->depth - active->depth) > 1)
         SDL_SetAtomicInt(&job->cancel, 1);
     prune_cache();
@@ -922,6 +995,7 @@ bool level_cache_travel_to(int depth, int y, int x)
     if (!valid_depth(depth) || y < 1 || x < 1 || y >= MAX_DUNGEON_HGT - 1
         || x >= MAX_DUNGEON_WID - 1) return false;
     pending_y = y; pending_x = x;
+    pending_disconnected_stair = false;
     use_pending_origin = true;
     p_ptr->create_stair = p_ptr->create_rubble = 0;
     p_ptr->depth = depth;
@@ -1080,7 +1154,7 @@ void level_cache_clear(void)
     }
     active = NULL; running = false;
     requested_depth = pending_depth = -1;
-    use_pending_origin = pending_rubble = false;
+    use_pending_origin = pending_rubble = pending_disconnected_stair = false;
     cave_vertical_combat_reset();
 }
 
@@ -1426,6 +1500,25 @@ errr level_cache_read(void)
     requested_depth = pending_depth = saved_pending;
     pending_y = saved_y; pending_x = saved_x;
     pending_rubble = saved_rubble != 0;
+    /* The pending origin is already persisted. Recover stair semantics from
+     * the outgoing map without extending the save lane. Explicit watercourse
+     * portals retain their specified destination, even on a stair grid. */
+    pending_disconnected_stair = false;
+    if (saved_pending >= 0 && saved_y == p_ptr->py && saved_x == p_ptr->px
+        && (birth_discon_stair || quest_challenge_active(CHALLENGE_DISCONNECTED))
+        && ordinary_stair_destination(cave_feat[saved_y][saved_x], p_ptr->depth, saved_pending)) {
+        pending_disconnected_stair = true;
+        const cave_vertical_state* vertical = cave_vertical_get();
+        for (int i = 0; i < vertical->portal_count; i++) {
+            const cave_vertical_portal* portal = &vertical->portals[i];
+            if (portal->y == p_ptr->py && portal->x == p_ptr->px
+                && portal->peer_depth == saved_pending
+                && portal->peer_y == saved_y && portal->peer_x == saved_x) {
+                pending_disconnected_stair = false;
+                break;
+            }
+        }
+    }
     return 0;
 invalid:
     reading_floor = false;

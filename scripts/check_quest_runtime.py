@@ -16,18 +16,19 @@ HARNESS = r'''
 #include <assert.h>
 #include <stdarg.h>
 static player_type player;
-player_type *p_ptr=&player;
+_Thread_local player_type *p_ptr=&player;
 static maxima maxima_test={.r_max=700,.quest_max=24};
 maxima *z_info=&maxima_test;
 static quest_type templates[24];
 quest_type *quest_info=templates;
 char *quest_name_text="\0quest";
-static monster_race races[700]; monster_race *r_info=races;
-static monster_lore lore[700]; monster_lore *l_list=lore;
+static monster_race races[700]; _Thread_local monster_race *r_info=races;
+static monster_lore lore[700]; _Thread_local monster_lore *l_list=lore;
 char *r_name="dragon\0fire hatchling";
-static monster_type monsters[4]; monster_type *mon_list=monsters;
-static s16b map[4][MAX_DUNGEON_WID]; s16b (*cave_m_idx)[MAX_DUNGEON_WID]=map;
-bool *valar_reserved_artifacts;
+static monster_type monsters[4]; _Thread_local monster_type *mon_list=monsters;
+static s16b map[4][MAX_DUNGEON_WID]; _Thread_local s16b (*cave_m_idx)[MAX_DUNGEON_WID]=map;
+_Thread_local bool *valar_reserved_artifacts;
+bool level_cache_retains(int depth) {(void)depth;return false;}
 void cave_set_feat(int y,int x,int f){(void)y;(void)x;(void)f;}
 void tulkas_quest_interaction(void){}
 void aule_quest_interaction(void){}
@@ -36,7 +37,7 @@ void niena_quest_interaction(void){}
 void orome_quest_interaction(void){}
 void varda_quest_interaction(void){}
 size_t strnfmt(char *s,size_t n,cptr fmt,...){va_list a;va_start(a,fmt);int v=vsnprintf(s,n,fmt,a);va_end(a);return v<0?0:(size_t)v;}
-metarun metar;
+_Thread_local metarun metar;
 static metarun persisted;
 static bool enabled[17], rules, rewards, blitz;
 static int saves, rng_calls, reward_calls, beta_calls, removed_givers, silmarils=1;

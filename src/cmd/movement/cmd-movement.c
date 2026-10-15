@@ -93,28 +93,6 @@ void do_cmd_go_up(void)
         return;
     }
 
-    if (!utumno_destination && chosen_oath(OATH_IRON) && !oath_invalid(OATH_IRON) &&
-       (silmarils_possessed() == 0))
-    {
-        /* Use oath-specific confirmation prompt */
-        char* prompt = oath_confirmation_prompt(OATH_IRON);
-        if (!prompt || !prompt[0]) prompt = "Are you certain you wish to break your Oath of Iron?";
-        
-        if (get_check_oath_multiline(prompt))
-        {
-            /* Curse message and selection handled by apply_oath_breaking_curse */
-            do_cmd_note("Broke your oath", p_ptr->depth);
-            apply_oath_breaking_curse(OATH_IRON);
-            
-            /* Only mark oath as broken if player actually has it */
-            p_ptr->oaths_broken |= OATH_IRON_FLAG;
-        }
-        else
-        {
-            return;
-        }
-    }
-
     // warn player if they have an active Nienna quest and are trying to leave
     if (quest_enabled(QUEST_ID_NIENA) && p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
     {
@@ -154,15 +132,50 @@ void do_cmd_go_up(void)
         return;
     }
 
+    /* An impassable retreat cannot break Iron. Keep the ordinary failed
+     * stair attempt's turn cost, but do not offer an irreversible oath choice.
+     * Vertical routes retain their existing separate travel rules. */
+    min = min_depth();
+    if (!utumno_destination && !cave_vertical_can_travel(true)
+        && p_ptr->depth == MORGOTH_DEPTH && min == MORGOTH_DEPTH
+        && silmarils_possessed() == 0)
+    {
+        p_ptr->energy_use = 100;
+        p_ptr->previous_action[0] = ACTION_MISC;
+        msg_print("You enter a maze of staircases, but cannot find your way.");
+        return;
+    }
+
+    /* Resolve abandonment prompts before committing an oath break. Declining
+     * a later confirmation must not curse or ban a character who stays here. */
+    if (!utumno_destination && chosen_oath(OATH_IRON) && !oath_invalid(OATH_IRON) &&
+       (silmarils_possessed() == 0))
+    {
+        /* Use oath-specific confirmation prompt */
+        char* prompt = oath_confirmation_prompt(OATH_IRON);
+        if (!prompt || !prompt[0]) prompt = "Are you certain you wish to break your Oath of Iron?";
+
+        if (get_check_oath_multiline(prompt))
+        {
+            /* Curse message and selection handled by apply_oath_breaking_curse */
+            do_cmd_note("Broke your oath", p_ptr->depth);
+            apply_oath_breaking_curse(OATH_IRON);
+
+            /* Only mark oath as broken if player actually has it */
+            p_ptr->oaths_broken |= OATH_IRON_FLAG;
+        }
+        else
+        {
+            return;
+        }
+    }
+
     /* Hack -- take a turn */
     if (cave_vertical_travel(true)) return;
     p_ptr->energy_use = 100;
 
     // store the action type
     p_ptr->previous_action[0] = ACTION_MISC;
-
-    /* Calculate the shallowest a player is allowed to go */
-    min = min_depth();
 
     if (utumno_destination)
     {
@@ -174,16 +187,6 @@ void do_cmd_go_up(void)
         message(MSG_STAIRS, 0,
             "You climb Morgoth's private stair towards his throne.");
         goto finish_ascent;
-    }
-
-    /* At 1000ft, once locked in (by time or by entering Morgoth's hall),
-     * you cannot retreat without a Silmaril. */
-    if ((p_ptr->depth == MORGOTH_DEPTH) && (min == MORGOTH_DEPTH)
-        && (silmarils_possessed() == 0))
-    {
-        msg_print("You enter a maze of staircases, but cannot find your way.");
-
-        return;
     }
 
     // Store information for the combat rolls window

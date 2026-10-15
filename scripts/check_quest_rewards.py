@@ -19,10 +19,10 @@ CHALLENGE_HARNESS = r"""
 #include <assert.h>
 #include <stdio.h>
 player_type player_body;
-player_type *p_ptr = &player_body;
-metarun metar;
+_Thread_local player_type *p_ptr = &player_body;
+_Thread_local metarun metar;
 player_other options;
-player_other *op_ptr = &options;
+_Thread_local player_other *op_ptr = &options;
 void check_experience(void) {}
 static bool enabled = true, sandbox = false;
 static int sils = 1, saves = 0;
@@ -38,8 +38,8 @@ errr save_metaruns(void) { saves++; return 0; }
 int silmarils_possessed(void) { return sils; }
 void msg_print(cptr text) { (void)text; }
 static byte test_cave[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-byte (*cave_feat)[MAX_DUNGEON_WID] = test_cave;
-object_kind *k_info;
+_Thread_local byte (*cave_feat)[MAX_DUNGEON_WID] = test_cave;
+_Thread_local object_kind *k_info;
 void cave_set_feat(int y, int x, int feat) { cave_feat[y][x] = feat; }
 int quest_reward_book_choice(cptr title, cptr words[], int n, cptr prompt,
     const int values[], cptr labels[], const bool allowed[], int count,
@@ -116,8 +116,8 @@ REWARD_SETUP = r"""
 #include <assert.h>
 #include <stdio.h>
 player_type player_body;
-player_type *p_ptr = &player_body;
-metarun metar;
+_Thread_local player_type *p_ptr = &player_body;
+_Thread_local metarun metar;
 static bool rewards = true, lineage = true, sandbox = false, blitz = false;
 static bool enabled_quests[17];
 bool quest_rewards_enabled(void) { return rewards; }

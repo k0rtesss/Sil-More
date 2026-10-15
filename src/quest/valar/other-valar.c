@@ -665,10 +665,11 @@ void niena_quest_interaction(void)
             cptr* completion_texts = extract_quest_completion_texts(4, &completion_count); /* Nienna is quest index 4 */
             completion_texts = prepend_repeat_context(QUEST_ID_NIENA, completion_texts, &completion_count, true);
 
-            if (completion_texts && completion_count > 1) {
-                /* Use alternate completion text if available */
-                cptr alt_texts[] = {completion_texts[1]};
-                quest_typewriter_menu("Nienna, Lady of Pity", alt_texts, 1, TERM_L_BLUE, TERM_WHITE);
+            if (completion_texts && completion_count > 0) {
+                /* W: entries are paragraphs, including blank separators,
+                 * rather than alternate endings. Show the authored reward. */
+                quest_typewriter_menu("Nienna, Lady of Pity", completion_texts,
+                    completion_count, TERM_L_BLUE, TERM_WHITE);
                 free_quest_texts(completion_texts, completion_count);
             } else {
                 /* Fallback to simple message if text extraction fails */

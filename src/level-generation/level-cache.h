@@ -9,6 +9,7 @@ bool level_cache_in_worker(void);
 void level_cache_start(void);
 void level_cache_poll(void);
 void level_cache_clear(void);
+void level_cache_options_changed(void);
 bool level_cache_retains(int depth);
 bool level_cache_ready(int depth);
 bool level_cache_request(int depth);

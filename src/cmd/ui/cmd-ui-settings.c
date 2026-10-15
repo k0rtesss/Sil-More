@@ -19,6 +19,7 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "score/score_guid.h"
 #include "quest/quest-challenges.h"
 #include "quest/quest-runtime.h"
+#include "level-generation/level-cache.h"
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
@@ -1076,6 +1077,13 @@ static void settings_semantic_line_from_menu_line(char* out, size_t outsz,
 
 static void option_apply_side_effects(int opt)
 {
+    if (opt == OPT_birth_discon_stair || opt == OPT_birth_ironman
+        || opt == OPT_birth_no_artefacts || opt == OPT_birth_fixed_exp) {
+        int adult = OPT_ADULT + opt - OPT_BIRTH;
+        bool changed = op_ptr->opt[adult] != op_ptr->opt[opt];
+        op_ptr->opt[adult] = op_ptr->opt[opt];
+        if (changed) level_cache_options_changed();
+    }
     for (int i = 0; p_ptr && i < OPT_PAGE_PER; ++i) {
         if (option_page[QUEST_PAGE][i] == opt) {
             p_ptr->update |= PU_BONUS | PU_UPDATE_VIEW;
@@ -1085,8 +1093,10 @@ static void option_apply_side_effects(int opt)
     }
     if (opt >= OPT_meta_artefact_memory && opt <= OPT_meta_legendary_places)
         meta_state_options_changed();
-    if (opt == OPT_quest_challenges_beta)
+    if (opt == OPT_quest_challenges_beta) {
         quest_challenge_validate();
+        level_cache_options_changed();
+    }
     if (opt == OPT_story_lists_inven_pane || opt == OPT_story_lists_equip_pane)
         redraw_inven_equip_subwindows();
     if (opt == OPT_story_monster_desc_pane)
@@ -10182,7 +10192,7 @@ int options_menu(int* highlight)
 {
     tutorial_game_menu("settings", "Input, presentation, gameplay, and quest options are separate. Gameplay tutorial mode and Tale lesson history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
     int ch;
-    int options = 10;
+    int options = 11;
     int clicked_choice = 0;
     char line_buf[80];
     bool steamdeck = steamdeck_controls_active();
@@ -10217,10 +10227,11 @@ int options_menu(int* highlight)
     ADD_OPTIONS_MENU_ROW(7, 'h', "Quest Options");
     ADD_OPTIONS_MENU_ROW(8, 'g', "Sound Options");
     ADD_OPTIONS_MENU_ROW(9, 'i', "Other Options");
-    ADD_OPTIONS_MENU_ROW(10, 'o', "Return to Game");
+    ADD_OPTIONS_MENU_ROW(10, 'j', "Challenge Options");
+    ADD_OPTIONS_MENU_ROW(11, 'o', "Return to Game");
 
     if (allow_debug_menu && p_ptr->noscore)
-        ADD_OPTIONS_MENU_ROW(11, 'p', "Debugging Options");
+        ADD_OPTIONS_MENU_ROW(12, 'p', "Debugging Options");
 
 #undef ADD_OPTIONS_MENU_ROW
 
@@ -10241,6 +10252,7 @@ int options_menu(int* highlight)
             "rewards, challenges, and lineage.",
             "Sound effects and volume.",
             "Palette, notes, and other miscellaneous actions.",
+            "Optional challenges. Choose before taking your first action; later journeys keep these rules locked.",
             "Close the menu and return to play.",
             "Developer and debugging toggles.",
         };
@@ -10265,11 +10277,11 @@ int options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 10;
+                clicked_choice = 11;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = 10;
+                clicked_choice = 11;
             if (clicked_choice < 1 || clicked_choice > options)
                 return (0);
             *highlight = clicked_choice;
@@ -10335,18 +10347,24 @@ int options_menu(int* highlight)
         return (9);
     }
 
-    if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
-        || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
+    if (menu_letters && ((ch == 'j') || (ch == 'J')))
     {
         *highlight = 10;
         return (10);
     }
 
-    if (menu_letters && allow_debug_menu && p_ptr->noscore
-        && ((ch == 'p') || (ch == 'P')))
+    if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
+        || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
     {
         *highlight = 11;
         return (11);
+    }
+
+    if (menu_letters && allow_debug_menu && p_ptr->noscore
+        && ((ch == 'p') || (ch == 'P')))
+    {
+        *highlight = 12;
+        return (12);
     }
 
     /* Choose current  */
@@ -10781,7 +10799,7 @@ static bool options_debug_page_available(void)
 
 static int options_menu_page_choice_turn(int choice, int direction)
 {
-    int page_choices[] = { 3, 4, 5, 6, 7, 8, 11 };
+    int page_choices[] = { 3, 4, 5, 6, 7, 8, 10, 12 };
     int count = options_debug_page_available()
         ? (int)N_ELEMENTS(page_choices)
         : (int)N_ELEMENTS(page_choices) - 1;
@@ -10932,13 +10950,20 @@ void do_cmd_options(void)
         }
         case 10:
         {
+            do_cmd_options_aux(CHALLENGE_PAGE, "Challenge Options");
+            options_queue_page_turn(choice, &queued_choice);
+            Term_clear();
+            break;
+        }
+        case 11:
+        {
             /* Return to Game */
             settings_semantic_menu_hide();
             return_to_game = true;
             Term_clear();
             break;
         }
-        case 11:
+        case 12:
         {
             /* Debugging Options (only reachable when p_ptr->noscore) */
             do_cmd_options_aux(DEBUG_PAGE, "Debugging Options");

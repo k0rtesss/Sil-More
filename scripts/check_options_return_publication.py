@@ -138,7 +138,7 @@ def main():
 #include "ui/menu-click.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
-static int options_menu(int* highlight){(void)highlight;return 10;}
+static int options_menu(int* highlight){(void)highlight;return 11;}
 static void settings_semantic_menu_hide(void) {}
 static void do_cmd_input_options_submenu(int* highlight){(void)highlight;}
 static void options_queue_page_turn(int choice,int* queued){(void)choice;(void)queued;}
