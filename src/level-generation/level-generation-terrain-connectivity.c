@@ -301,7 +301,8 @@ bool check_connectivity(void)
     {
         int ry = dun->cent[i].y;
         int rx = dun->cent[i].x;
-        if (in_bounds_fully(ry, rx) && !cave_access[ry][rx])
+        if (in_bounds_fully(ry, rx) && cave_feat[ry][rx] != FEAT_CHASM
+            && !cave_access[ry][rx])
         {
             unreachable_rooms++;
             genlog_connect("UNREACHABLE ROOM #%d at (%d,%d) bounds=(%d,%d)-(%d,%d)",
@@ -325,13 +326,16 @@ bool check_connectivity(void)
     int rescue_attempts = 0;
     while (true)
     {
-        // Make sure entire dungeon is connected (ignoring rubble and chasms)
+        /* Require walking destinations to connect, allowing rubble removal.
+         * An inherited shaft can be an isolated hole surrounded by rock;
+         * there is no walking destination there for a rescue tunnel. */
         flood_access(p_ptr->py, p_ptr->px, cave_access, true);
         int unreachable = 0;
         int sample_y = -1, sample_x = -1;
         for (y = 1; y < p_ptr->cur_map_hgt - 1; y++)
             for (x = 1; x < p_ptr->cur_map_wid - 1; x++)
-                if (player_passable(y, x, true) && (cave_access[y][x] == false))
+                if (cave_feat[y][x] != FEAT_CHASM
+                    && player_passable(y, x, true) && (cave_access[y][x] == false))
                 {
                     unreachable++;
                     if (sample_y < 0)
@@ -353,6 +357,7 @@ bool check_connectivity(void)
                 int rx = dun->cent[i].x;
                 if (!in_bounds_fully(ry, rx)) continue;
                 if (cave_access[ry][rx]) continue;
+                if (cave_feat[ry][rx] == FEAT_CHASM) continue;
                 if (!player_passable(ry, rx, true)) continue;
                 sample_y = ry;
                 sample_x = rx;

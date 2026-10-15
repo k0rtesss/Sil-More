@@ -110,7 +110,10 @@ Focused checks:
   reciprocal stairs and authored dry circulation.
 * `scripts/check_vertical_cache.py`: real generation, eviction/reconstruction,
   shared history, v5/v6 save lanes, malformed records, aperture visibility and
-  ownership transfers, including preserved monster feuds and diplomacy.
+  ownership transfers, including preserved monster feuds and diplomacy. Targeted
+  `--case links`, `--case holes` and `--case upkeep` cover long-fall columns,
+  reciprocal stairs for every resident peer, isolated shaft geometry, and item
+  placement without premature view/lore/quest updates during generation.
 * `scripts/check_vertical_water.py`: currents, flow budgets, blocking, mixing,
   lava cooling, diving, destruction and every natural feature's generation.
 * `scripts/check_vertical_render.py` and `check_vertical_ui.py`: production SDL

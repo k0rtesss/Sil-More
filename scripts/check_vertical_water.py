@@ -100,6 +100,25 @@ static void checks(void)
     assert(cave_feat[24][24]==FEAT_WATER&&cave_feat[4][4]==FEAT_FLOOR);
     puts("Reciprocal offset passage inherits only required patch: PASS");
 
+    base();assert(cave_vertical_travel(false));
+    assert(travel_depth==7&&p_ptr->energy_use==100&&confirmations==0);
+    base();source.portals[0].peer_depth=5;
+    source.portals[0].flags=CAVE_VERTICAL_REVERSIBLE;source.basins[1].depth=5;
+    assert(cave_vertical_restore(&source));
+    assert(cave_vertical_travel(true));
+    assert(travel_depth==5&&travel_y==24&&travel_x==24
+        &&p_ptr->energy_use==150&&p_ptr->chp==100&&confirmations==0);
+    base();source.portals[0].peer_depth=5;
+    source.portals[0].flags=CAVE_VERTICAL_REVERSIBLE|CAVE_VERTICAL_CLOSED;
+    source.basins[1].depth=5;assert(cave_vertical_restore(&source));
+    assert(cave_vertical_travel(true)&&travel_depth==0&&p_ptr->energy_use==0);
+    source.portals[0].flags=CAVE_VERTICAL_REVERSIBLE;
+    source.basins[0].flags=CAVE_VERTICAL_RESERVOIR;
+    source.basins[0].volume=0;cave_feat[20][20]=FEAT_FLOOR;
+    assert(cave_vertical_restore(&source));
+    assert(cave_vertical_travel(true)&&travel_depth==5&&p_ptr->energy_use==100);
+    puts("Stream passage travel: upstream water costs more, downstream and drained passages retain ordinary cost, closed passage is free: PASS");
+
     base();source.portals[0].kind=CAVE_VERTICAL_RAPIDS;source.portals[0].strength=2;
     assert(cave_vertical_restore(&source));
     int direction=0;

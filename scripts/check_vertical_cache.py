@@ -103,6 +103,30 @@ TRACK(place_rubble_player,3)
 TRACK(terrain_history_finish,4)
 #undef TRACK
 
+/* Observe production upkeep without dereferencing the deliberately invalid
+ * pre-player-placement position on the historical crashing baseline. All
+ * ready-scene view rebuilds and calls outside this probe remain real. */
+static bool upkeep_probe;
+static int upkeep_view_calls,upkeep_lore_calls,upkeep_quest_calls;
+void __real_update_view(void);
+void __wrap_update_view(void) {
+    if(upkeep_probe) {
+        upkeep_view_calls++;
+        if(!p_ptr->py||!p_ptr->px)return;
+    }
+    __real_update_view();
+}
+void __real_update_lore(u32b flags);
+void __wrap_update_lore(u32b flags) {
+    if(upkeep_probe){upkeep_lore_calls++;return;}
+    __real_update_lore(flags);
+}
+void __real_metarun_check_and_update_quests(void);
+void __wrap_metarun_check_and_update_quests(void) {
+    if(upkeep_probe){upkeep_quest_calls++;return;}
+    __real_metarun_check_and_update_quests();
+}
+
 static void fresh(int depth)
 {
     character_dungeon=false;
@@ -208,6 +232,156 @@ static void inherited_worker(int depth)
     level_cache_generation_reserve();
     assert(vertical_vault_place());
     assert(cave_vertical_generation_finish());
+}
+
+static void test_cached_stair_and_long_fall_links(void)
+{
+    int failures=0;
+    /* A four-floor fall must reserve its bottom even though it lies beyond
+     * the usual adjacent-floor/shaft input window. */
+    fresh(8);cave_set_feat(70,70,FEAT_CHASM);
+    level_image *upper=capture();upper->chasm_drop[70][70]=4;
+    floors[0]=active=upper;running=true;
+    memset(&next_job,0,sizeof(next_job));next_job.depth=12;
+    prepare_links(&next_job);
+    bool bottom_reserved=next_job.links.feat[70][70]==FEAT_FLOOR
+        &&next_job.links.ceiling[70][70]
+        &&next_job.links.minimum_hgt>=72&&next_job.links.minimum_wid>=72;
+    fresh(12);cave_set_feat(70,70,FEAT_WALL_EXTRA);
+    worker_job=&next_job;
+    bool finalized=level_cache_generation_links();
+    bool bottom_placed=finalized&&cave_feat[70][70]==FEAT_FLOOR;
+    worker_job=NULL;
+    if(!bottom_reserved||!bottom_placed) {
+        fprintf(stderr,"FAIL long fall: depth 8 drop 4 at 70,70; reserved=%d placed=%d link=%u ceiling=%u\n",
+            bottom_reserved,bottom_placed,next_job.links.feat[70][70],next_job.links.ceiling[70][70]);
+        failures++;
+    }
+    level_cache_clear();
+
+    /* Shaft destination 10 is generated from active 8 while 9 is already
+     * retained. Both existing floors own their reciprocal stair columns. */
+    fresh(8);cave_set_feat(20,20,FEAT_MORE_SHAFT);
+    upper=capture();floors[0]=active=upper;running=true;
+    fresh(9);cave_set_feat(30,30,FEAT_MORE);
+    level_image *middle=capture();floors[1]=middle;
+    memset(&next_job,0,sizeof(next_job));next_job.depth=10;
+    prepare_links(&next_job);
+    assert(next_job.links.feat[20][20]==FEAT_LESS_SHAFT);
+    assert(next_job.links.feat[30][30]==FEAT_LESS);
+    fresh(10);
+    /* These are ordinary generator-authored stairs with no peer at their
+     * coordinate on either retained map. */
+    cave_set_feat(40,40,FEAT_LESS);
+    cave_set_feat(50,50,FEAT_LESS_SHAFT);
+    worker_job=&next_job;
+    finalized=level_cache_generation_links();worker_job=NULL;
+    bool reciprocal=finalized&&cave_feat[20][20]==FEAT_LESS_SHAFT
+        &&cave_feat[30][30]==FEAT_LESS
+        &&cave_feat[40][40]!=FEAT_LESS
+        &&cave_feat[50][50]!=FEAT_LESS_SHAFT;
+    if(!reciprocal) {
+        fprintf(stderr,"FAIL retained stair peer: active=8 retained=9 destination=10; unmatched up=%u unmatched shaft=%u finalized=%d\n",
+            cave_feat[40][40],cave_feat[50][50],finalized);
+        failures++;
+    }
+    level_cache_clear();
+    assert(!failures);
+    puts("Production cache links: four-floor chasm landing column and reciprocal stairs for every retained neighbor PASS.");
+}
+
+static void inherited_isolated_hole(void)
+{
+    fresh(8);cave_set_feat(20,20,FEAT_CHASM);
+    level_image *upper=capture();upper->chasm_drop[20][20]=2;
+    floors[0]=active=upper;running=true;
+    memset(&next_job,0,sizeof(next_job));next_job.depth=9;
+    prepare_links(&next_job);
+    fresh(9);dun->cent_n=0;cave_set_feat(6,6,FEAT_MORE);
+    for(int y=18;y<=22;y++)for(int x=18;x<=22;x++)
+        cave_set_feat(y,x,FEAT_WALL_EXTRA);
+    worker_job=&next_job;
+    assert(level_cache_generation_links());
+    assert(cave_feat[20][20]==FEAT_CHASM&&next_job.links.drop[20][20]==1);
+}
+
+static void test_inherited_hole_connectivity(void)
+{
+    int failures=0;
+    inherited_isolated_hole();
+    bool accepted=check_connectivity();
+    bool preserved=cave_feat[20][20]==FEAT_CHASM;
+    if(!accepted||!preserved) {
+        fprintf(stderr,"FAIL isolated inherited hole: accepted=%d preserved=%d\n",accepted,preserved);
+        failures++;
+    }
+    worker_job=NULL;level_cache_clear();
+
+    inherited_isolated_hole();
+    /* A hole used as a room center must not mask genuinely disconnected
+     * dry/rubble components which still require ordinary rescue tunnels. */
+    for(int y=28;y<=32;y++)for(int x=28;x<=32;x++)
+        cave_set_feat(y,x,FEAT_WALL_EXTRA);
+    cave_set_feat(30,30,FEAT_FLOOR);
+    for(int y=38;y<=42;y++)for(int x=38;x<=42;x++)
+        cave_set_feat(y,x,FEAT_WALL_EXTRA);
+    cave_set_feat(40,40,FEAT_RUBBLE);
+    dun->cent_n=2;dun->cent[0].y=dun->cent[0].x=20;
+    dun->cent[1].y=dun->cent[1].x=30;
+    accepted=check_connectivity();
+    int access[MAX_DUNGEON_HGT][MAX_DUNGEON_WID]={{0}};
+    flood_access(p_ptr->py,p_ptr->px,access,true);
+    bool rescued=access[30][30]&&access[40][40];
+    preserved=cave_feat[20][20]==FEAT_CHASM;
+    if(!accepted||!rescued||!preserved) {
+        fprintf(stderr,"FAIL hole room center plus dry/rubble islands: accepted=%d rescued=%d preserved=%d\n",
+            accepted,rescued,preserved);failures++;
+    }
+    worker_job=NULL;level_cache_clear();
+
+    fresh(9);dun->cent_n=0;
+    for(int y=18;y<=22;y++)for(int x=18;x<=22;x++)
+        cave_set_feat(y,x,FEAT_WALL_PERM);
+    cave_set_feat(20,20,FEAT_MORE);
+    if(check_connectivity()) {
+        fprintf(stderr,"FAIL permanently sealed dry stair accepted\n");failures++;
+    }
+    assert(!failures);
+    puts("Production inherited-hole connectivity: isolated holes preserved, hole room centers skipped, dry/rubble islands rescued, permanently sealed dry stairs rejected PASS.");
+}
+
+static void test_generation_upkeep_deferral(void)
+{
+    int arrow=0,failures=0;
+    for(int i=1;i<z_info->k_max;i++)if(k_info[i].tval==TV_ARROW){arrow=i;break;}
+    assert(arrow);
+    upkeep_probe=true;
+    for(int scene=0;scene<3;scene++) {
+        fresh(9);character_generated=true;character_icky=0;
+        character_dungeon=scene!=0;
+        if(scene==0)p_ptr->py=p_ptr->px=0;
+        if(scene==1)worker_job=&next_job;
+        view_n=temp_n=0;
+        upkeep_view_calls=upkeep_lore_calls=upkeep_quest_calls=0;
+        p_ptr->update=PU_UPDATE_VIEW;
+        object_type arrow_object;object_prep(&arrow_object,arrow);arrow_object.number=1;
+        int placed=drop_near(&arrow_object,0,25,25);
+        bool deferred=scene<2;
+        bool correct=placed>0&&o_list[placed].k_idx==arrow
+            &&(deferred ? ((p_ptr->update&PU_UPDATE_VIEW)
+                &&!upkeep_view_calls&&!upkeep_lore_calls&&!upkeep_quest_calls&&view_n==0)
+            : (!(p_ptr->update&PU_UPDATE_VIEW)&&upkeep_view_calls==1
+                &&upkeep_lore_calls==1&&upkeep_quest_calls==1&&view_n>0));
+        if(!correct) {
+            fprintf(stderr,"FAIL drop upkeep scene=%d placed=%d flags=%u view=%d lore=%d quests=%d view_n=%d\n",
+                scene,placed,p_ptr->update,upkeep_view_calls,upkeep_lore_calls,upkeep_quest_calls,view_n);
+            failures++;
+        }
+        worker_job=NULL;
+    }
+    upkeep_probe=false;
+    assert(!failures);
+    puts("Production drop_near upkeep: incomplete map at 0,0 and complete worker defer view/lore/quests without losing flags; ready main map rebuilds real view PASS.");
 }
 
 static void test_neighbor_reconstruction(void)
@@ -882,7 +1056,10 @@ def main(case="all"):
     harness += "    assert(!init_flavor_info());assert(!init_effect_info());assert(!init_skeleton_note_info());\n"
     harness += "    assert(!init_h_info());assert(!init_n_info());build_randart_tables();flavor_init();drop_system_init();character_generated=true;\n"
     calls = {
-        "all": "test_neighbor_reconstruction();test_regions_save();test_v5_metadata();test_public_cache_save();test_public_v5_cache();test_remote_transactions();test_aperture_visibility();test_packet_and_mirrors();test_shared_pair_history();test_cold_tube_reconstruction();test_authored_pool_drain();test_sluice_network();test_seeded_generation();",
+        "all": "test_cached_stair_and_long_fall_links();test_inherited_hole_connectivity();test_generation_upkeep_deferral();test_neighbor_reconstruction();test_regions_save();test_v5_metadata();test_public_cache_save();test_public_v5_cache();test_remote_transactions();test_aperture_visibility();test_packet_and_mirrors();test_shared_pair_history();test_cold_tube_reconstruction();test_authored_pool_drain();test_sluice_network();test_seeded_generation();",
+        "upkeep": "test_generation_upkeep_deferral();",
+        "holes": "test_inherited_hole_connectivity();",
+        "links": "test_cached_stair_and_long_fall_links();",
         "inherit": "test_neighbor_reconstruction();",
         "save": "test_regions_save();test_v5_metadata();test_public_cache_save();test_public_v5_cache();",
         "migration": "test_v5_metadata();test_public_v5_cache();",
@@ -912,7 +1089,7 @@ def main(case="all"):
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env.get("PATH", "")])
     exe = OUT / f"check-{case}.exe"
-    wraps = ["level_cache_generation_links", "cave_vertical_generation_finish", "check_connectivity", "place_rubble_player", "terrain_history_finish"]
+    wraps = ["level_cache_generation_links", "cave_vertical_generation_finish", "check_connectivity", "place_rubble_player", "terrain_history_finish", "update_view", "update_lore", "metarun_check_and_update_quests"]
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", *sources, "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap=" + name for name in wraps), "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=OUT) as data:
         assert Path(data).resolve().is_relative_to(OUT.resolve())
@@ -921,5 +1098,5 @@ def main(case="all"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--case", choices=("all", "inherit", "save", "migration", "public", "generation", "transactions", "aperture", "packets", "baseline", "shared", "tube", "pool", "sluice"), default="all")
+    parser.add_argument("--case", choices=("all", "links", "holes", "upkeep", "inherit", "save", "migration", "public", "generation", "transactions", "aperture", "packets", "baseline", "shared", "tube", "pool", "sluice"), default="all")
     main(parser.parse_args().case)

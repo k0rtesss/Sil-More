@@ -535,7 +535,10 @@ static bool depart(const cave_vertical_portal* p, bool forced)
             : "Go over the drop? You may be injured and cannot climb back here. ";
         if (!get_check_near(p_ptr->py, p_ptr->px, warning)) return true;
     }
-    p_ptr->energy_use = MAX(100, p_ptr->energy_use);
+    int travel_energy = 100;
+    if (ascending && p->kind == CAVE_VERTICAL_STREAM && liquid(cave_feat[p->y][p->x]))
+        travel_energy += p->strength * 50;
+    p_ptr->energy_use = MAX(travel_energy, p_ptr->energy_use);
     p_ptr->previous_action[0] = ACTION_MISC;
     if (p->kind == CAVE_VERTICAL_FALL || p->kind == CAVE_VERTICAL_LAVA_FALL
         || p->kind == CAVE_VERTICAL_LAKE) {

@@ -17,16 +17,16 @@ HARNESS = r'''
 #include "level-generation/level-generation-terrain-access.h"
 #include <assert.h>
 static player_type player;
-player_type *p_ptr = &player;
+_Thread_local player_type *p_ptr = &player;
 static byte map[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int access_map[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u16b info[MAX_DUNGEON_HGT][256];
 static s16b monsters[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-byte (*cave_feat)[MAX_DUNGEON_WID] = map;
-u16b (*cave_info)[256] = info;
-s16b (*cave_m_idx)[MAX_DUNGEON_WID] = monsters;
+_Thread_local byte (*cave_feat)[MAX_DUNGEON_WID] = map;
+_Thread_local u16b (*cave_info)[256] = info;
+_Thread_local s16b (*cave_m_idx)[MAX_DUNGEON_WID] = monsters;
 void flood_access(int, int, int [MAX_DUNGEON_HGT][MAX_DUNGEON_WID], bool);
 static void reset(void) {
     memset(&player, 0, sizeof(player));

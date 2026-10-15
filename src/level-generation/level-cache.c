@@ -15,6 +15,7 @@
 
 typedef struct level_link_plan {
     int minimum_hgt, minimum_wid, source_depth;
+    int stair_peer_count, stair_peer_depths[LEVEL_CACHE_SLOTS];
     byte feat[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     byte drop[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
     byte ceiling[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -238,7 +239,8 @@ static void prepare_links(level_job* next)
     next->allow_down = !find_floor(next->depth + 1);
     for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
         const level_image* source = floors[i];
-        if (!source || ABS(source->depth - next->depth) > 2) continue;
+        if (!source) continue;
+        links->stair_peer_depths[links->stair_peer_count++] = source->depth;
         if (ABS(source->depth - next->depth) == 1 && next->inherited_count < 2) {
             int n = next->inherited_count++;
             next->inherited_depth[n] = source->depth;
@@ -453,8 +455,13 @@ bool level_cache_generation_links(void)
             if (feat == FEAT_MORE) target = p_ptr->depth + 1;
             if (feat == FEAT_LESS_SHAFT) target = p_ptr->depth - 2;
             if (feat == FEAT_MORE_SHAFT) target = p_ptr->depth + 2;
-            if (target == links->source_depth && !links->feat[y][x])
-                cave_set_feat(y, x, FEAT_FLOOR);
+            /* Every resident peer already owns its stair columns, including
+             * the floor skipped by a shaft from the active floor. */
+            for (int peer = 0; peer < links->stair_peer_count; peer++)
+                if (target == links->stair_peer_depths[peer] && !links->feat[y][x]) {
+                    cave_set_feat(y, x, FEAT_FLOOR);
+                    break;
+                }
             /* Generating upwards cannot open a new hole through the live
              * floor below. Only pre-existing vertical openings continue up. */
             if (p_ptr->depth < links->source_depth && feat == FEAT_CHASM

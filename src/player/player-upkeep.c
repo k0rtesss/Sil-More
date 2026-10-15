@@ -7,6 +7,7 @@
 #include "supplies.h"
 #include "item_set.h"
 #include "player/player-upkeep-internal.h"
+#include "level-generation/level-cache.h"
 
 /*
  * Handle "p_ptr->update"
@@ -56,9 +57,11 @@ void update_stuff(void)
         calc_voice();
     }
 
-    /* Character is not ready yet, no screen updates */
-    if (!character_generated) {
-        // log_trace("update_stuff: character not generated yet, skipping screen updates");
+    /* Generation can drop an artefact before assigning the player a grid.
+     * A worker also shares character_generated with the live game, but must
+     * never run view, lore, quest or UI updates on its private unfinished map.
+     * Leave those flags pending for the ordinary dungeon setup. */
+    if (!character_generated || !character_dungeon || level_cache_in_worker()) {
         return;
     }
 
