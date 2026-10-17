@@ -2092,7 +2092,7 @@ static void sdl_pointer_aim_render_choice_prompt(void)
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b, 200);
     SDL_RenderRect(g_state.renderer, &box);
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
+    sdl_ui_render_text_texture(texture, NULL, &text_dst);
 }
 
 /* Highlight each adjacent candidate grid; the current selection is brighter. */

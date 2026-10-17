@@ -16,13 +16,13 @@ static bool play_games_exception(JNIEnv* env)
 }
 
 /* Resolve on the current SDL thread; never retain JNI local refs across frames. */
-static int play_games_call(const char* name, const char* signature, int value,
+static uint64_t play_games_call(const char* name, const char* signature, uint64_t value,
     bool returns_value)
 {
     JNIEnv* env = (JNIEnv*)SDL_GetAndroidJNIEnv();
     jobject activity = NULL;
     jclass activity_class = NULL;
-    int result = 0;
+    uint64_t result = 0;
     if (!env) return 0;
     activity = (jobject)SDL_GetAndroidActivity();
     if (play_games_exception(env) || !activity) goto cleanup;
@@ -34,9 +34,9 @@ static int play_games_call(const char* name, const char* signature, int value,
         if (returns_value && signature[2] == 'Z')
             result = (*env)->CallBooleanMethod(env, activity, method) == JNI_TRUE;
         else if (returns_value)
-            result = (*env)->CallIntMethod(env, activity, method);
+            result = (*env)->CallLongMethod(env, activity, method);
         else
-            (*env)->CallVoidMethod(env, activity, method, (jint)value);
+            (*env)->CallVoidMethod(env, activity, method, (jlong)value);
         if (play_games_exception(env)) result = 0;
     }
 cleanup:
@@ -46,19 +46,19 @@ cleanup:
 }
 #endif
 
-void sil_play_games_sync(unsigned int unlocked_mask)
+void sil_play_games_sync(uint64_t unlocked_mask)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
-    play_games_call("syncPlayGamesAchievements", "(I)V", (int)(unlocked_mask & SIL_ACH_ALL_MASK), false);
+    play_games_call("syncPlayGamesAchievements", "(J)V", (unlocked_mask & SIL_ACH_ALL_MASK), false);
 #else
     (void)unlocked_mask;
 #endif
 }
 
-unsigned int sil_play_games_unlocked(void)
+uint64_t sil_play_games_unlocked(void)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
-    return (unsigned int)play_games_call("getPlayGamesAchievementMask", "()I", 0, true) & SIL_ACH_ALL_MASK;
+    return (uint64_t)play_games_call("getPlayGamesAchievementMask", "()J", 0, true) & SIL_ACH_ALL_MASK;
 #else
     return 0;
 #endif

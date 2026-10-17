@@ -136,6 +136,11 @@ the desktop controller-choice prompt. Existing saved profiles and explicit
 input choices are retained. Reset Interface restores the device's defaults.
 Touch-only phone orientation/font prompts remain specific to mobile devices.
 
+Recognized PC handhelds also use the mobile text sizes, density-scaled touch
+targets, Quick Access sizing and readable menu wrapping, including Big Font.
+These sizing rules follow the hardware even when input mode is changed. Phones
+and PC handhelds share the same compact action wheel and secondary ring.
+
 Set `SIL_HANDHELD=auto`, `desktop`, `handheld` or `steamdeck` before launching
 to override classification (for an unrecognized model or support testing).
 The default is `auto`. This changes the starting defaults only when there is
@@ -167,6 +172,9 @@ overrides, first launches and saved-profile reloads using private profiles and
 dummy SDL drivers. `python scripts/check_desktop_startup_input.py` retains the
 desktop prompt checks and exercises handheld input overrides. These fixtures
 do not establish physical handheld or Proton input compatibility.
+`python scripts/check_handheld_ui.py` checks shared wheel geometry and renders
+desktop handheld menu fonts, touch targets and Quick Access at several screen
+sizes and display densities; the phone layout checks cover the mobile build.
 
 The platform check verifies SDK binary architectures, target selection and
 error handling, then generates the production Linux/macOS CMake project using

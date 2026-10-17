@@ -291,7 +291,7 @@ static void keyboard_draw_text(TTF_Font* font, cptr text,
         rect.y + MAX(0, (rect.h - h) * 0.5f), w, h};
     SDL_Rect clip = {(int)rect.x, (int)rect.y, (int)rect.w, (int)rect.h};
     SDL_SetRenderClipRect(g_state.renderer, &clip);
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, NULL, &dst);
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 }
 

@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-character.h"
 #include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -4328,6 +4329,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         player_active_weapon_free_change_commit();
     }
     tutorial_game_action_done("equip", &inventory[slot]);
+    sil_achievement_character_on_player_turn();
 
     /* Force immediate sidebar update */
     handle_stuff();
@@ -4889,6 +4891,8 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
 
             /* Uncurse the object */
             uncurse_object(o_ptr);
+            if (!cursed_p(o_ptr))
+                sil_achievements_on_event(SIL_ACH_NO_LONGER_BINDING);
         }
     }
     else if (smith_oath_forbids_object(o_ptr) && inven_carry_okay(o_ptr)
@@ -5069,6 +5073,8 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
 
             /* Uncurse the object */
             uncurse_object(o_ptr);
+            if (!cursed_p(o_ptr))
+                sil_achievements_on_event(SIL_ACH_NO_LONGER_BINDING);
         }
         else
         {
@@ -5444,6 +5450,7 @@ static bool prise_silmaril(void)
 
             // report success
             msg_print(freed_msg);
+            sil_achievement_character_on_silmaril(w_ptr);
 
             // Get new local object
             o_ptr = &object_type_body;

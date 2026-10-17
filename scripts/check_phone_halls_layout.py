@@ -13,6 +13,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/phone-halls-check"
+CASES = [(720, 1600, 2.0), (1080, 2340, 2.75), (1080, 2400, 2.625)]
 HARNESS = r'''
 #include "angband.h"
 #include <assert.h>
@@ -167,6 +168,7 @@ int main(int argc,char **argv)
     int base[4];
     for(int big=0;big<2;big++) {
         config.bigger_font=big;
+        for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=big;
         for(int role=0;role<4;role++) {
             int px=sdl_ui_role_font_px(role);
             if(!big) base[role]=px;
@@ -205,7 +207,7 @@ def main():
                     "-Wl,--wrap=SDL_GetDisplayContentScale,--wrap=sdl_get_layout_screen_rect,"
                     "--wrap=ui_menu_click_handle_choice_action,--wrap=Term_keypress",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    for width, height, density in [(720,1600,2.0),(1080,2340,2.75),(1080,2400,2.625)]:
+    for width, height, density in CASES:
         for w, h in [(width,height),(height,width)]:
             subprocess.run([str(exe),str(w),str(h),str(density),
                             str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"),

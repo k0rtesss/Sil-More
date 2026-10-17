@@ -282,6 +282,54 @@ void wr_extra(void)
     wr_u32b(p_ptr->achievement_kills);
     wr_u32b(p_ptr->achievement_singing_turns);
     wr_s16b(p_ptr->achievement_comeback_depth);
+    /* 0.9.8.34: transition and per-door provenance, with sparse door storage. */
+    wr_byte(0xAD);
+    wr_s16b(p_ptr->achievement_fall_depth);
+    u16b jammed_doors = 0;
+    for (int y = 0; y < MAX_DUNGEON_HGT; ++y)
+        for (int x = 0; x < MAX_DUNGEON_WID; ++x)
+        {
+            int index = y * MAX_DUNGEON_WID + x;
+            if (p_ptr->achievement_jammed_doors[index / 8] & (1u << (index % 8)))
+                ++jammed_doors;
+        }
+    wr_u16b(jammed_doors);
+    for (int y = 0; y < MAX_DUNGEON_HGT; ++y)
+        for (int x = 0; x < MAX_DUNGEON_WID; ++x)
+        {
+            int index = y * MAX_DUNGEON_WID + x;
+            if (p_ptr->achievement_jammed_doors[index / 8] & (1u << (index % 8)))
+            {
+                wr_byte(y);
+                wr_byte(x);
+            }
+        }
+    /* 0.9.8.35: discovery crossings, own ice and distinct rage episodes. */
+    wr_byte(0xAE);
+    wr_u32b(p_ptr->achievement_discovery_flags & SIL_ACH_DISC_FLAGS);
+    wr_u32b(p_ptr->achievement_rage_epoch);
+    wr_s16b(p_ptr->achievement_water_from_y);
+    wr_s16b(p_ptr->achievement_water_from_x);
+    wr_s16b(p_ptr->achievement_water_entry_y);
+    wr_s16b(p_ptr->achievement_water_entry_x);
+    wr_s16b(p_ptr->achievement_poison_from_y);
+    wr_s16b(p_ptr->achievement_poison_from_x);
+    wr_s16b(p_ptr->achievement_poison_entry_y);
+    wr_s16b(p_ptr->achievement_poison_entry_x);
+    wr_s16b(p_ptr->achievement_labyrinth_index);
+    wr_s16b(p_ptr->achievement_labyrinth_y);
+    wr_s16b(p_ptr->achievement_labyrinth_x);
+    u16b frozen_tiles = 0;
+    for (int i = 0; i < MAX_DUNGEON_HGT * MAX_DUNGEON_WID; ++i)
+        if (p_ptr->achievement_frozen_tiles[i / 8] & (1u << (i % 8)))
+            ++frozen_tiles;
+    wr_u16b(frozen_tiles);
+    for (int i = 0; i < MAX_DUNGEON_HGT * MAX_DUNGEON_WID; ++i)
+        if (p_ptr->achievement_frozen_tiles[i / 8] & (1u << (i % 8)))
+        {
+            wr_byte(i / MAX_DUNGEON_WID);
+            wr_byte(i % MAX_DUNGEON_WID);
+        }
     log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d", 
              p_ptr->oath_type, p_ptr->oaths_broken);
 

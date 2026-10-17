@@ -19,6 +19,7 @@ static void killer_set_pending(score_killer_kind kind, score_guid64 guid,
     pending_info.kind = kind;
     pending_info.guid = guid;
     pending_info.race_index = race_index;
+    pending_info.first_wolf = false;
     pending_info.valid = true;
 }
 
@@ -30,6 +31,7 @@ void killer_mark_monster(const monster_type* m_ptr)
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     guid64 guid = score_guid_from_u64(r_ptr->guid);
     killer_set_pending(SCORE_KILLER_MONSTER, guid, (u16b)m_ptr->r_idx);
+    pending_info.first_wolf = m_ptr->achievement_first_wolf && m_ptr->r_idx == 11;
 }
 
 void killer_mark_other(score_killer_kind kind)

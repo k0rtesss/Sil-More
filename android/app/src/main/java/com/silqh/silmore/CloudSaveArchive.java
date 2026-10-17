@@ -7,10 +7,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
@@ -29,6 +32,27 @@ final class CloudSaveArchive {
     private static final String[] ROOTS = {"save", "meta"};
 
     private CloudSaveArchive() {}
+
+    static final class Profile {
+        final String fingerprint;
+        final boolean empty;
+        Profile(String fingerprint, boolean empty) {
+            this.fingerprint = fingerprint;
+            this.empty = empty;
+        }
+    }
+
+    private static MessageDigest sha256() {
+        try { return MessageDigest.getInstance("SHA-256"); }
+        catch (NoSuchAlgorithmException error) { throw new AssertionError(error); }
+    }
+
+    /** Hash file names and contents, independently of ZIP order/compression/device. */
+    static Profile inspect(File root, byte[] bytes) throws IOException {
+        File temporary = writeCandidate(root, bytes);
+        try { return extract(temporary, null); }
+        finally { temporary.delete(); }
+    }
 
     static byte[] capture(File root) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -109,13 +133,18 @@ final class CloudSaveArchive {
     }
 
     static File prepareRestore(File root, byte[] bytes) throws IOException {
+        File temporary = writeCandidate(root, bytes);
+        try { extract(temporary, null); }
+        catch (IOException error) { temporary.delete(); throw error; }
+        return temporary;
+    }
+
+    private static File writeCandidate(File root, byte[] bytes) throws IOException {
         if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES) throw new IOException("Invalid cloud save size");
         mkdir(root);
         File temporary = new File(root, ".play-cloud-candidate-" + UUID.randomUUID() + ".zip");
         requireInside(root, temporary);
         write(temporary, bytes);
-        try { extract(temporary, null); }
-        catch (IOException error) { temporary.delete(); throw error; }
         return temporary;
     }
 
@@ -129,11 +158,12 @@ final class CloudSaveArchive {
         move(temporary, pending);
     }
 
-    private static void extract(File archive, File destination) throws IOException {
+    private static Profile extract(File archive, File destination) throws IOException {
         if (archive.length() > MAX_BYTES) throw new IOException("Cloud save exceeds the size limit");
         Set<String> seen = new HashSet<>();
         long total = 0;
         boolean formatFound = false;
+        TreeMap<String, byte[]> fingerprints = new TreeMap<>();
         try (ZipFile zip = new ZipFile(archive)) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
@@ -148,6 +178,7 @@ final class CloudSaveArchive {
                 }
                 ByteArrayOutputStream marker = name.equals(MARKER) ? new ByteArrayOutputStream() : null;
                 CRC32 crc = new CRC32();
+                MessageDigest content = sha256();
                 long length = 0;
                 try (InputStream input = zip.getInputStream(entry);
                      FileOutputStream output = outputFile == null ? null : new FileOutputStream(outputFile)) {
@@ -158,6 +189,7 @@ final class CloudSaveArchive {
                         length += count;
                         if (total > MAX_EXPANDED || (marker != null && length > 64)) throw new IOException("Cloud save expands beyond its limit");
                         crc.update(buffer, 0, count);
+                        content.update(buffer, 0, count);
                         if (output != null) output.write(buffer, 0, count);
                         if (marker != null) marker.write(buffer, 0, count);
                     }
@@ -167,10 +199,19 @@ final class CloudSaveArchive {
                 if (marker != null) {
                     if (!FORMAT.equals(new String(marker.toByteArray(), StandardCharsets.UTF_8))) throw new IOException("Unsupported cloud save version");
                     formatFound = true;
-                }
+                } else fingerprints.put(name, content.digest());
             }
         }
         if (!formatFound) throw new IOException("This is not a Sil-More cloud save");
+        MessageDigest profile = sha256();
+        for (String name : fingerprints.keySet()) {
+            profile.update(name.getBytes(StandardCharsets.UTF_8));
+            profile.update((byte)0);
+            profile.update(fingerprints.get(name));
+        }
+        StringBuilder hex = new StringBuilder();
+        for (byte value : profile.digest()) hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+        return new Profile(hex.toString(), fingerprints.isEmpty());
     }
 
     /** Runs on the native startup thread, before any progress files are loaded. */

@@ -281,6 +281,34 @@ SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text_value,
         out_width, out_height);
 }
 
+/* Semantic layouts use renderer pixels. Centering can leave a fractional
+ * origin even for native-size text; linear filtering then softens the glyphs.
+ * Snap the raster only, keeping layout, clipping and pointer hitboxes intact. */
+void sdl_ui_render_text_texture(SDL_Texture* texture,
+    const SDL_FRect* source, const SDL_FRect* destination)
+{
+    SDL_FRect crop = { 0 };
+    SDL_FRect aligned;
+
+    if (!texture || !destination)
+        return;
+    if (source)
+        crop = *source;
+    else if (!SDL_GetTextureSize(texture, &crop.w, &crop.h))
+        return;
+    aligned = *destination;
+    aligned.x = SDL_roundf(aligned.x);
+    aligned.y = SDL_roundf(aligned.y);
+    crop.x = SDL_roundf(crop.x);
+    crop.y = SDL_roundf(crop.y);
+    /* A semantic text raster is never stretched. A bounded viewport crops
+     * identical source/destination extents, retaining every visible pixel. */
+    aligned.w = crop.w = MIN(crop.w, destination->w);
+    aligned.h = crop.h = MIN(crop.h, destination->h);
+    if (crop.w > 0.0f && crop.h > 0.0f)
+        SDL_RenderTexture(g_state.renderer, texture, &crop, &aligned);
+}
+
 void sdl_apply_story_font_state(bool active)
 {
     log_trace("Story font state apply: active=%s depth=%d term=%p",

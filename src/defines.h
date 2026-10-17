@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 33 /* Play Games, cloud saves, and 16 KB Android support. */
+#define VERSION_EXTRA 35 /* Discovery and character achievement provenance. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1858,8 +1858,8 @@
 #define PROJECT_KILL 0x00002000
 #define PROJECT_PLAY 0x00004000
 #define PROJECT_SILENT 0x00008000
-#define PROJECT_XXX6 0x00010000
-#define PROJECT_XXX7 0x00020000
+#define PROJECT_POTION 0x00010000 /* Player-thrown potion effect provenance. */
+#define PROJECT_SONG 0x00020000 /* Actual Song of Trees projection provenance. */
 
 /* Graphics */
 #define PROJECT_HIDE 0x00040000
@@ -2101,8 +2101,8 @@
     0x00080000 /* Inspection established that a chest trap is present */
 #define IDENT_CHEST_TRAP_FULL                                               \
     0x00100000 /* Inspection revealed the exact chest trap mechanism */
-#define IDENT_UNUSED_XX2XXXXX 0x00200000 /* Unused */
-#define IDENT_UNUSED_XX4XXXXX 0x00400000 /* Unused */
+#define IDENT_ACH_TELCHAR_SHARPNESS 0x00200000 /* Telchar forged this Sharpness II weapon */
+#define IDENT_ACH_EOL_GALVORN 0x00400000 /* Eol forged this Galvorn armour */
 #define IDENT_UNUSED_XX8XXXXX 0x00800000 /* Unused */
 #define IDENT_UNUSED_X1XXXXXX 0x01000000 /* Unused */
 #define IDENT_UNUSED_X2XXXXXX 0x02000000 /* Unused */
@@ -2578,8 +2578,7 @@
  * Special Monster Flags
  */
 #define MFLAG_VIEW 0x00000001 /* Monster is in line of sight */
-#define MFLAG_MFLAGXXXX2                                                       \
-    0x00000002 /* previously: Knowledge of monster is limited */
+#define MFLAG_PLAYER_KNOCKBACK 0x00000002 /* Runtime-only source of a forced fall. */
 #define MFLAG_SUMMONED                                                         \
     0x00000004 /* Monster is magically summoned by a song                      \
                 */

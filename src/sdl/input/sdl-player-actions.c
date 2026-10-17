@@ -92,13 +92,6 @@ enum {
     SDL_PLAYER_ACTION_MENU_SECTOR_SEGMENTS = 12
 };
 
-static bool sdl_player_action_menu_desktop_layout(void)
-{
-    return g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP
-        || g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_CONTROLLER
-        || g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
-}
-
 static cptr sdl_player_action_menu_description_for_kind(int kind)
 {
     switch (kind) {
@@ -900,7 +893,6 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
     float icon_size;
     float icon_radius;
     float max_outer;
-    bool desktop_layout;
     float step;
     float first_start;
     int count;
@@ -923,11 +915,11 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
     if (count <= 0)
         return false;
 
-    desktop_layout = sdl_player_action_menu_desktop_layout();
     max_outer = ((bounds.w < bounds.h) ? bounds.w : bounds.h) * 0.5f - 4.0f;
-    outer_radius = desktop_layout
-        ? sdl_touch_pane_clampf((float)view->cell_h * 5.4f, 104.0f, 196.0f)
-        : sdl_touch_pane_clampf((float)view->cell_h * 6.7f, 124.0f, 236.0f);
+    /* Use the same compact wheel on phones and PC handhelds. Sector hit
+     * testing and rendering both consume these bounds. */
+    outer_radius = sdl_touch_pane_clampf((float)view->cell_h * 5.4f,
+        104.0f, 196.0f);
     if (outer_radius > max_outer)
         outer_radius = max_outer;
     if (outer_radius < 44.0f)
@@ -993,7 +985,6 @@ static bool sdl_player_action_menu_layout_secondary(int owner_kind,
     float ring_width;
     float icon_size;
     float icon_radius;
-    bool desktop_layout;
     float step;
 
     if (!entries || !out_count)
@@ -1018,13 +1009,9 @@ static bool sdl_player_action_menu_layout_secondary(int owner_kind,
     if (sec_count <= 0)
         return false;
 
-    desktop_layout = sdl_player_action_menu_desktop_layout();
     ring_inner = owner->outer_radius;
     ring_width = sdl_touch_pane_clampf(
-        (owner->outer_radius - owner->inner_radius)
-            * (desktop_layout ? 0.72f : 0.85f),
-        desktop_layout ? 42.0f : 50.0f,
-        desktop_layout ? 72.0f : 88.0f);
+        (owner->outer_radius - owner->inner_radius) * 0.72f, 42.0f, 72.0f);
     icon_size = sdl_touch_pane_clampf(ring_width * 0.78f, 38.0f, 76.0f);
     if (icon_size > owner->rect.w)
         icon_size = owner->rect.w;
@@ -2375,7 +2362,7 @@ static void sdl_player_action_menu_render_tooltip(
         166);
     SDL_RenderRect(g_state.renderer, &box);
 
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
+    sdl_ui_render_text_texture(texture, NULL, &text_dst);
 }
 
 void sdl_player_action_menu_render(void)

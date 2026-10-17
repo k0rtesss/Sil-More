@@ -5,6 +5,8 @@ final class PlayGamesCloudSaves {
     PlayGamesCloudSaves(SilMoreActivity activity) {}
     boolean isConfigured() { return false; }
     boolean prepare(String path) { return true; }
-    int show(String path) { return 0; }
+    void checkpoint(String path) {}
+    void onResume() {}
+    void onPause() {}
     void onDestroy() {}
 }

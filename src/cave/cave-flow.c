@@ -1,6 +1,7 @@
 /* File: cave-flow.c */
 
 #include "cave-internal.h"
+#include "achievements.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
@@ -964,6 +965,14 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
     feat = terrain_history_construction_feature(y, x, feat);
     int old_feat = cave_feat[y][x];
+    /* A replaced or opened lock cannot retain an earlier player-caused jam. */
+    if (character_dungeon && p_ptr && !p_ptr->restoring
+        && old_feat >= FEAT_DOOR_HEAD + 0x08 && old_feat <= FEAT_DOOR_TAIL
+        && old_feat != feat)
+        sil_achievements_forget_door(y, x);
+    if (character_dungeon && p_ptr && !p_ptr->restoring
+        && FEAT_IS_ICE(old_feat) && !FEAT_IS_ICE(feat))
+        sil_achievements_forget_ice(y, x);
     int old_flow_feature = cave_flow_feature(old_feat);
     int new_flow_feature = cave_flow_feature(feat);
     if (old_feat != feat)

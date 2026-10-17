@@ -794,6 +794,10 @@ struct monster_type
     byte confused; /* Monster is confused */
     s16b poisoned; /* Remaining poison damage, capped at 100 like the player. */
     s16b player_poisoned; /* Player-origin component of the remaining poison. */
+    s16b potion_poisoned; /* Thrown-potion subset of player-origin poison. */
+    u32b achievement_doom_rage_epoch; /* Exact attacker marked by Turin's defiance. */
+    u32b achievement_elbereth_turn; /* Player turn plus one of an actual morale loss. */
+    bool achievement_first_wolf; /* First ordinary wolf seen in this adventure. */
     s16b slowed; /* Monster is slowed */
     s16b hasted; /* Monster is hasted */
 
@@ -1255,6 +1259,18 @@ struct player_type
     u32b achievement_kills; /* Player-attributed kills, including poison. */
     u32b achievement_singing_turns; /* Paid player turns spent singing. */
     s16b achievement_comeback_depth; /* Floor on which a one-HP hit occurred. */
+    s16b achievement_fall_depth; /* Source floor of a pending survived fall. */
+    /* Current-floor lock jams, saved sparsely as coordinate pairs. */
+    byte achievement_jammed_doors[(MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 7) / 8];
+    u32b achievement_discovery_flags; /* Tracked crossings and first-wolf history. */
+    u32b achievement_rage_epoch; /* Separates distinct bouts of rage. */
+    s16b achievement_water_from_y, achievement_water_from_x;
+    s16b achievement_water_entry_y, achievement_water_entry_x;
+    s16b achievement_poison_from_y, achievement_poison_from_x;
+    s16b achievement_poison_entry_y, achievement_poison_entry_x;
+    s16b achievement_labyrinth_index;
+    s16b achievement_labyrinth_y, achievement_labyrinth_x;
+    byte achievement_frozen_tiles[(MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 7) / 8];
 
     s16b mhp; /* Max hit pts */
     s16b chp; /* Cur hit pts */

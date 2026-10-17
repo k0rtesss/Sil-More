@@ -4,9 +4,9 @@ package com.silqh.silmore;
 final class PlayGamesAchievements {
     PlayGamesAchievements(SilMoreActivity activity) { }
     boolean isConfigured() { return false; }
-    int unlockedMask() { return 0; }
+    long unlockedMask() { return 0; }
     void onResume() { }
     void onPause() { }
-    void sync(int unlockedMask) { }
+    void sync(long unlockedMask) { }
     void show() { }
 }

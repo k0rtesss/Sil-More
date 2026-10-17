@@ -135,38 +135,21 @@ static float sdl_touch_tutorial_callout_width_for_text(cptr title,
 float sdl_touch_tutorial_draw_text_line(cptr text, float x, float y,
     float max_w, int font_px, SDL_Color color, bool centered)
 {
-    TTF_Font* font;
-    SDL_Texture* texture;
-    SDL_FRect dst;
-    float scale = 1.0f;
-    int text_w = 0;
-    int text_h = 0;
-
+    int text_w = 0, text_h = 0;
     if (!text || !text[0] || font_px <= 0)
         return 0.0f;
-
-    font = sdl_touch_tutorial_font_for_height(font_px);
+    TTF_Font* font = sdl_touch_tutorial_font_for_height(font_px);
     if (!font)
         return 0.0f;
-
-    texture = config.bigger_font && max_w > 0.0f
-        ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
+    SDL_Texture* texture = max_w > 0.0f
+        ? sdl_ui_wrapped_text_texture(font, text, MAX(1, (int)max_w), color,
             &text_w, &text_h)
         : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
     if (!texture)
         return 0.0f;
-
-    if (!config.bigger_font && max_w > 0.0f && text_w > 0 && (float)text_w > max_w)
-        scale = max_w / (float)text_w;
-
-    dst = (SDL_FRect){
-        .x = centered ? x - (float)text_w * scale * 0.5f : x,
-        .y = y,
-        .w = (float)text_w * scale,
-        .h = (float)text_h * scale,
-    };
-
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_FRect dst = { centered ? x - (float)text_w * 0.5f : x,
+        y, (float)text_w, (float)text_h };
+    sdl_ui_render_text_texture(texture, NULL, &dst);
     return dst.h;
 }
 

@@ -266,7 +266,7 @@ void sdl_menu_font_button_render(void)
         if (text) {
             SDL_FRect dst = {button.x + (button.w - width) * 0.5f,
                 button.y + (button.h - height) * 0.5f, width, height};
-            SDL_RenderTexture(g_state.renderer, text, NULL, &dst);
+            sdl_ui_render_text_texture(text, NULL, &dst);
         }
     }
 }

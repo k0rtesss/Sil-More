@@ -40,16 +40,42 @@ configuration and Play Games project, enable Saved Games, and register the
 Google Play app-signing certificate in the Android OAuth credential. Upload-key
 signing is still required for the AAB sent to Play Console.
 
-Open **Main menu > Cloud saves** (`w`) and choose **Save to cloud** or **Restore
-from cloud**. These are manual whole-profile operations. The native game first
-checkpoints progress and pauses while the provider dialog is open. Replacing a
-different cloud profile requires confirmation; provider conflicts present the
-available versions for a choice. A successful offline SDK commit may be queued
-locally until Google reconnects.
+Cloud synchronization is automatic while signed in to Play Games. Before native
+progress is loaded at launch, the game checks cloud progress. A fresh installation
+downloads an existing profile; a device whose local profile still matches its
+last synchronized version can also load changes made on another device. The
+startup check times out after 15 seconds without a provider response. Choosing
+**Play offline** explicitly suspends automatic sync until the next launch; local
+saving continues.
 
-Restore validates the complete archive before queuing it, keeps a recovery copy
-of the previous local profile, and restarts the app. It applies both progress
-directories before native loading, with rollback for an interrupted replacement.
+Successful saves, background saves, finalized runs and session close capture the
+complete profile on the game thread, then upload an immutable copy asynchronously.
+Newer checkpoints replace queued older ones. Failed requests retry while the app
+is active and after resume; a successful offline SDK commit may be queued locally
+until Google reconnects. A download discovered during play waits for the next
+launch; it never replaces files beneath a running game.
+
+The device remembers the account and a fingerprint of the last common profile in
+`.play-cloud-sync`, outside the synchronized directories. Fingerprints compare
+file names and contents, independently of ZIP compression and timestamps. If both
+devices changed progress, or the Play Games account changes, automatic sync keeps
+the existing profiles and asks for a choice at launch. A conflict found during
+play displays a notice that the choice will be offered at the next launch. A local
+progress reset does not automatically restore or overwrite the previous cloud profile.
+
+There is no cloud entry in the main menu. If startup finds damaged cloud data,
+an invalid local synchronization record, an oversized local profile, or a previous
+local reset, it offers recovery at that point. **Continue locally** preserves the
+existing profiles; **Restore from cloud** explicitly loads the selected complete
+profile; **Back up this device** can repair a cloud copy after confirmation when
+there is a valid nonempty local checkpoint. Provider conflicts present the available
+versions for a choice, and a selected version is validated before resolving the
+provider conflict. Automatic sync never opens a manual sign-in prompt; an explicit
+recovery action can request sign-in.
+
+Restore validates the complete archive before queuing it and keeps a recovery copy
+of the previous local profile. It applies both progress directories before native
+loading, with rollback for an interrupted replacement.
 Recovery copies stay outside the synchronized roots as `.play-cloud-backup-*`.
 Temporary save/lock files are excluded from uploads.
 
@@ -60,6 +86,7 @@ without replacing local progress. The checked desktop profile compressed to
 
 ```powershell
 python scripts/check_cloud_saves.py --profile '<profile root>'
+python scripts/check_cloud_sync.py
 python scripts/check_cloud_profile_paths.py
 ```
 
@@ -70,7 +97,8 @@ automatically synchronize a Steam account with a Google account.
 
 Keep Play's Data safety declaration and the public privacy policy consistent
 with the Play Games SDK and optional Saved Games. Local archive/rollback tests,
-native path migration tests, platform-boundary achievement fixtures, and signed
+native path migration and synchronization fixtures, platform-boundary achievement fixtures, and signed
 build checks do not substitute for testing two real accounts/devices. Verify
-live sign-in, an earned achievement, an explicit cloud save/restore, cancellation,
-offline behavior and a conflict using the distributed beta.
+live sign-in, an earned achievement, automatic upload/launch restore, manual
+recovery, cancellation, offline retries, account switching, a conflict and a local
+progress reset using the distributed beta.

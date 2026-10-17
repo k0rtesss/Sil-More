@@ -13218,7 +13218,8 @@ void do_cmd_controller_settings(void)
                     break;
                 case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
                     cycle_desc =
-                        "Wait this long for a second D-pad direction to form a diagonal. "
+                        "During gameplay, wait this long for a second D-pad direction to form a diagonal. "
+                        "Recognized diagonals and menu navigation are immediate. "
                         "50 ms is the fastest setting, but makes diagonals harder to enter.";
                     break;
                 default:

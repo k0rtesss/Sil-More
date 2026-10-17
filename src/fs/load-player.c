@@ -481,6 +481,9 @@ errr rd_extra(void)
     p_ptr->achievement_kills = 0;
     p_ptr->achievement_singing_turns = 0;
     p_ptr->achievement_comeback_depth = -1;
+    p_ptr->achievement_fall_depth = -1;
+    memset(p_ptr->achievement_jammed_doors, 0,
+        sizeof(p_ptr->achievement_jammed_doors));
     if (savefile_version_at_least(0, 9, 8, 31))
     {
         byte achievement_marker;
@@ -493,6 +496,97 @@ errr rd_extra(void)
         p_ptr->achievement_flags &= SIL_ACH_RUN_FLAGS;
         if (p_ptr->achievement_comeback_depth < 0)
             p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
+    }
+    if (savefile_version_at_least(0, 9, 8, 34))
+    {
+        byte marker;
+        u16b count;
+        rd_byte(&marker);
+        if (marker != 0xAD) return -1;
+        rd_s16b(&p_ptr->achievement_fall_depth);
+        if (p_ptr->achievement_fall_depth < 0
+            || p_ptr->achievement_fall_depth > MORGOTH_DEPTH)
+        {
+            p_ptr->achievement_flags &= ~SIL_ACH_RUN_FALLING;
+            p_ptr->achievement_fall_depth = -1;
+        }
+        rd_u16b(&count);
+        if (count > MAX_DUNGEON_HGT * MAX_DUNGEON_WID) return -1;
+        for (unsigned i = 0; i < count; ++i)
+        {
+            byte y, x;
+            rd_byte(&y);
+            rd_byte(&x);
+            if (y >= MAX_DUNGEON_HGT || x >= MAX_DUNGEON_WID) return -1;
+            int index = y * MAX_DUNGEON_WID + x;
+            if (p_ptr->achievement_jammed_doors[index / 8] & (1u << (index % 8)))
+                return -1;
+            p_ptr->achievement_jammed_doors[index / 8] |= 1u << (index % 8);
+        }
+    }
+    else
+        p_ptr->achievement_flags &= ~SIL_ACH_RUN_FALLING;
+    p_ptr->achievement_discovery_flags = 0;
+    p_ptr->achievement_rage_epoch = 0;
+    sil_achievements_discovery_reset(false);
+    if (savefile_version_at_least(0, 9, 8, 35))
+    {
+        byte discovery_marker;
+        rd_byte(&discovery_marker);
+        if (discovery_marker != 0xAE) return -1;
+        rd_u32b(&p_ptr->achievement_discovery_flags);
+        p_ptr->achievement_discovery_flags &= SIL_ACH_DISC_FLAGS;
+        rd_u32b(&p_ptr->achievement_rage_epoch);
+        rd_s16b(&p_ptr->achievement_water_from_y);
+        rd_s16b(&p_ptr->achievement_water_from_x);
+        rd_s16b(&p_ptr->achievement_water_entry_y);
+        rd_s16b(&p_ptr->achievement_water_entry_x);
+        rd_s16b(&p_ptr->achievement_poison_from_y);
+        rd_s16b(&p_ptr->achievement_poison_from_x);
+        rd_s16b(&p_ptr->achievement_poison_entry_y);
+        rd_s16b(&p_ptr->achievement_poison_entry_x);
+        rd_s16b(&p_ptr->achievement_labyrinth_index);
+        rd_s16b(&p_ptr->achievement_labyrinth_y);
+        rd_s16b(&p_ptr->achievement_labyrinth_x);
+        if ((p_ptr->achievement_discovery_flags & SIL_ACH_DISC_CROSSING)
+            && (p_ptr->achievement_water_from_y < 0
+                || p_ptr->achievement_water_from_y >= MAX_DUNGEON_HGT
+                || p_ptr->achievement_water_from_x < 0
+                || p_ptr->achievement_water_from_x >= MAX_DUNGEON_WID
+                || p_ptr->achievement_water_entry_y < 0
+                || p_ptr->achievement_water_entry_y >= MAX_DUNGEON_HGT
+                || p_ptr->achievement_water_entry_x < 0
+                || p_ptr->achievement_water_entry_x >= MAX_DUNGEON_WID)) return -1;
+        if ((p_ptr->achievement_discovery_flags & SIL_ACH_DISC_POISON)
+            && (p_ptr->achievement_poison_from_y < 0
+                || p_ptr->achievement_poison_from_y >= MAX_DUNGEON_HGT
+                || p_ptr->achievement_poison_from_x < 0
+                || p_ptr->achievement_poison_from_x >= MAX_DUNGEON_WID
+                || p_ptr->achievement_poison_entry_y < 0
+                || p_ptr->achievement_poison_entry_y >= MAX_DUNGEON_HGT
+                || p_ptr->achievement_poison_entry_x < 0
+                || p_ptr->achievement_poison_entry_x >= MAX_DUNGEON_WID)) return -1;
+        if ((p_ptr->achievement_discovery_flags & SIL_ACH_DISC_LABYRINTH)
+            && (p_ptr->achievement_labyrinth_index < 0
+                || p_ptr->achievement_labyrinth_index >= 25
+                || p_ptr->achievement_labyrinth_y < 0
+                || p_ptr->achievement_labyrinth_y >= MAX_DUNGEON_HGT
+                || p_ptr->achievement_labyrinth_x < 0
+                || p_ptr->achievement_labyrinth_x >= MAX_DUNGEON_WID)) return -1;
+        u16b frozen_count;
+        rd_u16b(&frozen_count);
+        if (frozen_count > MAX_DUNGEON_HGT * MAX_DUNGEON_WID) return -1;
+        for (unsigned i = 0; i < frozen_count; ++i)
+        {
+            byte y, x;
+            rd_byte(&y);
+            rd_byte(&x);
+            if (y >= MAX_DUNGEON_HGT || x >= MAX_DUNGEON_WID) return -1;
+            int index = y * MAX_DUNGEON_WID + x;
+            if (p_ptr->achievement_frozen_tiles[index / 8] & (1u << (index % 8)))
+                return -1;
+            p_ptr->achievement_frozen_tiles[index / 8] |= 1u << (index % 8);
+        }
     }
     log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u", 
              p_ptr->oath_type, p_ptr->oaths_broken, (unsigned)load_byte_offset);

@@ -494,6 +494,11 @@ s32b object_value(const object_type* o_ptr)
  */
 bool object_similar(const object_type* o_ptr, const object_type* j_ptr)
 {
+    /* Provenance belongs to the actual forged item, never a found lookalike. */
+    if ((o_ptr->ident ^ j_ptr->ident)
+        & (IDENT_ACH_TELCHAR_SHARPNESS | IDENT_ACH_EOL_GALVORN))
+        return false;
+
     /* Require identical object types */
     if (o_ptr->k_idx != j_ptr->k_idx)
         return (false);

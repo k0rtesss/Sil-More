@@ -448,6 +448,8 @@ void change_song(int song)
         p_ptr->song2 = song;
     }
 
+    sil_achievements_song_begin();
+
     update_trees_song_light(previous_trees_bonus);
 
     if ((song_to_change == 1) && new_song_is_duel && (song != SNG_NOTHING))
@@ -586,6 +588,7 @@ void sing(void)
     bool abort_song = false;
 
     song_revealing_decay();
+    sil_achievements_song_begin();
 
     if (p_ptr->song1 == SNG_NOTHING)
     {
@@ -624,7 +627,6 @@ void sing(void)
     else
     {
         p_ptr->song_duration++;
-        sil_achievements_on_singing_turn();
     }
 
     if (singing(SNG_DISGUISE))
@@ -637,6 +639,7 @@ void sing(void)
         song_disguise_stop();
     }
 
+    sil_achievements_song_begin();
     for (type = 1; type <= 2; type++)
     {
         if (type == 1)
@@ -783,11 +786,18 @@ void sing(void)
             break;
     }
 
+    /* Count only a sustained turn whose complete Voice cost can be paid.
+     * Legitimate zero-cost ticks still count while the singer has Voice. */
+    if (!abort_song && p_ptr->csp >= cost)
+        sil_achievements_on_singing_turn();
+
     // pay the price of the singing
     if (p_ptr->csp >= cost)
         p_ptr->csp -= cost;
     else
         p_ptr->csp = 0;
+
+    if (!abort_song) sil_achievements_song_end(cost);
 
     p_ptr->redraw |= (PR_VOICE);
     p_ptr->redraw |= (PR_HP);

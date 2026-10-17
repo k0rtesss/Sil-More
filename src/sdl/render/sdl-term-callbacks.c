@@ -2734,7 +2734,7 @@ static void sdl_minimap_draw_large_text_box(const char* text, float anchor_x,
     SDL_RenderFillRect(g_state.renderer, &box);
     SDL_SetRenderDrawColor(g_state.renderer, accent.r, accent.g, accent.b, 255);
     SDL_RenderRect(g_state.renderer, &box);
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, NULL, &dst);
 }
 
 static void sdl_minimap_draw_hint_destination_label(const char* label,

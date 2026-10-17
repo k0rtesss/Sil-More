@@ -7,6 +7,13 @@
 #include "steamworks.h"
 #include <time.h>
 
+/* The atlas coordinates are shared with the store export, never generated art. */
+static const struct { int row, col; } achievement_icons[SIL_ACH_COUNT] = {
+#define SIL_ACHIEVEMENT_ICON(key, row, col, row2, col2, count) [SIL_ACH_##key] = { row, col },
+#include "achievement-icons.h"
+#undef SIL_ACHIEVEMENT_ICON
+};
+
 static bool platform_achievements_available(void)
 {
     return sil_steamworks_active() || sil_play_games_available();
@@ -20,7 +27,7 @@ static void show_platform_achievements(void)
 
 static void build_achievement_book(int page)
 {
-    char text[256];
+    char text[768];
     int earned = 0;
     for (int i = 0; i < SIL_ACH_COUNT; ++i)
         if (sil_achievement_unlocked_at(i)) ++earned;
@@ -35,21 +42,30 @@ static void build_achievement_book(int page)
     {
         const sil_achievement_definition *entry = sil_achievement_get(i);
         uint64_t unlocked = sil_achievement_unlocked_at(i);
+        int row = achievement_icons[i].row, col = achievement_icons[i].col;
+        if (entry->hidden && !unlocked)
+        {
+            /* The shared description symbol conceals the deed's identifying art. */
+            sdl_character_sheet_screen_add_book_icon_paragraph(
+                "Undiscovered achievement\nIts name and deed will be revealed when earned.",
+                TERM_SLATE, 32, 0);
+            continue;
+        }
         strnfmt(text, sizeof(text), "%s: %s", unlocked ? "Unlocked" : "Locked", entry->title);
-        sdl_character_sheet_screen_add_book_paragraph_colored(text,
-            unlocked ? TERM_YELLOW : TERM_SLATE);
-        sdl_character_sheet_screen_add_book_paragraph(entry->description);
         if (unlocked)
         {
             time_t when = (time_t)unlocked;
             struct tm *date = localtime(&when);
             char formatted[32];
             if (date && strftime(formatted, sizeof(formatted), "%Y-%m-%d", date))
-            {
-                strnfmt(text, sizeof(text), "Recorded %s", formatted);
-                sdl_character_sheet_screen_add_book_paragraph_colored(text, TERM_L_GREEN);
-            }
+                strnfmt(text, sizeof(text), "Unlocked: %s (%s)", entry->title, formatted);
         }
+        /* One paragraph keeps all 54 entries in the shared 64-paragraph budget;
+         * normal pagination and scrolling preserve the chosen readable font. */
+        size_t used = strlen(text);
+        strnfmt(text + used, sizeof(text) - used, "\n%s", entry->description);
+        sdl_character_sheet_screen_add_book_icon_paragraph(text,
+            unlocked ? TERM_YELLOW : TERM_SLATE, row, col);
     }
     sdl_character_sheet_screen_add_book_paragraph_colored(
         "Debug, cheat and practice games do not count.",

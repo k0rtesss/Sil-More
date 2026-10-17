@@ -230,13 +230,11 @@ static void sdl_hint_quest_draw_text(TTF_Font* font, cptr text,
         return;
     }
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         if (!wrapped && sdl_touch_pane_story_text_width(font, text) > rect->w)
             wrapped = true;
     }
-#endif
     texture = wrapped
         ? sdl_ui_wrapped_text_texture(font, text,
               MAX(1, (int)(rect->w + 0.5f)), color, &text_w, &text_h)
@@ -257,7 +255,8 @@ static void sdl_hint_quest_draw_text(TTF_Font* font, cptr text,
     if (center && dst.w < rect->w)
         dst.x += (rect->w - dst.w) * 0.5f;
 
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_FRect src = { 0, 0, dst.w, dst.h };
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 typedef struct sdl_hint_quest_context_rule {
@@ -731,7 +730,7 @@ static SDL_Texture* sdl_hint_quest_context_texture(TTF_Font* font,
             .w = (float)run_surface->w,
             .h = (float)run_surface->h,
         };
-        SDL_RenderTexture(g_state.renderer, run_texture, NULL, &dst);
+        sdl_ui_render_text_texture(run_texture, NULL, &dst);
         SDL_DestroyTexture(run_texture);
         SDL_DestroySurface(run_surface);
     }
@@ -791,18 +790,16 @@ static void sdl_hint_quest_draw_contextual_text(TTF_Font* font,
     if (!texture || width < 1 || height < 1)
         return;
     dst = (SDL_FRect){ rect->x, rect->y, (float)width, (float)height };
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, NULL, &dst);
 }
 
 static int sdl_hint_quest_body_px(const SDL_Rect* screen)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         (void)screen;
         return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     }
-#endif
     float short_side;
     bool portrait;
     int px;
@@ -849,12 +846,10 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
     portrait = screen.h > screen.w;
     out->body_px = sdl_hint_quest_body_px(&screen);
     out->title_px = (int)((float)out->body_px * 1.18f + 0.5f);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         out->title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
     }
-#endif
     out->line_h = (float)out->body_px * 1.22f;
     out->block_gap = sdl_touch_pane_clampf((float)out->body_px * 0.46f,
         8.0f, 22.0f);
@@ -897,8 +892,7 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
     gap = sdl_touch_pane_clampf((float)out->body_px * 0.40f,
         8.0f, 18.0f);
     title_h = (float)out->title_px * 1.22f;
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         {
             int text_h = 0;
@@ -911,7 +905,6 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
             title_h = MAX(title_h, (float)text_h);
         }
     }
-#endif
     if (g_hint_quest.show_tabs)
         tabs_h = MAX(44.0f, (float)out->body_px * 1.38f);
     section_h = g_hint_quest.section[0]
@@ -919,8 +912,7 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
     if (g_hint_quest.button_count > 0)
         footer_h = MAX(46.0f, (float)out->body_px * 1.56f);
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         if (g_hint_quest.show_tabs)
             tabs_h = MAX((float)out->body_px * 2.9f + 4.0f, (float)sdl_ui_min_tap_px());
@@ -932,7 +924,6 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
                 (float)sdl_ui_min_tap_px()) * rows + gap * (rows - 1);
         }
     }
-#endif
     /* On short tabbed pages, navigation already names this book and section.
      * Reserve two readable body lines before retaining those duplicate
      * headings. Keep the resolved body font and the tabs/Back actions. */
@@ -955,20 +946,16 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
                  * control rows still fit a complete line of the same font. */
                 float control_h = MAX(46.0f, out->line_h);
 
-#if SIL_SDL_MOBILE_BUILD
-                if (get_sdl_menu_bigger_font())
+                if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
                     control_h = MAX(control_h, (float)sdl_ui_min_tap_px());
-#endif
                 pad_y = 14.0f;
                 gap = 8.0f;
                 tabs_h = control_h;
                 if (footer_h > 0.0f)
                 {
                     int rows = 1;
-#if SIL_SDL_MOBILE_BUILD
-                    if (get_sdl_menu_bigger_font() && portrait)
+                    if (sdl_handheld_ui_active() && (get_sdl_menu_bigger_font() && portrait))
                         rows = (g_hint_quest.button_count + 1) / 2;
-#endif
                     footer_h = control_h * rows + gap * (rows - 1);
                 }
             }
@@ -1179,13 +1166,11 @@ static float sdl_hint_quest_block_height(TTF_Font* font,
     {
         float height = (float)measured_h
             + ((block->choice != 0) ? layout->card_pad_y * 2.0f : 0.0f);
-#if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_menu_bigger_font())
+        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         {
             if (block->choice != 0)
                 height = MAX(height, (float)sdl_ui_min_tap_px());
         }
-#endif
         return height;
     }
 }
@@ -1370,13 +1355,11 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
     }
     gap = sdl_touch_pane_clampf((float)layout->body_px * 0.42f,
         7.0f, 16.0f);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         gap = sdl_touch_pane_clampf((float)layout->body_px * 0.40f,
             8.0f, 18.0f);
     }
-#endif
     for (int i = 0; i < g_hint_quest.button_count; ++i)
     {
         int text_w = sdl_touch_pane_story_text_width(font,
@@ -1409,8 +1392,7 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
             .w = widths[i],
             .h = layout->footer.h
         };
-#if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_menu_bigger_font())
+        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         {
             {
                 SDL_Rect screen = sdl_menu_content_rect(sdl_get_layout_screen_rect());
@@ -1424,7 +1406,6 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
                     col_w, row_h };
             }
         }
-#endif
         bool hover = g_hint_quest.hover_choice == button->choice;
         SDL_Color text = hover ? gold : sdl_color_from_attr(button->attr);
 

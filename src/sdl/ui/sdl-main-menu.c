@@ -186,19 +186,14 @@ bool sdl_main_menu_overlay_hides_supporting_panes(void)
 int sdl_main_menu_pane_font_px(void)
 {
     /* A phone alone does not opt into the accessibility menu design. */
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
-#endif
     int auxiliary_size = sdl_menu_base_aux_font_size();
     int font_size = (auxiliary_size > 0)
         ? sdl_menu_font_px(MAX(8, MIN(48, auxiliary_size)))
-#if SIL_SDL_MOBILE_BUILD
-        /* Mobile: enlarge popup-menu font one notch (3/4 -> 4/5 of main). */
-        : sdl_menu_font_px(sdl_menu_auto_font_size_from_main(4, 5));
-#else
-        : sdl_menu_font_px(sdl_menu_auto_font_size_from_main(3, 4));
-#endif
+        : sdl_menu_font_px(sdl_handheld_ui_active()
+            ? sdl_menu_auto_font_size_from_main(4, 5)
+            : sdl_menu_auto_font_size_from_main(3, 4));
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
 
     if (font_px < 8)
@@ -299,32 +294,23 @@ float sdl_main_menu_draw_text(TTF_Font* font, cptr text, float x,
     main_menu_text_align align)
 {
     SDL_Texture* texture;
+    SDL_FRect src;
     SDL_FRect dst;
-    float scale = 1.0f;
-    float max_h;
     int text_w = 0;
     int text_h = 0;
 
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return 0.0f;
 
-    texture = get_sdl_menu_bigger_font()
-        ? sdl_ui_wrapped_text_texture(font, text, (int)max_w, color,
-            &text_w, &text_h)
-        : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
+    texture = sdl_ui_wrapped_text_texture(font, text,
+        MAX(1, (int)max_w), color, &text_w, &text_h);
     if (!texture)
         return 0.0f;
 
-    if (!get_sdl_menu_bigger_font() && text_w > 0 && (float)text_w > max_w)
-        scale = max_w / (float)text_w;
-    max_h = row_h * 0.86f;
-    if (!get_sdl_menu_bigger_font() && text_h > 0 && (float)text_h * scale > max_h)
-        scale = max_h / (float)text_h;
-    if (scale > 1.0f)
-        scale = 1.0f;
-
-    dst.w = (float)text_w * scale;
-    dst.h = (float)text_h * scale;
+    src = (SDL_FRect){ 0, 0, MIN((float)text_w, max_w),
+        MIN((float)text_h, row_h) };
+    dst.w = src.w;
+    dst.h = src.h;
     if (align == MAIN_MENU_TEXT_RIGHT)
         dst.x = x + max_w - dst.w;
     else if (align == MAIN_MENU_TEXT_CENTER)
@@ -333,7 +319,7 @@ float sdl_main_menu_draw_text(TTF_Font* font, cptr text, float x,
         dst.x = x;
     dst.y = y + (row_h - dst.h) * 0.5f;
 
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
     return dst.w;
 }
 
@@ -384,11 +370,8 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
 
     if (out) {
         *out = sdl_overlay_panel_rect(&anchor,
-#if SIL_SDL_MOBILE_BUILD
-            get_sdl_menu_bigger_font() ? PLACE_TOP_RIGHT : PLACE_TOP_CENTER,
-#else
-            PLACE_TOP_CENTER,
-#endif
+            sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
+                ? PLACE_TOP_RIGHT : PLACE_TOP_CENTER,
             (int)panel_w, (int)panel_h, &screen);
         out->y = (float)screen.y;
     }
@@ -495,18 +478,19 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         pad_y = 5.0f;
     if (row_h < (float)font_px + 3.0f)
         row_h = (float)font_px + 3.0f;
+    row_h = MAX(row_h, (float)text_h + 4.0f);
+    if (mono_font)
+        row_h = MAX(row_h, (float)TTF_GetFontHeight(mono_font) + 4.0f);
     if (get_sdl_menu_bigger_font()) {
         /* A touch list needs names and comfortable rows; shortcut keys still
          * work, but their extra column need not consume reading space. */
         shortcut_w = 0;
         row_h = MAX(44.0f, (float)text_h * 1.35f);
     }
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font()) {
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
         shortcut_w = 0;
         row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
     }
-#endif
 
     shortcut_gap = shortcut_w > 0 ? (float)font_px * 0.38f : 0.0f;
     if (shortcut_w > 0 && shortcut_gap < 5.0f)
@@ -520,7 +504,7 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         max_panel_w = (float)screen.w;
     panel_w = sdl_touch_pane_clampf(panel_w, 1.0f, max_panel_w);
 
-    if (get_sdl_menu_bigger_font()) {
+    {
         for (int i = 1; i <= MAIN_MENU_MAX; i++) {
             int width = 0;
             int height = 0;
@@ -530,8 +514,7 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         }
     }
 
-#if SIL_SDL_MOBILE_BUILD
-    if (!get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && !get_sdl_menu_bigger_font())
     {
         float overlay_margin = (float)sdl_overlay_margin_px();
 
@@ -539,19 +522,21 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         if (max_panel_h < 1.0f)
             max_panel_h = (float)screen.h;
 
+        float native_row_h = row_h;
+
         panel_h = max_panel_h;
         row_h = (panel_h - pad_y * 2.0f) / (float)MAIN_MENU_MAX;
         /* Keep the empty vertical gap between adjacent labels no larger than
          * the rendered label height. */
         if (row_h > (float)text_h * 2.0f)
             row_h = (float)text_h * 2.0f;
-        if (row_h < 1.0f)
-            row_h = 1.0f;
-        panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
-        visible_count = MAIN_MENU_MAX;
+        /* Short handheld windows scroll rather than clipping native glyphs. */
+        row_h = MAX(row_h, native_row_h);
+        visible_count = MAX(1, MIN(MAIN_MENU_MAX,
+            (int)((max_panel_h - pad_y * 2.0f) / row_h)));
+        panel_h = pad_y * 2.0f + row_h * (float)visible_count;
     }
     else
-#endif
     {
         panel_h = pad_y * 2.0f + row_h * (float)MAIN_MENU_MAX;
         max_panel_h = (float)screen.h - 12.0f;

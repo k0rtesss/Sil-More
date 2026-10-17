@@ -34,7 +34,8 @@ player_other *op_ptr = &options;
 cptr ANGBAND_DIR_APEX;
 bool character_generated = true;
 static int notifications, messages, syncs;
-static unsigned int remote, submitted;
+static uint64_t remote, submitted;
+#define ROAD_BIT (UINT64_C(1) << SIL_ACH_THE_ROAD_GOES_EVER_ON)
 static Uint64 ticks;
 static bool fail_flush, fail_rename;
 static bool broken_oath, blitz;
@@ -68,9 +69,15 @@ bool path_build(char *out, size_t size, cptr base, cptr name)
 void msg_print(cptr text) { assert(strstr(text, "Achievement unlocked:")); ++messages; }
 void sdl_popup_notification_show(cptr text)
 { assert(strstr(text, "Achievement unlocked:")); ++notifications; }
-void sil_play_games_sync(unsigned int mask) { submitted = mask; ++syncs; }
-unsigned int sil_play_games_unlocked(void) { return remote; }
+void sil_play_games_sync(uint64_t mask) { submitted = mask; ++syncs; }
+uint64_t sil_play_games_unlocked(void) { return remote; }
 
+/* Gameplay callback boundaries; full production routes have separate fixtures. */
+void sil_achievement_character_on_player_turn(void) {}
+void sil_achievement_character_on_monster_killed(int m,int who) { (void)m;(void)who; }
+void sil_achievements_discovery_reset(bool fresh) { (void)fresh; }
+void sil_achievements_on_partition_entry(int y,int x) { (void)y;(void)x; }
+void sil_achievements_song_begin(void) {}
 static void clean_player(void)
 {
     memset(&player, 0, sizeof(player));
@@ -83,6 +90,11 @@ static void clean_player(void)
 }
 static void try_all(void)
 {
+    for (int id = SIL_ACH_NO_RINGS_ATTACHED; id < SIL_ACH_COUNT; ++id)
+        sil_achievements_on_event((sil_achievement_id)id);
+    sil_achievements_on_door_jammed(8, 9);
+    sil_achievements_on_door_bashed(8, 9);
+    sil_achievements_on_fall();
     sil_achievements_on_depth(10);
     sil_achievements_on_silmaril();
     sil_achievements_on_escape(1);
@@ -118,25 +130,25 @@ static char *saved_file(size_t *size)
 static void earn_all(void)
 {
     blocked_games();
-    sil_achievements_on_depth(9); assert(!sil_achievements_mask());
+    sil_achievements_on_depth(1); assert(!sil_achievements_mask());
     sil_achievements_on_escape(0); assert(!sil_achievements_mask());
     player.depth = 1; sil_achievements_on_escape(1); assert(!sil_achievements_mask());
     sil_achievements_on_depth(10);
     uint64_t first = sil_achievement_unlocked_at(SIL_ACH_INTO_THE_DEEP);
-    assert(first && sil_achievements_mask() == 1 && sil_achievements_saved());
+    assert(first && sil_achievements_mask() == (1 | ROAD_BIT) && sil_achievements_saved());
     sil_achievements_on_depth(20);
-    assert(notifications == 1 && sil_achievement_unlocked_at(0) == first);
+    assert(notifications == 2 && sil_achievement_unlocked_at(0) == first);
     clean_player(); /* A new character and a new Tale do not reset the profile. */
-    assert(sil_achievements_mask() == 1);
+    assert(sil_achievements_mask() == (1 | ROAD_BIT));
     sil_achievements_on_silmaril();
     sil_achievements_on_escape(1);
-    assert(sil_achievements_mask() == 7 && notifications == 3 && messages == 3);
+    assert(sil_achievements_mask() == (7 | ROAD_BIT) && notifications == 4 && messages == 4);
     sil_achievements_on_silmaril(); sil_achievements_on_escape(1);
-    assert(notifications == 3 && sil_achievements_saved());
+    assert(notifications == 4 && sil_achievements_saved());
     sil_achievements_update();
-    assert(submitted == 7 && syncs == 1);
+    assert(submitted == (7 | ROAD_BIT) && syncs == 1);
     sil_achievements_update(); assert(syncs == 1);
-    ticks = 1000; sil_achievements_update(); assert(syncs == 2 && submitted == 7);
+    ticks = 1000; sil_achievements_update(); assert(syncs == 2 && submitted == (7 | ROAD_BIT));
 }
 static void failed_write(void)
 {
@@ -144,7 +156,7 @@ static void failed_write(void)
     size_t size; char *original = saved_file(&size); assert(original);
     fail_flush = true;
     sil_achievements_on_silmaril();
-    assert(sil_achievements_mask() == 3 && !sil_achievements_saved());
+    assert(sil_achievements_mask() == (3 | ROAD_BIT) && !sil_achievements_saved());
     size_t kept_size; char *kept = saved_file(&kept_size);
     assert(kept && size == kept_size && !memcmp(kept, original, size)); SDL_free(kept);
     fail_flush = false; fail_rename = true;
@@ -154,7 +166,7 @@ static void failed_write(void)
     SDL_free(kept); SDL_free(original);
     fail_rename = false;
     ticks = 30001; sil_achievements_update();
-    assert(sil_achievements_saved() && sil_achievements_mask() == 3);
+    assert(sil_achievements_saved() && sil_achievements_mask() == (3 | ROAD_BIT));
 }
 static void preserve_invalid_file(void)
 {
@@ -166,6 +178,73 @@ static void preserve_invalid_file(void)
     SDL_free(kept); SDL_free(original);
 }
 static bool earned(int id) { return sil_achievement_unlocked_at(id) != 0; }
+static void expanded_conditions(const char *test)
+{
+    sil_achievements_begin_run();
+    player.depth = 5;
+    if (!strcmp(test, "new-events")) {
+        assert(SIL_ACH_COUNT == 54);
+        int hidden = 0;
+        for (int id = 0; id < SIL_ACH_COUNT; ++id)
+            hidden += sil_achievement_get(id)->hidden;
+        assert(hidden == 44);
+        assert(!strcmp(sil_achievement_get(SIL_ACH_THE_QUIET_ROAD)->title,
+            "A Very Polite Burglary"));
+        assert(!strcmp(sil_achievement_get(SIL_ACH_NO_RINGS_ATTACHED)->title,
+            "No Rings Attached"));
+        for (int id = SIL_ACH_NO_RINGS_ATTACHED; id < SIL_ACH_COUNT; ++id) {
+            int before = notifications;
+            sil_achievements_on_event((sil_achievement_id)id);
+            assert(earned(id) && notifications == before + 1);
+            sil_achievements_on_event((sil_achievement_id)id);
+            assert(notifications == before + 1);
+        }
+        assert(sil_achievements_saved());
+    } else if (!strcmp(test, "door-history")) {
+        sil_achievements_on_door_bashed(8, 9);
+        assert(!earned(SIL_ACH_KNOCK_WITH_YOUR_HEAD));
+        sil_achievements_on_door_jammed(8, 9);
+        sil_achievements_on_door_jammed(8, 10);
+        sil_achievements_on_door_bashed(9, 9);
+        assert(!earned(SIL_ACH_KNOCK_WITH_YOUR_HEAD));
+        sil_achievements_forget_door(8, 9);
+        sil_achievements_on_door_bashed(8, 9);
+        assert(!earned(SIL_ACH_KNOCK_WITH_YOUR_HEAD));
+        sil_achievements_on_level_entry(true);
+        sil_achievements_on_door_bashed(8, 10);
+        assert(earned(SIL_ACH_KNOCK_WITH_YOUR_HEAD));
+    } else if (!strcmp(test, "door-level")) {
+        sil_achievements_on_door_jammed(8, 9);
+        sil_achievements_on_level_entry(false);
+        sil_achievements_on_door_bashed(8, 9);
+        assert(!earned(SIL_ACH_KNOCK_WITH_YOUR_HEAD));
+        options.opt[OPT_cheat_peek] = true;
+        sil_achievements_on_door_jammed(8, 9);
+        options.opt[OPT_cheat_peek] = false;
+        sil_achievements_on_door_bashed(8, 9);
+        assert(!earned(SIL_ACH_KNOCK_WITH_YOUR_HEAD));
+        sil_achievements_on_door_jammed(-1, 8);
+        sil_achievements_on_door_jammed(MAX_DUNGEON_HGT, 0);
+    } else if (!strcmp(test, "fall-arrival")) {
+        sil_achievements_on_level_entry(false);
+        assert(!earned(SIL_ACH_DOWN_TO_GOBLIN_TOWN));
+        player.is_dead = true;
+        sil_achievements_on_fall();
+        assert(!(player.achievement_flags & SIL_ACH_RUN_FALLING));
+        player.is_dead = false;
+        sil_achievements_on_fall();
+        assert(!earned(SIL_ACH_DOWN_TO_GOBLIN_TOWN));
+        assert(player.achievement_fall_depth == 5);
+        sil_achievements_on_level_entry(true); /* No descent occurred. */
+        assert(!earned(SIL_ACH_DOWN_TO_GOBLIN_TOWN));
+        sil_achievements_on_fall();
+        player.depth += 2;
+        sil_achievements_on_level_entry(false);
+        assert(earned(SIL_ACH_DOWN_TO_GOBLIN_TOWN));
+        assert(!(player.achievement_flags & SIL_ACH_RUN_FALLING));
+        assert(player.achievement_fall_depth == -1);
+    } else assert(false);
+}
 static void escape_challenges(const char *test)
 {
     if (!strcmp(test, "triple")) {
@@ -273,8 +352,8 @@ int main(int argc, char **argv)
     assert(!sil_achievement_unlocked_at(-1));
     if (!strcmp(argv[1], "earn")) earn_all();
     else if (!strcmp(argv[1], "reload")) {
-        assert(sil_achievements_mask() == 7 && sil_achievements_saved());
-        sil_achievements_update(); assert(submitted == 7 && !notifications);
+        assert(sil_achievements_mask() == (7 | ROAD_BIT) && sil_achievements_saved());
+        sil_achievements_update(); assert(submitted == (7 | ROAD_BIT) && !notifications);
     } else if (!strcmp(argv[1], "failed-write")) failed_write();
     else if (!strcmp(argv[1], "invalid")) preserve_invalid_file();
     else if (!strcmp(argv[1], "import")) {
@@ -303,6 +382,8 @@ int main(int argc, char **argv)
         sil_achievements_on_run_completed(); sil_achievements_on_tale_completed();
         assert(!earned(SIL_ACH_THE_LONG_TALE));
     }
+    else if (!strcmp(argv[1], "new-events") || !strncmp(argv[1], "door-", 5)
+        || !strcmp(argv[1], "fall-arrival")) expanded_conditions(argv[1]);
     else if (!strcmp(argv[1], "comeback")) comeback();
     else if (!strcmp(argv[1], "craft-combat")) craft_and_combat();
     else if (!strncmp(argv[1], "tale-", 5)) tale(argv[1]);
@@ -343,10 +424,10 @@ def main():
         run("earn", profile)
         run("reload", profile)
         payload = json.loads((profile / "achievements.json").read_text())
-        assert payload["version"] == 1 and len(payload["unlocked"]) == 3
+        assert payload["version"] == 1 and len(payload["unlocked"]) == 4
         for case in ("failed-write", "import"):
             run(case, base / case)
-        for case in ("triple", "pacifist", "killer", "legacy-run", "oath", "song", "gates", "taint", "comeback", "craft-combat", "tale-repeat", "tale-blitz", "tale-discard"):
+        for case in ("triple", "pacifist", "killer", "legacy-run", "oath", "song", "gates", "taint", "comeback", "craft-combat", "tale-repeat", "tale-blitz", "tale-discard", "new-events", "door-history", "door-level", "fall-arrival"):
             run(case, base / case)
         run("tale-first", base / "long-tale")
         run("tale-second", base / "long-tale")

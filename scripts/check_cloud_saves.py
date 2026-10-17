@@ -53,6 +53,23 @@ public final class CloudSaveFixture {
     static int countBackups(File root) {
         return root.listFiles(file -> file.getName().startsWith(".play-cloud-backup-")).length;
     }
+    static byte[] repack(byte[] bytes) throws Exception {
+        Map<String, byte[]> files = new TreeMap<>(Collections.reverseOrder());
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) files.put(entry.getName(), zip.readAllBytes());
+        }
+        ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytesOut)) {
+            zip.setLevel(0);
+            for (String name : files.keySet()) {
+                ZipEntry entry = new ZipEntry(name);
+                entry.setTime(1700000000000L);
+                zip.putNextEntry(entry); zip.write(files.get(name)); zip.closeEntry();
+            }
+        }
+        return bytesOut.toByteArray();
+    }
     static void tests(File root) throws Exception {
         root.mkdirs();
         put(root, "save/hero", "character and retained levels");
@@ -65,6 +82,16 @@ public final class CloudSaveFixture {
         put(root, "data/monster.raw", "generated data");
         byte[] original = CloudSaveArchive.capture(root);
         check(Arrays.equals(original, CloudSaveArchive.capture(root)), "Archive was not deterministic");
+        CloudSaveArchive.Profile identity = CloudSaveArchive.inspect(root, original);
+        check(!identity.empty && identity.fingerprint.length() == 64, "Profile fingerprint missing");
+        byte[] differentlyPacked = repack(original);
+        check(!Arrays.equals(original, differentlyPacked), "Fixture did not change ZIP representation");
+        check(identity.fingerprint.equals(CloudSaveArchive.inspect(root, differentlyPacked).fingerprint), "ZIP metadata/order/compression changed logical profile identity");
+        put(root, "save/hero", "changed gameplay");
+        check(!identity.fingerprint.equals(CloudSaveArchive.inspect(root, CloudSaveArchive.capture(root)).fingerprint), "Changed character content retained profile identity");
+        put(root, "save/hero", "character and retained levels");
+        File empty = new File(root.getParentFile(), "empty-profile"); empty.mkdirs();
+        check(CloudSaveArchive.inspect(empty, CloudSaveArchive.capture(empty)).empty, "Empty profile not recognized");
         Set<String> names = new HashSet<>();
         try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(original))) {
             ZipEntry entry; while ((entry = zip.getNextEntry()) != null) names.add(entry.getName());
@@ -120,7 +147,7 @@ public final class CloudSaveFixture {
         try { CloudSaveArchive.capture(tooLarge); throw new AssertionError("Oversized cloud save accepted"); }
         catch (IOException expected) {}
         check(new File(tooLarge, "save/hero").length() == random.length, "Size failure changed local progress");
-        System.out.println("PASS: complete profile, deterministic capture, validation, size bounds, local backup, atomic activation and crash rollback");
+        System.out.println("PASS: complete profile, deterministic capture, representation-independent fingerprints, validation, size bounds, local backup, atomic activation and crash rollback");
     }
     public static void main(String[] args) throws Exception {
         if (args.length == 2 && args[0].equals("measure")) {

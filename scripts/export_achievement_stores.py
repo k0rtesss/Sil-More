@@ -17,7 +17,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Points are multiples of five, with harder victories worth more (680 total).
+# Points are multiples of five, with harder victories worth more (1000 total).
 POINTS = {
     "INTO_THE_DEEP": 10, "LIGHT_IN_DARKNESS": 25,
     "BACK_TO_STARLIGHT": 50, "THREE_LIGHTS_IN_EXILE": 100,
@@ -26,27 +26,63 @@ POINTS = {
     "A_NAME_WORTH_REMEMBERING": 25, "SONG_BENEATH_THE_MOUNTAIN": 50,
     "THERE_AND_BACK_AGAIN": 25, "BY_A_THREAD": 25,
     "LIGHT_OF_THE_ELDAR": 10, "THE_LONG_TALE": 100,
+    "NO_RINGS_ATTACHED": 15,
+    "CABED_EN_ARAS": 15,
+    "OFT_EVIL_WILL": 15,
+    "THE_HASTY_STROKE": 15,
+    "A_FEW_LEAVES": 15,
+    "TWO_WEAPONS": 15,
+    "FOR_EXTERNAL_USE_ONLY": 15,
+    "FLY_YOU_FOOL": 15,
+    "KNOCK_WITH_YOUR_HEAD": 15,
+    "DOWN_TO_GOBLIN_TOWN": 15,
+    "ATHELAS_OUT_OF_STOCK": 15,
+    "ANGBAND_MAINTENANCE": 15,
+    "THE_ROAD_GOES_EVER_ON": 5,
+    "SOMETHING_TOOKISH": 5,
+    "FLIES_AND_SPIDERS": 5,
+    "NOT_EVEN_CARCHAROTH": 5,
+    "THE_FORDS_OF_SIRION": 5,
+    "HELCARAXE": 5,
+    "FIRE_AND_WATER": 5,
+    "THE_FIRES_OF_THANGORODRIM": 5,
+    "THROUGH_NAN_DUNGORTHEB": 5,
+    "A_JOURNEY_IN_THE_DARK": 5,
+    "A_MAP_OF_THE_IRON_HELLS": 5,
+    "A_ELBERETH_GILTHONIEL": 5,
+    "RELEASE_FROM_BONDAGE": 5,
+    "TWO_THEMES_ONE_VOICE": 5,
+    "YOU_CANNOT_PASS": 5,
+    "FELAGUNDS_ANSWER": 5,
+    "A_WILL_OF_YOUR_OWN": 5,
+    "HURINS_DEFIANCE": 5,
+    "NO_LONGER_BINDING": 5,
+    "A_FOOLS_HOPE": 5,
+    "A_SINGLE_SPARK": 5,
+    "ON_THE_OTHER_HAND": 5,
+    "IRON_CLEAVER": 5,
+    "OUT_OF_THIN_ORE": 5,
+    "CLAD_IN_THE_NIGHT": 5,
+    "A_DREAM_UPON_THE_DARK_LORD": 5,
+    "NEITHER_VOICE_DIMINISHED": 5,
+    "DOOM_CAN_WAIT": 5,
 }
 
 # Existing 16x16 gameplay tiles. Coordinates are (row, column), matching the
 # T: entries in the named lib/edit template. No new artwork is drawn.
-ICON_TILES = {
-    "INTO_THE_DEEP": {"tiles": [(0, 25)], "source": "terrain.txt N:81 down staircase"},
-    "LIGHT_IN_DARKNESS": {"tiles": [(5, 28)], "source": "object.txt N:20 Massive Iron Crown"},
-    "BACK_TO_STARLIGHT": {"tiles": [(12, 16)], "source": "object.txt N:131 Silmaril"},
-    "THREE_LIGHTS_IN_EXILE": {"tiles": [(12, 16)] * 3, "source": "object.txt N:131 Silmaril, three copies"},
-    "THE_SHADOW_FALLS": {"tiles": [(10, 18)], "source": "monster.txt N:251 Morgoth"},
-    "THE_QUIET_ROAD": {"tiles": [(5, 2)], "source": "object.txt N:106 Cloak"},
-    "WORD_UNBROKEN": {"tiles": [(6, 20)], "source": "flavor.txt N:1 Serpentine Ring of Barahir"},
-    "FORGED_BY_YOUR_HAND": {"tiles": [(15, 0)], "source": "terrain.txt N:69 forge"},
-    "A_NAME_WORTH_REMEMBERING": {"tiles": [(6, 6)], "source": "object.txt N:70 Star-Iron Greatsword"},
-    "SONG_BENEATH_THE_MOUNTAIN": {"tiles": [(2, 22)], "source": "flavor.txt N:101 Silver horn"},
-    "THERE_AND_BACK_AGAIN": {"tiles": [(0, 22)], "source": "terrain.txt N:80 up staircase"},
-    "BY_A_THREAD": {"tiles": [(3, 0)], "source": "flavor.txt N:193 Miruvor"},
-    "LIGHT_OF_THE_ELDAR": {"tiles": [(2, 31)], "source": "object.txt N:130 Feanorian Lamp"},
-    "THE_LONG_TALE": {"tiles": [(32, 25)], "source": "object.txt N:492 Scroll of the First Sentence"},
-}
+def icon_tiles():
+    """Read the same existing-sprite mapping used by the in-game book."""
+    source = (ROOT / "src/achievement-icons.h").read_text(encoding="utf-8")
+    icons = {}
+    pattern = r"^SIL_ACHIEVEMENT_ICON\(([A-Z_]+), (\d+), (\d+), (\d+), (\d+), (\d+)\) /\* (.*?) \*/$"
+    for key, row, col, row2, col2, count, origin in re.findall(pattern, source, re.M):
+        first, last = (int(row), int(col)), (int(row2), int(col2))
+        tiles = [first] * int(count) if first == last else [first, last]
+        icons[key] = {"tiles": tiles, "source": origin}
+    return icons
 
+
+ICON_TILES = icon_tiles()
 
 def catalogue():
     source = (ROOT / "src/achievements.c").read_text(encoding="utf-8")
@@ -55,9 +91,9 @@ def catalogue():
         raise ValueError("Cannot find native achievement catalogue")
     literal = r'"(?:[^"\\]|\\.)*"'
     rows = []
-    for match in re.finditer(r"\{\s*(" + literal + r")\s*,\s*(" + literal + r")\s*,\s*(" + literal + r")\s*\}", block[1]):
-        key, title, description = (json.loads(value) for value in match.groups())
-        rows.append({"key": key, "title": title, "description": description})
+    for match in re.finditer(r"\{\s*(" + literal + r")\s*,\s*(" + literal + r")\s*,\s*(" + literal + r")\s*,\s*(true|false)\s*\}", block[1]):
+        key, title, description, hidden = (json.loads(value) for value in match.groups())
+        rows.append({"key": key, "title": title, "description": description, "hidden": hidden})
     header = (ROOT / "src/achievements.h").read_text(encoding="utf-8")
     enum = re.search(r"typedef enum sil_achievement_id\s*\{(.*?)\}", header, re.S)
     keys = re.findall(r"\bSIL_ACH_([A-Z_]+)\b", enum[1])[:-1]
@@ -86,14 +122,16 @@ def export(output, node, sharp):
     mappings = []
     for index, row in enumerate(rows, 1):
         key = row["key"]
-        definitions.append([key, "", "Client", "false", "false", "", 0, 0])
+        definitions.append([key, "", "Client", str(row["hidden"]).lower(), "false", "", 0, 0])
         localizations.extend([[key, "name", row["title"]], [key, "description", row["description"]]])
         # Google disallows commas in these fields even when CSV-quoted.
         description = row["description"].replace(", 20 trained Song and", " and 20 trained Song with").replace(", before", " before")
-        if "," in row["title"] or "," in description or len(row["title"]) > 100 or len(description) > 500:
+        title = row["title"].replace(",", "")
+        description = description.replace(",", ";")
+        if len(title) > 100 or len(description) > 500:
             raise ValueError("Invalid Google metadata for " + key)
-        metadata.append([row["title"], description, "False", "", "Revealed", POINTS[key], index])
-        mappings.append([row["title"], key + ".png"])
+        metadata.append([title, description, "False", "", "Hidden" if row["hidden"] else "Revealed", POINTS[key], index])
+        mappings.append([title, key + ".png"])
     (steam_dir / "5442160-achievements-definitions.csv").write_text(csv_text(definitions), encoding="utf-8")
     (steam_dir / "5442160-achievements-localization.csv").write_text(csv_text(localizations), encoding="utf-8")
     (play_dir / "AchievementsMetadata.csv").write_text(csv_text(metadata), encoding="utf-8")
@@ -113,8 +151,8 @@ const root = process.argv[2], atlas = process.argv[3];
 (async () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'icon-sources.json')));
   for (const [key, info] of Object.entries(manifest.icons)) {
-    for (const [folder, size, singleScale, tripleScale] of [['steam',256,12,4],['google-play',512,24,8]]) {
-      const scale = info.tiles.length === 1 ? singleScale : tripleScale;
+    for (const [folder, size, singleScale] of [['steam',256,12],['google-play',512,24]]) {
+      const scale = info.tiles.length === 1 ? singleScale : Math.floor(singleScale / info.tiles.length);
       const width = 16 * scale, total = width * info.tiles.length;
       const layers = [];
       for (const [i, [row, col]] of info.tiles.entries()) {
@@ -147,7 +185,8 @@ const root = process.argv[2], atlas = process.argv[3];
         lines.append(line)
         label = ''.join(f'<tspan x="{x + 150}" dy="{0 if i == 0 else 24}">{html.escape(text)}</tspan>' for i, text in enumerate(lines))
         cards.append(icon + f'<text x="{x + 150}" y="{y + 224}" text-anchor="middle" fill="#f2e7d1" font-family="sans-serif" font-size="19">{label}</text>')
-    sheet = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1100"><rect width="1200" height="1100" fill="#0d1420"/>' + ''.join(cards) + '</svg>'
+    height = ((len(rows) + 3) // 4) * 275
+    sheet = f'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="{height}"><rect width="1200" height="{height}" fill="#0d1420"/>' + ''.join(cards) + '</svg>'
     (output / "preview.svg").write_text(sheet, encoding="utf-8")
     subprocess.run([node, "-e", "require(process.argv[1])(process.argv[2]).png().toFile(process.argv[3]).catch(e=>{console.error(e.message);process.exit(1)})", sharp, str(output / "preview.svg"), str(output / "preview.png")], check=True)
     bundle = output / "google-play-achievements.zip"
@@ -157,9 +196,20 @@ const root = process.argv[2], atlas = process.argv[3];
                 if path.stat().st_size >= 1000000:
                     raise ValueError("Google import files must be under 1 MB")
                 archive.write(path, path.name)
+    # Existing projects must append only the new rows; importing all rows creates
+    # duplicates instead of preserving the original opaque provider IDs.
+    first_new = next(i for i, row in enumerate(rows) if row["key"] == "THE_LONG_TALE") + 1
+    expansion = output / "google-play-new-achievements.zip"
+    with zipfile.ZipFile(expansion, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("AchievementsMetadata.csv", csv_text(metadata[first_new:]))
+        archive.writestr("AchievementsIconsMappings.csv", csv_text(mappings[first_new:]))
+        for row in rows[first_new:]:
+            path = play_dir / (row["key"] + ".png")
+            archive.write(path, path.name)
     print(f"Exported {len(rows)} achievements ({sum(POINTS.values())} Google points) to {output}")
     print(f"Steam: upload the two CSV files and all *_ACHIEVED.png icons in {steam_dir}")
-    print(f"Google Play: import {bundle}")
+    print(f"Google Play new project: import {bundle}")
+    print(f"Google Play existing project: append only {expansion}; edit existing metadata by existing ID")
 
 
 def main():

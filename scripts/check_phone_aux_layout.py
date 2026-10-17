@@ -14,6 +14,7 @@ from check_bigger_font_layout import HARNESS as BASE
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/phone-aux-check"
+CASES = [(720, 1600, 2), (1080, 2340, 2.75), (1080, 2400, 2.625)]
 PREFIX = CARD[:CARD.index("static void field(")].replace(
     '#define sdl_touch_tutorial_draw_text_line',
     '#include "sdl/main-sdl-private.h"\n#undef SIL_SDL_MOBILE_BUILD\n'
@@ -252,6 +253,7 @@ int main(int argc,char **argv)
     g_state.palette[TERM_DARK]=(SDL_Color){0,0,0,255};
     for(int big=1;big<2;big++) {
         config.bigger_font=big; fixture.active=false;
+        for (int menu=0; menu<SDL_MENU_FONT_COUNT; menu++) config.menu_bigger_font[menu]=big;
         check_songs(); check_questions(); check_large_tutorial(); check_touch_panels();
         check_touch_footer();
         check_question_backdrop();
@@ -291,7 +293,7 @@ def main():
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl," + ",".join("--wrap="+w for w in wraps),
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    for width,height,density in [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
+    for width,height,density in CASES:
         for w,h in [(width,height),(height,width)]:
             subprocess.run([str(exe),str(w),str(h),str(density),
                 str(ROOT/"lib/xtra/font/EBGaramond-Regular.ttf"),

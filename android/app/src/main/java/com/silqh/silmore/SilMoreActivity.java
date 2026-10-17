@@ -47,20 +47,17 @@ public class SilMoreActivity extends SDLActivity {
 		return playGamesCloudSaves.isConfigured();
 	}
 
-	public int showPlayGamesCloudSaves(String path) {
-		return playGamesCloudSaves.show(path);
-	}
-
-	public boolean restartAfterCloudRestore() {
-		return restartAfterProgressReset();
+	public int checkpointPlayGamesCloudSaves(String path) {
+		playGamesCloudSaves.checkpoint(path);
+		return 0;
 	}
 
 	/** JNI calls run on SDL's game thread; provider work belongs to the UI thread. */
-	public void syncPlayGamesAchievements(int unlockedMask) {
+	public void syncPlayGamesAchievements(long unlockedMask) {
 		runOnUiThread(() -> playGamesAchievements.sync(unlockedMask));
 	}
 
-	public int getPlayGamesAchievementMask() {
+	public long getPlayGamesAchievementMask() {
 		return playGamesAchievements.unlockedMask();
 	}
 
@@ -184,12 +181,14 @@ public class SilMoreActivity extends SDLActivity {
 	protected void onResume() {
 		super.onResume();
 		playGamesAchievements.onResume();
+		playGamesCloudSaves.onResume();
 		applyFullscreenLayout();
 		applyGameOrientation();
 	}
 
 	@Override
 	protected void onPause() {
+		playGamesCloudSaves.onPause();
 		playGamesAchievements.onPause();
 		super.onPause();
 	}

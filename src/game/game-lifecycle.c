@@ -7,6 +7,7 @@
  */
 #include "angband.h"
 #include "achievements.h"
+#include "cloud-saves.h"
 #include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "game/game-lifecycle.h"
@@ -29,6 +30,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+
+static bool close_game_save_succeeded;
+
 void do_cmd_escape(int silmarils)
 {
     /* Record before the completed run is marked dead and stopped. */
@@ -212,6 +216,7 @@ void do_cmd_suicide(void)
  */
 void do_cmd_save_game(void)
 {
+    close_game_save_succeeded = false;
     /* Disturb the player */
     disturb(1, 0);
 
@@ -249,7 +254,8 @@ void do_cmd_save_game(void)
     if (!run_mode_is_blitz())
         metarun_update_on_exit(false, false, 0, 0);
 
-    if (save_player())
+    close_game_save_succeeded = save_player();
+    if (close_game_save_succeeded)
     {
     log_debug("Game saved successfully");
         if (!save_game_quietly)
@@ -271,6 +277,8 @@ void do_cmd_save_game(void)
 #if defined(__ANDROID__) || defined(SIL_IOS)
         upsert_live_score_on_save();
 #endif
+
+        sil_cloud_saves_checkpoint();
 
         if (!save_game_quietly && p_ptr->playing && !p_ptr->leaving)
             sdl_popup_notification_show("Saved");
@@ -325,7 +333,8 @@ static void close_game_aux(void)
 
     /* Save dead player */
     log_info("saving dead player (noscore=0x%04X) -> '%s'", (unsigned)p_ptr->noscore, savefile);
-    if (!save_player())
+    close_game_save_succeeded = save_player();
+    if (!close_game_save_succeeded)
     {
         log_error("Death save failed - player data may be lost");
         msg_print("death save failed!");
@@ -418,6 +427,7 @@ static void close_game_aux(void)
 
     /* Final Look now owns the complete postmortem UI.  Choosing Quit there
      * returns directly to the welcome screen; there is no second tomb menu. */
+    if (close_game_save_succeeded) sil_cloud_saves_checkpoint();
     death_spectator_view();
 
     score_postmortem_clear();
@@ -601,6 +611,8 @@ void close_game(void)
 
     /* Forget the high score fd */
     highscore_fd = NULL;
+
+    if (close_game_save_succeeded) sil_cloud_saves_checkpoint();
 
     log_info("Game close sequence completed");
 

@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "player/killer.h"
@@ -414,6 +415,8 @@ static bool eat_food(object_type* o_ptr, bool* ident)
     if (disease_herb_matches(o_ptr))
     {
         *ident = cure_disease();
+        if (*ident && o_ptr->sval == SV_FOOD_SICKNESS)
+            sil_achievements_on_event(SIL_ACH_ATHELAS_OUT_OF_STOCK);
         return true;
     }
 

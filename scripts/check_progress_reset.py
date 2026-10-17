@@ -183,12 +183,16 @@ int main(int argc, char** argv)
         assert(SDL_GetPathInfo(save_path, NULL));
         return 0;
     }
-    if (streq(argv[1], "custom") || streq(argv[1], "custom-apex")) {
-        char error[1024];
+    if (streq(argv[1], "custom") || streq(argv[1], "custom-apex")
+        || streq(argv[1], "custom-metarun")) {
+        char error[1024], missing[4096];
+        assert(path_build(missing, sizeof(missing), fixture_root, "outside/missing"));
         if (streq(argv[1], "custom")) ANGBAND_DIR_SAVE = fixture_root;
-        else ANGBAND_DIR_APEX = install_path;
+        else if (streq(argv[1], "custom-apex")) ANGBAND_DIR_APEX = install_path;
+        else ANGBAND_DIR_METARUN = missing;
         assert(!sil_progress_reset_request_restart(error, sizeof(error)));
         assert(strstr(error, "custom") && !SDL_GetPathInfo(reset_marker, NULL));
+        assert(!SDL_GetPathInfo(missing, NULL));
         return 0;
     }
     if (streq(argv[1], "linked")) {
@@ -323,7 +327,7 @@ def main():
     source.write_text(HARNESS, encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        str(BUILD / "_deps/SDL"), "C:/msys64/mingw64/bin",
+        str(BUILD), str(BUILD / "_deps/SDL"), "C:/msys64/mingw64/bin",
         "C:/msys64/usr/bin", env["PATH"]])
     if os.name == "nt":
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -352,7 +356,8 @@ def main():
         executable = OUT / f"reset-check-{name}.exe"
         subprocess.run([*common, *defines, "-o", str(executable)],
                        cwd=BUILD, env=env, check=True)
-        for case in ("clear", "failure", "custom", "custom-apex", "linked", "invalid", "launch-failure", "launch"):
+        for case in ("clear", "failure", "custom", "custom-apex", "custom-metarun",
+                     "linked", "invalid", "launch-failure", "launch"):
             if name == "ios-policy" and case in ("launch", "launch-failure"):
                 continue
             with tempfile.TemporaryDirectory(prefix=f"{name}-{case}-", dir=OUT) as temp:
@@ -392,7 +397,8 @@ def main():
     if os.name == "nt":
         objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
         link_libs = ["@CMakeFiles/sil-more.dir/linkLibs.rsp"]
-        linker = [compiler[0]]
+        linker = [str(Path(compiler[0]).with_name("c++.exe"))
+                  if any(p.endswith(".cpp.obj") for p in objects) else compiler[0]]
     else:
         commands = subprocess.run(["ninja", "-t", "commands", "sil-more"], cwd=BUILD,
                                   check=True, capture_output=True, text=True).stdout

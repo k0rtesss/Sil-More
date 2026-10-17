@@ -3308,7 +3308,7 @@ void sdl_minimap_draw_prompt(sdl_view* d, int canvas_w, int canvas_h)
         SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
         SDL_RenderFillRect(g_state.renderer, &g_minimap.prompt_rect);
         if (texture)
-            SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+            sdl_ui_render_text_texture(texture, NULL, &dst);
         return;
     }
 

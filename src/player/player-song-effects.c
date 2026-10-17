@@ -1,6 +1,7 @@
 ﻿/* File: player/player-song-effects.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
@@ -75,6 +76,7 @@ void sing_song_of_freedom(int score)
                 {
                     /* Remove the trap */
                     cave_feat[y][x] = FEAT_FLOOR;
+                    sil_achievements_on_event(SIL_ACH_RELEASE_FROM_BONDAGE);
                 }
             }
 
@@ -87,6 +89,7 @@ void sing_song_of_freedom(int score)
                 {
                     /* Remove the trap */
                     cave_feat[y][x] = FEAT_FLOOR;
+                    sil_achievements_on_event(SIL_ACH_RELEASE_FROM_BONDAGE);
 
                     if (cave_info[y][x] & (CAVE_SEEN))
                     {
@@ -175,6 +178,7 @@ void sing_song_of_freedom(int score)
                 {
                     /* Disperse the rubble */
                     cave_set_feat(y, x, FEAT_FLOOR);
+                    sil_achievements_on_event(SIL_ACH_RELEASE_FROM_BONDAGE);
 
                     /* Update the flow code */
                     p_ptr->update |= (PU_UPDATE_VIEW | PU_MONSTERS);
@@ -248,9 +252,14 @@ void sing_song_of_challenge(int score)
         /* If successful, alert the monster and make it more aggressive */
         if (result > 0)
         {
+            int previous_alertness = m_ptr->alertness;
+            int previous_morale = m_ptr->tmp_morale;
             set_alertness(m_ptr, m_ptr->alertness + result);
             // boost morale and check for the monster turning aggressive
             m_ptr->tmp_morale = MAX(m_ptr->tmp_morale, 30);
+            if (m_ptr->alertness != previous_alertness
+                || m_ptr->tmp_morale != previous_morale)
+                sil_achievements_on_song_effect(SNG_CHALLENGE, i, -1);
             calc_morale(m_ptr);
             calc_stance(m_ptr);
         }
@@ -581,6 +590,8 @@ void sing_song_of_elbereth(int score)
         {
             /* Decrease temporary morale */
             m_ptr->tmp_morale -= result * 10;
+            m_ptr->achievement_elbereth_turn = (u32b)playerturn + 1u;
+            sil_achievements_on_song_effect(SNG_ELBERETH, i, -1);
         }
     }
 }
@@ -602,7 +613,7 @@ void sing_song_of_trees(int score)
     /* Light radius increase is handled separately in player-light.c calc_torch() */
     /* Shows damage messages to provide feedback when monsters are affected */
     /* IMPORTANT: Use uniform=true so dd doesn't decay with distance (damage is based on light_level at monster's position) */
-    u32b flg = PROJECT_BOOM | PROJECT_KILL | PROJECT_PASS | PROJECT_HIDE;
+    u32b flg = PROJECT_BOOM | PROJECT_KILL | PROJECT_PASS | PROJECT_HIDE | PROJECT_SONG;
     
     (void)project(-1, rad, py, px, py, px, dd, ds, dif, GF_LIGHT, flg, 0, true);
 }
@@ -647,7 +658,10 @@ void sing_song_of_lorien(int score)
         /* If successful, (partially) put the monster to sleep */
         if (result > 0)
         {
+            int previous_alertness = m_ptr->alertness;
             set_alertness(m_ptr, m_ptr->alertness - result);
+            if (m_ptr->alertness < previous_alertness)
+                sil_achievements_on_song_effect(SNG_LORIEN, i, previous_alertness);
         }
     }
 }
@@ -923,6 +937,7 @@ void sing_song_of_shattering(int score)
             {
                 /* Reduce by exactly 1 */
                 m_ptr->blow_ds_reduction[weapon_blow] += 1;
+                sil_achievements_on_song_effect(SNG_SHATTERING, i, -1);
 
                 if (weapon)
                     shatter_weapon_object(weapon, 1);
@@ -952,6 +967,7 @@ void sing_song_of_shattering(int score)
             {
                 /* Reduce by exactly 1 */
                 m_ptr->armor_ps_reduction += 1;
+                sil_achievements_on_song_effect(SNG_SHATTERING, i, -1);
 
                 if (armour)
                     shatter_armour_object(armour, 1);

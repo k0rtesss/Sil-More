@@ -743,9 +743,8 @@ int sdl_main_menu_button_height_for_screen(const SDL_Rect* screen)
         height = (float)font_px * 1.45f;
     if (max_height > 0.0f && height > max_height)
         height = max_height;
-#if SIL_SDL_MOBILE_BUILD
-    height = MAX(height, (float)sdl_ui_min_tap_px());
-#endif
+    if (sdl_handheld_ui_active())
+        height = MAX(height, (float)sdl_ui_min_tap_px());
     return MAX((int)(height + 0.5f), 1);
 }
 
@@ -4567,29 +4566,22 @@ int sdl_auto_font_size_from_main(int numerator, int denominator)
 
 int sdl_auto_aux_view_font_size(void)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (config.bigger_font)
+    if (sdl_handheld_ui_active() && config.bigger_font)
         return 16;
-#endif
     return sdl_auto_font_size_from_main(2, 3);
 }
 
 int sdl_auto_pane_font_size(enum pane_type type)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (config.bigger_font)
+    if (sdl_handheld_ui_active() && config.bigger_font)
         return (type == PANE_STATUS || type == PANE_STATUS_DEPTH
                 || type == PANE_DEPTH) ? 14 : 16;
-#endif
     if (type == PANE_STATUS || type == PANE_STATUS_DEPTH)
         return sdl_auto_font_size_from_main(1, 2);
     if (type == PANE_LEFT_PANEL || type == PANE_COMBAT || type == PANE_LOG)
-#if SIL_SDL_MOBILE_BUILD
-        /* Mobile: enlarge left-panel/combat/log fonts one notch (3/4 -> 4/5). */
-        return sdl_auto_font_size_from_main(4, 5);
-#else
-        return sdl_auto_font_size_from_main(3, 4);
-#endif
+        return sdl_handheld_ui_active()
+            ? sdl_auto_font_size_from_main(4, 5)
+            : sdl_auto_font_size_from_main(3, 4);
 
     return sdl_auto_aux_view_font_size();
 }
@@ -6106,7 +6098,8 @@ static bool sdl_startup_input_text(SDL_Renderer* renderer, TTF_Font* font,
     if (!surface)
         return false;
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FRect rect = {x, y, (float)surface->w, (float)surface->h};
+    SDL_FRect rect = {SDL_roundf(x), SDL_roundf(y),
+        (float)surface->w, (float)surface->h};
     SDL_DestroySurface(surface);
     if (!texture)
         return false;

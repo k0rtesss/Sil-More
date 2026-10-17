@@ -135,6 +135,7 @@ typedef enum sdl_desktop_handheld_kind {
 } sdl_desktop_handheld_kind;
 
 sdl_desktop_handheld_kind sdl_detect_desktop_handheld(void);
+bool sdl_handheld_ui_active(void);
 
 
 enum { SDL_MAIN_VIEW_ZOOM_MIN_MAP_SQUARES = 10 };
@@ -631,6 +632,9 @@ typedef struct sdl_character_sheet_screen_state {
      * canvas height) and mirrored into select_page_count. */
     char narrative_title[96];
     char narrative_paras[SDL_BOOK_MAX_PARAS][SDL_BOOK_PARA_LEN];
+    short narrative_icon_row[SDL_BOOK_MAX_PARAS]; /* -1: no atlas sprite */
+    short narrative_icon_col[SDL_BOOK_MAX_PARAS];
+    bool narrative_icon_book; /* Preserve native-size text with narrow icon columns. */
     int narrative_para_choice[SDL_BOOK_MAX_PARAS]; /* >= 0: clickable action */
     byte narrative_para_attr[SDL_BOOK_MAX_PARAS];
     bool narrative_para_break[SDL_BOOK_MAX_PARAS]; /* force a new page before this para */
@@ -3709,6 +3713,10 @@ SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text, SDL_Color color,
     int* out_width, int* out_height);
 SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text,
     int wrap_width, SDL_Color color, int* out_width, int* out_height);
+int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
+    float width, float height, bool wrapped);
+void sdl_ui_render_text_texture(SDL_Texture* texture,
+    const SDL_FRect* source, const SDL_FRect* destination);
 void sdl_ui_text_cache_clear(void);
 bool sdl_ui_scroll_indicator_layout(SDL_FRect viewport, float offset,
     float maximum, float visible, SDL_FRect* track, SDL_FRect* thumb);

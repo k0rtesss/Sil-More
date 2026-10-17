@@ -1254,31 +1254,16 @@ void sdl_status_pane_draw_text(TTF_Font* font, cptr text,
     SDL_Color color, float x, float y, float max_w, float row_h,
     bool right_align)
 {
-    SDL_Texture* texture;
-    SDL_FRect dst;
-    float scale = 1.0f;
-    int text_w = 0;
-    int text_h = 0;
-
+    int text_w = 0, text_h = 0;
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
-
-    texture = config.bigger_font
-        ? sdl_ui_wrapped_text_texture(font, text, MAX(1, (int)max_w), color,
-            &text_w, &text_h)
-        : sdl_ui_text_texture(font, text, color, &text_w, &text_h);
-    if (!texture)
-        return;
-
-    if (!config.bigger_font && text_w > 0 && (float)text_w > max_w)
-        scale = max_w / (float)text_w;
-
-    dst.w = (float)text_w * scale;
-    dst.h = (float)text_h * scale;
-    dst.x = right_align ? x + max_w - dst.w : x;
-    dst.y = y + (row_h - dst.h) * 0.5f;
-
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, text,
+        MAX(1, (int)max_w), color, &text_w, &text_h);
+    SDL_FRect src = { 0, 0, MIN((float)text_w, max_w),
+        MIN((float)text_h, row_h) };
+    SDL_FRect dst = { right_align ? x + max_w - src.w : x,
+        y + (row_h - src.h) * 0.5f, src.w, src.h };
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 static Uint64 sdl_status_pane_hash_bytes(Uint64 hash, const void* data,

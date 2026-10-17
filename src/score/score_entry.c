@@ -7,6 +7,7 @@
  */
 #include "angband.h"
 #include "game/progress-reset.h"
+#include "cloud-saves.h"
 #include "score/score_entry.h"
 #include "score/score_file_compat.h"
 #include "score/score_io.h"
@@ -585,6 +586,7 @@ bool mobile_autosave_game(cptr reason)
         }
 
         log_info("mobile autosave completed (%s)", reason ? reason : "unspecified");
+        sil_cloud_saves_checkpoint();
     }
     else
     {

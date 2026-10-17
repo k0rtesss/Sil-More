@@ -2,6 +2,7 @@
 """Exercise native settings, birth, stories, character pages and menus at phone density."""
 from pathlib import Path
 import os
+import re
 import shlex
 import subprocess
 from check_bigger_font_layout import HARNESS as BASE
@@ -16,7 +17,8 @@ HARNESS = BASE.replace(
     'float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID id) { return fixture_density; }\n'
     '#include "sdl/ui/sdl-screens.c"', 1
 ).replace('fixture_assert(argc==6)', 'fixture_assert(argc==7)').replace(
-    'g_state.system_scale=1;', 'fixture_density=atof(argv[6]); g_state.system_scale=fixture_density;'
+    'g_state.system_scale=1;', 'fixture_density=atof(argv[6]); g_state.system_scale=fixture_density; '
+    'g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;'
 ).replace('    check_actual_cell_metrics();', '').replace('    check_auto_font_metrics();', '').replace(
     'check_songs(); check_questions();', ''
 ).replace('check_halls();', '').replace('check_large_tutorial();', '').replace(
@@ -107,7 +109,7 @@ def main():
     excluded = ("/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
                 "/src/sdl/ui/sdl-screens.c.obj", "/src/sdl/ui/sdl-song-menu.c.obj",
                 "/src/sdl/ui/sdl-question-menu.c.obj", "/src/sdl/ui/sdl-main-menu.c.obj",
-                "/src/sdl/ui/sdl-halls-screen.c.obj")
+                "/src/sdl/ui/sdl-halls-screen.c.obj", "/src/sdl/ui/sdl-menu-font.c.obj")
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects
                                  if not obj.endswith(excluded)), encoding="utf-8")
@@ -120,7 +122,9 @@ def main():
              "sdl_touch_round_layer_controls_active", "sdl_touch_round_compute_layout",
              "sdl_touch_thumb_current_bounds", "sdl_map_grid_cell_rect",
              "sdl_touch_only_device_active", "sdl_get_layout_screen_rect",
-             "sdl_character_sheet_screen_commit_select", "SDL_GetDisplayContentScale"]
+             "sdl_character_sheet_screen_commit_select", "SDL_GetDisplayContentScale", "inkey"]
+    # BASE owns additional boundary doubles; link all inherited wrappers too.
+    wraps = list(dict.fromkeys([*wraps, *re.findall(r"\b__wrap_(\w+)\s*\(", HARNESS)]))
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),

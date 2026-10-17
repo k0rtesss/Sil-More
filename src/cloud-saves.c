@@ -3,10 +3,14 @@
 #include "cloud-saves.h"
 #include "achievements.h"
 #include "metarun.h"
+#include "game/progress-reset.h"
 #include "log/log.h"
 
 #if defined(__ANDROID__) && defined(USE_SDL)
 #include <jni.h>
+
+static bool cloud_ready;
+static bool cloud_checkpoint_busy;
 
 static int cloud_call(const char* method_name, const char* signature, const char* path)
 {
@@ -52,6 +56,13 @@ bool sil_cloud_saves_prepare(const char* user_root)
 #endif
 }
 
+void sil_cloud_saves_init(void)
+{
+#if defined(__ANDROID__) && defined(USE_SDL)
+    cloud_ready = true;
+#endif
+}
+
 bool sil_cloud_saves_available(void)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
@@ -61,30 +72,19 @@ bool sil_cloud_saves_available(void)
 #endif
 }
 
-void sil_cloud_saves_show(void)
+void sil_cloud_saves_checkpoint(void)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
-    if (!sil_cloud_saves_available()) {
-        sdl_popup_notification_show("Google Play cloud saves are unavailable in this build.");
-        return;
-    }
-    /* All local writers and native gameplay remain on this thread. Capture the
-     * complete checkpoint before Java opens its asynchronous provider UI. */
-    if (p_ptr && p_ptr->playing && character_generated && !p_ptr->is_dead
-        && !mobile_autosave_game("cloud save checkpoint")) {
-        sdl_popup_notification_show("Local progress could not be saved. Cloud saves were not opened.");
-        return;
-    }
-    if (save_metaruns() != 0) {
-        sdl_popup_notification_show("The Tale could not be saved. Cloud saves were not opened.");
-        return;
-    }
-    sil_achievements_flush();
-    if (!sil_achievements_saved()) {
-        sdl_popup_notification_show("Achievement progress could not be saved. Cloud saves were not opened.");
-        return;
-    }
-    int result = cloud_call("showPlayGamesCloudSaves", "(Ljava/lang/String;)I", ANGBAND_DIR_USER);
-    if (result == 2) quit(NULL);
+    if (!cloud_ready || cloud_checkpoint_busy || sil_progress_reset_restarting()
+        || !sil_cloud_saves_available()) return;
+    cloud_checkpoint_busy = true;
+    /* Capture only on the game thread, after the character and score writers.
+     * Java uploads these immutable bytes without blocking native gameplay. */
+    if (save_metaruns() == 0) {
+        sil_achievements_flush();
+        if (sil_achievements_saved())
+            (void)cloud_call("checkpointPlayGamesCloudSaves", "(Ljava/lang/String;)I", ANGBAND_DIR_USER);
+    } else log_warn("Cloud checkpoint deferred: Tale could not be saved");
+    cloud_checkpoint_busy = false;
 #endif
 }

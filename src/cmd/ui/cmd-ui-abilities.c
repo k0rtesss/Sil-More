@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -5264,6 +5265,8 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
         p_ptr->active_ability[skilltype][abilitynum] = true;
         ability_log_record_gain(skilltype, abilitynum);
         p_ptr->new_exp -= total_exp_cost;
+        if (exp_cost > 0)
+            sil_achievements_on_event(SIL_ACH_SOMETHING_TOOKISH);
 
         if (banechoice <= 0 && oathchoice <= 0)
         {

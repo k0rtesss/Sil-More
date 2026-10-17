@@ -1,6 +1,7 @@
 ﻿/* File: player/player-song-duels.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "player/player-song-internal.h"
 #include "log/log.h"
@@ -480,6 +481,11 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
     {
         song_contest_penalties applied
             = song_duel_apply_contest_penalties(m_ptr, song_skill);
+        if (applied.will || applied.stealth || applied.evasion || applied.armour_dice)
+        {
+            sil_achievements_on_event(SIL_ACH_FELAGUNDS_ANSWER);
+            sil_achievements_on_song_effect(SNG_CONTEST, (int)(m_ptr - mon_list), -1);
+        }
         msg_format(
             "%s is diminished: Will -%d, Stealth -%d.",
             m_name, applied.will, applied.stealth);
@@ -490,6 +496,8 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
     {
         song_lament_penalties applied
             = song_duel_apply_lament_penalties(m_ptr, song_skill);
+        if (applied.will || applied.maxhp || applied.damage_dice)
+            sil_achievements_on_song_effect(SNG_LAMENT, (int)(m_ptr - mon_list), -1);
 
         if (applied.damage_dice > 0)
         {

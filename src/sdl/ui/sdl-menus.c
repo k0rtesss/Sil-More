@@ -341,40 +341,21 @@ bool sdl_depth_menu_pane_handle_pointer(float x, float y)
 
 int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    bool handheld = sdl_handheld_ui_active();
+    if (handheld && get_sdl_menu_bigger_font())
         return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
-#endif
-    /* Main cells are already enlarged; use the normal reference before the
-     * prompt's own caps, then enlarge the resolved prompt once. */
+    /* Main cells are already enlarged; resolve the normal prompt first and
+     * apply its own font choice once. */
     if (get_sdl_menu_bigger_font())
         cell_h /= 1.5f;
-#if SIL_SDL_MOBILE_BUILD
-    int font_px = (int)(cell_h * 2.15f);
-
-    if (font_px < 32)
-        font_px = 32;
-    if (font_px > 56)
-        font_px = 56;
-    if (screen_h < 480 && font_px > 44)
-        font_px = 44;
-    if (screen_h < 360 && font_px > 34)
-        font_px = 34;
-    if (screen_h < 260 && font_px > 28)
-        font_px = 28;
-#else
-    int font_px = (int)(cell_h * 1.35f);
-
-    if (font_px < 20)
-        font_px = 20;
-    if (font_px > 36)
-        font_px = 36;
-    if (screen_h < 480 && font_px > 30)
-        font_px = 30;
-    if (screen_h < 360 && font_px > 24)
-        font_px = 24;
-#endif
-
+    int font_px = (int)(cell_h * (handheld ? 2.15f : 1.35f));
+    font_px = MAX(handheld ? 32 : 20, MIN(font_px, handheld ? 56 : 36));
+    if (screen_h < 480)
+        font_px = MIN(font_px, handheld ? 44 : 30);
+    if (screen_h < 360)
+        font_px = MIN(font_px, handheld ? 34 : 24);
+    if (handheld && screen_h < 260)
+        font_px = MIN(font_px, 28);
     return sdl_menu_font_px(font_px);
 }
 
@@ -720,12 +701,10 @@ int sdl_narrative_banner_font_px(const SDL_Rect* rect)
     if (!rect || rect->h <= 0)
         return 0;
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     }
-#endif
     /* Use the same font size as the message log pane. */
     font_px = sdl_effective_pane_cell_height_for_type(PANE_LOG);
     if (font_px < 8)
@@ -746,10 +725,8 @@ float sdl_narrative_banner_line_h(TTF_Font* font, int font_px)
 
 static float sdl_narrative_banner_close_size(float line_h)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         return MAX(line_h, (float)sdl_ui_min_tap_px());
-#endif
     return sdl_touch_pane_clampf(line_h, 22.0f, 44.0f);
 }
 
@@ -1047,8 +1024,8 @@ void sdl_narrative_banner_draw_line(TTF_Font* font, cptr text,
     SDL_Color color, float left_x, float y, float max_w, float line_h)
 {
     SDL_Texture* texture;
+    SDL_FRect src;
     SDL_FRect dst;
-    float scale = 1.0f;
     int text_w = 0;
     int text_h = 0;
 
@@ -1062,18 +1039,17 @@ void sdl_narrative_banner_draw_line(TTF_Font* font, cptr text,
     if (!texture)
         return;
 
-    if (!(SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font())
-        && text_w > 0 && (float)text_w > max_w)
-        scale = max_w / (float)text_w;
+    src = (SDL_FRect){ 0, 0, MIN((float)text_w, max_w),
+        MIN((float)text_h, line_h) };
 
     dst = (SDL_FRect){
-        .w = (float)text_w * scale,
-        .h = (float)text_h * scale,
+        .w = src.w,
+        .h = src.h,
     };
     dst.x = left_x;
     dst.y = y + (line_h - dst.h) * 0.5f;
 
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 static Uint8 sdl_narrative_banner_scaled_alpha(Uint8 alpha)
@@ -1402,10 +1378,8 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
     if (screen.w <= 0 || screen.h <= 0)
         return false;
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         screen = sdl_get_layout_screen_rect();
-#endif
     prompt_text = g_touch_pane_yes_no_prompt_text[0]
         ? g_touch_pane_yes_no_prompt_text
         : "Are you sure?";
@@ -1413,27 +1387,25 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
     prompt_font = sdl_story_font_for_height_slot(prompt_font_px, SDL_STORY_FONT_SLOT_MENU);
     prompt_text_w = sdl_touch_pane_story_text_width(prompt_font, prompt_text);
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font()) {
-    margin = 12.0f * sdl_ui_density_scale();
-    button_gap = 12.0f * sdl_ui_density_scale();
-    row_gap = 12.0f * sdl_ui_density_scale();
-    button_w = MAX((float)sdl_ui_min_tap_px(), (float)prompt_font_px * 4.0f);
-    button_h = MAX((float)sdl_ui_min_tap_px(), (float)prompt_font_px * 1.6f);
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
+        margin = 12.0f * sdl_ui_density_scale();
+        button_gap = 12.0f * sdl_ui_density_scale();
+        row_gap = 12.0f * sdl_ui_density_scale();
+        button_w = MAX((float)sdl_ui_min_tap_px(), (float)prompt_font_px * 4.0f);
+        button_h = MAX((float)sdl_ui_min_tap_px(), (float)prompt_font_px * 1.6f);
+    } else if (sdl_handheld_ui_active()) {
+        margin = sdl_touch_pane_clampf(cell_h * 1.45f, 24.0f, 46.0f);
+        button_gap = sdl_touch_pane_clampf(cell_w * 1.90f, 18.0f, 34.0f);
+        row_gap = sdl_touch_pane_clampf(cell_h * 1.10f, 18.0f, 34.0f);
+        button_w = sdl_touch_pane_clampf(cell_w * 13.50f, 136.0f, 220.0f);
+        button_h = sdl_touch_pane_clampf(cell_h * 3.80f, 72.0f, 112.0f);
     } else {
-    margin = sdl_touch_pane_clampf(cell_h * 1.45f, 24.0f, 46.0f);
-    button_gap = sdl_touch_pane_clampf(cell_w * 1.90f, 18.0f, 34.0f);
-    row_gap = sdl_touch_pane_clampf(cell_h * 1.10f, 18.0f, 34.0f);
-    button_w = sdl_touch_pane_clampf(cell_w * 13.50f, 136.0f, 220.0f);
-    button_h = sdl_touch_pane_clampf(cell_h * 3.80f, 72.0f, 112.0f);
+        margin = sdl_touch_pane_clampf(cell_h * 0.75f, 12.0f, 24.0f);
+        button_gap = sdl_touch_pane_clampf(cell_w, 10.0f, 18.0f);
+        row_gap = sdl_touch_pane_clampf(cell_h * 0.55f, 10.0f, 18.0f);
+        button_w = sdl_touch_pane_clampf(cell_w * 8.0f, 84.0f, 140.0f);
+        button_h = sdl_touch_pane_clampf(cell_h * 2.0f, 38.0f, 60.0f);
     }
-#else
-    margin = sdl_touch_pane_clampf(cell_h * 0.75f, 12.0f, 24.0f);
-    button_gap = sdl_touch_pane_clampf(cell_w, 10.0f, 18.0f);
-    row_gap = sdl_touch_pane_clampf(cell_h * 0.55f, 10.0f, 18.0f);
-    button_w = sdl_touch_pane_clampf(cell_w * 8.0f, 84.0f, 140.0f);
-    button_h = sdl_touch_pane_clampf(cell_h * 2.0f, 38.0f, 60.0f);
-#endif
 
     max_panel_w = (float)screen.w * 0.94f;
     if (max_panel_w > cell_w * 82.0f)
@@ -1470,15 +1442,15 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
 
     prompt_line_count = sdl_touch_pane_wrap_prompt_lines(prompt_text, prompt_font,
         prompt_w, prompt_lines, SDL_TOUCH_YES_NO_MAX_LINES);
-#if SIL_SDL_MOBILE_BUILD
-    prompt_line_h = (float)prompt_font_px * 1.42f;
-    if (prompt_line_h < 24.0f)
-        prompt_line_h = 24.0f;
-#else
-    prompt_line_h = (float)prompt_font_px * 1.25f;
-    if (prompt_line_h < 20.0f)
-        prompt_line_h = 20.0f;
-#endif
+    if (sdl_handheld_ui_active()) {
+        prompt_line_h = (float)prompt_font_px * 1.42f;
+        if (prompt_line_h < 24.0f)
+            prompt_line_h = 24.0f;
+    } else {
+        prompt_line_h = (float)prompt_font_px * 1.25f;
+        if (prompt_line_h < 20.0f)
+            prompt_line_h = 20.0f;
+    }
     prompt_h = prompt_line_h * (float)prompt_line_count;
 
     /* Let the panel grow to fit every wrapped line at the fixed font size.
@@ -1701,8 +1673,7 @@ bool sdl_touch_pane_handle_yes_no_prompt_pointer(float x, float y)
         return true;
     }
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         if (g_yes_no_prompt_pages > 1) {
             SDL_FRect prompt;
@@ -1718,7 +1689,6 @@ bool sdl_touch_pane_handle_yes_no_prompt_pointer(float x, float y)
             }
         }
     }
-#endif
     /* The yes/no prompt is modal; ignore clicks outside its buttons. */
     return true;
 }
@@ -1802,168 +1772,86 @@ static void sdl_touch_pane_draw_readable_label(const SDL_FRect* rect,
         rect->y + (rect->h - src.h) * 0.5f, src.w, src.h };
 
     if (texture)
-        SDL_RenderTexture(g_state.renderer, texture, &src, &dst);
+        sdl_ui_render_text_texture(texture, &src, &dst);
+}
+
+/* Resolve final font sizes before creating either label texture. */
+static void sdl_touch_pane_draw_native_button_text(const SDL_FRect* rect,
+    cptr name, cptr symbol, SDL_Color color, int name_px, int symbol_px)
+{
+    bool have_name = name && name[0];
+    bool have_symbol = symbol && symbol[0];
+    if (!rect || rect->w <= 0.0f || rect->h <= 0.0f
+        || (!have_name && !have_symbol))
+        return;
+    float gap = have_name && have_symbol ? MAX(2.0f, rect->h * 0.03f) : 0;
+    float available = MAX(1.0f, rect->h - gap);
+    float name_h = have_symbol && have_name
+        ? available * name_px / MAX(1, name_px + symbol_px) : available;
+    float symbol_h = have_name && have_symbol ? available - name_h : available;
+    if (have_name)
+        name_px = sdl_ui_fitted_font_px(name, SDL_STORY_FONT_SLOT_MENU,
+            name_px, rect->w, name_h, false);
+    if (have_symbol)
+        symbol_px = sdl_ui_fitted_font_px(symbol, SDL_STORY_FONT_SLOT_MENU,
+            symbol_px, rect->w, symbol_h, false);
+    /* Both fitting searches may cycle the font cache. Borrow the final fonts
+     * only after those searches, then borrow the two text textures. */
+    TTF_Font* name_font = have_name
+        ? sdl_story_font_for_height_slot(name_px, SDL_STORY_FONT_SLOT_MENU) : NULL;
+    TTF_Font* symbol_font = have_symbol
+        ? sdl_story_font_for_height_slot(symbol_px, SDL_STORY_FONT_SLOT_MENU) : NULL;
+    int nw = 0, nh = 0, sw = 0, sh = 0;
+    SDL_Texture* name_texture = name_font
+        ? sdl_ui_text_texture(name_font, name, color, &nw, &nh) : NULL;
+    SDL_Texture* symbol_texture = symbol_font
+        ? sdl_ui_text_texture(symbol_font, symbol, color, &sw, &sh) : NULL;
+    if (!name_texture || !symbol_texture)
+        gap = 0;
+    float y = rect->y + MAX(0.0f, rect->h - nh - sh - gap) * 0.5f;
+    if (name_texture) {
+        SDL_FRect dst = { rect->x + MAX(0.0f, rect->w - nw) * 0.5f,
+            y, (float)nw, (float)nh };
+        sdl_ui_render_text_texture(name_texture, NULL, &dst);
+        y += nh + gap;
+    }
+    if (symbol_texture) {
+        SDL_FRect dst = { rect->x + MAX(0.0f, rect->w - sw) * 0.5f,
+            y, (float)sw, (float)sh };
+        sdl_ui_render_text_texture(symbol_texture, NULL, &dst);
+    }
 }
 
 void sdl_touch_pane_draw_button_text_scaled(const SDL_FRect* rect, const char* name,
     const char* symbol, SDL_Color color, float single_text_font_ratio,
     float single_text_height_ratio)
 {
-    SDL_Texture* name_texture = NULL;
-    SDL_Texture* symbol_texture = NULL;
-    TTF_Font* name_font = NULL;
-    TTF_Font* symbol_font = NULL;
-    bool have_name;
-    bool have_symbol;
-    float name_max_w;
-    float name_max_h;
-    float symbol_max_w;
-    float symbol_max_h;
-    float gap;
-    SDL_FRect name_dst;
-    SDL_FRect symbol_dst;
-    int name_font_px;
-    int symbol_font_px;
-    int name_w = 0;
-    int name_h_px = 0;
-    int symbol_w = 0;
-    int symbol_h_px = 0;
-
     if (!rect)
         return;
-
-    have_name = (name && name[0]);
-    have_symbol = (symbol && symbol[0]);
-    if (!have_name && !have_symbol)
-        return;
-
+    bool have_name = name && name[0];
+    bool have_symbol = symbol && symbol[0];
+    int name_px = MAX(10, (int)(rect->h * 0.18f));
     if (single_text_font_ratio <= 0.0f)
         single_text_font_ratio = 0.28f;
     if (single_text_height_ratio <= 0.0f)
         single_text_height_ratio = 0.38f;
-
-    name_font_px = (int)(rect->h * 0.18f);
-    if (name_font_px < 10)
-        name_font_px = 10;
-
-    symbol_font_px =
-        (int)(rect->h * (have_name ? 0.22f : single_text_font_ratio));
-    if (symbol_font_px < 12)
-        symbol_font_px = 12;
-
+    int symbol_px = MAX(12, (int)(rect->h
+        * (have_name ? 0.22f : single_text_font_ratio)));
     if (get_sdl_menu_bigger_font()) {
-        /* One readable name replaces the name plus duplicate key symbol. */
         sdl_touch_pane_draw_readable_label(rect, have_name ? name : symbol,
-            color, SIL_SDL_MOBILE_BUILD
+            color, sdl_handheld_ui_active()
                 ? sdl_menu_role_font_px(SDL_UI_FONT_CONTROL)
-                : sdl_menu_font_px(have_name ? name_font_px : symbol_font_px));
+                : sdl_menu_font_px(have_name ? name_px : symbol_px));
         return;
     }
-
-    /* Resolve both fonts before borrowing either cached texture: loading the
-     * second font may evict an older story-font entry. */
-    if (have_name)
-        name_font = sdl_story_font_for_height_slot(name_font_px,
-            SDL_STORY_FONT_SLOT_MENU);
-    if (have_symbol)
-        symbol_font = sdl_story_font_for_height_slot(symbol_font_px,
-            SDL_STORY_FONT_SLOT_MENU);
-    if (name_font)
-        name_texture = sdl_ui_text_texture(name_font, name, color,
-            &name_w, &name_h_px);
-    if (symbol_font)
-        symbol_texture = sdl_ui_text_texture(symbol_font, symbol, color,
-            &symbol_w, &symbol_h_px);
-
-    if (!name_texture && !symbol_texture)
-        return;
-
-    gap = rect->h * 0.03f;
-    if (gap < 2.0f)
-        gap = 2.0f;
-
-    if (name_texture && symbol_texture) {
-        float total_h;
-        float avail_h;
-        float name_scale_w;
-        float name_scale_h;
-        float name_scale;
-        float symbol_scale_w;
-        float symbol_scale_h;
-        float symbol_scale;
-        float scale;
-        float name_h;
-        float symbol_h;
-        float start_y;
-
-        name_max_w = rect->w * 0.82f;
-        symbol_max_w = rect->w * 0.82f;
-        avail_h = rect->h * 0.68f;
-        name_max_h = rect->h * 0.22f;
-        symbol_max_h = rect->h * 0.30f;
-
-        name_scale_w = (name_w > 0) ? (name_max_w / (float)name_w) : 1.0f;
-        name_scale_h = (name_h_px > 0) ? (name_max_h / (float)name_h_px) : 1.0f;
-        name_scale = (name_scale_w < name_scale_h) ? name_scale_w : name_scale_h;
-        if (name_scale > 1.0f)
-            name_scale = 1.0f;
-
-        symbol_scale_w = (symbol_w > 0) ? (symbol_max_w / (float)symbol_w) : 1.0f;
-        symbol_scale_h = (symbol_h_px > 0) ? (symbol_max_h / (float)symbol_h_px) : 1.0f;
-        symbol_scale = (symbol_scale_w < symbol_scale_h) ? symbol_scale_w : symbol_scale_h;
-        if (symbol_scale > 1.0f)
-            symbol_scale = 1.0f;
-
-        total_h = (float)name_h_px * name_scale + gap
-            + (float)symbol_h_px * symbol_scale;
-        scale = 1.0f;
-        if (total_h > avail_h && total_h > 0.0f)
-            scale = avail_h / total_h;
-
-        name_scale *= scale;
-        symbol_scale *= scale;
-        name_h = (float)name_h_px * name_scale;
-        symbol_h = (float)symbol_h_px * symbol_scale;
-        start_y = rect->y + (rect->h - (name_h + gap + symbol_h)) * 0.5f;
-
-        name_dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)name_w * name_scale) * 0.5f,
-            .y = start_y,
-            .w = (float)name_w * name_scale,
-            .h = name_h,
-        };
-        symbol_dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)symbol_w * symbol_scale) * 0.5f,
-            .y = start_y + name_h + gap,
-            .w = (float)symbol_w * symbol_scale,
-            .h = symbol_h,
-        };
-
-        SDL_RenderTexture(g_state.renderer, name_texture, NULL, &name_dst);
-        SDL_RenderTexture(g_state.renderer, symbol_texture, NULL, &symbol_dst);
-    } else {
-        SDL_Texture* only_texture = name_texture ? name_texture : symbol_texture;
-        int only_w = name_texture ? name_w : symbol_w;
-        int only_h = name_texture ? name_h_px : symbol_h_px;
-        float max_w = rect->w * 0.82f;
-        float max_h = rect->h
-            * ((!have_name && have_symbol) ? single_text_height_ratio : 0.38f);
-        float scale_w = (only_w > 0) ? (max_w / (float)only_w) : 1.0f;
-        float scale_h = (only_h > 0) ? (max_h / (float)only_h) : 1.0f;
-        float scale = (scale_w < scale_h) ? scale_w : scale_h;
-
-        if (scale > 1.0f)
-            scale = 1.0f;
-
-        symbol_dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)only_w * scale) * 0.5f,
-            .y = rect->y + (rect->h - (float)only_h * scale) * 0.5f,
-            .w = (float)only_w * scale,
-            .h = (float)only_h * scale,
-        };
-
-        SDL_RenderTexture(g_state.renderer, only_texture, NULL, &symbol_dst);
-    }
+    /* The legacy ratios define the control's label area, not raster scaling. */
+    float fraction = have_name && have_symbol ? 0.68f
+        : have_symbol && !have_name ? single_text_height_ratio : 0.38f;
+    SDL_FRect area = { rect->x + rect->w * 0.09f,
+        rect->y + rect->h * (1.0f - fraction) * 0.5f,
+        rect->w * 0.82f, rect->h * fraction };
+    sdl_touch_pane_draw_native_button_text(&area, name, symbol, color,
+        name_px, symbol_px);
 }
 
 void sdl_touch_pane_draw_button_text(const SDL_FRect* rect, const char* name, const char* symbol,
@@ -1976,126 +1864,22 @@ void sdl_touch_pane_draw_button_text_px(const SDL_FRect* rect,
     const char* name, const char* symbol, SDL_Color color, int name_px,
     int symbol_px)
 {
-    SDL_Texture* name_texture = NULL;
-    SDL_Texture* symbol_texture = NULL;
-    TTF_Font* name_font = NULL;
-    TTF_Font* symbol_font = NULL;
-    bool have_name;
-    bool have_symbol;
-    float gap;
-    SDL_FRect name_dst;
-    SDL_FRect symbol_dst;
-    int name_w = 0;
-    int name_h_px = 0;
-    int symbol_w = 0;
-    int symbol_h_px = 0;
-
     if (!rect)
         return;
-
-    have_name = (name && name[0]);
-    have_symbol = (symbol && symbol[0]);
-    if (!have_name && !have_symbol)
-        return;
-
-    if (name_px < 8)
-        name_px = 8;
-    if (symbol_px < 8)
-        symbol_px = 8;
-
+    bool have_name = name && name[0];
+    name_px = MAX(8, name_px);
+    symbol_px = MAX(8, symbol_px);
     if (get_sdl_menu_bigger_font()) {
         sdl_touch_pane_draw_readable_label(rect, have_name ? name : symbol,
-            color, SIL_SDL_MOBILE_BUILD
+            color, sdl_handheld_ui_active()
                 ? sdl_menu_role_font_px(SDL_UI_FONT_CONTROL)
                 : (have_name ? name_px : symbol_px));
         return;
     }
-
-    if (have_name)
-        name_font = sdl_story_font_for_height_slot(name_px,
-            SDL_STORY_FONT_SLOT_MENU);
-    if (have_symbol)
-        symbol_font = sdl_story_font_for_height_slot(symbol_px,
-            SDL_STORY_FONT_SLOT_MENU);
-    if (name_font)
-        name_texture = sdl_ui_text_texture(name_font, name, color,
-            &name_w, &name_h_px);
-    if (symbol_font)
-        symbol_texture = sdl_ui_text_texture(symbol_font, symbol, color,
-            &symbol_w, &symbol_h_px);
-
-    if (!name_texture && !symbol_texture)
-        return;
-
-    gap = rect->h * 0.03f;
-    if (gap < 2.0f)
-        gap = 2.0f;
-
-    if (name_texture && symbol_texture) {
-        float max_w = rect->w * 0.92f;
-        float avail_h = rect->h - 4.0f;
-        float name_scale = 1.0f;
-        float symbol_scale = 1.0f;
-        float total_h;
-        float scale;
-        float name_h;
-        float symbol_h;
-        float start_y;
-
-        if (name_w > 0 && (float)name_w > max_w)
-            name_scale = max_w / (float)name_w;
-        if (symbol_w > 0 && (float)symbol_w > max_w)
-            symbol_scale = max_w / (float)symbol_w;
-
-        total_h = (float)name_h_px * name_scale + gap
-            + (float)symbol_h_px * symbol_scale;
-        scale = 1.0f;
-        if (avail_h > 0.0f && total_h > avail_h)
-            scale = avail_h / total_h;
-
-        name_scale *= scale;
-        symbol_scale *= scale;
-        name_h = (float)name_h_px * name_scale;
-        symbol_h = (float)symbol_h_px * symbol_scale;
-        start_y = rect->y + (rect->h - (name_h + gap + symbol_h)) * 0.5f;
-
-        name_dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)name_w * name_scale) * 0.5f,
-            .y = start_y,
-            .w = (float)name_w * name_scale,
-            .h = name_h,
-        };
-        symbol_dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)symbol_w * symbol_scale) * 0.5f,
-            .y = start_y + name_h + gap,
-            .w = (float)symbol_w * symbol_scale,
-            .h = symbol_h,
-        };
-
-        SDL_RenderTexture(g_state.renderer, name_texture, NULL, &name_dst);
-        SDL_RenderTexture(g_state.renderer, symbol_texture, NULL, &symbol_dst);
-    } else {
-        SDL_Texture* only_texture = name_texture ? name_texture : symbol_texture;
-        int only_w = name_texture ? name_w : symbol_w;
-        int only_h = name_texture ? name_h_px : symbol_h_px;
-        float max_w = rect->w * 0.92f;
-        float max_h = rect->h - 4.0f;
-        float scale_w = (only_w > 0) ? (max_w / (float)only_w) : 1.0f;
-        float scale_h = (only_h > 0) ? (max_h / (float)only_h) : 1.0f;
-        float scale = (scale_w < scale_h) ? scale_w : scale_h;
-
-        if (scale > 1.0f)
-            scale = 1.0f;
-
-        symbol_dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)only_w * scale) * 0.5f,
-            .y = rect->y + (rect->h - (float)only_h * scale) * 0.5f,
-            .w = (float)only_w * scale,
-            .h = (float)only_h * scale,
-        };
-
-        SDL_RenderTexture(g_state.renderer, only_texture, NULL, &symbol_dst);
-    }
+    SDL_FRect area = { rect->x + rect->w * 0.04f, rect->y + 2.0f,
+        rect->w * 0.92f, MAX(1.0f, rect->h - 4.0f) };
+    sdl_touch_pane_draw_native_button_text(&area, name, symbol, color,
+        name_px, symbol_px);
 }
 
 void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
@@ -2125,15 +1909,11 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
     line_h = (float)font_px * 1.42f;
     if (line_h < 24.0f)
         line_h = 24.0f;
-    if (!(SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font())
-        && line_h * (float)line_count > rect->h)
-        line_h = rect->h / (float)line_count;
+    line_h = MAX(line_h, (float)TTF_GetFontHeight(font) + 2.0f);
     if (line_h < 10.0f)
         line_h = 10.0f;
 
     shown_lines = line_count;
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
     {
         {
             int capacity = MAX(1, (int)(rect->h / line_h));
@@ -2158,7 +1938,7 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
                     if (hint_texture) {
                         SDL_FRect hint_dst = { rect->x, rect->y + rect->h - hint_h,
                             (float)width, (float)height };
-                        SDL_RenderTexture(g_state.renderer, hint_texture, NULL, &hint_dst);
+                        sdl_ui_render_text_texture(hint_texture, NULL, &hint_dst);
                     }
                 }
             } else {
@@ -2166,19 +1946,13 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
             }
         }
     }
-#endif
     total_h = line_h * (float)shown_lines;
     start_y = rect->y + (rect->h - total_h) * 0.5f;
-    if (start_y < rect->y || (SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font() && g_yes_no_prompt_pages > 1))
+    if (start_y < rect->y || g_yes_no_prompt_pages > 1)
         start_y = rect->y;
 
     for (int i = first_line; i < first_line + shown_lines; i++) {
         SDL_Texture* texture;
-        float max_w;
-        float max_h;
-        float scale_w;
-        float scale_h;
-        float scale;
         SDL_FRect dst;
         int text_w = 0;
         int text_h = 0;
@@ -2191,24 +1965,15 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
         if (!texture)
             continue;
 
-        max_w = rect->w;
-        max_h = line_h;
-        scale_w = (text_w > 0) ? (max_w / (float)text_w) : 1.0f;
-        scale_h = (text_h > 0) ? (max_h / (float)text_h) : 1.0f;
-        scale = SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font() ? 1.0f
-            : ((scale_w < scale_h) ? scale_w : scale_h);
-        if (scale > 1.0f)
-            scale = 1.0f;
-
         dst = (SDL_FRect){
-            .x = rect->x + (rect->w - (float)text_w * scale) * 0.5f,
+            .x = rect->x + (rect->w - (float)text_w) * 0.5f,
             .y = start_y + (float)(i - first_line) * line_h
-                + (line_h - (float)text_h * scale) * 0.5f,
-            .w = (float)text_w * scale,
-            .h = (float)text_h * scale,
+                + (line_h - (float)text_h) * 0.5f,
+            .w = (float)text_w,
+            .h = (float)text_h,
         };
 
-        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        sdl_ui_render_text_texture(texture, NULL, &dst);
     }
 }
 
@@ -2390,12 +2155,10 @@ void sdl_touch_pane_render_yes_no_prompt(void)
 
 static int sdl_unified_look_log_text_font_px(void)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     }
-#endif
     const sdl_view* log_view = &g_views[PANE_LOG];
     const sdl_view* rolls_view = &g_views[PANE_ROLLS];
     int font_px = 0;
@@ -2422,8 +2185,8 @@ static void sdl_unified_look_draw_centered_text(TTF_Font* font, cptr text,
     SDL_Color color, const SDL_FRect* rect)
 {
     SDL_Texture* texture;
+    SDL_FRect src;
     SDL_FRect dst;
-    float scale = 1.0f;
     float max_w;
     float max_h;
     int text_w = 0;
@@ -2446,17 +2209,15 @@ static void sdl_unified_look_draw_centered_text(TTF_Font* font, cptr text,
     if (max_h < 1.0f)
         max_h = rect->h;
 
-    if (text_w > 0 && (float)text_w > max_w)
-        scale = max_w / (float)text_w;
-    if (text_h > 0 && (float)text_h * scale > max_h)
-        scale = max_h / (float)text_h;
+    src = (SDL_FRect){ 0, 0, MIN((float)text_w, max_w),
+        MIN((float)text_h, max_h) };
 
-    dst.w = (float)text_w * scale;
-    dst.h = (float)text_h * scale;
+    dst.w = src.w;
+    dst.h = src.h;
     dst.x = rect->x + (rect->w - dst.w) * 0.5f;
     dst.y = rect->y + (rect->h - dst.h) * 0.5f;
 
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 typedef struct sdl_unified_look_prompt_layout_info {
@@ -2821,13 +2582,11 @@ static bool sdl_unified_look_prompt_layout(
                 row_h = (float)font_px + 7.0f;
             min_button_w = sdl_touch_pane_clampf((float)font_px * 2.2f,
                 14.0f, 58.0f);
-#if SIL_SDL_MOBILE_BUILD
-            if (get_sdl_menu_bigger_font())
+            if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
             {
                 row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
                 min_button_w = MAX(min_button_w, (float)sdl_ui_min_tap_px());
             }
-#endif
 
             for (int variant = 0;
                  variant < SDL_UNIFIED_LOOK_PROMPT_LABEL_VARIANTS; variant++)
@@ -3165,7 +2924,6 @@ static void sdl_unified_look_sidebar_draw_clipped_text(TTF_Font* font,
     SDL_Texture* texture;
     SDL_FRect src;
     SDL_FRect dst;
-    float scale = 1.0f;
     int text_w = 0;
     int text_h = 0;
 
@@ -3176,9 +2934,6 @@ static void sdl_unified_look_sidebar_draw_clipped_text(TTF_Font* font,
     if (!texture)
         return;
 
-    if (text_h > 0 && (float)text_h > row_h * 0.94f)
-        scale = (row_h * 0.94f) / (float)text_h;
-
     src = (SDL_FRect){
         .x = 0.0f,
         .y = 0.0f,
@@ -3188,20 +2943,20 @@ static void sdl_unified_look_sidebar_draw_clipped_text(TTF_Font* font,
     dst = (SDL_FRect){
         .x = x,
         .y = y,
-        .w = (float)text_w * scale,
-        .h = (float)text_h * scale,
+        .w = (float)text_w,
+        .h = (float)text_h,
     };
 
     if (dst.w > max_w)
     {
         dst.w = max_w;
-        src.w = max_w / scale;
+        src.w = max_w;
         if (src.w > (float)text_w)
             src.w = (float)text_w;
     }
     dst.y = y + (row_h - dst.h) * 0.5f;
 
-    SDL_RenderTexture(g_state.renderer, texture, &src, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 static float sdl_unified_look_sidebar_text_width(TTF_Font* font, cptr text,
@@ -3325,12 +3080,10 @@ static bool sdl_unified_look_sidebar_layout(
         return false;
 
     out->row_h = (float)out->font_px * 1.28f;
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         out->row_h = MAX(out->row_h, (float)sdl_ui_min_tap_px());
     }
-#endif
     if (out->row_h < (float)out->font_px + 4.0f)
         out->row_h = (float)out->font_px + 4.0f;
     out->pad_x = sdl_touch_pane_clampf((float)out->font_px * 0.68f, 8.0f,
