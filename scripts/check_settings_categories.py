@@ -28,13 +28,21 @@ static int input_index, pending_choice = -9999, next_click;
 static int app_saves, meta_saves, url_opens, lore_changes;
 static bool lore_failure;
 static const char* config_file;
-static int reset_answers[3], reset_questions, reset_requests;
+static int reset_answers[3], reset_questions, reset_requests, reset_errors;
 
 int __real_ui_question_ask_overlay(cptr, cptr, const ui_question_option*,
     int, int, int, int);
 int __wrap_ui_question_ask_overlay(cptr heading, cptr description,
     const ui_question_option* answers, int count, int y, int x, int initial)
 {
+    if (streq(heading, "Progress reset failed")) {
+        assert(reset_questions == 3 && reset_requests == 1);
+        assert(count == 1 && initial == 0 && streq(answers[0].label, "OK"));
+        assert(strstr(description, "Fixture restart failure"));
+        assert(y == UI_QUESTION_GLOBAL && x == UI_QUESTION_GLOBAL);
+        ++reset_errors;
+        return 0;
+    }
     if (!prefix(heading, "Clear all progress"))
         return __real_ui_question_ask_overlay(heading, description, answers,
             count, y, x, initial);
@@ -200,20 +208,21 @@ static void check_diagnostics(void)
 
 static void check_progress_reset_warnings(void)
 {
+    reset_errors = 0;
     for (int stop = 0; stop < 3; ++stop) {
         reset_questions = reset_requests = 0;
         for (int i = 0; i < 3; ++i) reset_answers[i] = i == stop ? -1 : 1;
         settings_clear_all_progress();
-        assert(reset_questions == stop + 1 && !reset_requests);
+        assert(reset_questions == stop + 1 && !reset_requests && !reset_errors);
         reset_questions = 0;
         reset_answers[stop] = 0; /* Cancel button is equally safe. */
         settings_clear_all_progress();
-        assert(reset_questions == stop + 1 && !reset_requests);
+        assert(reset_questions == stop + 1 && !reset_requests && !reset_errors);
     }
     reset_questions = reset_requests = 0;
     for (int i = 0; i < 3; ++i) reset_answers[i] = 1;
     settings_clear_all_progress();
-    assert(reset_questions == 3 && reset_requests == 1);
+    assert(reset_questions == 3 && reset_requests == 1 && reset_errors == 1);
     reset_questions = reset_requests = 0;
     settings_extra_row_handle(SETTINGS_EXTRA_CLEAR_PROGRESS, 'r');
     settings_extra_row_handle(SETTINGS_EXTRA_CLEAR_PROGRESS, 'n');
@@ -224,7 +233,7 @@ static void check_progress_reset_warnings(void)
     next_click = choices[row]; reset_answers[0] = 0;
     page(DEVELOPER_PAGE, "\177\177\033");
     assert(reset_questions == 1 && !reset_requests && !p_ptr->noscore);
-    puts("Clear all progress: three cancel-default warnings, Escape/cancel at every step, final erase key, touch action and restart failure: PASS");
+    puts("Clear all progress: three cancel-default warnings, Escape/cancel at every step, final erase key, touch action and visible restart failure: PASS");
 }
 
 static void check_extra_controls(void)

@@ -12,4 +12,7 @@
     public int getPlayGamesAchievementMask();
     public boolean showPlayGamesAchievements();
     public boolean isPlayGamesAchievementsAvailable();
+    public boolean preparePlayGamesCloudSaves(java.lang.String);
+    public boolean isPlayGamesCloudSavesAvailable();
+    public int showPlayGamesCloudSaves(java.lang.String);
 }

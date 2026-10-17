@@ -223,8 +223,13 @@ static void settings_clear_all_progress(void)
     char error[1024];
     if (!sil_progress_reset_request_restart(error, sizeof(error)))
     {
+        const ui_question_option dismiss[] = {
+            { 'o', "OK", TERM_WHITE, false }
+        };
         log_error("Clear all progress: %s", error);
-        msg_print(error);
+        ui_question_ask_overlay("Progress reset failed", error,
+            dismiss, N_ELEMENTS(dismiss), UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, 0);
     }
 }
 

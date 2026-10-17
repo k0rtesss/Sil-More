@@ -1016,7 +1016,12 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_SAVE 17
 #define MAIN_MENU_SAVE_QUIT 18
 #define MAIN_MENU_RETURN_GAME 19
+#ifdef __ANDROID__
+#define MAIN_MENU_CLOUD_SAVES 20
+#define MAIN_MENU_MAX 20
+#else
 #define MAIN_MENU_MAX 19
+#endif
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);

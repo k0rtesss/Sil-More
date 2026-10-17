@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.8.31).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8.33).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 31 /* Achievement run history and poison attribution. */
+#define VERSION_EXTRA 33 /* Play Games, cloud saves, and 16 KB Android support. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 

@@ -37,6 +37,23 @@ public class SilMoreActivity extends SDLActivity {
 
 	private static native void onTextInputVisibleFrameChanged();
 	private PlayGamesAchievements playGamesAchievements;
+	private PlayGamesCloudSaves playGamesCloudSaves;
+
+	public boolean preparePlayGamesCloudSaves(String path) {
+		return playGamesCloudSaves.prepare(path);
+	}
+
+	public boolean isPlayGamesCloudSavesAvailable() {
+		return playGamesCloudSaves.isConfigured();
+	}
+
+	public int showPlayGamesCloudSaves(String path) {
+		return playGamesCloudSaves.show(path);
+	}
+
+	public boolean restartAfterCloudRestore() {
+		return restartAfterProgressReset();
+	}
 
 	/** JNI calls run on SDL's game thread; provider work belongs to the UI thread. */
 	public void syncPlayGamesAchievements(int unlockedMask) {
@@ -156,6 +173,7 @@ public class SilMoreActivity extends SDLActivity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		playGamesAchievements = new PlayGamesAchievements(this);
+		playGamesCloudSaves = new PlayGamesCloudSaves(this);
 		super.onCreate(savedInstanceState);
 		applyFullscreenLayout();
 		getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(
@@ -174,6 +192,12 @@ public class SilMoreActivity extends SDLActivity {
 	protected void onPause() {
 		playGamesAchievements.onPause();
 		super.onPause();
+	}
+
+	@Override
+	protected void onDestroy() {
+		playGamesCloudSaves.onDestroy();
+		super.onDestroy();
 	}
 
 	@Override

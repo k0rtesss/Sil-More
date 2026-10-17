@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Check JNI catalogue ordering; --gradle also exercises real Play configuration.
 
-The Gradle checks use clearly synthetic Console IDs and restore unconfigured
-generated resources afterward. Run without other Gradle builds in this checkout.
+The Gradle checks use an isolated configuration file and synthetic Console IDs,
+then restore default resources. Run without other Gradle builds in this checkout.
 """
 from pathlib import Path
 import argparse
 import os
 import re
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,8 +57,14 @@ def check_gradle(keys):
         env["JAVA_HOME"] = str(jdk)
     wrapper = str(ANDROID / ("gradlew.bat" if os.name == "nt" else "gradlew"))
 
-    def run(values, error=None):
+    config_area = tempfile.TemporaryDirectory(prefix="sil-play-config-")
+    isolated_config = Path(config_area.name) / "empty.properties"
+    isolated_config.write_text("# Isolated validation configuration\n")
+
+    def run(values, error=None, use_default=False):
         command = [wrapper, ":app:generatePlayDebugResValues", "--console=plain"]
+        if not use_default:
+            command.append(f"-PSIL_MORE_PLAY_GAMES_CONFIG={isolated_config}")
         command += [f"-P{key}={value}" for key, value in values.items()]
         result = subprocess.run(command, cwd=ANDROID, env=env, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -94,9 +101,10 @@ def check_gradle(keys):
         assert {key: value for key, value in actual.items() if key.startswith("play_ach_")} == expected
         print("PASS: Gradle rejects incomplete, duplicate and malformed configuration; all IDs map correctly")
     finally:
-        run({})
-        assert resources()["play_games_configured"] == "false"
-        assert all(not value for key, value in resources().items() if key.startswith("play_ach_"))
+        try:
+            run({}, use_default=True)
+        finally:
+            config_area.cleanup()
 
 
 if __name__ == "__main__":

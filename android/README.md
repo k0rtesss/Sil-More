@@ -140,7 +140,25 @@ $env:SIL_MORE_RELEASE_KEY_PASSWORD = '<key password>'
 
 `SIL_MORE_RELEASE_KEY_PASSWORD` may be omitted if the key password is the same as the keystore password; the script will prompt and lets Enter reuse the keystore password. Install Android SDK Platform 36 and Build Tools 36.0.0 before building. The script defaults to `-CompileSdk 36 -TargetSdk 36` and writes `sil-more-<version>.aab` in the repo root.
 
+Android's displayed version includes all four game components from `src/defines.h`
+(for example, `0.9.8.33`). Its default version code uses the same components
+(`90833`); use `-VersionCode` only for a packaging-only revision that needs a
+higher Google Play code.
+
 The Play Store AAB script always builds the `Play` delivery flavor, preserving package ID `com.silmore.myapp` for Google Play/internal testing.
+
+Play Games uses the public IDs in `android/play-games.properties`. The existing
+upload keystore signs the AAB; the Android OAuth client for Play delivery must
+use Google's **app-signing** certificate SHA-1. These are separate certificates.
+See [achievements](../docs/achievements.md) and [cloud saves](../docs/cloud-saves.md)
+for provider configuration and the manual Google save/restore workflow.
+
+The Android project pins NDK `27.3.13750724` and enables
+`ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES` for every native dependency. Release AAB
+packaging verifies every 64-bit ELF load segment has at least 16 KB alignment
+and compatible file/virtual-address offsets. This applies to SDL and codecs as
+well as the game library; the Android Gradle Plugin also requests 16 KB APK
+alignment. These build checks do not replace execution on a 16 KB device.
 
 ## Notes
 

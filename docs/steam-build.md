@@ -10,7 +10,9 @@ input waits and animation delays, and shuts down at process exit. If Steam
 initialization fails, the game continues without Steam features. Achievements
 use the shared local profile and synchronize with Steam; see
 [achievement setup](achievements.md) for the catalogue and dashboard configuration.
-Leaderboards and Steam Cloud configuration require separate work.
+Steam Cloud uses Auto-Cloud for the shared progress profile; see
+[cloud saves](cloud-saves.md) for the published roots and recovery behavior.
+Leaderboards are not configured.
 
 ## SDK and source checkout
 
