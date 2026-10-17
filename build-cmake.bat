@@ -2,11 +2,20 @@
 setlocal
 REM Build Sil-More for native Windows with pinned SDL source submodules.
 REM This script uses MSYS2's MinGW64 environment for the toolchain.
-REM Builds standard, portable, or both versions (SIL_USE_LOCAL_DATA controls portable mode).
+REM Builds standard, portable, both, or a separate Steamworks version.
 
 set "BUILD_TARGET=%~1"
 if "%BUILD_TARGET%"=="" set "BUILD_TARGET=all"
-if /I not "%BUILD_TARGET%"=="all" if /I not "%BUILD_TARGET%"=="standard" if /I not "%BUILD_TARGET%"=="portable" goto :invalid_target
+if /I not "%BUILD_TARGET%"=="all" if /I not "%BUILD_TARGET%"=="standard" if /I not "%BUILD_TARGET%"=="portable" if /I not "%BUILD_TARGET%"=="steam" goto :invalid_target
+
+set "STANDARD_BUILD_DIR=build-standard"
+set "STANDARD_DEPLOY_DIR=sil-more-windows-sdl3"
+set "SIL_STEAM_ARG=-DSIL_STEAMWORKS=OFF"
+if /I "%BUILD_TARGET%"=="steam" (
+    set "STANDARD_BUILD_DIR=build-steam"
+    set "STANDARD_DEPLOY_DIR=sil-more-windows-steam"
+    set "SIL_STEAM_ARG=-DSIL_STEAMWORKS=ON"
+)
 
 echo Building Sil-More for Windows with pinned SDL sources using CMake...
 echo.
@@ -32,13 +41,13 @@ echo [1/2] Building standard version (user folder mode)...
 echo.
 
 REM Run CMake configuration and build
-cmake -G "MinGW Makefiles" -B build-standard -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/msys64/mingw64 -DSIL_USE_LOCAL_DATA=OFF %SIL_SDL_SOURCE_ARG%
+cmake -G "MinGW Makefiles" -B %STANDARD_BUILD_DIR% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/msys64/mingw64 -DSIL_USE_LOCAL_DATA=OFF %SIL_SDL_SOURCE_ARG% %SIL_STEAM_ARG%
 if errorlevel 1 (
     echo CMake configuration failed for standard build!
     exit /b 1
 )
 
-cmake --build build-standard --parallel
+cmake --build %STANDARD_BUILD_DIR% --parallel
 if errorlevel 1 (
     echo CMake build failed for standard build!
     exit /b 1
@@ -50,13 +59,18 @@ echo.
 echo Copying files to deployment folder (standard)...
 
 REM Create deployment directory
-if not exist sil-more-windows-sdl3 mkdir sil-more-windows-sdl3
+if not exist %STANDARD_DEPLOY_DIR% mkdir %STANDARD_DEPLOY_DIR%
 
 REM Copy executable
-copy /Y build-standard\sil-more.exe sil-more-windows-sdl3\
+copy /Y %STANDARD_BUILD_DIR%\sil-more.exe %STANDARD_DEPLOY_DIR%\
+if errorlevel 1 exit /b 1
+if /I "%BUILD_TARGET%"=="steam" (
+    copy /Y "%STANDARD_BUILD_DIR%\steam_api64.dll" "%STANDARD_DEPLOY_DIR%\"
+    if errorlevel 1 exit /b 1
+)
 
 REM Copy SDL DLLs
-call :copy_sdl_dlls build-standard sil-more-windows-sdl3
+call :copy_sdl_dlls %STANDARD_BUILD_DIR% %STANDARD_DEPLOY_DIR%
 if errorlevel 1 exit /b 1
 
 REM Copy MinGW runtime DLLs
@@ -81,57 +95,62 @@ for %%f in (
     libvorbisfile-3.dll
     libopus-0.dll
 ) do (
-    if exist "C:\msys64\mingw64\bin\%%f" copy /Y "C:\msys64\mingw64\bin\%%f" sil-more-windows-sdl3\ >nul 2>&1
+    if exist "C:\msys64\mingw64\bin\%%f" copy /Y "C:\msys64\mingw64\bin\%%f" %STANDARD_DEPLOY_DIR%\ >nul 2>&1
 )
 
 REM Copy game data
-if not exist sil-more-windows-sdl3\lib xcopy /E /I /Y /K lib sil-more-windows-sdl3\lib
+if not exist %STANDARD_DEPLOY_DIR%\lib xcopy /E /I /Y /K lib %STANDARD_DEPLOY_DIR%\lib
+if /I "%BUILD_TARGET%"=="steam" (
+    copy /Y LICENSE.md "%STANDARD_DEPLOY_DIR%\LICENSE.md" >nul
+    copy /Y README.md "%STANDARD_DEPLOY_DIR%\README.md" >nul
+)
 
 REM Always update lib/xtra/font folder to ensure latest fonts are deployed
 REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
-if exist sil-more-windows-sdl3\lib\xtra\font rmdir /S /Q sil-more-windows-sdl3\lib\xtra\font
-xcopy /E /I /Y /K lib\xtra\font sil-more-windows-sdl3\lib\xtra\font
+if exist %STANDARD_DEPLOY_DIR%\lib\xtra\font rmdir /S /Q %STANDARD_DEPLOY_DIR%\lib\xtra\font
+xcopy /E /I /Y /K lib\xtra\font %STANDARD_DEPLOY_DIR%\lib\xtra\font
 
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.
-if exist sil-more-windows-sdl3\lib\xtra\font\InputMono-Bold.ttf del /Q sil-more-windows-sdl3\lib\xtra\font\InputMono-Bold.ttf
+if exist %STANDARD_DEPLOY_DIR%\lib\xtra\font\InputMono-Bold.ttf del /Q %STANDARD_DEPLOY_DIR%\lib\xtra\font\InputMono-Bold.ttf
 
 REM Always update lib/edit folder to ensure latest data files
-if exist sil-more-windows-sdl3\lib\edit rmdir /S /Q sil-more-windows-sdl3\lib\edit
-xcopy /E /I /Y /K lib\edit sil-more-windows-sdl3\lib\edit
+if exist %STANDARD_DEPLOY_DIR%\lib\edit rmdir /S /Q %STANDARD_DEPLOY_DIR%\lib\edit
+xcopy /E /I /Y /K lib\edit %STANDARD_DEPLOY_DIR%\lib\edit
 
 REM Always update lib/pref folder to ensure latest default JSON configs
-if exist sil-more-windows-sdl3\lib\pref rmdir /S /Q sil-more-windows-sdl3\lib\pref
-xcopy /E /I /Y /K lib\pref sil-more-windows-sdl3\lib\pref
+if exist %STANDARD_DEPLOY_DIR%\lib\pref rmdir /S /Q %STANDARD_DEPLOY_DIR%\lib\pref
+xcopy /E /I /Y /K lib\pref %STANDARD_DEPLOY_DIR%\lib\pref
 
 REM Always refresh the contextual tutorial catalogue and help resources.
-xcopy /E /I /Y /K lib\help sil-more-windows-sdl3\lib\help
+xcopy /E /I /Y /K lib\help %STANDARD_DEPLOY_DIR%\lib\help
 
 REM Always update lib/xtra/sound folder to ensure latest sound configuration
-if exist sil-more-windows-sdl3\lib\xtra\sound rmdir /S /Q sil-more-windows-sdl3\lib\xtra\sound
-xcopy /E /I /Y /K lib\xtra\sound sil-more-windows-sdl3\lib\xtra\sound
+if exist %STANDARD_DEPLOY_DIR%\lib\xtra\sound rmdir /S /Q %STANDARD_DEPLOY_DIR%\lib\xtra\sound
+xcopy /E /I /Y /K lib\xtra\sound %STANDARD_DEPLOY_DIR%\lib\xtra\sound
 
 REM Always update lib/xtra/music folder to ensure latest music tracks
-if exist sil-more-windows-sdl3\lib\xtra\music rmdir /S /Q sil-more-windows-sdl3\lib\xtra\music
-xcopy /E /I /Y /K lib\xtra\music sil-more-windows-sdl3\lib\xtra\music
+if exist %STANDARD_DEPLOY_DIR%\lib\xtra\music rmdir /S /Q %STANDARD_DEPLOY_DIR%\lib\xtra\music
+xcopy /E /I /Y /K lib\xtra\music %STANDARD_DEPLOY_DIR%\lib\xtra\music
 
 REM Keep the deployed xtra audio tree OGG-only.
-call :StripWavFiles sil-more-windows-sdl3\lib\xtra
+call :StripWavFiles %STANDARD_DEPLOY_DIR%\lib\xtra
 
 REM Copy tileset graphic
-if not exist sil-more-windows-sdl3\lib\xtra\graf mkdir sil-more-windows-sdl3\lib\xtra\graf
-copy /Y lib\xtra\graf\16x16.png sil-more-windows-sdl3\lib\xtra\graf\
-copy /Y lib\xtra\graf\anim_*.png sil-more-windows-sdl3\lib\xtra\graf\
-copy /Y lib\xtra\graf\animated.png sil-more-windows-sdl3\lib\xtra\graf\
-copy /Y lib\xtra\graf\ice_sheet.png sil-more-windows-sdl3\lib\xtra\graf\
-copy /Y lib\xtra\graf\transition_*.png sil-more-windows-sdl3\lib\xtra\graf\
-copy /Y lib\xtra\graf\LICENSE-verdant-*.txt sil-more-windows-sdl3\lib\xtra\graf\
+if not exist %STANDARD_DEPLOY_DIR%\lib\xtra\graf mkdir %STANDARD_DEPLOY_DIR%\lib\xtra\graf
+copy /Y lib\xtra\graf\16x16.png %STANDARD_DEPLOY_DIR%\lib\xtra\graf\
+copy /Y lib\xtra\graf\anim_*.png %STANDARD_DEPLOY_DIR%\lib\xtra\graf\
+copy /Y lib\xtra\graf\animated.png %STANDARD_DEPLOY_DIR%\lib\xtra\graf\
+copy /Y lib\xtra\graf\ice_sheet.png %STANDARD_DEPLOY_DIR%\lib\xtra\graf\
+copy /Y lib\xtra\graf\transition_*.png %STANDARD_DEPLOY_DIR%\lib\xtra\graf\
+copy /Y lib\xtra\graf\LICENSE-verdant-*.txt %STANDARD_DEPLOY_DIR%\lib\xtra\graf\
 
 echo.
-echo Standard version complete: sil-more-windows-sdl3\sil-more.exe
+echo Standard version complete: %STANDARD_DEPLOY_DIR%\sil-more.exe
 echo.
 
 if /I "%BUILD_TARGET%"=="standard" goto :build_complete
+if /I "%BUILD_TARGET%"=="steam" goto :build_complete
 
 REM ========================================
 REM BUILD 2: Local build (SIL_USE_LOCAL_DATA mode)
@@ -141,7 +160,7 @@ echo [2/2] Building local version (SIL_USE_LOCAL_DATA mode)...
 echo.
 
 REM Run CMake configuration and build with local data flag
-cmake -G "MinGW Makefiles" -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/msys64/mingw64 -DSIL_USE_LOCAL_DATA=ON %SIL_SDL_SOURCE_ARG%
+cmake -G "MinGW Makefiles" -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/msys64/mingw64 -DSIL_USE_LOCAL_DATA=ON %SIL_SDL_SOURCE_ARG% -DSIL_STEAMWORKS=OFF
 if errorlevel 1 (
     echo CMake configuration failed for local build!
     exit /b 1
@@ -251,13 +270,14 @@ echo.
 
 :build_complete
 if /I "%BUILD_TARGET%"=="standard" echo Standard build and deployment complete.
+if /I "%BUILD_TARGET%"=="steam" echo Steam build and deployment complete: %STANDARD_DEPLOY_DIR%\sil-more.exe
 if /I "%BUILD_TARGET%"=="portable" echo Portable build and deployment complete.
 exit /b 0
 
 goto :EOF
 
 :invalid_target
-echo Usage: build-cmake.bat [all^|standard^|portable]
+echo Usage: build-cmake.bat [all^|standard^|portable^|steam]
 exit /b 2
 
 :StripWavFiles

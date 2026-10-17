@@ -22,6 +22,7 @@
 #include "main.h"
 #include "log/log.h"
 #include "sdl-sound.h"
+#include "steamworks.h"
 #include <SDL3/SDL_filesystem.h>
 #ifdef WINDOWS
 #include <direct.h>
@@ -524,6 +525,10 @@ int main(int argc, char* argv[])
     /* Install "quit" hook */
     log_register_quit_hook(quit_hook);
     screen_set_startup_supporting_panes_hidden(true);
+
+    /* Steam must initialize before SDL creates the window and renderer. */
+    if (!sil_steamworks_init())
+        quit(NULL);
 
     /* Try the modules in the order specified by modules[] */
     for (i = 0; i < (int)N_ELEMENTS(modules); i++)

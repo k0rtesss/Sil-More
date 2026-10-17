@@ -45,7 +45,11 @@ compile_commands.json
 /scripts/__pycache__
 /scripts/tests/__pycache__/
 /tools/__pycache__
+/external/steamworks_sdk/
+steam_appid.txt
 /.gradle-android
 /web/ui8-demo/samples
 *.apk
 *.aab
+/output
+/tmp

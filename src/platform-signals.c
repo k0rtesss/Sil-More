@@ -5,6 +5,11 @@
  * and not for profit purposes provided that this copyright and statement
  * are included in all such copies.  Other copyrights may also apply.
  */
+/* Expose kill() before libc headers when Linux builds use strict C17. */
+#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "angband.h"
 #include "platform-signals.h"
 #include "game/game-lifecycle.h"

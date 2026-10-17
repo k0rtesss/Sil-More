@@ -4,6 +4,7 @@
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 #include "log/perf.h"
+#include "steamworks.h"
 
 errr callback_sdl_xtra(int n, int v)
 {
@@ -12,6 +13,7 @@ errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_EVENT: {
         SDL_Event ev;
 
+        sil_steamworks_run_callbacks();
         sil_popup_trace_stage("event-pump-enter");
         sdl_gameplay_tutorial_sync();
         sdl_present_if_needed(d);
@@ -39,6 +41,10 @@ errr callback_sdl_xtra(int n, int v)
             sdl_music_update(); /* Update music before waiting */
             Uint64 now_ns = SDL_GetTicksNS();
             int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
+            int steam_timeout_ms = sil_steamworks_callback_timeout_ms();
+            if (steam_timeout_ms >= 0
+                && (timeout_ms < 0 || steam_timeout_ms < timeout_ms))
+                timeout_ms = steam_timeout_ms;
             int touch_timeout_ms = sdl_touch_pane_pending_timeout_ms(now_ns);
             int menu_touch_timeout_ms = sdl_menu_touch_pending_timeout_ms(now_ns);
             int character_panel_touch_timeout_ms =
@@ -271,6 +277,7 @@ errr callback_sdl_xtra(int n, int v)
                 SDL_Delay(1);
             }
         }
+        sil_steamworks_run_callbacks();
         sdl_present_if_needed(d);
         return 0;
     }
@@ -342,6 +349,7 @@ errr callback_sdl_xtra(int n, int v)
             
             /* Update music streams */
             sdl_music_update();
+            sil_steamworks_run_callbacks();
             
             /* Process pending events to prevent "Not Responding" status */
             SDL_Event ev;

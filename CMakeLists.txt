@@ -19,6 +19,9 @@ endif()
 
 option(LOG_MODE_TIMESTAMP "Create new log with timestamp each time" OFF)
 option(STEAMDECK_SUPPORT "Build for Steam Deck" OFF)
+option(SIL_STEAMWORKS "Enable Steamworks integration for Windows, Linux and macOS desktop" OFF)
+set(STEAMWORKS_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/steamworks_sdk/sdk" CACHE PATH "Steamworks SDK directory containing public/ and redistributable_bin/")
+set(SIL_STEAM_APP_ID "5442160" CACHE STRING "Sil-More Steam App ID")
 option(SIL_USE_LOCAL_DATA "Store generated data inside the game directory (debug builds)" OFF)
 option(SIL_BUILD_WITH_SDL_SOURCES "Build SDL dependencies from pinned sources under external/ (recommended for Windows and Android)" ${SIL_BUILD_WITH_SDL_SOURCES_DEFAULT})
 
@@ -572,6 +575,13 @@ elseif(SIL_IOS)
   add_executable(sil-more MACOSX_BUNDLE ${SIL_MORE_SOURCES})
 else()
   add_executable(sil-more ${SIL_MORE_SOURCES})
+endif()
+
+if(SIL_STEAMWORKS)
+  # Keep the engine in C; only this small SDK adapter requires C++.
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Steamworks.cmake")
+  enable_language(CXX)
+  sil_target_steamworks(sil-more)
 endif()
 
 if(ANDROID)
