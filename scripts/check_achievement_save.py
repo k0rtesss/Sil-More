@@ -2,7 +2,7 @@
 """Roundtrip achievement/player-poison state with production save/load codecs.
 
 Requires current build-standard engine objects. Uses temporary profiles only.
-The 0.9.9.6 fixture uses its committed production writers, rather than a
+The 1.1.0.6 fixture uses its committed production writers, rather than a
 second hand-written serialization implementation.
 """
 from pathlib import Path
@@ -49,7 +49,8 @@ int fixture_read(const byte* buffer, size_t length, int extra,
 {
     fff = SDL_IOFromConstMem(buffer, length); assert(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 9; sf_extra = extra;
+    sf_major = VERSION_MAJOR; sf_minor = VERSION_MINOR;
+    sf_patch = VERSION_PATCH; sf_extra = extra;
     /* FEATURE_FLAGS */
     int result = load_read_extra();
     if (!result) {
@@ -112,7 +113,7 @@ static void assert_player_tail(void)
 }
 static void test_save(void)
 {
-    assert(VERSION_MAJOR==0 && VERSION_MINOR==9 && VERSION_PATCH==9 && VERSION_EXTRA==7);
+    assert(VERSION_MAJOR==1 && VERSION_MINOR==1 && VERSION_PATCH==0 && VERSION_EXTRA==7);
     prepare_player();
     monster_type source={0}, restored;
     source.r_idx=41; source.image_r_idx=7; source.fy=8; source.fx=9;
@@ -136,7 +137,7 @@ static void test_save(void)
     assert(restored.ai.observations[MON_AI_FIRE].value==2);
     assert(restored.ai.observations[MON_AI_FIRE].ttl==40);
     assert(restored.ai.observations[MON_AI_FIRE].turn==775);
-    puts("Current 0.9.9.7: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
+    puts("Current 1.1.0.7: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
 
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(legacy,oldsize,6,&restored,legacy_end)==0);
@@ -153,7 +154,7 @@ static void test_save(void)
     p_ptr->depth=10;
     sil_achievements_on_monster_killed(1,-1);
     assert(!(sil_achievements_mask() & (1U<<SIL_ACH_BY_A_THREAD)));
-    puts("Legacy 0.9.9.6: exact stream/checksum alignment, safe defaults, no false pacifist or 1-HP achievement PASS");
+    puts("Legacy 1.1.0.6: exact stream/checksum alignment, safe defaults, no false pacifist or 1-HP achievement PASS");
 
     prepare_player(); source.mflag |= MFLAG_PLAYER_POISON;
     oldsize=fixture_write(true,&source,legacy,sizeof(legacy),&legacy_end);
@@ -161,7 +162,7 @@ static void test_save(void)
     assert(fixture_read(legacy,oldsize,6,&restored,legacy_end)==0);
     assert(restored.poisoned==27 && restored.player_poisoned==27);
     source.mflag &= ~MFLAG_PLAYER_POISON;
-    puts("Legacy 0.9.9.6: player poison flag retains pending quest credit PASS");
+    puts("Legacy 1.1.0.6: player poison flag retains pending quest credit PASS");
 
     for (int poison=-5;poison<=99;poison+=104) {
         prepare_player(); source.player_poisoned=poison;
@@ -175,7 +176,7 @@ static void test_save(void)
     clear_for_load();
     assert(fixture_read(current,size,7,&restored,current_end)==0);
     assert(!(p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK));
-    puts("Current 0.9.9.7: player poison clamps to [0,total poison], invalid comeback depth clears pending condition PASS");
+    puts("Current 1.1.0.7: player poison clamps to [0,total poison], invalid comeback depth clears pending condition PASS");
 
     decode(current,plain,size);
     const byte marker[]={0xAC,7,0,0,0,0x78,0x56,0x34,0x12,0x70,0x11,1,0,0xFF,0xFF};
@@ -185,11 +186,11 @@ static void test_save(void)
     assert(matches==1); plain[found]=0xAD;
     encode(plain,modified,size); clear_for_load();
     assert(fixture_read(modified,size,7,&restored,current_end)!=0);
-    puts("Current 0.9.9.7: corrupt achievement block marker rejected PASS");
+    puts("Current 1.1.0.7: corrupt achievement block marker rejected PASS");
     decode(current,plain,size); plain[size-1]^=1;
     encode(plain,modified,size); clear_for_load();
     assert(fixture_read(modified,size,7,&restored,current_end)!=0);
-    puts("Current 0.9.9.7: corrupt encoded checksum rejected by production footer validator PASS");
+    puts("Current 1.1.0.7: corrupt encoded checksum rejected by production footer validator PASS");
 }
 '''
 

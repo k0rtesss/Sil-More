@@ -1,6 +1,6 @@
 # File: style-levels.txt
 # Version header
-V:0.9.9
+V:1.1.0
 
 # Ground material used to weight Hushed/Echoing/Draughty generation only.
 # A:<style>:STONE|SOFT|SNOW. Unlisted styles default to STONE.

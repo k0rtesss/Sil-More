@@ -53,7 +53,8 @@ int fixture_read_partition_meta(const byte* buffer, size_t length, int extra,
 {
     fff = SDL_IOFromConstMem(buffer, length); assert(fff);
     xor_byte = 0; v_check = x_check = load_byte_offset = 0;
-    sf_major = VERSION_MAJOR; sf_minor = VERSION_MINOR;
+    sf_major = extra < 0 ? VERSION_MAJOR : 0;
+    sf_minor = extra < 0 ? VERSION_MINOR : 9;
     sf_patch = extra < 0 ? VERSION_PATCH : 8;
     sf_extra = extra < 0 ? VERSION_EXTRA : extra;
     savefile_has_partition_meta = savefile_version_at_least(0, 9, 1, 7);

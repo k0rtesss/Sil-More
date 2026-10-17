@@ -1,5 +1,12 @@
 # Session notes
 
+## 2026-10-17: Renumber the expansion to 1.1
+
+- Renamed the local branch to `1.1`. Canonical release components/string and all 26 template headers now use `1.1.0`; save/score/metarun revision remains `7` (`1.1.0.7`). Expansion-only read gates, comments, fixtures and current docs use the new series. Historical session entries below retain their original labels.
+- Existing expansion save headers need migration to the new series; the former number is reserved for the future mainline. No serialized field layout changed.
+- Updated fixture version selection and repaired two stale assumptions after the achievement backport: current/legacy player record lengths differ, and alloy fixtures use a current player prefix with independently versioned inventory records.
+- Validation: standard/portable `build-cmake.bat all`; template source/deployment, self-test, runtime parser and CMake guards; Insight birth/save, achievement/poison save, weapon-credit save, alloy save, vertical-cache save/migration and cave-atmosphere suites all pass. Isolated portable startup reports `1.1.0`, with no log warnings/errors; test process closed. Logs: `scripts/output/version-1.1/`.
+
 ## 2026-10-17: Port master into 0.9.9
 
 - Merged `origin/master` through `1bed051c`: local/platform achievements, optional Steamworks builds, handheld defaults, settings reset, generic lore, player tile health bars, and controller/UI fixes. Kept 0.9.9 progression, quests, Tale memory, and vertical-world behavior.

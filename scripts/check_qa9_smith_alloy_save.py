@@ -212,7 +212,8 @@ def main():
     load=(ROOT/'src/fs/load.c').read_text(encoding='utf-8')
     start=load.index('    savefile_has_runtime_overrides =',load.index('static errr rd_savefile_new_aux'))
     flags=load[start:load.index('    /* Reset load byte offset',start)]
-    reader=OUT/'reader.c';reader.write_text('#include "fs/load.c"\nint fixture_read_work(const byte* buf,size_t length,int extra){fff=SDL_IOFromConstMem(buf,length);xor_byte=0;v_check=x_check=load_byte_offset=0;sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;\n'+flags+'savefile_has_varda_quest=true;int result=rd_extra();if(!result)result=rd_inventory();u32b tail=0;if(!result){rd_u32b(&tail);if(tail!=0xA110795AU||SDL_TellIO(fff)!=(Sint64)length)result=-1;}SDL_CloseIO(fff);fff=NULL;return result;}\n',encoding='utf-8')
+    # The player prefix uses today's writer; only the inventory revision varies.
+    reader=OUT/'reader.c';reader.write_text('#include "fs/load.c"\nint fixture_read_work(const byte* buf,size_t length,int extra){fff=SDL_IOFromConstMem(buf,length);xor_byte=0;v_check=x_check=load_byte_offset=0;sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=VERSION_EXTRA;\n'+flags+'savefile_has_varda_quest=true;int result=rd_extra();sf_extra=extra;if(!result)result=rd_inventory();u32b tail=0;if(!result){rd_u32b(&tail);if(tail!=0xA110795AU||SDL_TellIO(fff)!=(Sint64)length)result=-1;}SDL_CloseIO(fff);fff=NULL;return result;}\n',encoding='utf-8')
     objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text())
     response=OUT/'objects.rsp';response.write_text('\n'.join('"'+p+'"' for p in objects if not p.endswith(('/src/main.c.obj','/src/cmd/ui/cmd-ui-smithing.c.obj','/src/fs/save.c.obj','/src/fs/load.c.obj'))),encoding='utf-8')
     env=os.environ.copy();env['PATH']=os.pathsep.join([*(str(BUILD/'_deps'/p) for p in ('SDL','SDL_ttf','SDL_image','SDL_mixer')),'C:/msys64/mingw64/bin','C:/msys64/usr/bin',env['PATH']])

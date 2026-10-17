@@ -7,7 +7,7 @@
 # H: mandatory parents skill/local pairs; J: new-mode name; F: new-mode effect
 # Z: tactical role. No new-policy attribute gates or secondary ability fees.
 
-V:0.9.9
+V:1.1.0
 
 N:0:Power
 X:1:500:0:1

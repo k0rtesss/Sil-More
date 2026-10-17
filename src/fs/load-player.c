@@ -364,7 +364,7 @@ errr rd_extra(void)
             {
                 rd_u16b(&insight_milestones);
                 rd_s32b(&insight_points);
-                if (savefile_version_at_least(0, 9, 9, 3))
+                if (savefile_version_at_least(1, 1, 0, 3))
                     rd_byte(&free_active_weapon_change_used);
                 else
                     strip_bytes(1);
@@ -423,7 +423,7 @@ errr rd_extra(void)
     p_ptr->insight_ruleset = op_ptr->opt[OPT_insight_beta]
         ? INSIGHT_RULESET_LEGACY : INSIGHT_RULESET_CLASSIC;
     p_ptr->light_dimmed = false;
-    if (savefile_version_at_least(0, 9, 9, 1))
+    if (savefile_version_at_least(1, 1, 0, 1))
     {
         byte ruleset, dimmed;
         rd_byte(&ruleset);
@@ -576,9 +576,9 @@ errr rd_extra(void)
     p_ptr->achievement_kills = 0;
     p_ptr->achievement_singing_turns = 0;
     p_ptr->achievement_comeback_depth = -1;
-    /* Earlier 0.9.9 releases predate master's 0.9.8.31 achievement block. */
-    if (savefile_version_at_least(0, 9, 9, 7)
-        || (!savefile_version_at_least(0, 9, 9, 0)
+    /* Earlier 1.1.0 releases predate master's 0.9.8.31 achievement block. */
+    if (savefile_version_at_least(1, 1, 0, 7)
+        || (!savefile_version_at_least(1, 1, 0, 0)
             && savefile_version_at_least(0, 9, 8, 31)))
     {
         byte achievement_marker;

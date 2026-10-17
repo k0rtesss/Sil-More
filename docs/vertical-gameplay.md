@@ -101,7 +101,7 @@ dimensions and reciprocal metadata; all eight transforms use one stored frame.
 In vault terrain rows, `_` is shallow water, `"` is deep water, and a backtick
 continues to mean lava. Role 9 marks the reward exposed by draining a pool.
 
-Save format 0.9.9.6 adds resident region/vault metadata. Earlier saves receive
+Save format 1.1.0.6 adds resident region/vault metadata. Earlier saves receive
 empty vertical metadata and keep their existing terrain and stairs.
 
 Focused checks:

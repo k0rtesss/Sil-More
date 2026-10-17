@@ -193,14 +193,14 @@ static void saves(void)
     body.insight_monster_types=RF3_ORC;body.insight_milestones=3;
     body.insight_ability_upgraded[S_SMT][3]=true;
     pos=0;save_lane();int current=pos;memcpy(expected,stream,current);
-    const byte versions[][4]={{0,9,8,26},{0,9,8,27},{0,9,8,28},{0,9,8,29},{0,9,8,30},{0,9,8,31},{0,9,9,0},{0,9,9,1}};
+    const byte versions[][4]={{0,9,8,26},{0,9,8,27},{0,9,8,28},{0,9,8,29},{0,9,8,30},{0,9,8,31},{1,1,0,0},{1,1,0,1}};
     for(int v=0;v<8;v++) for(int option=0;option<2;option++) {
         memcpy(version,versions[v],4);int n=0;
         memcpy(fixture,expected,15);n=15;
         if(savefile_version_at_least(0,9,8,30)){memcpy(fixture+n,expected+15,4);n+=4;}
         if(savefile_version_at_least(0,9,8,27)){memcpy(fixture+n,expected+19,A_MAX);n+=A_MAX;}
         if(savefile_version_at_least(0,9,8,29)){memcpy(fixture+n,expected+19+A_MAX,S_MAX*ABILITIES_MAX);n+=S_MAX*ABILITIES_MAX;}
-        if(savefile_version_at_least(0,9,9,1)){memcpy(fixture+n,expected+current-2,2);n+=2;}
+        if(savefile_version_at_least(1,1,0,1)){memcpy(fixture+n,expected+current-2,2);n+=2;}
         fixture[n++]=0xA7;memcpy(stream,fixture,n);size=n;pos=0;
         memset(&body,255,sizeof(body));options.opt[OPT_insight_beta]=option;load_lane();
         byte sentinel;rd_byte(&sentinel);assert(sentinel==0xA7&&pos==size);
@@ -252,7 +252,7 @@ static void origins(void) {
     profiles[0].a_adj[2][0]=-1;body.pcharacter=0;get_extra();
     for(int s=0;s<S_MAX;s++)for(int a=0;a<ABILITIES_MAX;a++)assert(!body.innate_ability[s][a]);
 }
-int main(void) { policy();saves();origins();puts("Insight birth/save: fixed rulesets, stat/upgrade fees, all 51 origin packages, bounds, 0.9.8.26-31/0.9.9.0-1 sentinel consumption PASS");return 0;}
+int main(void) { policy();saves();origins();puts("Insight birth/save: fixed rulesets, stat/upgrade fees, all 51 origin packages, bounds, 0.9.8.26-31/1.1.0.0-1 sentinel consumption PASS");return 0;}
 '''
     source = OUT / "check.c"
     source.write_text(harness, encoding="utf-8")

@@ -198,7 +198,7 @@ void wr_extra(void)
     }
     wr_u16b(p_ptr->insight_milestones);
     wr_s32b(p_ptr->insight_points);
-    /* 0.9.9.3: preserve ready credit in a formerly reserved whole byte. */
+    /* 1.1.0.3: preserve ready credit in a formerly reserved whole byte. */
     wr_byte(p_ptr->free_active_weapon_change_used != 0);
 
     /* Version 0.9.8.30: one-time Insight rewards for monster families. */
@@ -213,7 +213,7 @@ void wr_extra(void)
         for (int ability = 0; ability < ABILITIES_MAX; ++ability)
             wr_byte(p_ptr->insight_ability_upgraded[i][ability] ? 1 : 0);
 
-    /* 0.9.9.1: freeze progression policy and preserve the light toggle. */
+    /* 1.1.0.1: freeze progression policy and preserve the light toggle. */
     byte ruleset = p_ptr->insight_ruleset;
     if (ruleset < INSIGHT_RULESET_CLASSIC || ruleset > INSIGHT_RULESET_REWORKED)
         ruleset = insight_system_enabled()
@@ -313,7 +313,7 @@ void wr_extra(void)
 
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
-    /* 0.9.9.7 (master 0.9.8.31): preserve run-wide achievement conditions. */
+    /* 1.1.0.7 (master 0.9.8.31): preserve run-wide achievement conditions. */
     wr_byte(0xAC);
     wr_u32b(p_ptr->achievement_flags & SIL_ACH_RUN_FLAGS);
     wr_u32b(p_ptr->achievement_kills);

@@ -162,7 +162,7 @@ errr rd_inventory(void)
     {
         byte alloy[SMITHING_ALLOY_STATE_BYTES] = { 0 };
 
-        if (savefile_version_at_least(0, 9, 9, 4))
+        if (savefile_version_at_least(1, 1, 0, 4))
         {
             for (int i = 0; i < SMITHING_ALLOY_STATE_BYTES; i++)
                 rd_byte(&alloy[i]);

@@ -46,7 +46,7 @@ READER = r'''
 void fixture_read_begin(const byte *buffer,size_t length,int extra) {
     fff=SDL_IOFromConstMem(buffer,length);assert(fff);
     xor_byte=0;v_check=x_check=load_byte_offset=0;
-    sf_major=0;sf_minor=9;sf_patch=9;sf_extra=extra;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;
     savefile_has_runtime_overrides=savefile_has_monster_shatter=true;
     savefile_has_song_duels=savefile_has_thrall_quest=true;
     savefile_has_thrall_quest_requested=savefile_has_cave_info_hi=true;

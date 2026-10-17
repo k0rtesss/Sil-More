@@ -52,14 +52,14 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.9"
+#define VERSION_STRING "1.1.0"
 /*
- * Version components (0.9.9.7).  All on-disk formats (saves, scores, metaruns)
+ * Version components (1.1.0.7).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
-#define VERSION_MAJOR 0
-#define VERSION_MINOR 9
-#define VERSION_PATCH 9
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 1
+#define VERSION_PATCH 0
 #define VERSION_EXTRA 7  /* Achievement run history and poison attribution. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1

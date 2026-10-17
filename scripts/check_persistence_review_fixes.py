@@ -170,7 +170,7 @@ static void check_memory_paths_and_rollover(void)
     puts("Memory databases: user/portable paths, ownership isolation, legacy file preservation and real automatic rollover PASS.");
 }
 
-/* 0.9.8.31 has the same physical save layout as 0.9.9.0. Re-encode the
+/* 0.9.8.31 has the same physical save layout as 1.1.0.0. Re-encode the
  * current record under its earlier header, rebuilding both checksums. */
 static void encode_v31(byte* file, size_t size)
 {

@@ -1443,7 +1443,7 @@ static bool read_vertical(level_image* image)
             if (load_byte_offset - offset != 11 || dest->kind > HINT_DESTINATION_FIXED_QUEST_SITE) return false;
         }
     }
-    if (savefile_version_at_least(0, 9, 9, 6)) return read_regions(image);
+    if (savefile_version_at_least(1, 1, 0, 6)) return read_regions(image);
     SDL_memset(&image->vertical, 0, sizeof(image->vertical));
     image->vertical.breath = 12; image->vertical.last_turn = turn;
     SDL_memset(&image->vertical_vaults, 0, sizeof(image->vertical_vaults));

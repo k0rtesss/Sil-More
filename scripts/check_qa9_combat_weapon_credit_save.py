@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Roundtrip production player writer/reader and legacy 0.9.9.2 credit defaults.
+"""Roundtrip production player writer/reader and legacy 1.1.0.2 credit defaults.
 Requires a full current-header build; never opens a player save.
 """
 from pathlib import Path
@@ -34,14 +34,14 @@ READER = r"""
 #include <assert.h>
 bool fixture_supported(int extra)
 {
-    sf_major=0;sf_minor=9;sf_patch=9;sf_extra=extra;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;
     return savefile_version_supported();
 }
 int fixture_read(const byte* buffer,size_t size,int extra)
 {
     fff=SDL_IOFromConstMem(buffer,size); assert(fff);
     xor_byte=0;v_check=x_check=load_byte_offset=0;
-    sf_major=0;sf_minor=9;sf_patch=9;sf_extra=extra;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;
     savefile_has_song_duels=savefile_has_ability_timeline=true;
     savefile_has_varda_quest=savefile_has_skeleton_notes=true;
     savefile_has_skeleton_hint_mask32=savefile_has_skeleton_hint_counts=true;
@@ -60,7 +60,7 @@ extern int fixture_read(const byte*,size_t,int);
 extern bool fixture_supported(int);
 static void checks(void)
 {
-    byte buffer[262144];size_t canonical_size=0;
+    byte buffer[262144];size_t canonical_size[2]={0};
     assert(fixture_supported(2) && fixture_supported(3)
         && fixture_supported(VERSION_EXTRA)
         && !fixture_supported(VERSION_EXTRA + 1));
@@ -77,8 +77,9 @@ static void checks(void)
         p_ptr->insight_points=12345;p_ptr->stat_base[A_STR]=7;
         p_ptr->light_dimmed=true;
         size_t size=fixture_write(buffer,sizeof(buffer),legacy);
-        if(!canonical_size)canonical_size=size;
-        assert(size==canonical_size); /* Reserved byte preserves stream length. */
+        if(!canonical_size[legacy!=0])canonical_size[legacy!=0]=size;
+        /* Current player records also contain the later achievement block. */
+        assert(size==canonical_size[legacy!=0]);
         p_ptr->free_active_weapon_change_used=255;
         p_ptr->insight_points=0;p_ptr->stat_base[A_STR]=0;p_ptr->light_dimmed=false;
         assert(!fixture_read(buffer,size,legacy?2:VERSION_EXTRA));

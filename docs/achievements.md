@@ -34,7 +34,7 @@ Tale files. This is `<user-root>/meta/achievements.json` in standard builds and
 `lib/apex/achievements.json` in portable builds. Death, a new character, and a new
 Tale do not clear achievements. Character saves now store run-wide kill,
 singing and comeback history in save format
-**0.9.9.7** (ported from master **0.9.8.31**). Earlier `0.9.9` saves still load,
+**1.1.0.7** (ported from master **0.9.8.31**). Earlier `1.1.0` saves still load,
 with safe defaults for the new fields.
 The separate achievement file keeps schema version 1 and preserves all
 previously unlocked achievement keys.

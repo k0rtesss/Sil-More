@@ -185,7 +185,7 @@ static void encode(const byte* source, byte* target, size_t size)
 /* Find the end of the unchanged v16 lanes; v17 appends ecology here. */
 static size_t fixture_v16_dungeon_end(size_t dungeon_size)
 {
-    /* Extra resets when the release changes; 0.9.9.0 still has ecology. */
+    /* Extra resets when the release changes; 1.1.0.0 still has ecology. */
     if (VERSION_MAJOR == 0 && VERSION_MINOR == 9 && VERSION_PATCH == 8
         && VERSION_EXTRA < 17) return dungeon_size;
     const byte boundary[] = {0,0xF1,0,0,1,0xF1,0,0,2,0xF1,0,0,0x17,0xEC};
