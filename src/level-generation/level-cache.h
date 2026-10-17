@@ -37,6 +37,7 @@ bool level_cache_reading_floor(void);
 
 /* Main-thread borrowed views. Never retain them across cache polling/travel. */
 struct level_image;
+struct object_type;
 const struct level_image* level_cache_floor(int depth);
 struct level_image* level_cache_mutable_floor(int depth);
 bool level_cache_vertical_aperture(int y, int x, int* depth, int* target_y,
@@ -47,6 +48,12 @@ bool level_cache_vertical_receive(int depth, u32b identity, int material,
 void level_cache_process_vertical(void);
 bool level_cache_damage_monster(int depth, int index, int damage,
     const char* note, int who);
+bool level_cache_damage_monster_observed(int depth, int index, int damage,
+    const char* note, int who);
+/* An explicitly observed player shot, unlike an ambient poison tick. */
+void level_cache_poison_monster(int depth, int index,
+    const struct object_type* first, const struct object_type* second, int damage);
+bool level_cache_poison_tick(int depth, int index);
 bool level_cache_transfer_object(int depth, int index, int y, int x);
 
 #endif

@@ -3,6 +3,10 @@
 
 #include "../h-basic.h"
 typedef struct monster_type monster_type;
+struct level_image;
+/* Current physical lighting, excluding the player who last visited a floor.
+ * Sampling changes no gameplay clock, RNG, knowledge, or live flow fields. */
+int cave_light_cached_sample(const struct level_image* floor, int y, int x);
 
 /* Physical contribution before visibility flags and the final light clamp. */
 int cave_light_contribution(int light, bool glow, int sy, int sx, int y, int x);

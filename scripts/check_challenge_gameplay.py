@@ -8,6 +8,7 @@ from pathlib import Path
 import argparse
 import os
 import re
+import json
 import shlex
 import subprocess
 import tempfile
@@ -35,6 +36,7 @@ void fixture_read_begin(const byte*,size_t,int);
 size_t fixture_read_end(void);
 static int selection;
 static const char* menu_keys;
+static int fixture_sequence;
 char __real_inkey(void);
 char __wrap_inkey(void)
 {
@@ -56,6 +58,7 @@ int __wrap_quest_reward_book_choice(cptr title,cptr texts[],int text_count,
 static void seed(int challenge)
 {
     level_cache_clear();
+    Rand_state_init(FIXTURE_SEED+(++fixture_sequence)*7919);
     memset(p_ptr,0,sizeof(*p_ptr));
     memset(inventory,0,INVEN_TOTAL*sizeof(*inventory));
     reset_map(10); p_ptr->mhp=p_ptr->chp=100;
@@ -65,7 +68,7 @@ static void seed(int challenge)
     birth_discon_stair=birth_ironman=birth_no_artefacts=birth_fixed_exp=false;
     adult_discon_stair=adult_ironman=adult_no_artefacts=false;
     op_ptr->opt[OPT_ADULT+OPT_birth_fixed_exp-OPT_BIRTH]=false;
-    playerturn=1;
+    playerturn=1+FIXTURE_VARIANT;turn=1000+fixture_sequence;
     run_mode_set_current(RUN_MODE_STORY);
     for(int y=0;y<88;y++)for(int x=0;x<88;x++)
         if(!y||!x||y==87||x==87) cave_set_feat(y,x,FEAT_WALL_PERM);
@@ -115,10 +118,38 @@ static void restrictions(void)
     }
     puts("Fixed XP birth and gains; blunt item/melee/real fire/throw command gates; every light kind PASS.");
 }
+static void blunt_combat(void)
+{
+    seed(CHALLENGE_TULKAS_BLUNT);
+    p_ptr->playing=true;p_ptr->tutorial_deferred=true;
+    p_ptr->song1=p_ptr->song2=SNG_NOTHING;
+    p_ptr->chp=p_ptr->mhp=p_ptr->csp=p_ptr->msp=30000;p_ptr->cur_light=20;
+    for(int i=0;i<A_MAX;i++)p_ptr->stat_base[i]=p_ptr->stat_use[i]=30;
+    for(int i=0;i<S_MAX;i++)p_ptr->skill_base[i]=p_ptr->skill_use[i]=200;
+    p_ptr->mdd=20;p_ptr->mds=20;
+    op_ptr->opt[OPT_pacifist_attack_warning]=false;
+    character_generated=character_dungeon=true;
+    player_place(20,20);
+    int dirs[]={4,8,6};int d=dirs[FIXTURE_VARIANT%3];
+    int y=20+ddy[d],x=20+ddx[d];
+    assert(place_monster_one(y,x,11,false,true,NULL));
+    int m=cave_m_idx[y][x];mon_list[m].ml=true;mon_list[m].alertness=ALERTNESS_ALERT;
+    cave_info[y][x]|=CAVE_MARK|CAVE_SEEN|CAVE_GLOW;
+    object_prep(&inventory[INVEN_WIELD],lookup_kind(TV_SWORD,SV_LONG_SWORD));
+    int hp=mon_list[m].hp;p_ptr->energy_use=100;move_player(d);
+    assert(mon_list[m].r_idx==11&&mon_list[m].hp==hp);
+    object_prep(&inventory[INVEN_WIELD],lookup_kind(TV_HAFTED,SV_WAR_HAMMER));
+    int blows=0;
+    while(mon_list[m].r_idx){assert(++blows<=10);p_ptr->energy_use=100;move_player(d);new_combat_round();}
+    assert(!p_ptr->is_dead);
+    printf("Production movement/combat direction %d: forbidden sword caused zero damage; legal hammer defeated wolf in %d attacks PASS.\n",d,blows);
+    character_generated=character_dungeon=false;
+}
 static void lineage(void)
 {
     int quests[]={QUEST_ID_MANDOS_TRAITOR,QUEST_ID_OROME_DRAGONS,QUEST_ID_NIENA_MORGOTH,QUEST_ID_TULKAS_ORCS,QUEST_ID_VARDA_SHADOW};
-    for(int id=1;id<=5;id++) {
+    for(int order=0;order<5;order++) {
+        int id=1+(order+FIXTURE_VARIANT)%5;
         seed(id);quest_set_enabled(quests[id-1],true);
         assert(!quest_challenge_unlocked(id));
         p_ptr->noscore=1;quest_challenge_unlock_for_quest(quests[id-1]);
@@ -258,7 +289,8 @@ static void cache_links(void)
 }
 static void cache_arrivals(void)
 {
-    for(int mode=0;mode<3;mode++)for(int travel=0;travel<5;travel++) {
+    for(int mode=0;mode<3;mode++)for(int order=0;order<5;order++) {
+        int travel=(order+FIXTURE_VARIANT)%5;
         seed(mode==2?CHALLENGE_DISCONNECTED:0);birth_discon_stair=mode==1;
         int destination=travel==1?12:11;
         p_ptr->py=p_ptr->px=10;
@@ -267,6 +299,7 @@ static void cache_arrivals(void)
         reset_map(destination);p_ptr->py=p_ptr->px=2;
         cave_set_feat(10,10,travel==2?FEAT_FLOOR:travel==1?FEAT_LESS_SHAFT:FEAT_LESS);
         level_image* target=capture();
+        target->visited=(FIXTURE_VARIANT%2)==0;
         level_image_restore(source);floors[0]=active=source;running=true;
         /* Park the scheduler, so these explicit maps test the production
          * transition without launching unrelated background generation. */
@@ -321,7 +354,8 @@ static void safe_arrivals(void)
 static void pending_roundtrip(void)
 {
     static byte encoded[1024*1024];
-    for(int mode=0;mode<3;mode++)for(int travel=0;travel<10;travel++) {
+    for(int mode=0;mode<3;mode++)for(int order=0;order<10;order++) {
+        int travel=(order+FIXTURE_VARIANT)%10;
         seed(mode==2?CHALLENGE_DISCONNECTED:0);birth_discon_stair=mode==1;
         int departure=travel==5?UTUMNO_FORGE_DEPTH:travel==8?MORGOTH_DEPTH:travel==9?UTUMNO_DEPTH:10;
         int destination=travel==5?MORGOTH_DEPTH:travel==1?12:travel==6?9:travel==7?8
@@ -369,21 +403,56 @@ static void pending_roundtrip(void)
     }
     puts("Real cache write/clear/read pending transition roundtrip: ordinary/birth/quest up/down stairs and shafts, physical falls, offset/same-column registered portals and all three same-column private Utumno routes; following save sentinel unchanged (30 cases) PASS.");
 }
+static void await_floor(int depth)
+{
+    Uint64 deadline=SDL_GetTicks()+60000;
+    while(!find_floor(depth)) {
+        assert(SDL_GetTicks()<deadline);level_cache_poll();SDL_Delay(1);
+    }
+}
+static void async_generation(void)
+{
+    seed(0);playerturn=100;character_generated=true;
+    for(int id=1;id<=16;id++)quest_set_enabled(id,false);
+    cave_set_feat(10,10,FEAT_MORE);
+    floors[0]=active=capture();running=true;
+    start_job(11);assert(job&&job->thread);
+    SDL_Delay(FIXTURE_VARIANT%4);
+    assert(!SDL_GetAtomicInt(&job->done));
+    /* Mutate while the real SDL worker owns its private old options. */
+    birth_discon_stair=adult_discon_stair=true;
+    level_cache_options_changed();assert(SDL_GetAtomicInt(&job->cancel));
+    await_floor(11);
+    assert(find_floor(11)&&!find_floor(11)->visited);
+    assert(find_floor(11)->feat[10][10]!=FEAT_LESS);
+    /* Mutate again after publication: the old map must disappear, and a
+     * production worker must rebuild the now-connected return staircase. */
+    birth_discon_stair=adult_discon_stair=false;
+    level_cache_options_changed();assert(!find_floor(11));
+    await_floor(11);assert(find_floor(11)->feat[10][10]==FEAT_LESS);
+    level_cache_clear();character_generated=false;
+    puts("Real SDL async worker: in-flight disconnect change cancels/rebuilds; published disconnected neighbor is evicted and regenerated with connected return stair PASS.");
+}
 '''
 
 def main():
+    global OUT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", action="store_true", help="Use committed cache to reproduce regressions")
     parser.add_argument("--review-baseline", choices=("landing", "adult", "published", "pending"), help="Remove one reviewed fix in a generated source copy")
     parser.add_argument("--case", choices=("all", "links", "arrivals", "single", "menu", "safety", "changes", "artefact", "pending"), default="all")
+    parser.add_argument('--seed',type=int,default=1)
+    parser.add_argument('--variant',type=int,default=0)
+    parser.add_argument('--output-dir',type=Path,default=OUT)
     args = parser.parse_args()
+    OUT=args.output_dir.resolve()
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += fixture_function("terminal_extra") + "\n" + fixture_function("reset_map") + "\n"
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
     source = OUT / "check.c"
-    checks = CHECKS
+    checks = f'\n#define FIXTURE_SEED {args.seed}\n#define FIXTURE_VARIANT {args.variant}\n'+CHECKS
     if args.baseline:
         baseline = OUT / "cache-baseline.c"
         baseline.write_text(subprocess.check_output(["git", "show", "HEAD:src/level-generation/level-cache.c"],cwd=ROOT,text=True),encoding="utf-8")
@@ -403,12 +472,16 @@ def main():
         assert n==1
         baseline=OUT/"cache-review-baseline.c";baseline.write_text(cache,encoding="utf-8")
         checks=checks.replace('"level-generation/level-cache.c"','"'+baseline.as_posix()+'"')
-    calls = {"all":"restrictions();lineage();ordinary();cache_links();cache_arrivals();safe_arrivals();menu_route();artefact_menu();cache_option_changes();pending_roundtrip();", "links":"cache_links();", "arrivals":"cache_arrivals();", "single":"single_stairs();", "menu":"menu_route();artefact_menu();", "safety":"safe_arrivals();", "changes":"cache_option_changes();", "artefact":"artefact_menu();", "pending":"pending_roundtrip();"}
+    calls = {"all":"restrictions();blunt_combat();lineage();ordinary();cache_links();cache_arrivals();safe_arrivals();menu_route();artefact_menu();cache_option_changes();pending_roundtrip();async_generation();", "links":"cache_links();", "arrivals":"cache_arrivals();", "single":"single_stairs();", "menu":"menu_route();artefact_menu();", "safety":"safe_arrivals();", "changes":"cache_option_changes();", "artefact":"artefact_menu();", "pending":"pending_roundtrip();"}
     source.write_text(prefix + checks + init + r'''
-    assert(!init_quest_info());
+    assert(!init_quest_info());assert(!init_st_info());assert(!init_partition_info());
+    style_info=(style_type*)style_head.info_ptr;style_name=style_head.name_ptr;
+    assert(!init_flavor_info());assert(!init_effect_info());assert(!init_skeleton_note_info());
+    assert(!init_h_info());assert(!init_n_info());build_randart_tables();flavor_init();drop_system_init();
     ANGBAND_DIR_APEX=ANGBAND_DIR_METARUN=argv[2];
     metaruns=mem_alloc_array(1,metarun);metarun_max=1;current_run=0;
     reset_defaults(&metaruns[0]);metar=metaruns[0];
+    printf("Fresh challenge pass seed=%d variant=%d\n",FIXTURE_SEED,FIXTURE_VARIANT);
 ''' + calls[args.case] + r'''
     level_cache_clear();
     SDL_Quit();return 0;
@@ -435,7 +508,11 @@ def main():
     reader=OUT/"reader.c";reader.write_text(READER,encoding="utf-8")
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe","-DUSE_SDL","-std=c17","-O0","-g","@CMakeFiles/sil-more.dir/includes_C.rsp",str(source),str(settings),str(maker),str(writer),str(reader),"@"+str(rsp),"@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,--wrap=quest_reward_book_choice,--wrap=inkey,--wrap=metarun_save_persistent_settings,--wrap=save_pane_config_to_json","-o",str(exe)],cwd=BUILD,env=env,check=True)
     with tempfile.TemporaryDirectory(prefix="data-",dir=OUT) as data:
-        subprocess.run([str(exe),str(ROOT/"lib/edit"),data],cwd=data,env=env,check=True,timeout=90)
+        result=subprocess.run([str(exe),str(ROOT/"lib/edit"),data],cwd=data,env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=90)
+        print(result.stdout,end='')
+        (OUT/'results.log').write_text(result.stdout,encoding='utf-8')
+        (OUT/'result.json').write_text(json.dumps({'seed':args.seed,'variant':args.variant,'case':args.case,'exit_code':result.returncode,'target_visited':args.variant%2==0,'order_rotation':args.variant},indent=2),encoding='utf-8')
+        result.check_returncode()
 
 if __name__ == "__main__":
     main()

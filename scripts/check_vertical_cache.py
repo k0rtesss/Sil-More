@@ -384,6 +384,61 @@ static void test_generation_upkeep_deferral(void)
     puts("Production drop_near upkeep: incomplete map at 0,0 and complete worker defer view/lore/quests without losing flags; ready main map rebuilds real view PASS.");
 }
 
+static void test_natural_passage_generation(void)
+{
+    fresh(8);
+    cave_vertical_state source={0};
+    source.portal_count=1;source.breath=12;source.last_turn=turn;
+    cave_vertical_portal *portal=&source.portals[0];
+    *portal=(cave_vertical_portal){.identity=0x71550001,.y=20,.x=20,
+        .peer_depth=9,.peer_y=24,.peer_x=24,.kind=CAVE_VERTICAL_RAPIDS,
+        .material=FEAT_WATER,.strength=2,.flags=CAVE_VERTICAL_DOWN};
+    for(int y=0;y<7;y++)for(int x=0;x<7;x++) {
+        portal->local_patch[y][x]=FEAT_WATER;
+        portal->peer_patch[y][x]=(ABS(y-3)+ABS(x-3)<=1)
+            ?FEAT_DEEP_WATER:FEAT_FLOOR;
+    }
+    assert(cave_vertical_restore(&source));
+    level_image *upper=capture();floors[0]=active=upper;running=true;
+    memset(&next_job,0,sizeof(next_job));next_job.depth=9;
+    prepare_links(&next_job);next_job.allow_down=false;
+    fresh(9);worker_job=&next_job;
+    level_cache_generation_reserve();
+    assert(cave_vertical_get()->portals[0].local_patch[3][3]==FEAT_DEEP_WATER);
+    /* The room planner may still carve/set bedrock in a reserved footprint;
+     * those temporary writes must not rewrite its inherited blueprint. */
+    cave_set_feat(24,24,FEAT_WALL_OUTER);
+    if(cave_vertical_get()->portals[0].local_patch[3][3]!=FEAT_DEEP_WATER) {
+        fputs("FAIL: worker layout overwrote natural receiving-pool blueprint\n",stderr);
+        exit(1);
+    }
+    assert(cave_vertical_generation_finish());
+    assert(cave_feat[24][24]==FEAT_DEEP_WATER&&cave_floor_bold(24,24));
+    worker_job=NULL;character_dungeon=true;
+    cave_set_feat(24,24,FEAT_ICE);
+    assert(cave_vertical_get()->portals[0].local_patch[3][3]==FEAT_ICE);
+    level_cache_clear();
+    puts("Natural passage generation: worker room writes preserve inherited receiving pool; final placement is passable; live freezing still updates geometry PASS.");
+
+    /* A later physical obstruction on a real resident receiver must refuse
+     * passage before charging travel/impact, rather than using its spawn. */
+    fresh(9);cave_set_feat(24,24,FEAT_WALL_EXTRA);
+    level_image *lower=capture();floors[1]=lower;
+    fresh(8);cave_feat[20][20]=FEAT_WATER;
+    assert(cave_vertical_restore(&source));
+    floors[0]=active=capture();running=true;character_dungeon=true;
+    cave_m_idx[p_ptr->py][p_ptr->px]=0;
+    p_ptr->py=p_ptr->px=20;cave_m_idx[20][20]=-1;
+    p_ptr->energy_use=0;
+    assert(cave_vertical_travel(false));
+    if(p_ptr->depth!=8||p_ptr->leaving||p_ptr->energy_use||p_ptr->chp!=100) {
+        fputs("FAIL: blocked receiving passage committed travel or charged energy\n",stderr);
+        exit(1);
+    }
+    level_cache_clear();
+    puts("Physical blocked receiver: ordinary passage stays on its source floor, with no cost or unrelated spawn fallback PASS.");
+}
+
 static void test_neighbor_reconstruction(void)
 {
     build_upper();
@@ -791,7 +846,7 @@ static void test_remote_transactions(void)
 
 static void test_aperture_visibility(void)
 {
-    fresh(9);cave_feat[20][20]=FEAT_DEEP_WATER;cave_light[20][20]=1;
+    fresh(9);cave_feat[20][20]=FEAT_DEEP_WATER;cave_info[20][20]=CAVE_GLOW;
     level_image *lower=capture();floors[1]=lower;
     fresh(8);character_dungeon=true;
     cave_feat[20][20]=FEAT_CHASM;cave_info[20][20]=CAVE_SEEN;
@@ -800,20 +855,21 @@ static void test_aperture_visibility(void)
     assert(cave_vertical_view(20,20,&view));
     assert((view.flags&CAVE_VERTICAL_BELOW_VISIBLE)&&view.feature==FEAT_DEEP_WATER&&view.relative_depth==1);
     assert(cave_vertical_describe(20,20,description,sizeof(description))&&strstr(description,"50 ft below"));
-    lower->feat[20][20]=FEAT_TRAP_PIT;lower->info[20][20]=CAVE_HIDDEN;
+    lower->feat[20][20]=FEAT_TRAP_PIT;lower->info[20][20]=CAVE_HIDDEN|CAVE_GLOW;
     assert(cave_vertical_view(20,20,&view)&&view.feature==FEAT_FLOOR);
-    lower->info[20][20]=0;
+    lower->info[20][20]=CAVE_GLOW;
     assert(cave_vertical_view(20,20,&view)&&view.feature==FEAT_TRAP_PIT);
     lower->feat[20][20]=FEAT_SECRET;assert(f_info[FEAT_SECRET].mimic);
     assert(cave_vertical_view(20,20,&view)&&view.feature==f_info[FEAT_SECRET].mimic);
-    lower->light[20][20]=0;assert(!cave_vertical_view(20,20,&view));
+    lower->info[20][20]=0;lower->light[20][20]=9;
+    assert(!cave_vertical_view(20,20,&view));
     lower->info[20][20]=CAVE_GLOW;
     assert(cave_vertical_view(20,20,&view)&&(view.flags&CAVE_VERTICAL_BELOW_VISIBLE));
     lower->info[20][20]=0;p_ptr->cur_light=1;p_ptr->py=p_ptr->px=19;
     assert(cave_vertical_view(20,20,&view)&&(view.flags&CAVE_VERTICAL_BELOW_VISIBLE));
     p_ptr->py=p_ptr->px=5;
     assert(!cave_vertical_view(20,20,&view));
-    lower->light[20][20]=1;
+    lower->info[20][20]=CAVE_GLOW;
     p_ptr->blind=1;assert(!cave_vertical_view(20,20,&view));p_ptr->blind=0;
     p_ptr->image=1;assert(!cave_vertical_view(20,20,&view));p_ptr->image=0;
     cave_info[20][20]=CAVE_MARK;
@@ -830,7 +886,7 @@ static void test_aperture_visibility(void)
         .peer_depth=9,.peer_y=24,.peer_x=24,.kind=CAVE_VERTICAL_FALL,
         .material=FEAT_WATER,.strength=3,.flags=CAVE_VERTICAL_DOWN};
     assert(cave_vertical_restore(&state));
-    lower->feat[24][24]=FEAT_WATER;lower->light[24][24]=1;
+    lower->feat[24][24]=FEAT_WATER;lower->info[24][24]=CAVE_GLOW;
     assert(cave_vertical_view(20,20,&view)&&view.feature==FEAT_WATER);
     int depth,y,x;assert(level_cache_vertical_aperture(20,20,&depth,&y,&x));
     assert(depth==9&&y==24&&x==24);
@@ -1056,10 +1112,11 @@ def main(case="all"):
     harness += "    assert(!init_flavor_info());assert(!init_effect_info());assert(!init_skeleton_note_info());\n"
     harness += "    assert(!init_h_info());assert(!init_n_info());build_randart_tables();flavor_init();drop_system_init();character_generated=true;\n"
     calls = {
-        "all": "test_cached_stair_and_long_fall_links();test_inherited_hole_connectivity();test_generation_upkeep_deferral();test_neighbor_reconstruction();test_regions_save();test_v5_metadata();test_public_cache_save();test_public_v5_cache();test_remote_transactions();test_aperture_visibility();test_packet_and_mirrors();test_shared_pair_history();test_cold_tube_reconstruction();test_authored_pool_drain();test_sluice_network();test_seeded_generation();",
+        "all": "test_natural_passage_generation();test_cached_stair_and_long_fall_links();test_inherited_hole_connectivity();test_generation_upkeep_deferral();test_neighbor_reconstruction();test_regions_save();test_v5_metadata();test_public_cache_save();test_public_v5_cache();test_remote_transactions();test_aperture_visibility();test_packet_and_mirrors();test_shared_pair_history();test_cold_tube_reconstruction();test_authored_pool_drain();test_sluice_network();test_seeded_generation();",
         "upkeep": "test_generation_upkeep_deferral();",
         "holes": "test_inherited_hole_connectivity();",
         "links": "test_cached_stair_and_long_fall_links();",
+        "natural": "test_natural_passage_generation();",
         "inherit": "test_neighbor_reconstruction();",
         "save": "test_regions_save();test_v5_metadata();test_public_cache_save();test_public_v5_cache();",
         "migration": "test_v5_metadata();test_public_v5_cache();",
@@ -1098,5 +1155,5 @@ def main(case="all"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--case", choices=("all", "links", "holes", "upkeep", "inherit", "save", "migration", "public", "generation", "transactions", "aperture", "packets", "baseline", "shared", "tube", "pool", "sluice"), default="all")
+    parser.add_argument("--case", choices=("all", "links", "holes", "upkeep", "natural", "inherit", "save", "migration", "public", "generation", "transactions", "aperture", "packets", "baseline", "shared", "tube", "pool", "sluice"), default="all")
     main(parser.parse_args().case)

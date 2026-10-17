@@ -157,8 +157,49 @@ static void checks(void)
     assert(confirmations==1&&p_ptr->energy_use==0&&travel_depth==0);
     accept=true;assert(cave_vertical_travel(false));
     assert(travel_depth==7&&travel_y==24&&travel_x==24&&p_ptr->energy_use==100);
-    assert(cave_vertical_get()->submerged&&cave_vertical_get()->breath==12);
-    puts("Diving cancel is free; accepted passage has one paid exact arrival: PASS");
+    if (!cave_vertical_get()->submerged || cave_vertical_get()->breath!=11) {
+        fputs("FAIL: accepted dive did not spend its first action of air\n",stderr);
+        exit(1);
+    }
+    cave_vertical_end_action();assert(cave_vertical_get()->breath==11);
+    puts("Diving cancel is free; accepted passage has one paid exact arrival and spends air once: PASS");
+
+    base();source.portals[0].kind=CAVE_VERTICAL_SUMP;
+    source.submerged=1;source.breath=4;assert(cave_vertical_restore(&source));
+    cave_feat[20][20]=FEAT_DEEP_WATER;
+    accept=false;assert(cave_vertical_travel(false));
+    assert(cave_vertical_get()->breath==4&&p_ptr->energy_use==0&&travel_depth==0);
+    accept=true;assert(cave_vertical_travel(false));
+    assert(cave_vertical_get()->breath==3&&travel_depth==7);
+    cave_vertical_end_action();assert(cave_vertical_get()->breath==3);
+    puts("Repeated underwater travel preserves remaining air; cancellation spends none: PASS");
+
+    base();source.portals[0].kind=CAVE_VERTICAL_SUMP;
+    source.submerged=1;source.breath=0;assert(cave_vertical_restore(&source));
+    cave_feat[20][20]=FEAT_DEEP_WATER;
+    assert(cave_vertical_travel(false));
+    assert(cave_vertical_get()->breath==0&&p_ptr->chp==96&&travel_depth==7);
+    puts("A dive without air applies drowning damage instead of refilling it: PASS");
+
+    base();source.portals[0].kind=CAVE_VERTICAL_RAPIDS;
+    source.submerged=1;source.breath=0;assert(cave_vertical_restore(&source));
+    cave_feat[20][20]=FEAT_DEEP_WATER;p_ptr->chp=3;p_ptr->energy_use=100;
+    cave_vertical_end_action();
+    if (!p_ptr->is_dead || travel_depth) {
+        fputs("FAIL: lethal drowning committed another floor transition\n",stderr);
+        exit(1);
+    }
+    puts("Lethal drowning ends the action before a current can transfer the player: PASS");
+
+    base();source.portals[0].kind=CAVE_VERTICAL_SUMP;
+    source.submerged=1;source.breath=4;assert(cave_vertical_restore(&source));
+    assert(cave_vertical_travel(false));
+    assert(cave_vertical_get()->breath==11);
+    base();source.portals[0].kind=CAVE_VERTICAL_SUMP;
+    p_ptr->total_weight=350;assert(cave_vertical_restore(&source));
+    assert(cave_vertical_travel(false));
+    assert(cave_vertical_get()->breath==8);
+    puts("Shallow footing permits fresh air; carried weight limits a fresh dive: PASS");
 
     base();source.submerged=1;source.breath=4;assert(cave_vertical_restore(&source));
     cave_feat[20][20]=FEAT_DEEP_WATER;

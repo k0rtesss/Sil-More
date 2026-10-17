@@ -2341,6 +2341,7 @@ extern int weight_limit(void);
 extern bool sprinting(void);
 extern void calc_voice(void);
 extern bool weapon_glows(const object_type* o_ptr);
+extern int weapon_glow_multiplier(u32b f1, u32b f4, const monster_race* r_ptr);
 extern byte object_display_color(const object_type* o_ptr, byte base_color);
 extern void calc_torch(void);
 extern void do_cmd_dim_light(void);

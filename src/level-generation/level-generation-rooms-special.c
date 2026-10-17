@@ -5,23 +5,14 @@
 #include "level-generation/level-generation-landmarks.h"
 
 bool vault_template_has_aule(vault_type *v) {
-    if (!v || v->text == 0 || v->hgt == 0) return false;
-    char *s = v_text + v->text;
-    for (int row = 0; row < v->hgt; ++row) {
-        if (strchr(s, 'L')) return true; /* 'L' designates Aulë in template */
-        s += strlen(s) + 1; /* advance to next stored line (null-terminated) */
-    }
-    return false;
+    if (!v || v->text == 0 || v->hgt == 0 || v->wid == 0) return false;
+    /* Vault rows are packed into one string. Never scan following records. */
+    return memchr(v_text + v->text, 'L', (size_t)v->hgt * v->wid) != NULL;
 }
 
 bool vault_template_has_mandos(vault_type *v) {
-    if (!v || v->text == 0 || v->hgt == 0) return false;
-    char *s = v_text + v->text;
-    for (int row = 0; row < v->hgt; ++row) {
-        if (strchr(s, 'N')) return true; /* 'N' designates Mandos in template */
-        s += strlen(s) + 1; /* advance to next stored line (null-terminated) */
-    }
-    return false;
+    if (!v || v->text == 0 || v->hgt == 0 || v->wid == 0) return false;
+    return memchr(v_text + v->text, 'N', (size_t)v->hgt * v->wid) != NULL;
 }
 
 bool vault_template_has_duruin(vault_type *v) {

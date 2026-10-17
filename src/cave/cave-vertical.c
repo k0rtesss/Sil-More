@@ -11,6 +11,7 @@
 #include "level-generation/level-generation-vertical-vaults.h"
 #include "quest/quest-runtime.h"
 #include "player/killer.h"
+#include "cave/cave-light.h"
 
 static _Thread_local cave_vertical_state current;
 static _Thread_local bool new_down_allowed;
@@ -511,6 +512,17 @@ static int receiving_feature(const cave_vertical_portal* p)
     return feature;
 }
 
+static void spend_breath(void)
+{
+    if (current.breath) {
+        current.breath--;
+        if (current.breath == 3)
+            msg_print("You are running out of breath. Reach the shallows!");
+    } else {
+        take_hit(4, "drowning in a flooded passage");
+    }
+}
+
 static bool depart(const cave_vertical_portal* p, bool forced)
 {
     /* A background destination may take several input frames to arrive. The
@@ -528,6 +540,15 @@ static bool depart(const cave_vertical_portal* p, bool forced)
         p_ptr->energy_use = 100; return true;
     }
     if (p_ptr->on_the_run && p->peer_depth >= MORGOTH_DEPTH) return true;
+    const level_image* peer = level_cache_floor(p->peer_depth);
+    if (peer && (p->peer_y <= 0 || p->peer_x <= 0
+        || p->peer_y >= peer->hgt - 1 || p->peer_x >= peer->wid - 1
+        || (peer->info[p->peer_y][p->peer_x] & CAVE_WALL)
+        || FEAT_IS_WALL(peer->feat[p->peer_y][p->peer_x])
+        || peer->feat[p->peer_y][p->peer_x] == FEAT_NONE)) {
+        msg_print("The receiving passage is blocked.");
+        return true;
+    }
     if (!forced && (p->kind == CAVE_VERTICAL_FALL || p->kind == CAVE_VERTICAL_LAVA_FALL
         || p->kind == CAVE_VERTICAL_LAKE || p->kind == CAVE_VERTICAL_SUMP)) {
         cptr warning = p->kind == CAVE_VERTICAL_SUMP
@@ -550,8 +571,13 @@ static bool depart(const cave_vertical_portal* p, bool forced)
         if (p_ptr->is_dead) return true;
     }
     if (p->kind == CAVE_VERTICAL_SUMP) {
+        /* Air belongs to the submerged player across floors. Only a fresh
+         * dive from air can start a new budget; the travel action spends it. */
+        if (!current.submerged || !player_submerged_in_deep_water())
+            current.breath = MAX(1, 12 - p_ptr->total_weight / 100);
         current.submerged = 1;
-        current.breath = MAX(1, 12 - p_ptr->total_weight / 100);
+        spend_breath();
+        if (p_ptr->is_dead) return true;
     }
     msg_print(ascending ? "You struggle upstream into the higher passage."
         : p->kind == CAVE_VERTICAL_SUMP ? "You dive beneath the rock into the lower passage."
@@ -633,14 +659,11 @@ void cave_vertical_end_action(void)
         if (!player_submerged_in_deep_water()) {
             current.submerged = 0; current.breath = 12;
             msg_print("You find air above the water.");
-        } else if (current.breath) {
-            current.breath--;
-            if (current.breath == 3) msg_print("You are running out of breath. Reach the shallows!");
         } else {
-            take_hit(4, "drowning in a flooded passage");
+            spend_breath();
         }
     }
-    if (p_ptr->leaping) return;
+    if (p_ptr->is_dead || p_ptr->leaping) return;
     const cave_vertical_portal* p = portal_at(p_ptr->py, p_ptr->px, false);
     if (p && wet_portal(p) && (p->flags & CAVE_VERTICAL_DOWN)
         && !(p->flags & CAVE_VERTICAL_CLOSED)
@@ -1043,9 +1066,10 @@ bool cave_vertical_view(int y, int x, cave_vertical_view_info* view)
     if (!below || !open || depth <= p_ptr->depth
         || target_y < 1 || target_x < 1 || target_y >= below->hgt - 1
         || target_x >= below->wid - 1) return p != NULL;
-    if (below->light[target_y][target_x] <= 0
-        && !(below->info[target_y][target_x] & CAVE_GLOW)
-        && !(p_ptr->cur_light > 0 && distance(p_ptr->py, p_ptr->px, y, x) <= 2))
+    int light = cave_light_cached_sample(below, target_y, target_x);
+    if (p_ptr->cur_light > 0 && distance(p_ptr->py, p_ptr->px, y, x) <= 2)
+        light += p_ptr->cur_light;
+    if (light - curse_flag_delta_cur(CUR_LIGHTP) <= 0)
         return p != NULL;
     int feature = below->feat[target_y][target_x];
     if (f_info[feature].mimic) feature = f_info[feature].mimic;
@@ -1137,7 +1161,9 @@ bool cave_vertical_describe(int y, int x, char* text, size_t size)
 
 void cave_vertical_terrain_changed(int y, int x, int old_feature)
 {
-    if (changing_terrain) return;
+    /* Room/tunnel construction is provisional until inherited patches are
+     * placed. It must not rewrite those patches to match its scratch map. */
+    if (changing_terrain || !character_dungeon || level_cache_in_worker()) return;
     int feature = cave_feat[y][x];
     const cave_vertical_portal* gate = portal_at(y, x, true);
     if (gate && (feature == FEAT_BROKEN || feature == FEAT_FLOOR || liquid(feature))
@@ -1160,7 +1186,7 @@ void cave_vertical_terrain_changed(int y, int x, int old_feature)
         if (ABS(dy) <= 3 && ABS(dx) <= 3 && p->local_patch[dy + 3][dx + 3])
             p->local_patch[dy + 3][dx + 3] = cave_feat[y][x];
     }
-    if (!character_dungeon || !p_ptr->playing || level_cache_in_worker()) return;
+    if (!p_ptr->playing) return;
     for (int i = 0; i < current.basin_count; i++) {
         cave_vertical_basin* b = &current.basins[i];
         if (b->depth != p_ptr->depth || distance(y, x, b->y, b->x) > b->radius) continue;

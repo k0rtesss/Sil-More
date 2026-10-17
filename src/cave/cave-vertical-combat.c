@@ -8,6 +8,7 @@
 #include "spell/spell-damage.h"
 #include "tutorial/tutorial-game.h"
 #include "ui/question.h"
+#include "cave/cave-light.h"
 
 /* A floor separation costs three squares of projectile range. Targets must
  * be close to a real opening; this is not targeting through arbitrary floors. */
@@ -80,6 +81,16 @@ static int line_range(const vertical_line* line, const monster_type* monster)
         + distance(line->peer_y, line->peer_x, monster->fy, monster->fx);
 }
 
+static int effective_light(const level_image* floor, const vertical_line* line,
+    const monster_type* monster)
+{
+    int light = cave_light_cached_sample(floor, monster->fy, monster->fx);
+    int range = line_range(line, monster);
+    if (p_ptr->cur_light > 0 && range <= p_ptr->cur_light)
+        light += p_ptr->cur_light + 1 - range;
+    return light - curse_flag_delta_cur(CUR_LIGHTP);
+}
+
 static bool visible_target(const level_image* floor, const vertical_line* line,
     const monster_type* monster)
 {
@@ -95,8 +106,7 @@ static bool visible_target(const level_image* floor, const vertical_line* line,
     if ((race->flags1 & RF1_PEACEFUL)
         || ((race->flags2 & RF2_INVISIBLE) && !p_ptr->see_inv)) return false;
     /* Torchlight reaches the landing, never the whole resident floor. */
-    return floor->light[monster->fy][monster->fx] > 0
-        || (p_ptr->cur_light > 0 && line_range(line, monster) <= p_ptr->cur_light);
+    return effective_light(floor, line, monster) > 0;
 }
 
 bool cave_vertical_combat_available(int y, int x)
@@ -112,10 +122,10 @@ bool cave_vertical_combat_available(int y, int x)
 }
 
 static int cached_light_penalty(const level_image* floor,
-    const monster_type* monster)
+    const monster_type* monster, const vertical_line* line)
 {
     return (r_info[monster->r_idx].flags3 & RF3_HURT_LITE)
-        ? MAX(0, floor->light[monster->fy][monster->fx] - 2) : 0;
+        ? MAX(0, effective_light(floor, line, monster) - 2) : 0;
 }
 
 static bool cached_sees_player(monster_type* monster, const vertical_line* line)
@@ -135,12 +145,13 @@ static bool cached_sees_player(monster_type* monster, const vertical_line* line)
     return true;
 }
 
-static int cached_evasion(const level_image* floor, monster_type* monster)
+static int cached_evasion(const level_image* floor, monster_type* monster,
+    const vertical_line* line)
 {
     const monster_race* race = &r_info[monster->r_idx];
     int evasion = race->evn + monster_dodging_bonus_preview(monster)
         - monster->song_evasion_penalty - (monster->stunned ? 2 : 0)
-        - cached_light_penalty(floor, monster);
+        - cached_light_penalty(floor, monster, line);
     if (FEAT_IS_ICE(floor->feat[monster->fy][monster->fx])
         && !(race->flags2 & RF2_FLYING)) evasion -= ICE_EVASION_PENALTY;
     evasion += elf_bane_bonus(monster) + dwarf_bane_bonus(monster)
@@ -257,10 +268,10 @@ bool cave_vertical_combat_interact(int y, int x)
     p_ptr->killed_enemy_with_arrow = false;
     sound(MSG_SHOOT);
     hit = hit_roll(player_attack(&line, &target, &arrow),
-        cached_evasion(floor, &target), PLAYER, &target, true);
+        cached_evasion(floor, &target, &line), PLAYER, &target, true);
     if (hit <= 0 && ((af3 | bf3) & TR3_ACCURATE))
         hit = hit_roll(player_attack(&line, &target, &arrow),
-            cached_evasion(floor, &target), PLAYER, &target, true);
+            cached_evasion(floor, &target, &line), PLAYER, &target, true);
     if (hit > 0)
     {
         monster_race* race = &r_info[target.r_idx];
@@ -302,33 +313,46 @@ bool cave_vertical_combat_interact(int y, int x)
     }
     if (hit > 0 && damage < target.hp)
     {
-        apply_weapon_combat_effects(&arrow, &floor->monsters[indices[choice]],
+        monster_type* wounded = &floor->monsters[indices[choice]];
+        bool visible_before = wounded->ml;
+        wounded->ml = true;
+        apply_weapon_combat_effects(&arrow, wounded,
             S_ARC, damage, false, "arrow");
-        apply_weapon_combat_effects(bow, &floor->monsters[indices[choice]],
+        apply_weapon_combat_effects(bow, wounded,
             S_ARC, damage, false, "arrow");
+        wounded->ml = visible_before;
         if (p_ptr->active_ability[S_ARC][ARC_CRIPPLING] && damage > 0
             && critical_dice > 0 && !(r_info[target.r_idx].flags1 & RF1_RES_CRIT)
             && !monster_race_is_vala(target.r_idx)
             && skill_check(PLAYER, 30 - 60 / (critical_dice + 2),
                 monster_skill(&target, S_WIL), &target) > 0)
         {
-            monster_type* wounded = &floor->monsters[indices[choice]];
             if (!wounded->slowed) wounded->mspeed = MAX(1, wounded->mspeed - 1);
             wounded->slowed = MIN(200, wounded->slowed + critical_dice + 1);
         }
     }
-    player_quiver_remove_arrows(slot, 1);
-    p_ptr->redraw |= PR_QUIVER;
     floor->monsters[indices[choice]].mflag |= MFLAG_HIT_BY_RANGED | MFLAG_ACTV;
     floor->monsters[indices[choice]].alertness = MAX(ALERTNESS_ALERT,
         floor->monsters[indices[choice]].alertness);
-    level_cache_damage_monster(line.depth, indices[choice], damage, " dies.", -1);
+    level_cache_damage_monster_observed(line.depth, indices[choice], damage, " dies.", -1);
     floor = level_cache_mutable_floor(line.depth);
     if (floor)
     {
         p_ptr->killed_enemy_with_arrow = !floor->monsters[indices[choice]].r_idx;
+        if (!p_ptr->killed_enemy_with_arrow)
+            level_cache_poison_monster(line.depth, indices[choice], &arrow, bow, damage);
+        else if (((af1 | bf1) & TR1_VAMPIRIC)
+            && !monster_nonliving(&r_info[target.r_idx]) && hp_player(7, false, false))
+        {
+            if ((af1 & TR1_VAMPIRIC) && !object_known_p(&arrow))
+                ident_bow_arrow_by_use(bow, &arrow, ammo, &target, 0, TR1_VAMPIRIC);
+            else if ((bf1 & TR1_VAMPIRIC) && !object_known_p(bow))
+                ident_bow_arrow_by_use(bow, &arrow, ammo, &target, TR1_VAMPIRIC, 0);
+        }
         land_arrow(floor, &arrow, target.fy, target.fx);
     }
+    player_quiver_remove_arrows(slot, 1);
+    p_ptr->redraw |= PR_QUIVER;
     player_attack_audible = true;
     break_truce(false);
     /* A vertical target cannot neutralise a nearby melee opportunity. */
@@ -361,7 +385,7 @@ static bool retaliate(level_image* floor, monster_type* monster,
     sides = get_sides(96 + bit); dd = boulder ? 6 : bit + 1;
     visible.ml = visible_target(floor, line, monster);
     attack = race->spell_power - (monster->stunned ? 2 : 0)
-        - cached_light_penalty(floor, monster) - line_range(line, monster) / 5
+        - cached_light_penalty(floor, monster, line) - line_range(line, monster) / 5
         + elf_bane_bonus(monster) + dwarf_bane_bonus(monster)
         + edain_bane_bonus(monster) - unique_bane_bonus(monster);
     if (attack > 0 && race->light > 0 && strchr("@G", race->d_char)
@@ -492,6 +516,7 @@ static void cached_actor_action(level_image* floor, int index,
     monster_type* monster = &floor->monsters[index];
     int old_y = monster->fy, old_x = monster->fx;
     bool skipped = false;
+    if (monster->poisoned && level_cache_poison_tick(floor->depth, index)) return;
     monster_abilities_begin_action(monster);
     if (monster->smite_recovery == 1) { skipped = true; goto finished; }
     if (monster->skip_next_turn || monster->skip_this_turn)

@@ -48,6 +48,24 @@ static void nienna_reward_dialogue(void)
     }
     puts("Nienna reward: zero/10/20 creatures, full authored dialogue, reward and once-only completion PASS.");
 }
+static void orome_hunt_depths(void)
+{
+    static const int depths[]={2,5,6,10,11,15,16,20};
+    static const int targets[]={OROME_TARGET_WOLF,OROME_TARGET_WOLF,
+        OROME_TARGET_SPIDER,OROME_TARGET_SPIDER,OROME_TARGET_SERPENT,
+        OROME_TARGET_SERPENT,OROME_TARGET_VAMPIRE,OROME_TARGET_VAMPIRE};
+    static const int counts[]={100,100,80,80,60,60,30,30};
+    for(int i=0;i<(int)N_ELEMENTS(depths);i++) {
+        memset(p_ptr,0,sizeof(*p_ptr));p_ptr->quest_test_sandbox=1;
+        p_ptr->depth=depths[i];p_ptr->orome_quest=OROME_QUEST_GIVER_PRESENT;
+        quest_set_enabled(QUEST_ID_OROME,true);turn=3000+10*i;
+        orome_quest_interaction();
+        CHECK(p_ptr->orome_quest==OROME_QUEST_ACTIVE);
+        CHECK(p_ptr->orome_target_type==targets[i]);
+        CHECK(p_ptr->orome_target_count==counts[i]);
+    }
+    puts("Orome actual offers: level-to-feet conversion and both sides of250/500/750ft boundaries PASS.");
+}
 static const int opts[] = { OPT_quest_1,OPT_quest_2,OPT_quest_3,OPT_quest_4,
     OPT_quest_5,OPT_quest_6,OPT_quest_7,OPT_quest_8,OPT_quest_9,OPT_quest_10,
     OPT_quest_11,OPT_quest_12,OPT_quest_13,OPT_quest_14,OPT_quest_15,OPT_quest_16,
@@ -189,6 +207,7 @@ def topology():
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline-nienna',action='store_true',help='Prove the Nienna dialogue regression against HEAD')
+    parser.add_argument('--baseline-orome',action='store_true',help='Prove the Orome depth regression against HEAD')
     args=parser.parse_args()
     topology()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -200,11 +219,12 @@ def main():
     harness += '''
     CHECK(init_quest_info()==0);
     for(int id=1;id<=16;++id) CHECK(quest_info[id].name && quest_info[id].vala_id);
-    settings(); nienna_reward_dialogue(); vaults(); level_exits();
+    settings(); /* QUEST_CHECKS */
     printf("Quest engine integration: %d checks PASS (real templates/vault builds, 42 JSON patterns, defaults, Blitz).\\n",checks);
     SDL_Quit(); return 0;
 }
 '''
+    harness=harness.replace('/* QUEST_CHECKS */','orome_hunt_depths();' if args.baseline_orome else 'nienna_reward_dialogue(); orome_hunt_depths(); vaults(); level_exits();')
     source = OUT / "check.c"
     source.write_text(harness, encoding="utf-8")
     cmake = BUILD / "CMakeFiles/sil-more.dir"
@@ -212,7 +232,7 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"'+o+'"' for o in objects if not o.endswith(("/src/main.c.obj","/src/quest/valar/other-valar.c.obj"))))
     valar=ROOT/'src/quest/valar/other-valar.c'
-    if args.baseline_nienna:
+    if args.baseline_nienna or args.baseline_orome:
         valar=OUT/'baseline-other-valar.c'
         valar.write_bytes(subprocess.check_output(['git','show','HEAD:src/quest/valar/other-valar.c'],cwd=ROOT))
     env = os.environ.copy()

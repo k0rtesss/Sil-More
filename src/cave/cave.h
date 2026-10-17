@@ -8,6 +8,8 @@
 int distance(int y1, int x1, int y2, int x2);
 int distance_squared(int y1, int x1, int y2, int x2);
 bool los(int y1, int x1, int y2, int x2);
+/* Identical LOS on a borrowed map, without redirecting live globals. */
+bool cave_los_info(const u16b info[][256], int y1, int x1, int y2, int x2);
 void random_unseen_floor(int* ry, int* rx);
 bool seen_by_keen_senses(int y, int x);
 bool cave_valid_bold(int y, int x);

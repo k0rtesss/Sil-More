@@ -7,6 +7,8 @@ production code. Monsters do not receive scheduled turns. Native dialogue/reward
 flows are outside this objective-and-topology fixture. All state is isolated.
 """
 from pathlib import Path
+import argparse
+import json
 import os
 import shlex
 import subprocess
@@ -41,7 +43,8 @@ static int next_step(int ty,int tx)
     int head=0,tail=0; queue[tail++]=start; parent[p_ptr->py][p_ptr->px]=start;
     while(head<tail && parent[ty][tx]<0) {
         int cell=queue[head++], y=cell/MAX_DUNGEON_WID,x=cell%MAX_DUNGEON_WID;
-        for(int d=1;d<=9;d++) if(d!=5) {
+        for(int offset=0;offset<9;offset++) {
+            int d=(offset+FIXTURE_VARIANT)%9+1;if(d==5)continue;
             int yy=y+ddy[d],xx=x+ddx[d];
             if(!route_cell(yy,xx) || parent[yy][xx]>=0) continue;
             parent[yy][xx]=cell;queue[tail++]=yy*MAX_DUNGEON_WID+xx;
@@ -102,7 +105,10 @@ static void run_vault(int vault,int id,int depth,int seed,int expected)
     p_ptr->inven_cnt=1;p_ptr->playing=true;p_ptr->tutorial_deferred=true;
     p_ptr->song1=p_ptr->song2=SNG_NOTHING;
     turn=1000;playerturn=100; character_generated=true;character_dungeon=true;
-    player_place(44,44-v_info[vault].wid/2-2); boost();
+    if(FIXTURE_VARIANT%3==0)player_place(44,44-v_info[vault].wid/2-2);
+    else if(FIXTURE_VARIANT%3==1)player_place(44,44+v_info[vault].wid/2+2);
+    else player_place(44-v_info[vault].hgt/2-2,44);
+    boost();
     for(int y=0;y<88;y++) for(int x=0;x<88;x++) cave_info[y][x]|=CAVE_MARK|CAVE_SEEN|CAVE_GLOW;
     for(int m=1;m<mon_max;m++) {mon_list[m].ml=true;mon_list[m].alertness=ALERTNESS_ALERT;}
     int targets[16],n=0;
@@ -116,7 +122,8 @@ static void run_vault(int vault,int id,int depth,int seed,int expected)
     assert(n==expected);
     movements=attacks=tunnels=doors=0;
     for(int t=0;t<n;t++) {
-        int race=targets[t],m=0;
+        int index=FIXTURE_VARIANT%3==1?n-1-t:(t+FIXTURE_VARIANT)%n;
+        int race=targets[index],m=0;
         for(int i=1;i<mon_max;i++) if(mon_list[i].r_idx==race) m=i;
         assert(m>0); int steps=0;
         while(mon_list[m].r_idx) {
@@ -142,18 +149,28 @@ static void run_vault(int vault,int id,int depth,int seed,int expected)
 }
 '''
 def main():
+    global OUT
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--seed',type=int,default=1)
+    parser.add_argument('--variant',type=int,default=0)
+    parser.add_argument('--output-dir',type=Path,default=OUT)
+    args=parser.parse_args();OUT=args.output_dir.resolve()
     OUT.mkdir(parents=True,exist_ok=True)
     prefix=ENGINE_FIXTURE[:ENGINE_FIXTURE.index('static const char* guids[]')]
     prefix+=fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'
     init=ENGINE_FIXTURE[ENGINE_FIXTURE.index('int main(int argc,char** argv)'):]
     init=init[:init.index('    check_templates();')]
     source=OUT/'check.c'
-    source.write_text(prefix+CHECKS+init+'''
+    defines=f'\n#define FIXTURE_SEED {args.seed}\n#define FIXTURE_VARIANT {args.variant}\n'
+    source.write_text(prefix+defines+CHECKS+init+'''
     assert(init_flavor_info()==0); assert(init_quest_info()==0);
+    printf("Fresh authored-vault pass seed=%d variant=%d\\n",FIXTURE_SEED,FIXTURE_VARIANT);
     const int ids[]={8,7,13,15}, depths[]={17,10,5,16},counts[]={1,2,6,1};
-    for(int v=0;v<4;v++) {
+    for(int order=0;order<4;order++) {
+        int v=(order+FIXTURE_VARIANT)%4;
         unsigned orientations=0;
-        for(int seed=1;seed<=64 && orientations!=15;seed++) {
+        for(int offset=0;offset<256 && orientations!=15;offset++) {
+            int seed=FIXTURE_SEED+offset;
             Rand_state_init(seed); int fy=one_in_(2),fx=one_in_(2);
             unsigned flag=1U<<(fy*2+fx);
             if(orientations&flag) continue;
@@ -170,5 +187,9 @@ def main():
     exe=OUT/'check.exe'
     subprocess.run(['C:/msys64/mingw64/bin/cc.exe','-DUSE_SDL','-std=c17','-O0','-g','@CMakeFiles/sil-more.dir/includes_C.rsp',str(source),'@'+str(rsp),'@CMakeFiles/sil-more.dir/linkLibs.rsp','-o',str(exe)],cwd=BUILD,env=env,check=True)
     with tempfile.TemporaryDirectory(prefix='data-',dir=OUT) as data:
-        subprocess.run([str(exe),str(ROOT/'lib/edit'),data],cwd=data,env=env,check=True,timeout=90)
+        result=subprocess.run([str(exe),str(ROOT/'lib/edit'),data],cwd=data,env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=90)
+        print(result.stdout,end='')
+        (OUT/'results.log').write_text(result.stdout,encoding='utf-8')
+        (OUT/'result.json').write_text(json.dumps({'seed':args.seed,'variant':args.variant,'exit_code':result.returncode,'approach':('west','east','north')[args.variant%3],'all_four_orientations':result.returncode==0},indent=2),encoding='utf-8')
+        result.check_returncode()
 if __name__=='__main__':main()

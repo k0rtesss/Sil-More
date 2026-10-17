@@ -5,8 +5,9 @@ Only native presentation/selection boundaries are adapted. Uses production
 thrall interactions, request assignment, item matching/consumption and rewards.
 """
 from pathlib import Path
+import argparse
 import os, shlex, subprocess, tempfile
-from check_monster_scent_save import ENGINE_FIXTURE, fixture_function
+from check_monster_scent_save import ENGINE_FIXTURE, fixture_function, WRITER, READER
 ROOT=Path(__file__).resolve().parents[1]
 BUILD=ROOT/'build-standard'
 OUT=ROOT/'scripts/output/thrall-quest-gameplay'
@@ -45,6 +46,7 @@ static monster_type* setup(int race,int request)
     p_ptr->song1=p_ptr->song2=SNG_NOTHING;p_ptr->chp=p_ptr->mhp=100;p_ptr->playing=true;
     p_ptr->tutorial_deferred=true;p_ptr->stat_use[A_STR]=20;
     op_ptr->opt[OPT_insight_beta]=true;
+    Rand_state_init(CAMPAIGN_SEED+race*31+request*103);
     turn=1000;playerturn=100;character_generated=character_dungeon=true;
     monster_type* m=&mon_list[1];m->r_idx=race;m->fy=m->fx=3;m->ml=true;
     mon_max=2;cave_m_idx[3][3]=1;m->thrall_quest_item=request;
@@ -63,7 +65,7 @@ static void assignment(void)
     for(int elf=0;elf<2;elf++)for(int dep=0;dep<3;dep++) {
         int depth=depths[dep];
         monster_type* m=setup(elf?R_IDX_ALERT_ELF_THRALL:R_IDX_ALERT_HUMAN_THRALL,0);p_ptr->depth=depth;
-        unsigned seen=0;Rand_state_init(100+depth+elf);
+        unsigned seen=0;Rand_state_init(CAMPAIGN_SEED+depth*17+elf);
         for(int i=0;i<8000;i++) {
             init_thrall_quest(m);int q=m->thrall_quest_item;assert(q>0 && q<THRALL_QUEST_MAX);
             assert(depth>=6 || q!=THRALL_QUEST_LANTERN);assert(depth>=3 || q!=THRALL_QUEST_MALLORN);
@@ -77,25 +79,49 @@ static void assignment(void)
     }
     puts("Human/elven natural request pools, all16 types and depth gates PASS.");
 }
+size_t fixture_write_monster(const monster_type*,byte*,size_t);
+int fixture_read_current_monster(const byte*,size_t,monster_type*,u32b*,size_t*);
+static void roundtrip_thrall(monster_type* m)
+{
+    byte encoded[8192];monster_type before=*m,restored={0};u32b sentinel=0;size_t consumed=0;
+    size_t length=fixture_write_monster(m,encoded,sizeof(encoded));
+    assert(fixture_read_current_monster(encoded,length,&restored,&sentinel,&consumed)==0);
+    assert(sentinel==0xB4C3D2E1U && consumed==length);
+    assert(restored.r_idx==before.r_idx && restored.fy==before.fy && restored.fx==before.fx);
+    assert(restored.thrall_quest_item==before.thrall_quest_item);
+    assert(restored.thrall_quest_requested==before.thrall_quest_requested);
+    assert(restored.thrall_quest_completed==before.thrall_quest_completed);
+    *m=restored;
+}
 static void item_transactions(void)
 {
-    for(int elf=0;elf<2;elf++)for(int q=1;q<THRALL_QUEST_MAX;q++) {
+    for(int elf=0;elf<2;elf++)for(int step=0;step<THRALL_QUEST_MAX-1;step++) {
+        int q=(step+CAMPAIGN_VARIANT*5)%16+1;
         monster_type* m=setup(elf?R_IDX_ALERT_ELF_THRALL:R_IDX_ALERT_HUMAN_THRALL,q);
         assert(player_has_thrall_quest_item(q)==-1);assert(handle_thrall_interaction(m));assert(books==1 && m->thrall_quest_requested);
         assert(handle_thrall_interaction(m));assert(books==1 && questions==0);
-        requested_object(&inventory[0],q,2);p_ptr->inven_cnt=1;
-        assert(player_has_thrall_quest_item(q)==0);
+        int stack=2+CAMPAIGN_VARIANT,mode=(q+CAMPAIGN_VARIANT)%3;
+        object_type incoming;requested_object(&incoming,q,stack);
+        int slot;
+        if(mode==2 && supplies_can_absorb_object(&incoming)) {
+            assert(supplies_absorb_object(&incoming));slot=SUPPLIES_INDEX;
+        } else if(mode!=0) {
+            assert(player_carried_extra_load(&incoming));slot=CARRIED_EXTRA_INDEX;
+        } else {object_copy(&inventory[0],&incoming);p_ptr->inven_cnt=1;slot=0;}
+        assert(player_has_thrall_quest_item(q)==slot);
+        object_type* item=slot>=SUPPLIES_INDEX?supplies_entry_at(slot-SUPPLIES_INDEX):player_inventory_object(slot);
         int experience=p_ptr->new_exp;
-        give_choice=1;assert(handle_thrall_interaction(m));assert(inventory[0].number==2 && m->thrall_quest_completed==THRALL_QUEST_STATE_ACTIVE);
+        give_choice=CAMPAIGN_VARIANT==1?-1:1;assert(handle_thrall_interaction(m));assert(item->number==stack && m->thrall_quest_completed==THRALL_QUEST_STATE_ACTIVE);
         experience=p_ptr->new_exp; /* Identification before the offer may earn ordinary identification XP. */
-        give_choice=-1;assert(handle_thrall_interaction(m));assert(inventory[0].number==2 && p_ptr->new_exp==experience);
-        give_choice=0;assert(handle_thrall_interaction(m));assert(inventory[0].number==1 && p_ptr->new_exp==experience+75);
-        assert(m->thrall_quest_completed==THRALL_QUEST_STATE_FIRST_REWARD_PENDING);
-        assert(handle_thrall_interaction(m));assert(inventory[0].number==1 && p_ptr->new_exp==experience+75);
+        give_choice=CAMPAIGN_VARIANT==1?1:-1;assert(handle_thrall_interaction(m));assert(item->number==stack && p_ptr->new_exp==experience);
+        give_choice=0;assert(handle_thrall_interaction(m));assert(item->number==stack-1 && p_ptr->new_exp==experience+75);
+        assert(m->thrall_quest_completed==THRALL_QUEST_STATE_FIRST_REWARD_PENDING);roundtrip_thrall(m);
+        for(int wait=0;wait<=CAMPAIGN_VARIANT;wait++){assert(handle_thrall_interaction(m));assert(item->number==stack-1 && p_ptr->new_exp==experience+75);}
         gift="Insight point";assert(handle_thrall_interaction(m));assert(p_ptr->insight_points==1 && m->thrall_quest_completed==THRALL_QUEST_STATE_REWARDED);
-        assert(handle_thrall_interaction(m));assert(p_ptr->insight_points==1 && inventory[0].number==1);
+        roundtrip_thrall(m);assert(handle_thrall_interaction(m));assert(p_ptr->insight_points==1 && item->number==stack-1);
+        printf("Request %d race%d storage%d stack%d deferred%d PASS\n",q,elf,slot,stack,CAMPAIGN_VARIANT+1);
     }
-    puts("All16 request transactions for both thralls: no-item/request-once, refuse/Escape, consume exactly1, XP75 once, deferred first gift, Insight and replay PASS.");
+    puts("All16 request transactions for both thralls: no-item/request-once, refuse/Escape, consume exactly1, XP75 once, saved pending/rewarded monster records, deferred first gift, Insight and replay PASS.");
 }
 static void supplies_and_equipment(void)
 {
@@ -160,7 +186,8 @@ static void one_insight_per_life(void)
 static void rewards(void)
 {
     const cptr names[]={"Artefact knowledge","Repair a damaged item","Sanctify","Identify an item","Identify potions"};
-    for(int reward=0;reward<5;reward++) {
+    for(int step=0;step<5;step++) {
+        int reward=(step+CAMPAIGN_VARIANT)%5;
         bool elf=reward==2 || reward==4;monster_type* m=setup(elf?R_IDX_ALERT_ELF_THRALL:R_IDX_ALERT_HUMAN_THRALL,6);
         requested_object(&inventory[0],6,2);p_ptr->inven_cnt=2;
         object_prep(&inventory[1],lookup_kind(TV_HELM,SV_HELM));
@@ -179,14 +206,26 @@ static void rewards(void)
 }
 '''
 def main():
+    global OUT
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--seed',type=int,default=101)
+    parser.add_argument('--variant',type=int,choices=(0,1,2),default=0)
+    parser.add_argument('--output',type=Path)
+    args=parser.parse_args()
+    if args.output:OUT=args.output.resolve()
+    print(f"Thrall campaign seed={args.seed} variant={args.variant}",flush=True)
     OUT.mkdir(parents=True,exist_ok=True)
     prefix=ENGINE_FIXTURE[:ENGINE_FIXTURE.index('static const char* guids[]')]+fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'
     init=ENGINE_FIXTURE[ENGINE_FIXTURE.index('int main(int argc,char** argv)'):];init=init[:init.index('    check_templates();')]
+    prefix+=f'\n#define CAMPAIGN_SEED {args.seed}\n#define CAMPAIGN_VARIANT {args.variant}\n'
     source=OUT/'check.c';source.write_text(prefix+CHECKS+init+'''assert(init_flavor_info()==0);assignment();item_transactions();supplies_and_equipment();selection_and_deferral();one_insight_per_life();rewards();SDL_Quit();return 0;}''',encoding='utf-8')
-    objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text());rsp=OUT/'objects.rsp';rsp.write_text('\n'.join('"'+p+'"' for p in objects if not p.endswith('/src/main.c.obj')))
+    sources=[str(source)]
+    for filename,body in [('writer.c',WRITER),('reader.c',READER)]:
+        path=OUT/filename;path.write_text(body,encoding='utf-8');sources.append(str(path))
+    objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text());rsp=OUT/'objects.rsp';rsp.write_text('\n'.join('"'+p+'"' for p in objects if not p.endswith(('/src/main.c.obj','/src/fs/save.c.obj','/src/fs/load.c.obj'))))
     env=os.environ.copy();env['PATH']=os.pathsep.join([*(str(BUILD/'_deps'/p) for p in ('SDL','SDL_ttf','SDL_image','SDL_mixer')),'C:/msys64/mingw64/bin','C:/msys64/usr/bin',env['PATH']])
     wraps=['quest_typewriter_menu_pages','desc_art_fake','ui_question_ask','open_inventory_item_select_menu','display_unified_identify_menu','object_choice_overlay']
     exe=OUT/'check.exe'
-    subprocess.run(['C:/msys64/mingw64/bin/cc.exe','-DUSE_SDL','-std=c17','-O0','-g','@CMakeFiles/sil-more.dir/includes_C.rsp',str(source),'@'+str(rsp),'@CMakeFiles/sil-more.dir/linkLibs.rsp',*['-Wl,--wrap='+w for w in wraps],'-o',str(exe)],cwd=BUILD,env=env,check=True)
+    subprocess.run(['C:/msys64/mingw64/bin/cc.exe','-DUSE_SDL','-std=c17','-O0','-g','@CMakeFiles/sil-more.dir/includes_C.rsp',*sources,'@'+str(rsp),'@CMakeFiles/sil-more.dir/linkLibs.rsp',*['-Wl,--wrap='+w for w in wraps],'-o',str(exe)],cwd=BUILD,env=env,check=True)
     with tempfile.TemporaryDirectory(prefix='data-',dir=OUT) as data:subprocess.run([str(exe),str(ROOT/'lib/edit'),data],cwd=data,env=env,check=True,timeout=60)
 if __name__=='__main__':main()

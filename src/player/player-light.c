@@ -68,6 +68,52 @@ int hate_level(int y, int x, int multiplier)
 /*
  * Determine whether a melee weapon is glowing in response to nearby enemies
  */
+int weapon_glow_multiplier(u32b f1, u32b f4, const monster_race* r_ptr)
+{
+    bool target = false;
+    int multiplier = 1;
+    // Determine if a slay is applicable
+    if ((f1 & (TR1_SLAY_WOLF)) && (r_ptr->flags3 & (RF3_WOLF)))
+        target = true;
+    if ((f1 & (TR1_SLAY_SPIDER)) && (r_ptr->flags3 & (RF3_SPIDER)))
+        target = true;
+    if ((f1 & (TR1_SLAY_UNDEAD)) && (r_ptr->flags3 & (RF3_UNDEAD)))
+        target = true;
+    if ((f1 & (TR1_SLAY_RAUKO)) && (r_ptr->flags3 & (RF3_RAUKO)))
+        target = true;
+    if ((f1 & (TR1_SLAY_ORC)) && (r_ptr->flags3 & (RF3_ORC)))
+        target = true;
+    if ((f1 & (TR1_SLAY_TROLL)) && (r_ptr->flags3 & (RF3_TROLL)))
+        target = true;
+    if ((f1 & (TR1_SLAY_DRAGON)) && (r_ptr->flags3 & (RF3_DRAGON)))
+        target = true;
+    if ((f4 & (TR4_SLAY_SERPENT)) && (r_ptr->flags3 & (RF3_SERPENT)))
+        target = true;
+    if ((f4 & (TR4_SLAY_VAMPIRE)) && (r_ptr->flags3 & (RF3_VAMPIRE)))
+        target = true;
+    if ((f4 & (TR4_SLAY_HORROR)) && (r_ptr->flags3 & (RF3_HORROR)))
+        target = true;
+    if ((f4 & (TR4_SLAY_CAT)) && (r_ptr->flags3 & (RF3_CAT)))
+        target = true;
+    if ((f4 & (TR4_SLAY_GIANT)) && (r_ptr->flags3 & (RF3_GIANT)))
+        target = true;
+    // No glow for Morgoth's weapons that slay men and elves
+
+    if (!target) return 0;
+
+    // increase the effect for uniques
+    if (r_ptr->flags1 & (RF1_UNIQUE))
+        multiplier *= 2;
+
+    // increase the effect for individually occuring creatures
+    if (!(r_ptr->flags1 & (RF1_FRIENDS)) && !(r_ptr->flags1 & (RF1_FRIEND))
+        && !(r_ptr->flags1 & (RF1_ESCORTS))
+        && !(r_ptr->flags1 & (RF1_ESCORT)))
+        multiplier *= 2;
+
+    return multiplier;
+}
+
 bool weapon_glows(const object_type* o_ptr)
 {
     int total_hate = 0;
@@ -131,8 +177,7 @@ bool weapon_glows(const object_type* o_ptr)
     /* Add up the total of creatures vulnerable to the weapon's slays */
     for (i = 1; i < mon_max; i++)
     {
-        bool target = false;
-        int multiplier = 1;
+        int multiplier;
         monster_type* m_ptr = &mon_list[i];
         monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
@@ -140,46 +185,8 @@ bool weapon_glows(const object_type* o_ptr)
         if (!m_ptr->r_idx)
             continue;
 
-        // Determine if a slay is applicable
-        if ((f1 & (TR1_SLAY_WOLF)) && (r_ptr->flags3 & (RF3_WOLF)))
-            target = true;
-        if ((f1 & (TR1_SLAY_SPIDER)) && (r_ptr->flags3 & (RF3_SPIDER)))
-            target = true;
-        if ((f1 & (TR1_SLAY_UNDEAD)) && (r_ptr->flags3 & (RF3_UNDEAD)))
-            target = true;
-        if ((f1 & (TR1_SLAY_RAUKO)) && (r_ptr->flags3 & (RF3_RAUKO)))
-            target = true;
-        if ((f1 & (TR1_SLAY_ORC)) && (r_ptr->flags3 & (RF3_ORC)))
-            target = true;
-        if ((f1 & (TR1_SLAY_TROLL)) && (r_ptr->flags3 & (RF3_TROLL)))
-            target = true;
-        if ((f1 & (TR1_SLAY_DRAGON)) && (r_ptr->flags3 & (RF3_DRAGON)))
-            target = true;
-        if ((f4 & (TR4_SLAY_SERPENT)) && (r_ptr->flags3 & (RF3_SERPENT)))
-            target = true;
-        if ((f4 & (TR4_SLAY_VAMPIRE)) && (r_ptr->flags3 & (RF3_VAMPIRE)))
-            target = true;
-        if ((f4 & (TR4_SLAY_HORROR)) && (r_ptr->flags3 & (RF3_HORROR)))
-            target = true;
-        if ((f4 & (TR4_SLAY_CAT)) && (r_ptr->flags3 & (RF3_CAT)))
-            target = true;
-        if ((f4 & (TR4_SLAY_GIANT)) && (r_ptr->flags3 & (RF3_GIANT)))
-            target = true;
-        // No glow for Morgoth's weapons that slay men and elves
-
-        // skip inapplicable monsters
-        if (!target)
-            continue;
-
-        // increase the effect for uniques
-        if (r_ptr->flags1 & (RF1_UNIQUE))
-            multiplier *= 2;
-
-        // increase the effect for individually occuring creatures
-        if (!(r_ptr->flags1 & (RF1_FRIENDS)) && !(r_ptr->flags1 & (RF1_FRIEND))
-            && !(r_ptr->flags1 & (RF1_ESCORTS))
-            && !(r_ptr->flags1 & (RF1_ESCORT)))
-            multiplier *= 2;
+        multiplier = weapon_glow_multiplier(f1, f4, r_ptr);
+        if (!multiplier) continue;
 
         // add up the 'hate'
         total_hate += hate_level(m_ptr->fy, m_ptr->fx, multiplier);

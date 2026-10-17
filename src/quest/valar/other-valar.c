@@ -822,7 +822,7 @@ void orome_quest_interaction(void)
         }
 
         /* Determine hunt target based on dungeon depth */
-        int depth = p_ptr->depth;
+        int depth = p_ptr->depth * 50;
         cptr target_name;
         int target_count;
 

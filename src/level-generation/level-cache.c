@@ -1088,7 +1088,13 @@ static void sync_vertical_regions(void)
     cave_vertical_restore(&active->vertical);
 }
 
-bool level_cache_damage_monster(int depth, int index, int damage, const char* note, int who)
+typedef enum remote_monster_operation_kind {
+    REMOTE_DAMAGE, REMOTE_POISON_BRAND, REMOTE_POISON_TICK
+} remote_monster_operation_kind;
+
+static bool remote_monster_operation(int depth, int index, int damage,
+    const char* note, int who, const object_type* first, const object_type* second,
+    remote_monster_operation_kind operation, bool observed)
 {
     level_image* floor = level_cache_mutable_floor(depth);
     if (!floor || index <= 0 || index >= floor->mon_max
@@ -1097,7 +1103,15 @@ bool level_cache_damage_monster(int depth, int index, int damage, const char* no
     level_image_capture(active);
     player_type before = *p_ptr;
     level_image_restore(floor);
-    bool dead = mon_take_hit(index, damage, note, who);
+    bool visible_before = mon_list[index].ml;
+    if (observed) mon_list[index].ml = true;
+    bool dead = false;
+    if (operation == REMOTE_DAMAGE) dead = mon_take_hit(index, damage, note, who);
+    else if (operation == REMOTE_POISON_BRAND) monster_poison_brand(index, first, second, damage);
+    else dead = monster_poison_tick(index);
+    /* Observation belongs to this shot, never to a parked map's next turn.
+     * A canonical death may remove the slot or transform a special unique. */
+    if (mon_list[index].r_idx) mon_list[index].ml = visible_before;
     player_type after = *p_ptr;
     level_image_capture(floor);
     level_image_restore(active);
@@ -1113,6 +1127,28 @@ bool level_cache_damage_monster(int depth, int index, int damage, const char* no
     p_ptr->update |= PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS;
     p_ptr->redraw |= PR_MAP;
     return dead;
+}
+
+bool level_cache_damage_monster(int depth, int index, int damage, const char* note, int who)
+{
+    return remote_monster_operation(depth, index, damage, note, who, NULL, NULL, REMOTE_DAMAGE, false);
+}
+
+bool level_cache_damage_monster_observed(int depth, int index, int damage,
+    const char* note, int who)
+{
+    return remote_monster_operation(depth, index, damage, note, who, NULL, NULL, REMOTE_DAMAGE, true);
+}
+
+void level_cache_poison_monster(int depth, int index,
+    const object_type* first, const object_type* second, int damage)
+{
+    if (damage > 0) remote_monster_operation(depth, index, damage, NULL, 0, first, second, REMOTE_POISON_BRAND, true);
+}
+
+bool level_cache_poison_tick(int depth, int index)
+{
+    return remote_monster_operation(depth, index, 0, NULL, 0, NULL, NULL, REMOTE_POISON_TICK, false);
 }
 
 bool level_cache_transfer_object(int depth, int index, int y, int x)
