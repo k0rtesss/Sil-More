@@ -128,6 +128,28 @@ static bool reset_same_path(const char* left, const char* right)
     return *left == *right;
 }
 
+static bool reset_optional_directory_path(char* out, const char* path)
+{
+    if (reset_absolute_path(out, path)) return true;
+#ifndef WINDOWS
+    /* Startup migration can remove an empty metaruns directory. Resolve its
+     * existing parent when realpath cannot resolve the absent final component;
+     * do not create a directory before the configured path has been checked. */
+    if (errno != ENOENT || !path) return false;
+    char parent[RESET_PATH_MAX], resolved[RESET_PATH_MAX];
+    if (SDL_strlcpy(parent, path, sizeof(parent)) >= sizeof(parent)) return false;
+    size_t len = strlen(parent);
+    while (len > 1 && parent[len - 1] == '/') parent[--len] = '\0';
+    char* leaf = strrchr(parent, '/');
+    if (!leaf || leaf == parent || !leaf[1]) return false;
+    *leaf++ = '\0';
+    return reset_absolute_path(resolved, parent)
+        && path_build(out, RESET_PATH_MAX, resolved, leaf);
+#else
+    return false;
+#endif
+}
+
 static bool reset_contains(const char* parent, const char* child)
 {
     size_t len = strlen(parent);
@@ -242,11 +264,14 @@ bool sil_progress_reset_startup(const char* install_root, const char* user_root)
 #endif
     SDL_strlcpy(reset_install, install, sizeof(reset_install));
     SDL_strlcpy(reset_user, user, sizeof(reset_user));
-    if (!path_build(reset_runtime_apex, sizeof(reset_runtime_apex), install_root, "apex")
 #ifdef SIL_USE_LOCAL_DATA
+    if (!path_build(reset_runtime_apex, sizeof(reset_runtime_apex), install, "apex")
         || !path_build(reset_save, sizeof(reset_save), install, "save")
         || !path_build(reset_metarun, sizeof(reset_metarun), install, "apex")
 #else
+    /* Scores, achievements and discoveries share the writable cloud profile.
+     * Keep the legacy install apex separate from this active-path guard. */
+    if (!path_build(reset_runtime_apex, sizeof(reset_runtime_apex), user, "meta")
         || !path_build(reset_save, sizeof(reset_save), user, "save")
         || !path_build(reset_metarun, sizeof(reset_metarun), user, "meta/metaruns")
 #endif
@@ -409,10 +434,7 @@ static bool reset_launch_app(void)
 
 bool sil_progress_reset_request_restart(char* error, size_t error_size)
 {
-    char user[RESET_PATH_MAX], save[RESET_PATH_MAX];
-#if !defined(__ANDROID__) && !defined(SIL_IOS)
-    char apex[RESET_PATH_MAX];
-#endif
+    char user[RESET_PATH_MAX], save[RESET_PATH_MAX], apex[RESET_PATH_MAX];
     char metarun[RESET_PATH_MAX];
     if (!reset_paths_ready
         || reset_path_type(ANGBAND_DIR_USER) < 0
@@ -420,16 +442,12 @@ bool sil_progress_reset_request_restart(char* error, size_t error_size)
         || reset_path_type(ANGBAND_DIR_METARUN) < 0
         || !reset_absolute_path(user, ANGBAND_DIR_USER)
         || !reset_absolute_path(save, ANGBAND_DIR_SAVE)
-        || !reset_absolute_path(metarun, ANGBAND_DIR_METARUN)
+        || !reset_optional_directory_path(metarun, ANGBAND_DIR_METARUN)
         || !reset_same_path(user, reset_user) || !reset_same_path(save, reset_save)
         || !reset_same_path(metarun, reset_metarun)
-#if defined(__ANDROID__) || defined(SIL_IOS)
-        || !reset_same_path(ANGBAND_DIR_APEX, reset_runtime_apex)
-#else
         || reset_path_type(ANGBAND_DIR_APEX) < 0
         || !reset_absolute_path(apex, ANGBAND_DIR_APEX)
-        || !reset_same_path(apex, reset_apex)
-#endif
+        || !reset_same_path(apex, reset_runtime_apex)
         )
     {
         SDL_strlcpy(error, "Reset is unavailable with custom progress directories. "

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
@@ -900,6 +901,7 @@ bool do_cmd_open_aux(int y, int x)
             if (jammed)
             {
                 cave_set_feat(y, x, FEAT_DOOR_HEAD + 0x08 + power);
+                sil_achievements_on_door_jammed(y, x);
                 message_at(y, x, MSG_LOCKPICK_FAIL, 0,
                     "The pick twists in the lock, jamming it fast!");
                 SDL_strlcpy(previous,
@@ -1205,6 +1207,20 @@ static bool do_cmd_close_aux(int y, int x)
         {
             msg_print("You close the door, singing words of warding.");
             cave_set_feat(y, x, FEAT_WARDED);
+        }
+        for (int i = 1; i < mon_max; ++i)
+        {
+            monster_type *pursuer = &mon_list[i];
+            if (pursuer->r_idx && pursuer->alertness >= ALERTNESS_ALERT
+                && pursuer->stance != STANCE_FLEEING
+                && !(r_info[pursuer->r_idx].flags1 & (RF1_PEACEFUL | RF1_NEVER_MOVE))
+                && distance(y, x, pursuer->fy, pursuer->fx) <= 1
+                && ((pursuer->fy - y) * (p_ptr->py - y)
+                    + (pursuer->fx - x) * (p_ptr->px - x) < 0))
+            {
+                sil_achievements_on_event(SIL_ACH_YOU_CANNOT_PASS);
+                break;
+            }
         }
     }
     else
@@ -2835,6 +2851,8 @@ bool break_free_of_web(void)
         else
             msg_print("You break free!");
 
+        sil_achievements_on_event(SIL_ACH_FLIES_AND_SPIDERS);
+
         /* Forget the trap */
         cave_info[p_ptr->py][p_ptr->px] &= ~(CAVE_MARK);
 
@@ -3310,6 +3328,7 @@ static bool do_cmd_bash_aux(int y, int x, skill_roll_details* out_roll,
             }
 
             /* Break down the door */
+            sil_achievements_on_door_bashed(y, x);
             if (one_in_(2))
             {
                 cave_set_feat(y, x, FEAT_BROKEN);

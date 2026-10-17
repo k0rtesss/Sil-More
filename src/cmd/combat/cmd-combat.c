@@ -6,6 +6,7 @@
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "achievements.h"
+#include "achievements-character.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
@@ -296,6 +297,12 @@ int skill_check_details_sided(monster_type* m_ptr1, int skill, int difficulty,
         details->skill_alt_used = skill_alt_used;
         details->difficulty_alt_used = difficulty_alt_used;
     }
+
+    if ((m_ptr1 == PLAYER && m_ptr2 != PLAYER)
+        || (m_ptr2 == PLAYER && m_ptr1 && m_ptr1 != PLAYER))
+        sil_achievements_on_skill_check(m_ptr1 == PLAYER, skill, difficulty,
+            skill_sides, difficulty_sides, p_ptr->cursed,
+            skill_total - difficulty_total);
 
     /* Debugging message */
     if (cheat_skill_rolls)
@@ -1650,6 +1657,7 @@ void hit_trap(int y, int x)
 
             // take some damage
             falling_damage(false);
+            sil_achievements_on_fall();
 
             varda_quest_fail_if_bastion_missed();
 
@@ -1689,6 +1697,7 @@ void hit_trap(int y, int x)
 
         // take some damage
         falling_damage(false);
+        sil_achievements_on_fall();
 
         varda_quest_fail_if_bastion_missed();
 
@@ -2550,10 +2559,21 @@ bool knock_back(int y1, int x1, int y2, int x2)
             monster_abilities_forced_movement(m_ptr);
 
             // actually move the monster
+            int knocked_idx = (int)(m_ptr - mon_list);
             bool player_push = y1 == p_ptr->py && x1 == p_ptr->px;
+            bool player_chasm_knock = player_push
+                && cave_feat[y3][x3] == FEAT_CHASM
+                && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING);
+            if (player_chasm_knock)
+                m_ptr->mflag |= MFLAG_PLAYER_KNOCKBACK;
             if (player_push) m_ptr->mflag |= MFLAG_PLAYER_PUSH;
             monster_swap(y2, x2, y3, x3);
             if (player_push) m_ptr->mflag &= ~MFLAG_PLAYER_PUSH;
+            /* Falling actors can die or transfer to a cached lower floor. */
+            if (player_chasm_knock && !mon_list[knocked_idx].r_idx)
+                sil_achievements_on_event(SIL_ACH_FLY_YOU_FOOL);
+            if (mon_list[knocked_idx].r_idx)
+                mon_list[knocked_idx].mflag &= ~MFLAG_PLAYER_KNOCKBACK;
         }
         else
         {
@@ -3415,6 +3435,7 @@ void py_attack_aux(int y, int x, int attack_type)
                         /* Generate treasure */
                         quest_followup_damage(m_ptr, dam, -1);
                         quest_followup_kill(m_ptr->r_idx);
+                        sil_achievements_on_song_effect(SNG_SLAYING, m_idx, -1);
                         sil_achievements_on_monster_killed(m_idx, -1);
                         monster_death(m_idx);
 
@@ -3458,6 +3479,8 @@ void py_attack_aux(int y, int x, int attack_type)
              * the sound of an earlier miss, wound or another target. */
             if (!fatal_blow || !silent_kill_candidate)
                 player_attack_audible = true;
+            if (fatal_blow)
+                sil_achievement_character_on_melee_kill(o_ptr, crit_bonus_dice);
 
             // use different colours depending on whether knock back triggered
             if (do_knock_back)
@@ -3489,6 +3512,8 @@ void py_attack_aux(int y, int x, int attack_type)
             // deal with killing blows
             if (fatal_blow)
             {
+                if (attack_type == ATT_RIPOSTE)
+                    sil_achievements_on_event(SIL_ACH_THE_HASTY_STROKE);
                 // deal with 'follow_through' ability
                 possible_follow_through(y, x, attack_type);
 

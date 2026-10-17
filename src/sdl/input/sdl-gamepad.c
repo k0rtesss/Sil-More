@@ -1133,8 +1133,9 @@ bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force)
 {
     if (!g_gamepad_state.dpad_pending)
         return false;
-    if (!config.gamepad_enabled || !config.gamepad_use_dpad) {
-        sdl_gamepad_clear_pending_dpad();
+    if (!config.gamepad_enabled || !config.gamepad_use_dpad
+        || !sdl_movement_input_is_live()) {
+        sdl_gamepad_clear_dpad_state();
         return false;
     }
 
@@ -1508,8 +1509,9 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     int best = -1;
 
     if (g_gamepad_state.dpad_pending && config.gamepad_enabled && config.gamepad_use_dpad) {
-        Uint64 window_ns = (Uint64)sdl_gamepad_dpad_diagonal_delay_ms()
-            * 1000000ULL;
+        /* Retire a gameplay tap as soon as a menu takes ownership. */
+        Uint64 window_ns = sdl_movement_input_is_live()
+            ? (Uint64)sdl_gamepad_dpad_diagonal_delay_ms() * 1000000ULL : 0;
         Uint64 elapsed = now_ns - g_gamepad_state.dpad_pending_time;
         if (elapsed >= window_ns) {
             dpad_timeout = 0;
@@ -2914,20 +2916,12 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         || button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
         || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
     {
-        /* An enabled movement D-pad must resolve its chord before choosing
-         * the movement or terminal queue, as it did before UI navigation was
-         * added.  Clearing held/pending state for each modal event splits
-         * Up+Right into '8' and '6' without ever using the diagonal delay.
-         * sdl_gamepad_send_direction_mods() already routes a resolved direction
-         * to the terminal when a saved screen or prompt owns the input. */
-        if (!config.gamepad_use_dpad && sdl_movement_input_is_modal())
+        /* Menus own cardinal navigation immediately, regardless of the
+         * movement setting or held gameplay modifiers. Only live movement
+         * input waits for a second direction to form a diagonal. */
+        if (!sdl_movement_input_is_live())
         {
-            g_gamepad_state.dpad_up = false;
-            g_gamepad_state.dpad_down = false;
-            g_gamepad_state.dpad_left = false;
-            g_gamepad_state.dpad_right = false;
-            g_gamepad_state.dpad_dir = 0;
-            sdl_gamepad_clear_pending_dpad();
+            sdl_gamepad_clear_dpad_state();
             if (down)
             {
                 (void)sdl_gamepad_send_ui_direction(

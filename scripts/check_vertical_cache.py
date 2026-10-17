@@ -22,14 +22,6 @@ OUT = ROOT / "scripts/output/vertical-cache"
 WRITER = r'''
 #include "fs/save.c"
 #include <assert.h>
-void fixture_legacy_monster(const monster_type*);
-void __real_save_wr_monster(const monster_type*);
-static bool fixture_legacy_monsters;
-void fixture_set_legacy_monsters(bool legacy) { fixture_legacy_monsters=legacy; }
-void __wrap_save_wr_monster(const monster_type* monster) {
-    if(fixture_legacy_monsters)fixture_legacy_monster(monster);
-    else __real_save_wr_monster(monster);
-}
 void fixture_write_begin(byte *buffer,size_t capacity) {
     fff=SDL_IOFromMem(buffer,capacity);assert(fff);
     xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;
@@ -37,6 +29,17 @@ void fixture_write_begin(byte *buffer,size_t capacity) {
 size_t fixture_write_end(void) {
     size_t length=(size_t)SDL_TellIO(fff);assert(!write_error);
     SDL_CloseIO(fff);fff=NULL;return length;
+}
+'''
+
+LEGACY_WRITER = r'''
+void fixture_legacy_monster(const monster_type*);
+void __real_save_wr_monster(const monster_type*);
+static bool fixture_legacy_monsters;
+void fixture_set_legacy_monsters(bool legacy) { fixture_legacy_monsters=legacy; }
+void __wrap_save_wr_monster(const monster_type* monster) {
+    if(fixture_legacy_monsters)fixture_legacy_monster(monster);
+    else __real_save_wr_monster(monster);
 }
 '''
 
@@ -67,6 +70,7 @@ size_t fixture_read_end(void) {
 '''
 
 TESTS = r'''
+#include "achievements.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-water-flow.h"
@@ -910,6 +914,12 @@ static void test_aperture_visibility(void)
     assert(cave_vertical_forced_travel(20,20));
     assert(p_ptr->chp==health&&p_ptr->depth==8&&p_ptr->energy_use==100);
     pending_depth=-1;
+    p_ptr->playing=true;p_ptr->noscore=0;p_ptr->game_type=0;p_ptr->is_dead=false;
+    p_ptr->chp=p_ptr->mhp=1000;
+    sil_achievements_begin_run();
+    assert(cave_vertical_forced_travel(20,20));
+    assert(p_ptr->depth==9 && (p_ptr->achievement_flags&SIL_ACH_RUN_FALLING));
+    assert(p_ptr->achievement_fall_depth==8);
     level_cache_clear();
     puts("Production aperture reader: lit/glowing/near-torch terrain, hidden trap and secret sanitizing, darkness/blindness/hallucination/restricted memory, bridge foreground, displaced endpoint, read-only sampling and pending-fall impact dedup PASS.");
 }
@@ -1145,14 +1155,12 @@ def main(case="all"):
     harness += "    " + calls[case] + "\n"
     harness += '    puts("Vertical cache integration: PASS.");SDL_Quit();return 0;\n}\n'
     sources = []
-    save = (ROOT / "src/fs/save.c").read_text(encoding="utf-8")
+    save = subprocess.check_output(["git", "show", "658f9417:src/fs/save.c"],
+                                   cwd=ROOT, text=True, encoding="utf-8")
     start = save.index("void wr_monster(")
     legacy_monster = save[start:save.index("\n}", start) + 2]
-    poison = "    wr_s16b(m_ptr->player_poisoned);\n"
-    assert legacy_monster.count(poison) == 1
-    legacy_monster = legacy_monster.replace(poison, "").replace(
-        "void wr_monster(", "void fixture_legacy_monster(")
-    for name, content in (("check.c", harness), ("writer.c", WRITER + legacy_monster), ("reader.c", READER)):
+    legacy_monster = legacy_monster.replace("void wr_monster(", "void fixture_legacy_monster(")
+    for name, content in (("check.c", harness), ("writer.c", WRITER + LEGACY_WRITER + legacy_monster), ("reader.c", READER)):
         source = OUT / name
         source.write_text(content, encoding="utf-8")
         sources.append(str(source))

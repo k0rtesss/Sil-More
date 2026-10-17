@@ -680,18 +680,16 @@ void sdl_gameplay_tutorial_render(void)
     margin = MAX(8.0f, MIN(screen.w, screen.h)*0.018f);
     pad = margin;
     font_px = sdl_main_menu_pane_font_px();
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
         margin = pad = 8.0f * sdl_ui_density_scale();
         font_px = sdl_ui_role_font_px(SDL_UI_FONT_BODY);
         button_h = sdl_ui_min_tap_px();
     }
-#endif
     /* Keep a readable body row beside the footer on very short displays. */
     if (!config.bigger_font)
         font_px = MIN(font_px,MAX(8,(int)((screen.h-2*margin)/10)));
-    title_px = SIL_SDL_MOBILE_BUILD && config.bigger_font
+    title_px = sdl_handheld_ui_active() && config.bigger_font
         ? sdl_ui_role_font_px(SDL_UI_FONT_TITLE)
                                   : font_px + 2;
     if (compact_action) pad=4;
@@ -699,12 +697,10 @@ void sdl_gameplay_tutorial_render(void)
     if (!font) return;
     line_h = MAX(font_px*1.35f,tutorial_text_height("Ag",font_px,0)+1);
     width = MIN(screen.w-2*margin, MAX(690.0f,font_px*24.0f));
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
         width = MIN(screen.w-2*margin, 760.0f*sdl_ui_density_scale());
     }
-#endif
     card_space = (SDL_FRect){screen.x+(screen.w-width)/2, screen.y+margin,
         width, screen.h-2*margin};
     if (action_step) {
@@ -753,13 +749,11 @@ void sdl_gameplay_tutorial_render(void)
         shortcut_px=label_px;
     hint_px[0]=MAX(12,font_px-3);
     hint_px[1]=MAX(11,font_px-4);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
         label_px = sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
         shortcut_px = hint_px[0] = hint_px[1] = sdl_ui_role_font_px(SDL_UI_FONT_META);
     }
-#endif
     button_pad=MAX(4.0f,font_px*0.15f);
     gap=MAX(4.0f,font_px*0.15f);
     if (config.bigger_font) {
@@ -767,15 +761,13 @@ void sdl_gameplay_tutorial_render(void)
         button_pad = MAX(2.0f, font_px * 0.08f);
         gap = MAX(2.0f, font_px * 0.08f);
     }
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
         pad = button_pad = gap = 4.0f * sdl_ui_density_scale();
     }
-#endif
     for (int i=first_button;i<3;++i) {
         float text_w=(width-2*pad)/button_count-18;
-        label_h[i]=tutorial_text_height((config.bigger_font && !SIL_SDL_MOBILE_BUILD)
+        label_h[i]=tutorial_text_height((config.bigger_font && !sdl_handheld_ui_active())
             ? large_buttons[i] : controls.label[i],label_px,text_w);
         shortcut_h[i]=config.bigger_font ? 0
             : tutorial_text_height(controls.shortcut[i],shortcut_px,text_w);
@@ -897,7 +889,7 @@ void sdl_gameplay_tutorial_render(void)
         SDL_RenderRect(g_state.renderer,&tutorial_buttons[i]);
         float text_y=tutorial_buttons[i].y+(button_h-label_h[i]
             -(shortcut_h[i]>0?gap+shortcut_h[i]:0))/2;
-        sdl_touch_tutorial_draw_text_line((config.bigger_font && !SIL_SDL_MOBILE_BUILD) ? large_buttons[i] : controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
+        sdl_touch_tutorial_draw_text_line((config.bigger_font && !sdl_handheld_ui_active()) ? large_buttons[i] : controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
             text_y,tutorial_buttons[i].w-12,label_px,white,true);
         if (!config.bigger_font && controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
             tutorial_buttons[i].x+tutorial_buttons[i].w/2,text_y+label_h[i]+gap,

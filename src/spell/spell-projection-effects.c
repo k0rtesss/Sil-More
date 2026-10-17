@@ -53,9 +53,16 @@ bool project_f(
     {
     case GF_FIRE:
     case GF_COLD:
+    {
+        int old_feat = cave_feat[y][x];
         if (cave_transform_elemental_terrain(y, x, typ))
+        {
             obvious = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
+            if (who < 0)
+                sil_achievements_on_elemental_terrain(y, x, old_feat, typ);
+        }
         break;
+    }
 
     /* Ignore most effects */
 
@@ -782,7 +789,12 @@ bool project_m(
         else if (dam > 0)
         {
             poison_dose = dam;
+            int previous_player_poison = m_ptr->player_poisoned;
             monster_poison_add_from(cave_m_idx[y][x], poison_dose, who);
+            if (who < 0 && (flg & PROJECT_POTION))
+                m_ptr->potion_poisoned = MIN(m_ptr->player_poisoned,
+                    m_ptr->potion_poisoned
+                        + MAX(0, m_ptr->player_poisoned - previous_player_poison));
             note = " is poisoned.";
         }
         /* Poison projections build the same delayed counter as weapons. */
@@ -1041,10 +1053,14 @@ bool project_m(
                         /* Apply stun */
                         if (stun_amount > 0)
                         {
+                            int previous_stun = m_ptr->stunned;
                             stun_monster(m_ptr, stun_amount);
                             if (dif >= 0)
                                 legendary_song_observe_monster(
                                     cave_m_idx[y][x], 0);
+                            if ((flg & PROJECT_SONG) && m_ptr->stunned > previous_stun)
+                                sil_achievements_on_song_effect(SNG_TREES,
+                                    cave_m_idx[y][x], -1);
                             
                             /*possibly update the monster health bar*/
                             if (p_ptr->health_who == cave_m_idx[m_ptr->fy][m_ptr->fx])
@@ -1561,12 +1577,16 @@ bool project_m(
         /* Preserve the victim's type before mon_take_hit can delete its slot. */
         bool player_light_vs_undead = typ == GF_LIGHT && who < 0
             && (r_ptr->flags3 & RF3_UNDEAD);
+        if (who < 0 && typ == GF_LIGHT && (flg & PROJECT_SONG) && dam > 0)
+            sil_achievements_on_song_effect(SNG_TREES, cave_m_idx[y][x], -1);
 
         /* Hurt the monster, check for death */
         if (mon_take_hit(cave_m_idx[y][x], dam, note_dies, who))
         {
             if (player_light_vs_undead)
                 sil_achievements_on_light_kill();
+            if (who < 0 && (flg & PROJECT_POTION))
+                sil_achievements_on_event(SIL_ACH_FOR_EXTERNAL_USE_ONLY);
 
             /* Note death */
             if (!seen)

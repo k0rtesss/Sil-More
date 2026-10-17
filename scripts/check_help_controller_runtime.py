@@ -162,7 +162,7 @@ static void check_dpad_diagonals(void)
         {SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_BUTTON_DPAD_LEFT, 1},
         {SDL_GAMEPAD_BUTTON_DPAD_LEFT, SDL_GAMEPAD_BUTTON_DPAD_DOWN, 1},
     };
-    const int delays[] = {50, 300};
+    const int delays[] = {50, 200, 300};
     character_icky = 0;
     inkey_flag = true;
     movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
@@ -181,6 +181,8 @@ static void check_dpad_diagonals(void)
                 dpad_event(pairs[p].first, true);
                 expect_key(0);
                 assert(g_gamepad_state.dpad_pending);
+                assert(sdl_gamepad_pending_timeout_ms(
+                    g_gamepad_state.dpad_pending_time) == delays[d]);
                 assert(!sdl_gamepad_flush_pending_dpad(
                     g_gamepad_state.dpad_pending_time + (delays[d] - 1) * 1000000ULL, false));
                 if (release_first) dpad_event(pairs[p].first, false);
@@ -252,6 +254,75 @@ static void check_dpad_diagonals(void)
     puts("Dungeon D-pad diagonal regression checks: PASS");
 }
 
+static void check_dpad_menu_navigation(void)
+{
+    const SDL_GamepadButton directions[] = {SDL_GAMEPAD_BUTTON_DPAD_UP,
+        SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+        SDL_GAMEPAD_BUTTON_DPAD_RIGHT};
+    const int keys[] = {'8', '2', '4', '6'};
+
+    /* Title menus, saved screens with a stale dungeon context, and terminal
+     * prompts all navigate on button-down even at the maximum delay. */
+    for (int use_dpad = 0; use_dpad <= 1; use_dpad++)
+    for (int owner = 0; owner < 3; owner++) {
+        sdl_config_set_defaults(&config);
+        config.gamepad_enabled = true;
+        config.gamepad_use_dpad = use_dpad;
+        config.gamepad_dpad_diagonal_delay_ms = 300;
+        sdl_gamepad_reset_movement_controls();
+        movement_input_set_active_context(owner == 0
+            ? MOVEMENT_INPUT_CONTEXT_NONE : MOVEMENT_INPUT_CONTEXT_DUNGEON);
+        character_icky = owner == 1;
+        if (owner == 2) inkey_prompt_input_begin();
+        for (unsigned d = 0; d < N_ELEMENTS(directions); d++) {
+            dpad_event(directions[d], true);
+            expect_key(keys[d]);
+            assert(!g_gamepad_state.dpad_pending);
+            assert(sdl_gamepad_pending_timeout_ms(SDL_GetTicksNS()) == -1);
+            dpad_event(directions[d], false);
+            expect_key(0);
+        }
+        /* Overlapping menu presses are two cardinal actions, never a chord. */
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, true); expect_key('8');
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true); expect_key('6');
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+        assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true));
+        expect_key(0);
+        movement_input_command command;
+        assert(!movement_input_take_command(MOVEMENT_INPUT_CONTEXT_ANY, &command));
+        if (owner == 2) inkey_prompt_input_end();
+    }
+
+    /* A movement tap must not expire into a menu opened during its window,
+     * or combine with the first menu press. Retire it without waiting. */
+    config.gamepad_use_dpad = true;
+    for (int owner = 0; owner < 3; owner++) {
+        character_icky = 0;
+        movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, true);
+        assert(g_gamepad_state.dpad_pending);
+        expect_key(0);
+        if (owner == 0) movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+        if (owner == 1) character_icky = 1;
+        if (owner == 2) inkey_prompt_input_begin();
+        assert(sdl_gamepad_pending_timeout_ms(SDL_GetTicksNS()) == 0);
+        assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), false));
+        assert(!g_gamepad_state.dpad_pending && !g_gamepad_state.dpad_up);
+        expect_key(0);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true); expect_key('6');
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+        expect_key(0);
+        if (owner == 2) inkey_prompt_input_end();
+    }
+    character_icky = 0;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    sdl_gamepad_reset_movement_controls();
+    sdl_config_set_defaults(&config);
+    puts("Immediate D-pad menu input: all cardinal directions, overlapping presses, both movement settings, title/saved/prompt owners and pending gameplay cleanup PASS");
+}
+
 static void check_controller(void)
 {
     const SDL_GamepadButton buttons[] = {
@@ -292,27 +363,27 @@ static void check_controller(void)
     sdl_question_menu_finish();
     for (int tap = 0; tap < 2; ++tap) {
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
-        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
-        (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
         expect_key(UI_MENU_CLICK_WAKE_KEY);
         assert(sdl_question_menu_take_navigation() == 1);
+        assert(!g_gamepad_state.dpad_pending);
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
         expect_key(0);
     }
     dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, true);
-    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
-    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
     expect_key(UI_MENU_CLICK_WAKE_KEY);
     assert(sdl_question_menu_take_navigation() == -1);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
     expect_key(0);
-    /* Horizontal arrows have the same semantics as physical arrows, and an
-     * overlapping Down+Right chord resolves to one next navigation action. */
+    /* Horizontal arrows navigate immediately as separate cardinal presses,
+     * including when held together with a vertical direction. */
     dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
-    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
-    (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
     expect_key(UI_MENU_CLICK_WAKE_KEY);
     assert(sdl_question_menu_take_navigation() == 1);
+    dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
     expect_key(0);
     dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+    expect_key(UI_MENU_CLICK_WAKE_KEY);
+    assert(sdl_question_menu_take_navigation() == 1);
     dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
     expect_key(UI_MENU_CLICK_WAKE_KEY);
     assert(sdl_question_menu_take_navigation() == 1);
@@ -646,12 +717,14 @@ static void check_terminal_held_modifiers(void)
         sdl_gamepad_reset_movement_controls();
         for(int i=0;i<3;i++)if(mask&(1<<i))sdl_gamepad_apply_modifier(modifiers[i],true);
         for(unsigned d=0;d<N_ELEMENTS(directions);d++) {
-            dpad_event(directions[d],true);dpad_event(directions[d],false);
-            (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+            dpad_event(directions[d],true);
+            assert(!g_gamepad_state.dpad_pending);
             expect_key(keys[d]);expect_key(0);
+            dpad_event(directions[d],false);expect_key(0);
         }
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,true);
-        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);expect_key('3');
+        expect_key('2');
+        dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);expect_key('6');
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,false);
         assert(!sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true));expect_key(0);
@@ -695,7 +768,7 @@ static void check_terminal_held_modifiers(void)
     }
     sdl_gamepad_reset_movement_controls();sdl_config_set_defaults(&config);
     movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
-    puts("Saved terminal pad navigation: all 8 modifier states, D-pad/diagonal/sticks/B, no world queue, Look plain direction/Y mode and live modified routes PASS");
+    puts("Saved terminal pad navigation: all 8 modifier states, immediate cardinal D-pad/sticks/B, no world queue, Look plain direction/Y mode and live modified routes PASS");
 }
 
 static void check_trigger_owner_release(void)
@@ -927,12 +1000,14 @@ static void check_question_held_modifiers(void)
         sdl_question_menu_add_entry(1,"b)","Mattock",TERM_WHITE);
         sdl_question_menu_set_highlight(0);sdl_question_menu_finish();
         for(unsigned d=0;d<N_ELEMENTS(directions);d++) {
-            dpad_event(directions[d],true);dpad_event(directions[d],false);
-            (void)sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(),true);
+            dpad_event(directions[d],true);
+            assert(!g_gamepad_state.dpad_pending);
             expect_key(UI_MENU_CLICK_WAKE_KEY);
             assert(sdl_question_menu_take_navigation()==(d%2?1:-1));expect_key(0);
+            dpad_event(directions[d],false);expect_key(0);
         }
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,true);
+        expect_key(UI_MENU_CLICK_WAKE_KEY);assert(sdl_question_menu_take_navigation()==1);
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_RIGHT,true);
         expect_key(UI_MENU_CLICK_WAKE_KEY);assert(sdl_question_menu_take_navigation()==1);
         dpad_event(SDL_GAMEPAD_BUTTON_DPAD_DOWN,false);
@@ -964,7 +1039,7 @@ static void check_question_held_modifiers(void)
     axis.value=0;sdl_gamepad_handle_axis(&axis);assert(!sdl_gamepad_ctrl_active());expect_key(0);
     sdl_question_menu_clear();sdl_gamepad_reset_movement_controls();
     sdl_config_set_defaults(&config);movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
-    puts("Question picker held modifiers: all 8 states, D-pad/diagonal semantics, actual RT snapshot, A/B and no world queue PASS");
+    puts("Question picker held modifiers: all 8 states, immediate cardinal D-pad, actual RT snapshot, A/B and no world queue PASS");
 }
 
 static void check_yes_no_controller_owner(void)
@@ -1214,10 +1289,13 @@ int main(void)
     setbuf(stdout, NULL);
     assert(SDL_Init(SDL_INIT_EVENTS));
     sdl_config_set_defaults(&config);
+    assert(config.gamepad_dpad_diagonal_delay_ms == 200);
+    assert(get_sdl_gamepad_default_dpad_diagonal_delay_ms() == 200);
     term_init(&t, 80, 24, 256);
     Term_activate(&t);
     term_screen = &t;
     check_dpad_diagonals();
+    check_dpad_menu_navigation();
     check_controller();
     check_song_controller_owner();
     check_yes_no_controller_owner();

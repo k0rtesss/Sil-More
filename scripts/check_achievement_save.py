@@ -2,8 +2,8 @@
 """Roundtrip achievement/player-poison state with production save/load codecs.
 
 Requires current build-standard engine objects. Uses temporary profiles only.
-The 1.1.0.6 fixture uses its committed production writers, rather than a
-second hand-written serialization implementation.
+Legacy expansion layouts use committed production writers from revisions
+658f9417 (before achievements) and 3bf72847 (1.1.0.7).
 """
 from pathlib import Path
 import os
@@ -23,15 +23,21 @@ WRITER = r'''
 #include <assert.h>
 void fixture_legacy_extra(void);
 void fixture_legacy_monster(const monster_type*);
-size_t fixture_write(bool legacy, const monster_type* monster, byte* buffer,
+void fixture_previous_extra(void);
+void fixture_previous_monster(const monster_type*);
+size_t fixture_write(int legacy, const monster_type* monster, byte* buffer,
     size_t capacity, size_t* player_end)
 {
     fff = SDL_IOFromMem(buffer, capacity); assert(fff);
     xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
-    if (legacy) fixture_legacy_extra(); else save_write_extra();
+    if (legacy == 1) fixture_legacy_extra();
+    else if (legacy == 2) fixture_previous_extra();
+    else save_write_extra();
     *player_end = (size_t)SDL_TellIO(fff);
     save_wr_u32b(0xA1B2C3D4U);
-    if (legacy) fixture_legacy_monster(monster); else save_wr_monster(monster);
+    if (legacy == 1) fixture_legacy_monster(monster);
+    else if (legacy == 2) fixture_previous_monster(monster);
+    else save_wr_monster(monster);
     save_wr_u32b(0xB4C3D2E1U);
     save_wr_u32b(v_stamp); save_wr_u32b(x_stamp);
     size_t length = (size_t)SDL_TellIO(fff);
@@ -39,11 +45,20 @@ size_t fixture_write(bool legacy, const monster_type* monster, byte* buffer,
     SDL_CloseIO(fff); fff = NULL;
     return length;
 }
+size_t fixture_write_object(const object_type* object, byte* buffer, size_t capacity)
+{
+    fff=SDL_IOFromMem(buffer,capacity); assert(fff);
+    xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;
+    save_wr_item(object);save_wr_u32b(0x1234ABCDU);
+    size_t length=(size_t)SDL_TellIO(fff);
+    assert(!write_error);SDL_CloseIO(fff);fff=NULL;return length;
+}
 '''
 
 READER = r'''
 #include "fs/load.c"
 #include <assert.h>
+size_t fixture_read_offset;
 int fixture_read(const byte* buffer, size_t length, int extra,
     monster_type* monster, size_t player_end)
 {
@@ -62,15 +77,28 @@ int fixture_read(const byte* buffer, size_t length, int extra,
         result = rd_savefile_checksums();
         assert((size_t)SDL_TellIO(fff) == length);
     }
+    fixture_read_offset=(size_t)SDL_TellIO(fff);
     SDL_CloseIO(fff); fff = NULL;
     return result;
+}
+void fixture_read_object(const byte* buffer,size_t length,object_type* object)
+{
+    fff=SDL_IOFromConstMem(buffer,length);assert(fff);
+    xor_byte=0;v_check=x_check=load_byte_offset=0;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=VERSION_EXTRA;
+    assert(load_rd_item(object)==0);
+    u32b sentinel;load_rd_u32b(&sentinel);assert(sentinel==0x1234ABCDU);
+    assert((size_t)SDL_TellIO(fff)==length);SDL_CloseIO(fff);fff=NULL;
 }
 '''
 
 TESTS = r'''
 #include "achievements.h"
-size_t fixture_write(bool,const monster_type*,byte*,size_t,size_t*);
+size_t fixture_write(int,const monster_type*,byte*,size_t,size_t*);
 int fixture_read(const byte*,size_t,int,monster_type*,size_t);
+size_t fixture_write_object(const object_type*,byte*,size_t);
+void fixture_read_object(const byte*,size_t,object_type*);
+extern size_t fixture_read_offset;
 static byte current[65536], legacy[65536], modified[65536], plain[65536];
 static void decode(const byte* source, byte* target, size_t size)
 {
@@ -89,6 +117,9 @@ static void clear_for_load(void)
     p_ptr->achievement_flags=0xFFFFFFFFU;
     p_ptr->achievement_kills=p_ptr->achievement_singing_turns=0xFFFFFFFFU;
     p_ptr->achievement_comeback_depth=29;
+    p_ptr->achievement_discovery_flags=0xFFFFFFFFU;
+    p_ptr->achievement_rage_epoch=0xFFFFFFFFU;
+    memset(p_ptr->achievement_frozen_tiles,0xFF,sizeof(p_ptr->achievement_frozen_tiles));
 }
 static void prepare_player(void)
 {
@@ -98,6 +129,22 @@ static void prepare_player(void)
     p_ptr->achievement_flags=SIL_ACH_RUN_FLAGS|0x80000000U;
     p_ptr->achievement_kills=0x12345678U; p_ptr->achievement_singing_turns=70000;
     p_ptr->achievement_comeback_depth=10;
+    p_ptr->achievement_fall_depth=8;
+    p_ptr->achievement_discovery_flags=SIL_ACH_DISC_FLAGS|0x80000000U;
+    p_ptr->achievement_rage_epoch=0x11223344U;
+    p_ptr->achievement_water_from_y=1;p_ptr->achievement_water_from_x=2;
+    p_ptr->achievement_water_entry_y=3;p_ptr->achievement_water_entry_x=4;
+    p_ptr->achievement_poison_from_y=5;p_ptr->achievement_poison_from_x=6;
+    p_ptr->achievement_poison_entry_y=7;p_ptr->achievement_poison_entry_x=8;
+    p_ptr->achievement_labyrinth_index=9;
+    p_ptr->achievement_labyrinth_y=10;p_ptr->achievement_labyrinth_x=11;
+    int ice=12*MAX_DUNGEON_WID+13;
+    p_ptr->achievement_frozen_tiles[ice/8]|=1u<<(ice%8);
+    ++ice;p_ptr->achievement_frozen_tiles[ice/8]|=1u<<(ice%8);
+    int door=8*MAX_DUNGEON_WID+9;
+    p_ptr->achievement_jammed_doors[door/8] |= 1u<<(door%8);
+    ++door;
+    p_ptr->achievement_jammed_doors[door/8] |= 1u<<(door%8);
     p_ptr->tulkas_target_r_idx=41; p_ptr->niena_level=17;
     p_ptr->skill_base[S_SNG]=20;
     turn=888; playerturn=777;
@@ -111,40 +158,94 @@ static void assert_player_tail(void)
     assert(!strcmp(op_ptr->full_name,"Achievement codec"));
     assert(p_ptr->chp==1 && p_ptr->mhp==80);
 }
+static void assert_discovery_defaults(const monster_type* restored)
+{
+    assert(!p_ptr->achievement_discovery_flags && !p_ptr->achievement_rage_epoch);
+    assert(p_ptr->achievement_water_from_y==-1 && p_ptr->achievement_water_entry_x==-1);
+    assert(p_ptr->achievement_poison_from_y==-1 && p_ptr->achievement_poison_entry_x==-1);
+    assert(p_ptr->achievement_labyrinth_index==-1 && p_ptr->achievement_labyrinth_y==-1);
+    assert(!restored->achievement_doom_rage_epoch && !restored->achievement_elbereth_turn);
+    assert(!restored->achievement_first_wolf);
+    for(size_t i=0;i<sizeof(p_ptr->achievement_frozen_tiles);i++)assert(!p_ptr->achievement_frozen_tiles[i]);
+}
 static void test_save(void)
 {
-    assert(VERSION_MAJOR==1 && VERSION_MINOR==1 && VERSION_PATCH==0 && VERSION_EXTRA==7);
+    assert(VERSION_MAJOR==1 && VERSION_MINOR==1 && VERSION_PATCH==0 && VERSION_EXTRA==8);
     prepare_player();
     monster_type source={0}, restored;
     source.r_idx=41; source.image_r_idx=7; source.fy=8; source.fx=9;
-    source.hp=source.maxhp=120; source.poisoned=27; source.player_poisoned=11;
+    source.mflag=MFLAG_PLAYER_KNOCKBACK;
+    source.hp=source.maxhp=120; source.poisoned=27; source.player_poisoned=11; source.potion_poisoned=7;
     source.vengeance=1; source.smite_recovery=2;
+    source.achievement_doom_rage_epoch=0x11223344U;
+    source.achievement_elbereth_turn=778;source.achievement_first_wolf=true;
     source.ai.observations[MON_AI_FIRE].value=2;
     source.ai.observations[MON_AI_FIRE].ttl=40;
     source.ai.observations[MON_AI_FIRE].turn=775;
     size_t current_end,legacy_end;
     size_t size=fixture_write(false,&source,current,sizeof(current),&current_end);
     size_t oldsize=fixture_write(true,&source,legacy,sizeof(legacy),&legacy_end);
-    assert(current_end==legacy_end+15 && size==oldsize+17);
+    assert(current_end==legacy_end+61 && size==oldsize+74);
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
-    assert(fixture_read(current,size,7,&restored,current_end)==0);
+    assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
     assert_player_tail();
     assert(p_ptr->achievement_flags==SIL_ACH_RUN_FLAGS);
     assert(p_ptr->achievement_kills==0x12345678U && p_ptr->achievement_singing_turns==70000);
     assert(p_ptr->achievement_comeback_depth==10);
-    assert(restored.poisoned==27 && restored.player_poisoned==11);
+    assert(restored.poisoned==27 && restored.player_poisoned==11 && restored.potion_poisoned==7);
+    assert(!(restored.mflag & MFLAG_PLAYER_KNOCKBACK));
+    assert(p_ptr->achievement_fall_depth==8);
+    int first=8*MAX_DUNGEON_WID+9, second=first+1;
+    assert(p_ptr->achievement_jammed_doors[first/8] & (1u<<(first%8)));
+    assert(p_ptr->achievement_jammed_doors[second/8] & (1u<<(second%8)));
     assert(restored.vengeance==1 && restored.smite_recovery==2);
     assert(restored.ai.observations[MON_AI_FIRE].value==2);
     assert(restored.ai.observations[MON_AI_FIRE].ttl==40);
     assert(restored.ai.observations[MON_AI_FIRE].turn==775);
-    puts("Current 1.1.0.7: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
+    assert(p_ptr->achievement_discovery_flags==SIL_ACH_DISC_FLAGS);
+    assert(p_ptr->achievement_rage_epoch==0x11223344U);
+    assert(p_ptr->achievement_water_from_y==1 && p_ptr->achievement_water_from_x==2);
+    assert(p_ptr->achievement_water_entry_y==3 && p_ptr->achievement_water_entry_x==4);
+    assert(p_ptr->achievement_poison_from_y==5 && p_ptr->achievement_poison_from_x==6);
+    assert(p_ptr->achievement_poison_entry_y==7 && p_ptr->achievement_poison_entry_x==8);
+    assert(p_ptr->achievement_labyrinth_index==9 && p_ptr->achievement_labyrinth_y==10 && p_ptr->achievement_labyrinth_x==11);
+    int ice=12*MAX_DUNGEON_WID+13;
+    assert(p_ptr->achievement_frozen_tiles[ice/8]&(1u<<(ice%8)));
+    ++ice;assert(p_ptr->achievement_frozen_tiles[ice/8]&(1u<<(ice%8)));
+    assert(restored.achievement_doom_rage_epoch==0x11223344U);
+    assert(restored.achievement_elbereth_turn==778 && restored.achievement_first_wolf);
+    puts("Current 1.1.0.8: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
+
+    object_type forged={0},loaded;
+    object_prep(&forged,lookup_kind(TV_SOFT_ARMOR,SV_ARMOUR_OF_GALVORN));
+    forged.ident|=IDENT_ACH_EOL_GALVORN|IDENT_ACH_TELCHAR_SHARPNESS;
+    size_t object_size=fixture_write_object(&forged,modified,sizeof(modified));
+    memset(&loaded,0,sizeof(loaded));fixture_read_object(modified,object_size,&loaded);
+    assert((loaded.ident&(IDENT_ACH_EOL_GALVORN|IDENT_ACH_TELCHAR_SHARPNESS))
+        ==(IDENT_ACH_EOL_GALVORN|IDENT_ACH_TELCHAR_SHARPNESS));
+    puts("Current 1.1.0.8: object codec preserves both own-forged provenance bits PASS");
+
+    size_t previous_end;
+    size_t previous_size=fixture_write(2,&source,modified,sizeof(modified),&previous_end);
+    assert(current_end==previous_end+46 && size==previous_size+57);
+    clear_for_load(); memset(&restored,0x55,sizeof(restored));
+    assert(fixture_read(modified,previous_size,7,&restored,previous_end)==0);
+    assert_player_tail();
+    assert_discovery_defaults(&restored);
+    assert(p_ptr->achievement_flags==(SIL_ACH_RUN_FLAGS & ~SIL_ACH_RUN_FALLING));
+    assert(p_ptr->achievement_fall_depth==-1 && restored.potion_poisoned==0);
+    for(size_t i=0;i<sizeof(p_ptr->achievement_jammed_doors);++i)
+        assert(!p_ptr->achievement_jammed_doors[i]);
+    assert(restored.player_poisoned==11);
+    puts("Legacy 1.1.0.7: existing run/poison history retained, new provenance defaults empty PASS");
 
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(legacy,oldsize,6,&restored,legacy_end)==0);
     assert_player_tail();
+    assert_discovery_defaults(&restored);
     assert(p_ptr->achievement_flags==0 && p_ptr->achievement_kills==0);
     assert(p_ptr->achievement_singing_turns==0 && p_ptr->achievement_comeback_depth==-1);
-    assert(restored.poisoned==27 && restored.player_poisoned==0);
+    assert(restored.poisoned==27 && restored.player_poisoned==0 && restored.potion_poisoned==0);
     assert(restored.vengeance==1 && restored.smite_recovery==2);
     assert(restored.ai.observations[MON_AI_FIRE].value==2);
     p_ptr->playing=true; p_ptr->depth=0;
@@ -168,29 +269,76 @@ static void test_save(void)
         prepare_player(); source.player_poisoned=poison;
         size=fixture_write(false,&source,current,sizeof(current),&current_end);
         clear_for_load();
-        assert(fixture_read(current,size,7,&restored,current_end)==0);
+        assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
         assert(restored.player_poisoned==(poison<0?0:27));
+        assert(restored.potion_poisoned<=restored.player_poisoned);
+    }
+    source.player_poisoned=11;
+    for (int poison=-5;poison<=99;poison+=104) {
+        prepare_player(); source.potion_poisoned=poison;
+        size=fixture_write(false,&source,current,sizeof(current),&current_end);
+        clear_for_load();
+        assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
+        assert(restored.potion_poisoned==(poison<0?0:11));
     }
     prepare_player(); p_ptr->achievement_comeback_depth=-1;
     size=fixture_write(false,&source,current,sizeof(current),&current_end);
     clear_for_load();
-    assert(fixture_read(current,size,7,&restored,current_end)==0);
+    assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
     assert(!(p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK));
-    puts("Current 1.1.0.7: player poison clamps to [0,total poison], invalid comeback depth clears pending condition PASS");
+    puts("Current 1.1.0.8: player poison clamps to [0,total poison], invalid comeback depth clears pending condition PASS");
 
     decode(current,plain,size);
-    const byte marker[]={0xAC,7,0,0,0,0x78,0x56,0x34,0x12,0x70,0x11,1,0,0xFF,0xFF};
+    const byte marker[]={0xAC,15,0,0,0,0x78,0x56,0x34,0x12,0x70,0x11,1,0,0xFF,0xFF};
     size_t found=0; int matches=0;
     for(size_t i=0;i+sizeof(marker)<=current_end;i++)
         if(!memcmp(plain+i,marker,sizeof(marker))) { found=i; matches++; }
     assert(matches==1); plain[found]=0xAD;
     encode(plain,modified,size); clear_for_load();
-    assert(fixture_read(modified,size,7,&restored,current_end)!=0);
-    puts("Current 1.1.0.7: corrupt achievement block marker rejected PASS");
+    assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
+    puts("Current 1.1.0.8: corrupt achievement block marker rejected PASS");
+    decode(current,plain,size);
+    const byte extension[]={0xAD,8,0,2,0,8,9,8,10};
+    found=0; matches=0;
+    for(size_t i=0;i+sizeof(extension)<=current_end;i++)
+        if(!memcmp(plain+i,extension,sizeof(extension))) {found=i; matches++;}
+    assert(matches==1);
+    for(int bad=0;bad<4;bad++) {
+        decode(current,plain,size);
+        if(bad==0) plain[found]=0xAE;
+        if(bad==1) plain[found+3]=plain[found+4]=0xFF;
+        if(bad==2) plain[found+5]=0xFF;
+        if(bad==3) plain[found+8]=9;
+        encode(plain,modified,size); clear_for_load();
+        assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
+    }
+    puts("Current 1.1.0.8: potion ownership clamps; invalid extension/count/coordinates/duplicate doors rejected PASS");
+    decode(current,plain,size);
+    const byte discovery[]={0xAE,SIL_ACH_DISC_FLAGS,0,0,0,0x44,0x33,0x22,0x11,
+        1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,2,0,12,13,12,14};
+    found=0;matches=0;
+    for(size_t i=0;i+sizeof(discovery)<=current_end;i++)
+        if(!memcmp(plain+i,discovery,sizeof(discovery))){found=i;matches++;}
+    assert(matches==1);
+    for(int bad=0;bad<7;bad++) {
+        decode(current,plain,size);
+        if(bad==0)plain[found]=0xAF;
+        if(bad==1)plain[found+9]=plain[found+10]=0xFF;
+        if(bad==2)plain[found+17]=plain[found+18]=0xFF;
+        if(bad==3)plain[found+25]=25;
+        if(bad==4)plain[found+31]=plain[found+32]=0xFF;
+        if(bad==5)plain[found+33]=0xFF;
+        if(bad==6){plain[found+35]=12;plain[found+36]=13;}
+        encode(plain,modified,size);clear_for_load();
+        assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
+        /* Reject in the field decoder itself, before the checksummed tail. */
+        assert(fixture_read_offset<current_end);
+    }
+    puts("Current 1.1.0.8: invalid discovery marker/crossing/poison/labyrinth/ice count/ice coordinate/duplicate ice rejected before checksum PASS");
     decode(current,plain,size); plain[size-1]^=1;
     encode(plain,modified,size); clear_for_load();
-    assert(fixture_read(modified,size,7,&restored,current_end)!=0);
-    puts("Current 1.1.0.7: corrupt encoded checksum rejected by production footer validator PASS");
+    assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
+    puts("Current 1.1.0.8: corrupt encoded checksum rejected by production footer validator PASS");
 }
 '''
 
@@ -203,18 +351,22 @@ def function(source, name):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    def historical(path):
-        return subprocess.check_output(["git", "show", f"658f9417:{path}"],
-                                       cwd=ROOT, text=True, encoding="utf-8")
-    save = historical("src/fs/save.c")
-    player = historical("src/fs/save-player.c")
-    player = player[:player.index("\nvoid wr_randarts(void)")]
-    player = player.replace("save_write_partition_meta", "fixture_legacy_partition_meta")
-    player = player.replace("void wr_extra(void)", "void fixture_legacy_extra(void)")
-    monster = function(save, "wr_monster")
-    monster = monster.replace("void wr_monster(", "void fixture_legacy_monster(")
-    flags = save[save.index("#define SAVE_MON_FLAGS"):save.index('/*\n * Write a "monster"')]
-    old_writer = player + '\n#include "monster/monster-ai.h"\n' + flags + "\n" + monster
+    def historical_writer(ref, label):
+        def historical(path):
+            return subprocess.check_output(["git", "show", f"{ref}:{path}"],
+                                           cwd=ROOT, text=True, encoding="utf-8")
+        save = historical("src/fs/save.c")
+        player = historical("src/fs/save-player.c")
+        player = player[:player.index("\nvoid wr_randarts(void)")]
+        player = player.replace("save_write_partition_meta", f"fixture_{label}_partition_meta")
+        player = player.replace("void wr_extra(void)", f"void fixture_{label}_extra(void)")
+        monster = function(save, "wr_monster").replace(
+            "void wr_monster(", f"void fixture_{label}_monster(")
+        flags = save[save.index("#define SAVE_MON_FLAGS"):save.index('/*\n * Write a "monster"')]
+        return player + '\n#include "monster/monster-ai.h"\n' + flags + "\n" + monster
+
+    old_writer = historical_writer("658f9417", "legacy")
+    previous_writer = historical_writer("3bf72847", "previous")
     load = (ROOT / "src/fs/load.c").read_text(encoding="utf-8")
     # Use the complete load_player setup, including the Varda availability bit
     # which the inner auxiliary reader inherits from its caller.
@@ -228,7 +380,7 @@ def main():
     harness = prefix + fixture_function("terminal_extra") + "\n" + fixture_function("reset_map")
     harness += TESTS + init + "    ANGBAND_DIR_APEX=argv[2];\n    test_save(); SDL_Quit(); return 0;\n}\n"
     sources = []
-    for name, text in (("check.c", harness), ("writer.c", WRITER), ("reader.c", reader), ("legacy.c", old_writer)):
+    for name, text in (("check.c", harness), ("writer.c", WRITER), ("reader.c", reader), ("legacy.c", old_writer), ("previous.c", previous_writer)):
         path = OUT / name
         path.write_text(text, encoding="utf-8")
         sources.append(str(path))

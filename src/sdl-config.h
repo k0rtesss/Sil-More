@@ -170,7 +170,7 @@
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MIN_MS 50
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_MAX_MS 300
 #define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_STEP_MS 25
-#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 300
+#define SDL_GAMEPAD_DPAD_DIAGONAL_DELAY_DEFAULT_MS 200
 #define SDL_CAMERA_CENTER_CLEARANCE_MIN 1
 #define SDL_CAMERA_CENTER_CLEARANCE_MAX 20
 #if defined(__ANDROID__) || defined(SIL_IOS)
@@ -377,7 +377,7 @@ struct sdl_config {
     int gamepad_glyph_style;              // Auto, Xbox, DualShock, or DualSense prompts
     bool steamdeck_inv_equip_same_button_cycle; // In controller UI, pressing inventory/equipment again cycles to the other menu
     bool gamepad_use_dpad;                // Use d-pad for movement
-    int gamepad_dpad_diagonal_delay_ms;   // Wait for a second d-pad direction before sending a cardinal move
+    int gamepad_dpad_diagonal_delay_ms;   // Gameplay movement only; menu navigation is immediate
     gamepad_dpad_source_override
         gamepad_dpad_source_overrides[GAMEPAD_DPAD_SOURCE_OVERRIDE_COUNT];
     bool gamepad_use_left_stick;          // Use left stick for movement
@@ -516,3 +516,7 @@ void sdl_config_mark_character_wheel_tutorial_seen(void);
 bool sdl_config_keyboard_preset_prompt_seen(void);
 void sdl_config_mark_keyboard_preset_prompt_seen(void);
 bool option_is_app_persistent(int opt);
+
+/* Optional existing-atlas sprite beside a normal book paragraph. */
+void sdl_character_sheet_screen_add_book_icon_paragraph(const char* text,
+    int attr, int row, int col);

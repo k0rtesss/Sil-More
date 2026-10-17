@@ -8,8 +8,11 @@
 -keepclassmembers,allowoptimization class com.silqh.silmore.SilMoreActivity {
     public void requestGameOrientation(boolean);
     public boolean restartAfterProgressReset();
-    public void syncPlayGamesAchievements(int);
-    public int getPlayGamesAchievementMask();
+    public void syncPlayGamesAchievements(long);
+    public long getPlayGamesAchievementMask();
     public boolean showPlayGamesAchievements();
     public boolean isPlayGamesAchievementsAvailable();
+    public boolean preparePlayGamesCloudSaves(java.lang.String);
+    public boolean isPlayGamesCloudSavesAvailable();
+    public int checkpointPlayGamesCloudSaves(java.lang.String);
 }

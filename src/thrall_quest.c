@@ -5,6 +5,7 @@
  */
 
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "mem/alloc.h"
@@ -2128,6 +2129,7 @@ void complete_thrall_quest(monster_type* m_ptr, int item_slot)
     else
         m_ptr->thrall_quest_completed = THRALL_QUEST_STATE_REWARD_PENDING;
     catastrophe_note(CATA_THRALL);
+    sil_achievements_on_event(SIL_ACH_NO_RINGS_ATTACHED);
 
     if (offer_thrall_reward(m_ptr, false))
     {

@@ -16,8 +16,9 @@ PREFIX=PREFIX.replace("if(footer_capture && dest) {",r'''if(footer_capture && de
         float sw=source?source->w:tw,sh=source?source->h:th;
         if(config.bigger_font && (SDL_fabsf(dest->w-sw)>1 || SDL_fabsf(dest->h-sh)>1))
             fprintf(stderr,"shrunk texture %.1fx%.1f -> %.1fx%.1f\n",sw,sh,dest->w,dest->h);
-        if(config.bigger_font)
-            fixture_assert(SDL_fabsf(dest->w-sw)<=1 && SDL_fabsf(dest->h-sh)<=1);
+        fixture_assert(SDL_fabsf(dest->w-sw)<=.001f && SDL_fabsf(dest->h-sh)<=.001f);
+        fixture_assert(SDL_fabsf(dest->x-SDL_roundf(dest->x))<=.001f);
+        fixture_assert(SDL_fabsf(dest->y-SDL_roundf(dest->y))<=.001f);
 ''')
 INIT=AUX[AUX.index("int main(int argc,char **argv)"):AUX.index("    for(int big=")]
 HARNESS=PREFIX+r'''
@@ -83,8 +84,13 @@ static void welcome(void)
         for(int i=0;i<count;i++) {
             int w=0,h=0;
             cptr text=sdl_welcome_display_text(lines[i].source->text);
-            fixture_assert(TTF_GetStringSizeWrapped(lines[i].font,
-                text,0,config.bigger_font?(int)lines[i].box.w:0,&w,&h));
+            int natural_w=0,natural_h=0;
+            fixture_assert(TTF_GetStringSizeWrapped(lines[i].font,text,0,0,&natural_w,&natural_h));
+            TTF_HorizontalAlignment line_alignment=TTF_GetFontWrapAlignment(lines[i].font);
+            TTF_SetFontWrapAlignment(lines[i].font,lines[i].centered?TTF_HORIZONTAL_ALIGN_CENTER:TTF_HORIZONTAL_ALIGN_LEFT);
+            fixture_assert(TTF_GetStringSizeWrapped(lines[i].font, text, 0,
+                config.bigger_font || natural_w>lines[i].box.w ? (int)lines[i].box.w : 0,&w,&h));
+            TTF_SetFontWrapAlignment(lines[i].font,line_alignment);
             fixture_assert(lines[i].box.h+1>=h);
             if(i>0)
                 fixture_assert(lines[i].box.y>=lines[i-1].box.y+lines[i-1].box.h);
@@ -255,7 +261,10 @@ static void poetry(void)
         int w=0,h=0;
         TTF_Font* font=sdl_story_font_for_height_slot(sdl_ui_role_font_px(SDL_UI_FONT_CONTROL),SDL_WELCOME_STORY_FONT_SLOT);
         SDL_FRect content=sdl_welcome_content_rect(&canvas);
+        TTF_HorizontalAlignment prompt_alignment=TTF_GetFontWrapAlignment(font);
+        TTF_SetFontWrapAlignment(font,TTF_HORIZONTAL_ALIGN_CENTER);
         fixture_assert(TTF_GetStringSizeWrapped(font,prompts[i],0,(int)content.w,&w,&h));
+        TTF_SetFontWrapAlignment(font,prompt_alignment);
         fixture_assert(SDL_fabsf(prompt.h-h)<=1 && SDL_fabsf(prompt.w-w)<=1);
         fixture_assert(prompt.y+prompt.h<=canvas.h-sdl_welcome_bottom_margin(&canvas)+1);
         SDL_FRect ink_box=prompt; float inset=4*fixture_density;

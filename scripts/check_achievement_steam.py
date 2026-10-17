@@ -19,7 +19,8 @@ HARNESS = r'''
 #include "steamworks.h"
 
 static bool active, ready = true, have_stats = true, store_ok = true, overlay = true;
-static unsigned int cached, sets, stores, overlay_calls, registrations;
+static uint64_t cached;
+static unsigned int sets, stores, overlay_calls, registrations;
 static uint64 identity = 42;
 static CCallbackBase *stored_callback;
 static int user_handle, stats_handle, utils_handle, friends_handle;
@@ -43,9 +44,9 @@ extern "C" uint64_steamid SteamAPI_ISteamUser_GetSteamID(ISteamUser *user)
 { assert(user == reinterpret_cast<ISteamUser*>(&user_handle)); return identity; }
 extern "C" ISteamUserStats *SteamAPI_SteamUserStats_v013()
 { return have_stats ? reinterpret_cast<ISteamUserStats*>(&stats_handle) : nullptr; }
-static unsigned int bit_for(const char *key)
+static uint64_t bit_for(const char *key)
 {
-    for (int i = 0; i < SIL_ACH_COUNT; ++i) if (!std::strcmp(key, catalogue[i].key)) return 1u << i;
+    for (int i = 0; i < SIL_ACH_COUNT; ++i) if (!std::strcmp(key, catalogue[i].key)) return UINT64_C(1) << i;
     assert(false); return 0;
 }
 extern "C" bool SteamAPI_ISteamUserStats_GetAchievement(ISteamUserStats *stats, const char *key, bool *earned)
@@ -111,9 +112,10 @@ int main()
     assert(sil_steamworks_achievements_unlocked() == 4 && stores == 5);
     have_stats = false; deadline(); sil_steamworks_sync_achievements(7); assert(stores == 5);
     have_stats = true; deadline(); sil_steamworks_sync_achievements(SIL_ACH_ALL_MASK);
-    assert(achievements.pending == (SIL_ACH_ALL_MASK & ~4u));
+    assert(achievements.pending == (SIL_ACH_ALL_MASK & ~UINT64_C(4)));
     reply(k_EResultOK); deadline(); sil_steamworks_sync_achievements(SIL_ACH_ALL_MASK);
     assert(achievements.confirmed == SIL_ACH_ALL_MASK);
+    assert(achievements.confirmed & (UINT64_C(1) << (SIL_ACH_COUNT - 1)));
     assert(sil_steamworks_achievements_unlocked() == SIL_ACH_ALL_MASK);
     overlay = false; assert(!sil_steamworks_show_achievements() && !overlay_calls);
     overlay = true; assert(sil_steamworks_show_achievements() && overlay_calls == 1);
@@ -130,7 +132,7 @@ def main():
     header = (ROOT / "src/achievements.h").read_text()
     enum = header.split("typedef enum sil_achievement_id {", 1)[1].split("} sil_achievement_id;", 1)[0]
     keys = re.findall(r"\bSIL_ACH_([A-Z][A-Z0-9_]*)(?:\s*=\s*\d+)?\s*,", enum)
-    rows = ",\n".join('    { "' + key + '", "", "" }' for key in keys)
+    rows = ",\n".join('    { "' + key + '", "", "", false }' for key in keys)
     source.write_text(HARNESS.replace("CATALOGUE_ROWS", rows), encoding="utf-8")
     exe = OUT / "check.exe"
     env = os.environ.copy()

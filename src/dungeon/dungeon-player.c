@@ -106,6 +106,10 @@ void continue_leap(void)
 {
     int dir;
     int y_end, x_end; // the desired endpoint of the leap
+    bool crossed_chasm = p_ptr->leaping
+        && cave_feat[p_ptr->py][p_ptr->px] == FEAT_CHASM;
+    bool crossed_lava = p_ptr->leaping
+        && cave_feat[p_ptr->py][p_ptr->px] == FEAT_LAVA;
 
     dir = p_ptr->previous_action[1];
 
@@ -170,6 +174,14 @@ void continue_leap(void)
 
     // land on the ground
     land();
+    if (crossed_chasm && p_ptr->py == y_end && p_ptr->px == x_end
+        && !p_ptr->leaving && !p_ptr->leaping && !p_ptr->is_dead
+        && p_ptr->chp > 0 && cave_feat[y_end][x_end] != FEAT_CHASM)
+        sil_achievements_on_event(SIL_ACH_CABED_EN_ARAS);
+    if (crossed_lava && p_ptr->py == y_end && p_ptr->px == x_end
+        && !p_ptr->leaving && !p_ptr->leaping && !p_ptr->is_dead
+        && p_ptr->chp > 0 && cave_feat[y_end][x_end] != FEAT_LAVA)
+        sil_achievements_on_event(SIL_ACH_THE_FIRES_OF_THANGORODRIM);
 }
 
 /*

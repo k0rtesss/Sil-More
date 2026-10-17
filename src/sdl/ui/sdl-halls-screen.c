@@ -192,11 +192,7 @@ static int sdl_halls_clampi(int v, int lo, int hi)
 
 static bool sdl_halls_mobile_layout(void)
 {
-#if SIL_SDL_MOBILE_BUILD
-    return true;
-#else
-    return false;
-#endif
+    return sdl_handheld_ui_active();
 }
 
 static float sdl_halls_short_side(const SDL_Rect* canvas)
@@ -402,10 +398,10 @@ static SDL_Color sdl_halls_color(byte attr, byte alpha)
 static SDL_FRect sdl_halls_draw_text(TTF_Font* font, cptr text, byte attr,
     SDL_FRect box, int alignment)
 {
+    SDL_FRect src;
     SDL_FRect dst = { 0 };
     SDL_Texture* texture;
     SDL_Color color;
-    float scale = 1.0f;
     int text_w = 0;
     int text_h = 0;
 
@@ -417,22 +413,18 @@ static SDL_FRect sdl_halls_draw_text(TTF_Font* font, cptr text, byte attr,
     if (!texture || text_w <= 0 || text_h <= 0)
         return dst;
 
-    if ((float)text_w > box.w)
-        scale = box.w / (float)text_w;
-    if ((float)text_h * scale > box.h)
-        scale = box.h / (float)text_h;
-    if (scale > 1.0f)
-        scale = 1.0f;
+    src = (SDL_FRect){ 0, 0, MIN((float)text_w, box.w),
+        MIN((float)text_h, box.h) };
 
-    dst.w = (float)text_w * scale;
-    dst.h = (float)text_h * scale;
+    dst.w = src.w;
+    dst.h = src.h;
     dst.x = box.x;
     if (alignment == 0)
         dst.x += (box.w - dst.w) * 0.5f;
     else if (alignment > 0)
         dst.x += box.w - dst.w;
     dst.y = box.y + (box.h - dst.h) * 0.5f;
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
     return dst;
 }
 
@@ -513,8 +505,8 @@ static void sdl_halls_draw_wrapped_text(cptr text, byte attr, SDL_FRect box,
     TTF_Font* font;
     SDL_Texture* texture;
     SDL_Color color;
+    SDL_FRect src;
     SDL_FRect dst;
-    float scale = 1.0f;
     int text_w = 0;
     int text_h = 0;
 
@@ -530,17 +522,13 @@ static void sdl_halls_draw_wrapped_text(cptr text, byte attr, SDL_FRect box,
     if (!texture || text_w <= 0 || text_h <= 0)
         return;
 
-    if ((float)text_w > box.w)
-        scale = box.w / (float)text_w;
-    if ((float)text_h * scale > box.h)
-        scale = box.h / (float)text_h;
-    if (scale > 1.0f)
-        scale = 1.0f;
+    src = (SDL_FRect){ 0, 0, MIN((float)text_w, box.w),
+        MIN((float)text_h, box.h) };
 
-    dst = (SDL_FRect){ box.x, box.y, (float)text_w * scale,
-        (float)text_h * scale };
+    dst = (SDL_FRect){ box.x, box.y, src.w,
+        src.h };
     dst.y += (box.h - dst.h) * 0.5f;
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 static void sdl_halls_draw_rule(float x, float y, float w, byte attr,
@@ -711,7 +699,7 @@ static void sdl_halls_render_header(const SDL_Rect* canvas, float content_x,
         {
             SDL_FRect dst = { content_x + (content_w - text_w) * 0.5f,
                 top, text_w, text_h };
-            SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+            sdl_ui_render_text_texture(texture, NULL, &dst);
         }
         top += text_h;
         px = sdl_menu_font_px(sdl_halls_clampi((int)(canvas->h * 0.024f), 12, 24));
@@ -722,7 +710,7 @@ static void sdl_halls_render_header(const SDL_Rect* canvas, float content_x,
         {
             SDL_FRect dst = { content_x + (content_w - text_w) * 0.5f,
                 top, text_w, text_h };
-            SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+            sdl_ui_render_text_texture(texture, NULL, &dst);
         }
         return;
     }
@@ -868,7 +856,7 @@ static void sdl_halls_render_big_entry(sdl_halls_entry* entry, SDL_FRect card,
         if (textures[i])
         {
             SDL_FRect dst = { card.x + pad, y, widths[i], heights[i] };
-            SDL_RenderTexture(g_state.renderer, textures[i], NULL, &dst);
+            sdl_ui_render_text_texture(textures[i], NULL, &dst);
             y += heights[i] + font_h * 0.25f;
         }
     SDL_SetRenderClipRect(g_state.renderer, NULL);
@@ -1312,7 +1300,7 @@ static float sdl_halls_mobile_text(cptr text, byte attr,
     if (texture)
     {
         SDL_FRect dst = { x, y, w, h };
-        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        sdl_ui_render_text_texture(texture, NULL, &dst);
     }
     return h;
 }

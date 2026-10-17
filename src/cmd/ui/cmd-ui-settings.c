@@ -228,8 +228,13 @@ static void settings_clear_all_progress(void)
     char error[1024];
     if (!sil_progress_reset_request_restart(error, sizeof(error)))
     {
+        const ui_question_option dismiss[] = {
+            { 'o', "OK", TERM_WHITE, false }
+        };
         log_error("Clear all progress: %s", error);
-        msg_print(error);
+        ui_question_ask_overlay("Progress reset failed", error,
+            dismiss, N_ELEMENTS(dismiss), UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, 0);
     }
 }
 
@@ -13376,7 +13381,8 @@ void do_cmd_controller_settings(void)
                     break;
                 case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
                     cycle_desc =
-                        "Wait this long for a second D-pad direction to form a diagonal. "
+                        "During gameplay, wait this long for a second D-pad direction to form a diagonal. "
+                        "Recognized diagonals and menu navigation are immediate. "
                         "50 ms is the fastest setting, but makes diagonals harder to enter.";
                     break;
                 default:

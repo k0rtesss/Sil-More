@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cloud-saves.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 
@@ -443,6 +444,10 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
     switch (type)
     {
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        if (!g_mobile_lifecycle_autosaved && !character_generated) {
+            sil_cloud_saves_checkpoint();
+            g_mobile_lifecycle_autosaved = true;
+        }
         if (!g_mobile_lifecycle_autosaved
             && mobile_autosave_game("will enter background"))
         {
@@ -451,6 +456,10 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_DID_ENTER_BACKGROUND:
+        if (!g_mobile_lifecycle_autosaved && !character_generated) {
+            sil_cloud_saves_checkpoint();
+            g_mobile_lifecycle_autosaved = true;
+        }
         if (!g_mobile_lifecycle_autosaved
             && mobile_autosave_game("did enter background"))
         {
@@ -459,6 +468,10 @@ bool sdl_mobile_lifecycle_handle_event(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_TERMINATING:
+        if (!g_mobile_lifecycle_autosaved && !character_generated) {
+            sil_cloud_saves_checkpoint();
+            g_mobile_lifecycle_autosaved = true;
+        }
         if (!g_mobile_lifecycle_autosaved
             && mobile_autosave_game("terminating"))
         {
@@ -657,15 +670,17 @@ bool sdl_event_is_handheld_touch_fallback_input(const SDL_Event* ev)
     {
         return false;
     }
-    if (g_direct_touch_present)
-        return false;
+    /* Gamescope can enumerate a virtual direct-touch device while sending
+     * touchscreen taps only as ordinary seat-pointer clicks. Keep those
+     * clicks on the touch path even when hardware enumeration found touch.
+     * SDL's tagged touch-mouse duplicates are filtered separately below. */
 
     switch (ev->type) {
     case SDL_EVENT_MOUSE_MOTION:
         if (sdl_mouse_id_looks_like_touchscreen(ev->motion.which))
             return true;
-        /* Steam Deck Game Mode under Proton can expose touch as a generic
-         * Wine HID mouse. Only route its motion while a fallback press is live. */
+        /* Gamescope and Proton can expose touch as a generic mouse. Only
+         * route its motion while a fallback press from that device is live. */
         return g_touch_mouse_fallback_active
             && g_touch_mouse_fallback_mouse_id == ev->motion.which;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:

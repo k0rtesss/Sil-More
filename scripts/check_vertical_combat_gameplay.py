@@ -214,7 +214,7 @@ static void brands(void)
     level_image *lower=arena();ready_bow();
     lower->monsters[1].hp=lower->monsters[1].maxhp=10000;
     expect(cave_vertical_combat_interact(20,21)&&lower->monsters[1].poisoned>0
-        &&(lower->monsters[1].mflag&MFLAG_PLAYER_POISON),
+        &&lower->monsters[1].player_poisoned==lower->monsters[1].poisoned,
         "real remote poison-brand hit applies canonical attributed poison");
     int poison=lower->monsters[1].poisoned,hp=lower->monsters[1].hp;
     u32b old_race_flags=r_info[31].flags1,old_spells=r_info[31].flags4;

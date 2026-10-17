@@ -565,7 +565,6 @@ int sdl_log_pane_menu_collect(enum pane_type pane,
     return count;
 }
 
-#if SIL_SDL_MOBILE_BUILD
 static float sdl_pane_menu_text_height(TTF_Font* font, cptr text, float width)
 {
     int w = 0;
@@ -650,7 +649,7 @@ static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
     float y = rect->y + pad * .5f;
     if (texture) {
         SDL_FRect dst = {rect->x + pad,y,(float)w,(float)h};
-        SDL_RenderTexture(g_state.renderer,texture,NULL,&dst);
+        sdl_ui_render_text_texture(texture, NULL, &dst);
     }
     y += (float)h + gap;
     if (hint && hint[0]) {
@@ -658,21 +657,18 @@ static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
             MAX(1,(int)(rect->w - pad * 2)),color,&w,&h);
         if (texture) {
             SDL_FRect dst = {rect->x + pad,y,(float)w,(float)h};
-            SDL_RenderTexture(g_state.renderer,texture,NULL,&dst);
+            sdl_ui_render_text_texture(texture, NULL, &dst);
         }
     }
 }
-#endif
 
 int sdl_log_pane_menu_font_px(enum pane_type pane)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         (void)pane;
         return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
     }
-#endif
     const sdl_view* view = &g_views[pane];
     int font_px = 0;
 
@@ -718,8 +714,7 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
     if (count <= 0)
         return false;
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         {
             const char* labels[MAX_PANE_CONFIGS];
@@ -738,7 +733,6 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
             return true;
         }
     }
-#endif
 
     if (cell_w <= 0.0f)
         cell_w = 8.0f;
@@ -752,15 +746,15 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
     header_h = font_px * 1.9f;
     if (header_h < 48.0f)
         header_h = 48.0f;
-#if SIL_SDL_MOBILE_BUILD
-    row_h = font_px * 2.8f;
-    if (row_h < 58.0f)
-        row_h = 58.0f;
-#else
-    row_h = font_px * 2.4f;
-    if (row_h < 50.0f)
-        row_h = 50.0f;
-#endif
+    if (sdl_handheld_ui_active()) {
+        row_h = font_px * 2.8f;
+        if (row_h < 58.0f)
+            row_h = 58.0f;
+    } else {
+        row_h = font_px * 2.4f;
+        if (row_h < 50.0f)
+            row_h = 50.0f;
+    }
     panel_w = sdl_touch_pane_clampf(cell_w * 26.0f
         * SIDE_PANE_MENU_SCALE, 270.0f, 390.0f);
     if (panel_w < font_px * 9.0f)
@@ -775,10 +769,10 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
         row_h -= (panel_h - ((float)screen.h - 12.0f)) / (float)count;
         if (row_h < 34.0f)
             row_h = 34.0f;
-#if SIL_SDL_MOBILE_BUILD
-        if (row_h < 44.0f)
-            row_h = 44.0f;
-#endif
+        if (sdl_handheld_ui_active()) {
+            if (row_h < 44.0f)
+                row_h = 44.0f;
+        }
         panel_h = pad * 2.0f + header_h + row_h * (float)count;
     }
 
@@ -1135,10 +1129,8 @@ void sdl_log_pane_menu_render(void)
 
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         pad = 8.0f * sdl_ui_density_scale();
-#endif
     header = (SDL_FRect){
         .x = panel.x + pad,
         .y = panel.y + pad,
@@ -1164,13 +1156,11 @@ void sdl_log_pane_menu_render(void)
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b,
         150);
     SDL_RenderRect(g_state.renderer, &header);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font()) {
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
         sdl_pane_menu_mobile_text(&header,
             g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
             NULL, text);
     } else
-#endif
     {
         sdl_touch_pane_draw_button_text_px(&header, NULL,
             g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
@@ -1191,11 +1181,9 @@ void sdl_log_pane_menu_render(void)
             hover ? 238 : 166);
         SDL_RenderRect(g_state.renderer, rect);
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font()) {
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
         sdl_pane_menu_mobile_text(rect, entries[i].label, entries[i].hint, text);
     } else
-#endif
     {
         sdl_touch_pane_draw_button_text_px(rect, entries[i].label,
             entries[i].hint, text, font_px, hint_px);
@@ -1330,8 +1318,7 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
     if (count <= 0)
         return false;
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
     {
         {
             const char* labels[MAX_PANE_CONFIGS];
@@ -1350,7 +1337,6 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
             return true;
         }
     }
-#endif
 
     if (cell_w <= 0.0f)
         cell_w = 8.0f;
@@ -1363,13 +1349,13 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
         * SIDE_PANE_MENU_SCALE, 12.0f, 21.0f);
     header_h = sdl_touch_pane_clampf(cell_h * 2.2f
         * SIDE_PANE_MENU_SCALE, 51.0f, 72.0f);
-#if SIL_SDL_MOBILE_BUILD
-    row_h = sdl_touch_pane_clampf(cell_h * 3.0f
-        * SIDE_PANE_MENU_SCALE, 70.0f, 98.0f);
-#else
-    row_h = sdl_touch_pane_clampf(cell_h * 2.7f
-        * SIDE_PANE_MENU_SCALE, 63.0f, 87.0f);
-#endif
+    if (sdl_handheld_ui_active()) {
+        row_h = sdl_touch_pane_clampf(cell_h * 3.0f
+            * SIDE_PANE_MENU_SCALE, 70.0f, 98.0f);
+    } else {
+        row_h = sdl_touch_pane_clampf(cell_h * 2.7f
+            * SIDE_PANE_MENU_SCALE, 63.0f, 87.0f);
+    }
     panel_w = sdl_touch_pane_clampf(cell_w * 24.0f
         * SIDE_PANE_MENU_SCALE, 270.0f, 375.0f);
     if (panel_w > (float)screen.w - 8.0f)
@@ -1380,11 +1366,12 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
     panel_h = pad * 2.0f + header_h + row_h * (float)count;
     if (panel_h > (float)screen.h - 8.0f && count > 0) {
         float available = (float)screen.h - 8.0f - pad * 2.0f - header_h;
-#if SIL_SDL_MOBILE_BUILD
-        float minimum_compressed_row_h = 52.0f;
-#else
-        float minimum_compressed_row_h = 42.0f;
-#endif
+        float minimum_compressed_row_h;
+        if (sdl_handheld_ui_active()) {
+            minimum_compressed_row_h = 52.0f;
+        } else {
+            minimum_compressed_row_h = 42.0f;
+        }
 
         if (available > (float)count * minimum_compressed_row_h)
             row_h = available / (float)count;
@@ -1731,10 +1718,8 @@ void sdl_side_pane_menu_render(void)
 
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         pad = 8.0f * sdl_ui_density_scale();
-#endif
     header = (SDL_FRect){
         .x = panel.x + pad,
         .y = panel.y + pad,
@@ -1758,11 +1743,9 @@ void sdl_side_pane_menu_render(void)
     SDL_RenderFillRect(g_state.renderer, &header);
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b, 150);
     SDL_RenderRect(g_state.renderer, &header);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font()) {
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
     sdl_pane_menu_mobile_text(&header, "Side Panes", NULL, text);
     } else
-#endif
     {
     sdl_touch_pane_draw_button_text_scaled(&header, NULL, "Side Panes",
         text, 0.48f, 0.63f);
@@ -1788,12 +1771,10 @@ void sdl_side_pane_menu_render(void)
             hover ? 238 : 166);
         SDL_RenderRect(g_state.renderer, rect);
 
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font()) {
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
         sdl_pane_menu_mobile_text(rect, sdl_side_pane_menu_label(entries[i].pane),
             status, label);
     } else
-#endif
     {
         sdl_touch_pane_draw_button_text_scaled(rect,
             sdl_side_pane_menu_label(entries[i].pane), status, label,

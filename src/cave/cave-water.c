@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "cave/cave-environment.h"
 #include "externs.h"
 
@@ -142,11 +143,18 @@ void cave_apply_elemental_brands(int y, int x,
         object_flags(ammunition, &f1, &f2, &f3);
         brands |= f1;
     }
+    int old_feat = cave_feat[y][x];
     if (FEAT_IS_ICE(cave_feat[y][x]) && (brands & TR1_BRAND_FIRE))
-        (void)cave_transform_elemental_terrain(y, x, GF_FIRE);
+    {
+        if (cave_transform_elemental_terrain(y, x, GF_FIRE))
+            sil_achievements_on_elemental_terrain(y, x, old_feat, GF_FIRE);
+    }
     else if ((cave_feat[y][x] == FEAT_WATER
         || cave_feat[y][x] == FEAT_MELTING_ICE) && (brands & TR1_BRAND_COLD))
-        (void)cave_transform_elemental_terrain(y, x, GF_COLD);
+    {
+        if (cave_transform_elemental_terrain(y, x, GF_COLD))
+            sil_achievements_on_elemental_terrain(y, x, old_feat, GF_COLD);
+    }
 }
 
 /* Apply once to a completed movement, including the step back onto a bank.

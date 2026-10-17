@@ -3063,7 +3063,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             put_role(ROLE_BODY, action_buf, row++, col + (int)strlen(label) + 3);
         }
         strnfmt(action_buf, sizeof(action_buf),
-            "D-pad cardinal delay: %d ms. Stick navigation is immediate.",
+            "D-pad movement delay: %d ms. Menu navigation is immediate.",
             get_sdl_gamepad_dpad_diagonal_delay_ms());
         put_role(ROLE_BODY, action_buf, row++, col);
 

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cloud-saves.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -1034,12 +1035,6 @@ void init_file_paths(char* path)
         ANGBAND_DIR_SAVE = str_dup(user_root);
     }
 
-    /* Set ANGBAND_DIR_APEX to the actual apex directory in game folder */
-    if (path_build(buf, sizeof(buf), ANGBAND_DIR, "apex"))
-        ANGBAND_DIR_APEX = str_dup(buf);
-    else
-        ANGBAND_DIR_APEX = str_dup(ANGBAND_DIR);
-
     /* Set up meta directory for scores.raw and metarun data */
     char meta_root[1024] = "";
     bool meta_root_ready = false;
@@ -1047,6 +1042,7 @@ void init_file_paths(char* path)
     {
         meta_root_ready = true;
         ensure_directory_exists(meta_root, "meta");
+        ANGBAND_DIR_APEX = str_dup(meta_root);
 
         char metarun_dir[1024];
         if (path_build(metarun_dir, sizeof(metarun_dir), meta_root, SIL_USER_META_RUNS))
@@ -1062,7 +1058,23 @@ void init_file_paths(char* path)
     else
     {
         ANGBAND_DIR_METARUN = str_dup(user_root);
+        ANGBAND_DIR_APEX = str_dup(user_root);
     }
+
+    if (!sil_cloud_saves_prepare(user_root))
+        quit("Cannot safely prepare Google Play cloud saves");
+    ensure_directory_exists(ANGBAND_DIR_SAVE, "save");
+    ensure_directory_exists(ANGBAND_DIR_METARUN, "metarun");
+
+#if !defined(__ANDROID__) && !defined(SIL_IOS)
+    /* Older builds put these profile files in the installation. Preserve the
+     * originals and seed missing user copies independently of Tale migration. */
+    if (meta_root_ready && !sil_progress_reset_skip_legacy_import()
+        && path_build(buf, sizeof(buf), ANGBAND_DIR, "apex")) {
+        (void)copy_leaf_if_needed(buf, meta_root, "achievements.json", "achievements", NULL);
+        (void)copy_leaf_if_needed(buf, meta_root, "artefacts.db", "artefacts", NULL);
+    }
+#endif
 
     if (meta_root_ready)
         migrate_legacy_metarun_layout(meta_root, ANGBAND_DIR_METARUN);

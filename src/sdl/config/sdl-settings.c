@@ -3788,11 +3788,8 @@ static int sdl_terminal_menu_scale_for_mode(int menu_mode)
 
 int get_sdl_terminal_menu_scale(void)
 {
-#if SIL_SDL_MOBILE_BUILD
-    int menu_mode = config.min_terminal_mode;
-#else
-    int menu_mode = SDL_MIN_TERMINAL_NORMAL;
-#endif
+    int menu_mode = sdl_handheld_ui_active()
+        ? config.min_terminal_mode : SDL_MIN_TERMINAL_NORMAL;
 
     return sdl_terminal_menu_scale_for_mode(menu_mode);
 }
@@ -3802,15 +3799,13 @@ int get_sdl_terminal_menu_scale(void)
  * menu to wrap/page rather than silently reducing this font to fit 50 columns. */
 int sdl_terminal_menu_font_px(void)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (g_terminal_menu_scale_depth > 0
+    if (sdl_handheld_ui_active() && g_terminal_menu_scale_depth > 0
         && get_sdl_menu_bigger_font_for(sdl_terminal_menu_font()))
     {
         int logical_px = MAX(8, 16 + 2 * config.terminal_menu_scale_offset);
         return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
             * (logical_px + (logical_px + 1) / 2)));
     }
-#endif
     return 0;
 }
 

@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-play-games.h"
+#include "achievements-character.h"
 #include "blitz.h"
 #include "cJSON.h"
 #include "externs.h"
@@ -18,25 +19,117 @@
 #define ACHIEVEMENTS_TALE_BUDGET (48 * 1024)
 
 static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
-    { "INTO_THE_DEEP", "Into the Deep", "Reach a depth of 500 feet." },
-    { "LIGHT_IN_DARKNESS", "A Light in the Darkness",
-        "Cut a Silmaril from Morgoth's Iron Crown." },
-    { "BACK_TO_STARLIGHT", "Back to the Starlight",
-        "Escape Angband carrying at least one Silmaril." },
-    { "THREE_LIGHTS_IN_EXILE", "Three Lights in Exile", "Escape carrying all three Silmarils." },
-    { "THE_SHADOW_FALLS", "The Shadow Falls", "Defeat Morgoth's final form." },
-    { "THE_QUIET_ROAD", "The Quiet Road", "Escape with a Silmaril without killing a creature during the run." },
-    { "WORD_UNBROKEN", "Word Unbroken", "Escape with a Silmaril while keeping your oath." },
-    { "FORGED_BY_YOUR_HAND", "Forged by Your Hand", "Complete a smithing project." },
-    { "A_NAME_WORTH_REMEMBERING", "A Name Worth Remembering", "Create a custom artefact." },
-    { "SONG_BENEATH_THE_MOUNTAIN", "Song Beneath the Mountain", "Escape with a Silmaril, 20 trained Song and at least 100 turns spent singing." },
-    { "THERE_AND_BACK_AGAIN", "There and Back Again", "Enter Morgoth's throne room and return to the Gates alive." },
-    { "BY_A_THREAD", "By a Thread", "Defeat an enemy after a hit leaves you at exactly 1 HP, before fully healing or leaving the floor." },
-    { "LIGHT_OF_THE_ELDAR", "Light of the Eldar", "Defeat an undead enemy with a light-based attack." },
-    { "THE_LONG_TALE", "The Long Tale", "Win a Tale with at least two different characters having completed adventures in it." }
+    { "INTO_THE_DEEP", "To Dungeons Deep",
+        "Reach a depth of 500 feet.", false },
+    { "LIGHT_IN_DARKNESS", "The Fire of Fëanor",
+        "Cut a Silmaril from Morgoth's Iron Crown.", true },
+    { "BACK_TO_STARLIGHT", "The Quest of the Silmaril",
+        "Escape Angband carrying at least one Silmaril.", false },
+    { "THREE_LIGHTS_IN_EXILE", "Three Lights in Exile",
+        "Escape carrying all three Silmarils.", true },
+    { "THE_SHADOW_FALLS", "Dagor Dagorath",
+        "Defeat Morgoth's final form.", true },
+    { "THE_QUIET_ROAD", "A Very Polite Burglary",
+        "Escape with a Silmaril without killing a creature during the run.", false },
+    { "WORD_UNBROKEN", "When the Road Darkens",
+        "Escape with a Silmaril while keeping your oath.", false },
+    { "FORGED_BY_YOUR_HAND", "While Hammers Fell",
+        "Complete a smithing project.", false },
+    { "A_NAME_WORTH_REMEMBERING", "And Light They Caught",
+        "Create a custom artefact.", true },
+    { "SONG_BENEATH_THE_MOUNTAIN", "The Lay of Leithian",
+        "Escape with a Silmaril, 20 trained Song and at least 100 turns spent singing.", false },
+    { "THERE_AND_BACK_AGAIN", "There and Back Again",
+        "Enter Morgoth's throne room and return to the Gates alive.", true },
+    { "BY_A_THREAD", "Aurë Entuluva!",
+        "Defeat an enemy after a hit leaves you at exactly 1 HP, before fully healing or leaving the floor.", true },
+    { "LIGHT_OF_THE_ELDAR", "Get Out, You Old Wight!",
+        "Defeat an undead enemy with a light-based attack.", true },
+    { "THE_LONG_TALE", "Grew in the Telling",
+        "Win a Tale with at least two different characters having completed adventures in it.", true },
+    { "NO_RINGS_ATTACHED", "No Rings Attached",
+        "Give a thrall the item they requested.", true },
+    { "CABED_EN_ARAS", "Cabed-en-Aras",
+        "Successfully leap over a chasm and land safely.", true },
+    { "OFT_EVIL_WILL", "Oft Evil Will Shall Evil Mar",
+        "Kill an enemy with a trap you rewired.", true },
+    { "THE_HASTY_STROKE", "The Hasty Stroke Goes Oft Astray",
+        "Kill an enemy with a Riposte.", true },
+    { "A_FEW_LEAVES", "A Few Leaves in a Forest",
+        "Kill an enemy with a Deadly Hail empowered shot.", true },
+    { "TWO_WEAPONS", "Two Weapons, One Obituary",
+        "Kill an enemy with a Power Throw in which both attacks hit.", true },
+    { "FOR_EXTERNAL_USE_ONLY", "For External Use Only",
+        "Kill an enemy with a thrown potion's effect, including its delayed poison.", true },
+    { "FLY_YOU_FOOL", "Fly, You Fool!",
+        "Knock a non-flying enemy into a chasm.", true },
+    { "KNOCK_WITH_YOUR_HEAD", "Knock on the Doors with Your Head",
+        "Jam a lock while picking it, then bash that same door open.", true },
+    { "DOWN_TO_GOBLIN_TOWN", "Down, Down to Goblin-town",
+        "Survive a fall through a false floor or into a chasm and arrive alive.", true },
+    { "ATHELAS_OUT_OF_STOCK", "Athelas Was Out of Stock",
+        "Cure a disease with an Herb of Sickness when it is the correct cure.", true },
+    { "ANGBAND_MAINTENANCE", "Angband's Maintenance Department",
+        "Witness an enemy dismantle a trap you rewired.", true },
+    { "THE_ROAD_GOES_EVER_ON", "The Road Goes Ever On",
+        "Reach a depth of 100 feet.", false },
+    { "SOMETHING_TOOKISH", "Something Tookish",
+        "Purchase your first ability with experience.", false },
+    { "FLIES_AND_SPIDERS", "Flies and Spiders",
+        "Break free of a web.", false },
+    { "NOT_EVEN_CARCHAROTH", "Not Even Carcharoth",
+        "Be killed by the first ordinary wolf you encounter before making your first kill.", true },
+    { "THE_FORDS_OF_SIRION", "The Fords of Sirion",
+        "Cross a stream from one dry bank to the other.", true },
+    { "HELCARAXE", "Helcaraxë",
+        "Freeze water yourself and cross the ice you created.", true },
+    { "FIRE_AND_WATER", "Fire and Water",
+        "Melt the ice beneath an enemy with your fire.", true },
+    { "THE_FIRES_OF_THANGORODRIM", "The Fires of Thangorodrim",
+        "Leap over lava and land alive after its heat.", true },
+    { "THROUGH_NAN_DUNGORTHEB", "Through Nan Dungortheb",
+        "Cross a poison pool and reach dry ground alive.", true },
+    { "A_JOURNEY_IN_THE_DARK", "A Journey in the Dark",
+        "Enter a labyrinth and leave through a different passage.", true },
+    { "A_MAP_OF_THE_IRON_HELLS", "A Map of the Iron Hells",
+        "Discover labyrinth, chasm, ice, fire and poison partitions within one Tale.", true },
+    { "A_ELBERETH_GILTHONIEL", "A Elbereth Gilthoniel!",
+        "Make an enemy flee with the Song of Elbereth.", true },
+    { "RELEASE_FROM_BONDAGE", "Release from Bondage",
+        "Clear rubble or disarm a trap with the Song of Freedom.", true },
+    { "TWO_THEMES_ONE_VOICE", "Two Themes, One Voice",
+        "Have both woven themes affect enemies in the same turn.", true },
+    { "YOU_CANNOT_PASS", "You Cannot Pass",
+        "Hold a door against a pursuer with the Song of Thresholds.", true },
+    { "FELAGUNDS_ANSWER", "Felagund's Answer",
+        "Permanently weaken an opponent with the Song of Contest.", true },
+    { "A_WILL_OF_YOUR_OWN", "A Will of Your Own",
+        "Resist a hostile effect in an opposed Will check.", false },
+    { "HURINS_DEFIANCE", "Húrin's Defiance",
+        "Use Indomitable to resist a hostile mental attack at a quarter health or less.", true },
+    { "NO_LONGER_BINDING", "No Longer Binding",
+        "Break an equipment curse with Curse Breaking.", true },
+    { "A_FOOLS_HOPE", "A Fool's Hope",
+        "Succeed at a genuine skill check whose chance was at most one in ten.", true },
+    { "A_SINGLE_SPARK", "A Single Spark",
+        "As Fëanor, create an artefact using a forge's last charge.", true },
+    { "ON_THE_OTHER_HAND", "On the Other Hand",
+        "As Maedhros, kill with a Subtlety critical using a hand-and-a-half weapon.", true },
+    { "IRON_CLEAVER", "Iron-Cleaver",
+        "As Telchar, forge a Sharpness II blade and cut a Silmaril with that same blade.", true },
+    { "OUT_OF_THIN_ORE", "Out of Thin Ore",
+        "As Gamil Zirak, forge mithril equipment without consuming mithril.", true },
+    { "CLAD_IN_THE_NIGHT", "Clad in the Night",
+        "As Eöl, forge and wear your own galvorn armour.", true },
+    { "A_DREAM_UPON_THE_DARK_LORD", "A Dream Upon the Dark Lord",
+        "As Lúthien, put Morgoth to sleep with the Song of Lórien.", true },
+    { "NEITHER_VOICE_DIMINISHED", "Neither Voice Diminished",
+        "As Daeron, have both full-strength woven themes affect enemies in the same turn.", true },
+    { "DOOM_CAN_WAIT", "Doom Can Wait",
+        "As Túrin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.", true }
 };
 
-_Static_assert(SIL_ACH_COUNT < 32, "Achievement bridge masks must fit in 32 bits");
+_Static_assert(SIL_ACH_COUNT < 64, "Achievement bridge masks must fit in 64 bits");
 
 static uint64_t unlocked_at[SIL_ACH_COUNT];
 static cJSON *progress;
@@ -58,11 +151,11 @@ uint64_t sil_achievement_unlocked_at(int id)
     return id >= 0 && id < SIL_ACH_COUNT ? unlocked_at[id] : 0;
 }
 
-unsigned int sil_achievements_mask(void)
+uint64_t sil_achievements_mask(void)
 {
-    unsigned int mask = 0;
+    uint64_t mask = 0;
     for (int i = 0; i < SIL_ACH_COUNT; ++i)
-        if (unlocked_at[i]) mask |= 1u << i;
+        if (unlocked_at[i]) mask |= UINT64_C(1) << i;
     return mask;
 }
 
@@ -244,6 +337,18 @@ static bool achievements_eligible(void)
     return achievement_run_eligible() && p_ptr->playing && !p_ptr->is_dead;
 }
 
+bool sil_achievements_eligible(void) { return achievements_eligible(); }
+
+bool sil_achievements_kill_eligible(void)
+{
+    /* monster_death() finalizes Morgoth victory before mon_take_hit() returns
+     * to the weapon, trap or potion reporting the confirmed killing blow. */
+    return achievements_eligible()
+        || (achievement_run_eligible() && p_ptr->morgoth_slain
+            && p_ptr->is_dead && !p_ptr->playing && p_ptr->leaving
+            && !p_ptr->escaped);
+}
+
 static void unlock_achievement(int id, bool announce)
 {
     sil_achievements_init();
@@ -264,9 +369,69 @@ static void unlock_achievement(int id, bool announce)
 
 void sil_achievements_on_depth(int depth)
 {
-    if (!achievements_eligible() || depth < 10) return;
-    unlock_achievement(SIL_ACH_INTO_THE_DEEP, true);
+    if (!achievements_eligible()) return;
+    if (depth >= 2) unlock_achievement(SIL_ACH_THE_ROAD_GOES_EVER_ON, true);
+    if (depth >= 10) unlock_achievement(SIL_ACH_INTO_THE_DEEP, true);
     sil_achievements_flush();
+}
+
+void sil_achievements_on_event(sil_achievement_id id)
+{
+    if (id < SIL_ACH_NO_RINGS_ATTACHED || id >= SIL_ACH_COUNT) return;
+    switch (id)
+    {
+        case SIL_ACH_OFT_EVIL_WILL:
+        case SIL_ACH_THE_HASTY_STROKE:
+        case SIL_ACH_A_FEW_LEAVES:
+        case SIL_ACH_TWO_WEAPONS:
+        case SIL_ACH_FOR_EXTERNAL_USE_ONLY:
+        case SIL_ACH_FLY_YOU_FOOL:
+        case SIL_ACH_ON_THE_OTHER_HAND:
+            if (!sil_achievements_kill_eligible()) return;
+            break;
+        default:
+            if (!achievements_eligible()) return;
+            break;
+    }
+    unlock_achievement(id, true);
+    sil_achievements_flush();
+}
+
+static int achievement_door_index(int y, int x)
+{
+    if (y < 0 || x < 0 || y >= MAX_DUNGEON_HGT || x >= MAX_DUNGEON_WID)
+        return -1;
+    return y * MAX_DUNGEON_WID + x;
+}
+
+void sil_achievements_on_door_jammed(int y, int x)
+{
+    int index = achievement_door_index(y, x);
+    if (!achievements_eligible() || index < 0) return;
+    p_ptr->achievement_jammed_doors[index / 8] |= 1u << (index % 8);
+}
+
+void sil_achievements_forget_door(int y, int x)
+{
+    int index = achievement_door_index(y, x);
+    if (p_ptr && index >= 0)
+        p_ptr->achievement_jammed_doors[index / 8] &= ~(1u << (index % 8));
+}
+
+void sil_achievements_on_door_bashed(int y, int x)
+{
+    int index = achievement_door_index(y, x);
+    if (!p_ptr || index < 0) return;
+    if (p_ptr->achievement_jammed_doors[index / 8] & (1u << (index % 8)))
+        sil_achievements_on_event(SIL_ACH_KNOCK_WITH_YOUR_HEAD);
+    sil_achievements_forget_door(y, x);
+}
+
+void sil_achievements_on_fall(void)
+{
+    if (!achievements_eligible()) return;
+    p_ptr->achievement_flags |= SIL_ACH_RUN_FALLING;
+    p_ptr->achievement_fall_depth = p_ptr->depth;
 }
 
 void sil_achievements_on_silmaril(void)
@@ -298,6 +463,12 @@ void sil_achievements_begin_run(void)
     p_ptr->achievement_kills = 0;
     p_ptr->achievement_singing_turns = 0;
     p_ptr->achievement_comeback_depth = -1;
+    p_ptr->achievement_fall_depth = -1;
+    memset(p_ptr->achievement_jammed_doors, 0,
+        sizeof(p_ptr->achievement_jammed_doors));
+    sil_achievements_discovery_reset(true);
+    p_ptr->achievement_rage_epoch = 0;
+    sil_achievements_song_begin();
 }
 
 void sil_achievements_on_healing(void)
@@ -315,6 +486,7 @@ void sil_achievements_on_player_turn(void)
         return;
     }
     sil_achievements_on_healing();
+    sil_achievement_character_on_player_turn();
 }
 
 void sil_achievements_on_singing_turn(void)
@@ -338,18 +510,33 @@ void sil_achievements_on_damage(int damage, int previous_hp)
 
 void sil_achievements_on_level_entry(bool restoring)
 {
-    if (!restoring) p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
+    if (!restoring)
+    {
+        p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
+        memset(p_ptr->achievement_jammed_doors, 0,
+            sizeof(p_ptr->achievement_jammed_doors));
+        sil_achievements_discovery_reset(false);
+    }
+    if (p_ptr->achievement_flags & SIL_ACH_RUN_FALLING)
+    {
+        if (p_ptr->achievement_fall_depth >= 0
+            && p_ptr->depth > p_ptr->achievement_fall_depth)
+            sil_achievements_on_event(SIL_ACH_DOWN_TO_GOBLIN_TOWN);
+        p_ptr->achievement_flags &= ~SIL_ACH_RUN_FALLING;
+        p_ptr->achievement_fall_depth = -1;
+    }
     if (achievements_eligible() && !p_ptr->depth && p_ptr->morgoth_hall_entered)
     {
         unlock_achievement(SIL_ACH_THERE_AND_BACK_AGAIN, true);
         sil_achievements_flush();
     }
+    sil_achievements_on_partition_entry(p_ptr->py, p_ptr->px);
 }
 
 void sil_achievements_on_monster_killed(int m_idx, int who)
 {
-    (void)m_idx; /* Event owner has already confirmed the death, before deletion. */
     if (!achievements_eligible() || who >= 0) return;
+    sil_achievement_character_on_monster_killed(m_idx, who);
     if (p_ptr->achievement_kills < UINT32_MAX) ++p_ptr->achievement_kills;
     if ((p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK)
         && p_ptr->achievement_comeback_depth == p_ptr->depth
@@ -394,6 +581,27 @@ static cJSON *current_tale_characters(bool create)
     cJSON *characters = cJSON_GetObjectItemCaseSensitive(tales, key);
     if (!characters && create) characters = cJSON_AddObjectToObject(tales, key);
     return cJSON_IsObject(characters) ? characters : NULL;
+}
+
+void sil_achievements_on_partition_discovered(unsigned mask)
+{
+    if (!achievements_eligible() || run_mode_is_blitz()) return;
+    sil_achievements_init();
+    cJSON *tale = current_tale_characters(true);
+    if (!tale) return;
+    cJSON *entry = cJSON_GetObjectItemCaseSensitive(tale, "_partitions");
+    unsigned old = cJSON_IsNumber(entry) && entry->valuedouble >= 0
+        && entry->valuedouble <= 31 ? (unsigned)entry->valuedouble : 0;
+    unsigned discovered = old | (mask & 31u);
+    if (discovered != old)
+    {
+        if (entry) cJSON_SetNumberValue(entry, discovered);
+        else if (!cJSON_AddNumberToObject(tale, "_partitions", discovered)) return;
+        dirty = true;
+    }
+    if (discovered == 31u)
+        unlock_achievement(SIL_ACH_A_MAP_OF_THE_IRON_HELLS, true);
+    sil_achievements_flush();
 }
 
 void sil_achievements_on_run_completed(void)
@@ -444,12 +652,12 @@ void sil_achievements_update(void)
     Uint64 now = SDL_GetTicks();
     if (now < next_sync) return;
     next_sync = now + 1000;
-    unsigned int mask = sil_achievements_mask();
+    uint64_t mask = sil_achievements_mask();
     sil_steamworks_sync_achievements(mask);
     sil_play_games_sync(mask);
-    unsigned int remote = sil_steamworks_achievements_unlocked()
+    uint64_t remote = sil_steamworks_achievements_unlocked()
         | sil_play_games_unlocked();
     for (int i = 0; i < SIL_ACH_COUNT; ++i)
-        if (remote & (1u << i)) unlock_achievement(i, false);
+        if (remote & (UINT64_C(1) << i)) unlock_achievement(i, false);
     if (dirty && now >= next_save) sil_achievements_flush();
 }

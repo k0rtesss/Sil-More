@@ -113,6 +113,7 @@ void take_hit(int dam, cptr kb_str)
         }
 
         killer_commit(kb_str);
+        sil_achievements_on_wolf_death(killer_last() && killer_last()->first_wolf);
 
         {
             const killer_info* killer = killer_last();

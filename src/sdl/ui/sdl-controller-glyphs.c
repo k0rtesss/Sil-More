@@ -190,29 +190,38 @@ static void controller_glyph_paint(TTF_Font* font, SDL_Surface* surface,
         return;
     }
     SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface* label = TTF_RenderText_Blended(font,
-        text, 0, white);
+    TTF_Font* label_font = TTF_CopyFont(font);
+    if (!label_font)
+        return;
+    int maximum = MAX(1, (int)SDL_ceilf(TTF_GetFontSize(font) * 2.0f));
+    int low = 1, high = maximum, best = 1;
+    /* Fit actual visible ink at an integer point size. Re-rasterize the
+     * selected size; never scale an already antialiased letter surface. */
+    while (low <= high) {
+        int px = low + (high - low) / 2;
+        TTF_SetFontSize(label_font, (float)px);
+        SDL_Surface* trial = TTF_RenderText_Blended(label_font, text, 0, white);
+        SDL_Rect ink = trial ? controller_glyph_label_ink(trial) : (SDL_Rect){0};
+        float diagonal = sqrtf((float)ink.w * ink.w + (float)ink.h * ink.h);
+        bool fits = trial && ink.w <= width * 0.68f && ink.h <= height * 0.64f
+            && (!controller_glyphs[glyph].round
+                || diagonal <= MAX(1, width - 2 * thickness - 1));
+        if (trial)
+            SDL_DestroySurface(trial);
+        if (fits) { best = px; low = px + 1; }
+        else high = px - 1;
+    }
+    TTF_SetFontSize(label_font, (float)best);
+    SDL_Surface* label = TTF_RenderText_Blended(label_font, text, 0, white);
     if (label) {
-        /* Fit visible ink, not the font's ascender/descender padding. The
-         * story font's tall line box otherwise shrinks A/B and shoulder
-         * labels to a few pixels inside otherwise full-sized icons. */
         SDL_Rect ink = controller_glyph_label_ink(label);
-        if (ink.w > 0 && ink.h > 0) {
-            float scale = MIN((height * 0.64f) / ink.h,
-                (width * 0.68f) / ink.w);
-            if (controller_glyphs[glyph].round) {
-                float diagonal = sqrtf((float)ink.w * ink.w
-                    + (float)ink.h * ink.h);
-                scale = MIN(scale, MAX(1.0f,width-2*thickness-1) / diagonal);
-            }
-            SDL_Rect dst = {icon.x, icon.y, MAX(1, (int)(ink.w * scale)),
-                MAX(1, (int)(ink.h * scale))};
-            dst.x += (width - dst.w) / 2;
-            dst.y += (height - dst.h) / 2;
-            SDL_BlitSurfaceScaled(label, &ink, surface, &dst, SDL_SCALEMODE_LINEAR);
-        }
+        SDL_Rect dst = {icon.x + (width - ink.w) / 2,
+            icon.y + (height - ink.h) / 2, ink.w, ink.h};
+        if (ink.w > 0 && ink.h > 0)
+            SDL_BlitSurface(label, &ink, surface, &dst);
         SDL_DestroySurface(label);
     }
+    TTF_CloseFont(label_font);
 }
 
 void sdl_controller_glyphs_paint(TTF_Font* font, SDL_Surface* surface,

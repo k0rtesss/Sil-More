@@ -743,6 +743,10 @@ void wr_monster(const monster_type* m_ptr)
     wr_byte(m_ptr->thrall_quest_completed);
     wr_s16b(m_ptr->poisoned);
     wr_s16b(m_ptr->player_poisoned);
+    wr_s16b(m_ptr->potion_poisoned);
+    wr_u32b(m_ptr->achievement_doom_rage_epoch);
+    wr_u32b(m_ptr->achievement_elbereth_turn);
+    wr_byte(m_ptr->achievement_first_wolf ? 1 : 0);
     wr_byte(m_ptr->vengeance);
     wr_byte(m_ptr->smite_recovery);
 

@@ -17,11 +17,11 @@ using Clock = std::chrono::steady_clock;
 class AchievementSync {
 public:
     CCallbackManual<AchievementSync, UserStatsStored_t> stored_callback;
-    unsigned int remote = 0;
-    unsigned int confirmed = 0;
-    unsigned int staged = 0;
-    unsigned int pending = 0;
-    unsigned int wanted = 0;
+    uint64_t remote = 0;
+    uint64_t confirmed = 0;
+    uint64_t staged = 0;
+    uint64_t pending = 0;
+    uint64_t wanted = 0;
     uint64 account = 0;
     bool registered = false;
     Clock::time_point next_attempt = Clock::time_point::min();
@@ -41,7 +41,7 @@ public:
         next_attempt = Clock::now() + std::chrono::seconds(60);
     }
 
-    void sync(unsigned int mask)
+    void sync(uint64_t mask)
     {
         if (!sil_steamworks_active()) return;
         ISteamUser *user = SteamAPI_SteamUser_v023();
@@ -69,7 +69,7 @@ public:
         if (!stats) return;
         for (int i = 0; i < SIL_ACH_COUNT; ++i)
         {
-            unsigned int bit = 1u << i;
+            uint64_t bit = UINT64_C(1) << i;
             bool achieved = false;
             const char *key = sil_achievement_get(i)->key;
             /* Modern SDKs preload the local user's stats before launch. If
@@ -101,12 +101,12 @@ public:
 AchievementSync achievements;
 }
 
-void sil_steamworks_sync_achievements(unsigned int unlocked_mask)
+void sil_steamworks_sync_achievements(uint64_t unlocked_mask)
 {
     achievements.sync(unlocked_mask);
 }
 
-unsigned int sil_steamworks_achievements_unlocked(void)
+uint64_t sil_steamworks_achievements_unlocked(void)
 {
     return sil_steamworks_active() ? achievements.remote : 0;
 }

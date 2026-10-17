@@ -11,6 +11,7 @@ typedef struct killer_info {
     score_killer_kind kind;
     score_guid64 guid;
     u16b race_index;
+    bool first_wolf; /* Runtime attribution copied from the exact attacker. */
 } killer_info;
 
 void killer_reset(void);

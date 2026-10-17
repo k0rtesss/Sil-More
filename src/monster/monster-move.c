@@ -3,6 +3,7 @@
 #include "monster-internal.h"
 #include "cave/cave-atmosphere.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 #include "log/perf.h"
 #include "cave/cave.h"
 #include "cave/cave-vertical-actors.h"
@@ -143,6 +144,8 @@ void m_fall_in_chasm(int fy, int fx)
         // kill monsters which cannot survive the damage
         if (m_ptr->hp <= dam)
         {
+            if (m_ptr->mflag & MFLAG_PLAYER_KNOCKBACK)
+                sil_achievements_on_monster_killed(cave_m_idx[fy][fx], -1);
             // kill the monster, gain experience etc
             if (m_ptr->mflag & MFLAG_PLAYER_PUSH) quest_followup_kill(m_ptr->r_idx);
             monster_death(cave_m_idx[fy][fx]);
@@ -242,6 +245,8 @@ static void mon_trigger_rewired_trap(int m_idx, int fy, int fx)
 
     /* Hurt the monster (who == -1 so the player gains the experience) */
     died = mon_take_hit(m_idx, dam, NULL, -1);
+    if (died)
+        sil_achievements_on_event(SIL_ACH_OFT_EVIL_WILL);
 
     /* Caltrops also slow a survivor */
     if (!died && (feat == FEAT_TRAP_CALTROPS))
@@ -327,6 +332,8 @@ void m_engage_rewired_trap(int fy, int fx)
 
     if (disarm > 0)
     {
+        if (seen)
+            sil_achievements_on_event(SIL_ACH_ANGBAND_MAINTENANCE);
         /* Neutralises your handiwork */
         if (seen)
             msg_format("%^s dismantles the trap.", m_name);
@@ -828,6 +835,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
     {
         player_lava_exposure(p_ptr->leaping);
         player_poison_terrain_exposure(p_ptr->leaping);
+        if (m1 < 0) sil_achievements_on_movement(y1, x1, y2, x2);
+        else if (m2 < 0) sil_achievements_on_movement(y2, x2, y1, x1);
         describe_floor_object();
     }
 }

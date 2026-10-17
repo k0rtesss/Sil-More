@@ -865,16 +865,11 @@ void sdl_hover_tooltip_clear(void)
 
 int sdl_object_tooltip_font_px(void)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
         return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
-#endif
-#if SIL_SDL_MOBILE_BUILD
-    /* Mobile: enlarge tooltip/character-wheel-description font (3/4 -> 4/5). */
-    int font_size = sdl_auto_font_size_from_main(4, 5);
-#else
-    int font_size = sdl_auto_font_size_from_main(3, 4);
-#endif
+    int font_size = sdl_handheld_ui_active()
+        ? sdl_auto_font_size_from_main(4, 5)
+        : sdl_auto_font_size_from_main(3, 4);
     int font_px = sdl_aux_cell_height_for_font_size(sdl_ui_font_px(font_size));
 
     if (sdl_touch_only_mobile_device_active())
@@ -1294,17 +1289,11 @@ static void sdl_object_tooltip_draw_health_bar(TTF_Font* font,
 
         if (texture)
         {
-            float scale = (text_h_px > 0)
-                ? (line_h / (float)text_h_px) : 1.0f;
-            float text_w = (float)text_w_px * scale;
-            SDL_FRect dst = {
-                .x = bar.x + MAX(0.0f, (bar.w - text_w) * 0.5f),
-                .y = y,
-                .w = MIN(text_w, bar.w),
-                .h = line_h,
-            };
-
-            SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+            SDL_FRect src = { 0, 0, MIN((float)text_w_px, bar.w),
+                MIN((float)text_h_px, line_h) };
+            SDL_FRect dst = { bar.x + MAX(0.0f, bar.w - src.w) * 0.5f,
+                y, src.w, src.h };
+            sdl_ui_render_text_texture(texture, &src, &dst);
         }
     }
 }
@@ -1686,19 +1675,17 @@ void sdl_object_tooltip_render(void)
             .w = (float)run_w,
             .h = (float)run_h,
         };
-        SDL_RenderTexture(g_state.renderer, texture, NULL, &text_dst);
+        sdl_ui_render_text_texture(texture, NULL, &text_dst);
     }
 }
 
 static int sdl_description_overlay_font_px_for_story(bool story)
 {
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
         (void)story;
         return sdl_ui_role_font_px(SDL_UI_FONT_BODY);
     }
-#endif
     int font_px = get_sdl_terminal_menu_scale() * TILE_SIZE;
 
     if (story)
@@ -1713,6 +1700,12 @@ static int sdl_description_overlay_font_px_for_story(bool story)
 int sdl_description_overlay_font_px(void)
 {
     return sdl_description_overlay_font_px_for_story(false);
+}
+
+static TTF_Font* sdl_description_overlay_story_font(int cell_h, int slot)
+{
+    int px = sdl_ui_fitted_font_px(NULL, slot, cell_h, 0, (float)cell_h, false);
+    return sdl_story_font_for_height_slot(px, slot);
 }
 
 static int sdl_description_overlay_story_font_px(void)
@@ -1854,14 +1847,12 @@ int sdl_description_overlay_text_px(void)
 }
 
 /* Proportional width, in pixels, of a text run rendered in the overlay's story
- * font for the given slot at the overlay cell height (matches the scaling used
- * by sdl_description_overlay_render_story_run). */
+ * font for the given slot, fitted before rasterization to the overlay cell. */
 int sdl_description_overlay_story_text_width(cptr text, int len, int slot)
 {
     int font_px;
     int cell_h;
     int adv = 0;
-    int font_h;
     TTF_Font* font;
 
     if (!text || len <= 0)
@@ -1873,15 +1864,11 @@ int sdl_description_overlay_story_text_width(cptr text, int len, int slot)
 
     font_px = sdl_description_overlay_story_font_px();
     cell_h = font_px;
-    font = sdl_story_font_for_height_slot(cell_h, slot);
+    font = sdl_description_overlay_story_font(cell_h, slot);
     if (!font)
         return 0;
 
     TTF_MeasureString(font, text, len, 0, &adv, NULL);
-
-    font_h = TTF_GetFontHeight(font);
-    if (font_h > 0)
-        adv = (int)((float)adv * ((float)cell_h / (float)font_h));
 
     return adv;
 }
@@ -2325,13 +2312,11 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
         return false;
 
     header_rows = overlay->interactive ? 1 : 0;
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_bigger_font())
+    if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
         if (overlay->interactive)
             header_rows = (sdl_ui_min_tap_px() + cell_h - 1) / cell_h;
     }
-#endif
     max_cols = (max_panel_w - pad_x * 2) / cell_w;
     max_rows_no_footer =
         (max_panel_h - pad_y * 2) / cell_h - header_rows;
@@ -2444,12 +2429,10 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (out->close_button)
     {
         float close_size = (float)cell_h;
-#if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_bigger_font())
+        if (sdl_handheld_ui_active() && get_sdl_bigger_font())
         {
             close_size = MAX(close_size, (float)sdl_ui_min_tap_px());
         }
-#endif
 
         out->close_rect = (SDL_FRect){
             .x = out->panel.x + out->panel.w - (float)pad_x - close_size,
@@ -2694,7 +2677,7 @@ static float sdl_description_overlay_run_advance(TTF_Font* font,
     float cell_h, const char* s, int n)
 {
     int adv = 0;
-    int font_h;
+    (void)cell_h;
 
     if (!font || !s || n <= 0)
         return 0.0f;
@@ -2704,16 +2687,11 @@ static float sdl_description_overlay_run_advance(TTF_Font* font,
         return 0.0f;
 
     TTF_MeasureString(font, s, n, 0, &adv, NULL);
-    font_h = TTF_GetFontHeight(font);
-    if (font_h > 0)
-        return (float)adv * (cell_h / (float)font_h);
-
     return (float)adv;
 }
 
 /*
- * Render a run of story-font glyphs inside the description overlay, scaled to
- * the overlay cell height.  Returns the advance width in pixels so the caller
+ * Render a native-size story-font run inside the description overlay.  Returns the advance width in pixels so the caller
  * can keep flowing proportional text.  The active render clip (the panel rect)
  * keeps glyphs from spilling past the panel edges.
  */
@@ -2723,9 +2701,7 @@ static float sdl_description_overlay_render_story_run(TTF_Font* font,
     char text_buf[256];
     int len;
     int adv_unscaled = 0;
-    float scale;
     float advance_w;
-    float render_w;
     SDL_Texture* texture;
     SDL_Color col;
     int text_w = 0;
@@ -2751,22 +2727,10 @@ static float sdl_description_overlay_render_story_run(TTF_Font* font,
         return 0.0f;
 
     TTF_MeasureString(font, text_buf, len, 0, &adv_unscaled, NULL);
-    scale = (text_h > 0) ? (cell_h / (float)text_h) : 1.0f;
-    render_w = (float)text_w * scale;
-
-    /* Advance must match sdl_description_overlay_story_text_width (which scales
-     * by the font height) so wrapping and rendering agree on line width. */
-    {
-        int font_h = TTF_GetFontHeight(font);
-        float adv_scale = (font_h > 0) ? (cell_h / (float)font_h) : scale;
-        advance_w = (float)adv_unscaled * adv_scale;
-    }
-
-    {
-        SDL_FRect dst = { x_px, y_px, render_w, cell_h };
-
-        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
-    }
+    advance_w = (float)adv_unscaled;
+    SDL_FRect dst = { x_px, y_px + MAX(0.0f, cell_h - text_h) * 0.5f,
+        (float)text_w, (float)text_h };
+    sdl_ui_render_text_texture(texture, NULL, &dst);
     return advance_w;
 }
 
@@ -2960,7 +2924,7 @@ static void sdl_description_overlay_render_row(
         }
         int region_end = col;
 
-        TTF_Font* font = sdl_story_font_for_height_slot(layout->cell_h,
+        TTF_Font* font = sdl_description_overlay_story_font(layout->cell_h,
             slot2 ? STORY_FONT_SLOT_SECONDARY : STORY_FONT_SLOT_DEFAULT);
         if (!font)
         {
@@ -3123,7 +3087,7 @@ void sdl_description_overlay_render(void)
         /* The command row uses the secondary story font (storyfont2), matching
          * the menu/log UI; glyphs are snapped per-cell so footer hover/column
          * hit-testing stays aligned with the monospace layout. */
-        TTF_Font* footer_font = sdl_story_font_for_height_slot(
+        TTF_Font* footer_font = sdl_description_overlay_story_font(
             layout.cell_h, STORY_FONT_SLOT_SECONDARY);
 
         if (overlay->interactive
@@ -3334,7 +3298,7 @@ int sdl_description_overlay_footer_action_at(float x, float y)
          * so map the pointer to a character by accumulating glyph advances
          * (matching the render path).  Fall back to monospace columns when no
          * story font is available. */
-        TTF_Font* footer_font = sdl_story_font_for_height_slot(
+        TTF_Font* footer_font = sdl_description_overlay_story_font(
             layout.cell_h, STORY_FONT_SLOT_SECONDARY);
 
         if (footer_font)

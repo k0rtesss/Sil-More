@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "cave/cave-vertical.h"
 #include "cave/cave-water-flow.h"
 #include "cave/cave-environment.h"
@@ -569,6 +570,7 @@ static bool depart(const cave_vertical_portal* p, bool forced)
             : p->kind == CAVE_VERTICAL_LAVA_FALL ? "falling down a volcanic shaft"
             : "falling down a waterfall");
         if (p_ptr->is_dead) return true;
+        sil_achievements_on_fall();
     }
     if (p->kind == CAVE_VERTICAL_SUMP) {
         /* Air belongs to the submerged player across floors. Only a fresh

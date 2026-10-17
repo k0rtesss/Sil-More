@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "meta_state.h"
+#include "achievements.h"
 #include "monster/monster-tactics.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
@@ -420,6 +421,7 @@ static void process_monster(monster_type* m_ptr)
             m_ptr->skip_this_turn = true;
             if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
                 legendary_song_observe_mastery((int)(m_ptr - mon_list));
+            sil_achievements_on_song_effect(SNG_MASTERY, (int)(m_ptr - mon_list), -1);
 
             // end the monster's turn
             return;
@@ -1391,6 +1393,12 @@ void calc_stance(monster_type* m_ptr)
     }
 
     // update the monster's stance
+    if (stance == STANCE_FLEEING && m_ptr->stance != STANCE_FLEEING
+        && m_ptr->achievement_elbereth_turn
+        && (m_ptr->achievement_elbereth_turn == (u32b)playerturn
+            || m_ptr->achievement_elbereth_turn == (u32b)playerturn + 1u)
+        && singing(SNG_ELBERETH) && !(r_ptr->flags1 & RF1_PEACEFUL))
+        sil_achievements_on_event(SIL_ACH_A_ELBERETH_GILTHONIEL);
     m_ptr->stance = stance;
 }
 

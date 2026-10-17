@@ -1,4 +1,6 @@
 #include "angband.h"
+#include "achievements.h"
+#include "achievements-character.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -10,7 +12,7 @@
  *
  * Note that the player is resisting and thus wins ties.
  */
-extern bool saving_throw(monster_type* m_ptr, int resistance)
+static bool saving_throw_details(monster_type* m_ptr, int resistance, int *margin)
 {
     int player_score = p_ptr->skill_use[S_WIL];
     int difficulty;
@@ -26,7 +28,9 @@ extern bool saving_throw(monster_type* m_ptr, int resistance)
     log_trace("SAVING THROW DEBUG: original_difficulty=%d, resistance=%d, adjusted_difficulty=%d, player_will=%d",
               original_difficulty, resistance, difficulty, player_score);
 
-    if (skill_check(m_ptr, difficulty, player_score, PLAYER) > 0)
+    int result = skill_check(m_ptr, difficulty, player_score, PLAYER);
+    if (margin) *margin = result;
+    if (result > 0)
     {
         log_trace("SAVING THROW DEBUG: SAVE FAILED - skill check result > 0");
         return (false);
@@ -34,8 +38,14 @@ extern bool saving_throw(monster_type* m_ptr, int resistance)
     else
     {
         log_trace("SAVING THROW DEBUG: SAVE SUCCEEDED - skill check result <= 0");
+        if (m_ptr) sil_achievements_on_event(SIL_ACH_A_WILL_OF_YOUR_OWN);
         return (true);
     }
+}
+
+bool saving_throw(monster_type* m_ptr, int resistance)
+{
+    return saving_throw_details(m_ptr, resistance, NULL);
 }
 
 // Auxilliary function for the allow_player functions
@@ -54,11 +64,20 @@ bool allow_player_aux(monster_type* m_ptr, int player_flag, u32b ident_flag)
 
     log_trace("RESIST DEBUG: allow_player_aux called with player_flag=%d, resistance=%d", player_flag, resistance);
 
-    bool save_result = saving_throw(m_ptr, resistance);
+    int save_margin;
+    bool save_result = saving_throw_details(m_ptr, resistance, &save_margin);
     log_trace("RESIST DEBUG: saving_throw returned %s", save_result ? "SUCCESS" : "FAILED");
 
     if (save_result)
+    {
+        if (m_ptr && p_ptr->active_ability[S_WIL][WIL_INDOMITABLE]
+            && resistance > 0 && save_margin + 10 > 0
+            && p_ptr->chp > 0 && 4 * p_ptr->chp <= p_ptr->mhp
+            && (ident_flag & (TR2_RES_FEAR | TR2_RES_CONFU
+                | TR2_RES_STUN | TR2_RES_HALLU)))
+            sil_achievements_on_event(SIL_ACH_HURINS_DEFIANCE);
         return (false);
+    }
 
     // Don't have the right resists or failed the save
     return (true);
@@ -520,7 +539,10 @@ bool allow_player_entrancement(monster_type* m_ptr)
 {
     /* Túrin character resistance check first */
     if (turin_resist_bad_effect())
+    {
+        sil_achievement_character_on_entrancement_resisted(m_ptr);
         return (false);
+    }
 
     return (allow_player_aux(m_ptr, p_ptr->free_act, TR2_FREE_ACT));
 }
@@ -773,6 +795,7 @@ bool set_rage(int v)
     /* Rage just started */
     if (will_rage && !was_raging)
     {
+        sil_achievement_character_on_rage_started();
         msg_print("You burst into a furious rage!");
         notice = true;
 

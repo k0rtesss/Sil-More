@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-character.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -10192,6 +10193,10 @@ void create_smithing_item(void)
     bool reused_meta_slot = false;
     bool custom_artefact = smith_o_ptr->name1 != 0;
     bool delivered = true;
+    int achievement_forge_before = forge_uses(p_ptr->py, p_ptr->px);
+    int achievement_forge_paid = smithing_cost.uses;
+    int achievement_mithril_paid = smithing_cost.mithril;
+    object_type achievement_created;
 
     log_debug("Creating smithing item");
 
@@ -10313,6 +10318,10 @@ void create_smithing_item(void)
                     (smith_o_ptr->weight * smith_o_ptr->number) % 10),
         p_ptr->depth);
 
+    /* Stamp the new object before inventory/drop copies preserve it. */
+    sil_achievement_character_on_forged(smith_o_ptr);
+    object_copy(&achievement_created, smith_o_ptr);
+
     // Get the slot of the forged item
     slot = inven_carry(smith_o_ptr, true);
 
@@ -10366,7 +10375,12 @@ void create_smithing_item(void)
 
     /* Costs, artefact registration and delivery have all completed. */
     if (delivered)
+    {
         sil_achievements_on_smithing_completed(custom_artefact);
+        sil_achievement_character_on_smithing_completed(&achievement_created,
+            custom_artefact, achievement_forge_before,
+            achievement_forge_paid, achievement_mithril_paid);
+    }
 
     // Wipe the smithing object
     object_wipe(smith_o_ptr);

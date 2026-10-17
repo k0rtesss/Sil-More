@@ -2,6 +2,7 @@
 #include "quest/quest-rewards-beta.h"
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
@@ -1127,6 +1128,8 @@ void do_cmd_fire(int quiver)
                         cave_m_idx[y][x], net_dam, note_dies, -1);
                     if (!p_ptr->killed_enemy_with_arrow || !silent_kill_candidate)
                         player_attack_audible = true;
+                    if (p_ptr->killed_enemy_with_arrow && deadly_hail_bonus)
+                        sil_achievements_on_event(SIL_ACH_A_FEW_LEAVES);
                     if (!p_ptr->killed_enemy_with_arrow)
                         monster_poison_brand(cave_m_idx[y][x], i_ptr,
                             j_ptr, net_dam);
@@ -1404,6 +1407,14 @@ static cptr thrown_potion_effect_log_message(const object_type* o_ptr)
     }
 }
 
+/* Keep the ordinary explosion geometry, carrying only extra source metadata. */
+static bool thrown_potion_burst(int y, int x, int dd, int ds, int dif, int typ)
+{
+    u32b flags = PROJECT_BOOM | PROJECT_GRID | PROJECT_JUMP | PROJECT_ITEM
+        | PROJECT_KILL | PROJECT_PLAY | PROJECT_POTION;
+    return project_ball(-1, 1, y, x, y, x, dd, ds, dif, typ, flags, false);
+}
+
 /* Apply a supported potion to the impact tile and every adjacent tile. */
 static bool thrown_potion_effects(object_type* o_ptr, int center_y, int center_x)
 {
@@ -1424,16 +1435,16 @@ static bool thrown_potion_effects(object_type* o_ptr, int center_y, int center_x
     switch (o_ptr->sval)
     {
     case SV_POTION_SLOWNESS:
-        ident = explosion(-1, 1, center_y, center_x, 0, 0, 10, GF_SLOW);
+        ident = thrown_potion_burst(center_y, center_x, 0, 0, 10, GF_SLOW);
         break;
     case SV_POTION_CONFUSION:
-        ident = explosion(-1, 1, center_y, center_x, 0, 0, 10, GF_CONFUSION);
+        ident = thrown_potion_burst(center_y, center_x, 0, 0, 10, GF_CONFUSION);
         break;
     case SV_POTION_POISON:
-        ident = explosion(-1, 1, center_y, center_x, 5, 4, 0, GF_POIS);
+        ident = thrown_potion_burst(center_y, center_x, 5, 4, 0, GF_POIS);
         break;
     case SV_POTION_ORCISH_LIQUOR:
-        ident = explosion(-1, 1, center_y, center_x, 3, 4, 0, GF_FIRE);
+        ident = thrown_potion_burst(center_y, center_x, 3, 4, 0, GF_FIRE);
         break;
     default:
         /* The remaining effects are monster-specific and are applied below. */
@@ -2764,6 +2775,8 @@ void do_cmd_throw(bool automatic)
                 {
                     fatal_blow = (mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1));
+                    if (fatal_blow && power_throw_hit && thrown_hit && melee_hit)
+                        sil_achievements_on_event(SIL_ACH_TWO_WEAPONS);
                     if (!fatal_blow)
                     {
                         /* Power Throw shares one armor roll. Allocate the

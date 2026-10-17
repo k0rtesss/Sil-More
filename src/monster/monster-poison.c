@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "quest/quest-runtime.h"
 
@@ -27,6 +28,8 @@ void monster_poison_add_from(int m_idx, int amount, int who)
     int previous = m_ptr->poisoned;
     m_ptr->poisoned = MIN(100, previous + MIN(amount, 100));
     m_ptr->player_poisoned = MAX(0, MIN(previous, m_ptr->player_poisoned));
+    m_ptr->potion_poisoned = MAX(0,
+        MIN(m_ptr->player_poisoned, m_ptr->potion_poisoned));
     if (who < 0) m_ptr->player_poisoned += m_ptr->poisoned - previous;
     m_ptr->mflag |= MFLAG_ACTV;
     if (p_ptr->health_who == m_idx)
@@ -52,8 +55,13 @@ bool monster_poison_tick(int m_idx)
     int owned = MAX(0, MIN(previous, m_ptr->player_poisoned));
     damage = (previous + 4) / 5;
     int player_damage = (damage * owned + previous - 1) / previous;
+    int potion_owned = MAX(0, MIN(owned, m_ptr->potion_poisoned));
+    int potion_damage = owned > 0
+        ? (player_damage * potion_owned + owned - 1) / owned : 0;
     m_ptr->poisoned -= damage;
     m_ptr->player_poisoned = MAX(0, MIN(m_ptr->poisoned, owned - player_damage));
+    m_ptr->potion_poisoned = MAX(0,
+        MIN(m_ptr->player_poisoned, potion_owned - potion_damage));
     seen = m_ptr->ml;
     y = m_ptr->fy;
     x = m_ptr->fx;
@@ -67,6 +75,8 @@ bool monster_poison_tick(int m_idx)
     bool dead = mon_take_hit(m_idx, damage,
         seen ? " dies of poisoning." : "",
         player_kill ? -1 : 0);
+    if (dead && potion_damage > 0)
+        sil_achievements_on_event(SIL_ACH_FOR_EXTERNAL_USE_ONLY);
     if (seen)
         display_hit(y, x, damage, GF_POIS, dead);
     return dead;

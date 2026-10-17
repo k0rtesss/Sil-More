@@ -215,8 +215,11 @@ add_subdirectory(src/log)
 
 set(SIL_MORE_SOURCES
     src/achievements.c
+    src/achievements-discovery.c
+    src/achievements-character.c
     src/achievements-play-games.c
     src/achievements-ui.c
+    src/cloud-saves.c
     src/blitz.c
     src/birth/birth-allocation.c
     src/birth/birth-blitz.c

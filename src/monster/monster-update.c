@@ -2,6 +2,7 @@
 
 #include "monster-internal.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 
 /*
  * Shared sound-based detection logic. Returns true when the check succeeds.
@@ -507,6 +508,7 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         p_ptr->encounter_exp += new_exp;
 
         // update stats
+        sil_achievements_on_monster_seen(m_idx);
         m_ptr->encountered = true;
         l_ptr->psights++;
         if (l_ptr->tsights < MAX_SHORT)

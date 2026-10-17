@@ -1058,6 +1058,7 @@ void rd_monster(monster_type* m_ptr)
     rd_s16b(&m_ptr->turns_stationary);
     rd_u32b(&m_ptr->mflag);
     m_ptr->mflag &= ~MFLAG_PLAYER_PUSH;
+    m_ptr->mflag &= ~MFLAG_PLAYER_KNOCKBACK;
     if (!savefile_version_at_least(0, 9, 8, 26))
         m_ptr->mflag &= ~MFLAG_PLAYER_POISON;
 
@@ -1147,6 +1148,26 @@ void rd_monster(monster_type* m_ptr)
         m_ptr->player_poisoned = m_ptr->poisoned;
     }
     m_ptr->vengeance = 0;
+    m_ptr->potion_poisoned = 0;
+    if (savefile_version_at_least(1, 1, 0, 8)
+        || (!savefile_version_at_least(1, 1, 0, 0)
+            && savefile_version_at_least(0, 9, 8, 34)))
+    {
+        rd_s16b(&m_ptr->potion_poisoned);
+        m_ptr->potion_poisoned = MAX(0,
+            MIN(m_ptr->player_poisoned, m_ptr->potion_poisoned));
+    }
+    m_ptr->achievement_doom_rage_epoch = 0;
+    m_ptr->achievement_elbereth_turn = 0;
+    m_ptr->achievement_first_wolf = false;
+    if (savefile_version_at_least(1, 1, 0, 8)
+        || (!savefile_version_at_least(1, 1, 0, 0)
+            && savefile_version_at_least(0, 9, 8, 35)))
+    {
+        rd_u32b(&m_ptr->achievement_doom_rage_epoch);
+        rd_u32b(&m_ptr->achievement_elbereth_turn);
+        rd_bool(&m_ptr->achievement_first_wolf);
+    }
     m_ptr->smite_recovery = 0;
     m_ptr->ability_in_action = false;
     m_ptr->ability_melee = false;

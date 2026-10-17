@@ -72,22 +72,39 @@ if (!achievementEnum.find()) {
 }
 def playAchievementKeys = (achievementEnum.group(1) =~ /\bSIL_ACH_([A-Z][A-Z0-9_]*)\b/)
         .collect { match -> match[1] }.findAll { it != 'COUNT' }
-if (!playAchievementKeys || playAchievementKeys.size() >= 32 ||
+if (!playAchievementKeys || playAchievementKeys.size() >= 64 ||
         playAchievementKeys.toSet().size() != playAchievementKeys.size()) {
-    throw new GradleException('The native achievement catalogue must have 1-31 unique bitmask indexes.')
+    throw new GradleException('The native achievement catalogue must have 1-63 unique bitmask indexes.')
 }
-def playGamesProjectId = (readOptionalBuildValue('SIL_MORE_PLAY_GAMES_PROJECT_ID') ?: '').trim()
+// Provider IDs are public build configuration. Keep release builds configured
+// across shells and CI; command-line properties/environment still take priority.
+def playGamesProperties = new Properties()
+def playGamesConfigPath = readOptionalBuildValue('SIL_MORE_PLAY_GAMES_CONFIG')
+def playGamesConfigFile = playGamesConfigPath ? rootProject.file(playGamesConfigPath) :
+        new File(rootProject.projectDir, 'play-games.properties')
+if (playGamesConfigFile.isFile()) {
+    playGamesConfigFile.withInputStream { playGamesProperties.load(it) }
+} else if (playGamesConfigPath) {
+    throw new GradleException("Play Games configuration file does not exist: $playGamesConfigFile")
+}
+def readPlayGamesValue = { String name ->
+    readOptionalBuildValue(name) ?: playGamesProperties.getProperty(name, '')
+}
+def playGamesProjectId = readPlayGamesValue('SIL_MORE_PLAY_GAMES_PROJECT_ID').trim()
 def playAchievementIds = playAchievementKeys.collect { key ->
-    (readOptionalBuildValue('SIL_MORE_PLAY_ACH_' + key) ?: '').trim()
+    readPlayGamesValue('SIL_MORE_PLAY_ACH_' + key).trim()
 }
 if (playGamesProjectId && !(playGamesProjectId ==~ /[1-9][0-9]*/)) {
     throw new GradleException('SIL_MORE_PLAY_GAMES_PROJECT_ID must be the numeric Games services project ID.')
 }
-def playGamesConfigured = playGamesProjectId && playAchievementIds.every { it }
-if ((playGamesProjectId || playAchievementIds.any { it }) && !playGamesConfigured) {
-    throw new GradleException("Play Games requires the project ID and all ${playAchievementKeys.size()} SIL_MORE_PLAY_ACH_* IDs together.")
+// During catalogue expansion, blank IDs keep new unlocks local until Console
+// assigns their IDs. Existing mapped achievements continue synchronizing.
+def nonemptyAchievementIds = playAchievementIds.findAll { it }
+def playGamesConfigured = playGamesProjectId && !nonemptyAchievementIds.isEmpty()
+if (!nonemptyAchievementIds.isEmpty() && !playGamesProjectId) {
+    throw new GradleException("Play Games requires a numeric project ID together with any supplied achievement IDs.")
 }
-if (playGamesConfigured && playAchievementIds.toSet().size() != playAchievementIds.size()) {
+if (playGamesConfigured && nonemptyAchievementIds.toSet().size() != nonemptyAchievementIds.size()) {
     throw new GradleException('Each Google Play achievement must have its own distinct Console ID.')
 }
 // Resource strings contain only provider IDs, never credentials. Restrict their syntax
@@ -122,6 +139,7 @@ if ((hasAnyReleaseSigningValue || requireReleaseSigning) && !hasReleaseSigning) 
 android {
     namespace 'com.silmore.myapp'
     compileSdk androidCompileSdk
+    ndkVersion '27.3.13750724'
     flavorDimensions 'delivery'
 
     if (!buildBundle) {
@@ -151,7 +169,7 @@ android {
         minSdk 24
         targetSdk androidTargetSdk
         versionCode androidVersionCode
-        versionName gameVersion
+        versionName "${gameVersion}.${gameVersionExtra}"
         // Select a distinct launcher label for the APK2 installation while
         // retaining the existing labels for the primary app and debug builds.
         manifestPlaceholders = [
@@ -167,7 +185,10 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments '-DSIL_BUILD_WITH_SDL_SOURCES=ON'
+                // Apply the NDK's flexible-page mode to every vendored shared
+                // library, including SDL and image codecs, not only libmain.
+                arguments '-DSIL_BUILD_WITH_SDL_SOURCES=ON',
+                        '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
             }
         }
     }

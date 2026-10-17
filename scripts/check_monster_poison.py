@@ -22,6 +22,7 @@ def function(path, name):
 
 PRELUDE = r'''
 #include "angband.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-senses.h"
 #include <assert.h>
@@ -37,6 +38,9 @@ _Thread_local monster_lore *l_list=lore;
 _Thread_local s16b mon_max=3;
 static int dealt, hits;
 static int player_damage, player_kills;
+void sil_achievements_on_event(sil_achievement_id id) {
+    assert(id==SIL_ACH_FOR_EXTERNAL_USE_ONLY);
+}
 void quest_followup_damage(monster_type* monster,int damage,int who) {
     assert(monster==&monsters[1] && who==-1);player_damage+=damage;
 }
@@ -65,6 +69,7 @@ static bool savefile_has_song_duels=true,savefile_has_monster_shatter=true;
 static bool savefile_has_thrall_quest=true,savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte n){assert(wp<1024);bytes[wp++]=n;}
 static void rd_byte(byte *n){assert(rp<wp);*n=bytes[rp++];}
+static void rd_bool(bool *n){byte value;rd_byte(&value);*n=value!=0;}
 static void wr_s16b(s16b n){wr_byte((byte)n);wr_byte((byte)((u16b)n>>8));}
 static void rd_s16b(s16b *n){byte a,b;rd_byte(&a);rd_byte(&b);*n=(s16b)(a|((u16b)b<<8));}
 static void wr_u32b(u32b n){for(int i=0;i<4;i++)wr_byte((byte)(n>>(8*i)));}
@@ -146,10 +151,10 @@ int main(void){
             int start=ai_offset+29*7, count=(MON_AI_FEATURE_COUNT-29)*7;
             memmove(bytes+start,bytes+start+count,wp-start-count);wp-=count;
         }
-        /* All legacy records predate the v31 player poison attribution. */
+        /* Legacy records predate both poison words and discovery provenance. */
         if(!current_version && version>=4){
-            memmove(bytes+player_poison_offset,bytes+player_poison_offset+2,
-                wp-player_poison_offset-2);wp-=2;
+            memmove(bytes+player_poison_offset,bytes+player_poison_offset+13,
+                wp-player_poison_offset-13);wp-=13;
         }
         wr_byte(0xA5);memset(&dst,0x55,sizeof(dst));rd_monster(&dst);
         assert(dst.poisoned==(version<4?0:poison));assert(dst.r_idx==2&&dst.hp==123&&dst.energy==-50);

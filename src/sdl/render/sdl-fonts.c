@@ -1,6 +1,19 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 
+/* Readable text and touch targets follow the device, independently of the
+ * selected input mode. A desktop with an attached controller stays desktop. */
+bool sdl_handheld_ui_active(void)
+{
+#if SIL_SDL_MOBILE_BUILD
+    return true;
+#else
+    return g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD
+        || g_startup_device_class == SDL_STARTUP_DEVICE_ANDROID_HANDHELD
+        || g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH;
+#endif
+}
+
 /* Resolve sizes before measuring a layout; caches accept resolved sizes. */
 int sdl_ui_font_px(int normal_px)
 {
@@ -872,6 +885,36 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
     g_state.story_fonts[target_index].font = font;
     g_state.story_fonts[target_index].last_used = ++g_story_font_use_clock;
     return font;
+}
+
+/* Fit point size before rasterization for fixed-size controls. Body text
+ * instead keeps its chosen font and uses the menu's wrapping/paging layout. */
+int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
+    float width, float height, bool wrapped)
+{
+    int low = 1, high = MAX(1, maximum_px), best = 1;
+    TTF_Font* base = sdl_story_font_for_height_slot(high, slot);
+    TTF_Font* measure = base ? TTF_CopyFont(base) : NULL;
+    if (!measure)
+        return best;
+    /* Measuring a private copy avoids filling/evicting the shared font cache
+     * with intermediate sizes while a caller is borrowing another font. */
+    while (low <= high) {
+        int px = low + (high - low) / 2;
+        int w = 0, h = 0;
+        bool measured = TTF_SetFontSize(measure, (float)px)
+            && (wrapped && width > 0.0f
+                ? TTF_GetStringSizeWrapped(measure, text ? text : "Mg", 0,
+                    MAX(1, (int)width), &w, &h)
+                : TTF_GetStringSize(measure, text ? text : "Mg", 0, &w, &h));
+        if (measured && (width <= 0.0f || w <= width)
+            && (height <= 0.0f || h <= height)) {
+            best = px;
+            low = px + 1;
+        } else high = px - 1;
+    }
+    TTF_CloseFont(measure);
+    return best;
 }
 
 TTF_Font* sdl_story_font_for_height(int pixel_height)

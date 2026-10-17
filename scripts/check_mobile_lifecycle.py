@@ -33,6 +33,14 @@ static int attempts;
 static bool save_ok = true;
 static char last_reason[64];
 static bool audio_suspended;
+static bool character_generated = true;
+static int cloud_checkpoints;
+
+void sil_cloud_saves_checkpoint(void)
+{
+    assert(SDL_IsMainThread());
+    ++cloud_checkpoints;
+}
 
 bool sdl_sound_initialize(void) { return true; }
 void sdl_sound_set_suspended(bool suspended)
@@ -168,6 +176,17 @@ int main(void)
     assert(attempts == 6);
     drain();
     assert(attempts == 7);
+
+    /* Welcome/Tale changes also get one complete-profile checkpoint, without
+     * asking the character autosave to manufacture a running character. */
+    push(SDL_EVENT_DID_ENTER_FOREGROUND);
+    drain();
+    character_generated = false;
+    push(SDL_EVENT_WILL_ENTER_BACKGROUND);
+    push(SDL_EVENT_DID_ENTER_BACKGROUND);
+    push(SDL_EVENT_TERMINATING);
+    drain();
+    assert(attempts == 7 && cloud_checkpoints == 1);
     SDL_Quit();
     puts("Mobile lifecycle: pause audio/save before Android blocks, resume only on completed foreground entry, duplicate suppression, retry, worker dispatch, stale transitions and queue-failure fallback: PASS");
     return 0;

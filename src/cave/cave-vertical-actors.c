@@ -128,7 +128,8 @@ static bool fall_into_neighbour(int index, const cave_vertical_portal* portal)
     *destination = *source;
     destination->fy = portal->peer_y; destination->fx = portal->peer_x;
     destination->ml = false; destination->cdis = 0;
-    destination->mflag &= ~(MFLAG_VIEW | MFLAG_SHOW | MFLAG_MARK | MFLAG_PLAYER_PUSH);
+    destination->mflag &= ~(MFLAG_VIEW | MFLAG_SHOW | MFLAG_MARK
+        | MFLAG_PLAYER_PUSH | MFLAG_PLAYER_KNOCKBACK);
     destination->hold_o_idx = 0;
     destination->target_y = destination->target_x = 0;
     destination->wandering_idx = 0;

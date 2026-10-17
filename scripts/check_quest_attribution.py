@@ -8,6 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'scripts/output/quest-attribution'
 HARNESS=r'''
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "quest/quest-runtime.h"
 #include <assert.h>
@@ -16,6 +17,7 @@ static monster_type monsters[4];_Thread_local monster_type *mon_list=monsters;_T
 static monster_race races[8];_Thread_local monster_race *r_info=races;
 static monster_lore lore[8];_Thread_local monster_lore *l_list=lore;
 static int credited_damage,credited_kills,damage_hooks,ambient_hits,hit_displays,last_race;
+void sil_achievements_on_event(sil_achievement_id id){assert(id==SIL_ACH_FOR_EXTERNAL_USE_ONLY);}
 void quest_followup_damage(monster_type *m,int damage,int who){
  ++damage_hooks;
  if(who<0)credited_damage+=MIN(damage,MAX(0,m->hp));
@@ -81,6 +83,7 @@ def integration_checks():
     assert re.search(r'if \(who < 0\) quest_followup_kill\(m_ptr->r_idx\)',death)
     assert re.search(r'quest_followup_damage\(m_ptr, song_dam, -1\);[\s\S]{0,250}morgoth_enter_final_stage',combat)
     assert re.search(r'quest_followup_kill\(m_ptr->r_idx\);\s*'
+        r'sil_achievements_on_song_effect\(SNG_SLAYING, m_idx, -1\);\s*'
         r'sil_achievements_on_monster_killed\(m_idx, -1\);\s*monster_death\(m_idx\)',combat)
     assert re.search(r'if \(player_push\) m_ptr->mflag \|= MFLAG_PLAYER_PUSH;[\s\S]{0,200}if \(player_push\) m_ptr->mflag &= ~MFLAG_PLAYER_PUSH;',combat)
     for name in ['src/monster/monster-move.c','src/cave/cave-lava.c']:

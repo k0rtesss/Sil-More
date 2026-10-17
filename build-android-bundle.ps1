@@ -21,6 +21,52 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Assert-NativePageAlignment {
+    param([Parameter(Mandatory = $true)]$Archive)
+
+    $checkedLibraries = 0
+    foreach ($entry in $Archive.Entries) {
+        if ($entry.FullName -notmatch '/lib/(arm64-v8a|x86_64)/[^/]+\.so$') { continue }
+        $stream = $entry.Open()
+        $memory = New-Object System.IO.MemoryStream
+        try {
+            $stream.CopyTo($memory)
+            $libraryBytes = $memory.ToArray()
+        } finally {
+            $stream.Dispose()
+            $memory.Dispose()
+        }
+        if ($libraryBytes.Length -lt 64 -or $libraryBytes[0] -ne 127 -or
+            [System.Text.Encoding]::ASCII.GetString($libraryBytes, 1, 3) -ne 'ELF' -or
+            $libraryBytes[4] -ne 2 -or $libraryBytes[5] -ne 1) {
+            throw "Invalid Android 64-bit ELF library: $($entry.FullName)"
+        }
+        $programHeaders = [BitConverter]::ToUInt64($libraryBytes, 32)
+        $headerSize = [BitConverter]::ToUInt16($libraryBytes, 54)
+        $headerCount = [BitConverter]::ToUInt16($libraryBytes, 56)
+        if ($headerSize -lt 56 -or $programHeaders -gt $libraryBytes.Length -or
+            $programHeaders + [long]$headerSize * $headerCount -gt $libraryBytes.Length) {
+            throw "Invalid ELF program headers: $($entry.FullName)"
+        }
+        $loadSegments = 0
+        for ($index = 0; $index -lt $headerCount; $index++) {
+            $offset = [int]($programHeaders + [long]$index * $headerSize)
+            if ([BitConverter]::ToUInt32($libraryBytes, $offset) -ne 1) { continue }
+            $loadSegments++
+            $fileOffset = [BitConverter]::ToUInt64($libraryBytes, $offset + 8)
+            $virtualAddress = [BitConverter]::ToUInt64($libraryBytes, $offset + 16)
+            $alignment = [BitConverter]::ToUInt64($libraryBytes, $offset + 48)
+            if ($alignment -lt 16384 -or $fileOffset % 16384 -ne $virtualAddress % 16384) {
+                throw "Native library does not support 16 KB pages: $($entry.FullName). Rebuild all native dependencies with flexible-page support."
+            }
+        }
+        if ($loadSegments -eq 0) { throw "ELF has no load segments: $($entry.FullName)" }
+        $checkedLibraries++
+    }
+    if ($checkedLibraries -eq 0) { throw 'Bundle has no Android 64-bit native libraries.' }
+    Write-Host "Verified 16 KB ELF alignment for $checkedLibraries native libraries." -ForegroundColor Green
+}
+
 function Resolve-JavaHome {
     if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\java.exe'))) {
         return $env:JAVA_HOME
@@ -387,6 +433,7 @@ try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $bundleArchive = [System.IO.Compression.ZipFile]::OpenRead($bundlePath)
     try {
+        Assert-NativePageAlignment -Archive $bundleArchive
         $mappingEntry = $bundleArchive.GetEntry('BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map')
         if (-not $mappingEntry -or $mappingEntry.Length -eq 0) {
             throw "R8 deobfuscation mapping is missing from app bundle: $bundlePath"

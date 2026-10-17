@@ -319,14 +319,14 @@ static void sdl_question_menu_draw_text_aux(TTF_Font* font, cptr text,
     SDL_Texture* texture;
     SDL_FRect src;
     SDL_FRect dst;
-    float scale = 1.0f;
     int text_w = 0;
     int text_h = 0;
 
     if (!font || !text || !text[0] || max_w <= 0.0f || row_h <= 0.0f)
         return;
 
-    if (get_sdl_menu_bigger_font())
+    if (get_sdl_menu_bigger_font()
+        || sdl_touch_pane_story_text_width(font, text) > max_w)
         wrap = true;
     texture = wrap
         ? sdl_ui_wrapped_text_texture(font, text,
@@ -335,22 +335,17 @@ static void sdl_question_menu_draw_text_aux(TTF_Font* font, cptr text,
     if (!texture)
         return;
 
-    if (!get_sdl_menu_bigger_font() && text_h > 0 && (float)text_h > row_h * 0.94f)
-        scale = (row_h * 0.94f) / (float)text_h;
-    if (!get_sdl_menu_bigger_font() && text_w > 0 && (float)text_w * scale > max_w)
-        scale = max_w / (float)text_w;
-
     src = (SDL_FRect){
         .x = 0.0f,
         .y = 0.0f,
-        .w = (float)text_w,
-        .h = (float)text_h,
+        .w = MIN((float)text_w, max_w),
+        .h = MIN((float)text_h, row_h),
     };
     dst = (SDL_FRect){
         .x = x,
         .y = y,
-        .w = (float)text_w * scale,
-        .h = (float)text_h * scale,
+        .w = src.w,
+        .h = src.h,
     };
 
     if (center && dst.w < max_w)
@@ -370,7 +365,7 @@ static void sdl_question_menu_draw_text_aux(TTF_Font* font, cptr text,
         dst.y = y + (row_h - dst.h) * 0.5f;
     }
 
-    SDL_RenderTexture(g_state.renderer, texture, &src, &dst);
+    sdl_ui_render_text_texture(texture, &src, &dst);
 }
 
 static void sdl_question_menu_draw_text(TTF_Font* font, cptr text,
@@ -716,16 +711,15 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     compact_table = get_sdl_menu_bigger_font() || anchor.h > anchor.w;
 
     font_px = sdl_main_menu_pane_font_px();
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font())
-        font_px = sdl_menu_role_font_px(SDL_UI_FONT_BODY);
-    else
-        font_px = (int)((float)font_px * 1.18f + 0.5f);
-#endif
+    if (sdl_handheld_ui_active()) {
+        font_px = get_sdl_menu_bigger_font()
+            ? sdl_menu_role_font_px(SDL_UI_FONT_BODY)
+            : (int)((float)font_px * 1.18f + 0.5f);
+    }
     if (g_question_menu.text_input && sdl_controller_keyboard_active())
         font_px = MAX(font_px, (int)SDL_ceilf(sdl_ui_density_scale()
             * sdl_menu_font_px(24)));
-    if (g_question_menu.context_hint && !(SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font()))
+    if (g_question_menu.context_hint && !(sdl_handheld_ui_active() && get_sdl_menu_bigger_font()))
     {
         font_px = (int)((float)font_px * 0.78f + 0.5f);
         if (font_px < sdl_menu_font_px(13))
@@ -803,14 +797,12 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     {
         TTF_Font* title_font = story_font;
         int title_px = font_px;
-#if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_menu_bigger_font())
+        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         {
             title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
             title_font = sdl_story_font_for_height_slot(title_px,
                 SDL_STORY_FONT_SLOT_DEFAULT);
         }
-#endif
         /* Size the header with the font used to draw it. Measuring the
          * smaller body font can split even a short title within a word. */
         title_w = sdl_question_menu_text_width(title_font,
@@ -825,12 +817,13 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     row_h = (float)font_px * 1.24f;
     if (row_h < (float)font_px + 4.0f)
         row_h = (float)font_px + 4.0f;
+    row_h = MAX(row_h, (float)TTF_GetFontHeight(story_font) + 4.0f);
+    if (mono_font)
+        row_h = MAX(row_h, (float)TTF_GetFontHeight(mono_font) + 4.0f);
     if (get_sdl_menu_bigger_font() || g_question_menu.text_input)
         row_h = MAX(44.0f, (float)TTF_GetFontHeight(story_font) * 1.3f);
-#if SIL_SDL_MOBILE_BUILD
-    if (get_sdl_menu_bigger_font() || g_question_menu.text_input)
+    if (sdl_handheld_ui_active() && (get_sdl_menu_bigger_font() || g_question_menu.text_input))
         row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
-#endif
     divider_gap = sdl_touch_pane_clampf((float)font_px * 0.3f, 3.0f, 8.0f);
     button_gap = sdl_touch_pane_clampf((float)font_px * 0.42f, 6.0f, 14.0f);
     letter_gap = letter_w > 0.0f
@@ -1000,7 +993,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
-    if (get_sdl_menu_bigger_font() || g_question_menu.text_input) {
+    {
         float available_w = MAX(1.0f, panel_w - pad_x * 2.0f);
         float title_available = MAX(1.0f, available_w
             - close_reserve - info_reserve - suppress_reserve);
@@ -1012,11 +1005,9 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
             title_available = available_w;
         }
         TTF_Font* title_font = story_font;
-#if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_menu_bigger_font())
+        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
             title_font = sdl_story_font_for_height_slot(
             sdl_menu_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
-#endif
         int title_h = sdl_question_menu_wrapped_text_height(title_font,
             g_question_menu.title, title_available);
 
@@ -1174,7 +1165,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
 
                 if (desc_h > max_desc_h)
                 {
-                    if (SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font()) {
+                    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
                         out->description_in_list = true;
                         out->scrolling_desc_h = desc_h;
                         desc_h = 0;
@@ -1183,7 +1174,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
             }
             else
             {
-                if (SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font()) {
+                if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
                     out->description_in_list = true;
                     out->scrolling_desc_h = desc_h;
                 }
@@ -1209,7 +1200,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     /* On phones, hidden Help must not leave its reading area below a short
      * choice list. Opening Help measures and scrolls that content. */
     if (g_question_menu.help_mode
-        && (g_question_menu.help_open || !SIL_SDL_MOBILE_BUILD
+        && (g_question_menu.help_open || !sdl_handheld_ui_active()
             || !get_sdl_menu_bigger_font()))
     {
         float help_panel_h = pad_y * 2.0f + help_content_h;
@@ -2289,7 +2280,7 @@ void sdl_question_menu_render(void)
 
     /* Match the description overlay chrome. */
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0,
-        SIL_SDL_MOBILE_BUILD && get_sdl_menu_bigger_font() ? 255 : 232);
+        sdl_handheld_ui_active() && get_sdl_menu_bigger_font() ? 255 : 232);
     SDL_RenderFillRect(g_state.renderer, &layout.panel);
     SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 120);
     SDL_RenderRect(g_state.renderer, &layout.panel);
@@ -2305,11 +2296,9 @@ void sdl_question_menu_render(void)
     if (layout.has_title)
     {
         TTF_Font* title_font = story_font;
-#if SIL_SDL_MOBILE_BUILD
-        if (get_sdl_menu_bigger_font())
+        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
             title_font = sdl_story_font_for_height_slot(
             sdl_menu_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
-#endif
         sdl_question_menu_draw_text(title_font,
             g_question_menu.help_open ? "Help" : g_question_menu.title,
             g_state.palette[TERM_WHITE], layout.title_row.x,
@@ -2354,13 +2343,13 @@ void sdl_question_menu_render(void)
             };
 
             if (dst.w > layout.desc_rect.w)
-                dst.w = layout.desc_rect.w;
+                dst.w = src.w = layout.desc_rect.w;
             if (dst.h > layout.desc_rect.h)
             {
                 dst.h = layout.desc_rect.h;
                 src.h = layout.desc_rect.h;
             }
-            SDL_RenderTexture(g_state.renderer, texture, &src, &dst);
+            sdl_ui_render_text_texture(texture, &src, &dst);
         }
     }
 

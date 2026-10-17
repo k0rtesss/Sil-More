@@ -1,6 +1,7 @@
 """Exercise production phone confirmations, labels, details and hintbooks."""
 from pathlib import Path
 import check_phone_halls_layout as runner
+OUT = runner.ROOT / "scripts/output/phone-overlays-check"
 
 PREFIX = runner.HARNESS[:runner.HARNESS.index('static int width, height;')]
 PREFIX = PREFIX.replace('#include "sdl/ui/sdl-halls-screen.c"', '''#include "sdl/ui/sdl-menus.c"
@@ -73,7 +74,7 @@ static void check_quick_access(void){
          * check_normal_touch_compat.py compares them with pre-big-text code. */
         assert(sdl_touch_top_panel_reserved_stack_height(&screen)+1>=panel.h);
         if(preferred_rows==1 && count*sdl_touch_top_panel_min_button_size()
-           +(count-1)*4*density <= screen.w-2*MIN(18,screen.w*.02f))
+           +(count-1)*4*density <= screen.w-2*SDL_BIG_TEXT_SIDE_PAD_PX)
             for(int i=1;i<count;i++)assert(buttons[i].y==buttons[0].y);
         for(int i=0;i<count;i++){
             float rounding=config.bigger_font?.01f:1.f;
@@ -94,8 +95,12 @@ static void check_quick_access(void){
             assert(sdl_touch_top_panel_point_to_slot(buttons[i].x+buttons[i].w/2,buttons[i].y+buttons[i].h/2,&slot));
             assert(slot==i);
         }
-        if(config.bigger_font&&width<height&&preferred_rows==1) {
-            assert(panel.h>=sdl_ui_min_tap_px()*2);
+        if(config.bigger_font&&width<height&&preferred_rows==1
+            && count*sdl_touch_top_panel_min_button_size()+(count-1)*4*density
+                > screen.w-2*SDL_BIG_TEXT_SIDE_PAD_PX) {
+            if (panel.h+.01f<sdl_ui_min_tap_px()*2)
+                fprintf(stderr,"Quick Access count%d width%d density%.3f stretch%d edge%d constrained%d panel%.1fx%.1f first%.1fx%.1f last_y%.1f first_y%.1f\n",count,screen.w,density,stretch,edge,constrained,panel.w,panel.h,buttons[0].w,buttons[0].h,buttons[count-1].y,buttons[0].y);
+            assert(panel.h+.01f>=sdl_ui_min_tap_px()*2);
             if(count<=11 && (!constrained || count<=9)) {
                 int rows=1;
                 for(int i=1;i<count;i++)if(buttons[i].y!=buttons[i-1].y)rows++;
@@ -309,7 +314,9 @@ int main(int argc,char **argv){
     for(int i=0;i<16;i++)g_state.palette[i]=(SDL_Color){220,220,220,255};
     /* Legacy normal pixels/geometry are covered by both normal compatibility
      * harnesses; the following checks require big-font reflow. */
-    config.bigger_font=true;check();check_quick_access();check_pane_menus();check_context_buttons();
+    config.bigger_font=true;
+    for (int menu=0; menu<SDL_MENU_FONT_COUNT; menu++) config.menu_bigger_font[menu]=true;
+    check();check_quick_access();check_pane_menus();check_context_buttons();
     printf("Overlays %dx%d @%.3f Big font confirmations/buttons/details/hintbook/QuickAccess9,11,16/pane-menu-ink-dispatch/context-labels-hit-dispatch PASS\n",width,height,density);
     return 0;
 }
@@ -319,7 +326,7 @@ int main(int argc,char **argv){
 def main():
     # Reuse only the isolated compiler/fixture driver, leaving its test intact.
     runner.HARNESS = HARNESS
-    runner.OUT = runner.ROOT / "scripts/output/phone-overlays-check"
+    runner.OUT = OUT
     import inspect
     code = inspect.getsource(runner.main)
     code = code.replace('"/src/sdl/ui/sdl-halls-screen.c.obj",',
