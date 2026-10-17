@@ -5,6 +5,11 @@
 /* Poison is pending damage, with the same cap and decay as player poison. */
 void monster_poison_add(int m_idx, int amount)
 {
+    monster_poison_add_from(m_idx, amount, 0);
+}
+
+void monster_poison_add_from(int m_idx, int amount, int who)
+{
     monster_type* m_ptr;
 
     if (m_idx <= 0 || m_idx >= mon_max || amount <= 0)
@@ -19,8 +24,10 @@ void monster_poison_add(int m_idx, int amount)
         return;
     }
 
-    if (!m_ptr->poisoned) m_ptr->mflag &= ~MFLAG_PLAYER_POISON;
-    m_ptr->poisoned = MIN(100, m_ptr->poisoned + MIN(amount, 100));
+    int previous = m_ptr->poisoned;
+    m_ptr->poisoned = MIN(100, previous + MIN(amount, 100));
+    m_ptr->player_poisoned = MAX(0, MIN(previous, m_ptr->player_poisoned));
+    if (who < 0) m_ptr->player_poisoned += m_ptr->poisoned - previous;
     m_ptr->mflag |= MFLAG_ACTV;
     if (p_ptr->health_who == m_idx)
         p_ptr->redraw |= PR_HEALTHBAR;
@@ -41,21 +48,25 @@ bool monster_poison_tick(int m_idx)
     if (!m_ptr->r_idx || m_ptr->poisoned <= 0)
         return false;
 
-    damage = (m_ptr->poisoned + 4) / 5;
+    int previous = m_ptr->poisoned;
+    int owned = MAX(0, MIN(previous, m_ptr->player_poisoned));
+    damage = (previous + 4) / 5;
+    int player_damage = (damage * owned + previous - 1) / previous;
     m_ptr->poisoned -= damage;
+    m_ptr->player_poisoned = MAX(0, MIN(m_ptr->poisoned, owned - player_damage));
     seen = m_ptr->ml;
     y = m_ptr->fy;
     x = m_ptr->fx;
     p_ptr->window |= PW_MONLIST | PW_MONSTER;
 
-    int race = m_ptr->r_idx;
-    bool player_poison = (m_ptr->mflag & MFLAG_PLAYER_POISON) != 0;
-    if (player_poison) quest_followup_damage(m_ptr, damage, -1);
-    /* Keep ambient combat behavior while attributing quest objectives. */
+    /* mon_take_hit credits a lethal player dose through the normal kill path.
+     * Nonlethal mixed doses credit only their player-owned quest damage. */
+    bool player_kill = damage >= m_ptr->hp && player_damage > 0;
+    if (!player_kill && player_damage > 0)
+        quest_followup_damage(m_ptr, player_damage, -1);
     bool dead = mon_take_hit(m_idx, damage,
-        seen ? " dies of poisoning." : "", 0);
-    if (dead && player_poison) quest_followup_kill(race);
-    if (!dead && !m_ptr->poisoned) m_ptr->mflag &= ~MFLAG_PLAYER_POISON;
+        seen ? " dies of poisoning." : "",
+        player_kill ? -1 : 0);
     if (seen)
         display_hit(y, x, damage, GF_POIS, dead);
     return dead;
@@ -80,9 +91,6 @@ void monster_poison_brand(int m_idx, const object_type* first,
         object_flags(second, &f1, &f2, &f3);
         branded |= (f1 & TR1_BRAND_POIS) != 0;
     }
-    if (branded) {
-        monster_poison_add(m_idx, (damage + 1) / 2);
-        if (m_idx > 0 && m_idx < mon_max && mon_list[m_idx].r_idx
-            && mon_list[m_idx].poisoned) mon_list[m_idx].mflag |= MFLAG_PLAYER_POISON;
-    }
+    if (branded)
+        monster_poison_add_from(m_idx, (damage + 1) / 2, -1);
 }

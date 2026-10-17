@@ -835,6 +835,7 @@ struct monster_type
     byte stunned; /* Monster is stunned */
     byte confused; /* Monster is confused */
     s16b poisoned; /* Remaining poison damage, capped at 100 like the player. */
+    s16b player_poisoned; /* Player-origin component of the remaining poison. */
     s16b slowed; /* Monster is slowed */
     s16b hasted; /* Monster is hasted */
 
@@ -1308,6 +1309,10 @@ struct player_type
     byte light_dimmed; /* Player-controlled dimming, not removal of the light item */
     byte discovery_lore_flags; /* Run-wide discovery XP awards already claimed */
     byte quick_access_prompt_flags; /* Run-wide item shortcut offers already made */
+    u32b achievement_flags; /* Persistent run history and comeback window. */
+    u32b achievement_kills; /* Player-attributed kills, including poison. */
+    u32b achievement_singing_turns; /* Paid player turns spent singing. */
+    s16b achievement_comeback_depth; /* Floor on which a one-HP hit occurred. */
 
     s16b mhp; /* Max hit pts */
     s16b chp; /* Cur hit pts */

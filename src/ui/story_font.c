@@ -161,6 +161,7 @@ void story_font_term_pop(story_font_term_state* prev)
 
 void text_out_to_screen_story(byte a, cptr str)
 {
+    str = lore_text(str);
     int x, y;
     int wid, h;
     int wrap_cols;
@@ -290,6 +291,7 @@ static void overlay_story_seed_line(char* line, int line_size, int y, int x,
  */
 void text_out_to_screen_overlay_story(byte a, cptr str)
 {
+    str = lore_text(str);
     int x, y;
     int wid, h;
     cptr s;

@@ -11,6 +11,7 @@
 /* Purpose: a generic, efficient, terminal window package -BEN- */
 
 #include "z-term.h"
+#include "lore.h"
 
 #include "mem/alloc.h"
 #include "log/log.h"
@@ -1942,6 +1943,7 @@ errr Term_addch(byte a, char c)
  */
 errr Term_addstr(int n, byte a, cptr s)
 {
+    s = lore_text(s);
     int k;
 
     int w = Term->wid;

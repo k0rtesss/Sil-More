@@ -23,7 +23,7 @@ errr file_character(cptr name, bool full)
 
     byte a;
 
-#define SDL_IOprintf SDL_IOprintf
+#define SDL_IOprintf lore_dump_printf
     char c;
 
     SDL_IOStream* fd;
@@ -36,8 +36,6 @@ errr file_character(cptr name, bool full)
     bool has_effective_equipment = false;
 
     ability_type* b_ptr;
-
-    int holder;
 
     bool challenges = false;
 
@@ -350,22 +348,8 @@ errr file_character(cptr name, bool full)
 
     SDL_IOprintf(fff, "\n\n  [Notes]\n\n");
 
-    /*dump notes to character file*/
-    i = 0;
-    holder = notes_buffer[i];
-
-    while (holder != '\0')
-    {
-        /*get a character from the notes buffer*/
-        holder = notes_buffer[i];
-
-        /*output it to the character dump*/
-        if (holder != '\0')
-            SDL_IOprintf(fff, "%c", holder);
-
-        // increment location in notes buffer
-        i++;
-    }
+    /* Translate whole notes for export; the saved journal stays canonical. */
+    SDL_IOprintf(fff, "%s", notes_buffer);
 
     SDL_IOprintf(fff, "\n");
 

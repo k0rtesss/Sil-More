@@ -1,6 +1,7 @@
 package com.silqh.silmore;
 
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
 import android.os.Build;
@@ -20,7 +21,42 @@ import android.widget.TextView;
 import org.libsdl.app.SDLActivity;
 
 public class SilMoreActivity extends SDLActivity {
+	/** Called only after the native reset request has been durably written. */
+	public boolean restartAfterProgressReset() {
+		try {
+			Intent restart = new Intent(this, SilMoreRestartActivity.class);
+			restart.putExtra("old_pid", android.os.Process.myPid());
+			restart.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+			startActivity(restart);
+			return true;
+		} catch (RuntimeException error) {
+			android.util.Log.e("SilMore", "Could not restart after progress reset", error);
+			return false;
+		}
+	}
+
 	private static native void onTextInputVisibleFrameChanged();
+	private PlayGamesAchievements playGamesAchievements;
+
+	/** JNI calls run on SDL's game thread; provider work belongs to the UI thread. */
+	public void syncPlayGamesAchievements(int unlockedMask) {
+		runOnUiThread(() -> playGamesAchievements.sync(unlockedMask));
+	}
+
+	public int getPlayGamesAchievementMask() {
+		return playGamesAchievements.unlockedMask();
+	}
+
+	public boolean isPlayGamesAchievementsAvailable() {
+		return playGamesAchievements.isConfigured();
+	}
+
+	public boolean showPlayGamesAchievements() {
+		if (!playGamesAchievements.isConfigured()) return false;
+		runOnUiThread(() -> playGamesAchievements.show());
+		return true;
+	}
+
 	// Native text panels use the measured visible area, including the IME.
 	public int getTextInputVisibleBottom() {
 		View decor = getWindow().getDecorView();
@@ -119,6 +155,7 @@ public class SilMoreActivity extends SDLActivity {
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
+		playGamesAchievements = new PlayGamesAchievements(this);
 		super.onCreate(savedInstanceState);
 		applyFullscreenLayout();
 		getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(
@@ -128,8 +165,15 @@ public class SilMoreActivity extends SDLActivity {
 	@Override
 	protected void onResume() {
 		super.onResume();
+		playGamesAchievements.onResume();
 		applyFullscreenLayout();
 		applyGameOrientation();
+	}
+
+	@Override
+	protected void onPause() {
+		playGamesAchievements.onPause();
+		super.onPause();
 	}
 
 	@Override

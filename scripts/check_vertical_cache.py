@@ -22,6 +22,14 @@ OUT = ROOT / "scripts/output/vertical-cache"
 WRITER = r'''
 #include "fs/save.c"
 #include <assert.h>
+void fixture_legacy_monster(const monster_type*);
+void __real_save_wr_monster(const monster_type*);
+static bool fixture_legacy_monsters;
+void fixture_set_legacy_monsters(bool legacy) { fixture_legacy_monsters=legacy; }
+void __wrap_save_wr_monster(const monster_type* monster) {
+    if(fixture_legacy_monsters)fixture_legacy_monster(monster);
+    else __real_save_wr_monster(monster);
+}
 void fixture_write_begin(byte *buffer,size_t capacity) {
     fff=SDL_IOFromMem(buffer,capacity);assert(fff);
     xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;
@@ -67,6 +75,7 @@ TESTS = r'''
 #include "level-generation/level-cache.c"
 
 void fixture_write_begin(byte*,size_t);
+void fixture_set_legacy_monsters(bool);
 size_t fixture_write_end(void);
 void fixture_read_begin(const byte*,size_t,int);
 size_t fixture_read_end(void);
@@ -613,11 +622,13 @@ static void test_public_v5_cache(void)
     save_wr_s16b(-1);save_wr_s16b(0);save_wr_s16b(0);save_wr_byte(0);
     for(size_t j=0;j<sizes[1];j++)save_wr_byte(legacy_metadata[1][j]);
     save_wr_byte(2);
+    fixture_set_legacy_monsters(true);
     for(int i=0;i<3;i++)if(i!=1) {
         level_image_restore(floors[i]);
         save_write_partition_meta();save_write_dungeon();
         for(size_t j=0;j<sizes[i];j++)save_wr_byte(legacy_metadata[i][j]);
     }
+    fixture_set_legacy_monsters(false);
     save_wr_u32b(0x1928ABCDU);save_wr_u32b(0x76543210U);
     size_t length=fixture_write_end();
     level_image_restore(active);
@@ -1134,7 +1145,14 @@ def main(case="all"):
     harness += "    " + calls[case] + "\n"
     harness += '    puts("Vertical cache integration: PASS.");SDL_Quit();return 0;\n}\n'
     sources = []
-    for name, content in (("check.c", harness), ("writer.c", WRITER), ("reader.c", READER)):
+    save = (ROOT / "src/fs/save.c").read_text(encoding="utf-8")
+    start = save.index("void wr_monster(")
+    legacy_monster = save[start:save.index("\n}", start) + 2]
+    poison = "    wr_s16b(m_ptr->player_poisoned);\n"
+    assert legacy_monster.count(poison) == 1
+    legacy_monster = legacy_monster.replace(poison, "").replace(
+        "void wr_monster(", "void fixture_legacy_monster(")
+    for name, content in (("check.c", harness), ("writer.c", WRITER + legacy_monster), ("reader.c", READER)):
         source = OUT / name
         source.write_text(content, encoding="utf-8")
         sources.append(str(source))
@@ -1146,7 +1164,7 @@ def main(case="all"):
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env.get("PATH", "")])
     exe = OUT / f"check-{case}.exe"
-    wraps = ["level_cache_generation_links", "cave_vertical_generation_finish", "check_connectivity", "place_rubble_player", "terrain_history_finish", "update_view", "update_lore", "metarun_check_and_update_quests"]
+    wraps = ["level_cache_generation_links", "cave_vertical_generation_finish", "check_connectivity", "place_rubble_player", "terrain_history_finish", "update_view", "update_lore", "metarun_check_and_update_quests", "save_wr_monster"]
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", *sources, "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap=" + name for name in wraps), "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=OUT) as data:
         assert Path(data).resolve().is_relative_to(OUT.resolve())

@@ -5,6 +5,7 @@
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
+#include "achievements.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
@@ -3414,6 +3415,7 @@ void py_attack_aux(int y, int x, int attack_type)
                         /* Generate treasure */
                         quest_followup_damage(m_ptr, dam, -1);
                         quest_followup_kill(m_ptr->r_idx);
+                        sil_achievements_on_monster_killed(m_idx, -1);
                         monster_death(m_idx);
 
                         /* Auto-recall only if visible or unique */

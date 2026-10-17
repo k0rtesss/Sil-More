@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
 #include "cave/cave-vertical.h"
@@ -65,6 +66,7 @@ void regenhp(int regen_multiplier)
     if (p_ptr->chp >= p_ptr->mhp)
     {
         p_ptr->chp = p_ptr->mhp;
+        sil_achievements_on_healing();
     }
 
     /* Notice changes */

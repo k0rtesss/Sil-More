@@ -556,6 +556,7 @@ extern void monster_poison_terrain_begin_action(int m_idx);
 extern void monster_poison_terrain_exposure(int m_idx);
 extern void monster_poison_terrain_end_action(int m_idx);
 extern void monster_poison_add(int m_idx, int amount);
+extern void monster_poison_add_from(int m_idx, int amount, int who);
 extern bool monster_poison_tick(int m_idx);
 extern bool monster_thrall_turn(monster_type* m_ptr);
 extern void monster_poison_brand(int m_idx, const object_type* first,
@@ -1018,11 +1019,12 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_OPTIONS 12
 #define MAIN_MENU_HELP 13
 #define MAIN_MENU_TUTORIAL_CARDS 14
-#define MAIN_MENU_ABOUT 15
-#define MAIN_MENU_SAVE 16
-#define MAIN_MENU_SAVE_QUIT 17
-#define MAIN_MENU_RETURN_GAME 18
-#define MAIN_MENU_MAX 18
+#define MAIN_MENU_ACHIEVEMENTS 15
+#define MAIN_MENU_ABOUT 16
+#define MAIN_MENU_SAVE 17
+#define MAIN_MENU_SAVE_QUIT 18
+#define MAIN_MENU_RETURN_GAME 19
+#define MAIN_MENU_MAX 19
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);
@@ -1406,6 +1408,10 @@ extern bool object_grants_ability(
     const object_type* o_ptr, int skilltype, int abilitynum);
 extern void strip_name(char* buf, int k_idx);
 extern void object_desc(
+    char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
+extern void object_desc_display(
+    char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
+extern void object_desc_floor_display(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
 extern void object_desc_floor(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
@@ -1861,6 +1867,7 @@ extern bool sdl_welcome_screen_set_status(cptr status);
 extern bool sdl_welcome_screen_show_loading(cptr status);
 extern void sdl_welcome_screen_hide(void);
 extern bool sdl_welcome_screen_active(void);
+extern void sdl_lore_changed(void);
 extern void sdl_poetry_screen_begin(cptr title, cptr body,
     cptr transition, cptr prompt);
 extern void sdl_poetry_sequence_layout_begin(void);

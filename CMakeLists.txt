@@ -19,6 +19,9 @@ endif()
 
 option(LOG_MODE_TIMESTAMP "Create new log with timestamp each time" OFF)
 option(STEAMDECK_SUPPORT "Build for Steam Deck" OFF)
+option(SIL_STEAMWORKS "Enable Steamworks integration for Windows, Linux and macOS desktop" OFF)
+set(STEAMWORKS_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/steamworks_sdk/sdk" CACHE PATH "Steamworks SDK directory containing public/ and redistributable_bin/")
+set(SIL_STEAM_APP_ID "5442160" CACHE STRING "Sil-More Steam App ID")
 option(SIL_USE_LOCAL_DATA "Store generated data inside the game directory (debug builds)" OFF)
 option(SIL_BUILD_WITH_SDL_SOURCES "Build SDL dependencies from pinned sources under external/ (recommended for Windows and Android)" ${SIL_BUILD_WITH_SDL_SOURCES_DEFAULT})
 
@@ -211,6 +214,9 @@ endif()
 add_subdirectory(src/log)
 
 set(SIL_MORE_SOURCES
+    src/achievements.c
+    src/achievements-play-games.c
+    src/achievements-ui.c
     src/blitz.c
     src/birth/birth-allocation.c
     src/birth/birth-blitz.c
@@ -248,6 +254,7 @@ set(SIL_MORE_SOURCES
     src/cave/cave-view.c
     src/cave/cave-visuals.c
     src/cJSON.c
+    src/lore.c
     src/cmd/combat/cmd-combat.c
     src/cmd/combat/cmd-ranged.c
     src/cmd/item/cmd-fletchery.c
@@ -286,6 +293,7 @@ set(SIL_MORE_SOURCES
     src/fs/file.c
     src/fs/savefile-name.c
     src/game/game-lifecycle.c
+    src/game/progress-reset.c
     src/metarun/metarun-files.c
     src/platform-signals.c
     src/score/score_entry.c
@@ -374,6 +382,7 @@ set(SIL_MORE_SOURCES
     src/main-sdl.c
     src/sdl/config/sdl-settings.c
     src/sdl/core/sdl-events.c
+    src/sdl/core/sdl-handheld.c
     src/sdl/core/sdl-init.c
     src/sdl/core/sdl-layout.c
     src/sdl/core/sdl-state.c
@@ -592,6 +601,13 @@ else()
   add_executable(sil-more ${SIL_MORE_SOURCES})
 endif()
 
+if(SIL_STEAMWORKS)
+  # Keep the engine in C; only this small SDK adapter requires C++.
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Steamworks.cmake")
+  enable_language(CXX)
+  sil_target_steamworks(sil-more)
+endif()
+
 if(ANDROID)
   # SDL's Android launcher expects libmain.so by convention.
   set_target_properties(sil-more PROPERTIES OUTPUT_NAME "main")
@@ -689,12 +705,27 @@ target_compile_options(sil-more PRIVATE
 )
 
 target_include_directories(sil-more PRIVATE src)
+# Portable builds edit their deployed sound.json in place. Embed the shipped
+# template so a full reset can restore it without a second drifting JSON copy.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/lib/pref/sound.json")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/lib/pref/sound.json" SIL_FACTORY_SOUND_JSON_C)
+string(REPLACE "\\" "\\\\" SIL_FACTORY_SOUND_JSON_C "${SIL_FACTORY_SOUND_JSON_C}")
+string(REPLACE "\"" "\\\"" SIL_FACTORY_SOUND_JSON_C "${SIL_FACTORY_SOUND_JSON_C}")
+string(REPLACE "\r" "" SIL_FACTORY_SOUND_JSON_C "${SIL_FACTORY_SOUND_JSON_C}")
+string(REPLACE "\n" "\\n" SIL_FACTORY_SOUND_JSON_C "${SIL_FACTORY_SOUND_JSON_C}")
+configure_file(cmake/sound-defaults.h.in generated/sound-defaults.h @ONLY)
+set_property(SOURCE src/game/progress-reset.c APPEND PROPERTY INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(MINGW)
   target_link_options(sil-more PRIVATE -mwindows)
 endif()
 
 # Link SDL3 libraries (required for this build)
 target_compile_definitions(sil-more PRIVATE USE_SDL SIL_PERF_DIAGNOSTICS)
+if(UNIX)
+  # lstat/realpath and kill are used to reject linked reset paths and wait for
+  # the old desktop process. Keep these declarations available in strict C17.
+  set_source_files_properties(src/game/progress-reset.c PROPERTIES COMPILE_DEFINITIONS "_XOPEN_SOURCE=700")
+endif()
 
 if(SIL_IOS)
   target_link_libraries(sil-more PRIVATE SDL3::SDL3-static SDL3_ttf::SDL3_ttf-static SDL3_image::SDL3_image-static SDL3_mixer::SDL3_mixer-static log m "-framework UIKit")

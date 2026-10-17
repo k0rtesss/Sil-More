@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.9"
 /*
- * Version components (0.9.9.4).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.9.7).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 6  /* Neighbour-inherited vertical regions and reservoirs. */
+#define VERSION_EXTRA 7  /* Achievement run history and poison attribution. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -2969,6 +2969,7 @@
 #define OPT_hjkl_movement 0
 #define OPT_quick_messages 1 /* obsolete 0.9.7: reusable setting slot */
 #define OPT_angband_keyset 2
+#define OPT_generic 3 /* Presentation only; app-wide, off by default. */
 // reserved legacy slot: carry_query
 #define OPT_stop_singing_on_rest 4
 // reserved legacy slot: always_pickup
@@ -3123,7 +3124,7 @@
 #define OPT_intro_style 95
 #define OPT_show_partition_narrative 96
 #define OPT_noble_item_spawn_mode 97
-#define OPT_hide_left_panel 98 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_styled_player_tile_health_bar 98 /* Reuses retired hide_left_panel. */
 // reserved legacy slot: banner_message_stairs
 #define OPT_show_level_generation_debug 100
 #define OPT_unlock_blitz_mode 101
@@ -3371,6 +3372,8 @@
 #define story_object_desc op_ptr->opt[OPT_story_object_desc]
 #define hide_secondary_action_ring op_ptr->opt[OPT_hide_secondary_action_ring]
 #define styled_player_health_bar op_ptr->opt[OPT_styled_player_health_bar]
+#define styled_player_tile_health_bar \
+    op_ptr->opt[OPT_styled_player_tile_health_bar]
 #define styled_monster_health_bars op_ptr->opt[OPT_styled_monster_health_bars]
 #define styled_monster_tile_health_bars \
     (op_ptr->monster_tile_health_bar_mode != MONSTER_TILE_HEALTH_BARS_OFF)
@@ -3490,7 +3493,7 @@
 /*
  * Information for "do_cmd_options()".
  */
-#define OPT_PAGE_MAX 8
+#define OPT_PAGE_MAX 9
 #define OPT_PAGE_PER 28
 
 /*
@@ -3504,6 +3507,7 @@
 #define DEBUG_PAGE 5
 #define SOUND_PAGE 6
 #define QUEST_PAGE 7
+#define DEVELOPER_PAGE 8
 
 /*** Macro Definitions ***/
 

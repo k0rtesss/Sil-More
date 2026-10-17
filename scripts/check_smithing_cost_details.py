@@ -122,6 +122,8 @@ static void details_checks(void)
 {
     scenario = "read-only Smithing Details";
     prepare(3);
+    config.menu_bigger_font[SDL_MENU_FONT_SMITHING] = true;
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SMITHING);
     int prefix, turns, dex;
     assert(fixture_reforge_plan(selected_item, &prefix, &turns, &dex) >= 0);
     for (int mode = 0; mode < 5; ++mode)
@@ -154,6 +156,7 @@ static void details_checks(void)
         keys = "q"; fixture_type_shortcut(17); assert(!*keys);
     }
     puts("Smithing type shortcuts repaint selected Ring/Boots parent row, including offscreen choices PASS");
+    sdl_pop_terminal_menu_scale();
 }
 '''
 

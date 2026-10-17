@@ -10179,11 +10179,11 @@ static void knowledge_show_curse_detail(int curse_id)
     char accept_label[16] = "";
     curse_type* c = &cu_info[curse_id];
     cptr cname = cu_name + c->name;
-    cptr cdesc = cu_text + c->text;
-    cptr cpower = cu_text + c->power;
+    cptr cdesc = lore_text(cu_text + c->text);
+    cptr cpower = lore_text(cu_text + c->power);
     cptr bname = knowledge_blessing_display_name(curse_id);
-    cptr bdesc = (c->blessing_text) ? (cu_text + c->blessing_text) : "";
-    cptr bpower = (c->blessing_power) ? (cu_text + c->blessing_power) : "";
+    cptr bdesc = (c->blessing_text) ? (lore_text(cu_text + c->blessing_text)) : "";
+    cptr bpower = (c->blessing_power) ? (lore_text(cu_text + c->blessing_power)) : "";
     bool has_blessing_text = bdesc && *bdesc;
     bool has_blessing_effect = bpower && *bpower;
     bool has_blessing_info = has_blessing_text || has_blessing_effect
@@ -10967,7 +10967,7 @@ void do_cmd_knowledge_browser_page(int page)
             if (curse_cnt > 0)
             {
                 curse_type* c = &cu_info[curse_idx[state.entry_cur[page]]];
-                cptr cpower = cu_text + c->power;
+                cptr cpower = lore_text(cu_text + c->power);
                 strnfmt(status, sizeof(status), "Effect: %s",
                     (*cpower) ? cpower : "[no additional effect listed]");
             }

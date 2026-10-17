@@ -507,7 +507,7 @@ static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
     cptr title;
     byte title_color;
 
-    format_thrall_quest_text(m_ptr, fmt_text, text_buf, sizeof(text_buf));
+    format_thrall_quest_text(m_ptr, lore_text(fmt_text), text_buf, sizeof(text_buf));
     texts[0] = text_buf;
 
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
@@ -571,7 +571,7 @@ static void thrall_pre_give_desc(monster_type* m_ptr, char* desc,
     else
         text = human_pre_give_texts[variant];
 
-    format_thrall_quest_text(m_ptr, text, text_buf, sizeof(text_buf));
+    format_thrall_quest_text(m_ptr, lore_text(text), text_buf, sizeof(text_buf));
     thrall_text_to_prompt_desc(text_buf, desc, desc_sz);
 }
 

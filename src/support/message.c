@@ -912,8 +912,10 @@ static void msg_print_aux(u16b type, cptr msg)
     if (!msg_flag)
         message_column = 0;
 
-    /* Message Length */
-    n = (msg ? strlen(msg) : 0);
+    /* Layout uses the displayed text; history keeps the canonical message. */
+    if (msg)
+        lore_copy(buf, sizeof(buf), msg);
+    n = (msg ? strlen(buf) : 0);
 
     /* Hack -- flush when requested or needed */
     if (message_column && (!msg || ((message_column + n) > available_width)))
@@ -936,7 +938,7 @@ static void msg_print_aux(u16b type, cptr msg)
     }
 
     /* Paranoia */
-    if (n > 1000)
+    if (strlen(msg) > 1000)
         return;
 
     /* Memorize the message (if legal) */
@@ -952,9 +954,6 @@ static void msg_print_aux(u16b type, cptr msg)
         message_column = 0;
         return;
     }
-
-    /* Copy it */
-    SDL_strlcpy(buf, msg, sizeof(buf));
 
     /* Analyze the buffer */
     t = buf;

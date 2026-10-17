@@ -183,6 +183,9 @@ def launch(control: GameControl, executable: Path, headless: bool, wizard: bool 
                                "if the previous game crashed.")
     control.directory.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
+    # Keep the same opt-in mailbox when the game restarts after clearing local
+    # progress. The restart intentionally discards other command-line options.
+    env["SIL_MORE_CONTROL_DIR"] = str(control.directory)
     if headless:
         env.update(SDL_VIDEO_DRIVER="dummy", SDL_RENDER_DRIVER="software",
                    SDL_AUDIO_DRIVER="dummy")

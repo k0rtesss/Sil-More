@@ -5,6 +5,7 @@
 #include "angband.h"
 #include "quest/quest-rewards-beta.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
 #include "log/log.h"
@@ -86,6 +87,7 @@ void take_hit(int dam, cptr kb_str)
 
     attempt_to_cheat_death();
     quest_beta_resurrect();
+    sil_achievements_on_damage(dam, old_chp);
 
     /* Display the hitpoints */
     p_ptr->redraw |= (PR_HP);

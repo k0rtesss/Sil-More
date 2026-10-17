@@ -26,6 +26,8 @@ PREAMBLE = r'''
 #define SIL_SDL_MOBILE_BUILD 1
 #define SDL_strncmp strncmp
 #define log_info(...) ((void)0)
+enum { SDL_DESKTOP_HANDHELD_NONE };
+static int sdl_detect_desktop_handheld(void) { return SDL_DESKTOP_HANDHELD_NONE; }
 enum { SDL_INPUT_UI_MODE_AUTO, SDL_INPUT_UI_MODE_PLATFORM,
        SDL_INPUT_UI_MODE_CONTROLLER, SDL_INPUT_UI_MODE_COUNT };
 typedef enum {

@@ -184,6 +184,7 @@ static void quantity_title(void)
     sdl_question_menu_clear();ui_menu_click_clear();
 }
 ''' + INIT + r'''
+    config.show_menu_font_button=true;
     for(int big=0;big<2;big++) {
         config.bigger_font=big;
         for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=big;

@@ -140,6 +140,7 @@ static const char* big_cave_elemental_text(void)
 
 static void append_narrative_piece(char* buf, size_t size, const char* text)
 {
+    text = lore_text(text);
     if (!text || !text[0])
         return;
 

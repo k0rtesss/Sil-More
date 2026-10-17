@@ -26,7 +26,9 @@ def create_session(name: str, wizard: bool = True) -> dict:
     # Copy only shipped read-only assets. Never import real saves, scores,
     # preferences, or generated data from either deployment or user profile.
     for folder in ("docs", "edit", "help", "pref", "xtra"):
-        source = DEPLOY / "lib" / folder
+        # Portable sound settings are mutable in the deployment's pref folder.
+        # Use the repository's shipped defaults for a genuinely fresh profile.
+        source = (ROOT if folder == "pref" else DEPLOY) / "lib" / folder
         if source.is_dir():
             shutil.copytree(source, profile / "lib" / folder)
     for folder in ("apex", "apex/metaruns", "data", "save", "user", "bone"):

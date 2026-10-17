@@ -67,6 +67,21 @@ static void controller_glyph_line(SDL_Surface* surface,
     SDL_UnlockSurface(surface);
 }
 
+static SDL_Rect controller_glyph_label_ink(SDL_Surface* label)
+{
+    int left=label->w, top=label->h, right=-1, bottom=-1;
+    for (int y=0;y<label->h;++y) {
+        for (int x=0;x<label->w;++x) {
+            Uint8 r,g,b,a;
+            if (!SDL_ReadSurfacePixel(label,x,y,&r,&g,&b,&a) || !a)
+                continue;
+            left=MIN(left,x); top=MIN(top,y);
+            right=MAX(right,x); bottom=MAX(bottom,y);
+        }
+    }
+    return (SDL_Rect){left,top,MAX(0,right-left+1),MAX(0,bottom-top+1)};
+}
+
 static void controller_glyph_paint(TTF_Font* font, SDL_Surface* surface,
     SDL_Rect bounds, int glyph)
 {
@@ -74,12 +89,13 @@ static void controller_glyph_paint(TTF_Font* font, SDL_Surface* surface,
         return;
     SDL_Rect clear = bounds;
     SDL_FillSurfaceRect(surface, &clear, SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0));
-    int height = MAX(3, bounds.h * 4 / 5);
-    int width = controller_glyphs[glyph].round ? MIN(bounds.w, height)
+    int height = MAX(3, bounds.h * 9 / 10);
+    if (controller_glyphs[glyph].round) height = MIN(bounds.w, height);
+    int width = controller_glyphs[glyph].round ? height
         : MIN(bounds.w - 2, height * 2);
     SDL_Rect icon = {bounds.x + (bounds.w - width) / 2,
         bounds.y + (bounds.h - height) / 2, width, height};
-    float thickness = MAX(1.5f, height * 0.075f);
+    float thickness = MAX(2.0f, height * 0.085f);
     if (!SDL_LockSurface(surface))
         return;
     for (int y = MAX(0, icon.y); y < MIN(surface->h, icon.y + icon.h); ++y) {
@@ -177,13 +193,24 @@ static void controller_glyph_paint(TTF_Font* font, SDL_Surface* surface,
     SDL_Surface* label = TTF_RenderText_Blended(font,
         text, 0, white);
     if (label) {
-        float scale = MIN((height * 0.72f) / label->h,
-            (width * 0.75f) / label->w);
-        SDL_Rect dst = {0, 0, MAX(1, (int)(label->w * scale)),
-            MAX(1, (int)(label->h * scale))};
-        dst.x = icon.x + (width - dst.w) / 2;
-        dst.y = icon.y + (height - dst.h) / 2;
-        SDL_BlitSurfaceScaled(label, NULL, surface, &dst, SDL_SCALEMODE_LINEAR);
+        /* Fit visible ink, not the font's ascender/descender padding. The
+         * story font's tall line box otherwise shrinks A/B and shoulder
+         * labels to a few pixels inside otherwise full-sized icons. */
+        SDL_Rect ink = controller_glyph_label_ink(label);
+        if (ink.w > 0 && ink.h > 0) {
+            float scale = MIN((height * 0.64f) / ink.h,
+                (width * 0.68f) / ink.w);
+            if (controller_glyphs[glyph].round) {
+                float diagonal = sqrtf((float)ink.w * ink.w
+                    + (float)ink.h * ink.h);
+                scale = MIN(scale, MAX(1.0f,width-2*thickness-1) / diagonal);
+            }
+            SDL_Rect dst = {icon.x, icon.y, MAX(1, (int)(ink.w * scale)),
+                MAX(1, (int)(ink.h * scale))};
+            dst.x += (width - dst.w) / 2;
+            dst.y += (height - dst.h) / 2;
+            SDL_BlitSurfaceScaled(label, &ink, surface, &dst, SDL_SCALEMODE_LINEAR);
+        }
         SDL_DestroySurface(label);
     }
 }

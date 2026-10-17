@@ -46,8 +46,9 @@ def androidTargetSdk = (readOptionalBuildValue('SIL_MORE_TARGET_SDK') ?: '36') a
 def androidVersionCode =
         (readOptionalBuildValue('SIL_MORE_VERSION_CODE') ?: gameVersionCode.toString()) as Integer
 def buildApk2 = (readOptionalBuildValue('SIL_MORE_APK2') ?: 'false').toBoolean()
-// Keep device builds on ARM64; opt into an emulator ABI for local testing.
-def nativeAbis = (readOptionalBuildValue('SIL_MORE_ANDROID_ABIS') ?: 'arm64-v8a')
+def buildBundle = (readOptionalBuildValue('SIL_MORE_BUILD_BUNDLE') ?: 'false').toBoolean()
+// Package both common ARM ABIs by default. Deploy helpers override this to ARM64 only.
+def nativeAbis = (readOptionalBuildValue('SIL_MORE_ANDROID_ABIS') ?: 'arm64-v8a,armeabi-v7a')
         .split(',').collect { it.trim() }.findAll { it }
 
 if (androidVersionCode < gameVersionCode || androidVersionCode > 2100000000) {
@@ -60,6 +61,39 @@ if (androidCompileSdk < androidTargetSdk) {
     throw new GradleException(
             "Compile SDK ($androidCompileSdk) must be at least the target SDK ($androidTargetSdk)."
     )
+}
+
+// Play Console supplies these IDs; unconfigured local builds keep achievements local.
+// Keep resource/index order tied to the native catalogue used by the JNI bitmask.
+def achievementHeader = new File(repoRoot, 'src/achievements.h')
+def achievementEnum = (achievementHeader.text =~ /(?s)typedef\s+enum\s+sil_achievement_id\s*\{(.*?)\}\s*sil_achievement_id\s*;/)
+if (!achievementEnum.find()) {
+    throw new GradleException('Could not find sil_achievement_id in src/achievements.h.')
+}
+def playAchievementKeys = (achievementEnum.group(1) =~ /\bSIL_ACH_([A-Z][A-Z0-9_]*)\b/)
+        .collect { match -> match[1] }.findAll { it != 'COUNT' }
+if (!playAchievementKeys || playAchievementKeys.size() >= 32 ||
+        playAchievementKeys.toSet().size() != playAchievementKeys.size()) {
+    throw new GradleException('The native achievement catalogue must have 1-31 unique bitmask indexes.')
+}
+def playGamesProjectId = (readOptionalBuildValue('SIL_MORE_PLAY_GAMES_PROJECT_ID') ?: '').trim()
+def playAchievementIds = playAchievementKeys.collect { key ->
+    (readOptionalBuildValue('SIL_MORE_PLAY_ACH_' + key) ?: '').trim()
+}
+if (playGamesProjectId && !(playGamesProjectId ==~ /[1-9][0-9]*/)) {
+    throw new GradleException('SIL_MORE_PLAY_GAMES_PROJECT_ID must be the numeric Games services project ID.')
+}
+def playGamesConfigured = playGamesProjectId && playAchievementIds.every { it }
+if ((playGamesProjectId || playAchievementIds.any { it }) && !playGamesConfigured) {
+    throw new GradleException("Play Games requires the project ID and all ${playAchievementKeys.size()} SIL_MORE_PLAY_ACH_* IDs together.")
+}
+if (playGamesConfigured && playAchievementIds.toSet().size() != playAchievementIds.size()) {
+    throw new GradleException('Each Google Play achievement must have its own distinct Console ID.')
+}
+// Resource strings contain only provider IDs, never credentials. Restrict their syntax
+// so generated XML is safe without changing the IDs supplied by Play Console.
+if (playAchievementIds.any { it && !(it ==~ /[A-Za-z0-9_-]+/) }) {
+    throw new GradleException('Google Play achievement IDs must contain only letters, digits, _ or -.')
 }
 
 def releaseStoreFile = readOptionalBuildValue('SIL_MORE_RELEASE_STORE_FILE')
@@ -90,6 +124,17 @@ android {
     compileSdk androidCompileSdk
     flavorDimensions 'delivery'
 
+    if (!buildBundle) {
+        splits {
+            abi {
+                enable true
+                reset()
+                include(*nativeAbis)
+                universalApk true
+            }
+        }
+    }
+
     signingConfigs {
         release {
             if (hasReleaseSigning) {
@@ -103,7 +148,7 @@ android {
 
     defaultConfig {
         applicationId 'com.silmore.myapp'
-        minSdk 21
+        minSdk 24
         targetSdk androidTargetSdk
         versionCode androidVersionCode
         versionName gameVersion
@@ -114,8 +159,10 @@ android {
                 silMoreControlDirectory: readOptionalBuildValue('SIL_MORE_CONTROL_DIR') ?: ''
         ]
 
-        ndk {
-            abiFilters.addAll(nativeAbis)
+        if (buildBundle) {
+            ndk {
+                abiFilters.addAll(nativeAbis)
+            }
         }
 
         externalNativeBuild {
@@ -128,6 +175,11 @@ android {
     productFlavors {
         play {
             dimension 'delivery'
+            resValue 'string', 'play_games_project_id', playGamesProjectId
+            resValue 'bool', 'play_games_configured', playGamesConfigured ? 'true' : 'false'
+            playAchievementKeys.eachWithIndex { key, index ->
+                resValue 'string', 'play_ach_' + key.toLowerCase(Locale.ROOT), playAchievementIds[index]
+            }
         }
         sideload {
             dimension 'delivery'
@@ -201,4 +253,8 @@ tasks.named('preBuild') {
 // between the primary APK and APK2 cannot reuse stale manifests or outputs.
 tasks.configureEach {
     inputs.property('silMoreApk2', buildApk2)
+}
+
+dependencies {
+    playImplementation 'com.google.android.gms:play-services-games-v2:22.1.0'
 }

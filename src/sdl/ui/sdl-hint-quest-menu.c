@@ -1639,6 +1639,7 @@ void sdl_hint_quest_menu_render(void)
 void sdl_hint_quest_menu_begin(hint_quest_page page, cptr title,
     cptr section, bool show_tabs, bool center_body, int selected_choice)
 {
+    title = lore_text(title);
     bool preserve = g_hint_quest.active && g_hint_quest.page == page
         && g_hint_quest.show_tabs == show_tabs
         && g_hint_quest.center_body == center_body;
@@ -1685,17 +1686,20 @@ static void sdl_hint_quest_menu_add_block_internal(cptr text, byte attr,
 void sdl_hint_quest_menu_add_block(cptr text, byte attr, int indent,
     int choice)
 {
+    text = lore_text(text);
     sdl_hint_quest_menu_add_block_internal(text, attr, indent, choice, false);
 }
 
 void sdl_hint_quest_menu_add_contextual_block(cptr text, byte attr, int indent,
     int choice)
 {
+    text = lore_text(text);
     sdl_hint_quest_menu_add_block_internal(text, attr, indent, choice, true);
 }
 
 void sdl_hint_quest_menu_add_button(int choice, cptr label, byte attr)
 {
+    label = lore_text(label);
     sdl_hint_quest_button* button;
 
     if (!g_hint_quest.active || !label || !label[0]

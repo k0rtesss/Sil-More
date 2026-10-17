@@ -22,12 +22,15 @@ void quest_followup_damage(monster_type *m,int damage,int who){
 }
 void quest_followup_kill(int race){++credited_kills;last_race=race;}
 bool mon_take_hit(int idx,int damage,cptr note,int who){
- (void)note;assert(who==0);++ambient_hits;
- /* Production mon_take_hit forwards damage to quests. The zero source must
-  * not credit the player a second time after poison's explicit attribution. */
+ (void)note;assert(who==0||who==-1);++ambient_hits;
+ /* Production mon_take_hit owns lethal player credit; nonlethal ticks use
+  * the zero source after poison credits only the player-owned component. */
  quest_followup_damage(&monsters[idx],damage,who);
  monsters[idx].hp-=damage;
- if(monsters[idx].hp<=0){monsters[idx].r_idx=0;return true;}
+ if(monsters[idx].hp<=0){
+  if(who<0)quest_followup_kill(monsters[idx].r_idx);
+  monsters[idx].r_idx=0;return true;
+ }
  return false;
 }
 void object_flags(const object_type *object,u32b *f1,u32b *f2,u32b *f3){*f1=object->sval?TR1_BRAND_POIS:0;*f2=*f3=0;}
@@ -40,22 +43,22 @@ static void reset(void){
 int main(void){
  object_type branded={.sval=1},plain={0};
  reset();monster_poison_brand(1,&branded,&branded,10);
- assert(monsters[1].poisoned==5);assert(monsters[1].mflag&MFLAG_PLAYER_POISON);
+ assert(monsters[1].poisoned==5);assert(monsters[1].player_poisoned==5);
  assert(!monster_poison_tick(1));assert(credited_damage==1 && credited_kills==0 && ambient_hits==1 && damage_hooks==2);
  while(monsters[1].poisoned)assert(!monster_poison_tick(1));
- assert(credited_damage==5 && monsters[1].hp==95 && !(monsters[1].mflag&MFLAG_PLAYER_POISON));
+ assert(credited_damage==5 && monsters[1].hp==95 && !monsters[1].player_poisoned);
  assert(damage_hooks==2*ambient_hits);
  reset();monsters[1].hp=1;monster_poison_brand(1,&branded,NULL,10);
  assert(monster_poison_tick(1));assert(credited_kills==1 && last_race==3 && credited_damage==1);
  assert(!monster_poison_tick(1));assert(credited_kills==1);
- reset();monster_poison_add(1,10);assert(!(monsters[1].mflag&MFLAG_PLAYER_POISON));monsters[1].hp=1;
+ reset();monster_poison_add(1,10);assert(!monsters[1].player_poisoned);monsters[1].hp=1;
  assert(monster_poison_tick(1));assert(!credited_damage && !credited_kills && damage_hooks==1);
- reset();monsters[1].mflag|=MFLAG_PLAYER_POISON;monster_poison_add(1,5);
- assert(!(monsters[1].mflag&MFLAG_PLAYER_POISON));
+ reset();monsters[1].player_poisoned=5;monster_poison_add(1,5);
+ assert(!monsters[1].player_poisoned);
  reset();monster_poison_brand(1,&plain,&plain,10);assert(!monsters[1].poisoned);
  monster_poison_brand(1,&branded,NULL,0);assert(!monsters[1].poisoned);
  races[3].flags3=RF3_RES_POIS;monster_poison_brand(1,&branded,NULL,10);
- assert(!monsters[1].poisoned && !(monsters[1].mflag&MFLAG_PLAYER_POISON));assert(lore[3].flags3&RF3_RES_POIS);
+ assert(!monsters[1].poisoned && !monsters[1].player_poisoned);assert(lore[3].flags3&RF3_RES_POIS);
  reset();monster_poison_brand(1,NULL,&branded,1000);assert(monsters[1].poisoned==100);
  monsters[1].hp=1000;assert(!monster_poison_tick(1));assert(monsters[1].poisoned==80 && credited_damage==20);
  assert(!monster_poison_tick(0));assert(!monster_poison_tick(mon_max));
@@ -68,7 +71,8 @@ def integration_checks():
     combat=(ROOT/'src/cmd/combat/cmd-combat.c').read_text(encoding='utf-8')
     death=(ROOT/'src/world/monster-death.c').read_text(encoding='utf-8')
     saved_flags = re.search(r'#define SAVE_MON_FLAGS[\s\S]*?\)', save)[0]
-    assert 'MFLAG_PLAYER_POISON' in saved_flags, 'Player poison must survive save'
+    assert 'wr_s16b(m_ptr->player_poisoned);' in save, 'Player poison dose must survive save'
+    assert 'MFLAG_PLAYER_POISON' in saved_flags, 'Keep the legacy poison flag for older saves'
     assert 'MFLAG_PLAYER_PUSH' not in saved_flags, 'Transient shove attribution must not persist'
     assert 'm_ptr->mflag & (SAVE_MON_FLAGS)' in save or 'm_ptr->mflag & SAVE_MON_FLAGS' in save
     assert re.search(r'!savefile_version_at_least\(0, 9, 8, 26\)[\s\S]{0,120}~MFLAG_PLAYER_POISON',load)
@@ -76,7 +80,8 @@ def integration_checks():
     assert 'quest_followup_damage(m_ptr, dam, who);' in death
     assert re.search(r'if \(who < 0\) quest_followup_kill\(m_ptr->r_idx\)',death)
     assert re.search(r'quest_followup_damage\(m_ptr, song_dam, -1\);[\s\S]{0,250}morgoth_enter_final_stage',combat)
-    assert re.search(r'quest_followup_kill\(m_ptr->r_idx\);\s*monster_death\(m_idx\)',combat)
+    assert re.search(r'quest_followup_kill\(m_ptr->r_idx\);\s*'
+        r'sil_achievements_on_monster_killed\(m_idx, -1\);\s*monster_death\(m_idx\)',combat)
     assert re.search(r'if \(player_push\) m_ptr->mflag \|= MFLAG_PLAYER_PUSH;[\s\S]{0,200}if \(player_push\) m_ptr->mflag &= ~MFLAG_PLAYER_PUSH;',combat)
     for name in ['src/monster/monster-move.c','src/cave/cave-lava.c']:
         text=(ROOT/name).read_text(encoding='utf-8')

@@ -742,6 +742,7 @@ void wr_monster(const monster_type* m_ptr)
     wr_byte(m_ptr->thrall_quest_requested);
     wr_byte(m_ptr->thrall_quest_completed);
     wr_s16b(m_ptr->poisoned);
+    wr_s16b(m_ptr->player_poisoned);
     wr_byte(m_ptr->vengeance);
     wr_byte(m_ptr->smite_recovery);
 

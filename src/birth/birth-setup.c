@@ -5,6 +5,7 @@
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
+#include "achievements.h"
 #include "birth/birth-internal.h"
 
 static bool starting_artifact_is_eligible(int art_idx, int k_idx);
@@ -177,6 +178,7 @@ void player_wipe(void)
 
     /* Wipe the player */
     memset(p_ptr, 0, sizeof(player_type));
+    sil_achievements_begin_run();
     /* Smithing blueprints and alloy metadata live outside player_type. */
     smithing_reset_work();
     /* Freeze the new character's policy before origin previews/allocation.

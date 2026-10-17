@@ -43,12 +43,12 @@ In SDL3, the Java shim Activity class is `org.libsdl.app.SDLActivity` (from `SDL
 3. Install Android SDK + NDK + CMake in Android Studio (SDK Manager).
 4. Open the `android/` folder in Android Studio.
 5. Let Gradle sync complete.
-6. Build/Run the `app` configuration (ABI is set to `arm64-v8a`).
+6. Build the `app` configuration to emit separate `arm64-v8a` and `armeabi-v7a` APKs by default.
 
 ## Emulator testing
 
-Device APKs default to `arm64-v8a`. To build a debug APK for an x86-64
-Android emulator, set the ABI override before running the normal APK helper:
+APK builds emit separate `arm64-v8a` and `armeabi-v7a` APKs by default. To
+build an APK for an x86-64 Android emulator, set the ABI override before running the APK helper:
 
 ```powershell
 $env:SIL_MORE_ANDROID_ABIS = 'x86_64'
@@ -57,7 +57,8 @@ Remove-Item Env:SIL_MORE_ANDROID_ABIS
 ```
 
 The Gradle property `-PSIL_MORE_ANDROID_ABIS=x86_64` is equivalent. A
-comma-separated list can build multiple ABIs.
+comma-separated list emits one APK per ABI. Deploy helpers always build and
+install the `arm64-v8a` APK only, regardless of this default or an inherited override.
 
 Debug builds can also opt into the [local game-control interface](../docs/game-control.md)
 with `SIL_MORE_CONTROL_DIR` (environment variable or Gradle property). Set it
@@ -90,9 +91,9 @@ It also auto-detects `cmake.exe` from:
 
 ## Deploy to device (ADB)
 
-After Android Studio builds the `sideloadDebug` APK, install with:
+After Android Studio builds the `sideloadDebug` APKs, install the 64-bit build with:
 
-`adb install -r android/app/build/outputs/apk/sideload/debug/app-sideload-debug.apk`
+`adb install -r android/app/build/outputs/apk/sideload/debug/app-sideload-arm64-v8a-debug.apk`
 
 Or use repo helper scripts from root:
 
@@ -103,6 +104,8 @@ Or use repo helper scripts from root:
 The APK helpers default to the `Sideload` delivery flavor. Release APKs use package ID `com.silmore.myapp.sideload`; debug APKs use `com.silmore.myapp.sideload.debug`, so the debug app can coexist with both the release sideload APK and the Google Play/internal-testing app (`com.silmore.myapp`). Pass `-Delivery Play` only when you intentionally want an APK with the Play package ID.
 
 All repo install and deploy helpers update the selected package in place with `adb install -r`. They never uninstall a package or clear its app data. If an update cannot preserve data, such as when the signing key does not match, the helper stops with an error. Existing saves are visible only when the package ID matches the installed copy; debug, sideload release, and Play builds intentionally use separate app-private storage.
+
+`install-android-apk.ps1` selects the 64-bit APK by default. Pass `-Abi armeabi-v7a` to install the separate 32-bit APK. APK builds also emit a universal APK containing both ABIs, which Android can install on either architecture. The distribution helper copies that single universal APK beside the Windows archives.
 
 For a one-step debug build, install, and optional launch:
 

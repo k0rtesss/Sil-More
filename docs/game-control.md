@@ -173,6 +173,10 @@ JSON identifies the profile, PID, and control directory. Use that exact control
 directory with `game_control.py --dir ...` or import `connect` and `capture`
 from `tools/game_playtest.py` to save observation PNGs and JSON in the profile.
 Keep one game process per profile, including when reusing a saved fixture.
+The helper copies factory preferences from the source tree so portable sound
+changes in a deployment cannot enter the test profile. The Python launcher
+preserves its mailbox across the game's Clear all progress restart; reconnect
+to the new session after the old one reports that it has closed.
 
 ## Validation
 

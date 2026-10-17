@@ -1764,6 +1764,7 @@ static const byte app_input_options[] = {
 static const byte app_interface_options[] = {
     OPT_look_objects_sort_by_difficulty, OPT_look_nearby_filter_default,
     OPT_song_list_sort_by_recent, OPT_styled_player_health_bar,
+    OPT_styled_player_tile_health_bar,
     OPT_styled_monster_health_bars, OPT_styled_monster_tile_health_bars,
     OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
     OPT_show_dungeon_events,
@@ -1778,6 +1779,10 @@ static const byte app_text_options[] = {
     OPT_story_monster_desc_pane, OPT_story_lists_inven_pane,
     OPT_story_lists_equip_pane,
     OPT_NONE
+};
+
+static const byte app_other_options[] = {
+    OPT_generic, OPT_NONE
 };
 
 static const byte app_gameplay_options[] = {
@@ -1851,6 +1856,7 @@ bool option_is_app_persistent(int opt)
     return option_list_contains(app_input_options, opt)
         || option_list_contains(app_interface_options, opt)
         || option_list_contains(app_text_options, opt)
+        || option_list_contains(app_other_options, opt)
         || option_list_contains(app_gameplay_options, opt)
         || option_list_contains(app_visual_options, opt);
 }
@@ -1893,6 +1899,7 @@ static void sdl_config_apply_app_option_defaults(void)
     sdl_config_apply_app_bool_defaults(app_input_options);
     sdl_config_apply_app_bool_defaults(app_interface_options);
     sdl_config_apply_app_bool_defaults(app_text_options);
+    sdl_config_apply_app_bool_defaults(app_other_options);
     sdl_config_apply_app_bool_defaults(app_gameplay_options);
     sdl_config_apply_app_bool_defaults(app_visual_options);
 
@@ -2176,6 +2183,7 @@ void sdl_config_load_app_options(const char* filename)
     sdl_config_load_app_option_group(app_options, "input", app_input_options);
     sdl_config_load_app_option_group(app_options, "interface", app_interface_options);
     sdl_config_load_app_option_group(app_options, "text", app_text_options);
+    sdl_config_load_app_option_group(app_options, "other", app_other_options);
     sdl_config_load_app_option_group(app_options, "gameplay", app_gameplay_options);
     sdl_config_load_app_option_group(app_options, "visual", app_visual_options);
 
@@ -2261,6 +2269,9 @@ void sdl_config_load_app_options(const char* filename)
      * it. */
     op_ptr->opt[OPT_hide_supporting_panes_fullscreen] = true;
 #endif
+
+    if (op_ptr->opt[OPT_generic] && !lore_init())
+        op_ptr->opt[OPT_generic] = false;
 
     cJSON_Delete(root);
 }
@@ -5916,6 +5927,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             sdl_config_save_app_option_group(app_options, "input", app_input_options);
             sdl_config_save_app_option_group(app_options, "interface", app_interface_options);
             sdl_config_save_app_option_group(app_options, "text", app_text_options);
+            sdl_config_save_app_option_group(app_options, "other", app_other_options);
             sdl_config_save_app_option_group(app_options, "gameplay", app_gameplay_options);
             sdl_config_save_app_option_group(app_options, "visual", app_visual_options);
 
@@ -6148,6 +6160,16 @@ void sdl_config_clear_touch_pane_labels(struct sdl_config* config)
     memset(config->touch_pane_second_labels, 0, sizeof(config->touch_pane_second_labels));
 }
 
+void sdl_config_apply_handheld_defaults(struct sdl_config* config)
+{
+    config->enable_bottom_panes = false;
+    config->left_panel_expanded_on_launch = false;
+    config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
+    config->touch_top_panel_arrows_visible = false;
+    config->touch_top_panel_default_open = true;
+    config->touch_top_panel_size = (float)config->main_view_scale;
+}
+
 void sdl_config_set_defaults(struct sdl_config* config)
 {
     config->main_view_scale = SDL_MAIN_VIEW_PREFERRED_MIN_SCALE;
@@ -6170,33 +6192,17 @@ void sdl_config_set_defaults(struct sdl_config* config)
         SDL_CAMERA_CENTER_CLEARANCE_DEFAULT;
     config->fullscreen = true;
     config->tiles = true;
-#if defined(__ANDROID__) || defined(SIL_IOS)
     config->use_unsafe_area = false;
-#else
-    config->use_unsafe_area = false;
-#endif
     config->enable_right_panes = false;
-#if defined(__ANDROID__) || defined(SIL_IOS)
-    config->enable_bottom_panes = false;
-#else
     config->enable_bottom_panes = true;
-#endif
     config->show_pane_borders = true;
     config->left_overlays_touch_screen_edge = false;
     config->show_overlay_log_border = true;
-#if defined(__ANDROID__) || defined(SIL_IOS)
-    config->left_panel_expanded_on_launch = false;
-#else
     config->left_panel_expanded_on_launch = true;
-#endif
     config->left_panel_compact_mode = SDL_LEFT_PANEL_COMPACT_COLUMN;
     config->left_panel_compact_health_bar = true;
     config->quick_touch_buttons_on_left = false;
-#if defined(__ANDROID__) || defined(SIL_IOS)
-    config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
-#else
     config->min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
-#endif
     config->log_pane_display_filter = LOG_HISTORY_FILTER_ALL;
     config->dice_roll_lock_ms = SDL_DICE_ROLL_LOCK_DEFAULT_MS;
     config->dice_roll_overlay_ms = SDL_DICE_ROLL_OVERLAY_DEFAULT_MS;
@@ -6270,6 +6276,9 @@ void sdl_config_set_defaults(struct sdl_config* config)
     sdl_config_set_default_gamepad_bindings(config);
     sdl_config_set_default_touch_pane_bindings(config);
     sdl_config_clear_touch_pane_labels(config);
+#if SIL_SDL_MOBILE_BUILD
+    sdl_config_apply_handheld_defaults(config);
+#endif
 }
 
 bool sdl_config_set_defaults_for_resolution(struct sdl_config* config,

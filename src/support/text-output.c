@@ -91,6 +91,7 @@ int count_wrapped_lines(cptr str, int wrap_width, int indent)
 
 void text_out_to_screen(byte a, cptr str)
 {
+    str = lore_text(str);
     bool has_utf8;
     bool story_enabled;
     bool story_grid;
@@ -242,6 +243,7 @@ void text_out_to_screen(byte a, cptr str)
  */
 void text_out_to_file(byte a, cptr str)
 {
+    str = lore_text(str);
     /* Current position on the line */
     static int pos = 0;
 
@@ -374,4 +376,4 @@ void text_out(cptr str) { text_out_c(TERM_WHITE, str); }
  * Output text to the screen (in color) or to a file depending on the
  * selected hook.
  */
-void text_out_c(byte a, cptr str) { text_out_hook(a, str); }
+void text_out_c(byte a, cptr str) { text_out_hook(a, lore_text(str)); }

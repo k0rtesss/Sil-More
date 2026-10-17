@@ -518,11 +518,11 @@ static void blitz_add_effect_details(int id, bool blessing,
     cu = &cu_info[id];
     name = blessing ? blitz_blessing_name_str(id) : blitz_curse_name_str(id);
     desc = blessing
-        ? (cu->blessing_text ? cu_text + cu->blessing_text : "")
-        : (cu->text ? cu_text + cu->text : "");
+        ? (cu->blessing_text ? lore_text(cu_text + cu->blessing_text) : "")
+        : (cu->text ? lore_text(cu_text + cu->text) : "");
     power = blessing
-        ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
-        : (cu->power ? cu_text + cu->power : "");
+        ? (cu->blessing_power ? lore_text(cu_text + cu->blessing_power) : "")
+        : (cu->power ? lore_text(cu_text + cu->power) : "");
     /* Birth Blitz selection is a deliberate pick, so "+ descriptions" reveals
      * the effect outright -- the poetical description always shows, and the
      * mechanical effect is added on top when descriptions are enabled (no

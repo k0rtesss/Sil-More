@@ -203,10 +203,10 @@ void birth_format_ability_hint(int skill, int ability, char* buf,
         return;
 
     name = ability_display_name(b_ptr);
-    effect = ability_effect_text(b_ptr);
+    effect = lore_text(ability_effect_text(b_ptr));
     skill = ability_learning_skill(b_ptr);
     if (b_ptr->text)
-        lore = b_text + b_ptr->text;
+        lore = lore_text(b_text + b_ptr->text);
 
     if (effect && effect[0])
         strnfmt(buf, buflen, "%s (%s, inherited): %s", name,

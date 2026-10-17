@@ -244,6 +244,7 @@ static void ability_menu_append_text(char* out, size_t outsz, size_t* cur,
 
 static cptr ability_menu_controller_text(cptr src, char* out, size_t outsz)
 {
+    src = lore_text(src);
     char wait_label[32];
     char fletch_label[32];
     char exchange_label[32];
@@ -2300,6 +2301,7 @@ char* oath_reward_text(int oath_id)
 
 static int oath_menu_put_wrapped(int desc_col, int row, byte attr, cptr text)
 {
+    text = lore_text(text);
     int old_wrap = text_out_wrap;
     int old_indent = text_out_indent;
 
@@ -3316,6 +3318,7 @@ static void ability_desc_add_wrapped_segment(ability_browser_desc_line lines[],
 static void ability_desc_add_wrapped(ability_browser_desc_line lines[],
     int* line_count, byte attr, cptr text, int width)
 {
+    text = lore_text(text);
     if (!text || !text[0])
         return;
 

@@ -1,0 +1,578 @@
+{
+  "title": "Emberfall creatures",
+  "terms": [],
+  "descriptions": [
+    [
+      "Before you stands Nienna, the Lady of Pity, she who mourns for every hurt that Arda has suffered. Her tears watered the dying Trees, and those who hearken to her learn pity, and endurance in hope. Her gaze rests upon you, grave and gentle, full of grief that is not despair.",
+      "Ilyra keeps the names of the drowned in a book bound with sailcloth. Survivors of the tide cities come to her with losses too heavy to speak aloud. She waits beside the quiet water, offering the patient attention of someone who has carried many such stories without surrendering her kindness."
+    ],
+    [
+      "A lean and hungry wolf, bred in the kennels of Angband to run with the orcish packs. Its yellow eyes gleam with feral cunning.",
+      "Lean flanks and a rough coat betray the hard life of a kennel wolf. It follows soldiers for scraps, then joins its pack in worrying wounded prey with sharp, tearing bites. Yellow eyes follow every movement beyond its jaws."
+    ],
+    [
+      "'... great writhing, tangled brambles sprawled. Some had long stabbing thorns, some hooked barbs that rent like knives.'",
+      "Knotted brambles fill the passage, rooted firmly in the cracked floor. Straight thorns stab between hooked ones that catch clothing and tear skin as a traveller pulls away. The dry stems look easy to burn, but there is no safe gap through the living tangle."
+    ],
+    [
+      "A scarred and dirty man clad only in a loincloth. A metal collar is about his neck. He shuffles slowly through the mine, chipping quartz into rubble under the eyes of his overseers.",
+      "A miner in a filthy loincloth chips at quartz with slow, exhausted movements. An iron collar has rubbed his neck raw. He keeps his eyes on the rubble, conserving what little strength the overseers have left him."
+    ],
+    [
+      "A shackled elf labours slowly at the quartz, filthy hair hanging to his shoulders and eyes vacant. His back and arms bear the marks of a whip.",
+      "A shackled elf works the quartz face without looking up. Hair matted with stone dust hides his expression; old lash marks cross his shoulders beneath newer bruises. Each lift of the pick seems to require a separate effort of will."
+    ],
+    [
+      "A brutish orc set to oversee the wretched thralls who labour in Morgoth's mines. He wields a cudgel and a whip with equal cruelty, and takes pleasure in the suffering of his charges.",
+      "The mine overseer measures his workers by the rubble at their feet. A cudgel hangs in one fist and a whip coils in the other, ready to catch a weapon as readily as a prisoner's arm. His keys and well-kept armour speak of privileges earned through cruelty."
+    ],
+    [
+      "A scarred and dirty man shackled to the wall with a long chain. His head is raised and he takes in his surroundings alertly.",
+      "A long chain fixes this miner to the wall. Though grime and scars cover his body, his raised head and searching eyes show that exhaustion has not dulled his attention. He studies the passage beyond you, listening for the overseer's return."
+    ],
+    [
+      "A chained elf crouches here, filthy hair hanging to his shoulders. Dried blood encrusts a noble face. His eyes are fixed on you.",
+      "Blood has dried along this elf's cheek beneath dirty hair. He crouches within the narrow reach of his chains and watches you intently. The stillness seems deliberate, as if he is saving every movement for a chance that has yet to come."
+    ],
+    [
+      "Here stands Tulkas the Strong, last of the Powers to come down into Arda and mightiest in deeds of strength. He bears no weapon, for his hands are weapon enough, and his laughter rings against the stone until dust falls from the unseen roof.",
+      "Drevan once hauled broken floodgates into place while the evacuation boats passed beneath them. Now he rests here with empty hands and the easy posture of a veteran labourer. His booming laugh carries through the chamber, startling dust from the beams overhead."
+    ],
+    [
+      "Here stands Aulë, the great Smith among the Valar, patient and intent. His eyes weigh your craft, not your valour. Beside him stands a mighty forge whose fires await a work worthy of his approval.",
+      "Korren tends a forge assembled from the surviving workshops of the tide cities. He examines the balance of every tool before its ornament, and watches your hands with the same close attention. The fire waits for work that will justify the metal spent upon it."
+    ],
+    [
+      "Before you stands Mandos, the Doomsman of the Valar, keeper of the Houses of the Dead, who forgets nothing that has been and speaks only the counsels of Ilúvatar. His presence is solemn beyond all speech, and in his eyes is the memory of every doom that has been spoken.",
+      "Nareth maintains the Recall Chambers, where the last testimony of the dead is stored in fragile crystal. He reconciles names with records recovered from flooded districts. His silence carries the weight of a careful judge who will allow neither convenience nor rank to erase a life."
+    ],
+    [
+      "A wretched creature clad in scraps of leather, barely armed but vicious in its desperation. These lesser soldiers are sent ahead of the host to test defences and harry the unwary with their crude blades.",
+      "Scraps of leather hang around this underfed skirmisher. Its crude blade is chipped from fighting over rations as often as from battle. Sent ahead of better-equipped troops, it probes for weakness with the desperate aggression of a soldier nobody expects to recover."
+    ],
+    [
+      "A raptor bred in the eyries of Angband, favoured by the orc-scouts as a mount and messenger. Its talons are tipped with cruel iron barbs, and its keen eyes miss little that moves in the deep places below.",
+      "Iron fittings glint on the hooked talons of this tunnel raptor. Raised in the ventilation towers of Karth Vault, it circles spaces its handlers cannot easily reach. Its narrow head follows movement below before it drops to strike with its pointed beak."
+    ],
+    [
+      "Beyond the Merlock Mountains, beyond the marsh of Tode, live the Mewlips. These pale, spider-fingered creatures lurk in dark pools, feeding on the bones of unwary travelers. Their eyes gleam with hunger in the darkness.",
+      "Pale fingers spread like a spider's legs above stagnant water. A siltlurker has crept from the abandoned drainage pools, carrying treasures picked from the bones of drowned travellers. Around its hungry eyes the light seems to lose its strength."
+    ],
+    [
+      "Quick-eyed and furtive, this orc moves through the dark tunnels with practised stealth, watching for intruders. If it spots you, it will shriek to alert every foul creature within earshot before slinking away into the shadows.",
+      "This scout pauses at each junction to listen, its small blade held close to its body. It knows the service tunnels and their locks. If it finds an intruder, a piercing alarm will bring attention from well beyond the next bend."
+    ],
+    [
+      "Monstrous newly-hatched spiders; already the height of a dog. They would probably present little threat, but for the venom in their bite...",
+      "A newly hatched spider is already as tall as a kennel dog. Its legs seem too long for its body, but the fangs are fully formed and wet with venom. Others of its clutch gather nearby, testing the floor with uneven steps."
+    ],
+    [
+      "A serpent the length of a man, armoured in hard blue scales that glitter like ice. A bitter chill clings to the air around it, and frost forms where its coils have rested on the stone.",
+      "Blue scales overlap tightly along this man-length serpent. Frost traces the places where its coils have rested, and a pale cloud gathers between its jaws. The creature endures the cold it exhales, though flame is another matter."
+    ],
+    [
+      "He is one of Morgoth's grim mockeries of the firstborn. He is arrayed in black leathers with a crude sword and shield: a soldier in the dark hosts of Bauglir.",
+      "Black leather, a battered shield and a serviceable sword mark a regular soldier of the vault garrison. It keeps pace with its companions through doors, rubble and broken crossings. The regiment's discipline survives even in this neglected passage."
+    ],
+    [
+      "Found most often in the depths of Taur-nu-Fuin, it is more feared by travellers than wolves, for the poison on its thorns can bring madness.",
+      "A thorn bush has pushed through the remnants of a flooded herb garden. Damp beads gather on its points, carrying a toxin that muddles thought when they break the skin. It cannot pursue a traveller, but brushing past may be enough."
+    ],
+    [
+      "A foul bird of Morgoth's making, bred alongside the Crebain to harry and torment his enemies. It strikes without hesitation at any exposed flesh, gouging at the face and eyes with cruel beak.",
+      "The bird's hooked beak is scratched and dark around the tip. Bred to harry quarry at close quarters, it flutters toward exposed faces rather than armoured limbs. Its small companion keeps nearby, waiting for another opening at the eyes."
+    ],
+    [
+      "A huge ponderous spider with clusters of eggs on its back. Its hairy mandibles are wet with a dark fluid.",
+      "Egg clusters cover this heavy spider's back like bunches of pale fruit. Dark venom wets its bristled mouthparts. As it shifts, the eggs tremble and split, releasing young that spread around their enormous parent."
+    ],
+    [
+      "An orc trained in the use of the short bow, a weapon copied crudely from the Eldar. He looses his arrows from the safety of darkness, and though his aim lacks the grace of the firstborn, numbers and malice make up for what skill does not.",
+      "This archer draws a rough short bow with the confidence of long practice in narrow corridors. Its companions give it space to shoot past their shoulders. A sheathed blade provides an answer for anyone who reaches it."
+    ],
+    [
+      "A great white wolf from the frozen wastes north of Angband, where even orcs fear to tread. Its thick fur protects it from the bitter cold, and its jaws can crush bone.",
+      "A white coat thick enough for the exposed northern banks covers this powerful wolf. Frost clings to its whiskers without troubling it. It keeps close to its pack, opening jaws built to tear deep wounds when prey turns away."
+    ],
+    [
+      "A serpent the length of a man, clad in scales of dull red that radiate a fierce heat. The air around it shimmers and warps, and the stone beneath its belly is scorched dark where it has lain.",
+      "Dull red scales gleam above a belly blackened by furnace soot. Heat bends the air around the serpent's coils, and its open mouth reveals a flicker of flame. It is at home beside hot conduits; cold would be a harsher welcome."
+    ],
+    [
+      "Gorgol earned his title through the butchery of captives, a spectacle he uses to keep his warband in terror of his wrath. He is large for an orc-captain and wields a heavy cleaver stained dark with old blood. His pack follows him out of fear rather than loyalty.",
+      "Urzhek once ran a slaughterhouse supplying the vault kitchens, and carried its cleaver into the regimental contests. His brutal victories won him a captaincy. The soldiers around him answer his calls quickly, having seen what the blood-dark blade does to those he singles out."
+    ],
+    [
+      "Larger and more ferocious than the common orc, this warrior has survived the brutal training pits of Angband. He charges headlong into battle with a heavy axe, his snarl baring iron-capped teeth.",
+      "An iron-capped snarl shows beneath this warrior's battered helm. It grips a heavy axe and leans forward as though measuring a charge. The training yard has taught it to commit its weight before an opponent can settle behind a guard."
+    ],
+    [
+      "A giant black spider with mandibles sharp as sword-blades, bred in the dark pits beneath Angband. It moves with unsettling speed, and its bite can shear through leather and flesh alike.",
+      "A glossy black spider spreads its legs across the passage. Its long mandibles meet like paired blades, their edges clean despite the scraps of leather caught beneath it. It waits on its chosen patch of floor for something substantial enough to bite."
+    ],
+    [
+      "Crebain are dark crows bred by Morgoth's servants as spies and scouts. Their harsh cries alert nearby enemies to your presence, and their keen eyes miss nothing that moves in the shadows below.",
+      "Slag crows once carried message ribbons between the foundries. This flock has learned a harsher service: watching corridors for strangers and announcing them with ragged cries. Close up, their beaks can open surprisingly deep cuts."
+    ],
+    [
+      "A faded presence that perhaps once was man or elf, now bound to the world of shadow by dark arts wrought in Morgoth's service. It moves unseen through the halls, and those who feel its touch are seized by a terror from which reason cannot free them.",
+      "Something brushes your awareness where no body can be seen. The phantom is a damaged remnant of a life trapped in a failed recall, drifting through corridors that once led home. Its touch brings sudden terror while the surrounding light fades."
+    ],
+    [
+      "An attercop -- poison-spider, as the folk call it -- as big as a hound, covered in thick dark bristles. It spins webs of deathly silk to entangle the unwary, and its pale bulbous eyes gleam with a hunger that is almost knowing.",
+      "Bristles cover a hound-sized hookspinner, leaving only its pale, swollen eyes exposed. It tests the air before casting strands across a likely approach. Its bite can leave prey helpless long enough for the silk to close around it."
+    ],
+    [
+      "A twisted growth born of Morgoth's malice, this thorn-plant draws the very light from the air around it, leaving only cold darkness in its wake. It was first found creeping through the lightless halls of Angband, and has since spread its roots through many a cavern.",
+      "Black stems knot together beneath hooked thorns. The plant has colonised a disused conduit, growing so densely that little light reaches its roots. It remains fixed in place, but its heavy points punish anyone within reach."
+    ],
+    [
+      "A serpent the length of a man, its mottled green scales slick with a foul secretion. A stench of corruption hangs about it, and the very air it breathes turns sickly and poisonous.",
+      "A wet sheen coats this man-length serpent's mottled green scales. It raises its head through the sour vapour gathering around its mouth. Poisonous breath gives its ordinary-looking fangs a reach far beyond the length of its body."
+    ],
+    [
+      "A tall troll from the mountains north of Angband, where Morgoth's servants first bred their kind. Its hide is tough as stone and it fears nothing but the light of day, which would turn it back to the rock from whence it came.",
+      "A mountain troll stoops beneath the ceiling, its rough hide resembling weathered rock. Old wounds are knitting along its thick arms. It swings with enough force to batter a foe backward, but the light spilling down the passage makes it flinch."
+    ],
+    [
+      "A wretched undead thing, wrapped in the remnants of a burial shroud long since rotted to rags. Whatever treasures were once laid with it in the earth have been stolen, and now it wanders the halls in hollow rage, grasping at the living with fingers that drain the nimbleness from flesh and bone.",
+      "Rags of burial cloth hang from this restless corpse. Its grave goods were taken long ago, leaving a possessive anger with nothing to guard. Withered fingers leave living hands clumsy and slow while unnatural darkness gathers nearby."
+    ],
+    [
+      "An Orc captain hardened by years of raids against the Eldar, Baugon rules his warband through fear. He takes pride in prisoners brought alive to Angband, and his followers know what awaits those who fail him. His cruel strength is an Orc's own, with no spirit behind it.",
+      "Krask commands the prisoner convoys that supply the lower mines. He keeps his bow close, treating a moving captive as another target to be judged and struck. His escorts know that his patience ends the moment a convoy falls behind schedule."
+    ],
+    [
+      "A champion risen from the brutal fighting-pits of Angband, where orcs prove themselves before Morgoth's captains. He bears scars from countless bouts and wears well-crafted armour, his battle axe notched and stained dark with the blood of his own kind as much as any foe.",
+      "Fine armour sits awkwardly over a body covered in arena scars. This champion's notched axe has outlasted many rivals and several owners. It studies you without haste, accustomed to meeting a fresh challenger after the last has been carried away."
+    ],
+    [
+      "A warrior of the Easterlings, one of those peoples who crossed into Beleriand and swore oaths to the lords of the Eldar -- only to break them when Morgoth's promises proved sweeter. He fights with a crude blade and a shield, loyal now only to the Dark Lord.",
+      "A Banklander infantryman wears the insignia of a levy bought with grain and debt relief. His shield is weathered but carefully strapped, and his short blade shows frequent use. He holds ground beside his companions, keeping that shield between an enemy and his body."
+    ],
+    [
+      "A monstrous wasp, larger than any natural insect, bred in the poisoned pits beneath Angband. Its wings fill the air with a maddening drone, and the venom on its stinger can bring even the strong to confusion and despair.",
+      "The wings of this enormous wasp produce a grinding drone. It swerves unpredictably around its companions before darting in with its sharp tail. The toxin delivered by its sting leaves victims confused and struggling to judge their surroundings."
+    ],
+    [
+      "A huge champion of the orcs, clad in thick black armour and bearing a shield and much-notched axe. Scarred and baleful, Balcmeg earned his name for the way he pursues his prey -- he never stops, never rests, and none who flee from him have ever reached safety. His warband follows him out of dread.",
+      "Drezhak's heavy black armour is patched with plates taken from defeated rivals. He carries a shield and a deeply notched axe, each sized for his massive frame. Once a collector of overdue forge tithes, he now settles larger disputes for the garrison."
+    ],
+    [
+      "A small and exceptionally ugly orc, the most twisted of Morgoth's mockeries. Despite his wretched appearance, Lug moves with a dexterity that belies his form, tossing his short broad blade from hand to hand. His strikes land in places that wound most deeply, and few survive his attentions long.",
+      "Ozzek's small, twisted frame seems poorly suited to his broad knife until he moves. He passes the blade between his hands with unnerving accuracy, looking for tender places armour leaves exposed. The vault surgeons know his work by the cruelty of the wounds."
+    ],
+    [
+      "An orc who has clawed his way to rank through blood and cunning. He walks with the confidence of one who has broken lesser orcs beneath his heel, and his much-notched blade speaks of battles won in the dark halls of Angband.",
+      "A captain's insignia has been hammered onto this veteran's battered armour. Its sword bears a different notch for each campaign along the drainage roads. Nearby soldiers watch for its signals, ready to gather their resolve when it calls them back to battle."
+    ],
+    [
+      "A Warg, bred in the pits of Angband to be larger and more cunning than any natural wolf. They are used as mounts by orc-chieftains, and their keen intelligence makes them dangerous hunters.",
+      "Larger than a kennel wolf, this broad-backed hunting beast was raised to carry armoured riders. It studies doors and obstacles with disquieting intelligence. Its pack gives it confidence to press close, where long fangs tear flesh from an unguarded limb."
+    ],
+    [
+      "A spirit bound still to the earth by necromancy wrought in Morgoth's service, wrapped in a rotting shroud. It guards the treasures that were laid with it in the grave, and the touch of its withered hand saps the strength from living flesh.",
+      "A rotting shroud wraps a corpse standing beside its burial goods. Whatever failed machinery keeps it moving has preserved its attachment to the treasure. Its grasp saps muscular strength, while muttered rites draw darkness and drag at a victim's steps."
+    ],
+    [
+      "A serpent wrought in Morgoth's darkness, its scales drinking all light that falls upon them. Where it passes the shadows deepen, and its breath carries a chill that chokes the spirit.",
+      "The serpent's scales swallow reflections, leaving only its raised outline. Dense black vapour spills between its fangs. Its bite is dangerous enough, but the darkness it exhales can reach someone who thinks the coils are safely distant."
+    ],
+    [
+      "Orcobal has risen through the ranks of Morgoth's orc-hosts by strength of arm and ruthless cunning. He bears scars from a hundred battles against the Eldar and commands the respect even of those captains who loathe him. His name is cursed in the songs of the Noldor, for he has slain many of their kin beneath the shadows of Thangorodrim.",
+      "Karzhek became champion after recovering a lost payroll from mutineers in the lower works. He still wears the finest pieces of their armour, repaired to fit his powerful frame. His escort answers sharp commands, and his heavy weapon makes clear why the mutiny ended."
+    ],
+    [
+      "A flickering darkness that spreads through the halls like a stain, multiplying as it feeds. From its midst you hear faint voices yearning, beckoning -- the whispers of those it has already consumed, calling others to join them in the cold.",
+      "A patch of darkness flickers across the floor with the suggestion of many mouths. Each whisper overlaps another until the voices cease to sound like separate speakers. The stain divides as it spreads, and contact carries the cold hurt of solid darkness."
+    ],
+    [
+      "A monstrous spider of Ungoliant's brood, its swollen body distended with venom. A single bite can paralyze prey while its digestive fluids slowly dissolve the victim from within.",
+      "Venom has swollen this spider's abdomen until its legs look too slender to support it. It waits low against the floor beside a meal wrapped in old silk. A dark drop forms at each fang when it opens its jaws."
+    ],
+    [
+      "An archer of the Easterling host, sworn to Morgoth's service. His people came to Beleriand under fair words, but their allegiance was bought with dark promises. He draws his bow with practiced ease, and his arrows have felled many an Elven lord from the shadows.",
+      "The Banklander archer has wrapped cloth around his bow to protect it from damp. His economical stance reflects years spent guarding long causeways. A knife hangs at his belt, but his attention stays on the clear line between bow and target."
+    ],
+    [
+      "A bat warped beyond all natural shape by Morgoth's corruption. Its head is grotesquely misshapen, with long curving fangs that drain the very strength from the flesh they pierce. It moves with a speed that belies its broken form.",
+      "An uneven skull and crooked wings give this bat the appearance of a badly assembled specimen. It flies far more quickly than its shape suggests. Long curved fangs leave victims exhausted and less able to endure the next attack."
+    ],
+    [
+      "An orc-lord of great cunning, who has served Morgoth long enough to have earned his master's favour. His massive frame is clad in heavy armour, and he wields both sword and whip with equal skill. His cruelty to subordinates and prisoners alike has earned him a feared name among the hosts of Angband.",
+      "Orrhod controls the garrison's storehouses, and his escorts eat better than most soldiers in the vault. Heavy armour covers his enormous frame. He uses sword and whip to punish resistance and strip weapons from hands, calling followers forward when pressure mounts."
+    ],
+    [
+      "A snow troll from the frozen wastes of the far north. Its white hide blends with ice and snow, and its clawed hands can rend steel. The cold that would slay lesser creatures only makes it stronger.",
+      "White hide covers this troll like packed snow. Its hands can drive an opponent backward, and frost forms around its teeth. Cold scarcely troubles it, while flame scorches the pale skin more readily than expected."
+    ],
+    [
+      "A spirit chained to the earth by dark enchantment, unable to pass into the halls of Mandos. It haunts its burial chamber wrapped in tattered grave-cloths, and the cold that seeps from it is a cold of the soul, not merely of the flesh.",
+      "A burial chamber has kept this wight's clothes from wholly rotting away. It remains tied here by a recall rite that never completed. Darkness and slowing words surround it, while its touch dulls the inward clarity upon which voice and resolve depend."
+    ],
+    [
+      "It waits in the deepest ink-black of the dungeon, patient and still, a thing of nothing but claws and teeth. When it strikes, its bite does not merely wound -- it holds fast, and the dread that pours from it can break the will of even the bravest.",
+      "Claws scrape once in the darkness, then fall silent. The lurking horror waits until a shape comes close enough for its poor sight to resolve. Its gripping bite can leave the victim helpless, and the dread it projects makes approaching it an effort."
+    ],
+    [
+      "A giant of Morgoth's hosts, as tall as three men and armed with a massive club. These brutes served the Dark Lord since before the rising of the Sun, and their strength is terrible to behold. They hurl great boulders at their foes from afar.",
+      "The giant's club was cut from a structural beam, with old bolt holes still visible along the grain. It towers above human soldiers, carrying stones as if they were sling pellets. A distant foe may receive a boulder before reaching that great wooden weapon."
+    ],
+    [
+      "Son of Ulfang the Black, Uldor led the Easterling treachery in the Nirnaeth Arnoediad. At the height of battle, when victory seemed within reach, his host turned upon the sons of Fëanor. His betrayal doomed the Union of Maedhros and earned him eternal infamy. He was slain by Maglor, yet the curse upon his name endures: Uldor the Accursed.",
+      "Varrek held the toll bridges during a famine and learned to treat every crossing as a shooting lane. He keeps an escort close and a bow already strung. His arrows can cripple a traveller, leaving time to collect the payment he thinks the world still owes him."
+    ],
+    [
+      "A cruel Easterling who ruled Dor-lomin with an iron fist after the Nirnaeth Arnoediad. He oppressed the people of Húrin's house and was foretold to die by Túrin's blade, but fate has been altered. The dark power binds his spirit here still.",
+      "Borruk once owned the debt registers of three canal districts. A failed recall left him guarding the sealed accounts in a decaying body. His touch drains endurance and strength, while his commands slow the living or bind them motionless before the shelves."
+    ],
+    [
+      "A spy of the Easterling host, clad in dark garb and armed for silent work. These treacherous Men were planted among the Eldar by Morgoth to whisper and report, and they have honed their craft to a dark perfection.",
+      "This Banklander agent wears dark cloth over the metal fittings of his equipment. He moves with the care of someone paid to hear conversations without joining them. A small bow serves his quiet work, though when secrecy fails he quickly raises an alarm."
+    ],
+    [
+      "A bat twisted by Morgoth's power into something feral and unnatural. Its wings are black as the void, and it hunts in the lightless deeps with a shriek that chills the blood. Even in darkness, it finds its prey with uncanny ease.",
+      "Soot-black wings make the bat difficult to distinguish from the vault above. It wheels through dark passages and snaps at anything crossing its chosen hunting ground. Bright light reveals its outline clearly and makes it recoil."
+    ],
+    [
+      "A spirit of the winds that was seduced to Morgoth's service in the days before the Sun. It howls through the halls of Angband, invisible and swift, battering all who stand against its fell master.",
+      "A gale revenant twists dust and loose grit into a moving column. It formed where a pressure chamber burst, preserving an angry fragment of the engine's command to keep air flowing. Unseen impacts batter anything in its route, and doors shake before its approach."
+    ],
+    [
+      "Barely hatched from the fire-pits where Morgoth breeds his wyrms, this young drake is already as large as a man. Thin wisps of smoke curl from its nostrils, and its scales still have the soft gleam of youth. Yet even now its breath carries flame enough to sear flesh from bone.",
+      "The young fire-drake is already man-sized, though its scales retain a soft new sheen. Smoke escapes its nostrils with every breath. Raised beside the lower furnaces, it answers intrusion with burning teeth and short bursts of flame."
+    ],
+    [
+      "Ulfang the Black, chieftain of the Easterlings, swore false oaths of allegiance to the sons of Fëanor while secretly in the pay of Morgoth. His treachery in the Nirnaeth Arnoediad shattered the Union of Maedhros and condemned countless Eldar and Edain to death or slavery. He is cunning and ruthless, and strikes at every opening.",
+      "Zarvok built his power by buying the debts of isolated Banklander settlements, then offering their people places in his retinue. He watches every exchange for advantage. His followers rally at his voice, while his blade punishes an opponent stepping carelessly within reach."
+    ],
+    [
+      "The Valaraukar, demons of power, are among the mightiest of Morgoth's servants and widely feared. Before you stands Duruin, Flame of the Night, a great figure wrapped in fire and shadow. He wields fiery sword and whip.",
+      "Ashvek was left to supervise a furnace after its operators fled. Years of heat have fused his armour into the fiery shape beneath it. He carries a burning sword and a whip that catches weapons, pursuing his old duty with destructive literalness."
+    ],
+    [
+      "No mere wolf, but a foul spirit bound into wolf-form by Sauron's dark arts. These creatures served as guards and hunters on Tol-in-Gaurhoth, and their venom brings a slow and painful death.",
+      "The wolf-shaped creature handles doors almost as cleverly as a person. A stolen memoryprint drives the animal body with a hunter's purpose. Its claws tear long wounds, and poison glistens along the teeth behind curled lips."
+    ],
+    [
+      "A great black spider wreathed in clinging shadow, kin to the spawn of Ungoliant. It lurks in darkness, and its bite can steal the light from your very eyes.",
+      "A black spider crouches within a fringe of clinging shadow. Its body is difficult to separate from the gloom until the legs shift. Its fangs threaten more than torn flesh: their bite can plunge a victim's sight into darkness."
+    ],
+    [
+      "It appears as nothing more than a deepening of the darkness, a patch of shadow that moves against the feeble light. Yet something watches from within it, something that was perhaps once a living spirit before the dark craft of Morgoth's servants stripped it of all but malice and hunger. Its touch brings a darkness that no flame can dispel.",
+      "A deeper patch of shadow moves independently of the torchlight. The failed recall that produced it left no visible body, only a hungry trace able to slip through closed doors. Its touch wounds with darkness, while bright light exposes the remnant's fragility."
+    ],
+    [
+      "A great serpent with scales of gleaming sapphire, ancient and terrible. An icy chill surrounds it, and where it passes the very air grows still and cold, as though winter itself had come to these dark halls.",
+      "Hard sapphire scales reflect light in cold blue facets. The great serpent's bite carries a piercing chill, and an icy cloud gathers when it draws breath. It settles comfortably amid frost that would drive warmer creatures away."
+    ],
+    [
+      "From Eruman, the dark and frozen lands south of Valinor, came Gilim in the days when Melkor first raised his banner. He is a giant of winter, and frost follows in his wake. His breath freezes the air, and his footfalls shake the stone. Long has he served the Dark Lord, and long shall his name be cursed by those who dwell in the North.",
+      "Orrusk once moved ice blocks into cooling reservoirs with his bare hands. The crews are gone, but the giant still follows maintenance routes, carrying a club and stones to throw. Rime plates his armour, and the cold of his blows lingers painfully in the flesh."
+    ],
+    [
+      "A great serpent with scales of gleaming ruby, kin to the fire-drakes of old though it breathes no flame of its own. An intense heat radiates from its coils, and the stone beneath it cracks and warps.",
+      "Ruby-coloured facets cover this furnace serpent's broad coils. Sparks glow behind its teeth when it opens its mouth. Both its bite and its exhaled flame carry the heat of the chambers it calls home."
+    ],
+    [
+      "It slithers and crawls across the floor towards you, low and fast, a thing of dread and corroding malice. Its claws dissolve flesh and stone alike, and the terror it exudes tears at the mind long before it ever reaches you.",
+      "A low shape scuttles toward you on an irregular spread of limbs. Acid beads along its claws, etching the floor at every pause. It brings dread before it reaches striking distance, as if the body were only the nearest part of the threat."
+    ],
+    [
+      "One of the lesser spirits that fell with Morgoth, this Rauko has chosen the cold rather than the flame as its domain. A chill hangs heavy in the air around it, and the pale gleaming blade in its hand drinks the warmth from all it touches.",
+      "A rime revenant carries a pale blade through a haze of icy crystals. It is the lingering command of a cooling ward given hostile shape. Cold flows through the steel into anything it strikes, while heat disrupts its frozen form."
+    ],
+    [
+      "Some have called the Balrogs 'Demons of Terror', but none inspires such dread as Delthaur. His very presence fills the heart with nameless fear, and the bravest warriors have fled screaming at his approach. Yet his malice turns most keenly against those who delve in the deep places of the earth, and dark halls may one day remember him by a darker title: the Bane of Durin.",
+      "Cindrek once policed crews assigned to excavations below the engine. The cinder fiend still regards miners' tools as evidence of disobedience. Fire runs along his sword, his whip hooks weapons, and dread scatters workers before he reaches them."
+    ],
+    [
+      "Brother to Gilim, Nan is the giant of summer and the southern lands. Where Gilim brings frost, Nan brings scorching heat and withering drought. He towers like a great tree, and in his right hand he bears the longest blade you have ever seen. Both brothers swore allegiance to Melkor when the world was young, and both have served him ever since.",
+      "Borrath hauled timber before the regent recruited giants for the garrison. He carries a sword nearly as long as a ship's mast, swinging it with the unhurried force of a workman clearing an obstruction. Loose masonry supplies ammunition against anyone staying beyond the blade."
+    ],
+    [
+      "A troll bred in the deepest pits of Angband, where no light has ever reached. Its hide is grey as wet stone and its limbs are thick and powerful, shaped by ages in the crushing dark. It fears the light, and fights all the more savagely for that fear.",
+      "Grey hide folds heavily over the cave troll's powerful limbs. Its eyes narrow against light, and half-healed scars pull tight as it raises its arms. It batters intruders aside before biting whatever remains within reach."
+    ],
+    [
+      "A great serpent with scales of gleaming emerald, bred in the poisoned depths where Morgoth's corruption seeps into the very earth. The noxious vapours that surround it can wither flesh before its fangs ever strike.",
+      "Emerald scales slide through a veil of sour vapour. This serpent has thrived near the leaking treatment vats beneath the old cities. Poison gathers on its fangs and pours from its mouth when it exhales toward a threat."
+    ],
+    [
+      "The spirit of one who broke a sacred oath and was cursed to wander forever in darkness. This Oathwraith hungers endlessly for the warmth of the living, and its touch drains all vitality. It is drawn to those who have sworn vows, seeking to drag them down into its own damnation.",
+      "An oathwraith is a recall remnant trapped repeating a promise it can no longer understand. It reaches for the living as though seeking a witness. Its touch brings gnawing hunger, and its insistent words can hold a listener still long enough to hear them again."
+    ],
+    [
+      "One of the warriors of Tevildo's court, this great cat walks upright like a man, though no man could match its speed. Its long scything claws are weapons of terrible precision, and it moves with a fluid grace that makes it nearly impossible to track.",
+      "An upright cat warrior balances easily on its hind legs, long claws held clear of the floor. These soldiers protected the granaries before Razzek turned their company into a private court. It moves fluidly around opponents, exchanging positions to keep its claws near exposed flesh."
+    ],
+    [
+      "A great serpent with scales of darkly glinting amethyst. It moves through the halls wrapped in deepening shadow, and those who catch sight of it in the gloom often wish they had not, for darkness follows close behind.",
+      "Amethyst glints along heavy coils, visible only where light catches a facet. Darkness wells in the serpent's mouth before the fangs part. It carries that same darkness in its bite, making close approach as dangerous as its breath."
+    ],
+    [
+      "A spirit of earth and stone, corrupted by Morgoth to serve as guardian of his deep halls. It moves through rock as easily as air, and its blows can shatter steel. The very foundations of Angband answer to its will.",
+      "A stone revenant rises from a foundation damaged in the engine's collapse. Its body is a shifting assembly of rock held together by a command to rebuild. It breaks through walls rather than following passages, and its blows can shatter the ground."
+    ],
+    [
+      "'Huge shapes there stood like carven trolls enormous hewn of blasted rock to forms that mortal likeness mock; monstrous and menacing, entombed, at every turn they silent loomed in fitful glares that leaped and died.'",
+      "A carved figure waits among broken statues, claws resting on stone knees. It resembles a troll assembled by a sculptor who understood menace better than anatomy. It shifts when attention turns away, leaving fresh gouges where motionless stone should have stood."
+    ],
+    [
+      "Not all dragons have the gift of fire, but none is needed here. The lashing tail, the great claws, the sharp teeth -- and above all, the mesmerising eyes. To meet its gaze is to feel one's will dissolve like mist, held fast in the thrall of a dragon's ancient and terrible mind.",
+      "This young drake needs no furnace breath to defend its chamber. Heavy claws and long teeth supply its close weapons. Its steady eyes are more dangerous than its youth suggests, unsettling thought, stirring dread and holding prey in place."
+    ],
+    [
+      "Grizzled and cunning, Umuiyan has kept watch at the gates of Tevildo's fortress since the early days. None may pass without his leave, and his keen eyes miss nothing. Many a prisoner has been dragged past him into the dark halls within, never to emerge again. He delights in the slow torment of those who think themselves clever enough to slip by.",
+      "Murrik has guarded the granary court since its doors opened onto a working quay. His grizzled fur and patient expression conceal a watcher's judgement. He keeps a bow ready behind the threshold, with clawed attendants nearby to deal with anyone reaching him."
+    ],
+    [
+      "Belegwath is wreathed in darkness deeper than the pits of Angband, yet within that shadow burns a terrible flame. His great wings of night unfold to blot out all light, and he moves through the halls like doom itself. For many of the Children of Ilúvatar, this Mighty Shadow has been the last thing they ever beheld.",
+      "Vozhrek maintained the blackout shutters protecting furnace crews from blinding glare. Now soot and shadow cling to the cinder fiend's armour around a core of flame. His sword burns through the gloom while a hooked whip lashes outward to catch an opponent's weapon."
+    ],
+    [
+      "An insubstantial wraith, barely more than a shred of shadow given form. Its eyes are two dark pits in a ruined face, and the cold that emanates from it is a blight upon the living. It drifts through walls as though they were not there.",
+      "The spectre's ruined features drift through a wall before the rest of its faint outline follows. It is one of several recall remnants that have lost the distinction between room and corridor. Its hands carry painful cold and a touch that dims the inward force of the living."
+    ],
+    [
+      "This great spider was one of the brood laid by the Unlight, Ungoliant, in the mountains of Ered Gorgoroth. Some have made their way North to Angband, and crept down to the very darkest parts of the stronghold.",
+      "A great spider nests in cracked conduits beneath the basalt ridges. Its stillness is almost deliberate enough to resemble thought. Its crushing bite can leave prey helpless, and it defends its darkness particularly fiercely when light reaches the web."
+    ],
+    [
+      "A monstrous werewolf of great size and cunning, perhaps once a mighty warrior before Sauron bound his spirit into wolf-form. Its eyes gleam with a terrible intelligence, and its fangs drip with deadly venom.",
+      "A massive wolf-shaped body moves with an experienced fighter's judgement. The memory bound inside has survived long enough to master the borrowed limbs. Claws open deep wounds, and its large fangs carry dangerous poison."
+    ],
+    [
+      "A great serpent armoured in scales harder than any mortal stone, gleaming with prismatic hues as light catches their facets. It breathes fire, cold, poison, and shadow alike, and few living things can match its terrible versatility.",
+      "Faceted scales overlap like pieces of a jeweller's hardest stone. The serpent's mouth carries an unstable mixture of the engine's old outputs: flame, frost, venom and darkness. Its own hide endures fire, cold and poison, making that variety more than a threat at range."
+    ],
+    [
+      "A servant of Thuringwethil, it flits through the darkness on great bat-like wings, though no bat could harbour so much malice behind its eyes. Its bite drains the very life from its victims, leaving them cold and hollow.",
+      "A lean winged figure folds long bat-like limbs against its sides. The lesser vampire watches the living with hunger that has outlasted its former identity. Its claws cut deeply, and its bite leaves prey exhausted and less able to withstand injury."
+    ],
+    [
+      "One of the silent hunters of Tevildo's court, this jet-black cat moves through shadow as though born of it. Unseen and patient, it looses its cruel arrows from the dark with the calm precision of one who has stalked and slain many times before.",
+      "A black-furred archer moves where the shadows seem empty. The cat assassin belongs to the court's quiet collectors, sent after debts that cannot be recovered publicly. It shoots from concealment, keeping long claws ready for anyone who closes the distance."
+    ],
+    [
+      "A young cold-drake, long and sinuous, coiling upon the stone floor. Scatha is cunning beyond his years, and has already begun to amass a hoard through theft and murder. His kind lack the fire of the Uruloki, but his claws are keen and his gaze holds a terrible power. One day he may crawl forth from Angband to trouble the world above.",
+      "Skareth coils over a hoard assembled from pump houses and stolen convoy chests. The young drake is still growing into the chamber it has claimed. Frost spills from its jaws, and its unwavering gaze can confuse, terrify or hold an intruder before its claws descend."
+    ],
+    [
+      "Chief among the thanes of Tevildo, Oikeroi is sworn to guard his master with fang and claw. He is cunning in the ways of ambush and has slain many who sought to challenge the Prince of Cats. His loyalty to Tevildo is absolute, born of both fear and dark devotion.",
+      "Keshak rose from the granary guards by spotting a poisoner among the kitchen staff. He has served as Razzek's close protector ever since. He wastes little movement, waiting with sharpened claws beside the ruler whose survival has become his profession."
+    ],
+    [
+      "...no feet he heard, though the earth quaked. when the young dragon his thirst slaked. and the stream smoked at his dark door. The flames hissed on the dank floor, and he died alone in the red fire; his bones were ashes in the hot mire.",
+      "Water hisses beneath the young fire-drake's weight. Its claws score the damp floor, and flame spills between its teeth when it turns toward an intruder. It guards a small hoard with the ferocity of something newly acquainted with the pleasure of possession."
+    ],
+    [
+      "No larger than a wolf, but much swifter -- a blur of limbs and malice that is hard to comprehend. What evil thought first brought this into the world, none can say. Its bite does not merely wound; it fills the mind with visions so terrible that reason itself crumbles.",
+      "The darting horror is scarcely larger than a wolf, but its limbs move in a disorienting blur. Its bite floods the senses with impossible sights. A separate wave of dread can follow before the mind has sorted those visions from the creature still attacking it."
+    ],
+    [
+      "A mantled shape of void that was once perhaps man or elf, now twisted beyond recognition by the necromancy of Gorthaur, greatest of Morgoth's servants. Noseless it scents the air, turning this way and that, drawn to the warmth of the living. Its touch brings a darkness that seeps into the very soul, and its will can hold a victim helpless as the grave.",
+      "A hollow mantle turns as if listening for a familiar voice. The wraith is a recall subject stripped of name and body, left with the command to detain anyone it meets. Darkness wounds at its touch, while whispered orders slow the living or hold them still."
+    ],
+    [
+      "A spirit of fire given terrible form, blazing so fiercely that its shape is hard to discern. Like Arien who guides the Sun, it was once a spirit of flame, but it chose to follow Melkor when the World was young, and now its fire serves only to destroy.",
+      "An ember revenant burns with the concentrated heat of a failed ignition chamber. A hostile intelligence persists inside the shifting flame, driving it toward anything interrupting the old firing sequence. Its blows sear flesh, though strong cold disrupts the blazing form."
+    ],
+    [
+      "Tevildo is a mighty fay in the service of Melko, lord and master of all the cats. In his fortress he keeps many thralls in torment, and his hatred of the Hound of Valinor is legendary. His strength lies partly in a golden collar about his neck wherein a spell is locked, and while he wears it, none may defeat him.",
+      "Razzek wears a golden collar commissioned from the granary district's last jewellers. He converted food reserves into influence, then guards into a court. Quick claws and a cruel eye for exposed flesh sustain his authority when bargaining fails, and he slips around opponents with predatory ease."
+    ],
+    [
+      "A Balrog who has earned his rank not by terror alone, but by the winning of battles. Turkano commands a host of lesser Raukar with cold authority, and under his leadership they have broken armies of the Eldar upon the slopes of Thangorodrim. His sword burns with a flame older than the Sun.",
+      "Zhavrek once coordinated the furnaces from a gallery of signal lamps. The cinder fiend commands his surviving attendants with the same clipped certainty, turning them into an ordered fighting force. His burning sword and catching whip enforce instructions that no longer serve useful work."
+    ],
+    [
+      "This great wyrm has coiled in the frozen depths of Angband since before the rising of the Sun. Its sapphire scales gleam with an inner frost, and the air crystallises around it in glittering motes. Its breath can freeze a warrior where he stands, armour and all.",
+      "Generations of frost have dulled the floor around this vast sapphire serpent. Its scales remain clear, with trapped light gleaming beneath blue surfaces. A freezing bite and a heavy blast of icy breath protect the chamber it has occupied for years."
+    ],
+    [
+      "The very largest and toughest of the trolls are chosen for the personal guard of Gothmog, High Captain of Angband. Drilled relentlessly for war, they wear armour wrought in the forges below and bear weapons that can shatter stone. Nothing short of death itself can stop them.",
+      "Plate armour turns this enormous troll into a moving barricade. Selected for the regent's inner garrison, it has been drilled to keep fighting through pain. Its heavy weapon batters foes backward while wounds close across thick hide beneath the metal."
+    ],
+    [
+      "A nightmarish creature of the vampire kindred, servants of Sauron who dwell in darkness. Its bat-like wings carry it silently through the halls, and its bite drains both strength and vitality from its victims.",
+      "A vampire glides along the corridor on dark, leathery wings. Its claws can open long wounds, but its hungry gaze remains on the throat. The bite weakens both the strength and endurance of its prey."
+    ],
+    [
+      "'Far, far below the deepest delvings of the Dwarves, the world is gnawed by nameless things...' It is as a vast grub, eating its way through the roots of the earth.",
+      "A vast pale grub pushes through stone with a muscular ripple. Acid slicks its body and eats at surfaces crushed beneath its weight. Injuries close along the soft flesh while aimless tunnelling carries it into new chambers."
+    ],
+    [
+      "A fire-drake of surpassing greed even among his avaricious kind, Smaug already hoards treasures stolen from Morgoth's own vaults. Young and ambitious, his golden scales gleam in the darkness as he surveys all he considers rightfully his. In ages to come he may grow into something truly terrible, but even now he is a deadly foe.",
+      "Ravaz's golden scales carry scratches from squeezing through treasury vents. He has piled coins and fittings stripped from abandoned districts into a glittering nest. The winged drake defends his claim with flame and a gaze that clouds thought or holds a thief helpless."
+    ],
+    [
+      "Son of Eol the Dark Elf and Aredhel of Gondolin, Maeglin rose high in the counsels of King Turgon. Yet his heart was consumed by forbidden desire for Idril Celebrindal, and when captured by Morgoth, he revealed the hidden location of Gondolin in exchange for promises of power and Idril as his bride. His treachery doomed the fairest of elven cities. The darkness in his heart has only deepened since.",
+      "Ossresar designed Aster Quay's inspection doors and later sold duplicate keys to the regent's agents. His reward was a place in the vault, where every corridor reminds him what a lock is worth. He fights with precise, cruel cuts and answers a missed attack with an immediate counterstroke."
+    ],
+    [
+      "Grown vast in the furnaces of Angband where it has basked since the world was young, this serpent's ruby scales glow as though lit from within. Wisps of smoke curl from its nostrils and the extreme heat it radiates makes the very air painful to breathe.",
+      "Smoke traces cracks between this huge serpent's glowing ruby scales. It has spent long years beside furnace channels, growing on heat other creatures avoid. A burning bite and deep exhalations of fire make its broad coils difficult to approach safely."
+    ],
+    [
+      "An ancient cold-drake of immense size, lacking the fire of the Uruloki but no less deadly for it. Its hypnotic gaze can freeze prey in place, and its claws and fangs have slain countless warriors. It has grown cunning beyond mortal understanding over long centuries of darkness.",
+      "An immense drake watches over a chamber worn smooth by its passage. Time has sharpened its cunning along with its claws and fangs. Its cold patience is matched by a gaze that scatters thought, fills the mind with dread or holds a victim motionless."
+    ],
+    [
+      "They were like great figures seated upon thrones. Each had three joined bodies, and three heads facing outward, and inward, and across the gateway. The heads had vulture-faces, and on their great knees were laid clawlike hands. They seemed to be carved out of huge blocks of stone, immovable, and yet they were aware: some dreadful spirit of evil vigilance abode in them. They knew an enemy. Visible or invisible none could pass unheeded. They would forbid his entry, or his escape.",
+      "Three joined stone bodies sit across the threshold, each with a hooked face turned toward a different approach. Clawed hands rest on their shared knees. The watcher never leaves its seat, but a dreadful awareness inhabits the carving, ready to release a shriek when a stranger comes into view."
+    ],
+    [
+      "A Rauko of shadow and darkness, among the first spirits to fall when Melkor raised his banner in defiance of Ilúvatar. It moves through the halls like a creeping void, and its touch brings a darkness so deep that even torches cannot burn within it.",
+      "A shade revenant gathers around the outline of an abandoned blackout ward. Its surface holds no reflection, only a depth of moving darkness. That darkness wounds wherever it strikes, while strong light eats into the unstable shape."
+    ],
+    [
+      "Sire of all werewolves, Draugluin was bred by Morgoth in the pits of Angband and given to Sauron as captain of his wolf-hosts. Upon the Isle of Werewolves he dwelt, greatest and most terrible of his kind, until Huan of Valinor overthrew him. Yet death could not hold him long in the service of the Dark Lord, and now he stalks these halls once more.",
+      "Grozhak was the largest subject in the vault's attempt to bind trained guards into hunting bodies. He broke the kennel doors and took command of the surviving pack. Long claws and poisoned fangs protect that authority, and his human cunning makes the corridors no refuge."
+    ],
+    [
+      "Vallach was among the Balrogs who burst forth in the Dagor Bragollach, the Battle of Sudden Flame, when rivers of fire poured from Thangorodrim. He moves with terrifying speed, a huge shape cloaked in flame and shadow, his fiery axe cutting down all in his path before they can even raise their weapons in defense. There is something headlong in his wrath, as though it will one day bear him and a golden lord to a common doom.",
+      "Verrusk was caught in the flashover that destroyed the southern furnace controls. The cinder fiend still moves with the urgency of an operator racing a failing system. A burning axe and disarming whip now clear the route for a task that can never be completed."
+    ],
+    [
+      "One of the eldest surviving spawn of Ungoliant the Gloomweaver, this ancient spider has grown vast and cunning over countless years. Its bloated body drips with venom so potent that even dragons fear its bite. It has lurked in darkness since before the Sun first rose.",
+      "The ancient spider's abdomen brushes the floor as it shifts its immense weight. Years of hunting have taught it patience and the value of a narrow approach. Venom gathers heavily on its fangs, and its powerful body can force apart a door interrupting its chosen ground."
+    ],
+    [
+      "The largest of the venomous serpents bred in Angband's deepest pits, its emerald scales shimmer sickly in the gloom. It moves within a billowing cloud of poisonous vapour so thick that merely breathing near it can bring sickness and death.",
+      "Poisonous breath rolls ahead of this enormous emerald serpent. Its bright scales have grown thick beside the leaking treatment works. Both fangs and vapour threaten living flesh, while the creature moves freely through the toxins surrounding it."
+    ],
+    [
+      "An ancient vampire of great power, graceful and terrible. Perhaps it once served Thuringwethil herself before she fell. Its black eyes regard all living things as prey, and its touch drains the very essence of life.",
+      "The vampire lord carries itself with the measured grace of someone accustomed to obedience. Its wings fold like a formal cloak, exposing long, precise claws. Its bite drains every faculty of the living, leaving even a strong and clear-minded victim diminished."
+    ],
+    [
+      "Dagorhir towers above even the mightiest of trolls, clad in iron plates forged in the smithies of Angband. He earned the name Elfbane in the Nirnaeth Arnoediad, where his great hammer crushed countless sons of the Eldar. Now he leads patrols of the feared Troll Guard through the deep halls, and the sound of his tread brings dread to all who hear.",
+      "Drazken commanded the heavy salvage crews stripping the drowned districts. Iron plates cover the troll's towering frame, and his hammer was made to break fittings free of stone. He now leads armoured guards through the lower halls, driving opponents back with blows few can absorb standing still."
+    ],
+    [
+      "Among the cold-drakes of the North, Gostir is most feared for his terrible gaze. Those who meet his eyes are held fast as though bound by invisible chains, unable to flee as doom approaches. Though he lacks the fire of his kin, his hypnotic stare has claimed more victims than many a flame-breathing wyrm.",
+      "Ozhar learned to watch the supply doors from a chamber beside the cooling reservoir. The great drake barely moves until an intruder meets his eyes. That gaze confuses, terrifies and holds prey, giving long claws and tearing teeth time to finish the encounter."
+    ],
+    [
+      "Darkness clings to this ancient wyrm like a living shroud. Its amethyst scales seem to drink what little light reaches these depths, and the shadows deepen wherever it passes. Even keen eyes struggle to make out its true shape until its fangs are already upon you.",
+      "Age has deepened this serpent's amethyst scales almost to black. It lifts its head from a nest of shadows, exposing fangs darkened by the force gathering in its throat. Both bite and breath carry that painful darkness outward."
+    ],
+    [
+      "A great Uruloki, fire-drake of Angband, grown vast and terrible over centuries of slaughter. Its breath is a torrent of flame that can melt stone, and its scales gleam like hot coals. It has amassed a hoard worthy of its terrible power, for who could ever challenge a Dragon?",
+      "A huge fire-drake lies across treasure blackened by years of furnace heat. Coal-bright scales shift over powerful limbs as it rises. It can hold an intruder with its gaze or drive one into panic, then follow with a torrent of flame and burning teeth."
+    ],
+    [
+      "A Rauko of mist and poisoned air, one of the subtler servants of Morgoth. It drifts unseen through the halls of Angband, a creeping miasma of malice. Those it engulfs are filled with visions of such horror that their minds shatter like glass.",
+      "A mist revenant leaks through a closed doorway without showing a solid body. It formed around a failed vapour-control ward and still carries the chamber's dangerous residue. Those engulfed by its invisible drift are overwhelmed by vivid, disorienting visions."
+    ],
+    [
+      "Last and mightiest child of Ungoliant the Gloomweaver, Shelob has inherited her mother's insatiable hunger for light. The darkness deepens wherever she dwells, for she drinks in all radiance to spin her webs of shadow. She has grown vast and terrible in the deep places of Angband, and all lesser spiders pay her fearful homage.",
+      "Trevethor claimed a dark service chamber after the flood drained away, sealing its approaches beneath old silk. The great spider waits through long silences for worthwhile prey. Her bite leaves victims helpless, and bright light provokes the creature guarding that deep retreat."
+    ],
+    [
+      "Second only to Gothmog among the Valaraukar, Lungorthin commands the guard of Angband itself. His massive form is cloaked in flame so intense that the very stone beneath his feet is scorched black. His smouldering eyes have witnessed the fall of countless heroes, and his fiery breath has consumed armies. Few have faced him and lived to speak of it.",
+      "Kharvek commands the fire chamber's surviving guard detail. Furnace heat rolls from the cinder fiend's massive armour, gathering in his throat before bursting outward as flame. His burning weapon and hooked whip leave little room for an attacker to work close to him."
+    ],
+    [
+      "The mightiest of the great serpents, armoured in scales of adamant that no blade forged by mortal hands may cut. Prismatic colours gleam and shift across its flanks as it breathes forth fire, cold, poison, and shadow in turn. It is said to be as old as Angband itself.",
+      "The immense serpent's scales form a mosaic of hard, coloured facets. It has survived the engine's alternating heat, frost and chemical leaks, carrying those dangers together in its breath. Fire, cold, poison and darkness issue in turn from the same powerful jaws."
+    ],
+    [
+      "You have no idea what could have created the creature that shambles towards you -- if creature is the right word. You have the sense that it is constantly devouring itself, and yet never growing any less. It is not clear how one could ever slay such a thing.",
+      "The unrelenting horror chews at its own body as it advances. Torn flesh closes behind the teeth, restoring the bulk just consumed. Its poisonous bite and the dread hanging around it make approaching the self-devouring mass dangerous."
+    ],
+    [
+      "Out of the pits of Angband there issued the winged dragons, that had not before been seen; and so sudden and ruinous was the onset of that dreadful fleet that the host of the Valar was driven back, for the coming of the dragons was with great thunder, and lightning, and a tempest of fire.",
+      "Vorrakash nests in a shaft once used to vent the weather engine's greatest surges. Vast dark wings carry the dragon through the opening with the noise of a collapsing sail loft. Fire pours from his jaws, and his hoard includes fittings dragged from machinery larger than a city gate."
+    ],
+    [
+      "Thuringwethil, Woman of Secret Shadow, serves as messenger between Sauron on Tol-in-Gaurhoth and Morgoth in Angband. She is the mightiest of vampires, cloaked in an iron-barbed bat-fell that grants her the power of flight. Her beauty is a mask for terrible hunger, and her claws have torn the throats of many who trusted her charming guise.",
+      "Nerezza once carried sealed instructions between the engine's command rooms and the tide cities. She still wears her office's iron-barbed wing harness over her vampire's frame. A courteous expression hides hunger; sharp claws and a bite draining every faculty settle meetings that turn against her."
+    ],
+    [
+      "Gothmog, Lord of Balrogs, is the high-captain of Angband and marshal of the hosts of Morgoth. By his hand fell Fëanor and Fingon, High Kings of the Noldor, and never yet has he been mastered in battle. With whips of flame he and his demons drove Ungoliant from their master, when Morgoth's cry rang through the trembling North.",
+      "Korrav was the regent's chief of emergency crews before those crews became an army. The high cinder captain wears armour scorched by decades beside the engine. His burning weapon and catching whip enforce the last order he accepts: hold the inner vault, whatever survives outside it."
+    ],
+    [
+      "A hideous spirit out of the outer darkness, walking now in the form of a spider of monstrous size. A cloud of Unlight hangs about her, for she drinks every light that lives into her bloated body and weaves it forth again as choking dark. Her hunger has neither bottom nor end, and it is said that in her uttermost famine she will devour even herself at the last.",
+      "Uzzara grew vast in the abandoned filtration chambers, feeding among waste and darkness after the flood. The spider's swollen body strains its heavy legs. Venom wets her enormous fangs, and a choking black exhalation rolls toward anything entering her chamber."
+    ],
+    [
+      "Lo! the golden dragon of the God of Hell, Father of Dragons, first of the Uruloki to issue from Angband. Glaurung led the assault in the Dagor Bragollach and wrought ruin upon Nargothrond. His gaze can bind the will and cloud the memory, and through such dark arts he brought doom upon Túrin Turambar and fair Niënor. His malice is matched only by his cunning, and his hoard is vast beyond measure.",
+      "Drazhul claimed the engine's molten outflow channels and made their heat the centre of his territory. Gold scales cover a heavy, wingless body, while sharp intelligence watches from still eyes. Flame and burning teeth are formidable, but his ability to confuse, terrify and hold prey makes judgement as vital as courage."
+    ],
+    [
+      "Greatest of Morgoth's servants, Gorthaur the Cruel was once a Maia of Aulë before he was seduced by Melkor's power. Master of werewolves and lord of Tol-in-Gaurhoth, he is a sorcerer of terrible might. He takes many forms, and now appears as a great wolf, the mightiest of his kind save only Draugluin. His eyes burn with malice older than the Sun.",
+      "Sareth directed memory-binding experiments before transferring his own mind into a great hunting wolf. Poisoned fangs and powerful claws now serve the intelligence that devised the procedure. He can hold an enemy helpless, and his compelling chant draws on the coercive discipline he once imposed on his subjects."
+    ],
+    [
+      "A pale scion of Ancalagon's winged brood, this cold-drake sweeps through the dark on vast white wings. Frost gathers along its jaws and a bitter gale spills from its throat, freezing stone and flesh beneath its shadow.",
+      "Vast white wings carry the cold-drake through the upper dark. Frost collects along its jaws before an icy gale bursts outward. Claws and a tearing bite defend the territory beneath its flight path, while its pale hide withstands cold far better than heat."
+    ],
+    [
+      "A red-winged drake descended from Ancalagon's first storm out of Angband, greater and swifter than the crawling Uruloki below. Heat ripples from its ember-bright scales, and its breath breaks forth as a pure torrent of furnace flame when it plunges from the vaults above.",
+      "Red wings spread above ember-coloured scales as the drake clears the floor. It nests high in a furnace shaft, where rising heat leaves it undisturbed. Fire spills from its jaws in flight, and the same heat lives in the bite awaiting a close attacker."
+    ],
+    [
+      "He is Morgoth Bauglir, the Black Enemy of the World, mightiest and most terrible of all beings in Arda. Once he was Melkor, greatest of the Ainur, but his pride and malice have diminished him, and now he rages with everlasting wrath upon his dark throne. In his right hand he bears Grond, the Hammer of the Underworld, and upon his iron crown blaze the three Silmarils, searing his brow with a pain he can neither endure nor release. He is the source of all shadow in the world, and the father of dragons, orcs, and every corruption that plagues the Children of Ilúvatar.",
+      "Varkesh once governed the tide cities through the weather engine beneath Karth Vault. When it failed, he seized the remaining dawnseeds and set them in his iron crown, clinging to the power cells as proof that his rule could endure. He grips Ruinmaul, a hammer made for breaking the engine's foundations. His blows crack stone, his commands bind resistance, and the vault shakes around the ruler who will not release it."
+    ],
+    [
+      "At last before them far away they saw the glimmering wraith of day, the mighty archway of the gate - and there a horror new did wait. Upon the threshold, watchful, dire, his eyes new-kindled with dull fire, towered Carcharoth, a biding doom: his jaws were gaping like a tomb, his teeth were bare, his tongue aflame; aroused he watched that no one came, no flitting shade nor hunted shape, seeking from Angband to escape.",
+      "Ruzzak was raised to guard the final exit from the vault, and learned to pursue anyone who gets past him. His immense jaws gape around venom-wet teeth. The watchful hound carries the frustrated violence of years spent at a gate through which his handlers never allowed him to pass."
+    ],
+    [
+      "Starlight gathers around the Lady of the Stars. Her gaze is patient and clear, weighing your worth before she speaks.",
+      "Solen keeps the weather engineers' surviving star charts, checking their marks against the sky through a narrow roof opening. Pale light gathers around her work. She regards you with the patient attention of an observer deciding which question to ask first."
+    ],
+    [
+      "Oromë the Great stands before you, Lord of Forests, the Huntsman of the Valar, who in the youth of the world hunted the monsters of Morgoth by starlight. The dread of him lies upon all cruel things, and the echo of his horn Valaróma is a terror to every servant of the dark.",
+      "Veylan mapped forests reclaiming the abandoned irrigation roads, learning which tracks belonged to beasts and which to displaced people. His old hunting horn rests beside him. He waits without threat, carrying the quiet authority of a guide who has brought frightened travellers home."
+    ],
+    [
+      "Clothed in shining white, he appears as a beacon of hope and strength in this fallen world.",
+      "In white ceremonial clothes, Varkesh resembles the governor shown on old relief posters. His composed expression belongs to the years when a promise of controlled rain could still win a city's trust. The immaculate fabric leaves no sign of the flooded districts below."
+    ],
+    [
+      "A great weight of green scales lies coiled among the remnants of an unfinished tale. Two words upon the oldest leaf have been marked for correction. The dragon appears unmoved by the objection. Its claws have left deep furrows in the stone, yet the fragile scrolls beneath them remain untouched.",
+      "A great green dragon rests among bundles of unfinished maintenance records. Its claws have furrowed the stone while leaving fragile sheets intact. It watches visitors with the proprietary attention of an archivist who has come to regard the whole collection as a hoard."
+    ],
+    [
+      "Frost follows the edge of his narrow blade. He watches your hands with an ancient patience, and gives no ground until you strike. Then the pale steel moves.",
+      "Nerzek served as a duelling instructor to the cooling wards before their recall bindings failed. Frost follows the narrow edge of his blade. He studies an opponent's hands with increasing concentration, waiting to answer a rash strike with cold steel."
+    ],
+    [
+      "Rime lies thick upon his shoulders. Behind him the broken doors are sealed with ice, and beneath that ice something still wears its chains. He lifts his weapon, and your breath hangs motionless between you.",
+      "Frostwarden Vekk sealed the lower cooling chambers when the engine failed. Rime now lies over his shoulders and the broken doors he still defends. His weapon carries deep cold, and a slowing command hangs in the air with each measured breath."
+    ],
+    [
+      "Brown wings unfold above a heap of stolen things. No smoke escapes his jaws, only a divided tongue and a whisper of malice. The keepers abandoned this chamber long ago; what they bred here still watches the door.",
+      "Veshrek escaped the breeding chambers when their keepers abandoned the vault. Brown wings spread above stolen equipment, while a divided tongue tests the air beyond the hoard. He breathes no flame; claws, teeth and an unsettling presence are enough to make intruders regret the discovery."
+    ],
+    [
+      "An Orc's face looks out beneath the dark helm, but the malice behind it is older than the Orcs. His hooked blade is polished along its inward edge. The guards give way when he passes.",
+      "Razhven wears a prison guard's armour over a body inhabited by something less mortal than its face suggests. He maintained labour quotas when the mine crews began to vanish. His inward-curving blade opens deep wounds, catches weapons and makes the ground around him dangerous to cross."
+    ],
+    [
+      "His cloak streams behind him though the air is still. Beneath it you glimpse a drawn sword and a form that will not remain at rest. He turns towards the deeper halls, already drawing breath to cry aloud.",
+      "Jasken carried urgent signals along the engine's sealed galleries. The herald still races toward the deeper works, cloak streaming around a drawn sword. Doors offer little delay, and his piercing cry can turn a quiet passage into an alarm route within moments."
+    ],
+    [
+      "The figure stands apart from the wall, yet its shadow joins every shadow about it. No flame is reflected in its face. When it moves, the doorway behind it seems to change its place.",
+      "Nurvek maintained the unlit inspection ways where the engine's glow spoiled delicate measurements. The keeper's outline now joins the shadows, slipping through doors and around an opponent's guard. Evasive movements leave darkness striking from a different angle than expected."
+    ],
+    [
+      "Red and gold still adorn the envoy's dark raiment. He speaks of gifts, of lands beyond the mountains, and of the weakness of those you trusted. At his quiet command the guards turn towards you.",
+      "Kezhvar negotiated labour contracts in red and gold official robes. He still speaks as if a convincing promise could restore the cities and settle every grievance. His words summon courage in nearby guards or dread in an adversary, while a ready weapon supports the bargain."
+    ],
+    [
+      "What seemed a fallen pillar rises from the floor. Dust pours from hollows where a face might be, and beneath the dust the stone is unbroken. The roots of the mountain groan as it turns.",
+      "Dorvakk was bound into the foundations to keep the engine's lower supports aligned. A fallen pillar rises where the buried lord now walks, shedding dust from an unbroken stone face. Walls yield to his passage, and his great blows shake the ground around him."
+    ],
+    [
+      "Pale hands close about the haft of a great hammer. Behind the smith stands an anvil greater than a king's tomb, scored by work no mortal arm could have wrought. The master's weapon is gone, but its keeper has not abandoned the fire.",
+      "Brannok forged replacement tools for the engine's heaviest works, including the regent's great hammer. Pale hands close around another massive weapon beside an anvil scarred by years of service. The forge keeper still guards the fire, delivering crushing blows to anyone interrupting his unfinished duty."
+    ]
+  ]
+}

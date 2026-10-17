@@ -19,6 +19,7 @@ void cleanup_angband(void)
 {
     meta_state_shutdown();
 
+    lore_cleanup();
     /* Free the macros */
     macro_free();
 

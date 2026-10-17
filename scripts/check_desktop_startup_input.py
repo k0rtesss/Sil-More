@@ -33,6 +33,7 @@ static void setup(int mode, int pads)
 {
     sdl_config_set_defaults(&config);
     config.input_ui_mode = mode;
+    g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP;
     g_gamepad_state.pad_count = pads;
     g_gamepad_auto_ui = pads > 0;
     prompts = 0;
@@ -83,6 +84,26 @@ static void decisions(void)
     set_sdl_input_ui_mode(keyboard);
     assert(config.desktop_input_choice == SDL_INPUT_UI_MODE_AUTO);
     answer_controller = answer_remember = false; expect_mode(keyboard, 2);
+    /* Handheld identity survives keyboard overrides and temporarily absent
+     * built-in controls, without opening the desktop controller prompt. */
+    for (int pads = 0; pads <= 1; pads++) {
+        setup(SDL_INPUT_UI_MODE_AUTO, pads);
+        g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
+        config.mouse_enabled = false;
+        sdl_check_desktop_startup_input();
+        assert(prompts == 0 && config.input_ui_mode == SDL_INPUT_UI_MODE_AUTO);
+        assert(!config.mouse_enabled);
+        assert(g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD);
+        config.input_ui_mode = keyboard;
+        config.gamepad_enabled = false;
+        sdl_check_desktop_startup_input();
+        assert(prompts == 0 && config.input_ui_mode == keyboard);
+        assert(!config.gamepad_enabled);
+        config.input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
+        config.desktop_input_choice = keyboard;
+        sdl_check_desktop_startup_input();
+        assert(prompts == 0 && config.input_ui_mode == keyboard);
+    }
     puts("Startup cases, repeated launches, remembered choices and JSON roundtrip: PASS");
 }
 static void key(SDL_Keycode keycode)
@@ -192,9 +213,9 @@ def main():
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
-        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin",
         str(BUILD / "_deps/SDL"), str(BUILD / "_deps/SDL_ttf"),
-        str(BUILD / "_deps/SDL_image"), str(BUILD / "_deps/SDL_mixer"), env["PATH"]])
+        str(BUILD / "_deps/SDL_image"), str(BUILD / "_deps/SDL_mixer"),
+        "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env["SDL_VIDEO_DRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     compiler = "C:/msys64/mingw64/bin/cc.exe"

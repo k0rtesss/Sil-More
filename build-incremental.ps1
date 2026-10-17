@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("standard", "portable")]
+    [ValidateSet("standard", "portable", "steam")]
     [string]$Target = "standard",
 
     [int]$Jobs = 0,
@@ -13,7 +13,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cmakeExe = "C:\msys64\mingw64\bin\cmake.exe"
 $mingwBin = "C:\msys64\mingw64\bin"
 $msysBin = "C:\msys64\usr\bin"
-$buildDir = if ($Target -eq "portable") { "build-portable" } else { "build-standard" }
+$buildDir = "build-$Target"
 $cachePath = Join-Path $repoRoot $buildDir | Join-Path -ChildPath "CMakeCache.txt"
 
 if (-not (Test-Path $cmakeExe)) {

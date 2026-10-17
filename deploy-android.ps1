@@ -76,11 +76,21 @@ if ($Config -eq 'Release') {
     }
 }
 
-& $buildScript @buildParams
+$previousAndroidAbis = [Environment]::GetEnvironmentVariable('SIL_MORE_ANDROID_ABIS', 'Process')
+try {
+    # Every deploy entrypoint installs the 64-bit build, even when the caller's
+    # environment requests another ABI for a standalone APK build.
+    [Environment]::SetEnvironmentVariable('SIL_MORE_ANDROID_ABIS', 'arm64-v8a', 'Process')
+    & $buildScript @buildParams
+}
+finally {
+    [Environment]::SetEnvironmentVariable('SIL_MORE_ANDROID_ABIS', $previousAndroidAbis, 'Process')
+}
 
 $installParams = @{
     Config = $Config
     Delivery = $Delivery
+    Abi = 'arm64-v8a'
 }
 if ($Apk2) {
     $installParams['Apk2'] = $true

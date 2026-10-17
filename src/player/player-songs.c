@@ -1,6 +1,7 @@
 ﻿/* File: player/player-songs.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -622,6 +623,7 @@ void sing(void)
     else
     {
         p_ptr->song_duration++;
+        sil_achievements_on_singing_turn();
     }
 
     if (singing(SNG_DISGUISE))
@@ -698,6 +700,7 @@ void sing(void)
 
             if (p_ptr->chp > p_ptr->mhp)
                 p_ptr->chp = p_ptr->mhp;
+            sil_achievements_on_healing();
 
             break;
         }

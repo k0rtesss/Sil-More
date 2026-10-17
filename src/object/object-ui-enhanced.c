@@ -983,7 +983,7 @@ void show_inven_enhanced(void)
             if (!item_tester_okay(o_ptr))
                 continue;
 
-            object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 3);
+            object_desc_floor_display(o_name, sizeof(o_name), o_ptr, true, 3);
             o_name[lim] = '\0';
 
             out_index[k] = 0 - floor_list[i];
@@ -1030,7 +1030,7 @@ void show_inven_enhanced(void)
         if (!item_tester_okay(o_ptr))
             continue;
 
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
         o_name[lim] = '\0';
 
         out_index[k] = i;
@@ -1229,7 +1229,7 @@ void show_inven_enhanced(void)
                     if (equipped_obj->k_idx)
                     {
                         compare_obj[idx] = equipped_obj; /* Store for tile display */
-                        object_desc(compare_desc[idx], sizeof(compare_desc[idx]), equipped_obj, true, 3);
+                        object_desc_display(compare_desc[idx], sizeof(compare_desc[idx]), equipped_obj, true, 3);
                         compare_desc[idx][compare_lim] = '\0';
                         log_debug("COMPARE SETUP slot=%d: orig_len=%d, compare_lim=%d, truncated='%s'",
                             slot, (int)strlen(compare_desc[idx]), compare_lim, compare_desc[idx]);
@@ -2085,7 +2085,7 @@ void show_equip_enhanced(void)
         else
         {
             /* Description (exactly like show_equip) */
-            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+            object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
             out_color[k] = object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
         }
         

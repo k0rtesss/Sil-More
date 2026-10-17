@@ -336,7 +336,7 @@ if ([string]::IsNullOrWhiteSpace($PortableArchiveName)) {
 $releaseApkFileName = "$defaultArchiveBaseName.apk"
 
 $releaseApkSourcePath = if ([string]::IsNullOrWhiteSpace($ApkPath)) {
-    Get-FullPath "android/app/build/outputs/apk/sideload/release/app-sideload-release.apk"
+    Get-FullPath "android/app/build/outputs/apk/sideload/release/app-sideload-universal-release.apk"
 } else {
     Get-FullPath $ApkPath
 }
@@ -424,7 +424,7 @@ try {
     New-DistributionArchive -Label "portable" -SourceFolderPath $portableReleaseFolderPath -ArchivePath $portableArchivePath
 
     Write-Host ""
-    Write-Host "Copying release APK..." -ForegroundColor Yellow
+    Write-Host "Copying universal release APK..." -ForegroundColor Yellow
     Copy-Item -LiteralPath $releaseApkSourcePath -Destination $releaseApkDestinationPath -Force
     Write-Host "  [OK] APK copied to $releaseApkDestinationPath" -ForegroundColor Green
 

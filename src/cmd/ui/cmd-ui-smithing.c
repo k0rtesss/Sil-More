@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -10156,13 +10157,16 @@ static void finish_smith_reforge(void)
 
     /* Delta costs were paid when this exact item entered the work. */
     int slot = inven_carry(smith_o_ptr, true);
+    bool delivered = true;
     if (player_inventory_handle_valid(slot))
         msg_format("You have reforged %s (%c).", name, player_inventory_label(slot));
     else
     {
-        drop_near(smith_o_ptr, 0, p_ptr->py, p_ptr->px);
+        delivered = drop_near(smith_o_ptr, 0, p_ptr->py, p_ptr->px) > 0;
         msg_format("You have reforged %s, but it falls to the floor.", name);
     }
+    if (delivered)
+        sil_achievements_on_smithing_completed(false);
     object_wipe(smith_o_ptr);
     smith_clear_alloy_state(&smith_alloy);
     p_ptr->update |= PU_BONUS;
@@ -10186,6 +10190,8 @@ void create_smithing_item(void)
     char o_name[80];
     bool meta_saved = false;
     bool reused_meta_slot = false;
+    bool custom_artefact = smith_o_ptr->name1 != 0;
+    bool delivered = true;
 
     log_debug("Creating smithing item");
 
@@ -10326,7 +10332,7 @@ void create_smithing_item(void)
     {
         // Drop it on the floor instead
         log_debug("Smithed item couldn't fit in inventory, dropping to floor");
-        drop_near(smith_o_ptr, 0, p_ptr->py, p_ptr->px);
+        delivered = drop_near(smith_o_ptr, 0, p_ptr->py, p_ptr->px) > 0;
 
         // Describe the object
         object_desc(o_name, sizeof(o_name), smith_o_ptr, true, 3);
@@ -10357,6 +10363,10 @@ void create_smithing_item(void)
         msg_format("You have %s (%c).", o_name, player_inventory_label(slot));
         log_info("Created smithing item: %s", o_name);
     }
+
+    /* Costs, artefact registration and delivery have all completed. */
+    if (delivered)
+        sil_achievements_on_smithing_completed(custom_artefact);
 
     // Wipe the smithing object
     object_wipe(smith_o_ptr);

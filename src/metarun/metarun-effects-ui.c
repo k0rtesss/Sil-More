@@ -30,16 +30,16 @@ static int metarun_active_effect_block_lines(int id, int term_width)
     int lines = 1; /* Name */
 
     cptr desc = is_blessing
-        ? (cu->blessing_text ? cu_text + cu->blessing_text : NULL)
-        : (cu->text ? cu_text + cu->text : NULL);
+        ? (cu->blessing_text ? lore_text(cu_text + cu->blessing_text) : NULL)
+        : (cu->text ? lore_text(cu_text + cu->text) : NULL);
     if (desc && *desc) {
         lines += metarun_count_effect_lines(desc, wrap_width, text_col);
     }
 
     if (seen) {
         cptr power = is_blessing
-            ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
-            : (cu->power ? cu_text + cu->power : NULL);
+            ? (cu->blessing_power ? lore_text(cu_text + cu->blessing_power) : NULL)
+            : (cu->power ? lore_text(cu_text + cu->power) : NULL);
 
         if (power && *power) {
             char effect_line[1024];
@@ -77,8 +77,8 @@ static int metarun_render_active_effect_block(int id, int row, int term_width)
     text_out_wrap = wrap_width;
 
     cptr desc = is_blessing
-        ? (cu->blessing_text ? cu_text + cu->blessing_text : NULL)
-        : (cu->text ? cu_text + cu->text : NULL);
+        ? (cu->blessing_text ? lore_text(cu_text + cu->blessing_text) : NULL)
+        : (cu->text ? lore_text(cu_text + cu->text) : NULL);
     if (desc && *desc) {
         Term_gotoxy(text_col, row);
         text_out_c(TERM_SLATE, desc);
@@ -87,8 +87,8 @@ static int metarun_render_active_effect_block(int id, int row, int term_width)
 
     if (seen) {
         cptr power = is_blessing
-            ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
-            : (cu->power ? cu_text + cu->power : NULL);
+            ? (cu->blessing_power ? lore_text(cu_text + cu->blessing_power) : NULL)
+            : (cu->power ? lore_text(cu_text + cu->power) : NULL);
 
         if (power && *power) {
             char effect_line[1024];

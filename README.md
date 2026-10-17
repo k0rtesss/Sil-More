@@ -52,6 +52,13 @@ Second, it uses metaruns so consecutive runs are connected into one storyline, c
    .\sil-more-windows-sdl3-portable\sil-more.exe
    ```
 
+### Optional: Steamworks builds
+
+Normal builds keep Steamworks disabled and do not require Valve's SDK. Steam
+builds explicitly enable `SIL_STEAMWORKS` and use a separately obtained SDK,
+which stays local and is excluded from Git. See the [Steam build guide](docs/steam-build.md)
+for SDK setup, Windows/Linux/macOS commands and release packaging.
+
 ### Optional: package-based desktop build
 
 This is a local convenience path only. Windows release builds should use the pinned submodules above.
@@ -97,7 +104,10 @@ cmake --build build --parallel
 
 ## macOS
 
-macOS currently uses package-based SDL builds by default. The normal order is: install Apple's command line tools, install Homebrew packages, clone the repo, then build with CMake. The submodule path is still available as an alternative.
+macOS defaults to building the pinned SDL submodules. The normal order is:
+install Apple's command line tools, install the build/font dependencies, clone
+the repo, initialize its submodules, then build with CMake. This avoids mixing
+an older Homebrew SDL3 with the newer SDL_mixer submodule.
 
 ### Build Order (Default macOS Path)
 
@@ -121,7 +131,7 @@ That should print a path such as:
 ```
 
 #### 2. Install Homebrew
-Homebrew is the easiest way to install the SDL3 libraries and CMake on macOS.
+Homebrew provides CMake and the font dependencies for this build.
 
 If you already have it, check with:
 
@@ -135,7 +145,7 @@ If not, install it from https://brew.sh/ and then continue here.
 In Terminal, run:
 
 ```bash
-brew install cmake sdl3 sdl3-image sdl3-ttf sdl3-mixer
+brew install cmake pkgconf freetype harfbuzz
 ```
 
 #### 4. Clone the repo
@@ -144,17 +154,18 @@ In Terminal, run:
 ```bash
 git clone https://github.com/k0rtesss/Sil-More.git
 cd Sil-More
+git submodule update --init --recursive
 ```
 
 #### 5. Build the game
-From the repo root, configure and build against the Homebrew SDL packages:
+From the repo root, configure and build the pinned SDL sources:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSIL_BUILD_WITH_SDL_SOURCES=ON -DCMAKE_PREFIX_PATH="$(brew --prefix)"
 cmake --build build --parallel
 ```
 
-If CMake says it cannot find `SDL3`, `SDL3_image`, `SDL3_ttf`, or `SDL3_mixer`, try an explicit Homebrew prefix:
+If CMake cannot find FreeType or HarfBuzz, try an explicit Homebrew prefix:
 
 - Apple Silicon Macs usually use `/opt/homebrew`
 - Intel Macs usually use `/usr/local`
@@ -162,7 +173,7 @@ If CMake says it cannot find `SDL3`, `SDL3_image`, `SDL3_ttf`, or `SDL3_mixer`, 
 Example:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/homebrew
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSIL_BUILD_WITH_SDL_SOURCES=ON -DCMAKE_PREFIX_PATH=/opt/homebrew
 cmake --build build --parallel
 ```
 
@@ -177,8 +188,9 @@ From the repo root, run:
 
 On first launch, the game will create its save/config folders in your macOS user data location and seed the default `sound.json` automatically.
 
-### Alternative: build macOS against the repo SDL submodules
-Use this only if you explicitly want the same source-based SDL path used by Windows and Android.
+### Alternative: build macOS with vendored font dependencies
+Use this to avoid Homebrew font libraries, including when building both Intel
+and Apple Silicon architectures. The pinned SDL submodules remain required.
 
 1. Clone the repo and enter it.
    ```bash
@@ -192,7 +204,7 @@ Use this only if you explicitly want the same source-based SDL path used by Wind
 3. If you already configured `build/` for the Homebrew path and want to switch methods, remove the old build directory first.
 4. Configure and build:
    ```bash
-   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSIL_BUILD_WITH_SDL_SOURCES=ON
+   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSIL_BUILD_WITH_SDL_SOURCES=ON -DSDLTTF_VENDORED=ON
    cmake --build build --parallel
    ```
 5. Run the game:
@@ -224,7 +236,7 @@ These instructions are for personal builds and sideloading. For normal play, pre
 3. Install Android Studio plus the Android SDK, NDK, and CMake components from SDK Manager.
 4. Open the `android/` folder in Android Studio.
 5. Let Gradle sync complete.
-6. Build or run the `app` configuration. Use the `sideloadDebug` variant for personal adb installs. Debug builds use a separate package from both the Play/internal-testing app and the release sideload APK, so all copies can coexist. The Gradle project packages the game data from `lib/` into the APK and targets `arm64-v8a`.
+6. Build or run the `app` configuration. Use the `sideloadDebug` variant for personal adb installs. Debug builds use a separate package from both the Play/internal-testing app and the release sideload APK, so all copies can coexist. The Gradle project packages the game data from `lib/` and emits separate `arm64-v8a` and `armeabi-v7a` APKs by default; deploy helpers install the 64-bit APK.
 
 ### Personal APK build from PowerShell
 From the repo root, build a debug APK:
@@ -295,6 +307,10 @@ The Play Store app bundle script always builds the Play delivery flavor and keep
 For more Android-specific details, see [android/README.md](android/README.md).
 
 # Steam Deck installation
+
+Linux and Windows builds detect Steam Deck and supported PC handhelds and use
+the Android handheld layout/input defaults on first launch. Saved settings
+are preserved. See [handheld detection and overrides](docs/steam-build.md#pc-handheld-defaults).
 
 - There is no separate Steam Deck release anymore. Use the regular Windows release zip.
 - Long press power button and enter Desktop Mode.

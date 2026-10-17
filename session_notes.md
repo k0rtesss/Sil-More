@@ -1,5 +1,14 @@
 # Session notes
 
+## 2026-10-17: Port master into 0.9.9
+
+- Merged `origin/master` through `1bed051c`: local/platform achievements, optional Steamworks builds, handheld defaults, settings reset, generic lore, player tile health bars, and controller/UI fixes. Kept 0.9.9 progression, quests, Tale memory, and vertical-world behavior.
+- Save format is `0.9.9.7`. Gate new achievement/poison fields separately from master's `0.9.8.31`; an actual committed `0.9.9.6` writer verifies legacy stream/checksum alignment and safe defaults. Upgrade the legacy player-poison flag into its pending dose so existing quest credit survives; lethal poison uses the normal quest/achievement kill path once.
+- Kept Quest and Challenge options alongside the new Developer page; supplied complete quest group headings. Removed duplicate control-interface initialization and retained background cache polling. Adapted imported fixtures to thread-local engine globals, current settings navigation, and the pinned SDL runtime.
+- Extended generic prose to 0.9.9 abilities, follow-up quests, vertical cistern vaults, and revised smithing tutorials. Source, both Windows deployments, and the ARM64 APK contain identical catalogues; canonical templates, IDs, GUIDs, and gameplay RNG remain unchanged.
+- Validation: standard/portable `build-cmake.bat all`; Android ARM64 sideload debug APK plus final asset packaging; 30 regression suites pass. Three optional Steam adapter/platform checks cannot run because the Steamworks SDK is absent; no Steam build or platform-service runtime validation is claimed.
+- Isolated normal-game smoke profile: `scripts/output/control-playtests/master-port-20261017-397760b0/`. Created a hero and checked inventory/equipment, unified Look, empty combat history, achievements, Quest/Developer settings, and save/reload preserving position, HP and clocks. Saved and closed both runs; adjacent log has no warnings/errors. Normal player data was not opened. Build/check logs and final result manifest are under `scripts/output/master-port-20261017/`.
+
 ## 2026-10-04: Parallel game-control wizard playtest
 
 - Used all three available subagents (GPT-6.1 Sol, medium) for independent terrain, item, and combat play, with root covering quests, menus, and save/load. Each used a separate headless portable profile under `scripts/output/control-playtests/`; no normal saves/configurations were opened. Profiles: `terrain-oct04-d8d84a8f`, `items-oct04-a7622d90`, `combat-oct04-400a4821`, `quests-oct04-5c3ae922`.

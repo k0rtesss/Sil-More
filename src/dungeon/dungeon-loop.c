@@ -4,6 +4,7 @@
 #include "level-generation/level-cache.h"
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
+#include "achievements.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
 
@@ -266,6 +267,9 @@ void dungeon(void)
     sdl_touch_maybe_show_first_game_tutorial();
     sdl_mouse_maybe_show_first_game_tutorial();
     tutorial_game_start();
+    /* Existing saves can establish this milestone from their recorded depth. */
+    sil_achievements_on_depth(p_ptr->max_depth);
+    sil_achievements_on_level_entry(p_ptr->restoring);
 
     log_info("Dungeon display setup completed successfully");
     catastrophe_resume_level();

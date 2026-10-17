@@ -1445,7 +1445,7 @@ void hint_text_for_current_platform(const char* src, char* out,
     if (!out || out_sz == 0)
         return;
 
-    SDL_strlcpy(current, src ? src : "", sizeof(current));
+    lore_prose_copy(current, sizeof(current), src ? src : "");
     if (!touch && !controller)
     {
         SDL_strlcpy(out, current, out_sz);

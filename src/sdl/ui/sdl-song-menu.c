@@ -315,6 +315,7 @@ void sdl_song_menu_clear(void)
 
 void sdl_song_menu_begin(cptr title)
 {
+    title = lore_text(title);
     memset(&g_song_menu, 0, sizeof(g_song_menu));
     g_song_menu.active = true;
     g_song_menu.highlight = -1;
@@ -325,6 +326,7 @@ void sdl_song_menu_begin(cptr title)
 
 void sdl_song_menu_add_entry(int choice, cptr letter, cptr text, byte attr)
 {
+    text = lore_text(text);
     sdl_song_menu_entry_state* entry;
 
     if (!g_song_menu.active)
@@ -346,6 +348,7 @@ void sdl_song_menu_add_entry(int choice, cptr letter, cptr text, byte attr)
 /* Information-only line: rendered like an entry but never hit-tested. */
 void sdl_song_menu_add_text(cptr text, byte attr)
 {
+    text = lore_text(text);
     sdl_song_menu_add_entry(-1, "", text, attr);
 }
 

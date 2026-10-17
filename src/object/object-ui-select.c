@@ -41,9 +41,9 @@ static bool verify_item(cptr prompt, int item)
 
     /* Describe */
     if (item < 0)
-        object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_floor_display(o_name, sizeof(o_name), o_ptr, true, 3);
     else
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+        object_desc_display(o_name, sizeof(o_name), o_ptr, true, 3);
 
     /* Prompt */
     strnfmt(out_val, sizeof(out_val), "%s %s? ", prompt, o_name);
@@ -260,11 +260,11 @@ void object_choice_entry_make(object_choice_entry* entry, int item,
     }
     else if (item < 0)
     {
-        object_desc_floor(desc, sizeof(desc), o_ptr, true, 3);
+        object_desc_floor_display(desc, sizeof(desc), o_ptr, true, 3);
     }
     else
     {
-        object_desc(desc, sizeof(desc), o_ptr, true, 3);
+        object_desc_display(desc, sizeof(desc), o_ptr, true, 3);
     }
 
     if (prefix && prefix[0])
@@ -1236,7 +1236,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             for (int r=0;r<vis_equip_cnt;r++){                                      \
                 object_type* o_ptr=&inventory[vis_equip[r]];                        \
                 if (o_ptr->k_idx)                                                   \
-                    object_desc(tmp, sizeof(tmp), o_ptr, true, 3);                  \
+                    object_desc_display(tmp, sizeof(tmp), o_ptr, true, 3);                  \
                 else                                                                \
                     SDL_strlcpy(tmp, describe_empty_slot(vis_equip[r]), sizeof(tmp)); \
                 tmp[lim]='\0';                                                     \
@@ -1246,7 +1246,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         } else if (p_ptr->command_wrk == (USE_FLOOR)) {                             \
             for (int r=0;r<vis_floor_cnt;r++){                                      \
                 object_type* o_ptr=&o_list[floor_list[vis_floor[r]]];               \
-                object_desc_floor(tmp, sizeof(tmp), o_ptr, true, 3);                \
+                object_desc_floor_display(tmp, sizeof(tmp), o_ptr, true, 3);                \
                 tmp[lim]='\0';                                                     \
                 int l=strlen(tmp)+5 + (show_weights?9:0);                           \
                 if (l>len) len=l;                                                   \
@@ -1318,7 +1318,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             row = highlight_row; item_index = vis_equip[highlight_row];             \
             object_type* o_ptr=&inventory[item_index];                              \
             if (o_ptr->k_idx)                                                       \
-                object_desc(tmp,sizeof(tmp),o_ptr,true,3);                          \
+                object_desc_display(tmp,sizeof(tmp),o_ptr,true,3);                          \
             else                                                                    \
                 SDL_strlcpy(tmp, describe_empty_slot(item_index), sizeof(tmp));     \
             tmp[lim]='\0';                                                          \
@@ -1352,7 +1352,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             row = highlight_row; floor_slot = vis_floor[highlight_row];             \
             int obj_idx = floor_list[floor_slot];                                   \
             object_type* o_ptr=&o_list[obj_idx];                                    \
-            object_desc_floor(tmp,sizeof(tmp),o_ptr,true,3); tmp[lim]='\0';         \
+            object_desc_floor_display(tmp,sizeof(tmp),o_ptr,true,3); tmp[lim]='\0';         \
             prt("", row+1, col);                                                    \
             int label_col = label_col_base;                                         \
             DRAW_HIGHLIGHT_IF_STORY({                                               \

@@ -1,0 +1,1473 @@
+{
+  "title": "Emberfall world descriptions",
+  "terms": [
+    [
+      "Gift out of the West",
+      "Workshop Inheritance"
+    ],
+    [
+      "Supply Covenant",
+      "Reserve Allotment"
+    ]
+  ],
+  "descriptions": [
+    [
+      "Every step feels older than the hills, your frame burdened by some unseen weight of ages past.",
+      "The recall harness pulls against every movement, as if its lifting braces had seized. You must supply the strength the mechanism no longer gives."
+    ],
+    [
+      "The unseen weight falls away; your stride lightens.",
+      "The harness answers your movements again. Its braces lift with you instead of pulling you down."
+    ],
+    [
+      "Strength -1",
+      "Strength modifier: -1."
+    ],
+    [
+      "Strength +1",
+      "Strength modifier: +1."
+    ],
+    [
+      "A faint quiver deep within; calm dissolves beneath hidden tremors.",
+      "A vibration passes from the return circuit into your hands. Even a familiar movement takes care to complete."
+    ],
+    [
+      "A gentle hush steadies your hands; tremors fade into stillness.",
+      "The circuit settles into a steady pulse. Your hands follow their intended paths without the tremor."
+    ],
+    [
+      "Dexterity -1",
+      "Dexterity modifier: -1."
+    ],
+    [
+      "Dexterity +1",
+      "Dexterity modifier: +1."
+    ],
+    [
+      "Your heart feels as petals under frost, frail and fleeting, vulnerable to the gentlest winds.",
+      "The journey back has left you with little reserve. A long climb or a hard fight empties your strength sooner than it should."
+    ],
+    [
+      "Warmth floods your limbs; your endurance renews like spring.",
+      "You recover a reserve that the return journey once consumed. Your body can endure more before it gives way."
+    ],
+    [
+      "Constitution -1",
+      "Constitution modifier: -1."
+    ],
+    [
+      "Constitution +1",
+      "Constitution modifier: +1."
+    ],
+    [
+      "No longer do you glide upon the earth, for a shadow has passed over your steps, harmony forever broken.",
+      "The recall loom has restored your movements out of rhythm with your thoughts. Actions that once flowed together now require a deliberate effort."
+    ],
+    [
+      "Harmony returns to your movements; every step finds its rhythm.",
+      "Thought and movement fall into step. You can draw on the clarity that the faulty recall had obscured."
+    ],
+    [
+      "Grace -1",
+      "Grace modifier: -1."
+    ],
+    [
+      "Grace +1",
+      "Grace modifier: +1."
+    ],
+    [
+      "The blade betrays your hand; the foe laughs softly as your blows fall like rain upon the stones.",
+      "Your memory of close combat arrives a fraction late. Familiar openings close before your weapon reaches them."
+    ],
+    [
+      "The blade sings in your grasp, swift and certain as starlight.",
+      "Old fighting lessons become clear again. Your hand finds the opening while it is still there."
+    ],
+    [
+      "Melee Penalty",
+      "A penalty applies to your Melee skill."
+    ],
+    [
+      "Melee Affinity",
+      "You gain an affinity for Melee."
+    ],
+    [
+      "Moonlight dims and arrows stray; shadows deceive your sight, truths obscured in mist and twilight.",
+      "The remembered line from bow to target will not stay steady. Each shot requires you to work against that uncertainty."
+    ],
+    [
+      "Moonlight bathes your aim; shadows flee before your arrows.",
+      "The path of the shot becomes clear. Training and aim work together instead of pulling apart."
+    ],
+    [
+      "Archery Penalty",
+      "A penalty applies to your Archery skill."
+    ],
+    [
+      "Archery Affinity",
+      "You gain an affinity for Archery."
+    ],
+    [
+      "Silence slips away gently, betraying secrets once carefully kept.",
+      "The recall has returned the sound of every careless step. Learning to move unnoticed takes more effort."
+    ],
+    [
+      "Quiet veils your path; every step becomes a whisper.",
+      "You recover the quiet habits of the old maintenance crews. Concealment feels like a skill you can master again."
+    ],
+    [
+      "Stealth Penalty",
+      "A penalty applies to your Stealth skill."
+    ],
+    [
+      "Stealth Affinity",
+      "You gain an affinity for Stealth."
+    ],
+    [
+      "The present blurs, responses lingering too long at the edge of thought.",
+      "Your body remembers the danger after it has already begun to move. Keeping clear of an attack becomes harder to learn."
+    ],
+    [
+      "Moments quicken; you move before danger can arise.",
+      "You read an approaching blow with renewed confidence. The movement needed to avoid it comes more readily."
+    ],
+    [
+      "Evasion Penalty",
+      "A penalty applies to your Evasion skill."
+    ],
+    [
+      "Evasion Affinity",
+      "You gain an affinity for Evasion."
+    ],
+    [
+      "A film comes over your sight, and subtle truths dance forever just beyond it.",
+      "The details that should warn you of danger seem to arrive through scratched glass. Observation becomes a demanding discipline."
+    ],
+    [
+      "Your sight clears; each thing stands forth sharp and true.",
+      "The scratched image clears. Small differences and hidden signs become easier to understand."
+    ],
+    [
+      "Perception Penalty",
+      "A penalty applies to your Perception skill."
+    ],
+    [
+      "Perception Affinity",
+      "You gain an affinity for Perception."
+    ],
+    [
+      "A shadow creeps upon your mind, whispers of despair eroding bravery once unyielding.",
+      "A faulty memoryprint repeats every reason to give up. Holding a purpose against it requires greater effort."
+    ],
+    [
+      "Resolve blazes anew; dread is banished from your thoughts.",
+      "The repeating doubt loses its hold. You can build resolve without fighting the recall circuit at every step."
+    ],
+    [
+      "Will Penalty",
+      "A penalty applies to your Will skill."
+    ],
+    [
+      "Will Affinity",
+      "You gain an affinity for Will."
+    ],
+    [
+      "That which you craft falters like an ancient ruin, strength yielding slowly to decay.",
+      "Measurements and toolwork that once made sense return as disconnected lessons. Mastering the forge becomes harder."
+    ],
+    [
+      "Forge heat steadies; every craft holds fast beneath your hands.",
+      "The missing links between measurement, heat and hammerwork return. Craft lessons fit together again."
+    ],
+    [
+      "Smith Penalty",
+      "A penalty applies to your Smithing skill."
+    ],
+    [
+      "Smith Affinity",
+      "You gain an affinity for Smithing."
+    ],
+    [
+      "Voice drifts silently away, words unraveling softly before heard.",
+      "The recall preserves the words but loses the shape of the tune. Learning to use your voice becomes more difficult."
+    ],
+    [
+      "Your voice returns, weaving melodies anew through the dark.",
+      "Breath and melody reconnect. Songs become a craft you can learn instead of a memory you cannot quite reach."
+    ],
+    [
+      "Song Penalty",
+      "A penalty applies to your Song skill."
+    ],
+    [
+      "Song Affinity",
+      "You gain an affinity for Song."
+    ],
+    [
+      "Gone is the grace of choice; your path is bent by a doom not of your making. The Shadow mocks your striving, and leaves you only bitter fortune.",
+      "A damaged selector in the recall loom makes its own decision. You must live with the burden it assigns instead of choosing one."
+    ],
+    [
+      "Instead of choosing from curses, one is forced upon you.",
+      "A curse is assigned automatically; you cannot choose among curses."
+    ],
+    [
+      "A weary shadow follows you, pressing heavily upon your shoulders. Strength fades beneath the relentless weight of your own doom.",
+      "The harness is carrying more of its own damaged weight. Less of your strength remains available for the things you bring."
+    ],
+    [
+      "Your burden lifts; you carry hope's weight with ease.",
+      "The harness sheds its dead load. More of your carrying strength is available for useful equipment."
+    ],
+    [
+      "Weight limit decreased by 20%.",
+      "Your carrying weight limit is 20% lower."
+    ],
+    [
+      "Weight limit increased by 20%",
+      "Your carrying weight limit is 20% higher."
+    ],
+    [
+      "Your foes rise, drawn from deeper shadows. Their vigor renewed by whispered malice, each battle longer, bloodier, and grimmer.",
+      "The ordinary creatures of the works have grown harder to bring down. Each injury seems to leave them more life than you expected."
+    ],
+    [
+      "Your foes falter; their strength wanes before your resolve.",
+      "The creatures lose the unnatural endurance that sustained them. Ordinary foes fall with less punishment."
+    ],
+    [
+      "Ordinary monsters' HP increased by 20%.",
+      "Ordinary monsters receive 20% more HP."
+    ],
+    [
+      "Ordinary monsters' HP decreased by 10%",
+      "Ordinary monsters receive 10% less HP."
+    ],
+    [
+      "Named terrors regain their ancient potency, and their dark legends burn the brighter. You must reckon now with foes whose names echo loud in the dark.",
+      "The named powers of the lower works have renewed their reserves. Defeating them demands a longer struggle."
+    ],
+    [
+      "Great names fade; legends diminish before your growing might.",
+      "The great adversaries lose part of their reserve. Their reputations remain, but their bodies cannot sustain as much punishment."
+    ],
+    [
+      "Unique monsters' HP increased by 20%.",
+      "Unique monsters receive 20% more HP."
+    ],
+    [
+      "Unique monsters' HP decreased by 10%",
+      "Unique monsters receive 10% less HP."
+    ],
+    [
+      "Enemies glide unseen, cloaked by unnatural shadows. Footfalls silent, menace concealed, until dread's blade is poised at your back.",
+      "The machinery covers the sound of approaching enemies. They can conceal their movements more effectively."
+    ],
+    [
+      "Shadows flee; all that lurks is laid bare before you.",
+      "The masking noise falls away. Enemies find it harder to hide the sounds of their approach."
+    ],
+    [
+      "Monster Stealth increased by 2.",
+      "Add 2 to monster Stealth."
+    ],
+    [
+      "Monster Stealth decreased by 2",
+      "Subtract 2 from monster Stealth."
+    ],
+    [
+      "No subtlety escapes the watchful darkness. Eyes hidden in gloom pierce your every attempt at secrecy, stripping away your refuge.",
+      "Watchers have learned to notice the small disturbances you leave behind. Hiding from them becomes less reliable."
+    ],
+    [
+      "Your foes grow blind; their searching eyes find only mist.",
+      "The watchers lose their practiced attention. Small disturbances are more likely to pass unnoticed."
+    ],
+    [
+      "Monster Perception +2.",
+      "Monster Perception modifier: +2."
+    ],
+    [
+      "Monster Perception -2",
+      "Monster Perception modifier: -2."
+    ],
+    [
+      "Darkness fortifies their resolve. Adversaries steel their minds, unyielding as stone, resisting your every subtlety and song.",
+      "The regent has drilled his followers to resist coercion. Their determination gives your influence less room to work."
+    ],
+    [
+      "Their wills crumble; defiance turns to doubt and fear.",
+      "The followers begin to question their orders. Their resolve is less able to withstand pressure."
+    ],
+    [
+      "Monster Will +2.",
+      "Monster Will modifier: +2."
+    ],
+    [
+      "Monster Will -2",
+      "Monster Will modifier: -2."
+    ],
+    [
+      "Enemy hides harden after the fashion of Glaurung's iron fell. Blades ring vainly upon scales tempered in the Worm's lingering malice.",
+      "A fresh layer of hard material has formed over your enemies. Their protection has gained another layer to overcome."
+    ],
+    [
+      "Monster armour dice +1.",
+      "Monster armour gains +1 die."
+    ],
+    [
+      "A fell enchantment coats your foes in armour forged in shadowed halls. Weapons chip against barriers tougher than mortal craft can break.",
+      "Enemy armour has been reinforced at its strongest points. Blows that would once have penetrated may be turned aside."
+    ],
+    [
+      "Fell enchantments break; their armour turns to rust.",
+      "The reinforcement fails. Enemy armour can no longer absorb blows as effectively."
+    ],
+    [
+      "Monster armour dice sides +1.",
+      "Each monster armour die gains +1 side."
+    ],
+    [
+      "Monster armour dice sides -1",
+      "Monster armour die size modifier: -1."
+    ],
+    [
+      "You awaken stripped of all tokens of hope. Bereft, you face darkness bare-handed and vulnerable, a stark soul in a merciless world.",
+      "The return bay has lost your equipment allocation. This descent begins with whatever your empty hands can achieve."
+    ],
+    [
+      "Start without any equipment.",
+      "Begin the descent with no equipment."
+    ],
+    [
+      "Your hammer betrays you; each stroke tainted with subtle spite. Crafted treasures hide treacheries, twisted by secret malice.",
+      "Contamination has reached the forge stock. Even work made carefully by your own hand may carry a curse."
+    ],
+    [
+      "Items forged have chance to be cursed.",
+      "A forged item can turn out cursed."
+    ],
+    [
+      "Spoiled are the gifts of Arda, for darkness leaves its lingering touch. What should nourish now poisons; what might save may now doom.",
+      "The stores of the lower works have been tampered with. Newly appearing equipment may arrive already cursed."
+    ],
+    [
+      "Spawned items have chance to be cursed.",
+      "Items that appear in the dungeon can be cursed."
+    ],
+    [
+      "A shadow settles around you, dimming the circle of hope. The darkness looms closer, daring you to step into deeper gloom.",
+      "A fault narrows the useful circle of your light. The passage ahead disappears sooner into darkness."
+    ],
+    [
+      "Brightness swells around you; shadows flee from your presence.",
+      "The light reaches farther down the passage. More of the surrounding floor comes within its circle."
+    ],
+    [
+      "Light radius -1",
+      "Light radius modifier: -1."
+    ],
+    [
+      "Light radius +1",
+      "Light radius modifier: +1."
+    ],
+    [
+      "Light falters and flickers, drained by an unseen malice. Flames grow pale, barely holding back the encroaching night.",
+      "Your light has lost some of its strength. Its glow struggles against the darkness around it."
+    ],
+    [
+      "Your light burns eternal; no darkness can diminish its glow.",
+      "The light regains its strength. Its glow stands up more effectively to the surrounding dark."
+    ],
+    [
+      "Light Power -1",
+      "Light Power modifier: -1."
+    ],
+    [
+      "Light Power +1",
+      "Light Power modifier: +1."
+    ],
+    [
+      "Paths twist treacherously beneath your feet, snares multiplying at every step. Each shadow holds hidden peril, waiting hungrily to catch the unwary.",
+      "The old service routes have been seeded with additional traps. An apparently familiar passage deserves another look."
+    ],
+    [
+      "Traps are more frequent.",
+      "The dungeon contains traps more often."
+    ],
+    [
+      "Shadows multiply, thronging your path with relentless foes. Legions rise endlessly, pressing forward with hungry malice.",
+      "The lower works are more heavily occupied. More creatures stand between you and the routes you need."
+    ],
+    [
+      "More monsters",
+      "Additional monsters populate the dungeon."
+    ],
+    [
+      "A hollow gnaws within you, insatiable and relentless. Hunger stalks your every step, the emptiness a ceaseless torment.",
+      "The recall has left your body consuming its stores too quickly. Provisions disappear faster on the journey."
+    ],
+    [
+      "As with the waybread of the Elves, a little food sustains you long upon the road.",
+      "Your body makes its provisions last. Food sustains you for longer between meals."
+    ],
+    [
+      "Digestion rate is increased",
+      "You consume food at a faster rate."
+    ],
+    [
+      "Digestion rate is decreased",
+      "You consume food at a slower rate."
+    ],
+    [
+      "The essence of Arda twists cruelly upon your tongue. Visions distort reality, weaving madness from nourishment, blurring friend and foe.",
+      "Residue in the drinking vessels can disturb the mind. A draught may bring confusion to what your senses report."
+    ],
+    [
+      "20% chance per potion to go mad",
+      "Each potion carries a 20% chance of madness."
+    ],
+    [
+      "An unseen whisper seeps through your heart, unravelling valour into trembling dread.",
+      "The memory of danger keeps arriving with the force of a new alarm. You have less protection against fear."
+    ],
+    [
+      "Courage floods your chest; dread shatters against your will.",
+      "You can distinguish an alarm from the panic it creates. Fear finds a steadier mind to overcome."
+    ],
+    [
+      "Fear resistance -1",
+      "Fear resistance modifier: -1."
+    ],
+    [
+      "Fear resistance +1",
+      "Fear resistance modifier: +1."
+    ],
+    [
+      "Invisible tremors rattle your sinews; every impact lingers, stealing your balance.",
+      "A shock travels through you without dispersing. Your footing and awareness are more easily stunned."
+    ],
+    [
+      "Impact disperses in gentle waves; your stance remains unshaken.",
+      "You absorb a shock without letting it scatter your balance. It becomes harder to stun you."
+    ],
+    [
+      "Stun resistance -1",
+      "Stun resistance modifier: -1."
+    ],
+    [
+      "Stun resistance +1",
+      "Stun resistance modifier: +1."
+    ],
+    [
+      "Your thoughts fray into knotted echoes; commands dissolve before they reach your hands.",
+      "Competing recollections interrupt one another. You are more vulnerable when an attack confuses your thoughts."
+    ],
+    [
+      "A single lucid thread guides your mind; bewilderment cannot cling.",
+      "The recollections settle into a clear order. Confusion has less opportunity to take hold."
+    ],
+    [
+      "Confusion resistance -1",
+      "Confusion resistance modifier: -1."
+    ],
+    [
+      "Confusion resistance +1",
+      "Confusion resistance modifier: +1."
+    ],
+    [
+      "Phantasms bloom along the edge of sight; reality blurs into mocking lights.",
+      "The damaged recall mixes imagined shapes into what you see. Hallucinations can take hold more readily."
+    ],
+    [
+      "Illusions peel away; only the sure outline of truth remains.",
+      "You can separate the loom's false images from the world in front of you. Hallucinations find less purchase."
+    ],
+    [
+      "Hallucination resistance -1",
+      "Hallucination resistance modifier: -1."
+    ],
+    [
+      "Hallucination resistance +1",
+      "Hallucination resistance modifier: +1."
+    ],
+    [
+      "Your blood chills with stagnant venom; toxins linger eager for the kill.",
+      "The return has weakened your body's defenses against poison. Toxins are harder to withstand."
+    ],
+    [
+      "Your pulse quickens, burning poison to harmless ash.",
+      "Your defenses against poison recover. Toxins must overcome a stronger resistance."
+    ],
+    [
+      "Poison resistance -1",
+      "Poison resistance modifier: -1."
+    ],
+    [
+      "Poison resistance +1",
+      "Poison resistance modifier: +1."
+    ],
+    [
+      "Scorching doubts thin your wards; every ember threatens to consume you.",
+      "The return has thinned your protection against heat. Fire can harm you more readily."
+    ],
+    [
+      "A gentle glow wraps you; flame gutters at its edge.",
+      "Your protection against heat recovers. Fire meets a stronger resistance."
+    ],
+    [
+      "Fire resistance -1",
+      "Fire resistance modifier: -1."
+    ],
+    [
+      "Fire resistance +1",
+      "Fire resistance modifier: +1."
+    ],
+    [
+      "A creeping frost seeps into your bones; winter tides slip past your guard.",
+      "Cold reaches you through weaknesses left by the recall. You have less protection from freezing harm."
+    ],
+    [
+      "Warmth settles upon your shoulders; winter's bite slides away.",
+      "The weaknesses close. Your resistance to cold becomes stronger."
+    ],
+    [
+      "Cold resistance -1",
+      "Cold resistance modifier: -1."
+    ],
+    [
+      "Cold resistance +1",
+      "Cold resistance modifier: +1."
+    ],
+    [
+      "Your strikes hesitate at the final instant; keen edges dull against fate.",
+      "Your attacks lose force at the moment of contact. The weapon does not deliver all the damage it should."
+    ],
+    [
+      "Timing and edge align; every blow lands with sharpened purpose.",
+      "Your attack carries its force through the point of contact. Each damage die can reach a higher result."
+    ],
+    [
+      "Melee damage dice sides -1",
+      "Melee damage dice sides modifier: -1."
+    ],
+    [
+      "Melee damage dice sides +1",
+      "Melee damage dice sides modifier: +1."
+    ],
+    [
+      "Your guard reveals fatal seams; foes find grievous openings with ease.",
+      "Your guard leaves openings that a precise enemy can exploit. Critical hits become easier to inflict on you."
+    ],
+    [
+      "Critical threshold reduced by 1",
+      "Reduce the critical-hit threshold against you by 1."
+    ],
+    [
+      "The plates of your armour gap and groan; protection thins where strikes fall.",
+      "Your protection has weakened where blows are absorbed. Each protection die can do less to save you."
+    ],
+    [
+      "Mail knits tight and resilient; armour drinks the force of blows.",
+      "Your protection regains its strength. Each protection die can absorb a higher amount."
+    ],
+    [
+      "Protection dice sides -1",
+      "Protection dice sides modifier: -1."
+    ],
+    [
+      "Protection dice sides +1",
+      "Protection dice sides modifier: +1."
+    ],
+    [
+      "A darkness older than the Sun clings to your sight, kin to the Unlight that drank the radiance of the Trees. All things blur and blend; names and natures hide beneath a shroud no lamp can pierce.",
+      "The recall replaces useful observations with noise. Working out what an object really is takes more effort."
+    ],
+    [
+      "A gleam as of Laurelin and Telperion together falls upon your gaze; each thing stands forth in its true shape, naked and known.",
+      "The noise falls away from your observations. The true nature of an object becomes easier to establish."
+    ],
+    [
+      "Identification difficulty +7",
+      "Identification difficulty modifier: +7."
+    ],
+    [
+      "Identification difficulty -7",
+      "Identification difficulty modifier: -7."
+    ],
+    [
+      "The deep places grow barren and grey, their riches forfeit to the long defeat. Where once the Naugrim laid their proudest works in halls of living stone, only rude timbers now keep watch—the Shadow's tithe upon the dwindling wealth of Arda.",
+      "The valuable chests have been stripped from the works. You are more likely to find a wooden coffer in their place."
+    ],
+    [
+      "The deep places remember their glory; proud craft returns to vault and coffer, and the Shadow's tithe is paid no more.",
+      "The neglected stores yield better containers again. Wooden chests become less common."
+    ],
+    [
+      "Wooden chest probability +20%.",
+      "Wooden chests have a +20% probability adjustment."
+    ],
+    [
+      "Wooden chest probability -20%.",
+      "Wooden chests have a -20% probability adjustment."
+    ],
+    [
+      "A hidden tithe is laid upon your lore, as though every hard-won lesson must now be bought again from the long defeat that darkens Beleriand.",
+      "A damaged instruction record makes every new technique harder to secure. You must spend more experience on each ability."
+    ],
+    [
+      "A small mercy falls upon your labour, and the road to mastery is made less steep for a little while.",
+      "The instruction records become easier to use. Each ability requires less experience to learn."
+    ],
+    [
+      "Abilities cost 100 experience more.",
+      "Learning an ability requires an additional 100 experience."
+    ],
+    [
+      "Abilities cost 100 experience less.",
+      "Learning an ability requires 100 less experience."
+    ],
+    [
+      "No binding oath",
+      "No promise binds your choices"
+    ],
+    [
+      "You have taken no oath and are free to act as you choose.",
+      "You have made no binding promise for this descent. Choose your actions freely."
+    ],
+    [
+      "I swear no binding words.",
+      "I take on no binding obligation."
+    ],
+    [
+      "None",
+      "No prohibited actions"
+    ],
+    [
+      "Freedom of choice",
+      "You retain freedom to choose"
+    ],
+    [
+      "To spare the Children of Ilúvatar",
+      "Leave Men and Elves unharmed"
+    ],
+    [
+      "A solemn vow to leave Angband without shedding the blood of Man or Elf, showing mercy even to those who might oppose you. This oath reflects the compassion of Nienna, Lady of Pity.",
+      "Ilyra's field records ask for restraint toward Men and Elves, including those who oppose you. Accepting this promise means crossing Karth Vault without attacking or harming either people."
+    ],
+    [
+      "I swear to leave Angband without shedding blood of Man or Elf, showing mercy to all Children of Ilúvatar I encounter.",
+      "I will leave Karth Vault without attacking or harming any Man or Elf."
+    ],
+    [
+      "Attack or harm Men or Elves in any way",
+      "Any attack or harm against Men or Elves"
+    ],
+    [
+      "+1 Grace—Divine favor for your merciful heart",
+      "+1 Grace through practiced compassion"
+    ],
+    [
+      "Complete the Quest of Nienna, Lady of Pity",
+      "Finish Ilyra's task"
+    ],
+    [
+      "Your hand stays its course. The life before you is one of the Children of Ilúvatar. To strike them down is to stain your very soul and forsake the compassion you swore to uphold. Are you certain you wish to break your Oath of Mercy?",
+      "This action would harm a Man or Elf and break your Oath of Mercy. Continue and abandon the promise?"
+    ],
+    [
+      "The light of pity leaves your eyes, replaced by the shadow of wrath. The weight of this life taken settles upon you, a curse of your own making.",
+      "You have harmed someone you promised to spare. The discipline of that promise no longer supports you."
+    ],
+    [
+      "The echo of your mercy is now a mockery. Your Oath of Mercy is forever broken, a testament to the compassion you have cast aside in this age.",
+      "Your Oath of Mercy has been broken for this run."
+    ],
+    [
+      "You passed from the world, but the memory of your final deeds remains. You will be remembered as one who swore compassion, yet chose cruelty.",
+      "The record of your descent includes the life you harmed after promising restraint."
+    ],
+    [
+      "OATH OF MERCY SUNDERED—Thy hands are stained with the blood of kindred. No prayer for pity shall be heard from a voice that has forsaken it. The shadow of thy deed shall not be lifted in this age of the world. Marked forever as one who broke the bonds of mercy.",
+      "OATH OF MERCY BROKEN. A previous violation bars this promise; the recall record retains the harm you caused."
+    ],
+    [
+      "To maintain grim silence",
+      "Complete the descent without a voice"
+    ],
+    [
+      "A vow of absolute silence, taken by those who would enter and leave Angband as they came—wordless and grim. This oath embodies the stoic determination of proven warriors.",
+      "The maintenance crews once worked in listening silence, separating a useful sound from the noise of the works. You promise to keep that silence through Karth Vault, speaking no word and raising no song."
+    ],
+    [
+      "I swear to leave Angband as I came, grim and silent, speaking no word and raising no song in these dark halls.",
+      "I will enter and leave Karth Vault without speaking or singing."
+    ],
+    [
+      "Sing any song or make any vocal utterance",
+      "Singing or making a vocal utterance"
+    ],
+    [
+      "+1 Dexterity—Stoic fortitude and inner resilience",
+      "+1 Dexterity through silent discipline"
+    ],
+    [
+      "Complete the Quest of Oromë, the Great Hunter",
+      "Finish Veylan's task"
+    ],
+    [
+      "A word forms on your lips. To give it voice is to shatter the solemn vow you have sworn and lose the strength found in stillness. Are you certain you wish to break your Oath of Silence?",
+      "Giving voice to this action would break your Oath of Silence. Continue and abandon the promise?"
+    ],
+    [
+      "The quiet strength you held is lost in a cacophony of your own making. Your voice, once held in check, now feels alien and weak.",
+      "Your voice breaks the silence you undertook to keep. Its steadying discipline is lost."
+    ],
+    [
+      "The profound stillness you swore to keep is drowned by a single sound. Your Oath of Silence is forever broken, lost to a moment of weakness in this age.",
+      "Your Oath of Silence has been broken for this run."
+    ],
+    [
+      "You passed from the world, and your story ended not with a deed, but with a hollow sound. You will be remembered as one whose resolve was as fleeting as a spoken word.",
+      "The recall record remembers the moment you chose to speak after pledging silence."
+    ],
+    [
+      "OATH OF SILENCE SUNDERED—Thy vow is drowned in empty sound, thy purpose lost. Wisdom has fled from a tongue so quick to betray its own promise. The stillness thou hast forsaken shall grant thee no peace in this age of the world. Marked forever as one who shattered the silence.",
+      "OATH OF SILENCE BROKEN. A previous utterance bars this promise; the recall record retains that choice."
+    ],
+    [
+      "To face Morgoth with unwavering courage",
+      "Recover a dawnseed before ascending"
+    ],
+    [
+      "An oath of absolute resolve, sworn by those who will not be turned aside from their purpose by any force or fear. You pledge to face even the Dark Lord himself.",
+      "You commit to the work below rather than the shelter above. Until you possess a dawnseed, you will not take an upward stair or retreat from the depths."
+    ],
+    [
+      "I swear that none will daunt me from facing Morgoth forthwith, and I shall not flee upward until a Silmaril is won.",
+      "I will keep descending toward Varkesh and will not ascend before I possess a dawnseed."
+    ],
+    [
+      "Go up stairs or flee the depths without possessing a Silmaril",
+      "Ascending stairs or escaping the depths without a dawnseed"
+    ],
+    [
+      "+1 Constitution—Unbreakable fortitude and endurance",
+      "+1 Constitution through determined endurance"
+    ],
+    [
+      "Complete the Quest of Mandos the Doomsman",
+      "Finish Nareth's task"
+    ],
+    [
+      "The path of escape lies before you, a refuge for the weary and the weak. To take it is to yield to despair and prove your will is not equal to your doom. Are you certain you wish to break your Oath of Iron?",
+      "You do not possess a dawnseed. Taking the upward route would break your Oath of Iron. Continue and abandon the promise?"
+    ],
+    [
+      "As you turn from your purpose, the iron will within you turns to brittle rust. The despair you swore to defy now rushes in to claim your heart.",
+      "You turn upward before securing the dawnseed. The resolve you relied on gives way."
+    ],
+    [
+      "Your great purpose is abandoned. Your Oath of Iron is forever shattered, proof that you chose flight over fate in this age.",
+      "Your Oath of Iron has been broken for this run."
+    ],
+    [
+      "You passed from the world, having fled from your great doom. You will be remembered not for your strength, but as one whose will was found wanting at the final test.",
+      "The record of this descent shows an upward retreat before the promised recovery."
+    ],
+    [
+      "OATH OF IRON SHATTERED—Thy will is broken, thy purpose abandoned in the dark. Thou hast fled from the doom thou didst embrace, and no glory shall be found in weakness. The shadow of thy cowardice shall not be lifted in this age of the world. Marked forever as one whose will was broken.",
+      "OATH OF IRON BROKEN. An earlier retreat without a dawnseed bars this promise; the recall record has not erased it."
+    ],
+    [
+      "To craft all gear by your own hand",
+      "Rely on weapons and armour you make"
+    ],
+    [
+      "A pledge to rely only upon your own craftsmanship, rejecting all weapons and armor not forged by your own skill. This oath honors Aulë's mastery of all crafts.",
+      "Korren's workshop challenge binds equipment to personal responsibility. You will pick up, wield or wear only weapons and armour that you have forged yourself."
+    ],
+    [
+      "I swear to craft all blades and armor by my own hand, taking up no weapon or protection wrought by others.",
+      "I will use only weapons and armour made by my own hand."
+    ],
+    [
+      "Pick up, wield, or wear weapons or armor crafted by others",
+      "Picking up, wielding or wearing weapons or armour made by someone else"
+    ],
+    [
+      "+5 Smithing—Divine inspiration in all crafts",
+      "+5 Smithing through a commitment to your own craft"
+    ],
+    [
+      "Complete the Quest of Aulë the Smith",
+      "Finish Korren's task"
+    ],
+    [
+      "Your hand reaches for a tool not of your own making. To take it up is to scorn your own craft and admit the weakness of your skill. Are you certain you wish to break your Oath of the Smith?",
+      "This weapon or armour was made by someone else. Taking it would break your Oath of the Smith. Continue and abandon the promise?"
+    ],
+    [
+      "As you grasp the foreign craft, the fire of your own forge grows dim within you. A shadow of doubt now clouds your eye and makes your own hands feel clumsy.",
+      "You accept another maker's work after pledging to depend on your own. The confidence behind that pledge is lost."
+    ],
+    [
+      "You have cast aside self-reliance for the fleeting ease of another's work. Your Oath of the Smith is forever broken, a tribute to the craft you forsook in this age.",
+      "Your Oath of the Smith has been broken for this run."
+    ],
+    [
+      "You passed from the world, armed not with your own mastery, but with the craft of another. You will be remembered as a smith who lost faith in his own hands.",
+      "The recall record shows a maker who accepted equipment beyond the terms of the promise."
+    ],
+    [
+      "OATH OF THE SMITH FORSAKEN—Thy forge is cold, thy hammer idle. Thou hast scorned the work of thine own hands for the craft of a stranger. No mastery shall be found by those who betray their own skill in this age of the world. Marked forever as one who abandoned the craft.",
+      "OATH OF THE SMITH BROKEN. An earlier use of another maker's gear bars this promise; the workshop record retains that decision."
+    ],
+    [
+      "To fight with honour and restraint",
+      "Let terrified enemies withdraw"
+    ],
+    [
+      "A true contest of might is a test of will against will, not a felling of the broken. To strike down a foe whose courage has failed is no display of strength. It is the work of a brute, not a warrior. This oath embodies the honourable restraint of those who have proven their valour in fair combat.",
+      "Drevan's combat discipline distinguishes a fighting opponent from a terrified fugitive. You promise not to attack or damage enemies that are fleeing in terror."
+    ],
+    [
+      "I swear to face my enemy while it has the heart to fight, and to let the craven flee into the darkness. In this honourable restraint, my resolve shall be sharpened, and I will perceive weaknesses hidden from others.",
+      "I will fight opponents who stand against me and leave terrified fleeing enemies unharmed."
+    ],
+    [
+      "Attack or deal damage to enemies that are fleeing in terror",
+      "Attacking or damaging an enemy that flees in terror"
+    ],
+    [
+      "+1 Strength—Honed physical prowess through honourable combat",
+      "+1 Strength through restrained combat"
+    ],
+    [
+      "Complete the Quest of Tulkas the Strong",
+      "Finish Drevan's task"
+    ],
+    [
+      "Your foe's will has shattered; it turns and flees for its life. To strike it now is to stain your victory with a craven's blow and dishonour the strength you swore to uphold. Are you certain you wish to break your Oath of the Valorous Heart?",
+      "This enemy is fleeing in terror. Attacking it would break your Oath of Valour. Continue and abandon the promise?"
+    ],
+    [
+      "As your weapon strikes the fleeing foe, the glory of the battle turns to shame. The warrior's pride within you falters, a curse born of a dishonourable act.",
+      "You strike a terrified enemy that was trying to escape. The restraint supporting your discipline is lost."
+    ],
+    [
+      "You have chosen a brute's work over a warrior's honour. Your Oath of the Valorous Heart is forever broken, a testament to the valour you have discarded in this age.",
+      "Your Oath of Valour has been broken for this run."
+    ],
+    [
+      "You passed from the world, and your tale is a tainted one. You will be remembered as a warrior who lacked honour, striking down the terrified who fled your might.",
+      "The record of your descent retains the attack on an enemy that was fleeing in terror."
+    ],
+    [
+      "OATH OF THE VALOROUS HEART SUNDERED—Thy blade is stained by a coward's stroke. The noble spirit of honourable battle has fled from thee. No glory shall be found in a victory won over a foe whose heart has failed in this age of the world. Marked forever as one who preyed upon the broken.",
+      "OATH OF VALOUR BROKEN. An earlier attack on a terrified fugitive bars this promise; the combat record retains the blow."
+    ],
+    [
+      "To bear starlight unsullied",
+      "Refuse equipment that dims your light"
+    ],
+    [
+      "A vow to keep the Kindler's radiance clear, shunning any gear that drinks the light and clouds the path. The stars of Varda are a gift beyond measure, and to bear their light is to walk as a beacon in the darkness. This oath binds you to refuse the tools of shadow.",
+      "Solen's light circuit serves as a promise as well as a tool. You undertake to keep its path clear by refusing to wield or wear equipment that reduces your light."
+    ],
+    [
+      "I swear to wear no shadowed gear that dims my light, and to keep the clear radiance of the stars upon my path.",
+      "I will wield or wear no equipment that dims the light I carry."
+    ],
+    [
+      "Wield or wear items that dim your light",
+      "Wielding or wearing an item that dims your light"
+    ],
+    [
+      "+1 Light radius—Blessing of Varda's starlight",
+      "+1 Light radius from Solen's circuit"
+    ],
+    [
+      "Complete the Quest of Varda, Lady of the Stars",
+      "Finish Solen's task"
+    ],
+    [
+      "Your hand closes on a shadowed thing. To take it up is to smother the starlight you swore to bear and turn your back on the Kindler's trust. Are you certain you wish to break your Oath of Light?",
+      "This equipment would dim your light and break your Oath of Light. Continue and abandon the promise?"
+    ],
+    [
+      "The light within you gutters and fades as you embrace the shadowed gear. The stars of Varda withdraw their radiance, leaving your path cold and dim.",
+      "You take up the light-dimming equipment. The circuit entrusted to you loses its promised clarity."
+    ],
+    [
+      "The flame you vowed to guard is smothered by your own hand. Your Oath of Light is forever broken, a testament to the radiance you forsook in this age.",
+      "Your Oath of Light has been broken for this run."
+    ],
+    [
+      "You passed from the world with your light quenched by shadow. You will be remembered as one who bore the gift of starlight and cast it aside.",
+      "The recall record remembers the choice to dim a light you had promised to guard."
+    ],
+    [
+      "OATH OF LIGHT EXTINGUISHED—Thy hand has chosen shadow over starlight. The radiance of the Kindler has fled from thee, and no star shall answer thy call. The light thou hast forsworn shall grant thee no comfort in this age of the world. Marked forever as one who broke the light.",
+      "OATH OF LIGHT BROKEN. An earlier choice of light-dimming gear bars this promise; Solen's record retains that choice."
+    ],
+    [
+      "Supplies weight bonus",
+      "Expanded reserve storage"
+    ],
+    [
+      "A provision is sworn between you and the Powers: the stores laid up against your long war shall be deepened. (Cache limit raised to 50 lbs.)",
+      "The custodians allocate more space in the supply reserves for your next journeys. Your caches may hold up to 50 lbs."
+    ],
+    [
+      "You seal the Supply Covenant; the larders of your long war are deepened, and your caches may bear far greater weight.",
+      "The reserve allocation is approved. Your supply caches can now bear the greater load."
+    ],
+    [
+      "Starting artefact boon",
+      "An artefact for each new hero"
+    ],
+    [
+      "The Valar do not send their champions naked into the dark: each hero hereafter shall bear out of the West some treasure of the Elder Days. (Heroes begin with an artefact.)",
+      "The workshops release an inherited piece of equipment for every new hero. Future heroes begin with an artefact from the surviving stores."
+    ],
+    [
+      "A gift is appointed you out of the West: each hero hereafter shall begin their tale bearing a treasure of the Elder Days.",
+      "The workshop inheritance is approved. Every future hero begins with an artefact from the reserve."
+    ],
+    [
+      "The Strong One tests your mettle in combat",
+      "Drevan tests your close-combat skill"
+    ],
+    [
+      "Hunt down the named creature of shadow, [monster name], and return victorious",
+      "Defeat [monster name] and report your victory."
+    ],
+    [
+      "Deep beneath Thangorodrim, where few living feet have ever trodden and fewer still returned, the stone began to tremble as with distant thunder, and a great laugh came rolling and booming through the dark. There, filling the narrow hall with the brightness of his presence, stood Tulkas the Strong, whom the Eldar name Astaldo the Valiant: last of the Powers to come down into Arda, and mightiest of all in deeds of the body.\n\nHe bears no weapon and wears no armour, for his two hands are strength enough, and he delights above all things in feats of contest and the testing of courage. It is told that he laughs even in the face of the Enemy, so that evil things falter at the sound. Long had he watched the wanderer's slow descent through the lightless deep, and he found there a fire of heart and a strength of arm that pleased him well.\n\n\"Ho, champion!\" he cried, and his voice was like the meeting of two great rivers in flood. \"I have marked your passage through these sunless halls, and I see that you do not flinch though the dark press close about you. Such spirit is rare among the children of the world, and it gladdens me to find it here.\"\n\n[newpage]\n\n\"Yet courage that is never tried is but a promise unspoken, as steel is only steel until the forge and the hammer make of it a blade. Words are wind, but deeds are stone; and I would see for myself of what stuff you are wrought, here in the deep places where the Enemy is strong and hope is thin.\"\n\n[highlight]\nThen the Vala named a thing of shadow that haunted those ways, a fell and hungry beast called [monster name], grown bold in the long darkness. \"Seek it out,\" said Tulkas, \"and hunt it down, and let it trouble these halls no more.\"\n\n[highlight]\n\"Do this, and return to me with word of your victory, and a weapon of great renown shall pass into your keeping: [artifact name], forged in the deeps of time, ere ever the Sun and Moon first rose above the world.\" And he laughed again, so that dust fell from the unseen roof, and he waited to learn what the wanderer would do.",
+      "An old training station starts as you pass. A broad-shouldered instructor resolves in its damaged projection: Drevan, once responsible for the crews who defended the lower works.\n\nHe studies your grip and the marks left on your armour. The station has no need of a ceremony; it needs evidence that someone can still handle a dangerous assignment.\n\n\"The service routes are occupied,\" he says. \"You have made it farther than most. Before I put a valuable weapon in your hands, I need to know you can finish a difficult fight.\"\n\n[newpage]\n\nA surviving combat record opens beside him. \"Training becomes useful when you can carry it through exhaustion, noise and a real opponent. This trial will ask you to do exactly that.\"\n\n[highlight]\nThe record identifies [monster name]. \"Find this creature and defeat it. Until it is gone, another stretch of the works will remain too dangerous to use.\"\n\n[highlight]\nHe releases the lock on a storage outline labelled [artifact name]. \"Return after the victory, and this weapon is yours. I would rather see it used than leave it sealed here.\""
+    ],
+    [
+      "Word of the deed went up even into the West, and a mighty laugh rang out beneath the mountains, shaking dust from the stone; and Tulkas stood once more before the victor, radiant with power and with that simple delight which is his alone among the Valar.\n\n\"A glorious fight!\" he said. \"I felt the very earth shudder with the fall of your foe, and it was good. You have proven your might in the place where might is hardest to keep, and shown a courage worthy of the songs that were sung in the morning of the world.\"\n\n\"Few there are who would go down willing into such dark to do battle for its own sake, asking neither safety nor reward. That is the very heart of valour, and it is the thing I love.\"\n\nAnd into the champion's hands he set a prize wrought in the deeps of time, ere ever the Sun and Moon first rose. \"Bear it well, and let it not lie idle,\" he said; then he was gone, and only the echo of his laughter lingered long in the dark.",
+      "The combat station receives the report and clears the creature from its list of active threats. Drevan's recording returns to the workbench.\n\n\"A completed fight leaves fewer excuses than a promised one,\" he says. \"You took the assignment to its end.\"\n\nHe opens the surviving training record. The discipline behind the trial is now available for you to carry forward.\n\nThe weapon's storage lock releases. \"Use it well. The service routes still need someone willing to finish the work.\""
+    ],
+    [
+      "The Maker challenges you to prove your craft",
+      "Korren asks for a masterwork"
+    ],
+    [
+      "At Aulë's forge, craft a work of true worth and mastery",
+      "Make a work of sufficient quality at Korren's forge."
+    ],
+    [
+      "The air grew warm, and warmer still, until it carried the breath of a great forge hidden somewhere in the deep rock; and a voice rang out clear and strong, like a hammer falling true upon an anvil. There stood Aulë the Smith, whom many name simply the Maker: mightiest in craft of all the Powers, and lord of all the substances of which Arda is made.\n\nIt was Aulë who wrought the deeps of the earth, and the mountains, and the vessels that bear the Sun and Moon; and so great is his love of making that he is kin in spirit to all who shape and build and delve. Yet he holds no work above the worth of the labour that made it. He regarded the wanderer with a deep and knowing gaze, as a master weighs an unfinished thing and sees what it might yet become.\n\n\"I have seen your works,\" he said, \"the stone you have hewn and the metal you have shaped in your long going-down, and I tell you there is a true spark of the fire of making in you. I do not give my regard lightly, nor my teaching.\"\n\n[newpage]\n\n\"But a spark is not yet a flame, and a willing hand is not yet a skilled one. Craft must be honed by trial, and the stubborn substance of the earth does not yield up its secrets to any who have not earned them. It must be wooed, and understood, and at the last persuaded, never merely forced.\"\n\n[highlight]\nHe laid his hand upon the forge before them, whose fires burned with the heat of the heart of the world. \"Here, then, is my forge, and here is your trial. Take up the hammer, and from the base matter of this place fashion for me a thing of true worth and purpose: not a trinket, but a work in which your craft and your will are made one.\"",
+      "A forge monitor wakes beneath a crust of soot. Korren's recorded likeness stands over the bench, turning a damaged component through the light.\n\nThis workshop once kept the pumps and floodgates in repair. Its tools are still serviceable; the question is whether the next person at the anvil understands what they can do.\n\n\"A weapon carries every decision its maker made,\" Korren says. \"Show me that you can choose the material, the heat and the work with care.\"\n\n[newpage]\n\nHe clears a place at the forge. \"Use this station to produce a work of sufficient mastery. A promise about your skill will not satisfy the workshop; the finished piece must do that.\"\n\n[highlight]\n\"Complete the task, and I will release the advanced lessons held here. The promise of a self-reliant maker will also be open to you.\""
+    ],
+    [
+      "The wanderer laid the finished work before the Smith, and Aulë took it up in his great hands; and for a long while he said nothing. He turned it over and over, feeling the weight of it and the balance, hearkening as though to some voice within the metal, and missing no least detail of its making.\n\n\"It is well-wrought,\" he said at last, and there was gladness in his voice. \"You have not forced the shape upon the substance, but listened to it, and learned its nature, and so persuaded it to your will. That, and not mere cunning of the hands, is the very heart of true craft.\"\n\n\"There are many who can make a thing that is fair to look upon, but few indeed who understand what they make. You are of the few, and you are worthy of my blessing.\"\n\n\"Go now, and make, and mend,\" said the Maker. \"May your arm never tire at the anvil, and may the hidden flaws of rock and steel reveal themselves freely to your eye, so that nothing false or weak shall ever come from your hand.\"",
+      "Korren's monitor turns the finished work through the forge light, checking the decisions made visible in its shape.\n\n\"You have made something that can stand on its own merits,\" he says. \"That is a better recommendation than confidence.\"\n\nThe workshop releases its advanced instruction records. What was reserved for a proven maker is now available to you.\n\n\"Keep learning from what you make. If you choose the Smith's oath, let the next piece answer the same standard.\""
+    ],
+    [
+      "The Doomsman bids you release a bound spirit",
+      "Nareth requests a trapped memory's release"
+    ],
+    [
+      "Unmake the false body and free Brodda's spirit to Mandos's judgment",
+      "Destroy the false body holding Borruk's memory so it can be recovered."
+    ],
+    [
+      "A chill came into the chamber, and the air grew very still, as though the place itself held its breath; and upon a throne of black and unadorned stone there sat a tall figure, veiled and grave. It was Mandos, the Doomsman of the Valar, keeper of the Houses of the Dead, who forgets nothing that has been and speaks only the counsels of Ilúvatar.\n\nHe pronounces the dooms and judgments of the Powers, and none are uttered but at the bidding of the One; and his voice, when it came, was low and slow and heavy, like the turning of the long ages of the world. The wanderer felt the weight of it settle upon the heart, as the weight of a sorrow long remembered.\n\n\"Child of Middle-earth,\" he said, \"here in this dark there lingers a spirit that should long ago have passed beyond the circles of the world, to await my judgment as is the doom of Men. The hand of Túrin Turambar brought a just death upon Brodda the Easterling in the days of old, even as that man had earned.\"\n\n[newpage]\n\n\"Yet the malice of Morgoth does not end where death begins. His black art has bound this spirit fast, far from my halls, and lent the broken thing a hollow mockery of life, so that it may neither live nor truly die, but suffer on without end in the dark.\"\n\n[highlight]\n\"This is a wound in the order of things, and it must be healed. Seek out that bound and tormented spirit, and unmake the false body that holds it, and grant it the release that even the wicked are owed at the last, that it may come at length before me to receive what is just.\"\n\n[highlight]\n\"Do this,\" said the Doomsman, \"and you shall have restored one small thread of the pattern that the Enemy has tangled; and the way that leads deeper shall be opened before you.\"",
+      "The walls carry the remains of a recall terminal. Nareth's voice emerges from its failing speaker, asking you to leave the return line clear.\n\nA memoryprint has been trapped in a false body inside the lower works. The apparatus continues to hold it while the surrounding chambers deteriorate.\n\n\"The trapped person was called Borruk,\" Nareth says. \"What you meet below is a body the machinery has made around the record. Do not mistake keeping it intact for saving its occupant.\"\n\n[newpage]\n\nThe terminal marks the faulty vessel. \"Break the false body. Only then can its memory pass back through the recovery circuit.\"\n\n[highlight]\n\"There is no trial of obedience here. Someone cannot leave a mechanism that was supposed to bring them home. You have the means to end that confinement.\"\n\n[highlight]\nA return channel opens on the display. \"Release the memory, and I will acknowledge the work. The discipline of the Iron oath will then be available to you.\""
+    ],
+    [
+      "As the false body fell and was unmade, a long sigh went out through the darkness, sorrowful and yet laden with release, and the bound spirit was gone at last upon its appointed road. A deep stillness settled over the place, such as comes only after long pain has ended.\n\n\"The mockery is unmade,\" said Mandos, and his grave voice held no triumph, but only the calm of a thing set right. \"The spirit of Brodda is unbound, and goes now to the judgment that is its due. You have not wrought vengeance, for vengeance was never yours to take.\"\n\n\"Rather you have restored a thread of the natural order, long tangled by the Enemy's malice; and such mending, quiet and unsung, is a deed of more worth than many a louder victory.\"\n\n\"Receive now this gift: a spirit shielded against the great fears that unman the hearts of mortals and turn their courage to water. Go forward into the dark, and walk unafraid.\"",
+      "The false vessel has failed, and the recovery line registers a memory freed from it. Nareth's station confirms the transfer.\n\n\"The apparatus was holding a person after its purpose had ended,\" the recording says. \"You have ended that confinement.\"\n\nThe terminal adds the deed to the recall record and releases the training held in recognition of it.\n\n\"Carry the strength of this decision into the work ahead. The Iron oath is now available if you choose to take it.\""
+    ],
+    [
+      "The Lady of Pity tests your compassion",
+      "Ilyra asks you to practice restraint"
+    ],
+    [
+      "Find the downward stair without taking a life",
+      "Reach the downward stair without killing anything."
+    ],
+    [
+      "A soft light gathered slowly in the gloom, grey and sorrowful, neither warm nor cold; and within it stood a figure cloaked and hooded in grey, her face turned a little aside, her eyes holding the memory of every grief that has ever been. It was Nienna, sister of the Lord of the Dead, who dwells alone and looks ever outward, toward the Walls of the World.\n\nShe does not weep for herself, but for the hurts of all Arda, and for the marring that the Enemy has wrought upon it; and those who hearken to her learn pity, and endurance, and the hope that lies hidden in the heart of sorrow. Her voice, when she spoke, was as gentle as soft rain falling upon stone long parched.\n\n\"Child,\" she said, \"this place is filled with pain, more than your eyes can see. The creatures that haunt these halls are not all of them born of evil. Many are only lost: twisted and marred by the long darkness they have endured, and afraid, and lashing out at all that moves, because fear is the last thing left to them.\"\n\n[newpage]\n\n\"I have wept for them, as I weep for all the sorrows of the world; and I would ask of you a thing that is hard, harder perhaps than any work of the blade. If there is yet pity in your heart, then show it here, in the one place where pity is least looked for.\"\n\n[highlight]\n\"Go down to the next deep, and seek out the stair that leads below; but raise no hand against the tormented things that dwell upon this level, and take no life as you go. Let compassion be your shield and your guide, where wrath would be the easier road.\"\n\n[highlight]\n\"Do this,\" said the Lady of Pity, \"and as a sign of my faith in you, the hidden ways of descent shall be laid open to your sight.\"",
+      "A small aid station lights beside the passage. Ilyra's surviving record sits among inventories of bandages, clean water and names of evacuees.\n\nHer work began when the upper settlements flooded. It continued belowground, where rescuing a person often meant refusing an easier, harsher choice.\n\n\"I need to know that you can keep moving without answering every danger with a death,\" she says. \"The people who return after you will need more than an empty corridor.\"\n\n[newpage]\n\nThe station shows the downward route. \"Find the stair and reach it without taking a life. Be careful about every action along the way.\"\n\n[highlight]\n\"This is a trial of restraint, not of how many enemies you can avoid seeing. A life lost through your actions is still a life lost.\"\n\n[highlight]\n\"Succeed, and I will share the discipline stored here. You may also bind a future descent to the promise of mercy.\""
+    ],
+    [
+      "As the wanderer's foot came down upon the first step of the descending stair, with no life taken upon the road behind, a deep and unlooked-for peace welled up out of the dark; and the gentle voice of Nienna returned, nearer now, and less sorrowful than before.\n\n\"You have chosen pity over violence,\" she said, \"where the choosing cost you something; and that is the only kind of choice that truly counts. You have walked through the valley of fear, and left behind you not a trail of death, but a small and stubborn glimmer of hope.\"\n\n\"Such a deed is a light in the deepest darkness, and the lost things you spared shall trouble the Enemy's reckoning more than ever you will know. Mercy is not weakness, child; it is the harder strength.\"\n\n\"For the compassion you have shown to the forsaken, receive this blessing of mine: may your path be wrapped in silence and go unmarked, whenever mercy, and not malice, is your guide.\"",
+      "The aid station receives your arrival at the downward stair. Its record shows a path completed without a life taken.\n\nIlyra's voice answers. \"You found a way through without making the people after you inherit another death.\"\n\nThe station releases its lessons in care and composure. Your restraint has completed the trial.\n\n\"If you choose the Mercy oath, remember the same care when the next passage gives you a harder choice.\""
+    ],
+    [
+      "The Great Hunter tests your skill in the hunt",
+      "Veylan calls for a sustained hunt"
+    ],
+    [
+      "Hunt down the foul kindreds throughout your journey: 100 wolves, 80 spiders, 60 serpents, or 30 vampires",
+      "During your journey, defeat 100 wolves, 80 spiders, 60 serpents, or 30 vampires."
+    ],
+    [
+      "The air grew suddenly wild and clean, as though a wind off some far and ancient forest had found its way down into the deeps, carrying the scent of green growing things and of open country beneath a sky thick with stars. Then a horn was winded, the Valaróma, the great horn of Oromë, and its clear and terrible note rang from wall to wall, shaking the very stones and sending a tremor of fear through every evil thing that crouched in the dark.\n\nThere, upon a great white steed shod with gold, sat a lord of high and noble bearing, his face alight with the joy of the chase: Oromë, the Huntsman of the Valar, who in the youth of the world loved the lands of Middle-earth and hunted the monsters and fell beasts of Morgoth across them. Of all the Powers he came most often among the Eldar, and the dread of him lies upon all things cruel and wild.\n\n\"Hail, hunter!\" he cried, and his voice was like a horn-call itself. \"I have heard the echo of your deeds even in these sunless caverns; but the shadow here lies deep and old, and a single arm cannot cleanse it alone. The foulest broods of the Enemy have made their lairs throughout this realm, and breed unchecked in the dark.\"\n\n[newpage]\n\n\"The fell wolves run in their packs; the venomous spawn of Ungoliant spin their snares in the black; the cold serpents coil in the deep places; and the blood-drinking horrors of the night prey upon all that yet lives. The longer they endure, the bolder they grow, and the heavier lies their shadow upon the world above.\"\n\n[highlight]\n\"I call upon you, then, to take up the great hunt, and to carry it with you wherever your road descends. Hunt these broods without pity, and break the numbers of whichever kindred you will: slay a hundred of the wolves, or eighty of the spiders, or sixty of the serpents, or thirty of the vampires, and let the dark learn to fear you.\"\n\n[highlight]\n\"When your hunt is accomplished and its count is filled,\" said the Huntsman, \"I shall return to bestow my blessing upon you. Ride well, though you go on foot; the chase is its own reward, yet I do not forget those who serve it.\"",
+      "A tracking station starts beneath the dust. Veylan's record stands over a map marked with sightings from patrols that never came back.\n\nThe lower works are too large for one dramatic fight to make them safe. His crews relied on patient observation and a record of the threats they had actually removed.\n\n\"Choose a sustained hunt,\" he says. \"Bring the work to completion across your journey rather than exhausting yourself on the first sign of a track.\"\n\n[newpage]\n\nThe targets appear beside the map: wolves, spiders, serpents and vampires. Each calls for a different pace, but all demand persistence.\n\n[highlight]\n\"Defeat 100 wolves, 80 spiders, 60 serpents, or 30 vampires. Complete any one of those totals. The record will follow your progress.\"\n\n[highlight]\n\"Finish the hunt, and the surviving patrol lessons will be yours. The oath of silent travel will also be available for a later descent.\""
+    ],
+    [
+      "As the last of your chosen prey was slain, far off the Valaróma sounded again in triumph, and the note of it ran through the deeps like a clean wind; and Oromë appeared before you upon his white steed, his eyes bright with approval and with the gladness of a hunt well ended.\n\n\"A mighty hunt!\" he said. \"The foul things of the dark have learned your name, and learned to dread it. You have the eye of a true hunter, and a spirit that does not quail before the beasts of night, however many or however terrible they come against you.\"\n\n\"This is a service of more worth than you may know. Every brood you have broken is a shadow lifted from the lands above, where folk you will never meet shall sleep a little safer for your labour here in the dark.\"\n\n\"For this, receive the Hunter's Insight as my gift: with every mighty foe you overcome hereafter, your understanding of its fell nature shall deepen, until the very strength of your enemies reveals its own weakness to your keen and practised eye.\"\n\n\"And know this also: you have let your deeds speak where lesser folk spend only words. Such resolve makes you worthy to swear the Oath of Silence, should you choose that hard and honoured path in some life yet to come.\"",
+      "Veylan's tracking station reaches the required tally and closes the hunt. The patrol map is quieter than when the work began.\n\n\"You kept a difficult task in mind through a long journey,\" he says. \"That is the part of hunting a trophy cannot show.\"\n\nThe station releases the surviving patrol lessons, including the discipline of the Warden.\n\nThe completed record also opens the oath of silent travel. You may choose that obligation on a later descent.\n\n\"There will always be another track. Decide which one deserves your attention, and give that work the patience it needs.\""
+    ],
+    [
+      "The Star-kindler bids you cleanse the shadows",
+      "Solen asks you to recover a light circuit"
+    ],
+    [
+      "Find and slay Duruin, least of the balrogs, within his Bastion on the first level you reach after 500 ft",
+      "Find and kill Ashvek in his bastion on the first level you reach after 500 ft."
+    ],
+    [
+      "A light pierced the gloom, pure and silver and unwavering, as though one of the high stars had left its place in heaven and come down into the deep places of the earth. In its radiance stood Varda, whom the Elves name Elbereth, Lady of the Stars, most revered of all the Valar; and her gaze held the cool, far calm of the heavens that lie beyond the trouble of the world.\n\nIt was she who kindled the stars and set them in the sky, and her light is the Enemy's oldest dread; for of all the Powers Morgoth fears her most and hates her most, since her light he can neither quench nor endure. Where her name is spoken in the dark, his servants falter; and even here, in the pits beneath his iron crown, her presence was itself a defiance.\n\n\"Child of the darkened halls,\" she said, and her voice was clear and distant as starlight upon still water, \"long have I watched your wandering beneath the weight of shadow. Take heart: know that even in the deepest pits of the Enemy, where it seems most wholly lost, my light is not altogether quenched.\"\n\n[newpage]\n\n\"Yet a shard of that light now lies smothered below, stolen away and hidden, and about it a darkness has gathered and grown strong. A petty balrog named Duruin has seized it: least of his fell kind, but cruel, and he has raised a bastion of shadow upon the first level you shall reach below five hundred feet.\"\n\n[highlight]\n\"There the whispering shades of the dark flock to his stolen flame, and his hold upon my light grows stronger with every hour that passes. Seek out that stronghold where the world grows dark and deep; break his hold, cast down his foul servants, and let the imprisoned light go free.\"\n\n[highlight]\n\"Do this,\" said the Kindler, \"and I shall lay a choice of bright gifts before you, and teach you the oath that keeps the flame burning within the heart, so that you need never again walk wholly in the dark.\"",
+      "A narrow beam catches the dust ahead. Solen's record appears at an optical station built to route light through chambers that never saw the open sky.\n\nA branch of that circuit has been seized. Its custodian cannot restore the connection while the stronghold around it remains occupied.\n\n\"The loss is small on the plans and immense to anyone trying to find a way through those halls,\" Solen says. \"We need that light back in service.\"\n\n[newpage]\n\nThe display identifies Ashvek and his bastion on the first level you reach after 500 ft. \"Find him there and end his occupation of the circuit.\"\n\n[highlight]\n\"His followers gather around the stolen apparatus. Break his hold on the bastion so the light can be recovered.\"\n\n[highlight]\nThe station shows the available rewards. \"Complete the task, and choose a gift from these circuits. You may also undertake the promise to refuse equipment that dims your light.\""
+    ],
+    [
+      "A great hush fell as the last shadow guttered and failed; and then a light welled up from among the broken stones and rose shining into the air, like a long-held breath released at last. The voice of Varda returned, distant and clear as starlight upon still and waiting water.\n\n\"It is done,\" she said. \"The stolen light is free, and the bastion of Duruin is emptied of its whispers and its dread. You have struck a blow against the darkness that even the Enemy shall feel, far off in his iron crown; and small though it seem to you, no evil thing will think it small.\"\n\n\"You went down into the deepest dark to set a light free, and asked nothing first. That is a deed after my own heart, and it shall not go unrewarded, nor unremembered.\"\n\n\"Choose now one lamp of my blessing, and bear it with you through the long night that yet lies ahead. But if you would keep its radiance undimmed, then swear the Oath of Light, and shun thereafter all shadowed and unhallowed gear; for my gifts endure only in the hearts that remain true to them.\"",
+      "The occupation of the bastion is over. A light returns to the recovered circuit, and Solen's station confirms that it can answer again.\n\n\"The line is clear,\" the recording says. \"A chamber that was cut off can once more be reached by light.\"\n\nThe reward circuits unlock in acknowledgment of the completed task. Their stored gifts are ready for your choice.\n\n\"Choose the light you can use. If you take the Light oath, keep its path clear of gear that would dim it.\""
+    ],
+    [
+      "You are one of several children",
+      "You grew up among several children"
+    ],
+    [
+      "You are one of two children",
+      "You grew up with one sibling"
+    ],
+    [
+      "You are the only child",
+      "You grew up as the sole child"
+    ],
+    [
+      "You awoke on the shores of lake Cuiviénen.",
+      "Your first memories are of the evacuation camps beside the Silt Basin."
+    ],
+    [
+      "of an archer",
+      "in the household of a bowyer and archer"
+    ],
+    [
+      "of a warrior",
+      "in the household of a veteran guard"
+    ],
+    [
+      "of a smith",
+      "in the household of a working smith"
+    ],
+    [
+      "of a bard",
+      "in the household of a keeper of songs"
+    ],
+    [
+      "of a prince",
+      "in the household of a district heir"
+    ],
+    [
+      "from the house of Fëanor.",
+      "among the Furnace-Born families."
+    ],
+    [
+      "from the house of Fingolfin.",
+      "among the Stoneward families."
+    ],
+    [
+      "from the house of Finarfin.",
+      "among the Clearwell families."
+    ],
+    [
+      "of a Sindar archer.",
+      "in a Reedwalker archer's household."
+    ],
+    [
+      "of a Sindar warrior.",
+      "in a Reedwalker guard's household."
+    ],
+    [
+      "of a Sindar smith.",
+      "in a Reedwalker smith's household."
+    ],
+    [
+      "of a Sindar bard.",
+      "in a Reedwalker singer's household."
+    ],
+    [
+      "of a Sindar prince.",
+      "in the household of a Reedwalker district heir."
+    ],
+    [
+      "of a Sindar king.",
+      "in the household of a Reedwalker council ruler."
+    ],
+    [
+      "You are one of two children of a Dwarven",
+      "You grew up with one sibling in the family of a Deep Mason"
+    ],
+    [
+      "You are the only child of a Dwarven",
+      "You grew up as the sole child in the family of a Deep Mason"
+    ],
+    [
+      "Outcast.",
+      "living outside the guilds."
+    ],
+    [
+      "Craftsman.",
+      "who worked as an artisan."
+    ],
+    [
+      "Warrior.",
+      "who served as a guard."
+    ],
+    [
+      "Smith.",
+      "who worked at a forge."
+    ],
+    [
+      "Prince.",
+      "who inherited a district office."
+    ],
+    [
+      "You are the black sheep of the family.",
+      "Your choices often brought you into conflict with your family."
+    ],
+    [
+      "You are a credit to the family.",
+      "Your family took pride in what you achieved."
+    ],
+    [
+      "You were a well liked child.",
+      "The people who raised you remember you with affection."
+    ],
+    [
+      "You are the illegitimate and unacknowledged child",
+      "Your parentage was never publicly acknowledged; you were born to the family"
+    ],
+    [
+      "You are the illegitimate but acknowledged child",
+      "Your parentage was publicly acknowledged despite your parents' circumstances; you were born to the family"
+    ],
+    [
+      "You are the first child",
+      "You were the eldest child"
+    ],
+    [
+      "of a farmer.",
+      "of someone who worked the fields."
+    ],
+    [
+      "of a craftsman.",
+      "of someone who practiced a craft."
+    ],
+    [
+      "of an archer.",
+      "of someone trained with a bow."
+    ],
+    [
+      "of a warrior.",
+      "of someone who served in combat."
+    ],
+    [
+      "of a prince.",
+      "of an heir to a district office."
+    ],
+    [
+      "You have dark brown eyes,",
+      "Your eyes are dark brown,"
+    ],
+    [
+      "You have brown eyes,",
+      "Your eyes are brown,"
+    ],
+    [
+      "You have hazel eyes,",
+      "Your eyes are hazel,"
+    ],
+    [
+      "You have green eyes,",
+      "Your eyes are green,"
+    ],
+    [
+      "You have blue eyes,",
+      "Your eyes are blue,"
+    ],
+    [
+      "You have blue-gray eyes,",
+      "Your eyes are blue-gray,"
+    ],
+    [
+      "straight",
+      "falling straight"
+    ],
+    [
+      "wavy",
+      "falling in waves"
+    ],
+    [
+      "curly",
+      "falling in curls"
+    ],
+    [
+      "black hair,",
+      "hair of black,"
+    ],
+    [
+      "brown hair,",
+      "hair of brown,"
+    ],
+    [
+      "auburn hair,",
+      "hair of auburn,"
+    ],
+    [
+      "red hair,",
+      "hair of red,"
+    ],
+    [
+      "golden hair,",
+      "hair of gold,"
+    ],
+    [
+      "and an average complexion.",
+      "and a complexion of an ordinary shade."
+    ],
+    [
+      "and a fair complexion.",
+      "and skin of a fair shade."
+    ],
+    [
+      "and a very fair complexion.",
+      "and skin of a very fair shade."
+    ],
+    [
+      "You have light grey eyes,",
+      "Your eyes are light grey,"
+    ],
+    [
+      "You have light blue eyes,",
+      "Your eyes are light blue,"
+    ],
+    [
+      "You have light green eyes,",
+      "Your eyes are light green,"
+    ],
+    [
+      "golden hair, and a fair complexion.",
+      "hair of golden, with skin of a fair shade."
+    ],
+    [
+      "black hair, and a fair complexion.",
+      "hair of black, with skin of a fair shade."
+    ],
+    [
+      "brown hair, and a fair complexion.",
+      "hair of brown, with skin of a fair shade."
+    ],
+    [
+      "auburn hair, and a fair complexion.",
+      "hair of auburn, with skin of a fair shade."
+    ],
+    [
+      "silver hair, and a fair complexion.",
+      "hair of silver, with skin of a fair shade."
+    ],
+    [
+      "a one foot beard,",
+      "a beard measuring one foot,"
+    ],
+    [
+      "a two foot beard,",
+      "a beard measuring two foot,"
+    ],
+    [
+      "a three foot beard,",
+      "a beard measuring three foot,"
+    ],
+    [
+      "a four foot beard,",
+      "a beard measuring four foot,"
+    ],
+    [
+      "and a dark complexion.",
+      "and skin of a dark shade."
+    ],
+    [
+      "and a ruddy complexion.",
+      "and skin with a ruddy shade."
+    ],
+    [
+      "\"Let no blood of the Children stain thy blade in these halls of sorrow\"",
+      "\"I will harm neither Man nor Elf on my passage through these works.\""
+    ],
+    [
+      "\"In silence came I, and in silence shall I depart, as befits the wise\"",
+      "\"I keep my voice silent until I have left these halls.\""
+    ],
+    [
+      "\"Though darkness gather and Balrogs rise, I shall not yield nor turn aside\"",
+      "\"I will take no upward stair before I carry a dawnseed.\""
+    ],
+    [
+      "\"By mine own hand shall all blades be wrought, and no other's craft shall I bear\"",
+      "\"The weapons and armour I use will be work of my own hands.\""
+    ],
+    [
+      "\"Valor guards the fallen foe; the honorable blade stays when terror takes them\"",
+      "\"I leave terrified fugitives unharmed and fight those who stand.\""
+    ],
+    [
+      "\"I will carry unsullied starlight, shunning the shadowed tools that would dim it\"",
+      "\"I refuse the equipment that would dim the light I carry.\""
+    ]
+  ],
+  "passages": [
+    [
+      "I swear to leave Angband without shedding blood of Man or Elf, showing mercy to all Children of Ilúvatar I encounter.",
+      "I will leave Karth Vault without attacking or harming any Man or Elf."
+    ],
+    [
+      "Your hand stays its course. The life before you is one of the Children of Ilúvatar. To strike them down is to stain your very soul and forsake the compassion you swore to uphold. Are you certain you wish to break your Oath of Mercy?",
+      "This action would harm a Man or Elf and break your Oath of Mercy. Continue and abandon the promise?"
+    ],
+    [
+      "The light of pity leaves your eyes, replaced by the shadow of wrath. The weight of this life taken settles upon you, a curse of your own making.",
+      "You have harmed someone you promised to spare. The discipline of that promise no longer supports you."
+    ],
+    [
+      "The echo of your mercy is now a mockery. Your Oath of Mercy is forever broken, a testament to the compassion you have cast aside in this age.",
+      "Your Oath of Mercy has been broken for this run."
+    ],
+    [
+      "You passed from the world, but the memory of your final deeds remains. You will be remembered as one who swore compassion, yet chose cruelty.",
+      "The record of your descent includes the life you harmed after promising restraint."
+    ],
+    [
+      "OATH OF MERCY SUNDERED—Thy hands are stained with the blood of kindred. No prayer for pity shall be heard from a voice that has forsaken it. The shadow of thy deed shall not be lifted in this age of the world. Marked forever as one who broke the bonds of mercy.",
+      "OATH OF MERCY BROKEN. A previous violation bars this promise; the recall record retains the harm you caused."
+    ],
+    [
+      "I swear to leave Angband as I came, grim and silent, speaking no word and raising no song in these dark halls.",
+      "I will enter and leave Karth Vault without speaking or singing."
+    ],
+    [
+      "A word forms on your lips. To give it voice is to shatter the solemn vow you have sworn and lose the strength found in stillness. Are you certain you wish to break your Oath of Silence?",
+      "Giving voice to this action would break your Oath of Silence. Continue and abandon the promise?"
+    ],
+    [
+      "The quiet strength you held is lost in a cacophony of your own making. Your voice, once held in check, now feels alien and weak.",
+      "Your voice breaks the silence you undertook to keep. Its steadying discipline is lost."
+    ],
+    [
+      "The profound stillness you swore to keep is drowned by a single sound. Your Oath of Silence is forever broken, lost to a moment of weakness in this age.",
+      "Your Oath of Silence has been broken for this run."
+    ],
+    [
+      "You passed from the world, and your story ended not with a deed, but with a hollow sound. You will be remembered as one whose resolve was as fleeting as a spoken word.",
+      "The recall record remembers the moment you chose to speak after pledging silence."
+    ],
+    [
+      "OATH OF SILENCE SUNDERED—Thy vow is drowned in empty sound, thy purpose lost. Wisdom has fled from a tongue so quick to betray its own promise. The stillness thou hast forsaken shall grant thee no peace in this age of the world. Marked forever as one who shattered the silence.",
+      "OATH OF SILENCE BROKEN. A previous utterance bars this promise; the recall record retains that choice."
+    ],
+    [
+      "I swear that none will daunt me from facing Morgoth forthwith, and I shall not flee upward until a Silmaril is won.",
+      "I will keep descending toward Varkesh and will not ascend before I possess a dawnseed."
+    ],
+    [
+      "The path of escape lies before you, a refuge for the weary and the weak. To take it is to yield to despair and prove your will is not equal to your doom. Are you certain you wish to break your Oath of Iron?",
+      "You do not possess a dawnseed. Taking the upward route would break your Oath of Iron. Continue and abandon the promise?"
+    ],
+    [
+      "As you turn from your purpose, the iron will within you turns to brittle rust. The despair you swore to defy now rushes in to claim your heart.",
+      "You turn upward before securing the dawnseed. The resolve you relied on gives way."
+    ],
+    [
+      "Your great purpose is abandoned. Your Oath of Iron is forever shattered, proof that you chose flight over fate in this age.",
+      "Your Oath of Iron has been broken for this run."
+    ],
+    [
+      "You passed from the world, having fled from your great doom. You will be remembered not for your strength, but as one whose will was found wanting at the final test.",
+      "The record of this descent shows an upward retreat before the promised recovery."
+    ],
+    [
+      "OATH OF IRON SHATTERED—Thy will is broken, thy purpose abandoned in the dark. Thou hast fled from the doom thou didst embrace, and no glory shall be found in weakness. The shadow of thy cowardice shall not be lifted in this age of the world. Marked forever as one whose will was broken.",
+      "OATH OF IRON BROKEN. An earlier retreat without a dawnseed bars this promise; the recall record has not erased it."
+    ],
+    [
+      "I swear to craft all blades and armor by my own hand, taking up no weapon or protection wrought by others.",
+      "I will use only weapons and armour made by my own hand."
+    ],
+    [
+      "Your hand reaches for a tool not of your own making. To take it up is to scorn your own craft and admit the weakness of your skill. Are you certain you wish to break your Oath of the Smith?",
+      "This weapon or armour was made by someone else. Taking it would break your Oath of the Smith. Continue and abandon the promise?"
+    ],
+    [
+      "As you grasp the foreign craft, the fire of your own forge grows dim within you. A shadow of doubt now clouds your eye and makes your own hands feel clumsy.",
+      "You accept another maker's work after pledging to depend on your own. The confidence behind that pledge is lost."
+    ],
+    [
+      "You have cast aside self-reliance for the fleeting ease of another's work. Your Oath of the Smith is forever broken, a tribute to the craft you forsook in this age.",
+      "Your Oath of the Smith has been broken for this run."
+    ],
+    [
+      "You passed from the world, armed not with your own mastery, but with the craft of another. You will be remembered as a smith who lost faith in his own hands.",
+      "The recall record shows a maker who accepted equipment beyond the terms of the promise."
+    ],
+    [
+      "OATH OF THE SMITH FORSAKEN—Thy forge is cold, thy hammer idle. Thou hast scorned the work of thine own hands for the craft of a stranger. No mastery shall be found by those who betray their own skill in this age of the world. Marked forever as one who abandoned the craft.",
+      "OATH OF THE SMITH BROKEN. An earlier use of another maker's gear bars this promise; the workshop record retains that decision."
+    ],
+    [
+      "I swear to face my enemy while it has the heart to fight, and to let the craven flee into the darkness. In this honourable restraint, my resolve shall be sharpened, and I will perceive weaknesses hidden from others.",
+      "I will fight opponents who stand against me and leave terrified fleeing enemies unharmed."
+    ],
+    [
+      "Your foe's will has shattered; it turns and flees for its life. To strike it now is to stain your victory with a craven's blow and dishonour the strength you swore to uphold. Are you certain you wish to break your Oath of the Valorous Heart?",
+      "This enemy is fleeing in terror. Attacking it would break your Oath of Valour. Continue and abandon the promise?"
+    ],
+    [
+      "As your weapon strikes the fleeing foe, the glory of the battle turns to shame. The warrior's pride within you falters, a curse born of a dishonourable act.",
+      "You strike a terrified enemy that was trying to escape. The restraint supporting your discipline is lost."
+    ],
+    [
+      "You have chosen a brute's work over a warrior's honour. Your Oath of the Valorous Heart is forever broken, a testament to the valour you have discarded in this age.",
+      "Your Oath of Valour has been broken for this run."
+    ],
+    [
+      "You passed from the world, and your tale is a tainted one. You will be remembered as a warrior who lacked honour, striking down the terrified who fled your might.",
+      "The record of your descent retains the attack on an enemy that was fleeing in terror."
+    ],
+    [
+      "OATH OF THE VALOROUS HEART SUNDERED—Thy blade is stained by a coward's stroke. The noble spirit of honourable battle has fled from thee. No glory shall be found in a victory won over a foe whose heart has failed in this age of the world. Marked forever as one who preyed upon the broken.",
+      "OATH OF VALOUR BROKEN. An earlier attack on a terrified fugitive bars this promise; the combat record retains the blow."
+    ],
+    [
+      "I swear to wear no shadowed gear that dims my light, and to keep the clear radiance of the stars upon my path.",
+      "I will wield or wear no equipment that dims the light I carry."
+    ],
+    [
+      "Your hand closes on a shadowed thing. To take it up is to smother the starlight you swore to bear and turn your back on the Kindler's trust. Are you certain you wish to break your Oath of Light?",
+      "This equipment would dim your light and break your Oath of Light. Continue and abandon the promise?"
+    ],
+    [
+      "The light within you gutters and fades as you embrace the shadowed gear. The stars of Varda withdraw their radiance, leaving your path cold and dim.",
+      "You take up the light-dimming equipment. The circuit entrusted to you loses its promised clarity."
+    ],
+    [
+      "The flame you vowed to guard is smothered by your own hand. Your Oath of Light is forever broken, a testament to the radiance you forsook in this age.",
+      "Your Oath of Light has been broken for this run."
+    ],
+    [
+      "You passed from the world with your light quenched by shadow. You will be remembered as one who bore the gift of starlight and cast it aside.",
+      "The recall record remembers the choice to dim a light you had promised to guard."
+    ],
+    [
+      "OATH OF LIGHT EXTINGUISHED—Thy hand has chosen shadow over starlight. The radiance of the Kindler has fled from thee, and no star shall answer thy call. The light thou hast forsworn shall grant thee no comfort in this age of the world. Marked forever as one who broke the light.",
+      "OATH OF LIGHT BROKEN. An earlier choice of light-dimming gear bars this promise; Solen's record retains that choice."
+    ]
+  ]
+}

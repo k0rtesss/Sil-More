@@ -266,6 +266,7 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
 SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text_value,
     SDL_Color color, int* out_width, int* out_height)
 {
+    text_value = lore_text(text_value);
     return sdl_ui_text_texture_internal(font, text_value, 0, color,
         out_width, out_height);
 }
@@ -273,6 +274,7 @@ SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text_value,
 SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text_value,
     int wrap_width, SDL_Color color, int* out_width, int* out_height)
 {
+    text_value = lore_text(text_value);
     if (wrap_width < 1)
         wrap_width = 1;
     return sdl_ui_text_texture_internal(font, text_value, wrap_width, color,

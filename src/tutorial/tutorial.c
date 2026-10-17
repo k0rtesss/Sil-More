@@ -733,7 +733,7 @@ static void fill_view(tutorial_view *view, int index, int step_index,
     memset(view, 0, sizeof(*view));
     SDL_strlcpy(view->id, lesson->id, sizeof(view->id));
     SDL_strlcpy(view->title, lesson->title, sizeof(view->title));
-    render_text(view->body, sizeof(view->body), step->text, context);
+    render_text(view->body, sizeof(view->body), lore_text(step->text), context);
     SDL_strlcpy(view->action, step->action, sizeof(view->action));
     SDL_strlcpy(view->action_subject, step->subject_type, sizeof(view->action_subject));
     SDL_strlcpy(view->anchor, step->anchor, sizeof(view->anchor));

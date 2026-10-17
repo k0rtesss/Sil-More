@@ -445,6 +445,7 @@ static int pane_log_wrap_message(cptr msg, int avail,
 static int pane_log_wrap_message_pixels(cptr msg, int fallback_avail,
     char segs[PANE_LOG_WRAP_MAX_SEGS][PANE_LOG_WRAP_SEG_MAX])
 {
+    msg = lore_text(msg);
     int offsets[PANE_LOG_WRAP_MAX_SEGS];
     int lengths[PANE_LOG_WRAP_MAX_SEGS];
     int nseg;
@@ -1088,10 +1089,9 @@ void redraw_stuff(void)
             prt_hp();
 
         /*
-         * hack:  redraw player, since the player's color
-         * now indicates approximate health.
+         * Redraw the player's health color or graphical tile health bar.
          */
-        if (arg_graphics == GRAPHICS_NONE)
+        if (arg_graphics == GRAPHICS_NONE || styled_player_tile_health_bar)
         {
             lite_spot(p_ptr->py, p_ptr->px);
         }

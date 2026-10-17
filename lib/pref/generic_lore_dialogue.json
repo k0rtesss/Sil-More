@@ -1,0 +1,1200 @@
+{
+  "title": "Emberfall dialogue",
+  "terms": [],
+  "descriptions": [
+    [
+      "The shadows here are deep, and hope is a rare guest in these halls. Yet I see a glimmer of light in your eyes, stranger.\n\nI am bound to this darkness, but perhaps you are not. If your heart still knows pity, I beg a small boon of you.\n\nBring me %s.\n\n%s\n\nGrant me this, and I shall share what little aid I can still offer.",
+      "Keep to this side of the pump. The guards cannot see us from the upper walk. I used to service these valves before the regent turned the crews into prisoners.\n\nI need %s.\n\n%s\n\nBring it here and I can help with your equipment. They took my workshop, but they have not taken what I know."
+    ],
+    [
+      "You there - halt. You have the look of a free soul about you, and that is a rare and dangerous thing in these deeps.\n\nI have nothing to offer but words, and those are cheap in Angband. But I have a need, and you may have the means.\n\nBring me %s.\n\n%s\n\nDo this, and I will repay the kindness as best I can. I have not forgotten all my skill.",
+      "Your boots are not marked for a work gang. Good. That means you can reach stores they will never let me near. I have been saving my strength for an opening, but I am missing something.\n\nCan you bring me %s?\n\n%s\n\nI have a trade to offer in return, if we can keep the overseer out of it."
+    ],
+    [
+      "Do not be afraid. I was a man once, before the chains and the dark. I still am, though they would have me forget it.\n\nThe overseers leave me alive because my hands are useful, but my spirit is my own, and it cries out for one mercy.\n\nBring me %s.\n\n%s\n\nIn return I shall put these calloused hands to work for you.",
+      "Please wait. I am not reaching for a weapon; I need you to hear me before the next shift begins. I worked the ferry yards before this place, and I know how to make a useful repair.\n\nFirst I need %s.\n\n%s\n\nIf you can find it, I will put that knowledge to work for you."
+    ],
+    [
+      "Another wanderer in the pits. I would warn you to turn back, but no road leads out of Angband save through it.\n\nI have laboured here longer than I care to reckon. My strength fades, but my wits have not yet been broken.\n\nIf you could find me %s, it would be a lifeline in this drowning dark.\n\n%s\n\nHelp me, and I will help you. That is an honest bargain, even here.",
+      "I have counted six changes of guard since they last opened the service hatch. There may be a way through it, but I cannot make the attempt as I am.\n\nWould you find me %s?\n\n%s\n\nHelp me prepare, and I will do what I can for the gear carrying you through this place."
+    ],
+    [
+      "Quiet - the guards have just passed. Listen, I have not much time to speak.\n\nThey have worked me near to death, but I am still breathing, and where there is breath there is a chance. I need your help.\n\nBring me %s.\n\n%s\n\nI can still ply a trade, and I will use it in your favour.",
+      "The hammering covers our voices for a moment. Listen: I have hidden a little room behind the scrap bins, enough to work without the guards looking over my shoulder.\n\nWhat I need is %s.\n\n%s\n\nBring it while the shift is changing. I can repay you with work they do not own."
+    ],
+    [
+      "I see from your bearing that you are no thrall. That alone gives me courage to ask what I am about to ask.\n\nThey took everything from me - my home, my name, my kin. All I have left is the hope that someone, someday, might show me a scrap of kindness.\n\nBring me %s.\n\n%s\n\nDo this, and what skill these worn hands still possess is yours.",
+      "I still remember the inventory marks from my old quay. Sometimes I trace them on the wall to keep my hands from forgetting their work. You look as though you might get back to those cities.\n\nBefore you go, could you bring me %s?\n\n%s\n\nI cannot travel with you, but I can make my skill useful to your journey."
+    ],
+    [
+      "Ai! A star in the darkness! Do my eyes deceive me, or do I look upon one of the Free Peoples walking these accursed paths?\n\nI am weary, kinsman, weary beyond the counting of years. The Shadow lies heavy upon my fea.\n\nYet, if you would show mercy to one who has lost all, bring me %s.\n\n%s\n\nIn return, I shall speak to you of ancient works and secrets long forgotten by the world above.",
+      "The return lamps have been dark so long that I nearly mistook you for a memory. Come closer, away from the listening pipe. I kept the instrument records before they brought me below.\n\nI need %s.\n\n%s\n\nIf you can help, I will share the workshop knowledge I have kept hidden from the overseers."
+    ],
+    [
+      "Stay your step, wanderer. Not all who dwell here are foes, though the iron and shadow would have it so.\n\nOnce I walked beneath stars and knew the names of every tree from root to crown. Now I count the hours by the dripping of water and the turning of the wheel.\n\nIf compassion yet moves your heart, bring me %s.\n\n%s\n\nIt would ease my captivity, and I would repay you with such knowledge as I still possess.",
+      "There is a safe board beside the drain; stand there. I know which parts of this gallery are still sound because I helped inspect them before the occupation.\n\nCan you obtain %s for me?\n\n%s\n\nI can offer what I remember of the old equipment and the ways it was made."
+    ],
+    [
+      "A… free walker? Here, in the deep places? I thought my eyes had at last surrendered to the dark, but no - you are real.\n\nI was taken from the green lands long ago, and the song has all but left my voice. Still, I remember enough to be of use.\n\nIf it is within your power, bring me %s.\n\n%s\n\nI shall repay such grace with whatever craft the long years have not stripped from me.",
+      "You found this chamber without a guard escort. Then the lower passages are not completely closed. I have been waiting for someone who could carry a request beyond this wall.\n\nPlease bring %s.\n\n%s\n\nThere is still useful work in these hands, and I will use it for you."
+    ],
+    [
+      "Daro! Do not strike. I am no servant of the Enemy, though my chains would give the lie to that claim.\n\nThere was a time when my people sang the world into shape. Now I sing only to keep madness at bay. But I have not yet fallen.\n\nI ask only this: bring me %s.\n\n%s\n\nGrant me this, and the old knowledge shall be yours - such of it as endures in a captive heart.",
+      "Do not follow the cable on the floor; it leads to the alarm. I pulled it loose so we could speak here. The guards make me maintain their instruments, but I have kept some procedures out of their books.\n\nI would trade that knowledge for %s.\n\n%s\n\nWill you help me?"
+    ],
+    [
+      "Hush - speak softly. The walls have ears, and the servants of the Enemy are cunning beyond measure.\n\nI have dwelt in these pits since before the sun last touched my face. My strength wanes, but my memory is long, and I remember things of power and beauty.\n\nIf pity stirs in your breast, bring me %s.\n\n%s\n\nIn exchange I will impart to you a portion of the Elder craft - small, perhaps, but not without worth.",
+      "The old survey marks are still under the soot. I read them when I need to remember that these were once service works, built by people rather than masters.\n\nWould you bring me %s?\n\n%s\n\nIn return, I can explain some of the craft that survived with those marks."
+    ],
+    [
+      "You move as one who still knows the taste of open air. How I envy you.\n\nI was a maker once - a shaper of fair things in the halls of my people. Now my forge is cold and my tools are rust. But the skill lives on in these fingers, if barely.\n\nWould you bring me %s?\n\n%s\n\nI would give you something in return - a gift of craft that the darkness has not yet devoured.",
+      "I used to fit the signal crystals in the western docks. Even now I find myself checking the alignment of every lamp they make me clean. There may still be something I can teach you.\n\nFirst, I need %s.\n\n%s\n\nBring it here, and the next piece of useful knowledge will leave this prison with you."
+    ],
+    [
+      "You return... and I see you bear the burden I spoke of. Can it be true? Have you brought %s to this wretched place?\n\n%s\n\nIf you would part with it, my gratitude would be boundless.",
+      "You made it back. Is that %s you found? I kept the work space ready in case you returned.\n\n%s\n\nWill you give it to me? I will do the work we agreed on."
+    ],
+    [
+      "I see it upon you - %s! My heart leaps at the sight.\n\n%s\n\nWill you surrender it to one whose freedom hangs by a thread?",
+      "That is %s, just what I asked for. Keep your voice down; the next guard is near the stairs.\n\n%s\n\nCan you spare it for me?"
+    ],
+    [
+      "Wait - is that %s I spy? I have dreamed of such a thing through many dark watches.\n\n%s\n\nSay the word, and it shall not be given in vain.",
+      "I recognize %s among your gear. I was beginning to think the stores had all been emptied.\n\n%s\n\nIf you can hand it over, I am ready to repay the help."
+    ],
+    [
+      "By all that is still good in this world - you carry %s! I can scarcely believe my fortune.\n\n%s\n\nWould you part with it? I swear upon my people that the debt will be repaid.",
+      "You brought %s through all those checkpoints. I have not forgotten the bargain.\n\n%s\n\nWill you leave it with me?"
+    ],
+    [
+      "Hold - I recognise what you carry. That is %s, unless my eyes have wholly failed me.\n\n%s\n\nIf you would spare it, I will see that the kindness is returned.",
+      "Wait before you move on. You are carrying %s, and it would make a real difference here.\n\n%s\n\nCan you give it to me? My tools are ready for your equipment."
+    ],
+    [
+      "You have it - %s! I can see it plain as day, and my heart almost bursts with hope.\n\n%s\n\nWill you give it to me? I will put my hands and my wits at your service in thanks.",
+      "There it is: %s. I checked the hiding place again, and it is still safe enough to work.\n\n%s\n\nWill you let me have it? I can return the favor now."
+    ],
+    [
+      "You have returned, and the light of the stars seems to follow you. And... yes, I sense you carry %s.\n\n%s\n\nIs it for me? Will you grant this kindness to a fading spirit?",
+      "You returned to the right chamber. I can see %s in your gear.\n\n%s\n\nWill you give it to me? I have prepared the knowledge I promised you."
+    ],
+    [
+      "Ai, you have come again, and you bring with you %s! Even here, hope endures.\n\n%s\n\nWill you part with it for my sake?",
+      "That is %s. I recognize the shape even under this poor light.\n\n%s\n\nCan you spare it? We can finish our exchange before the inspection."
+    ],
+    [
+      "My heart quickens - can it be? You bear %s! The very air around you seems brighter for it.\n\n%s\n\nIf you would bestow it upon me, I shall not soon forget the gift.",
+      "You found %s after all. I have kept the useful records in my head while waiting.\n\n%s\n\nWill you hand it over so I can begin?"
+    ],
+    [
+      "Na vedui! At last, a kindness beyond hope. You carry %s, and its presence alone is a balm.\n\n%s\n\nWill you yield it to one whose need is great?",
+      "I was listening for the overseer, but it is you at the door, carrying %s.\n\n%s\n\nCan you leave it here? I am ready to do my part."
+    ],
+    [
+      "The light follows you still, and upon you I perceive %s. A thread of hope in a tapestry of ruin.\n\n%s\n\nIf you can spare this boon, my craft - such as it is - shall be devoted to your cause.",
+      "The guards have not searched this corner today. We have time to exchange %s for the help I offered.\n\n%s\n\nWill you give it to me?"
+    ],
+    [
+      "Ai, can it be? %s! My fea trembles at the sight. Even in Angband, the world is not wholly bereft of grace.\n\n%s\n\nWill you give it to one who has all but forgotten the sun?",
+      "Yes, %s is what I needed. Please keep it covered until you are beside me.\n\n%s\n\nIf you can part with it, I can pass on the old craft now."
+    ],
+    [
+      "You... you have brought it? I had not dared to hope.\n\nMy thanks, stranger. You have done a kinder deed than you know. May your courage not fail you in the trials to come.\n\nIn payment, such as I can make, I will give you what craft or lore I have not forgotten.",
+      "You kept your word. I can make use of this before the next shift. Let me repay you with the trade I learned in the ferry yards; that part of my life still belongs to me."
+    ],
+    [
+      "It is done. You are a finer soul than any master I have served in these halls.\n\nI had thought all kindness perished when I was thrown into this pit, but you have proven me wrong.\n\nTake what I can give - some cunning of hand and eye that the long years of labour have taught me.",
+      "That will help. For once, something useful came into this chamber without an order from a guard. Bring your gear closer and I will do my part of the bargain."
+    ],
+    [
+      "I will not weep - tears are a luxury I cannot afford - but know that you have given me something more precious than gold.\n\nFor a moment I remember what it was to be free, and that is enough.\n\nHere - let me set my hands to your gear. It is the least I can do.",
+      "I had nearly stopped planning for tomorrow. This gives me a reason to start again. Let me work on your equipment while my hands are steady."
+    ],
+    [
+      "You risked much to bring this to a wretch like me, and I will not forget it.\n\nWhen I was a craftsman in the daylight world, my work was honest and strong. The dark has not stolen that from me entirely.\n\nLet me put what remains of my old skill to your benefit.",
+      "You took a risk for someone the regent would never count. I will remember it. Here is what an old workshop hand can offer in return."
+    ],
+    [
+      "There are no words - not in the common tongue, nor in any speech I know - that can repay what you have done.\n\nBut words are not all I have. These hands still know their trade, battered though they are.\n\nCome, let me work upon whatever you carry. It is the only coin I can offer, and I give it gladly.",
+      "Thank you. I can hide this where the inspection will miss it. Now let me show you a piece of work the overseers have never managed to take from me."
+    ],
+    [
+      "A good deed in a foul place. My old mother used to say that kindness is the only wealth that grows when you give it away.\n\nShe was right, and you have proven it.\n\nNow let me see what I can do for you - I may be a slave, but my craft is still my own.",
+      "A fair exchange in a place built on taking. I needed that more than you know. Hold your equipment still; I can repay the help with useful work."
+    ],
+    [
+      "Elen síla lúmenn' omentielvo! You have my deepest thanks.\n\nLong have I lacked such kindness in this forsaken place. May the stars shine upon your road, and may your hand be swift and your heart steadfast.\n\nIn return I will share with you what lore and craft remain to me, dim though my memory has become in these pits.",
+      "This will last me through another shift. Thank you for returning. I have kept the instrument procedures clear in my memory, and I will share what can help you now."
+    ],
+    [
+      "Hannon le, mellon. The grace of the Valar is not yet wholly spent if such mercy can be found in Morgoth's domain.\n\nMy spirit is lifted, if only for a moment, and in that moment I am myself again.\n\nLet me share with you a fragment of the ancient craft - a gift from one who may soon pass beyond all circles of the world.",
+      "The guards would call this missing inventory. I call it help freely given. Let me return it with the craft I learned before these galleries became a prison."
+    ],
+    [
+      "Le hannon, le hannon. Words fail where gratitude is too deep for speech.\n\nYou have rekindled an ember I thought quenched forever. Even if this body fails, the memory of your kindness will not fade from the song.\n\nAccept what I can offer - a whisper of the old craft, shaped in better days.",
+      "You brought more than a useful object: you proved a promise can still be kept here. Take this knowledge with you; I would rather see it used than hidden."
+    ],
+    [
+      "You walk in the shadow of Morgoth himself, yet you carry light with you. That is no small thing.\n\nI have seen ages pass in this darkness, and few deeds have touched me so. May the stars remember your name when all other names are forgotten.\n\nCome - let me share what lore I have. It is poor coin for such a gift, but it is all I possess.",
+      "Thank you. I had begun to measure every visitor by the trouble they brought. You have given me a different measure. Here is the workshop knowledge I promised."
+    ],
+    [
+      "Gi nathlam hí. You honour me beyond all deserving.\n\nIn the long dark I have felt my fea diminish, a candle guttering in a gale. Yet your gift has steadied the flame, if only for a breath.\n\nLet me repay you with a remnant of Noldorin craft - ancient and worn, yet still sharp.",
+      "My hands have remembered the work all this time. Now someone besides the regent will benefit from it. Let me repay you before the overseer returns."
+    ],
+    [
+      "A… tear? I had forgotten the Eldar could still weep. Forgive me - it has been long since anyone showed me such generosity.\n\nThe world beyond these walls grows dim in my memory, but the old skills remain. They are etched into my hands deeper than any chain.\n\nTake what I offer. It is given freely, from a heart that you have made whole again, if only for a moment.",
+      "I can picture my old bench again, down to the worn edge beside the lamp. The skill is still there. Take what I can teach you and put it to use outside this cell."
+    ],
+    [
+      "With it I could scrape away the slag and filth about my chain-bolt, and perhaps find some hidden weakness in the stone.",
+      "A shovel would clear the packed slag from my chain-bolt. I want to see whether the stone beneath it has cracked."
+    ],
+    [
+      "With it I might loosen the stones about my fetter, and dig a little hollow wherein to hide myself when the guards are hunting.",
+      "I could dig around the fetter and make a covered space behind the loose blocks, somewhere the guards might overlook."
+    ],
+    [
+      "With it I may read the ways of these tunnels and avoid the pits and runes that the Orcs forget, for the dark here is a snare.",
+      "A lantern would let me read the survey marks and avoid the abandoned pits and warning signs in these tunnels."
+    ],
+    [
+      "With it I could steal through the blackness when the fires are quenched, and not stumble into chasms or the lash of the watch.",
+      "I need a light for the hours when the furnaces go cold. Without one, an unnoticed gap or patrol can end any attempt to move."
+    ],
+    [
+      "With it the smarting of wounds may be eased, that my hands do not tremble and my thoughts do not wander into madness.",
+      "The wounds keep my hands shaking. A healing herb would ease them enough for me to work and think clearly."
+    ],
+    [
+      "With it I could bind up the sores of the whip and the iron, and drive away the fever that has been set upon me.",
+      "I could treat the sores left by the collar and whip, and bring down the fever before the next shift."
+    ],
+    [
+      "With it I would set a clean light against the Shadow; the wood of mallorn remembers the West, and darkness draws back from such flame.",
+      "Its clean flame would give me a reliable light apart from the guard lamps. That wood burns well even in this bad air."
+    ],
+    [
+      "With it I would keep a true flame beside me, for the strange glamour of this place hates a light that is not of their making.",
+      "I could keep a steady flame beside the work space. The uncertain lights here make every small task harder."
+    ],
+    [
+      "With it a hurt that has gone black with poison may yet be cleansed, and my strength saved from a slow fading.",
+      "The wound has darkened with poison. A healing potion might clear it before it takes the strength I have left."
+    ],
+    [
+      "With it a wound that will not close may be stayed, and I might live to see another hour unchained of pain.",
+      "A healing potion could help close this stubborn wound and give me a little time without the pain."
+    ],
+    [
+      "With it I would not strike at the innocent, but keep a last defence, and a blade to cut cord or chain when a slender hope arises.",
+      "I need a small blade for cord and bindings, and something to defend myself with if the chance to leave comes."
+    ],
+    [
+      "With it I could sever rope or leather, and if the worst befall, keep one sharp edge between myself and the tormentors.",
+      "I could cut rope or leather with it, and keep an edge between myself and a guard if there is no other way."
+    ],
+    [
+      "With it I might move as once I moved beneath leaves and stars, unseen of captains and their hounds, and so slip from bondage for a time.",
+      "A cloak could hide my outline from the watch and its hounds while I move between the work chambers."
+    ],
+    [
+      "With it I could hide from the eye and the cold, for these deep ways gnaw at bone and the overseers see all who stand bare.",
+      "I need cover from the cold as well as the patrols. The open galleries leave me exposed to both."
+    ],
+    [
+      "With them I may tread in silence again, and not wake the watchers when I must pass between shadowed doors.",
+      "Boots would help me cross the service landings quietly, without alerting the watchers at the doors."
+    ],
+    [
+      "With them my feet would not bleed upon the stone, and if a door is left unbarred I could run before the cry is raised.",
+      "My feet are bleeding on the rough floor. With boots I might reach an open door before anyone could stop me."
+    ],
+    [
+      "With it I can endure the long watches when no crust is thrown to us, for even the Eldar are not beyond hunger in these pits.",
+      "A sustenance herb would carry me through the shifts when they withhold our rations."
+    ],
+    [
+      "With it I could master hunger for a while, and not be driven to folly when they starve us to obedience.",
+      "I could quiet my hunger long enough to think, instead of letting starvation make the next decision for me."
+    ],
+    [
+      "With it the strength that has been drained by torment may be rekindled, and I may remember myself for a little while.",
+      "I need to recover the strength this work has drained, enough to trust my own hands again."
+    ],
+    [
+      "With it I might recover what the Dark has stolen from my limbs, and stand straighter beneath their burden.",
+      "A restoration herb might give my weakened limbs back the strength to carry their load."
+    ],
+    [
+      "With it the veils upon my mind may be lifted, and the dreams they weave may be scattered like mist before the morning.",
+      "Clarity would help me separate what is happening from the visions and confused thoughts this place brings."
+    ],
+    [
+      "With it I could cast out the madness of fear and whispering shadows, and think clearly when the hour of choice comes.",
+      "I need a clear head when the next opening comes. These frightened, wandering thoughts could cost me that chance."
+    ],
+    [
+      "With it I could keep a small flame clean and steady, and remember for a while that light was made for more than the watchfires of Angband.",
+      "Oil would keep the lamp burning steadily through a whole watch instead of failing in the middle of work."
+    ],
+    [
+      "With it I could nurse a lamp through the dead watches, when a stumble in the black means the lash or the pit.",
+      "I could keep a lamp alive through the dark hours and see the floor before a misstep brings the guards."
+    ],
+    [
+      "With it I could carry one honest flame into the black ways, and not go wholly blind beneath the earth.",
+      "A torch would give me portable light for passages the fixed lamps no longer reach."
+    ],
+    [
+      "With it I could find a gate, a crack, any path not barred by iron, before the dark swallows my nerve.",
+      "I could search for a loose gate or crack in the walls without feeling for every step in darkness."
+    ],
+    [
+      "With it I could quiet the hunger that hollows my strength, and keep enough life in my limbs to endure the next labour.",
+      "Bread would quiet the hunger and leave me enough strength for the work they will demand next."
+    ],
+    [
+      "With it I could put strength back into my body; the scraps our masters cast us scarcely keep a man standing.",
+      "The rations barely keep me standing. Dried meat would put some strength back into my body."
+    ],
+    [
+      "I ask only to taste it once more, and remember the clean air beneath the trees before iron and darkness became all my world.",
+      "Those wafers were made for long journeys. A little food that lasts could help me endure here, and remind me what travel felt like."
+    ],
+    [
+      "With it I might yet endure a little longer, and do some small good before all light is quenched.",
+      "It would help me survive a little longer and keep enough strength to offer something useful in return."
+    ],
+    [
+      "You... you have brought it? I had not dared to hope. My thanks, stranger. You have done a kinder deed than you know. May your courage not fail you in the trials to come. In payment, such as I can make, I will give you what craft or lore I have not forgotten.",
+      "You kept your word. I can make use of this before the next shift. Let me repay you with the trade I learned in the ferry yards; that part of my life still belongs to me."
+    ],
+    [
+      "You... you have brought it? I had not dared to hope. My thanks, stranger. You have done a kinder deed than you know. May your courage not fail you in the trials to come. In payment, such as I can make, I will give you w",
+      "You kept your word. I can make use of this before the next shift. Let me repay you with the trade I learned in the ferry yards; that part of my life still belongs to me."
+    ],
+    [
+      "It is done. You are a finer soul than any master I have served in these halls. I had thought all kindness perished when I was thrown into this pit, but you have proven me wrong. Take what I can give - some cunning of hand and eye that the long years of labour have taught me.",
+      "That will help. For once, something useful came into this chamber without an order from a guard. Bring your gear closer and I will do my part of the bargain."
+    ],
+    [
+      "It is done. You are a finer soul than any master I have served in these halls. I had thought all kindness perished when I was thrown into this pit, but you have proven me wrong. Take what I can give - some cunning of ha",
+      "That will help. For once, something useful came into this chamber without an order from a guard. Bring your gear closer and I will do my part of the bargain."
+    ],
+    [
+      "I will not weep - tears are a luxury I cannot afford - but know that you have given me something more precious than gold. For a moment I remember what it was to be free, and that is enough. Here - let me set my hands to your gear. It is the least I can do.",
+      "I had nearly stopped planning for tomorrow. This gives me a reason to start again. Let me work on your equipment while my hands are steady."
+    ],
+    [
+      "I will not weep - tears are a luxury I cannot afford - but know that you have given me something more precious than gold. For a moment I remember what it was to be free, and that is enough. Here - let me set my hands to",
+      "I had nearly stopped planning for tomorrow. This gives me a reason to start again. Let me work on your equipment while my hands are steady."
+    ],
+    [
+      "You risked much to bring this to a wretch like me, and I will not forget it. When I was a craftsman in the daylight world, my work was honest and strong. The dark has not stolen that from me entirely. Let me put what remains of my old skill to your benefit.",
+      "You took a risk for someone the regent would never count. I will remember it. Here is what an old workshop hand can offer in return."
+    ],
+    [
+      "You risked much to bring this to a wretch like me, and I will not forget it. When I was a craftsman in the daylight world, my work was honest and strong. The dark has not stolen that from me entirely. Let me put what re",
+      "You took a risk for someone the regent would never count. I will remember it. Here is what an old workshop hand can offer in return."
+    ],
+    [
+      "There are no words - not in the common tongue, nor in any speech I know - that can repay what you have done. But words are not all I have. These hands still know their trade, battered though they are. Come, let me work upon whatever you carry. It is the only coin I can offer, and I give it gladly.",
+      "Thank you. I can hide this where the inspection will miss it. Now let me show you a piece of work the overseers have never managed to take from me."
+    ],
+    [
+      "There are no words - not in the common tongue, nor in any speech I know - that can repay what you have done. But words are not all I have. These hands still know their trade, battered though they are. Come, let me work ",
+      "Thank you. I can hide this where the inspection will miss it. Now let me show you a piece of work the overseers have never managed to take from me."
+    ],
+    [
+      "A good deed in a foul place. My old mother used to say that kindness is the only wealth that grows when you give it away. She was right, and you have proven it. Now let me see what I can do for you - I may be a slave, but my craft is still my own.",
+      "A fair exchange in a place built on taking. I needed that more than you know. Hold your equipment still; I can repay the help with useful work."
+    ],
+    [
+      "A good deed in a foul place. My old mother used to say that kindness is the only wealth that grows when you give it away. She was right, and you have proven it. Now let me see what I can do for you - I may be a slave, b",
+      "A fair exchange in a place built on taking. I needed that more than you know. Hold your equipment still; I can repay the help with useful work."
+    ],
+    [
+      "Elen síla lúmenn' omentielvo! You have my deepest thanks. Long have I lacked such kindness in this forsaken place. May the stars shine upon your road, and may your hand be swift and your heart steadfast. In return I will share with you what lore and craft remain to me, dim though my memory has become in these pits.",
+      "This will last me through another shift. Thank you for returning. I have kept the instrument procedures clear in my memory, and I will share what can help you now."
+    ],
+    [
+      "Elen síla lúmenn' omentielvo! You have my deepest thanks. Long have I lacked such kindness in this forsaken place. May the stars shine upon your road, and may your hand be swift and your heart steadfast. In return I wil",
+      "This will last me through another shift. Thank you for returning. I have kept the instrument procedures clear in my memory, and I will share what can help you now."
+    ],
+    [
+      "Elen síla lúmenn' omentielvo! You have my deepest thanks. Long have I lacked such kindness in this forsaken place. May the stars shine upon your road, and may your hand be swift and your heart steadfast. In return I w",
+      "This will last me through another shift. Thank you for returning. I have kept the instrument procedures clear in my memory, and I will share what can help you now."
+    ],
+    [
+      "Hannon le, mellon. The grace of the Valar is not yet wholly spent if such mercy can be found in Morgoth's domain. My spirit is lifted, if only for a moment, and in that moment I am myself again. Let me share with you a fragment of the ancient craft - a gift from one who may soon pass beyond all circles of the world.",
+      "The guards would call this missing inventory. I call it help freely given. Let me return it with the craft I learned before these galleries became a prison."
+    ],
+    [
+      "Hannon le, mellon. The grace of the Valar is not yet wholly spent if such mercy can be found in Morgoth's domain. My spirit is lifted, if only for a moment, and in that moment I am myself again. Let me share with you a ",
+      "The guards would call this missing inventory. I call it help freely given. Let me return it with the craft I learned before these galleries became a prison."
+    ],
+    [
+      "Le hannon, le hannon. Words fail where gratitude is too deep for speech. You have rekindled an ember I thought quenched forever. Even if this body fails, the memory of your kindness will not fade from the song. Accept what I can offer - a whisper of the old craft, shaped in better days.",
+      "You brought more than a useful object: you proved a promise can still be kept here. Take this knowledge with you; I would rather see it used than hidden."
+    ],
+    [
+      "Le hannon, le hannon. Words fail where gratitude is too deep for speech. You have rekindled an ember I thought quenched forever. Even if this body fails, the memory of your kindness will not fade from the song. Accept w",
+      "You brought more than a useful object: you proved a promise can still be kept here. Take this knowledge with you; I would rather see it used than hidden."
+    ],
+    [
+      "You walk in the shadow of Morgoth himself, yet you carry light with you. That is no small thing. I have seen ages pass in this darkness, and few deeds have touched me so. May the stars remember your name when all other names are forgotten. Come - let me share what lore I have. It is poor coin for such a gift, but it is all I possess.",
+      "Thank you. I had begun to measure every visitor by the trouble they brought. You have given me a different measure. Here is the workshop knowledge I promised."
+    ],
+    [
+      "You walk in the shadow of Morgoth himself, yet you carry light with you. That is no small thing. I have seen ages pass in this darkness, and few deeds have touched me so. May the stars remember your name when all other ",
+      "Thank you. I had begun to measure every visitor by the trouble they brought. You have given me a different measure. Here is the workshop knowledge I promised."
+    ],
+    [
+      "Gi nathlam hí. You honour me beyond all deserving. In the long dark I have felt my fea diminish, a candle guttering in a gale. Yet your gift has steadied the flame, if only for a breath. Let me repay you with a remnant of Noldorin craft - ancient and worn, yet still sharp.",
+      "My hands have remembered the work all this time. Now someone besides the regent will benefit from it. Let me repay you before the overseer returns."
+    ],
+    [
+      "Gi nathlam hí. You honour me beyond all deserving. In the long dark I have felt my fea diminish, a candle guttering in a gale. Yet your gift has steadied the flame, if only for a breath. Let me repay you with a remnant ",
+      "My hands have remembered the work all this time. Now someone besides the regent will benefit from it. Let me repay you before the overseer returns."
+    ],
+    [
+      "Gi nathlam hí. You honour me beyond all deserving. In the long dark I have felt my fea diminish, a candle guttering in a gale. Yet your gift has steadied the flame, if only for a breath. Let me repay you with a remnant",
+      "My hands have remembered the work all this time. Now someone besides the regent will benefit from it. Let me repay you before the overseer returns."
+    ],
+    [
+      "A… tear? I had forgotten the Eldar could still weep. Forgive me - it has been long since anyone showed me such generosity. The world beyond these walls grows dim in my memory, but the old skills remain. They are etched into my hands deeper than any chain. Take what I offer. It is given freely, from a heart that you have made whole again, if only for a moment.",
+      "I can picture my old bench again, down to the worn edge beside the lamp. The skill is still there. Take what I can teach you and put it to use outside this cell."
+    ],
+    [
+      "A… tear? I had forgotten the Eldar could still weep. Forgive me - it has been long since anyone showed me such generosity. The world beyond these walls grows dim in my memory, but the old skills remain. They are etched ",
+      "I can picture my old bench again, down to the worn edge beside the lamp. The skill is still there. Take what I can teach you and put it to use outside this cell."
+    ],
+    [
+      "A… tear? I had forgotten the Eldar could still weep. Forgive me - it has been long since anyone showed me such generosity. The world beyond these walls grows dim in my memory, but the old skills remain. They are etche",
+      "I can picture my old bench again, down to the worn edge beside the lamp. The skill is still there. Take what I can teach you and put it to use outside this cell."
+    ],
+    [
+      "You awaken in darkness. No name. No memory. Only a quiet ache of courage deep inside you, like embers buried beneath ash.",
+      "A pump starts somewhere beyond the wall. You wake with your hand closed around an absent railing. Your name is missing, but the instinct to get someone safely through a door remains."
+    ],
+    [
+      "Far below, Morgoth waits upon his throne—iron-dark and crowned in flame. Upon his brow shine three Silmarils, stolen stars. He senses your stirring. He knows you will come.",
+      "Below the tide cities, Varkesh has locked three dawnseeds into a command crown. The weather engine feeds his fortress while the reservoirs above lose their forecasts and their water."
+    ],
+    [
+      "Far above, beyond the shadows of Angband, the Valar watch silently. They offer no guidance, yet their presence fills you with strength—and dread.",
+      "The Nine Custodians receive your return signal. They are surviving operators and technical records of the failed engine, working with equipment that no longer meets its own safety limits."
+    ],
+    [
+      "You will return many times, each death and rebirth etched into the endless stone halls of Mandos. Each fall will draw your spirit deeper into shadow, closer to a doom from which you cannot escape.",
+      "The recall loom can rebuild a body around what remains of your memoryprint. Each death forces another recovery, and each recovery risks losing a detail that once made your life your own."
+    ],
+    [
+      "Yet each victory—each Silmaril wrested from Morgoth's crown—will brighten the Valar's hope, even as your soul grows thinner, your strength fading with every triumph.",
+      "A recovered dawnseed can restart a dead part of the weather system. Bringing one out also puts a heavier load through your return line. Repair and survival do not always ask the same thing of you."
+    ],
+    [
+      "You envy the Edain, whose Gift from Ilúvatar frees them from the bonds of Mandos and the world. Yet you do not know if such release can ever be yours. You do not know who—or even what—you truly are.",
+      "Some records end when their bearers die; others remain trapped in the recall cycle. You do not yet know why yours was preserved, or what happened during the evacuation it cannot fully remember."
+    ],
+    [
+      "For each time you awaken, you will carry the names of heroes beloved and feared—bright spirits, fiery hearts, proud kings and exiles, wanderers beneath sun and stars, whose courage you borrow, but whose fates are not your own.",
+      "The custodians keep training records from the people who built, guarded, and repaired the tide cities. Each return lets you work through a different record, taking its skills and its difficult habits into the deep."
+    ],
+    [
+      "This is the trial set by the Valar: to walk the narrow way between shadow and light, to bear the borrowed glory of the great, and to win back at last the name that was taken from you.",
+      "The descent has a practical purpose: recover the dawnseeds and restore the engine. Somewhere along that work, the broken record may also yield the name of the person who stayed behind at the flood gates."
+    ],
+    [
+      "Now the path before you opens, and your trial begins.",
+      "The return chamber opens. Beyond it, the first service passage is waiting."
+    ],
+    [
+      "You wake again in the dark, nameless and unremembered — a spirit set by the Valar to their long trial: to live the War of the Jewels once more, in a shape that is not your own.",
+      "The recall chamber has restored your body before it has restored your name. The custodians offer a surviving training record to carry through your next descent."
+    ],
+    [
+      "In the Elder Days, when the Two Trees of Valinor were slain and their light failed, Morgoth the great Enemy stole the Silmarils — the three holy jewels wrought by Fëanor, in which that light yet lived — and fled north to Angband, his fortress of iron beneath the triple peaks of Thangorodrim. There he set the Jewels in an iron crown and sat enthroned in darkness, walled about by orcs, balrogs, and dragons.\n\nFor the Silmarils Fëanor swore his terrible Oath, and the Noldor forsook the Blessed Realm and came in exile to Beleriand to make war upon the Enemy. They raised proud kingdoms and held Angband under siege through long years — yet their valour was ever shadowed by the Kinslaying at Alqualondë and the Doom of Mandos that followed them.\n\nThey did not fight alone. The Sindar, Grey-elves who dwelt beneath the stars of Beleriand long before the Noldor came, took up arms in the Elven realms and at the Havens of the Falas — though hidden Doriath, girdled by the power of Melian, held apart behind its enchanted bounds. The Naugrim, Dwarves of the Blue Mountains, forged matchless mail and axes and marched to the great battles. And the Edain, the first Men over the mountains, swore friendship to the Eldar and spent their brief, valiant lives in the war, winning undying renown.",
+      "The tide cities depended on a weather engine: reservoirs, pressure towers, and a network of signals that gave every quay time to prepare for a storm. Its operators became the Nine Custodians, keeping people and machinery working together across the changing water.\n\nVarkesh seized the lower works during the Furnace Breach. He mounted three dawnseeds in a command crown and diverted their current to Karth Vault. The forecasts stopped. Relief gates failed to open, and the evacuations left whole districts under water.\n\nThe survivors came from many trades. Glasswright crews knew the engine instruments; Reedwalkers knew the changing marsh paths; Deep Masons kept foundations and tunnels sound; Tideborn communities supplied boats, provisions, and new workers. Their records still hold the skills needed for a repair. No single crew can finish it alone."
+    ],
+    [
+      "Choose now whose name you will wear — whose courage, whose grief, whose doom you carry down into Angband. Each Silmaril wrested from the iron crown brightens the Valar's hope, though your spirit thins; and in the borrowed glory of another you may, at last, remember your own forgotten name.",
+      "Choose the training record you will carry into Karth Vault. Its strengths and burdens will shape this attempt. Each dawnseed brought out repairs part of the engine, while each return may recover another piece of your missing life."
+    ],
+    [
+      "The Noldor are the High Elves of the West, deep in lore and craft, who dwelt in the light of Valinor. For love of the stolen Silmarils -- and, for some, bound by the dreadful Oath of Feanor -- they returned to Middle-earth in exile to make war upon Morgoth. Proud, mighty, and gifted, they raised shining kingdoms and forged wondrous things, yet a doom of sorrow and kinstrife shadows their valour. Their lineages descend from three lords: Feanor, Fingolfin, and Finarfin.",
+      "The Glasswrights built the instruments that measured storms and carried commands between reservoirs. They organized their work into Furnace, Breakwater, and Lantern Houses, each preserving a different balance of practical skills. The breach scattered their workshops and left dangerous unfinished contracts behind. Their records offer powerful training, along with the habits that once divided them."
+    ],
+    [
+      "The Sindar are the Grey-elves of Beleriand, kindred of the Eldar who never crossed the Sea but lingered under the stars of Middle-earth. Masters of song, woodcraft, and secret ways, they ruled the woven realm of Doriath and the havens of the Falas. Theirs is a quieter wisdom than the Noldor's, deep-rooted and enduring, though wars not of their making press hard upon their twilight land.",
+      "The Reedwalkers lived between the fixed gauges, where a channel could change before the next survey arrived. They used song signals, close observation, and hidden paths to keep the marsh settlements connected. After the engine failed, that local knowledge often mattered more than any official chart. Their records favor an attentive, adaptable approach."
+    ],
+    [
+      "The Naugrim, the Dwarves, are the hardy smith-folk who dwell in halls of stone beneath the mountains. Strong and stubborn, secretive yet steadfast, they are unmatched in the working of metal and gem. Their axes are feared and their mail is peerless; greed and grievance can stir them, but a Dwarf-friend has no truer ally in the long war against the Shadow.",
+      "The Deep Masons built the dry chambers beneath the tide cities and maintained the service ways that linked them. They judged a promise by whether its work survived the next flood. Their records preserve strength, craftsmanship, and the stubborn attention needed to repair a structure while others are still using it."
+    ],
+    [
+      "The Edain are the Men of the Three Houses, mortal and short-lived, who came over the mountains into Beleriand and allied themselves with the Eldar against Morgoth. Brief their years, but bright their valour; their deeds outrun their span and live on in song. Bound to the Elves by love and sorrow, they carry hope into the dark beyond the reach of the Eldar's fading.",
+      "The Tideborn rebuilt on the banks exposed after the cities broke. They supplied the ferries, food, and labor that kept isolated survivors connected. Their lives were shorter than the engine records they inherited, but each new crew learned quickly from the last. Their training favors endurance and action when there is no time for another council."
+    ],
+    [
+      "The Noldor — exiled High Elves of three royal houses, whose names you may take:",
+      "The Glasswrights preserve records from three workshop houses. Choose whose training to carry:"
+    ],
+    [
+      "You encounter Aulë the Smith, Maker of Mountains.",
+      "Korren is examining a cracked support beside the forge."
+    ],
+    [
+      "'Speak with me again to learn of the challenges that await.'",
+      "'When you are ready, I have a piece of work to discuss.'"
+    ],
+    [
+      "Aulë speaks in a voice like hammer on anvil:",
+      "Korren sets down a measuring tool before speaking:"
+    ],
+    [
+      "'Find my forge and create something worthy of my attention.'",
+      "'Use my forge to make a sound piece of work. I want to see what you can build.'"
+    ],
+    [
+      "Aulë has challenged me to use his forge to create an item.",
+      "Korren asked me to create an item at his forge."
+    ],
+    [
+      "Aulë nods with satisfaction:",
+      "Korren checks the finished work against its intended use:"
+    ],
+    [
+      "'Well done! Your skill at the forge shows promise.'",
+      "'The work holds up. You are ready for a more demanding process.'"
+    ],
+    [
+      "Aulë smiles with approval and returns to his eternal labors.",
+      "Korren records the inspection and turns back to the repairs."
+    ],
+    [
+      "Aulë watches you with eyes like glowing coals:",
+      "Korren looks from your tools to the unused forge:"
+    ],
+    [
+      "'The forge awaits your skill. Show me what you can create.'",
+      "'You have the equipment. Finish a piece so we can test your work.'"
+    ],
+    [
+      "Aulë the Smith regards you with interest.",
+      "Korren pauses his work to consider your equipment."
+    ],
+    [
+      "You encounter Mandos, the Doomsman of the Valar.",
+      "Nareth waits beside an open recall ledger."
+    ],
+    [
+      "His stern gaze weighs upon your soul, as if judging your worth.",
+      "He checks your return signal against a record of someone still held below."
+    ],
+    [
+      "Mandos speaks with the authority of the Valar:",
+      "Nareth points to a damaged entry in the ledger:"
+    ],
+    [
+      "'Slay Brodda the Easterling and prove your worth.'",
+      "'Destroy Borruk. His false body is keeping a stolen memoryprint from its return.'"
+    ],
+    [
+      "Mandos nods with solemn approval:",
+      "Nareth watches the blocked return channel clear:"
+    ],
+    [
+      "'Justice has been served. The path forward opens.'",
+      "'The false body's signal has stopped. The record can finally pass out of its hold.'"
+    ],
+    [
+      "Mandos gazes at you with penetrating eyes:",
+      "Nareth checks the same unresolved entry:"
+    ],
+    [
+      "'Brodda the Easterling still draws breath within these halls.",
+      "'Borruk's false body is still operating in these galleries."
+    ],
+    [
+      "Until his tyranny is ended, you may not pass beyond.'",
+      "Destroy it before this work can be completed.'"
+    ],
+    [
+      "'Remember - he who ruled Dor-lomin with an iron fist",
+      "'The regent uses that body to imprison a stolen record."
+    ],
+    [
+      "must face the justice he denied to others.'",
+      "Breaking its control is the only way to release it.'"
+    ],
+    [
+      "Mandos acknowledges you with respect:",
+      "Nareth connects a recovered protection record:"
+    ],
+    [
+      "'Accept the gift of my protection from mortal fears.'",
+      "'This stable sequence will protect your mind from imposed states.'"
+    ],
+    [
+      "Mandos bows deeply and fades into shadow, his task complete.",
+      "Nareth closes the repaired ledger and withdraws from the chamber."
+    ],
+    [
+      "Mandos nods with solemn respect:",
+      "Nareth confirms the completed entry:"
+    ],
+    [
+      "'The task is done, and the doom has been fulfilled.'",
+      "'The stolen record is free. There is nothing more to do here.'"
+    ],
+    [
+      "'Your path continues ever deeper into the halls of Mandos.'",
+      "'Your next descent can proceed with this repair behind you.'"
+    ],
+    [
+      "Brodda the Easterling falls! His tyranny is ended at last.",
+      "Borruk's false body breaks apart. Its command signal stops."
+    ],
+    [
+      "The spirits of Dor-lomin can finally know peace.",
+      "The captive memoryprint is free to leave the damaged channel."
+    ],
+    [
+      "Return to Mandos the Doomsman to claim your reward.",
+      "Return to Nareth for the protection record he promised."
+    ],
+    [
+      "Oromë the Huntsman will be pleased with your mastery.",
+      "Veylan can now mark the hunt as complete."
+    ],
+    [
+      "Seek him out to claim your reward - the knowledge of Unique Bane!",
+      "Find him to receive the Unique Bane training record."
+    ],
+    [
+      "Nienna, Lady of Pity, speaks with a voice full of sorrow and hope:",
+      "Ilyra studies the route through the creatures ahead:"
+    ],
+    [
+      "'Show mercy to the creatures here and find the downward path.'",
+      "'Reach the downward stair while leaving the creatures here alive.'"
+    ],
+    [
+      "Nienna fades away, but her presence lingers in your heart.",
+      "Ilyra withdraws, leaving you the route and the choice of how to travel it."
+    ],
+    [
+      "Nienna appears with tears of joy in her eyes!",
+      "Ilyra returns to review the lives left intact along your route."
+    ],
+    [
+      "'You have shown that true strength lies in restraint.'",
+      "'You found a way through without making every encounter a killing.'"
+    ],
+    [
+      "Nienna appears, her expression neutral.",
+      "Ilyra returns and compares your route with its losses."
+    ],
+    [
+      "'You have completed the task, though perhaps not as I hoped.'",
+      "'You reached the stair, but the cost was greater than I asked.'"
+    ],
+    [
+      "Nienna smiles sadly and fades away, leaving you with her blessing.",
+      "Ilyra records the result and leaves the aid you earned connected to your return line."
+    ],
+    [
+      "As you step onto the stairs, you feel Nienna's presence return.",
+      "At the stair, Ilyra's signal reconnects to your return line."
+    ],
+    [
+      "'You have done well, showing mercy where others would show only violence.'",
+      "'You kept the route open without destroying everything on it.'"
+    ],
+    [
+      "Wait here a moment - she wishes to speak with you.",
+      "Wait here while she reviews the completed route with you."
+    ],
+    [
+      "Oromë the Huntsman regards you with keen eyes:",
+      "Veylan unfolds a survey of the occupied galleries:"
+    ],
+    [
+      "'Prove your skill as a hunter. The dark creatures multiply.'",
+      "'These creatures are spreading through the service ways. Show me you can track and stop them.'"
+    ],
+    [
+      "Oromë fades into the wild, but his presence lingers in your soul.",
+      "Veylan withdraws to the survey line, leaving the hunt in your hands."
+    ],
+    [
+      "Oromë appears with a proud smile!",
+      "Veylan returns with the completed survey record."
+    ],
+    [
+      "'You have proven yourself a true hunter of the wild.'",
+      "'The count is verified. You have learned how to follow a dangerous quarry.'"
+    ],
+    [
+      "You learn the secret of hunting unique creatures!",
+      "You receive training drawn from the records of singular threats."
+    ],
+    [
+      "Oromë the Huntsman materializes nearby, ready to honor your success!",
+      "Veylan reconnects nearby to deliver the training earned by your hunt."
+    ],
+    [
+      "Tulkas nods thoughtfully and fades away, finding no worthy challenge for you at this time.",
+      "Drevan checks the threat register. No suitable assignment remains, so he closes the connection."
+    ],
+    [
+      "Tulkas frowns. 'The foe I had in mind has already fallen. Impressive, but I have no new challenge for you now.'",
+      "Drevan checks the register. 'That target is already dead. I have no replacement assignment for you.'"
+    ],
+    [
+      "Tulkas frowns and fades away, having no suitable reward to offer.",
+      "Drevan finds the reserve store empty. He cannot offer a suitable reward and closes the connection."
+    ],
+    [
+      "Tulkas the Strong speaks of a great quest, but the words are lost in thunder.",
+      "Noise overwhelms Drevan's connection before the assignment can be heard."
+    ],
+    [
+      "Tulkas appears but looks puzzled about your reward.",
+      "Drevan cannot reconcile the reward entry with the available stores."
+    ],
+    [
+      "Tulkas appears with a great laugh of triumph!",
+      "Drevan receives the confirmed result and opens the reserve store."
+    ],
+    [
+      "'Well fought, warrior! You have proven your valor in battle.'",
+      "'You stopped the threat. The equipment we reserved for this task is yours.'"
+    ],
+    [
+      "Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!",
+      "Drevan reconnects nearby with the equipment reserved for your completed assignment."
+    ],
+    [
+      "The deed is done! Seek out Tulkas Unclad to claim your reward.",
+      "The target is dead. Find Drevan to receive the reserved equipment."
+    ],
+    [
+      "Varda has no radiant artefacts left to offer.",
+      "Solen has no light-bearing artifacts left in the reserve store."
+    ],
+    [
+      "The starlight gifts wait until you are ready to choose.",
+      "The reserve equipment will remain available until you choose."
+    ],
+    [
+      "Starlight gathers at your feet, coalescing into a shining relic.",
+      "The release mechanism places a light-bearing artifact at your feet."
+    ],
+    [
+      "Varda blessed me with a radiant artefact and the Oath of Light.",
+      "Solen released a light-bearing artifact and registered my Oath of Light."
+    ],
+    [
+      "Varda's quest presses upon you.",
+      "Solen's assigned repair must be completed here."
+    ],
+    [
+      "Duruin, least of the Balrogs, waits here.",
+      "Ashvek, the cinder fiend holding the signal bastion, is here."
+    ],
+    [
+      "His Bastion is on this level.",
+      "The occupied signal bastion is on this level."
+    ],
+    [
+      "Leave without slaying him and the quest is lost.",
+      "Leaving before you kill him will forfeit the assignment."
+    ],
+    [
+      "Duruin's Bastion lies on this level.",
+      "Ashvek's signal bastion is on this level."
+    ],
+    [
+      "Leaving now will fail Varda's quest.",
+      "Leaving now will fail Solen's assignment."
+    ],
+    [
+      "Leave Duruin's Bastion and fail Varda's quest? ",
+      "Leave Ashvek's signal bastion and fail Solen's assignment? "
+    ],
+    [
+      "You have left Duruin's Bastion behind.",
+      "You left the occupied signal bastion without clearing it."
+    ],
+    [
+      "Varda's quest is lost.",
+      "Solen's assignment has failed."
+    ],
+    [
+      "Failed Varda's quest by leaving Duruin's Bastion behind.",
+      "Failed Solen's assignment by leaving the occupied signal bastion."
+    ],
+    [
+      "Duruin falls. The Bastion's shadows unravel under starlight!",
+      "Ashvek falls. The abandoned lamps in the signal bastion begin to answer again."
+    ],
+    [
+      "Varda's voice is clear as starlight:",
+      "Solen speaks over a newly cleared signal line:"
+    ],
+    [
+      "\"Seek Duruin's bastion of shadow and break it open to the Sun.\"",
+      "\"Find Ashvek's occupied signal bastion and remove its captor.\""
+    ],
+    [
+      "Varda sent me to destroy Duruin and cleanse his bastion.",
+      "Solen sent me to kill Ashvek and recover the signal bastion."
+    ],
+    [
+      "Varda's whisper:",
+      "Solen repeats the route condition:"
+    ],
+    [
+      "\"Find Duruin's Bastion on the first level",
+      "\"Find Ashvek's signal bastion on the first level"
+    ],
+    [
+      "you reach after 500 ft.\"",
+      "reached after passing 500 ft.\""
+    ],
+    [
+      "\"Leave it behind and the quest is lost.\"",
+      "\"The assignment fails if you leave without completing it.\""
+    ],
+    [
+      "Varda inclines her head in silent approval:",
+      "Solen verifies that the signal bastion is clear:"
+    ],
+    [
+      "\"The stolen light is free. Choose your blessing.\"",
+      "\"The lamps are answering again. Choose your equipment.\""
+    ],
+    [
+      "Varda's blessing still follows the path you walk.",
+      "Solen's aid remains connected to your return line."
+    ],
+    [
+      "You returned empty handed.",
+      "You reached the surface without a recovered dawnseed."
+    ],
+    [
+      "You brought back a Silmaril from Morgoth's crown!",
+      "You recovered one dawnseed from the regent's command crown."
+    ],
+    [
+      "You brought back two Silmarils from Morgoth's crown!",
+      "Two dawnseeds were recovered from the regent's command crown."
+    ],
+    [
+      "You brought back all three Silmarils from Morgoth's crown!",
+      "All three dawnseeds were recovered from the regent's command crown."
+    ],
+    [
+      "You brought back so many Silmarils that people should be suspicious!",
+      "The recovered dawnseed count exceeds the engine inventory. The custodians request another count."
+    ],
+    [
+      "You passed from the world, but the stain of a faithless heart remains. You will be remembered not for your deeds, but as a shameful Oathbreaker.",
+      "Your record ends with an unfulfilled covenant. The repair crews inherit both what you achieved and the cost of the promise you broke."
+    ],
+    [
+      "You kept your oath to the very end.",
+      "Your final record confirms that the covenant was kept."
+    ],
+    [
+      "The Valar hail your impossible triumph and pour out their blessing.",
+      "The Nine Custodians receive the shutdown signal and connect their reserve current to your return line."
+    ],
+    [
+      "The gates to ANGBAND are closing...",
+      "Karth Vault is preparing to close its access gates."
+    ],
+    [
+      "The gates to ANGBAND are now closed.",
+      "Karth Vault has closed its access gates."
+    ],
+    [
+      "Beyond this passage lies the black hall of Morgoth Bauglir,",
+      "Past this passage is the crown chamber,"
+    ],
+    [
+      "the Dark Enemy, and the last of the Iron Hells.",
+      "where Varkesh controls the weather engine."
+    ],
+    [
+      "If you pass within, you may not return until you bear a Silmaril.",
+      "Once inside, you cannot return without a dawnseed."
+    ],
+    [
+      "Steel yourself: to enter is to choose doom or glory.",
+      "Prepare before committing to the final chamber."
+    ],
+    [
+      "Beyond this passage lies the black hall",
+      "This passage leads to the crown chamber"
+    ],
+    [
+      "of Morgoth Bauglir, the Dark Enemy,",
+      "where Varkesh holds the engine controls"
+    ],
+    [
+      "and the last of the Iron Hells.",
+      "at the end of Karth Vault."
+    ],
+    [
+      "Pass within; return only with a Silmaril.",
+      "Enter; return requires a dawnseed."
+    ],
+    [
+      "Steel yourself: enter and choose doom or glory.",
+      "Prepare before entering the final chamber."
+    ],
+    [
+      "The Iron Gates of Angband",
+      "The Crown Chamber Gates"
+    ],
+    [
+      "The other free peoples of Beleriand:",
+      "The other crews of the tide cities:"
+    ],
+    [
+      "THE NAMELESS CHRONICLE",
+      "THE BROKEN RETURN RECORD"
+    ],
+    [
+      "The War of the Jewels",
+      "The Weather Engine Failure"
+    ],
+    [
+      "Entered Angband on %s\n",
+      "Began the Karth Vault descent on %s\n"
+    ],
+    [
+      "You escaped the Iron Hells on %s.",
+      "Your return from Karth Vault was recorded on %s."
+    ],
+    [
+      "On %s you broke the illusion binding Morgoth to his throne.",
+      "On %s you destroyed the regent's projected command body."
+    ],
+    [
+      "The elven thrall names old scents, colors, and hidden virtues with a memory no darkness has wholly broken.\n\nYour carried potions, gems, and herbs are revealed.",
+      "The captive compares scent, color, and crystal structure against remembered workshop standards.\n\nYour carried potions, gems, and herbs are identified."
+    ],
+    [
+      "The thrall takes %s in scarred hands, and his fingers move with an old, half-forgotten surety.\n\nHe murmurs words under his breath, and a pale light kindles along the metal...\n\nIt is remade as %s!",
+      "The captive examines %s, then begins a repair sequence with the patience of a trained workshop hand.\n\nA quiet calibration brings the altered pattern into alignment.\n\nThe result is %s!"
+    ],
+    [
+      "The elven thrall lays gentle hands upon %s, and a clear light runs through it.\n\nIts curse is lifted, and every jinx upon it is wholly broken.",
+      "The captive traces the imposed patterns in %s and breaks their connections one by one.\n\nThe curse is removed, and every jinx is broken."
+    ],
+    [
+      "The elven thrall murmurs words of ancient grace over %s.\n\nIts curse is lifted.",
+      "The captive runs a quiet correction sequence through %s.\n\nThe curse loses its hold."
+    ],
+    [
+      "The elven thrall studies %s in silence, and a pale brightness strips one layer of malice away.\n\nIts jinx is broken, but the deeper curse remains.",
+      "The captive isolates one faulty pattern in %s and clears it.\n\nThe jinx is broken, but the underlying curse remains."
+    ],
+    [
+      "The elven thrall breathes softly over %s, and the spite laid upon it unravels.\n\nIts jinx is wholly broken.",
+      "The captive corrects the distorted pattern in %s with a measured signal.\n\nThe jinx is completely broken."
+    ],
+    [
+      "The thrall lowers his eyes. \"All the tales I remember are spent; in these pits, even memory is made a slave.\"",
+      "The captive checks the remembered inventory again. \"I have told you about every surviving work I can recall. There are no new entries left.\""
+    ],
+    [
+      "These names will remain known to later heroes in this tale.",
+      "The recovered item records will remain available to later characters in this tale."
+    ],
+    [
+      "The elven thrall still waits to grant the boon you earned.",
+      "The captive recordkeeper is still ready to provide the help you earned."
+    ],
+    [
+      "Choose what gift the elven thrall will grant you.",
+      "Choose the help the captive recordkeeper will provide."
+    ],
+    [
+      "The human thrall still waits to grant the boon you earned.",
+      "The captive workshop hand is still ready to provide the help you earned."
+    ],
+    [
+      "Choose what gift the human thrall will grant you.",
+      "Choose the help the captive workshop hand will provide."
+    ],
+    [
+      "%^s bows the head and waits for your return.",
+      "%^s puts the tools aside until you return."
+    ],
+    [
+      "%^s inclines the head, and though no words are spoken, gratitude is plain in hollow eyes.",
+      "%^s recognizes you and quietly acknowledges the help you gave."
+    ],
+    [
+      "%^s sinks back into the shadows, and the light in those eyes grows dim.",
+      "%^s returns to the work space, still waiting for the help requested."
+    ],
+    [
+      "The elven thrall names old scents, colors, and hidden virtues with a memory no darkness has wholly broken. Your carried potions, gems, and herbs are revealed.",
+      "The captive compares scent, color, and crystal structure against remembered workshop standards. Your carried potions, gems, and herbs are identified."
+    ],
+    [
+      "The Doomsman sends you against the Easterling traitors",
+      "Nareth orders judgment on the turncoat fortress"
+    ],
+    [
+      "Storm the Easterling Fortress and slay Ulfang the Black and Uldor the Accursed",
+      "Enter the Turncoat Fortress and kill Zarvok the Black and Varrek the Accursed"
+    ],
+    [
+      "The chill of Mandos' presence settles once more upon you, heavy as iron and cold as the Void.\n\n\"You who have tasted of my judgment, hear me again.\"\n\"Two mortal kings turned traitor dwell in these depths -- Ulfang the Black and his son Uldor the Accursed.\"\n\"Their treachery at the Nirnaeth Arnoediad brought ruin upon the hosts of the Eldar, and their guilt is not yet answered.\"\n\n\"They have raised an Easterling fortress in service to the Enemy.\"\n\"Go there. Judge them in their own hall and end their line, that the doom long appointed may at last be fulfilled.\"",
+      "Nareth places two broken command seals on the stair.\n\n\"Zarvok and his son Varrek sold our retreat routes to the Regent during the Battle of Broken Dikes. The deaths along those routes remain on their account.\"\n\n\"They now hold a fortress for the occupation. Enter their hall and end both commands. Bring this judgment to the people who have waited for it.\""
+    ],
+    [
+      "The clamour of arms falls silent as the Easterling lords lie dead amid the ruin of their garrison.\nMandos' voice speaks from the stillness, cold and final.\n\n\"The traitors of the East are cast down. The doom I spoke upon them is fulfilled.\"\n\"You have been the instrument of a judgment long deferred.\"\n\"Take again the strength I set upon you, and walk the paths that lie beyond the known stairs.\"",
+      "The fortress signals go dark. Nareth collects the two command seals from the fallen lords.\n\n\"Their garrison will no longer open our routes to the Regent. You have settled the charge.\"\n\n\"Keep the strength I entrusted to you. There are passages beyond the surveyed stairs where it will still be needed.\""
+    ],
+    [
+      "The Doomsman bids you end the hidden traitor",
+      "Nareth sends you after the hidden betrayer"
+    ],
+    [
+      "Seek the Den of Maeglin the Traitor and end his false life",
+      "Find Ossresar the Traitor in his den and kill him"
+    ],
+    [
+      "The voice of Mandos returns, colder and more terrible than before, now that you have twice endured his charge.\n\n\"One betrayal yet festers in these depths, the greatest of all.\"\n\"Maeglin, who sold Gondolin to the Enemy for a promise of dominion and dark love, still haunts the deep places.\"\n\"He lurks in a den between the seventeenth and nineteenth delvings, a shade that will not answer my summons.\"\n\n\"Hunt him there and deliver final judgment.\"\n\"Do this, and I shall grant a gift beyond doom -- a single return from death's gate, that you may finish what remains undone.\"",
+      "Nareth unrolls a damaged survey of the lower workings.\n\n\"Ossresar sold the refuge gates to the occupation. He still hides below, avoiding every summons to answer for the dead. Look for his den between delvings seventeen and nineteen.\"\n\n\"Finish this charge, and I will reserve a single recall for you: one return from death, to complete work that would otherwise be lost.\""
+    ],
+    [
+      "As Maeglin falls, the air stills. Mandos steps from shadow, the weight of ancient judgment in his eyes.\n\n\"The betrayer of Gondolin meets his doom at last. Long has he evaded the fate I appointed.\"\n\"His treachery brought the Hidden City to ruin and delivered its people to fire and sword.\"\n\"Now that account is settled. Carry this reprieve I grant: once only, death shall loosen its hold at your call.\"",
+      "Ossresar falls among the stolen refuge records. Nareth closes the survey.\n\n\"The one who delivered those gates to the occupation will betray no one else.\"\n\n\"Your recall is reserved. Once, when death reaches you, you may return to finish your charge.\""
+    ],
+    [
+      "The Huntsman challenges you against the great drakes",
+      "Veylan sets a trial against the great drakes"
+    ],
+    [
+      "Slay ten great dragons of renown (no hatchlings) and return to Orome",
+      "Kill ten great dragons, excluding hatchlings, then return to Veylan"
+    ],
+    [
+      "The clear call of the Valaroma rolls again through the deep halls, and Orome rides from shadow with eyes alight.\n\n\"You have proven yourself among the lesser beasts, hunter. Now I set you a worthier quarry.\"\n\"The great worms that brood in these depths are the mightiest servants of Morgoth after his Balrogs.\"\n\"Their fires scorch the stone, and their terror breaks the will of even the bold.\"\n\n\"Slay ten dragons of renown -- not the whelps that crawl in the shallows, but the great drakes and their ancient kin.\"\n\"Break their terror and return to me. Then shall you know what it is to be called a true hunter of Orome.\"",
+      "A hunting signal echoes along the galleries. Veylan waits beside a wall scorched by an old breath attack.\n\n\"You know how to track the smaller beasts. Now face the great dragons that defend the Regent's workings. Their flame and terror have closed whole routes to us.\"\n\n\"Kill ten mature or ancient dragons. Hatchlings do not count. Return when the tally is complete.\""
+    ],
+    [
+      "The air shimmers with heat and fading dread as the last dragon falls. Orome appears, well satisfied by the ruin of its kin.\n\n\"Well struck! The lords of flame and frost have learned to flee before your horn.\"\n\"No hunter since the riding of the Valar has broken so many of the great worms.\"\n\"Keep the Wraith of Orome to carry you through such fury, and know that a harsher path awaits your line: lone stairs, one way up and one way down upon each delving.\"\n\"Choose it, if you would test the mettle of your heirs.\"",
+      "Heat shimmers above the last fallen dragon. Veylan marks the tenth notch on the hunting staff.\n\n\"The great beasts can be brought down. Your work has proved it. Keep the hunter's fury for the fights ahead.\"\n\n\"Your heirs may now choose the lone-stair challenge: each delving has one way up and one way down.\""
+    ],
+    [
+      "The Huntsman sets the greatest of all hunts",
+      "Veylan names the final quarry"
+    ],
+    [
+      "Slay Orome's marked foes across your delvings: Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil",
+      "Across your adventures, kill Veylan's marked foes: Skareth, Ravaz, Grozhak, Ozhar, Trevethor, and Nerezza"
+    ],
+    [
+      "The clear call of the Valaroma returns, closer and more urgent than before.\nOrome's gaze burns with a fierce light as he speaks.\n\n\"The greatest prey still prowl beneath the earth, and their names are known to me.\"\n\"Scatha the Worm, Smaug the Golden, Draugluin lord of werewolves, Gostir the dreadful, Shelob spawn of Ungoliant, and Thuringwethil the vampire.\"\n\n\"Hunt them down across every delving. This charge I lay upon you and all your heirs, until the last of them falls.\"\n\"It is a doom and a glory both -- the greatest hunt since the world was young.\"",
+      "Veylan spreads six marked tokens on a dry ledge.\n\n\"Skareth, Ravaz, Grozhak, Ozhar, Trevethor, and Nerezza still command the deep hunting grounds. Each has survived the parties sent before you.\"\n\n\"Track them across your delvings. This charge passes to your heirs until every token can be turned over.\""
+    ],
+    [
+      "The final mark is slain. The Valaroma rings once more, and Orome's presence thunders in your bones.\n\n\"Your line has answered every horn-blast, and the great hunt is ended at last.\"\n\"Take this gift: the rhythm of bow and spear, that two arrows struck true shall drive your next spear home with doubled wrath.\"\n\"Let those who follow you claim this hunter's art for 5000 experience, and walk the path of the Huntsman forevermore.\"",
+      "The last token turns beneath Veylan's hand.\n\n\"Your line has finished the hunt. I will teach you to join the bow's rhythm to the spear: two arrows that strike prepare a thrust with double force.\"\n\n\"Those who follow you may learn this art for 5000 experience.\""
+    ],
+    [
+      "Nienna bids you steal light without striking the Foe",
+      "Ilyra asks you to free a dawnseed without harming the Regent"
+    ],
+    [
+      "Escape with a Silmaril from Morgoth's hall without striking him at all, not even with area attacks. Wounds from other creatures do not count against you",
+      "Leave Varkesh's hall with a dawnseed without damaging him, including with area attacks. Damage from other creatures does not count against you"
+    ],
+    [
+      "In the shadow of the Iron Crown, Nienna awaits, her form dim with sorrow yet steady with resolve.\n\n\"The hour of greatest mercy draws near. A Silmaril blazes upon Morgoth's brow, and its light cries out to be freed.\"\n\"Take it from his crown, yet lay no blow upon the Dark Lord -- not blade, not arrow, not song, nor blast of wrath.\"\n\"Even the sweep of your power must spare him. Only the malice of his own servants is not counted against you.\"\n\n\"I lend you my Gift of Mercy for this task. Let it shield you in the darkness.\"\n\"Tread softly, and bring the light out of these pits. Prove that even in the seat of evil, mercy may endure.\"",
+      "Ilyra waits where the light from the Regent's crown touches the floor.\n\n\"A dawnseed is held above us. Free it, but do no harm to Varkesh: no blade, arrow, song, or blast may strike him. Your widest attacks must spare him too. Harm from his own creatures is outside your charge.\"\n\n\"Take my protection for this task. Carry the light out without paying for it in his blood.\""
+    ],
+    [
+      "As you flee the throne room with the Silmaril blazing in your hand, Nienna's presence soothes your racing heart.\n\n\"You have stolen light from the Iron Crown without striking the Black Foe. Mercy has endured even in Angband.\"\n\"Few deeds in all the ages of the world shall rival this.\"\n\"I open a harsher road for your line: the fixed 50,000 experience challenge, and my Gift of Mercy may be learned thereafter for 5000 experience.\"",
+      "Beyond the throne room, Ilyra steadies the dawnseed in your hands.\n\n\"You have taken back its light without striking the Regent. There is another way through his power.\"\n\n\"Your line may now choose the fixed 50,000 experience challenge. Those who follow you may learn my protection for 5000 experience.\""
+    ],
+    [
+      "Nienna calls you to walk Angband without bloodshed",
+      "Ilyra asks for a return without bloodshed"
+    ],
+    [
+      "Escape Angband without taking a single life; the first kill ends the vow for that life",
+      "Escape Karth Vault without killing any creature; the first kill breaks the vow for that life"
+    ],
+    [
+      "Before you descend, Nienna's quiet grief settles over the stairs like a grey mantle. Her words are soft but unyielding.\n\n\"The final test of mercy awaits. Go down into the uttermost dark and return without taking a single life.\"\n\"Every creature you meet, however foul, bears within it a spark that was kindled by Iluvatar.\"\n\"The first blood you spill shall break this mercy, and the vow will be shattered beyond mending.\"\n\n\"But if you reach the light again with clean hands, I will wash away every curse that clings to your tale.\"\n\"Walk now the path of peace, the hardest road of all.\"",
+      "Ilyra stops beside the descending stairs.\n\n\"Go below and return without taking a life. Every creature, even one that serves the occupation, is within this charge. The first kill breaks the vow for this life; it cannot be repaired along the way.\"\n\n\"Return with that promise intact, and I will grant one cleansing of the curses carried by your Tale.\""
+    ],
+    [
+      "The air tastes clean and sweet as you step into freedom with no blood upon your hands. Nienna's relief falls upon you like a gentle rain.\n\n\"Mercy has endured even in the pits of Angband, where all other virtues fail.\"\n\"You have walked through the domain of the Enemy and left not a single corpse behind.\"\n\"You may call upon me once to sweep away the dooms that shadow you, for you have earned a grace beyond any warrior's prize.\"",
+      "Ilyra meets you above the vault, where clean air moves across the stair.\n\n\"You have crossed the Regent's domain without leaving a life behind you. I will honor the promise made here.\"\n\n\"Once, you may call on me to clear every curse that burdens your Tale.\""
+    ],
+    [
+      "Tulkas sends you against the orc captains",
+      "Drevan orders a raid on the orc command"
+    ],
+    [
+      "Storm the Orc stronghold and slay every marked captain: Gorgol, Boldog, Balcmeg, Lug, Orcobal, Othrod",
+      "Storm the Orc stronghold and kill all marked captains: Urzhek, Zharrek, Drezhak, Ozzek, Karzhek, and Orrhod"
+    ],
+    [
+      "On your first steps past the shallows, Tulkas meets you in a flurry of motion, his laughter booming through the stones.\n\n\"The orcs breed bold captains in a stronghold below -- Gorgol, Boldog, Balcmeg, Lug, Orcobal, Othrod.\"\n\"Each of them a petty tyrant, each swollen with the malice of their master. All of them still draw breath, and that offends me.\"\n\n\"I will seal them in their lair and bar their kind from the tunnels.\"\n\"Hunt them down and break their pride. Leave not one of their captains standing.\"\n\"Do this, and I will teach you to scour uniques from the earth, and open a harsher challenge for your line.\"",
+      "Drevan brings a report from the occupied barracks.\n\n\"Six captains are mustering below: Urzhek, Zharrek, Drezhak, Ozzek, Karzhek, and Orrhod. I will seal their stronghold and keep their kind out of the surrounding tunnels.\"\n\n\"Enter the stronghold and kill every marked captain. Finish the raid, and I will give your line a prize against unique foes and a harsher challenge to attempt.\""
+    ],
+    [
+      "The last orc captain falls, and the stronghold echoes with silence. Tulkas strides from the dust, his grin fierce as a blade.\n\n\"You have crushed their chiefs and broken their muster! Not one captain remains to rally their wretched host.\"\n\"The orcs shall long remember the day their stronghold was emptied.\"\n\"Take this prize of war and the hunter's bane. A brutal road lies open for your heirs: a delve where only blunt arms may serve.\"",
+      "The command hall has no voices left to answer its signals. Drevan walks through the broken muster line.\n\n\"Every captain is down. Their host has lost the hands that held it together.\"\n\n\"Take the prize of this raid and the hunter's bane. Your heirs may now choose a delving fought with blunt weapons alone.\""
+    ],
+    [
+      "Tulkas commands you to scar the Black Foe himself",
+      "Drevan challenges you to wound the Regent"
+    ],
+    [
+      "Drive Morgoth to half his strength with your own blows, proving you can shake the Enemy upon his throne",
+      "Reduce Varkesh to half health with your own attacks before his throne"
+    ],
+    [
+      "Even in the shallows you feel Tulkas' mirth and challenge, rolling like distant thunder behind you.\n\n\"One day you will stand before the Black Foe upon his throne of iron.\"\n\"When that hour comes, do not cower. Do not merely endure. Strike him.\"\n\"Halve his might with your own hand, and let him feel the wrath of those he has wronged.\"\n\n\"I, Tulkas, who wrestled Morgoth before the gates of Utumno, set this charge upon you.\"\n\"Do this, and I will lend you a fury beyond the measure of mortal strength.\"",
+      "Drevan's challenge reaches you well above the throne room.\n\n\"When you stand before Varkesh, make him yield ground. Bring him to half his strength with damage dealt by your own hand.\"\n\n\"I once broke his guard at the lower gates. Prove that he can still be shaken, and I will teach your line the force behind that blow.\""
+    ],
+    [
+      "As your blows stagger Morgoth upon his throne, laughter like an earthquake rolls through Angband -- Tulkas exultant at your defiance.\n\n\"Well struck! The Black Foe reels, and the pillars of his hall tremble!\"\n\"Not since I cast him upon his face before Utumno has he known such indignity!\"\n\"Let my wrath flow through your smiting hand forevermore. The Enemy shall know your strength, and the strength of all who follow you.\"",
+      "Varkesh staggers, and the hall answers with the sound of shifting iron. Drevan's laughter carries above it.\n\n\"He has felt your hand. The throne cannot keep him beyond reach.\"\n\n\"Take my strength into your smiting blows. Those who come after you will share the lesson.\""
+    ],
+    [
+      "The Star-kindler sends you against Belegwath's bastion",
+      "Solen sends you against Vozhrek's bastion"
+    ],
+    [
+      "Face Belegwath, Balrog of Shadow, in his Shadow Bastion beyond the fifteenth delving",
+      "Confront Vozhrek, the shadow demon, in the Shadow Bastion below the fifteenth delving"
+    ],
+    [
+      "Starlight gathers again around you as you carry the Oath of Light. Varda's gaze is steady and clear.\n\n\"You have broken one bastion of shadow, but a greater darkness stirs below.\"\n\"Belegwath, a Balrog mightier than Duruin, has woven a Shadow Bastion in the deep halls beyond the fifteenth delving.\"\n\"His darkness is a living thing that devours the light and chokes the spirit.\"\n\n\"Go there and unmake him. Break his darkness, and the stars shall answer you with renewed grace.\"\n\"Carry the light that I have kindled in you, and let it burn through his shadow.\"",
+      "Solen checks the lamp you carry under the Oath of Light.\n\n\"Vozhrek has built another Shadow Bastion below the fifteenth delving. He is stronger than the keeper you faced before, and his darkness is choking the routes around him.\"\n\n\"Break the bastion and destroy him. When the passages open, you may choose a renewed gift of light.\""
+    ],
+    [
+      "The Shadow Bastion falls silent as Belegwath is unmade, and starlight pours in where darkness once held absolute dominion.\nVarda's voice rings clear as the dawn of the world.\n\n\"You have broken another stronghold of the Enemy's shadow. The deep places breathe freely once more.\"\n\"Choose your radiant gift anew, and carry the blessing of the Queen of Stars deeper into the dark.\"",
+      "Light reaches the empty galleries around the fallen bastion. Solen holds the lamp up to the newly visible stone.\n\n\"This stronghold can no longer smother the routes below. Choose your radiant gift again, and carry it into the workings that remain closed.\""
+    ],
+    [
+      "The Star-kindler commands you to end Ungoliant's unlight",
+      "Solen orders an end to Uzzara's darkness"
+    ],
+    [
+      "Seek out and slay Ungoliant, the Gloomweaver, ending her unlight forever",
+      "Find and kill Uzzara, the Gloomweaver, ending her unlight"
+    ],
+    [
+      "Starlight gathers once more, sharper and brighter than before. Varda's gaze fixes upon the deepest darkness.\n\n\"There remains one enemy whom I will not suffer to endure: Ungoliant, the Gloomweaver.\"\n\"She who drank the light of the Two Trees and vomited forth the Unlight that even my stars could not pierce.\"\n\"Her hunger is boundless, and her malice older than Morgoth's reign.\"\n\n\"Hunt her through the deepest places of the earth. When she is unmade, your line shall never enter the dark unarmed.\"\n\"Each new venture shall begin with a relic of your choosing, drawn from the light reclaimed.\"",
+      "Solen points to the last dark patch on the survey.\n\n\"Uzzara still feeds on the light beneath the deepest workings. The old return lamps were the first things she consumed, and no boundary has stopped her hunger since.\"\n\n\"Find her and end it. Your line will receive a chosen relic at the start of each new adventure, supplied from what her defeat restores.\""
+    ],
+    [
+      "Ungoliant's unlight gutters and dies, and starlight floods the void she leaves behind. Varda's voice is a clear, distant bell of triumph.\n\n\"Her hunger is ended at last. The Gloomweaver shall devour no more light.\"\n\"Henceforth, every new venture of your line shall begin with a relic chosen under starlight.\"\n\"Carry it well, and remember: the Queen of Stars sees the first step as surely as the last.\"",
+      "Uzzara's darkness drains from the stone. Far above, the return lamps begin to answer one another.\n\n\"Her hunger is ended,\" Solen says. \"Your line may now choose a relic at the beginning of every adventure. Carry it from the first stair into the places that still need light.\""
+    ]
+  ],
+  "passages": [
+    [
+      "Entered Angband on ",
+      "Began the Karth Vault descent on "
+    ],
+    [
+      "You escaped the Iron Hells on ",
+      "Your return from Karth Vault was recorded on "
+    ],
+    [
+      " you broke the illusion binding Morgoth to his throne.",
+      " you destroyed the regent's projected command body."
+    ],
+    [
+      "The thrall takes ",
+      "The captive examines "
+    ],
+    [
+      " in scarred hands, and his fingers move with an old, half-forgotten surety.\n\nHe murmurs words under his breath, and a pale light kindles along the metal...\n\nIt is remade as ",
+      ", then begins a repair sequence with the patience of a trained workshop hand.\n\nA quiet calibration brings the altered pattern into alignment.\n\nThe result is "
+    ],
+    [
+      " in scarred hands, and his fingers move with an old, half-forgotten surety. He murmurs words under his breath, and a pale light kindles along the metal... It is remade as ",
+      ", then begins a repair sequence with the patience of a trained workshop hand. A quiet calibration brings the altered pattern into alignment. The result is "
+    ],
+    [
+      "The elven thrall lays gentle hands upon ",
+      "The captive traces the imposed patterns in "
+    ],
+    [
+      ", and a clear light runs through it.\n\nIts curse is lifted, and every jinx upon it is wholly broken.",
+      " and breaks their connections one by one.\n\nThe curse is removed, and every jinx is broken."
+    ],
+    [
+      ", and a clear light runs through it. Its curse is lifted, and every jinx upon it is wholly broken.",
+      " and breaks their connections one by one. The curse is removed, and every jinx is broken."
+    ],
+    [
+      "The elven thrall murmurs words of ancient grace over ",
+      "The captive runs a quiet correction sequence through "
+    ],
+    [
+      ".\n\nIts curse is lifted.",
+      ".\n\nThe curse loses its hold."
+    ],
+    [
+      ". Its curse is lifted.",
+      ". The curse loses its hold."
+    ],
+    [
+      "The elven thrall studies ",
+      "The captive isolates one faulty pattern in "
+    ],
+    [
+      " in silence, and a pale brightness strips one layer of malice away.\n\nIts jinx is broken, but the deeper curse remains.",
+      " and clears it.\n\nThe jinx is broken, but the underlying curse remains."
+    ],
+    [
+      " in silence, and a pale brightness strips one layer of malice away. Its jinx is broken, but the deeper curse remains.",
+      " and clears it. The jinx is broken, but the underlying curse remains."
+    ],
+    [
+      "The elven thrall breathes softly over ",
+      "The captive corrects the distorted pattern in "
+    ],
+    [
+      ", and the spite laid upon it unravels.\n\nIts jinx is wholly broken.",
+      " with a measured signal.\n\nThe jinx is completely broken."
+    ],
+    [
+      ", and the spite laid upon it unravels. Its jinx is wholly broken.",
+      " with a measured signal. The jinx is completely broken."
+    ],
+    [
+      " bows the head and waits for your return.",
+      " puts the tools aside until you return."
+    ],
+    [
+      " inclines the head, and though no words are spoken, gratitude is plain in hollow eyes.",
+      " recognizes you and quietly acknowledges the help you gave."
+    ],
+    [
+      " sinks back into the shadows, and the light in those eyes grows dim.",
+      " returns to the work space, still waiting for the help requested."
+    ]
+  ]
+}

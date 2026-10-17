@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "quest/quest-runtime.h"
 #include "meta_state.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-social.h"
 #include "externs.h"
@@ -1336,6 +1337,8 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
         if (who < 0)
             meta_monster_record_revenge_kill((u16b)m_ptr->r_idx);
+        /* Record confirmed death before drops or deletion change the victim. */
+        sil_achievements_on_monster_killed(m_idx, who);
 
         /* Generate treasure */
         if (who < 0 && (r_ptr->flags1 & RF1_UNIQUE)

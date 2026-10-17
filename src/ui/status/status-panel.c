@@ -446,7 +446,7 @@ enum { PLAYER_PANEL_NAME_MAX = LEFT_PANEL_CONTENT_WID };
  */
 static void get_player_panel_name(char* buf, size_t buf_len)
 {
-    const char* name = op_ptr->full_name;
+    const char* name = lore_text(op_ptr->full_name);
     const char* cursor;
     const char* fit_end = NULL;
 

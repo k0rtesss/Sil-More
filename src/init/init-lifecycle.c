@@ -116,6 +116,8 @@ void init_angband(void)
     /* Load app-wide settings before the first intro render so the welcome
      * screen uses the configured style and first-launch state. */
     sdl_config_load_app_options(get_sdl_config_path());
+    if (!lore_init())
+        op_ptr->opt[OPT_generic] = false;
     run_mode_reset();
 
     /*** Display the introduction ***/

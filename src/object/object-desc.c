@@ -1765,6 +1765,30 @@ object_desc_done:
  * not been handled by the player), suppress the combat stats in the short
  * name display (e.g. show just "Short Sword").
  */
+/* UI callers translate before clipping and measuring. Storage and gameplay
+ * continue to use object_desc() and canonical template names. */
+void object_desc_display(char* buf, size_t max, const object_type* o_ptr,
+    int pref, int mode)
+{
+    char canonical[1024];
+    if (!buf || !max)
+        return;
+    object_desc(canonical, sizeof(canonical), o_ptr, pref, mode);
+    lore_copy(buf, max, canonical);
+    buf[utf8_safe_prefix_len(buf, (int)strlen(buf))] = '\0';
+}
+
+void object_desc_floor_display(char* buf, size_t max, const object_type* o_ptr,
+    int pref, int mode)
+{
+    char canonical[1024];
+    if (!buf || !max)
+        return;
+    object_desc_floor(canonical, sizeof(canonical), o_ptr, pref, mode);
+    lore_copy(buf, max, canonical);
+    buf[utf8_safe_prefix_len(buf, (int)strlen(buf))] = '\0';
+}
+
 void object_desc_floor(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode)
 {

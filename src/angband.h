@@ -32,6 +32,7 @@
 #include "defines.h"
 #include "types.h"
 #include "cave/cave-catastrophe.h"
+#include "lore.h"
 #include "supplies.h"
 
 #include <SDL3/SDL.h>

@@ -126,6 +126,7 @@ static void prepare(void)
 static void active_selection_checks(void)
 {
     int failures=0;
+    for(int merge_existing=0;merge_existing<2;merge_existing++)
     for(int source_active=0;source_active<2;source_active++) {
         for(int partial=0;partial<2;partial++) {
             prepare();player_quiver_reset_store();
@@ -136,6 +137,11 @@ static void active_selection_checks(void)
             obj=fixture_object(TV_ARROW,SV_NORMAL_ARROW,7);
             obj.att=1;obj.obj_note=unrelated_note;
             assert(player_quiver_absorb_arrow(&obj)==7);
+            if(merge_existing) {
+                obj=fixture_object(TV_ARROW,SV_NORMAL_ARROW,9);
+                obj.att=3;obj.obj_note=worked_note;
+                assert(player_quiver_absorb_arrow(&obj)==9);
+            }
             assert(player_quiver_select_arrow(QUIVER_INDEX+(source_active?0:1)));
             wanted=QUIVER_INDEX;do_cmd_fletchery();
             assert(p_ptr->fletch_item==QUIVER_INDEX && p_ptr->fletching==20);
@@ -146,12 +152,14 @@ static void active_selection_checks(void)
                 player_quiver_selected_arrow_slot());
             assert(selected && selected->k_idx);
             int expected_att=source_active?3:1;
-            int expected_count=source_active?(partial?5:20):7;
+            int expected_count=source_active
+                ? (partial?5:20)+(merge_existing?9:0) : 7;
             u16b expected_note=source_active?worked_note:unrelated_note;
             bool correct=selected->obj_note==expected_note
                 && selected->att==expected_att && selected->number==expected_count;
-            fprintf(stderr,"Fletch active=%s finish=%s selected='%s' att=%d count=%d; expected='%s' att=%d count=%d\n",
+            fprintf(stderr,"Fletch active=%s finish=%s merge=%d selected='%s' att=%d count=%d; expected='%s' att=%d count=%d\n",
                 source_active?"source":"unrelated",partial?"partial":"full",
+                merge_existing,
                 quark_str(selected->obj_note),selected->att,selected->number,
                 quark_str(expected_note),expected_att,expected_count);
             if(!correct)failures++;
@@ -161,7 +169,8 @@ static void active_selection_checks(void)
                 if(arrow->obj_note==worked_note)source_count+=arrow->number;
                 if(arrow->obj_note==unrelated_note)unrelated_count+=arrow->number;
             }
-            assert(source_count==20 && unrelated_count==7 && !player_pack_entry_count());
+            assert(source_count==20+(merge_existing?9:0)
+                && unrelated_count==7 && !player_pack_entry_count());
         }
     }
     assert(failures==0);
@@ -178,7 +187,7 @@ static void active_selection_checks(void)
     assert(active_change_reports==1 && active_change_message[0]);
     assert(inventory_item_to_object_ptr(player_quiver_selected_arrow_slot())->obj_note
         ==quark_add("replacement-ammo"));
-    puts("Fletchery active ammo identity: full/partial source improves active result; nonactive work preserves unrelated active stack PASS");
+    puts("Fletchery active ammo identity: full/partial source improves active result, including merges; nonactive work preserves unrelated active stack PASS");
     puts("Fletchery rebuild omits transient active-ammo announcements; ordinary stack exhaustion still reports replacement PASS");
 }
 static void checks(void)
@@ -292,4 +301,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

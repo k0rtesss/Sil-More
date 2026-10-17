@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "cave/cave-atmosphere.h"
+#include "achievements.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -571,6 +572,26 @@ errr rd_extra(void)
 
     rd_byte(&p_ptr->oath_type);
     rd_byte(&p_ptr->oaths_broken);
+    p_ptr->achievement_flags = 0;
+    p_ptr->achievement_kills = 0;
+    p_ptr->achievement_singing_turns = 0;
+    p_ptr->achievement_comeback_depth = -1;
+    /* Earlier 0.9.9 releases predate master's 0.9.8.31 achievement block. */
+    if (savefile_version_at_least(0, 9, 9, 7)
+        || (!savefile_version_at_least(0, 9, 9, 0)
+            && savefile_version_at_least(0, 9, 8, 31)))
+    {
+        byte achievement_marker;
+        rd_byte(&achievement_marker);
+        if (achievement_marker != 0xAC) return -1;
+        rd_u32b(&p_ptr->achievement_flags);
+        rd_u32b(&p_ptr->achievement_kills);
+        rd_u32b(&p_ptr->achievement_singing_turns);
+        rd_s16b(&p_ptr->achievement_comeback_depth);
+        p_ptr->achievement_flags &= SIL_ACH_RUN_FLAGS;
+        if (p_ptr->achievement_comeback_depth < 0)
+            p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
+    }
     log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u", 
              p_ptr->oath_type, p_ptr->oaths_broken, (unsigned)load_byte_offset);
 

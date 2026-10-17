@@ -34,9 +34,12 @@ static SDL_FRect stat_text[8];
 static int stat_text_count;
 static int trait_text_count;
 static bool final_lore_visible;
+static const char* title_probe = "The royal houses of the exiled High Elves";
+static SDL_FRect title_ink;
 static void record_preview_text(TTF_Font* font, cptr text, SDL_FRect rect)
 {
     fixture_assert(rect.x>=-1 && rect.x+rect.w<=fixture_width+1);
+    if (!strcmp(text,title_probe)) title_ink=rect;
     if (!strcmp(text,"Str") || !strcmp(text,"Dex")
         || !strcmp(text,"Con") || !strcmp(text,"Gra")
         || !strcmp(text,"+2") || !strcmp(text,"+3") || !strcmp(text,"+4")) {
@@ -114,6 +117,30 @@ static void preview(int selected,bool long_ability,bool fallen,bool empty)
     fixture_assert(sdl_character_sheet_screen_commit_select(selected));
     stat_text_count=trait_text_count=0; final_lore_visible=false;
     fixture_assert(sdl_render_current_window_frame());
+}
+static void check_title_clearance(void)
+{
+    for(int book=0;book<=1;book++) {
+        ui_menu_click_begin();
+        if(book) {
+            sdl_character_sheet_screen_begin_book(title_probe);
+            sdl_character_sheet_screen_add_book_paragraph("The peoples of Beleriand.");
+            sdl_character_sheet_screen_commit_book();
+        } else {
+            sdl_character_sheet_screen_begin_select(0,title_probe);
+            sdl_character_sheet_screen_add_select_row(0,"The Noldor",TERM_WHITE,"");
+            fixture_assert(sdl_character_sheet_screen_commit_select(0));
+        }
+        title_ink=(SDL_FRect){0};
+        fixture_assert(sdl_render_current_window_frame());
+        SDL_FRect button=sdl_menu_font_button_bounds();
+        fixture_assert(title_ink.w>0 && button.w>0);
+        fixture_assert(!SDL_HasRectIntersectionFloat(&title_ink,&button));
+        capture(book?"title-book-big":"title-people-big");
+        sdl_character_sheet_screen_hide();
+        ui_menu_click_clear();
+    }
+    printf("Big book/people title and visible font button clearance: PASS\n");
 }
 static void check_layout(void)
 {
@@ -218,6 +245,7 @@ int main(int argc,char** argv)
     g_state.safe_area=(SDL_Rect){0,0,fixture_width,fixture_height};
     sdl_view* view=&g_views[PANE_MAIN]; term_init(&view->t,80,24,256);
     Term_activate(&view->t); term_screen=&view->t; character_icky=1;
+    check_title_clearance();
     check_layout();
     sdl_character_sheet_screen_hide(); ui_menu_click_clear();
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear(); term_nuke(&view->t);

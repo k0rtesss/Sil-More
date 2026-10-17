@@ -115,6 +115,7 @@ static TTF_Font* sdl_halls_role_font(enum sdl_ui_font_role role)
 static float sdl_halls_mobile_text_h(cptr text, enum sdl_ui_font_role role,
     float width)
 {
+    text = lore_text(text);
     int w = 0, h = 0;
     if (text && text[0])
         TTF_GetStringSizeWrapped(sdl_halls_role_font(role), text, 0,
@@ -438,6 +439,7 @@ static SDL_FRect sdl_halls_draw_text(TTF_Font* font, cptr text, byte attr,
 static TTF_Font* sdl_halls_fitted_font(cptr text, SDL_FRect box,
     int min_px, int max_px, int slot)
 {
+    text = lore_text(text);
     TTF_Font* chosen = NULL;
     int low = MAX(1, min_px);
     int high = MAX(low, max_px);
@@ -475,6 +477,7 @@ static SDL_FRect sdl_halls_draw_fitted_text(cptr text, byte attr,
 static TTF_Font* sdl_halls_wrapped_font(cptr text, SDL_FRect box,
     int min_px, int max_px)
 {
+    text = lore_text(text);
     TTF_Font* chosen = NULL;
     int low = min_px;
     int high = MAX(min_px, max_px);
@@ -569,6 +572,7 @@ bool sdl_halls_screen_active(void)
 void sdl_halls_screen_begin(cptr subtitle, cptr page_status,
     bool detailed, int outside_choice)
 {
+    subtitle = lore_text(subtitle);
     tutorial_game_menu("halls", "Review fallen heroes and completed runs. These records explain previous outcomes; they do not resume a finished hero.");
     memset(&g_sdl_halls, 0, sizeof(g_sdl_halls));
     g_sdl_halls.active = true;
@@ -600,6 +604,11 @@ void sdl_halls_screen_add_entry(int choice, cptr rank, cptr name,
     byte honors_attr, cptr score_increases, cptr score_decreases,
     byte attr, bool selected)
 {
+    outcome = lore_text(outcome);
+    details = lore_text(details);
+    honors = lore_text(honors);
+    score_increases = lore_text(score_increases);
+    score_decreases = lore_text(score_decreases);
     sdl_halls_entry* entry;
 
     if (!g_sdl_halls.active
@@ -631,6 +640,7 @@ void sdl_halls_screen_add_entry(int choice, cptr rank, cptr name,
 
 void sdl_halls_screen_set_empty(cptr text)
 {
+    text = lore_text(text);
     if (!g_sdl_halls.active)
         return;
     SDL_strlcpy(g_sdl_halls.empty_text, text ? text : "",
@@ -641,6 +651,7 @@ void sdl_halls_screen_set_empty(cptr text)
 void sdl_halls_screen_add_action(int choice, cptr label, byte attr,
     bool enabled)
 {
+    label = lore_text(label);
     sdl_halls_action* action;
 
     if (!g_sdl_halls.active

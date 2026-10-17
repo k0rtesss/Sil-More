@@ -672,6 +672,8 @@ void sdl_gameplay_tutorial_render(void)
     sdl_gameplay_tutorial_sync();
     if (tutorial_mode_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
+    lore_copy(view.title, sizeof(view.title), view.title);
+    lore_copy(view.body, sizeof(view.body), view.body);
     tutorial_build_controls(&view,&controls,false);
     action_step=!view.can_continue && !tutorial_reading;
     compact_action=action_step && screen.h<360;
@@ -747,6 +749,8 @@ void sdl_gameplay_tutorial_render(void)
     button_count=3-first_button;
     label_px=MAX(13,(int)(font_px*0.85f));
     shortcut_px=MAX(11,(int)(font_px*0.65f));
+    if (tutorial_input_kind()==TUTORIAL_INPUT_CONTROLLER)
+        shortcut_px=label_px;
     hint_px[0]=MAX(12,font_px-3);
     hint_px[1]=MAX(11,font_px-4);
 #if SIL_SDL_MOBILE_BUILD

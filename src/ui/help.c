@@ -77,7 +77,12 @@ static int HELP_THEME[ROLE__COUNT] = {
 };
 
 static inline void put_role(color_role_t role, const char *s, int row, int col) {
-    c_put_str(HELP_THEME[role], s, row, col);
+    c_put_str(HELP_THEME[role], lore_text(s), row, col);
+}
+
+static int help_span_advance(cptr text, int canonical_width)
+{
+    return canonical_width + (int)strlen(lore_text(text)) - (int)strlen(text);
 }
 
 
@@ -1128,6 +1133,7 @@ static void help_doc_record_attr(byte attr, const char* s, int row, int col)
 
 static void help_emit_role(color_role_t role, const char* s, int row, int col)
 {
+    s = lore_text(s);
     if (g_help_record_ops)
         help_doc_record_role(role, s, false, row, col);
     else
@@ -1136,6 +1142,7 @@ static void help_emit_role(color_role_t role, const char* s, int row, int col)
 
 static void help_emit_heading(const char* s, int row, int col)
 {
+    s = lore_text(s);
     if (g_help_record_ops)
         help_doc_record_role(ROLE_SECTION, s, true, row, col);
     else
@@ -1144,6 +1151,7 @@ static void help_emit_heading(const char* s, int row, int col)
 
 static void help_emit_attr(byte attr, const char* s, int row, int col)
 {
+    s = lore_text(s);
     if (g_help_record_ops)
         help_doc_record_attr(attr, s, row, col);
     else
@@ -1655,7 +1663,7 @@ static void show_help_screen_dynamic_document(
     const int top = 2;
 
     strnfmt(header, sizeof(header),
-        "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
+        lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]"),
         page, total_pages);
     put_role(ROLE_HEADER, header, 0, col);
 
@@ -1691,7 +1699,7 @@ static void show_help_screen_compact_document(
     const int top = 2;
 
     strnfmt(header, sizeof(header),
-        "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
+        lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]"),
         page, total_pages);
     put_role(ROLE_HEADER, header, 0, col);
 
@@ -1745,7 +1753,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: GOAL & HEROES", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: GOAL & HEROES"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -1765,9 +1773,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row++;
         x = col;
         put_role(ROLE_BODY, "- Saving and quitting pauses a live run; it ", row, x);
-        x += (int)strlen("- Saving and quitting pauses a live run; it ");
+        x += (int)strlen(lore_text("- Saving and quitting pauses a live run; it "));
         put_role(ROLE_WARN, "does not create a checkpoint", row, x);
-        x += (int)strlen("does not create a checkpoint");
+        x += (int)strlen(lore_text("does not create a checkpoint"));
         put_role(ROLE_BODY, ".", row, x);
         row++;
         x = col;
@@ -1831,7 +1839,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
-        put_role(ROLE_TERM, "Valar", row, x); x += 5;
+        put_role(ROLE_TERM, "Valar", row, x); x += help_span_advance("Valar", 5);
         put_role(ROLE_BODY, " offer dungeon quests with stated ", row, x); x += 34;
         put_role(ROLE_GOOD, "rewards", row, x); x += 7;
         put_role(ROLE_BODY, "; you may hold ", row, x); x += 15;
@@ -1839,7 +1847,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, ".", row, x);
         row++;
         x = col;
-        put_role(ROLE_BODY, "- Completed Valar quests can unlock ", row, x); x += 36;
+        put_role(ROLE_BODY, "- Completed Valar quests can unlock ", row, x); x += help_span_advance("- Completed Valar quests can unlock ", 36);
         put_role(ROLE_GOOD, "Oaths", row, x); x += 5;
         put_role(ROLE_BODY, " for later heroes in the same Tale.", row, x);
         break;
@@ -1853,7 +1861,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: DEPTH & DANGER", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: DEPTH & DANGER"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -1870,9 +1878,9 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row++;
         x = col;
         put_role(ROLE_BODY, "- A ", row, x); x += 4;
-        put_role(ROLE_TERM, "Silmaril", row, x); x += 8;
+        put_role(ROLE_TERM, "Silmaril", row, x); x += help_span_advance("Silmaril", 8);
         put_role(ROLE_BODY, " unlocks retreat from ", row, x); x += 22;
-        put_role(ROLE_BAD, "Morgoth's depth", row, x); x += 15;
+        put_role(ROLE_BAD, "Morgoth's depth", row, x); x += help_span_advance("Morgoth's depth", 15);
         put_role(ROLE_BODY, ", not other depth limits.", row, x);
         row++;
         x = col;
@@ -1971,7 +1979,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT & DEFENCE", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT & DEFENCE"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -2099,8 +2107,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header,
-                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT ROLLS EXPLAINED",
+            strnfmt(page_header, sizeof(page_header),
+                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT ROLLS EXPLAINED"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2246,7 +2254,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EARLY TIPS", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EARLY TIPS"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -2273,18 +2281,18 @@ static void show_help_screen_legacy(int source_page, int display_page,
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_UI, "Train Skills", row, x);
-        x += (int)strlen("Train Skills");
+        x += (int)strlen(lore_text("Train Skills"));
         put_role(ROLE_BODY, " raises skills. The next rank costs ", row, x);
-        x += (int)strlen(" raises skills. The next rank costs ");
+        x += (int)strlen(lore_text(" raises skills. The next rank costs "));
         put_role(ROLE_WARN, "100 x new rank", row, x); x += 14;
         put_role(ROLE_BODY, " experience.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_UI, "Abilities", row, x);
-        x += (int)strlen("Abilities");
+        x += (int)strlen(lore_text("Abilities"));
         put_role(ROLE_BODY, " lets you buy ", row, x);
-        x += (int)strlen(" lets you buy ");
+        x += (int)strlen(lore_text(" lets you buy "));
         put_role(ROLE_GOOD, "abilities", row, x); x += 9;
         put_role(ROLE_BODY, "; costs rise within a skill and ", row, x); x += 32;
         put_role(ROLE_GOOD, "affinities", row, x); x += 10;
@@ -2324,7 +2332,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_UI, "Rest", row, x); x += 4;
         put_role(ROLE_BODY, " can wait for recovery, but monsters and ", row, x);
-        x += (int)strlen(" can wait for recovery, but monsters and ");
+        x += (int)strlen(lore_text(" can wait for recovery, but monsters and "));
         put_role(ROLE_WARN, "Deep Call", row, x); x += 9;
         put_role(ROLE_BODY, " keep advancing.", row, x);
         row++;
@@ -2428,8 +2436,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header,
-                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CHARACTER & ADVANCEMENT",
+            strnfmt(page_header, sizeof(page_header),
+                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CHARACTER & ADVANCEMENT"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2505,16 +2513,16 @@ static void show_help_screen_legacy(int source_page, int display_page,
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_UI, "Train Skills", row, x);
-        x += (int)strlen("Train Skills");
+        x += (int)strlen(lore_text("Train Skills"));
         put_role(ROLE_BODY, " raises skills; the next base rank costs ", row, x);
-        x += (int)strlen(" raises skills; the next base rank costs ");
+        x += (int)strlen(lore_text(" raises skills; the next base rank costs "));
         put_role(ROLE_WARN, "100 x new rank", row, x); x += 14;
         put_role(ROLE_BODY, " XP.", row, x);
         row++;
         x = col;
         put_role(ROLE_BODY, "- ", row, x); x += 2;
         put_role(ROLE_UI, "Abilities", row, x);
-        x += (int)strlen("Abilities");
+        x += (int)strlen(lore_text("Abilities"));
         put_role(ROLE_BODY,
             " shows each ability's required base skill and exact cost.", row, x);
         row++;
@@ -2538,8 +2546,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header,
-                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EXPLORATION & INFORMATION",
+            strnfmt(page_header, sizeof(page_header),
+                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EXPLORATION & INFORMATION"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2631,8 +2639,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header,
-                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES",
+            strnfmt(page_header, sizeof(page_header),
+                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2730,7 +2738,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         if (include_header)
         {
-            sprintf(page_header, "HELP [%d/%d]: MOVEMENT & MISCELLANEOUS", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: MOVEMENT & MISCELLANEOUS"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
@@ -2855,7 +2863,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* SIL-MORE: TERRAIN & ITEMS */
         if (include_header)
         {
-            sprintf(page_header, "HELP [%d/%d]: TERRAIN & ITEMS", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: TERRAIN & ITEMS"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
@@ -2928,7 +2936,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* SIL-MORE: CORE COMMANDS FROM THE CANONICAL KEYBIND CATALOG */
         if (include_header)
         {
-            sprintf(page_header, "HELP [%d/%d]: CORE COMMANDS", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: CORE COMMANDS"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
@@ -2959,7 +2967,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* SIL-MORE: COMPLETE SUPPLEMENTARY COMMAND CATALOG */
         if (include_header)
         {
-            sprintf(page_header, "HELP [%d/%d]: ALL OTHER COMMANDS",
+            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: ALL OTHER COMMANDS"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
@@ -2990,7 +2998,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header, "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CONTROLLER CONTROLS", display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CONTROLLER CONTROLS"), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -3294,8 +3302,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header,
-                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: STORAGE & READINESS",
+            strnfmt(page_header, sizeof(page_header),
+                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: STORAGE & READINESS"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -3477,8 +3485,8 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            sprintf(page_header,
-                "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SURVIVAL & CHECKS",
+            strnfmt(page_header, sizeof(page_header),
+                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SURVIVAL & CHECKS"),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }

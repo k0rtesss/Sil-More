@@ -477,10 +477,10 @@ static void story_book_sdl_build(bool startup_scene,
         char desc[384];
         char power[384];
         story_book_sdl_copy_excerpt(desc, sizeof(desc),
-            curse->text ? cu_text + curse->text : "No description recorded.",
+            curse->text ? lore_text(cu_text + curse->text) : "No description recorded.",
             300);
         story_book_sdl_copy_excerpt(power, sizeof(power),
-            curse->power ? cu_text + curse->power : "Unknown", 260);
+            curse->power ? lore_text(cu_text + curse->power) : "Unknown", 260);
         strnfmt(buf, sizeof(buf), "%s\n%s",
             curse_display_name(state->selected_curse), desc);
         sdl_character_sheet_screen_add_book_paragraph_colored(buf, TERM_SLATE);

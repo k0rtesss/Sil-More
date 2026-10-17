@@ -313,6 +313,7 @@ try {
         '--no-daemon',
         '--console=plain',
         "-PSIL_MORE_TARGET_SDK=$TargetSdk",
+        '-PSIL_MORE_BUILD_BUNDLE=true',
         '-PSIL_MORE_REQUIRE_RELEASE_SIGNING=true'
     )
 

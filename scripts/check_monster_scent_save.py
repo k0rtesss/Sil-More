@@ -407,6 +407,13 @@ static void test_monster_record_legacy_compatibility(void)
     decode(encoded, plain, modern_length);
     size_t record_size = modern_length - 4;
     size_t ai_start = record_size - MON_AI_FEATURE_COUNT * 7 - (22 + 13 + 8);
+    /* .31 adds the player-origin poison component immediately before the
+     * existing vengeance/smite bytes. Historical .6 records have no component. */
+    size_t player_poison_start = ai_start - 4;
+    memmove(plain + player_poison_start, plain + player_poison_start + 2,
+        modern_length - player_poison_start - 2);
+    modern_length -= 2;
+    ai_start -= 2;
     size_t appended = (MON_AI_FEATURE_COUNT - MON_AI_IMPALE) * 7;
     size_t removed_start = ai_start + MON_AI_IMPALE * 7;
     memmove(plain + removed_start, plain + removed_start + appended,
