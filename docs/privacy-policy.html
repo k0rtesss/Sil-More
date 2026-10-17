@@ -53,7 +53,7 @@
 <body>
   <main>
     <h1>Sil-More Privacy Policy</h1>
-    <p class="effective-date">Effective July 25, 2026</p>
+    <p class="effective-date">Effective October 17, 2026</p>
 
     <p>
       This privacy policy applies to the Sil-More game for Android, published
@@ -62,25 +62,51 @@
 
     <h2>Data collection and sharing</h2>
     <p>
-      Sil-More does not collect, transmit, sell, or share personal information,
-      gameplay data, diagnostics, advertising identifiers, or other user or
-      device data with the developer or third parties. The game does not
-      contain advertising, analytics, tracking, or user-account services.
+      Sil-More does not contain advertising or developer-operated analytics,
+      tracking, or account servers. The developer does not receive your game
+      saves. Google Play builds include Google Play Games Services for platform
+      authentication, achievements, and optional cloud saves. These features
+      send information to Google as described below. Sideload builds do not
+      include the Play Games Services SDK.
     </p>
 
     <h2>Data stored on your device</h2>
     <p>
       Sil-More stores game saves, character names, gameplay and run history,
       preferences, and diagnostic logs in the app's private storage on your
-      device. This information is used only to provide game functionality and
-      is not accessible to the Sil-More developer.
+      device. This information provides game functionality. Cloud restores
+      also retain a local recovery copy of the previous progress.
+    </p>
+
+    <h2>Google Play Games Services</h2>
+    <p>
+      On configured Google Play builds, Google's SDK can authenticate an existing
+      Play Games profile automatically. The game uses your game-specific player
+      identifier to synchronize achievements with that account. Local gameplay
+      remains available without signing in. Google's SDK also processes gamer
+      identity and its own service analytics and diagnostics, as described in
+      <a href="https://developer.android.com/games/pgs/data-collection">Google's Play Games Services data disclosure</a>
+      and the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.
+      Sil-More does not request your friends list, contacts, or email address.
+    </p>
+
+    <h2>Optional cloud saves</h2>
+    <p>
+      When you choose Save to cloud, the game sends a compressed copy of your
+      characters, character names, Tales, run and score history, custom
+      artefacts, and achievement progress to Google's Saved Games service for
+      your signed-in Play Games account. Restore from cloud downloads that
+      progress to this device. Device-specific preferences, generated data
+      caches, and diagnostic log files are excluded from these cloud saves.
+      The developer does not operate this storage or receive its contents.
     </p>
 
     <h2>Data security</h2>
     <p>
-      Sil-More relies on Android's app-private storage protections for its local
-      data. Because the game does not transmit user data, it does not send that
-      data over a network connection.
+      Sil-More relies on Android's app-private storage protections for local
+      data. Google Play Games Services encrypts its network transfers using
+      HTTPS. Cloud restores are validated before activation and preserve a
+      local recovery copy of the previous profile.
     </p>
 
     <h2>Android backup</h2>
@@ -93,18 +119,47 @@
       device backup settings govern that service.
     </p>
 
-    <h2>Data retention and deletion</h2>
+    <h2 id="deletion">Delete Sil-More data</h2>
     <p>
       Local data remains on your device until you delete it, clear Sil-More's
       storage in Android settings, or uninstall the app. Backup copies are
       retained and deleted according to your Android or Google account backup
-      settings and the backup provider's policies.
+      settings and the backup provider's policies. Uninstalling the game or
+      resetting local progress does not delete Play Games achievements or cloud
+      saves. You can manage and delete game data through Google's account and
+      Play Games controls; see
+      <a href="https://support.google.com/googleplay/answer/9130646">Delete your Play Games profile and data</a>.
+      Clear the corresponding local progress as well if you do not want it
+      synchronized again when you next sign in.
     </p>
+    <ol>
+      <li>
+        To delete Sil-More's Google Play Games data, open Google's
+        <a href="https://support.google.com/googleplay/answer/9130646">game-data deletion instructions</a>,
+        choose the option to delete data for an individual game, select
+        <strong>Sil-More</strong>, and confirm deletion. This covers the game's
+        Play Games achievements and cloud progress. Google's profile and
+        account controls also provide broader deletion options.
+      </li>
+      <li>
+        To remove the device's characters, Tales, scores, custom artefacts,
+        achievements, settings, logs, and local cloud-restore recovery copies,
+        clear Sil-More's app storage in Android settings. Deleting only the
+        Google copy does not clear this local data.
+      </li>
+      <li>
+        Manage any Android system backup separately in your device or Google
+        backup settings. The developer keeps no additional server copy of
+        your game progress; Google controls retention and completion of
+        deletion for data held by its services.
+      </li>
+    </ol>
 
     <h2>Children's privacy</h2>
     <p>
-      Sil-More does not knowingly collect personal information from anyone,
-      including children.
+      The developer does not operate a service that collects children's
+      personal information. Use of Google Play Games Services is governed by
+      Google's account, age, and parental-control settings.
     </p>
 
     <h2>Changes to this policy</h2>
