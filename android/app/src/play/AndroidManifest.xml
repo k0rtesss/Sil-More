@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:name="com.silqh.silmore.PlayGamesApplication">
+        <!-- Initialize explicitly only after checking that real Console IDs exist. -->
+        <provider android:name="com.google.android.gms.games.provider.PlayGamesInitProvider"
+            tools:node="remove" />
+        <meta-data android:name="com.google.android.gms.games.APP_ID"
+            android:value="@string/play_games_project_id" />
+        <meta-data android:name="com.google.android.gms.games.SUPPRESS_GAME_PROFILE_CREATION"
+            android:value="true" />
+    </application>
+</manifest>

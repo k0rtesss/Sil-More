@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <steam/steam_api.h>
+#include <steam/steam_api_flat.h>
 
 extern "C" {
 #include "log/log.h"
@@ -14,6 +15,7 @@ static void steamworks_shutdown(void)
     if (!steamworks_active)
         return;
 
+    sil_steamworks_achievements_shutdown();
     SteamAPI_Shutdown();
     steamworks_active = false;
     log_info("Steamworks shut down");
@@ -60,4 +62,19 @@ int sil_steamworks_callback_timeout_ms(void)
 {
     /* Keep callbacks flowing while a turn-based menu waits for input. */
     return steamworks_active ? 100 : -1;
+}
+
+bool sil_steamworks_is_steam_deck(void)
+{
+    if (!steamworks_active)
+        return false;
+
+    ISteamUtils* utils = SteamAPI_SteamUtils_v011();
+    return utils && SteamAPI_ISteamUtils_IsRunningOnSteamHardware(utils)
+        == k_ESteamHardwareTypeSteamDeck;
+}
+
+bool sil_steamworks_active(void)
+{
+    return steamworks_active;
 }

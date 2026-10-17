@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-damage.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
 #include "log/log.h"
@@ -81,6 +82,7 @@ void take_hit(int dam, cptr kb_str)
     p_ptr->chp -= dam;
 
     attempt_to_cheat_death();
+    sil_achievements_on_damage(dam, old_chp);
 
     /* Display the hitpoints */
     p_ptr->redraw |= (PR_HP);

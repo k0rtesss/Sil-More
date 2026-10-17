@@ -308,6 +308,10 @@ For more Android-specific details, see [android/README.md](android/README.md).
 
 # Steam Deck installation
 
+Linux and Windows builds detect Steam Deck and supported PC handhelds and use
+the Android handheld layout/input defaults on first launch. Saved settings
+are preserved. See [handheld detection and overrides](docs/steam-build.md#pc-handheld-defaults).
+
 - There is no separate Steam Deck release anymore. Use the regular Windows release zip.
 - Long press power button and enter Desktop Mode.
 - Download the latest Windows release zip from the Releases page.

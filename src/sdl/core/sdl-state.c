@@ -709,17 +709,17 @@ void sdl_reset_config_to_resolution_defaults(int screen_width,
     (void)sdl_config_set_defaults_for_resolution(&config, pane_config,
         &pane_config_count, MAX_PANE_CONFIGS, screen_width, screen_height);
 
+    /* Only fresh/reset profiles get hardware defaults. Loaded settings keep
+     * the player's layout, even when moved between desktop and handheld. */
+    if (sdl_detect_desktop_handheld() != SDL_DESKTOP_HANDHELD_NONE)
+        sdl_config_apply_handheld_defaults(&config);
+
     config.main_view_scale = default_main_scales[config.min_terminal_mode];
     config.terminal_menu_scale_offset =
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
             config.main_view_scale);
     config.aux_view_font_size = 0;
     config.enable_right_panes = false;
-#if SIL_SDL_MOBILE_BUILD
-    config.enable_bottom_panes = false;
-#else
-    config.enable_bottom_panes = true;
-#endif
 
     (void)sdl_normalize_unified_log_pane_config(pane_config,
         &pane_config_count, true);

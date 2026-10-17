@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-projection-effects.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
 #include "spell/spell-projection-internal.h"
@@ -780,7 +781,7 @@ bool project_m(
         else if (dam > 0)
         {
             poison_dose = dam;
-            monster_poison_add(cave_m_idx[y][x], poison_dose);
+            monster_poison_add_from(cave_m_idx[y][x], poison_dose, who);
             note = " is poisoned.";
         }
         /* Poison projections build the same delayed counter as weapons. */
@@ -1553,9 +1554,16 @@ bool project_m(
             break_mercy_oath(m_ptr, MAX(dam, poison_dose));
         }
 
+        /* Preserve the victim's type before mon_take_hit can delete its slot. */
+        bool player_light_vs_undead = typ == GF_LIGHT && who < 0
+            && (r_ptr->flags3 & RF3_UNDEAD);
+
         /* Hurt the monster, check for death */
         if (mon_take_hit(cave_m_idx[y][x], dam, note_dies, who))
         {
+            if (player_light_vs_undead)
+                sil_achievements_on_light_kill();
+
             /* Note death */
             if (!seen)
                 death_count++;

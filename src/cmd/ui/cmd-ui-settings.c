@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "cave/cave-environment.h"
 #include "sdl-config.h"
+#include "sdl/control/sdl-control.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
 
@@ -19,6 +20,7 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
+#include "game/progress-reset.h"
 #include "ui/command-reference.h"
 #include "tutorial/tutorial-game.h"
 #include <SDL3/SDL_keyboard.h>
@@ -132,6 +134,164 @@ struct settings_value_choice
 #define IFACE_OVERLAY_LOG_ROWS_MIN 1
 #define IFACE_OVERLAY_LOG_ROWS_MAX 20
 
+/* SDL controls and actions have no savefile option bit. */
+enum {
+    SETTINGS_EXTRA_PALETTE = 8192,
+    SETTINGS_EXTRA_TEXT_SIZE,
+    SETTINGS_EXTRA_COMPACT_INVENTORY,
+    SETTINGS_EXTRA_CONFIG_FILE,
+    SETTINGS_EXTRA_CHEATS,
+    SETTINGS_EXTRA_CLEAR_PROGRESS
+};
+
+struct settings_extra_row {
+    int id;
+    int page;
+    cptr label;
+    cptr description;
+};
+
+static const struct settings_extra_row settings_extra_rows[] = {
+    { SETTINGS_EXTRA_PALETTE, VISUAL_PAGE, "Color Palette",
+        "Choose the color palette used throughout the game." },
+    { SETTINGS_EXTRA_TEXT_SIZE, TEXT_PAGE, "Text Size and Fonts",
+        "Configure Big Font, full-screen menu text size, and supporting pane fonts." },
+    { SETTINGS_EXTRA_COMPACT_INVENTORY, INTERFACE_PAGE, "Compact Inventory Menus",
+        "Use shorter category names in Equipped, Inventory, and Supplies. "
+        "Hide the category pane while browsing items. Big Font selects this layout automatically." },
+    { SETTINGS_EXTRA_CONFIG_FILE, DEVELOPER_PAGE, "Open SDL Config File",
+        "Open the raw sil_sdl.json configuration in the system's default editor. "
+        "Changes made there are loaded when the game restarts." },
+    { SETTINGS_EXTRA_CHEATS, DEVELOPER_PAGE, "Cheat Options",
+        "Cheats are available only in unscored games. Their use is recorded permanently." },
+    { SETTINGS_EXTRA_CLEAR_PROGRESS, DEVELOPER_PAGE, "Clear all progress",
+        "Permanently erase all local characters, Tales, scores, achievements, "
+        "tutorial progress, and settings. Three warnings precede the reset. "
+        "Steam and Google Play account achievements remain." }
+};
+
+static void do_cmd_text_size_settings(void);
+static void sdl_open_config_file(void);
+static void settings_semantic_menu_hide(void);
+
+static bool options_debug_page_available(void)
+{
+#ifdef SHOW_DEBUG_OPTIONS_MENU
+    return p_ptr && p_ptr->noscore;
+#else
+    return false;
+#endif
+}
+
+static void settings_clear_all_progress(void)
+{
+    const ui_question_option warnings[] = {
+        { 'c', "Cancel - keep my progress", TERM_WHITE, false },
+        { 'w', "Continue to next warning", TERM_ORANGE, false }
+    };
+    const ui_question_option final[] = {
+        { 'c', "Cancel - keep my progress", TERM_WHITE, false },
+#ifdef SIL_IOS
+        { 'e', "Erase everything and close app", TERM_L_RED, false }
+#else
+        { 'e', "Erase everything and restart", TERM_L_RED, false }
+#endif
+    };
+    if (ui_question_ask_overlay("Clear all progress (1/3)",
+            "This permanently deletes every local saved character, Tale, score, "
+            "and unlocked reward, including your current game. There is no undo.",
+            warnings, N_ELEMENTS(warnings), UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, 0) != 1)
+        return;
+    if (ui_question_ask_overlay("Clear all progress (2/3)",
+            "This also resets local achievements, tutorials, and settings. "
+            "Steam/Google Play account achievements stay and can sync back.",
+            warnings, N_ELEMENTS(warnings), UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, 0) != 1)
+        return;
+    if (ui_question_ask_overlay("Clear all progress (3/3)",
+#ifdef SIL_IOS
+            "Your game ends without saving. The app closes; reopen it to erase "
+            "all local progress and settings and repeat first-launch setup. No undo.",
+#else
+            "All local progress and settings will be erased. Your game ends "
+            "without saving. The app restarts with first-launch setup. No undo.",
+#endif
+            final, N_ELEMENTS(final), UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, 0) != 1)
+        return;
+    char error[1024];
+    if (!sil_progress_reset_request_restart(error, sizeof(error)))
+    {
+        log_error("Clear all progress: %s", error);
+        msg_print(error);
+    }
+}
+
+static const struct settings_extra_row* settings_extra_row_for_id(int id)
+{
+    for (int i = 0; i < (int)N_ELEMENTS(settings_extra_rows); i++)
+        if (settings_extra_rows[i].id == id)
+            return &settings_extra_rows[i];
+    return NULL;
+}
+
+static bool settings_extra_row_visible(const struct settings_extra_row* row)
+{
+    if (row->id == SETTINGS_EXTRA_COMPACT_INVENTORY)
+        return !get_sdl_menu_bigger_font_for(SDL_MENU_FONT_INVENTORY);
+    if (row->id == SETTINGS_EXTRA_CHEATS)
+        return options_debug_page_available();
+    return true;
+}
+
+static bool settings_extra_row_handle(int id, int key)
+{
+    bool activate = key == ' ' || key == '\r' || key == '\n'
+        || key == 't' || key == '5' || key == 'y' || key == '6';
+
+    if (id == SETTINGS_EXTRA_COMPACT_INVENTORY)
+    {
+        bool value = get_sdl_compact_inventory_menus();
+        bool next = value;
+
+        if (key == 'r' || key == 'R')
+        {
+            struct sdl_config defaults;
+            sdl_config_set_defaults(&defaults);
+            next = defaults.compact_inventory_menus;
+        }
+        else if (key == 'n' || key == '4')
+            next = false;
+        else if (key == 'y' || key == '6')
+            next = true;
+        else if (activate)
+            next = !value;
+        if (next == value)
+            return false;
+        set_sdl_compact_inventory_menus(next);
+        return true;
+    }
+
+    if (!activate)
+        return false;
+    settings_semantic_menu_hide();
+    if (id == SETTINGS_EXTRA_PALETTE)
+        do_cmd_colors();
+    else if (id == SETTINGS_EXTRA_TEXT_SIZE)
+        do_cmd_text_size_settings();
+    else if (id == SETTINGS_EXTRA_CONFIG_FILE)
+        sdl_open_config_file();
+    else if (id == SETTINGS_EXTRA_CHEATS && options_debug_page_available())
+    {
+        do_cmd_options_aux(DEBUG_PAGE, "Cheat Options");
+        settings_option_page_turn = 0;
+    }
+    else if (id == SETTINGS_EXTRA_CLEAR_PROGRESS)
+        settings_clear_all_progress();
+    return false;
+}
+
 static const struct settings_value_choice running_delay_choices[] = {
     { 0, "0 ms" },
     { 5, "5 ms" },
@@ -165,27 +325,32 @@ static byte running_delay_step(byte current, int delta)
 static const struct option_group_marker interface_option_groups[] = {
     { OPT_look_objects_sort_by_difficulty, "Look" },
     { OPT_look_nearby_filter_default, "Look" },
-    { OPT_song_list_sort_by_recent, "Look" },
+    { OPT_song_list_sort_by_recent, "Songs" },
     { OPT_styled_player_health_bar, "Health Bars" },
+    { OPT_styled_player_tile_health_bar, "Health Bars" },
     { OPT_styled_monster_health_bars, "Health Bars" },
     { OPT_styled_monster_tile_health_bars, "Health Bars" },
     { OPT_hide_supporting_panes_fullscreen, "Panels" },
     { OPT_hitpoint_warning, "Warnings" },
     { OPT_supply_menu_random_icons, "Items" },
     { OPT_supply_menu_hide_flavor_compact, "Items" },
-    { OPT_hide_secondary_action_ring, "Quick Access" },
-    { OPT_show_level_generation_debug, "Debug" },
-    { OPT_show_elemental_item_rolls, "Debug" },
-    { OPT_show_dungeon_events, "Debug" },
+    { OPT_hide_secondary_action_ring, "Action Wheel" },
+    { SETTINGS_EXTRA_COMPACT_INVENTORY, "Menus" },
     { -1, NULL }
 };
 
 static const struct option_group_marker text_option_groups[] = {
+    { OPT_generic, "Names and Lore" },
+    { OPT_show_level_entry_banner, "Narrative" },
+    { OPT_show_partition_narrative, "Narrative" },
+    { OPT_narrative_banner_turns, "Narrative" },
+    { OPT_intro_style, "Narrative" },
     { OPT_story_object_desc, "Overlays" },
     { OPT_story_monster_desc, "Overlays" },
     { OPT_story_monster_desc_pane, "Panes" },
     { OPT_story_lists_inven_pane, "Panes" },
     { OPT_story_lists_equip_pane, "Panes" },
+    { SETTINGS_EXTRA_TEXT_SIZE, "Text Size" },
     { -1, NULL }
 };
 
@@ -198,16 +363,16 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_lockpick_minigame, "Interaction" },
     { OPT_chest_trap_minigame, "Interaction" },
     { OPT_stop_singing_on_rest, "Rest and Song" },
-    { OPT_visual_recognition, "Information" },
+    { OPT_visual_recognition, "Monster Behavior" },
     { OPT_know_monster_info, "Information" },
     { OPT_disable_skeleton_note_tutorial, "Tutorial" },
     { OPT_smaller_level_size, "World Generation" },
     { OPT_more_stairs, "World Generation" },
     { OPT_utumno_corridors, "World Generation" },
     { OPT_illusory_walls, "World Generation" },
-    { OPT_vault_drop_frequency, "World Generation" },
-    { OPT_noble_item_spawn_mode, "World Generation" },
-    { OPT_min_depth_timer_mode, "World Generation" },
+    { OPT_vault_drop_frequency, "Loot" },
+    { OPT_noble_item_spawn_mode, "Loot" },
+    { OPT_min_depth_timer_mode, "Pacing" },
     { OPT_environment_speed, "Living Dungeon" },
     { OPT_load_blitz_by_default, "Blitz" },
     { -1, NULL }
@@ -226,17 +391,12 @@ static const struct option_group_marker visual_option_groups[] = {
     { OPT_torch_animation_always, "Animation" },
     { OPT_center_player, "Camera" },
     { OPT_run_avoid_center, "Camera" },
-    { OPT_show_level_entry_banner, "Narrative" },
-    { OPT_show_partition_narrative, "Narrative" },
-    { OPT_narrative_banner_turns, "Narrative" },
-    { OPT_intro_style, "Narrative" },
     { OPT_solid_walls, "ASCII" },
     { OPT_hybrid_walls, "ASCII" },
     { OPT_hilite_player, "Cursor" },
     { OPT_hilite_target, "Cursor" },
     { OPT_hilite_unwary, "Cursor" },
-    { OPT_show_smithing_difficulty, "Debug" },
-    { OPT_show_smithing_difficulty_look, "Debug" },
+    { SETTINGS_EXTRA_PALETTE, "Colors" },
     { -1, NULL }
 };
 
@@ -261,6 +421,17 @@ static const struct option_group_marker debug_option_groups[] = {
     { OPT_cheat_skill_rolls, "Knowledge" },
     { OPT_cheat_live, "Survival" },
     { OPT_cheat_timestop, "Survival" },
+    { -1, NULL }
+};
+
+static const struct option_group_marker developer_option_groups[] = {
+    { OPT_show_level_generation_debug, "Generation Diagnostics" },
+    { OPT_show_elemental_item_rolls, "Item Diagnostics" },
+    { OPT_show_dungeon_events, "Dungeon Diagnostics" },
+    { OPT_show_smithing_difficulty, "Smithing Diagnostics" },
+    { OPT_show_smithing_difficulty_look, "Smithing Diagnostics" },
+    { SETTINGS_EXTRA_CONFIG_FILE, "Configuration" },
+    { SETTINGS_EXTRA_CHEATS, "Unscored Games" },
     { -1, NULL }
 };
 
@@ -313,6 +484,7 @@ static const struct option_group_marker* get_option_groups_for_page(int page)
     case CHALLENGE_PAGE: return challenge_option_groups;
     case DEBUG_PAGE: return debug_option_groups;
     case SOUND_PAGE: return sound_option_groups;
+    case DEVELOPER_PAGE: return developer_option_groups;
     default: return NULL;
     }
 }
@@ -352,7 +524,7 @@ static bool option_group_starts_at(const struct option_group_marker* groups,
 static bool option_page_uses_app_config(int page)
 {
     return (page == INTERFACE_PAGE) || (page == TEXT_PAGE)
-        || (page == VISUAL_PAGE);
+        || (page == VISUAL_PAGE) || (page == DEVELOPER_PAGE);
 }
 
 static int settings_ui_term_wid(void)
@@ -720,6 +892,8 @@ static cptr option_menu_label(int opt)
 
     switch (opt)
     {
+    case OPT_generic:
+        return "Generic Fantasy Names and Lore";
     case OPT_delay_factor:
         return compact ? (narrow ? "Anim delay" : "Animation delay")
                        : "Delay factor for animation (0 to 9)";
@@ -732,6 +906,9 @@ static cptr option_menu_label(int opt)
     case OPT_styled_player_health_bar:
         return compact ? (narrow ? "Styled HP bar" : "Styled health bar")
                        : "Use styled player health bar in the left panel";
+    case OPT_styled_player_tile_health_bar:
+        return compact ? (narrow ? "Player tile HP" : "Player tile HP bar")
+                       : "Show health bar above the player tile";
     case OPT_styled_monster_health_bars:
         return compact ? (narrow ? "Monster HP bars" : "Monster health bars")
                        : "Use styled monster health bars in panes/overlays";
@@ -753,15 +930,14 @@ static cptr option_menu_label(int opt)
         return compact ? (narrow ? "Partition text" : "Partition narrative")
                        : "Partition transition narrative";
     case OPT_vault_drop_frequency:
-        return compact ? "Vault drops" : "Vault drop frequency";
+        return compact ? "Loot abundance" : "Dungeon loot abundance";
     case OPT_min_depth_timer_mode:
         return compact ? (narrow ? "Depth pace" : "Min depth pace")
                        : "Minimum depth pace";
     case OPT_environment_speed:
         return compact ? "Environment speed" : "Environmental effects speed";
     case OPT_noble_item_spawn_mode:
-        return compact ? (narrow ? "Noble items" : "Noble item sources")
-                       : "Noble item spawns";
+        return compact ? "Noble vault loot" : "Noble items in vault loot";
     case OPT_look_objects_sort_by_difficulty:
         return compact ? (narrow ? "Look diff sort" : "Look sort by diff")
                        : "Sort look (L) objects by difficulty only";
@@ -789,20 +965,16 @@ static cptr option_menu_label(int opt)
         return compact ? (narrow ? "Load Blitz" : "Load Blitz first")
                        : "Load Blitz by default";
     case OPT_show_level_generation_debug:
-        return compact ? (narrow ? "Dbg lvl screen" : "Debug level screen")
-                       : "Show detailed level-generation screen info and pause before play";
+        return narrow ? "Generation screen" : "Level generation screen";
     case OPT_show_elemental_item_rolls:
-        return compact ? (narrow ? "Dbg elem items" : "Debug elemental items")
-                       : "Show elemental item break rolls and target probabilities";
+        return "Elemental item rolls";
     case OPT_show_dungeon_events:
         return compact ? (narrow ? "Events {debug}" : "Dungeon events {debug}")
-                       : "Log all dungeon events in messages {debug}";
+                       : "All dungeon events {debug}";
     case OPT_show_smithing_difficulty:
-        return compact ? (narrow ? "Smith dbg items" : "Debug smithing in items")
-                       : "Show {sd,wr} in item descriptions";
+        return narrow ? "Smithing in items" : "Smithing values in items";
     case OPT_show_smithing_difficulty_look:
-        return compact ? (narrow ? "Smith dbg look" : "Debug smithing in look")
-                       : "Show {sd,wr} in look sidebar and message";
+        return narrow ? "Smithing in look" : "Smithing values in look";
     default:
         break;
     }
@@ -861,7 +1033,7 @@ static cptr option_menu_label(int opt)
         case OPT_cheat_peek: return narrow ? "Debug obj gen" : "Debug object gen";
         case OPT_cheat_hear: return narrow ? "Debug mon gen" : "Debug monster gen";
         case OPT_cheat_room: return narrow ? "Debug room gen" : "Debug dungeon gen";
-        case OPT_cheat_xtra: return narrow ? "Debug extra" : "Debug extra";
+        case OPT_cheat_xtra: return "Generation failures";
         case OPT_cheat_know: return narrow ? "Debug know mons" : "Debug know monsters";
         case OPT_cheat_monsters: return narrow ? "Debug show mons" : "Debug show monsters";
         case OPT_cheat_noise: return narrow ? "Debug noise" : "Debug noise";
@@ -994,6 +1166,18 @@ static void settings_semantic_line_from_menu_line(char* out, size_t outsz,
 
 static void option_apply_side_effects(int opt)
 {
+    if (opt == OPT_generic)
+    {
+        if (!lore_set_generic(op_ptr->opt[OPT_generic]))
+        {
+            op_ptr->opt[OPT_generic] = false;
+            msg_print("Could not load generic lore. Update lib/pref/generic_lore.json with the game.");
+        }
+        p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
+        p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0
+            | PW_MONSTER | PW_OBJECT | PW_MESSAGE;
+        sdl_lore_changed();
+    }
     if (opt == OPT_story_lists_inven_pane || opt == OPT_story_lists_equip_pane)
         redraw_inven_equip_subwindows();
     if (opt == OPT_story_monster_desc_pane)
@@ -1012,7 +1196,8 @@ static void option_apply_side_effects(int opt)
         redraw_monster_subwindows();
         sdl_left_panel_source_invalidate();
     }
-    if (opt == OPT_styled_monster_tile_health_bars)
+    if (opt == OPT_styled_monster_tile_health_bars
+        || opt == OPT_styled_player_tile_health_bar)
         p_ptr->redraw |= PR_MAP;
     if (opt == OPT_stealth_vision || opt == OPT_visual_recognition
         || opt == OPT_sleep_icon || opt == OPT_mirror_player_tile_facing
@@ -1241,16 +1426,16 @@ static bool option_pick_value(int opt, bool* handled)
         { PARTITION_NARRATIVE_OFF, "Off" }
     };
     static const struct settings_value_choice vault_drop_choices[] = {
-        { VDF_NORMAL, "Normal (0)" },
-        { VDF_MODEST, "Modest (1)" },
-        { VDF_SCARCE, "Scarce (2)" },
-        { VDF_MEAGER, "Meager (3)" },
-        { VDF_PLENTIFUL, "Plentiful (4)" }
+        { VDF_NORMAL, "Normal" },
+        { VDF_MODEST, "Modest" },
+        { VDF_SCARCE, "Scarce" },
+        { VDF_MEAGER, "Meager" },
+        { VDF_PLENTIFUL, "Plentiful" }
     };
     static const struct settings_value_choice min_depth_choices[] = {
         { MIN_DEPTH_TIMER_MODE_NORMAL, "Normal" },
-        { MIN_DEPTH_TIMER_MODE_RELAXED, "Relaxed (+30000)" },
-        { MIN_DEPTH_TIMER_MODE_HARSH, "Harsh (-30000)" }
+        { MIN_DEPTH_TIMER_MODE_RELAXED, "Relaxed" },
+        { MIN_DEPTH_TIMER_MODE_HARSH, "Harsh" }
     };
     static const struct settings_value_choice environment_speed_choices[] = {
         { ENVIRONMENT_SPEED_SLOW, "Slow" },
@@ -1258,9 +1443,8 @@ static bool option_pick_value(int opt, bool* handled)
         { ENVIRONMENT_SPEED_FAST, "Fast" }
     };
     static const struct settings_value_choice noble_spawn_choices[] = {
-        { NOBLE_ITEM_SPAWN_RESTRICTED,
-            "0 (good+/chests/human+elf skeletons)" },
-        { NOBLE_ITEM_SPAWN_INCLUDE_VAULTS, "1 (also vault drops)" }
+        { NOBLE_ITEM_SPAWN_RESTRICTED, "Exclude from vault loot" },
+        { NOBLE_ITEM_SPAWN_INCLUDE_VAULTS, "Include in vault loot" }
     };
     static const struct settings_value_choice intro_choices[] = {
         { INTRO_STYLE_FLAME, "Flame Imperishable" },
@@ -1273,7 +1457,7 @@ static bool option_pick_value(int opt, bool* handled)
         { INTRO_STYLE_RANDOM, "Random" }
     };
     static const struct settings_value_choice narrative_turn_choices[] = {
-        { 0, "0 dismiss manually" },
+        { 0, "Dismiss manually" },
         { 1, "1 turn" },
         { 2, "2 turns" },
         { 3, "3 turns" }
@@ -1781,6 +1965,12 @@ static void options_aux_reset_to_default(int page, const int* opt, int k,
     }
 
     o = opt[k];
+    if (settings_extra_row_for_id(o))
+    {
+        if (settings_extra_row_handle(o, 'r') && app_dirty)
+            *app_dirty = true;
+        return;
+    }
     switch (o)
     {
     case OPT_delay_factor:
@@ -1852,7 +2042,7 @@ extern void do_cmd_options_aux(int page, cptr info)
 
     int i, k = 0, n = 0;
 
-    int opt[OPT_PAGE_PER + IFACE_PANE_ROW_MAX];
+    int opt[OPT_PAGE_PER + IFACE_PANE_ROW_MAX + N_ELEMENTS(settings_extra_rows)];
     struct iface_pane_row pane_rows[IFACE_PANE_ROW_MAX];
     int pane_row_count = 0;
     struct option_group_marker iface_groups[
@@ -1873,6 +2063,10 @@ extern void do_cmd_options_aux(int page, cptr info)
     struct sound_config* sound_cfg = sdl_sound_get_config();
 
     settings_option_page_turn = 0;
+
+    if (page < 0 || page >= OPT_PAGE_MAX
+        || (page == DEBUG_PAGE && !options_debug_page_available()))
+        return;
 
     /* Scan the options */
     for (i = 0; i < OPT_PAGE_PER; i++)
@@ -1930,6 +2124,11 @@ extern void do_cmd_options_aux(int page, cptr info)
         groups = iface_groups;
     }
 
+    for (i = 0; i < (int)N_ELEMENTS(settings_extra_rows); i++)
+        if (settings_extra_rows[i].page == page
+            && settings_extra_row_visible(&settings_extra_rows[i]))
+            opt[n++] = settings_extra_rows[i].id;
+
     /* Interact with the player */
     while (true)
     {
@@ -1972,7 +2171,19 @@ extern void do_cmd_options_aux(int page, cptr info)
 
             /* Display the option text */
             buf[0] = '\0';
-            if (page == INTERFACE_PAGE && opt[i] >= IFACE_PANE_ROW_BASE)
+            if (settings_extra_row_for_id(opt[i]))
+            {
+                const struct settings_extra_row* row =
+                    settings_extra_row_for_id(opt[i]);
+                cptr value = opt[i] == SETTINGS_EXTRA_COMPACT_INVENTORY
+                    ? (get_sdl_compact_inventory_menus() ? "yes" : "no")
+                    : opt[i] == SETTINGS_EXTRA_CLEAR_PROGRESS ? "Erase..." : "Open";
+                if (opt[i] == SETTINGS_EXTRA_CLEAR_PROGRESS && i != k)
+                    a = TERM_L_RED;
+
+                option_menu_format_line(buf, sizeof(buf), row->label, value);
+            }
+            else if (page == INTERFACE_PAGE && opt[i] >= IFACE_PANE_ROW_BASE)
             {
                 char value_str[32];
                 const struct iface_pane_row* prow =
@@ -2202,14 +2413,11 @@ extern void do_cmd_options_aux(int page, cptr info)
             else if (opt[i] == OPT_vault_drop_frequency)
             {
                 const char *vdf_names[] = { "Normal", "Modest", "Scarce", "Meager", "Plentiful" };
-                char value_str[32];
                 byte mode = op_ptr->vault_drop_frequency;
                 if (mode > VDF_PLENTIFUL)
                     mode = VDF_NORMAL;
-                strnfmt(value_str, sizeof(value_str), "%s (%d)", vdf_names[mode],
-                    mode);
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
-                    value_str);
+                    vdf_names[mode]);
             }
             else if (opt[i] == OPT_min_depth_timer_mode)
             {
@@ -2218,14 +2426,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                 switch (op_ptr->min_depth_timer_mode)
                 {
                 case MIN_DEPTH_TIMER_MODE_RELAXED:
-                    mode_str = option_menu_use_compact_layout()
-                        ? "+30000 relaxed"
-                        : "Relaxed (+30000)";
+                    mode_str = "Relaxed";
                     break;
                 case MIN_DEPTH_TIMER_MODE_HARSH:
-                    mode_str = option_menu_use_compact_layout()
-                        ? "-30000 harsh"
-                        : "Harsh (-30000)";
+                    mode_str = "Harsh";
                     break;
                 default:
                     mode_str = "Normal";
@@ -2246,8 +2450,7 @@ extern void do_cmd_options_aux(int page, cptr info)
             {
                 const char *mode_str
                     = (op_ptr->noble_item_spawn_mode == NOBLE_ITEM_SPAWN_INCLUDE_VAULTS)
-                    ? (option_menu_use_compact_layout() ? "1 with vaults" : "1 (also &/! vault drops)")
-                    : (option_menu_use_compact_layout() ? "0 restricted" : "0 (good+/chests/human+elf skeletons)");
+                    ? "Included" : "Excluded";
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
                     mode_str);
             }
@@ -2273,7 +2476,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                     turns = DEFAULT_NARRATIVE_BANNER_TURNS;
 
                 if (turns == 0)
-                    strnfmt(value_str, sizeof(value_str), "0 dismiss");
+                    strnfmt(value_str, sizeof(value_str), "Manual dismiss");
                 else
                     strnfmt(value_str, sizeof(value_str), "%d turn%s",
                         turns, (turns == 1) ? "" : "s");
@@ -2317,7 +2520,13 @@ extern void do_cmd_options_aux(int page, cptr info)
                 settings_semantic_line_from_menu_line(semantic_buf,
                     sizeof(semantic_buf), buf);
                 settings_semantic_add_row(i, semantic_buf, a);
-                if (page == INTERFACE_PAGE && opt[i] >= IFACE_PANE_ROW_BASE)
+                if (settings_extra_row_for_id(opt[i]))
+                {
+                    if (opt[i] == SETTINGS_EXTRA_COMPACT_INVENTORY)
+                        sdl_character_sheet_screen_set_last_select_row_reset(
+                            SETTINGS_CLICK_RESET_ROW_BASE + i);
+                }
+                else if (page == INTERFACE_PAGE && opt[i] >= IFACE_PANE_ROW_BASE)
                 {
                     if (iface_pane_row_resettable(
                             &pane_rows[opt[i] - IFACE_PANE_ROW_BASE]))
@@ -2340,7 +2549,9 @@ extern void do_cmd_options_aux(int page, cptr info)
                 cptr od = NULL;
                 int o = opt[k];
 
-                if (page == INTERFACE_PAGE && o >= IFACE_PANE_ROW_BASE)
+                if (settings_extra_row_for_id(o))
+                    od = settings_extra_row_for_id(o)->description;
+                else if (page == INTERFACE_PAGE && o >= IFACE_PANE_ROW_BASE)
                     od = iface_pane_row_description(
                         &pane_rows[o - IFACE_PANE_ROW_BASE]);
                 else if (!is_sound_page && o >= 0 && o < OPT_MAX)
@@ -2396,7 +2607,8 @@ extern void do_cmd_options_aux(int page, cptr info)
                     if (click_action == UI_MENU_CLICK_HOVER)
                         continue;
                     k = clicked_choice - SETTINGS_CLICK_RESET_ROW_BASE;
-                    if (page == INTERFACE_PAGE && opt[k] >= IFACE_PANE_ROW_BASE)
+                    if (page == INTERFACE_PAGE && opt[k] >= IFACE_PANE_ROW_BASE
+                        && !settings_extra_row_for_id(opt[k]))
                     {
                         if (iface_pane_row_reset_to_default(
                                 &pane_rows[opt[k] - IFACE_PANE_ROW_BASE]))
@@ -2444,6 +2656,16 @@ extern void do_cmd_options_aux(int page, cptr info)
         dir = target_dir((char)ch);
         if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
             ch = I2D(dir);
+
+        /* Action rows must never index the savefile's opt[] array. */
+        if (settings_extra_row_for_id(opt[k]) && ch != ESCAPE
+            && ch != SETTINGS_PREV_OPTION_PAGE && ch != SETTINGS_NEXT_OPTION_PAGE
+            && ch != '-' && ch != '8' && ch != '2')
+        {
+            if (settings_extra_row_handle(opt[k], ch))
+                app_settings_dirty = true;
+            continue;
+        }
 
         /* Analyze */
         switch (ch)
@@ -3444,15 +3666,13 @@ static void do_cmd_big_font_settings(bool* settings_changed)
     screen_load();
 }
 
-void do_cmd_pane_settings(void)
+static void do_cmd_pane_settings_for_page(bool text_only)
 {
     enum {
         PANE_SETTING_BIG_FONT = 0,
         PANE_SETTING_MIN_TERMINAL_SIZE,
         PANE_SETTING_MAIN_VIEW_SCALE,
         PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET,
-        PANE_SETTING_COMPACT_INVENTORY_MENUS,
-        PANE_SETTING_DEBUG_CHARACTER_SHEET,
         PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET,
         PANE_SETTING_CAMERA_VERTICAL_DISTANCE,
         PANE_SETTING_CAMERA_HORIZONTAL_DISTANCE,
@@ -3466,16 +3686,14 @@ void do_cmd_pane_settings(void)
         PANE_SETTING_TILES,
         PANE_SETTING_USE_UNSAFE_AREA,
         PANE_SETTING_WHITE_PANE_BORDERS,
-        PANE_SETTING_HIDE_FULLSCREEN_PANES,
         PANE_SETTING_AUX_VIEW_FONT_SIZE,
         PANE_SETTING_VIEW_PANE_CONFIGURATION,
         PANE_SETTING_PANE_FONT_SIZES,
-        PANE_SETTING_OPEN_CONFIG_FILE,
         PANE_SETTING_RESET_ALL,
         PANE_SETTING_SAVE_RETURN,
         PANE_SETTING_COUNT
     };
-    int k = 0;
+    int k = text_only ? PANE_SETTING_BIG_FONT : PANE_SETTING_MIN_TERMINAL_SIZE;
     int n = PANE_SETTING_COUNT;
     bool pane_setting_visible[PANE_SETTING_COUNT];
     bool done = false;
@@ -3485,7 +3703,12 @@ void do_cmd_pane_settings(void)
     const char* config_label = (config_path && config_path[0]) ? config_path : "sil_sdl.json";
 
     for (int i = 0; i < PANE_SETTING_COUNT; i++)
-        pane_setting_visible[i] = true;
+        pane_setting_visible[i] = !text_only;
+    pane_setting_visible[PANE_SETTING_BIG_FONT] = text_only;
+    pane_setting_visible[PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET] = text_only;
+    pane_setting_visible[PANE_SETTING_AUX_VIEW_FONT_SIZE] = text_only;
+    pane_setting_visible[PANE_SETTING_PANE_FONT_SIZES] = text_only;
+    pane_setting_visible[PANE_SETTING_SAVE_RETURN] = true;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     /* Mobile uses the full display and supports overlay panes only.  Do not
      * offer ordinary pane/window controls whose values are fixed by the
@@ -3494,10 +3717,13 @@ void do_cmd_pane_settings(void)
     pane_setting_visible[PANE_SETTING_ENABLE_BOTTOM_PANES] = false;
     pane_setting_visible[PANE_SETTING_FULLSCREEN] = false;
     pane_setting_visible[PANE_SETTING_WHITE_PANE_BORDERS] = false;
-    pane_setting_visible[PANE_SETTING_HIDE_FULLSCREEN_PANES] = false;
     pane_setting_visible[PANE_SETTING_AUX_VIEW_FONT_SIZE] = false;
     pane_setting_visible[PANE_SETTING_VIEW_PANE_CONFIGURATION] = false;
     pane_setting_visible[PANE_SETTING_PANE_FONT_SIZES] = false;
+#else
+    /* Starting zoom offsets only run on mobile. Desktop zoom uses Main View Scale. */
+    pane_setting_visible[PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] = false;
+    pane_setting_visible[PANE_SETTING_USE_UNSAFE_AREA] = false;
 #endif
 
     /* Save screen */
@@ -3507,17 +3733,12 @@ void do_cmd_pane_settings(void)
     {
         int row_width;
         int label_hint;
-        /* These layouts are selected automatically by the larger-text mode. */
-        pane_setting_visible[PANE_SETTING_COMPACT_INVENTORY_MENUS] =
-            !get_sdl_menu_bigger_font_for(SDL_MENU_FONT_INVENTORY);
-        pane_setting_visible[PANE_SETTING_DEBUG_CHARACTER_SHEET] =
-            false; /* Replaced by the character-sheet font toggle above. */
-        settings_semantic_menu_begin("General Settings", k);
+        settings_semantic_menu_begin(text_only ? "Text Size and Fonts" : "Display and Layout", k);
         sdl_character_sheet_screen_set_select_confirm_label(
             k == PANE_SETTING_BIG_FONT ? "Open"
             : k == PANE_SETTING_RESET_ALL ? "Reset"
-            : k >= PANE_SETTING_VIEW_PANE_CONFIGURATION
-                    && k <= PANE_SETTING_OPEN_CONFIG_FILE ? "Open" : "Done");
+            : k == PANE_SETTING_VIEW_PANE_CONFIGURATION
+                || k == PANE_SETTING_PANE_FONT_SIZES ? "Open" : "Done");
 
         /* Display current settings */
         char buf[96];
@@ -3557,58 +3778,30 @@ void do_cmd_pane_settings(void)
             row_width, 10);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MIN_TERMINAL_SIZE, 0, a, buf);
 
-        /* Option 1: Main View Scale */
+        /* Main View Scale */
         a = (k == PANE_SETTING_MAIN_VIEW_SCALE) ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(value_buf, sizeof(value_buf), "%d", get_sdl_main_view_scale());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-                "Main Terminal Scale (1-max)",
-                "Main Terminal Scale",
-                "View Scale"),
+                "Map Zoom",
+                "Map Zoom",
+                "Map Zoom"),
             value_buf, row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MAIN_VIEW_SCALE, 1, a, buf);
 
-        /* Option 2: terminal-menu scale relative to the layout maximum. */
+        /* terminal-menu scale relative to the layout maximum. */
         a = (k == PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET)
             ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(value_buf, sizeof(value_buf), "%+d",
             get_sdl_terminal_menu_scale_offset());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-#if defined(__ANDROID__) || defined(SIL_IOS)
-                get_sdl_menu_bigger_font() ? "Menu Text Size" : "Terminal Menu Scale Offset",
-                get_sdl_menu_bigger_font() ? "Menu Text Size" : "Menu Scale Offset",
-                get_sdl_menu_bigger_font() ? "Menu Text Size" : "Menu Scale"),
-#else
-                "Terminal Menu Scale Offset",
-                "Menu Scale Offset",
-                "Menu Scale"),
-#endif
+                "Menu Text Size",
+                "Menu Text Size",
+                "Menu Text Size"),
             value_buf, row_width, 4);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET, 2, a,
             buf);
-
-        a = (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
-            ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf),
-            settings_ui_pick_label(label_hint,
-                "Compact Inventory Menus",
-                "Compact Item Menus",
-                "Compact Menus"),
-            get_sdl_compact_inventory_menus() ? "yes" : "no",
-            row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_COMPACT_INVENTORY_MENUS, 3, a, buf);
-
-        a = (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
-            ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf),
-            settings_ui_pick_label(label_hint,
-                "Character Sheet Mode",
-                "Character Sheet",
-                "Sheet Mode"),
-            config.debug_character_sheet ? "Pages" : "SDL",
-            row_width, 8);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_DEBUG_CHARACTER_SHEET, 4, a, buf);
 
         /* Extra zoom applied when mobile gameplay starts. */
         a = (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
@@ -3676,7 +3869,7 @@ void do_cmd_pane_settings(void)
             a, buf);
 #endif
 
-        /* Option 4: Enable Side Panes */
+        /* Enable Side Panes */
         a = (k == PANE_SETTING_ENABLE_SIDE_PANES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3687,7 +3880,7 @@ void do_cmd_pane_settings(void)
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_SIDE_PANES, 4, a, buf);
 
-        /* Option 5: Enable Bottom Panes */
+        /* Enable Bottom Panes */
         a = (k == PANE_SETTING_ENABLE_BOTTOM_PANES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3698,19 +3891,19 @@ void do_cmd_pane_settings(void)
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_BOTTOM_PANES, 5, a, buf);
 
-        /* Option 6: Fullscreen */
+        /* Fullscreen */
         a = (k == PANE_SETTING_FULLSCREEN) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf), "Fullscreen",
             get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_FULLSCREEN, 6, a, buf);
 
-        /* Option 7: Tiles */
+        /* Tiles */
         a = (k == PANE_SETTING_TILES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf), "Tiles [Alt+A]",
             get_sdl_tiles() ? "yes" : "no", row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TILES, 7, a, buf);
 
-        /* Option 8: Use Unsafe Area */
+        /* Use Unsafe Area */
         a = (k == PANE_SETTING_USE_UNSAFE_AREA) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3721,7 +3914,7 @@ void do_cmd_pane_settings(void)
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_USE_UNSAFE_AREA, 8, a, buf);
 
-        /* Option 9: White Pane Borders */
+        /* White Pane Borders */
         a = (k == PANE_SETTING_WHITE_PANE_BORDERS) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -3732,31 +3925,22 @@ void do_cmd_pane_settings(void)
             row_width, 5);
         ADD_PANE_SETTING_ROW(PANE_SETTING_WHITE_PANE_BORDERS, 9, a, buf);
 
-        /* Option 10: Hide supporting panes on full-screen screens */
-        a = (k == PANE_SETTING_HIDE_FULLSCREEN_PANES) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf),
-            settings_ui_pick_label(label_hint,
-                "Hide supporting panes on full-screen screens",
-                "Hide panes on full-screen screens",
-                "Hide panes on full-screen"),
-            op_ptr->opt[OPT_hide_supporting_panes_fullscreen] ? "yes" : "no",
-            row_width, 3);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_HIDE_FULLSCREEN_PANES, 10, a, buf);
+        /* Hide supporting panes on full-screen screens */
 
-        /* Option 11: Aux View Font Size */
+        /* Aux View Font Size */
         a = (k == PANE_SETTING_AUX_VIEW_FONT_SIZE) ? TERM_L_BLUE : TERM_WHITE;
         format_font_size_value(font_value, sizeof(font_value),
             get_sdl_aux_view_font_size(), get_sdl_effective_aux_view_font_size(),
             MAX(6, MIN(14, row_width / 2)));
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-                "Default Aux Font Size (0=auto, 8-48)",
-                "Default Aux Font (0=auto)",
-                "Aux Font"),
+                "Supporting Pane Font Size",
+                "Default Pane Font",
+                "Pane Font"),
             font_value, row_width, 6);
         ADD_PANE_SETTING_ROW(PANE_SETTING_AUX_VIEW_FONT_SIZE, 11, a, buf);
 
-        /* Option 12: View Pane Configuration (supporting panes only) */
+        /* View Pane Configuration (supporting panes only) */
         a = (k == PANE_SETTING_VIEW_PANE_CONFIGURATION) ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(buf, sizeof(buf), "%s (%d)",
             settings_ui_pick_label(row_width,
@@ -3771,7 +3955,7 @@ void do_cmd_pane_settings(void)
         }
         ADD_PANE_SETTING_ROW(PANE_SETTING_VIEW_PANE_CONFIGURATION, 12, a, buf);
 
-        /* Option 13: Pane Font Sizes */
+        /* Pane Font Sizes */
         a = (k == PANE_SETTING_PANE_FONT_SIZES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
             settings_ui_pick_label(row_width,
@@ -3781,17 +3965,7 @@ void do_cmd_pane_settings(void)
             row_width);
         ADD_PANE_SETTING_ROW(PANE_SETTING_PANE_FONT_SIZES, 13, a, buf);
 
-        /* Option 14: Open SDL Config File */
-        a = (k == PANE_SETTING_OPEN_CONFIG_FILE) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf),
-            settings_ui_pick_label(label_hint,
-                "Open SDL Config File",
-                "Open SDL Config",
-                "Open Config"),
-            sdl_config_path_leaf(config_label), row_width, 12);
-        ADD_PANE_SETTING_ROW(PANE_SETTING_OPEN_CONFIG_FILE, 14, a, buf);
-
-        /* Option 15: Reset all interface settings */
+        /* Reset all interface settings */
         a = (k == PANE_SETTING_RESET_ALL) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
             settings_ui_pick_label(row_width,
@@ -3801,10 +3975,10 @@ void do_cmd_pane_settings(void)
             row_width);
         ADD_PANE_SETTING_ROW(PANE_SETTING_RESET_ALL, 15, a, buf);
 
-        /* Option 16: Return (changes are saved automatically on exit). */
+        /* Return (changes are saved automatically on exit). */
         a = (k == PANE_SETTING_SAVE_RETURN) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
-            "Return to Options Menu",
+            text_only ? "Return to Text Options" : "Return to Options Menu",
             row_width);
         ADD_PANE_SETTING_ROW(PANE_SETTING_SAVE_RETURN, 16, a, buf);
 
@@ -3818,9 +3992,9 @@ void do_cmd_pane_settings(void)
                     "Set larger text for the gameplay UI and each menu. "
                     "The All fonts toggle switches everything on or off.",
                 [PANE_SETTING_MIN_TERMINAL_SIZE] =
-                    "Smallest character grid the game will use. Larger minimums "
-                    "keep text big but leave less room for side and bottom "
-                    "panes on small windows.",
+                    "Smallest character grid the game will use. A larger grid "
+                    "fits more content by limiting zoom. Compact allows larger "
+                    "map text and tiles on small displays.",
                 [PANE_SETTING_MAIN_VIEW_SCALE] =
                     "Zoom level of the main map. Higher values enlarge the map "
                     "and its font but show less of the level at once.",
@@ -3834,15 +4008,6 @@ void do_cmd_pane_settings(void)
                     "largest scale that fits. Set to 0 for the maximum; -1 "
                     "uses one step below it.",
 #endif
-                [PANE_SETTING_COMPACT_INVENTORY_MENUS] =
-                    "Use shorter category names in Equipped, Inventory, and "
-                    "Supplies. When focus moves to the item list, hide the "
-                    "category pane and use its space for item names.",
-                [PANE_SETTING_DEBUG_CHARACTER_SHEET] =
-                    "Choose Pages for separate character sheet pages of "
-                    "attributes, skills, traits and background, using 50% larger text. "
-                    "Use arrows or Prev/Next to change pages. Bigger font mode "
-                    "selects this sheet automatically. Choose SDL for the standard sheet.",
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile. "
                     "Set to 0 to start at the configured main-map scale. The "
@@ -3890,9 +4055,6 @@ void do_cmd_pane_settings(void)
                     "Use white rather than black separator lines for ordinary "
                     "panes. Configure the overlay-log border in Interface > "
                     "Overlay Log.",
-                [PANE_SETTING_HIDE_FULLSCREEN_PANES] =
-                    "On full-screen menus (inventory, character sheet, and the "
-                    "like), hide the supporting panes to reduce clutter.",
                 [PANE_SETTING_AUX_VIEW_FONT_SIZE] =
                     "Font size for the supporting panes. Set to 0 (auto) to let "
                     "the game pick a size that fits.",
@@ -3903,15 +4065,12 @@ void do_cmd_pane_settings(void)
                     "panes are configured.",
                 [PANE_SETTING_PANE_FONT_SIZES] =
                     "Set the font size of each pane individually.",
-                [PANE_SETTING_OPEN_CONFIG_FILE] =
-                    "Open the raw sil_sdl.json config file in your system's "
-                    "default editor.",
                 [PANE_SETTING_RESET_ALL] =
                     "Reset the complete interface configuration at once, "
                     "including pane layout, fonts, controls, display, and "
                     "interface options.",
                 [PANE_SETTING_SAVE_RETURN] =
-                    "Return to the Options menu. Changes are saved "
+                    "Return to the parent menu. Changes are saved "
                     "automatically.",
             };
             cptr d = (k >= 0 && k < PANE_SETTING_COUNT)
@@ -3960,14 +4119,6 @@ void do_cmd_pane_settings(void)
                             SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
                                 get_sdl_main_view_scale()));
                         break;
-                    case PANE_SETTING_COMPACT_INVENTORY_MENUS:
-                        set_sdl_compact_inventory_menus(
-                            def.compact_inventory_menus);
-                        break;
-                    case PANE_SETTING_DEBUG_CHARACTER_SHEET:
-                        config.debug_character_sheet =
-                            def.debug_character_sheet;
-                        break;
                     case PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET:
                         set_sdl_mobile_starting_zoom_offset(
                             def.mobile_starting_zoom_offset);
@@ -4006,10 +4157,6 @@ void do_cmd_pane_settings(void)
                         break;
                     case PANE_SETTING_WHITE_PANE_BORDERS:
                         set_sdl_show_pane_borders(def.show_pane_borders);
-                        break;
-                    case PANE_SETTING_HIDE_FULLSCREEN_PANES:
-                        op_ptr->opt[OPT_hide_supporting_panes_fullscreen] =
-                            option_norm[OPT_hide_supporting_panes_fullscreen];
                         break;
                     case PANE_SETTING_AUX_VIEW_FONT_SIZE:
                         set_sdl_aux_view_font_size(0);
@@ -4086,12 +4233,6 @@ void do_cmd_pane_settings(void)
             {
                 settings_semantic_menu_hide();
                 do_cmd_supporting_pane_font_editor(&settings_changed);
-                break;
-            }
-            if (k == PANE_SETTING_OPEN_CONFIG_FILE) /* Open SDL Config File */
-            {
-                settings_semantic_menu_hide();
-                sdl_open_config_file();
                 break;
             }
             if (k == PANE_SETTING_RESET_ALL)
@@ -4193,22 +4334,10 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
-            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
-            {
-                set_sdl_compact_inventory_menus(
-                    !get_sdl_compact_inventory_menus());
-                settings_changed = true;
-            }
             else if (k == PANE_SETTING_BIG_FONT)
             {
                 settings_semantic_menu_hide();
                 do_cmd_big_font_settings(&settings_changed);
-            }
-            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
-            {
-                config.debug_character_sheet =
-                    !config.debug_character_sheet;
-                settings_changed = true;
             }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             {
@@ -4304,13 +4433,6 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 sdl_request_redraw();
             }
-            else if (k == PANE_SETTING_HIDE_FULLSCREEN_PANES)
-            {
-                op_ptr->opt[OPT_hide_supporting_panes_fullscreen]
-                    = !op_ptr->opt[OPT_hide_supporting_panes_fullscreen];
-                settings_changed = true;
-                sdl_refresh_supporting_panes_layout();
-            }
             else if (k == PANE_SETTING_MIN_TERMINAL_SIZE) /* Minimum Terminal Size */
             {
                 set_sdl_min_terminal_mode(get_sdl_min_terminal_mode() == 0 ? 1 : 0);
@@ -4326,11 +4448,6 @@ void do_cmd_pane_settings(void)
             {
                 settings_semantic_menu_hide();
                 do_cmd_supporting_pane_font_editor(&settings_changed);
-            }
-            else if (k == PANE_SETTING_OPEN_CONFIG_FILE) /* Open SDL Config File */
-            {
-                settings_semantic_menu_hide();
-                sdl_open_config_file();
             }
             else if (k == PANE_SETTING_RESET_ALL)
             {
@@ -4387,22 +4504,6 @@ void do_cmd_pane_settings(void)
                     set_sdl_terminal_menu_scale_offset(val + 1);
                     settings_changed = true;
                     sdl_apply_config();
-                }
-            }
-            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
-            {
-                if (!get_sdl_compact_inventory_menus())
-                {
-                    set_sdl_compact_inventory_menus(true);
-                    settings_changed = true;
-                }
-            }
-            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
-            {
-                if (!config.debug_character_sheet)
-                {
-                    config.debug_character_sheet = true;
-                    settings_changed = true;
                 }
             }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
@@ -4483,12 +4584,6 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 sdl_request_redraw();
             }
-            else if (k == PANE_SETTING_HIDE_FULLSCREEN_PANES) /* Hide panes on full-screen screens */
-            {
-                op_ptr->opt[OPT_hide_supporting_panes_fullscreen] = true;
-                settings_changed = true;
-                sdl_refresh_supporting_panes_layout();
-            }
             else if (k == PANE_SETTING_MIN_TERMINAL_SIZE) /* Minimum Terminal Size */
             {
                 if (get_sdl_min_terminal_mode() != 0)
@@ -4546,22 +4641,6 @@ void do_cmd_pane_settings(void)
                     set_sdl_terminal_menu_scale_offset(val - 1);
                     settings_changed = true;
                     sdl_apply_config();
-                }
-            }
-            else if (k == PANE_SETTING_COMPACT_INVENTORY_MENUS)
-            {
-                if (get_sdl_compact_inventory_menus())
-                {
-                    set_sdl_compact_inventory_menus(false);
-                    settings_changed = true;
-                }
-            }
-            else if (k == PANE_SETTING_DEBUG_CHARACTER_SHEET)
-            {
-                if (config.debug_character_sheet)
-                {
-                    config.debug_character_sheet = false;
-                    settings_changed = true;
                 }
             }
             else if (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
@@ -4642,12 +4721,6 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 sdl_request_redraw();
             }
-            else if (k == PANE_SETTING_HIDE_FULLSCREEN_PANES) /* Hide panes on full-screen screens */
-            {
-                op_ptr->opt[OPT_hide_supporting_panes_fullscreen] = false;
-                settings_changed = true;
-                sdl_refresh_supporting_panes_layout();
-            }
             else if (k == PANE_SETTING_MIN_TERMINAL_SIZE) /* Minimum Terminal Size */
             {
                 if (get_sdl_min_terminal_mode() != 1)
@@ -4676,14 +4749,6 @@ void do_cmd_pane_settings(void)
             break;
         }
 
-        case 'o':
-        case 'O':
-        {
-            settings_semantic_menu_hide();
-            sdl_open_config_file();
-            break;
-        }
-
         default:
         {
             bell("Illegal command for general settings!");
@@ -4697,6 +4762,15 @@ void do_cmd_pane_settings(void)
     screen_load();
 }
 
+void do_cmd_pane_settings(void)
+{
+    do_cmd_pane_settings_for_page(false);
+}
+
+static void do_cmd_text_size_settings(void)
+{
+    do_cmd_pane_settings_for_page(true);
+}
 
 static const char* pane_type_name(enum pane_type type)
 {
@@ -9862,265 +9936,128 @@ static void do_cmd_mouse_settings(bool* settings_changed)
 
 void do_cmd_controller_settings(void);
 
-static bool other_options_choice_is_disabled(int choice)
-{
-    return (choice == 3);
-}
+enum {
+    ABOUT_ACTION_NONE = 0,
+    ABOUT_ACTION_NOTE,
+    ABOUT_ACTION_END_CHARACTER,
+    ABOUT_ACTION_PRIVACY,
+    ABOUT_ACTION_RETURN
+};
 
-static int other_options_menu(int* highlight)
+static int about_actions_menu(int* highlight)
 {
-    int ch;
-    int options = 6;
-    int clicked_choice = 0;
+    static const struct {
+        char key;
+        cptr label;
+        cptr description;
+    } rows[] = {
+        { 'n', "Write a Note", "Write a note into your character's journal." },
+        { 's', "End Current Character", "End your current character permanently." },
+        { 'p', "Privacy Policy", "Open the privacy policy in your web browser." },
+        { 'o', "Return to Options", "Return to the Options menu." }
+    };
     bool death_view = death_spectator_active();
+    bool menu_letters = sdl_menu_letters_enabled();
+    int options = (int)N_ELEMENTS(rows);
+    int clicked_choice, click_action = UI_MENU_CLICK_PRIMARY;
+    char line[80];
 
-    if (*highlight < 1)
-        *highlight = 1;
-    else if (*highlight > options)
-        *highlight = options;
-
-    if (death_view && other_options_choice_is_disabled(*highlight))
-        *highlight = options;
-
-    settings_semantic_menu_begin("Other Options", *highlight);
-
-#define ADD_OTHER_OPTIONS_ROW(CHOICE, LABEL, ATTR)                             \
-    do {                                                                       \
-        settings_semantic_add_row((CHOICE), (LABEL), (ATTR));                  \
-    } while (0)
-
-    ADD_OTHER_OPTIONS_ROW(1, "m) Choose Palette",
-        (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE);
-    ADD_OTHER_OPTIONS_ROW(2, "n) Write a note",
-        (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE);
-    ADD_OTHER_OPTIONS_ROW(3, "s) Suicide",
-        death_view ? TERM_L_DARK
-                   : ((*highlight == 3) ? TERM_L_BLUE : TERM_WHITE));
-    ADD_OTHER_OPTIONS_ROW(4, "p) Privacy Policy",
-        (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE);
+    *highlight = MAX(1, MIN(options, *highlight));
+    if (death_view && *highlight == ABOUT_ACTION_END_CHARACTER)
+        *highlight = ABOUT_ACTION_RETURN;
+    settings_semantic_menu_begin("About and Actions", *highlight);
+    for (int i = 0; i < options; i++)
     {
-        char label[80];
-        strnfmt(label, sizeof(label), "g) Generic: %s",
-            op_ptr->opt[OPT_generic] ? "On" : "Off");
-        ADD_OTHER_OPTIONS_ROW(5, label,
-            (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE);
+        int choice = i + 1;
+        byte attr = choice == *highlight ? TERM_L_BLUE : TERM_WHITE;
+        if (death_view && choice == ABOUT_ACTION_END_CHARACTER)
+            attr = TERM_L_DARK;
+        keyed_menu_entry_label(line, sizeof(line), rows[i].key, rows[i].label);
+        settings_semantic_add_row(choice, line, attr);
     }
-    ADD_OTHER_OPTIONS_ROW(6, "o) Return to Options",
-        (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE);
-
-#undef ADD_OTHER_OPTIONS_ROW
-
-    {
-        char verbuf[128];
-        strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
-        static const char* const other_options_row_desc[] = {
-            NULL,
-            "Choose the color palette used throughout the game.",
-            "Write a note into your character's journal.",
-            "End your current character permanently.",
-            "Open the Sil-More privacy policy in your web browser.",
-            "Use the Emberfall setting for names and stories. Applies immediately. Off by default.",
-            "Return to the Options menu.",
-        };
-        cptr d = (*highlight >= 1 && *highlight <= 6)
-            ? other_options_row_desc[*highlight] : NULL;
-
-        sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
-        sdl_character_sheet_screen_commit_select(*highlight);
-    }
-
+    sdl_character_sheet_screen_set_select_description(rows[*highlight - 1].description);
+    sdl_character_sheet_screen_commit_select(*highlight);
     hide_cursor = true;
-    ch = inkey();
+    int key = inkey();
     hide_cursor = false;
 
+    if (ui_menu_click_take_action(&clicked_choice, &click_action))
     {
-        int click_action = UI_MENU_CLICK_PRIMARY;
+        if (clicked_choice == -1 || clicked_choice == SETTINGS_CLICK_RETURN)
+            clicked_choice = ABOUT_ACTION_RETURN;
+        else if (clicked_choice == -2)
+            clicked_choice = *highlight;
+        if (clicked_choice < 1 || clicked_choice > options)
+            return ABOUT_ACTION_NONE;
+        if (death_view && clicked_choice == ABOUT_ACTION_END_CHARACTER)
+            return ABOUT_ACTION_NONE;
+        *highlight = clicked_choice;
+        return click_action == UI_MENU_CLICK_HOVER ? ABOUT_ACTION_NONE : *highlight;
+    }
 
-        if (ui_menu_click_take_action(&clicked_choice, &click_action))
-        {
-            if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
-                return (0);
-            if (clicked_choice == -1)
-                clicked_choice = 6;
-            else if (clicked_choice == -2)
-                clicked_choice = *highlight;
-            if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = 6;
-            if (clicked_choice < 1 || clicked_choice > options)
-                return (0);
-            *highlight = clicked_choice;
-            if (click_action == UI_MENU_CLICK_HOVER)
-                return (0);
-            if (death_view && other_options_choice_is_disabled(*highlight))
+    key = settings_menu_key(key, '8', '2', false);
+    if (key == ESCAPE || (menu_letters && (key == 'q' || key == 'Q')))
+        return ABOUT_ACTION_RETURN;
+    if (menu_letters)
+        for (int i = 0; i < options; i++)
+            if (tolower((unsigned char)key) == rows[i].key)
             {
-                msg_print("You can no longer take that action.");
-                return (0);
+                if (death_view && i + 1 == ABOUT_ACTION_END_CHARACTER)
+                    return ABOUT_ACTION_NONE;
+                *highlight = i + 1;
+                return *highlight;
             }
-            return (*highlight);
-        }
-    }
-
-    ch = settings_menu_key(ch, '8', '2', false);
-
-    if ((ch == 'm') || (ch == 'M'))
+    if (key == '\r' || key == '\n' || key == ' ' || key == '6')
+        return *highlight;
+    if (key == '8' || key == '2')
     {
-        *highlight = 1;
-        return (1);
+        int delta = key == '8' ? options - 1 : 1;
+        do {
+            *highlight = (*highlight - 1 + delta) % options + 1;
+        } while (death_view && *highlight == ABOUT_ACTION_END_CHARACTER);
     }
-
-    if ((ch == 'n') || (ch == 'N'))
-    {
-        *highlight = 2;
-        return (2);
-    }
-
-    if ((ch == 's') || (ch == 'S'))
-    {
-        if (death_view)
-        {
-            msg_print("You can no longer take that action.");
-            return (0);
-        }
-
-        *highlight = 3;
-        return (3);
-    }
-
-    if ((ch == 'p') || (ch == 'P'))
-    {
-        *highlight = 4;
-        return (4);
-    }
-
-    if ((ch == 'g') || (ch == 'G'))
-    {
-        *highlight = 5;
-        return (5);
-    }
-
-    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
-        || (ch == ESCAPE))
-    {
-        *highlight = 6;
-        return (6);
-    }
-
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        if (death_view && other_options_choice_is_disabled(*highlight))
-        {
-            msg_print("You can no longer take that action.");
-            return (0);
-        }
-
-        return (*highlight);
-    }
-
-    if (ch == '8')
-    {
-        *highlight = (*highlight + (options - 2)) % options + 1;
-        while (death_view && other_options_choice_is_disabled(*highlight))
-            *highlight = (*highlight + (options - 2)) % options + 1;
-    }
-
-    if (ch == '2')
-    {
-        *highlight = *highlight % options + 1;
-        while (death_view && other_options_choice_is_disabled(*highlight))
-            *highlight = *highlight % options + 1;
-    }
-
-    return (0);
+    return ABOUT_ACTION_NONE;
 }
 
-static void do_cmd_other_options(void)
+static void do_cmd_about_actions(void)
 {
-    int choice = 0;
     int highlight = 1;
-    bool return_to_options = false;
-    Term_clear();
+    bool done = false;
 
-    while (!return_to_options)
+    while (!done)
     {
-        choice = other_options_menu(&highlight);
+        int choice = about_actions_menu(&highlight);
         settings_semantic_menu_hide();
-
         switch (choice)
         {
-        case 1:
-        {
-            settings_semantic_menu_hide();
-            do_cmd_colors();
-            Term_clear();
-            break;
-        }
-        case 2:
-        {
-            settings_semantic_menu_hide();
+        case ABOUT_ACTION_NOTE:
             do_cmd_note("", p_ptr->depth);
-            Term_clear();
             break;
-        }
-        case 3:
-        {
-            settings_semantic_menu_hide();
+        case ABOUT_ACTION_END_CHARACTER:
             do_cmd_suicide();
-            return_to_options = true;
-            Term_clear();
+            done = true;
             break;
-        }
-        case 4:
-        {
+        case ABOUT_ACTION_PRIVACY:
             if (!SDL_OpenURL(SIL_MORE_PRIVACY_POLICY_URL))
-            {
-                msg_format("Could not open the privacy policy (%s)",
-                    SDL_GetError());
-            }
-            Term_clear();
+                msg_format("Could not open the privacy policy (%s)", SDL_GetError());
             break;
-        }
-        case 5:
-        {
-            if (!lore_set_generic(!op_ptr->opt[OPT_generic]))
-            {
-                msg_print("Could not load generic lore. Update lib/pref/generic_lore.json with the game.");
-                break;
-            }
-            if (!save_pane_config_to_json())
-                msg_print("Generic lore changed, but the setting could not be saved.");
-            p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
-            p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0
-                | PW_MONSTER | PW_OBJECT | PW_MESSAGE;
-            sdl_lore_changed();
-            Term_clear();
+        case ABOUT_ACTION_RETURN:
+            done = true;
             break;
-        }
-        case 6:
-        {
-            settings_semantic_menu_hide();
-            return_to_options = true;
-            Term_clear();
-            break;
-        }
         }
     }
 }
+
 
 int options_menu(int* highlight)
 {
-    tutorial_game_menu("settings", "Input, presentation and gameplay options are separate. Gameplay tutorial mode and Tale lesson history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
+    tutorial_game_menu("settings", "Input, presentation and gameplay options are separate. Gameplay tutorial mode and Tale tutorial history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
     int ch;
-    int options = 9;
+    int options = 10;
     int clicked_choice = 0;
     char line_buf[80];
     bool steamdeck = steamdeck_controls_active();
     bool menu_letters = sdl_menu_letters_enabled();
-    bool allow_debug_menu = false;
-#ifdef SHOW_DEBUG_OPTIONS_MENU
-    allow_debug_menu = true;
-#endif
-    if (allow_debug_menu && p_ptr->noscore)
-        options++;
 
     if (*highlight < 1)
         *highlight = 1;
@@ -10137,17 +10074,15 @@ int options_menu(int* highlight)
     } while (0)
 
     ADD_OPTIONS_MENU_ROW(1, 'a', "Input Options");
-    ADD_OPTIONS_MENU_ROW(2, 'b', "General Settings");
+    ADD_OPTIONS_MENU_ROW(2, 'b', "Display and Layout");
     ADD_OPTIONS_MENU_ROW(3, 'c', "Interface Options");
     ADD_OPTIONS_MENU_ROW(4, 'd', "Visual Options");
     ADD_OPTIONS_MENU_ROW(5, 'e', "Text Options");
     ADD_OPTIONS_MENU_ROW(6, 'f', "Gameplay Options");
     ADD_OPTIONS_MENU_ROW(7, 'g', "Sound Options");
-    ADD_OPTIONS_MENU_ROW(8, 'i', "Other Options");
-    ADD_OPTIONS_MENU_ROW(9, 'o', "Return to Game");
-
-    if (allow_debug_menu && p_ptr->noscore)
-        ADD_OPTIONS_MENU_ROW(10, 'p', "Debugging Options");
+    ADD_OPTIONS_MENU_ROW(8, 'i', "About and Actions");
+    ADD_OPTIONS_MENU_ROW(9, 'p', "Developer Settings");
+    ADD_OPTIONS_MENU_ROW(10, 'o', "Return to Game");
 
 #undef ADD_OPTIONS_MENU_ROW
 
@@ -10158,16 +10093,15 @@ int options_menu(int* highlight)
         static const char* const options_row_desc[] = {
             NULL,
             "Keyboard, controller, and mouse input settings and tutorials.",
-            "Window layout: panes, terminal scale, fullscreen, tiles, and "
-            "fonts.",
+            "Window and map layout, zoom, fullscreen, tiles, and supporting panes.",
             "How information is presented and how menus and the HUD behave.",
             "Map and tile appearance, highlighting, and related visuals.",
-            "Fonts and text rendering options.",
+            "Text size, fonts, names and lore, and narrative presentation.",
             "Rules and quality-of-life options that affect play.",
-            "Sound effects and volume.",
-            "Palette, notes, and other miscellaneous actions.",
+            "Sound effects, music, and volume.",
+            "Privacy policy, journal notes, and ending the current character.",
+            "Generation, item and dungeon diagnostics, and raw configuration access.",
             "Close the menu and return to play.",
-            "Developer and debugging toggles.",
         };
         cptr d = (*highlight >= 1
             && *highlight < (int)N_ELEMENTS(options_row_desc))
@@ -10190,7 +10124,7 @@ int options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 9;
+                clicked_choice = 10;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
@@ -10257,15 +10191,14 @@ int options_menu(int* highlight)
     if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
         || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
     {
-        *highlight = 9;
-        return (9);
-    }
-
-    if (menu_letters && allow_debug_menu && p_ptr->noscore
-        && ((ch == 'p') || (ch == 'P')))
-    {
         *highlight = 10;
         return (10);
+    }
+
+    if (menu_letters && ((ch == 'p') || (ch == 'P')))
+    {
+        *highlight = 9;
+        return (9);
     }
 
     /* Choose current  */
@@ -10483,7 +10416,7 @@ static int input_option_rows_collect(struct input_option_row* rows,
             "startup choice. At launch, a missing controller switches to Keyboard.");
 #endif
     }
-    if (SDL_HasKeyboard()) {
+    if (SDL_HasKeyboard() || sdl_control_enabled()) {
         ADD_INPUT_OPTION(INPUT_OPTION_KEYBOARD, 'b', "Keyboard Input",
             "Keyboard movement presets, the Angband keyset, and key "
             "rebinding.");
@@ -10497,7 +10430,7 @@ static int input_option_rows_collect(struct input_option_row* rows,
         ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', "Touch Tutorial",
             "Replay the touch-controls tutorial.");
     }
-    if (SDL_HasMouse()) {
+    if (SDL_HasMouse() || sdl_control_enabled()) {
         ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'e', "Mouse Input",
             "Mouse behavior, including click-to-move and pointer options.");
     }
@@ -10689,21 +10622,10 @@ static void do_cmd_input_options_submenu(int* highlight)
     }
 }
 
-static bool options_debug_page_available(void)
-{
-#ifdef SHOW_DEBUG_OPTIONS_MENU
-    return p_ptr && p_ptr->noscore;
-#else
-    return false;
-#endif
-}
-
 static int options_menu_page_choice_turn(int choice, int direction)
 {
-    int page_choices[] = { 3, 4, 5, 6, 7, 10 };
-    int count = options_debug_page_available()
-        ? (int)N_ELEMENTS(page_choices)
-        : (int)N_ELEMENTS(page_choices) - 1;
+    int page_choices[] = { 3, 4, 5, 6, 7, 9 };
+    int count = (int)N_ELEMENTS(page_choices);
 
     for (int i = 0; i < count; i++)
     {
@@ -10836,7 +10758,7 @@ void do_cmd_options(void)
         }
         case 8:
         {
-            do_cmd_other_options();
+            do_cmd_about_actions();
             if (p_ptr && (p_ptr->leaving || !p_ptr->playing))
                 return_to_game = true;
             Term_clear();
@@ -10844,17 +10766,15 @@ void do_cmd_options(void)
         }
         case 9:
         {
-            /* Return to Game */
-            settings_semantic_menu_hide();
-            return_to_game = true;
+            do_cmd_options_aux(DEVELOPER_PAGE, "Developer Settings");
+            options_queue_page_turn(choice, &queued_choice);
             Term_clear();
             break;
         }
         case 10:
         {
-            /* Debugging Options (only reachable when p_ptr->noscore) */
-            do_cmd_options_aux(DEBUG_PAGE, "Debugging Options");
-            options_queue_page_turn(choice, &queued_choice);
+            settings_semantic_menu_hide();
+            return_to_game = true;
             Term_clear();
             break;
         }

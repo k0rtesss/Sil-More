@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -5558,6 +5559,7 @@ static bool prise_silmaril(void)
 
             // add a note to the notes file
             do_cmd_note("Cut a Silmaril from Morgoth's crown", p_ptr->depth);
+            sil_achievements_on_silmaril();
         }
     }
 

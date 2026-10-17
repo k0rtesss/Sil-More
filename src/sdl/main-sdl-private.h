@@ -19,6 +19,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#include "sdl/control/sdl-control.h"
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -126,6 +127,14 @@ typedef enum sdl_startup_device_class {
     SDL_STARTUP_DEVICE_ANDROID_HANDHELD,
     SDL_STARTUP_DEVICE_MOBILE_TOUCH,
 } sdl_startup_device_class;
+
+typedef enum sdl_desktop_handheld_kind {
+    SDL_DESKTOP_HANDHELD_NONE = 0,
+    SDL_DESKTOP_HANDHELD_STEAM_DECK,
+    SDL_DESKTOP_HANDHELD_OTHER,
+} sdl_desktop_handheld_kind;
+
+sdl_desktop_handheld_kind sdl_detect_desktop_handheld(void);
 
 
 enum { SDL_MAIN_VIEW_ZOOM_MIN_MAP_SQUARES = 10 };
@@ -471,7 +480,7 @@ typedef enum sdl_character_sheet_context {
  * across N parchment pages, reusing the select_page/page-curl machinery. */
 #define SDL_BOOK_MAX_PARAS 64   /* most paragraphs/actions a single book may hold */
 #define SDL_BOOK_PARA_LEN  1024 /* longest single paragraph (re-flowed text) */
-#define SDL_BOOK_MAX_PAGES 24   /* most pages a single book may paginate into */
+#define SDL_BOOK_MAX_PAGES 64   /* allow a full page for every semantic paragraph */
 #define SDL_BOOK_MAX_CONTENTS 8 /* persistent contents links beside the leaf */
 
 typedef struct sdl_character_sheet_live_item {

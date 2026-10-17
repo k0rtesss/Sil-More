@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -114,6 +115,7 @@ void calc_hitpoints(void)
 
         /* Save new limit */
         p_ptr->mhp = mhp;
+        sil_achievements_on_healing();
 
         /* Hack - any change in max hitpoint resets frac */
         p_ptr->chp_frac = 0;

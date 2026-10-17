@@ -1089,10 +1089,9 @@ void redraw_stuff(void)
             prt_hp();
 
         /*
-         * hack:  redraw player, since the player's color
-         * now indicates approximate health.
+         * Redraw the player's health color or graphical tile health bar.
          */
-        if (arg_graphics == GRAPHICS_NONE)
+        if (arg_graphics == GRAPHICS_NONE || styled_player_tile_health_bar)
         {
             lite_spot(p_ptr->py, p_ptr->px);
         }

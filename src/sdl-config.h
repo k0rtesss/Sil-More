@@ -456,6 +456,7 @@ void sdl_pane_profile_apply_bigger_font_defaults(
 
 // Set default configuration values
 void sdl_config_set_defaults(struct sdl_config* config);
+void sdl_config_apply_handheld_defaults(struct sdl_config* config);
 void sdl_config_apply_keyboard_keymaps(const struct sdl_config* config);
 
 // Keyboard movement bindings persisted in sil_sdl.json.

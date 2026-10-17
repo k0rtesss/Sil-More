@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-world.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
 #include "dungeon-internal.h"
@@ -62,6 +63,7 @@ void regenhp(int regen_multiplier)
     if (p_ptr->chp >= p_ptr->mhp)
     {
         p_ptr->chp = p_ptr->mhp;
+        sil_achievements_on_healing();
     }
 
     /* Notice changes */

@@ -33,6 +33,7 @@ static void setup(int mode, int pads)
 {
     sdl_config_set_defaults(&config);
     config.input_ui_mode = mode;
+    g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP;
     g_gamepad_state.pad_count = pads;
     g_gamepad_auto_ui = pads > 0;
     prompts = 0;
@@ -83,6 +84,26 @@ static void decisions(void)
     set_sdl_input_ui_mode(keyboard);
     assert(config.desktop_input_choice == SDL_INPUT_UI_MODE_AUTO);
     answer_controller = answer_remember = false; expect_mode(keyboard, 2);
+    /* Handheld identity survives keyboard overrides and temporarily absent
+     * built-in controls, without opening the desktop controller prompt. */
+    for (int pads = 0; pads <= 1; pads++) {
+        setup(SDL_INPUT_UI_MODE_AUTO, pads);
+        g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
+        config.mouse_enabled = false;
+        sdl_check_desktop_startup_input();
+        assert(prompts == 0 && config.input_ui_mode == SDL_INPUT_UI_MODE_AUTO);
+        assert(!config.mouse_enabled);
+        assert(g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD);
+        config.input_ui_mode = keyboard;
+        config.gamepad_enabled = false;
+        sdl_check_desktop_startup_input();
+        assert(prompts == 0 && config.input_ui_mode == keyboard);
+        assert(!config.gamepad_enabled);
+        config.input_ui_mode = SDL_INPUT_UI_MODE_AUTO;
+        config.desktop_input_choice = keyboard;
+        sdl_check_desktop_startup_input();
+        assert(prompts == 0 && config.input_ui_mode == keyboard);
+    }
     puts("Startup cases, repeated launches, remembered choices and JSON roundtrip: PASS");
 }
 static void key(SDL_Keycode keycode)

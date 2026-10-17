@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "metarun-internal.h"
 #include "metarun/metarun-files.h"
 
@@ -810,6 +811,7 @@ void check_run_end(void)
 
     /* Loss takes precedence over victory */
     if (alive < required_survivors) {
+        sil_achievements_on_tale_discarded(metar.id);
         log_info("Metarun DEFEAT: alive=%d required=%d (remaining silmarils=%d)",
                  alive, required_survivors, remaining_silmarils);
 
@@ -822,6 +824,7 @@ void check_run_end(void)
     }
 
     if (metar.silmarils >= win_goal) {
+        sil_achievements_on_tale_completed();
         log_info("Metarun VICTORY: %d Silmarils collected (goal: %d)", metar.silmarils, win_goal);
         show_run_result_screen(true, alive, required_survivors, win_goal,
             "[Press any key to begin anew]");

@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-utility.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -595,6 +596,8 @@ bool hp_player(int x, bool percent, bool message)
             p_ptr->chp = p_ptr->mhp;
             p_ptr->chp_frac = 0;
         }
+
+        sil_achievements_on_healing();
 
         /* Redraw */
         p_ptr->redraw |= (PR_HP);

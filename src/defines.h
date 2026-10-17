@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.8.29).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8.31).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 30 /* Saved weapon-ready credit and smithing alloy state. */
+#define VERSION_EXTRA 31 /* Achievement run history and poison attribution. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -3048,7 +3048,7 @@
 #define OPT_intro_style 95
 #define OPT_show_partition_narrative 96
 #define OPT_noble_item_spawn_mode 97
-#define OPT_hide_left_panel 98 /* obsolete 0.9.7: reusable setting slot */
+#define OPT_styled_player_tile_health_bar 98 /* Reuses retired hide_left_panel. */
 // reserved legacy slot: banner_message_stairs
 #define OPT_show_level_generation_debug 100
 #define OPT_unlock_blitz_mode 101
@@ -3296,6 +3296,8 @@
 #define story_object_desc op_ptr->opt[OPT_story_object_desc]
 #define hide_secondary_action_ring op_ptr->opt[OPT_hide_secondary_action_ring]
 #define styled_player_health_bar op_ptr->opt[OPT_styled_player_health_bar]
+#define styled_player_tile_health_bar \
+    op_ptr->opt[OPT_styled_player_tile_health_bar]
 #define styled_monster_health_bars op_ptr->opt[OPT_styled_monster_health_bars]
 #define styled_monster_tile_health_bars \
     (op_ptr->monster_tile_health_bar_mode != MONSTER_TILE_HEALTH_BARS_OFF)
@@ -3415,7 +3417,7 @@
 /*
  * Information for "do_cmd_options()".
  */
-#define OPT_PAGE_MAX 7
+#define OPT_PAGE_MAX 8
 #define OPT_PAGE_PER 24
 
 /*
@@ -3428,6 +3430,7 @@
 #define CHALLENGE_PAGE 4
 #define DEBUG_PAGE 5
 #define SOUND_PAGE 6
+#define DEVELOPER_PAGE 7
 
 /*** Macro Definitions ***/
 

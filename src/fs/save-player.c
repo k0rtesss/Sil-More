@@ -1,6 +1,7 @@
 /* File: fs/save-player.c -- carved from save.c (shares state via fs/save-internal.h) */
 
 #include "angband.h"
+#include "achievements.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -275,6 +276,12 @@ void wr_extra(void)
 
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
+    /* 0.9.8.31: run-wide achievement conditions survive save/resume. */
+    wr_byte(0xAC);
+    wr_u32b(p_ptr->achievement_flags & SIL_ACH_RUN_FLAGS);
+    wr_u32b(p_ptr->achievement_kills);
+    wr_u32b(p_ptr->achievement_singing_turns);
+    wr_s16b(p_ptr->achievement_comeback_depth);
     log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d", 
              p_ptr->oath_type, p_ptr->oaths_broken);
 

@@ -552,6 +552,7 @@ extern void monster_poison_terrain_begin_action(int m_idx);
 extern void monster_poison_terrain_exposure(int m_idx);
 extern void monster_poison_terrain_end_action(int m_idx);
 extern void monster_poison_add(int m_idx, int amount);
+extern void monster_poison_add_from(int m_idx, int amount, int who);
 extern bool monster_poison_tick(int m_idx);
 extern bool monster_thrall_turn(monster_type* m_ptr);
 extern void monster_poison_brand(int m_idx, const object_type* first,
@@ -1010,11 +1011,12 @@ extern void create_smithing_item(void);
 #define MAIN_MENU_OPTIONS 12
 #define MAIN_MENU_HELP 13
 #define MAIN_MENU_TUTORIAL_CARDS 14
-#define MAIN_MENU_ABOUT 15
-#define MAIN_MENU_SAVE 16
-#define MAIN_MENU_SAVE_QUIT 17
-#define MAIN_MENU_RETURN_GAME 18
-#define MAIN_MENU_MAX 18
+#define MAIN_MENU_ACHIEVEMENTS 15
+#define MAIN_MENU_ABOUT 16
+#define MAIN_MENU_SAVE 17
+#define MAIN_MENU_SAVE_QUIT 18
+#define MAIN_MENU_RETURN_GAME 19
+#define MAIN_MENU_MAX 19
 extern cptr main_menu_title(int choice);
 extern int main_menu_keyboard_key(int choice);
 extern void main_menu_shortcut_label(int choice, char* buf, size_t buflen);

@@ -71,7 +71,9 @@ function(sil_target_steamworks target)
   if(api_implib)
     set_target_properties(Steamworks::SteamAPI PROPERTIES IMPORTED_IMPLIB "${api_implib}")
   endif()
-  target_sources(${target} PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/steamworks.cpp")
+  target_sources(${target} PRIVATE
+    "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/steamworks.cpp"
+    "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/achievements-steam.cpp")
   target_compile_features(${target} PRIVATE cxx_std_11)
   target_compile_definitions(${target} PRIVATE SIL_STEAMWORKS SIL_STEAM_APP_ID=${SIL_STEAM_APP_ID})
   target_link_libraries(${target} PRIVATE Steamworks::SteamAPI)

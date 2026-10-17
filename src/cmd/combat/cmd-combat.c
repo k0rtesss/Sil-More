@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
@@ -3326,6 +3327,7 @@ void py_attack_aux(int y, int x, int attack_type)
                         prt_percent = 0;
 
                         /* Generate treasure */
+                        sil_achievements_on_monster_killed(m_idx, -1);
                         monster_death(m_idx);
 
                         /* Auto-recall only if visible or unique */

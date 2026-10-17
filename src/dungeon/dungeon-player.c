@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-events.h"
 #include "monster/monster-ai.h"
@@ -1046,6 +1047,7 @@ void process_player(void)
     /* Do song effects */
     sil_popup_trace_stage("action-upkeep-begin");
     sing();
+    sil_achievements_on_player_turn();
 
     // make less noise if you did nothing at all
     // (+7 in total whether or not stealth mode is used)

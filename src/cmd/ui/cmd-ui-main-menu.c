@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -54,6 +55,7 @@ cptr main_menu_title(int choice)
     case MAIN_MENU_OPTIONS: return "Options";
     case MAIN_MENU_HELP: return "Help";
     case MAIN_MENU_TUTORIAL_CARDS: return "Tutorial cards";
+    case MAIN_MENU_ACHIEVEMENTS: return "Achievements";
     case MAIN_MENU_ABOUT: return "About";
     case MAIN_MENU_SAVE: return "Save";
     case MAIN_MENU_SAVE_QUIT:
@@ -81,6 +83,7 @@ int main_menu_keyboard_key(int choice)
     case MAIN_MENU_OPTIONS: return 'o';
     case MAIN_MENU_HELP: return 'h';
     case MAIN_MENU_TUTORIAL_CARDS: return 'u';
+    case MAIN_MENU_ACHIEVEMENTS: return 'v';
     case MAIN_MENU_ABOUT: return 'b';
     case MAIN_MENU_SAVE: return 's';
     case MAIN_MENU_SAVE_QUIT: return 'q';
@@ -275,6 +278,7 @@ int main_menu_choice_from_key(int key)
     case 'o': return MAIN_MENU_OPTIONS;
     case 'h': return MAIN_MENU_HELP;
     case 'u': return MAIN_MENU_TUTORIAL_CARDS;
+    case 'v': return MAIN_MENU_ACHIEVEMENTS;
     case 'b': return MAIN_MENU_ABOUT;
     case 's':
         if (death_spectator_active())
@@ -1941,6 +1945,11 @@ static bool do_cmd_main_menu_execute_choice_impl(int actiontype,
     case MAIN_MENU_ABOUT: // About (b)
     {
         main_menu_about();
+        return true;
+    }
+    case MAIN_MENU_ACHIEVEMENTS:
+    {
+        sil_achievements_show();
         return true;
     }
     case MAIN_MENU_SAVE: // Save (s)

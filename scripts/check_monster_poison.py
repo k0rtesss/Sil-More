@@ -51,7 +51,7 @@ void object_flags(const object_type *o,u32b *a,u32b *b,u32b *c) {
 static byte bytes[1024];
 static int wp,rp,extra_version;
 static bool current_version;
-static int poison_offset, abilities_offset, ai_offset;
+static int poison_offset, player_poison_offset, abilities_offset, ai_offset;
 static bool savefile_has_song_duels=true,savefile_has_monster_shatter=true;
 static bool savefile_has_thrall_quest=true,savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte n){assert(wp<1024);bytes[wp++]=n;}
@@ -107,7 +107,7 @@ int main(void){
     }
     puts("Brands: positive post-armor damage adds ceil(half), zero blocked hit, bow/ammo either or both apply once: PASS");
     for(int version=2;version<=8;version++)for(int poison=0;poison<=100;poison++){
-        monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.thrall_quest_requested=1;
+        monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.player_poisoned=poison/2;src.thrall_quest_requested=1;
         src.song_will_penalty=7;src.blow_ds_reduction[0]=3;
         src.vengeance=1;src.smite_recovery=2;
         src.ai.observations[MON_AI_FIRE].value=2;
@@ -127,8 +127,14 @@ int main(void){
             int start=ai_offset+29*7, count=(MON_AI_FEATURE_COUNT-29)*7;
             memmove(bytes+start,bytes+start+count,wp-start-count);wp-=count;
         }
+        /* All legacy records predate the v31 player poison attribution. */
+        if(!current_version && version>=4){
+            memmove(bytes+player_poison_offset,bytes+player_poison_offset+2,
+                wp-player_poison_offset-2);wp-=2;
+        }
         wr_byte(0xA5);memset(&dst,0x55,sizeof(dst));rd_monster(&dst);
         assert(dst.poisoned==(version<4?0:poison));assert(dst.r_idx==2&&dst.hp==123&&dst.energy==-50);
+        assert(dst.player_poisoned==(current_version?poison/2:0));
         assert(dst.thrall_quest_requested==1&&dst.song_will_penalty==7&&dst.blow_ds_reduction[0]==3);
         assert(dst.vengeance==(version<5?0:1));
         assert(dst.smite_recovery==(version<5?0:2));
@@ -155,6 +161,7 @@ def main():
     source = PRELUDE + (ROOT / "src/monster/monster-poison.c").read_text()
     writer = function("src/fs/save.c", "wr_monster")
     writer = writer.replace("wr_s16b(m_ptr->poisoned);", "poison_offset=wp;wr_s16b(m_ptr->poisoned);")
+    writer = writer.replace("wr_s16b(m_ptr->player_poisoned);", "player_poison_offset=wp;wr_s16b(m_ptr->player_poisoned);")
     writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=wp;wr_byte(m_ptr->vengeance);")
     writer = writer.replace("for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)",
                             "ai_offset=wp;for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)", 1)

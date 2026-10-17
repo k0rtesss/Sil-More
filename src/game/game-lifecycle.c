@@ -6,6 +6,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "game/game-lifecycle.h"
@@ -30,6 +31,8 @@
 #include <time.h>
 void do_cmd_escape(int silmarils)
 {
+    /* Record before the completed run is marked dead and stopped. */
+    sil_achievements_on_escape(silmarils);
     time_t ct = time((time_t*)0);
     char long_day[40];
     char buf[120];
@@ -134,6 +137,7 @@ void do_cmd_morgoth_victory(void)
 
     /* Ensure the victory flag is set */
     p_ptr->morgoth_slain = true;
+    sil_achievements_on_morgoth_defeated();
 
     /* Flush input ahead of the scripted sequence */
     flush();
@@ -377,6 +381,7 @@ static void close_game_aux(void)
 
     /* Record this run's outcome for the metarun ledger */
     int final_score = score_points(&the_score);
+    sil_achievements_on_run_completed();
     if (!run_mode_is_blitz())
     {
         if (p_ptr->escaped)

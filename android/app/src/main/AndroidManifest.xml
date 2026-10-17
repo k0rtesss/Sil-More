@@ -26,6 +26,17 @@
             </intent-filter>
         </activity>
 
+        <!-- A separate, short-lived process can stop the SDL process before
+             launching it again; recreating SDLActivity keeps native globals. -->
+        <activity
+            android:name="com.silqh.silmore.SilMoreRestartActivity"
+            android:exported="false"
+            android:process=":restart"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
     </application>
 
 </manifest>

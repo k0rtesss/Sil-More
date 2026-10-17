@@ -1,9 +1,12 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "game/progress-reset.h"
 
 void sdl_quit_hook(cptr str)
 {
     (void)str; // Unused parameter
+
+    sdl_control_shutdown();
 
 #if SIL_SDL_MOBILE_BUILD
     sdl_mobile_lifecycle_unregister();
@@ -26,7 +29,8 @@ void sdl_quit_hook(cptr str)
     sdl_mono_font_cache_clear();
     
     // Only save if we have a valid window and config file path
-    if (g_state.window && config_file_path[0] != '\0') {
+    if (!sil_progress_reset_restarting()
+        && g_state.window && config_file_path[0] != '\0') {
         // Get current window position and size if not in fullscreen
         if (!config.fullscreen) {
             SDL_GetWindowPosition(g_state.window, &config.window_x, &config.window_y);
@@ -47,6 +51,17 @@ static void sdl_check_desktop_startup_input(void)
 {
     int mode = config.input_ui_mode;
     bool remember = false;
+
+    /* Built-in controls are expected on a handheld. Keep its hardware class
+     * and saved input settings instead of asking the desktop pad question. */
+    if (g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD) {
+        if (mode == SDL_INPUT_UI_MODE_AUTO
+            && config.desktop_input_choice != SDL_INPUT_UI_MODE_AUTO)
+        {
+            config.input_ui_mode = config.desktop_input_choice;
+        }
+        return;
+    }
 
     /* A remembered controller choice survives a launch without the device. */
     if (g_gamepad_state.pad_count == 0) {
@@ -606,6 +621,7 @@ errr init_sdl(int argc, char **argv)
     log_debug("init_sdl: SDL term opened (tiles_mode=%d higher_pict=%d always_pict=%d)",
             config.tiles, Term->higher_pict, Term->always_pict);
     
+    sdl_control_init(argc, argv);
     return 0;
 }
 

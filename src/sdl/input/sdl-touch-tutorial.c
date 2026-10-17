@@ -2431,7 +2431,7 @@ int sdl_touch_tutorial_wait_action(Uint64 accept_after_ns)
         Uint64 now_ns;
 
         sdl_music_update();
-        if (!SDL_WaitEvent(&ev))
+        if (!sdl_control_wait_modal_event(&ev, accept_after_ns))
             continue;
         now_ns = SDL_GetTicksNS();
 
@@ -2661,7 +2661,7 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
             page = page_count - 1;
 
         sdl_touch_tutorial_draw_page(page, full, page_count, mouse);
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
 
         action = sdl_touch_tutorial_wait_action(accept_after_ns);
@@ -2673,7 +2673,7 @@ void sdl_touch_tutorial_run(bool full, bool mouse)
     tutorial_panel_part = 0;
     tutorial_panel_parts = 1;
     if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
     }
     g_state.need_present = false;
@@ -3362,7 +3362,7 @@ static void birth_coach_run_overlay(int stage)
             sizeof(body));
         birth_coach_draw_step(&screen, mouse, count == 1,
             have_zone ? &zone : NULL, title, body_text);
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
 
         action = sdl_touch_tutorial_wait_action(accept_after_ns);
@@ -3376,7 +3376,7 @@ static void birth_coach_run_overlay(int stage)
 
     /* Restore the underlying screen without the overlay. */
     if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
     }
     g_state.need_present = false;
@@ -3769,7 +3769,7 @@ bool sdl_touch_tutorial_draw_profile_choice_screen(int highlighted,
         (float)screen.x + (float)screen.w * 0.5f, y,
         (float)screen.w * 0.92f, footer_px, text_color);
 
-    SDL_RenderPresent(g_state.renderer);
+    sdl_control_present_modal(g_state.renderer);
     sdl_restore_render_target(d);
     g_state.need_present = false;
     return true;
@@ -3821,7 +3821,7 @@ int sdl_touch_tutorial_choose_profile(void)
         }
 
         sdl_music_update();
-        if (!SDL_WaitEvent(&ev))
+        if (!sdl_control_wait_modal_event(&ev, accept_after_ns))
             continue;
         now_ns = SDL_GetTicksNS();
 
@@ -4272,7 +4272,7 @@ static bool sdl_character_wheel_coach_run(void)
         sdl_touch_tutorial_draw_footer(&screen,
             input == SDL_WHEEL_COACH_INPUT_MOUSE, true);
 
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
         shown = true;
 
@@ -4286,7 +4286,7 @@ static bool sdl_character_wheel_coach_run(void)
 
     sdl_player_action_menu_cancel();
     if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
+        sdl_control_present_modal(g_state.renderer);
         sdl_restore_render_target(d);
     }
     g_state.need_present = false;

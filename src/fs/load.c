@@ -1115,6 +1115,12 @@ void rd_monster(monster_type* m_ptr)
     }
     else
         m_ptr->poisoned = 0;
+    m_ptr->player_poisoned = 0;
+    if (savefile_version_at_least(0, 9, 8, 31))
+    {
+        rd_s16b(&m_ptr->player_poisoned);
+        m_ptr->player_poisoned = MAX(0, MIN(m_ptr->poisoned, m_ptr->player_poisoned));
+    }
     m_ptr->vengeance = 0;
     m_ptr->smite_recovery = 0;
     m_ptr->ability_in_action = false;

@@ -1,0 +1,5 @@
+/* Generated from the shipped lib/pref/sound.json; do not edit. */
+#ifndef SIL_FACTORY_SOUND_DEFAULTS_H
+#define SIL_FACTORY_SOUND_DEFAULTS_H
+static const char sil_factory_sound_json[] = "@SIL_FACTORY_SOUND_JSON_C@";
+#endif

@@ -32,6 +32,7 @@ static int drawn_count;
 static char drawn_hints[1024];
 static char drawn_content[8192];
 static bool drawn_space,drawn_enter;
+static int drawn_continue_px;
 static int fixture_run_count;
 static char fixture_id[160];
 static int fixture_width,fixture_height,fixture_font,fixture_scroll;
@@ -88,6 +89,9 @@ float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Co
         }
         if (centered && !strcmp(text,"Space")) drawn_space=true;
         if (centered && !strcmp(text,"Enter")) drawn_enter=true;
+        if (centered && !strcmp(text,"Continue")) drawn_continue_px=px;
+        if (centered && !strcmp(text,"<A>") && drawn_continue_px)
+            fixture_assert(px>=drawn_continue_px);
         float scale=w>width && width>0?width/w:1;
         fixture_assert(drawn_count<64);
         drawn_text[drawn_count]=(SDL_FRect){centered?x-w*scale/2:x,y,w*scale,h*scale};
@@ -205,6 +209,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
             radius,(SDL_Color){160,210,190,255});
     }
     drawn_count=0; drawn_hints[0]=drawn_content[0]='\0'; drawn_space=drawn_enter=false;
+    drawn_continue_px=0;
     cJSON *render_state=cJSON_GetObjectItemCaseSensitive(entry,"render_state");
     if (cJSON_IsString(render_state)) {
         if (!strcmp(render_state->valuestring,"pane")) {
@@ -494,6 +499,18 @@ def main():
         fixtures.append(dict(fixtures[0], id=f"{fixtures[0]['id']}.mode{mode}", mode=mode))
     fixtures.extend(dict(fixture, id=f"{fixture['id']}.font48", font_size=48)
                      for fixture in fixtures[:selected_count])
+    # Reported image dimensions plus the Deck's 1280x800 output: exercise all
+    # opening pages and the item preview with controller prompts at each size.
+    for size in ([1280, 960], [1280, 800]):
+        for font_size in (16, 28, 48):
+            for step in opening["steps"]:
+                fixture = make_fixture(opening, step, False, 4, False)
+                fixture.update(size=size, font_size=font_size,
+                               capture=step is opening["steps"][0])
+                fixtures.append(fixture)
+            fixture = make_fixture(description, preview_step, True, 4, True)
+            fixture.update(size=size, font_size=font_size, capture=False)
+            fixtures.append(fixture)
     # All introductory pages have Continue and never append lesson-wide text,
     # including stale context already captured by a displayed card.
     for lesson_id in ("opening.move", "combat.first_adjacent"):

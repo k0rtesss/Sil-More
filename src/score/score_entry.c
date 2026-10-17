@@ -6,6 +6,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "game/progress-reset.h"
 #include "score/score_entry.h"
 #include "score/score_file_compat.h"
 #include "score/score_io.h"
@@ -532,7 +533,7 @@ bool mobile_autosave_game(cptr reason)
 {
     static bool in_progress = false;
 
-    if (in_progress)
+    if (in_progress || sil_progress_reset_restarting())
         return false;
 
     if (!character_generated || !p_ptr || p_ptr->is_dead || !p_ptr->playing

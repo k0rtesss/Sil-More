@@ -7,4 +7,9 @@
 # Sil-More also looks up this callback by name from sdl-settings.c.
 -keepclassmembers,allowoptimization class com.silqh.silmore.SilMoreActivity {
     public void requestGameOrientation(boolean);
+    public boolean restartAfterProgressReset();
+    public void syncPlayGamesAchievements(int);
+    public int getPlayGamesAchievementMask();
+    public boolean showPlayGamesAchievements();
+    public boolean isPlayGamesAchievementsAvailable();
 }

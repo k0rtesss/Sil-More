@@ -3643,7 +3643,8 @@ sdl_startup_device_class sdl_detect_startup_device_class(
     (void)has_gamepad;
     (void)screen_width;
     (void)screen_height;
-    return SDL_STARTUP_DEVICE_DESKTOP;
+    return sdl_detect_desktop_handheld() != SDL_DESKTOP_HANDHELD_NONE
+        ? SDL_STARTUP_DEVICE_DESKTOP_HANDHELD : SDL_STARTUP_DEVICE_DESKTOP;
 }
 
 bool sdl_mobile_device_is_tablet(void)

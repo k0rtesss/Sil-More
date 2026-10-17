@@ -217,6 +217,41 @@ static void check_preferences(void)
     set_sdl_gamepad_glyph_style(999);assert(get_sdl_gamepad_glyph_style()==SDL_GAMEPAD_GLYPH_AUTO);
 }
 
+static void check_glyph_legibility(const char* font_path)
+{
+    /* Inspect the ink inside the circle, excluding its outline. Full font
+     * line boxes used to leave only a few pixels for these button letters. */
+    for (int px=16;px<=48;px+=8) {
+        TTF_Font* font=TTF_OpenFont(font_path,px); assert(font);
+        const char* tokens[]={"<A>","<B>","<X>","<Y>"};
+        for (unsigned i=0;i<N_ELEMENTS(tokens);i++) {
+            SDL_Surface* surface=TTF_RenderText_Blended(font,tokens[i],0,
+                (SDL_Color){255,255,255,255}); assert(surface);
+            sdl_controller_glyphs_paint(font,surface,tokens[i],0);
+            /* Keep only the centre of the disc so the outline cannot make a
+             * tiny letter appear taller than its actual ink. */
+            int left=surface->w/2-surface->h*3/10;
+            int right=surface->w/2+surface->h*3/10;
+            int top=surface->h/5, bottom=surface->h*4/5;
+            int first=bottom,last=-1;
+            for(int y=top;y<bottom;y++) for(int x=left;x<right;x++) {
+                float dx=x+0.5f-surface->w*0.5f;
+                float dy=y+0.5f-surface->h*0.5f;
+                if(dx*dx+dy*dy>surface->h*surface->h*0.27f*0.27f) continue;
+                Uint8 r,g,b,a;
+                assert(SDL_ReadSurfacePixel(surface,x,y,&r,&g,&b,&a));
+                if(a>=128) { first=MIN(first,y); last=MAX(last,y); }
+            }
+            if(last-first+1<surface->h*0.36f)
+                fprintf(stderr,"%s @ %d: button letter only %d pixels in a %d pixel row\n",
+                    tokens[i],px,last-first+1,surface->h);
+            assert(last-first+1>=surface->h*0.36f);
+            SDL_DestroySurface(surface);
+        }
+        TTF_CloseFont(font);
+    }
+}
+
 static void check_glyphs(const char* font_path, const char* png_path)
 {
     TTF_Font* font = TTF_OpenFont(font_path, 32); assert(font);
@@ -302,6 +337,7 @@ int main(int argc,char** argv)
     SDL_DestroyWindow(g_state.window);g_state.window=NULL;
     for(int style=1;style<SDL_GAMEPAD_GLYPH_COUNT;style++) {
         set_sdl_gamepad_glyph_style(style);
+        if(style==SDL_GAMEPAD_GLYPH_XBOX) check_glyph_legibility(argv[1]);
         char path[1024];SDL_strlcpy(path,argv[2],sizeof(path));
         char* slash=strrchr(path,'\\');if(!slash)slash=strrchr(path,'/');assert(slash);
         strnfmt(slash+1,sizeof(path)-(slash+1-path),"glyphs-%s.png",sdl_gamepad_glyph_style_label(style));

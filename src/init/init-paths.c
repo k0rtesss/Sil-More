@@ -13,6 +13,7 @@
 #include "sdl-sound.h"
 #include "init2-internal.h"
 #include "init-lifecycle.h"
+#include "game/progress-reset.h"
 #include <SDL3/SDL_filesystem.h>
 #include <limits.h>
 #include <stdio.h>
@@ -839,6 +840,20 @@ static void migrate_legacy_metarun_layout(const char* meta_root, const char* met
 }
 #endif /* SIL_USE_LOCAL_DATA */
 
+static void apply_requested_progress_reset(const char* user_root)
+{
+    if (!sil_progress_reset_startup(ANGBAND_DIR, user_root))
+    {
+        char error[1024];
+        strnfmt(error, sizeof(error), "The progress reset could not finish: %s\n\n"
+            "Close any other running copy of Sil-More and reopen the app to retry. "
+            "No previous progress will be loaded until the reset finishes.", SDL_GetError());
+        log_error("%s", error);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Progress reset incomplete", error, NULL);
+        quit(error);
+    }
+}
+
 /*
  * This file is used to initialize various variables and arrays for the
  * Sil game.  Note the use of "sdl_read()" and "sdl_write()" to bypass
@@ -961,6 +976,9 @@ void init_file_paths(char* path)
     ANGBAND_DIR_PREF = str_dup(path);
 
 #ifdef SIL_USE_LOCAL_DATA
+    if (!path_build(buf, sizeof(buf), ANGBAND_DIR, "user"))
+        quit("Cannot resolve the portable user directory");
+    apply_requested_progress_reset(buf);
     if (path_build(buf, sizeof(buf), ANGBAND_DIR, "user"))
         ANGBAND_DIR_USER = str_dup(buf);
     else
@@ -992,6 +1010,7 @@ void init_file_paths(char* path)
             user_root);
     }
 
+    apply_requested_progress_reset(user_root);
     ensure_directory_exists(user_root, "user root");
     ANGBAND_DIR_USER = str_dup(user_root);
 
@@ -1052,9 +1071,10 @@ void init_file_paths(char* path)
 #endif
     seed_user_data_from_install(ANGBAND_DIR_DATA);
 #if !defined(__ANDROID__) && !defined(SIL_IOS)
-    if (meta_root_ready)
+    if (meta_root_ready && !sil_progress_reset_skip_legacy_import())
         seed_user_meta_from_install(meta_root, ANGBAND_DIR_METARUN);
-    seed_user_saves_from_install(ANGBAND_DIR_SAVE);
+    if (!sil_progress_reset_skip_legacy_import())
+        seed_user_saves_from_install(ANGBAND_DIR_SAVE);
 #endif
     seed_sound_config(user_root);
 #endif /* SIL_USE_LOCAL_DATA */

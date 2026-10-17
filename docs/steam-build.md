@@ -7,8 +7,10 @@ Steam API runtime for the target operating system.
 
 The adapter initializes Steam before renderer creation, pumps callbacks during
 input waits and animation delays, and shuts down at process exit. If Steam
-initialization fails, the game continues without Steam features. Achievements,
-leaderboards and Steam Cloud configuration require separate work.
+initialization fails, the game continues without Steam features. Achievements
+use the shared local profile and synchronize with Steam; see
+[achievement setup](achievements.md) for the catalogue and dashboard configuration.
+Leaderboards and Steam Cloud configuration require separate work.
 
 ## SDK and source checkout
 
@@ -111,6 +113,42 @@ Without it, directly launching a Steam-enabled executable can ask Steam to
 relaunch the installed app. See
 [Valve's API setup documentation](https://partner.steamgames.com/doc/sdk/api).
 
+## PC handheld defaults
+
+Linux and Windows builds identify Steam Deck separately from other recognized
+PC handhelds. Steam-enabled builds use SDK 1.65's
+[`IsRunningOnSteamHardware`](https://partner.steamgames.com/doc/api/ISteamUtils#IsRunningOnSteamHardware)
+for Deck identification, including a Windows build running through Proton.
+The fallback reads public manufacturer/model fields from Linux DMI or Windows
+SMBIOS. Under Wine/Proton it can also read Linux DMI through the usual `Z:` host
+mapping. Detection does not depend on display resolution or an attached gamepad.
+
+The model list covers Deck LCD/OLED, ROG Ally/X/Xbox Ally, Legion Go/Go S/Go 2,
+MSI Claw, listed GPD Win models, listed AYANEO handhelds, ONEXPLAYER-branded
+models and ZOTAC Gaming Zone. Unknown models keep desktop defaults.
+
+On first launch, recognized handhelds use the Android handheld starting
+settings: compact terminal mode, collapsed left panel, no bottom panes,
+open quick-access panel, controller Auto mode and mouse control off. They skip
+the desktop controller-choice prompt. Existing saved profiles and explicit
+input choices are retained. Reset Interface restores the device's defaults.
+Touch-only phone orientation/font prompts remain specific to mobile devices.
+
+Set `SIL_HANDHELD=auto`, `desktop`, `handheld` or `steamdeck` before launching
+to override classification (for an unrecognized model or support testing).
+The default is `auto`. This changes the starting defaults only when there is
+no saved SDL config, or when Reset Interface is requested; it does not replace
+saved settings. The startup log records the detected class, source and model.
+
+Model identifier references:
+[Linux Deck DMI matches](https://github.com/torvalds/linux/blob/master/sound/soc/amd/acp-config.c),
+[ROG Ally](https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/rog_ally/__init__.py),
+[Legion Go](https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/legion_go/__init__.py),
+[GPD Win](https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/gpd/win/__init__.py),
+[AYANEO and Zone](https://github.com/hhd-dev/hhd/blob/master/src/hhd/device/generic/const.py).
+Windows firmware access uses
+[`GetSystemFirmwareTable`](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemfirmwaretable).
+
 ## Validation
 
 These checks use the separately installed SDK. They run on Windows with MSYS2,
@@ -120,6 +158,13 @@ or on a native host with GCC/Clang, CMake and Ninja:
 python scripts/check_steam_platform_config.py
 python scripts/check_steamworks.py
 ```
+
+After a Windows standard build, `python scripts/check_handheld_startup.py`
+checks model matches/exclusions, bounded SMBIOS parsing, Steam detection and
+overrides, first launches and saved-profile reloads using private profiles and
+dummy SDL drivers. `python scripts/check_desktop_startup_input.py` retains the
+desktop prompt checks and exercises handheld input overrides. These fixtures
+do not establish physical handheld or Proton input compatibility.
 
 The platform check verifies SDK binary architectures, target selection and
 error handling, then generates the production Linux/macOS CMake project using

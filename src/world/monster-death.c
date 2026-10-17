@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-social.h"
 #include "externs.h"
@@ -1329,6 +1330,9 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
                 message_format_at(m_ptr->fy, m_ptr->fx, MSG_KILL,
                     m_ptr->r_idx, "%^s has been slain.", m_name);
         }
+
+        /* Record confirmed death before drops or deletion change the victim. */
+        sil_achievements_on_monster_killed(m_idx, who);
 
         /* Generate treasure */
         monster_death(m_idx);

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave.h"
 #include "sdl/main-sdl-private.h"
@@ -14,12 +15,16 @@ errr callback_sdl_xtra(int n, int v)
         SDL_Event ev;
 
         sil_steamworks_run_callbacks();
+        sil_achievements_update();
         sil_popup_trace_stage("event-pump-enter");
         sdl_gameplay_tutorial_sync();
         sdl_present_if_needed(d);
         if (!tutorial_is_active())
             sdl_input_tutorial_maybe_show_deferred();
         sdl_mono_font_prewarm_process_idle();
+
+        if (sdl_control_poll(v != 0))
+            return 0;
 
         if (v) {
             /* The player has ended the session (quit to title / quit program /
@@ -42,6 +47,9 @@ errr callback_sdl_xtra(int n, int v)
             Uint64 now_ns = SDL_GetTicksNS();
             int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
             int steam_timeout_ms = sil_steamworks_callback_timeout_ms();
+            /* Retry durable local writes and receive asynchronous platform
+             * unlocks even while the turn-based game is waiting for input. */
+            if (timeout_ms < 0 || timeout_ms > 1000) timeout_ms = 1000;
             if (steam_timeout_ms >= 0
                 && (timeout_ms < 0 || steam_timeout_ms < timeout_ms))
                 timeout_ms = steam_timeout_ms;
@@ -175,6 +183,7 @@ errr callback_sdl_xtra(int n, int v)
             {
                 timeout_ms = thumb_touch_timeout_ms;
             }
+            timeout_ms = sdl_control_wait_timeout(timeout_ms);
             g_sdl_blocking_key_wait = true;
             {
                 sil_perf_flush();
@@ -351,6 +360,8 @@ errr callback_sdl_xtra(int n, int v)
             sdl_music_update();
             sil_steamworks_run_callbacks();
             
+            (void)sdl_control_poll(false);
+
             /* Process pending events to prevent "Not Responding" status */
             SDL_Event ev;
             while (SDL_PollEvent(&ev)) {
@@ -1380,11 +1391,15 @@ static bool sdl_map_monster_health_bar_visible(int y, int x)
     return true;
 }
 
-static void sdl_draw_map_monster_health_bar(int y, int x,
-    const SDL_FRect* cell)
+static bool sdl_map_player_health_bar_visible(int y, int x)
 {
-    int m_idx;
-    monster_type* m_ptr;
+    return op_ptr && styled_player_tile_health_bar && p_ptr
+        && !p_ptr->is_dead && p_ptr->mhp > 0
+        && sdl_map_grid_is_player(y, x);
+}
+
+static void sdl_draw_map_health_bar(const SDL_FRect* cell, int hp, int maxhp)
+{
     long scaled;
     float scale = sdl_map_monster_overlay_scale();
     float margin;
@@ -1392,14 +1407,10 @@ static void sdl_draw_map_monster_health_bar(int y, int x,
     float width;
     SDL_FRect bar;
 
-    if (!cell || !sdl_map_monster_health_bar_visible(y, x))
+    if (!cell || maxhp <= 0)
         return;
 
-    m_idx = cave_m_idx[y][x];
-    m_ptr = &mon_list[m_idx];
-
-    scaled = ((long)m_ptr->hp * 255L + (long)m_ptr->maxhp - 1L)
-        / (long)m_ptr->maxhp;
+    scaled = ((long)hp * 255L + (long)maxhp - 1L) / (long)maxhp;
     if (scaled < 1L)
         scaled = 1L;
     if (scaled > 255L)
@@ -1426,7 +1437,20 @@ static void sdl_draw_map_monster_health_bar(int y, int x,
         .h = height,
     };
     sdl_render_health_bar_rect(&bar, (byte)scaled,
-        health_attr(m_ptr->hp, m_ptr->maxhp));
+        health_attr(hp, maxhp));
+}
+
+static void sdl_draw_map_tile_health_bar(int y, int x,
+    const SDL_FRect* cell)
+{
+    if (sdl_map_player_health_bar_visible(y, x))
+        sdl_draw_map_health_bar(cell, p_ptr->chp, p_ptr->mhp);
+    else if (sdl_map_monster_health_bar_visible(y, x))
+    {
+        const monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
+
+        sdl_draw_map_health_bar(cell, m_ptr->hp, m_ptr->maxhp);
+    }
 }
 
 static float sdl_status_icon_clampf(float value, float min_value,
@@ -1832,7 +1856,8 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
     if (!dst)
         return;
 
-    health_bar_visible = sdl_map_monster_health_bar_visible(dy, dx);
+    health_bar_visible = sdl_map_monster_health_bar_visible(dy, dx)
+        || sdl_map_player_health_bar_visible(dy, dx);
 
     if (pixel_monster_status_icons)
         sdl_map_monster_status_icons_from_live_state(dy, dx, &sleep, &seen,
@@ -1855,7 +1880,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
 
     if (!tile_mode) {
         sdl_draw_ascii_minimap_cell(a, c, ta, tc, dst);
-        sdl_draw_map_monster_health_bar(dy, dx, dst);
+        sdl_draw_map_tile_health_bar(dy, dx, dst);
         return;
     }
 
@@ -2013,7 +2038,7 @@ static void sdl_draw_map_tile_layers_at_status_scale(int dy, int dx, byte a,
         sdl_draw_rewired_trap_tint(dst);
 
     if (health_bar_visible)
-        sdl_draw_map_monster_health_bar(dy, dx, dst);
+        sdl_draw_map_tile_health_bar(dy, dx, dst);
     sdl_draw_map_monster_status_icons(sleep, seen, alert, alert_fleeing,
         health_bar_visible, dst, status_icon_scale);
     sdl_draw_illusion_debug_dot(dy, dx, dst);
@@ -4318,6 +4343,19 @@ static Uint64 sdl_minimap_monster_health_hash(void)
     hash *= 1099511628211ULL;
     hash ^= (Uint64)(p_ptr && p_ptr->stealth_mode ? 1 : 0);
     hash *= 1099511628211ULL;
+    hash ^= (Uint64)(styled_player_tile_health_bar ? 1 : 0);
+    hash *= 1099511628211ULL;
+    if (styled_player_tile_health_bar && p_ptr)
+    {
+        hash ^= (Uint64)(u16b)p_ptr->chp;
+        hash *= 1099511628211ULL;
+        hash ^= (Uint64)(u16b)p_ptr->mhp;
+        hash *= 1099511628211ULL;
+        hash ^= (Uint64)(p_ptr->is_dead ? 1 : 0);
+        hash *= 1099511628211ULL;
+        hash ^= ((Uint64)(u16b)p_ptr->py << 16) | (Uint64)(u16b)p_ptr->px;
+        hash *= 1099511628211ULL;
+    }
     if (!styled_monster_tile_health_bars && !pixel_monster_status_icons)
         return hash;
 

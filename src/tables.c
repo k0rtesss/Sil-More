@@ -245,7 +245,7 @@ cptr option_text[OPT_MAX] = {
     NULL, /* reserved legacy slot */
     "partition_narrative_mode", /* OPT_show_partition_narrative */
     "noble_item_spawn_mode", /* OPT_noble_item_spawn_mode */
-    NULL, /* obsolete 0.9.7: hide_left_panel */
+    "styled_player_tile_health_bar", /* OPT_styled_player_tile_health_bar */
     NULL, /* reserved legacy slot: banner_message_stairs */
     "show_level_generation_debug", /* OPT_show_level_generation_debug */
     "unlock_blitz_mode", /* OPT_unlock_blitz_mode */
@@ -388,7 +388,7 @@ cptr option_desc[OPT_MAX] = {
     "Move with hjkl etc. (use ^ for underlying keys)", /* OPT_hjkl_movement */
     NULL, /* obsolete 0.9.7: quick_messages */
     "Use a keyset more closely based on Angband", /* OPT_angband_keyset */
-    "Use generic fantasy names and lore", /* OPT_generic */
+    "Use the Emberfall setting for fantasy names and stories; applies immediately", /* OPT_generic */
     "Stop singing when you use the rest command", /* OPT_stop_singing_on_rest */
     NULL, /* reserved legacy slot: always_pickup */
     "Forgo bonus attacks on non-alert enemies", /* OPT_forgo_attacking_unwary */
@@ -471,19 +471,19 @@ cptr option_desc[OPT_MAX] = {
     "Render monster description overlays with the story font", /* OPT_story_monster_desc */
     "Render monster descriptions in the monster pane with the story font", /* OPT_story_monster_desc_pane */
     "Disable tutorial messages in skeleton notes", /* OPT_disable_skeleton_note_tutorial */
-    "Smaller level size (3 blocks smaller, min 6)", /* OPT_smaller_level_size */
+    "Generate smaller dungeon floors; applies to newly generated floors", /* OPT_smaller_level_size */
     "More stairs (50% more; double max)", /* OPT_more_stairs */
     "Show unidentified items in slate color", /* OPT_unidentified_items_slate */
     "Environmental effects speed (Slow, Normal, Fast)", /* OPT_environment_speed */
     "Level entry narrative (banner with animation/banner without animation/message/off)", /* OPT_show_level_entry_banner */
     NULL, /* reserved legacy slot: ability_desc_mode */
-    "Vault drop frequency (0=Normal, 1=Modest, 2=Scarce, 3=Meager, 4=Plentiful)", /* OPT_vault_drop_frequency */
+    "Dungeon loot abundance, including floor objects and vault drops", /* OPT_vault_drop_frequency */
     "Debug: Show {sd,wr} in item descriptions", /* OPT_show_smithing_difficulty */
     "Debug: Show {sd,wr} in look (L) sidebar and message", /* OPT_show_smithing_difficulty_look */
-    "Welcome screen (0-6=fixed, 7=random)", /* OPT_intro_style */
+    "Choose a welcome-screen story or select one at random", /* OPT_intro_style */
     "Partition transition narrative (banner with animation/banner without animation/message/off)", /* OPT_show_partition_narrative */
-    "Noble item spawns (0=good+/chests/human+elf skeletons, 1=also &/! vault drops)", /* OPT_noble_item_spawn_mode */
-    NULL, /* obsolete 0.9.7: hide_left_panel */
+    "Allow noble items in good and great vault loot, as well as chests and human or elf skeletons", /* OPT_noble_item_spawn_mode */
+    "Show a health bar above the player tile", /* OPT_styled_player_tile_health_bar */
     NULL, /* reserved legacy slot: banner_message_stairs */
     "Debug: Show detailed level-generation screen info and pause before play", /* OPT_show_level_generation_debug */
     "Unlock Blitz Mode after winning a tale", /* OPT_unlock_blitz_mode */
@@ -547,7 +547,7 @@ cptr option_desc[OPT_MAX] = {
     "Debug: Peek into object creation", /* OPT_cheat_peek */
     "Debug: Peek into monster creation", /* OPT_cheat_hear */
     "Debug: Peek into dungeon creation", /* OPT_cheat_room */
-    "Debug: Peek into something else", /* OPT_cheat_xtra */
+    "Debug: Show monster allocation and level generation failures", /* OPT_cheat_xtra */
     "Debug: Know complete monster info", /* OPT_cheat_know */
     "Debug: Allow player to avoid death", /* OPT_cheat_live */
     "Debug: Continually display all monsters", /* OPT_cheat_monsters */
@@ -737,7 +737,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* reserved legacy slot */
     true, /* OPT_show_partition_narrative */
     false, /* OPT_noble_item_spawn_mode (default 0 via byte field) */
-    false, /* obsolete 0.9.7: hide_left_panel */
+    false, /* OPT_styled_player_tile_health_bar */
     false, /* reserved legacy slot: banner_message_stairs */
     false, /* OPT_show_level_generation_debug */
     false, /* OPT_unlock_blitz_mode */
@@ -898,26 +898,28 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     { OPT_look_objects_sort_by_difficulty, OPT_look_nearby_filter_default,
         OPT_song_list_sort_by_recent, OPT_styled_player_health_bar,
+        OPT_styled_player_tile_health_bar,
         OPT_styled_monster_health_bars, OPT_styled_monster_tile_health_bars,
         OPT_hide_supporting_panes_fullscreen,
         OPT_hitpoint_warning,
         OPT_supply_menu_random_icons,
         OPT_supply_menu_hide_flavor_compact,
         OPT_hide_secondary_action_ring,
-        OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
-        OPT_show_dungeon_events, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Text options ***/
 
-    { OPT_story_object_desc, OPT_story_monster_desc,
+    { OPT_generic, OPT_show_level_entry_banner, OPT_show_partition_narrative,
+        OPT_narrative_banner_turns, OPT_intro_style,
+        OPT_story_object_desc, OPT_story_monster_desc,
         OPT_story_monster_desc_pane, OPT_story_lists_inven_pane,
         OPT_story_lists_equip_pane,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Game-Play ***/
 
@@ -940,12 +942,10 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_mirror_player_tile_facing, OPT_mirror_monster_tile_facing,
         OPT_torch_animation_always,
         OPT_center_player,
-        OPT_run_avoid_center, OPT_show_level_entry_banner,
-        OPT_show_partition_narrative, OPT_narrative_banner_turns,
-        OPT_intro_style, OPT_solid_walls, OPT_hybrid_walls,
+        OPT_run_avoid_center, OPT_solid_walls, OPT_hybrid_walls,
         OPT_hilite_player, OPT_hilite_target, OPT_hilite_unwary,
-        OPT_show_smithing_difficulty, OPT_show_smithing_difficulty_look,
-        OPT_NONE },
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Birth ***/
 
@@ -970,6 +970,16 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
     { OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
+
+    /*** Developer diagnostics (do not enable cheats) ***/
+
+    { OPT_show_level_generation_debug, OPT_show_elemental_item_rolls,
+        OPT_show_dungeon_events, OPT_show_smithing_difficulty,
+        OPT_show_smithing_difficulty_look,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE }
 };
 

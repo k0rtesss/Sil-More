@@ -1359,6 +1359,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         g_state.need_present = true;
         return;
     }
+    if (sdl_control_handle_event(ev))
+        return;
     sdl_normalize_event_to_render_coords(ev);
     if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
         sdl_gamepad_release_button_modifier(ev->gbutton.button);

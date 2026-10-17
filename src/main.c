@@ -23,6 +23,8 @@
 #include "log/log.h"
 #include "sdl-sound.h"
 #include "steamworks.h"
+#include "achievements.h"
+#include "game/progress-reset.h"
 #include <SDL3/SDL_filesystem.h>
 #ifdef WINDOWS
 #include <direct.h>
@@ -55,6 +57,8 @@ static const struct module modules[] = {
 static void quit_hook(cptr s)
 {
     int j;
+    if (!sil_progress_reset_restarting())
+        sil_achievements_flush();
 
     /* Unused parameter */
     (void)s;
@@ -292,6 +296,8 @@ static void change_path(cptr info)
  */
 int main(int argc, char* argv[])
 {
+    if (!sil_progress_reset_launch_init(&argc, &argv))
+        return 1;
     int i;
 
     bool done = false;
@@ -554,6 +560,7 @@ int main(int argc, char* argv[])
 
     /* Initialize */
     init_angband();
+    sil_achievements_init();
 
     /* Initialize sound system (requires ANGBAND_DIR_XTRA to be set) */
     sdl_init_sounds();
