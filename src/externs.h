@@ -1912,6 +1912,7 @@ extern void sdl_halls_screen_add_action(int choice, cptr label, byte attr,
     bool enabled);
 extern void sdl_halls_screen_hide(void);
 extern bool sdl_halls_screen_active(void);
+extern bool sdl_halls_screen_handle_key(int key);
 extern bool sdl_character_sheet_screen_active(void);
 extern void sdl_character_sheet_screen_hide(void);
 extern void sdl_character_sheet_screen_begin_live(int focus_choice);
@@ -2587,6 +2588,7 @@ extern void set_sdl_bigger_font(bool value);
 extern void set_sdl_compact_inventory_menus(bool value);
 extern bool get_sdl_show_context_square_popups(void);
 extern void set_sdl_show_context_square_popups(bool value);
+extern bool sdl_handheld_ui_active(void);
 extern int get_sdl_mobile_starting_zoom_offset(void);
 extern void set_sdl_mobile_starting_zoom_offset(int value);
 extern bool get_sdl_mobile_portrait_mode(void);
@@ -2648,6 +2650,7 @@ extern void sdl_question_menu_clear_nonblocking(void);
 extern void sdl_question_menu_set_scroll_offset_target(int* offset,
     bool follow_highlight);
 extern bool sdl_question_menu_take_touch_scrolled(void);
+extern bool sdl_question_menu_handle_help_key(int key);
 extern void sdl_question_menu_set_blocking_input(bool blocking);
 extern bool sdl_question_menu_blocks_input(void);
 extern bool sdl_question_menu_queue_navigation(int direction);

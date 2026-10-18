@@ -72,6 +72,45 @@ static bool test_steam_deck(void)
 #undef GetSystemFirmwareTable
 #endif
 
+static void starting_zoom(bool handheld)
+{
+    struct sdl_config saved = config;
+    static const int offsets[] = { 0, 2, 5 };
+    for (int bigger = 0; bigger < 2; bigger++) {
+        config.bigger_font = bigger;
+        config.main_view_scale = sdl_main_view_scale_floor();
+        /* Controller presentation alone must not opt an ordinary PC in. */
+        config.input_ui_mode = SDL_INPUT_UI_MODE_CONTROLLER;
+        g_main_view_zoom_scale = 0;
+        sdl_apply_config_no_redraw();
+        int base = config.main_view_scale;
+        int pane_font = sdl_effective_pane_cell_height_for_type(PANE_LOG);
+        for (size_t i = 0; i < N_ELEMENTS(offsets); i++) {
+            g_main_view_zoom_scale = 0;
+            set_sdl_mobile_starting_zoom_offset(offsets[i]);
+            int target = sdl_main_screen_clamp_main_view_scale(base + offsets[i]);
+            bool changed = handheld && offsets[i] != 0 && target != base;
+            assert(sdl_prepare_first_gameplay_main_view_zoom() == changed);
+            assert(get_sdl_effective_main_view_scale() == (changed ? target : base));
+            assert(config.main_view_scale == base);
+            assert(sdl_effective_pane_cell_height_for_type(PANE_LOG) == pane_font);
+            assert(g_auto_aux_main_cell_h_override == 0);
+            if (changed) assert(!g_state.need_present);
+        }
+        /* A previously zoomed map at the layout limit must remain valid. */
+        int maximum = get_sdl_max_main_view_zoom_scale();
+        set_sdl_main_view_zoom_scale(maximum);
+        set_sdl_mobile_starting_zoom_offset(SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX);
+        assert(!sdl_prepare_first_gameplay_main_view_zoom());
+        assert(get_sdl_effective_main_view_scale() == maximum);
+        assert(config.main_view_scale == base);
+    }
+    config = saved;
+    g_main_view_zoom_scale = 0;
+    sdl_apply_config_no_redraw();
+    puts("Starting zoom: device gate, Normal/Big, offsets 0/2/5, clamp, pane font and saved base PASS");
+}
+
 static void identifiers(void)
 {
     static const struct {
@@ -165,6 +204,7 @@ CHECKS = r'''
         assert(config.input_ui_mode == SDL_INPUT_UI_MODE_PLATFORM);
         assert(!config.gamepad_enabled && config.mouse_enabled);
         assert(!config.touch_top_panel_default_open && config.touch_top_panel_arrows_visible);
+        assert(config.mobile_starting_zoom_offset == 4);
     } else {
         assert(config.enable_bottom_panes == !handheld);
         assert(config.left_panel_expanded_on_launch == !handheld);
@@ -184,6 +224,7 @@ CHECKS = r'''
             }
         }
     }
+    starting_zoom(handheld);
     if (handheld && !strcmp(mode, "fresh")) {
         /* An explicit saved desktop layout/input choice must win on relaunch. */
         set_sdl_min_terminal_mode(SDL_MIN_TERMINAL_NORMAL);
@@ -194,6 +235,7 @@ CHECKS = r'''
         config.input_ui_mode = SDL_INPUT_UI_MODE_PLATFORM;
         config.gamepad_enabled = false;
         config.mouse_enabled = true;
+        set_sdl_mobile_starting_zoom_offset(4);
     }
     sdl_quit_hook(NULL);
     sdl_gamepad_shutdown();

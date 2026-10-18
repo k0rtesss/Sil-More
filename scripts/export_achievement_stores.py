@@ -84,6 +84,22 @@ def icon_tiles():
 
 ICON_TILES = icon_tiles()
 
+# Google rejects an icon already assigned to another achievement. Preserve the
+# Tolkien references and distinguish repeated base sprites with related game art.
+# Steam and the in-game book retain the shared primary sprite mapping above.
+GOOGLE_ICON_ACCENTS = {
+    "THE_ROAD_GOES_EVER_ON": [(32, 19)],  # Traveller and descending stairs.
+    "A_WILL_OF_YOUR_OWN": [(5, 18)],  # Ring and shield: resisting hostile will.
+    "HURINS_DEFIANCE": [(5, 18)],  # Sword and shield: defiance under attack.
+    "A_ELBERETH_GILTHONIEL": [(2, 27)],  # Horn and shining jewel: the Star-kindler.
+    "A_JOURNEY_IN_THE_DARK": [(32, 25)],  # Lamp and map: finding a way through.
+    "A_MAP_OF_THE_IRON_HELLS": [(32, 26)],  # Map and water: terrain discoveries.
+    "RELEASE_FROM_BONDAGE": [(32, 24)],  # Thrall and song: Freedom.
+    "IRON_CLEAVER": [(12, 16)],  # Blade and the Silmaril it cuts free.
+    "A_DREAM_UPON_THE_DARK_LORD": [(32, 24)],  # Morgoth and Luthien's song.
+    "NEITHER_VOICE_DIMINISHED": [(32, 24)],  # Two full-strength musical voices.
+}
+
 def catalogue():
     source = (ROOT / "src/achievements.c").read_text(encoding="utf-8")
     block = re.search(r"catalogue\[SIL_ACH_COUNT\]\s*=\s*\{(.*?)\n\};", source, re.S)
@@ -142,6 +158,7 @@ def export(output, node, sharp):
         "atlas": "lib/xtra/graf/16x16.png",
         "atlas_sha256": __import__("hashlib").sha256(atlas.read_bytes()).hexdigest(),
         "icons": ICON_TILES,
+        "google_icon_accents": GOOGLE_ICON_ACCENTS,
     }
     (output / "icon-sources.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     render = r'''
@@ -152,10 +169,12 @@ const root = process.argv[2], atlas = process.argv[3];
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'icon-sources.json')));
   for (const [key, info] of Object.entries(manifest.icons)) {
     for (const [folder, size, singleScale] of [['steam',256,12],['google-play',512,24]]) {
-      const scale = info.tiles.length === 1 ? singleScale : Math.floor(singleScale / info.tiles.length);
-      const width = 16 * scale, total = width * info.tiles.length;
+      const tiles = folder === 'google-play'
+        ? [...info.tiles, ...(manifest.google_icon_accents[key] || [])] : info.tiles;
+      const scale = tiles.length === 1 ? singleScale : Math.floor(singleScale / tiles.length);
+      const width = 16 * scale, total = width * tiles.length;
       const layers = [];
-      for (const [i, [row, col]] of info.tiles.entries()) {
+      for (const [i, [row, col]] of tiles.entries()) {
         const tile = await sharp(atlas).extract({left:col*16, top:row*16, width:16, height:16})
           .resize(width,width,{kernel:'nearest'}).png().toBuffer();
         layers.push({input:tile,left:(size-total)/2+i*width,top:(size-width)/2});
@@ -168,6 +187,10 @@ const root = process.argv[2], atlas = process.argv[3];
 })().catch(error => { console.error(error.message); process.exit(1); });
 '''
     subprocess.run([node, "-e", render, sharp, str(output), str(atlas)], check=True)
+    google_hashes = [__import__("hashlib").sha256((play_dir / (row["key"] + ".png")).read_bytes()).hexdigest()
+                     for row in rows]
+    if len(set(google_hashes)) != len(rows):
+        raise ValueError("Every Google achievement must have a distinct icon")
     import base64
     cards = []
     for index, row in enumerate(rows):

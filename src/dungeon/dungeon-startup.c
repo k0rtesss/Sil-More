@@ -616,7 +616,7 @@ PlayResult play_game(void)
     // Sil-y: added to get 'shades' right in extra inventory terms
     screen_set_startup_supporting_panes_hidden(false);
     screen_set_startup_touch_pane_hidden(false);
-#if defined(USE_SDL) && (defined(__ANDROID__) || defined(SIL_IOS))
+#if defined(USE_SDL)
     (void)sdl_prepare_first_gameplay_main_view_zoom();
 #endif
     do_cmd_redraw();

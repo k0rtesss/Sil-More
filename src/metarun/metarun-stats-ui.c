@@ -67,7 +67,8 @@ static void story_book_show_tale_action_error(void)
             "The existing tale remains active; see log.txt for details.");
     }
     Term_putstr(2, 9, -1, TERM_L_DARK,
-        "Press any key to return to the Chronicle of Tales.");
+        steamdeck_controls_active() ? "<B> Return to the Chronicle of Tales."
+            : "Press any key to return to the Chronicle of Tales.");
     metarun_wait_hidden();
     screen_load();
 }
@@ -602,7 +603,7 @@ static void story_book_sdl_build(bool startup_scene,
     bool can_manage = metarun_tale_management_available();
     if (can_manage) {
         sdl_character_sheet_screen_add_book_action_colored(
-            steamdeck_controls_active() ? "Y - Start a new tale"
+            steamdeck_controls_active() ? "<Y> Start a new tale"
                                         : "N - Start a new tale",
             STORY_BOOK_NEW_TALE, TERM_L_BLUE);
     }
@@ -624,7 +625,7 @@ static void story_book_sdl_build(bool startup_scene,
 
         if (can_manage && order[state->selected_run] != current_run) {
             sdl_character_sheet_screen_add_book_action_colored(
-                steamdeck_controls_active() ? "A - Load selected tale"
+                steamdeck_controls_active() ? "<A> Load selected tale"
                                             : "Enter - Load selected tale",
                 STORY_BOOK_LOAD_TALE,
                 TERM_L_BLUE);

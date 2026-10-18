@@ -2,6 +2,13 @@
 #include "sdl/main-sdl-private.h"
 #include <math.h>
 
+cptr sdl_controller_menu_hint(bool selectable, bool scrollable)
+{
+    if (!steamdeck_controls_active()) return "";
+    if (selectable) return "D-pad select   <A> choose   <B> back";
+    return scrollable ? "D-pad scroll   <B> back" : "<B> back";
+}
+
 /* Explicit prompt markers keep ordinary prose and keyboard shortcuts out of
  * controller glyph rendering.  Text measurements still reserve their width. */
 static const struct {

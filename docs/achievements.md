@@ -69,6 +69,11 @@ hidden entries use the same generic description sprite. Steam exports set
 `spoiler` and Google exports use the `Hidden` initial state. Synchronization only
 unlocks earned achievements and never reveals a hidden achievement in advance.
 
+Google locks the initial state of achievements once published. The original
+14 retain their published revealed state on Google; the 40 additions use
+36 hidden and four revealed entries. Local and Steam visibility still follows
+the 44-hidden policy above. Existing Google identities and unlocks are preserved.
+
 The ten visible entries are To Dungeons Deep, The Quest of the Silmaril,
 A Very Polite Burglary, When the Road Darkens, While Hammers Fell, The Lay of
 Leithian, The Road Goes Ever On, Something Tookish, Flies and Spiders, and
@@ -81,6 +86,20 @@ for the book and exported artwork; composite store icons use the first mapped
 sprite in the book. Entries use one paragraph each so the whole catalogue fits
 the book's 64-paragraph capacity. Wrapping, pagination and scrolling retain the
 chosen font size on narrow screens.
+
+Icon choices consider the Tolkien title as well as the unlock condition.
+Carcharoth, Shelob and the Shadow Cloak are deliberate references. Water and
+ice use unchanged gameplay sprites copied into previously empty atlas cells
+32:26 and 32:27 by `scripts/sync_achievement_terrain_icons.cjs`; the script
+preserves every other atlas pixel. Door and hand-and-a-half weapon icons use
+the corresponding door and Bastard Sword artwork rather than misleading
+ring or dagger graphics.
+
+Google requires distinct achievement images. Repeated primary sprites receive
+related secondary sprites in the Google export: for example, Morgoth with a
+song symbol for Luthien's deed and a blade with a Silmaril for Iron-Cleaver.
+The exporter verifies that all 54 Google images are distinct; every sprite
+still comes directly from the game's atlas with nearest-neighbor scaling.
 
 Ordinary scored adventures qualify, including the contextual gameplay
 tutorial. Wizard/debug runs, active cheats, recorded cheating, and the separate
@@ -260,8 +279,8 @@ $env:SIL_MORE_PLAY_ACH_DOOM_CAN_WAIT = '<Console achievement ID>'
 
 The IDs are build configuration, not secrets. No OAuth secret or service
 account key belongs in the app. Malformed IDs, duplicate nonempty IDs, or achievement IDs without a project
-ID fail Gradle configuration. The checked-in configuration preserves the 14
-existing assigned IDs and leaves 40 IDs blank pending Console creation.
+ID fail Gradle configuration. The checked-in configuration contains all 54
+actual Console-assigned IDs, preserving the original 14 provider identities.
 Existing mapped achievements continue synchronizing. Unmapped achievements
 remain durable in local progress and are uploaded after their real IDs are
 configured in a later build. They never send an empty ID to Google. An entirely
@@ -289,10 +308,11 @@ catalogue and verify **54** records before publishing. Successful file import
 only prepares pending changes. Publish the Steamworks configuration with images
 included. Google edits must keep the existing achievement IDs. The full
 `google-play-achievements.zip` is for a new project. For the existing project,
-import only `google-play-new-achievements.zip` (40 pending entries), then update the
-existing 14 names/hidden states in place. Reimporting all 54 as new achievements
-would duplicate the existing entries and lose their provider identity. Copy the
-40 newly assigned IDs into the blank properties after creation.
+import only `google-play-new-achievements.zip` when its 40 entries do not yet
+exist, then update the existing names and icons in place. Published initial
+states cannot be changed. Reimporting existing entries would create duplicates
+and lose their provider identity. All 40 additions have now been created and
+their actual assigned IDs are recorded in `android/play-games.properties`.
 
 Google Play cloud backups are a separate explicit main-menu action; see
 [cloud saves](cloud-saves.md).

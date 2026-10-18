@@ -56,6 +56,7 @@ static void capture(cptr name)
 }
 
 static bool capture_actual_general;
+static int actual_text_frames;
 static int actual_general_frames;
 static int actual_big_font_frames;
 static SDL_FRect visible_button_scroll;
@@ -67,8 +68,26 @@ bool __wrap_sdl_character_sheet_screen_commit_select(int choice)
 {
     bool result=__real_sdl_character_sheet_screen_commit_select(choice);
     if(capture_actual_general && result
-        && !strcmp(g_sdl_character_sheet_screen.select_title,"General Settings")) {
-        fixture_assert(g_sdl_character_sheet_screen.select_row_count>8);
+        && !strcmp(g_sdl_character_sheet_screen.select_title,"Text Options")) {
+        int step=actual_text_frames++;
+        fixture_assert(step<2);
+        fixture_assert(sdl_render_current_window_frame()); capture("actual-text-options");
+        if(!step) {
+            bool found=false,wake=false;
+            for(int i=0;i<g_sdl_character_sheet_screen.select_row_count;i++) {
+                const sdl_character_sheet_select_row *row=&g_sdl_character_sheet_screen.select_rows[i];
+                if(!strstr(row->label,"Text Size and Fonts")) continue;
+                fixture_assert(ui_menu_click_handle_choice_action(row->choice,UI_MENU_CLICK_PRIMARY,&wake));
+                found=true; break;
+            }
+            fixture_assert(found);
+            fixture_assert(Term_keypress(UI_MENU_CLICK_WAKE_KEY)==0);
+        } else fixture_assert(Term_keypress(ESCAPE)==0);
+        return result;
+    }
+    if(capture_actual_general && result
+        && !strcmp(g_sdl_character_sheet_screen.select_title,"Text Size and Fonts")) {
+        fixture_assert(g_sdl_character_sheet_screen.select_row_count>=3);
         fixture_assert(strstr(g_sdl_character_sheet_screen.select_rows[0].label,"Big Font"));
         fixture_assert(g_sdl_character_sheet_screen.select_rows[0].reset_choice<0);
         for(int i=1;i<g_sdl_character_sheet_screen.select_row_count;i++)
@@ -204,9 +223,11 @@ static void check_actual_general(void)
     struct sdl_pane_profile saved_profiles[SDL_PANE_PROFILE_COUNT];
     memcpy(saved_profiles,g_pane_profiles,sizeof(saved_profiles));
     capture_actual_general=true;
-    do_cmd_pane_settings();
+    actual_text_frames=0;
+    do_cmd_options_aux(TEXT_PAGE,"Text Options");
     capture_actual_general=false;
     fixture_assert(actual_general_frames==before+2);
+    fixture_assert(actual_text_frames==2);
     fixture_assert(actual_big_font_frames==14);
     fixture_assert(!sdl_character_sheet_screen_active());
     fixture_assert(config.bigger_font);
@@ -324,10 +345,30 @@ static int check_settings(int rows, cptr title)
         sdl_character_sheet_screen_add_select_row(i+1,labels[i%8],TERM_WHITE,"");
         if(i<rows-1) sdl_character_sheet_screen_set_last_select_row_reset(1001+i);
     }
+    sdl_character_sheet_screen_set_select_description(
+        "Adjust this setting to change how the game is displayed.");
     fixture_assert(sdl_character_sheet_screen_commit_select(1));
     fixture_assert(sdl_render_current_window_frame());
     int px=g_sdl_character_sheet_screen.last_body_px;
     fixture_assert(px>0);
+    /* A rendered horizontal white rule must separate the explanation from
+     * its choices in both font modes, including scaled phone layouts. */
+    SDL_Surface *pixels=SDL_RenderReadPixels(g_state.renderer,NULL);
+    fixture_assert(pixels!=NULL);
+    SDL_FRect list=g_sdl_character_sheet_screen.select_scroll_rect;
+    bool divider=false;
+    int x0=(int)(list.x+list.w*.2f), x1=(int)(list.x+list.w*.8f);
+    for(int y=(int)list.y+1;y<pixels->h && !divider;y++) {
+        int white=0;
+        for(int x=x0;x<x1;x++) {
+            Uint8 r,g,b,a;
+            fixture_assert(SDL_ReadSurfacePixel(pixels,x,y,&r,&g,&b,&a));
+            if(r==255 && g==255 && b==255 && a==255) white++;
+        }
+        divider=white==x1-x0;
+    }
+    SDL_DestroySurface(pixels);
+    fixture_assert(divider);
     capture(title);
     if(config.bigger_font) {
         TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_MENU);
@@ -622,13 +663,18 @@ static void check_main_menu(void)
 {
     SDL_strlcpy(fixture_id,"main-menu",sizeof(fixture_id));
     character_icky=0; g_main_menu_overlay_active=true;
-    for(int choice=1;choice<=MAIN_MENU_MAX;choice++) {
-        g_main_menu_overlay_highlight=choice;
-        main_menu_pane_layout layout;
-        fixture_assert(sdl_main_menu_overlay_layout(&layout));
-        inside(layout.panel); inside(layout.rows[choice]);
-        fixture_assert(choice>=layout.first_choice);
-        fixture_assert(choice<layout.first_choice+layout.visible_count);
+    for(int big=0;big<2;big++) {
+        fixture_set_all_fonts(big);
+        for(int choice=1;choice<=MAIN_MENU_MAX;choice++) {
+            g_main_menu_overlay_highlight=choice;
+            main_menu_pane_layout layout;
+            fixture_assert(sdl_main_menu_overlay_layout(&layout));
+            inside(layout.panel); inside(layout.rows[choice]);
+            fixture_assert(fabsf(layout.panel.h-fixture_height)<1.0f);
+            fixture_assert(fabsf(layout.panel.y)<1.0f);
+            fixture_assert(choice>=layout.first_choice);
+            fixture_assert(choice<layout.first_choice+layout.visible_count);
+        }
     }
     SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255); SDL_RenderClear(g_state.renderer);
     sdl_main_menu_pane_render(); capture("main-menu-last");
@@ -786,7 +832,9 @@ static void check_bottom_buttons(void)
         float expected=MAX((float)sdl_ui_min_tap_px(),text_h+sdl_ui_density_scale()*8);
         fixture_assert(fabsf(buttons[0].rect.h-expected)<.1f);
         int reserved=sdl_touch_menu_button_reserved_rows();
-        fixture_assert(fixture_height-reserved*view->cell_h<=buttons[0].rect.y);
+        float content_bottom=view->rect.y+view->margin_y
+            +sdl_main_view_visual_rows(view)*view->cell_h;
+        fixture_assert(content_bottom-reserved*view->cell_h<=buttons[0].rect.y);
         SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);
         SDL_RenderClear(g_state.renderer); sdl_touch_exit_button_render();
         capture(toggled?"bottom-buttons-toggled":"bottom-buttons");
@@ -1215,9 +1263,14 @@ static void check(int width,int height)
     fixture_set_all_fonts(true);
     /* Phone big-font menus use semantic reading sizes. Normal menus retain
      * their original fitted fonts, verified against pre-feature sources. */
-    fixture_assert(sdl_main_menu_pane_font_px()==sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
+    /* The menu keeps at least the shared auxiliary logical floor.  On a
+     * fractional-density fixture that floor can be larger than the semantic
+     * role size after physical-pixel conversion. */
+    fixture_assert(sdl_main_menu_pane_font_px()>=sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
+    fixture_assert(sdl_main_menu_pane_font_px()>=SDL_AUX_VIEW_FONT_MIN);
     int large=check_settings(8,"General Settings");
-    fixture_assert(large==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+    fixture_assert(large>=sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+    fixture_assert(large>=SDL_AUX_VIEW_FONT_MIN);
     check_settings(80,"Overflow Settings");
     check_songs(); check_questions(); check_character_allocation(); check_text_pages(); check_main_menu(); check_halls(); check_live_sheet(); check_bottom_buttons(); check_large_tutorial(); check_welcome_cache();
     check_independent_menu_fonts();

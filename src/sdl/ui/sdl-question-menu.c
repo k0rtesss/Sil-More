@@ -38,6 +38,8 @@ typedef struct sdl_question_menu_layout_info {
     SDL_FRect close_rect;
     SDL_FRect suppress_rect;
     SDL_FRect actions_link;
+    SDL_FRect controller_hint;
+    cptr controller_hint_text;
     SDL_FRect scroll_track;
     SDL_FRect scroll_thumb;
     SDL_FRect rows[SDL_QUESTION_MENU_MAX_ENTRIES];
@@ -91,6 +93,8 @@ static sdl_question_menu_touch_state g_question_menu_touch;
 static bool g_question_menu_touch_scrolled = false;
 static int g_question_menu_pending_navigation = 0;
 static int g_question_menu_internal_scroll;
+static bool sdl_question_menu_scroll_offset_by(
+    const sdl_question_menu_layout_info* layout, int delta);
 
 /* Pixel rect of a map cell on the main view, or false when it is off the
  * current panel.  Shared with the yes/no prompt anchoring. */
@@ -681,6 +685,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     int table_column_count = 0;
     bool has_icons = false;
     bool keyboard_clipped = false;
+    float controller_hint_h = 0.0f;
 
     if (!out)
         return false;
@@ -1107,13 +1112,35 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         }
     }
 
+    /* The native panel replaces the caller's terminal footer. Reserve its
+     * own controller legend so choices and actions cannot cover it. */
+    if (!g_question_menu.nonblocking && !g_question_menu.context_hint
+        && !sdl_controller_keyboard_active())
+    {
+        bool selectable = false;
+        for (int i = 0; i < g_question_menu.count; i++)
+            if (g_question_menu.entries[i].choice >= 0)
+                selectable = true;
+        out->controller_hint_text = sdl_controller_menu_hint(
+            selectable && !g_question_menu.help_open,
+            g_question_menu.help_open || g_question_menu.scroll_offset_ptr != NULL);
+        if (steamdeck_controls_active() && g_question_menu.help_mode)
+            out->controller_hint_text = g_question_menu.help_open
+                ? "D-pad scroll   <View> choices   <B> back"
+                : "D-pad select   <A> choose   <View> help   <B> back";
+        if (out->controller_hint_text[0])
+            controller_hint_h = sdl_question_menu_wrapped_text_height(
+                story_font, out->controller_hint_text,
+                panel_w - pad_x * 2.0f) + divider_gap;
+    }
+
     max_panel_h = (float)anchor.h - (float)margin * 2.0f;
     if (max_panel_h < 1.0f)
         max_panel_h = (float)anchor.h;
 
     if (get_sdl_menu_bigger_font() && !g_question_menu.help_mode
         && button_count > 0 && g_question_menu.count > 0
-        && pad_y * 2.0f + header_h + divider_gap + button_section_h
+        && pad_y * 2.0f + header_h + divider_gap + button_section_h + controller_hint_h
             + row_h * (g_question_menu.text_input ? 1.0f : 2.0f)
                 > max_panel_h) {
         /* On short screens, put secondary actions after the choices in the
@@ -1156,7 +1183,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
                 reserved_h += header_h + divider_gap;
             else if (close_button || suppress_button)
                 reserved_h += row_h + divider_gap;
-            reserved_h += button_section_h;
+            reserved_h += button_section_h + controller_hint_h;
 
             if (max_panel_h > reserved_h)
             {
@@ -1195,14 +1222,14 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         panel_h += header_h + divider_gap;
     if (desc_h > 0.0f)
         panel_h += desc_h + divider_gap;
-    panel_h += button_section_h;
+    panel_h += button_section_h + controller_hint_h;
     /* On phones, hidden Help must not leave its reading area below a short
      * choice list. Opening Help measures and scrolls that content. */
     if (g_question_menu.help_mode
         && (g_question_menu.help_open || !sdl_handheld_ui_active()
             || !get_sdl_menu_bigger_font()))
     {
-        float help_panel_h = pad_y * 2.0f + help_content_h;
+        float help_panel_h = pad_y * 2.0f + help_content_h + controller_hint_h;
 
         if (header_row)
             help_panel_h += header_h + divider_gap;
@@ -1260,6 +1287,10 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     }
 
     out->font_px = font_px;
+    if (controller_hint_h > 0)
+        out->controller_hint = (SDL_FRect){ out->panel.x + pad_x,
+            out->panel.y + out->panel.h - pad_y - controller_hint_h + divider_gap,
+            out->panel.w - pad_x * 2.0f, controller_hint_h - divider_gap };
     out->letter_w = letter_w;
     out->letter_gap = letter_gap;
     out->icon_w = icon_w;
@@ -1365,7 +1396,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         int max_scroll_offset;
 
         rows_bottom = out->panel.y + out->panel.h - pad_y
-            - button_section_h;
+            - button_section_h - controller_hint_h;
         rows_h = rows_bottom - rows_top;
         if (rows_h < 1.0f)
             rows_h = 1.0f;
@@ -1508,7 +1539,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     {
         float button_area_w = out->panel.w - pad_x * 2.0f;
         float y = out->panel.y + out->panel.h - pad_y
-            - button_section_h + divider_gap;
+            - button_section_h - controller_hint_h + divider_gap;
         float total_w = button_total_w;
         float x;
 
@@ -2106,7 +2137,15 @@ bool sdl_question_menu_queue_navigation(int direction)
         return false;
     }
 
-    g_question_menu_pending_navigation = direction;
+    if (g_question_menu.help_open)
+    {
+        sdl_question_menu_layout_info layout;
+        if (sdl_question_menu_layout(&layout))
+            sdl_question_menu_scroll_offset_by(&layout,
+                (int)(direction * layout.row_h));
+    }
+    else
+        g_question_menu_pending_navigation = direction;
     Term_keypress(UI_MENU_CLICK_WAKE_KEY);
     return true;
 }
@@ -2180,6 +2219,20 @@ bool sdl_question_menu_toggle_help(void)
     sdl_question_menu_cancel_touch();
     g_state.need_present = true;
     return true;
+}
+
+bool sdl_question_menu_handle_help_key(int key)
+{
+    if (!g_question_menu.active || !g_question_menu.help_mode)
+        return false;
+    if (key == '?' || (steamdeck_controls_active() && key == steamdeck_info_key())
+        || (g_question_menu.help_open
+            && (key == ESCAPE || key == '\r' || key == '\n')))
+    {
+        sdl_question_menu_toggle_help();
+        return true;
+    }
+    return false;
 }
 
 void sdl_question_menu_set_timeout_ms(int ms)
@@ -2558,6 +2611,12 @@ void sdl_question_menu_render(void)
             at_actions ? "Choices" : "Actions", g_state.palette[TERM_WHITE],
             rect.x, rect.y, rect.w, rect.h, true);
     }
+
+    if (layout.controller_hint.h > 0)
+        sdl_question_menu_draw_wrapped_text(story_font,
+            layout.controller_hint_text, g_state.palette[TERM_L_WHITE],
+            layout.controller_hint.x, layout.controller_hint.y,
+            layout.controller_hint.w, layout.controller_hint.h);
 
     sdl_question_menu_render_suppress_button(&layout,
         g_question_menu.suppress_hover);

@@ -376,6 +376,7 @@ static u16b sdl_movement_modifiers_from_sdl(SDL_Keymod mod)
 static bool sdl_prompt_input_is_active(void)
 {
     return g_touch_pane_yes_no_prompt_active
+        || g_log_pane_menu.active || g_side_pane_menu.active
         || sdl_question_menu_captures_pointer()
         || g_song_menu.active
         || inkey_prompt_input_active();
@@ -1063,6 +1064,8 @@ static bool sdl_gamepad_send_ui_direction(int dir)
     if (!key)
         return false;
 
+    if (sdl_pane_menu_handle_key(key))
+        return true;
     Term_keypress(key);
     return true;
 }
@@ -2858,6 +2861,31 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
 
     if (sdl_player_action_menu_handle_gamepad_button(button, down))
         return;
+
+    if (g_log_pane_menu.active || g_side_pane_menu.active)
+    {
+        sdl_gamepad_clear_pending_shoulder();
+        sdl_gamepad_clear_dpad_state();
+        int key = 0;
+        switch (button)
+        {
+        case SDL_GAMEPAD_BUTTON_SOUTH: key = '\r'; break;
+        case SDL_GAMEPAD_BUTTON_EAST:
+        case SDL_GAMEPAD_BUTTON_START: key = ESCAPE; break;
+        case SDL_GAMEPAD_BUTTON_DPAD_UP: key = '8'; break;
+        case SDL_GAMEPAD_BUTTON_DPAD_DOWN: key = '2'; break;
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: key = '4'; break;
+        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: key = '6'; break;
+        default: break;
+        }
+        if (down && key)
+        {
+            if (key == '\r' || key == ESCAPE)
+                sdl_gamepad_settle_modal_navigation(false);
+            sdl_pane_menu_handle_key(key);
+        }
+        return;
+    }
 
     if (sdl_gamepad_context_focus_handle_button(button, down))
         return;

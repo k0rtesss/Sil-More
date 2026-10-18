@@ -2725,8 +2725,13 @@ static void sdl_config_load_pane_array(cJSON* panes, struct pane_config* pane_co
             pc->font_size = font_size->valueint;
             if (pc->font_size < 0)
                 pc->font_size = 0;
-            if (pc->font_size > 48)
-                pc->font_size = 48;
+            if (pc->font_size > 0
+                && pc->font_size < SDL_AUX_VIEW_FONT_MIN)
+            {
+                pc->font_size = SDL_AUX_VIEW_FONT_MIN;
+            }
+            if (pc->font_size > SDL_AUX_VIEW_FONT_MAX)
+                pc->font_size = SDL_AUX_VIEW_FONT_MAX;
             log_debug("Pane %d: fontSize=%d", count, pc->font_size);
         }
 
@@ -2822,8 +2827,18 @@ static void sdl_config_load_pane_profile(cJSON* profile_obj,
     }
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj, "auxViewFontSize");
-    if (cJSON_IsNumber(item))
+    if (cJSON_IsNumber(item)) {
         profile->aux_view_font_size = item->valueint;
+        if (profile->aux_view_font_size < 0)
+            profile->aux_view_font_size = 0;
+        if (profile->aux_view_font_size > 0
+            && profile->aux_view_font_size < SDL_AUX_VIEW_FONT_MIN)
+        {
+            profile->aux_view_font_size = SDL_AUX_VIEW_FONT_MIN;
+        }
+        if (profile->aux_view_font_size > SDL_AUX_VIEW_FONT_MAX)
+            profile->aux_view_font_size = SDL_AUX_VIEW_FONT_MAX;
+    }
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj, "enableRightPanes");
     if (cJSON_IsBool(item))
@@ -3781,6 +3796,15 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         item = cJSON_GetObjectItemCaseSensitive(sdl, "auxViewFontSize");
         if (cJSON_IsNumber(item)) {
             config->aux_view_font_size = item->valueint;
+            if (config->aux_view_font_size < 0)
+                config->aux_view_font_size = 0;
+            if (config->aux_view_font_size > 0
+                && config->aux_view_font_size < SDL_AUX_VIEW_FONT_MIN)
+            {
+                config->aux_view_font_size = SDL_AUX_VIEW_FONT_MIN;
+            }
+            if (config->aux_view_font_size > SDL_AUX_VIEW_FONT_MAX)
+                config->aux_view_font_size = SDL_AUX_VIEW_FONT_MAX;
             log_debug("Loaded auxViewFontSize: %d", config->aux_view_font_size);
         } else {
             log_warn("auxViewFontSize not found or not a number");
@@ -6320,6 +6344,10 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
                 const char* size_str = argv[++i];
                 int size = atoi(size_str);
                 if (size > 0) {
+                    if (size < SDL_AUX_VIEW_FONT_MIN)
+                        size = SDL_AUX_VIEW_FONT_MIN;
+                    if (size > SDL_AUX_VIEW_FONT_MAX)
+                        size = SDL_AUX_VIEW_FONT_MAX;
                     config->aux_view_font_size = size;
                     log_info("Command line: auxiliary view font size set to %d", size);
                 }

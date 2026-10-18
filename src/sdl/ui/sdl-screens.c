@@ -4187,6 +4187,11 @@ void sdl_char_sheet_draw_birth_status_row(TTF_Font* font, float x,
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 38,
         TERM_L_BLUE, status, false);
 #else
+    if (steamdeck_controls_active())
+    {
+        confirm_text = "<A>";
+        back_text = "<B>";
+    }
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, status_span,
         TERM_L_BLUE, status, false);
 
@@ -5228,15 +5233,18 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
     static const cptr labels[] = { "Prev", "Next", "Back" };
     static const cptr short_labels[] = { "<", ">", "Back" };
     static const cptr narrow_labels[] = { "<", ">", "Esc" };
-    const cptr* nav_labels = labels;
+    static const cptr controller_labels[] = { "<LB> Prev", "<RB> Next", "<B> Back" };
+    static const cptr controller_short_labels[] = { "<LB>", "<RB>", "<B>" };
+    const cptr* nav_labels = steamdeck_controls_active() ? controller_labels : labels;
     static const int choices[] = { '[', ']', ESCAPE };
     float label_w = 0.0f;
     for (int i = 0; i < 3; i++)
-        label_w = MAX(label_w, sdl_char_sheet_text_width(font, labels[i]));
+        label_w = MAX(label_w, sdl_char_sheet_text_width(font, nav_labels[i]));
     if (label_w * 3.0f > width)
     {
-        nav_labels = sdl_char_sheet_text_width(font, "Back") * 3.0f <= width
-            ? short_labels : narrow_labels;
+        nav_labels = steamdeck_controls_active() ? controller_short_labels
+            : sdl_char_sheet_text_width(font, "Back") * 3.0f <= width
+                ? short_labels : narrow_labels;
         label_w = 0.0f;
         for (int i = 0; i < 3; i++)
             label_w = MAX(label_w, sdl_char_sheet_text_width(font, nav_labels[i]));
@@ -5491,7 +5499,8 @@ static void sdl_standalone_pager_finish(TTF_Font* font, const SDL_Rect* canvas)
         SDL_FRect rect = g_sdl_standalone_pager.buttons[i];
         bool enabled = i ? g_sdl_standalone_pager.offset < g_sdl_standalone_pager.maximum
                          : g_sdl_standalone_pager.offset > 0;
-        (void)sdl_char_sheet_draw_text(font, i ? "Next >" : "< Prev",
+        (void)sdl_char_sheet_draw_text(font, steamdeck_controls_active()
+                ? (i ? "<RB> Next" : "<LB> Prev") : (i ? "Next >" : "< Prev"),
             enabled ? TERM_WHITE : TERM_SLATE,
             rect.x, rect.y, rect.w, rect.h, true);
     }
@@ -7126,6 +7135,9 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     static const sdl_char_sheet_prompt_item preview_items[] = {
         { "Continue to Stats", -2 },
     };
+    static const sdl_char_sheet_prompt_item preview_controller_items[] = {
+        { "<A> Continue to Stats", -2 },
+    };
     const sdl_char_sheet_prompt_item* items = birth_items;
     int item_count = (int)N_ELEMENTS(birth_items);
     sdl_char_sheet_prompt_item birth_controller_items[2];
@@ -7246,7 +7258,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
     else if (g_sdl_character_sheet_screen.context
         == SDL_CHARACTER_SHEET_BIRTH_PREVIEW)
     {
-        items = preview_items;
+        items = controller ? preview_controller_items : preview_items;
         item_count = (int)N_ELEMENTS(preview_items);
     }
     else if (g_sdl_character_sheet_screen.context
@@ -8155,7 +8167,8 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         return;
     }
 
-    if (sdl_handheld_ui_active() && !sdl_touch_only_device_active())
+    if (steamdeck_controls_active()
+        || (sdl_handheld_ui_active() && !sdl_touch_only_device_active()))
     {
         bool controller = steamdeck_controls_active();
         bool narrative = (g_sdl_character_sheet_screen.context
@@ -9863,6 +9876,14 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
         float y = top_y + (selected_row >= 0
             ? row_tops[selected_row] + row_heights[selected_row] + desc_gap
             : scroll_content_h - desc_h) - scroll;
+        if (g_sdl_character_sheet_screen.font_menu == SDL_MENU_FONT_SETTINGS)
+        {
+            float divider_y = y - desc_gap * 0.5f;
+
+            SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 255);
+            SDL_RenderLine(g_state.renderer, content_x, divider_y,
+                content_x + content_w, divider_y);
+        }
         sdl_char_sheet_draw_wrapped(desc_font, desc, TERM_L_WHITE, content_x,
             y, content_w, desc_h, desc_line_h, desc_lines);
     }
@@ -9872,15 +9893,20 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
     {
         float y = top_y + row_region_h + desc_gap;
 
-        if (g_sdl_select_dynamic_description)
+        if (g_sdl_select_dynamic_description
+            || g_sdl_character_sheet_screen.font_menu == SDL_MENU_FONT_SETTINGS)
         {
-            SDL_Color divider = g_state.palette[TERM_SLATE];
+            SDL_Color divider = g_sdl_character_sheet_screen.font_menu
+                    == SDL_MENU_FONT_SETTINGS
+                ? (SDL_Color){ 255, 255, 255, 255 }
+                : g_state.palette[TERM_SLATE];
             float divider_y = y - desc_gap * 0.5f;
 
             SDL_SetRenderDrawBlendMode(g_state.renderer,
                 SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(g_state.renderer, divider.r, divider.g,
-                divider.b, 150);
+                divider.b, g_sdl_character_sheet_screen.font_menu
+                    == SDL_MENU_FONT_SETTINGS ? 255 : 150);
             SDL_RenderLine(g_state.renderer, content_x, divider_y,
                 content_x + content_w, divider_y);
         }

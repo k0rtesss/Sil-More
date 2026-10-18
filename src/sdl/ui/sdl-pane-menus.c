@@ -565,6 +565,19 @@ int sdl_log_pane_menu_collect(enum pane_type pane,
     return count;
 }
 
+static bool sdl_pane_menu_flow_layout(void)
+{
+    return steamdeck_controls_active()
+        || (sdl_handheld_ui_active() && get_sdl_menu_bigger_font());
+}
+
+static int sdl_pane_menu_role_font_px(enum sdl_ui_font_role role)
+{
+    int px = sdl_menu_role_font_px(role);
+    return steamdeck_controls_active()
+        ? MAX(px, sdl_menu_font_px(role == SDL_UI_FONT_META ? 18 : 22)) : px;
+}
+
 static float sdl_pane_menu_text_height(TTF_Font* font, cptr text, float width)
 {
     int w = 0;
@@ -572,6 +585,32 @@ static float sdl_pane_menu_text_height(TTF_Font* font, cptr text, float width)
     (void)sdl_ui_wrapped_text_texture(font, text, MAX(1, (int)width),
         g_state.palette[TERM_WHITE], &w, &h);
     return (float)MAX(1, h);
+}
+
+static float sdl_pane_menu_controller_hint_height(float width)
+{
+    if (!steamdeck_controls_active()) return 0;
+    TTF_Font* font = sdl_story_font_for_height_slot(
+        sdl_pane_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+    return sdl_pane_menu_text_height(font, sdl_controller_menu_hint(true, false), width) + 4;
+}
+
+static void sdl_pane_menu_draw_controller_hint(SDL_FRect* header)
+{
+    float height = sdl_pane_menu_controller_hint_height(header->w);
+    if (height <= 0) return;
+    header->h -= height;
+    TTF_Font* font = sdl_story_font_for_height_slot(
+        sdl_pane_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+    int w = 0, h = 0;
+    SDL_Texture* texture = sdl_ui_wrapped_text_texture(font,
+        sdl_controller_menu_hint(true, false), MAX(1, (int)header->w),
+        g_state.palette[TERM_L_WHITE], &w, &h);
+    if (texture)
+    {
+        SDL_FRect dst = { header->x, header->y + header->h, w, h };
+        sdl_ui_render_text_texture(texture, NULL, &dst);
+    }
 }
 
 static bool sdl_pane_menu_mobile_grid(const SDL_Rect* screen, int count,
@@ -582,10 +621,10 @@ static bool sdl_pane_menu_mobile_grid(const SDL_Rect* screen, int count,
     float pad = 8.0f * dp;
     float gap = 4.0f * dp;
     TTF_Font* label_font = sdl_story_font_for_height_slot(
-        sdl_menu_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+        sdl_pane_menu_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
     TTF_Font* hint_font = sdl_story_font_for_height_slot(
-        sdl_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
-    float header_h = label_font ? MAX((float)sdl_ui_min_tap_px(),
+        sdl_pane_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+    float base_header_h = label_font ? MAX((float)sdl_ui_min_tap_px(),
         (float)TTF_GetFontHeight(label_font) + pad) : 0;
     float max_w = (float)screen->w - pad * 2;
     float max_h = (float)screen->h - pad * 2;
@@ -594,6 +633,8 @@ static bool sdl_pane_menu_mobile_grid(const SDL_Rect* screen, int count,
         return false;
     for (int columns = 1; columns <= count; columns++) {
         float width = columns == 1 ? MIN(max_w, 360.0f * dp) : max_w;
+        float header_h = base_header_h
+            + sdl_pane_menu_controller_hint_height(width - pad * 2);
         float cell_w = (width - pad * 2 - gap * (columns - 1)) / columns;
         float heights[MAX_PANE_CONFIGS] = { 0 };
         int rows = (count + columns - 1) / columns;
@@ -640,9 +681,9 @@ static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
     float pad = 8.0f * sdl_ui_density_scale();
     float gap = 4.0f * sdl_ui_density_scale();
     TTF_Font* font = sdl_story_font_for_height_slot(
-        sdl_menu_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
+        sdl_pane_menu_role_font_px(SDL_UI_FONT_CONTROL), SDL_STORY_FONT_SLOT_MENU);
     TTF_Font* meta = sdl_story_font_for_height_slot(
-        sdl_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
+        sdl_pane_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
     int w = 0, h = 0;
     SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, label,
         MAX(1,(int)(rect->w - pad * 2)),color,&w,&h);
@@ -664,10 +705,10 @@ static void sdl_pane_menu_mobile_text(const SDL_FRect* rect, cptr label,
 
 int sdl_log_pane_menu_font_px(enum pane_type pane)
 {
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_pane_menu_flow_layout())
     {
         (void)pane;
-        return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
+        return sdl_pane_menu_role_font_px(SDL_UI_FONT_CONTROL);
     }
     const sdl_view* view = &g_views[pane];
     int font_px = 0;
@@ -714,7 +755,7 @@ bool sdl_log_pane_menu_layout(log_pane_menu_entry* entries,
     if (count <= 0)
         return false;
 
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_pane_menu_flow_layout())
     {
         {
             const char* labels[MAX_PANE_CONFIGS];
@@ -877,7 +918,7 @@ bool sdl_log_pane_menu_open_at(float x, float y, enum pane_type pane)
     g_log_pane_menu.target_pane = pane;
     g_log_pane_menu.anchor_x = x;
     g_log_pane_menu.anchor_y = y;
-    g_log_pane_menu.hover_index = -1;
+    g_log_pane_menu.hover_index = steamdeck_controls_active() ? 0 : -1;
     g_state.need_present = true;
     return true;
 }
@@ -1129,7 +1170,7 @@ void sdl_log_pane_menu_render(void)
 
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_pane_menu_flow_layout())
         pad = 8.0f * sdl_ui_density_scale();
     header = (SDL_FRect){
         .x = panel.x + pad,
@@ -1156,7 +1197,8 @@ void sdl_log_pane_menu_render(void)
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b,
         150);
     SDL_RenderRect(g_state.renderer, &header);
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
+    sdl_pane_menu_draw_controller_hint(&header);
+    if (sdl_pane_menu_flow_layout()) {
         sdl_pane_menu_mobile_text(&header,
             g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
             NULL, text);
@@ -1181,7 +1223,7 @@ void sdl_log_pane_menu_render(void)
             hover ? 238 : 166);
         SDL_RenderRect(g_state.renderer, rect);
 
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
+    if (sdl_pane_menu_flow_layout()) {
         sdl_pane_menu_mobile_text(rect, entries[i].label, entries[i].hint, text);
     } else
     {
@@ -1318,7 +1360,7 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
     if (count <= 0)
         return false;
 
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_pane_menu_flow_layout())
     {
         {
             const char* labels[MAX_PANE_CONFIGS];
@@ -1475,7 +1517,7 @@ bool sdl_side_pane_menu_open_at(float x, float y)
     g_side_pane_menu.press_index = -1;
     g_side_pane_menu.anchor_x = x;
     g_side_pane_menu.anchor_y = y;
-    g_side_pane_menu.hover_index = -1;
+    g_side_pane_menu.hover_index = steamdeck_controls_active() ? 0 : -1;
     g_state.need_present = true;
     return true;
 }
@@ -1718,7 +1760,7 @@ void sdl_side_pane_menu_render(void)
 
     pad = sdl_touch_pane_clampf(g_state.system_scale * 7.0f
         * SIDE_PANE_MENU_SCALE, 9.0f, 18.0f);
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_pane_menu_flow_layout())
         pad = 8.0f * sdl_ui_density_scale();
     header = (SDL_FRect){
         .x = panel.x + pad,
@@ -1743,7 +1785,8 @@ void sdl_side_pane_menu_render(void)
     SDL_RenderFillRect(g_state.renderer, &header);
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b, 150);
     SDL_RenderRect(g_state.renderer, &header);
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
+    sdl_pane_menu_draw_controller_hint(&header);
+    if (sdl_pane_menu_flow_layout()) {
     sdl_pane_menu_mobile_text(&header, "Side Panes", NULL, text);
     } else
     {
@@ -1771,7 +1814,7 @@ void sdl_side_pane_menu_render(void)
             hover ? 238 : 166);
         SDL_RenderRect(g_state.renderer, rect);
 
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
+    if (sdl_pane_menu_flow_layout()) {
         sdl_pane_menu_mobile_text(rect, sdl_side_pane_menu_label(entries[i].pane),
             status, label);
     } else
@@ -1781,4 +1824,34 @@ void sdl_side_pane_menu_render(void)
             0.30f, 0.40f);
     }
     }
+}
+
+bool sdl_pane_menu_handle_key(int key)
+{
+    if (!g_log_pane_menu.active && !g_side_pane_menu.active)
+        return false;
+    if (key == ESCAPE || key == SDLK_AC_BACK)
+    {
+        sdl_log_pane_menu_cancel();
+        sdl_side_pane_menu_cancel();
+        return true;
+    }
+    bool log_menu = g_log_pane_menu.active;
+    log_pane_menu_entry entries[SDL_LOG_PANE_MENU_MAX_ENTRIES];
+    int count = log_menu ? sdl_log_pane_menu_collect(g_log_pane_menu.target_pane, entries)
+                         : sdl_side_pane_menu_collect(NULL);
+    if (count <= 0) return true;
+    int* focus = log_menu ? &g_log_pane_menu.hover_index : &g_side_pane_menu.hover_index;
+    if (*focus < 0 || *focus >= count) *focus = 0;
+    if (key == '8' || key == '4' || key == SDLK_UP || key == SDLK_LEFT)
+        *focus = (*focus + count - 1) % count;
+    else if (key == '2' || key == '6' || key == SDLK_DOWN || key == SDLK_RIGHT)
+        *focus = (*focus + 1) % count;
+    else if (key == '\r' || key == '\n' || key == ' ')
+    {
+        if (log_menu) sdl_log_pane_menu_activate(*focus);
+        else sdl_side_pane_menu_toggle(*focus);
+    }
+    g_state.need_present = true;
+    return true;
 }

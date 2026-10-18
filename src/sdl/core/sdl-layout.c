@@ -4553,13 +4553,13 @@ int sdl_auto_font_size_from_main(int numerator, int denominator)
     main_font_size = (int)((float)main_cell_h_px / system_scale + 0.5f);
     size = (main_font_size * numerator + denominator - 1) / denominator;
 
-    if (size >= main_font_size && main_font_size > 8)
+    if (size >= main_font_size && main_font_size > SDL_AUX_VIEW_FONT_MIN)
         size = main_font_size - 1;
 
-    if (size < 8)
-        size = 8;
-    if (size > 48)
-        size = 48;
+    if (size < SDL_AUX_VIEW_FONT_MIN)
+        size = SDL_AUX_VIEW_FONT_MIN;
+    if (size > SDL_AUX_VIEW_FONT_MAX)
+        size = SDL_AUX_VIEW_FONT_MAX;
 
     return size;
 }
@@ -4592,10 +4592,10 @@ int sdl_resolve_aux_view_font_size(int requested_size)
 
     if (size <= 0)
         size = sdl_auto_aux_view_font_size();
-    if (size < 8)
-        size = 8;
-    if (size > 48)
-        size = 48;
+    if (size < SDL_AUX_VIEW_FONT_MIN)
+        size = SDL_AUX_VIEW_FONT_MIN;
+    if (size > SDL_AUX_VIEW_FONT_MAX)
+        size = SDL_AUX_VIEW_FONT_MAX;
 
     return sdl_ui_font_px(size);
 }
@@ -4606,10 +4606,10 @@ int sdl_resolve_pane_font_size(enum pane_type type, int requested_size)
 
     if (size <= 0)
         size = sdl_auto_pane_font_size(type);
-    if (size < 8)
-        size = 8;
-    if (size > 48)
-        size = 48;
+    if (size < SDL_AUX_VIEW_FONT_MIN)
+        size = SDL_AUX_VIEW_FONT_MIN;
+    if (size > SDL_AUX_VIEW_FONT_MAX)
+        size = SDL_AUX_VIEW_FONT_MAX;
 
     return sdl_ui_font_px(size);
 }

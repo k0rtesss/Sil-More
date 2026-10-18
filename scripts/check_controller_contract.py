@@ -72,6 +72,7 @@ def main() -> int:
             ("native welcome owner", "sdl_welcome_screen_handle_gamepad_button"),
             ("native exchange owner", "sdl_player_exchange_handle_gamepad_button"),
             ("native action-wheel owner", "sdl_player_action_menu_handle_gamepad_button"),
+            ("native pane-menu owner", "if (g_log_pane_menu.active || g_side_pane_menu.active)"),
             ("spatial contextual focus owner", "sdl_gamepad_context_focus_handle_button"),
         ],
     )
@@ -87,8 +88,8 @@ def main() -> int:
         [
             ("contextual focus", "sdl_gamepad_context_focus_handle_button"),
             ("terminal modal confirm", "Terminal_keypress_placeholder"),
-            ("terminal modal back", "sdl_gamepad_settle_modal_navigation(false)"),
-            ("D-pad routing", "SDL_GAMEPAD_BUTTON_DPAD_UP"),
+            ("terminal modal back", "if (down && (sdl_gamepad_button_is_ui_back(button)"),
+            ("D-pad routing", "if (button == SDL_GAMEPAD_BUTTON_DPAD_UP"),
             ("bound-button fallback", "handle_bound_button:"),
         ],
     )

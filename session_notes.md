@@ -9787,3 +9787,75 @@ Artifacts: `scripts/output/android-playtest-20261004/mobile-sweep/` (baseline/fi
 - All ten combined suites passed with 54/54 saved unlock coverage; final 15 engine scenarios passed. Existing v35/v34/v33/v30 save corruption/compatibility cases and all ten locked/earned book sizes passed. Concurrent rage-provenance and narrow-book changes were preserved and tested, not authored by this chat.
 - Played an ordinary isolated portable game through GameControl: free Power earned nothing, 500-XP Finesse earned Something Tookish once, book navigation consumed no turns, then save/close/relaunch retained the exact unlock date and character state. Replayed the new portable executable on resume; no runtime ERROR/FATAL/CRITICAL log entries. Closed the test process cleanly. Real player profiles and platform accounts were not used.
 - Standard/portable/Steam Windows builds passed; refreshed all three local deployments with matching SHA256. Evidence: scripts/output/achievement-playtest/{verification.json,catalogue-coverage.json,engine-scenarios.json,live-receipt.json,full-validation.log} and screenshots. Full manual playthroughs, native Linux/Android replay and live Steam/Google unlock synchronization were not performed. No staging, commit, push or store publication.
+
+## 2026-10-17 - Store achievement expansion and 0.9.8.35 releases
+- Published 40 new Steam and Google Play Games achievements, 54 total; preserved every existing API/provider identity and all 14 original Google point values. Renamed existing titles in place. Google locks published initial visibility: original 14 remain revealed; new 40 have 36 hidden/four visible, while local/Steam retain 44 hidden/ten visible.
+- Reviewed artwork against both deeds and Tolkien titles; retained Carcharoth, Shelob, spider and Shadow Cloak references. Corrected nine weak mappings, including actual door/hand-and-a-half art and water/ice sprites copied unchanged into unused atlas cells 32:26/27. Added the reproducible sync_achievement_terrain_icons.cjs helper; all previously occupied atlas pixels are preserved.
+- Google rejected reused icons. Its exporter now adds related existing sprites to ten repeated base icons; all 54 Google images are visually distinct. Steam primary artwork and in-game references remain shared. Verified all 108 store images against exact nearest-neighbor source pixels.
+- Built and uploaded Windows x64 and native Linux 0.9.8.35 Steam depots. Default build 26015538 is live; Windows manifest 4580033663046043110, Linux 1736695362367905150. Achievement configuration published with images. Linux builder recovered from a TCG stop using WHPX, passed relocated fresh/repeat X11 startup and adapter checks, then shut down cleanly.
+- Configured all 54 actual Google provider IDs in android/play-games.properties. Signed dual-ARM AAB 90835, verified archive/signature/current atlas/embedded IDs and 16 KB ELF alignment for all 12 ARM64 libraries. Play confirms 0.9.8.35, SDK 24+/target 36 and both ABIs with no supported-device losses.
+- Submitted closed Alpha release 13, 0.9.8.35 closed beta (90835), at 100 percent of the existing closed track. Publishing overview shows Changes in review; automated quick checks remain pending at handoff. Google Play Games shows No changes to publish. Public production rollout was not changed.
+- Validation: 54/54 saved production unlock scenarios, final book rendering, Android JNI/provider ordering, builds/package hashes/CRCs, native startup and source-pixel checks passed. Physical-device gameplay and live account unlock replay were not exercised. Source changes remain unstaged/uncommitted. Receipts, source hashes, packages and screenshots: scripts/output/store-release-20261017/.
+
+
+## 2026-10-18 - Final semantic menu rendering review
+- Verified title/welcome and in-game main menu in Normal/Big Font with exact native pixel comparisons on D3D11, OpenGL and software at 1280x800, 800x1280 @1.5 and 800x360. The source audit permits the new achievement tileset artwork without exempting semantic text; Steam-target fixtures link their C++ runtime.
+- All 17 screen/input suites passed after standalone reruns of the six initially failing suites. Corrected obsolete test tracing, explicit mobile/per-menu font setup, current Text Options > Text Size and Fonts > Big Font navigation, terminal footer reservation relative to whole terminal rows, and the invalid assumption that every tall skills viewport must overflow. Kept glyph, clipping, footer, hit, scroll and dispatch assertions.
+- Played two isolated current portable builds at 1280x800 in Normal/Big Font through title/stories, hero/attribute/skill creation, confirmations, tutorials, main menu, settings/text options, character, inventory, achievements and Halls. Inspected native PNGs; no ERROR/FATAL/CRITICAL logs. Both test sessions saved and closed cleanly; private EXE hashes match build-portable. No personal profiles used.
+- Evidence: scripts/output/render-validation-20261018-menu-text/verification.json, real-game/{normal,big}/screens/, scripts/output/semantic-text-sharpness/, and scripts/output/controller-menu-prompts/. No physical Steam Deck/SteamOS replay or store upload by this chat. Rendering changes from the prior fixes are already in HEAD; this follow-up changes tests/notes only and preserves concurrent source/store/controller work.
+
+
+## 2026-10-18: Steam Deck memorial layout and controller menu prompts
+
+- Halls controller UI now uses measured wrapped memorial fields, readable role fonts and a responsive glyph-labelled action grid. D-pad follows the selected hero; LB/RB scroll long entries before changing pages. Fixed-height score/detail clipping is avoided without squeezing the text.
+- Added shared controller legends to native questions and Songs, labelled Hints/Quests/Thralls actions and tabs, and completed character preview/status/pagination, Chronicle and note/recall prompts. View opens Map in hint/thrall screens and on-demand Help in questions; Help owns D-pad scrolling and returns to choices before dismissal.
+- Keyboard binding screens expose X reset, View group/preset and Y save. Physical Back can cancel keyboard capture without waiting for a keyboard scancode.
+- Log/side-pane context menus now own physical A/B/Start, D-pad and stick input, consume gameplay bindings and display a measured legend. Existing pointer operations and pure keyboard/touch presentation are retained.
+- Validation: Windows standard build, controller contract, isolated Deck/720p/960x540/1080p Normal+Big and PlayStation render/input fixture, controller keyboard, Help/runtime, description actions, phone Halls/aux/books and responsive character-sheet checks passed. Disabling Halls flow reproduces cropped text (63px raster cut to 29px). No physical Steam Deck or native Linux replay was performed.
+- Refreshed sil-more-windows-sdl3/sil-more.exe from build-standard; SHA256 and validation receipt/screenshots are under scripts/output/controller-menu-prompts/. Source remains unstaged/uncommitted; unrelated achievement and fixture edits were preserved.
+
+
+### Halls style correction
+
+- Restored the original centered heading/rule, framed memorials with separate name/score/rank and three-column metadata, and the normal one-row action bar. Controller glyphs sit above the original button labels. The large touch reading layout is no longer imposed on controllers.
+- Fit metadata to its actual row, size cards from readable field heights, and retain the original card renderer inside a scrollable body for long memorials. Controller prompts and the rest of the menu sweep are retained.
+- Windows standard rebuild and controller/style render suite passed at Deck/720p/960x540/1080p and PlayStation, Normal/Big. Checks now guard title centering, original margins/rank accent and normal footer row, as well as complete text rasters and scrolling. Phone Halls and controller contract also passed. Restoring the unfitted metadata reproduces a 63px raster cropped to 34px.
+- Refreshed the local Windows EXE and receipt. Current original-style preview: scripts/output/controller-menu-prompts/halls-restored-1280x800.png. No physical Deck replay or publication.
+
+
+### Compact Halls buttons
+
+- Reduced the normal controller button bar from 96px to 72px at 1280x800, with a 60px lower bound. Removed excess Big Font row padding and tightened controller button gaps to 6px. Card/header styling is retained.
+- Windows rebuild and existing controller/style render checks passed at all five Deck/desktop/PlayStation cases in Normal and Big Font. Refreshed the local Windows EXE and compact-buttons preview.
+
+
+## 2026-10-18 - Handheld main menu height and audio recovery
+
+- Fill the usable handheld screen height in Normal and Big Font; preserve native row metrics and scroll when needed.
+- Represent the menu theme as its own music cue so ambient music never overlaps it, including settings reloads and music/master toggles. Restore gameplay music and all local environmental loops immediately on theme exit; refresh loops when closing the main overlay or returning from a modal main-menu action.
+- Add an opaque white rule above option descriptions in Normal and Big Font, preserving the existing description placement and scrolling.
+- Validation: Windows standard incremental build; six phone-density portrait/landscape render/input fixtures (both fonts, full-height geometry, white-rule pixels, touch/scroll and existing inventory/character coverage); real SDL_mixer asset/reload/lifecycle checks with six fixed-environment loop sources; dual-ARM Sideload Debug APK 0.9.8.35 (90835). Universal APK native libraries match the staged ARM64/ARMv7 binaries and all changed native source objects are current.
+- Refreshed sil-more-windows-sdl3/sil-more.exe; verification/hashes: scripts/output/menu-audio-fixes/verification.json. Audio uses the SDL dummy device; no physical Android listening or device replay was performed. Preserved unrelated pre-existing edits; no staging or commit.
+
+## 2026-10-18 - Starting zoom on handheld PCs
+
+- Replaced the mobile build guard with the existing runtime handheld classification in sdl_prepare_first_gameplay_main_view_zoom, and call it before the first gameplay redraw on every SDL build. Android/iOS and detected Windows/Linux/macOS handheld PCs apply the existing saved offset; ordinary desktops, including Controller UI overrides, skip it.
+- Expose Starting Zoom Offset on handheld PCs and mobile, preserving the mobileStartingZoomOffset JSON key, saved values, 0-5 range and existing defaults. The temporary map zoom keeps the configured Main View Scale and automatic pane font sizes unchanged; zero disables the startup offset.
+- Extended check_handheld_startup.py with real startup zoom checks in Normal/Big Font, offsets 0/2/5, maximum layout clamping, desktop exclusion, pane font/base-scale preservation and saved offset reloads.
+- Validation: Windows standard and Steam builds, all five isolated fresh/reload startup profiles, hardware matching/DMI/SMBIOS tests and the production Linux detector branch exercised on Windows passed. Refreshed both local deployment executables with matching SHA256. Receipt/log: scripts/output/handheld-starting-zoom/. No physical handheld replay or native Linux/Android build for this change. Preserved unrelated edits; no staging or commit.
+
+## 2026-10-18 - Raise automatic auxiliary font floor
+
+- Raised the logical minimum for automatic and explicit auxiliary/pane fonts from 8 to 10 while keeping the 48px maximum. Applied the same bounds to menu auto sizing, terminal menu sizing, JSON/profile loading and command-line font sizes; density conversion still happens after the logical size is resolved.
+- Windows standard and Steam builds passed. Handheld startup/font checks passed. The broad `check_bigger_font_layout.py` fixture reaches a pre-existing handheld main-menu height assertion after its old exact 8px assumptions were relaxed for the new floor; no product build failure occurred. No physical device replay; no commit or staging.
+
+## 2026-10-18 - Compact terminal minimum reduced to 16 rows
+
+- Audited the Compact minimum-row consumers. The 18-row value is a shared terminal-fit minimum used by scale caps, split-pane/layout recovery, initial window sizing, mobile startup clamping, event layout diagnostics, and the terminal-menu scale selector; full-screen menus do not directly render a fixed 18 rows.
+- Changed both Compact minimum-row definitions to 16, rebuilt standard and Steam targets, and ran the menu-size, handheld UI/overlay, handheld startup, and controller-menu fixtures. Product fixtures passed. Updated the menu-size fixture's stale 8-pixel floor assertion to the current 10-pixel floor; the historical normal-UI comparison failed at link time before tests ran.
+- Static risks at a 16-row menu grid: Abilities has explicit `Term->hgt <= 18` compact branches; knowledge/inventory/equipment, settings, smithing, score history, birth/character and file/help viewers reduce available rows and rely on scrolling/paging. Help/file-viewer are explicitly paginated; the other layouts need visual review at 16 rows. No physical Steam Deck replay, commit or staging.
+
+## 2026-10-18 - Compact handheld Hints and Quests text
+
+- Normal handheld Hints/Quests/Thralls now use the shared menu font scale instead of a viewport-proportional 65px body at 1280x800. The per-menu Big Font path remains unchanged.
+- Windows standard build, controller-menu render/input fixtures at 1280x800/1280x720/960x540/1920x1080 plus PlayStation, and phone overlay fixtures at six portrait/landscape density cases passed. No physical handheld replay; no staging or commit.

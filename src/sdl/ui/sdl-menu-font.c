@@ -115,9 +115,9 @@ int sdl_menu_auto_font_size_from_main(int numerator, int denominator)
         config.min_terminal_mode);
     int main_size = (int)(scale * TILE_SIZE / density + 0.5f);
     int size = (main_size * numerator + denominator - 1) / denominator;
-    if (size >= main_size && main_size > 8)
+    if (size >= main_size && main_size > SDL_AUX_VIEW_FONT_MIN)
         size = main_size - 1;
-    return MAX(8, MIN(48, size));
+    return MAX(SDL_AUX_VIEW_FONT_MIN, MIN(SDL_AUX_VIEW_FONT_MAX, size));
 }
 
 void set_sdl_menu_bigger_font(enum sdl_menu_font menu, bool value)

@@ -226,9 +226,8 @@ static int ui_question_ask_aux(cptr title, cptr desc,
             }
         }
 
-        if (desc_on_demand && which == '?')
+        if (desc_on_demand && sdl_question_menu_handle_help_key(which))
         {
-            (void)sdl_question_menu_toggle_help();
             continue;
         }
 

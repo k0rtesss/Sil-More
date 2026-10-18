@@ -190,12 +190,15 @@ int sdl_main_menu_pane_font_px(void)
         return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
     int auxiliary_size = sdl_menu_base_aux_font_size();
     int font_size = (auxiliary_size > 0)
-        ? sdl_menu_font_px(MAX(8, MIN(48, auxiliary_size)))
+        ? sdl_menu_font_px(MAX(SDL_AUX_VIEW_FONT_MIN,
+            MIN(SDL_AUX_VIEW_FONT_MAX, auxiliary_size)))
         : sdl_menu_font_px(sdl_handheld_ui_active()
             ? sdl_menu_auto_font_size_from_main(4, 5)
             : sdl_menu_auto_font_size_from_main(3, 4));
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
 
+    /* font_px is already density-scaled; the logical minimum is enforced
+     * before this conversion by the automatic font-size helpers. */
     if (font_px < 8)
         font_px = 8;
 
@@ -514,27 +517,18 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         }
     }
 
-    if (sdl_handheld_ui_active() && !get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active())
     {
-        float overlay_margin = (float)sdl_overlay_margin_px();
-
-        max_panel_h = (float)screen.h - overlay_margin * 2.0f;
-        if (max_panel_h < 1.0f)
-            max_panel_h = (float)screen.h;
-
         float native_row_h = row_h;
 
-        panel_h = max_panel_h;
-        row_h = (panel_h - pad_y * 2.0f) / (float)MAIN_MENU_MAX;
-        /* Keep the empty vertical gap between adjacent labels no larger than
-         * the rendered label height. */
-        if (row_h > (float)text_h * 2.0f)
-            row_h = (float)text_h * 2.0f;
-        /* Short handheld windows scroll rather than clipping native glyphs. */
-        row_h = MAX(row_h, native_row_h);
+        /* The screen rect already excludes unsafe display areas. Use its
+         * full height in both font modes; short windows scroll at the native
+         * row size, while taller windows spread the visible rows evenly. */
+        max_panel_h = (float)screen.h;
         visible_count = MAX(1, MIN(MAIN_MENU_MAX,
-            (int)((max_panel_h - pad_y * 2.0f) / row_h)));
-        panel_h = pad_y * 2.0f + row_h * (float)visible_count;
+            (int)((max_panel_h - pad_y * 2.0f) / native_row_h)));
+        panel_h = max_panel_h;
+        row_h = (panel_h - pad_y * 2.0f) / (float)visible_count;
     }
     else
     {
@@ -653,6 +647,7 @@ void sdl_main_menu_overlay_close(void)
     g_main_menu_overlay_hover_choice = 0;
     g_main_menu_pane_hover = false;
     sdl_main_menu_overlay_reset_nav_input();
+    sdl_sound_update_environment();
     g_state.need_present = true;
 }
 

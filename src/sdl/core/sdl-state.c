@@ -591,7 +591,7 @@ int sdl_default_main_scale_for_screen_size(int screen_width,
     int screen_height, int mode)
 {
     int min_cols = (mode == SDL_MIN_TERMINAL_COMPACT) ? 50 : 80;
-    int min_rows = (mode == SDL_MIN_TERMINAL_COMPACT) ? 18 : 24;
+    int min_rows = (mode == SDL_MIN_TERMINAL_COMPACT) ? 16 : 24;
     int max_scale_w;
     int max_scale_h;
     int max_scale;
@@ -762,7 +762,7 @@ int sdl_min_terminal_cols_for_mode(int mode)
 
 int sdl_min_terminal_rows_for_mode(int mode)
 {
-    return (mode == SDL_MIN_TERMINAL_COMPACT) ? 18 : 24;
+    return (mode == SDL_MIN_TERMINAL_COMPACT) ? 16 : 24;
 }
 
 int sdl_current_min_terminal_cols(void)

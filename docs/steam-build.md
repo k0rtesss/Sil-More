@@ -1,9 +1,10 @@
 # Steam build guide
 
-Steamworks integration is optional and disabled by default. The ordinary
-standard and portable builds work without Valve's SDK. Enabling
-`SIL_STEAMWORKS=ON` adds the small C++ adapter around the C engine and links the
-Steam API runtime for the target operating system.
+Steamworks integration is optional per deployment. The standard and portable
+Windows builds work without Valve's SDK; the default Windows build also stages
+a separate Steamworks deployment. Enabling `SIL_STEAMWORKS=ON` adds the small
+C++ adapter around the C engine and links the Steam API runtime for the target
+operating system.
 
 The adapter initializes Steam before renderer creation, pumps callbacks during
 input waits and animation delays, and shuts down at process exit. If Steam
@@ -88,6 +89,18 @@ Python 3.11+, CMake 3.24+, Ninja, GCC/G++, patchelf, binutils and the initialize
 SDL submodules. The Steam Runtime SDK provides the Linux build environment;
 the separately obtained Steamworks SDK above supplies the Steam API library.
 
+From Windows with Docker Desktop, use the repository wrapper. It pulls the
+Steam Runtime 4 SDK image when needed, mounts this checkout, and does not upload
+or delete anything:
+
+```powershell
+.\build-linux-steam.ps1 -OutputFolder scripts/output/linux-release
+```
+
+Use a fresh output folder for each package. The wrapper refuses to overwrite an
+existing `sil-more-linux-steam` package folder. The equivalent command when
+already inside the Steam Runtime 4 SDK is:
+
 ```bash
 python3 scripts/build_linux_steam.py --jobs 8 --output scripts/output/linux-release
 ```
@@ -102,6 +115,64 @@ Set Steam's Linux launch executable to `sil-more.sh` and select Steam Linux
 Runtime 4.0. Saves and settings normally live under `~/sil-more/`, outside the
 installation. The helper creates local packages; upload and branch activation
 are separate release steps.
+
+## SteamPipe upload helper
+
+`build-cmake.bat` and `build_linux_steam.py` prepare deployment folders; they do
+not upload or activate a Steam build. `scripts/steam_upload.py` validates those
+folders, writes SteamPipe app/depot VDF files, and records a receipt. It is
+preview-only unless `--preview` or `--upload` is explicitly supplied. It never
+accepts a password; SteamCMD uses its saved login state or prompts interactively.
+
+Build the Windows deployment first:
+
+```powershell
+.\build-cmake.bat steam
+```
+
+Prepare a Windows upload (no network call):
+
+```powershell
+.\scripts\upload-steam.ps1 --platform windows
+```
+
+Run a SteamPipe preview to produce manifests without uploading content:
+
+```powershell
+.\scripts\upload-steam.ps1 --platform windows --preview --account YOUR_STEAM_BUILDER_ACCOUNT
+```
+
+For a real upload, replace `--preview` with `--upload`. The default IDs are
+App `5442160`, Windows depot `5442161`, and native Linux depot `5442162`; pass
+the corresponding `--*-id` option if the live Steamworks configuration differs.
+
+Build the native Linux deployment inside Steam Runtime 4, then upload it:
+
+```bash
+python3 scripts/build_linux_steam.py --jobs 8 --output scripts/output/linux-release
+python3 scripts/steam_upload.py \
+  --platform linux \
+  --linux-content-root scripts/output/linux-release/sil-more-linux-steam \
+  --upload --account YOUR_STEAM_BUILDER_ACCOUNT
+```
+
+If both clean deployment folders are available on the same upload machine, one
+SteamPipe app build can contain both OS depots:
+
+```bash
+python3 scripts/steam_upload.py \
+  --platform both \
+  --content-root sil-more-windows-steam \
+  --linux-content-root scripts/output/linux-release/sil-more-linux-steam \
+  --upload --account YOUR_STEAM_BUILDER_ACCOUNT
+```
+
+Use `--set-live <private-beta-name>` only when deliberately activating a
+non-default test branch. The script rejects `--set-live default`; test the
+uploaded build on a private branch in Steam before changing the default branch.
+The generated VDFs map each deployment folder directly to its OS-specific
+depot and exclude `steam_appid.txt`, logs, saves, generated caches, template
+work files, WAV source audio, and optional sound packs.
 
 ## Local Steam testing
 

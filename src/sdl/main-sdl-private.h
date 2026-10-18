@@ -1805,6 +1805,7 @@ bool sdl_controller_keyboard_handle_button(const SDL_GamepadButtonEvent* ev);
 bool sdl_controller_keyboard_handle_axis(const SDL_GamepadAxisEvent* ev);
 bool sdl_controller_keyboard_handle_pointer(const SDL_Event* ev);
 void sdl_controller_keyboard_render(void);
+cptr sdl_controller_menu_hint(bool selectable, bool scrollable);
 void sdl_controller_glyphs_paint(TTF_Font* font, SDL_Surface* surface,
     cptr text, int wrap_width);
 SDL_GamepadType sdl_gamepad_prompt_type(void);
@@ -2929,6 +2930,7 @@ void sdl_log_pane_menu_cancel_long_press(SDL_FingerID finger_id);
 int sdl_log_pane_menu_pending_timeout_ms(Uint64 now_ns);
 bool sdl_log_pane_menu_flush_pending_press(Uint64 now_ns);
 void sdl_log_pane_menu_render(void);
+bool sdl_pane_menu_handle_key(int key);
 const char* sdl_side_pane_menu_label(enum pane_type pane);
 bool sdl_side_pane_menu_config_is_entry(int index);
 int sdl_side_pane_menu_collect(side_pane_menu_entry* entries);

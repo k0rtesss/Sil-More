@@ -958,9 +958,11 @@ static char display_scores_pages(const high_score* entries, int count,
             "No memorials have yet been inscribed.", false,
             SCORE_CLICK_EXIT);
         sdl_halls_screen_set_empty("No recorded heroes yet.");
-        sdl_halls_screen_add_action(SCORE_CLICK_HISTORY, "Run History",
+        sdl_halls_screen_add_action(SCORE_CLICK_HISTORY,
+            steamdeck ? "<View> Run History" : "Run History",
             TERM_L_BLUE, true);
-        sdl_halls_screen_add_action(SCORE_CLICK_EXIT, "Back", TERM_L_WHITE,
+        sdl_halls_screen_add_action(SCORE_CLICK_EXIT,
+            steamdeck ? "<B> Back" : "Back", TERM_L_WHITE,
             true);
         Term_fresh();
         while (true)
@@ -1071,21 +1073,29 @@ static char display_scores_pages(const high_score* entries, int count,
                 is_highlight);
         }
 
-        sdl_halls_screen_add_action(SCORE_CLICK_EXIT, "Back", TERM_L_WHITE,
+        sdl_halls_screen_add_action(SCORE_CLICK_EXIT,
+            steamdeck ? "<B> Back" : "Back", TERM_L_WHITE,
             true);
-        sdl_halls_screen_add_action(SCORE_CLICK_HISTORY, "Run History",
+        sdl_halls_screen_add_action(SCORE_CLICK_HISTORY,
+            steamdeck ? "<View> Run History" : "Run History",
             TERM_L_BLUE, true);
         sdl_halls_screen_add_action(SCORE_CLICK_ORDER,
-            order == SCORE_VIEW_ORDER_SCORE ? "Order: Score" : "Order: Date",
+            steamdeck ? (order == SCORE_VIEW_ORDER_SCORE
+                ? "<Y> Order: Score" : "<Y> Order: Date")
+                : (order == SCORE_VIEW_ORDER_SCORE ? "Order: Score" : "Order: Date"),
             TERM_L_WHITE, true);
         sdl_halls_screen_add_action(SCORE_CLICK_LAYOUT,
-            detailed ? "View: Full" : "View: Brief", TERM_L_WHITE, true);
+            steamdeck ? (detailed ? "<X> View: Full" : "<X> View: Brief")
+                : (detailed ? "View: Full" : "View: Brief"), TERM_L_WHITE, true);
         if (!sdl_touch_only_device_active())
-            sdl_halls_screen_add_action(SCORE_CLICK_OPEN, "Open Hero",
+            sdl_halls_screen_add_action(SCORE_CLICK_OPEN,
+                steamdeck ? "<A> Open Hero" : "Open Hero",
                 TERM_L_BLUE, true);
-        sdl_halls_screen_add_action(SCORE_CLICK_PREV, "Previous", TERM_SLATE,
+        sdl_halls_screen_add_action(SCORE_CLICK_PREV,
+            steamdeck ? "<LB> Previous" : "Previous", TERM_SLATE,
             has_prev);
-        sdl_halls_screen_add_action(SCORE_CLICK_NEXT, "Next", TERM_SLATE,
+        sdl_halls_screen_add_action(SCORE_CLICK_NEXT,
+            steamdeck ? "<RB> Next" : "Next", TERM_SLATE,
             has_more);
         Term_fresh();
 
@@ -1140,7 +1150,11 @@ static char display_scores_pages(const high_score* entries, int count,
             continue;
 
         if (!click_generated_command)
+        {
+            if (sdl_halls_screen_handle_key(ch))
+                continue;
             ch = (char)steamdeck_menu_key(ch, 'p', 'n');
+        }
 
         if (steamdeck) {
             int back_key = steamdeck_back_key();

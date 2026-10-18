@@ -77,6 +77,7 @@ typedef struct sdl_halls_layout {
     float header_body_gap;
     float body_footer_gap;
     float footer_h;
+    float controller_hint_h;
     float body_top;
     float body_h;
     float gap;
@@ -97,6 +98,29 @@ static struct {
     float offset, maximum, last_touch_y;
     SDL_FRect body;
 } g_halls_mobile;
+
+/* Controllers retain the memorial composition. Only the pre-existing large
+ * touch layout uses the mobile reading surface. */
+static bool sdl_halls_flow_layout(void)
+{
+    return !steamdeck_controls_active()
+        && sdl_handheld_ui_active() && get_sdl_menu_bigger_font();
+}
+
+static struct {
+    char page[256];
+    float offset, maximum;
+    SDL_FRect body;
+    int selected_choice;
+} g_halls_controller;
+
+static float sdl_halls_controller_card_h(const SDL_Rect* canvas, float width,
+    bool detailed, const sdl_halls_entry* entry);
+
+static cptr sdl_halls_controller_hint(void)
+{
+    return "D-pad select   <LB>/<RB> scroll / page";
+}
 
 static cptr sdl_halls_mobile_action_label(const sdl_halls_action* action)
 {
@@ -217,7 +241,7 @@ static void sdl_halls_measure_layout(const SDL_Rect* canvas,
 
     memset(layout, 0, sizeof(*layout));
     short_side = sdl_halls_short_side(canvas);
-    if (mobile && get_sdl_menu_bigger_font())
+    if (sdl_halls_flow_layout())
     {
         float dp = sdl_ui_density_scale();
         int columns, rows;
@@ -287,6 +311,28 @@ static void sdl_halls_measure_layout(const SDL_Rect* canvas,
         layout->footer_h = action_px * 1.6f * (canvas->w >= canvas->h ? 3 : 4);
         layout->content_w = (float)canvas->w - layout->margin_x * 2.0f;
     }
+    if (steamdeck_controls_active())
+    {
+        TTF_Font* hint_font = sdl_story_font_for_height_slot(
+            sdl_menu_font_px(18), SDL_STORY_FONT_SLOT_MENU);
+        layout->controller_hint_h = TTF_GetFontHeight(hint_font) + 6.0f;
+        if (get_sdl_menu_bigger_font())
+        {
+            int count = 0;
+            for (int i = 0; i < g_sdl_halls.action_count; i++)
+                if (g_sdl_halls.actions[i].enabled) count++;
+            if (!count) count = 7;
+            int columns = MIN(canvas->w >= canvas->h ? 3 : 2, count);
+            int rows = (count + columns - 1) / columns;
+            TTF_Font* label_font = sdl_story_font_for_height_slot(
+                sdl_menu_font_px(sdl_halls_clampi((int)(short_side * 0.025f), 16, 24)),
+                SDL_STORY_FONT_SLOT_MENU);
+            layout->footer_h = rows * (TTF_GetFontHeight(label_font)
+                + layout->controller_hint_h + 2.0f) + (rows - 1) * 6.0f;
+        }
+        else
+            layout->footer_h = MAX(60.0f, layout->footer_h * 0.75f);
+    }
     if (layout->content_w < 1.0f)
         layout->content_w = 1.0f;
     layout->content_x = (float)canvas->x
@@ -296,7 +342,7 @@ static void sdl_halls_measure_layout(const SDL_Rect* canvas,
     layout->body_h = (float)canvas->h - layout->margin_top
         - layout->margin_bottom - layout->header_h
         - layout->header_body_gap - layout->body_footer_gap
-        - layout->footer_h;
+        - layout->footer_h - layout->controller_hint_h;
     if (layout->body_h < 1.0f)
         layout->body_h = 1.0f;
     layout->gap = mobile
@@ -328,9 +374,17 @@ static int sdl_halls_capacity_for_layout(const SDL_Rect* canvas,
     if (!canvas || !layout)
         return 1;
 
+    if (steamdeck_controls_active())
+    {
+        float height = sdl_halls_controller_card_h(canvas, layout->content_w,
+            detailed, NULL);
+        return sdl_halls_clampi((int)((layout->body_h + layout->gap)
+            / (height + layout->gap)), 1, SDL_HALLS_MAX_ENTRIES);
+    }
+
     /* Choose a readable page density in display units; overflow remains
      * scrollable when individual memorial fields wrap onto extra lines. */
-    if (sdl_halls_mobile_layout() && get_sdl_menu_bigger_font())
+    if (sdl_halls_flow_layout())
     {
         float dp = sdl_ui_density_scale();
         float line = sdl_halls_mobile_text_h("Aglar", SDL_UI_FONT_BODY,
@@ -747,49 +801,97 @@ static char* sdl_halls_trim_segment(char* text)
     return text;
 }
 
-static void sdl_halls_draw_details(TTF_Font* font, cptr text,
-    SDL_FRect box)
+static int sdl_halls_detail_fields(cptr text, char* buffer, size_t size,
+    cptr fields[3])
 {
-    char buffer[SDL_HALLS_TEXT_LEN];
-    char* separator1;
-    char* separator2;
-    char* turns;
-    char* depth;
-    char* date;
-    float gap;
-    float usable_w;
-    SDL_FRect field;
-
-    if (!font || !text || !text[0])
-        return;
-
-    SDL_strlcpy(buffer, text, sizeof(buffer));
-    separator1 = strchr(buffer, '|');
-    separator2 = separator1 ? strchr(separator1 + 1, '|') : NULL;
-    if (!separator1 || !separator2)
-    {
-        (void)sdl_halls_draw_text(font, text, TERM_SLATE, box, -1);
-        return;
-    }
-
+    SDL_strlcpy(buffer, text ? text : "", size);
+    char* separator1 = strchr(buffer, '|');
+    char* separator2 = separator1 ? strchr(separator1 + 1, '|') : NULL;
+    fields[0] = buffer;
+    if (!separator1 || !separator2) return 1;
     *separator1 = '\0';
     *separator2 = '\0';
-    turns = sdl_halls_trim_segment(buffer);
-    depth = sdl_halls_trim_segment(separator1 + 1);
-    date = sdl_halls_trim_segment(separator2 + 1);
-    if (prefix(depth, "deepest descent "))
-        depth += strlen("deepest descent ");
+    fields[0] = sdl_halls_trim_segment(buffer);
+    fields[1] = sdl_halls_trim_segment(separator1 + 1);
+    fields[2] = sdl_halls_trim_segment(separator2 + 1);
+    if (prefix(fields[1], "deepest descent "))
+        fields[1] += strlen("deepest descent ");
+    return 3;
+}
 
-    gap = sdl_halls_clampf(box.w * 0.018f, 5.0f, 12.0f);
-    usable_w = box.w - gap * 2.0f;
-    field = (SDL_FRect){ box.x, box.y, usable_w * 0.37f, box.h };
-    (void)sdl_halls_draw_text(font, turns, TERM_SLATE, field, -1);
-    field.x += field.w + gap;
-    field.w = usable_w * 0.26f;
-    (void)sdl_halls_draw_text(font, depth, TERM_SLATE, field, 0);
-    field.x += field.w + gap;
-    field.w = box.x + box.w - field.x;
-    (void)sdl_halls_draw_text(font, date, TERM_SLATE, field, 1);
+static void sdl_halls_draw_details(cptr text, SDL_FRect box,
+    int min_px, int max_px)
+{
+    char buffer[SDL_HALLS_TEXT_LEN];
+    cptr fields[3];
+    int count = sdl_halls_detail_fields(text, buffer, sizeof(buffer), fields);
+    float gap = sdl_halls_clampf(box.w * 0.018f, 5.0f, 12.0f);
+    float usable_w = count == 3 ? box.w - gap * 2 : box.w;
+    const float shares[] = { 0.37f, 0.26f, 0.37f };
+    SDL_FRect field = box;
+    for (int i = 0; i < count; i++)
+    {
+        field.w = count == 3 ? usable_w * shares[i] : usable_w;
+        /* The old fixed font could be taller than this entire metadata row.
+         * Fit the actual fields before drawing, retaining their three columns. */
+        (void)sdl_halls_draw_fitted_text(fields[i], TERM_SLATE, field,
+            i - 1, min_px, max_px, SDL_STORY_FONT_SLOT_NARRATIVE);
+        field.x += field.w + gap;
+    }
+}
+
+static float sdl_halls_card_text_h(cptr text, int px, int slot, float width)
+{
+    int w = 0, h = 0;
+    TTF_Font* font = sdl_story_font_for_height_slot(px, slot);
+    if (text && text[0])
+        TTF_GetStringSizeWrapped(font, text, 0, MAX(1, (int)width), &w, &h);
+    return h;
+}
+
+static float sdl_halls_controller_card_h(const SDL_Rect* canvas, float width,
+    bool detailed, const sdl_halls_entry* entry)
+{
+    bool mobile = sdl_halls_mobile_layout();
+    float short_side = sdl_halls_short_side(canvas);
+    float pad = mobile ? 19.0f : MAX(8.0f, short_side * 0.018f);
+    float rank_w = mobile ? sdl_halls_clampf(width * 0.064f, 42, 82)
+        : MIN(MAX(short_side * 0.055f, 42), width * 0.15f);
+    float text_w = MAX(1, width - pad * 2 - rank_w);
+    int name_px = sdl_menu_font_px(mobile ? 28 : MAX((int)(short_side * 0.024f), 21));
+    int body_px = sdl_menu_font_px(mobile ? 24 : MAX((int)(short_side * 0.019f), 18));
+    int meta_px = sdl_menu_font_px(mobile ? 24 : MAX((int)(short_side * 0.015f), 15));
+    int factor_px = sdl_menu_font_px(mobile ? 20 : MAX((int)(short_side * 0.014f), 15));
+    float height = sdl_halls_target_card_h(canvas, detailed);
+    float name_h = sdl_halls_card_text_h("Aglar", name_px,
+        SDL_STORY_FONT_SLOT_DEFAULT, text_w);
+    float body_h = sdl_halls_card_text_h(entry ? entry->outcome : "Lives still in Angband.",
+        body_px, SDL_STORY_FONT_SLOT_NARRATIVE, text_w);
+    height = MAX(height, name_h / (detailed ? (mobile ? 0.19f : 0.17f) : 0.28f));
+    height = MAX(height, body_h / (detailed ? (mobile ? 0.16f : 0.14f) : 0.34f));
+    if (entry && entry->honors[0])
+        height = MAX(height, sdl_halls_card_text_h(entry->honors, meta_px,
+            SDL_STORY_FONT_SLOT_NARRATIVE, MAX(110, width * 0.22f))
+                / (detailed ? 0.14f : 0.26f));
+    if (detailed)
+    {
+        float increases = sdl_halls_card_text_h(entry ? entry->score_increases : "Score increases: none",
+            factor_px, SDL_STORY_FONT_SLOT_NARRATIVE, text_w);
+        float decreases = sdl_halls_card_text_h(entry ? entry->score_decreases : "Score decreases: none",
+            factor_px, SDL_STORY_FONT_SLOT_NARRATIVE, text_w);
+        if (mobile)
+        {
+            height = MAX(height, increases / 0.25f);
+            height = MAX(height, decreases / 0.18f);
+        }
+        else
+            height = MAX(height, increases + decreases + pad * 2
+                + sdl_menu_font_px((int)(short_side * 0.040f)) * 1.3f
+                + sdl_menu_font_px((int)(short_side * 0.032f)) * 1.3f
+                + sdl_menu_font_px((int)(short_side * 0.025f)) * 1.4f
+                + MAX(6, short_side * 0.008f) * 5);
+    }
+    return SDL_ceilf(height + 2.0f);
 }
 
 static void sdl_halls_render_big_entry(sdl_halls_entry* entry, SDL_FRect card,
@@ -918,8 +1020,6 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
         : MAX((int)(short_side * 0.015f), 15));
     int factor_min_px = sdl_menu_font_px(mobile ? 20
         : MAX((int)(short_side * 0.014f), 15));
-    TTF_Font* meta_font = sdl_story_font_for_height_slot(meta_px,
-        SDL_STORY_FONT_SLOT_NARRATIVE);
     SDL_FRect strip = {
         card.x, card.y,
         mobile ? (focused ? 5.0f : 2.0f)
@@ -962,9 +1062,13 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
         box = (SDL_FRect){ text_x,
             card.y + card.h * (g_sdl_halls.detailed ? 0.22f : 0.36f),
             text_w, card.h * (g_sdl_halls.detailed ? 0.16f : 0.42f) };
-        (void)sdl_halls_draw_fitted_text(entry->outcome,
-            focused ? TERM_WHITE : TERM_L_WHITE, box, -1,
-            body_min_px, body_px, SDL_STORY_FONT_SLOT_NARRATIVE);
+        if (steamdeck_controls_active())
+            sdl_halls_draw_wrapped_text(entry->outcome,
+                focused ? TERM_WHITE : TERM_L_WHITE, box, body_min_px, body_px);
+        else
+            (void)sdl_halls_draw_fitted_text(entry->outcome,
+                focused ? TERM_WHITE : TERM_L_WHITE, box, -1,
+                body_min_px, body_px, SDL_STORY_FONT_SLOT_NARRATIVE);
 
         if (g_sdl_halls.detailed)
         {
@@ -975,7 +1079,7 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
             box = (SDL_FRect){ text_x, card.y + card.h * 0.385f,
                 text_w - honors_w - (honors_w > 0.0f ? pad : 0.0f),
                 card.h * 0.14f };
-            sdl_halls_draw_details(meta_font, entry->details, box);
+            sdl_halls_draw_details(entry->details, box, factor_min_px, meta_px);
             if (honors_w > 0.0f)
             {
                 box.x = card.x + card.w - pad - honors_w;
@@ -1041,9 +1145,13 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
         box = (SDL_FRect){ text_x, content_y, text_w, outcome_h };
         if (!g_sdl_halls.detailed && entry->honors[0])
             box.w -= score_w + pad;
-        (void)sdl_halls_draw_fitted_text(entry->outcome,
-            focused ? TERM_WHITE : TERM_L_WHITE, box, -1,
-            body_min_px, body_px, SDL_STORY_FONT_SLOT_NARRATIVE);
+        if (steamdeck_controls_active())
+            sdl_halls_draw_wrapped_text(entry->outcome,
+                focused ? TERM_WHITE : TERM_L_WHITE, box, body_min_px, body_px);
+        else
+            (void)sdl_halls_draw_fitted_text(entry->outcome,
+                focused ? TERM_WHITE : TERM_L_WHITE, box, -1,
+                body_min_px, body_px, SDL_STORY_FONT_SLOT_NARRATIVE);
 
         if (g_sdl_halls.detailed)
         {
@@ -1063,7 +1171,7 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
             box = (SDL_FRect){ text_x, content_y,
                 text_w - honors_w - (honors_w > 0.0f ? pad : 0.0f),
                 details_h };
-            sdl_halls_draw_details(meta_font, entry->details, box);
+            sdl_halls_draw_details(entry->details, box, factor_min_px, meta_px);
             if (honors_w > 0.0f)
             {
                 box.x = card.x + card.w - pad - honors_w;
@@ -1108,6 +1216,50 @@ static void sdl_halls_render_entry(sdl_halls_entry* entry, SDL_FRect card,
     entry->hit_rect = card;
 }
 
+static cptr sdl_halls_action_label(const sdl_halls_action* action,
+    char* badge, size_t size)
+{
+    cptr label = action->label;
+    badge[0] = '\0';
+    cptr end = steamdeck_controls_active() && label[0] == '<'
+        ? strchr(label, '>') : NULL;
+    if (end && (size_t)(end - label + 1) < size)
+    {
+        size_t length = (size_t)(end - label + 1);
+        memcpy(badge, label, length);
+        badge[length] = '\0';
+        label = end + 1;
+        if (*label == ' ') label++;
+    }
+    return label;
+}
+
+static void sdl_halls_draw_action_label(TTF_Font* font,
+    const sdl_halls_action* action, SDL_FRect box, bool compact)
+{
+    char badge[16];
+    cptr label = sdl_halls_action_label(action, badge, sizeof(badge));
+    if (compact)
+    {
+        if (streq(label, "Run History")) label = "History";
+        else if (streq(label, "Open Hero")) label = "Open";
+        else if (streq(label, "Previous")) label = "Prev";
+        else if (prefix(label, "Order: ")) label += 7;
+        else if (prefix(label, "View: ")) label += 6;
+    }
+    if (badge[0])
+    {
+        TTF_Font* badge_font = sdl_story_font_for_height_slot(
+            sdl_menu_font_px(18), SDL_STORY_FONT_SLOT_NARRATIVE);
+        SDL_FRect badge_box = box;
+        badge_box.h = TTF_GetFontHeight(badge_font) + 4.0f;
+        (void)sdl_halls_draw_text(badge_font, badge, action->attr, badge_box, 0);
+        box.y += badge_box.h;
+        box.h -= badge_box.h;
+    }
+    (void)sdl_halls_draw_text(font, label, action->attr, box, 0);
+}
+
 static TTF_Font* sdl_halls_actions_font(float action_w, float inset,
     float h, int min_px, int max_px)
 {
@@ -1115,6 +1267,12 @@ static TTF_Font* sdl_halls_actions_font(float action_w, float inset,
     int low = MAX(1, min_px);
     int high = MAX(low, max_px);
     float available_w = MAX(1.0f, action_w - inset * 2.0f);
+    if (steamdeck_controls_active())
+    {
+        TTF_Font* badge_font = sdl_story_font_for_height_slot(
+            sdl_menu_font_px(18), SDL_STORY_FONT_SLOT_NARRATIVE);
+        h -= TTF_GetFontHeight(badge_font) + 4.0f;
+    }
 
     while (low <= high)
     {
@@ -1130,7 +1288,9 @@ static TTF_Font* sdl_halls_actions_font(float action_w, float inset,
 
             if (!g_sdl_halls.actions[i].enabled)
                 continue;
-            if (!TTF_GetStringSize(font, g_sdl_halls.actions[i].label, 0,
+            char badge[16];
+            cptr label = sdl_halls_action_label(&g_sdl_halls.actions[i], badge, sizeof(badge));
+            if (!TTF_GetStringSize(font, label, 0,
                     &text_w, &text_h)
                 || (float)text_w > available_w + 1.0f
                 || (float)text_h > h + 1.0f)
@@ -1157,7 +1317,7 @@ static void sdl_halls_render_actions_normal(const SDL_Rect* canvas, float conten
 {
     bool mobile = sdl_halls_mobile_layout();
     float short_side = sdl_halls_short_side(canvas);
-    float gap = mobile
+    float gap = steamdeck_controls_active() ? 6.0f : mobile
         ? sdl_halls_clampf(content_w * 0.010f, 5.0f, 14.0f)
         : MAX(short_side * 0.008f, 7.0f);
     float action_w;
@@ -1203,7 +1363,7 @@ static void sdl_halls_render_actions_normal(const SDL_Rect* canvas, float conten
         box = action->hit_rect;
         box.x += gap;
         box.w -= gap * 2.0f;
-        (void)sdl_halls_draw_text(font, action->label, action->attr, box, 0);
+        sdl_halls_draw_action_label(font, action, box, false);
     }
 }
 
@@ -1216,7 +1376,7 @@ static void sdl_halls_render_actions(const SDL_Rect* canvas, float content_x,
     }
     bool mobile = sdl_halls_mobile_layout();
     float short_side = sdl_halls_short_side(canvas);
-    float gap = mobile
+    float gap = steamdeck_controls_active() ? 6.0f : mobile
         ? sdl_halls_clampf(content_w * 0.010f, 5.0f, 14.0f)
         : MAX(short_side * 0.008f, 7.0f);
     float action_w;
@@ -1274,16 +1434,7 @@ static void sdl_halls_render_actions(const SDL_Rect* canvas, float content_x,
         box = action->hit_rect;
         box.x += gap;
         box.w -= gap * 2.0f;
-        cptr label = action->label;
-        if (get_sdl_menu_bigger_font())
-        {
-            if (streq(label, "Run History")) label = "History";
-            else if (streq(label, "Open Hero")) label = "Open";
-            else if (streq(label, "Previous")) label = "Prev";
-            else if (prefix(label, "Order: ")) label += 7;
-            else if (prefix(label, "View: ")) label += 6;
-        }
-        (void)sdl_halls_draw_text(font, label, action->attr, box, 0);
+        sdl_halls_draw_action_label(font, action, box, get_sdl_menu_bigger_font());
     }
 }
 
@@ -1436,6 +1587,73 @@ static void sdl_halls_render_mobile(const SDL_Rect* canvas,
     }
 }
 
+static void sdl_halls_render_controller_entries(const SDL_Rect* canvas,
+    const sdl_halls_layout* layout)
+{
+    float heights[SDL_HALLS_MAX_ENTRIES];
+    float total = 0, selected_top = 0;
+    char page[256];
+    strnfmt(page, sizeof(page), "%d:%s:%s", g_sdl_halls.detailed,
+        g_sdl_halls.page_status, g_sdl_halls.entry_count
+            ? g_sdl_halls.entries[0].name : "");
+    if (!streq(page, g_halls_controller.page))
+    {
+        SDL_strlcpy(g_halls_controller.page, page, sizeof(g_halls_controller.page));
+        g_halls_controller.offset = 0;
+        g_halls_controller.selected_choice = INT_MIN;
+    }
+    g_halls_controller.body = (SDL_FRect){ layout->content_x, layout->body_top,
+        layout->content_w, layout->body_h };
+    for (int i = 0; i < g_sdl_halls.entry_count; i++)
+    {
+        sdl_halls_entry* entry = &g_sdl_halls.entries[i];
+        heights[i] = sdl_halls_controller_card_h(canvas, layout->content_w,
+            g_sdl_halls.detailed, entry);
+        if (entry->selected && entry->choice != g_halls_controller.selected_choice)
+        {
+            if (selected_top < g_halls_controller.offset)
+                g_halls_controller.offset = selected_top;
+            else if (selected_top + heights[i] > g_halls_controller.offset + layout->body_h)
+                g_halls_controller.offset = MIN(selected_top,
+                    selected_top + heights[i] - layout->body_h);
+            g_halls_controller.selected_choice = entry->choice;
+        }
+        selected_top += heights[i] + layout->gap;
+        total += heights[i] + (i ? layout->gap : 0);
+    }
+    g_halls_controller.maximum = MAX(0, total - layout->body_h);
+    g_halls_controller.offset = sdl_halls_clampf(g_halls_controller.offset,
+        0, g_halls_controller.maximum);
+    SDL_Rect clip = { (int)layout->content_x, (int)layout->body_top,
+        (int)layout->content_w, (int)layout->body_h };
+    SDL_SetRenderClipRect(g_state.renderer, &clip);
+    float y = layout->body_top - g_halls_controller.offset;
+    for (int i = 0; i < g_sdl_halls.entry_count; i++)
+    {
+        sdl_halls_entry* entry = &g_sdl_halls.entries[i];
+        SDL_FRect card = { layout->content_x, y, layout->content_w, heights[i] };
+        if (y + card.h > layout->body_top && y < layout->body_top + layout->body_h)
+        {
+            sdl_halls_render_entry(entry, card, (int)sdl_halls_short_side(canvas));
+            entry->hit_rect.y = MAX(y, layout->body_top);
+            entry->hit_rect.h = MIN(y + card.h, layout->body_top + layout->body_h)
+                - entry->hit_rect.y;
+        }
+        y += heights[i] + layout->gap;
+    }
+    if (!g_sdl_halls.entry_count)
+    {
+        SDL_FRect box = g_halls_controller.body;
+        (void)sdl_halls_draw_fitted_text(g_sdl_halls.empty_text[0]
+            ? g_sdl_halls.empty_text : "No recorded heroes yet.", TERM_SLATE,
+            box, 0, sdl_menu_font_px(19), sdl_menu_font_px(28),
+            SDL_STORY_FONT_SLOT_NARRATIVE);
+    }
+    sdl_ui_render_scroll_indicator(g_halls_controller.body,
+        g_halls_controller.offset, g_halls_controller.maximum, layout->body_h);
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+}
+
 void sdl_halls_screen_render(void)
 {
     SDL_Rect window;
@@ -1469,7 +1687,7 @@ void sdl_halls_screen_render(void)
 
     sdl_halls_measure_layout(&canvas, &layout);
     mobile = sdl_halls_mobile_layout();
-    if (mobile && get_sdl_menu_bigger_font())
+    if (sdl_halls_flow_layout())
     {
         sdl_halls_render_mobile(&canvas, &layout);
         return;
@@ -1480,6 +1698,21 @@ void sdl_halls_screen_render(void)
     visible_body_h = layout.body_h;
     footer_y = (float)(canvas.y + canvas.h) - layout.margin_bottom
         - layout.footer_h;
+
+    if (steamdeck_controls_active())
+    {
+        sdl_halls_render_header(&canvas, layout.content_x, layout.content_w,
+            header_top, layout.header_h);
+        sdl_halls_render_controller_entries(&canvas, &layout);
+        SDL_FRect hint_box = { layout.content_x,
+            footer_y - layout.controller_hint_h, layout.content_w, layout.controller_hint_h };
+        TTF_Font* hint_font = sdl_story_font_for_height_slot(
+            sdl_menu_font_px(18), SDL_STORY_FONT_SLOT_MENU);
+        (void)sdl_halls_draw_text(hint_font, sdl_halls_controller_hint(), TERM_SLATE, hint_box, 0);
+        sdl_halls_render_actions(&canvas, layout.content_x, layout.content_w,
+            footer_y, layout.footer_h);
+        return;
+    }
 
     if (g_sdl_halls.entry_count > 0)
     {
@@ -1562,6 +1795,21 @@ void sdl_halls_screen_render(void)
         footer_y, layout.footer_h);
 }
 
+bool sdl_halls_screen_handle_key(int key)
+{
+    if (!g_sdl_halls.active || !steamdeck_controls_active()
+        || g_halls_controller.maximum <= 0)
+        return false;
+    float direction = key == steamdeck_prev_page_key() ? -1.0f
+        : key == steamdeck_next_page_key() ? 1.0f : 0.0f;
+    float offset = sdl_halls_clampf(g_halls_controller.offset
+        + direction * g_halls_controller.body.h * 0.85f, 0, g_halls_controller.maximum);
+    if (!direction || offset == g_halls_controller.offset) return false;
+    g_halls_controller.offset = offset;
+    g_state.need_present = true;
+    return true;
+}
+
 static int sdl_halls_hit_at(float x, float y)
 {
     int i;
@@ -1614,7 +1862,8 @@ static bool sdl_halls_pointer_motion(float x, float y)
 
 static bool sdl_halls_pointer_press(float x, float y, int action)
 {
-    if (!sdl_halls_mobile_layout() && get_sdl_menu_bigger_font() && g_sdl_halls.entry_count > 0)
+    if (!steamdeck_controls_active() && !sdl_halls_mobile_layout()
+        && get_sdl_menu_bigger_font() && g_sdl_halls.entry_count > 0)
         for (int i = 0; i < 2; i++)
             if (sdl_halls_point_in_rect(x, y, &g_halls_text_pager.buttons[i]))
             {
@@ -1699,7 +1948,17 @@ static bool sdl_halls_touch_press_motion(float x, float y,
         g_sdl_halls.touch_press_dragged = true;
     }
 
-    if (get_sdl_menu_bigger_font() && sdl_halls_mobile_layout()
+    if (steamdeck_controls_active() && g_sdl_halls.touch_press_dragged
+        && sdl_halls_point_in_rect(g_sdl_halls.touch_press_start_x,
+            g_sdl_halls.touch_press_start_y, &g_halls_controller.body))
+    {
+        g_halls_controller.offset = sdl_halls_clampf(g_halls_controller.offset
+            + g_halls_mobile.last_touch_y - y, 0, g_halls_controller.maximum);
+        g_halls_mobile.last_touch_y = y;
+        g_state.need_present = true;
+        return true;
+    }
+    if (sdl_halls_flow_layout()
         && g_sdl_halls.touch_press_dragged
         && sdl_halls_point_in_rect(g_sdl_halls.touch_press_start_x,
             g_sdl_halls.touch_press_start_y, &g_halls_mobile.body))
@@ -1785,7 +2044,14 @@ bool sdl_halls_screen_handle_pointer_event(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_MOUSE_WHEEL:
-        if (get_sdl_menu_bigger_font() && sdl_halls_mobile_layout()
+        if (steamdeck_controls_active() && g_halls_controller.maximum > 0)
+        {
+            g_halls_controller.offset = sdl_halls_clampf(g_halls_controller.offset
+                - ev->wheel.y * sdl_ui_min_tap_px(), 0, g_halls_controller.maximum);
+            g_state.need_present = true;
+            return true;
+        }
+        if (sdl_halls_flow_layout()
             && g_halls_mobile.maximum > 0)
         {
             g_halls_mobile.offset = sdl_halls_clampf(g_halls_mobile.offset
@@ -1793,7 +2059,8 @@ bool sdl_halls_screen_handle_pointer_event(const SDL_Event* ev)
             g_state.need_present = true;
             return true;
         }
-        if (get_sdl_menu_bigger_font() && g_halls_text_pager.maximum > 0)
+        if (!steamdeck_controls_active() && get_sdl_menu_bigger_font()
+            && g_halls_text_pager.maximum > 0)
         {
             g_halls_text_pager.offset = sdl_halls_clampf(
                 g_halls_text_pager.offset - ev->wheel.y * g_halls_text_pager.step,

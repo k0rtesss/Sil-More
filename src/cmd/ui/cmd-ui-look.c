@@ -3023,10 +3023,19 @@ void do_cmd_query_symbol(void)
     }
 
     /* Prompt */
-    put_str("Recall details? (k/p/y/n): ", 0, 40);
+    if (steamdeck_controls_active())
+        prt("<A> recall   <X> sort kills   <Y> sort level   <B> back", 0, 0);
+    else
+        put_str("Recall details? (k/p/y/n): ", 0, 40);
 
     /* Query */
     query = inkey();
+    if (steamdeck_controls_active())
+    {
+        if (query == steamdeck_confirm_key()) query = 'y';
+        else if (query == steamdeck_alt_action_key()) query = 'k';
+        else if (query == steamdeck_secondary_key()) query = 'p';
+    }
 
     /* Restore */
     prt(buf, 0, 0);
@@ -3084,7 +3093,11 @@ void do_cmd_query_symbol(void)
         roff_top(r_idx);
 
         /* Hack -- Complete the prompt */
-        Term_addstr(-1, TERM_WHITE, " [(r)ecall, ESC]");
+        if (steamdeck_controls_active())
+            prt("<A> recall   <LB>/<RB> previous/next   <B> back",
+                (Term ? Term->hgt : 24) - 1, 0);
+        else
+            Term_addstr(-1, TERM_WHITE, " [(r)ecall, ESC]");
 
         /* Interact */
         while (1)
@@ -3108,6 +3121,11 @@ void do_cmd_query_symbol(void)
             /* Command */
             if (!recall || !query)
                 query = inkey();
+            if (steamdeck_controls_active())
+            {
+                query = (char)steamdeck_menu_key(query, '-', ' ');
+                if (query == steamdeck_confirm_key()) query = 'r';
+            }
 
             /* Unrecall */
             if (recall)

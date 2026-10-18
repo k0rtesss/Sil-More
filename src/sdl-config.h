@@ -153,11 +153,13 @@
 #define SDL_MAIN_VIEW_MIN_SCALE 1
 #define SDL_MAIN_VIEW_PREFERRED_MIN_SCALE 2
 #define SDL_MAIN_VIEW_MAX_SCALE 20
+#define SDL_AUX_VIEW_FONT_MIN 10
+#define SDL_AUX_VIEW_FONT_MAX 48
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_MIN (-3)
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT (-1)
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_MAX 0
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(scale) \
-    ((scale) <= 3 ? 0 : SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT)
+    ((scale) < 3 ? 0 : SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT)
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN 0
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT 2
 #define SDL_MOBILE_TABLET_STARTING_ZOOM_OFFSET_DEFAULT 1
@@ -293,7 +295,7 @@ struct sdl_config {
     bool show_menu_font_button;
     // Use the paginated Big font character sheet (legacy JSON key retained).
     bool debug_character_sheet;
-    // Extra scale steps applied when mobile gameplay first appears.
+    // Extra scale steps when gameplay first appears on mobile or handheld PCs.
     int mobile_starting_zoom_offset;
     // On mobile, request a real portrait device orientation.  Landscape
     // remains the default for existing desktop and handheld layouts.
