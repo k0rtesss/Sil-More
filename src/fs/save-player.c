@@ -277,6 +277,7 @@ void wr_extra(void)
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
     /* 0.9.8.31: run-wide achievement conditions survive save/resume. */
+    /* The positive chasm/shaft route bit is recognized from save version 37. */
     wr_byte(0xAC);
     wr_u32b(p_ptr->achievement_flags & SIL_ACH_RUN_FLAGS);
     wr_u32b(p_ptr->achievement_kills);

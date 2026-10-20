@@ -7,6 +7,7 @@ import com.google.android.gms.games.PlayGames;
 import com.google.android.gms.games.achievement.Achievement;
 import com.google.android.gms.games.achievement.AchievementBuffer;
 import com.silmore.myapp.R;
+import java.util.Arrays;
 
 /** All mutable synchronization state belongs to Android's UI thread. */
 final class PlayGamesAchievements {
@@ -16,12 +17,12 @@ final class PlayGamesAchievements {
     private static final long TASK_TIMEOUT_MS = 30000;
     private final SilMoreActivity activity;
     private final String[] ids;
-    private final long allMask;
-    private final long availableMask;
+    private final long[] allMask;
+    private final long[] availableMask;
     // The game thread only reads this snapshot; no Java callback mutates game state.
-    private volatile long remoteMask;
-    private long localMask;
-    private long confirmedMask;
+    private volatile long[] remoteMask;
+    private final long[] localMask;
+    private final long[] confirmedMask;
     private int generation;
     private String playerId;
     private boolean resumed;
@@ -90,21 +91,55 @@ final class PlayGamesAchievements {
             activity.getString(R.string.play_ach_clad_in_the_night),
             activity.getString(R.string.play_ach_a_dream_upon_the_dark_lord),
             activity.getString(R.string.play_ach_neither_voice_diminished),
-            activity.getString(R.string.play_ach_doom_can_wait)
+            activity.getString(R.string.play_ach_doom_can_wait),
+            activity.getString(R.string.play_ach_the_high_captain_falls),
+            activity.getString(R.string.play_ach_dagnir_glaurunga),
+            activity.getString(R.string.play_ach_the_abhorred),
+            activity.getString(R.string.play_ach_unlight_unwoven),
+            activity.getString(R.string.play_ach_the_dragon_host_broken),
+            activity.getString(R.string.play_ach_the_red_maw),
+            activity.getString(R.string.play_ach_lord_of_the_fountain),
+            activity.getString(R.string.play_ach_master_of_doom),
+            activity.getString(R.string.play_ach_for_idril_and_earendil),
+            activity.getString(R.string.play_ach_before_the_rising_of_the_sun),
+            activity.getString(R.string.play_ach_tulkas_last_laugh),
+            activity.getString(R.string.play_ach_aules_apprentice),
+            activity.getString(R.string.play_ach_the_doomsmans_due),
+            activity.getString(R.string.play_ach_pity_for_the_forsaken),
+            activity.getString(R.string.play_ach_the_great_hunt),
+            activity.getString(R.string.play_ach_a_star_against_the_balrog),
+            activity.getString(R.string.play_ach_no_steps_required),
+            activity.getString(R.string.play_ach_there_and_almost_back_again),
+            activity.getString(R.string.play_ach_the_halls_of_utumno),
+            activity.getString(R.string.play_ach_where_grond_was_wrought)
         };
-        if (ids.length == 0 || ids.length >= Long.SIZE) {
-            throw new IllegalStateException("Achievement catalogue exceeds the JNI bitmask");
-        }
-        allMask = (1L << ids.length) - 1;
-        long mapped = 0;
+        int words = (ids.length + Long.SIZE - 1) / Long.SIZE;
+        allMask = new long[words];
+        Arrays.fill(allMask, -1L);
+        if (ids.length % Long.SIZE != 0)
+            allMask[words - 1] = (1L << (ids.length % Long.SIZE)) - 1;
+        availableMask = new long[words];
+        localMask = new long[words];
+        confirmedMask = new long[words];
+        remoteMask = new long[words];
         for (int i = 0; i < ids.length; i++) {
-            if (!ids[i].isEmpty()) mapped |= 1L << i;
+            if (!ids[i].isEmpty()) availableMask[i / Long.SIZE] |= 1L << (i % Long.SIZE);
         }
-        availableMask = mapped;
     }
 
     boolean isConfigured() { return PlayGamesApplication.initialized; }
-    long unlockedMask() { return remoteMask; }
+    long unlockedMask(int word) {
+        long[] snapshot = remoteMask;
+        return word >= 0 && word < snapshot.length ? snapshot[word] : 0;
+    }
+
+    private void confirm(int word, long bit) {
+        confirmedMask[word] |= bit;
+        // Publish an immutable snapshot to the SDL game thread.
+        long[] snapshot = remoteMask.clone();
+        snapshot[word] |= bit;
+        remoteMask = snapshot;
+    }
 
     void onResume() {
         resumed = true;
@@ -123,10 +158,14 @@ final class PlayGamesAchievements {
         resetAccount(null);
     }
 
-    void sync(long unlockedMask) {
-        long newBits = (unlockedMask & allMask) & ~localMask;
-        localMask |= unlockedMask & allMask;
-        if (newBits != 0 && retryDelay == 5000) nextAttempt = 0;
+    void sync(long[] unlockedMasks) {
+        boolean newBits = false;
+        for (int word = 0; word < Math.min(unlockedMasks.length, localMask.length); word++) {
+            long incoming = unlockedMasks[word] & allMask[word];
+            newBits |= (incoming & ~localMask[word]) != 0;
+            localMask[word] |= incoming;
+        }
+        if (newBits && retryDelay == 5000) nextAttempt = 0;
         pump();
     }
 
@@ -140,8 +179,8 @@ final class PlayGamesAchievements {
 
     private void resetAccount(String id) {
         playerId = id;
-        confirmedMask = 0;
-        remoteMask = 0;
+        Arrays.fill(confirmedMask, 0);
+        remoteMask = new long[allMask.length];
         loaded = false;
         nextRemoteLoad = 0;
     }
@@ -240,8 +279,7 @@ final class PlayGamesAchievements {
                             if (achievement.getState() != Achievement.STATE_UNLOCKED) continue;
                             for (int i = 0; i < ids.length; i++) {
                                 if (!ids[i].isEmpty() && ids[i].equals(achievement.getAchievementId())) {
-                                    confirmedMask |= 1L << i;
-                                    remoteMask |= 1L << i;
+                                    confirm(i / Long.SIZE, 1L << (i % Long.SIZE));
                                 }
                             }
                         }
@@ -258,14 +296,20 @@ final class PlayGamesAchievements {
     }
 
     private void upload(int token, String id) {
-        long pending = localMask & ~confirmedMask & availableMask;
+        int pendingWord = 0;
+        long pending = 0;
+        for (; pendingWord < localMask.length; pendingWord++) {
+            pending = localMask[pendingWord] & ~confirmedMask[pendingWord] & availableMask[pendingWord];
+            if (pending != 0) break;
+        }
         if (pending == 0) {
             if (showRequested) openUi(token, id);
             else succeeded(AUTH_POLL_MS);
             return;
         }
         final long bit = Long.lowestOneBit(pending);
-        final int index = Long.numberOfTrailingZeros(bit);
+        final int word = pendingWord;
+        final int index = word * Long.SIZE + Long.numberOfTrailingZeros(bit);
         try {
             // unlockImmediate reveals hidden achievements only when earned. Never call reveal.
             // Only server acknowledgement clears pending work. The durable native
@@ -277,8 +321,7 @@ final class PlayGamesAchievements {
                         failed("Cannot unlock Play Games achievement", task.getException());
                         return;
                     }
-                    confirmedMask |= bit;
-                    remoteMask |= bit;
+                    confirm(word, bit);
                     if (showRequested) upload(token, id);
                     else succeeded(0);
                 });

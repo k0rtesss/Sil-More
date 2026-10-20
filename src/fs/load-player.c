@@ -494,6 +494,9 @@ errr rd_extra(void)
         rd_u32b(&p_ptr->achievement_singing_turns);
         rd_s16b(&p_ptr->achievement_comeback_depth);
         p_ptr->achievement_flags &= SIL_ACH_RUN_FLAGS;
+        if (!savefile_version_at_least(0, 9, 8, 37)
+            || !(p_ptr->achievement_flags & SIL_ACH_RUN_STARTED))
+            p_ptr->achievement_flags &= ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
         if (p_ptr->achievement_comeback_depth < 0)
             p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
     }

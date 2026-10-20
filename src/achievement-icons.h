@@ -55,3 +55,23 @@ SIL_ACHIEVEMENT_ICON(CLAD_IN_THE_NIGHT, 5, 3, 5, 3, 1) /* object.txt N:107 Shado
 SIL_ACHIEVEMENT_ICON(A_DREAM_UPON_THE_DARK_LORD, 10, 18, 10, 18, 1) /* monster.txt N:251 Morgoth */
 SIL_ACHIEVEMENT_ICON(NEITHER_VOICE_DIMINISHED, 32, 24, 32, 24, 1) /* atlas UI sing symbol */
 SIL_ACHIEVEMENT_ICON(DOOM_CAN_WAIT, 6, 5, 5, 18, 2) /* object.txt N:68 Greatsword and N:44 Kite Shield, surviving and fighting back */
+SIL_ACHIEVEMENT_ICON(THE_HIGH_CAPTAIN_FALLS, 10, 16, 10, 16, 1) /* monster.txt N:241 Gothmog */
+SIL_ACHIEVEMENT_ICON(DAGNIR_GLAURUNGA, 10, 3, 10, 3, 1) /* monster.txt N:243 Glaurung */
+SIL_ACHIEVEMENT_ICON(THE_ABHORRED, 10, 17, 6, 20, 2) /* monster.txt N:244 Gorthaur and flavor.txt N:1 ring */
+SIL_ACHIEVEMENT_ICON(UNLIGHT_UNWOVEN, 7, 0, 7, 0, 1) /* monster.txt N:242 Ungoliant */
+SIL_ACHIEVEMENT_ICON(THE_DRAGON_HOST_BROKEN, 10, 2, 10, 2, 1) /* monster.txt N:233 Ancalagon */
+SIL_ACHIEVEMENT_ICON(THE_RED_MAW, 8, 23, 2, 22, 2) /* monster.txt N:253 Carcharoth and flavor.txt N:101 hunting horn */
+SIL_ACHIEVEMENT_ICON(LORD_OF_THE_FOUNTAIN, 10, 16, 5, 25, 2) /* monster.txt N:241 Gothmog and object.txt N:103 Mithril Helm, Ecthelion's helm */
+SIL_ACHIEVEMENT_ICON(MASTER_OF_DOOM, 10, 3, 6, 5, 2) /* monster.txt N:243 Glaurung and object.txt N:68 Greatsword */
+SIL_ACHIEVEMENT_ICON(FOR_IDRIL_AND_EARENDIL, 6, 3, 12, 16, 2) /* object.txt N:64 Longsword and N:131 Silmaril, Tuor defending his family */
+SIL_ACHIEVEMENT_ICON(BEFORE_THE_RISING_OF_THE_SUN, 10, 2, 12, 16, 2) /* monster.txt N:233 Ancalagon and object.txt N:131 Silmaril */
+SIL_ACHIEVEMENT_ICON(TULKAS_LAST_LAUGH, 21, 0, 21, 0, 1) /* monster.txt N:18 Tulkas */
+SIL_ACHIEVEMENT_ICON(AULES_APPRENTICE, 21, 2, 21, 2, 1) /* monster.txt N:19 Aule */
+SIL_ACHIEVEMENT_ICON(THE_DOOMSMANS_DUE, 21, 3, 21, 3, 1) /* monster.txt N:20 Mandos */
+SIL_ACHIEVEMENT_ICON(PITY_FOR_THE_FORSAKEN, 21, 8, 21, 8, 1) /* monster.txt N:260 Nienna */
+SIL_ACHIEVEMENT_ICON(THE_GREAT_HUNT, 21, 1, 21, 1, 1) /* monster.txt N:332 Orome */
+SIL_ACHIEVEMENT_ICON(A_STAR_AGAINST_THE_BALROG, 11, 8, 11, 8, 1) /* monster.txt N:321 Varda */
+SIL_ACHIEVEMENT_ICON(NO_STEPS_REQUIRED, 0, 28, 34, 0, 2) /* terrain.txt N:83 down shaft and N:2 chasm */
+SIL_ACHIEVEMENT_ICON(THERE_AND_ALMOST_BACK_AGAIN, 0, 22, 5, 18, 2) /* terrain.txt N:80 up staircase and object.txt N:44 shield, a journey cut short */
+SIL_ACHIEVEMENT_ICON(THE_HALLS_OF_UTUMNO, 32, 27, 0, 28, 2) /* existing ice_sheet.png sprite and terrain.txt N:83 down shaft */
+SIL_ACHIEVEMENT_ICON(WHERE_GROND_WAS_WROUGHT, 15, 11, 15, 11, 1) /* terrain.txt N:79 Orodruth, the Forge of Grond */

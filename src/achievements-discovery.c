@@ -82,6 +82,17 @@ void sil_achievements_on_partition_entry(int y, int x)
     if (bit) sil_achievements_on_partition_discovered(bit);
 }
 
+void sil_achievements_on_terrain_seen(int y, int x)
+{
+    if (!p_ptr || p_ptr->depth != UTUMNO_FORGE_DEPTH
+        || sil_achievement_unlocked_at(SIL_ACH_WHERE_GROND_WAS_WROUGHT)
+        || !in_bounds(y, x) || !(cave_info[y][x] & CAVE_SEEN)
+        || !sil_achievements_eligible()) return;
+    int feature = cave_feat[y][x];
+    if (feature >= FEAT_FORGE_UNIQUE_HEAD && feature <= FEAT_FORGE_UNIQUE_TAIL)
+        sil_achievements_on_event(SIL_ACH_WHERE_GROND_WAS_WROUGHT);
+}
+
 void sil_achievements_on_movement(int fy, int fx, int ty, int tx)
 {
     if (!sil_achievements_eligible() || !in_bounds(fy, fx) || !in_bounds(ty, tx))

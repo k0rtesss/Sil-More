@@ -55,7 +55,7 @@ int __wrap_hit_roll(int a,int e,const monster_type* attacker,const monster_type*
 { (void)a;(void)e;(void)attacker;(void)defender;(void)show;return ++roll_number==miss_roll ? -100 : 100; }
 int __wrap_hit_roll_details(int a,int e,const monster_type* attacker,const monster_type* defender,bool show,int* ad,int* ed)
 { if(ad)*ad=10;if(ed)*ed=1;return __wrap_hit_roll(a,e,attacker,defender,show); }
-static bool earned(int id) { return (sil_achievements_mask() & (UINT64_C(1)<<id))!=0; }
+static bool earned(int id) { return sil_achievement_unlocked_at(id)!=0; }
 static monster_type* prepare(int race)
 {
     player_carried_extra_reset_store();player_quiver_reset_store();supplies_reset_store();

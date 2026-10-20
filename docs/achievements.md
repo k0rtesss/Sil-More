@@ -61,9 +61,29 @@ controls. New unlocks appear in the message history and the popup notification.
 | `A_DREAM_UPON_THE_DARK_LORD` | A Dream Upon the Dark Lord | As Lúthien, put Morgoth to sleep with the Song of Lórien. | Yes |
 | `NEITHER_VOICE_DIMINISHED` | Neither Voice Diminished | As Daeron, have both full-strength woven themes affect enemies in the same turn. | Yes |
 | `DOOM_CAN_WAIT` | Doom Can Wait | As Túrin, resist entrancement through your unique power and kill the attacker before the resulting rage ends. | Yes |
+| `THE_HIGH_CAPTAIN_FALLS` | The High Captain Falls | Slay Gothmog. | Yes |
+| `DAGNIR_GLAURUNGA` | Dagnir Glaurunga | Slay Glaurung. | Yes |
+| `THE_ABHORRED` | The Abhorred | Slay Gorthaur. | Yes |
+| `UNLIGHT_UNWOVEN` | Unlight Unwoven | Slay Ungoliant. | Yes |
+| `THE_DRAGON_HOST_BROKEN` | The Dragon-host Broken | Slay Ancalagon. | Yes |
+| `THE_RED_MAW` | The Red Maw | Slay Carcharoth. | Yes |
+| `LORD_OF_THE_FOUNTAIN` | Lord of the Fountain | As Ecthelion, slay Gothmog. | Yes |
+| `MASTER_OF_DOOM` | Master of Doom | As Túrin, slay Glaurung. | Yes |
+| `FOR_IDRIL_AND_EARENDIL` | For Idril and Eärendil | As Tuor, slay Maeglin. | Yes |
+| `BEFORE_THE_RISING_OF_THE_SUN` | Before the Rising of the Sun | As Eärendil, slay Ancalagon. | Yes |
+| `TULKAS_LAST_LAUGH` | Tulkas Has the Last Laugh | Slay Tulkas's named unique and collect his artefact reward. | Yes |
+| `AULES_APPRENTICE` | Apprentice of the Maker | Forge an item of difficulty 21 or higher for Aulë and claim his blessing. | Yes |
+| `THE_DOOMSMANS_DUE` | The Doomsman's Due | Release Brodda's spirit for Mandos and receive his blessing. | Yes |
+| `PITY_FOR_THE_FORSAKEN` | Pity for the Forsaken | Reach a down stair or shaft without a creature dying during Nienna's trial and claim her blessing. | Yes |
+| `THE_GREAT_HUNT` | The Great Hunt | Hunt 100 wolves, 80 spiders excluding hatchlings, 60 serpents or 30 vampires for Oromë and claim his blessing. | Yes |
+| `A_STAR_AGAINST_THE_BALROG` | A Star Against the Balrog | Slay Duruin in his Bastion for Varda and choose a radiant gift. | Yes |
+| `NO_STEPS_REQUIRED` | No Steps Required | Reach Morgoth's level using only chasms and shafts for descent; upward stairs are allowed. | Yes |
+| `THERE_AND_ALMOST_BACK_AGAIN` | There and Almost Back Again | Die at the Gates of Angband, on the surface. | Yes |
+| `THE_HALLS_OF_UTUMNO` | The Halls of Utumno | Reach the frozen ruins of Utumno. | Yes |
+| `WHERE_GROND_WAS_WROUGHT` | Where Grond Was Wrought | Discover Orodruth, the Great Forge of Grond in Utumno. | Yes |
 
-The 54 achievements preserve the original 26 stable keys and indexes, followed
-by 28 appended entries. Forty-four are hidden: their title, condition and
+The 74 achievements preserve the previous 54 stable keys and indexes, followed
+by 20 appended entries. Sixty-four are hidden: their title, condition and
 identifying icon remain concealed until earned in the local viewer. Locked
 hidden entries use the same generic description sprite. Steam exports set
 `spoiler` and Google exports use the `Hidden` initial state. Synchronization only
@@ -72,7 +92,8 @@ unlocks earned achievements and never reveals a hidden achievement in advance.
 Google locks the initial state of achievements once published. The original
 14 retain their published revealed state on Google; the 40 additions use
 36 hidden and four revealed entries. Local and Steam visibility still follows
-the 44-hidden policy above. Existing Google identities and unlocks are preserved.
+the local hidden policy above. The newest 20 entries are hidden and await
+assigned provider IDs. Existing Google identities and unlocks are preserved.
 
 The ten visible entries are To Dungeons Deep, The Quest of the Silmaril,
 A Very Polite Burglary, When the Road Darkens, While Hammers Fell, The Lay of
@@ -84,7 +105,7 @@ The in-game list displays existing game sprites beside each revealed entry,
 including in ASCII map mode. `src/achievement-icons.h` is the shared mapping
 for the book and exported artwork; composite store icons use the first mapped
 sprite in the book. Entries use one paragraph each so the whole catalogue fits
-the book's 64-paragraph capacity. Wrapping, pagination and scrolling retain the
+the book's 128-paragraph capacity. Wrapping, pagination and scrolling retain the
 chosen font size on narrow screens.
 
 Icon choices consider the Tolkien title as well as the unlock condition.
@@ -98,13 +119,88 @@ ring or dagger graphics.
 Google requires distinct achievement images. Repeated primary sprites receive
 related secondary sprites in the Google export: for example, Morgoth with a
 song symbol for Luthien's deed and a blade with a Silmaril for Iron-Cleaver.
-The exporter verifies that all 54 Google images are distinct; every sprite
+The exporter verifies that all 74 Google images are distinct; every sprite
 still comes directly from the game's atlas with nearest-neighbor scaling.
 
 Ordinary scored adventures qualify, including the contextual gameplay
 tutorial. Wizard/debug runs, active cheats, recorded cheating, and the separate
 practice tutorial (`game_type != 0`) cannot earn achievements. Previously
 earned achievements remain visible while playing these modes.
+
+## Unique kills, historical deeds and quests
+
+The six new unique victories focus on the principal First Age enemies; Morgoth
+already has **Dagor Dagorath**. Confirmed player kills include normal combat,
+projectiles, player-attributed poison, traps and lethal knockback. Ambient damage
+and kills by other monsters do not count. A hero can earn the general unique
+victory and the corresponding historical deed from the same kill. Heroes match
+the selected character template's stable GUID; a custom player name or copied
+ability does not impersonate a hero. Ecthelion's template spelling is corrected
+without changing its index or GUID.
+
+The four historical pairings follow the published *Silmarillion*: Ecthelion and
+Gothmog, and Tuor and Maeglin, in chapter 23, “Of Tuor and the Fall of Gondolin”;
+Túrin and Glaurung in chapter 21, “Of Túrin Turambar”; Eärendil and Ancalagon in
+chapter 24, “Of the Voyage of Eärendil and the War of Wrath”. Ecthelion's deed
+requires the kill, without requiring his death; Tuor's requires the right victim,
+without requiring a chasm. No particular weapon or time of day is required.
+Online reference summaries and their book citations:
+[Ecthelion](https://tolkiengateway.net/wiki/Ecthelion),
+[Glaurung's death](https://tolkiengateway.net/wiki/The_Death_of_Glaurung),
+[the fall of Gondolin](https://tolkiengateway.net/wiki/Of_Tuor_and_the_Fall_of_Gondolin),
+[Ancalagon](https://tolkiengateway.net/wiki/Ancalagon_the_Black).
+
+Further researched possibilities, not additional unlock conditions in this set:
+
+| Coincidence | Source and qualification |
+| --- | --- |
+| Túrin slays Brodda | *The Children of Húrin*, “The Return of Túrin to Dor-lómin”; [reference](https://tolkiengateway.net/wiki/Brodda). The current Mandos quest makes this an especially apt repeated encounter. |
+| Azaghâl faces Glaurung | *The Silmarillion*, ch. 20; [reference](https://tolkiengateway.net/wiki/Glaurung). He wounds and repels the dragon but dies; slaying it would change the story. |
+| Fingolfin wounds Morgoth with Ringil | *The Silmarillion*, ch. 18; [reference](https://tolkiengateway.net/wiki/Fall_of_Fingolfin). A victory would reverse his historical fate. |
+
+Attribution matters: Huan kills Carcharoth and Draugluin; Glorfindel's Balrog and
+Finrod's last werewolf are unnamed. Lúthien and Huan defeat Gorthaur/Sauron but
+release him after he yields. The generic Gorthaur kill is a game victory, without
+claiming that Sauron was historically or permanently slain.
+
+Each of the six Valar achievements fires in the successful reward-delivery path,
+after the quest's actual completion checks. Acceptance, unfinished objectives,
+failed quests, loaded pending rewards and cancellation of Varda's gift choice do
+not unlock one. Claiming a reward again never announces a second unlock. The
+existing **No Rings Attached** continues to cover fulfilling a thrall's request.
+The key-based achievement profile remains version 1.
+
+The four journey/discovery entries are hidden. **No Steps Required** is awarded
+on a living arrival at Morgoth's level (1000 ft), with every downward transition
+since birth made through a chasm or down shaft. Ordinary down stairs, false
+floors, horn-created falls and downward level teleportation disqualify the run.
+Upward travel is allowed, and cancelling a stair prompt does not spoil the run.
+A down shaft immediately above Morgoth may travel only one level and still counts.
+Save version **0.9.8.37** stores positive route eligibility in the existing
+achievement flags word; older saves start ineligible because their route is
+unknown. The serialized block size stays unchanged. Invalid routes remain
+ineligible after save/resume.
+
+**There and Almost Back Again** requires an actual lethal hit at depth 0, the
+Gates/surface. Last-chance equipment is resolved first. Escape, victory, quitting
+and the suicide command do not count as this death.
+
+**The Halls of Utumno** unlocks on a living arrival at the optional Utumno level,
+including a legitimate saved character already there. **Where Grond Was Wrought**
+requires seeing Orodruth's unique forge tile on the Forge of Grond level. Entering
+the forge level's landing, remembering an unseen tile or seeing an ordinary forge
+does not meet that condition. These discoveries require no combat or smithing.
+
+The catalogue's naming pattern mixes specific book references and epithets with
+original humour tied to the deed. Names such as **Dagnir Glaurunga**, **Lord of
+the Fountain** and **The Red Maw** retain the specific-reference side. Quest
+names such as **The Great Hunt** and **Apprentice of the Maker** are more general;
+their descriptions now state the actual objective rather than only saying to
+complete a quest. **No Steps Required** uses original mechanical humour;
+**There and Almost Back Again** riffs on the existing journey title. **The Halls
+of Utumno** names the discovered place, and **Where Grond Was Wrought** refers to
+the authored Forge of Grond setpiece. These new names are not presented as quotes.
+
 
 ## Local progress and synchronization
 
@@ -176,7 +272,7 @@ profile from fitting, saving reports failure and retains the previous file.
 
 Build with the optional Steamworks integration described in
 [steam-build.md](steam-build.md). In the Steamworks dashboard for the configured
-App ID, create and **publish** the 54 achievements using the exact API names
+App ID, create and **publish** the 74 achievements using the exact API names
 in the table above. Supply their names, descriptions, and unlocked/locked icons.
 These are ordinary one-shot achievements; no Steam stat definitions are needed
 for progress tracking. Keep the API names stable after release.
@@ -204,7 +300,7 @@ Unconfigured Play builds also work locally and do not initialize Play Games.
    Android application ID and the signing certificate SHA-1 of each build you
    will test/distribute, including the **Play App Signing** certificate for Play
    delivery. Register test accounts while the service is unpublished.
-2. Create 54 **standard**, one-shot achievements with the conditions in the
+2. Create 74 **standard**, one-shot achievements with the conditions in the
    table above. Supply the Console metadata, points, and icons, and publish the
    Play Games configuration when releasing it.
 3. The public project and achievement IDs for Sil-More are supplied by
@@ -284,7 +380,7 @@ actual Console-assigned IDs, preserving the original 14 provider identities.
 Existing mapped achievements continue synchronizing. Unmapped achievements
 remain durable in local progress and are uploaded after their real IDs are
 configured in a later build. They never send an empty ID to Google. An entirely
-unmapped build keeps achievements local. Assign and verify all 54 IDs before
+unmapped build keeps achievements local. Assign and verify all 74 IDs before
 shipping the expanded Play catalogue; no provider IDs are fabricated.
 
 Use `scripts/export_achievement_stores.py` to export the two Steam CSVs, Steam
@@ -294,9 +390,11 @@ scaling uses nearest-neighbor sampling. `icon-sources.json` records the template
 entry, atlas coordinates, and source hash. The three-Silmaril achievement uses
 three copies of the same game sprite. The original 14 achievements retain their
 assigned IDs and 680 Play points.
-The previous 12 pending achievements receive 15 points each (reduced from their
-unpublished 25-point draft), and the 28 additions receive 5 points each. The
-full catalogue totals exactly 1000 points. No published point values change.
+The next 12 existing achievements have 15 points each, and the following 28
+have 5 points each. That previous catalogue totals 1000 points.
+The 20 new entries add 460 points, for
+1460 total. No existing point values change. The exporter enforces the current
+[2000-point allowance](https://developer.android.com/games/pgs/achievements#points_and_experience_points).
 Google import titles omit commas and descriptions replace
 remaining commas with semicolons to meet its import format; native and Steam
 wording retains punctuation. The preview height follows the catalogue size.
@@ -304,15 +402,15 @@ Generated files belong under
 `scripts/output/achievement-stores/` and are not source assets to commit.
 
 In Steam's bulk editor, wait for **Changes were saved**, then reload the
-catalogue and verify **54** records before publishing. Successful file import
+catalogue and verify **74** records before publishing. Successful file import
 only prepares pending changes. Publish the Steamworks configuration with images
 included. Google edits must keep the existing achievement IDs. The full
 `google-play-achievements.zip` is for a new project. For the existing project,
-import only `google-play-new-achievements.zip` when its 40 entries do not yet
-exist, then update the existing names and icons in place. Published initial
+import only `google-play-new-achievements.zip` for the 20 entries without
+configured provider IDs, then update existing names and icons in place. Published initial
 states cannot be changed. Reimporting existing entries would create duplicates
-and lose their provider identity. All 40 additions have now been created and
-their actual assigned IDs are recorded in `android/play-games.properties`.
+and lose their provider identity. The prior 54 assigned IDs remain in
+`android/play-games.properties`; the newest 20 IDs remain blank until assigned.
 
 Google Play cloud backups are a separate explicit main-menu action; see
 [cloud saves](cloud-saves.md).
@@ -320,9 +418,11 @@ Google Play cloud backups are a separate explicit main-menu action; see
 The Play-only Application initializes the SDK when configuration is complete.
 Automatic profile creation prompts are suppressed. Authentication checks and
 provider tasks run asynchronously on Android's UI thread; the native game
-thread polls a snapshot. Native and Steam masks use `uint64_t`; Android uses
-Java `long` and JNI `jlong`, with `()J` and `(J)V` method signatures. Every
-shift uses a 64-bit operand, preserving appended indexes above 31. Uploads use
+thread polls a snapshot. Native and Steam masks use arrays of `uint64_t`;
+Android uses arrays of Java `long` and JNI `jlong`, with `(I)J` and `([J)V`
+method signatures. Index `i`
+always uses word `i / 64` and bit `i % 64`, including the sign bit in Java.
+Remote Java masks are immutable snapshots published to the game thread. Uploads use
 `unlockImmediate`, and failures retry
 with bounded backoff (5 seconds to 5 minutes). Remote achievement loads restore
 unlocks on a new installation. Lifecycle/account generations reject stale
@@ -349,6 +449,9 @@ python scripts/check_achievement_events.py
 python scripts/check_achievement_expansion.py
 python scripts/check_achievement_discoveries.py
 python scripts/check_achievement_characters.py
+python scripts/check_achievement_legends.py
+python scripts/check_achievement_journeys.py
+python scripts/check_achievement_play_games.py
 python scripts/check_achievement_save.py
 python scripts/check_android_achievement_catalogue.py --gradle
 python scripts/check_steamworks.py
@@ -359,7 +462,7 @@ cd android
 ```
 
 The combined playtest command runs every achievement suite and records saved
-production unlock evidence for all 54 entries in
+production unlock evidence for all 74 entries in
 `scripts/output/achievement-playtest/catalogue-coverage.json`. It also checks
 the actual singing payment and final-Morgoth combat completion paths.
 
@@ -376,7 +479,7 @@ Append a stable enum entry and catalogue row in `src/achievements.{h,c}`; never
 reorder existing indexes. Add the corresponding Play ID resource/configuration
 and Java ID array. Add its existing-atlas sprite to
 `src/achievement-icons.h`, used by the in-game viewer and store exporter, and
-choose its Play point allocation within the catalogue's 1000-point total.
+choose its Play point allocation within the catalogue's 2000-point allowance.
 Gradle and both native bridge masks derive from the enum;
 the catalogue check verifies Java's order against it.
 Hook a successful production gameplay event after its outcome is known. Keep
@@ -385,5 +488,5 @@ the shared core. Publish the matching entries in both store dashboards before
 shipping a configured release.
 
 The full catalogue above is implemented. The No Armour proposal is excluded
-at the user's request. Native book pagination supports up to 64 pages; each achievement occupies one
-semantic paragraph, so all 54 remain present with large text and narrow screens.
+at the user's request. Native book pagination supports up to 128 pages; each achievement occupies one
+semantic paragraph, so all 74 remain present with large text and narrow screens.

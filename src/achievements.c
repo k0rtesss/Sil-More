@@ -126,10 +126,48 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "NEITHER_VOICE_DIMINISHED", "Neither Voice Diminished",
         "As Daeron, have both full-strength woven themes affect enemies in the same turn.", true },
     { "DOOM_CAN_WAIT", "Doom Can Wait",
-        "As Túrin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.", true }
+        "As Túrin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.", true },
+    { "THE_HIGH_CAPTAIN_FALLS", "The High Captain Falls",
+        "Slay Gothmog, High Captain of Balrogs.", true },
+    { "DAGNIR_GLAURUNGA", "Dagnir Glaurunga",
+        "Slay Glaurung, the Deceiver.", true },
+    { "THE_ABHORRED", "The Abhorred",
+        "Slay Gorthaur, Servant of Morgoth.", true },
+    { "UNLIGHT_UNWOVEN", "Unlight Unwoven",
+        "Slay Ungoliant, the Gloomweaver.", true },
+    { "THE_DRAGON_HOST_BROKEN", "The Dragon-host Broken",
+        "Slay Ancalagon the Black.", true },
+    { "THE_RED_MAW", "The Red Maw",
+        "Slay Carcharoth, the Jaws of Thirst.", true },
+    { "LORD_OF_THE_FOUNTAIN", "Lord of the Fountain",
+        "As Ecthelion, slay Gothmog.", true },
+    { "MASTER_OF_DOOM", "Master of Doom",
+        "As Túrin Turambar, slay Glaurung.", true },
+    { "FOR_IDRIL_AND_EARENDIL", "For Idril and Eärendil",
+        "As Tuor, slay Maeglin, Betrayer of Gondolin.", true },
+    { "BEFORE_THE_RISING_OF_THE_SUN", "Before the Rising of the Sun",
+        "As Eärendil, slay Ancalagon the Black.", true },
+    { "TULKAS_LAST_LAUGH", "Tulkas Has the Last Laugh",
+        "Slay the unique enemy named by Tulkas and collect his artefact reward.", true },
+    { "AULES_APPRENTICE", "Apprentice of the Maker",
+        "Forge an item of difficulty 21 or higher for Aulë and receive his blessing.", true },
+    { "THE_DOOMSMANS_DUE", "The Doomsman's Due",
+        "Release Brodda's bound spirit for Mandos and receive his blessing.", true },
+    { "PITY_FOR_THE_FORSAKEN", "Pity for the Forsaken",
+        "Reach a down stair or shaft without a creature dying during Nienna's trial and receive her blessing.", true },
+    { "THE_GREAT_HUNT", "The Great Hunt",
+        "Hunt 100 wolves, 80 spiders excluding hatchlings, 60 serpents or 30 vampires for Oromë and receive his blessing.", true },
+    { "A_STAR_AGAINST_THE_BALROG", "A Star Against the Balrog",
+        "Slay Duruin in his Bastion for Varda and choose a radiant gift.", true },
+    { "NO_STEPS_REQUIRED", "No Steps Required",
+        "Reach Morgoth's level using only chasms and shafts for descent; upward stairs are allowed.", true },
+    { "THERE_AND_ALMOST_BACK_AGAIN", "There and Almost Back Again",
+        "Die at the Gates of Angband, on the surface.", true },
+    { "THE_HALLS_OF_UTUMNO", "The Halls of Utumno",
+        "Reach the frozen ruins of Utumno.", true },
+    { "WHERE_GROND_WAS_WROUGHT", "Where Grond Was Wrought",
+        "Discover Orodruth, the Great Forge of Grond in Utumno.", true }
 };
-
-_Static_assert(SIL_ACH_COUNT < 64, "Achievement bridge masks must fit in 64 bits");
 
 static uint64_t unlocked_at[SIL_ACH_COUNT];
 static cJSON *progress;
@@ -151,11 +189,12 @@ uint64_t sil_achievement_unlocked_at(int id)
     return id >= 0 && id < SIL_ACH_COUNT ? unlocked_at[id] : 0;
 }
 
-uint64_t sil_achievements_mask(void)
+uint64_t sil_achievements_mask(unsigned word)
 {
     uint64_t mask = 0;
-    for (int i = 0; i < SIL_ACH_COUNT; ++i)
-        if (unlocked_at[i]) mask |= UINT64_C(1) << i;
+    if (word >= SIL_ACH_WORD_COUNT) return 0;
+    for (unsigned bit = 0; bit < 64 && word * 64 + bit < SIL_ACH_COUNT; ++bit)
+        if (unlocked_at[word * 64 + bit]) mask |= UINT64_C(1) << bit;
     return mask;
 }
 
@@ -459,7 +498,7 @@ void sil_achievements_on_escape(int silmarils)
 
 void sil_achievements_begin_run(void)
 {
-    p_ptr->achievement_flags = SIL_ACH_RUN_STARTED;
+    p_ptr->achievement_flags = SIL_ACH_RUN_STARTED | SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
     p_ptr->achievement_kills = 0;
     p_ptr->achievement_singing_turns = 0;
     p_ptr->achievement_comeback_depth = -1;
@@ -510,6 +549,19 @@ void sil_achievements_on_damage(int damage, int previous_hp)
 
 void sil_achievements_on_level_entry(bool restoring)
 {
+    if (achievements_eligible() && p_ptr->depth == UTUMNO_DEPTH)
+    {
+        unlock_achievement(SIL_ACH_THE_HALLS_OF_UTUMNO, true);
+        sil_achievements_flush();
+    }
+    if (achievements_eligible() && p_ptr->depth == MORGOTH_DEPTH
+        && (p_ptr->achievement_flags
+                & (SIL_ACH_RUN_STARTED | SIL_ACH_RUN_CHASM_SHAFT_ROUTE))
+            == (SIL_ACH_RUN_STARTED | SIL_ACH_RUN_CHASM_SHAFT_ROUTE))
+    {
+        unlock_achievement(SIL_ACH_NO_STEPS_REQUIRED, true);
+        sil_achievements_flush();
+    }
     if (!restoring)
     {
         p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
@@ -533,9 +585,47 @@ void sil_achievements_on_level_entry(bool restoring)
     sil_achievements_on_partition_entry(p_ptr->py, p_ptr->px);
 }
 
+void sil_achievements_on_level_travel(int from_depth, int to_depth, int feature)
+{
+    /* Report only committed travel. Upward travel never spoils the route.
+     * The cause matters: a false floor or teleport while standing on a shaft
+     * is still not a shaft descent. Legacy saves never acquire provenance. */
+    if (p_ptr && to_depth > from_depth
+        && feature != FEAT_CHASM && feature != FEAT_MORE_SHAFT)
+        p_ptr->achievement_flags &= ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
+}
+
+void sil_achievements_on_death(void)
+{
+    /* take_hit() calls this after last-chance equipment, before closing the
+     * living run. Escape, victory, quitting and suicide never use this hook. */
+    if (!achievements_eligible() || p_ptr->depth != 0 || p_ptr->chp > 0
+        || p_ptr->escaped || p_ptr->morgoth_slain) return;
+    unlock_achievement(SIL_ACH_THERE_AND_ALMOST_BACK_AGAIN, true);
+    sil_achievements_flush();
+}
+
 void sil_achievements_on_monster_killed(int m_idx, int who)
 {
     if (!achievements_eligible() || who >= 0) return;
+    if (mon_list && r_info && z_info && m_idx > 0 && m_idx < mon_max)
+    {
+        int race = mon_list[m_idx].r_idx;
+        if (race > 0 && race < z_info->r_max
+            && (r_info[race].flags1 & RF1_UNIQUE)
+            && !(r_info[race].flags1 & RF1_PEACEFUL))
+        {
+            switch (race)
+            {
+                case R_IDX_GOTHMOG: unlock_achievement(SIL_ACH_THE_HIGH_CAPTAIN_FALLS, true); break;
+                case R_IDX_GLAURUNG: unlock_achievement(SIL_ACH_DAGNIR_GLAURUNGA, true); break;
+                case R_IDX_GORTHAUR: unlock_achievement(SIL_ACH_THE_ABHORRED, true); break;
+                case R_IDX_UNGOLIANT: unlock_achievement(SIL_ACH_UNLIGHT_UNWOVEN, true); break;
+                case R_IDX_ANCALAGON: unlock_achievement(SIL_ACH_THE_DRAGON_HOST_BROKEN, true); break;
+                case R_IDX_CARCHAROTH: unlock_achievement(SIL_ACH_THE_RED_MAW, true); break;
+            }
+        }
+    }
     sil_achievement_character_on_monster_killed(m_idx, who);
     if (p_ptr->achievement_kills < UINT32_MAX) ++p_ptr->achievement_kills;
     if ((p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK)
@@ -652,12 +742,17 @@ void sil_achievements_update(void)
     Uint64 now = SDL_GetTicks();
     if (now < next_sync) return;
     next_sync = now + 1000;
-    uint64_t mask = sil_achievements_mask();
-    sil_steamworks_sync_achievements(mask);
-    sil_play_games_sync(mask);
-    uint64_t remote = sil_steamworks_achievements_unlocked()
-        | sil_play_games_unlocked();
-    for (int i = 0; i < SIL_ACH_COUNT; ++i)
-        if (remote & (UINT64_C(1) << i)) unlock_achievement(i, false);
+    uint64_t masks[SIL_ACH_WORD_COUNT];
+    for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
+        masks[word] = sil_achievements_mask(word);
+    sil_steamworks_sync_achievements(masks);
+    sil_play_games_sync(masks);
+    for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
+    {
+        uint64_t remote = sil_steamworks_achievements_unlocked(word)
+            | sil_play_games_unlocked(word);
+        for (unsigned bit = 0; bit < 64 && word * 64 + bit < SIL_ACH_COUNT; ++bit)
+            if (remote & (UINT64_C(1) << bit)) unlock_achievement(word * 64 + bit, false);
+    }
     if (dirty && now >= next_save) sil_achievements_flush();
 }

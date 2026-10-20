@@ -60,7 +60,7 @@ static void build_achievement_book(int page)
             if (date && strftime(formatted, sizeof(formatted), "%Y-%m-%d", date))
                 strnfmt(text, sizeof(text), "Unlocked: %s (%s)", entry->title, formatted);
         }
-        /* One paragraph keeps all 54 entries in the shared 64-paragraph budget;
+        /* One paragraph per entry fits the shared book paragraph budget;
          * normal pagination and scrolling preserve the chosen readable font. */
         size_t used = strlen(text);
         strnfmt(text + used, sizeof(text) - used, "\n%s", entry->description);

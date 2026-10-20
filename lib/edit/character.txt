@@ -202,7 +202,7 @@ D: Golden-haired lord, valiant defender of Gondolin's doomed white towers; fierc
 
 #Stats +5 +5 =10
 
-N:11:Etchelion
+N:11:Ecthelion
 Q:40a8c0d5cdd81345
 A: of the Fountain
 B:You march proudly—captain of Gondolin, whose blade sang bravely against fire.

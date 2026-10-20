@@ -22,7 +22,7 @@ Characters deferred during an upgrade remain exempt from automatic tutorials for
 
 Skeletons and chests use Normal informational feature lessons. Their old generic item IDs remain untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.
 
-Item descriptions have separate explanations for each public item family. Finding a gem first leaves the weapon and armour explanations available for later. Runtime identification wording reflects only what the hero already knows; examining an item does not identify it.
+Item descriptions have separate explanations for each public item family. Finding a gem first leaves the weapon and armour explanations available for later. Runtime identification wording reflects only what the hero already knows; examining an item does not identify it. Gem encounters and previews share one introduction and its progress, so neither route repeats an introduction already read or skipped through the other.
 
 ## Presentation order
 
@@ -368,11 +368,13 @@ Level: **Normal**.
 
 Priority: **27** (higher appears first).
 
+Archive compatibility entry. New encounters use `item.gem`.
+
 **1. Info**
 
 {subject}. {detail} Gems are single-use items. Read any revealed effect and targeting instructions. If the effect is unknown, the preview may show only its appearance, weight in lb and volume in qt. You can keep it and identify it later. Reading this preview does not use the gem.
 
-Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+Trigger: Archive compatibility entry. Gem encounters and descriptions use item.gem.
 
 Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
 
@@ -670,13 +672,13 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
-Priority: **24** (higher appears first).
+Priority: **27** (higher appears first).
 
 **1. Info**
 
-Gems are single-use items with effects such as mapping, detection, identification or warding. Read the known effect before using one. If a gem asks you to choose an item, cancelling that choice preserves the gem.
+{subject}. {detail} Gems are single-use. Their description shows appearance, weight in lb and volume in qt, plus any revealed effect and targeting instructions. You can keep an unknown gem for later identification. Reading a preview does not use it. If a gem asks you to choose an item, cancelling that choice preserves the gem.
 
-Trigger: The item type is publicly encountered; no hidden subtype or property is used.
+Trigger: The player reaches a gem or opens its description. Both routes share this tutorial and progress; no hidden subtype or property is used.
 
 Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutorial/tutorial-game.c`.
 

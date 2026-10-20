@@ -34,7 +34,11 @@ player_other *op_ptr = &options;
 cptr ANGBAND_DIR_APEX;
 bool character_generated = true;
 static int notifications, messages, syncs;
-static uint64_t remote, submitted;
+static uint64_t remote, submitted, remote_upper, submitted_upper;
+maxima *z_info;
+monster_type *mon_list;
+monster_race *r_info;
+s16b mon_max;
 #define ROAD_BIT (UINT64_C(1) << SIL_ACH_THE_ROAD_GOES_EVER_ON)
 static Uint64 ticks;
 static bool fail_flush, fail_rename;
@@ -69,8 +73,8 @@ bool path_build(char *out, size_t size, cptr base, cptr name)
 void msg_print(cptr text) { assert(strstr(text, "Achievement unlocked:")); ++messages; }
 void sdl_popup_notification_show(cptr text)
 { assert(strstr(text, "Achievement unlocked:")); ++notifications; }
-void sil_play_games_sync(uint64_t mask) { submitted = mask; ++syncs; }
-uint64_t sil_play_games_unlocked(void) { return remote; }
+void sil_play_games_sync(const uint64_t* masks) { submitted = masks[0]; submitted_upper = masks[1]; ++syncs; }
+uint64_t sil_play_games_unlocked(unsigned word) { return word == 0 ? remote : word == 1 ? remote_upper : 0; }
 
 /* Gameplay callback boundaries; full production routes have separate fixtures. */
 void sil_achievement_character_on_player_turn(void) {}
@@ -101,7 +105,7 @@ static void try_all(void)
     sil_achievements_on_smithing_completed(true);
     sil_achievements_on_light_kill();
     sil_achievements_on_morgoth_defeated();
-    assert(sil_achievements_mask() == 0);
+    assert(sil_achievements_mask(0) == 0);
     assert(!notifications && !messages);
 }
 static void blocked_games(void)
@@ -130,19 +134,19 @@ static char *saved_file(size_t *size)
 static void earn_all(void)
 {
     blocked_games();
-    sil_achievements_on_depth(1); assert(!sil_achievements_mask());
-    sil_achievements_on_escape(0); assert(!sil_achievements_mask());
-    player.depth = 1; sil_achievements_on_escape(1); assert(!sil_achievements_mask());
+    sil_achievements_on_depth(1); assert(!sil_achievements_mask(0));
+    sil_achievements_on_escape(0); assert(!sil_achievements_mask(0));
+    player.depth = 1; sil_achievements_on_escape(1); assert(!sil_achievements_mask(0));
     sil_achievements_on_depth(10);
     uint64_t first = sil_achievement_unlocked_at(SIL_ACH_INTO_THE_DEEP);
-    assert(first && sil_achievements_mask() == (1 | ROAD_BIT) && sil_achievements_saved());
+    assert(first && sil_achievements_mask(0) == (1 | ROAD_BIT) && sil_achievements_saved());
     sil_achievements_on_depth(20);
     assert(notifications == 2 && sil_achievement_unlocked_at(0) == first);
     clean_player(); /* A new character and a new Tale do not reset the profile. */
-    assert(sil_achievements_mask() == (1 | ROAD_BIT));
+    assert(sil_achievements_mask(0) == (1 | ROAD_BIT));
     sil_achievements_on_silmaril();
     sil_achievements_on_escape(1);
-    assert(sil_achievements_mask() == (7 | ROAD_BIT) && notifications == 4 && messages == 4);
+    assert(sil_achievements_mask(0) == (7 | ROAD_BIT) && notifications == 4 && messages == 4);
     sil_achievements_on_silmaril(); sil_achievements_on_escape(1);
     assert(notifications == 4 && sil_achievements_saved());
     sil_achievements_update();
@@ -156,7 +160,7 @@ static void failed_write(void)
     size_t size; char *original = saved_file(&size); assert(original);
     fail_flush = true;
     sil_achievements_on_silmaril();
-    assert(sil_achievements_mask() == (3 | ROAD_BIT) && !sil_achievements_saved());
+    assert(sil_achievements_mask(0) == (3 | ROAD_BIT) && !sil_achievements_saved());
     size_t kept_size; char *kept = saved_file(&kept_size);
     assert(kept && size == kept_size && !memcmp(kept, original, size)); SDL_free(kept);
     fail_flush = false; fail_rename = true;
@@ -166,7 +170,7 @@ static void failed_write(void)
     SDL_free(kept); SDL_free(original);
     fail_rename = false;
     ticks = 30001; sil_achievements_update();
-    assert(sil_achievements_saved() && sil_achievements_mask() == (3 | ROAD_BIT));
+    assert(sil_achievements_saved() && sil_achievements_mask(0) == (3 | ROAD_BIT));
 }
 static void preserve_invalid_file(void)
 {
@@ -183,11 +187,11 @@ static void expanded_conditions(const char *test)
     sil_achievements_begin_run();
     player.depth = 5;
     if (!strcmp(test, "new-events")) {
-        assert(SIL_ACH_COUNT == 54);
+        assert(SIL_ACH_COUNT == 74);
         int hidden = 0;
         for (int id = 0; id < SIL_ACH_COUNT; ++id)
             hidden += sil_achievement_get(id)->hidden;
-        assert(hidden == 44);
+        assert(hidden == 64);
         assert(!strcmp(sil_achievement_get(SIL_ACH_THE_QUIET_ROAD)->title,
             "A Very Polite Burglary"));
         assert(!strcmp(sil_achievement_get(SIL_ACH_NO_RINGS_ATTACHED)->title,
@@ -287,7 +291,7 @@ static void escape_challenges(const char *test)
     } else if (!strcmp(test, "taint")) {
         sil_achievements_begin_run(); options.opt[OPT_cheat_peek] = true;
         sil_achievements_on_player_turn(); options.opt[OPT_cheat_peek] = false;
-        sil_achievements_on_escape(3); assert(!sil_achievements_mask());
+        sil_achievements_on_escape(3); assert(!sil_achievements_mask(0));
     } else assert(false);
 }
 static void comeback(void)
@@ -352,15 +356,15 @@ int main(int argc, char **argv)
     assert(!sil_achievement_unlocked_at(-1));
     if (!strcmp(argv[1], "earn")) earn_all();
     else if (!strcmp(argv[1], "reload")) {
-        assert(sil_achievements_mask() == (7 | ROAD_BIT) && sil_achievements_saved());
+        assert(sil_achievements_mask(0) == (7 | ROAD_BIT) && sil_achievements_saved());
         sil_achievements_update(); assert(submitted == (7 | ROAD_BIT) && !notifications);
     } else if (!strcmp(argv[1], "failed-write")) failed_write();
     else if (!strcmp(argv[1], "invalid")) preserve_invalid_file();
     else if (!strcmp(argv[1], "import")) {
         remote = 2; sil_achievements_update();
-        assert(sil_achievements_mask() == 2 && sil_achievements_saved() && !notifications);
+        assert(sil_achievements_mask(0) == 2 && sil_achievements_saved() && !notifications);
         ticks = 1000; remote = 0; sil_achievements_update();
-        assert(sil_achievements_mask() == 2 && submitted == 2);
+        assert(sil_achievements_mask(0) == 2 && submitted == 2);
     } else if (!strcmp(argv[1], "unknown")) sil_achievements_on_depth(10);
     else if (!strcmp(argv[1], "limit-earn")) {
         metar.id = 17; sil_achievements_on_depth(10);
@@ -372,7 +376,7 @@ int main(int argc, char **argv)
         sil_achievements_on_run_completed(); sil_achievements_on_tale_completed();
         assert(earned(SIL_ACH_THE_LONG_TALE));
     } else if (!strcmp(argv[1], "bounded-write")) {
-        assert(sil_achievements_saved() && !sil_achievements_mask());
+        assert(sil_achievements_saved() && !sil_achievements_mask(0));
         preserve_invalid_file();
     } else if (!strcmp(argv[1], "limit-read")) {
         assert(earned(SIL_ACH_INTO_THE_DEEP) && sil_achievements_saved());
@@ -388,10 +392,16 @@ int main(int argc, char **argv)
     else if (!strcmp(argv[1], "craft-combat")) craft_and_combat();
     else if (!strncmp(argv[1], "tale-", 5)) tale(argv[1]);
     else if (!strcmp(argv[1], "all-import")) {
-        remote = SIL_ACH_ALL_MASK; sil_achievements_update();
-        assert(sil_achievements_mask() == SIL_ACH_ALL_MASK && !notifications);
+        remote = sil_achievement_word_mask(0); remote_upper = UINT64_MAX; sil_achievements_update();
+        assert(sil_achievements_mask(0) == sil_achievement_word_mask(0) && !notifications);
+        assert(sil_achievements_mask(1) == sil_achievement_word_mask(1));
+        assert(sil_achievements_mask(SIL_ACH_WORD_COUNT) == 0);
     }
-    else if (!strcmp(argv[1], "all-reload")) assert(sil_achievements_mask() == SIL_ACH_ALL_MASK);
+    else if (!strcmp(argv[1], "all-reload")) {
+        assert(sil_achievements_mask(0) == sil_achievement_word_mask(0));
+        assert(sil_achievements_mask(1) == sil_achievement_word_mask(1));
+        sil_achievements_update(); assert(submitted_upper == sil_achievement_word_mask(1));
+    }
     else escape_challenges(argv[1]);
     SDL_Quit(); puts("Achievement production rules/persistence case: PASS"); return 0;
 }

@@ -1632,6 +1632,8 @@ void hit_trap(int y, int x)
             note_lost_greater_vault();
 
             /* New depth */
+            sil_achievements_on_level_travel(p_ptr->depth,
+                MIN(p_ptr->depth + 2, MORGOTH_DEPTH), FEAT_CHASM);
             p_ptr->depth = MIN(p_ptr->depth + 2, MORGOTH_DEPTH);
 
             /* Leaving */
@@ -1672,6 +1674,8 @@ void hit_trap(int y, int x)
         note_lost_greater_vault();
 
         /* New depth */
+        sil_achievements_on_level_travel(p_ptr->depth,
+            p_ptr->depth + 1, FEAT_TRAP_false_FLOOR);
         p_ptr->depth++;
 
         /* Leaving */

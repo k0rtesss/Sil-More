@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
@@ -384,6 +385,7 @@ finish_ascent:
     note_lost_greater_vault();
 
     /* New depth */
+    sil_achievements_on_level_travel(p_ptr->depth, new, cave_feat[p_ptr->py][p_ptr->px]);
     p_ptr->depth = new;
 
     /* Reset tulkas quest */
@@ -600,6 +602,7 @@ finish_descent:
     note_lost_greater_vault();
 
     /* New depth */
+    sil_achievements_on_level_travel(p_ptr->depth, new, cave_feat[p_ptr->py][p_ptr->px]);
     p_ptr->depth = new;
 
     /* Reset tulkas quest */

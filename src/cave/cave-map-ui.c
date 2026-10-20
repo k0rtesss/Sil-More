@@ -1,6 +1,7 @@
 /* File: cave-map-ui.c */
 
 #include "cave-internal.h"
+#include "achievements.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-fixtures.h"
 #include "cave/cave-bridge.h"
@@ -285,6 +286,7 @@ void note_spot(int y, int x)
         return;
 
     cave_environment_observe(y, x);
+    sil_achievements_on_terrain_seen(y, x);
 
     /* Hack -- memorize objects */
     for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))

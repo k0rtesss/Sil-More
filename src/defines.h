@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.8"
 /*
- * Version components (0.9.8.36).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.8.37).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 36 /* Discovery and character achievement provenance. */
+#define VERSION_EXTRA 37 /* Track chasm/shaft-only achievement routes. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -335,7 +335,9 @@
 #define R_IDX_CAT_ASSASSIN 175
 #define R_IDX_YOUNG_FIRE_DRAKE 181
 #define R_IDX_TROLL_GUARD 192
+#define R_IDX_MAEGLIN 196
 #define R_IDX_SILENT_WATCHER 203
+#define R_IDX_ANCALAGON 233
 #define R_IDX_GOTHMOG 241 // the location of Gothmog
 #define R_IDX_UNGOLIANT 242 // the location of Ungoliant
 #define R_IDX_GLAURUNG 243 // the location of Glaurung

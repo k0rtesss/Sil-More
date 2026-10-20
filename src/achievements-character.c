@@ -91,9 +91,34 @@ void sil_achievement_character_on_entrancement_resisted(monster_type* attacker)
 
 void sil_achievement_character_on_monster_killed(int m_idx, int who)
 {
-    if (!sil_achievements_eligible() || who >= 0 || !has_unique(UNQ_WIL_TURIN)
-        || !p_ptr->rage || !p_ptr->achievement_rage_epoch
+    if (!sil_achievements_eligible() || who >= 0
         || m_idx <= 0 || m_idx >= mon_max) return;
+    /* Match the selected template's persistent GUID, never the editable player
+     * name or a shared racial/ability flag. These are character.txt Q: values. */
+    static const struct {
+        guid64 hero;
+        int victim;
+        sil_achievement_id achievement;
+    } deeds[] = {
+        { { 0x40a8c0d5, 0xcdd81345 }, R_IDX_GOTHMOG, SIL_ACH_LORD_OF_THE_FOUNTAIN },
+        { { 0xa1860c8b, 0x017a6daa }, R_IDX_GLAURUNG, SIL_ACH_MASTER_OF_DOOM },
+        { { 0x372282fe, 0x5bf0b106 }, R_IDX_MAEGLIN, SIL_ACH_FOR_IDRIL_AND_EARENDIL },
+        { { 0x2bca19ef, 0x728150b9 }, R_IDX_ANCALAGON, SIL_ACH_BEFORE_THE_RISING_OF_THE_SUN }
+    };
+    int race = mon_list[m_idx].r_idx;
+    if (c_info && z_info && p_ptr->pcharacter < z_info->c_max
+        && race > 0 && race < z_info->r_max
+        && (r_info[race].flags1 & RF1_UNIQUE)
+        && !(r_info[race].flags1 & RF1_PEACEFUL))
+    {
+        guid64 hero = c_info[p_ptr->pcharacter].guid;
+        for (size_t i = 0; i < N_ELEMENTS(deeds); ++i)
+            if (hero.hi == deeds[i].hero.hi && hero.lo == deeds[i].hero.lo
+                && race == deeds[i].victim)
+                sil_achievements_on_event(deeds[i].achievement);
+    }
+    if (!has_unique(UNQ_WIL_TURIN) || !p_ptr->rage
+        || !p_ptr->achievement_rage_epoch) return;
     if (mon_list[m_idx].achievement_doom_rage_epoch
         == p_ptr->achievement_rage_epoch)
         sil_achievements_on_event(SIL_ACH_DOOM_CAN_WAIT);

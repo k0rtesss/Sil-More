@@ -1428,6 +1428,8 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
                     note_lost_greater_vault();
 
                     /* New depth */
+                    sil_achievements_on_level_travel(p_ptr->depth,
+                        p_ptr->depth + 1, FEAT_NONE);
                     p_ptr->depth++;
 
                     /* Leaving */

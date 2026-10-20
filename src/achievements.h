@@ -64,15 +64,44 @@ typedef enum sil_achievement_id {
     SIL_ACH_A_DREAM_UPON_THE_DARK_LORD,
     SIL_ACH_NEITHER_VOICE_DIMINISHED,
     SIL_ACH_DOOM_CAN_WAIT,
+    SIL_ACH_THE_HIGH_CAPTAIN_FALLS,
+    SIL_ACH_DAGNIR_GLAURUNGA,
+    SIL_ACH_THE_ABHORRED,
+    SIL_ACH_UNLIGHT_UNWOVEN,
+    SIL_ACH_THE_DRAGON_HOST_BROKEN,
+    SIL_ACH_THE_RED_MAW,
+    SIL_ACH_LORD_OF_THE_FOUNTAIN,
+    SIL_ACH_MASTER_OF_DOOM,
+    SIL_ACH_FOR_IDRIL_AND_EARENDIL,
+    SIL_ACH_BEFORE_THE_RISING_OF_THE_SUN,
+    SIL_ACH_TULKAS_LAST_LAUGH,
+    SIL_ACH_AULES_APPRENTICE,
+    SIL_ACH_THE_DOOMSMANS_DUE,
+    SIL_ACH_PITY_FOR_THE_FORSAKEN,
+    SIL_ACH_THE_GREAT_HUNT,
+    SIL_ACH_A_STAR_AGAINST_THE_BALROG,
+    SIL_ACH_NO_STEPS_REQUIRED,
+    SIL_ACH_THERE_AND_ALMOST_BACK_AGAIN,
+    SIL_ACH_THE_HALLS_OF_UTUMNO,
+    SIL_ACH_WHERE_GROND_WAS_WROUGHT,
     SIL_ACH_COUNT
 } sil_achievement_id;
 
-#define SIL_ACH_ALL_MASK ((UINT64_C(1) << SIL_ACH_COUNT) - UINT64_C(1))
+/* Platform masks are an array of words, preserving every existing bit/index. */
+#define SIL_ACH_WORD_COUNT ((SIL_ACH_COUNT + 63) / 64)
+static inline uint64_t sil_achievement_word_mask(unsigned word)
+{
+    if (word >= SIL_ACH_WORD_COUNT) return 0;
+    unsigned remaining = SIL_ACH_COUNT - word * 64;
+    return remaining >= 64 ? UINT64_MAX : (UINT64_C(1) << remaining) - 1;
+}
 #define SIL_ACH_RUN_STARTED 0x01u
 #define SIL_ACH_RUN_TAINTED 0x02u
 #define SIL_ACH_RUN_COMEBACK 0x04u
 #define SIL_ACH_RUN_FALLING 0x08u
-#define SIL_ACH_RUN_FLAGS 0x0Fu
+/* Positive provenance: only a newly tracked run starts with this bit. */
+#define SIL_ACH_RUN_CHASM_SHAFT_ROUTE 0x10u
+#define SIL_ACH_RUN_FLAGS 0x1Fu
 #define SIL_ACH_DISC_TRACKED 0x01u
 #define SIL_ACH_DISC_WOLF_SEEN 0x02u
 #define SIL_ACH_DISC_CROSSING 0x04u
@@ -91,7 +120,7 @@ typedef struct sil_achievement_definition {
 
 const sil_achievement_definition *sil_achievement_get(int id);
 uint64_t sil_achievement_unlocked_at(int id);
-uint64_t sil_achievements_mask(void);
+uint64_t sil_achievements_mask(unsigned word);
 bool sil_achievements_eligible(void);
 /* A winning killing blow can finish reporting after victory closes the run. */
 bool sil_achievements_kill_eligible(void);
@@ -109,6 +138,7 @@ void sil_achievements_on_movement(int from_y, int from_x, int to_y, int to_x);
 void sil_achievements_on_partition_entry(int y, int x);
 void sil_achievements_on_partition_discovered(unsigned mask);
 void sil_achievements_on_monster_seen(int m_idx);
+void sil_achievements_on_terrain_seen(int y, int x);
 void sil_achievements_on_wolf_death(bool first_wolf);
 void sil_achievements_on_elemental_terrain(int y, int x, int old_feat, int typ);
 void sil_achievements_forget_ice(int y, int x);
@@ -129,6 +159,8 @@ void sil_achievements_on_singing_turn(void);
 void sil_achievements_on_damage(int damage, int previous_hp);
 void sil_achievements_on_healing(void);
 void sil_achievements_on_level_entry(bool restoring);
+void sil_achievements_on_level_travel(int from_depth, int to_depth, int feature);
+void sil_achievements_on_death(void);
 void sil_achievements_on_monster_killed(int m_idx, int who);
 void sil_achievements_on_light_kill(void);
 void sil_achievements_on_smithing_completed(bool custom_artefact);

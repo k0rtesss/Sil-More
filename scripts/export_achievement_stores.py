@@ -17,7 +17,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Points are multiples of five, with harder victories worth more (1000 total).
+# Published point values stay fixed. Reserve room within Google's 2000-point cap.
 POINTS = {
     "INTO_THE_DEEP": 10, "LIGHT_IN_DARKNESS": 25,
     "BACK_TO_STARLIGHT": 50, "THREE_LIGHTS_IN_EXILE": 100,
@@ -66,6 +66,26 @@ POINTS = {
     "A_DREAM_UPON_THE_DARK_LORD": 5,
     "NEITHER_VOICE_DIMINISHED": 5,
     "DOOM_CAN_WAIT": 5,
+    "THE_HIGH_CAPTAIN_FALLS": 25,
+    "DAGNIR_GLAURUNGA": 25,
+    "THE_ABHORRED": 25,
+    "UNLIGHT_UNWOVEN": 25,
+    "THE_DRAGON_HOST_BROKEN": 25,
+    "THE_RED_MAW": 25,
+    "LORD_OF_THE_FOUNTAIN": 50,
+    "MASTER_OF_DOOM": 50,
+    "FOR_IDRIL_AND_EARENDIL": 50,
+    "BEFORE_THE_RISING_OF_THE_SUN": 50,
+    "TULKAS_LAST_LAUGH": 10,
+    "AULES_APPRENTICE": 10,
+    "THE_DOOMSMANS_DUE": 10,
+    "PITY_FOR_THE_FORSAKEN": 10,
+    "THE_GREAT_HUNT": 10,
+    "A_STAR_AGAINST_THE_BALROG": 10,
+    "NO_STEPS_REQUIRED": 25,
+    "THERE_AND_ALMOST_BACK_AGAIN": 5,
+    "THE_HALLS_OF_UTUMNO": 10,
+    "WHERE_GROND_WAS_WROUGHT": 10,
 }
 
 # Existing 16x16 gameplay tiles. Coordinates are (row, column), matching the
@@ -98,6 +118,7 @@ GOOGLE_ICON_ACCENTS = {
     "IRON_CLEAVER": [(12, 16)],  # Blade and the Silmaril it cuts free.
     "A_DREAM_UPON_THE_DARK_LORD": [(32, 24)],  # Morgoth and Luthien's song.
     "NEITHER_VOICE_DIMINISHED": [(32, 24)],  # Two full-strength musical voices.
+    "FOR_IDRIL_AND_EARENDIL": [(5, 18)],  # Tuor protects his family: blade, Silmaril and shield.
 }
 
 def catalogue():
@@ -115,7 +136,7 @@ def catalogue():
     keys = re.findall(r"\bSIL_ACH_([A-Z_]+)\b", enum[1])[:-1]
     if [row["key"] for row in rows] != keys or set(keys) != set(POINTS) or set(keys) != set(ICON_TILES):
         raise ValueError("Native catalogue, enum, point values and icon artwork must match")
-    if not all(5 <= value <= 200 and value % 5 == 0 for value in POINTS.values()) or sum(POINTS.values()) > 1000:
+    if not all(5 <= value <= 200 and value % 5 == 0 for value in POINTS.values()) or sum(POINTS.values()) > 2000:
         raise ValueError("Invalid Google achievement points")
     return rows
 
@@ -221,12 +242,15 @@ const root = process.argv[2], atlas = process.argv[3];
                 archive.write(path, path.name)
     # Existing projects must append only the new rows; importing all rows creates
     # duplicates instead of preserving the original opaque provider IDs.
-    first_new = next(i for i, row in enumerate(rows) if row["key"] == "THE_LONG_TALE") + 1
+    configured = dict(re.findall(r"^SIL_MORE_PLAY_ACH_([A-Z_]+)=(\S*)\s*$",
+                                (ROOT / "android/play-games.properties").read_text(), re.M))
+    new_indexes = [i for i, row in enumerate(rows) if not configured.get(row["key"])]
     expansion = output / "google-play-new-achievements.zip"
     with zipfile.ZipFile(expansion, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("AchievementsMetadata.csv", csv_text(metadata[first_new:]))
-        archive.writestr("AchievementsIconsMappings.csv", csv_text(mappings[first_new:]))
-        for row in rows[first_new:]:
+        archive.writestr("AchievementsMetadata.csv", csv_text([metadata[i] for i in new_indexes]))
+        archive.writestr("AchievementsIconsMappings.csv", csv_text([mappings[i] for i in new_indexes]))
+        for i in new_indexes:
+            row = rows[i]
             path = play_dir / (row["key"] + ".png")
             archive.write(path, path.name)
     print(f"Exported {len(rows)} achievements ({sum(POINTS.values())} Google points) to {output}")

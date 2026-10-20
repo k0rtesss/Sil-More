@@ -67,7 +67,7 @@ static void check_case(void)
     const char* name = getenv("SIL_ACH_PLAYTEST_CASE"); assert(name);
     monster_type* m = ready(41);
     if (!strcmp(name, "depth")) {
-        sil_achievements_on_depth(1); assert(!sil_achievements_mask());
+        sil_achievements_on_depth(1); assert(!sil_achievements_mask(0));
         sil_achievements_on_depth(2); assert(earned(SIL_ACH_THE_ROAD_GOES_EVER_ON));
         assert(!earned(SIL_ACH_INTO_THE_DEEP));
         sil_achievements_on_depth(10); assert(earned(SIL_ACH_INTO_THE_DEEP));
@@ -198,7 +198,7 @@ static void check_case(void)
     } else assert(false);
     sil_achievements_flush(); assert(sil_achievements_saved());
     printf("PASS achievement playtest scenario: %s; earned mask %llu\n",
-        name, (unsigned long long)sil_achievements_mask());
+        name, (unsigned long long)sil_achievements_mask(0));
 }
 '''
 
@@ -283,7 +283,8 @@ def check_catalogue():
             return super().__exit__(*args)
 
     production = ("check_achievement_playtest", "check_achievement_expansion",
-                  "check_achievement_discoveries", "check_achievement_characters")
+                  "check_achievement_discoveries", "check_achievement_characters",
+                  "check_achievement_legends", "check_achievement_journeys")
     for active_suite in production:
         print("Running production suite:", active_suite, flush=True)
         with patch.object(tempfile, "TemporaryDirectory", RecordedDirectory):
@@ -292,7 +293,7 @@ def check_catalogue():
             else:
                 importlib.import_module(active_suite).main()
     supporting = ("check_achievements", "check_achievement_events", "check_achievement_save",
-                  "check_achievement_steam", "check_achievement_viewer",
+                  "check_achievement_steam", "check_achievement_play_games", "check_achievement_viewer",
                   "check_android_achievement_catalogue")
     for name in supporting:
         print("Running supporting suite:", name, flush=True)
@@ -305,7 +306,10 @@ def check_catalogue():
     missing = [key for key, suites in evidence.items() if not suites]
     sources = [ROOT / "src" / name for name in (
         "achievements.c", "achievements.h", "achievements-discovery.c",
-        "achievements-character.c", "player/player-songs.c")]
+        "achievements-character.c", "player/player-songs.c",
+        "cmd/movement/cmd-movement.c", "cmd/combat/cmd-combat.c",
+        "spell/spell-damage.c", "spell/spell-teleport.c", "use-obj.c",
+        "cave/cave-map-ui.c", "fs/save-player.c", "fs/load-player.c", "defines.h")]
     receipt = dict(total=len(keys), covered=len(keys) - len(missing), missing=missing,
                    production_suites=list(production), supporting_suites=list(supporting),
                    source_sha256={str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()

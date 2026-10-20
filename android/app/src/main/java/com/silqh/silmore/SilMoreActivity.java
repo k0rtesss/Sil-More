@@ -53,12 +53,12 @@ public class SilMoreActivity extends SDLActivity {
 	}
 
 	/** JNI calls run on SDL's game thread; provider work belongs to the UI thread. */
-	public void syncPlayGamesAchievements(long unlockedMask) {
-		runOnUiThread(() -> playGamesAchievements.sync(unlockedMask));
+	public void syncPlayGamesAchievements(long[] unlockedMasks) {
+		runOnUiThread(() -> playGamesAchievements.sync(unlockedMasks));
 	}
 
-	public long getPlayGamesAchievementMask() {
-		return playGamesAchievements.unlockedMask();
+	public long getPlayGamesAchievementMask(int word) {
+		return playGamesAchievements.unlockedMask(word);
 	}
 
 	public boolean isPlayGamesAchievementsAvailable() {

@@ -479,9 +479,9 @@ typedef enum sdl_character_sheet_context {
 
 /* Narrative book (quest offer/completion, etc.): a text-only book paginated
  * across N parchment pages, reusing the select_page/page-curl machinery. */
-#define SDL_BOOK_MAX_PARAS 64   /* most paragraphs/actions a single book may hold */
+#define SDL_BOOK_MAX_PARAS 128  /* includes achievement entries and book controls */
 #define SDL_BOOK_PARA_LEN  1024 /* longest single paragraph (re-flowed text) */
-#define SDL_BOOK_MAX_PAGES 64   /* allow a full page for every semantic paragraph */
+#define SDL_BOOK_MAX_PAGES 128  /* allow a full page for every semantic paragraph */
 #define SDL_BOOK_MAX_CONTENTS 8 /* persistent contents links beside the leaf */
 
 typedef struct sdl_character_sheet_live_item {

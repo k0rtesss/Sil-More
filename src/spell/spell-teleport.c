@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-teleport.c */
 
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -503,6 +504,8 @@ void teleport_player_level()
         note_lost_greater_vault();
 
         /* New depth */
+        sil_achievements_on_level_travel(p_ptr->depth,
+            p_ptr->depth + 1, FEAT_NONE);
         p_ptr->depth++;
 
         /* Leaving */

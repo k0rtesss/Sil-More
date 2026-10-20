@@ -171,7 +171,7 @@ static void assert_discovery_defaults(const monster_type* restored)
 }
 static void test_save(void)
 {
-    assert(VERSION_MAJOR==0 && VERSION_MINOR==9 && VERSION_PATCH==8 && VERSION_EXTRA==35);
+    assert(VERSION_MAJOR==0 && VERSION_MINOR==9 && VERSION_PATCH==8 && VERSION_EXTRA>=35);
     prepare_player();
     monster_type source={0}, restored;
     source.r_idx=41; source.image_r_idx=7; source.fy=8; source.fx=9;
@@ -215,7 +215,26 @@ static void test_save(void)
     ++ice;assert(p_ptr->achievement_frozen_tiles[ice/8]&(1u<<(ice%8)));
     assert(restored.achievement_doom_rage_epoch==0x11223344U);
     assert(restored.achievement_elbereth_turn==778 && restored.achievement_first_wolf);
-    puts("Current v35: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
+    puts("Current format: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
+
+    // The new provenance uses the existing flags word; older layouts remain exact.
+    for(int previous=35;previous<=36;previous++) {
+        clear_for_load();memset(&restored,0,sizeof(restored));
+        assert(fixture_read(current,size,previous,&restored,current_end)==0);
+        assert_player_tail();
+        assert(p_ptr->achievement_flags==(SIL_ACH_RUN_FLAGS & ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE));
+    }
+    puts("Legacy v35/v36: unknown descent history cannot qualify for the chasm/shaft route PASS");
+    prepare_player();p_ptr->achievement_flags &= ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
+    size_t invalid_end;
+    size_t invalid_size=fixture_write(false,&source,modified,sizeof(modified),&invalid_end);
+    clear_for_load();memset(&restored,0,sizeof(restored));
+    assert(fixture_read(modified,invalid_size,VERSION_EXTRA,&restored,invalid_end)==0);
+    assert(!(p_ptr->achievement_flags & SIL_ACH_RUN_CHASM_SHAFT_ROUTE));
+    puts("Current route: a disqualified descent remains disqualified after save/resume PASS");
+    clear_for_load();memset(&restored,0,sizeof(restored));
+    assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
+    assert(p_ptr->achievement_flags & SIL_ACH_RUN_CHASM_SHAFT_ROUTE);
 
     object_type forged={0},loaded;
     object_prep(&forged,lookup_kind(TV_SOFT_ARMOR,SV_ARMOUR_OF_GALVORN));
@@ -224,7 +243,7 @@ static void test_save(void)
     memset(&loaded,0,sizeof(loaded));fixture_read_object(modified,object_size,&loaded);
     assert((loaded.ident&(IDENT_ACH_EOL_GALVORN|IDENT_ACH_TELCHAR_SHARPNESS))
         ==(IDENT_ACH_EOL_GALVORN|IDENT_ACH_TELCHAR_SHARPNESS));
-    puts("Current v35: object codec preserves both own-forged provenance bits PASS");
+    puts("Current format: object codec preserves both own-forged provenance bits PASS");
 
     size_t v34_end;
     size_t v34_size=fixture_write(3,&source,modified,sizeof(modified),&v34_end);
@@ -242,7 +261,8 @@ static void test_save(void)
     assert(fixture_read(modified,previous_size,33,&restored,previous_end)==0);
     assert_player_tail();
     assert_discovery_defaults(&restored);
-    assert(p_ptr->achievement_flags==(SIL_ACH_RUN_FLAGS & ~SIL_ACH_RUN_FALLING));
+    assert(p_ptr->achievement_flags==(SIL_ACH_RUN_FLAGS
+        & ~(SIL_ACH_RUN_FALLING | SIL_ACH_RUN_CHASM_SHAFT_ROUTE)));
     assert(p_ptr->achievement_fall_depth==-1 && restored.potion_poisoned==0);
     for(size_t i=0;i<sizeof(p_ptr->achievement_jammed_doors);++i)
         assert(!p_ptr->achievement_jammed_doors[i]);
@@ -260,11 +280,11 @@ static void test_save(void)
     assert(restored.ai.observations[MON_AI_FIRE].value==2);
     p_ptr->playing=true; p_ptr->depth=0;
     sil_achievements_on_escape(1);
-    assert(sil_achievements_mask() & (1U<<SIL_ACH_BACK_TO_STARLIGHT));
-    assert(!(sil_achievements_mask() & (1U<<SIL_ACH_THE_QUIET_ROAD)));
+    assert(sil_achievements_mask(0) & (1U<<SIL_ACH_BACK_TO_STARLIGHT));
+    assert(!(sil_achievements_mask(0) & (1U<<SIL_ACH_THE_QUIET_ROAD)));
     p_ptr->depth=10;
     sil_achievements_on_monster_killed(1,-1);
-    assert(!(sil_achievements_mask() & (1U<<SIL_ACH_BY_A_THREAD)));
+    assert(!(sil_achievements_mask(0) & (1U<<SIL_ACH_BY_A_THREAD)));
     puts("Legacy v30: exact stream/checksum alignment, safe defaults, no false pacifist or 1-HP achievement PASS");
 
     for (int poison=-5;poison<=99;poison+=104) {
@@ -288,17 +308,17 @@ static void test_save(void)
     clear_for_load();
     assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
     assert(!(p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK));
-    puts("Current v35: player poison clamps to [0,total poison], invalid comeback depth clears pending condition PASS");
+    puts("Current format: player poison clamps to [0,total poison], invalid comeback depth clears pending condition PASS");
 
     decode(current,plain,size);
-    const byte marker[]={0xAC,15,0,0,0,0x78,0x56,0x34,0x12,0x70,0x11,1,0,0xFF,0xFF};
+    const byte marker[]={0xAC,SIL_ACH_RUN_FLAGS,0,0,0,0x78,0x56,0x34,0x12,0x70,0x11,1,0,0xFF,0xFF};
     size_t found=0; int matches=0;
     for(size_t i=0;i+sizeof(marker)<=current_end;i++)
         if(!memcmp(plain+i,marker,sizeof(marker))) { found=i; matches++; }
     assert(matches==1); plain[found]=0xAD;
     encode(plain,modified,size); clear_for_load();
     assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
-    puts("Current v35: corrupt achievement block marker rejected PASS");
+    puts("Current format: corrupt achievement block marker rejected PASS");
     decode(current,plain,size);
     const byte extension[]={0xAD,8,0,2,0,8,9,8,10};
     found=0; matches=0;
@@ -314,7 +334,7 @@ static void test_save(void)
         encode(plain,modified,size); clear_for_load();
         assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
     }
-    puts("Current v35: potion ownership clamps; invalid extension/count/coordinates/duplicate doors rejected PASS");
+    puts("Current format: potion ownership clamps; invalid extension/count/coordinates/duplicate doors rejected PASS");
     decode(current,plain,size);
     const byte discovery[]={0xAE,SIL_ACH_DISC_FLAGS,0,0,0,0x44,0x33,0x22,0x11,
         1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,2,0,12,13,12,14};
@@ -336,11 +356,11 @@ static void test_save(void)
         /* Reject in the field decoder itself, before the checksummed tail. */
         assert(fixture_read_offset<current_end);
     }
-    puts("Current v35: invalid discovery marker/crossing/poison/labyrinth/ice count/ice coordinate/duplicate ice rejected before checksum PASS");
+    puts("Current format: invalid discovery marker/crossing/poison/labyrinth/ice count/ice coordinate/duplicate ice rejected before checksum PASS");
     decode(current,plain,size); plain[size-1]^=1;
     encode(plain,modified,size); clear_for_load();
     assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
-    puts("Current v35: corrupt encoded checksum rejected by production footer validator PASS");
+    puts("Current format: corrupt encoded checksum rejected by production footer validator PASS");
 }
 '''
 

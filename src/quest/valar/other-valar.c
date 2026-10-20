@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -203,6 +204,7 @@ void aule_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(2); /* Aulë is quest index 2 */
+        sil_achievements_on_event(SIL_ACH_AULES_APPRENTICE);
 
         msg_print("Aulë smiles with approval and returns to his eternal labors.");
 
@@ -382,6 +384,7 @@ void mandos_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(3); /* Mandos is quest index 3 */
+        sil_achievements_on_event(SIL_ACH_THE_DOOMSMANS_DUE);
 
         msg_print("Mandos bows deeply and fades into shadow, his task complete.");
 
@@ -684,6 +687,7 @@ void niena_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(4); /* Nienna is quest index 4 */
+        sil_achievements_on_event(SIL_ACH_PITY_FOR_THE_FORSAKEN);
 
         /* Mark quest completion in metarun for score/persistence */
         metarun_mark_quest_completed(METARUN_QUEST_NIENA);
@@ -882,6 +886,7 @@ void orome_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(5); /* Oromë is quest index 5 */
+        sil_achievements_on_event(SIL_ACH_THE_GREAT_HUNT);
 
         /* Mark quest as completed in metarun */
         metarun_mark_quest_completed(METARUN_QUEST_OROME);
