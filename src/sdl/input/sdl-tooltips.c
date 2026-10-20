@@ -1892,7 +1892,7 @@ cptr sdl_description_overlay_footer_text(
         return overlay->footer_text;
 
     return steamdeck_controls_active()
-        ? "<B> Close  <A> scroll  D-pad scroll"
+        ? "<B> Close  <A> page  D-pad / <RS> scroll"
         : "Esc close  Space page  Dir scroll";
 }
 

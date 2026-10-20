@@ -28,6 +28,7 @@ compile_commands.json
 *.temp
 /build*
 !/build-android-bundle.ps1
+!/build-linux-steam.ps1
 /lib/xtra/sound/packs
 /scripts/output
 /sil-more-*

@@ -333,6 +333,8 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
             :(scrollable?"Ctrl+Tab: tutorial | PgUp/PgDn: read":"Ctrl+Tab: tutorial"),sizeof(out->controls_hint));
         SDL_strlcpy(out->read_hint,"PgUp/Dn: read",sizeof(out->read_hint));
     } else if (input==TUTORIAL_INPUT_CONTROLLER) {
+        /* The buttons already show their actions and controller shortcuts. */
+        if (out->primary) out->action_hint[0]='\0';
         if (out->native_command) SDL_strlcpy(out->shortcut[0],binding,sizeof(out->shortcut[0]));
         if (!native) {
             if (tutorial_focus>=0 && tutorial_focus<3)
@@ -341,10 +343,11 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
         }
         if (native) strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: tutorial buttons | %s: back",menu,back);
         else if (view->can_continue || tutorial_reading)
-            strnfmt(out->controls_hint,sizeof(out->controls_hint),"D-pad: %s | %s: choose | %s: skip",
-                scrollable?"scroll/buttons":"buttons",confirm,back);
-        else if (scrollable) strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: read card | %s: skip",read,back);
-        else strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: skip",back);
+            SDL_strlcpy(out->controls_hint,
+                scrollable ? "D-pad: buttons | RS: scroll" : "D-pad: buttons",
+                sizeof(out->controls_hint));
+        else if (scrollable) strnfmt(out->controls_hint,sizeof(out->controls_hint),
+            "%s: read card | RS: scroll",read);
         strnfmt(out->read_hint,sizeof(out->read_hint),"%s: read",native?menu:read);
     } else if (input==TUTORIAL_INPUT_TOUCH) {
         SDL_strlcpy(out->controls_hint,scrollable?"Swipe this card to read":"",sizeof(out->controls_hint));
@@ -995,6 +998,31 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
         if (ev->gaxis.axis < SDL_GAMEPAD_AXIS_COUNT && tutorial_blocked_axes[ev->gaxis.axis]) {
             if (abs(ev->gaxis.value)<=MAX(config.gamepad_deadzone,4000)) tutorial_blocked_axes[ev->gaxis.axis]=false;
             return true;
+        }
+        if (active && (ev->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTX
+                || ev->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTY)) {
+            int deadzone = MAX(config.gamepad_deadzone,0);
+            int dir;
+
+            if (ev->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTX)
+                g_gamepad_state.right_x = ev->gaxis.value;
+            else
+                g_gamepad_state.right_y = ev->gaxis.value;
+            dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.right_x,
+                g_gamepad_state.right_y,deadzone);
+            if (dir != g_gamepad_state.right_ui_dir) {
+                g_gamepad_state.right_ui_dir = dir;
+                if (dir == GAMEPAD_STICK_DIR_UP
+                    || dir == GAMEPAD_STICK_DIR_DOWN) {
+                    if (!view.can_continue && tutorial_max_scroll > 0)
+                        tutorial_set_reading(true);
+                    tutorial_scroll=MAX(0,MIN(tutorial_max_scroll,
+                        tutorial_scroll+(dir==GAMEPAD_STICK_DIR_UP?-3:3)));
+                    g_state.need_present=true;
+                }
+            }
+            return view.can_continue || tutorial_reading
+                || tutorial_max_scroll > 0;
         }
         return ev->common.timestamp < tutorial_input_barrier
             || (active && (view.can_continue || tutorial_reading));

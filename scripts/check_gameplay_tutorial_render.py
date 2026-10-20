@@ -499,6 +499,24 @@ def main():
         fixtures.append(dict(fixtures[0], id=f"{fixtures[0]['id']}.mode{mode}", mode=mode))
     fixtures.extend(dict(fixture, id=f"{fixture['id']}.font48", font_size=48)
                      for fixture in fixtures[:selected_count])
+    for lesson in lessons:
+        if lesson.get("alias_of") or (not lesson["id"].startswith("item.description.")
+                                     and lesson["id"] != "item.gem"):
+            continue
+        unknown = "This item is not fully identified. The preview shows only what your hero has learned; undiscovered properties remain hidden."
+        if lesson["id"].rsplit(".", 1)[-1] in ("gem", "potion", "food", "staff", "horn"):
+            unknown = "Its effect is still unknown. Examining does not identify it, and an unknown effect is not necessarily safe."
+        for state, detail in (("unknown", unknown),
+                ("identified", "This item is identified. Read its known properties and any drawbacks.")):
+            for size, font_size in (([1280, 720], 28), ([360, 800], 20), ([800, 360], 20),
+                                    ([1280, 720], 48), ([360, 800], 48), ([800, 360], 48)):
+                fixture = make_fixture(
+                    lesson, lesson["steps"][0], True, 3, False,
+                    fixture_id=f"{lesson['id']}.{state}.{size[0]}x{size[1]}.font{font_size}",
+                    context_text=detail, subject_name="The selected item",
+                    capture=lesson["id"] == "item.gem" and state == "unknown")
+                fixture.update(size=size, font_size=font_size, subject_type="item")
+                fixtures.append(fixture)
     # Reported image dimensions plus the Deck's 1280x800 output: exercise all
     # opening pages and the item preview with controller prompts at each size.
     for size in ([1280, 960], [1280, 800]):

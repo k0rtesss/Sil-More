@@ -664,6 +664,8 @@ static void blitz_show_effect_summary(void)
     int hgt = 24;
     int row = 3;
 
+blitz_summary_redraw:
+    row = 3;
     Term_get_size(&wid, &hgt);
     Term_clear();
     c_put_str(TERM_YELLOW, "Blitz Effects", 1, MAX((wid - 13) / 2, 0));
@@ -700,7 +702,8 @@ static void blitz_show_effect_summary(void)
         birth_put_str_fit(TERM_L_BLUE, "Press any key to continue.",
             MIN(row + 1, hgt - 1), 2);
     }
-    (void)inkey();
+    if (inkey() == UI_MENU_CLICK_WAKE_KEY)
+        goto blitz_summary_redraw;
 }
 
 NavResult blitz_configure_effects(void)

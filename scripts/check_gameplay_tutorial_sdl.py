@@ -86,6 +86,13 @@ bool sdl_hint_quest_menu_active(void) { return false; }
 bool sdl_key_is_escape_or_back(SDL_Keycode key) { return key==SDLK_ESCAPE; }
 bool sdl_gamepad_button_is_ui_confirm(SDL_GamepadButton b) { return b==SDL_GAMEPAD_BUTTON_SOUTH; }
 bool sdl_gamepad_button_is_ui_back(SDL_GamepadButton b) { return b==SDL_GAMEPAD_BUTTON_EAST; }
+int sdl_gamepad_axis_to_cardinal_dir(Sint16 x,Sint16 y,int deadzone)
+{
+    int ax=abs((int)x),ay=abs((int)y);
+    if(ax<=deadzone && ay<=deadzone) return -1;
+    if(ax>=ay) return x>=0?GAMEPAD_STICK_DIR_RIGHT:GAMEPAD_STICK_DIR_LEFT;
+    return y>=0?GAMEPAD_STICK_DIR_DOWN:GAMEPAD_STICK_DIR_UP;
+}
 void sdl_gamepad_send_key(int key, bool mods) { (void)mods; Term_keypress(key); }
 bool sdl_finger_event_to_render_coords(const SDL_TouchFingerEvent *event,float *x,float *y)
 { *x=event->x; *y=event->y; return true; }
@@ -229,6 +236,37 @@ int main(void)
     }
     {
         tutorial_controls labels;
+        config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+        show(true,"","");
+        for (int scrollable=0;scrollable<2;++scrollable) {
+            for (int focus=0;focus<3;++focus) {
+                tutorial_focus=focus;
+                tutorial_build_controls(&current,&labels,scrollable);
+                assert(strstr(labels.shortcut[focus],focus==1?"B":"A"));
+                assert(!strcmp(labels.shortcut[1],"B"));
+                assert(!strstr(labels.controls_hint,": choose")
+                    && !strstr(labels.controls_hint,": skip"));
+                assert(strstr(labels.controls_hint,"D-pad"));
+                assert((strstr(labels.controls_hint,"RS: scroll")!=NULL)==scrollable);
+            }
+        }
+        show(false,"open-menu","inventory");
+        tutorial_build_controls(&current,&labels,false);
+        assert(labels.primary && !strcmp(labels.label[0],"Open inventory"));
+        assert(!strcmp(labels.shortcut[0],"A") && !strcmp(labels.shortcut[1],"B"));
+        assert(!labels.action_hint[0] && !labels.controls_hint[0]);
+        tutorial_build_controls(&current,&labels,true);
+        assert(strstr(labels.controls_hint,"View: read card")
+            && strstr(labels.controls_hint,"RS: scroll"));
+        assert(!strstr(labels.controls_hint,": skip"));
+        show(false,"move","");
+        tutorial_build_controls(&current,&labels,false);
+        assert(!labels.primary && strstr(labels.action_hint,"movement controls"));
+        config.input_ui_mode=SDL_INPUT_UI_MODE_AUTO;
+        tutorial_last_input=TUTORIAL_INPUT_UNKNOWN;
+    }
+    {
+        tutorial_controls labels;
         show(false,"use-item","poisoned");
         SDL_strlcpy(current.id,"status.poisoned.remedy",sizeof(current.id));
         tutorial_build_controls(&current,&labels,false);
@@ -305,6 +343,7 @@ int main(void)
         config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
         tutorial_build_controls(&current,&labels,true);
         assert(!strcmp(labels.shortcut[0],"Y") && !labels.shortcut[1][0]);
+        assert(!labels.action_hint[0]); /* Preview shortcut is on its button. */
         assert(strstr(labels.controls_hint,"Menu") && strstr(labels.controls_hint,"back"));
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_BACK);
         assert(!sdl_gameplay_tutorial_handle_event(&e)); /* Native Preview control remains native. */
@@ -312,6 +351,8 @@ int main(void)
         assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_reading);
         tutorial_build_controls(&current,&labels,true);
         assert(!strcmp(labels.shortcut[1],"B"));
+        assert(!strstr(labels.controls_hint,": choose")
+            && !strstr(labels.controls_hint,": skip"));
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
         assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_focus==1);
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_SOUTH);
@@ -463,6 +504,16 @@ int main(void)
     assert(sdl_gameplay_tutorial_handle_event(&e));
     tutorial_max_scroll=5;
     e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+    assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_scroll==1 && key_count==0);
+    g_gamepad_state.right_x=g_gamepad_state.right_y=0;
+    g_gamepad_state.right_ui_dir=-1;
+    e=(SDL_Event){0};e.gaxis.type=SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    e.gaxis.timestamp=tutorial_input_barrier+1000000;
+    e.gaxis.axis=SDL_GAMEPAD_AXIS_RIGHTY;e.gaxis.value=20000;
+    assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_scroll==4 && key_count==0);
+    assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_scroll==4 && key_count==0);
+    e.gaxis.value=0;assert(sdl_gameplay_tutorial_handle_event(&e));
+    e.gaxis.value=-20000;
     assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_scroll==1 && key_count==0);
     e=key_event(SDL_EVENT_KEY_DOWN,SDLK_X,SDL_SCANCODE_X);
     assert(sdl_gameplay_tutorial_handle_event(&e) && key_count==0);

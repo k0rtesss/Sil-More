@@ -100,6 +100,9 @@ def source_inventory():
         assert len(top_level_expressions(hazards.group(1))) == len(hazard_ids), 'Hazard IDs/features are out of alignment'
         direct.update(hazard_ids)
     direct.update(('identification.item', 'item.artefact', 'item.first_description', 'item.description'))
+    description_routes = re.search(r'static const char \*item_description_lesson\([^)]*\)\s*\{(.*?)\n\}', core, re.S)
+    assert description_routes and 'lesson = item_description_lesson(item);' in core
+    direct.update(re.findall(r'return "(item\.[a-z.]+)"', description_routes.group(1)))
     menu_ids = set(re.findall(r'\btutorial_game_menu\(\s*"([a-z0-9_-]+)"', '\n'.join(sources.values())))
     for expression in re.findall(r'\btutorial_game_menu\(\s*([^,]+),', combined):
         menu_ids.update(re.findall(r'"([a-z0-9_-]+)"', expression))
@@ -119,7 +122,10 @@ def validate_resource_routes():
     assert re.search(r'path_build\(path,\s*sizeof\(path\),\s*ANGBAND_DIR_HELP,\s*"tutorials.json"\)', core), 'Lazy tutorial loader no longer uses the installed help resource route'
     batch = (ROOT / 'build-cmake.bat').read_text(encoding='utf-8-sig')
     for folder in ('sil-more-windows-sdl3', 'sil-more-windows-sdl3-portable'):
-        assert re.search(r'^xcopy\s+[^\r\n]*\blib\\help\s+' + re.escape(folder) + r'\\lib\\help\s*$', batch, re.M | re.I), 'Windows help staging missing: ' + folder
+        destinations = [re.escape(folder)]
+        if re.search(r'^set "STANDARD_DEPLOY_DIR=' + re.escape(folder) + r'"$', batch, re.M | re.I):
+            destinations.append('%STANDARD_DEPLOY_DIR%')
+        assert re.search(r'^xcopy\s+[^\r\n]*\blib\\help\s+(?:' + '|'.join(destinations) + r')\\lib\\help\s*$', batch, re.M | re.I), 'Windows help staging missing: ' + folder
     for script in ('create-release-build.ps1', 'create-portable-release-build.ps1'):
         release = (ROOT / script).read_text(encoding='utf-8-sig')
         copied = re.search(r'\$libFoldersToCopy\s*=\s*@\(([^)]+)\)', release)
@@ -334,7 +340,12 @@ def write_reference(lessons, counts, unwired):
               'Changing mode or resetting the Tale lesson history does not bypass that gate. The upgrade notice '
               'belongs to its own native UI and is independent of catalogue filtering.', '',
               'Skeletons and chests use Normal informational feature lessons. Their old generic item IDs remain '
-              'untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.', '']
+              'untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.', '',
+              'Item descriptions have separate explanations for each public item family. Finding a gem first '
+              'leaves the weapon and armour explanations available for later. Runtime identification wording '
+              'reflects only what the hero already knows; examining an item does not identify it. '
+              'Gem encounters and previews share one introduction and its progress, so neither route repeats '
+              'an introduction already read or skipped through the other.', '']
     lines += ['## Presentation order', '',
               'Cards are selected by descending priority at a safe input boundary, not by their position in this document. '
               'Equal priorities keep observation order. A higher-priority card can interrupt between steps; the earlier '

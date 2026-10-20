@@ -11,6 +11,10 @@ void get_sdl_config_info(char* buf, size_t size)
     offset += (size_t)strnfmt(buf + offset, size - offset,
         "Terminal Menu Scale Offset: %+d\n",
         config.terminal_menu_scale_offset);
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT && offset < size; menu++)
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Terminal Menu Scale: %s %+d\n", sdl_menu_font_label(menu),
+            config.terminal_menu_scale_offsets[menu]);
     offset += (size_t)strnfmt(buf + offset, size - offset,
         "Compact Inventory Menus: %s\n",
         config.compact_inventory_menus ? "Yes" : "No");
@@ -166,6 +170,38 @@ int get_sdl_terminal_menu_scale_offset(void)
     return config.terminal_menu_scale_offset;
 }
 
+int get_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu)
+{
+    if (menu < 0 || menu >= SDL_MENU_FONT_COUNT)
+        return config.terminal_menu_scale_offset;
+    return config.terminal_menu_scale_offsets[menu];
+}
+
+void set_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu,
+    int value)
+{
+    int target_scale;
+
+    if (menu < 0 || menu >= SDL_MENU_FONT_COUNT)
+        return;
+    if (value < SDL_TERMINAL_MENU_SCALE_OFFSET_MIN)
+        value = SDL_TERMINAL_MENU_SCALE_OFFSET_MIN;
+    if (value > SDL_TERMINAL_MENU_SCALE_OFFSET_MAX)
+        value = SDL_TERMINAL_MENU_SCALE_OFFSET_MAX;
+    if (config.terminal_menu_scale_offsets[menu] == value)
+        return;
+
+    config.terminal_menu_scale_offsets[menu] = value;
+    if (g_terminal_menu_scale_depth <= 0
+        || sdl_terminal_menu_font() != menu)
+        return;
+
+    /* The outer stack entry belongs to the menu that opened this menu. Keep
+     * it intact; popping will refresh from that menu's own saved offset. */
+    target_scale = get_sdl_terminal_menu_scale();
+    g_terminal_menu_scale_override = target_scale;
+}
+
 void set_sdl_terminal_menu_scale_offset(int value)
 {
     int target_scale;
@@ -174,20 +210,20 @@ void set_sdl_terminal_menu_scale_offset(int value)
         value = SDL_TERMINAL_MENU_SCALE_OFFSET_MIN;
     if (value > SDL_TERMINAL_MENU_SCALE_OFFSET_MAX)
         value = SDL_TERMINAL_MENU_SCALE_OFFSET_MAX;
-    if (config.terminal_menu_scale_offset == value)
-        return;
+    bool changed = config.terminal_menu_scale_offset != value;
 
     config.terminal_menu_scale_offset = value;
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++) {
+        if (config.terminal_menu_scale_offsets[menu] != value)
+            changed = true;
+        config.terminal_menu_scale_offsets[menu] = value;
+    }
+    if (!changed)
+        return;
     if (g_terminal_menu_scale_depth <= 0)
         return;
 
-    /* Keep nested terminal-menu restores on the newly selected scale too. */
     target_scale = get_sdl_terminal_menu_scale();
-    for (int i = 0; i < g_terminal_menu_scale_depth; i++)
-    {
-        if (g_terminal_menu_scale_stack[i] > 0)
-            g_terminal_menu_scale_stack[i] = target_scale;
-    }
     g_terminal_menu_scale_override = target_scale;
 }
 
@@ -3766,7 +3802,9 @@ static int sdl_terminal_menu_scale_for_mode(int menu_mode)
         scale = SDL_MAIN_VIEW_MIN_SCALE;
     else
     {
-        scale = max_scale + config.terminal_menu_scale_offset;
+        enum sdl_menu_font menu = sdl_terminal_menu_font();
+        int offset = get_sdl_terminal_menu_scale_offset_for(menu);
+        scale = max_scale + offset;
         if (scale < min_scale)
             scale = min_scale;
         if (scale > max_scale)
@@ -3778,7 +3816,9 @@ static int sdl_terminal_menu_scale_for_mode(int menu_mode)
               "offset=%+d target=%d",
         sdl_min_terminal_mode_name(menu_mode),
         supporting_panes_hidden ? 1 : 0, max_scale, platform_max,
-        compact_platform_max, config.terminal_menu_scale_offset, scale);
+        compact_platform_max,
+        get_sdl_terminal_menu_scale_offset_for(sdl_terminal_menu_font()),
+        scale);
 
     return scale;
 }
@@ -3800,7 +3840,8 @@ int sdl_terminal_menu_font_px(void)
         && get_sdl_menu_bigger_font_for(sdl_terminal_menu_font()))
     {
         int logical_px = MAX(SDL_AUX_VIEW_FONT_MIN,
-            16 + 2 * config.terminal_menu_scale_offset);
+            16 + 2 * get_sdl_terminal_menu_scale_offset_for(
+                sdl_terminal_menu_font()));
         return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
             * (logical_px + (logical_px + 1) / 2)));
     }
@@ -3825,14 +3866,21 @@ void sdl_refresh_terminal_menu_scale(void)
 
 void sdl_set_terminal_menu_font(enum sdl_menu_font menu)
 {
+    int old_scale;
+    int old_font_px;
+    int old_main_font_px;
+
     if (g_terminal_menu_scale_depth <= 0 || menu < 0
         || menu >= SDL_MENU_FONT_COUNT || sdl_terminal_menu_font() == menu)
         return;
-    bool changed = get_sdl_menu_bigger_font_for(sdl_terminal_menu_font())
-        != get_sdl_menu_bigger_font_for(menu);
+    old_scale = g_terminal_menu_scale_override;
+    old_font_px = sdl_terminal_menu_font_px();
+    old_main_font_px = sdl_main_view_font_px(16);
     g_terminal_menu_fonts[g_terminal_menu_scale_depth - 1] = menu;
-    if (changed) {
-        sdl_refresh_terminal_menu_scale();
+    sdl_refresh_terminal_menu_scale();
+    if (old_scale != g_terminal_menu_scale_override
+        || old_font_px != sdl_terminal_menu_font_px()
+        || old_main_font_px != sdl_main_view_font_px(16)) {
         sdl_apply_config_no_redraw();
     }
 }
@@ -3907,7 +3955,7 @@ void sdl_pop_terminal_menu_scale(void)
     if (g_terminal_menu_scale_depth == 0
         || old_menu != sdl_terminal_menu_font()
         || old_big != (sdl_main_view_font_px(16) > 16)
-        || old_scale != restored_scale
+        || old_scale != g_terminal_menu_scale_override
         || old_font_px != sdl_terminal_menu_font_px())
         sdl_apply_config_no_redraw();
 }

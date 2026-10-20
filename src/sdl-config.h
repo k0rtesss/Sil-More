@@ -265,10 +265,14 @@ enum sdl_menu_font {
     SDL_MENU_FONT_LOG_OPTIONS,
     SDL_MENU_FONT_PANE_OPTIONS,
     SDL_MENU_FONT_LOOK,
+    SDL_MENU_FONT_ABOUT,
     SDL_MENU_FONT_COUNT
 };
 const char* sdl_menu_font_key(enum sdl_menu_font menu);
 const char* sdl_menu_font_label(enum sdl_menu_font menu);
+int get_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu);
+void set_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu,
+    int value);
 bool get_sdl_menu_bigger_font(void);
 bool get_sdl_menu_bigger_font_for(enum sdl_menu_font menu);
 void set_sdl_menu_bigger_font(enum sdl_menu_font menu, bool value);
@@ -287,6 +291,9 @@ struct sdl_config {
     int main_view_scale;
     // Scale steps relative to the largest terminal-menu scale that fits.
     int terminal_menu_scale_offset;
+    // Per-menu scale steps. The scalar above remains the legacy/all-menu
+    // setting and is used to migrate older configuration files.
+    int terminal_menu_scale_offsets[SDL_MENU_FONT_COUNT];
     // Use focus-dependent compact layouts for Inventory-style browsers.
     bool compact_inventory_menus;
     // Enlarge gameplay UI text. Menus have independent choices below.

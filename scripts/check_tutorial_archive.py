@@ -97,6 +97,7 @@ HARNESS = r'''
 static metarun test_tale;
 static bool test_blitz;
 cptr ANGBAND_DIR_HELP = ".";
+cptr lore_text(cptr text) { return text; } /* Archive tests use the default theme. */
 const metarun *metarun_current(void) { return &test_tale; }
 bool run_mode_is_blitz(void) { return test_blitz; }
 void ensure_run_dir(const metarun *m) { (void)m; }

@@ -57,6 +57,7 @@ typedef struct sdl_question_menu_layout_info {
     float help_content_h;
     float scrolling_desc_h;
     int font_px;
+    int desc_font_px;
     int table_column_count;
     int first_entry;
     int visible_count;
@@ -630,8 +631,10 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     SDL_Rect anchor;
     SDL_FRect anchor_cell;
     TTF_Font* story_font;
+    TTF_Font* desc_font;
     TTF_Font* mono_font;
     int font_px;
+    int desc_font_px;
     int margin;
     float pad_x;
     float pad_y;
@@ -733,6 +736,8 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         SDL_STORY_FONT_SLOT_MENU);
     if (!story_font)
         return false;
+    desc_font = story_font;
+    desc_font_px = font_px;
     mono_font = sdl_main_menu_mono_font_for_height(font_px);
     table_gap = sdl_touch_pane_clampf((float)font_px * 0.45f, 8.0f,
         16.0f);
@@ -1126,8 +1131,8 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
             g_question_menu.help_open || g_question_menu.scroll_offset_ptr != NULL);
         if (steamdeck_controls_active() && g_question_menu.help_mode)
             out->controller_hint_text = g_question_menu.help_open
-                ? "D-pad scroll   <View> choices   <B> back"
-                : "D-pad select   <A> choose   <View> help   <B> back";
+                ? "D-pad / <RS> scroll   <View> choices   <B> back"
+                : "D-pad select   <RS> scroll   <A> choose   <View> help   <B> back";
         if (out->controller_hint_text[0])
             controller_hint_h = sdl_question_menu_wrapped_text_height(
                 story_font, out->controller_hint_text,
@@ -1161,7 +1166,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
 
     if (out->has_desc)
     {
-        desc_h = sdl_question_menu_desc_height(story_font,
+        desc_h = sdl_question_menu_desc_height(desc_font,
             panel_w - pad_x * 2.0f);
 
         if (desc_h > 0.0f)
@@ -1185,25 +1190,41 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
                 reserved_h += row_h + divider_gap;
             reserved_h += button_section_h + controller_hint_h;
 
-            if (max_panel_h > reserved_h)
-            {
-                float max_desc_h = max_panel_h - reserved_h;
+            float max_desc_h = MAX(0.0f, max_panel_h - reserved_h);
 
-                if (desc_h > max_desc_h)
+            if (desc_h > max_desc_h && !get_sdl_menu_bigger_font()
+                && max_desc_h > 0.0f)
+            {
+                int density_floor = MAX(1,
+                    (int)SDL_ceilf(sdl_ui_density_scale() * 13.0f));
+                int min_desc_px = MAX(density_floor,
+                    (font_px * 3 + 3) / 4);
+
+                /* Keep ordinary prompts on one screen when a modest body-text
+                 * reduction is enough. Bigger Font is an accessibility choice
+                 * and never shrinks; long prose remains available by scrolling. */
+                for (int px = font_px - 1; px >= min_desc_px; px--)
                 {
-                    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
-                        out->description_in_list = true;
-                        out->scrolling_desc_h = desc_h;
-                        desc_h = 0;
-                    } else desc_h = max_desc_h;
+                    TTF_Font* candidate = sdl_story_font_for_height_slot(px,
+                        SDL_STORY_FONT_SLOT_MENU);
+                    float candidate_h;
+
+                    if (!candidate)
+                        continue;
+                    candidate_h = sdl_question_menu_desc_height(candidate,
+                        panel_w - pad_x * 2.0f);
+                    desc_font = candidate;
+                    desc_font_px = px;
+                    desc_h = candidate_h;
+                    if (candidate_h <= max_desc_h)
+                        break;
                 }
             }
-            else
+
+            if (desc_h > max_desc_h)
             {
-                if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
-                    out->description_in_list = true;
-                    out->scrolling_desc_h = desc_h;
-                }
+                out->description_in_list = true;
+                out->scrolling_desc_h = desc_h;
                 desc_h = 0.0f;
             }
         }
@@ -1287,6 +1308,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     }
 
     out->font_px = font_px;
+    out->desc_font_px = desc_font_px;
     if (controller_hint_h > 0)
         out->controller_hint = (SDL_FRect){ out->panel.x + pad_x,
             out->panel.y + out->panel.h - pad_y - controller_hint_h + divider_gap,
@@ -1578,7 +1600,10 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         {
             float button_y = y;
             float height = button_row_h;
-            if (get_sdl_menu_bigger_font()) {
+            /* The grid chooser above also wraps normal-font actions when a
+             * single row would make the buttons too narrow.  Honor that row
+             * count here or later buttons continue past the clipped panel. */
+            if (get_sdl_menu_bigger_font() || button_rows > 1) {
                 x = out->panel.x + pad_x
                     + (i % button_columns) * (button_widths[i] + button_gap);
                 for (int row = 0; row < i / button_columns; row++)
@@ -1960,12 +1985,10 @@ void sdl_question_menu_begin(cptr title)
     g_question_menu.help_open = help_open;
     g_question_menu.help_button_hover = help_button_hover;
     g_question_menu.help_scroll_offset = help_scroll_offset;
-    if (get_sdl_menu_bigger_font()) {
-        if (!keep_scroll)
-            g_question_menu_internal_scroll = 0;
-        g_question_menu.scroll_offset_ptr = &g_question_menu_internal_scroll;
-        g_question_menu.scroll_follow_highlight = true;
-    }
+    if (!keep_scroll)
+        g_question_menu_internal_scroll = 0;
+    g_question_menu.scroll_offset_ptr = &g_question_menu_internal_scroll;
+    g_question_menu.scroll_follow_highlight = true;
     if (title)
         SDL_strlcpy(g_question_menu.title, title,
             sizeof(g_question_menu.title));
@@ -2280,6 +2303,7 @@ void sdl_question_menu_render(void)
     SDL_FRect shadow;
     SDL_Color accent = g_state.palette[TERM_L_BLUE];
     TTF_Font* story_font;
+    TTF_Font* desc_font;
     TTF_Font* mono_font;
     SDL_Rect clip;
     SDL_Rect entries_clip;
@@ -2307,6 +2331,11 @@ void sdl_question_menu_render(void)
         SDL_STORY_FONT_SLOT_MENU);
     if (!story_font)
         return;
+    desc_font = (layout.desc_font_px == layout.font_px)
+        ? story_font : sdl_story_font_for_height_slot(layout.desc_font_px,
+            SDL_STORY_FONT_SLOT_MENU);
+    if (!desc_font)
+        desc_font = story_font;
     mono_font = sdl_main_menu_mono_font_for_height(layout.font_px);
 
     has_hover_choice = ui_menu_click_get_hover_choice(&hover_choice);
@@ -2365,7 +2394,7 @@ void sdl_question_menu_render(void)
         int wrap_w = MAX(1, (int)(layout.desc_rect.w + 0.5f));
         int text_w = 0;
         int text_h = 0;
-        SDL_Texture* texture = sdl_ui_wrapped_text_texture(story_font,
+        SDL_Texture* texture = sdl_ui_wrapped_text_texture(desc_font,
             sdl_question_menu_description(), wrap_w, g_state.palette[TERM_L_WHITE],
             &text_w, &text_h);
 
@@ -2405,7 +2434,7 @@ void sdl_question_menu_render(void)
 
     if (layout.description_in_list) {
         int offset = g_question_menu.scroll_offset_ptr ? *g_question_menu.scroll_offset_ptr : 0;
-        sdl_question_menu_draw_wrapped_text(story_font, sdl_question_menu_description(),
+        sdl_question_menu_draw_wrapped_text(desc_font, sdl_question_menu_description(),
             g_state.palette[TERM_L_WHITE], layout.entries_rect.x,
             layout.entries_rect.y - offset, layout.entries_rect.w,
             layout.scrolling_desc_h);
@@ -2792,6 +2821,33 @@ static bool sdl_question_menu_scroll_offset_by(
     if (!g_question_menu.help_open)
         g_question_menu_touch_scrolled = true;
     g_state.need_present = true;
+    return true;
+}
+
+bool sdl_question_menu_scroll_content(int direction, bool page)
+{
+    sdl_question_menu_layout_info layout;
+    int delta;
+    bool changed = false;
+
+    if (!sdl_question_menu_captures_pointer() || direction == 0)
+        return false;
+
+    /* Vertical right-stick input belongs to the prose/list viewport while a
+     * question is open. D-pad navigation remains the way to change choices. */
+    if (!sdl_question_menu_layout(&layout) || !layout.scrollable)
+        return true;
+
+    delta = page
+        ? MAX(1, (int)(layout.entries_rect.h - layout.row_h))
+        : MAX(1, (int)(layout.row_h * 3.0f));
+    if (direction < 0)
+        delta = -delta;
+    if (!g_question_menu.help_open)
+        g_question_menu.scroll_follow_highlight = false;
+    changed = sdl_question_menu_scroll_offset_by(&layout, delta);
+    if (changed)
+        Term_keypress(UI_MENU_CLICK_WAKE_KEY);
     return true;
 }
 

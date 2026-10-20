@@ -5549,9 +5549,9 @@ bool sdl_apply_default_main_scale_for_layout(const char* reason)
         config.min_terminal_mode);
 
     config.main_view_scale = new_scale;
-    config.terminal_menu_scale_offset =
+    set_sdl_terminal_menu_scale_offset(
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
-            config.main_view_scale);
+            config.main_view_scale));
     g_main_view_zoom_scale = 0;
 
     if (old_scale != new_scale) {

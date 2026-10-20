@@ -239,7 +239,7 @@
       "priority": 25,
       "steps": [
         {
-          "text": "{subject} is at your feet or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.",
+          "text": "{subject} is at your feet or in your belongings. Open its preview to read what your hero knows before deciding what to do with it. Weight is shown in lb and volume in qt. {detail}",
           "kind": "info",
           "anchor": "inventory"
         },
@@ -265,7 +265,7 @@
       "priority": 27,
       "steps": [
         {
-          "text": "{detail} Damage written as 2d5 means roll two five-sided dice, for 2 to 10 damage before Protection. Protection such as 1d3 blocks 1 to 3 damage when it applies. Also compare Attack, Evasion, weight, volume and known bonuses or drawbacks.",
+          "text": "{subject}. {detail} Check the name, quantity, weight in lb and volume in qt. These describe what you are carrying. Reading the preview does not equip or use the item.",
           "kind": "info",
           "anchor": "item-description"
         }
@@ -277,6 +277,315 @@
       "sources": [
         "src/object/object-info.c",
         "src/object/object-desc.c"
+      ]
+    },
+    {
+      "id": "item.description.weapon",
+      "title": "Reading a weapon's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Damage such as 2d5 means two five-sided dice, for 2 to 10 damage before Protection. Attack affects accuracy; Evasion helps avoid hits. Compare weight and the damage shown for your current Strength, along with any revealed bonuses and drawbacks.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.bow",
+      "title": "Reading a bow's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Damage such as 2d5 means two five-sided dice, for 2 to 10 damage before Protection. Compare the bow's Attack, range, weight and damage with your current Strength. You also need ready arrows to fire it.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.arrows",
+      "title": "Reading an arrow stack's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Check how many arrows are in the stack, their Attack modifier and any revealed special properties. Compare these with your other arrows. Arrows need a bow and must be ready in the Quiver to fire; reading the preview does not ready them.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.armour",
+      "title": "Reading armour and shield descriptions",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Evasion helps avoid hits; Protection reduces damage after a hit. Protection such as 1d3 rolls one three-sided die, blocking 1 to 3 damage when it applies. Compare weight, skill penalties and any revealed properties. A shield also needs a free hand.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.jewelry",
+      "title": "Reading jewelry descriptions",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Look for revealed bonuses to attributes, skills or resistances, granted abilities and drawbacks. An unidentified ring or amulet can still have hidden properties. Reading its preview does not equip it, and you can leave it unused until you know more.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.potion",
+      "title": "Reading a potion's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} A potion is consumed when drunk. A known effect explains what it changes or treats; appearance alone does not tell you whether it helps or harms. If its effect is unknown, you can keep it for later. Reading this preview does not drink it.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.food",
+      "title": "Reading food and herb descriptions",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Check nourishment and any revealed effect. Ordinary food and herbs serve different purposes, and an unknown herb may be harmful. Read a known herb's effect before eating it; reading this preview does not consume it.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.gem",
+      "title": "Reading a gem's description",
+      "alias_of": "item.gem",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Gems are single-use items. Read any revealed effect and targeting instructions. If the effect is unknown, the preview may show only its appearance, weight in lb and volume in qt. You can keep it and identify it later. Reading this preview does not use the gem.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "Archive compatibility entry. Gem encounters and descriptions use item.gem."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.staff",
+      "title": "Reading a staff's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} A staff has a magical effect and a limited supply of charges. Read its effect when known, and check remaining charges when revealed. Knowing the kind does not necessarily reveal the charges of this particular staff. Reading this preview spends no charge.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.horn",
+      "title": "Reading a horn's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} A horn's effect and Voice cost matter when deciding whether to play it. Read those details when revealed. An unfamiliar horn's appearance does not reveal its power; you can leave it unused. Reading this preview spends no Voice.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.light",
+      "title": "Reading a light's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Light radius is how far it reaches; intensity is how bright it is. Fuelled lights also show remaining fuel. Compare those details, weight and any revealed properties before choosing your light. Reading the preview does not equip or refuel it.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.oil",
+      "title": "Reading an oil container's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Oil supplies lantern fuel. Check the amount of fuel and its weight before deciding whether to keep it. A suitable lantern uses the Refuel action; reading this preview does not transfer any fuel.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.digging",
+      "title": "Reading a digging tool's description",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Compare its tunnelling ability, weight and any revealed bonuses or drawbacks. A digging tool helps with suitable walls and rubble; reading its description does not start digging or spend turns.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
+      ]
+    },
+    {
+      "id": "item.description.metal",
+      "title": "Reading smithing material descriptions",
+      "level": "normal",
+      "priority": 27,
+      "steps": [
+        {
+          "text": "{subject}. {detail} Check the material, quantity and weight. Metal is a smithing resource. A forge and the relevant Smithing abilities are still needed, and the smithing preview lists the actual materials and costs.",
+          "kind": "info",
+          "anchor": "item-description"
+        }
+      ],
+      "trigger": {
+        "source": "src/tutorial/tutorial-game.c",
+        "predicate": "The player opens a description for this public item family; identification wording uses only current item knowledge."
+      },
+      "sources": [
+        "src/object/object-info.c",
+        "src/object/object-desc.c",
+        "src/tutorial/tutorial-game.c"
       ]
     },
     {
@@ -547,17 +856,17 @@
       "id": "item.gem",
       "title": "Gems",
       "level": "normal",
-      "priority": 24,
+      "priority": 27,
       "steps": [
         {
-          "text": "Gems are single-use items with effects such as mapping, detection, identification or warding. Read the known effect before using one. If a gem asks you to choose an item, cancelling that choice preserves the gem.",
+          "text": "{subject}. {detail} Gems are single-use. Their description shows appearance, weight in lb and volume in qt, plus any revealed effect and targeting instructions. You can keep an unknown gem for later identification. Reading a preview does not use it. If a gem asks you to choose an item, cancelling that choice preserves the gem.",
           "kind": "info",
           "anchor": "item-description"
         }
       ],
       "trigger": {
         "source": "src/tutorial/tutorial-game.c",
-        "predicate": "The item type is publicly encountered; no hidden subtype or property is used."
+        "predicate": "The player reaches a gem or opens its description. Both routes share this tutorial and progress; no hidden subtype or property is used."
       },
       "sources": [
         "src/object/object-info.c",

@@ -24,6 +24,7 @@ static char pending_ui_lesson[80];
 static char ui_scoped_lessons[768][80];
 static int ui_scoped_count;
 static char visible_description_type[48];
+static char visible_description_lesson[80];
 static int authorized_action_depth;
 static bool reached_kinds[65536];
 static const char *item_types[] = {"item", "staff", "horn", "bow", "arrows",
@@ -227,6 +228,51 @@ static const char *item_type(const object_type *item)
     }
 }
 
+static const char *item_description_lesson(const object_type *item)
+{
+    /* Select by public item family, never by an unrevealed subtype or flag.
+     * Each family keeps its own progress: a gem must not consume the weapon
+     * or armour explanation before the player has seen those descriptions. */
+    switch (item->tval) {
+    case TV_SWORD: case TV_HAFTED: case TV_POLEARM:
+        return "item.description.weapon";
+    case TV_BOW: return "item.description.bow";
+    case TV_ARROW: return "item.description.arrows";
+    case TV_BOOTS: case TV_GLOVES: case TV_HELM: case TV_CROWN:
+    case TV_CLOAK: case TV_SOFT_ARMOR: case TV_MAIL: case TV_SHIELD:
+        return "item.description.armour";
+    case TV_RING: case TV_AMULET: return "item.description.jewelry";
+    case TV_POTION: return "item.description.potion";
+    case TV_FOOD: return "item.description.food";
+    case TV_GEM: {
+        /* Encounter and preview share the original gem introduction. Honour
+         * completed/skipped history from the former separate preview card. */
+        tutorial_status previous = tutorial_lesson_status("item.description.gem");
+        if (previous == TUTORIAL_COMPLETED || previous == TUTORIAL_SKIPPED)
+            return "item.description.gem";
+        return "item.gem";
+    }
+    case TV_STAFF: return "item.description.staff";
+    case TV_HORN: return "item.description.horn";
+    case TV_LIGHT: return "item.description.light";
+    case TV_FLASK: return "item.description.oil";
+    case TV_DIGGING: return "item.description.digging";
+    case TV_METAL: return "item.description.metal";
+    default: return "item.description";
+    }
+}
+
+static const char *item_identification_detail(const object_type *item)
+{
+    if (object_known_p(item))
+        return "This item is identified. Read its known properties and any drawbacks.";
+    if (!object_aware_p(item) && (item->tval == TV_GEM
+        || item->tval == TV_POTION || item->tval == TV_FOOD
+        || item->tval == TV_STAFF || item->tval == TV_HORN))
+        return "Its effect is still unknown. Examining does not identify it, and an unknown effect is not necessarily safe.";
+    return "This item is not fully identified. The preview shows only what your hero has learned; undiscovered properties remain hidden.";
+}
+
 static bool item_is_remedy(const object_type *item, const char *condition)
 {
     if (!item || !item->k_idx || !object_aware_p(item)) return false;
@@ -330,12 +376,16 @@ static void tutorial_game_item_at(const object_type *item, int map_y, int map_x)
         if (!strcmp(type, item_types[i])) present_item_types[i] = true;
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
-    strnfmt(detail, sizeof(detail), "Examine %s to read its known properties and handling requirements.", name);
-    observe("item.first_description", type, name, detail);
+    observe("item.first_description", type, name, item_identification_detail(item));
     if (tutorial_lesson_status("item.first_description") == TUTORIAL_UNSEEN
         || tutorial_lesson_status("item.first_description") == TUTORIAL_IN_PROGRESS) return;
-    strnfmt(id, sizeof(id), "item.%s", type);
-    observe(id, type, name, detail);
+    strnfmt(detail, sizeof(detail), "Examine %s to read its known properties and handling requirements.", name);
+    if (item->tval == TV_GEM)
+        SDL_strlcpy(id, item_description_lesson(item), sizeof(id));
+    else
+        strnfmt(id, sizeof(id), "item.%s", type);
+    observe(id, type, name, item->tval == TV_GEM
+        ? item_identification_detail(item) : detail);
     if (tutorial_lesson_status(id) == TUTORIAL_UNSEEN
         || tutorial_lesson_status(id) == TUTORIAL_IN_PROGRESS) return;
     /* Effect cards use aware kinds only; no hidden subtype is exposed. */
@@ -355,25 +405,35 @@ void tutorial_game_item(const object_type *item)
 
 void tutorial_game_item_described(const object_type *item)
 {
-    char name[160], detail[384];
+    char name[160];
+    const char *lesson;
     if (!item || !item->k_idx || !gameplay_available() || p_ptr->image) return;
     if (item->tval == TV_SKELETON || item->tval == TV_CHEST) {
         tutorial_game_item_description_closed();
         tutorial_game_item(item);
         return;
     }
+    lesson = item_description_lesson(item);
+    if (strcmp(visible_description_lesson, lesson))
+        tutorial_game_item_description_closed();
     SDL_strlcpy(visible_description_type, item_type(item), sizeof(visible_description_type));
+    SDL_strlcpy(visible_description_lesson, lesson, sizeof(visible_description_lesson));
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
-    strnfmt(detail, sizeof(detail), "%s. Weight: %.1f lb. Only revealed properties belong in this description.", name, item->weight / 10.0);
     tutorial_game_action_done("examine", item);
-    observe("item.description", item_type(item), name, detail);
+    observe(lesson, item_type(item), name, item_identification_detail(item));
     ui_checkpoint_requested = true;
 }
 
 void tutorial_game_item_description_closed(void)
 {
     visible_description_type[0] = '\0';
+    if (visible_description_lesson[0]) {
+        tutorial_forget_observation(visible_description_lesson);
+        if (!strcmp(pending_ui_lesson, visible_description_lesson))
+            pending_ui_lesson[0] = '\0';
+        visible_description_lesson[0] = '\0';
+    }
     tutorial_forget_observation("item.description");
     tutorial_forget_observation("menu.item-description");
     if (!strcmp(pending_ui_lesson, "item.description")

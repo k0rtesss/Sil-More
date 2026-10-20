@@ -1070,6 +1070,66 @@ static bool sdl_gamepad_send_ui_direction(int dir)
     return true;
 }
 
+static bool sdl_gamepad_handle_right_stick_scroll(int dir)
+{
+    int direction;
+
+    if (dir == GAMEPAD_STICK_DIR_UP)
+        direction = -1;
+    else if (dir == GAMEPAD_STICK_DIR_DOWN)
+        direction = 1;
+    else
+        return false;
+
+    if (sdl_question_menu_captures_pointer())
+        return sdl_question_menu_scroll_content(direction, false);
+
+    if (g_description_overlay.active && g_description_overlay.interactive)
+    {
+        (void)sdl_description_overlay_scroll_by(direction * 3);
+        return true;
+    }
+
+    if (sdl_hint_quest_menu_active())
+    {
+        (void)sdl_hint_quest_menu_scroll(direction, false);
+        return true;
+    }
+
+    if (sdl_halls_screen_active() && steamdeck_controls_active())
+    {
+        (void)sdl_halls_screen_handle_key(direction < 0
+            ? steamdeck_prev_page_key() : steamdeck_next_page_key());
+        return true;
+    }
+
+    if (sdl_character_sheet_screen_active()
+        && g_sdl_character_sheet_screen.sheet_scroll_max > 0)
+    {
+        (void)sdl_character_sheet_screen_scroll_book(direction);
+        return true;
+    }
+
+    if (sdl_standalone_screen_handle_key(direction < 0
+            ? SDLK_PAGEUP : SDLK_PAGEDOWN))
+    {
+        return true;
+    }
+
+    /* Native selection surfaces without overflow retain their existing
+     * right-stick navigation. Do not let a stale terminal scroll region from
+     * the screen underneath claim the direction. */
+    if (sdl_character_sheet_screen_active() || g_song_menu.active
+        || g_log_pane_menu.active || g_side_pane_menu.active
+        || sdl_pause_text_screen_active() || sdl_poetry_screen_active()
+        || sdl_welcome_screen_active() || sdl_tale_screen_active())
+    {
+        return false;
+    }
+
+    return sdl_menu_scroll_handle_gamepad_direction(direction);
+}
+
 void sdl_gamepad_send_direction(int dir)
 {
     sdl_gamepad_send_direction_mods(dir, sdl_gamepad_shift_active(),
@@ -3205,8 +3265,18 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         bool modal = sdl_movement_input_is_modal()
             || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
                 && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON);
+        bool right_scroll_context = stick == 1
+            && (sdl_question_menu_captures_pointer()
+                || (g_description_overlay.active
+                    && g_description_overlay.interactive)
+                || sdl_hint_quest_menu_active()
+                || sdl_halls_screen_active()
+                || sdl_character_sheet_screen_active()
+                || sdl_pause_text_screen_active()
+                || sdl_poetry_screen_active()
+                || sdl_welcome_screen_active());
 
-        if (native_overlay || modal) {
+        if (native_overlay || modal || right_scroll_context) {
             sdl_gamepad_release_stick_modifier(stick);
             *binding_dir = -1;
             g_gamepad_state.stick_movement[stick].dir = 0;
@@ -3214,7 +3284,12 @@ void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
             if (dir != *ui_dir) {
                 *ui_dir = dir;
                 if (dir >= 0) {
-                    if (native_overlay)
+                    if (stick == 1 && !native_overlay
+                        && sdl_gamepad_handle_right_stick_scroll(dir))
+                    {
+                        /* The open viewport owns vertical right-stick input. */
+                    }
+                    else if (native_overlay)
                         (void)sdl_gamepad_native_overlay_move(dir);
                     else
                         (void)sdl_gamepad_send_ui_direction(dir);

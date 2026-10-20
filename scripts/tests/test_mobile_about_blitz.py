@@ -1,4 +1,4 @@
-"""Exercise actual mobile About/Blitz callers, fields and input dispatch in C.
+"""Exercise actual semantic About/Blitz callers, fields and input dispatch in C.
 
 Native rendering is checked separately by check_phone_about_blitz_layout.py.
 This isolated test never opens a save, SDL window, emulator or shared build.
@@ -20,7 +20,7 @@ credits=re.search(r'static const main_menu_about_line about_lines\[\] = \{.*?\n 
 parts=[function(B,x) for x in ['static cptr blitz_character_mode_name(',
  'static cptr blitz_effect_mode_name(', 'static void blitz_setup_clamp(',
  'static void blitz_setup_draw_mobile(', 'static NavResult blitz_setup_menu(']]
-parts += [function(M,x) for x in ['static void main_menu_about_mobile_build(', 'static bool main_menu_mobile_book_wait(', 'static void main_menu_about_mobile(',
+parts += [function(M,x) for x in ['static void main_menu_about_semantic_attrs(', 'static void main_menu_about_semantic_build(', 'static bool main_menu_mobile_book_wait(', 'static bool main_menu_about_semantic(',
  'static void main_menu_blitz_intro_mobile_build(',
  'static bool main_menu_blitz_confirm_mobile(', 'static void do_cmd_start_blitz(']]
 harness=r'''
@@ -40,6 +40,8 @@ typedef const char*cptr;typedef unsigned char byte;typedef int NavResult;
 #define TERM_SLATE 5
 #define TERM_L_GREEN 6
 #define TERM_L_WHITE 7
+#define TERM_VIOLET 8
+#define SDL_memset memset
 #define UI_QUESTION_GLOBAL (-1)
 #define BLITZ_CHARACTER_RANDOM 0
 #define BLITZ_CHARACTER_RANDOM_STATS 1
@@ -60,7 +62,7 @@ typedef const char*cptr;typedef unsigned char byte;typedef int NavResult;
 static bool hide_cursor,save_game_quietly;
 static struct {bool playing,is_dead,quit_to_menu,leaving;} player,*p_ptr=&player;
 static int saves,launches,restores,hidden,scale_depth,pane_depth,book_count,page,page_count=3,question_result;
-static char book[32][256],rows[5][160],confirm[40],description[2048];static byte colors[32];
+static char book[32][256],rows[5][160],confirm[40],description[2048];static byte colors[32],styles[32][256];
 static int selected_seen,row_count,events[128],clicks[128],actions[128],event_count,event_pos,last;
 static int strnfmt(char*s,size_t n,cptr f,...){va_list a;va_start(a,f);int r=vsnprintf(s,n,f,a);va_end(a);return r;}
 static bool steamdeck_controls_active(void){return false;}
@@ -75,7 +77,7 @@ static void screen_push_supporting_panes_hidden(void){pane_depth++;}
 static void screen_pop_supporting_panes_hidden(void){pane_depth--;}
 static void screen_push_touch_pane_hidden(void){pane_depth++;}
 static void screen_pop_touch_pane_hidden(void){pane_depth--;}
-enum {SDL_MENU_FONT_BIRTH,SDL_MENU_FONT_HELP};
+enum {SDL_MENU_FONT_BIRTH,SDL_MENU_FONT_HELP,SDL_MENU_FONT_ABOUT};
 static void sdl_push_terminal_menu_scale_for(int menu){scale_depth++;}
 static void sdl_pop_terminal_menu_scale(void){scale_depth--;}
 static void ui_menu_click_begin(void){}
@@ -85,9 +87,14 @@ static int inkey(void){assert(event_pos<event_count);last=event_pos++;return eve
 static bool ui_menu_click_take_action(int*c,int*a){if(clicks[last]==-999)return false;*c=clicks[last];*a=actions[last];return true;}
 static void sdl_character_sheet_screen_hide(void){hidden++;}
 static void sdl_character_sheet_screen_begin_book(cptr title){assert(!strcmp(title,"About Sil-More")||!strcmp(title,"Blitz Mode"));book_count=0;page=0;}
+static void sdl_character_sheet_screen_set_font_menu(int menu){assert(menu==SDL_MENU_FONT_ABOUT);}
+static void sdl_character_sheet_screen_set_book_full_width(bool b){assert(b);}
+static void sdl_character_sheet_screen_set_book_terminal_style(bool b){assert(b);}
+static bool sdl_character_sheet_screen_active(void){return true;}
 static void sdl_character_sheet_screen_set_book_close_button(bool b){assert(b);}
 static void sdl_character_sheet_screen_set_book_close_label(cptr label){assert(!strcmp(label,"Back")||!strcmp(label,"Continue"));}
 static void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,int attr){if(!text[0])return;strnfmt(book[book_count],256,"%s",text);colors[book_count++]=attr;}
+static void sdl_character_sheet_screen_add_book_paragraph_styled(cptr text,const byte*attrs,int count){strnfmt(book[book_count],256,"%s",text);memcpy(styles[book_count],attrs,count);colors[book_count]=count?attrs[0]:TERM_WHITE;book_count++;}
 static void sdl_character_sheet_screen_commit_book(void){}
 static bool sdl_character_sheet_screen_page_turning(void){return false;}
 static int sdl_character_sheet_screen_select_page(void){return page;}
@@ -131,10 +138,12 @@ static void reset(void){event_count=event_pos=0;}
 main=r'''
 int main(void){
  reset();queue('6',-999,1);queue('6',-999,1);queue(0,SDL_SELECT_CLICK_CLOSE,1);
- main_menu_about_mobile(about_lines);assert(page==2&&book_count==16);
- assert(strstr(book[0],"evolution of SilQ"));assert(strstr(book[15],"Tolkien and his timeless creations."));assert(colors[15]==TERM_L_RED);
- int source=0;for(int i=0;about_lines[i].text;i++)if(about_lines[i].text[0])assert(!strcmp(book[source++],about_lines[i].text));
- assert(source==book_count&&!hide_cursor);
+ assert(main_menu_about_semantic(about_lines));assert(page==2&&book_count==21);
+ assert(strstr(book[0],"evolution of SilQ"));assert(strstr(book[19],"Tolkien and his timeless creations."));assert(colors[19]==TERM_L_RED);
+ for(int i=0;about_lines[i].text;i++)assert(!strcmp(book[i],about_lines[i].text[0]?about_lines[i].text:" "));
+ assert(styles[0][0]==TERM_VIOLET&&styles[0][28]==TERM_L_BLUE);
+ assert(styles[3][0]==TERM_YELLOW&&styles[3][11]==TERM_WHITE);
+ assert(styles[12][0]==TERM_L_BLUE&&styles[19][0]==TERM_L_RED&&!hide_cursor);
  /* First touch selects a different field; repeated touch cycles. No input
   * can start a run except the explicit Begin control or confirm key. */
  setup=(blitz_setup){0};reset();queue(0,1,1);queue(0,1,1);queue(0,4,1);queue(0,4,1);queue(0,-2,1);
@@ -155,7 +164,7 @@ int main(void){
  }
  memset(&player,0,sizeof(player));player.playing=true;saves=launches=0;question_result=0;
  reset();queue(ESCAPE,-999,1);do_cmd_start_blitz();assert(!saves&&!launches&&player.playing);
- puts("Actual mobile About credits/Back, Blitz fields/touch/cycle/limits/Begin, save/cancel passed");
+ puts("Actual semantic About credits/Back, Blitz fields/touch/cycle/limits/Begin, save/cancel passed");
 }
 '''.replace('player=(typeof(player)){.playing=true};','memset(&player,0,sizeof(player));player.playing=true;')
 msys=Path(r'C:\msys64\mingw64\bin');cc=os.environ.get('CC') or shutil.which('gcc') or str(msys/'gcc.exe')

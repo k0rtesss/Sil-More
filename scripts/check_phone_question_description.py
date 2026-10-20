@@ -11,6 +11,10 @@ import shlex
 import subprocess
 from check_phone_short_question import PREFIX, INIT
 
+PREFIX=PREFIX.replace(
+    "{ int top=fixture_height>fixture_width?(int)(68*fixture_density):0; *rect=(SDL_Rect){0,top,fixture_width,fixture_height-top}; return true; }",
+    "{ if(fixture_width==1280 && fixture_height==800) { *rect=(SDL_Rect){300,140,780,520}; return true; } int top=fixture_height>fixture_width?(int)(68*fixture_density):0; *rect=(SDL_Rect){0,top,fixture_width,fixture_height-top}; return true; }")
+
 ROOT=Path(__file__).resolve().parents[1]
 BUILD=ROOT/"build-standard"
 OUT=ROOT/"scripts/output/phone-question-description-check"
@@ -26,7 +30,7 @@ static void paragraph_ink(SDL_FRect rect,int px)
     rect.x-=inset; rect.y-=inset; rect.w+=2*inset; rect.h+=2*inset;
     ink(rect,px);
 }
-static void description(void)
+static void description(bool big)
 {
     char prose[8192]="FIRST PARAGRAPH BEGIN\n\n";
     for(int paragraph=0;paragraph<3;paragraph++) {
@@ -35,7 +39,8 @@ static void description(void)
         SDL_strlcat(prose,"\n\n",sizeof(prose));
     }
     SDL_strlcat(prose,"LAST PARAGRAPH END",sizeof(prose));
-    SDL_strlcpy(fixture_id,"complete-normal-description",sizeof(fixture_id));
+    strnfmt(fixture_id,sizeof(fixture_id),"complete-%s-description",
+        big?"big":"normal");
     ui_menu_click_begin(); sdl_question_menu_begin("Read instructions");
     sdl_question_menu_set_desc(prose);
     sdl_question_menu_add_entry(11,"a)","Accept this choice",TERM_WHITE);
@@ -48,7 +53,9 @@ static void description(void)
     fixture_assert(sdl_question_menu_layout(&layout));
     fixture_assert(layout.description_in_list && layout.scrollable);
     fixture_assert(g_question_menu.scroll_offset_ptr && *g_question_menu.scroll_offset_ptr==0);
-    int px=sdl_menu_role_font_px(SDL_UI_FONT_BODY);
+    fixture_assert(layout.desc_font_px>0 && layout.desc_font_px<=layout.font_px);
+    if(big) fixture_assert(layout.desc_font_px==layout.font_px);
+    int px=layout.desc_font_px;
     TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_MENU);
     int w=0,h=0; fixture_assert(TTF_GetStringSizeWrapped(font,prose,0,(int)(layout.entries_rect.w+.5f),&w,&h));
     fixture_assert(SDL_fabsf(layout.scrolling_desc_h-h)<=1);
@@ -56,6 +63,13 @@ static void description(void)
     frame("description-first");
     paragraph_ink((SDL_FRect){layout.entries_rect.x,layout.entries_rect.y,
         layout.entries_rect.w,line_h},px);
+    Term_flush();
+    fixture_assert(sdl_question_menu_scroll_content(1,false));
+    char wake=0;
+    fixture_assert(Term_inkey(&wake,false,true)==0
+        && wake==UI_MENU_CLICK_WAKE_KEY);
+    fixture_assert(*g_question_menu.scroll_offset_ptr>0);
+    *g_question_menu.scroll_offset_ptr=0;
     float x=layout.entries_rect.x+layout.entries_rect.w/2;
     float y=layout.entries_rect.y+layout.entries_rect.h*.7f;
     fixture_assert(sdl_question_menu_handle_touch_down(x,y,9));
@@ -78,7 +92,7 @@ static void description(void)
     fixture_assert(*g_question_menu.scroll_offset_ptr==layout.max_scroll_offset);
     SDL_FRect hit;
     fixture_assert(SDL_GetRectIntersectionFloat(&layout.rows[1],&layout.entries_rect,&hit));
-    fixture_assert(hit.h>=sdl_ui_min_tap_px());
+    fixture_assert(hit.h>=(big?sdl_ui_min_tap_px():layout.row_h)-1);
     fixture_assert(sdl_question_menu_handle_pointer(hit.x+hit.w/2,hit.y+hit.h/2,UI_MENU_CLICK_PRIMARY));
     int choice=0,action=0;
     fixture_assert(ui_menu_click_take_action(&choice,&action));
@@ -94,14 +108,49 @@ static void description(void)
     sdl_question_menu_clear(); fixture_assert(!g_question_full_description);
     ui_menu_click_clear();
 }
+static void chest_description(void)
+{
+    cptr prose="Interaction check: choose an action, then the game rolls automatically. "
+        "The displayed percentage is the success probability; a tie fails. "
+        "Acting spends one turn. Closing this prompt spends none. "
+        "Inspection succeeded. You identified the trap. "
+        "You know how this trap works, making it easier to disarm. "
+        "Confusion gas: 4d4 turns of confusion.";
+    SDL_strlcpy(fixture_id,"deck-chest-description",sizeof(fixture_id));
+    config.bigger_font=false;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    config.main_view_scale=3;
+    config.aux_view_font_size=0;
+    config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=false;
+    ui_menu_click_begin();sdl_question_menu_begin("a Small wooden chest (Gas Trap)");
+    sdl_question_menu_set_desc(prose);
+    sdl_question_menu_add_entry(1,"d)","Disarm: 45%",TERM_L_GREEN);
+    sdl_question_menu_add_entry(2,"o)","Open anyway (lock): 36%",TERM_ORANGE);
+    sdl_question_menu_set_highlight(1);sdl_question_menu_finish();
+    sdl_question_menu_layout_info layout;
+    fixture_assert(sdl_question_menu_layout(&layout));inside(layout.panel);
+    fixture_assert(layout.has_desc && !layout.description_in_list);
+    fixture_assert(layout.desc_font_px<layout.font_px);
+    fixture_assert(layout.max_scroll_offset==0);
+    for(int i=0;i<2;i++) {
+        fixture_assert(layout.rows[i].y>=layout.entries_rect.y-1);
+        fixture_assert(layout.rows[i].y+layout.rows[i].h
+            <=layout.entries_rect.y+layout.entries_rect.h+1);
+    }
+    frame("deck-chest-fitted");
+    sdl_question_menu_clear();ui_menu_click_clear();
+}
 ''' + INIT + r'''
     config.show_menu_font_button=true;
     for(int big=0;big<2;big++) {
         config.bigger_font=big;
-        config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=true;
-        fixture.active=false; description();
+        for(int menu_big=0;menu_big<2;menu_big++) {
+            config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=menu_big;
+            fixture.active=false; description(menu_big!=0);
+        }
     }
-    printf("Enlarged question description %dx%d @%.3f UI Off/On full prose, glyphs, swipe/choice/cancel: PASS\n",
+    if(fixture_width==1280 && fixture_height==800) chest_description();
+    printf("Question description %dx%d @%.3f normal/Big full prose, fit/scroll, stick API, swipe/choice/cancel: PASS\n",
         fixture_width,fixture_height,fixture_density);
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window); TTF_Quit(); SDL_Quit();
@@ -110,7 +159,7 @@ static void description(void)
 
 
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument("--negative",action="store_true"); args=parser.parse_args()
+    parser=argparse.ArgumentParser(); parser.add_argument("--negative",action="store_true"); parser.add_argument("--deck-only",action="store_true"); args=parser.parse_args()
     OUT.mkdir(parents=True,exist_ok=True)
     harness=HARNESS
     if args.negative:
@@ -139,7 +188,8 @@ def main():
         "@CMakeFiles/sil-more.dir/includes_C.rsp",str(source),"@"+str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,"+",".join("--wrap="+w for w in wraps),
         "-o",str(exe)],cwd=BUILD,env=env,check=True)
-    for width,height,density in [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
+    fixtures=[(1280,800,1)] if args.deck_only else [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625),(1280,800,1)]
+    for width,height,density in fixtures:
         for w,h in [(width,height),(height,width)]:
             subprocess.run([str(exe),str(w),str(h),str(density),
                 str(ROOT/"lib/xtra/font/EBGaramond-Regular.ttf"),str(ROOT/"lib/xtra/font/Cinzel-Medium.ttf"),

@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 542 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 556 lessons, including 107 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 542 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **156 Normal** lessons and **386 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
+Default: **Extended**. The catalogue has **170 Normal** lessons and **386 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -21,6 +21,8 @@ Filtering a lesson never marks it learned or skipped. Lowering the mode withdraw
 Characters deferred during an upgrade remain exempt from automatic tutorials for that character. Changing mode or resetting the Tale lesson history does not bypass that gate. The upgrade notice belongs to its own native UI and is independent of catalogue filtering.
 
 Skeletons and chests use Normal informational feature lessons. Their old generic item IDs remain untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.
+
+Item descriptions have separate explanations for each public item family. Finding a gem first leaves the weapon and armour explanations available for later. Runtime identification wording reflects only what the hero already knows; examining an item does not identify it.
 
 ## Presentation order
 
@@ -218,7 +220,7 @@ Priority: **25** (higher appears first).
 
 **1. Info**
 
-{subject} is at your feet or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.
+{subject} is at your feet or in your belongings. Open its preview to read what your hero knows before deciding what to do with it. Weight is shown in lb and volume in qt. {detail}
 
 **2. Action**
 
@@ -240,11 +242,235 @@ Priority: **27** (higher appears first).
 
 **1. Info**
 
-{detail} Damage written as 2d5 means roll two five-sided dice, for 2 to 10 damage before Protection. Protection such as 1d3 blocks 1 to 3 damage when it applies. Also compare Attack, Evasion, weight, volume and known bonuses or drawbacks.
+{subject}. {detail} Check the name, quantity, weight in lb and volume in qt. These describe what you are carrying. Reading the preview does not equip or use the item.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
 Sources: `src/object/object-info.c`, `src/object/object-desc.c`.
+
+## Reading a weapon's description
+
+`item.description.weapon`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Damage such as 2d5 means two five-sided dice, for 2 to 10 damage before Protection. Attack affects accuracy; Evasion helps avoid hits. Compare weight and the damage shown for your current Strength, along with any revealed bonuses and drawbacks.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a bow's description
+
+`item.description.bow`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Damage such as 2d5 means two five-sided dice, for 2 to 10 damage before Protection. Compare the bow's Attack, range, weight and damage with your current Strength. You also need ready arrows to fire it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading an arrow stack's description
+
+`item.description.arrows`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Check how many arrows are in the stack, their Attack modifier and any revealed special properties. Compare these with your other arrows. Arrows need a bow and must be ready in the Quiver to fire; reading the preview does not ready them.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading armour and shield descriptions
+
+`item.description.armour`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Evasion helps avoid hits; Protection reduces damage after a hit. Protection such as 1d3 rolls one three-sided die, blocking 1 to 3 damage when it applies. Compare weight, skill penalties and any revealed properties. A shield also needs a free hand.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading jewelry descriptions
+
+`item.description.jewelry`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Look for revealed bonuses to attributes, skills or resistances, granted abilities and drawbacks. An unidentified ring or amulet can still have hidden properties. Reading its preview does not equip it, and you can leave it unused until you know more.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a potion's description
+
+`item.description.potion`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} A potion is consumed when drunk. A known effect explains what it changes or treats; appearance alone does not tell you whether it helps or harms. If its effect is unknown, you can keep it for later. Reading this preview does not drink it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading food and herb descriptions
+
+`item.description.food`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Check nourishment and any revealed effect. Ordinary food and herbs serve different purposes, and an unknown herb may be harmful. Read a known herb's effect before eating it; reading this preview does not consume it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a gem's description
+
+`item.description.gem`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Gems are single-use items. Read any revealed effect and targeting instructions. If the effect is unknown, the preview may show only its appearance, weight in lb and volume in qt. You can keep it and identify it later. Reading this preview does not use the gem.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a staff's description
+
+`item.description.staff`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} A staff has a magical effect and a limited supply of charges. Read its effect when known, and check remaining charges when revealed. Knowing the kind does not necessarily reveal the charges of this particular staff. Reading this preview spends no charge.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a horn's description
+
+`item.description.horn`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} A horn's effect and Voice cost matter when deciding whether to play it. Read those details when revealed. An unfamiliar horn's appearance does not reveal its power; you can leave it unused. Reading this preview spends no Voice.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a light's description
+
+`item.description.light`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Light radius is how far it reaches; intensity is how bright it is. Fuelled lights also show remaining fuel. Compare those details, weight and any revealed properties before choosing your light. Reading the preview does not equip or refuel it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading an oil container's description
+
+`item.description.oil`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Oil supplies lantern fuel. Check the amount of fuel and its weight before deciding whether to keep it. A suitable lantern uses the Refuel action; reading this preview does not transfer any fuel.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a digging tool's description
+
+`item.description.digging`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Compare its tunnelling ability, weight and any revealed bonuses or drawbacks. A digging tool helps with suitable walls and rubble; reading its description does not start digging or spend turns.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading smithing material descriptions
+
+`item.description.metal`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Check the material, quantity and weight. Metal is a smithing resource. A forge and the relevant Smithing abilities are still needed, and the smithing preview lists the actual materials and costs.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
 
 ## Melee weapons
 

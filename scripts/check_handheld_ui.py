@@ -14,7 +14,8 @@ import check_phone_overlays_layout as overlays
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/handheld-ui-check"
-CASES = [(1280, 800, 1.0), (1920, 1080, 1.5), (1080, 2400, 2.625)]
+CASES = [(1280, 800, 1.0), (1280, 800, 2.0),
+         (1920, 1080, 1.5), (1080, 2400, 2.625)]
 
 
 def handheld(harness):

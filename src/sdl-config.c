@@ -17,13 +17,13 @@ static const char* const menu_font_keys[SDL_MENU_FONT_COUNT] = {
     "main", "inventory", "abilities",
     "character", "smithing", "settings", "knowledge", "help", "messages",
     "scores", "songs", "quests", "birth", "narrative", "questions",
-    "logOptions", "paneOptions", "look"
+    "logOptions", "paneOptions", "look", "about"
 };
 static const char* const menu_font_labels[SDL_MENU_FONT_COUNT] = {
     "Main menu", "Inventory (all tabs)", "Abilities",
     "Character sheet", "Smithing", "Settings", "Knowledge", "Help", "Messages",
     "Halls of Mandos", "Songs", "Quests", "Character creation", "Story pages",
-    "Questions and choices", "Log menu", "Pane menu", "Look"
+    "Questions and choices", "Log menu", "Pane menu", "Look", "About"
 };
 
 const char* sdl_menu_font_key(enum sdl_menu_font menu)
@@ -34,6 +34,15 @@ const char* sdl_menu_font_key(enum sdl_menu_font menu)
 const char* sdl_menu_font_label(enum sdl_menu_font menu)
 {
     return menu >= 0 && menu < SDL_MENU_FONT_COUNT ? menu_font_labels[menu] : "";
+}
+
+static int sdl_clamp_terminal_menu_scale_offset(int value)
+{
+    if (value < SDL_TERMINAL_MENU_SCALE_OFFSET_MIN)
+        return SDL_TERMINAL_MENU_SCALE_OFFSET_MIN;
+    if (value > SDL_TERMINAL_MENU_SCALE_OFFSET_MAX)
+        return SDL_TERMINAL_MENU_SCALE_OFFSET_MAX;
+    return value;
 }
 
 static bool sdl_config_gamepad_dpad_source_is_valid(int source)
@@ -3714,6 +3723,27 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     config->main_view_scale);
         }
 
+        /* Older files have one shared offset. Seed every menu from it, then
+         * overlay the independently saved values when present. */
+        for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+            config->terminal_menu_scale_offsets[menu] =
+                config->terminal_menu_scale_offset;
+        cJSON* menu_scales = cJSON_GetObjectItemCaseSensitive(sdl,
+            "terminalMenuScaleOffsets");
+        if (cJSON_IsObject(menu_scales)) {
+            for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++) {
+                item = cJSON_GetObjectItemCaseSensitive(menu_scales,
+                    sdl_menu_font_key(menu));
+                if (cJSON_IsNumber(item)) {
+                    config->terminal_menu_scale_offsets[menu] =
+                        sdl_clamp_terminal_menu_scale_offset(item->valueint);
+                    log_debug("Loaded terminalMenuScaleOffsets.%s: %d",
+                        sdl_menu_font_key(menu),
+                        config->terminal_menu_scale_offsets[menu]);
+                }
+            }
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "compactInventoryMenus");
         if (cJSON_IsBool(item)) {
@@ -5434,6 +5464,11 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
     cJSON_AddNumberToObject(sdl, "terminalMenuScaleOffset",
         config->terminal_menu_scale_offset);
+    cJSON* menu_scales = cJSON_AddObjectToObject(sdl,
+        "terminalMenuScaleOffsets");
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+        cJSON_AddNumberToObject(menu_scales, sdl_menu_font_key(menu),
+            config->terminal_menu_scale_offsets[menu]);
     cJSON_AddBoolToObject(sdl, "compactInventoryMenus",
         config->compact_inventory_menus);
     cJSON_AddBoolToObject(sdl, "debugCharacterSheet",
@@ -6182,6 +6217,9 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->terminal_menu_scale_offset =
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
             config->main_view_scale);
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+        config->terminal_menu_scale_offsets[menu] =
+            config->terminal_menu_scale_offset;
     config->compact_inventory_menus = false;
     config->debug_character_sheet = false;
     config->bigger_font = false;

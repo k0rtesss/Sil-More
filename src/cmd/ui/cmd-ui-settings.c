@@ -3812,9 +3812,9 @@ static void do_cmd_pane_settings_for_page(bool text_only)
             get_sdl_terminal_menu_scale_offset());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-                "Menu Text Size",
-                "Menu Text Size",
-                "Menu Text Size"),
+                "All Menu Text Sizes",
+                "All Menu Text Sizes",
+                "All Menu Sizes"),
             value_buf, row_width, 4);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET, 2, a,
             buf);
@@ -4016,13 +4016,17 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                     "and its font but show less of the level at once.",
                 [PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET] =
 #if defined(__ANDROID__) || defined(SIL_IOS)
-                    "Adjust text size in full-screen list menus independently "
-                    "from dungeon zoom. Zero uses the standard menu size. "
-                    "Bigger font increases this size by 50% too.",
+                    "Set the scale for all terminal menus independently from "
+                    "dungeon zoom. Zero uses the standard menu size. "
+                    "Use - and + in a terminal menu's top-right corner to "
+                    "adjust only that menu. Each choice is saved. "
+                    "Native screens keep their own Big Font setting.",
 #else
-                    "Scale of full-screen terminal menus relative to the "
-                    "largest scale that fits. Set to 0 for the maximum; -1 "
-                    "uses one step below it.",
+                    "Set the scale for all full-screen terminal menus relative to "
+                    "the largest scale that fits. Set to 0 for the maximum; "
+                    "-1 uses one step below it. Each menu also has floating "
+                    "- and + controls in its top-right corner; those choices "
+                    "are saved independently.",
 #endif
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
                     "Extra zoom steps applied when gameplay starts on mobile "

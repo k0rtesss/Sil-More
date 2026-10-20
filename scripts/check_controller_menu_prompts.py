@@ -30,7 +30,7 @@ HARNESS = r'''
 #include "sdl/ui/sdl-pane-menus.c"
 
 static int width, height, cropped, paints, expected_choice;
-static bool check_complete, playstation;
+static bool check_complete, playstation, oversized_halls_canvas;
 static int nonmenu_keys;
 static SDL_Texture* halls_title_texture;
 static bool halls_title_seen;
@@ -40,7 +40,13 @@ char __wrap_inkey(void) { return ESCAPE; }
 bool __wrap_sdl_overlay_pane_anchor_rect(enum pane_type pane, SDL_Rect* out)
 { *out = (SDL_Rect){0,0,width,height}; return true; }
 SDL_Rect __wrap_sdl_get_layout_screen_rect(void)
-{ return (SDL_Rect){0,0,width,height}; }
+{ return (SDL_Rect){0,0,width*(oversized_halls_canvas?2:1),height}; }
+SDL_Rect __real_sdl_get_window_pixel_rect(void);
+SDL_Rect __wrap_sdl_get_window_pixel_rect(void)
+{
+    return oversized_halls_canvas ? (SDL_Rect){0,0,width*2,height}
+        : __real_sdl_get_window_pixel_rect();
+}
 float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display) { return 1.0f; }
 SDL_GamepadType __wrap_sdl_gamepad_prompt_type(void)
 { return playstation ? SDL_GAMEPAD_TYPE_PS5 : SDL_GAMEPAD_TYPE_XBOXONE; }
@@ -122,6 +128,7 @@ static void halls(bool detailed, bool long_text, int count)
     sdl_halls_screen_render();
     assert(paints>8 && cropped==0 && halls_title_seen);
     assert(!sdl_halls_flow_layout());
+    inside(g_halls_controller.body);
     /* Retain the centered memorial composition and its rank accent strip. */
     assert(g_halls_controller.body.w<width*.94f);
     assert(SDL_fabsf(g_halls_controller.body.x+g_halls_controller.body.w*.5f-width*.5f)<1);
@@ -138,7 +145,9 @@ static void halls(bool detailed, bool long_text, int count)
         for(int j=0;j<i;j++) assert(!overlap(r,g_sdl_halls.actions[j].hit_rect));
         if(!config.bigger_font) assert(r.y==g_sdl_halls.actions[0].hit_rect.y);
     }
-    if(count && !long_text) snapshot(detailed?"halls-full":"halls-brief");
+    if(count && !long_text) snapshot(oversized_halls_canvas
+        ? (detailed?"halls-full-output-bounds":"halls-brief-output-bounds")
+        : (detailed?"halls-full":"halls-brief"));
     float before=g_halls_controller.offset;
     while(sdl_halls_screen_handle_key(steamdeck_next_page_key())) {
         assert(g_halls_controller.offset>before);before=g_halls_controller.offset;
@@ -169,6 +178,20 @@ static void questions(bool controller)
     sdl_question_menu_set_highlight(0);sdl_question_menu_finish();
     sdl_question_menu_layout_info l;assert(sdl_question_menu_layout(&l));
     if(controller) {
+        if(l.max_scroll_offset>0) {
+            SDL_GamepadAxisEvent axis={0};
+            int keys_before=nonmenu_keys;
+            g_gamepad_state.right_x=g_gamepad_state.right_y=0;
+            g_gamepad_state.right_ui_dir=-1;
+            axis.axis=SDL_GAMEPAD_AXIS_RIGHTY;axis.value=32767;
+            sdl_gamepad_handle_axis(&axis);
+            assert(scroll>0 && nonmenu_keys==keys_before);
+            int scrolled=scroll;
+            sdl_gamepad_handle_axis(&axis);assert(scroll==scrolled);
+            axis.value=0;sdl_gamepad_handle_axis(&axis);
+            scroll=0;g_question_menu.scroll_follow_highlight=true;
+            assert(sdl_question_menu_layout(&l));
+        }
         inside(l.controller_hint);assert(strstr(l.controller_hint_text,"<A>") && strstr(l.controller_hint_text,"<B>"));
         assert(!overlap(l.entries_rect,l.controller_hint));
         for(int i=0;i<l.button_count;i++) assert(!overlap(l.buttons[i],l.controller_hint));
@@ -275,10 +298,19 @@ int main(int argc,char** argv)
         config.bigger_font=big;for(int i=0;i<SDL_MENU_FONT_COUNT;i++)config.menu_bigger_font[i]=big;
         config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
         halls(true,false,1);halls(false,false,2);halls(true,true,3);halls(false,false,0);
+        /* The drawable can be narrower than the window/layout report. Both
+         * page capacity and every memorial/footer must use the real output. */
+        for(int full=0;full<2;full++) {
+            int capacity=sdl_halls_screen_page_capacity(full);
+            oversized_halls_canvas=true;
+            assert(sdl_halls_screen_page_capacity(full)==capacity);
+            halls(full,false,2);halls(full,true,3);halls(full,false,0);
+            oversized_halls_canvas=false;
+        }
         questions(true);questions(false);songs(true);songs(false);hints();preview();panes();
     }
     fixture_check_settings();
-    printf("Controller menus %dx%d %s: Normal/Big memorial text/scroll, hints, Songs, question Help, pane input, binding cancel, keyboard suppression PASS\n",width,height,playstation?"PlayStation":"Deck");
+    printf("Controller menus %dx%d %s: Normal/Big memorial output bounds/text/scroll, hints, Songs, question Help, pane input, binding cancel, keyboard suppression PASS\n",width,height,playstation?"PlayStation":"Deck");
     sdl_ui_text_cache_clear();sdl_story_font_cache_clear();SDL_DestroyRenderer(g_state.renderer);SDL_DestroyWindow(g_state.window);TTF_Quit();SDL_Quit();return 0;
 }
 '''
@@ -360,7 +392,7 @@ def main():
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / dep) for dep in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
                                   "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
-    wraps = ("sdl_overlay_pane_anchor_rect", "sdl_get_layout_screen_rect", "SDL_GetDisplayContentScale",
+    wraps = ("sdl_overlay_pane_anchor_rect", "sdl_get_layout_screen_rect", "sdl_get_window_pixel_rect", "SDL_GetDisplayContentScale",
              "sdl_gamepad_prompt_type", "sdl_ui_render_text_texture", "ui_menu_click_handle_choice_action", "Term_keypress", "inkey",
              "save_pane_config_to_json", "sdl_apply_config")
     wraps += ("sdl_ui_text_texture", "sdl_ui_wrapped_text_texture")

@@ -1983,7 +1983,11 @@ extern bool sdl_character_sheet_screen_commit_select(int selected_index);
 /* Narrative "book" (N pages with optional actions): quest text, stats, etc.  Reuses the page-turn
  * navigation accessors above (select_page / page_turning / begin_page_turn). */
 extern void sdl_character_sheet_screen_begin_book(cptr title);
+extern void sdl_character_sheet_screen_set_book_full_width(bool enabled);
+extern void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 extern void sdl_character_sheet_screen_add_book_paragraph(cptr text);
+extern void sdl_character_sheet_screen_add_book_paragraph_styled(cptr text,
+    const byte* attrs, int attr_count);
 extern void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,
     int attr);
 extern void sdl_character_sheet_screen_add_book_action(cptr text, int choice);

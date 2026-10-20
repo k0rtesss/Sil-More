@@ -1563,6 +1563,34 @@ void sdl_menu_scroll_send_lines(int lines)
             ui_scroll_area_get_vertical_key(-1), -lines);
 }
 
+bool sdl_menu_scroll_handle_gamepad_direction(int direction)
+{
+    bool changed = false;
+    int key;
+    int count;
+
+    if (direction == 0 || ui_scroll_area_count() <= 0)
+        return false;
+
+    if (ui_scroll_area_has_offset_target())
+    {
+        for (int i = 0; i < 3; i++)
+            changed |= ui_scroll_area_offset_scroll(direction > 0 ? 1 : -1);
+        if (changed)
+            Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+        return true;
+    }
+
+    /* Scroll regions describe content motion: stick Down uses the region's
+     * negative-Y key (normally '2'), while stick Up uses positive-Y ('8'). */
+    key = ui_scroll_area_get_vertical_key(direction > 0 ? -1 : 1);
+    if (!key)
+        return true;
+    count = ui_scroll_area_is_page_mode() ? 1 : 3;
+    sdl_menu_scroll_send_key_repeated(key, count);
+    return true;
+}
+
 bool sdl_menu_scroll_handle_mouse_wheel(const SDL_MouseWheelEvent* wheel)
 {
     static sdl_wheel_step_state wheel_state;

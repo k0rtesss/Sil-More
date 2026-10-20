@@ -715,9 +715,9 @@ void sdl_reset_config_to_resolution_defaults(int screen_width,
         sdl_config_apply_handheld_defaults(&config);
 
     config.main_view_scale = default_main_scales[config.min_terminal_mode];
-    config.terminal_menu_scale_offset =
+    set_sdl_terminal_menu_scale_offset(
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
-            config.main_view_scale);
+            config.main_view_scale));
     config.aux_view_font_size = 0;
     config.enable_right_panes = false;
 

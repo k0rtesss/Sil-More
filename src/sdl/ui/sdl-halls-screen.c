@@ -119,7 +119,7 @@ static float sdl_halls_controller_card_h(const SDL_Rect* canvas, float width,
 
 static cptr sdl_halls_controller_hint(void)
 {
-    return "D-pad select   <LB>/<RB> scroll / page";
+    return "D-pad select   <RS> scroll   <LB>/<RB> page";
 }
 
 static cptr sdl_halls_mobile_action_label(const sdl_halls_action* action)
@@ -228,6 +228,26 @@ static float sdl_halls_short_side(const SDL_Rect* canvas)
 
     short_side = (float)MIN(canvas->w, canvas->h);
     return (short_side > 0.0f) ? short_side : 720.0f;
+}
+
+static SDL_Rect sdl_halls_canvas_rect(void)
+{
+    SDL_Rect output = sdl_get_window_pixel_rect();
+    SDL_Rect drawable = { 0 };
+    SDL_Rect canvas = sdl_menu_content_rect(sdl_get_layout_screen_rect());
+    SDL_Rect clipped;
+
+    /* Native Halls coordinates are renderer pixels. Window/safe-area reports
+     * can exceed the drawable; keep the entire composition inside its output.
+     * Query the window output even if a gameplay texture is still targeted. */
+    if (g_state.renderer
+        && SDL_GetRenderOutputSize(g_state.renderer, &drawable.w, &drawable.h)
+        && drawable.w > 0 && drawable.h > 0)
+        output = drawable;
+
+    if (SDL_GetRectIntersection(&canvas, &output, &clipped))
+        return clipped;
+    return output;
 }
 
 static void sdl_halls_measure_layout(const SDL_Rect* canvas,
@@ -630,7 +650,7 @@ void sdl_halls_screen_begin(cptr subtitle, cptr page_status,
 
 int sdl_halls_screen_page_capacity(bool detailed)
 {
-    SDL_Rect canvas = sdl_menu_content_rect(sdl_get_layout_screen_rect());
+    SDL_Rect canvas = sdl_halls_canvas_rect();
     sdl_halls_layout layout;
 
     if (canvas.w <= 0 || canvas.h <= 0)
@@ -1656,7 +1676,6 @@ static void sdl_halls_render_controller_entries(const SDL_Rect* canvas,
 
 void sdl_halls_screen_render(void)
 {
-    SDL_Rect window;
     SDL_Rect canvas;
     sdl_halls_layout layout;
     bool mobile;
@@ -1671,11 +1690,8 @@ void sdl_halls_screen_render(void)
     if (!g_sdl_halls.active || !g_state.window || !g_state.renderer)
         return;
 
-    window = sdl_get_window_pixel_rect();
-    canvas = sdl_menu_content_rect(sdl_get_layout_screen_rect());
+    canvas = sdl_halls_canvas_rect();
     if (canvas.w <= 0 || canvas.h <= 0)
-        canvas = window;
-    if (window.w <= 0 || window.h <= 0 || canvas.w <= 0 || canvas.h <= 0)
         return;
 
     sdl_halls_clear_hits();

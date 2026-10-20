@@ -420,6 +420,15 @@ def main():
         assert drawing.count(call) == 1, f"Text trace missed {signature}"
         drawing = drawing.replace(call, "record_text(font,text,dst,max_w);\n    " + call)
         screens = screens[:start] + drawing + screens[end:]
+    signature = "static void sdl_char_sheet_draw_terminal_styled_paragraph("
+    start = screens.index(signature)
+    end = brace_end(screens, start)
+    drawing = screens[start:end]
+    call = "sdl_ui_render_text_texture(texture, NULL, &dst);"
+    assert drawing.count(call) == 1, "Text trace missed terminal-styled book runs"
+    drawing = drawing.replace(call,
+        "record_text(font,run_text,dst,width);\n        " + call)
+    screens = screens[:start] + drawing + screens[end:]
     signature = "static void sdl_char_sheet_draw_book_page_controls("
     start = screens.index(signature)
     end = brace_end(screens, start)

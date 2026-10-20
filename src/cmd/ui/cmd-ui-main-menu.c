@@ -433,19 +433,60 @@ static void main_menu_about_draw_spans(int row, int indent, int wrap_right,
     text_out_indent = old_indent;
 }
 
-/* The native book owns wrapping, paging and its Back control. Source credit
- * lines remain semantic paragraphs, so no terminal footer can erase a tail. */
-static void main_menu_about_mobile_build(const main_menu_about_line* lines)
+/* The semantic book owns wrapping, paging and its Back control. Source credit
+ * lines remain paragraphs, and the bordered page fills the SDL safe area. */
+static void main_menu_about_semantic_attrs(int index,
+    const main_menu_about_line* line, byte* attrs, int capacity)
+{
+    cptr text = line && line->text ? line->text : "";
+    int length = MIN((int)strlen(text), capacity);
+
+    SDL_memset(attrs, line ? line->attr : TERM_WHITE, (size_t)length);
+    if (index == 0)
+    {
+        cptr silq = strstr(text, "SilQ");
+        int name_len = MIN((int)strlen("Sil-More"), length);
+
+        SDL_memset(attrs, TERM_VIOLET, (size_t)name_len);
+        if (silq)
+        {
+            int start = (int)(silq - text);
+            int count = MIN((int)strlen("SilQ"), length - start);
+            if (count > 0)
+                SDL_memset(attrs + start, TERM_L_BLUE, (size_t)count);
+        }
+    }
+    else if ((index >= 3 && index <= 8) || index == 15)
+    {
+        cptr colon = strchr(text, ':');
+        int label_len = colon ? (int)(colon - text) + 1 : length;
+
+        SDL_memset(attrs, TERM_YELLOW,
+            (size_t)MIN(label_len, length));
+    }
+}
+
+static void main_menu_about_semantic_build(const main_menu_about_line* lines)
 {
     sdl_character_sheet_screen_begin_book("About Sil-More");
+    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_ABOUT);
+    sdl_character_sheet_screen_set_book_full_width(true);
+    sdl_character_sheet_screen_set_book_terminal_style(true);
     sdl_character_sheet_screen_set_book_close_button(true);
     sdl_character_sheet_screen_set_book_close_label("Back");
     for (int i = 0; lines[i].text; ++i)
     {
-        byte attr = lines[i].attr;
-        if ((i >= 3 && i <= 8) || i == 15)
-            attr = TERM_YELLOW;
-        sdl_character_sheet_screen_add_book_paragraph_colored(lines[i].text, attr);
+        char blank[] = " ";
+        cptr text = lines[i].text[0] ? lines[i].text : blank;
+        byte attrs[160];
+        int length = MIN((int)strlen(text), (int)sizeof(attrs));
+
+        main_menu_about_semantic_attrs(i, &lines[i], attrs,
+            (int)sizeof(attrs));
+        if (!lines[i].text[0])
+            attrs[0] = TERM_WHITE;
+        sdl_character_sheet_screen_add_book_paragraph_styled(text, attrs,
+            length);
     }
     sdl_character_sheet_screen_commit_book();
 }
@@ -494,10 +535,13 @@ static bool main_menu_mobile_book_wait(void)
     return completed;
 }
 
-static void main_menu_about_mobile(const main_menu_about_line* lines)
+static bool main_menu_about_semantic(const main_menu_about_line* lines)
 {
-    main_menu_about_mobile_build(lines);
+    main_menu_about_semantic_build(lines);
+    if (!sdl_character_sheet_screen_active())
+        return false;
     (void)main_menu_mobile_book_wait();
+    return true;
 }
 
 static void main_menu_about(void)
@@ -513,6 +557,7 @@ static void main_menu_about(void)
     int row;
     char ch;
     bool saved_hide_cursor;
+    bool terminal_scale_pushed = false;
     static const main_menu_about_line about_lines[] = {
         { TERM_WHITE, "Sil-More is an evolution of SilQ, a famous roguelike" },
         { TERM_WHITE, "taking place in the First Age of Beleriand." },
@@ -543,15 +588,15 @@ static void main_menu_about(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
+
+    if (main_menu_about_semantic(about_lines))
+        goto about_cleanup;
+
+    /* Renderer-less fallback for tests and non-SDL emergency paths. */
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_ABOUT);
+    terminal_scale_pushed = true;
 
 about_font_redraw:
-    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
-    {
-        main_menu_about_mobile(about_lines);
-        goto about_cleanup;
-    }
-
     Term_get_size(&wid, &hgt);
     if (wid < 1)
         wid = 80;
@@ -719,7 +764,8 @@ about_font_redraw:
     (void)ch;
 
 about_cleanup:
-    sdl_pop_terminal_menu_scale();
+    if (terminal_scale_pushed)
+        sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
 
