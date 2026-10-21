@@ -1271,6 +1271,10 @@ struct player_type
     s16b achievement_labyrinth_index;
     s16b achievement_labyrinth_y, achievement_labyrinth_x;
     byte achievement_frozen_tiles[(MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 7) / 8];
+    u32b achievement_lore_flags; /* Confirmed kills and recovered Dailir. */
+    byte achievement_ringil_wounds; /* Saturates at the seven required blows. */
+    s16b achievement_glorfindel_depth; /* Pending survival after a cliff duel. */
+    u16b achievement_artefact_rings[3]; /* Distinct projects, not reforges. */
 
     s16b mhp; /* Max hit pts */
     s16b chp; /* Cur hit pts */

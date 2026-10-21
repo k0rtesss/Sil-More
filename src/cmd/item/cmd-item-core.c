@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-character.h"
+#include "achievements-lore.h"
 #include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -4281,6 +4282,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
                 if ((eq_f3 & TR3_PERMA_CURSE) && cursed_p(eq_ptr))
                 {
+                    sil_achievement_lore_on_curse_lifted(o_ptr, eq_ptr);
                     /* Break the curse - the holy light overcomes the oath */
                     eq_ptr->ident &= ~IDENT_CURSED;
                     oath_broken = true;
@@ -5143,6 +5145,7 @@ void shatter_weapon(int silnum)
     int anger_level;
 
     log_debug("shatter_weapon: called for silmaril #%d", silnum);
+    sil_achievement_lore_on_shatter(silnum, w_ptr);
     
     /* Set the appropriate shatter flag for this silmaril */
     if (silnum == 2)

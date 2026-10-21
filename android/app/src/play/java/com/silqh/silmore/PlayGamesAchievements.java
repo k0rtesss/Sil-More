@@ -111,7 +111,26 @@ final class PlayGamesAchievements {
             activity.getString(R.string.play_ach_no_steps_required),
             activity.getString(R.string.play_ach_there_and_almost_back_again),
             activity.getString(R.string.play_ach_the_halls_of_utumno),
-            activity.getString(R.string.play_ach_where_grond_was_wrought)
+            activity.getString(R.string.play_ach_where_grond_was_wrought),
+            activity.getString(R.string.play_ach_not_the_doom_of_the_silmarils),
+            activity.getString(R.string.play_ach_the_king_who_kept_his_oath),
+            activity.getString(R.string.play_ach_thuringwethil_i_am),
+            activity.getString(R.string.play_ach_his_death_and_final_end),
+            activity.getString(R.string.play_ach_seven_times_he_cried),
+            activity.getString(R.string.play_ach_the_cat_and_the_necromancer),
+            activity.getString(R.string.play_ach_ever_found_again),
+            activity.getString(R.string.play_ach_the_golden_flower_stands),
+            activity.getString(R.string.play_ach_belegost_remembers),
+            activity.getString(R.string.play_ach_biter_and_beater),
+            activity.getString(R.string.play_ach_at_most_seven),
+            activity.getString(R.string.play_ach_heavy_is_the_stolen_crown),
+            activity.getString(R.string.play_ach_these_things_are_mine),
+            activity.getString(R.string.play_ach_the_oath_he_should_have_sworn),
+            activity.getString(R.string.play_ach_his_fathers_light),
+            activity.getString(R.string.play_ach_heirlooms_of_the_hidden_king),
+            activity.getString(R.string.play_ach_the_ring_maker_overruled),
+            activity.getString(R.string.play_ach_no_phial_required),
+            activity.getString(R.string.play_ach_three_untouched)
         };
         int words = (ids.length + Long.SIZE - 1) / Long.SIZE;
         allMask = new long[words];

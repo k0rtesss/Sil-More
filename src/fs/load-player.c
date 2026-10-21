@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -591,7 +592,36 @@ errr rd_extra(void)
             p_ptr->achievement_frozen_tiles[index / 8] |= 1u << (index % 8);
         }
     }
-    log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u", 
+    sil_achievement_lore_reset();
+    if (savefile_version_at_least(0, 9, 8, 38))
+    {
+        byte lore_marker;
+        rd_byte(&lore_marker);
+        if (lore_marker != 0xAF) return -1;
+        rd_u32b(&p_ptr->achievement_lore_flags);
+        p_ptr->achievement_lore_flags &= SIL_ACH_LORE_FLAGS;
+        if (!(p_ptr->achievement_lore_flags & SIL_ACH_LORE_DAILIR_KILL))
+            p_ptr->achievement_lore_flags &= ~SIL_ACH_LORE_DAILIR_RECOVERED;
+        rd_byte(&p_ptr->achievement_ringil_wounds);
+        if (p_ptr->achievement_ringil_wounds > 7) return -1;
+        rd_s16b(&p_ptr->achievement_glorfindel_depth);
+        if (p_ptr->achievement_glorfindel_depth < -1
+            || p_ptr->achievement_glorfindel_depth > UTUMNO_DEPTH) return -1;
+        bool empty = false;
+        for (int i = 0; i < 3; ++i)
+        {
+            rd_u16b(&p_ptr->achievement_artefact_rings[i]);
+            u16b artefact = p_ptr->achievement_artefact_rings[i];
+            if (!artefact) empty = true;
+            else
+            {
+                if (empty || artefact >= z_info->art_max) return -1;
+                for (int j = 0; j < i; ++j)
+                    if (p_ptr->achievement_artefact_rings[j] == artefact) return -1;
+            }
+        }
+    }
+    log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u",
              p_ptr->oath_type, p_ptr->oaths_broken, (unsigned)load_byte_offset);
 
     /* Quest fields (0.8.6+ format with marker 0x51) */

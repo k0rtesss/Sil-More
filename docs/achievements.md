@@ -82,8 +82,28 @@ controls. New unlocks appear in the message history and the popup notification.
 | `THE_HALLS_OF_UTUMNO` | The Halls of Utumno | Reach the frozen ruins of Utumno. | Yes |
 | `WHERE_GROND_WAS_WROUGHT` | Where Grond Was Wrought | Discover Orodruth, the Great Forge of Grond in Utumno. | Yes |
 
-The 74 achievements preserve the previous 54 stable keys and indexes, followed
-by 20 appended entries. Sixty-four are hidden: their title, condition and
+| `NOT_THE_DOOM_OF_THE_SILMARILS` | Not the Doom of the Silmarils | Have Angrist shatter while trying to cut the second Silmaril. | Yes |
+| `THE_KING_WHO_KEPT_HIS_OATH` | The King Who Kept His Oath | As Finrod Felagund, kill a werewolf with an unarmed attack. | Yes |
+| `THURINGWETHIL_I_AM` | Thuringwethil I Am | As Lúthien, enter Morgoth's throne room wearing Thuringwethil's Bat-Fell. | Yes |
+| `HIS_DEATH_AND_FINAL_END` | His Death and Final End | As Túrin, deliver Morgoth's final death with Gurthang. | Yes |
+| `SEVEN_TIMES_HE_CRIED` | Seven Times He Cried | Wound Morgoth seven times with Ringil, then escape with a Silmaril while he lives. | Yes |
+| `THE_CAT_AND_THE_NECROMANCER` | The Cat and the Necromancer | Defeat Tevildo and Gorthaur in the same adventure. | Yes |
+| `EVER_FOUND_AGAIN` | Ever Found Again | Kill with Dailir, recover the arrow, and kill another enemy with it. | Yes |
+| `THE_GOLDEN_FLOWER_STANDS` | The Golden Flower Stands | As Glorfindel, slay a Balrog beside a chasm and leave that floor alive. | Yes |
+| `BELEGOST_REMEMBERS` | Belegost Remembers | As a Dwarf, slay Glaurung with Azaghâl's dagger. | Yes |
+| `BITER_AND_BEATER` | Biter and Beater | Make an orc flee while wielding Orcrist and Glamdring together. | Yes |
+| `AT_MOST_SEVEN` | At Most Seven | Slay seven distinct Balrogs in one Tale. | Yes |
+| `HEAVY_IS_THE_STOLEN_CROWN` | Heavy Is the Stolen Crown | Escape with the empty Iron Crown and a Silmaril. | Yes |
+| `THESE_THINGS_ARE_MINE` | These Things Are Mine | As Fëanor, escape with all three Silmarils. | Yes |
+| `THE_OATH_HE_SHOULD_HAVE_SWORN` | The Oath He Should Have Sworn | As Fëanor, escape with a Silmaril and an unbroken Oath of Mercy. | Yes |
+| `HIS_FATHERS_LIGHT` | His Father's Light | As Fëanor, use Finwë's lamp to lift the curse on Fëanor's crown. | Yes |
+| `HEIRLOOMS_OF_THE_HIDDEN_KING` | Heirlooms of the Hidden King | As a Man, escape with a Silmaril, Narsil and the Ring of Barahir. | Yes |
+| `THE_RING_MAKER_OVERRULED` | The Ring-maker Overruled | Permanently weaken Gorthaur with the Song of Contest while wearing the Ring of Mairon. | Yes |
+| `NO_PHIAL_REQUIRED` | No Phial Required | Slay Shelob with Sting while wielding a Silmaril as your light. | Yes |
+| `THREE_UNTOUCHED` | Three Untouched | As Celebrimbor, forge three distinct artefact rings, free of evil and curses. | Yes |
+
+The 93 achievements preserve the previous 54 stable keys and indexes, followed
+by 39 appended entries. Eighty-three are hidden: their title, condition and
 identifying icon remain concealed until earned in the local viewer. Locked
 hidden entries use the same generic description sprite. Steam exports set
 `spoiler` and Google exports use the `Hidden` initial state. Synchronization only
@@ -92,7 +112,7 @@ unlocks earned achievements and never reveals a hidden achievement in advance.
 Google locks the initial state of achievements once published. The original
 14 retain their published revealed state on Google; the 40 additions use
 36 hidden and four revealed entries. Local and Steam visibility still follows
-the local hidden policy above. The newest 20 entries are hidden and await
+the local hidden policy above. The newest 39 entries are hidden and await
 assigned provider IDs. Existing Google identities and unlocks are preserved.
 
 The ten visible entries are To Dungeons Deep, The Quest of the Silmaril,
@@ -119,7 +139,7 @@ ring or dagger graphics.
 Google requires distinct achievement images. Repeated primary sprites receive
 related secondary sprites in the Google export: for example, Morgoth with a
 song symbol for Luthien's deed and a blade with a Silmaril for Iron-Cleaver.
-The exporter verifies that all 74 Google images are distinct; every sprite
+The exporter verifies that all 93 Google images are distinct; every sprite
 still comes directly from the game's atlas with nearest-neighbor scaling.
 
 Ordinary scored adventures qualify, including the contextual gameplay
@@ -169,6 +189,31 @@ failed quests, loaded pending rewards and cancellation of Varda's gift choice do
 not unlock one. Claiming a reward again never announces a second unlock. The
 existing **No Rings Attached** continues to cover fulfilling a thrall's request.
 The key-based achievement profile remains version 1.
+
+The 19 accepted lore achievements are appended after the original 74. All are
+hidden and use shipped game sprites. Rejected proposals are not in the catalogue;
+no Narya, Nenya, Vilya or One Ring item is introduced.
+
+Save version **0.9.8.38** persists Ringil's seven damaging blows, the Tevildo and
+Gorthaur kills, Dailir's kill/recovery sequence, Glorfindel's pending survival
+condition and Celebrimbor's three distinct forged artefact IDs. Older saves start
+these counters empty. A reforge of the same ring does not count again, and ordinary,
+evil or cursed rings do not count for **Three Untouched**. It requires three
+separately created artefact rings as Celebrimbor.
+
+Weapon-specific deeds use the actual synchronous weapon damage source. Merely
+wearing Gurthang, Sting or Azaghal's dagger while poison, a spell, a trap or another
+weapon kills the victim does not qualify. Ringil requires seven damaging blows;
+absorbed blows do not count. **Ever Found Again** requires a confirmed floor pickup
+between Dailir's kills. **The Golden Flower Stands** is awarded on committed travel
+away from the cliff-duel floor while Glorfindel is alive. **At Most Seven** counts
+stable Balrog GUIDs once each within a Tale, retaining progress across adventures.
+
+The four final replacement titles are **Not the Doom of the Silmarils**, **The King
+Who Kept His Oath**, **Thuringwethil I Am**, and **His Death and Final End**. The last
+references Turin's black sword in the Second Prophecy of Mandos; it describes the
+future Last Battle, not a First Age victory in the published Silmarillion.
+
 
 The four journey/discovery entries are hidden. **No Steps Required** is awarded
 on a living arrival at Morgoth's level (1000 ft), with every downward transition
@@ -272,7 +317,7 @@ profile from fitting, saving reports failure and retains the previous file.
 
 Build with the optional Steamworks integration described in
 [steam-build.md](steam-build.md). In the Steamworks dashboard for the configured
-App ID, create and **publish** the 74 achievements using the exact API names
+App ID, create and **publish** the 93 achievements using the exact API names
 in the table above. Supply their names, descriptions, and unlocked/locked icons.
 These are ordinary one-shot achievements; no Steam stat definitions are needed
 for progress tracking. Keep the API names stable after release.
@@ -300,7 +345,7 @@ Unconfigured Play builds also work locally and do not initialize Play Games.
    Android application ID and the signing certificate SHA-1 of each build you
    will test/distribute, including the **Play App Signing** certificate for Play
    delivery. Register test accounts while the service is unpublished.
-2. Create 74 **standard**, one-shot achievements with the conditions in the
+2. Create 93 **standard**, one-shot achievements with the conditions in the
    table above. Supply the Console metadata, points, and icons, and publish the
    Play Games configuration when releasing it.
 3. The public project and achievement IDs for Sil-More are supplied by
@@ -380,7 +425,7 @@ actual Console-assigned IDs, preserving the original 14 provider identities.
 Existing mapped achievements continue synchronizing. Unmapped achievements
 remain durable in local progress and are uploaded after their real IDs are
 configured in a later build. They never send an empty ID to Google. An entirely
-unmapped build keeps achievements local. Assign and verify all 74 IDs before
+unmapped build keeps achievements local. Assign and verify all 93 IDs before
 shipping the expanded Play catalogue; no provider IDs are fabricated.
 
 Use `scripts/export_achievement_stores.py` to export the two Steam CSVs, Steam
@@ -402,7 +447,7 @@ Generated files belong under
 `scripts/output/achievement-stores/` and are not source assets to commit.
 
 In Steam's bulk editor, wait for **Changes were saved**, then reload the
-catalogue and verify **74** records before publishing. Successful file import
+catalogue and verify **93** records before publishing. Successful file import
 only prepares pending changes. Publish the Steamworks configuration with images
 included. Google edits must keep the existing achievement IDs. The full
 `google-play-achievements.zip` is for a new project. For the existing project,
@@ -410,7 +455,7 @@ import only `google-play-new-achievements.zip` for the 20 entries without
 configured provider IDs, then update existing names and icons in place. Published initial
 states cannot be changed. Reimporting existing entries would create duplicates
 and lose their provider identity. The prior 54 assigned IDs remain in
-`android/play-games.properties`; the newest 20 IDs remain blank until assigned.
+`android/play-games.properties`; the newest 39 IDs remain blank until assigned.
 
 Google Play cloud backups are a separate explicit main-menu action; see
 [cloud saves](cloud-saves.md).
@@ -451,6 +496,7 @@ python scripts/check_achievement_discoveries.py
 python scripts/check_achievement_characters.py
 python scripts/check_achievement_legends.py
 python scripts/check_achievement_journeys.py
+python scripts/check_achievement_lore.py
 python scripts/check_achievement_play_games.py
 python scripts/check_achievement_save.py
 python scripts/check_android_achievement_catalogue.py --gradle
@@ -462,7 +508,7 @@ cd android
 ```
 
 The combined playtest command runs every achievement suite and records saved
-production unlock evidence for all 74 entries in
+production unlock evidence for all 93 entries in
 `scripts/output/achievement-playtest/catalogue-coverage.json`. It also checks
 the actual singing payment and final-Morgoth combat completion paths.
 
@@ -489,4 +535,4 @@ shipping a configured release.
 
 The full catalogue above is implemented. The No Armour proposal is excluded
 at the user's request. Native book pagination supports up to 128 pages; each achievement occupies one
-semantic paragraph, so all 74 remain present with large text and narrow screens.
+semantic paragraph, so all 93 remain present with large text and narrow screens.

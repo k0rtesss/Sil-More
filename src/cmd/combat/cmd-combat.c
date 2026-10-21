@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-character.h"
+#include "achievements-lore.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
@@ -3382,7 +3383,9 @@ void py_attack_aux(int y, int x, int attack_type)
             if (!fatal_blow && !skip_take_hit)
             {
                 // damage, check for death
+                sil_achievement_lore_attack_begin(m_idx, o_ptr, net_dam, true);
                 fatal_blow = mon_take_hit(m_idx, net_dam, NULL, -1);
+                sil_achievement_lore_attack_end();
                 if (!fatal_blow)
                 {
                     monster_receive_melee_damage(m_ptr, net_dam);

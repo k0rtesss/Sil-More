@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 8
-#define VERSION_EXTRA 37 /* Track chasm/shaft-only achievement routes. */
+#define VERSION_EXTRA 38 /* Persist the accepted lore achievement deeds. */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -321,6 +321,11 @@
 #define R_IDX_NIENA 6
 #define R_IDX_OROME 332
 #define R_IDX_DURUIN 126
+#define R_IDX_WEREWOLF 131
+#define R_IDX_GREATER_WEREWOLF 172
+#define R_IDX_TEVILDO 185
+#define R_IDX_DRAUGLUIN 205
+#define R_IDX_SHELOB 224
 #define R_IDX_VARDA 321
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
@@ -1423,6 +1428,17 @@
 /*** Important artefact indexes (see "lib/edit/artefact.txt") ***/
 
 #define ART_MAEGLIN 32
+#define ART_BARAHIR 1
+#define ART_MAIRON 7
+#define ART_FEANOR 9
+#define ART_AZAGHAL 50
+#define ART_ANGRIST 54
+#define ART_STING 61
+#define ART_NARSIL 66
+#define ART_GURTHANG 70
+#define ART_RINGIL 81
+#define ART_DAILIR 150
+#define ART_FINWE_LAMP 171
 #define ART_DURIN 35
 #define ART_ORCRIST 64
 #define ART_GLAMDRING 65

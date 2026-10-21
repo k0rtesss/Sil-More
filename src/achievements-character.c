@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-character.h"
+#include "achievements-lore.h"
 #include "externs.h"
 
 /* These events use the same character flags as the mechanics themselves. */
@@ -32,6 +33,7 @@ void sil_achievement_character_on_smithing_completed(
     if (has_unique(UNQ_SMT_FEANOR) && custom_artefact
         && forge_uses_before == 1 && forge_uses_paid == 1)
         sil_achievements_on_event(SIL_ACH_A_SINGLE_SPARK);
+    sil_achievement_lore_on_forged(object, custom_artefact);
     object_flags(object, &f1, &f2, &f3);
     if (has_unique(UNQ_SMT_GAMIL) && (f3 & TR3_MITHRIL)
         && (object->ident & IDENT_CANT_MELT)
@@ -173,6 +175,11 @@ bool sil_achievement_character_song_effect(
     monster = &mon_list[m_idx];
     if (!monster->r_idx || (r_info[monster->r_idx].flags1 & RF1_PEACEFUL))
         return false;
+    if (song == SNG_CONTEST && monster->r_idx == R_IDX_GORTHAUR
+        && sil_achievement_lore_has_mairon_ring())
+        /* A completed duel stops the song before song_end(). This event is
+         * emitted only after the permanent penalties have been applied. */
+        sil_achievements_on_event(SIL_ACH_THE_RING_MAKER_OVERRULED);
     if (song == SNG_LORIEN && has_unique(UNQ_SNG_LUT)
         && monster->r_idx == R_IDX_MORGOTH
         && previous_alertness >= ALERTNESS_UNWARY

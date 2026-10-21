@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "monster/monster-tactics.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
@@ -1389,6 +1390,8 @@ void calc_stance(monster_type* m_ptr)
     }
 
     // update the monster's stance
+    if (stance == STANCE_FLEEING && m_ptr->stance != STANCE_FLEEING)
+        sil_achievement_lore_on_flee(m_ptr);
     if (stance == STANCE_FLEEING && m_ptr->stance != STANCE_FLEEING
         && m_ptr->achievement_elbereth_turn
         && (m_ptr->achievement_elbereth_turn == (u32b)playerturn

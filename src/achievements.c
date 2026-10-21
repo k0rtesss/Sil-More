@@ -2,6 +2,7 @@
 #include "achievements.h"
 #include "achievements-play-games.h"
 #include "achievements-character.h"
+#include "achievements-lore.h"
 #include "blitz.h"
 #include "cJSON.h"
 #include "externs.h"
@@ -166,7 +167,45 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "THE_HALLS_OF_UTUMNO", "The Halls of Utumno",
         "Reach the frozen ruins of Utumno.", true },
     { "WHERE_GROND_WAS_WROUGHT", "Where Grond Was Wrought",
-        "Discover Orodruth, the Great Forge of Grond in Utumno.", true }
+        "Discover Orodruth, the Great Forge of Grond in Utumno.", true },
+    { "NOT_THE_DOOM_OF_THE_SILMARILS", "Not the Doom of the Silmarils",
+        "Have Angrist shatter while trying to cut the second Silmaril.", true },
+    { "THE_KING_WHO_KEPT_HIS_OATH", "The King Who Kept His Oath",
+        "As Finrod Felagund, kill a werewolf with an unarmed attack.", true },
+    { "THURINGWETHIL_I_AM", "Thuringwethil I Am",
+        "As Lúthien, enter Morgoth's throne room wearing Thuringwethil's Bat-Fell.", true },
+    { "HIS_DEATH_AND_FINAL_END", "His Death and Final End",
+        "As Túrin, deliver Morgoth's final death with Gurthang.", true },
+    { "SEVEN_TIMES_HE_CRIED", "Seven Times He Cried",
+        "Wound Morgoth seven times with Ringil, then escape with a Silmaril while he lives.", true },
+    { "THE_CAT_AND_THE_NECROMANCER", "The Cat and the Necromancer",
+        "Defeat Tevildo and Gorthaur in the same adventure.", true },
+    { "EVER_FOUND_AGAIN", "Ever Found Again",
+        "Kill with Dailir, recover the arrow, and kill another enemy with it.", true },
+    { "THE_GOLDEN_FLOWER_STANDS", "The Golden Flower Stands",
+        "As Glorfindel, slay a Balrog beside a chasm and leave that floor alive.", true },
+    { "BELEGOST_REMEMBERS", "Belegost Remembers",
+        "As a Dwarf, slay Glaurung with Azaghâl's dagger.", true },
+    { "BITER_AND_BEATER", "Biter and Beater",
+        "Make an orc flee while wielding Orcrist and Glamdring together.", true },
+    { "AT_MOST_SEVEN", "At Most Seven",
+        "Slay seven distinct Balrogs in one Tale.", true },
+    { "HEAVY_IS_THE_STOLEN_CROWN", "Heavy Is the Stolen Crown",
+        "Escape with the empty Iron Crown and a Silmaril.", true },
+    { "THESE_THINGS_ARE_MINE", "These Things Are Mine",
+        "As Fëanor, escape with all three Silmarils.", true },
+    { "THE_OATH_HE_SHOULD_HAVE_SWORN", "The Oath He Should Have Sworn",
+        "As Fëanor, escape with a Silmaril and an unbroken Oath of Mercy.", true },
+    { "HIS_FATHERS_LIGHT", "His Father's Light",
+        "As Fëanor, use Finwë's lamp to lift the curse on Fëanor's crown.", true },
+    { "HEIRLOOMS_OF_THE_HIDDEN_KING", "Heirlooms of the Hidden King",
+        "As a Man, escape with a Silmaril, Narsil and the Ring of Barahir.", true },
+    { "THE_RING_MAKER_OVERRULED", "The Ring-maker Overruled",
+        "Permanently weaken Gorthaur with the Song of Contest while wearing the Ring of Mairon.", true },
+    { "NO_PHIAL_REQUIRED", "No Phial Required",
+        "Slay Shelob with Sting while wielding a Silmaril as your light.", true },
+    { "THREE_UNTOUCHED", "Three Untouched",
+        "As Celebrimbor, forge three distinct artefact rings, free of evil and curses.", true }
 };
 
 static uint64_t unlocked_at[SIL_ACH_COUNT];
@@ -426,6 +465,7 @@ void sil_achievements_on_event(sil_achievement_id id)
         case SIL_ACH_FOR_EXTERNAL_USE_ONLY:
         case SIL_ACH_FLY_YOU_FOOL:
         case SIL_ACH_ON_THE_OTHER_HAND:
+        case SIL_ACH_HIS_DEATH_AND_FINAL_END:
             if (!sil_achievements_kill_eligible()) return;
             break;
         default:
@@ -493,6 +533,7 @@ void sil_achievements_on_escape(int silmarils)
         unlock_achievement(SIL_ACH_SONG_BENEATH_THE_MOUNTAIN, true);
     if (p_ptr->morgoth_hall_entered)
         unlock_achievement(SIL_ACH_THERE_AND_BACK_AGAIN, true);
+    sil_achievement_lore_on_escape(silmarils);
     sil_achievements_flush();
 }
 
@@ -507,6 +548,7 @@ void sil_achievements_begin_run(void)
         sizeof(p_ptr->achievement_jammed_doors));
     sil_achievements_discovery_reset(true);
     p_ptr->achievement_rage_epoch = 0;
+    sil_achievement_lore_reset();
     sil_achievements_song_begin();
 }
 
@@ -587,6 +629,7 @@ void sil_achievements_on_level_entry(bool restoring)
 
 void sil_achievements_on_level_travel(int from_depth, int to_depth, int feature)
 {
+    sil_achievement_lore_on_travel(from_depth, to_depth);
     /* Report only committed travel. Upward travel never spoils the route.
      * The cause matters: a false floor or teleport while standing on a shaft
      * is still not a shaft descent. Legacy saves never acquire provenance. */
@@ -597,6 +640,8 @@ void sil_achievements_on_level_travel(int from_depth, int to_depth, int feature)
 
 void sil_achievements_on_death(void)
 {
+    if (p_ptr && p_ptr->chp <= 0)
+        p_ptr->achievement_glorfindel_depth = -1;
     /* take_hit() calls this after last-chance equipment, before closing the
      * living run. Escape, victory, quitting and suicide never use this hook. */
     if (!achievements_eligible() || p_ptr->depth != 0 || p_ptr->chp > 0
@@ -627,6 +672,7 @@ void sil_achievements_on_monster_killed(int m_idx, int who)
         }
     }
     sil_achievement_character_on_monster_killed(m_idx, who);
+    sil_achievement_lore_on_kill(m_idx, who);
     if (p_ptr->achievement_kills < UINT32_MAX) ++p_ptr->achievement_kills;
     if ((p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK)
         && p_ptr->achievement_comeback_depth == p_ptr->depth
@@ -671,6 +717,28 @@ static cJSON *current_tale_characters(bool create)
     cJSON *characters = cJSON_GetObjectItemCaseSensitive(tales, key);
     if (!characters && create) characters = cJSON_AddObjectToObject(tales, key);
     return cJSON_IsObject(characters) ? characters : NULL;
+}
+
+void sil_achievements_on_balrog_killed(int race)
+{
+    if (!achievements_eligible() || run_mode_is_blitz() || !metar.id
+        || race <= 0 || race >= z_info->r_max) return;
+    sil_achievements_init();
+    cJSON* tale = current_tale_characters(true);
+    if (!tale) return;
+    cJSON* balrogs = cJSON_GetObjectItemCaseSensitive(tale, "_balrogs");
+    if (!balrogs) balrogs = cJSON_AddObjectToObject(tale, "_balrogs");
+    if (!cJSON_IsObject(balrogs)) return;
+    if (!r_info[race].guid) return;
+    char key[17];
+    strnfmt(key, sizeof(key), "%016llx", (unsigned long long)r_info[race].guid);
+    if (!cJSON_HasObjectItem(balrogs, key)
+        && cJSON_AddBoolToObject(balrogs, key, true)) dirty = true;
+    int count = 0;
+    for (const cJSON* item = balrogs->child; item; item = item->next)
+        if (cJSON_IsTrue(item)) ++count;
+    if (count >= 7) unlock_achievement(SIL_ACH_AT_MOST_SEVEN, true);
+    sil_achievements_flush();
 }
 
 void sil_achievements_on_partition_discovered(unsigned mask)

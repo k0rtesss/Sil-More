@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-social.h"
 #include "externs.h"
@@ -1245,6 +1246,7 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
         p_ptr->redraw |= (PR_HEALTHBAR);
 
     /* Hurt it */
+    sil_achievement_lore_on_hit(m_idx, dam, who);
     m_ptr->hp -= dam;
 
     if (m_ptr->ml

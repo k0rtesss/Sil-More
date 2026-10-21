@@ -84,6 +84,25 @@ typedef enum sil_achievement_id {
     SIL_ACH_THERE_AND_ALMOST_BACK_AGAIN,
     SIL_ACH_THE_HALLS_OF_UTUMNO,
     SIL_ACH_WHERE_GROND_WAS_WROUGHT,
+    SIL_ACH_NOT_THE_DOOM_OF_THE_SILMARILS,
+    SIL_ACH_THE_KING_WHO_KEPT_HIS_OATH,
+    SIL_ACH_THURINGWETHIL_I_AM,
+    SIL_ACH_HIS_DEATH_AND_FINAL_END,
+    SIL_ACH_SEVEN_TIMES_HE_CRIED,
+    SIL_ACH_THE_CAT_AND_THE_NECROMANCER,
+    SIL_ACH_EVER_FOUND_AGAIN,
+    SIL_ACH_THE_GOLDEN_FLOWER_STANDS,
+    SIL_ACH_BELEGOST_REMEMBERS,
+    SIL_ACH_BITER_AND_BEATER,
+    SIL_ACH_AT_MOST_SEVEN,
+    SIL_ACH_HEAVY_IS_THE_STOLEN_CROWN,
+    SIL_ACH_THESE_THINGS_ARE_MINE,
+    SIL_ACH_THE_OATH_HE_SHOULD_HAVE_SWORN,
+    SIL_ACH_HIS_FATHERS_LIGHT,
+    SIL_ACH_HEIRLOOMS_OF_THE_HIDDEN_KING,
+    SIL_ACH_THE_RING_MAKER_OVERRULED,
+    SIL_ACH_NO_PHIAL_REQUIRED,
+    SIL_ACH_THREE_UNTOUCHED,
     SIL_ACH_COUNT
 } sil_achievement_id;
 
@@ -168,6 +187,7 @@ void sil_achievements_on_morgoth_defeated(void);
 void sil_achievements_on_run_completed(void);
 void sil_achievements_on_tale_completed(void);
 void sil_achievements_on_tale_discarded(uint32_t id);
+void sil_achievements_on_balrog_killed(int race);
 void sil_achievements_show(void);
 
 #ifdef __cplusplus

@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
 
@@ -331,6 +332,8 @@ void dungeon(void)
     varda_quest_notice_bastion_level_entry();
 
     was_in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH) && (cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT);
+    if (was_in_morgoth_vault && !p_ptr->restoring)
+        sil_achievement_lore_on_throne_entry();
     if ((p_ptr->depth == MORGOTH_DEPTH) && !p_ptr->morgoth_hall_entered
         && (was_in_morgoth_vault || (silmarils_possessed() > 0)))
     {

@@ -79,6 +79,10 @@ uint64_t sil_play_games_unlocked(unsigned word) { return word == 0 ? remote : wo
 /* Gameplay callback boundaries; full production routes have separate fixtures. */
 void sil_achievement_character_on_player_turn(void) {}
 void sil_achievement_character_on_monster_killed(int m,int who) { (void)m;(void)who; }
+void sil_achievement_lore_on_kill(int m,int who) { (void)m;(void)who; }
+void sil_achievement_lore_on_escape(int n) { (void)n; }
+void sil_achievement_lore_on_travel(int from,int to) { (void)from;(void)to; }
+void sil_achievement_lore_reset(void) {}
 void sil_achievements_discovery_reset(bool fresh) { (void)fresh; }
 void sil_achievements_on_partition_entry(int y,int x) { (void)y;(void)x; }
 void sil_achievements_song_begin(void) {}
@@ -187,11 +191,11 @@ static void expanded_conditions(const char *test)
     sil_achievements_begin_run();
     player.depth = 5;
     if (!strcmp(test, "new-events")) {
-        assert(SIL_ACH_COUNT == 74);
+        assert(SIL_ACH_COUNT == 93);
         int hidden = 0;
         for (int id = 0; id < SIL_ACH_COUNT; ++id)
             hidden += sil_achievement_get(id)->hidden;
-        assert(hidden == 64);
+        assert(hidden == 83);
         assert(!strcmp(sil_achievement_get(SIL_ACH_THE_QUIET_ROAD)->title,
             "A Very Polite Burglary"));
         assert(!strcmp(sil_achievement_get(SIL_ACH_NO_RINGS_ATTACHED)->title,

@@ -284,7 +284,8 @@ def check_catalogue():
 
     production = ("check_achievement_playtest", "check_achievement_expansion",
                   "check_achievement_discoveries", "check_achievement_characters",
-                  "check_achievement_legends", "check_achievement_journeys")
+                  "check_achievement_legends", "check_achievement_journeys",
+                  "check_achievement_lore")
     for active_suite in production:
         print("Running production suite:", active_suite, flush=True)
         with patch.object(tempfile, "TemporaryDirectory", RecordedDirectory):
@@ -306,10 +307,13 @@ def check_catalogue():
     missing = [key for key, suites in evidence.items() if not suites]
     sources = [ROOT / "src" / name for name in (
         "achievements.c", "achievements.h", "achievements-discovery.c",
-        "achievements-character.c", "player/player-songs.c",
+        "achievements-character.c", "achievements-lore.c", "achievements-lore.h",
+        "achievement-icons.h", "player/player-songs.c",
         "cmd/movement/cmd-movement.c", "cmd/combat/cmd-combat.c",
         "spell/spell-damage.c", "spell/spell-teleport.c", "use-obj.c",
-        "cave/cave-map-ui.c", "fs/save-player.c", "fs/load-player.c", "defines.h")]
+        "cave/cave-map-ui.c", "fs/save-player.c", "fs/load-player.c", "defines.h",
+        "cmd/item/cmd-item-core.c", "cmd/item/cmd-pickup.c", "world/monster-death.c",
+        "dungeon/dungeon-player.c", "dungeon/dungeon-loop.c", "melee/melee-process.c")]
     receipt = dict(total=len(keys), covered=len(keys) - len(missing), missing=missing,
                    production_suites=list(production), supporting_suites=list(supporting),
                    source_sha256={str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()

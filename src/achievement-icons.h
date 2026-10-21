@@ -75,3 +75,22 @@ SIL_ACHIEVEMENT_ICON(NO_STEPS_REQUIRED, 0, 28, 34, 0, 2) /* terrain.txt N:83 dow
 SIL_ACHIEVEMENT_ICON(THERE_AND_ALMOST_BACK_AGAIN, 0, 22, 5, 18, 2) /* terrain.txt N:80 up staircase and object.txt N:44 shield, a journey cut short */
 SIL_ACHIEVEMENT_ICON(THE_HALLS_OF_UTUMNO, 32, 27, 0, 28, 2) /* existing ice_sheet.png sprite and terrain.txt N:83 down shaft */
 SIL_ACHIEVEMENT_ICON(WHERE_GROND_WAS_WROUGHT, 15, 11, 15, 11, 1) /* terrain.txt N:79 Orodruth, the Forge of Grond */
+SIL_ACHIEVEMENT_ICON(NOT_THE_DOOM_OF_THE_SILMARILS, 6, 0, 5, 28, 2) /* object.txt N:56 dagger and N:20 Iron Crown */
+SIL_ACHIEVEMENT_ICON(THE_KING_WHO_KEPT_HIS_OATH, 1, 9, 8, 20, 2) /* object.txt N:104 Crown and monster.txt N:131 Werewolf */
+SIL_ACHIEVEMENT_ICON(THURINGWETHIL_I_AM, 6, 18, 10, 18, 2) /* object.txt N:109 Bat-Fell and monster.txt N:251 Morgoth */
+SIL_ACHIEVEMENT_ICON(HIS_DEATH_AND_FINAL_END, 6, 6, 10, 18, 2) /* object.txt N:70 black sword and monster.txt N:251 Morgoth */
+SIL_ACHIEVEMENT_ICON(SEVEN_TIMES_HE_CRIED, 6, 4, 0, 22, 2) /* existing mithril sword and terrain.txt N:80 up staircase */
+SIL_ACHIEVEMENT_ICON(THE_CAT_AND_THE_NECROMANCER, 9, 25, 10, 17, 2) /* monster.txt N:185 Tevildo and N:244 Gorthaur */
+SIL_ACHIEVEMENT_ICON(EVER_FOUND_AGAIN, 5, 27, 5, 27, 2) /* object.txt N:116 arrow, recovered and used again */
+SIL_ACHIEVEMENT_ICON(THE_GOLDEN_FLOWER_STANDS, 10, 16, 34, 0, 2) /* monster.txt N:241 Balrog and terrain.txt N:2 chasm */
+SIL_ACHIEVEMENT_ICON(BELEGOST_REMEMBERS, 6, 0, 10, 3, 2) /* object.txt N:56 dagger and monster.txt N:243 Glaurung */
+SIL_ACHIEVEMENT_ICON(BITER_AND_BEATER, 6, 3, 6, 7, 2) /* object.txt N:64 Longsword and N:67 Bastard Sword */
+SIL_ACHIEVEMENT_ICON(AT_MOST_SEVEN, 10, 16, 10, 16, 3) /* monster.txt N:241 Balrog, representing the seven distinct foes */
+SIL_ACHIEVEMENT_ICON(HEAVY_IS_THE_STOLEN_CROWN, 5, 28, 0, 22, 2) /* object.txt N:20 Iron Crown and terrain.txt N:80 up staircase */
+SIL_ACHIEVEMENT_ICON(THESE_THINGS_ARE_MINE, 12, 16, 1, 9, 2) /* object.txt N:131 Silmaril and N:104 Crown, Feanor's recovered jewels */
+SIL_ACHIEVEMENT_ICON(THE_OATH_HE_SHOULD_HAVE_SWORN, 6, 20, 8, 1, 2) /* flavor.txt N:1 ring and monster.txt N:13 thrall, a merciful oath */
+SIL_ACHIEVEMENT_ICON(HIS_FATHERS_LIGHT, 2, 31, 1, 9, 2) /* object.txt N:130 Feanorian Lamp and N:104 Crown */
+SIL_ACHIEVEMENT_ICON(HEIRLOOMS_OF_THE_HIDDEN_KING, 6, 20, 6, 3, 2) /* flavor.txt N:1 Ring of Barahir and object.txt N:64 sword */
+SIL_ACHIEVEMENT_ICON(THE_RING_MAKER_OVERRULED, 6, 20, 10, 17, 2) /* flavor.txt N:1 ring and monster.txt N:244 Gorthaur */
+SIL_ACHIEVEMENT_ICON(NO_PHIAL_REQUIRED, 6, 2, 12, 16, 2) /* object.txt N:60 Shortsword (Sting) and N:131 Silmaril */
+SIL_ACHIEVEMENT_ICON(THREE_UNTOUCHED, 6, 20, 6, 20, 3) /* flavor.txt N:1 ring, three distinct artefact rings */

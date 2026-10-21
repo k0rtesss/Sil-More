@@ -331,7 +331,13 @@ void wr_extra(void)
             wr_byte(i / MAX_DUNGEON_WID);
             wr_byte(i % MAX_DUNGEON_WID);
         }
-    log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d", 
+    /* 0.9.8.38: accepted lore deeds, including distinct forged artefact rings. */
+    wr_byte(0xAF);
+    wr_u32b(p_ptr->achievement_lore_flags);
+    wr_byte(p_ptr->achievement_ringil_wounds);
+    wr_s16b(p_ptr->achievement_glorfindel_depth);
+    for (int i = 0; i < 3; ++i) wr_u16b(p_ptr->achievement_artefact_rings[i]);
+    log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d",
              p_ptr->oath_type, p_ptr->oaths_broken);
 
     /* From 0.8.6 onward, write quest block preceded by marker 0x51 */

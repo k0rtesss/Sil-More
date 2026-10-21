@@ -27,6 +27,7 @@ void fixture_previous_extra(void);
 void fixture_previous_monster(const monster_type*);
 void fixture_v34_extra(void);
 void fixture_v34_monster(const monster_type*);
+void fixture_v37_extra(void);
 size_t fixture_write(int legacy, const monster_type* monster, byte* buffer,
     size_t capacity, size_t* player_end)
 {
@@ -34,7 +35,8 @@ size_t fixture_write(int legacy, const monster_type* monster, byte* buffer,
     xor_byte = 0; v_stamp = x_stamp = save_byte_offset = 0; write_error = false;
     if (legacy == 1) fixture_legacy_extra();
     else if (legacy == 2) fixture_previous_extra();
-    else if (legacy == 3) fixture_v34_extra(); else save_write_extra();
+    else if (legacy == 3) fixture_v34_extra();
+    else if (legacy == 4) fixture_v37_extra(); else save_write_extra();
     *player_end = (size_t)SDL_TellIO(fff);
     save_wr_u32b(0xA1B2C3D4U);
     if (legacy == 1) fixture_legacy_monster(monster);
@@ -95,6 +97,7 @@ void fixture_read_object(const byte* buffer,size_t length,object_type* object)
 
 TESTS = r'''
 #include "achievements.h"
+#include "achievements-lore.h"
 size_t fixture_write(int,const monster_type*,byte*,size_t,size_t*);
 int fixture_read(const byte*,size_t,int,monster_type*,size_t);
 size_t fixture_write_object(const object_type*,byte*,size_t);
@@ -120,6 +123,10 @@ static void clear_for_load(void)
     p_ptr->achievement_comeback_depth=29;
     p_ptr->achievement_discovery_flags=0xFFFFFFFFU;
     p_ptr->achievement_rage_epoch=0xFFFFFFFFU;
+    p_ptr->achievement_lore_flags=0xFFFFFFFFU;
+    p_ptr->achievement_ringil_wounds=255;
+    p_ptr->achievement_glorfindel_depth=30;
+    memset(p_ptr->achievement_artefact_rings,0xFF,sizeof(p_ptr->achievement_artefact_rings));
     memset(p_ptr->achievement_frozen_tiles,0xFF,sizeof(p_ptr->achievement_frozen_tiles));
 }
 static void prepare_player(void)
@@ -133,6 +140,11 @@ static void prepare_player(void)
     p_ptr->achievement_fall_depth=8;
     p_ptr->achievement_discovery_flags=SIL_ACH_DISC_FLAGS|0x80000000U;
     p_ptr->achievement_rage_epoch=0x11223344U;
+    p_ptr->achievement_lore_flags=SIL_ACH_LORE_FLAGS;
+    p_ptr->achievement_ringil_wounds=6;
+    p_ptr->achievement_glorfindel_depth=5;
+    p_ptr->achievement_artefact_rings[0]=z_info->art_rand_max;
+    p_ptr->achievement_artefact_rings[1]=z_info->art_rand_max+1;
     p_ptr->achievement_water_from_y=1;p_ptr->achievement_water_from_x=2;
     p_ptr->achievement_water_entry_y=3;p_ptr->achievement_water_entry_x=4;
     p_ptr->achievement_poison_from_y=5;p_ptr->achievement_poison_from_x=6;
@@ -186,7 +198,7 @@ static void test_save(void)
     size_t current_end,legacy_end;
     size_t size=fixture_write(false,&source,current,sizeof(current),&current_end);
     size_t oldsize=fixture_write(true,&source,legacy,sizeof(legacy),&legacy_end);
-    assert(current_end==legacy_end+61 && size==oldsize+74);
+    assert(current_end==legacy_end+75 && size==oldsize+88);
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(current,size,VERSION_EXTRA,&restored,current_end)==0);
     assert_player_tail();
@@ -215,16 +227,28 @@ static void test_save(void)
     ++ice;assert(p_ptr->achievement_frozen_tiles[ice/8]&(1u<<(ice%8)));
     assert(restored.achievement_doom_rage_epoch==0x11223344U);
     assert(restored.achievement_elbereth_turn==778 && restored.achievement_first_wolf);
+    assert(p_ptr->achievement_lore_flags==SIL_ACH_LORE_FLAGS);
+    assert(p_ptr->achievement_ringil_wounds==6 && p_ptr->achievement_glorfindel_depth==5);
+    assert(p_ptr->achievement_artefact_rings[0]==z_info->art_rand_max
+        && p_ptr->achievement_artefact_rings[1]==z_info->art_rand_max+1
+        && p_ptr->achievement_artefact_rings[2]==0);
     puts("Current format: achievement fields, post-block quests, player poison, AI, sentinels and both checksums PASS");
 
-    // The new provenance uses the existing flags word; older layouts remain exact.
-    for(int previous=35;previous<=36;previous++) {
+    size_t v37_end;
+    size_t v37_size=fixture_write(4,&source,modified,sizeof(modified),&v37_end);
+    assert(current_end==v37_end+14 && size==v37_size+14);
+    // Previous writers have no lore block; older route provenance remains exact.
+    for(int previous=35;previous<=37;previous++) {
         clear_for_load();memset(&restored,0,sizeof(restored));
-        assert(fixture_read(current,size,previous,&restored,current_end)==0);
+        assert(fixture_read(modified,v37_size,previous,&restored,v37_end)==0);
         assert_player_tail();
-        assert(p_ptr->achievement_flags==(SIL_ACH_RUN_FLAGS & ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE));
+        assert(p_ptr->achievement_flags==(previous<37
+            ? SIL_ACH_RUN_FLAGS & ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE : SIL_ACH_RUN_FLAGS));
+        assert(!p_ptr->achievement_lore_flags && !p_ptr->achievement_ringil_wounds);
+        assert(p_ptr->achievement_glorfindel_depth==-1);
+        for(int i=0;i<3;i++)assert(!p_ptr->achievement_artefact_rings[i]);
     }
-    puts("Legacy v35/v36: unknown descent history cannot qualify for the chasm/shaft route PASS");
+    puts("Legacy v35/v36/v37: safe lore defaults, correct historical route eligibility, exact stream/checksum alignment PASS");
     prepare_player();p_ptr->achievement_flags &= ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
     size_t invalid_end;
     size_t invalid_size=fixture_write(false,&source,modified,sizeof(modified),&invalid_end);
@@ -247,7 +271,7 @@ static void test_save(void)
 
     size_t v34_end;
     size_t v34_size=fixture_write(3,&source,modified,sizeof(modified),&v34_end);
-    assert(current_end==v34_end+37 && size==v34_size+46);
+    assert(current_end==v34_end+51 && size==v34_size+60);
     clear_for_load();memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(modified,v34_size,34,&restored,v34_end)==0);
     assert_player_tail();assert_discovery_defaults(&restored);
@@ -256,7 +280,7 @@ static void test_save(void)
 
     size_t previous_end;
     size_t previous_size=fixture_write(2,&source,modified,sizeof(modified),&previous_end);
-    assert(current_end==previous_end+46 && size==previous_size+57);
+    assert(current_end==previous_end+60 && size==previous_size+71);
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(modified,previous_size,33,&restored,previous_end)==0);
     assert_player_tail();
@@ -357,6 +381,27 @@ static void test_save(void)
         assert(fixture_read_offset<current_end);
     }
     puts("Current format: invalid discovery marker/crossing/poison/labyrinth/ice count/ice coordinate/duplicate ice rejected before checksum PASS");
+    decode(current,plain,size);
+    const byte lore[]={0xAF,SIL_ACH_LORE_FLAGS,0,0,0,6,5,0,
+        (byte)z_info->art_rand_max,(byte)(z_info->art_rand_max>>8),
+        (byte)(z_info->art_rand_max+1),(byte)((z_info->art_rand_max+1)>>8),0,0};
+    found=0;matches=0;
+    for(size_t i=0;i+sizeof(lore)<=current_end;i++)
+        if(!memcmp(plain+i,lore,sizeof(lore))){found=i;matches++;}
+    assert(matches==1);
+    for(int bad=0;bad<6;bad++) {
+        decode(current,plain,size);
+        if(bad==0)plain[found]=0xB0;
+        if(bad==1)plain[found+5]=8;
+        if(bad==2)plain[found+6]=UTUMNO_DEPTH+1;
+        if(bad==3)plain[found+8]=plain[found+9]=0xFF;
+        if(bad==4){plain[found+10]=plain[found+8];plain[found+11]=plain[found+9];}
+        if(bad==5)plain[found+8]=plain[found+9]=0;
+        encode(plain,modified,size);clear_for_load();
+        assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
+        assert(fixture_read_offset<current_end);
+    }
+    puts("Current lore: invalid marker/wounds/floor/artefact ID/duplicate rings/gapped rings rejected before checksum PASS");
     decode(current,plain,size); plain[size-1]^=1;
     encode(plain,modified,size); clear_for_load();
     assert(fixture_read(modified,size,VERSION_EXTRA,&restored,current_end)!=0);
@@ -382,6 +427,10 @@ def main():
              "    wr_s16b(p_ptr->achievement_comeback_depth);\n")
     assert player.count(block) == 1, "Update precise v31 player-field fixture filter"
     player = player[:player.index("\nvoid wr_randarts(void)")]
+    lore_start = player.index("    /* 0.9.8.38:")
+    lore_end = player.index('    log_info("SAVE: About to write quest marker', lore_start)
+    v37_player = player[:lore_start] + player[lore_end:]
+    v37_writer = v37_player.replace("void wr_extra(void)", "void fixture_v37_extra(void)")
     discovery_start = player.index("    /* 0.9.8.35:")
     discovery_end = player.index('    log_info("SAVE: About to write quest marker', discovery_start)
     v34_player = player[:discovery_start] + player[discovery_end:]
@@ -422,7 +471,7 @@ def main():
     harness = prefix + fixture_function("terminal_extra") + "\n" + fixture_function("reset_map")
     harness += TESTS + init + "    ANGBAND_DIR_APEX=argv[2];\n    test_save(); SDL_Quit(); return 0;\n}\n"
     sources = []
-    for name, text in (("check.c", harness), ("writer.c", WRITER), ("reader.c", reader), ("legacy.c", old_writer), ("previous.c", previous_writer), ("v34.c", v34_writer)):
+    for name, text in (("check.c", harness), ("writer.c", WRITER), ("reader.c", reader), ("legacy.c", old_writer), ("previous.c", previous_writer), ("v34.c", v34_writer), ("v37.c", v37_writer)):
         path = OUT / name
         path.write_text(text, encoding="utf-8")
         sources.append(str(path))
