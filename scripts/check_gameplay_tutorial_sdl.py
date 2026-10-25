@@ -90,6 +90,7 @@ bool inkey_prompt_input_active(void) { return false; }
 bool ui_menu_click_take_action(int *choice, int *action)
 { (void)choice; (void)action; bool result=pending_choice; pending_choice=0; return result; }
 bool sdl_question_menu_captures_pointer(void) { return false; }
+bool sdl_question_menu_current_rect(SDL_FRect *rect) { (void)rect; return false; }
 bool sdl_hint_quest_menu_active(void) { return false; }
 bool sdl_key_is_escape_or_back(SDL_Keycode key) { return key==SDLK_ESCAPE; }
 bool sdl_gamepad_button_is_ui_confirm(SDL_GamepadButton b) { return b==SDL_GAMEPAD_BUTTON_SOUTH; }
@@ -309,6 +310,12 @@ int main(void)
         SDL_strlcpy(current.id,"item.staff.use",sizeof(current.id));
         tutorial_build_controls(&current,&labels,false);
         assert(labels.command=='u');
+        show(false,"change-active","throwing");
+        character_icky=1;
+        tutorial_build_controls(&current,&labels,false);
+        assert(!labels.primary && !labels.command);
+        assert(strstr(labels.action_hint,"Choose a Throwing row"));
+        character_icky=0;
         show(false,"examine","");
         tutorial_last_input=TUTORIAL_INPUT_KEYBOARD;
         tutorial_build_controls(&current,&labels,true);

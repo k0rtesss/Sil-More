@@ -6012,7 +6012,7 @@ Priority: **32** (higher appears first).
 
 **1. Action**
 
-Open Change Active and choose the readied throwing weapon. Check which weapon and shield will be active. Confirm the change to finish this practice, or Skip to keep your current setup.
+Open Change Active and choose a row labelled Throwing for a readied weapon. A spear can also have a separate Melee row; choose Throwing for this practice. Check which weapon and shield will be active, then confirm. Skip to keep your current setup.
 
 Required action: `change-active`; subject: `throwing`.
 

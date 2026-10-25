@@ -824,6 +824,18 @@ void tutorial_game_combat_roll(const combat_roll *roll)
     observe("combat.first_result", "combat", "Your combat roll", detail);
 }
 
+bool tutorial_game_active_weapon_allowed(int kind)
+{
+    tutorial_view view;
+    if (managing || authorized_action_depth || !tutorial_peek_view(&view)
+        || !view.active || strcmp(view.action, "change-active")) return true;
+    if (!strcmp(view.action_subject, "throwing"))
+        return kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    if (!strcmp(view.action_subject, "bow") || !strcmp(view.action_subject, "arrows"))
+        return kind == PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    return true;
+}
+
 bool tutorial_game_action_allowed(const char *action, const object_type *item)
 {
     tutorial_view view;
@@ -860,11 +872,12 @@ void tutorial_game_action_done(const char *action, const object_type *item)
 {
     tutorial_view view;
     const char *type = item_type(item);
-    /* Direct pointer/keyboard mode switches have no selected item pointer.
-     * Credit the resulting weapon role, but never an arrow-stack change:
+    /* Credit the resulting role even when the selected physical weapon can
+     * serve several roles. Never infer an arrow-stack change:
      * that requires the chooser's committed, specific arrow subject. */
-    if (!item && !strcmp(action, "change-active")) {
+    if ((!item || item->tval != TV_ARROW) && !strcmp(action, "change-active")) {
         int kind = player_active_weapon_kind();
+        type = "";
         if (kind == PLAYER_ACTIVE_WEAPON_KIND_BOW) type = "bow";
         else if (kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING) type = "throwing";
     }

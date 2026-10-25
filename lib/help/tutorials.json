@@ -10000,7 +10000,7 @@
       "priority": 32,
       "steps": [
         {
-          "text": "Open Change Active and choose the readied throwing weapon. Check which weapon and shield will be active. Confirm the change to finish this practice, or Skip to keep your current setup.",
+          "text": "Open Change Active and choose a row labelled Throwing for a readied weapon. A spear can also have a separate Melee row; choose Throwing for this practice. Check which weapon and shield will be active, then confirm. Skip to keep your current setup.",
           "kind": "action",
           "anchor": "weapon",
           "action": "change-active",

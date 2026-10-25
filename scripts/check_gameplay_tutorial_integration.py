@@ -1173,20 +1173,46 @@ int main(void)
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
 
     activate("item.bow.active","bow");
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_THROWING));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_MELEE;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
+    object_type bow={.k_idx=1,.tval=TV_BOW,.number=1};
+    tutorial_game_action_done("change-active",&bow);
+    assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_COMPLETED);
     activate("item.throwing.active","throwing");
+    object_type spear={.k_idx=1,.tval=TV_POLEARM,.sval=SV_SPEAR,.number=1};
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_THROWING));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
+    assert(tutorial_game_begin_action("change-active",&spear));
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    tutorial_game_end_action();
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+    tutorial_game_action_done("change-active",&spear);
+    assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_IN_PROGRESS);
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    tutorial_game_action_done("change-active",&spear);
+    assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_COMPLETED);
+    activate("item.throwing.active","throwing");
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_COMPLETED);
+    activate("item.throwing.active","throwing");
+    tutorial_skip();
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
     activate("item.arrows.active","arrows");
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_THROWING));
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.arrows.active")==TUTORIAL_IN_PROGRESS);
@@ -1196,6 +1222,7 @@ int main(void)
 
     activate("item.staff.ready","staff");
     assert(tutorial_game_begin_action("ready",&staff));
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
     tutorial_checkpoint(false); /* Pack's paid multi-turn access hides the card. */
     assert(!tutorial_get_view(&view));
     assert(tutorial_game_action_allowed("ready",&staff));

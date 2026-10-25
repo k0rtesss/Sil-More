@@ -3,6 +3,7 @@
 #include "monster/monster-tactics.h"
 #include "externs.h"
 #include "melee/melee-attack.h"
+#include "object/object-place.h"
 #include "player/killer.h"
 
 
@@ -1892,7 +1893,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                 {
                     /* Oops */
                     msg_format(
-                        "%^s disarms you! Your %s falls to the ground nearby.",
+                        "%^s disarms you! Your %s falls nearby.",
                         m_name, o_name);
 
                     /* Get the original object */
@@ -1933,7 +1934,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     }
 
                     /* Drop it near the player */
-                    drop_near(i_ptr, 0, near_y, near_x);
+                    drop_disarmed_weapon(i_ptr, near_y, near_x);
                     monster_ai_observe(m_ptr, MON_AI_DISARM, -1);
 
                     /* Modify, Optimize */

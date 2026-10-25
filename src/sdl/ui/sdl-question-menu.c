@@ -1860,6 +1860,16 @@ bool sdl_question_menu_is_active(void)
     return g_question_menu.active;
 }
 
+bool sdl_question_menu_current_rect(SDL_FRect* rect)
+{
+    sdl_question_menu_layout_info layout;
+
+    if (!rect || g_question_menu.nonblocking
+        || !sdl_question_menu_layout(&layout)) return false;
+    *rect = layout.panel;
+    return true;
+}
+
 int sdl_question_menu_collect_controller_focus_targets(
     sdl_controller_focus_target* targets, int max_targets)
 {
