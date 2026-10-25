@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render and tap tale/intro footer labels in normal and large text."""
+"""Check complete tale/intro captions and footer taps in normal and large text."""
 from pathlib import Path
 import check_big_text_creation as fixture
 
@@ -20,6 +20,30 @@ static void creation_intro_skip(void)
         for(int i=0;i<(int)N_ELEMENTS(prompts);i++) {
             sdl_tale_screen_set_prompt(prompts[i],true,false);
             creation_begin("intro-skip-target"); sdl_tale_screen_render_canvas(&canvas); stop_capture();
+            sdl_tale_layout_metrics metrics; fixture_assert(sdl_tale_screen_metrics(&metrics,&canvas));
+            SDL_FRect title=creation_find("THE NAMELESS CHRONICLE");
+            int title_w=0,title_h=0;
+            fixture_assert(TTF_GetStringSizeWrapped(metrics.title_font,
+                "THE NAMELESS CHRONICLE",0,0,&title_w,&title_h));
+            if(big || title_w>metrics.column_w) {
+                TTF_HorizontalAlignment previous=TTF_GetFontWrapAlignment(metrics.title_font);
+                TTF_SetFontWrapAlignment(metrics.title_font,manuscript
+                    ?TTF_HORIZONTAL_ALIGN_CENTER:TTF_HORIZONTAL_ALIGN_LEFT);
+                fixture_assert(TTF_GetStringSizeWrapped(metrics.title_font,
+                    "THE NAMELESS CHRONICLE",0,(int)metrics.column_w,&title_w,&title_h));
+                TTF_SetFontWrapAlignment(metrics.title_font,previous);
+            }
+            capture(manuscript?"intro-caption":"tale-caption");
+            /* Compare with the full shaped texture: a clipped source rectangle
+             * can stay inside the panel while silently dropping the last letters. */
+            if(SDL_fabsf(title.w-title_w)>1 || SDL_fabsf(title.h-title_h)>1)
+                fprintf(stderr,"caption manuscript=%d big=%d: drawn %.1fx%.1f, expected %dx%d, column %.1f\n",
+                    manuscript,big,title.w,title.h,title_w,title_h,metrics.column_w);
+            fixture_assert(SDL_fabsf(title.w-title_w)<=1 && SDL_fabsf(title.h-title_h)<=1);
+            inside(title);
+            fixture_assert(title.x>=metrics.column_x-1
+                && title.x+title.w<=metrics.column_x+metrics.column_w+1);
+            fixture_assert(title.y+title.h<=metrics.body_y);
             SDL_FRect glyph;
             float next_x,next_y;
             if(big) {
@@ -29,7 +53,6 @@ static void creation_intro_skip(void)
                 next_y=next.y+next.h*.5f;
             } else {
                 SDL_FRect full=creation_find(prompts[i]);
-                sdl_tale_layout_metrics metrics; fixture_assert(sdl_tale_screen_metrics(&metrics,&canvas));
                 int total_w=0,prefix_w=0;
                 fixture_assert(TTF_GetStringSize(metrics.prompt_font,prompts[i],0,&total_w,NULL));
                 fixture_assert(TTF_GetStringSize(metrics.prompt_font,prompts[i],
@@ -69,7 +92,7 @@ def main():
         "creation_intro_skip();")
     fixture.HARNESS = fixture.HARNESS.replace(
         "compact stats, aligned calculations, lamp/footer containment, tale actions, hero touch/mouse drag",
-        "normal/large tale and intro visible skip/continue touch targets")
+        "complete normal/large tale and intro captions, visible skip/continue touch targets")
     fixture.main()
 
 

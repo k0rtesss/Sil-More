@@ -809,32 +809,13 @@ void orome_quest_interaction(void)
             quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
 
-        /* Determine hunt target based on dungeon depth */
-        int depth = p_ptr->depth;
-        cptr target_name;
-        int target_count;
-
-        if (depth <= 250) {
-            p_ptr->orome_target_type = OROME_TARGET_WOLF;
-            target_count = 100;
-            target_name = "wolves";
-        } else if (depth <= 500) {
-            p_ptr->orome_target_type = OROME_TARGET_SPIDER;
-            target_count = 80;
-            target_name = "spiders";
-        } else if (depth <= 750) {
-            p_ptr->orome_target_type = OROME_TARGET_SERPENT;
-            target_count = 60;
-            target_name = "serpents";
-        } else {
-            p_ptr->orome_target_type = OROME_TARGET_VAMPIRE;
-            target_count = 30;
-            target_name = "vampires";
-        }
+        /* The hunt accepts any one of the four kindred totals. These legacy
+         * fields no longer select or restrict a target species. */
+        p_ptr->orome_target_type = 0;
 
         /* Accept the quest */
         p_ptr->orome_quest = OROME_QUEST_ACTIVE;
-        p_ptr->orome_target_count = target_count;
+        p_ptr->orome_target_count = 0;
         p_ptr->orome_killed_count = 0;
 
         /* Remove the quest giver now that quest is accepted without
@@ -842,12 +823,12 @@ void orome_quest_interaction(void)
          */
         remove_quest_giver_silent(R_IDX_OROME);
 
-        msg_format("You must hunt and slay %d %s to prove your prowess.", target_count, target_name);
+        msg_print("Hunt 100 wolves, 80 spiders, 60 serpents, or 30 vampires.");
+        msg_print("Complete any one of these counts to prove your prowess.");
         msg_print("Return when the hunt is complete to claim your reward.");
         msg_print("Oromë fades into the wild, but his presence lingers in your soul.");
 
-        log_trace("Oromë quest started - hunt %d %s at depth %d",
-                 target_count, target_name, depth);
+        log_trace("Oromë quest started - any kindred total qualifies, depth=%d", p_ptr->depth);
         sdl_popup_notification_show("New quest added");
     }
     else if (p_ptr->orome_quest == OROME_QUEST_SUCCESS)
@@ -871,13 +852,7 @@ void orome_quest_interaction(void)
             quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
 
-        /* Show the specific numbers after the main dialogue */
-        cptr monster_names[] = {"wolves", "spiders", "serpents", "vampires"};
-        cptr monster_name = (p_ptr->orome_target_type >= 1 && p_ptr->orome_target_type <= 4)
-                           ? monster_names[p_ptr->orome_target_type - 1] : "creatures";
-
-        msg_format("You have slain %d %s as commanded.",
-                  p_ptr->orome_target_count, monster_name);
+        msg_print("You have completed the great hunt as commanded.");
         msg_print("You learn the secret of hunting unique creatures!");
 
         /* Clear quest state */

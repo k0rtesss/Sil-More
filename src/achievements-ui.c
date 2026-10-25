@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-character.h"
 #include "achievements-play-games.h"
 #include "externs.h"
 #include "cmd/ui/cmd-ui-internal.h"
@@ -7,12 +8,25 @@
 #include "steamworks.h"
 #include <time.h>
 
-/* The atlas coordinates are shared with the store export, never generated art. */
-static const struct { int row, col; } achievement_icons[SIL_ACH_COUNT] = {
-#define SIL_ACHIEVEMENT_ICON(key, row, col, row2, col2, count) [SIL_ACH_##key] = { row, col },
+/* Existing sprites and approved compositions share their atlas/store mappings. */
+static const struct { int row, col, row2, col2, count, source_size; } achievement_icons[SIL_ACH_COUNT] = {
+#define SIL_ACHIEVEMENT_ICON(key, row, col, row2, col2, count) [SIL_ACH_##key] = { row, col, row2, col2, count, 16 },
+#define SIL_ACHIEVEMENT_ICON_RECT(key, row, col, size) [SIL_ACH_##key] = { row, col, row, col, 1, size },
 #include "achievement-icons.h"
 #undef SIL_ACHIEVEMENT_ICON
+#undef SIL_ACHIEVEMENT_ICON_RECT
 };
+
+/* The catalogue's native indexes remain the save/provider identities. */
+static const struct { int id; const char *category; } achievement_order[] = {
+#define SIL_ACHIEVEMENT_ORDER(key, category) { SIL_ACH_##key, category },
+#include "achievement-order.h"
+#undef SIL_ACHIEVEMENT_ORDER
+};
+_Static_assert(sizeof(achievement_order) / sizeof(achievement_order[0]) == SIL_ACH_COUNT,
+    "Achievement display order must include the whole catalogue");
+/* Requirements are revealed only in this viewer session, never at a provider. */
+static bool show_hidden_requirements;
 
 static bool platform_achievements_available(void)
 {
@@ -25,25 +39,46 @@ static void show_platform_achievements(void)
         sdl_popup_notification_show("Platform achievements are currently unavailable.");
 }
 
-static void build_achievement_book(int page)
+static void build_achievement_book(int page, bool character_only)
 {
-    char text[768];
-    int earned = 0;
-    for (int i = 0; i < SIL_ACH_COUNT; ++i)
-        if (sil_achievement_unlocked_at(i)) ++earned;
-    sdl_character_sheet_screen_begin_book("Achievements");
+    char text[1024];
+    sdl_character_sheet_screen_begin_book(character_only
+        ? "Character achievements" : "Achievements");
     sdl_character_sheet_screen_set_book_close_button(true);
-    sdl_character_sheet_screen_set_book_close_label("Back");
-    strnfmt(text, sizeof(text), "%d of %d unlocked", earned, SIL_ACH_COUNT);
-    sdl_character_sheet_screen_add_book_paragraph_colored(text, TERM_L_BLUE);
-    sdl_character_sheet_screen_add_book_paragraph(
-        "Across all characters and Tales.");
-    for (int i = 0; i < SIL_ACH_COUNT; ++i)
+    sdl_character_sheet_screen_set_book_close_label(character_only ? "Done" : "Back");
+    if (!character_only)
     {
+        int earned = 0;
+        for (int i = 0; i < SIL_ACH_COUNT; ++i)
+            if (sil_achievement_unlocked_at(i)) ++earned;
+        strnfmt(text, sizeof(text), "%d of %d unlocked", earned, SIL_ACH_ACTIVE_COUNT);
+        sdl_character_sheet_screen_add_book_paragraph_colored(text, TERM_L_BLUE);
+        sdl_character_sheet_screen_add_book_paragraph("Across all characters and Tales.");
+    }
+    bool current_character = character_generated && p_ptr
+        && p_ptr->playing && !p_ptr->is_dead;
+    const char *category = NULL;
+    /* Promote this hero's deeds once, keeping save/provider indexes intact. */
+    for (int pass = 0; pass < 2; ++pass)
+    for (int position = 0; position < SIL_ACH_COUNT; ++position)
+    {
+        int i = achievement_order[position].id;
         const sil_achievement_definition *entry = sil_achievement_get(i);
+        if (!entry) continue;
+        bool for_character = current_character && sil_achievement_for_current_character(i);
+        if (character_only && (!for_character || !sil_achievement_revealed(i))) continue;
+        if (for_character != (pass == 0)) continue;
+        const char *section = for_character ? "For this character"
+            : achievement_order[position].category;
+        if (!character_only && (!category || strcmp(category, section)))
+        {
+            category = section;
+            sdl_character_sheet_screen_add_book_paragraph_colored(category, TERM_L_BLUE);
+        }
         uint64_t unlocked = sil_achievement_unlocked_at(i);
+        bool revealed = show_hidden_requirements || sil_achievement_revealed(i);
         int row = achievement_icons[i].row, col = achievement_icons[i].col;
-        if (entry->hidden && !unlocked)
+        if (!revealed)
         {
             /* The shared description symbol conceals the deed's identifying art. */
             sdl_character_sheet_screen_add_book_icon_paragraph(
@@ -64,16 +99,37 @@ static void build_achievement_book(int page)
          * normal pagination and scrolling preserve the chosen readable font. */
         size_t used = strlen(text);
         strnfmt(text + used, sizeof(text) - used, "\n%s", entry->description);
-        sdl_character_sheet_screen_add_book_icon_paragraph(text,
-            unlocked ? TERM_YELLOW : TERM_SLATE, row, col);
+        char progress[256];
+        if (!unlocked && revealed
+            && sil_achievement_progress_text(i, progress, sizeof(progress)))
+        {
+            used = strlen(text);
+            strnfmt(text + used, sizeof(text) - used, "\n%s", progress);
+        }
+        if (achievement_icons[i].source_size > 16)
+            sdl_character_sheet_screen_add_book_atlas_icon_paragraph(text,
+                unlocked ? TERM_YELLOW : TERM_SLATE, row, col,
+                achievement_icons[i].source_size);
+        else
+            sdl_character_sheet_screen_add_book_composite_icon_paragraph(text,
+                unlocked ? TERM_YELLOW : TERM_SLATE, row, col,
+                achievement_icons[i].row2, achievement_icons[i].col2,
+                achievement_icons[i].count);
     }
-    sdl_character_sheet_screen_add_book_paragraph_colored(
-        "Debug, cheat and practice games do not count.",
-        TERM_SLATE);
+    if (character_only)
+        sdl_character_sheet_screen_add_book_paragraph(
+            "Review these deeds in Main menu > Achievements.");
+    else
+    {
+        sdl_character_sheet_screen_add_book_paragraph_colored(
+            "Debug, cheat and practice games do not count.", TERM_SLATE);
+        sdl_character_sheet_screen_add_book_action(show_hidden_requirements
+            ? "Hide hidden requirements [R]" : "Show hidden requirements [R]", 2);
+    }
     if (!sil_achievements_saved())
         sdl_character_sheet_screen_add_book_paragraph_colored(
             "Some achievement progress could not be saved on this device.", TERM_L_RED);
-    if (platform_achievements_available())
+    if (!character_only && platform_achievements_available())
     {
         char key[24];
         if (steamdeck_controls_active())
@@ -90,7 +146,14 @@ static void build_achievement_book(int page)
     sdl_character_sheet_screen_set_book_page(page);
 }
 
-void sil_achievements_show(void)
+static void toggle_hidden_requirements(void)
+{
+    int page = sdl_character_sheet_screen_select_page();
+    show_hidden_requirements = !show_hidden_requirements;
+    build_achievement_book(page, false);
+}
+
+static void show_achievement_book(bool character_only)
 {
     sil_achievements_init();
     sil_achievements_update();
@@ -100,7 +163,8 @@ void sil_achievements_show(void)
     bool old_hide_cursor = hide_cursor;
     hide_cursor = true;
     unsigned int shown_revision = sil_achievements_revision();
-    build_achievement_book(0);
+    show_hidden_requirements = false;
+    build_achievement_book(0, character_only);
     while (1)
     {
         int clicked = 0, action = UI_MENU_CLICK_PRIMARY;
@@ -111,7 +175,7 @@ void sil_achievements_show(void)
         {
             int page = sdl_character_sheet_screen_select_page();
             shown_revision = sil_achievements_revision();
-            build_achievement_book(page);
+            build_achievement_book(page, character_only);
         }
         if (ui_menu_click_take_action(&clicked, &action))
         {
@@ -119,13 +183,19 @@ void sil_achievements_show(void)
             if (action == UI_MENU_CLICK_HOVER) continue;
             if (clicked == SDL_SELECT_CLICK_CLOSE) break;
             if (clicked == 1) { show_platform_achievements(); continue; }
-            if (clicked == SDL_SELECT_CLICK_PAGE_PREV) key = '4';
+            if (clicked == 2) key = 'r';
+            else if (clicked == SDL_SELECT_CLICK_PAGE_PREV) key = '4';
             else if (clicked == SDL_SELECT_CLICK_PAGE_NEXT) key = '6';
             else continue;
         }
         else if (key == UI_MENU_CLICK_WAKE_KEY) continue;
         ui_menu_click_clear();
-        if ((key == 'p' || key == 'P'
+        if (!character_only && (key == 'r' || key == 'R'))
+        {
+            toggle_hidden_requirements();
+            continue;
+        }
+        if (!character_only && (key == 'p' || key == 'P'
                 || (steamdeck_controls_active() && key == steamdeck_secondary_key()))
             && platform_achievements_available())
         {
@@ -164,4 +234,14 @@ void sil_achievements_show(void)
         p_ptr->window |= PW_INVEN | PW_EQUIP;
         handle_stuff();
     }
+}
+
+void sil_achievements_show(void)
+{
+    show_achievement_book(false);
+}
+
+void sil_achievements_show_character_deeds(void)
+{
+    show_achievement_book(true);
 }

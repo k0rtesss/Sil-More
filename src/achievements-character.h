@@ -2,6 +2,8 @@
 #define SIL_ACHIEVEMENTS_CHARACTER_H
 
 /* Include angband.h before this internal gameplay interface. */
+bool sil_achievement_for_current_character(int id);
+void sil_achievement_character_on_start(bool first_entry);
 void sil_achievement_character_on_forged(object_type* object);
 void sil_achievement_character_on_smithing_completed(
     const object_type* object, bool custom_artefact, int forge_uses_before,

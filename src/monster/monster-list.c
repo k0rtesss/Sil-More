@@ -275,6 +275,10 @@ static void compact_monsters_aux(int i1, int i2)
     if (p_ptr->health_who == i1)
         p_ptr->health_who = i2;
 
+    /* Duel songs track the same monster across list compaction. */
+    if (p_ptr->song_target_idx == i1)
+        p_ptr->song_target_idx = i2;
+
     /* Hack -- move monster */
     monster_social_remap(i1, i2);
     memcpy(&mon_list[i2], &mon_list[i1], sizeof(monster_type));

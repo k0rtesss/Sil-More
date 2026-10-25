@@ -66,7 +66,8 @@ static void checks(void)
     monster_type* m=ready(41);
     if(!strcmp(name,"depth")) {
         sil_achievements_on_depth(1);assert(!earned(SIL_ACH_THE_ROAD_GOES_EVER_ON));
-        sil_achievements_on_depth(2);assert(earned(SIL_ACH_THE_ROAD_GOES_EVER_ON));
+        sil_achievements_on_depth(2);assert(!earned(SIL_ACH_THE_ROAD_GOES_EVER_ON));
+        sil_achievements_on_depth(3);assert(earned(SIL_ACH_THE_ROAD_GOES_EVER_ON));
     } else if(!strcmp(name,"purchase")) {
         p_ptr->new_exp=1000000;
         for(int a=1;a<4;a++)p_ptr->innate_ability[S_MEL][a]=true;
@@ -112,13 +113,17 @@ static void checks(void)
         step(10,10);step(10,9);assert(!earned(SIL_ACH_HELCARAXE));
         step(10,10);step(10,11);assert(earned(SIL_ACH_HELCARAXE));
         assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION));
-    } else if(!strcmp(name,"fire")) {
+    } else if(!strncmp(name,"fire",4)) {
+        remove_enemy();
         cave_feat[10][10]=FEAT_ICE;project_f(1,10,10,0,0,0,0,GF_FIRE);
         assert(!earned(SIL_ACH_FIRE_AND_WATER));
+        m=ready(41);
         u32b old=r_info[m->r_idx].flags1;r_info[m->r_idx].flags1|=RF1_PEACEFUL;
         cave_feat[10][10]=FEAT_ICE;project_f(-1,10,10,0,0,0,0,GF_FIRE);
         assert(!earned(SIL_ACH_FIRE_AND_WATER));r_info[m->r_idx].flags1=old;
-        cave_feat[10][10]=FEAT_ICE;project_f(-1,10,10,0,0,0,0,GF_FIRE);
+        cave_feat[10][10]=FEAT_ICE;
+        project_f(!strcmp(name,"fire-monster")?1:!strcmp(name,"fire-environment")?0:-1,
+            10,10,0,0,0,0,GF_FIRE);
         assert(earned(SIL_ACH_FIRE_AND_WATER));
     } else if(!strcmp(name,"lava")) {
         remove_enemy();p_ptr->resist_fire=4;
@@ -147,14 +152,31 @@ static void checks(void)
         step(10,border);step(11,border);step(12,border);step(12,border-1);
         assert(earned(SIL_ACH_A_JOURNEY_IN_THE_DARK));
     } else if(!strcmp(name,"map")) {
+        char text[256];
         metar.id=125;partition(3,0);sil_achievements_on_partition_entry(10,10);
         partition(4,0);sil_achievements_on_partition_entry(10,10);
+        sil_achievements_on_level_entry(false);
+        assert(sil_achievement_progress_text(SIL_ACH_A_MAP_OF_THE_IRON_HELLS,text,sizeof(text)));
+        assert(strstr(text,"This run: 2/5 regions."));
+        /* A long step/teleport clears crossings, but retains this run's visits. */
+        sil_achievements_on_movement(10,10,12,12);
         partition(5,BIG_CAVE_ICE);sil_achievements_on_partition_entry(10,10);
         partition(5,BIG_CAVE_FIRE);sil_achievements_on_partition_entry(10,10);
         assert(!earned(SIL_ACH_A_MAP_OF_THE_IRON_HELLS));
-        metar.id=126;partition(5,BIG_CAVE_POIS);sil_achievements_on_partition_entry(10,10);
+        assert(sil_achievement_progress_text(SIL_ACH_A_MAP_OF_THE_IRON_HELLS,text,sizeof(text)));
+        assert(strstr(text,"This run: 4/5 regions."));
+        /* Another character in the same Tale starts with no earlier visits. */
+        sil_achievements_begin_run();
+        partition(5,BIG_CAVE_POIS);sil_achievements_on_partition_entry(10,10);
         assert(!earned(SIL_ACH_A_MAP_OF_THE_IRON_HELLS));
-        metar.id=125;sil_achievements_on_partition_entry(10,10);
+        assert(sil_achievement_progress_text(SIL_ACH_A_MAP_OF_THE_IRON_HELLS,text,sizeof(text)));
+        assert(strstr(text,"This run: 1/5 regions."));
+        sil_achievements_on_level_entry(true);
+        partition(3,0);sil_achievements_on_partition_entry(10,10);
+        partition(4,0);sil_achievements_on_partition_entry(10,10);
+        partition(5,BIG_CAVE_ICE);sil_achievements_on_partition_entry(10,10);
+        assert(!earned(SIL_ACH_A_MAP_OF_THE_IRON_HELLS));
+        partition(5,BIG_CAVE_FIRE);sil_achievements_on_partition_entry(10,10);
         assert(earned(SIL_ACH_A_MAP_OF_THE_IRON_HELLS));
     } else if(!strcmp(name,"elbereth")) {
         ability(S_SNG,SNG_ELBERETH);p_ptr->song1=SNG_ELBERETH;
@@ -254,7 +276,7 @@ def main():
                     "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
                     *("-Wl,--wrap=" + name for name in wraps), "-o", str(exe)],
                    cwd=BUILD, env=env, check=True)
-    cases = ("depth", "purchase", "web", "wolf", "water", "ice", "fire", "lava", "poison",
+    cases = ("depth", "purchase", "web", "wolf", "water", "ice", "fire", "fire-monster", "fire-environment", "lava", "poison",
              "labyrinth", "map", "elbereth", "freedom", "thresholds", "contest", "will",
              "indomitable", "curse", "checks")
     for case in cases:

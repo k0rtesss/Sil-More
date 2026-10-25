@@ -980,13 +980,15 @@ static Uint8 sdl_popup_notification_scaled_alpha(Uint8 alpha,
 }
 
 static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
-    TTF_Font** out_font)
+    SDL_FRect* out_text, TTF_Font** out_font)
 {
     SDL_FRect menu_rect;
     SDL_Rect screen;
     TTF_Font* font;
     int font_px;
     int text_w;
+    int text_h;
+    int wrap_w;
     float pad_x;
     float pad_y;
     float gap;
@@ -1027,14 +1029,14 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
-    panel_h = (float)font_px * 1.10f + pad_y * 2.0f;
-    if (get_sdl_menu_bigger_font()) {
-        int width = 0;
-        int height = 0;
-        if (TTF_GetStringSizeWrapped(font, g_popup_notification.text, 0,
-                MAX(1, (int)(panel_w - pad_x * 2.0f)), &width, &height))
-            panel_h = MAX(panel_h, height + pad_y * 2.0f);
-    }
+    /* Measure and draw in the same padded rectangle for every font profile.
+     * A one-line height clips wrapped achievement titles in normal mode. */
+    wrap_w = MAX(1, (int)(panel_w - pad_x * 2.0f));
+    if (!TTF_GetStringSizeWrapped(font, g_popup_notification.text, 0,
+            wrap_w, &text_w, &text_h))
+        return false;
+    panel_h = MAX((float)font_px * 1.10f, (float)text_h)
+        + pad_y * 2.0f;
     panel = (SDL_FRect){ .w = panel_w, .h = panel_h };
     if (menu_button_visible) {
         panel.x = menu_rect.x + (menu_rect.w - panel_w) * 0.5f;
@@ -1061,6 +1063,9 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
 
     if (out_panel)
         *out_panel = panel;
+    if (out_text)
+        *out_text = (SDL_FRect){ panel.x + pad_x, panel.y + pad_y,
+            (float)wrap_w, panel.h - pad_y * 2.0f };
     if (out_font)
         *out_font = font;
     return true;
@@ -1069,6 +1074,7 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
 void sdl_popup_notification_render(void)
 {
     SDL_FRect panel;
+    SDL_FRect text_rect;
     SDL_FRect shadow;
     TTF_Font* font;
     SDL_Color accent;
@@ -1076,7 +1082,7 @@ void sdl_popup_notification_render(void)
     Uint8 alpha;
 
     alpha = sdl_popup_notification_alpha(SDL_GetTicksNS());
-    if (!alpha || !sdl_popup_notification_layout(&panel, &font))
+    if (!alpha || !sdl_popup_notification_layout(&panel, &text_rect, &font))
         return;
 
     shadow = panel;
@@ -1098,7 +1104,7 @@ void sdl_popup_notification_render(void)
     text = g_state.palette[TERM_L_WHITE];
     text.a = alpha;
     (void)sdl_main_menu_draw_text(font, g_popup_notification.text,
-        panel.x + panel.w * 0.07f, panel.y, panel.w * 0.86f, panel.h,
+        text_rect.x, text_rect.y, text_rect.w, text_rect.h,
         text, MAIN_MENU_TEXT_CENTER);
 }
 

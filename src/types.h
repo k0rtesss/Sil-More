@@ -1262,7 +1262,7 @@ struct player_type
     s16b achievement_fall_depth; /* Source floor of a pending survived fall. */
     /* Current-floor lock jams, saved sparsely as coordinate pairs. */
     byte achievement_jammed_doors[(MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 7) / 8];
-    u32b achievement_discovery_flags; /* Tracked crossings and first-wolf history. */
+    u32b achievement_discovery_flags; /* Crossings, first wolf and this run's region visits. */
     u32b achievement_rage_epoch; /* Separates distinct bouts of rage. */
     s16b achievement_water_from_y, achievement_water_from_x;
     s16b achievement_water_entry_y, achievement_water_entry_x;
@@ -1275,6 +1275,7 @@ struct player_type
     byte achievement_ringil_wounds; /* Saturates at the seven required blows. */
     s16b achievement_glorfindel_depth; /* Pending survival after a cliff duel. */
     u16b achievement_artefact_rings[3]; /* Distinct projects, not reforges. */
+    byte achievement_balrogs; /* Seven named Balrogs, scoped to this adventure. */
 
     s16b mhp; /* Max hit pts */
     s16b chp; /* Cur hit pts */
@@ -1287,10 +1288,11 @@ struct player_type
     s16b stat_base[A_MAX]; /* The base ('internal') stat values */
     s16b stat_drain[A_MAX]; /* The negative modifier from stat drain */
     s16b stat_disease[A_MAX]; /* Negative penalties restored only by curing disease */
-    s16b diseased; /* 0: healthy; otherwise player turns until the next disease penalty */
+    s16b diseased; /* 0: healthy; otherwise progression units (2/turn, 1 with Hardiness) */
     byte disease_name; /* Stable 1-based name index; 0 when healthy */
     byte disease_cure; /* Herb sval assigned to this infection */
     byte disease_knowledge; /* DISEASE_KNOWN_* discoveries for this infection */
+    byte disease_immunity; /* Cured disease-name bits; cleared only for a new run */
 
     s16b skill_base[S_MAX]; /* The base skill values */
 

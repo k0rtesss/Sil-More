@@ -90,11 +90,16 @@ errr rd_extra(void)
         rd_s16b(&p_ptr->diseased);
         for (i = 0; i < A_MAX; i++)
             rd_s16b(&p_ptr->stat_disease[i]);
-        if (p_ptr->diseased < 0 || p_ptr->diseased > DISEASE_INTERVAL)
+        bool disease_progress_units = savefile_version_at_least(0, 9, 9, 2);
+        int disease_countdown_max = disease_progress_units
+            ? DISEASE_COUNTDOWN_MAX : DISEASE_INTERVAL;
+        if (p_ptr->diseased < 0 || p_ptr->diseased > disease_countdown_max)
         {
             note("Invalid disease countdown in savefile.");
             return -1;
         }
+        if (!disease_progress_units)
+            p_ptr->diseased *= 2;
         for (i = 0; i < A_MAX; i++)
         {
             if (p_ptr->stat_disease[i] > 0
@@ -109,11 +114,14 @@ errr rd_extra(void)
     p_ptr->disease_name = 0;
     p_ptr->disease_cure = 0;
     p_ptr->disease_knowledge = 0;
+    p_ptr->disease_immunity = 0;
     if (savefile_version_at_least(0, 9, 8, 9))
     {
         rd_byte(&p_ptr->disease_name);
         rd_byte(&p_ptr->disease_cure);
         rd_byte(&p_ptr->disease_knowledge);
+        if (savefile_version_at_least(0, 9, 9, 2))
+            rd_byte(&p_ptr->disease_immunity);
         if (p_ptr->disease_name > DISEASE_NAME_COUNT
             || p_ptr->disease_cure >= DISEASE_HERB_COUNT
             || (p_ptr->disease_knowledge & ~(DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE))
@@ -121,7 +129,9 @@ errr rd_extra(void)
                 && !(p_ptr->disease_knowledge & DISEASE_KNOWN_NAME))
             || (p_ptr->diseased && !p_ptr->disease_name)
             || (!p_ptr->diseased && (p_ptr->disease_name
-                || p_ptr->disease_cure || p_ptr->disease_knowledge)))
+                || p_ptr->disease_cure || p_ptr->disease_knowledge))
+            || (p_ptr->diseased && (p_ptr->disease_immunity
+                & (1u << (p_ptr->disease_name - 1)))))
         {
             note("Invalid disease identity or diagnosis in savefile.");
             return -1;
@@ -129,7 +139,7 @@ errr rd_extra(void)
     }
     else if (p_ptr->diseased)
     {
-        disease_assign_identity();
+        (void)disease_assign_identity();
     }
 
     /* Read the skill info - all skills including S_SPC (Special) present in 0.9.0 */
@@ -620,6 +630,20 @@ errr rd_extra(void)
                     if (p_ptr->achievement_artefact_rings[j] == artefact) return -1;
             }
         }
+    }
+    p_ptr->achievement_balrogs = 0;
+    if (savefile_version_at_least(0, 9, 8, 39))
+    {
+        byte balrog_marker;
+        rd_byte(&balrog_marker);
+        if (balrog_marker != 0xB0) return -1;
+        rd_byte(&p_ptr->achievement_balrogs);
+        if (p_ptr->achievement_balrogs & 0x80) return -1;
+    }
+    else
+    {
+        /* Older comeback windows allowed partial healing; that history is unknown. */
+        p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
     }
     log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u",
              p_ptr->oath_type, p_ptr->oaths_broken, (unsigned)load_byte_offset);

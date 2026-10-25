@@ -4648,7 +4648,7 @@ void do_cmd_search_skeleton(int y, int x, s16b o_idx)
 
     /* Exposure happens once even when this search yields nothing. */
     if (o_ptr->sval == SV_SKELETON_ORC && !p_ptr->diseased
-        && one_in_(DISEASE_SKELETON_ONE_IN))
+        && rand_int(100) < DISEASE_SKELETON_PERCENT)
         (void)infect_disease();
 
     object_generation_mode = OB_GEN_MODE_SKELETON;
@@ -5030,11 +5030,7 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
     looked = chest_was_inspected(o_ptr);
 
     object_desc(title, sizeof(title), o_ptr, true, 3);
-    SDL_strlcpy(desc,
-        "Interaction check: choose an action, then the game rolls automatically. "
-        "The displayed percentage is the success probability; a tie fails. "
-        "Acting spends one turn. Closing this prompt spends none. ",
-        sizeof(desc));
+    SDL_strlcpy(desc, ui_question_interaction_help_once(), sizeof(desc));
     if (previous[0])
         chest_desc_append(desc, sizeof(desc), previous);
 

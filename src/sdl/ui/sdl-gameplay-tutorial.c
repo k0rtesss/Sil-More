@@ -102,6 +102,11 @@ void sdl_gameplay_tutorial_sync(void)
     bool active = tutorial_is_active();
     int count = 0;
     const bool *keys;
+    /* A banner can arrive while the same tutorial card is still active.
+     * Close it before the revision shortcut so its highlighted map square
+     * and input remain available without restarting the tutorial. */
+    if (active && dismiss_active_narrative_banner())
+        g_state.need_present = true;
     if (!tutorial_force_sync && revision == tutorial_seen_revision && active == tutorial_was_active)
         return;
     tutorial_force_sync=false;

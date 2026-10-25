@@ -566,8 +566,8 @@ void sing_song_of_elbereth(int score)
         monster_type* m_ptr = &mon_list[i];
         monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
-        /* Ignore dead monsters */
-        if (!m_ptr->r_idx)
+        /* Thralls are allies, so the player's song does not frighten them. */
+        if (!m_ptr->r_idx || monster_is_thrall(m_ptr))
             continue;
 
         resistance = monster_skill(m_ptr, S_WIL);

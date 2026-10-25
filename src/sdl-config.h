@@ -524,8 +524,18 @@ bool sdl_config_character_wheel_tutorial_seen(void);
 void sdl_config_mark_character_wheel_tutorial_seen(void);
 bool sdl_config_keyboard_preset_prompt_seen(void);
 void sdl_config_mark_keyboard_preset_prompt_seen(void);
+/* Claim the shared chest/door explanation once per app config, across restarts. */
+bool sdl_config_take_interaction_check_help(void);
 bool option_is_app_persistent(int opt);
 
 /* Optional existing-atlas sprite beside a normal book paragraph. */
 void sdl_character_sheet_screen_add_book_icon_paragraph(const char* text,
     int attr, int row, int col);
+/* Existing sprites in the same fixed reading gutter (compact triangles for
+ * three on narrow screens). Equal coordinates repeat count times; different
+ * coordinates compose two sprites. */
+void sdl_character_sheet_screen_add_book_composite_icon_paragraph(const char* text,
+    int attr, int row, int col, int row2, int col2, int count);
+/* One precomposed square, using the same fixed gutter and 16px grid origin. */
+void sdl_character_sheet_screen_add_book_atlas_icon_paragraph(const char* text,
+    int attr, int row, int col, int source_size);

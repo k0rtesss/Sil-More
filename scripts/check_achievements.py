@@ -34,6 +34,8 @@ player_other *op_ptr = &options;
 cptr ANGBAND_DIR_APEX;
 bool character_generated = true;
 static int notifications, messages, syncs;
+static int carried_silmarils;
+int silmarils_possessed(void) { return carried_silmarils; }
 static uint64_t remote, submitted, remote_upper, submitted_upper;
 maxima *z_info;
 monster_type *mon_list;
@@ -75,6 +77,10 @@ void sdl_popup_notification_show(cptr text)
 { assert(strstr(text, "Achievement unlocked:")); ++notifications; }
 void sil_play_games_sync(const uint64_t* masks) { submitted = masks[0]; submitted_upper = masks[1]; ++syncs; }
 uint64_t sil_play_games_unlocked(unsigned word) { return word == 0 ? remote : word == 1 ? remote_upper : 0; }
+#ifdef SIL_STEAMWORKS
+void sil_steamworks_sync_achievements(const uint64_t* masks) { (void)masks; }
+uint64_t sil_steamworks_achievements_unlocked(unsigned word) { (void)word; return 0; }
+#endif
 
 /* Gameplay callback boundaries; full production routes have separate fixtures. */
 void sil_achievement_character_on_player_turn(void) {}
@@ -90,6 +96,7 @@ static void clean_player(void)
 {
     memset(&player, 0, sizeof(player));
     memset(&options, 0, sizeof(options));
+    carried_silmarils = 0;
     player.playing = true;
     player.chp = player.mhp = 20;
     player.energy_use = 100;
@@ -139,8 +146,12 @@ static void earn_all(void)
 {
     blocked_games();
     sil_achievements_on_depth(1); assert(!sil_achievements_mask(0));
-    sil_achievements_on_escape(0); assert(!sil_achievements_mask(0));
-    player.depth = 1; sil_achievements_on_escape(1); assert(!sil_achievements_mask(0));
+    sil_achievements_on_depth(2); assert(!sil_achievements_mask(0));
+    sil_achievements_on_depth(3); assert(sil_achievements_mask(0) == ROAD_BIT);
+    assert(notifications == 1 && messages == 1);
+    sil_achievements_on_depth(3); assert(notifications == 1 && messages == 1);
+    sil_achievements_on_escape(0); assert(sil_achievements_mask(0) == ROAD_BIT);
+    player.depth = 1; sil_achievements_on_escape(1); assert(sil_achievements_mask(0) == ROAD_BIT);
     sil_achievements_on_depth(10);
     uint64_t first = sil_achievement_unlocked_at(SIL_ACH_INTO_THE_DEEP);
     assert(first && sil_achievements_mask(0) == (1 | ROAD_BIT) && sil_achievements_saved());
@@ -191,18 +202,33 @@ static void expanded_conditions(const char *test)
     sil_achievements_begin_run();
     player.depth = 5;
     if (!strcmp(test, "new-events")) {
-        assert(SIL_ACH_COUNT == 93);
+        assert(SIL_ACH_COUNT == 110);
+#ifdef SIL_STEAMWORKS
+        assert(SIL_ACH_ACTIVE_COUNT == 100);
+#else
+        assert(SIL_ACH_ACTIVE_COUNT == 110);
+#endif
         int hidden = 0;
         for (int id = 0; id < SIL_ACH_COUNT; ++id)
-            hidden += sil_achievement_get(id)->hidden;
-        assert(hidden == 83);
+            if (sil_achievement_get(id)) hidden += sil_achievement_get(id)->hidden;
+#ifdef SIL_STEAMWORKS
+        assert(hidden == 48);
+#else
+        assert(hidden == 50);
+#endif
+        assert(!sil_achievement_get(SIL_ACH_THREE_LIGHTS_IN_EXILE)->hidden);
+        assert(sil_achievement_revealed(SIL_ACH_THREE_LIGHTS_IN_EXILE));
         assert(!strcmp(sil_achievement_get(SIL_ACH_THE_QUIET_ROAD)->title,
-            "A Very Polite Burglary"));
+            "Not to Strike Without Need"));
         assert(!strcmp(sil_achievement_get(SIL_ACH_NO_RINGS_ATTACHED)->title,
             "No Rings Attached"));
         for (int id = SIL_ACH_NO_RINGS_ATTACHED; id < SIL_ACH_COUNT; ++id) {
             int before = notifications;
             sil_achievements_on_event((sil_achievement_id)id);
+            if (!sil_achievement_get(id)) {
+                assert(!earned(id) && notifications == before);
+                continue;
+            }
             assert(earned(id) && notifications == before + 1);
             sil_achievements_on_event((sil_achievement_id)id);
             assert(notifications == before + 1);
@@ -274,7 +300,7 @@ static void escape_challenges(const char *test)
         sil_achievements_on_escape(1); assert(!earned(SIL_ACH_WORD_UNBROKEN));
         broken_oath = false; sil_achievements_on_escape(1); assert(earned(SIL_ACH_WORD_UNBROKEN));
     } else if (!strcmp(test, "song")) {
-        player.skill_base[S_SNG] = 20;
+        player.skill_base[S_SNG] = 19;
         for (int i=0; i<120; ++i) sil_achievements_on_player_turn();
         assert(!player.achievement_singing_turns);
         player.song1 = SNG_ELBERETH;
@@ -282,14 +308,18 @@ static void escape_challenges(const char *test)
         assert(!player.achievement_singing_turns); player.energy_use = 100;
         for (int i=0; i<99; ++i) sil_achievements_on_singing_turn();
         sil_achievements_on_escape(1); assert(!earned(SIL_ACH_SONG_BENEATH_THE_MOUNTAIN));
-        sil_achievements_on_singing_turn(); player.skill_base[S_SNG] = 19;
-        sil_achievements_on_escape(1); assert(!earned(SIL_ACH_SONG_BENEATH_THE_MOUNTAIN));
+        player.achievement_singing_turns = 0;
         player.skill_base[S_SNG] = 20; sil_achievements_on_escape(1);
         assert(earned(SIL_ACH_SONG_BENEATH_THE_MOUNTAIN));
     } else if (!strcmp(test, "gates")) {
         sil_achievements_on_level_entry(false); assert(!earned(SIL_ACH_THERE_AND_BACK_AGAIN));
         player.morgoth_hall_entered = true; player.depth = 1;
         sil_achievements_on_level_entry(false); assert(!earned(SIL_ACH_THERE_AND_BACK_AGAIN));
+        player.depth = 0; carried_silmarils = 1;
+        sil_achievements_on_level_entry(false); assert(!earned(SIL_ACH_THERE_AND_BACK_AGAIN));
+        carried_silmarils = 3;
+        sil_achievements_on_escape(3); assert(!earned(SIL_ACH_THERE_AND_BACK_AGAIN));
+        carried_silmarils = 0;
         player.depth = 0; sil_achievements_on_level_entry(false);
         assert(earned(SIL_ACH_THERE_AND_BACK_AGAIN));
     } else if (!strcmp(test, "taint")) {
@@ -300,16 +330,22 @@ static void escape_challenges(const char *test)
 }
 static void comeback(void)
 {
-    player.depth = 5; player.chp = 1;
-    sil_achievements_on_damage(9, 10);
-    assert(player.achievement_flags & SIL_ACH_RUN_COMEBACK);
-    player.chp = 20; sil_achievements_on_healing(); player.chp = 5;
+    maxima limits = {0};
+    monster_type monsters[2] = {0};
+    monster_race races[2] = {0};
+    limits.r_max = 2; z_info = &limits;
+    monsters[1].r_idx = 1; mon_list = monsters; mon_max = 2; r_info = races;
+    player.chp = 2;
     sil_achievements_on_monster_killed(1, -1); assert(!earned(SIL_ACH_BY_A_THREAD));
-    player.chp = 1; sil_achievements_on_damage(9,10);
+    player.depth = 5; player.chp = 1;
+    sil_achievements_on_monster_killed(1, 0); assert(!earned(SIL_ACH_BY_A_THREAD));
+    races[1].flags1 = RF1_PEACEFUL;
+    sil_achievements_on_monster_killed(1, -1); assert(!earned(SIL_ACH_BY_A_THREAD));
+    races[1].flags1 = 0;
+    /* A save/level boundary or previous healing cannot impose an old hit window. */
+    player.chp = 2; sil_achievements_on_healing(); player.chp = 1;
     sil_achievements_on_level_entry(false);
-    sil_achievements_on_monster_killed(1,-1); assert(!earned(SIL_ACH_BY_A_THREAD));
-    sil_achievements_on_damage(9,10); sil_achievements_on_level_entry(true);
-    sil_achievements_on_monster_killed(1,0); assert(!earned(SIL_ACH_BY_A_THREAD));
+    assert(!(player.achievement_flags & SIL_ACH_RUN_COMEBACK));
     sil_achievements_on_monster_killed(1,-1); assert(earned(SIL_ACH_BY_A_THREAD));
 }
 static void craft_and_combat(void)
@@ -357,6 +393,10 @@ int main(int argc, char **argv)
     assert(argc == 3); ANGBAND_DIR_APEX = argv[2]; clean_player();
     assert(SDL_Init(0)); sil_achievements_init();
     assert(!sil_achievement_get(-1) && !sil_achievement_get(SIL_ACH_COUNT));
+    assert((sil_achievement_get(SIL_ACH_RELEASE_FROM_BONDAGE) != NULL)
+        == sil_achievement_enabled(SIL_ACH_RELEASE_FROM_BONDAGE));
+    assert((sil_achievement_get(SIL_ACH_A_WILL_OF_YOUR_OWN) != NULL)
+        == sil_achievement_enabled(SIL_ACH_A_WILL_OF_YOUR_OWN));
     assert(!sil_achievement_unlocked_at(-1));
     if (!strcmp(argv[1], "earn")) earn_all();
     else if (!strcmp(argv[1], "reload")) {
@@ -369,6 +409,25 @@ int main(int argc, char **argv)
         assert(sil_achievements_mask(0) == 2 && sil_achievements_saved() && !notifications);
         ticks = 1000; remote = 0; sil_achievements_update();
         assert(sil_achievements_mask(0) == 2 && submitted == 2);
+    } else if (!strcmp(argv[1], "retired")) {
+        uint64_t retired = (UINT64_C(1) << SIL_ACH_RELEASE_FROM_BONDAGE)
+            | (UINT64_C(1) << SIL_ACH_A_WILL_OF_YOUR_OWN);
+#ifdef SIL_STEAMWORKS
+        assert(!(sil_achievement_word_mask(0) & retired));
+#else
+        assert((sil_achievement_word_mask(0) & retired) == retired);
+#endif
+        remote = retired; sil_achievements_update();
+        sil_achievements_on_event(SIL_ACH_RELEASE_FROM_BONDAGE);
+        sil_achievements_on_event(SIL_ACH_A_WILL_OF_YOUR_OWN);
+        sil_achievements_flush();
+        uint64_t expected = 1;
+#ifndef SIL_STEAMWORKS
+        expected |= retired;
+#endif
+        assert(sil_achievements_mask(0) == expected && !notifications);
+        assert(earned(SIL_ACH_RELEASE_FROM_BONDAGE) == sil_achievement_enabled(SIL_ACH_RELEASE_FROM_BONDAGE));
+        assert(earned(SIL_ACH_A_WILL_OF_YOUR_OWN) == sil_achievement_enabled(SIL_ACH_A_WILL_OF_YOUR_OWN));
     } else if (!strcmp(argv[1], "unknown")) sil_achievements_on_depth(10);
     else if (!strcmp(argv[1], "limit-earn")) {
         metar.id = 17; sil_achievements_on_depth(10);
@@ -423,6 +482,7 @@ def main():
     exe = OUT / "check.exe"
     subprocess.run([
         "C:/msys64/mingw64/bin/cc.exe", "-std=c17", "-O0", "-Wall", "-Wextra",
+        *(["-DSIL_STEAMWORKS"] if os.environ.get("ACHIEVEMENTS_STEAM") == "1" else []),
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
         str(ROOT / "src/achievements.c"), str(ROOT / "src/cJSON.c"),
         "-L", str(BUILD / "_deps/SDL"), "-lSDL3", "-lm",
@@ -463,6 +523,16 @@ def main():
         run("unknown", profile)
         payload = json.loads((profile / "achievements.json").read_text())
         assert payload["extra"] == "preserved" and payload["unlocked"]["FUTURE_ACH"] == 123
+        profile = base / "retired"
+        profile.mkdir()
+        (profile / "achievements.json").write_text(json.dumps({
+            "version": 1, "unlocked": {"INTO_THE_DEEP": 123,
+                "RELEASE_FROM_BONDAGE": 456, "A_WILL_OF_YOUR_OWN": 789,
+                "FUTURE_ACH": 321}}))
+        run("retired", profile)
+        payload = json.loads((profile / "achievements.json").read_text())
+        assert payload["unlocked"] == {"INTO_THE_DEEP": 123, "FUTURE_ACH": 321,
+            "RELEASE_FROM_BONDAGE": 456, "A_WILL_OF_YOUR_OWN": 789}
         # Recover profiles written above the former 64 KiB cap. Bound optional
         # history while retaining the current Tale's exact character set.
         profile = base / "history-pressure"

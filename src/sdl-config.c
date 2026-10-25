@@ -1763,6 +1763,7 @@ static bool g_app_touch_tutorial_seen = false;
 static bool g_app_mouse_tutorial_seen = false;
 static bool g_app_character_wheel_tutorial_seen = false;
 static bool g_app_keyboard_preset_prompt_seen = false;
+static bool g_app_interaction_check_help_seen = false;
 
 static const byte app_input_options[] = {
     OPT_hjkl_movement, OPT_angband_keyset,
@@ -2116,6 +2117,7 @@ void sdl_config_load_app_options(const char* filename)
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
     g_app_keyboard_preset_prompt_seen = false;
+    g_app_interaction_check_help_seen = false;
 
     if (!filename || !filename[0]) {
         log_warn("sdl_config_load_app_options: no config filename provided");
@@ -2170,6 +2172,11 @@ void sdl_config_load_app_options(const char* filename)
         "keyboardPresetPromptSeen");
     if (cJSON_IsBool(item))
         g_app_keyboard_preset_prompt_seen = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(app_options,
+        "interactionCheckHelpSeen");
+    if (cJSON_IsBool(item))
+        g_app_interaction_check_help_seen = cJSON_IsTrue(item);
 
     sdl_config_load_app_option_group(app_options, "input", app_input_options);
     sdl_config_load_app_option_group(app_options, "interface", app_interface_options);
@@ -2347,6 +2354,16 @@ bool sdl_config_keyboard_preset_prompt_seen(void)
 void sdl_config_mark_keyboard_preset_prompt_seen(void)
 {
     g_app_keyboard_preset_prompt_seen = true;
+}
+
+bool sdl_config_take_interaction_check_help(void)
+{
+    if (g_app_interaction_check_help_seen)
+        return false;
+
+    g_app_interaction_check_help_seen = true;
+    (void)save_pane_config_to_json();
+    return true;
 }
 
 static void sdl_config_load_touch_binding_array(cJSON* array, int* dst, int max_count)
@@ -5964,6 +5981,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
                 g_app_character_wheel_tutorial_seen);
             cJSON_AddBoolToObject(app_options, "keyboardPresetPromptSeen",
                 g_app_keyboard_preset_prompt_seen);
+            cJSON_AddBoolToObject(app_options, "interactionCheckHelpSeen",
+                g_app_interaction_check_help_seen);
 
             sdl_config_save_app_option_group(app_options, "input", app_input_options);
             sdl_config_save_app_option_group(app_options, "interface", app_interface_options);

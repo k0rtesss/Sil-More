@@ -13,6 +13,13 @@ static bool is_mining_thrall(const monster_type* m_ptr)
         || m_ptr->r_idx == R_IDX_ELF_THRALL;
 }
 
+bool monster_is_thrall(const monster_type* m_ptr)
+{
+    return is_mining_thrall(m_ptr)
+        || m_ptr->r_idx == R_IDX_ALERT_HUMAN_THRALL
+        || m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL;
+}
+
 static bool thrall_can_walk(int y, int x)
 {
     return in_bounds_fully(y, x) && cave_empty_bold(y, x)

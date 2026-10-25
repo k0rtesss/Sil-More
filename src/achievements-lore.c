@@ -56,6 +56,10 @@ static struct {
     bool melee, unarmed;
 } attack;
 
+/* The cutting action's noise resolves before the next input prompt. This
+ * pending outcome never crosses a player save boundary and needs no save field. */
+static bool quiet_cut_pending;
+
 static bool attack_uses(int artefact)
 {
     return attack.artefact == artefact || attack.secondary == artefact;
@@ -74,12 +78,52 @@ void sil_achievement_lore_attack_end(void)
 
 void sil_achievement_lore_reset(void)
 {
+    quiet_cut_pending = false;
     p_ptr->achievement_lore_flags = 0;
     p_ptr->achievement_ringil_wounds = 0;
     p_ptr->achievement_glorfindel_depth = -1;
     memset(p_ptr->achievement_artefact_rings, 0,
         sizeof(p_ptr->achievement_artefact_rings));
     sil_achievement_lore_attack_end();
+}
+
+bool sil_achievement_lore_morgoth_asleep(void)
+{
+    if (!sil_achievements_eligible() || p_ptr->depth != MORGOTH_DEPTH
+        || p_ptr->morgoth_slain || !mon_list) return false;
+    for (int i = 1; i < mon_max; ++i)
+        if (mon_list[i].r_idx == R_IDX_MORGOTH && mon_list[i].hp > 0)
+            return mon_list[i].alertness < ALERTNESS_UNWARY;
+    return false;
+}
+
+void sil_achievement_lore_on_silmaril_cut(bool morgoth_was_asleep)
+{
+    quiet_cut_pending = morgoth_was_asleep
+        && sil_achievement_lore_morgoth_asleep();
+}
+
+void sil_achievement_lore_on_morgoth_alertness(int alertness)
+{
+    /* Waking and being sung back to sleep cannot restore a quiet attempt. */
+    if (alertness >= ALERTNESS_UNWARY) quiet_cut_pending = false;
+}
+
+void sil_achievement_lore_on_perception(void)
+{
+    bool pending = quiet_cut_pending;
+    quiet_cut_pending = false;
+    if (pending && sil_achievement_lore_morgoth_asleep())
+        sil_achievements_on_event(SIL_ACH_A_BURGLARS_BUSINESS);
+}
+
+void sil_achievement_lore_on_archery_kill(int race)
+{
+    if (!sil_achievements_kill_eligible() || !hero(0xef168bf1, 0xb8fd5e8d)
+        || !r_info || !z_info || race <= 0 || race >= z_info->r_max
+        || !(r_info[race].flags1 & RF1_UNIQUE)
+        || (r_info[race].flags1 & RF1_PEACEFUL)) return;
+    sil_achievements_on_event(SIL_ACH_STRONGBOW);
 }
 
 void sil_achievement_lore_attack_begin(int m_idx, const object_type* weapon,
@@ -196,6 +240,7 @@ void sil_achievement_lore_on_flee(const monster_type* monster)
 
 void sil_achievement_lore_on_travel(int from_depth, int to_depth)
 {
+    if (from_depth != to_depth) quiet_cut_pending = false;
     if (from_depth != to_depth
         && p_ptr->achievement_glorfindel_depth == from_depth)
     {
@@ -208,9 +253,11 @@ void sil_achievement_lore_on_travel(int from_depth, int to_depth)
 void sil_achievement_lore_on_escape(int silmarils)
 {
     if (!sil_achievements_eligible() || p_ptr->depth != 0 || silmarils < 1) return;
+    if (silmarils == 1 && !p_ptr->morgoth_slain && hero(0xaa1ef063, 0x31cf55df))
+        sil_achievements_on_event(SIL_ACH_ONE_JEWEL_IS_ENOUGH);
     if (p_ptr->achievement_ringil_wounds >= 7 && !p_ptr->morgoth_slain)
         sil_achievements_on_event(SIL_ACH_SEVEN_TIMES_HE_CRIED);
-    if (carrying(ART_MORGOTH_0))
+    if (has_iron_crown())
         sil_achievements_on_event(SIL_ACH_HEAVY_IS_THE_STOLEN_CROWN);
     if (hero(0xb1902182, 0x0c53b215))
     {

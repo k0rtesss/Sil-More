@@ -10,6 +10,69 @@ static bool has_unique(u32b flag)
     return p_ptr && c_info && (c_info[p_ptr->pcharacter].flags_u & flag);
 }
 
+/* Match the same flags/GUIDs as the deeds, never the editable player name. */
+bool sil_achievement_for_current_character(int id)
+{
+    if (!sil_achievement_enabled(id) || !p_ptr || !z_info || !c_info
+        || p_ptr->pcharacter >= z_info->c_max) return false;
+    switch (id)
+    {
+        case SIL_ACH_A_SINGLE_SPARK: return has_unique(UNQ_SMT_FEANOR);
+        case SIL_ACH_ON_THE_OTHER_HAND: return has_unique(UNQ_MEL_MAEDHROS);
+        case SIL_ACH_IRON_CLEAVER: return has_unique(UNQ_SMT_TELCHAR);
+        case SIL_ACH_OUT_OF_THIN_ORE: return has_unique(UNQ_SMT_GAMIL);
+        case SIL_ACH_CLAD_IN_THE_NIGHT: return has_unique(UNQ_SMT_EOL);
+        case SIL_ACH_A_DREAM_UPON_THE_DARK_LORD: return has_unique(UNQ_SNG_LUT);
+        case SIL_ACH_NEITHER_VOICE_DIMINISHED: return has_unique(UNQ_WOVEN_MASTER);
+        case SIL_ACH_DOOM_CAN_WAIT: return has_unique(UNQ_WIL_TURIN);
+        default: break;
+    }
+    static const struct {
+        int id;
+        guid64 hero;
+    } deeds[] = {
+        { SIL_ACH_LORD_OF_THE_FOUNTAIN, { 0x40a8c0d5, 0xcdd81345 } },
+        { SIL_ACH_MASTER_OF_DOOM, { 0xa1860c8b, 0x017a6daa } },
+        { SIL_ACH_FOR_IDRIL_AND_EARENDIL, { 0x372282fe, 0x5bf0b106 } },
+        { SIL_ACH_BEFORE_THE_RISING_OF_THE_SUN, { 0x2bca19ef, 0x728150b9 } },
+        { SIL_ACH_THE_KING_WHO_KEPT_HIS_OATH, { 0x7165372d, 0xbc78071f } },
+        { SIL_ACH_THURINGWETHIL_I_AM, { 0xada9da15, 0x7479fe7a } },
+        { SIL_ACH_HIS_DEATH_AND_FINAL_END, { 0xa1860c8b, 0x017a6daa } },
+        { SIL_ACH_THE_GOLDEN_FLOWER_STANDS, { 0x0ed53377, 0xc70064d5 } },
+        { SIL_ACH_THESE_THINGS_ARE_MINE, { 0xb1902182, 0x0c53b215 } },
+        { SIL_ACH_THE_OATH_HE_SHOULD_HAVE_SWORN, { 0xb1902182, 0x0c53b215 } },
+        { SIL_ACH_HIS_FATHERS_LIGHT, { 0xb1902182, 0x0c53b215 } },
+        { SIL_ACH_THREE_UNTOUCHED, { 0x92088065, 0xa83f4ad1 } },
+        { SIL_ACH_STRONGBOW, { 0xef168bf1, 0xb8fd5e8d } },
+        { SIL_ACH_ONE_JEWEL_IS_ENOUGH, { 0xaa1ef063, 0x31cf55df } }
+    };
+    guid64 hero = c_info[p_ptr->pcharacter].guid;
+    for (size_t i = 0; i < N_ELEMENTS(deeds); ++i)
+        if (id == deeds[i].id)
+            return hero.hi == deeds[i].hero.hi && hero.lo == deeds[i].hero.lo;
+    return false;
+}
+
+void sil_achievement_character_on_start(bool first_entry)
+{
+    if (!first_entry || !sil_achievements_eligible()
+        || p_ptr->restoring || playerturn != 0) return;
+    bool has_deeds = false;
+    for (int id = 0; id < SIL_ACH_COUNT; ++id)
+    {
+        if (!sil_achievement_for_current_character(id)
+            || !sil_achievement_revealed(id)) continue;
+        has_deeds = true;
+        const sil_achievement_definition* entry = sil_achievement_get(id);
+        if (sil_achievement_unlocked_at(id))
+            msg_format("Character achievement already unlocked: %s.", entry->title);
+        else
+            msg_format("Character achievement available: %s. %s",
+                entry->title, entry->description);
+    }
+    if (has_deeds) sil_achievements_show_character_deeds();
+}
+
 void sil_achievement_character_on_forged(object_type* object)
 {
     u32b f1, f2, f3;
@@ -98,14 +161,13 @@ void sil_achievement_character_on_monster_killed(int m_idx, int who)
     /* Match the selected template's persistent GUID, never the editable player
      * name or a shared racial/ability flag. These are character.txt Q: values. */
     static const struct {
-        guid64 hero;
         int victim;
         sil_achievement_id achievement;
     } deeds[] = {
-        { { 0x40a8c0d5, 0xcdd81345 }, R_IDX_GOTHMOG, SIL_ACH_LORD_OF_THE_FOUNTAIN },
-        { { 0xa1860c8b, 0x017a6daa }, R_IDX_GLAURUNG, SIL_ACH_MASTER_OF_DOOM },
-        { { 0x372282fe, 0x5bf0b106 }, R_IDX_MAEGLIN, SIL_ACH_FOR_IDRIL_AND_EARENDIL },
-        { { 0x2bca19ef, 0x728150b9 }, R_IDX_ANCALAGON, SIL_ACH_BEFORE_THE_RISING_OF_THE_SUN }
+        { R_IDX_GOTHMOG, SIL_ACH_LORD_OF_THE_FOUNTAIN },
+        { R_IDX_GLAURUNG, SIL_ACH_MASTER_OF_DOOM },
+        { R_IDX_MAEGLIN, SIL_ACH_FOR_IDRIL_AND_EARENDIL },
+        { R_IDX_ANCALAGON, SIL_ACH_BEFORE_THE_RISING_OF_THE_SUN }
     };
     int race = mon_list[m_idx].r_idx;
     if (c_info && z_info && p_ptr->pcharacter < z_info->c_max
@@ -113,10 +175,9 @@ void sil_achievement_character_on_monster_killed(int m_idx, int who)
         && (r_info[race].flags1 & RF1_UNIQUE)
         && !(r_info[race].flags1 & RF1_PEACEFUL))
     {
-        guid64 hero = c_info[p_ptr->pcharacter].guid;
         for (size_t i = 0; i < N_ELEMENTS(deeds); ++i)
-            if (hero.hi == deeds[i].hero.hi && hero.lo == deeds[i].hero.lo
-                && race == deeds[i].victim)
+            if (race == deeds[i].victim
+                && sil_achievement_for_current_character(deeds[i].achievement))
                 sil_achievements_on_event(deeds[i].achievement);
     }
     if (!has_unique(UNQ_WIL_TURIN) || !p_ptr->rage

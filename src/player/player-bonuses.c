@@ -552,7 +552,7 @@ void calc_bonuses(void)
         p_ptr->skill_misc_mod[S_MEL] -= 3;
     }
 
-    if (p_ptr->active_ability[S_WIL][WIL_POISON_RESISTANCE])
+    if (p_ptr->active_ability[S_WIL][WIL_HARDINESS])
     {
         p_ptr->resist_pois += 1;
     }

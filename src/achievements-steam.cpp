@@ -81,10 +81,12 @@ public:
         if (!stats) return;
         for (int i = 0; i < SIL_ACH_COUNT; ++i)
         {
+            const sil_achievement_definition *entry = sil_achievement_get(i);
+            if (!entry) continue;
             unsigned word = i / 64;
             uint64_t bit = UINT64_C(1) << (i % 64);
             bool achieved = false;
-            const char *key = sil_achievement_get(i)->key;
+            const char *key = entry->key;
             /* Modern SDKs preload the local user's stats before launch. If
              * they aren't ready (or a schema isn't published), try again later. */
             if (!SteamAPI_ISteamUserStats_GetAchievement(stats, key, &achieved)) continue;

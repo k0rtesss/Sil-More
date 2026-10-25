@@ -70,7 +70,19 @@ int main(void) {
             output[0]=0;assert(describe_consumable_healing(&herb));
             assert(strstr(output,disease_name()) && healing_previews==1);
         }
-    puts("Disease menu and item text: unknown/name/cure, retained discoveries, Alchemist, all names/herbs, no hidden cure disclosure: PASS");
+    p_ptr->diseased=0;
+    for(int mask=0;mask<256;mask++) {
+        p_ptr->disease_immunity=mask;int count=0;
+        for(int bit=0;bit<8;bit++)if(mask&(1u<<bit))count++;
+        assert(rows()==(mask?1:0)&&!calls);
+        if(mask) {
+            char expected[80];strnfmt(expected,sizeof(expected),"Disease immunity: %d/8",count);
+            assert(!strcmp(s[0],expected)&&strstr(t[0],"during this run")&&good[0]);
+        }
+    }
+    p_ptr->diseased=300;p_ptr->disease_immunity=1;
+    assert(rows()==2&&strstr(s[0],"Disease:")&&!strcmp(s[1],"Disease immunity: 1/8"));
+    puts("Disease menu and item text: unknown/name/cure, retained discoveries, Alchemist, all names/herbs, no hidden cure disclosure; all immunity counts while healthy or infected: PASS");
     return 0;
 }
 '''
@@ -82,7 +94,7 @@ def main():
     menu = menu[menu.index("    /* One diagnosis attempt"):menu.index("    // Get item flags")]
     helpers = "\n".join(function("src/player/effects.c", name) for name in
                         ["disease_name", "disease_cure_name", "disease_identify", "disease_herb_matches"])
-    rows = "static int rows(void) {int i=0;\n" + menu + "\nreturn i;\n}\n"
+    rows = "static int rows(void) {int i=0,j;\n" + menu + "\nreturn i;\n}\n"
     source = OUT / "check.c"
     source.write_text(PRELUDE + helpers + rows
                       + function("src/object/object-info.c", "describe_consumable_healing")

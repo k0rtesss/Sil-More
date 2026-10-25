@@ -1104,6 +1104,8 @@ void do_cmd_fire(int quiver)
                     p_ptr->killed_enemy_with_arrow = mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1);
                     sil_achievement_lore_attack_end();
+                    if (p_ptr->killed_enemy_with_arrow && i_ptr->tval == TV_ARROW)
+                        sil_achievement_lore_on_archery_kill((int)(r_ptr - r_info));
                     if (p_ptr->killed_enemy_with_arrow && deadly_hail_bonus)
                         sil_achievements_on_event(SIL_ACH_A_FEW_LEAVES);
                     if (!p_ptr->killed_enemy_with_arrow)

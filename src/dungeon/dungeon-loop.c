@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "achievements.h"
+#include "achievements-character.h"
 #include "achievements-lore.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -261,6 +262,7 @@ void dungeon(void)
     sdl_touch_maybe_show_first_game_tutorial();
     sdl_mouse_maybe_show_first_game_tutorial();
     tutorial_game_start();
+    sil_achievement_character_on_start(first_dungeon_entry);
     /* Existing saves can establish this milestone from their recorded depth. */
     sil_achievements_on_depth(p_ptr->max_depth);
     sil_achievements_on_level_entry(p_ptr->restoring);

@@ -2329,11 +2329,12 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 2;
 
         help_emit_heading("DISEASE", row++, col);
-        put_role(ROLE_BODY, "- Disease causes -1 Constitution on infection, then -1 to a random attribute every 100 player turns.", row++, col);
+        put_role(ROLE_BODY, "- Disease causes -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness).", row++, col);
         put_role(ROLE_WARN, "- It continues while resting and never clears on its own.", row++, col);
         put_role(ROLE_BODY, "- Potions of Healing or Miruvor cure it and restore all disease penalties, leaving unrelated drain unchanged.", row++, col);
-        put_role(ROLE_BODY, "- When healthy, infection risks are Herb of Sickness 100%, Dried Meat 20%, searching orc remains 5%.", row++, col);
-        put_role(ROLE_BODY, "- Each infection gets a random disease name and one random cure herb from all ten herbs.", row++, col);
+        put_role(ROLE_BODY, "- Base exposure chances: Herb of Sickness 100%, Dried Meat 20%, searching orc remains 3%.", row++, col);
+        put_role(ROLE_BODY, "- Each exposure rolls the full list of eight diseases; immunity blocks any disease cured earlier in this run.", row++, col);
+        put_role(ROLE_BODY, "- Each successful infection gets a random cure herb from all ten herbs. Hardiness halves infection chances.", row++, col);
         put_role(ROLE_BODY, "- A Gem of Self Knowledge with Alchemy shows the disease name and cure herb.", row++, col);
         put_role(ROLE_BODY, "- Without Alchemy, each use has a 50% chance to identify the name; once known, a 50% chance identifies the cure herb.", row++, col);
         put_role(ROLE_BODY, "- Discoveries are remembered for the current infection and saved. A new infection gets a new name and cure and resets them.", row++, col);
@@ -2344,7 +2345,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, "- Only gems spawn in water. Flooding can cover existing items; new items avoid lava and poisonous acid.", row++, col);
         put_role(ROLE_BODY, "- Submerged items need clear sight and one tile of detection range per 5 Perception (your own square at 0).", row++, col);
         put_role(ROLE_BODY, "- Entering, crossing, or leaving water costs 150% movement energy.", row++, col);
-        put_role(ROLE_WARN, "- Each water tile entered on foot has a 0.5% disease risk. Standing still or leaping over water does not.", row++, col);
+        put_role(ROLE_WARN, "- Each water tile entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still or leaping over water does not.", row++, col);
         put_role(ROLE_BODY, "- Each wading move splashes: -3 Stealth for that action. Standing actions cost normally.", row++, col);
         put_role(ROLE_BODY, "- Water holds no scent. Wading leaves no fresh tracks on nearby banks; old land tracks remain.", row++, col);
         put_role(ROLE_BODY, "- Flying monsters ignore the movement cost. Water does not stop sight or hearing.", row++, col);

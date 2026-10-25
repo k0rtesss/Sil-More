@@ -634,6 +634,10 @@ typedef struct sdl_character_sheet_screen_state {
     char narrative_paras[SDL_BOOK_MAX_PARAS][SDL_BOOK_PARA_LEN];
     short narrative_icon_row[SDL_BOOK_MAX_PARAS]; /* -1: no atlas sprite */
     short narrative_icon_col[SDL_BOOK_MAX_PARAS];
+    short narrative_icon_row2[SDL_BOOK_MAX_PARAS];
+    short narrative_icon_col2[SDL_BOOK_MAX_PARAS];
+    byte narrative_icon_count[SDL_BOOK_MAX_PARAS];
+    byte narrative_icon_source_size[SDL_BOOK_MAX_PARAS]; /* Atlas square, normally 16px. */
     bool narrative_icon_book; /* Preserve native-size text with narrow icon columns. */
     bool narrative_full_width; /* Let a semantic page frame fill the safe area. */
     bool narrative_terminal_style; /* Native layout with the terminal font/colours. */

@@ -54,6 +54,7 @@ void wr_extra(void)
     wr_byte(p_ptr->disease_name);
     wr_byte(p_ptr->disease_cure);
     wr_byte(p_ptr->disease_knowledge);
+    wr_byte(p_ptr->disease_immunity);
 
     /* Dump the skill bases */
     for (i = 0; i < S_MAX; ++i)
@@ -337,6 +338,9 @@ void wr_extra(void)
     wr_byte(p_ptr->achievement_ringil_wounds);
     wr_s16b(p_ptr->achievement_glorfindel_depth);
     for (int i = 0; i < 3; ++i) wr_u16b(p_ptr->achievement_artefact_rings[i]);
+    /* 0.9.8.39: each named Balrog counts once within this adventure. */
+    wr_byte(0xB0);
+    wr_byte(p_ptr->achievement_balrogs & 0x7F);
     log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d",
              p_ptr->oath_type, p_ptr->oaths_broken);
 

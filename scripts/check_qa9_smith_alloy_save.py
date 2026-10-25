@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import tempfile
 from check_monster_scent_save import ENGINE_FIXTURE, fixture_function
+from check_reforge_work_transaction import pre_achievement_player_writer
 
 ROOT=Path(__file__).resolve().parents[1]
 BUILD=ROOT/'build-standard'
@@ -186,7 +187,8 @@ static void legacy_and_malformed(void)
 }
 static void checks(void)
 {
-    assert(VERSION_EXTRA>=27&&SMITHING_ALLOY_STATE_BYTES==5);
+    assert(VERSION_MAJOR*1000000 + VERSION_MINOR*10000 + VERSION_PATCH*100 + VERSION_EXTRA >= 90827);
+    assert(SMITHING_ALLOY_STATE_BYTES==5);
     matrix(1,1);matrix(1,2);matrix(0,1);matrix(0,2);legacy_and_malformed();
     puts("Alloy v27: real writer/loader weapon+armour matrix, repeated-load reset, exact resumed costs/output, v26 stream alignment, malformed neutral fallback PASS.");
 }
@@ -207,11 +209,11 @@ def main():
     begin=block.index('    {\n        byte alloy[SMITHING_ALLOY_STATE_BYTES];')
     stop=block.index('    log_trace(',begin)
     block=block[:begin]+'    if(extra>=27)\n'+block[begin:stop]+block[stop:]
-    writer=OUT/'writer.c';writer.write_text('#include "fs/save.c"\nstatic bool fixture_inventory_block(int extra){int i;\n'+block+'wr_u32b(0xA110795AU);return !write_error;}\nsize_t fixture_write_work(byte* buf,size_t cap,int extra){fff=SDL_IOFromMem(buf,cap);xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;wr_extra();bool ok=fixture_inventory_block(extra);size_t n=ok?(size_t)SDL_TellIO(fff):0;SDL_CloseIO(fff);fff=NULL;return n;}\n',encoding='utf-8')
+    writer=OUT/'writer.c';writer.write_text('#include "fs/save.c"\n'+pre_achievement_player_writer()+'\nstatic bool fixture_inventory_block(int extra){int i;\n'+block+'wr_u32b(0xA110795AU);return !write_error;}\nsize_t fixture_write_work(byte* buf,size_t cap,int extra){fff=SDL_IOFromMem(buf,cap);xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;if(extra<31)fixture_pre_achievement_extra();else wr_extra();bool ok=fixture_inventory_block(extra);size_t n=ok?(size_t)SDL_TellIO(fff):0;SDL_CloseIO(fff);fff=NULL;return n;}\n',encoding='utf-8')
     load=(ROOT/'src/fs/load.c').read_text(encoding='utf-8')
     start=load.index('    savefile_has_runtime_overrides =',load.index('static errr rd_savefile_new_aux'))
     flags=load[start:load.index('    /* Reset load byte offset',start)]
-    reader=OUT/'reader.c';reader.write_text('#include "fs/load.c"\nint fixture_read_work(const byte* buf,size_t length,int extra){fff=SDL_IOFromConstMem(buf,length);xor_byte=0;v_check=x_check=load_byte_offset=0;sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;\n'+flags+'savefile_has_varda_quest=true;int result=rd_extra();if(!result)result=rd_inventory();u32b tail=0;if(!result){rd_u32b(&tail);if(tail!=0xA110795AU||SDL_TellIO(fff)!=(Sint64)length)result=-1;}SDL_CloseIO(fff);fff=NULL;return result;}\n',encoding='utf-8')
+    reader=OUT/'reader.c';reader.write_text('#include "fs/load.c"\nint fixture_read_work(const byte* buf,size_t length,int extra){fff=SDL_IOFromConstMem(buf,length);xor_byte=0;v_check=x_check=load_byte_offset=0;sf_major=0;sf_minor=9;sf_patch=8;sf_extra=extra;\n'+flags+'savefile_has_varda_quest=true;int result=rd_extra();if(!result)result=rd_inventory();u32b tail=0;if(!result){rd_u32b(&tail);if(tail!=0xA110795AU||SDL_TellIO(fff)!=(Sint64)length)result=-1;}SDL_CloseIO(fff);fff=NULL;return result;}\n',encoding='utf-8')
     objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text())
     response=OUT/'objects.rsp';response.write_text('\n'.join('"'+p+'"' for p in objects if not p.endswith(('/src/main.c.obj','/src/cmd/ui/cmd-ui-smithing.c.obj','/src/fs/save.c.obj','/src/fs/load.c.obj'))),encoding='utf-8')
     env=os.environ.copy();env['PATH']=os.pathsep.join([*(str(BUILD/'_deps'/p) for p in ('SDL','SDL_ttf','SDL_image','SDL_mixer')),'C:/msys64/mingw64/bin','C:/msys64/usr/bin',env['PATH']])

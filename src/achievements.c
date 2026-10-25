@@ -23,57 +23,57 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "INTO_THE_DEEP", "To Dungeons Deep",
         "Reach a depth of 500 feet.", false },
     { "LIGHT_IN_DARKNESS", "The Fire of Fëanor",
-        "Cut a Silmaril from Morgoth's Iron Crown.", true },
+        "Cut a Silmaril from Morgoth's Iron Crown.", false },
     { "BACK_TO_STARLIGHT", "The Quest of the Silmaril",
         "Escape Angband carrying at least one Silmaril.", false },
     { "THREE_LIGHTS_IN_EXILE", "Three Lights in Exile",
-        "Escape carrying all three Silmarils.", true },
+        "Escape carrying all three Silmarils.", false },
     { "THE_SHADOW_FALLS", "Dagor Dagorath",
         "Defeat Morgoth's final form.", true },
-    { "THE_QUIET_ROAD", "A Very Polite Burglary",
-        "Escape with a Silmaril without killing a creature during the run.", false },
+    { "THE_QUIET_ROAD", "Not to Strike Without Need",
+        "Escape with a Silmaril without killing a creature during the adventure. Your traps and poison count.", false },
     { "WORD_UNBROKEN", "When the Road Darkens",
-        "Escape with a Silmaril while keeping your oath.", false },
+        "Escape with a Silmaril after choosing an oath and keeping it unbroken.", false },
     { "FORGED_BY_YOUR_HAND", "While Hammers Fell",
         "Complete a smithing project.", false },
     { "A_NAME_WORTH_REMEMBERING", "And Light They Caught",
-        "Create a custom artefact.", true },
+        "Create a custom artefact.", false },
     { "SONG_BENEATH_THE_MOUNTAIN", "The Lay of Leithian",
-        "Escape with a Silmaril, 20 trained Song and at least 100 turns spent singing.", false },
-    { "THERE_AND_BACK_AGAIN", "There and Back Again",
-        "Enter Morgoth's throne room and return to the Gates alive.", true },
+        "Escape with a Silmaril and at least 20 trained Song.", false },
+    { "THERE_AND_BACK_AGAIN", "There and Back for Nothing",
+        "Enter Morgoth's throne room and return to the Gates alive without carrying any Silmarils.", true },
     { "BY_A_THREAD", "Aurë Entuluva!",
-        "Defeat an enemy after a hit leaves you at exactly 1 HP, before fully healing or leaving the floor.", true },
+        "Kill an enemy while you have exactly 1 HP.", true },
     { "LIGHT_OF_THE_ELDAR", "Get Out, You Old Wight!",
         "Defeat an undead enemy with a light-based attack.", true },
     { "THE_LONG_TALE", "Grew in the Telling",
-        "Win a Tale with at least two different characters having completed adventures in it.", true },
+        "Win a Tale with at least two different characters having completed adventures in it.", false },
     { "NO_RINGS_ATTACHED", "No Rings Attached",
-        "Give a thrall the item they requested.", true },
+        "Give a thrall the item they requested.", false },
     { "CABED_EN_ARAS", "Cabed-en-Aras",
-        "Successfully leap over a chasm and land safely.", true },
+        "Successfully leap over a chasm and land safely.", false },
     { "OFT_EVIL_WILL", "Oft Evil Will Shall Evil Mar",
-        "Kill an enemy with a trap you rewired.", true },
+        "Kill an enemy with a trap you rewired.", false },
     { "THE_HASTY_STROKE", "The Hasty Stroke Goes Oft Astray",
-        "Kill an enemy with a Riposte.", true },
+        "Kill an enemy with a Riposte.", false },
     { "A_FEW_LEAVES", "A Few Leaves in a Forest",
-        "Kill an enemy with a Deadly Hail empowered shot.", true },
-    { "TWO_WEAPONS", "Two Weapons, One Obituary",
-        "Kill an enemy with a Power Throw in which both attacks hit.", true },
+        "Kill an enemy with a Deadly Hail empowered shot.", false },
+    { "TWO_WEAPONS", "Two Blows, One Doom",
+        "Kill an enemy with a Power Throw in which both attacks hit.", false },
     { "FOR_EXTERNAL_USE_ONLY", "For External Use Only",
-        "Kill an enemy with a thrown potion's effect, including its delayed poison.", true },
+        "Kill an enemy with a thrown potion's effect, including its delayed poison.", false },
     { "FLY_YOU_FOOL", "Fly, You Fool!",
-        "Knock a non-flying enemy into a chasm.", true },
+        "Knock a non-flying enemy into a chasm. It need not die.", true },
     { "KNOCK_WITH_YOUR_HEAD", "Knock on the Doors with Your Head",
         "Jam a lock while picking it, then bash that same door open.", true },
     { "DOWN_TO_GOBLIN_TOWN", "Down, Down to Goblin-town",
-        "Survive a fall through a false floor or into a chasm and arrive alive.", true },
-    { "ATHELAS_OUT_OF_STOCK", "Athelas Was Out of Stock",
+        "Survive a fall through a false floor or down a chasm.", true },
+    { "ATHELAS_OUT_OF_STOCK", "A Bitter Cure",
         "Cure a disease with an Herb of Sickness when it is the correct cure.", true },
     { "ANGBAND_MAINTENANCE", "Angband's Maintenance Department",
         "Witness an enemy dismantle a trap you rewired.", true },
     { "THE_ROAD_GOES_EVER_ON", "The Road Goes Ever On",
-        "Reach a depth of 100 feet.", false },
+        "Reach a depth of 150 feet.", false },
     { "SOMETHING_TOOKISH", "Something Tookish",
         "Purchase your first ability with experience.", false },
     { "FLIES_AND_SPIDERS", "Flies and Spiders",
@@ -81,53 +81,53 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "NOT_EVEN_CARCHAROTH", "Not Even Carcharoth",
         "Be killed by the first ordinary wolf you encounter before making your first kill.", true },
     { "THE_FORDS_OF_SIRION", "The Fords of Sirion",
-        "Cross a stream from one dry bank to the other.", true },
+        "Cross a stream from one dry bank to the other.", false },
     { "HELCARAXE", "Helcaraxë",
-        "Freeze water yourself and cross the ice you created.", true },
+        "Freeze water with a cold-branded attack, then cross your ice from one bank to the other.", true },
     { "FIRE_AND_WATER", "Fire and Water",
-        "Melt the ice beneath an enemy with your fire.", true },
+        "Melt the ice beneath an enemy with fire.", true },
     { "THE_FIRES_OF_THANGORODRIM", "The Fires of Thangorodrim",
-        "Leap over lava and land alive after its heat.", true },
+        "Leap across lava and survive its heat.", false },
     { "THROUGH_NAN_DUNGORTHEB", "Through Nan Dungortheb",
-        "Cross a poison pool and reach dry ground alive.", true },
+        "Cross a poison pool and reach dry ground alive.", false },
     { "A_JOURNEY_IN_THE_DARK", "A Journey in the Dark",
-        "Enter a labyrinth and leave through a different passage.", true },
+        "Enter a labyrinth and leave through a different passage.", false },
     { "A_MAP_OF_THE_IRON_HELLS", "A Map of the Iron Hells",
-        "Discover labyrinth, chasm, ice, fire and poison partitions within one Tale.", true },
+        "Enter labyrinth, chasm, ice, fire and poison regions within one run.", false },
     { "A_ELBERETH_GILTHONIEL", "A Elbereth Gilthoniel!",
-        "Make an enemy flee with the Song of Elbereth.", true },
+        "Make an enemy flee with the Song of Elbereth.", false },
     { "RELEASE_FROM_BONDAGE", "Release from Bondage",
-        "Clear rubble or disarm a trap with the Song of Freedom.", true },
+        "Clear rubble or disarm a trap with the Song of Freedom.", false },
     { "TWO_THEMES_ONE_VOICE", "Two Themes, One Voice",
-        "Have both woven themes affect enemies in the same turn.", true },
+        "Have both woven themes affect enemies in the same turn.", false },
     { "YOU_CANNOT_PASS", "You Cannot Pass",
-        "Hold a door against a pursuer with the Song of Thresholds.", true },
+        "Hold a door against a pursuer with the Song of Thresholds.", false },
     { "FELAGUNDS_ANSWER", "Felagund's Answer",
-        "Permanently weaken an opponent with the Song of Contest.", true },
+        "Permanently weaken an opponent with the Song of Contest.", false },
     { "A_WILL_OF_YOUR_OWN", "A Will of Your Own",
         "Resist a hostile effect in an opposed Will check.", false },
     { "HURINS_DEFIANCE", "Húrin's Defiance",
-        "Use Indomitable to resist a hostile mental attack at a quarter health or less.", true },
+        "Resist a hostile mental attack at 25% HP or less when Indomitable makes the difference.", true },
     { "NO_LONGER_BINDING", "No Longer Binding",
-        "Break an equipment curse with Curse Breaking.", true },
+        "Break an equipment curse with Curse Breaking.", false },
     { "A_FOOLS_HOPE", "A Fool's Hope",
-        "Succeed at a genuine skill check whose chance was at most one in ten.", true },
+        "Succeed at a skill check with a success chance of 10% or less.", true },
     { "A_SINGLE_SPARK", "A Single Spark",
-        "As Fëanor, create an artefact using a forge's last charge.", true },
-    { "ON_THE_OTHER_HAND", "On the Other Hand",
-        "As Maedhros, kill with a Subtlety critical using a hand-and-a-half weapon.", true },
+        "As Fëanor, create an artefact using a forge's last charge. “His spirit burned as a flame.”", false },
+    { "ON_THE_OTHER_HAND", "More Deadly Than His Right",
+        "As Maedhros, kill with a Subtlety critical using a hand-and-a-half weapon.", false },
     { "IRON_CLEAVER", "Iron-Cleaver",
-        "As Telchar, forge a Sharpness II blade and cut a Silmaril with that same blade.", true },
+        "As Telchar, forge a blade that ignores all armour and cut a Silmaril with that same blade.", false },
     { "OUT_OF_THIN_ORE", "Out of Thin Ore",
-        "As Gamil Zirak, forge mithril equipment without consuming mithril.", true },
+        "As Gamil Zirak, forge mithril equipment without consuming mithril.", false },
     { "CLAD_IN_THE_NIGHT", "Clad in the Night",
-        "As Eöl, forge and wear your own galvorn armour.", true },
+        "As Eöl, forge and wear your own galvorn armour.", false },
     { "A_DREAM_UPON_THE_DARK_LORD", "A Dream Upon the Dark Lord",
-        "As Lúthien, put Morgoth to sleep with the Song of Lórien.", true },
+        "As Lúthien, put Morgoth to sleep with the Song of Lórien.", false },
     { "NEITHER_VOICE_DIMINISHED", "Neither Voice Diminished",
-        "As Daeron, have both full-strength woven themes affect enemies in the same turn.", true },
+        "As Daeron, have both full-strength woven themes affect enemies in the same turn.", false },
     { "DOOM_CAN_WAIT", "Doom Can Wait",
-        "As Túrin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.", true },
+        "As Túrin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.", false },
     { "THE_HIGH_CAPTAIN_FALLS", "The High Captain Falls",
         "Slay Gothmog, High Captain of Balrogs.", true },
     { "DAGNIR_GLAURUNGA", "Dagnir Glaurunga",
@@ -136,18 +136,18 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
         "Slay Gorthaur, Servant of Morgoth.", true },
     { "UNLIGHT_UNWOVEN", "Unlight Unwoven",
         "Slay Ungoliant, the Gloomweaver.", true },
-    { "THE_DRAGON_HOST_BROKEN", "The Dragon-host Broken",
+    { "THE_DRAGON_HOST_BROKEN", "The Mightiest of the Dragon-host",
         "Slay Ancalagon the Black.", true },
     { "THE_RED_MAW", "The Red Maw",
         "Slay Carcharoth, the Jaws of Thirst.", true },
     { "LORD_OF_THE_FOUNTAIN", "Lord of the Fountain",
-        "As Ecthelion, slay Gothmog.", true },
+        "As Ecthelion, slay Gothmog.", false },
     { "MASTER_OF_DOOM", "Master of Doom",
-        "As Túrin Turambar, slay Glaurung.", true },
+        "As Túrin Turambar, slay Glaurung.", false },
     { "FOR_IDRIL_AND_EARENDIL", "For Idril and Eärendil",
-        "As Tuor, slay Maeglin, Betrayer of Gondolin.", true },
+        "As Tuor, slay Maeglin, Betrayer of Gondolin.", false },
     { "BEFORE_THE_RISING_OF_THE_SUN", "Before the Rising of the Sun",
-        "As Eärendil, slay Ancalagon the Black.", true },
+        "As Eärendil, slay Ancalagon the Black.", false },
     { "TULKAS_LAST_LAUGH", "Tulkas Has the Last Laugh",
         "Slay the unique enemy named by Tulkas and collect his artefact reward.", true },
     { "AULES_APPRENTICE", "Apprentice of the Maker",
@@ -157,11 +157,11 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "PITY_FOR_THE_FORSAKEN", "Pity for the Forsaken",
         "Reach a down stair or shaft without a creature dying during Nienna's trial and receive her blessing.", true },
     { "THE_GREAT_HUNT", "The Great Hunt",
-        "Hunt 100 wolves, 80 spiders excluding hatchlings, 60 serpents or 30 vampires for Oromë and receive his blessing.", true },
+        "Complete Oromë's hunt and receive his blessing.", true },
     { "A_STAR_AGAINST_THE_BALROG", "A Star Against the Balrog",
         "Slay Duruin in his Bastion for Varda and choose a radiant gift.", true },
     { "NO_STEPS_REQUIRED", "No Steps Required",
-        "Reach Morgoth's level using only chasms and shafts for descent; upward stairs are allowed.", true },
+        "From the start of the adventure, reach Morgoth's level using only chasms and down shafts for descent. Upward stairs are allowed.", false },
     { "THERE_AND_ALMOST_BACK_AGAIN", "There and Almost Back Again",
         "Die at the Gates of Angband, on the surface.", true },
     { "THE_HALLS_OF_UTUMNO", "The Halls of Utumno",
@@ -171,41 +171,75 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "NOT_THE_DOOM_OF_THE_SILMARILS", "Not the Doom of the Silmarils",
         "Have Angrist shatter while trying to cut the second Silmaril.", true },
     { "THE_KING_WHO_KEPT_HIS_OATH", "The King Who Kept His Oath",
-        "As Finrod Felagund, kill a werewolf with an unarmed attack.", true },
+        "As Finrod Felagund, kill a werewolf with an unarmed attack.", false },
     { "THURINGWETHIL_I_AM", "Thuringwethil I Am",
-        "As Lúthien, enter Morgoth's throne room wearing Thuringwethil's Bat-Fell.", true },
+        "As Lúthien, enter Morgoth's throne room wearing Thuringwethil's Bat-Fell.", false },
     { "HIS_DEATH_AND_FINAL_END", "His Death and Final End",
-        "As Túrin, deliver Morgoth's final death with Gurthang.", true },
+        "As Túrin, slay Morgoth's final form with Gurthang.", false },
     { "SEVEN_TIMES_HE_CRIED", "Seven Times He Cried",
-        "Wound Morgoth seven times with Ringil, then escape with a Silmaril while he lives.", true },
+        "Land at least seven damaging blows on Morgoth with Ringil, then escape with a Silmaril while he lives.", false },
     { "THE_CAT_AND_THE_NECROMANCER", "The Cat and the Necromancer",
         "Defeat Tevildo and Gorthaur in the same adventure.", true },
     { "EVER_FOUND_AGAIN", "Ever Found Again",
         "Kill with Dailir, recover the arrow, and kill another enemy with it.", true },
     { "THE_GOLDEN_FLOWER_STANDS", "The Golden Flower Stands",
-        "As Glorfindel, slay a Balrog beside a chasm and leave that floor alive.", true },
+        "As Glorfindel, slay a Balrog in close quarters beside a chasm, then leave the level alive.", false },
     { "BELEGOST_REMEMBERS", "Belegost Remembers",
-        "As a Dwarf, slay Glaurung with Azaghâl's dagger.", true },
+        "As a Dwarf, slay Glaurung with Azaghâl's dagger.", false },
     { "BITER_AND_BEATER", "Biter and Beater",
         "Make an orc flee while wielding Orcrist and Glamdring together.", true },
     { "AT_MOST_SEVEN", "At Most Seven",
-        "Slay seven distinct Balrogs in one Tale.", true },
+        "Slay all seven named Balrogs within one adventure.", false },
     { "HEAVY_IS_THE_STOLEN_CROWN", "Heavy Is the Stolen Crown",
-        "Escape with the empty Iron Crown and a Silmaril.", true },
+        "Escape with Morgoth's Iron Crown and at least one Silmaril, loose or still set in the Crown.", true },
     { "THESE_THINGS_ARE_MINE", "These Things Are Mine",
-        "As Fëanor, escape with all three Silmarils.", true },
+        "As Fëanor, escape with all three Silmarils.", false },
     { "THE_OATH_HE_SHOULD_HAVE_SWORN", "The Oath He Should Have Sworn",
-        "As Fëanor, escape with a Silmaril and an unbroken Oath of Mercy.", true },
+        "As Fëanor, escape with a Silmaril and an unbroken Oath of Mercy.", false },
     { "HIS_FATHERS_LIGHT", "His Father's Light",
-        "As Fëanor, use Finwë's lamp to lift the curse on Fëanor's crown.", true },
+        "As Fëanor, use Finwë's lamp to lift the curse on Fëanor's crown.", false },
     { "HEIRLOOMS_OF_THE_HIDDEN_KING", "Heirlooms of the Hidden King",
-        "As a Man, escape with a Silmaril, Narsil and the Ring of Barahir.", true },
+        "As a Man, escape with a Silmaril, Narsil and the Ring of Barahir.", false },
     { "THE_RING_MAKER_OVERRULED", "The Ring-maker Overruled",
         "Permanently weaken Gorthaur with the Song of Contest while wearing the Ring of Mairon.", true },
-    { "NO_PHIAL_REQUIRED", "No Phial Required",
+    { "NO_PHIAL_REQUIRED", "When All Other Lights Go Out",
         "Slay Shelob with Sting while wielding a Silmaril as your light.", true },
     { "THREE_UNTOUCHED", "Three Untouched",
-        "As Celebrimbor, forge three distinct artefact rings, free of evil and curses.", true }
+        "As Celebrimbor, forge three separate custom artefact rings during one adventure, none evil or cursed.", false },
+    { "A_BURGLARS_BUSINESS", "A Burglar's Business",
+        "Cut a Silmaril without waking Morgoth during the attempt.", true },
+    { "STRONGBOW", "Strongbow",
+        "As Beleg, slay a hostile unique with an arrow.", false },
+    { "ONE_JEWEL_IS_ENOUGH", "One Jewel Is Enough",
+        "As Beren, escape with exactly one Silmaril while Morgoth lives.", false },
+    { "A_DESPERATE_VICTORY", "A Desperate Victory",
+        "Slay a hostile unique while at 25% HP or less.", true },
+    { "THEIR_WORK_HAD_NO_RIVAL", "Their Work Had No Rival",
+        "Create a custom artefact of smithing difficulty 65 or higher.", false },
+    { "FIND_NAUGLAMIR", "The Necklace of the Dwarves",
+        "Nauglamír, the Dwarven masterpiece made for Finrod, resting on its wearer 'as a strand of flax'.", true },
+    { "FIND_GURTHANG", "The Black Sword of Túrin",
+        "Gurthang, the black sword that slew Glaurung and answered Túrin: 'I will drink thy blood gladly'.", true },
+    { "FIND_MELKOR", "The Spear of Melkor",
+        "The Great Spear of Melkor, the black weapon that pierced the Two Trees before Ungoliant drank their light.", true },
+    { "FIND_GOTHMOG_AXE", "The Black Axe of Gothmog",
+        "Gothmog's black axe, which struck down Fingon in the Battle of Unnumbered Tears.", true },
+    { "FIND_ANGRIST", "Angrist, the Iron-Cleaver",
+        "Angrist, Telchar's knife that Beren took into Angband: 'iron it would cleave as if it were green wood'.", true },
+    { "FIND_BELTHRONDING", "The Black Bow of Beleg",
+        "Belthronding, Beleg's bow of black yew, laid beside him after his death at Túrin's hand.", true },
+    { "FIND_IDRIL_ROBE", "The Raiment of Silverfoot",
+        "The Robe of Idril Celebrindal, a remembrance of Silverfoot and the secret way that saved Gondolin's survivors.", true },
+    { "FIND_CELEBRIMBOR_GLOVES", "The Hands of the Jewel-Smith",
+        "Celebrimbor's gloves, recalling Fëanor's grandson, whose greatest works would be the Three Rings of the Elves.", true },
+    { "FIND_MELIAN_RING", "The Foresight of Melian",
+        "The Ring of Melian, a remembrance of the Maia whose Girdle sheltered Doriath from Morgoth.", true },
+    { "FIND_ULMO_CLOAK", "The Mantle of the Lord of Waters",
+        "The cloak Ulmo gave Tuor at Vinyamar, concealing the bearer of his warning on the road to Gondolin.", true },
+    { "FIND_FINGOLFIN_SHIELD", "The Shield of the High King",
+        "Fingolfin's blue, crystal-set shield, borne when he rode alone to challenge Morgoth.", true },
+    { "FIND_TURGON_STAFF", "The Staff of the Hidden King",
+        "The Quarterstaff of Turgon, the 'staff of doom' before which Eöl faced judgment in Gondolin.", true }
 };
 
 static uint64_t unlocked_at[SIL_ACH_COUNT];
@@ -220,12 +254,12 @@ static Uint64 next_save;
 
 const sil_achievement_definition *sil_achievement_get(int id)
 {
-    return id >= 0 && id < SIL_ACH_COUNT ? &catalogue[id] : NULL;
+    return sil_achievement_enabled(id) ? &catalogue[id] : NULL;
 }
 
 uint64_t sil_achievement_unlocked_at(int id)
 {
-    return id >= 0 && id < SIL_ACH_COUNT ? unlocked_at[id] : 0;
+    return sil_achievement_get(id) ? unlocked_at[id] : 0;
 }
 
 uint64_t sil_achievements_mask(unsigned word)
@@ -295,6 +329,7 @@ void sil_achievements_init(void)
         {
             for (int i = 0; i < SIL_ACH_COUNT; ++i)
             {
+                if (!sil_achievement_enabled(i)) continue;
                 const cJSON *entry = cJSON_GetObjectItemCaseSensitive(
                     unlocked, catalogue[i].key);
                 if (cJSON_IsNumber(entry) && isfinite(entry->valuedouble)
@@ -357,7 +392,7 @@ void sil_achievements_flush(void)
     cJSON *unlocked = cJSON_GetObjectItemCaseSensitive(progress, "unlocked");
     for (int i = 0; i < SIL_ACH_COUNT; ++i)
     {
-        if (!unlocked_at[i]) continue;
+        if (!sil_achievement_enabled(i) || !unlocked_at[i]) continue;
         cJSON *entry = cJSON_CreateNumber((double)unlocked_at[i]);
         if (!entry) return;
         if (cJSON_HasObjectItem(unlocked, catalogue[i].key))
@@ -430,7 +465,7 @@ bool sil_achievements_kill_eligible(void)
 static void unlock_achievement(int id, bool announce)
 {
     sil_achievements_init();
-    if (!initialized || id < 0 || id >= SIL_ACH_COUNT || unlocked_at[id]) return;
+    if (!initialized || !sil_achievement_get(id) || unlocked_at[id]) return;
     unlocked_at[id] = achievement_time();
     dirty = true;
     ++revision;
@@ -448,7 +483,7 @@ static void unlock_achievement(int id, bool announce)
 void sil_achievements_on_depth(int depth)
 {
     if (!achievements_eligible()) return;
-    if (depth >= 2) unlock_achievement(SIL_ACH_THE_ROAD_GOES_EVER_ON, true);
+    if (depth >= 3) unlock_achievement(SIL_ACH_THE_ROAD_GOES_EVER_ON, true);
     if (depth >= 10) unlock_achievement(SIL_ACH_INTO_THE_DEEP, true);
     sil_achievements_flush();
 }
@@ -466,6 +501,7 @@ void sil_achievements_on_event(sil_achievement_id id)
         case SIL_ACH_FLY_YOU_FOOL:
         case SIL_ACH_ON_THE_OTHER_HAND:
         case SIL_ACH_HIS_DEATH_AND_FINAL_END:
+        case SIL_ACH_STRONGBOW:
             if (!sil_achievements_kill_eligible()) return;
             break;
         default:
@@ -529,10 +565,8 @@ void sil_achievements_on_escape(int silmarils)
         unlock_achievement(SIL_ACH_THE_QUIET_ROAD, true);
     if (p_ptr->oath_type > 0 && !oath_invalid(p_ptr->oath_type))
         unlock_achievement(SIL_ACH_WORD_UNBROKEN, true);
-    if (p_ptr->skill_base[S_SNG] >= 20 && p_ptr->achievement_singing_turns >= 100)
+    if (p_ptr->skill_base[S_SNG] >= 20)
         unlock_achievement(SIL_ACH_SONG_BENEATH_THE_MOUNTAIN, true);
-    if (p_ptr->morgoth_hall_entered)
-        unlock_achievement(SIL_ACH_THERE_AND_BACK_AGAIN, true);
     sil_achievement_lore_on_escape(silmarils);
     sil_achievements_flush();
 }
@@ -542,6 +576,7 @@ void sil_achievements_begin_run(void)
     p_ptr->achievement_flags = SIL_ACH_RUN_STARTED | SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
     p_ptr->achievement_kills = 0;
     p_ptr->achievement_singing_turns = 0;
+    p_ptr->achievement_balrogs = 0;
     p_ptr->achievement_comeback_depth = -1;
     p_ptr->achievement_fall_depth = -1;
     memset(p_ptr->achievement_jammed_doors, 0,
@@ -554,7 +589,7 @@ void sil_achievements_begin_run(void)
 
 void sil_achievements_on_healing(void)
 {
-    if (p_ptr && p_ptr->chp >= p_ptr->mhp)
+    if (p_ptr && p_ptr->chp > 1)
         p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
 }
 
@@ -566,7 +601,6 @@ void sil_achievements_on_player_turn(void)
         p_ptr->achievement_flags |= SIL_ACH_RUN_TAINTED;
         return;
     }
-    sil_achievements_on_healing();
     sil_achievement_character_on_player_turn();
 }
 
@@ -619,7 +653,8 @@ void sil_achievements_on_level_entry(bool restoring)
         p_ptr->achievement_flags &= ~SIL_ACH_RUN_FALLING;
         p_ptr->achievement_fall_depth = -1;
     }
-    if (achievements_eligible() && !p_ptr->depth && p_ptr->morgoth_hall_entered)
+    if (achievements_eligible() && !p_ptr->depth && p_ptr->morgoth_hall_entered
+        && silmarils_possessed() == 0)
     {
         unlock_achievement(SIL_ACH_THERE_AND_BACK_AGAIN, true);
         sil_achievements_flush();
@@ -657,27 +692,30 @@ void sil_achievements_on_monster_killed(int m_idx, int who)
     {
         int race = mon_list[m_idx].r_idx;
         if (race > 0 && race < z_info->r_max
-            && (r_info[race].flags1 & RF1_UNIQUE)
             && !(r_info[race].flags1 & RF1_PEACEFUL))
         {
-            switch (race)
+            if (p_ptr->chp == 1)
+                unlock_achievement(SIL_ACH_BY_A_THREAD, true);
+            if (r_info[race].flags1 & RF1_UNIQUE)
             {
-                case R_IDX_GOTHMOG: unlock_achievement(SIL_ACH_THE_HIGH_CAPTAIN_FALLS, true); break;
-                case R_IDX_GLAURUNG: unlock_achievement(SIL_ACH_DAGNIR_GLAURUNGA, true); break;
-                case R_IDX_GORTHAUR: unlock_achievement(SIL_ACH_THE_ABHORRED, true); break;
-                case R_IDX_UNGOLIANT: unlock_achievement(SIL_ACH_UNLIGHT_UNWOVEN, true); break;
-                case R_IDX_ANCALAGON: unlock_achievement(SIL_ACH_THE_DRAGON_HOST_BROKEN, true); break;
-                case R_IDX_CARCHAROTH: unlock_achievement(SIL_ACH_THE_RED_MAW, true); break;
+                if (p_ptr->mhp > 0 && p_ptr->chp > 0
+                    && (s32b)p_ptr->chp * 4 <= p_ptr->mhp)
+                    unlock_achievement(SIL_ACH_A_DESPERATE_VICTORY, true);
+                switch (race)
+                {
+                    case R_IDX_GOTHMOG: unlock_achievement(SIL_ACH_THE_HIGH_CAPTAIN_FALLS, true); break;
+                    case R_IDX_GLAURUNG: unlock_achievement(SIL_ACH_DAGNIR_GLAURUNGA, true); break;
+                    case R_IDX_GORTHAUR: unlock_achievement(SIL_ACH_THE_ABHORRED, true); break;
+                    case R_IDX_UNGOLIANT: unlock_achievement(SIL_ACH_UNLIGHT_UNWOVEN, true); break;
+                    case R_IDX_ANCALAGON: unlock_achievement(SIL_ACH_THE_DRAGON_HOST_BROKEN, true); break;
+                    case R_IDX_CARCHAROTH: unlock_achievement(SIL_ACH_THE_RED_MAW, true); break;
+                }
             }
         }
     }
     sil_achievement_character_on_monster_killed(m_idx, who);
     sil_achievement_lore_on_kill(m_idx, who);
     if (p_ptr->achievement_kills < UINT32_MAX) ++p_ptr->achievement_kills;
-    if ((p_ptr->achievement_flags & SIL_ACH_RUN_COMEBACK)
-        && p_ptr->achievement_comeback_depth == p_ptr->depth
-        && p_ptr->chp > 0 && p_ptr->chp < p_ptr->mhp)
-        unlock_achievement(SIL_ACH_BY_A_THREAD, true);
     p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
     sil_achievements_flush();
 }
@@ -704,6 +742,35 @@ void sil_achievements_on_morgoth_defeated(void)
     sil_achievements_flush();
 }
 
+void sil_achievements_on_artefact_created(int difficulty)
+{
+    if (!achievements_eligible() || difficulty < 65) return;
+    unlock_achievement(SIL_ACH_THEIR_WORK_HAD_NO_RIVAL, true);
+    sil_achievements_flush();
+}
+
+void sil_achievements_on_artefact_found(int artefact)
+{
+    if (!achievements_eligible()) return;
+    switch (artefact)
+    {
+        case ART_NAUGLAMIR: unlock_achievement(SIL_ACH_FIND_NAUGLAMIR, true); break;
+        case ART_GURTHANG: unlock_achievement(SIL_ACH_FIND_GURTHANG, true); break;
+        case ART_MELKOR: unlock_achievement(SIL_ACH_FIND_MELKOR, true); break;
+        case ART_GOTHMOG_AXE: unlock_achievement(SIL_ACH_FIND_GOTHMOG_AXE, true); break;
+        case ART_ANGRIST: unlock_achievement(SIL_ACH_FIND_ANGRIST, true); break;
+        case ART_BELTHRONDING: unlock_achievement(SIL_ACH_FIND_BELTHRONDING, true); break;
+        case ART_IDRIL_ROBE: unlock_achievement(SIL_ACH_FIND_IDRIL_ROBE, true); break;
+        case ART_CELEBRIMBOR_GLOVES: unlock_achievement(SIL_ACH_FIND_CELEBRIMBOR_GLOVES, true); break;
+        case ART_MELIAN_RING: unlock_achievement(SIL_ACH_FIND_MELIAN_RING, true); break;
+        case ART_ULMO_CLOAK: unlock_achievement(SIL_ACH_FIND_ULMO_CLOAK, true); break;
+        case ART_FINGOLFIN_SHIELD: unlock_achievement(SIL_ACH_FIND_FINGOLFIN_SHIELD, true); break;
+        case ART_TURGON_STAFF: unlock_achievement(SIL_ACH_FIND_TURGON_STAFF, true); break;
+        default: return;
+    }
+    sil_achievements_flush();
+}
+
 /* Distinct character templates, scoped to the local Tale, make repeats and
  * Eru resurrection idempotent without counting living snapshots as adventures. */
 static cJSON *current_tale_characters(bool create)
@@ -719,45 +786,126 @@ static cJSON *current_tale_characters(bool create)
     return cJSON_IsObject(characters) ? characters : NULL;
 }
 
+static const struct { int race; const char* name; } achievement_balrogs[] = {
+    { R_IDX_DURUIN, "Duruin" }, { 145, "Delthaur" }, { 166, "Belegwath" },
+    { 186, "Turkano" }, { 206, "Vallach" }, { 225, "Lungorthin" },
+    { R_IDX_GOTHMOG, "Gothmog" }
+};
+
+static unsigned achievement_bit_count(unsigned mask)
+{
+    unsigned count = 0;
+    while (mask) { count += mask & 1u; mask >>= 1; }
+    return count;
+}
+
+bool sil_achievement_revealed(int id)
+{
+    const sil_achievement_definition* entry = sil_achievement_get(id);
+    if (!entry) return false;
+    return !entry->hidden || sil_achievement_unlocked_at(id);
+}
+
+bool sil_achievement_progress_text(int id, char* out, size_t size)
+{
+    if (!out || !size) return false;
+    out[0] = '\0';
+    if (!p_ptr || !character_generated || !p_ptr->playing || p_ptr->is_dead)
+        return false;
+    switch (id)
+    {
+        case SIL_ACH_AT_MOST_SEVEN:
+            strnfmt(out, size, "This adventure: %u/7 Balrogs.",
+                achievement_bit_count(p_ptr->achievement_balrogs));
+            for (unsigned i = 0; i < N_ELEMENTS(achievement_balrogs); ++i)
+            {
+                size_t used = strlen(out);
+                strnfmt(out + used, size - used, "\n[%s] %s",
+                    p_ptr->achievement_balrogs & (1u << i) ? "x" : " ",
+                    achievement_balrogs[i].name);
+            }
+            return true;
+        case SIL_ACH_THREE_UNTOUCHED:
+        {
+            unsigned count = 0;
+            for (int i = 0; i < 3; ++i)
+                if (p_ptr->achievement_artefact_rings[i]) ++count;
+            strnfmt(out, size, "This adventure: %u/3 artefact rings forged.", count);
+            return true;
+        }
+        case SIL_ACH_SEVEN_TIMES_HE_CRIED:
+            strnfmt(out, size, "This adventure: %u/7 damaging blows with Ringil.",
+                (unsigned)p_ptr->achievement_ringil_wounds);
+            return true;
+        case SIL_ACH_NO_STEPS_REQUIRED:
+            strnfmt(out, size, "%s",
+                !(p_ptr->achievement_flags & SIL_ACH_RUN_STARTED)
+                    ? "Route tracking is unavailable for this adventure."
+                    : p_ptr->achievement_flags & SIL_ACH_RUN_CHASM_SHAFT_ROUTE
+                        ? "This adventure: route intact." : "This adventure: route broken.");
+            return true;
+        case SIL_ACH_THE_QUIET_ROAD:
+            strnfmt(out, size, "%s", !(p_ptr->achievement_flags & SIL_ACH_RUN_STARTED)
+                ? "Kill history is unavailable for this adventure."
+                : p_ptr->achievement_kills ? "This adventure: a creature has been killed."
+                    : "This adventure: no creatures killed.");
+            return true;
+        case SIL_ACH_WORD_UNBROKEN:
+            strnfmt(out, size, "%s", !p_ptr->oath_type ? "No oath chosen."
+                : oath_invalid(p_ptr->oath_type) ? "This adventure: oath broken."
+                    : "This adventure: oath unbroken.");
+            return true;
+        case SIL_ACH_A_MAP_OF_THE_IRON_HELLS:
+        {
+            unsigned mask = (p_ptr->achievement_discovery_flags
+                & SIL_ACH_DISC_REGIONS) >> SIL_ACH_DISC_REGIONS_SHIFT;
+            static const char* const names[] = { "Labyrinth", "Chasm", "Ice", "Fire", "Poison" };
+            strnfmt(out, size, "This run: %u/5 regions.", achievement_bit_count(mask));
+            for (unsigned i = 0; i < N_ELEMENTS(names); ++i)
+            {
+                size_t used = strlen(out);
+                strnfmt(out + used, size - used, "\n[%s] %s",
+                    mask & (1u << i) ? "x" : " ", names[i]);
+            }
+            return true;
+        }
+        case SIL_ACH_THE_LONG_TALE:
+        {
+            if (run_mode_is_blitz()) return false;
+            cJSON* tale = current_tale_characters(false);
+            unsigned count = 0;
+            for (const cJSON* item = tale ? tale->child : NULL; item; item = item->next)
+                if (cJSON_IsTrue(item)) ++count;
+            strnfmt(out, size, "This Tale: %u/2 different characters have completed adventures.",
+                MIN(count, 2u));
+            return true;
+        }
+        default: return false;
+    }
+}
+
 void sil_achievements_on_balrog_killed(int race)
 {
-    if (!achievements_eligible() || run_mode_is_blitz() || !metar.id
-        || race <= 0 || race >= z_info->r_max) return;
-    sil_achievements_init();
-    cJSON* tale = current_tale_characters(true);
-    if (!tale) return;
-    cJSON* balrogs = cJSON_GetObjectItemCaseSensitive(tale, "_balrogs");
-    if (!balrogs) balrogs = cJSON_AddObjectToObject(tale, "_balrogs");
-    if (!cJSON_IsObject(balrogs)) return;
-    if (!r_info[race].guid) return;
-    char key[17];
-    strnfmt(key, sizeof(key), "%016llx", (unsigned long long)r_info[race].guid);
-    if (!cJSON_HasObjectItem(balrogs, key)
-        && cJSON_AddBoolToObject(balrogs, key, true)) dirty = true;
-    int count = 0;
-    for (const cJSON* item = balrogs->child; item; item = item->next)
-        if (cJSON_IsTrue(item)) ++count;
-    if (count >= 7) unlock_achievement(SIL_ACH_AT_MOST_SEVEN, true);
+    if (!achievements_eligible()) return;
+    for (unsigned i = 0; i < N_ELEMENTS(achievement_balrogs); ++i)
+        if (achievement_balrogs[i].race == race)
+        {
+            p_ptr->achievement_balrogs |= 1u << i;
+            if (p_ptr->achievement_balrogs == 0x7F)
+                unlock_achievement(SIL_ACH_AT_MOST_SEVEN, true);
+            break;
+        }
     sil_achievements_flush();
 }
 
 void sil_achievements_on_partition_discovered(unsigned mask)
 {
-    if (!achievements_eligible() || run_mode_is_blitz()) return;
-    sil_achievements_init();
-    cJSON *tale = current_tale_characters(true);
-    if (!tale) return;
-    cJSON *entry = cJSON_GetObjectItemCaseSensitive(tale, "_partitions");
-    unsigned old = cJSON_IsNumber(entry) && entry->valuedouble >= 0
-        && entry->valuedouble <= 31 ? (unsigned)entry->valuedouble : 0;
-    unsigned discovered = old | (mask & 31u);
-    if (discovered != old)
-    {
-        if (entry) cJSON_SetNumberValue(entry, discovered);
-        else if (!cJSON_AddNumberToObject(tale, "_partitions", discovered)) return;
-        dirty = true;
-    }
-    if (discovered == 31u)
+    if (!achievements_eligible()) return;
+    /* This existing saved flag word belongs to the current player/run. Old
+     * Tale-wide JSON history deliberately cannot supply any of these visits. */
+    p_ptr->achievement_discovery_flags |= (mask & 31u) << SIL_ACH_DISC_REGIONS_SHIFT;
+    if ((p_ptr->achievement_discovery_flags & SIL_ACH_DISC_REGIONS)
+        == SIL_ACH_DISC_REGIONS)
         unlock_achievement(SIL_ACH_A_MAP_OF_THE_IRON_HELLS, true);
     sil_achievements_flush();
 }

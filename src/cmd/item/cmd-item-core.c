@@ -5308,6 +5308,8 @@ static bool prise_silmaril(void)
         attack_mod += 3;
     }
 
+    bool morgoth_was_asleep = sil_achievement_lore_morgoth_asleep();
+
     /* Test for hit */
     hit_result = hit_roll(attack_mod, 0, PLAYER, NULL, true);
 
@@ -5570,6 +5572,7 @@ static bool prise_silmaril(void)
             // add a note to the notes file
             do_cmd_note("Cut a Silmaril from Morgoth's crown", p_ptr->depth);
             sil_achievements_on_silmaril();
+            sil_achievement_lore_on_silmaril_cut(morgoth_was_asleep);
         }
     }
 

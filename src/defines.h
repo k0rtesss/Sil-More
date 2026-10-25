@@ -52,15 +52,15 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.8"
+#define VERSION_STRING "0.9.9"
 /*
- * Version components (0.9.8.37).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.9.0).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
-#define VERSION_PATCH 8
-#define VERSION_EXTRA 38 /* Persist the accepted lore achievement deeds. */
+#define VERSION_PATCH 9
+#define VERSION_EXTRA 2
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -773,7 +773,8 @@
 #define WIL_INNER_LIGHT 4
 #define WIL_INDOMITABLE 5
 #define WIL_OATH 6
-#define WIL_POISON_RESISTANCE 7
+#define WIL_HARDINESS 7
+#define WIL_POISON_RESISTANCE WIL_HARDINESS /* Historical name; same saved slot. */
 #define WIL_VENGEANCE 8
 #define WIL_MAJESTY 9
 #define WIL_CON 10
@@ -1429,15 +1430,26 @@
 
 #define ART_MAEGLIN 32
 #define ART_BARAHIR 1
+#define ART_MELIAN_RING 2
+#define ART_NAUGLAMIR 6
 #define ART_MAIRON 7
 #define ART_FEANOR 9
 #define ART_AZAGHAL 50
+#define ART_IDRIL_ROBE 22
+#define ART_FINGOLFIN_SHIELD 46
 #define ART_ANGRIST 54
 #define ART_STING 61
 #define ART_NARSIL 66
 #define ART_GURTHANG 70
+#define ART_CELEG_AITHORN 80
 #define ART_RINGIL 81
+#define ART_MELKOR 90
+#define ART_GOTHMOG_AXE 97
+#define ART_TURGON_STAFF 105
+#define ART_ULMO_CLOAK 133
+#define ART_BELTHRONDING 145
 #define ART_DAILIR 150
+#define ART_CELEBRIMBOR_GLOVES 162
 #define ART_FINWE_LAMP 171
 #define ART_DURIN 35
 #define ART_ORCRIST 64
@@ -1778,9 +1790,10 @@
 
 /* Disease exposure odds and progression, measured in completed player turns. */
 #define DISEASE_MEAT_ONE_IN 5
-#define DISEASE_SKELETON_ONE_IN 20
+#define DISEASE_SKELETON_PERCENT 3
 #define DISEASE_WATER_ONE_IN 200
-#define DISEASE_INTERVAL 100
+#define DISEASE_INTERVAL 150
+#define DISEASE_COUNTDOWN_MAX (DISEASE_INTERVAL * 2)
 #define DISEASE_NAME_COUNT 8
 #define DISEASE_HERB_COUNT 10 /* Contiguous herb svals, Rage through Sickness. */
 #define DISEASE_KNOWN_NAME 0x01

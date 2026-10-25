@@ -130,7 +130,24 @@ final class PlayGamesAchievements {
             activity.getString(R.string.play_ach_heirlooms_of_the_hidden_king),
             activity.getString(R.string.play_ach_the_ring_maker_overruled),
             activity.getString(R.string.play_ach_no_phial_required),
-            activity.getString(R.string.play_ach_three_untouched)
+            activity.getString(R.string.play_ach_three_untouched),
+            activity.getString(R.string.play_ach_a_burglars_business),
+            activity.getString(R.string.play_ach_strongbow),
+            activity.getString(R.string.play_ach_one_jewel_is_enough),
+            activity.getString(R.string.play_ach_a_desperate_victory),
+            activity.getString(R.string.play_ach_their_work_had_no_rival),
+            activity.getString(R.string.play_ach_find_nauglamir),
+            activity.getString(R.string.play_ach_find_gurthang),
+            activity.getString(R.string.play_ach_find_melkor),
+            activity.getString(R.string.play_ach_find_gothmog_axe),
+            activity.getString(R.string.play_ach_find_angrist),
+            activity.getString(R.string.play_ach_find_belthronding),
+            activity.getString(R.string.play_ach_find_idril_robe),
+            activity.getString(R.string.play_ach_find_celebrimbor_gloves),
+            activity.getString(R.string.play_ach_find_melian_ring),
+            activity.getString(R.string.play_ach_find_ulmo_cloak),
+            activity.getString(R.string.play_ach_find_fingolfin_shield),
+            activity.getString(R.string.play_ach_find_turgon_staff)
         };
         int words = (ids.length + Long.SIZE - 1) / Long.SIZE;
         allMask = new long[words];

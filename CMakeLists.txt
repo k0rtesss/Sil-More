@@ -461,6 +461,7 @@ set(SIL_MORE_SOURCES
     src/object/object-allocation.c
     src/object/object-desc.c
     src/object/object-flags.c
+    src/object/object-difficulty.c
     src/object/object-flavor.c
     src/object/object-info.c
     src/object/object-inventory.c

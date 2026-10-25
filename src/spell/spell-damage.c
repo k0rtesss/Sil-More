@@ -9,6 +9,7 @@
 #include "metarun.h"
 #include "sdl-config.h"
 #include "supplies.h"
+#include "tutorial/tutorial-game.h"
 #include <math.h>
 
 void attempt_to_cheat_death(void)
@@ -83,6 +84,7 @@ void take_hit(int dam, cptr kb_str)
 
     attempt_to_cheat_death();
     sil_achievements_on_damage(dam, old_chp);
+    tutorial_game_damage(dam);
 
     /* Display the hitpoints */
     p_ptr->redraw |= (PR_HP);

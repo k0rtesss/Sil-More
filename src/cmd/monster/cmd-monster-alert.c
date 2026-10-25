@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements-lore.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -416,6 +417,8 @@ void set_alertness(monster_type* m_ptr, int alertness)
 
     // do the actual alerting
     m_ptr->alertness = alertness;
+    if (m_ptr->r_idx == R_IDX_MORGOTH)
+        sil_achievement_lore_on_morgoth_alertness(alertness);
 
     /* An alerting monster skips its next AI turn to notice the player.  Mark
      * it active now so player actions during that notice turn still respect

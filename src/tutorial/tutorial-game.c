@@ -27,6 +27,7 @@ static char visible_description_type[48];
 static char visible_description_lesson[80];
 static int authorized_action_depth;
 static bool reached_kinds[65536];
+static bool damage_pending;
 static const char *item_types[] = {"item", "staff", "horn", "bow", "arrows",
     "ring", "amulet", "potion", "food", "light", "oil", "gem", "digging",
     "metal", "shield", "armour", "throwing", "weapon"};
@@ -39,7 +40,7 @@ static const char *item_action_ids[] = {
 };
 static bool offered_item_actions[N_ELEMENTS(item_action_ids)];
 static u32b observed_tale;
-static int previous_y, previous_x, previous_depth, previous_hp, previous_voice;
+static int previous_y, previous_x, previous_depth, previous_voice;
 static int previous_mode, previous_min_depth;
 static bool level_changed;
 static s16b previous_drain[A_MAX];
@@ -55,7 +56,7 @@ typedef struct condition_lesson {
 #define CONDITION(FIELD, NAME, EFFECT) \
     { "status." #FIELD, NAME, offsetof(player_type, FIELD), EFFECT }
 static const condition_lesson conditions[] = {
-    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 100 player turns. Rest does not cure it."),
+    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 150 player turns (300 with Hardiness). Rest does not cure it."),
     CONDITION(poisoned, "Poisoned", "Poison prevents ordinary Health regeneration."),
     CONDITION(cut, "Bleeding", "Bleeding prevents ordinary Health regeneration. Healing halves bleeding; it does not always stop it."),
     CONDITION(stun, "Stunned", "Stun penalizes every skill. More than 100 stun prevents acting."),
@@ -802,6 +803,14 @@ void tutorial_game_attack(const monster_type *monster)
     (void)monster;
 }
 
+void tutorial_game_damage(int damage)
+{
+    /* Health also falls when Constitution rescales the maximum. Only a
+     * committed hit counts, and the card waits for the next safe checkpoint. */
+    if (damage > 0 && gameplay_available() && tutorial_enabled())
+        damage_pending = true;
+}
+
 void tutorial_game_combat_roll(const combat_roll *roll)
 {
     char detail[384];
@@ -1157,13 +1166,14 @@ void tutorial_game_start(void)
      * Only ordinary level travel (the return above) preserves reached items. */
     memset(reached_kinds, 0, sizeof(reached_kinds));
     started = true;
+    damage_pending = false;
     level_changed = false;
     authorized_action_depth = 0;
     ui_checkpoint_requested = false;
     tutorial_world_start();
     observed_tale = tale ? tale->id : 0;
     previous_y = p_ptr->py; previous_x = p_ptr->px;
-    previous_depth = p_ptr->depth; previous_hp = p_ptr->chp;
+    previous_depth = p_ptr->depth;
     previous_voice = p_ptr->csp; previous_mode = player_active_weapon_mode();
     previous_min_depth = min_depth();
     memcpy(previous_drain, p_ptr->stat_drain, sizeof(previous_drain));
@@ -1186,7 +1196,11 @@ void tutorial_game_checkpoint(void)
     char detail[384], id[80];
     const metarun *tale = metarun_current();
     if (!started || (tale && tale->id != observed_tale)) tutorial_game_start();
-    if (!gameplay_available()) { tutorial_invalidate_context(); return; }
+    if (!gameplay_available()) {
+        damage_pending = false;
+        tutorial_invalidate_context();
+        return;
+    }
     if (opening_turn_gate && playerturn > 0) opening_turn_gate = false;
     end_ui_lessons();
     if (level_changed || p_ptr->depth != previous_depth) {
@@ -1269,9 +1283,10 @@ void tutorial_game_checkpoint(void)
     }
     if (drained) offer_remedy("drain", "Drained attributes");
     else tutorial_forget_observation("status.drain.remedy");
-    if (p_ptr->chp < previous_hp) {
+    if (damage_pending) {
         strnfmt(detail, sizeof(detail), "Health: %d/%d. Read the last attack and its effects before acting again.", p_ptr->chp, p_ptr->mhp);
         observe("combat.first_damage", "health", "Health lost", detail);
+        damage_pending = false;
     }
     if (p_ptr->chp <= p_ptr->mhp * op_ptr->hitpoint_warn / 10) {
         observe("status.health", "health", "Low Health", "Your Health is at or below your warning threshold. Inspect known healing options and the escape route.");
@@ -1280,7 +1295,6 @@ void tutorial_game_checkpoint(void)
         tutorial_forget_observation("status.health");
         tutorial_forget_observation("status.health.remedy");
     }
-    previous_hp = p_ptr->chp;
     if (p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4)
         observe("status.voice", "voice", "Low Voice", "Voice fuels songs and horns. It does not regenerate while singing; stop singing to recover it.");
     if (p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4)

@@ -2,7 +2,8 @@
 """Exercise the real SDL tutorial event owner without opening a player save.
 
 The SDL event gate is compiled unchanged. Game-side services are isolated
-stubs; assertions cover ownership, release barriers and semantic key dispatch.
+stubs; assertions cover ownership, release barriers, semantic key dispatch
+and narrative banner dismissal.
 This is not a physical-device or visual replay.
 """
 from pathlib import Path
@@ -42,6 +43,13 @@ static int keys[16], key_count, flush_count, pending_choice;
 static int pending_mode_choice = -1, mode_selector_calls;
 static bool touch_only, disabled;
 static bool controls_visible;
+static bool banner_visible, banner_consumes_input;
+bool dismiss_active_narrative_banner(void)
+{
+    bool visible=banner_visible;
+    banner_visible=banner_consumes_input=false;
+    return visible;
+}
 static tutorial_mode g_app_gameplay_tutorial_mode=TUTORIAL_MODE_EXTENDED;
 static int config_saves;
 void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
@@ -171,6 +179,30 @@ int main(void)
     Term=&terminal;
     angband_term[0]=&terminal;
     config.gamepad_enabled=true;
+    /* Tutorials clear both timed and input-blocking banners, including a
+     * banner arriving while the same card/revision remains on screen. */
+    banner_visible=banner_consumes_input=true;
+    sdl_gameplay_tutorial_sync();
+    assert(banner_visible && banner_consumes_input); /* No active tutorial. */
+    show(true,"","");
+    assert(!banner_visible && !banner_consumes_input);
+    {
+        unsigned int epoch=sdl_gameplay_tutorial_input_epoch();
+        g_state.need_present=false;
+        banner_visible=true;
+        sdl_gameplay_tutorial_sync();
+        assert(!banner_visible && g_state.need_present);
+        assert(sdl_gameplay_tutorial_input_epoch()==epoch);
+    }
+    banner_visible=banner_consumes_input=true;
+    show(false,"move","");
+    assert(!banner_visible && !banner_consumes_input);
+    current.active=false; ++revision;
+    sdl_gameplay_tutorial_sync();
+    banner_visible=banner_consumes_input=true;
+    sdl_gameplay_tutorial_sync();
+    assert(banner_visible && banner_consumes_input); /* Later banners survive. */
+    banner_visible=banner_consumes_input=false;
     {
         const char *documents[]={"{}","{\"gameplayTutorialEnabled\":true}",
             "{\"gameplayTutorialEnabled\":false}","{\"gameplayTutorialMode\":\"Normal\"}",
@@ -553,7 +585,7 @@ int main(void)
     e.common.timestamp=tutorial_input_barrier-1;
     assert(sdl_gameplay_tutorial_handle_event(&e));
     SDL_Quit();
-    puts("Gameplay tutorial SDL gate: PASS (info/menu ownership, required commands, keymaps, fresh keyboard/gamepad/mouse/touch, resize, quit)");
+    puts("Gameplay tutorial SDL gate: PASS (banner dismissal, info/menu ownership, required commands, keymaps, fresh keyboard/gamepad/mouse/touch, resize, quit)");
     return 0;
 }
 '''

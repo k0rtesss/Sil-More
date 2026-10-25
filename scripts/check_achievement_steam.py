@@ -28,7 +28,7 @@ static const sil_achievement_definition catalogue[] = {
     CATALOGUE_ROWS
 };
 extern "C" const sil_achievement_definition *sil_achievement_get(int id)
-{ assert(id >= 0 && id < SIL_ACH_COUNT); return &catalogue[id]; }
+{ assert(id >= 0 && id < SIL_ACH_COUNT); return sil_achievement_enabled(id) ? &catalogue[id] : nullptr; }
 extern "C" bool sil_steamworks_active() { return active; }
 extern "C" void log_log(int, const char*, int, const char*, ...) {}
 extern "C" void S_CALLTYPE SteamAPI_RegisterCallback(CCallbackBase *callback, int type)
@@ -46,7 +46,8 @@ extern "C" ISteamUserStats *SteamAPI_SteamUserStats_v013()
 { return have_stats ? reinterpret_cast<ISteamUserStats*>(&stats_handle) : nullptr; }
 static int index_for(const char *key)
 {
-    for (int i = 0; i < SIL_ACH_COUNT; ++i) if (!std::strcmp(key, catalogue[i].key)) return i;
+    for (int i = 0; i < SIL_ACH_COUNT; ++i)
+        if (catalogue[i].key && !std::strcmp(key, catalogue[i].key)) return i;
     assert(false); return 0;
 }
 extern "C" bool SteamAPI_ISteamUserStats_GetAchievement(ISteamUserStats *stats, const char *key, bool *earned)

@@ -105,6 +105,76 @@ static void checks(void)
         assert(earned(target)==positive);
         if(positive) { entry();assert(earned(target)); }
     }
+    else if(!strncmp(scenario,"return-",7)) {
+        target=SIL_ACH_THERE_AND_BACK_AGAIN;
+        const char* mode=scenario+7;
+        /* Leave the actual throne stair with a jewel, then test the return load.
+         * This preserves the game's existing minimum-depth/endgame rules. */
+        p_ptr->depth=MORGOTH_DEPTH;p_ptr->morgoth_hall_entered=true;
+        item(&inventory[0],TV_LIGHT,SV_LIGHT_SILMARIL,1);
+        cave_feat[p_ptr->py][p_ptr->px]=FEAT_LESS;
+        do_cmd_go_up();entry();assert(p_ptr->depth==MORGOTH_DEPTH-1&&p_ptr->on_the_run);
+        object_wipe(&inventory[0]);
+        if(!strcmp(mode,"pack"))item(&inventory[0],TV_LIGHT,SV_LIGHT_SILMARIL,1);
+        else if(!strcmp(mode,"equipped"))item(&inventory[INVEN_LITE],TV_LIGHT,SV_LIGHT_SILMARIL,1);
+        else if(!strcmp(mode,"extra")) {
+            object_type jewel;item(&jewel,TV_LIGHT,SV_LIGHT_SILMARIL,1);
+            assert(player_carried_extra_load(&jewel));
+        }
+        else if(!strcmp(mode,"three"))item(&inventory[0],TV_LIGHT,SV_LIGHT_SILMARIL,3);
+        else if(!strncmp(mode,"crown",5)) {
+            int gems=atoi(mode+5);assert(gems>=0&&gems<=3);
+            item(&inventory[0],a_info[ART_MORGOTH_0+gems].tval,a_info[ART_MORGOTH_0+gems].sval,1);
+            inventory[0].name1=ART_MORGOTH_0+gems;
+        }
+        while(p_ptr->depth>1) {
+            int old=p_ptr->depth;p_ptr->leaving=false;
+            cave_feat[p_ptr->py][p_ptr->px]=FEAT_LESS;do_cmd_go_up();entry();
+            assert(p_ptr->depth==old-1&&!earned(target));
+        }
+        if(!strcmp(mode,"not-gates")) { entry();assert(!earned(target)); }
+        else {
+            if(!strcmp(mode,"no-throne"))p_ptr->morgoth_hall_entered=false;
+            if(!strcmp(mode,"dead"))p_ptr->is_dead=true;
+            restrict_run(mode);p_ptr->leaving=false;
+            cave_feat[p_ptr->py][p_ptr->px]=FEAT_LESS;do_cmd_go_up();entry();assert(p_ptr->depth==0);
+            positive=!strcmp(mode,"empty")||!strcmp(mode,"crown0");
+            assert(earned(target)==positive);
+            uint64_t when=sil_achievement_unlocked_at(target);entry();
+            assert(sil_achievement_unlocked_at(target)==when);
+            sil_achievements_on_escape(silmarils_possessed());
+            assert(earned(target)==positive);
+        }
+    }
+    else if(!strncmp(scenario,"crown-",6)) {
+        target=SIL_ACH_HEAVY_IS_THE_STOLEN_CROWN;
+        const char* mode=scenario+6;
+        p_ptr->depth=0;p_ptr->morgoth_hall_entered=true;
+        int gems=!strcmp(mode,"extra-filled")?3:!strcmp(mode,"equipped-filled")?2:
+            !strncmp(mode,"filled",6)?atoi(mode+6):!strcmp(mode,"mixed")?1:0;
+        bool has_crown=strcmp(mode,"loose-only")&&strcmp(mode,"none");
+        object_type crown;
+        if(has_crown) {
+            item(&crown,a_info[ART_MORGOTH_0+gems].tval,a_info[ART_MORGOTH_0+gems].sval,1);
+            crown.name1=ART_MORGOTH_0+gems;
+            if(!strncmp(mode,"extra",5))assert(player_carried_extra_load(&crown));
+            else if(!strncmp(mode,"equipped",8))inventory[INVEN_HEAD]=crown;
+            else inventory[0]=crown;
+        }
+        int loose=!strcmp(mode,"mixed")?2:!strcmp(mode,"none")||!strcmp(mode,"empty-only")?0:
+            strstr(mode,"filled")?0:1;
+        if(loose)item(&inventory[1],TV_LIGHT,SV_LIGHT_SILMARIL,loose);
+        int total=silmarils_possessed();assert(total==gems+loose);
+        assert((has_iron_crown()!=0)==has_crown);
+        do_cmd_escape(total);
+        positive=has_crown&&total>0;
+        assert(p_ptr->escaped&&p_ptr->is_dead&&!p_ptr->playing);
+        assert(earned(target)==positive);
+        assert(earned(SIL_ACH_BACK_TO_STARLIGHT)==(total>0));
+        assert(earned(SIL_ACH_THREE_LIGHTS_IN_EXILE)==(total==3));
+        assert(!earned(SIL_ACH_THERE_AND_BACK_AGAIN));
+        printf("PASS final tally: %d loose + %d in Crown = %d\n",loose,gems,total);
+    }
     else if(!strncmp(scenario,"death-",6)) {
         target=SIL_ACH_THERE_AND_ALMOST_BACK_AGAIN;
         const char* mode=scenario+6;p_ptr->depth=0;p_ptr->chp=p_ptr->mhp=100;
@@ -161,6 +231,9 @@ SCENARIOS = (
     *("route-" + x for x in ("stairs", "false-floor", "teleport", "horn", "legacy",
                               "wizard", "practice", "tainted", "cheat", "score", "dead",
                               "shaft", "cancel", "up", "chasm")),
+    *("return-" + x for x in ("empty", "pack", "equipped", "extra", "three", "crown0", "crown1", "crown2", "crown3",
+                               "not-gates", "no-throne", "dead", "wizard", "practice", "tainted", "cheat", "score")),
+    *("crown-" + x for x in ("filled1", "filled2", "filled3", "mixed", "empty-loose", "empty-only", "extra", "equipped", "extra-filled", "equipped-filled", "loose-only", "none")),
     *("death-" + x for x in ("deep", "living", "suicide", "amulet", "escaped", "victory",
                               "wizard", "practice", "tainted", "cheat", "score", "real")),
     *("utumno-" + x for x in ("forge", "wizard", "practice", "tainted", "arrival")),

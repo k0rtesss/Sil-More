@@ -13,7 +13,7 @@ void sil_achievements_discovery_reset(bool new_run)
 {
     p_ptr->achievement_discovery_flags = new_run ? SIL_ACH_DISC_TRACKED
         : p_ptr->achievement_discovery_flags
-            & (SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN);
+            & SIL_ACH_DISC_RUN_FLAGS;
     p_ptr->achievement_water_from_y = p_ptr->achievement_water_from_x = -1;
     p_ptr->achievement_water_entry_y = p_ptr->achievement_water_entry_x = -1;
     p_ptr->achievement_poison_from_y = p_ptr->achievement_poison_from_x = -1;
@@ -102,7 +102,7 @@ void sil_achievements_on_movement(int fy, int fx, int ty, int tx)
     bool step = ABS(ty - fy) <= 1 && ABS(tx - fx) <= 1 && (fy != ty || fx != tx);
     if (!step || p_ptr->leaping)
     {
-        *flags &= SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN;
+        *flags &= SIL_ACH_DISC_RUN_FLAGS;
         return;
     }
     int from = cave_feat[fy][fx], to = cave_feat[ty][tx];

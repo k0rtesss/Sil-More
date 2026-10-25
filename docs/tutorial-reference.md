@@ -740,7 +740,7 @@ Priority: **35** (higher appears first).
 
 **1. Info**
 
-Use the skeleton's contextual Search action on the dungeon floor. Each skeleton can be searched once and may contain supplies, damaged gear, a note, or nothing. Searching orc remains has a 5% chance of disease. Skeleton hints have their own setting and can be reread later.
+Use the skeleton's contextual Search action on the dungeon floor. Each skeleton can be searched once and may contain supplies, damaged gear, a note, or nothing. Searching orc remains has a 3% base chance of disease exposure, before immunity or Hardiness. Skeleton hints have their own setting and can be reread later.
 
 Trigger: Skeleton remains are actually encountered on the player square or visibly adjacent, including already-searched remains.
 
@@ -948,7 +948,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-{detail} Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.
+{detail} Exposure rolls one of eight diseases; a disease you have cured cannot infect you again for this run. Infection assigns a random cure herb from the ten herbs. It immediately lowers Constitution by 1, then lowers a random attribute by 1 every 150 player turns (300 with Hardiness), including rest. Hardiness halves infection chances. A Gem of Self Knowledge with Alchemy reveals the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name, then a 50% chance to identify the cure once the name is known. Discoveries and immunity are saved. Eating the correct herb cures disease, restores its penalties, and grants immunity, replacing its normal effect and nourishment. Other herbs act normally. Healing or Miruvor always cures it.
 
 Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
 
@@ -1412,7 +1412,7 @@ Priority: **90** (higher appears first).
 
 **1. Info**
 
-Healing, Miruvor, or the identified cure herb cures disease and restores the attribute points it took. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.
+Healing, Miruvor, or the identified cure herb cures disease, restores the attribute points it took, and grants immunity to it for this run. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
@@ -1654,7 +1654,7 @@ Priority: **90** (higher appears first).
 
 **1. Info**
 
-Known nourishing food can relieve hunger. Check any extra effects: Dried Meat carries a 20% disease risk, while harmful herbs can make your situation worse. A known remedy is available now. Skip if you prefer another action.
+Known nourishing food can relieve hunger. Check any extra effects: Dried Meat carries a 20% base disease exposure risk, while harmful herbs can make your situation worse. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
@@ -3334,7 +3334,7 @@ Trigger: Public ability preview or newly available ability; raw serial 106, skil
 
 Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`, `src/ui/character-dump.c`, `src/cmd/ui/cmd-ui-abilities.c`.
 
-## Poison Resistance
+## Hardiness
 
 `ability.107.preview`
 
@@ -3344,7 +3344,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Gain one layer of poison resistance. It reduces new poison exposure; existing poison still needs time or a remedy to clear.
+Gain one layer of poison resistance. Disease infection chances are halved, and disease penalties occur every 300 player turns instead of 150. Existing poison still needs time or a remedy to clear; disease needs its cure.
 
 Trigger: Public ability preview or newly available ability; raw serial 107, skill 5, ability slot 7.
 
@@ -5114,7 +5114,7 @@ Moving into, through or out of shallow water costs 50% more movement time and gi
 
 **2. Info**
 
-When healthy, each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.
+When healthy, each water square entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.
 
 Trigger: Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -5930,7 +5930,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Its normal effect is to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
+Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
@@ -5962,7 +5962,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns. Rest does not cure it; potions of Healing or Miruvor do.
+Provides about 2,000 ordinary turns of nourishment, with a 20% base chance of disease exposure: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure it; potions of Healing or Miruvor do.
 
 Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
@@ -9154,7 +9154,7 @@ Moving into, through or out of deep water takes four times normal movement energ
 
 **2. Info**
 
-Swimming splashes for -3 Stealth. Each water square entered while healthy has a 0.5% disease risk. Standing still adds no movement penalty or infection roll, but leaves you unable to attack until you reach safe footing.
+Swimming splashes for -3 Stealth. Each water square entered while healthy has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no movement penalty or infection roll, but leaves you unable to attack until you reach safe footing.
 
 Trigger: Feature 100 is on the player square or visibly adjacent and marked; the observation expires when no known deep water remains nearby.
 

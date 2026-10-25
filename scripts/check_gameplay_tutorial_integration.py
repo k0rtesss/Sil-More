@@ -13,8 +13,13 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/tutorial-integration-check"
 
 HARNESS = core.HARNESS.split("int main(", 1)[0] + r'''
+#include "achievements.h"
+#include "player/killer.h"
+void attempt_to_cheat_death(void);
 __DISEASE_IMPLEMENTATION__
 __GAME_IMPLEMENTATION__
+__VITALS_IMPLEMENTATION__
+__DAMAGE_IMPLEMENTATION__
 __RANGED_AIM_IMPLEMENTATION__
 __TUTORIAL_COMMAND_IMPLEMENTATION__
 static bool eat_food(object_type *,bool *);
@@ -123,6 +128,21 @@ s16b wield_slot(const object_type *item) { (void)item;return INVEN_BODY; }
 void monster_desc(char *buf,size_t size,const monster_type *m,int mode)
 { (void)mode; SDL_snprintf(buf,size,"Monster %d",m->r_idx); }
 void msg_print(cptr message) { (void)message; }
+s16b character_xtra;
+char notes_buffer[NOTES_LENGTH];
+void attempt_to_cheat_death(void) {}
+void sil_achievements_on_healing(void) {}
+void sil_achievements_on_damage(int damage,int before) { (void)damage;(void)before; }
+void sil_achievements_on_wolf_death(bool first) { (void)first; }
+void sil_achievements_on_death(void) {}
+void killer_commit(cptr cause) { (void)cause; }
+const killer_info *killer_last(void) { return NULL; }
+void disturb(int stop,int unused) { (void)stop;(void)unused; }
+void message(u16b type,s16b extra,cptr text) { (void)type;(void)extra;(void)text; }
+void message_flush(void) {}
+void do_cmd_note(char *note,int depth) { (void)note;(void)depth; }
+void bell(cptr reason) { (void)reason; }
+bool set_entranced(int value) { p_ptr->entranced=value;return true; }
 int project_path(u16b *path,int range,int y,int x,int *ty,int *tx,u32b flags)
 { (void)range;(void)y;(void)x;(void)ty;(void)tx;(void)flags;
   assert(test_path_count>=0 && test_path_count<=4);
@@ -471,6 +491,86 @@ static void live_checkpoint(void)
     waiting=true; /* Inspect offers without a simulated frontend reading them. */
     tutorial_game_checkpoint();
     waiting=false;
+}
+
+static void prepare_damage_scenario(void)
+{
+    memset(p_ptr,0,sizeof(*p_ptr));
+    memset(inventory,0,sizeof(test_inventory));
+    memset(mon_list,0,sizeof(test_monsters));
+    memset(cave_m_idx,0,sizeof(test_mon_idx));
+    memset(cave_o_idx,0,sizeof(test_obj_idx));
+    memset(cave_info,0,sizeof(test_info));
+    for (int y=0;y<12;++y) for (int x=0;x<12;++x) cave_feat[y][x]=FEAT_FLOOR;
+    p_ptr->playing=true; p_ptr->py=p_ptr->px=5;
+    p_ptr->cur_map_hgt=p_ptr->cur_map_wid=12;
+    p_ptr->csp=p_ptr->msp=20; p_ptr->food=PY_FOOD_ALERT;
+    p_ptr->stat_use[A_CON]=8; calc_hitpoints();
+    op_ptr->hitpoint_warn=3; character_generated=true;
+    playerturn=50; started=false; ++test_tale.id;
+    tutorial_game_start();
+    live_checkpoint();
+    assert(!pending_lesson("combat.first_damage"));
+}
+
+static void check_damage_observations(void)
+{
+    tutorial_view view;
+    /* Disease, drain, expiring buffs and removed equipment all rescale Health
+     * through calc_hitpoints(). Even rounding at partial Health is not damage. */
+    for (int wounded=0;wounded<2;++wounded) {
+        prepare_damage_scenario();
+        if (wounded) { p_ptr->chp=p_ptr->mhp*3/5; live_checkpoint(); }
+        int before=p_ptr->chp;
+        p_ptr->diseased=1; p_ptr->stat_disease[A_CON]=-1;
+        --p_ptr->stat_use[A_CON]; calc_hitpoints();
+        assert(p_ptr->chp<before);
+        if (!wounded) assert(p_ptr->chp==61 && p_ptr->mhp==61);
+        live_checkpoint();
+        assert(!pending_lesson("combat.first_damage"));
+        assert(tutorial_lesson_status("combat.first_damage")==TUTORIAL_UNSEEN);
+    }
+    prepare_damage_scenario();
+    take_hit(0,"fully protected attack"); live_checkpoint();
+    assert(!pending_lesson("combat.first_damage"));
+
+    /* Real damage survives same-turn healing or Constitution changes in either
+     * direction. The card uses the final Health and waits for a safe boundary. */
+    for (int scenario=0;scenario<4;++scenario) {
+        prepare_damage_scenario();
+        take_hit(1,"a tutorial fixture hit");
+        assert(!pending_lesson("combat.first_damage") && !tutorial_is_active());
+        if (scenario==1) { --p_ptr->stat_use[A_CON]; calc_hitpoints(); }
+        if (scenario==2) { ++p_ptr->stat_use[A_CON]; calc_hitpoints(); }
+        if (scenario==3) p_ptr->chp=p_ptr->mhp;
+        live_checkpoint();
+        assert(tutorial_get_view(&view) && !strcmp(view.id,"combat.first_damage"));
+        char health[64]; strnfmt(health,sizeof(health),"Health: %d/%d.",p_ptr->chp,p_ptr->mhp);
+        assert(strstr(view.body,health));
+        tutorial_continue();
+        take_hit(1,"another fixture hit"); live_checkpoint();
+        assert(!pending_lesson("combat.first_damage"));
+    }
+    /* Preserve a hit across ordinary level travel, but never across a restore
+     * or a fresh hero, including another hero in the same Tale. */
+    prepare_damage_scenario(); take_hit(1,"a hit before travel");
+    ++p_ptr->depth; tutorial_game_start(); live_checkpoint();
+    assert(pending_lesson("combat.first_damage"));
+    for (int restoring=0;restoring<2;++restoring) {
+        prepare_damage_scenario(); take_hit(1,"a hit before restart");
+        if (restoring) p_ptr->restoring=true;
+        else playerturn=0;
+        tutorial_game_start(); p_ptr->restoring=false; playerturn=50;
+        live_checkpoint(); assert(!pending_lesson("combat.first_damage"));
+    }
+    prepare_damage_scenario();
+    tutorial_set_enabled(false); take_hit(1,"a hit with tutorials disabled");
+    tutorial_set_enabled(true); live_checkpoint();
+    assert(!pending_lesson("combat.first_damage"));
+    prepare_damage_scenario();
+    take_hit(p_ptr->chp,"a lethal hit"); live_checkpoint();
+    assert(p_ptr->is_dead && !pending_lesson("combat.first_damage"));
+    puts("First damage tutorial: real hits only, full/partial CON rescaling, zero hits, healing, safe checkpoints and lifecycle: PASS");
 }
 
 static void check_opening_first_turn(void)
@@ -1163,6 +1263,7 @@ int main(void)
         tutorial_game_start();
         assert(!tutorial_character_blocked());
     }
+    check_damage_observations();
     check_opening_first_turn();
     check_information_only_movement();
     check_live_checkpoints();
@@ -1366,7 +1467,7 @@ def main():
                         'steps':[{'kind':'info','text':'Detailed terrain context.'}]})
     actual = json.loads((ROOT / 'lib/help/tutorials.json').read_text())['lessons']
     (OUT / "actual-catalogue.json").write_text(json.dumps({"version": 1, "lessons": actual}))
-    for lesson_id in ('menu.main-menu', 'menu.halls'):
+    for lesson_id in ('menu.main-menu', 'menu.halls', 'combat.first_damage'):
         lessons.append(next(entry for entry in actual if entry['id'] == lesson_id))
     for lesson_id in ('opening.move', 'combat.first_adjacent'):
         lesson = next(entry for entry in actual if entry['id'] == lesson_id)
@@ -1387,6 +1488,9 @@ def main():
     game = game.replace('#include "externs.h"', '')
     game = game.replace('#include "tutorial-game.h"', '#include "tutorial/tutorial-game.h"')
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')
+    vitals_source = (ROOT / 'src/player/player-vitals.c').read_text()
+    vitals = '\n'.join(c_function(vitals_source, name) for name in ('rescale_vital', 'calc_hitpoints'))
+    damage = c_function((ROOT / 'src/spell/spell-damage.c').read_text(), 'take_hit')
     ranged = (ROOT / "src/cmd/combat/cmd-ranged.c").read_text()
     tutorial_frontend = (ROOT / "src/sdl/ui/sdl-gameplay-tutorial.c").read_text()
     tutorial_command = c_function(tutorial_frontend, 'tutorial_command')
@@ -1407,6 +1511,8 @@ def main():
             'object_info_configure_footer', 'object_info_screen_capture_view',
             'object_info_screen_multi_with_actions'))
     source.write_text(HARNESS.replace("__GAME_IMPLEMENTATION__", game)
+                      .replace("__VITALS_IMPLEMENTATION__", vitals)
+                      .replace("__DAMAGE_IMPLEMENTATION__", damage)
                       .replace("__DISEASE_IMPLEMENTATION__", disease)
                       .replace("__RANGED_AIM_IMPLEMENTATION__", aim)
                       .replace("__TUTORIAL_COMMAND_IMPLEMENTATION__", tutorial_command)

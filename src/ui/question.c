@@ -4,6 +4,16 @@
 #include "ui/menu-click.h"
 #include "ui/question.h"
 
+cptr ui_question_interaction_help_once(void)
+{
+    if (!sdl_config_take_interaction_check_help())
+        return "";
+
+    return "Interaction check: choose an action, then the game rolls automatically. "
+        "The displayed percentage is the success probability; a tie fails. "
+        "Acting spends one turn. Closing this prompt or choosing Leave spends none. ";
+}
+
 /*
  * Rebuild the overlay panel for the current loop iteration.
  */

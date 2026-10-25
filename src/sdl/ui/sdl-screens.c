@@ -33,6 +33,7 @@ static int g_sdl_char_sheet_hover_tooltip_choice =
 static bool sdl_narrative_portrait_adjust_canvas(SDL_Rect* canvas);
 static void sdl_char_sheet_book_body_px_cache_clear(void);
 static bool sdl_char_sheet_terminal_book_style(void);
+static bool sdl_char_sheet_narrow_icon_book(float content_w);
 
 /* Standalone prose keeps its readable font when it is longer than a phone
  * viewport.  Navigation moves the viewport and leaves the prompt fixed. */
@@ -6298,6 +6299,14 @@ static void sdl_tale_screen_render_canvas(const SDL_Rect* canvas)
     SDL_RenderClear(g_state.renderer);
 
     if (screen->manuscript)
+        sdl_tale_screen_draw_manuscript_frame(&metrics);
+    /* Match the wrapped title height reserved by the layout in both font
+     * modes. The single-line sheet helper crops long normal-font titles. */
+    (void)sdl_welcome_draw_text_box(metrics.title_font, screen->title,
+        TERM_YELLOW, (SDL_FRect){ metrics.column_x, metrics.title_y,
+            metrics.column_w, metrics.title_h }, screen->manuscript);
+
+    if (screen->manuscript)
     {
         char folio[48];
         int folio_w;
@@ -6305,11 +6314,6 @@ static void sdl_tale_screen_render_canvas(const SDL_Rect* canvas)
         int remaining = screen->active_visible_characters;
         int previous_entry = -1;
         bool cursor_drawn = false;
-
-        sdl_tale_screen_draw_manuscript_frame(&metrics);
-        (void)sdl_char_sheet_draw_text(metrics.title_font, screen->title,
-            TERM_YELLOW, metrics.column_x, metrics.title_y,
-            metrics.column_w, metrics.title_h, true);
 
         strnfmt(folio, sizeof(folio), "Page %d of %d", screen->page + 1,
             MAX(1, screen->page_count));
@@ -6381,10 +6385,6 @@ static void sdl_tale_screen_render_canvas(const SDL_Rect* canvas)
     }
     else
     {
-        (void)sdl_char_sheet_draw_text(metrics.title_font, screen->title,
-            TERM_YELLOW, metrics.column_x, metrics.title_y, metrics.column_w,
-            metrics.title_h, false);
-
         for (int i = start; i < end; i++)
         {
             const sdl_tale_layout_line* line = &screen->layout_lines[i];
@@ -8151,12 +8151,12 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
 
     /* Achievement books can have large fonts on a phone. Compact navigation
      * keeps all three native-size labels readable within their own hitboxes. */
-    if (g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_NARRATIVE
-        && g_sdl_character_sheet_screen.narrative_icon_book && content_w < 700.0f)
+    if (sdl_char_sheet_narrow_icon_book(content_w))
     {
         const int choices[3] = { SDL_SELECT_CLICK_PAGE_PREV,
             SDL_SELECT_CLICK_CLOSE, SDL_SELECT_CLICK_PAGE_NEXT };
-        const char* labels[3] = { "<", "Back", ">" };
+        const char* labels[3] = { "<",
+            g_sdl_character_sheet_screen.narrative_close_label, ">" };
         const float fractions[3] = { 0.20f, 0.40f, 0.20f };
         const float offsets[3] = { 0.0f, 0.30f, 0.80f };
         for (int i = 0; i < 3; ++i)
@@ -12299,10 +12299,23 @@ static bool sdl_char_sheet_landscape_chronicle(void)
 
 /* Icon catalogues use the phone panel's width rather than body-size margins.
  * Keep the same inset for pagination, painted frames, contents and page turns. */
+static bool sdl_char_sheet_mobile_icon_book(void)
+{
+    if (g_sdl_character_sheet_screen.context != SDL_CHARACTER_SHEET_NARRATIVE
+        || !g_sdl_character_sheet_screen.narrative_icon_book) return false;
+#if SIL_SDL_MOBILE_BUILD
+    return true;
+#else
+    return g_startup_device_class == SDL_STARTUP_DEVICE_MOBILE_TOUCH
+        || g_startup_device_class == SDL_STARTUP_DEVICE_ANDROID_HANDHELD;
+#endif
+}
+
 static bool sdl_char_sheet_narrow_icon_book(float content_w)
 {
+    float density = sdl_char_sheet_mobile_icon_book() ? sdl_ui_density_scale() : 1.0f;
     return g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_NARRATIVE
-        && g_sdl_character_sheet_screen.narrative_icon_book && content_w < 700.0f;
+        && g_sdl_character_sheet_screen.narrative_icon_book && content_w < 700.0f * density;
 }
 
 static float sdl_char_sheet_book_margin_h(float body_lh, float content_w)
@@ -12312,8 +12325,9 @@ static float sdl_char_sheet_book_margin_h(float body_lh, float content_w)
     {
         return sdl_char_sheet_clampf(content_w * 0.035f, 12.0f, 52.0f);
     }
+    float density = sdl_char_sheet_mobile_icon_book() ? sdl_ui_density_scale() : 1.0f;
     return sdl_char_sheet_narrow_icon_book(content_w)
-        ? MIN(12.0f, content_w * 0.04f) : body_lh * SDL_BOOK_MARGIN_H;
+        ? MIN(12.0f * density, content_w * 0.04f) : body_lh * SDL_BOOK_MARGIN_H;
 }
 
 /* The reading-column width for a given story px (a measure cap, but never wider
@@ -12506,9 +12520,10 @@ static float sdl_char_sheet_narrative_bottom_lamp_height(float region_h,
 /* Achievement sprites use a gutter, included in every measuring/render pass. */
 static float sdl_char_sheet_narrative_icon_gutter(int para, float width, float lh)
 {
+    float density = sdl_char_sheet_mobile_icon_book() ? sdl_ui_density_scale() : 1.0f;
     return g_sdl_character_sheet_screen.narrative_icon_row[para] >= 0
-        ? MIN(lh * 1.6f, width <= 680.0f
-            ? MIN(40.0f, width * 0.12f) : width * 0.18f) : 0.0f;
+        ? MIN(lh * 1.6f, width <= 680.0f * density
+            ? MIN(40.0f * density, width * 0.12f) : width * 0.18f) : 0.0f;
 }
 
 static float sdl_char_sheet_narrative_text_width(int para, float width, float lh)
@@ -12982,6 +12997,11 @@ static void sdl_char_sheet_narrative_expand_pages_to_target(
 int sdl_char_sheet_narrative_choose_px(float canvas_h, float content_w,
     float top_y, float region_bottom)
 {
+    /* Achievement lists keep readable mobile text in both font modes.
+     * Density converts logical sizes once; long entries wrap and scroll. */
+    if (sdl_char_sheet_mobile_icon_book())
+        return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * sdl_menu_font_px(24)));
+
     if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
         && !sdl_char_sheet_terminal_book_style())
     {
@@ -14269,14 +14289,32 @@ void sdl_char_sheet_render_narrative_page(int page, TTF_Font* body_font,
         float gutter = sdl_char_sheet_narrative_icon_gutter(i, book_w, body_lh);
         if (gutter > 0.0f && g_state.tileset)
         {
-            float size = MIN(body_lh * 1.3f, gutter * 0.82f);
-            SDL_FRect src = {
-                g_sdl_character_sheet_screen.narrative_icon_col[i] * 16.0f,
-                g_sdl_character_sheet_screen.narrative_icon_row[i] * 16.0f,
-                16.0f, 16.0f };
-            SDL_FRect dst = { book_x, y, size, size };
+            int count = MAX(1, MIN(3,
+                g_sdl_character_sheet_screen.narrative_icon_count[i]));
+            float span = MIN(body_lh * 1.3f, gutter * 0.82f);
+            /* Three tiny rings become illegible in a 40px mobile gutter.
+             * Two above one keeps each source tile close to its native 16px
+             * while retaining the same gutter and text size. */
+            bool compact_three = count == 3 && span / count < 16.0f;
+            float size = span / (compact_three ? 2 : count);
             sdl_restore_tileset_mod();
-            SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
+            for (int tile = 0; tile < count; ++tile)
+            {
+                int row = tile ? g_sdl_character_sheet_screen.narrative_icon_row2[i]
+                    : g_sdl_character_sheet_screen.narrative_icon_row[i];
+                int col = tile ? g_sdl_character_sheet_screen.narrative_icon_col2[i]
+                    : g_sdl_character_sheet_screen.narrative_icon_col[i];
+                float source_size = (float)MAX(16, MIN(64,
+                    g_sdl_character_sheet_screen.narrative_icon_source_size[i]));
+                SDL_FRect src = { col * 16.0f, row * 16.0f,
+                    source_size, source_size };
+                float dx = compact_three ? (tile == 2 ? size * 0.5f : tile * size)
+                    : tile * size;
+                float dy = compact_three ? (tile == 2 ? size : 0.0f)
+                    : (span - size) * 0.5f;
+                SDL_FRect dst = { book_x + dx, y + dy, size, size };
+                SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
+            }
         }
         if (sdl_char_sheet_terminal_book_style())
         {
@@ -17547,6 +17585,10 @@ void sdl_character_sheet_screen_add_book_paragraph(cptr text)
         SDL_BOOK_PARA_LEN);
     g_sdl_character_sheet_screen.narrative_icon_row[n] = -1;
     g_sdl_character_sheet_screen.narrative_icon_col[n] = -1;
+    g_sdl_character_sheet_screen.narrative_icon_row2[n] = -1;
+    g_sdl_character_sheet_screen.narrative_icon_col2[n] = -1;
+    g_sdl_character_sheet_screen.narrative_icon_count[n] = 0;
+    g_sdl_character_sheet_screen.narrative_icon_source_size[n] = 16;
     g_sdl_character_sheet_screen.narrative_para_choice[n] = -1;
     g_sdl_character_sheet_screen.narrative_para_attr[n] = TERM_WHITE;
     SDL_memset(g_sdl_character_sheet_screen.narrative_para_char_attr[n],
@@ -17585,6 +17627,13 @@ void sdl_character_sheet_screen_add_book_paragraph_styled(cptr text,
 void sdl_character_sheet_screen_add_book_icon_paragraph(const char* text,
     int attr, int row, int col)
 {
+    sdl_character_sheet_screen_add_book_composite_icon_paragraph(text,
+        attr, row, col, row, col, 1);
+}
+
+void sdl_character_sheet_screen_add_book_composite_icon_paragraph(const char* text,
+    int attr, int row, int col, int row2, int col2, int count)
+{
     int before = g_sdl_character_sheet_screen.narrative_para_count;
     sdl_character_sheet_screen_add_book_paragraph_colored(text, attr);
     if (g_sdl_character_sheet_screen.narrative_para_count > before)
@@ -17593,7 +17642,21 @@ void sdl_character_sheet_screen_add_book_icon_paragraph(const char* text,
         (void)sdl_load_tileset_texture(); /* Icons also display in ASCII mode. */
         g_sdl_character_sheet_screen.narrative_icon_row[before] = (short)row;
         g_sdl_character_sheet_screen.narrative_icon_col[before] = (short)col;
+        g_sdl_character_sheet_screen.narrative_icon_row2[before] = (short)row2;
+        g_sdl_character_sheet_screen.narrative_icon_col2[before] = (short)col2;
+        g_sdl_character_sheet_screen.narrative_icon_count[before] =
+            (byte)((row == row2 && col == col2) ? MAX(1, MIN(3, count)) : 2);
     }
+}
+
+void sdl_character_sheet_screen_add_book_atlas_icon_paragraph(const char* text,
+    int attr, int row, int col, int source_size)
+{
+    int before = g_sdl_character_sheet_screen.narrative_para_count;
+    sdl_character_sheet_screen_add_book_icon_paragraph(text, attr, row, col);
+    if (g_sdl_character_sheet_screen.narrative_para_count > before)
+        g_sdl_character_sheet_screen.narrative_icon_source_size[before] =
+            (byte)MAX(16, MIN(64, source_size));
 }
 
 /* A soft radial bloom: a bright centre vertex fading to a transparent rim,

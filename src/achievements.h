@@ -2,6 +2,7 @@
 #define SIL_ACHIEVEMENTS_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -103,8 +104,53 @@ typedef enum sil_achievement_id {
     SIL_ACH_THE_RING_MAKER_OVERRULED,
     SIL_ACH_NO_PHIAL_REQUIRED,
     SIL_ACH_THREE_UNTOUCHED,
+    SIL_ACH_A_BURGLARS_BUSINESS,
+    SIL_ACH_STRONGBOW,
+    SIL_ACH_ONE_JEWEL_IS_ENOUGH,
+    SIL_ACH_A_DESPERATE_VICTORY,
+    SIL_ACH_THEIR_WORK_HAD_NO_RIVAL,
+    SIL_ACH_FIND_NAUGLAMIR,
+    SIL_ACH_FIND_GURTHANG,
+    SIL_ACH_FIND_MELKOR,
+    SIL_ACH_FIND_GOTHMOG_AXE,
+    SIL_ACH_FIND_ANGRIST,
+    SIL_ACH_FIND_BELTHRONDING,
+    SIL_ACH_FIND_IDRIL_ROBE,
+    SIL_ACH_FIND_CELEBRIMBOR_GLOVES,
+    SIL_ACH_FIND_MELIAN_RING,
+    SIL_ACH_FIND_ULMO_CLOAK,
+    SIL_ACH_FIND_FINGOLFIN_SHIELD,
+    SIL_ACH_FIND_TURGON_STAFF,
     SIL_ACH_COUNT
 } sil_achievement_id;
+
+/* Steam omits these published Play achievements without moving their IDs. */
+static inline bool sil_achievement_enabled(int id)
+{
+    if (id < 0 || id >= SIL_ACH_COUNT) return false;
+#ifdef SIL_STEAMWORKS
+    switch (id)
+    {
+#define SIL_ACH_STEAM_EXCLUDED(key) case SIL_ACH_##key:
+#include "achievement-steam-exclusions.h"
+#undef SIL_ACH_STEAM_EXCLUDED
+        return false;
+        default: break;
+    }
+#endif
+    return true;
+}
+#ifdef SIL_STEAMWORKS
+enum {
+    SIL_ACH_STEAM_EXCLUDED_COUNT = 0
+#define SIL_ACH_STEAM_EXCLUDED(key) + 1
+#include "achievement-steam-exclusions.h"
+#undef SIL_ACH_STEAM_EXCLUDED
+};
+#define SIL_ACH_ACTIVE_COUNT (SIL_ACH_COUNT - SIL_ACH_STEAM_EXCLUDED_COUNT)
+#else
+#define SIL_ACH_ACTIVE_COUNT SIL_ACH_COUNT
+#endif
 
 /* Platform masks are an array of words, preserving every existing bit/index. */
 #define SIL_ACH_WORD_COUNT ((SIL_ACH_COUNT + 63) / 64)
@@ -112,7 +158,14 @@ static inline uint64_t sil_achievement_word_mask(unsigned word)
 {
     if (word >= SIL_ACH_WORD_COUNT) return 0;
     unsigned remaining = SIL_ACH_COUNT - word * 64;
-    return remaining >= 64 ? UINT64_MAX : (UINT64_C(1) << remaining) - 1;
+    uint64_t mask = remaining >= 64 ? UINT64_MAX : (UINT64_C(1) << remaining) - 1;
+#ifdef SIL_STEAMWORKS
+#define SIL_ACH_STEAM_EXCLUDED(key) \
+    if (word == SIL_ACH_##key / 64) mask &= ~(UINT64_C(1) << (SIL_ACH_##key % 64));
+#include "achievement-steam-exclusions.h"
+#undef SIL_ACH_STEAM_EXCLUDED
+#endif
+    return mask;
 }
 #define SIL_ACH_RUN_STARTED 0x01u
 #define SIL_ACH_RUN_TAINTED 0x02u
@@ -128,7 +181,12 @@ static inline uint64_t sil_achievement_word_mask(unsigned word)
 #define SIL_ACH_DISC_WATER 0x10u
 #define SIL_ACH_DISC_POISON 0x20u
 #define SIL_ACH_DISC_LABYRINTH 0x40u
-#define SIL_ACH_DISC_FLAGS 0x7Fu
+/* Five region visits survive level changes and saves, but never a new run.
+ * These were unused bits in the existing saved u32b, so its layout is unchanged. */
+#define SIL_ACH_DISC_REGIONS_SHIFT 7u
+#define SIL_ACH_DISC_REGIONS 0xF80u
+#define SIL_ACH_DISC_RUN_FLAGS (SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN | SIL_ACH_DISC_REGIONS)
+#define SIL_ACH_DISC_FLAGS 0xFFFu
 
 typedef struct sil_achievement_definition {
     const char *key;
@@ -138,6 +196,8 @@ typedef struct sil_achievement_definition {
 } sil_achievement_definition;
 
 const sil_achievement_definition *sil_achievement_get(int id);
+bool sil_achievement_revealed(int id);
+bool sil_achievement_progress_text(int id, char* out, size_t size);
 uint64_t sil_achievement_unlocked_at(int id);
 uint64_t sil_achievements_mask(unsigned word);
 bool sil_achievements_eligible(void);
@@ -183,12 +243,16 @@ void sil_achievements_on_death(void);
 void sil_achievements_on_monster_killed(int m_idx, int who);
 void sil_achievements_on_light_kill(void);
 void sil_achievements_on_smithing_completed(bool custom_artefact);
+void sil_achievements_on_artefact_created(int difficulty);
+void sil_achievements_on_artefact_found(int artefact);
 void sil_achievements_on_morgoth_defeated(void);
 void sil_achievements_on_run_completed(void);
 void sil_achievements_on_tale_completed(void);
 void sil_achievements_on_tale_discarded(uint32_t id);
 void sil_achievements_on_balrog_killed(int race);
 void sil_achievements_show(void);
+/* Acknowledged startup panel containing only the current hero's deeds. */
+void sil_achievements_show_character_deeds(void);
 
 #ifdef __cplusplus
 }

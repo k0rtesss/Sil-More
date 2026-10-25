@@ -39,6 +39,9 @@ typedef struct ui_question_button {
  */
 #define UI_QUESTION_GLOBAL (-1)
 
+/* Shared chest/door introduction, empty after its first use. */
+cptr ui_question_interaction_help_once(void);
+
 int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index);
 

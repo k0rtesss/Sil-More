@@ -286,12 +286,18 @@ cptr disease_cure_name(void)
     return names[p_ptr->disease_cure];
 }
 
-/* Also used to give pre-0.9.8.9 infections an identity during migration. */
-void disease_assign_identity(void)
+/* Roll the full list once. An immune result prevents infection, rather than
+ * rerolling until a susceptible disease is found. Legacy saves have no immunity. */
+bool disease_assign_identity(void)
 {
-    p_ptr->disease_name = 1 + rand_int(DISEASE_NAME_COUNT);
+    byte name = 1 + rand_int(DISEASE_NAME_COUNT);
+    if (p_ptr->disease_immunity & (1u << (name - 1)))
+        return false;
+
+    p_ptr->disease_name = name;
     p_ptr->disease_cure = rand_int(DISEASE_HERB_COUNT);
     p_ptr->disease_knowledge = 0;
+    return true;
 }
 
 void disease_identify(void)
@@ -324,8 +330,13 @@ bool infect_disease(void)
     if (p_ptr->diseased)
         return false;
 
-    p_ptr->diseased = DISEASE_INTERVAL;
-    disease_assign_identity();
+    /* All exposure sources, including a Herb of Sickness, share this save. */
+    if (p_ptr->active_ability[S_WIL][WIL_HARDINESS] && one_in_(2))
+        return false;
+    if (!disease_assign_identity())
+        return false;
+
+    p_ptr->diseased = DISEASE_COUNTDOWN_MAX;
     p_ptr->stat_disease[A_CON] = -1;
     msg_print("You contract a disease. Your Constitution decreases.");
     disease_changed();
@@ -337,13 +348,15 @@ bool cure_disease(void)
     if (!p_ptr->diseased)
         return false;
 
+    if (p_ptr->disease_name > 0 && p_ptr->disease_name <= DISEASE_NAME_COUNT)
+        p_ptr->disease_immunity |= 1u << (p_ptr->disease_name - 1);
     p_ptr->diseased = 0;
     p_ptr->disease_name = 0;
     p_ptr->disease_cure = 0;
     p_ptr->disease_knowledge = 0;
     for (int stat = 0; stat < A_MAX; stat++)
         p_ptr->stat_disease[stat] = 0;
-    msg_print("Your disease is cured. The attributes it weakened are restored.");
+    msg_print("Your disease is cured. The attributes it weakened are restored, and you are immune to it for this run.");
     disease_changed();
     return true;
 }
@@ -356,10 +369,13 @@ void process_disease(void)
 
     if (!p_ptr->diseased)
         return;
-    if (--p_ptr->diseased > 0)
+    /* A fixed progress scale preserves partial intervals when Hardiness is
+     * gained, disabled or lost: 150 ordinary turns or 300 protected turns. */
+    p_ptr->diseased -= p_ptr->active_ability[S_WIL][WIL_HARDINESS] ? 1 : 2;
+    if (p_ptr->diseased > 0)
         return;
 
-    p_ptr->diseased = DISEASE_INTERVAL;
+    p_ptr->diseased = DISEASE_COUNTDOWN_MAX;
     int stat = rand_int(A_MAX);
     /* Saturate storage during arbitrarily long games; calc_stats applies the
      * normal attribute floor independently of the accumulated penalties. */

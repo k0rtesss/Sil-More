@@ -58,7 +58,7 @@
 
 # Version stamp (required)
 
-V:0.9.8
+V:0.9.9
 
 N:0:Houseless
 Q:beb6128db2d417c1
@@ -412,7 +412,7 @@ B:You endure bravely—mightiest mortal warrior, spirit unbroken by darkness.
 F:EVN_AFFINITY | WIL_AFFINITY | PER_PENALTY | SNG_AFFINITY | MOR_CURSE | STL_PENALTY
 U:SNG_HURIN
 S:2:2:2:0
-C:5:3:5:5:5:7:7:10  # Song of Slaying  # Poison Resistance  # Indomitable # Formidable
+C:5:3:5:5:5:7:7:10  # Song of Slaying  # Hardiness  # Indomitable # Formidable
 P:2
 D: Mightiest mortal warrior, defiant heart opposing Morgoth's darkness, whose valor on Anfauglith echoed courage beyond mortal despair. Bound cruelly to doom, witnessing ruin wrought upon kin and realm alike, sorrow unmatched, yet spirit unbroken amid relentless torment. Foreshadowing tragic deeds borne of bitterness and wrathful grief, memory enduring in pride and tragedy, hero forever defiant; Húrin, steadfast flame, challenging darkness even unto bitterest end.
 

@@ -176,10 +176,12 @@ static void checks(void)
         setup(41);hero(1);p_ptr->prace=5;p_ptr->depth=0;
         artefact(&inventory[0],strstr(s,"no-empty")?ART_MORGOTH_1:ART_MORGOTH_0);
         artefact(&inventory[1],ART_NARSIL);artefact(&inventory[2],ART_BARAHIR);
+        item(&inventory[3],TV_LIGHT,SV_LIGHT_SILMARIL,strstr(s,"no-empty")?2:3);
         p_ptr->oath_type=OATH_MERCY;
         if(strstr(s,"broken"))p_ptr->oaths_broken|=OATH_MERCY_FLAG;
-        target=SIL_ACH_THESE_THINGS_ARE_MINE;sil_achievements_on_escape(3);
-        assert(earned(SIL_ACH_HEAVY_IS_THE_STOLEN_CROWN)==!strstr(s,"no-empty"));
+        target=SIL_ACH_THESE_THINGS_ARE_MINE;assert(silmarils_possessed()==3);
+        sil_achievements_on_escape(silmarils_possessed());
+        assert(earned(SIL_ACH_HEAVY_IS_THE_STOLEN_CROWN));
         assert(earned(SIL_ACH_THE_OATH_HE_SHOULD_HAVE_SWORN)==!strstr(s,"broken"));
         assert(earned(SIL_ACH_HEIRLOOMS_OF_THE_HIDDEN_KING));
     }
@@ -215,8 +217,7 @@ static void checks(void)
         setup(41);target=SIL_ACH_AT_MOST_SEVEN;
         const int races[]={R_IDX_DURUIN,145,166,186,206,225,R_IDX_GOTHMOG};
         for(int i=0;i<7;i++) {
-            sil_achievements_begin_run();
-            if(i==6&&strstr(s,"split"))metar.id=72;
+            if(i==6&&strstr(s,"split"))sil_achievements_begin_run();
             monster_type* m=spawn(strstr(s,"duplicates")?R_IDX_DURUIN:races[i]);
             direct_kill(m,-1);if(i<6)assert(!earned(target));
         }

@@ -6,6 +6,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "cave/cave-environment.h"
+#include "melee/melee-util.h"
 #include "ui/question.h"
 #include <math.h>
 
@@ -253,6 +254,7 @@ void move_player(int dir)
     int px = p_ptr->px;
 
     int y, x;
+    bool exchange_thrall = false;
 
     /* Find the result of moving */
     player_set_visual_facing_dir(dir);
@@ -273,8 +275,17 @@ void move_player(int dir)
         return;
     }
 
+    /* Dejected thralls can make room; alert thralls keep their quest dialog. */
+    if (cave_m_idx[y][x] > 0)
+    {
+        int race = mon_list[cave_m_idx[y][x]].r_idx;
+        exchange_thrall = race == R_IDX_HUMAN_THRALL
+            || race == R_IDX_ELF_THRALL;
+    }
+
     /* Hack -- attack visible monsters */
-    if ((cave_m_idx[y][x] > 0) && mon_list[cave_m_idx[y][x]].ml)
+    if ((cave_m_idx[y][x] > 0) && mon_list[cave_m_idx[y][x]].ml
+        && !exchange_thrall)
     {
         /* Attack */
         py_attack(y, x, ATT_MAIN);
@@ -369,6 +380,34 @@ void move_player(int dir)
             return;
         }
 
+        if (exchange_thrall)
+        {
+            monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
+            char m_name[80], prompt[160];
+
+            disturb(0, 0);
+            /* An exchange must leave the thrall on safe, walkable ground. */
+            if (!cave_exist_mon(&r_info[m_ptr->r_idx], py, px, true, false)
+                || cave_trap_bold(py, px)
+                || cave_feat[py][px] == FEAT_DEEP_WATER
+                || cave_feat[py][px] == FEAT_POISON
+                || cave_environment_pending_hazard(py, px))
+            {
+                msg_print("There is no safe place for the thrall to stand.");
+                p_ptr->energy_use = 0;
+                return;
+            }
+
+            monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+            strnfmt(prompt, sizeof(prompt), "Change places with %s? ", m_name);
+            flush();
+            if (!get_check_near(y, x, prompt))
+            {
+                p_ptr->energy_use = 0;
+                return;
+            }
+        }
+
         /* Check before walking onto known leapable hazards */
         if (!p_ptr->confused
             && p_ptr->active_ability[S_SMT][SMT_REPAIR]
@@ -445,7 +484,8 @@ void move_player(int dir)
                  * two ways. Ask only when the same conditions below make a
                  * real leap available; traps and chasms retain their old
                  * automatic leap behavior. */
-                if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
+                if (!exchange_thrall
+                    && p_ptr->active_ability[S_EVN][EVN_LEAPING]
                     && run_up
                     && (cave_feat[y][x] == FEAT_WATER
                         || cave_feat[y][x] == FEAT_POISON
@@ -478,7 +518,8 @@ void move_player(int dir)
                     }
                 }
 
-                if (p_ptr->active_ability[S_EVN][EVN_LEAPING]
+                if (!exchange_thrall
+                    && p_ptr->active_ability[S_EVN][EVN_LEAPING]
                     && (cave_feat[y][x] != FEAT_WATER
                         || (run_up && !sdl_mouse_path_is_following()))
                     && !terrain_entry_chosen)
@@ -740,7 +781,7 @@ void move_player(int dir)
 
         // if there is an invisible monster present and you haven't yet
         // attacked, do so now
-        if (cave_m_idx[y][x] > 0)
+        if (cave_m_idx[y][x] > 0 && !exchange_thrall)
         {
             msg_print("An unseen foe blocks your way.");
 

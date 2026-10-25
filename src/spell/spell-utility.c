@@ -1119,6 +1119,20 @@ void self_knowledge(void)
         i++;
     }
 
+    if (p_ptr->disease_immunity)
+    {
+        int immune_count = 0;
+        for (j = 0; j < DISEASE_NAME_COUNT; j++)
+            if (p_ptr->disease_immunity & (1u << j))
+                immune_count++;
+        strnfmt(s[i], sizeof(s[i]), "Disease immunity: %d/%d",
+            immune_count, DISEASE_NAME_COUNT);
+        strnfmt(t[i], sizeof(t[i]),
+            "Cured diseases cannot infect you again during this run.");
+        good[i] = true;
+        i++;
+    }
+
     // Get item flags from equipment
     for (k = INVEN_WIELD; k < INVEN_TOTAL; k++) {
         u32b t1, t2, t3, t4;

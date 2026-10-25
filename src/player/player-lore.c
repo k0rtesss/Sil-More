@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -468,6 +469,7 @@ void update_lore_aux(object_type* o_ptr)
     {
         if (o_ptr->name1)
         {
+            sil_achievements_on_artefact_found(o_ptr->name1);
             artefact_type* a_ptr = &a_info[o_ptr->name1];
             char note[150];
             char shorter_desc[120];

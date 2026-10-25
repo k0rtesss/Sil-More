@@ -64,7 +64,7 @@ extern int fixture_menu_mask(void);
 extern void fixture_normal_pending(void);
 extern int fixture_reforge_plan(int,int*,int*,int*);
 extern int forge_uses(int,int);
-extern size_t fixture_write_work(byte*,size_t);
+extern size_t fixture_write_work(byte*,size_t,int);
 extern int fixture_read_work(const byte*,size_t,int);
 char __wrap_inkey(void)
 {
@@ -162,7 +162,7 @@ static void checks(void)
     for(int i=0;i<3;i++)work_one();
     scenario="interrupt/save/reload keeps paid source";disturb(0,0);
     assert(!p_ptr->smithing && p_ptr->smithing_leftover==turns-3);
-    byte buffer[65536];size_t length=fixture_write_work(buffer,sizeof(buffer));
+    byte buffer[65536];size_t length=fixture_write_work(buffer,sizeof(buffer),VERSION_EXTRA);
     object_wipe(smith_o_ptr);p_ptr->smithing_leftover=0;p_ptr->stat_drain[A_DEX]=0;
     assert(!fixture_read_work(buffer,length,VERSION_EXTRA));
     assert(p_ptr->smithing_leftover==turns-3 && smith_o_ptr->unused1==2);
@@ -194,7 +194,7 @@ static void checks(void)
     player_carried_extra_reset_store();fixture_normal_pending();
     replace_level_prefix();assert(!p_ptr->smithing_leftover);
     fixture_normal_pending();
-    length=fixture_write_work(buffer,sizeof(buffer));object_wipe(smith_o_ptr);p_ptr->smithing_leftover=0;
+    length=fixture_write_work(buffer,sizeof(buffer),25);object_wipe(smith_o_ptr);p_ptr->smithing_leftover=0;
     assert(!fixture_read_work(buffer,length,25));
     assert(smith_o_ptr->unused1==0 && p_ptr->smithing_leftover==1);
     keys="\r";do_cmd_smithing_screen();assert(!*keys && p_ptr->smithing==1);
@@ -223,6 +223,17 @@ static void checks(void)
 }
 '''
 
+def pre_achievement_player_writer():
+    """Write genuine v25-v27 player fields rather than a mislabeled current stream."""
+    player = (ROOT / 'src/fs/save-player.c').read_text(encoding='utf-8')
+    player = player[player.index('static void wr_tutorial_character_state(void)'):
+                    player.index('\nvoid wr_randarts(void)')]
+    start = player.index('    /* 0.9.8.31:')
+    end = player.index('    log_info("SAVE: About to write quest marker', start)
+    return (player[:start] + player[end:]).replace(
+        'void wr_extra(void)', 'static void fixture_pre_achievement_extra(void)')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline',action='store_true',help='Prove old instant prefix commit fails pending-work checks')
@@ -246,9 +257,11 @@ def main():
     source.write_text(prefix + checks + init + '    checks(); SDL_Quit(); return 0;\n}\n',encoding='utf-8')
     smith = OUT / 'smith.c';smith.write_text(smith_text,encoding='utf-8')
     writer = OUT / 'writer.c'
-    writer.write_text('#include "fs/save.c"\nsize_t fixture_write_work(byte *buf,size_t capacity) {\n'
+    writer.write_text('#include "fs/save.c"\n' + pre_achievement_player_writer()
+        + '\nsize_t fixture_write_work(byte *buf,size_t capacity,int extra) {\n'
         'fff=SDL_IOFromMem(buf,capacity); xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;\n'
-        'wr_extra();wr_item(smith_o_ptr);size_t n=SDL_TellIO(fff);SDL_CloseIO(fff);fff=NULL;return n;\n}\n',encoding='utf-8')
+        'if(extra<31)fixture_pre_achievement_extra();else wr_extra();\n'
+        'wr_item(smith_o_ptr);size_t n=SDL_TellIO(fff);SDL_CloseIO(fff);fff=NULL;return n;\n}\n',encoding='utf-8')
     loader_text=(ROOT/'src/fs/load.c').read_text(encoding='utf-8')
     start=loader_text.index('    savefile_has_runtime_overrides =',loader_text.index('static errr rd_savefile_new_aux'))
     flags=loader_text[start:loader_text.index('    /* Reset load byte offset',start)]

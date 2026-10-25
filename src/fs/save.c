@@ -1048,6 +1048,11 @@ static bool wr_savefile(void)
     /* Note the number of saves */
     sf_saves++;
 
+    /* Finalize monster indexes before wr_extra() writes the song target.
+     * Waiting until wr_dungeon() would serialize the pre-compaction index. */
+    if (!p_ptr->is_dead)
+        compact_monsters(0);
+
     /*** Actually write the file ***/
 
     /* Dump the file header */

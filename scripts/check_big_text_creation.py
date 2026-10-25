@@ -20,8 +20,14 @@ SCREENS = (ROOT / "src/sdl/ui/sdl-screens.c").read_text()
 start = SCREENS.index("static SDL_FRect sdl_char_sheet_draw_text_aligned(")
 end = SCREENS.index("SDL_FRect sdl_char_sheet_draw_text(", start)
 SCREENS = SCREENS[:start] + SCREENS[start:end].replace(
-    "SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);",
-    "creation_record(text, dst);\n    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);",
+    "sdl_ui_render_text_texture(texture, &src, &dst);",
+    "creation_record(text, dst);\n    sdl_ui_render_text_texture(texture, &src, &dst);",
+) + SCREENS[end:]
+start = SCREENS.index("static SDL_FRect sdl_welcome_draw_text_box_alpha(")
+end = SCREENS.index("static SDL_FRect sdl_welcome_draw_text_box(", start)
+SCREENS = SCREENS[:start] + SCREENS[start:end].replace(
+    "sdl_ui_render_text_texture(texture, NULL, &dst);",
+    "creation_record(text, dst);\n        sdl_ui_render_text_texture(texture, NULL, &dst);",
 ) + SCREENS[end:]
 PREFIX = PREFIX.replace('#include "sdl/ui/sdl-screens.c"',
     "static void creation_record(cptr text, SDL_FRect rect);\n" + SCREENS)
@@ -233,6 +239,7 @@ static void creation_hero_drag(void)
 }
 ''' + INIT + r'''
     config.bigger_font=true; fixture.active=false;
+    for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=true;
     g_state.palette[TERM_L_BLUE]=(SDL_Color){0,230,230,255};
     g_state.palette[TERM_L_GREEN]=(SDL_Color){0,255,0,255};
     g_state.palette[TERM_YELLOW]=(SDL_Color){255,255,0,255};

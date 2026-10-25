@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements-lore.h"
 #include "externs.h"
 #include "monster-world.h"
 #include "monster-routine.h"
@@ -80,6 +81,8 @@ void monster_world_observe(monster_type* m)
     if (world_hazard(m, cave_environment_pending_hazard(m->fy, m->fx))
         && m->alertness < ALERTNESS_UNWARY)
         m->alertness = ALERTNESS_UNWARY;
+    if (m->r_idx == R_IDX_MORGOTH)
+        sil_achievement_lore_on_morgoth_alertness(m->alertness);
 }
 
 /* Claims are inferred from live occupants, so deletion/compaction cannot leave
