@@ -2858,6 +2858,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             return;
         }
 
+        if (steamdeck_controls_active() && sdl_pane_menu_handle_key(key))
+            return;
         if (g_log_pane_menu.active) {
             sdl_log_pane_menu_cancel();
             if (sdl_key_is_escape_or_back(key))

@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "cave/cave-atmosphere.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -134,11 +135,19 @@ errr rd_extra(void)
         rd_s16b(&p_ptr->diseased);
         for (i = 0; i < A_MAX; i++)
             rd_s16b(&p_ptr->stat_disease[i]);
-        if (p_ptr->diseased < 0 || p_ptr->diseased > DISEASE_INTERVAL)
+        /* Expansion saves inherited the old timer units through 1.1.0.8. */
+        bool disease_progress_units = savefile_version_at_least(1, 1, 0, 9)
+            || (!savefile_version_at_least(1, 1, 0, 0)
+                && savefile_version_at_least(0, 9, 9, 2));
+        int disease_countdown_max = disease_progress_units
+            ? DISEASE_COUNTDOWN_MAX : DISEASE_INTERVAL;
+        if (p_ptr->diseased < 0 || p_ptr->diseased > disease_countdown_max)
         {
             note("Invalid disease countdown in savefile.");
             return -1;
         }
+        if (!disease_progress_units)
+            p_ptr->diseased *= 2;
         for (i = 0; i < A_MAX; i++)
         {
             if (p_ptr->stat_disease[i] > 0
@@ -153,11 +162,16 @@ errr rd_extra(void)
     p_ptr->disease_name = 0;
     p_ptr->disease_cure = 0;
     p_ptr->disease_knowledge = 0;
+    p_ptr->disease_immunity = 0;
     if (savefile_version_at_least(0, 9, 8, 9))
     {
         rd_byte(&p_ptr->disease_name);
         rd_byte(&p_ptr->disease_cure);
         rd_byte(&p_ptr->disease_knowledge);
+        if (savefile_version_at_least(1, 1, 0, 9)
+            || (!savefile_version_at_least(1, 1, 0, 0)
+                && savefile_version_at_least(0, 9, 9, 2)))
+            rd_byte(&p_ptr->disease_immunity);
         if (p_ptr->disease_name > DISEASE_NAME_COUNT
             || p_ptr->disease_cure >= DISEASE_HERB_COUNT
             || (p_ptr->disease_knowledge & ~(DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE))
@@ -165,7 +179,9 @@ errr rd_extra(void)
                 && !(p_ptr->disease_knowledge & DISEASE_KNOWN_NAME))
             || (p_ptr->diseased && !p_ptr->disease_name)
             || (!p_ptr->diseased && (p_ptr->disease_name
-                || p_ptr->disease_cure || p_ptr->disease_knowledge)))
+                || p_ptr->disease_cure || p_ptr->disease_knowledge))
+            || (p_ptr->diseased && (p_ptr->disease_immunity
+                & (1u << (p_ptr->disease_name - 1)))))
         {
             note("Invalid disease identity or diagnosis in savefile.");
             return -1;
@@ -173,7 +189,7 @@ errr rd_extra(void)
     }
     else if (p_ptr->diseased)
     {
-        disease_assign_identity();
+        (void)disease_assign_identity();
     }
 
     /* Read the skill info - all skills including S_SPC (Special) present in 0.9.0 */
@@ -592,6 +608,12 @@ errr rd_extra(void)
         rd_u32b(&p_ptr->achievement_singing_turns);
         rd_s16b(&p_ptr->achievement_comeback_depth);
         p_ptr->achievement_flags &= SIL_ACH_RUN_FLAGS;
+        /* The positive route bit first exists in expansion 1.1.0.9. */
+        if (!(savefile_version_at_least(1, 1, 0, 9)
+                || (!savefile_version_at_least(1, 1, 0, 0)
+                    && savefile_version_at_least(0, 9, 8, 37)))
+            || !(p_ptr->achievement_flags & SIL_ACH_RUN_STARTED))
+            p_ptr->achievement_flags &= ~SIL_ACH_RUN_CHASM_SHAFT_ROUTE;
         if (p_ptr->achievement_comeback_depth < 0)
             p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
     }
@@ -690,7 +712,54 @@ errr rd_extra(void)
             p_ptr->achievement_frozen_tiles[index / 8] |= 1u << (index % 8);
         }
     }
-    log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u", 
+    sil_achievement_lore_reset();
+    if (savefile_version_at_least(1, 1, 0, 9)
+        || (!savefile_version_at_least(1, 1, 0, 0)
+            && savefile_version_at_least(0, 9, 8, 38)))
+    {
+        byte lore_marker;
+        rd_byte(&lore_marker);
+        if (lore_marker != 0xAF) return -1;
+        rd_u32b(&p_ptr->achievement_lore_flags);
+        p_ptr->achievement_lore_flags &= SIL_ACH_LORE_FLAGS;
+        if (!(p_ptr->achievement_lore_flags & SIL_ACH_LORE_DAILIR_KILL))
+            p_ptr->achievement_lore_flags &= ~SIL_ACH_LORE_DAILIR_RECOVERED;
+        rd_byte(&p_ptr->achievement_ringil_wounds);
+        if (p_ptr->achievement_ringil_wounds > 7) return -1;
+        rd_s16b(&p_ptr->achievement_glorfindel_depth);
+        if (p_ptr->achievement_glorfindel_depth < -1
+            || p_ptr->achievement_glorfindel_depth > UTUMNO_DEPTH) return -1;
+        bool empty = false;
+        for (int i = 0; i < 3; ++i)
+        {
+            rd_u16b(&p_ptr->achievement_artefact_rings[i]);
+            u16b artefact = p_ptr->achievement_artefact_rings[i];
+            if (!artefact) empty = true;
+            else
+            {
+                if (empty || artefact >= z_info->art_max) return -1;
+                for (int j = 0; j < i; ++j)
+                    if (p_ptr->achievement_artefact_rings[j] == artefact) return -1;
+            }
+        }
+    }
+    p_ptr->achievement_balrogs = 0;
+    if (savefile_version_at_least(1, 1, 0, 9)
+        || (!savefile_version_at_least(1, 1, 0, 0)
+            && savefile_version_at_least(0, 9, 8, 39)))
+    {
+        byte balrog_marker;
+        rd_byte(&balrog_marker);
+        if (balrog_marker != 0xB0) return -1;
+        rd_byte(&p_ptr->achievement_balrogs);
+        if (p_ptr->achievement_balrogs & 0x80) return -1;
+    }
+    else
+    {
+        /* Older comeback windows allowed partial healing; that history is unknown. */
+        p_ptr->achievement_flags &= ~SIL_ACH_RUN_COMEBACK;
+    }
+    log_info("LOAD: Read oath_type=%d, oaths_broken=%d at byte_ofs=%u",
              p_ptr->oath_type, p_ptr->oaths_broken, (unsigned)load_byte_offset);
 
     /* Quest fields (0.8.6+ format with marker 0x51) */

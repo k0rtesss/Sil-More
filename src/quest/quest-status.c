@@ -1198,7 +1198,8 @@ hint_quest_page do_cmd_quest_status_page(void)
     }
 
     quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
-    sdl_hint_quest_menu_add_button(HINT_QUEST_CLICK_RETURN, "Back",
+    sdl_hint_quest_menu_add_button(HINT_QUEST_CLICK_RETURN,
+        steamdeck_controls_active() ? "<B> Back" : "Back",
         TERM_L_WHITE);
     sdl_hint_quest_menu_finish();
     Term_fresh();

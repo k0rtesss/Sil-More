@@ -115,9 +115,9 @@ static void check_complete_catalogue(void)
         assert(p_ptr->new_exp == before_xp - fee);
         assert(p_ptr->insight_points == before_ip - ip);
     }
-    assert(xp == 37 && insight == 52 && earned == 15 && retired == 8);
-    assert(xp_sum == 25100 && ip_sum == 68);
-    puts("Catalogue: all112 dispositions, every89 purchase, one currency, no XP parent toll or stat gate PASS.");
+    assert(xp == 38 && insight == 52 && earned == 15 && retired == 8);
+    assert(xp_sum == 25900 && ip_sum == 68);
+    puts("Catalogue: all113 dispositions, every90 purchase, one currency, no XP parent toll or stat gate PASS.");
 }
 
 static void check_modern_prices_and_atomicity(void)

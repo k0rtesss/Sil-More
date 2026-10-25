@@ -187,7 +187,8 @@ static void legacy_and_malformed(void)
 }
 static void checks(void)
 {
-    assert(VERSION_EXTRA>=4&&SMITHING_ALLOY_STATE_BYTES==5);
+    assert(VERSION_MAJOR*1000000 + VERSION_MINOR*10000 + VERSION_PATCH*100 + VERSION_EXTRA >= 90827);
+    assert(SMITHING_ALLOY_STATE_BYTES==5);
     matrix(1,1);matrix(1,2);matrix(0,1);matrix(0,2);legacy_and_malformed();
     puts("Alloy v4: real writer/loader weapon+armour matrix, repeated-load reset, exact resumed costs/output, v3 stream alignment, malformed neutral fallback PASS.");
 }

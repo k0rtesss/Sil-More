@@ -16,12 +16,13 @@ static bool play_games_exception(JNIEnv* env)
 }
 
 /* Resolve on the current SDL thread; never retain JNI local refs across frames. */
-static uint64_t play_games_call(const char* name, const char* signature, uint64_t value,
-    bool returns_value)
+static uint64_t play_games_call(const char* name, const char* signature,
+    unsigned word, const uint64_t* masks)
 {
     JNIEnv* env = (JNIEnv*)SDL_GetAndroidJNIEnv();
     jobject activity = NULL;
     jclass activity_class = NULL;
+    jlongArray values = NULL;
     uint64_t result = 0;
     if (!env) return 0;
     activity = (jobject)SDL_GetAndroidActivity();
@@ -31,34 +32,46 @@ static uint64_t play_games_call(const char* name, const char* signature, uint64_
     {
         jmethodID method = (*env)->GetMethodID(env, activity_class, name, signature);
         if (play_games_exception(env) || !method) goto cleanup;
-        if (returns_value && signature[2] == 'Z')
+        if (masks)
+        {
+            jlong words[SIL_ACH_WORD_COUNT];
+            for (unsigned i = 0; i < SIL_ACH_WORD_COUNT; ++i)
+                words[i] = (jlong)(masks[i] & sil_achievement_word_mask(i));
+            values = (*env)->NewLongArray(env, SIL_ACH_WORD_COUNT);
+            if (play_games_exception(env) || !values) goto cleanup;
+            (*env)->SetLongArrayRegion(env, values, 0, SIL_ACH_WORD_COUNT, words);
+            if (play_games_exception(env)) goto cleanup;
+            (*env)->CallVoidMethod(env, activity, method, values);
+        }
+        else if (signature[2] == 'Z')
             result = (*env)->CallBooleanMethod(env, activity, method) == JNI_TRUE;
-        else if (returns_value)
-            result = (*env)->CallLongMethod(env, activity, method);
         else
-            (*env)->CallVoidMethod(env, activity, method, (jlong)value);
+            result = (*env)->CallLongMethod(env, activity, method, (jint)word);
         if (play_games_exception(env)) result = 0;
     }
 cleanup:
+    if (values) (*env)->DeleteLocalRef(env, values);
     if (activity_class) (*env)->DeleteLocalRef(env, activity_class);
     if (activity) (*env)->DeleteLocalRef(env, activity);
     return result;
 }
 #endif
 
-void sil_play_games_sync(uint64_t unlocked_mask)
+void sil_play_games_sync(const uint64_t* unlocked_masks)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
-    play_games_call("syncPlayGamesAchievements", "(J)V", (unlocked_mask & SIL_ACH_ALL_MASK), false);
+    play_games_call("syncPlayGamesAchievements", "([J)V", 0, unlocked_masks);
 #else
-    (void)unlocked_mask;
+    (void)unlocked_masks;
 #endif
 }
 
-uint64_t sil_play_games_unlocked(void)
+uint64_t sil_play_games_unlocked(unsigned word)
 {
+    if (word >= SIL_ACH_WORD_COUNT) return 0;
 #if defined(__ANDROID__) && defined(USE_SDL)
-    return (uint64_t)play_games_call("getPlayGamesAchievementMask", "()J", 0, true) & SIL_ACH_ALL_MASK;
+    return play_games_call("getPlayGamesAchievementMask", "(I)J", word, NULL)
+        & sil_achievement_word_mask(word);
 #else
     return 0;
 #endif
@@ -67,7 +80,7 @@ uint64_t sil_play_games_unlocked(void)
 bool sil_play_games_show(void)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
-    return play_games_call("showPlayGamesAchievements", "()Z", 0, true) != 0;
+    return play_games_call("showPlayGamesAchievements", "()Z", 0, NULL) != 0;
 #else
     return false;
 #endif
@@ -76,7 +89,7 @@ bool sil_play_games_show(void)
 bool sil_play_games_available(void)
 {
 #if defined(__ANDROID__) && defined(USE_SDL)
-    return play_games_call("isPlayGamesAchievementsAvailable", "()Z", 0, true) != 0;
+    return play_games_call("isPlayGamesAchievementsAvailable", "()Z", 0, NULL) != 0;
 #else
     return false;
 #endif

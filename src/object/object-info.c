@@ -2486,7 +2486,8 @@ void note_info_screen(const object_type* o_ptr)
     text_out_to_screen(TERM_WHITE, k_text + k_info[o_ptr->k_idx].text);
 
     /* Note outro */
-    text_out_c(TERM_L_WHITE + TERM_SHADE, "\n\n(press any key)\n");
+    text_out_c(TERM_L_WHITE + TERM_SHADE, steamdeck_controls_active()
+        ? "\n\n<B> back\n" : "\n\n(press any key)\n");
 
     /* Reset text_out() vars */
     text_out_wrap = 0;

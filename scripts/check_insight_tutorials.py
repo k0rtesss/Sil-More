@@ -65,7 +65,7 @@ def main():
     source = HARNESS.split("int main(", 1)[0]
     source += r'''
 static player_type hero;
-player_type *p_ptr=&hero;
+_Thread_local player_type *p_ptr=&hero;
 static maxima limits;
 maxima *z_info=&limits;
 cptr skill_names_full[S_MAX]={"Melee","Archery","Evasion","Stealth","Perception","Will","Smithing","Song","Special"};
@@ -134,14 +134,14 @@ static void checks(void) {
             tutorial_continue();tutorial_checkpoint(true);tutorial_invalidate_context();
         }
     }
-    assert(ability_cards==112);
+    assert(ability_cards==113);
     /* Public presentation is independent of unseen actors, inventory or an
      * observation's contextual strings: only ability metadata and ruleset. */
     tutorial_view a={0},b={0};a.step=b.step=1;
     SDL_strlcpy(a.id,"ability.80.preview",sizeof(a.id));b=a;
     SDL_strlcpy(b.context.text,"secret fixture",sizeof(b.context.text));
     tutorial_game_format_view(&a);tutorial_game_format_view(&b);assert(!strcmp(a.body,b.body));
-    puts("Insight tutorials: all112 public policies, live/archive/replay, Appraisal, moved skills, new abilities, retired stats, AND/OR, currency and classic/LEGACY preservation PASS.");
+    puts("Insight tutorials: all113 public policies, live/archive/replay, Appraisal, moved skills, new abilities, retired stats, AND/OR, currency and classic/LEGACY preservation PASS.");
 }
 int main(int argc,char**argv) {
     assert(argc==2);assert(SDL_Init(0));limits.b_max=176;test_tale.id=781;

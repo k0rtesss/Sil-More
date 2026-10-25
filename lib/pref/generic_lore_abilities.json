@@ -499,12 +499,12 @@
       "Accept a reward by swearing a great oath. If you break it, consequences follow."
     ],
     [
-      "Resisting poison as the hardy Folk of Haleth endured the venoms of Ungoliant's spawn in the passes of the Ered Gorgoroth. Through strength of constitution or long exposure, the body learns to resist the corruption of venom that would fell a lesser soul.",
-      "Repeated work around contaminated sumps has taught you how to withstand their poisonous burden. Your body's defenses answer venom more effectively."
+      "Hardy in body as the Folk of Haleth who endured the venoms of Ungoliant's spawn in the passes of the Ered Gorgoroth. Through strength of constitution or long exposure, the body learns to withstand both venom and the wasting fevers of the deep.",
+      "Repeated work around contaminated sumps has strengthened your body's defenses. You withstand their poisonous burden and resist the fevers carried by stagnant water and spoiled provisions."
     ],
     [
-      "Grants resistance to poison.",
-      "Receive resistance to poison."
+      "Grants one layer of poison resistance. Halves disease infection chances and doubles the interval between disease penalties to 300 player turns.",
+      "Adds one layer of poison resistance. Disease infection chances are halved, and disease weakens an attribute once every 300 player turns."
     ],
     [
       "Seeking vengeance with the fury that drove the Noldor across the Grinding Ice after the Kinslaying at Alqualondë and the burning of the ships at Losgar. When wounded by a foe, that searing pain becomes fuel for a more devastating return stroke, the desire for retribution lending terrible force to the answering blow.",

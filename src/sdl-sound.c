@@ -139,7 +139,7 @@ static bool g_sound_loaded_once = false;
  * Explicit stop calls clear it; temporarily disabled music does not. */
 typedef enum {
     MUSIC_CUE_NONE, MUSIC_CUE_MAIN, MUSIC_CUE_MAIN_FULL,
-    MUSIC_CUE_DEATH, MUSIC_CUE_AMBIENT
+    MUSIC_CUE_DEATH, MUSIC_CUE_AMBIENT, MUSIC_CUE_MENU
 } music_cue;
 static music_cue g_music_cue = MUSIC_CUE_NONE;
 /* Allocate only for race/action pairs encountered; cache missing folders too. */
@@ -1601,6 +1601,7 @@ static void sdl_music_restore_background(void)
     case MUSIC_CUE_MAIN_FULL: sdl_music_play_main_full(); break;
     case MUSIC_CUE_DEATH: sdl_music_play_death(); break;
     case MUSIC_CUE_AMBIENT: sdl_music_play_ambient(); break;
+    case MUSIC_CUE_MENU: sdl_music_play_menu_theme(); break;
     default: break;
     }
 }
@@ -1611,9 +1612,6 @@ void sdl_sound_reload(void)
         return;
 
     SDL_LockMutex(g_sound_mutex);
-    bool resume_menu = sound_state.music_menu_track &&
-        (MIX_TrackPlaying(sound_state.music_menu_track) ||
-            MIX_TrackPaused(sound_state.music_menu_track));
     g_sound_generation++;
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
@@ -1752,8 +1750,6 @@ void sdl_sound_reload(void)
 
     sdl_music_update_volumes();
     sdl_music_restore_background();
-    if (resume_menu && sound_state.music_main_enabled)
-        sdl_music_play_menu_theme();
     g_sound_loaded_once = true;
     SDL_UnlockMutex(g_sound_mutex);
 }
@@ -1805,8 +1801,9 @@ void sdl_music_play_death(void)
 
 void sdl_music_play_menu_theme(void)
 {
+    g_music_cue = MUSIC_CUE_MENU;
     sdl_sound_stop_environment();
-    sdl_music_play_ambient();
+    sdl_music_stop_ambient();
     if (!sound_state.music_main_enabled) {
         sdl_music_stop_title_track();
         sdl_music_stop_track(sound_state.music_menu_track);
@@ -1818,9 +1815,11 @@ void sdl_music_play_menu_theme(void)
     }
 
     sdl_music_stop_title_track();
-    sdl_music_stop_track(sound_state.music_menu_track);
+    if (MIX_TrackPlaying(sound_state.music_menu_track)
+        || MIX_TrackPaused(sound_state.music_menu_track))
+        return;
 
-    log_debug("Starting menu theme overlay: %s", sound_state.music_main_full_path);
+    log_debug("Starting menu theme: %s", sound_state.music_main_full_path);
     (void)sdl_music_play_with_fallback(sound_state.music_main_full_path,
         sound_state.music_main_path, sound_state.music_menu_track,
         sound_state.music_main_volume, 0, "main_full", NULL, 0);
@@ -1829,6 +1828,8 @@ void sdl_music_play_menu_theme(void)
 void sdl_music_play_ambient(void)
 {
     g_music_cue = MUSIC_CUE_AMBIENT;
+    sdl_music_stop_title_track();
+    sdl_music_stop_track(sound_state.music_menu_track);
     if (!sound_state.music_ambient_enabled) {
         sdl_music_stop_track(sound_state.music_ambient_track);
         return;
@@ -1851,10 +1852,18 @@ void sdl_music_play_ambient(void)
 
 void sdl_music_stop_main(void)
 {
+    bool resume_game = g_music_cue == MUSIC_CUE_MENU && p_ptr
+        && p_ptr->playing && !p_ptr->is_dead && !p_ptr->leaving;
+
     if (g_music_cue != MUSIC_CUE_AMBIENT)
         g_music_cue = MUSIC_CUE_NONE;
     sdl_music_stop_title_track();
     sdl_music_stop_track(sound_state.music_menu_track);
+    if (resume_game)
+    {
+        sdl_music_play_ambient();
+        sdl_sound_update_environment();
+    }
 }
 
 void sdl_music_stop_ambient(void)
@@ -1910,7 +1919,8 @@ static void sdl_sound_update_loop(int index, MIX_Track* track,
 void sdl_sound_update_environment(void)
 {
     if (!g_sound_config.enabled || !character_generated || !p_ptr
-        || !p_ptr->playing || p_ptr->is_dead || p_ptr->depth < 0 || !cave_feat)
+        || !p_ptr->playing || p_ptr->is_dead || p_ptr->depth < 0 || !cave_feat
+        || g_music_cue == MUSIC_CUE_MENU)
     {
         sdl_sound_stop_environment();
         return;

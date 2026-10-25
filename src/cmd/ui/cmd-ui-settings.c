@@ -51,6 +51,17 @@ static int settings_menu_key(int key, int prev_page_key, int next_page_key,
     return steamdeck_menu_key(key, prev_page_key, next_page_key);
 }
 
+static int settings_keybind_menu_key(int key, bool click_generated, int group_key)
+{
+    if (!click_generated && steamdeck_controls_active())
+    {
+        if (key == steamdeck_alt_action_key()) return 'r';
+        if (key == steamdeck_info_key()) return group_key;
+        if (key == steamdeck_secondary_key()) return 's';
+    }
+    return key;
+}
+
 void clear_skills_and_abilities()
 {
     int i, j;
@@ -3837,6 +3848,8 @@ static void do_cmd_pane_settings_for_page(bool text_only)
     pane_setting_visible[PANE_SETTING_AUX_VIEW_FONT_SIZE] = text_only;
     pane_setting_visible[PANE_SETTING_PANE_FONT_SIZES] = text_only;
     pane_setting_visible[PANE_SETTING_SAVE_RETURN] = true;
+    pane_setting_visible[PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
+        !text_only && sdl_handheld_ui_active();
 #if defined(__ANDROID__) || defined(SIL_IOS)
     /* Mobile uses the full display and supports overlay panes only.  Do not
      * offer ordinary pane/window controls whose values are fixed by the
@@ -3849,8 +3862,6 @@ static void do_cmd_pane_settings_for_page(bool text_only)
     pane_setting_visible[PANE_SETTING_VIEW_PANE_CONFIGURATION] = false;
     pane_setting_visible[PANE_SETTING_PANE_FONT_SIZES] = false;
 #else
-    /* Starting zoom offsets only run on mobile. Desktop zoom uses Main View Scale. */
-    pane_setting_visible[PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] = false;
     pane_setting_visible[PANE_SETTING_USE_UNSAFE_AREA] = false;
 #endif
 
@@ -3924,22 +3935,22 @@ static void do_cmd_pane_settings_for_page(bool text_only)
             get_sdl_terminal_menu_scale_offset());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-                "Menu Text Size",
-                "Menu Text Size",
-                "Menu Text Size"),
+                "All Menu Text Sizes",
+                "All Menu Text Sizes",
+                "All Menu Sizes"),
             value_buf, row_width, 4);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET, 2, a,
             buf);
 
-        /* Extra zoom applied when mobile gameplay starts. */
+        /* Extra zoom applied when gameplay starts on a mobile device or handheld PC. */
         a = (k == PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET)
             ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(value_buf, sizeof(value_buf), "%+d",
             get_sdl_mobile_starting_zoom_offset());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
-                "Mobile Starting Zoom Offset",
-                "Mobile Start Zoom",
+                "Starting Zoom Offset",
+                "Starting Zoom",
                 "Start Zoom"),
             value_buf, row_width, 4);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET, 3, a,
@@ -4128,16 +4139,21 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                     "and its font but show less of the level at once.",
                 [PANE_SETTING_TERMINAL_MENU_SCALE_OFFSET] =
 #if defined(__ANDROID__) || defined(SIL_IOS)
-                    "Adjust text size in full-screen list menus independently "
-                    "from dungeon zoom. Zero uses the standard menu size. "
-                    "Bigger font increases this size by 50% too.",
+                    "Set the scale for all terminal menus independently from "
+                    "dungeon zoom. Zero uses the standard menu size. "
+                    "Use - and + in a terminal menu's top-right corner to "
+                    "adjust only that menu. Each choice is saved. "
+                    "Native screens keep their own Big Font setting.",
 #else
-                    "Scale of full-screen terminal menus relative to the "
-                    "largest scale that fits. Set to 0 for the maximum; -1 "
-                    "uses one step below it.",
+                    "Set the scale for all full-screen terminal menus relative to "
+                    "the largest scale that fits. Set to 0 for the maximum; "
+                    "-1 uses one step below it. Each menu also has floating "
+                    "- and + controls in its top-right corner; those choices "
+                    "are saved independently.",
 #endif
                 [PANE_SETTING_MOBILE_STARTING_ZOOM_OFFSET] =
-                    "Extra zoom steps applied when gameplay starts on mobile. "
+                    "Extra zoom steps applied when gameplay starts on mobile "
+                    "devices and handheld PCs. "
                     "Set to 0 to start at the configured main-map scale. The "
                     "result is limited to what the screen can display.",
                 [PANE_SETTING_CAMERA_VERTICAL_DISTANCE] =
@@ -4472,7 +4488,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 int old_value = get_sdl_mobile_starting_zoom_offset();
                 int value = old_value;
 
-                if (settings_pick_integer_range("Mobile Starting Zoom Offset",
+                if (settings_pick_integer_range("Starting Zoom Offset",
                         NULL,
                         SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN,
                         SDL_MOBILE_STARTING_ZOOM_OFFSET_MAX, old_value, true,
@@ -11557,7 +11573,8 @@ static bool movement_capture_binding(const movement_setting_entry* entry,
     settings_semantic_menu_hide();
     Term_clear();
     strnfmt(prompt, sizeof(prompt),
-        "Press key for %s (Escape cancels):", entry->label);
+        steamdeck_controls_active() ? "Press keyboard key for %s (<B> cancels):"
+                                   : "Press key for %s (Escape cancels):", entry->label);
     settings_ui_put_fitted(2, 2, TERM_YELLOW, prompt);
     settings_ui_put_fitted(4, 2, TERM_SLATE,
         "Hold Shift/Ctrl/Alt while pressing the key to require that modifier.");
@@ -11570,10 +11587,15 @@ static bool movement_capture_binding(const movement_setting_entry* entry,
      * captured like any other key and rejected below, which cancels. */
     while (true)
     {
-        (void)inkey();
+        int key = inkey();
 
         if (sdl_keyboard_capture_poll(&scancode, &modifiers))
             break;
+        if (key == ESCAPE)
+        {
+            sdl_keyboard_capture_cancel();
+            return false;
+        }
     }
 
     if (scancode == SDL_SCANCODE_ESCAPE || scancode == SDL_SCANCODE_UNKNOWN)
@@ -11661,7 +11683,9 @@ static void do_cmd_movement_keybinds(void)
             sdl_config_movement_preset_label(config.movement_keyboard_preset));
         settings_ui_put_fitted(2, 2, TERM_SLATE, preset_line);
         settings_ui_put_fitted(3, 2, TERM_WHITE,
-            "Enter bind  R reset selected  P cycle preset  S save  Esc return");
+            steamdeck_controls_active()
+                ? "<A> bind  <X> reset  <View> preset  <Y> save  <B> back"
+                : "Enter bind  R reset selected  P cycle preset  S save  Esc return");
         if (movement_bindings_shadow_letters(&config))
             settings_ui_put_fitted(4, 2, TERM_YELLOW,
                 "Note: letter keys control movement; hold Alt for their command (Alt+w wield, Alt+x examine, Alt+Shift+s stealth).");
@@ -11710,6 +11734,7 @@ static void do_cmd_movement_keybinds(void)
         }
 
         ch = settings_menu_key(ch, '8', '2', click_generated);
+        ch = settings_keybind_menu_key(ch, click_generated, 'p');
 
         if (ch == ESCAPE || ch == 'q' || ch == 'Q')
         {
@@ -11888,13 +11913,15 @@ void do_cmd_keybinds(void)
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
                 showing_primary ? "Show All Other Commands"
                                 : "Show Core Commands",
-                "Tab", TERM_UMBER);
+                steamdeck_controls_active() ? "<View>" : "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_SAVE,
-                "Save Keybinds", "S", TERM_L_GREEN);
+                "Save Keybinds", steamdeck_controls_active() ? "<Y>" : "S", TERM_L_GREEN);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "R", TERM_ORANGE);
+                "Reset Selected", steamdeck_controls_active() ? "<X>" : "R", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
-                "%s. Enter or Space rebinds the selected command. Tab switches between the complete Core and All Other lists. S saves to %s. R resets selected.%s%s",
+                steamdeck_controls_active()
+                    ? "%s. <A> rebinds the selected command. <View> switches Core and All Other commands. <Y> saves to %s. <X> resets selected.%s%s"
+                    : "%s. Enter or Space rebinds the selected command. Tab switches between the complete Core and All Other lists. S saves to %s. R resets selected.%s%s",
                 detail_binding_buf, default_file,
                 dirty ? " " : "",
                 dirty ? "Unsaved changes." : "");
@@ -11963,6 +11990,7 @@ void do_cmd_keybinds(void)
             }
 
             ch = (char)settings_menu_key(ch, '\t', '\t', click_generated);
+            ch = (char)settings_keybind_menu_key(ch, click_generated, '\t');
         }
 
         /* Handle input */

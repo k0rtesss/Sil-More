@@ -560,6 +560,11 @@ void calc_bonuses(void)
         p_ptr->skill_misc_mod[S_MEL] -= 3;
     }
 
+    if (p_ptr->active_ability[S_WIL][WIL_HARDINESS])
+    {
+        p_ptr->resist_pois += 1;
+    }
+
     /*** Temporary flags ***/
 
     /* Slippery footing affects melee, bows and thrown attacks once through
@@ -669,12 +674,6 @@ void calc_bonuses(void)
         p_ptr->resist_hallu += 1;
         p_ptr->resist_pois += 1;
         p_ptr->hunger -= 1;
-    }
-    else if (p_ptr->active_ability[S_WIL][WIL_RETIRED_POISON_RESISTANCE])
-    {
-        /* Preserve the old benefit for saves that still carry the retired
-         * Poison Resistance slot. New characters cannot acquire this slot. */
-        p_ptr->resist_pois += 1;
     }
 
     /* Meta-run curses/blessings adjusting resistances */

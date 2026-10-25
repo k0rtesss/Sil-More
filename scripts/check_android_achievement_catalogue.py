@@ -44,7 +44,7 @@ def catalogue_keys():
         "A_FEW_LEAVES", "TWO_WEAPONS", "FOR_EXTERNAL_USE_ONLY", "FLY_YOU_FOOL",
         "KNOCK_WITH_YOUR_HEAD", "DOWN_TO_GOBLIN_TOWN", "ATHELAS_OUT_OF_STOCK",
         "ANGBAND_MAINTENANCE"], "Existing achievement indexes must stay stable"
-    assert 0 < len(keys) < 64 and len(keys) == len(set(keys))
+    assert len(keys) > 64 and len(keys) == len(set(keys))
     definitions = catalogue()
     assert [row["key"] for row in definitions] == keys
     assert all(isinstance(row["hidden"], bool) for row in definitions)
@@ -52,25 +52,25 @@ def catalogue_keys():
     resources = re.findall(r"activity\.getString\(R\.string\.play_ach_([a-z0-9_]+)\)", java)
     assert resources == [key.lower() for key in keys], (
         "Java's provider ID array must match native enum order exactly", keys, resources)
-    assert "allMask = (1L << ids.length) - 1" in java
-    assert "long unlockedMask()" in java and "sync(long unlockedMask)" in java
+    assert "allMask = new long[words]" in java
+    assert "long unlockedMask(int word)" in java and "sync(long[] unlockedMasks)" in java
     activity = (ANDROID / "app/src/main/java/com/silqh/silmore/SilMoreActivity.java").read_text(encoding="utf-8")
     proguard = (ANDROID / "app/proguard-rules.pro").read_text(encoding="utf-8")
-    assert "syncPlayGamesAchievements(long unlockedMask)" in activity
-    assert "public long getPlayGamesAchievementMask()" in activity
-    assert "syncPlayGamesAchievements(long)" in proguard
-    assert "public long getPlayGamesAchievementMask()" in proguard
+    assert "syncPlayGamesAchievements(long[] unlockedMasks)" in activity
+    assert "public long getPlayGamesAchievementMask(int word)" in activity
+    assert "syncPlayGamesAchievements(long[])" in proguard
+    assert "public long getPlayGamesAchievementMask(int)" in proguard
     assert "Long.lowestOneBit(pending)" in java
     assert "Long.numberOfTrailingZeros(bit)" in java
-    assert "private volatile long remoteMask" in java
-    assert "localMask & ~confirmedMask & availableMask" in java
+    assert "private volatile long[] remoteMask" in java
+    assert "localMask[pendingWord] & ~confirmedMask[pendingWord] & availableMask[pendingWord]" in java
     assert '!ids[i].isEmpty()' in java, "Unmapped provider IDs must be skipped"
     assert "unlockImmediate(ids[index])" in java and not re.search(r"\.reveal(?:Immediate)?\s*\(", java), "Hidden achievements reveal only on unlock"
     properties = (ANDROID / "play-games.properties").read_text(encoding="utf-8")
     assert re.findall(r"^SIL_MORE_PLAY_ACH_([A-Z0-9_]+)=", properties, re.M) == keys
     native = (ROOT / "src/achievements-play-games.c").read_text(encoding="utf-8")
-    assert '"(J)V"' in native and '"()J"' in native and "CallLongMethod" in native
-    assert native.count("& SIL_ACH_ALL_MASK") == 2, "JNI must mask both directions with the shared catalogue"
+    assert '"([J)V"' in native and '"(I)J"' in native and "CallLongMethod" in native
+    assert native.count("& sil_achievement_word_mask(") == 2, "JNI must mask both directions with the shared catalogue"
     gradle = (ANDROID / "app/build.gradle").read_text(encoding="utf-8")
     assert "new File(repoRoot, 'src/achievements.h')" in gradle
     assert "playAchievementKeys.eachWithIndex" in gradle

@@ -7,6 +7,7 @@
 #include "meta_state.h"
 #include "achievements.h"
 #include "achievements-character.h"
+#include "achievements-lore.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
@@ -1665,7 +1666,9 @@ void hit_trap(int y, int x)
             note_lost_greater_vault();
 
             /* New depth */
-            p_ptr->depth = level_cache_chasm_fall_depth(y, x);
+            int fall_depth = level_cache_chasm_fall_depth(y, x);
+            sil_achievements_on_level_travel(p_ptr->depth, fall_depth, FEAT_CHASM);
+            p_ptr->depth = fall_depth;
 
             /* Leaving */
             p_ptr->leaving = true;
@@ -1705,6 +1708,8 @@ void hit_trap(int y, int x)
         note_lost_greater_vault();
 
         /* New depth */
+        sil_achievements_on_level_travel(p_ptr->depth,
+            p_ptr->depth + 1, FEAT_TRAP_false_FLOOR);
         p_ptr->depth++;
 
         /* Leaving */
@@ -3466,7 +3471,9 @@ void py_attack_aux(int y, int x, int attack_type)
             if (!fatal_blow && !skip_take_hit)
             {
                 // damage, check for death
+                sil_achievement_lore_attack_begin(m_idx, o_ptr, net_dam, true);
                 fatal_blow = mon_take_hit(m_idx, net_dam, NULL, -1);
+                sil_achievement_lore_attack_end();
                 if (!fatal_blow)
                 {
                     monster_receive_melee_damage(m_ptr, net_dam);

@@ -2,6 +2,7 @@
 #include "cave/cave-vertical.h"
 #include "level-generation/level-cache.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
@@ -393,6 +394,7 @@ finish_ascent:
 
     /* New depth */
     quest_followup_leave(new);
+    sil_achievements_on_level_travel(p_ptr->depth, new, cave_feat[p_ptr->py][p_ptr->px]);
     p_ptr->depth = new;
 
     if (!level_cache_retains(new))
@@ -617,6 +619,7 @@ finish_descent:
 
     /* New depth */
     quest_followup_leave(new);
+    sil_achievements_on_level_travel(p_ptr->depth, new, cave_feat[p_ptr->py][p_ptr->px]);
     p_ptr->depth = new;
 
     if (!level_cache_retains(new))

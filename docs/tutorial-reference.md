@@ -4,7 +4,7 @@ This continuous document contains the authored lessons from `lib/help/tutorials.
 
 Info and decision explanations use Continue. Required action steps complete only after the matching real action commits. Reading, skipping and reviewing are free; game actions retain their normal costs and consequences. The archive turns every step into a read-only explanation.
 
-The catalogue contains 545 lessons, including 110 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
+The catalogue contains 562 lessons, including 113 ability previews. Every live ability serial, item kind handled by the aware-effect producer and meaningful public terrain serial has a checked entry. Equivalent terrain variants and retired duplicate producers share an automatic lesson; their old entries remain for saved archive history. This checks source/data coverage, not physical-device interaction.
 
 ## Resource route
 
@@ -12,7 +12,7 @@ The catalogue contains 545 lessons, including 110 ability previews. Every live a
 
 ## Tutorial modes
 
-Default: **Extended**. The catalogue has **156 Normal** lessons and **389 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
+Default: **Extended**. The catalogue has **170 Normal** lessons and **392 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
 
@@ -21,6 +21,8 @@ Filtering a lesson never marks it learned or skipped. Lowering the mode withdraw
 Characters deferred during an upgrade remain exempt from automatic tutorials for that character. Changing mode or resetting the Tale lesson history does not bypass that gate. The upgrade notice belongs to its own native UI and is independent of catalogue filtering.
 
 Skeletons and chests use Normal informational feature lessons. Their old generic item IDs remain untouched if present in saved history, and they do not enter examine/equip/use tutorial chains.
+
+Item descriptions have separate explanations for each public item family. Finding a gem first leaves the weapon and armour explanations available for later. Runtime identification wording reflects only what the hero already knows; examining an item does not identify it. Gem encounters and previews share one introduction and its progress, so neither route repeats an introduction already read or skipped through the other.
 
 ## Presentation order
 
@@ -218,7 +220,7 @@ Priority: **25** (higher appears first).
 
 **1. Info**
 
-{subject} is at your feet or in your belongings. Its description shows what your hero knows, including useful effects and drawbacks. Inspect unfamiliar equipment or consumables before deciding what to do with them.
+{subject} is at your feet or in your belongings. Open its preview to read what your hero knows before deciding what to do with it. Weight is shown in lb and volume in qt. {detail}
 
 **2. Action**
 
@@ -240,11 +242,237 @@ Priority: **27** (higher appears first).
 
 **1. Info**
 
-{detail} Damage written as 2d5 means roll two five-sided dice, for 2 to 10 damage before Protection. Protection such as 1d3 blocks 1 to 3 damage when it applies. Also compare Attack, Evasion, weight, volume and known bonuses or drawbacks.
+{subject}. {detail} Check the name, quantity, weight in lb and volume in qt. These describe what you are carrying. Reading the preview does not equip or use the item.
 
 Trigger: Explicit public observation at a safe player or menu boundary.
 
 Sources: `src/object/object-info.c`, `src/object/object-desc.c`.
+
+## Reading a weapon's description
+
+`item.description.weapon`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Damage such as 2d5 means two five-sided dice, for 2 to 10 damage before Protection. Attack affects accuracy; Evasion helps avoid hits. Compare weight and the damage shown for your current Strength, along with any revealed bonuses and drawbacks.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a bow's description
+
+`item.description.bow`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Damage such as 2d5 means two five-sided dice, for 2 to 10 damage before Protection. Compare the bow's Attack, range, weight and damage with your current Strength. You also need ready arrows to fire it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading an arrow stack's description
+
+`item.description.arrows`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Check how many arrows are in the stack, their Attack modifier and any revealed special properties. Compare these with your other arrows. Arrows need a bow and must be ready in the Quiver to fire; reading the preview does not ready them.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading armour and shield descriptions
+
+`item.description.armour`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Evasion helps avoid hits; Protection reduces damage after a hit. Protection such as 1d3 rolls one three-sided die, blocking 1 to 3 damage when it applies. Compare weight, skill penalties and any revealed properties. A shield also needs a free hand.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading jewelry descriptions
+
+`item.description.jewelry`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Look for revealed bonuses to attributes, skills or resistances, granted abilities and drawbacks. An unidentified ring or amulet can still have hidden properties. Reading its preview does not equip it, and you can leave it unused until you know more.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a potion's description
+
+`item.description.potion`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} A potion is consumed when drunk. A known effect explains what it changes or treats; appearance alone does not tell you whether it helps or harms. If its effect is unknown, you can keep it for later. Reading this preview does not drink it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading food and herb descriptions
+
+`item.description.food`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Check nourishment and any revealed effect. Ordinary food and herbs serve different purposes, and an unknown herb may be harmful. Read a known herb's effect before eating it; reading this preview does not consume it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a gem's description
+
+`item.description.gem`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+Archive compatibility entry. New encounters use `item.gem`.
+
+**1. Info**
+
+{subject}. {detail} Gems are single-use items. Read any revealed effect and targeting instructions. If the effect is unknown, the preview may show only its appearance, weight in lb and volume in qt. You can keep it and identify it later. Reading this preview does not use the gem.
+
+Trigger: Archive compatibility entry. Gem encounters and descriptions use item.gem.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a staff's description
+
+`item.description.staff`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} A staff has a magical effect and a limited supply of charges. Read its effect when known, and check remaining charges when revealed. Knowing the kind does not necessarily reveal the charges of this particular staff. Reading this preview spends no charge.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a horn's description
+
+`item.description.horn`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} A horn's effect and Voice cost matter when deciding whether to play it. Read those details when revealed. An unfamiliar horn's appearance does not reveal its power; you can leave it unused. Reading this preview spends no Voice.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a light's description
+
+`item.description.light`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Light radius is how far it reaches; intensity is how bright it is. Fuelled lights also show remaining fuel. Compare those details, weight and any revealed properties before choosing your light. Reading the preview does not equip or refuel it.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading an oil container's description
+
+`item.description.oil`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Oil supplies lantern fuel. Check the amount of fuel and its weight before deciding whether to keep it. A suitable lantern uses the Refuel action; reading this preview does not transfer any fuel.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading a digging tool's description
+
+`item.description.digging`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Compare its tunnelling ability, weight and any revealed bonuses or drawbacks. A digging tool helps with suitable walls and rubble; reading its description does not start digging or spend turns.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
+
+## Reading smithing material descriptions
+
+`item.description.metal`
+
+Level: **Normal**.
+
+Priority: **27** (higher appears first).
+
+**1. Info**
+
+{subject}. {detail} Check the material, quantity and weight. Metal is a smithing resource. A forge and the relevant Smithing abilities are still needed, and the smithing preview lists the actual materials and costs.
+
+Trigger: The player opens a description for this public item family; identification wording uses only current item knowledge.
+
+Sources: `src/object/object-info.c`, `src/object/object-desc.c`, `src/tutorial/tutorial-game.c`.
 
 ## Melee weapons
 
@@ -444,13 +672,13 @@ Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutor
 
 Level: **Normal**.
 
-Priority: **24** (higher appears first).
+Priority: **27** (higher appears first).
 
 **1. Info**
 
-Gems are single-use items with effects such as mapping, detection, identification or warding. Read the known effect before using one. If a gem asks you to choose an item, cancelling that choice preserves the gem.
+{subject}. {detail} Gems are single-use. Their description shows appearance, weight in lb and volume in qt, plus any revealed effect and targeting instructions. You can keep an unknown gem for later identification. Reading a preview does not use it. If a gem asks you to choose an item, cancelling that choice preserves the gem.
 
-Trigger: The item type is publicly encountered; no hidden subtype or property is used.
+Trigger: The player reaches a gem or opens its description. Both routes share this tutorial and progress; no hidden subtype or property is used.
 
 Sources: `src/object/object-info.c`, `src/object/object-inventory.c`, `src/tutorial/tutorial-game.c`.
 
@@ -512,7 +740,7 @@ Priority: **35** (higher appears first).
 
 **1. Info**
 
-Use the skeleton's contextual Search action on the dungeon floor. Each skeleton can be searched once and may contain supplies, damaged gear, a note, or nothing. Searching orc remains has a 5% chance of disease. Skeleton hints have their own setting and can be reread later.
+Use the skeleton's contextual Search action on the dungeon floor. Each skeleton can be searched once and may contain supplies, damaged gear, a note, or nothing. Searching orc remains has a 3% base chance of disease exposure, before immunity or Hardiness. Skeleton hints have their own setting and can be reread later.
 
 Trigger: Skeleton remains are actually encountered on the player square or visibly adjacent, including already-searched remains.
 
@@ -720,7 +948,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-{detail} Each infection gets a random disease name and one random cure herb from the ten herbs. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 100 player turns; it continues while resting. A Gem of Self Knowledge with Alchemy shows the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name and, once the name is known, a 50% chance to identify the cure herb. Discoveries last for this infection and are saved; a new infection gets a new name and cure and resets them. Eating the correct herb cures disease and restores its penalties instead of applying its normal effect or nourishment; other herbs act normally. Healing or Miruvor always cures it.
+{detail} Exposure rolls one of eight diseases; a disease you have cured cannot infect you again for this run. Infection assigns a random cure herb from the ten herbs. It immediately lowers Constitution by 1, then lowers a random attribute by 1 every 150 player turns (300 with Hardiness), including rest. Hardiness halves infection chances. A Gem of Self Knowledge with Alchemy reveals the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name, then a 50% chance to identify the cure once the name is known. Discoveries and immunity are saved. Eating the correct herb cures disease, restores its penalties, and grants immunity, replacing its normal effect and nourishment. Other herbs act normally. Healing or Miruvor always cures it.
 
 Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
 
@@ -1184,7 +1412,7 @@ Priority: **90** (higher appears first).
 
 **1. Info**
 
-Healing, Miruvor, or the identified cure herb cures disease and restores the attribute points it took. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.
+Healing, Miruvor, or the identified cure herb cures disease, restores the attribute points it took, and grants immunity to it for this run. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
@@ -1426,7 +1654,7 @@ Priority: **90** (higher appears first).
 
 **1. Info**
 
-Known nourishing food can relieve hunger. Check any extra effects: Dried Meat carries a 20% disease risk, while harmful herbs can make your situation worse. A known remedy is available now. Skip if you prefer another action.
+Known nourishing food can relieve hunger. Check any extra effects: Dried Meat carries a 20% base disease exposure risk, while harmful herbs can make your situation worse. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
@@ -3110,6 +3338,22 @@ Trigger: Public ability preview or newly available ability; raw serial 106, skil
 
 Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`, `src/ui/character-dump.c`, `src/cmd/ui/cmd-ui-abilities.c`.
 
+## Hardiness
+
+`ability.107.preview`
+
+Level: **Extended**.
+
+Priority: **65** (higher appears first).
+
+**1. Decision**
+
+Gain one layer of poison resistance. Disease infection chances are halved, and disease penalties occur every 300 player turns instead of 150. Existing poison still needs time or a remedy to clear; disease needs its cure.
+
+Trigger: Public ability preview or newly available ability; raw serial 107, skill 5, ability slot 7.
+
+Sources: `lib/edit/ability.txt`, `src/player/player-bonuses.c`, `src/birth/birth-traits.c`, `src/player/effects.c`.
+
 ## Vengeance
 
 `ability.108.preview`
@@ -3863,6 +4107,38 @@ Queen of the Stars adds +1 light radius while active, strengthening Varda's radi
 Trigger: Public ability preview or newly available ability; raw serial 173, skill 8, ability slot 13.
 
 Sources: `lib/edit/ability.txt`, `src/quest/quest-rewards-beta.c`, `src/quest/quest-core.c`, `src/player/player-light.c`.
+
+## Silent Passage
+
+`ability.174.preview`
+
+Level: **Extended**.
+
+Priority: **65** (higher appears first).
+
+**1. Decision**
+
+Silent Passage is available only to new Insight characters. Direct melee, bow and throwing kills of non-alert foes produce no attack-alert noise. Exchange Places with a non-alert foe provokes no free target attack and does not alert it; witnesses and independent noises still matter. Read the current learning requirements and price before purchasing.
+
+Trigger: Public ability preview or newly available ability; raw serial 174, skill 3, ability slot 7.
+
+Sources: `lib/edit/ability.txt`, `src/player/player-insight-abilities.c`, `src/cmd/combat/cmd-combat.c`, `src/cmd/item/cmd-item-utility.c`.
+
+## Veil of Shadows
+
+`ability.175.preview`
+
+Level: **Extended**.
+
+Priority: **65** (higher appears first).
+
+**1. Decision**
+
+Veil of Shadows is available only to new Insight characters. Ctrl-L can dim all personal light sources. While sneaking without personal light, perceive adjacent monsters and features without emitting light; blindness and invisibility checks still apply. Read the current learning requirements and price before purchasing.
+
+Trigger: Public ability preview or newly available ability; raw serial 175, skill 3, ability slot 8.
+
+Sources: `lib/edit/ability.txt`, `src/player/player-insight-abilities.c`, `src/player/player-light.c`.
 
 ## Chasm
 
@@ -4938,7 +5214,7 @@ Moving into, through or out of shallow water costs 50% more movement time and gi
 
 **2. Info**
 
-When healthy, each water square entered on foot has a 0.5% disease risk. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.
+When healthy, each water square entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.
 
 Trigger: Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -5754,7 +6030,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Its normal effect is to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
+Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
@@ -5786,7 +6062,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Provides about 2,000 ordinary turns of nourishment, with a 20% chance of disease: -1 Constitution on infection, then -1 to a random attribute every 100 player turns. Rest does not cure it; potions of Healing or Miruvor do.
+Provides about 2,000 ordinary turns of nourishment, with a 20% base chance of disease exposure: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure it; potions of Healing or Miruvor do.
 
 Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
@@ -5836,7 +6112,7 @@ Priority: **32** (higher appears first).
 
 **1. Action**
 
-Open Change Active and choose the readied throwing weapon. Check which weapon and shield will be active. Confirm the change to finish this practice, or Skip to keep your current setup.
+Open Change Active and choose a row labelled Throwing for a readied weapon. A spear can also have a separate Melee row; choose Throwing for this practice. Check which weapon and shield will be active, then confirm. Skip to keep your current setup.
 
 Required action: `change-active`; subject: `throwing`.
 
@@ -8978,7 +9254,7 @@ Moving into, through or out of deep water takes four times normal movement energ
 
 **2. Info**
 
-Swimming splashes for -3 Stealth. Each water square entered while healthy has a 0.5% disease risk. Standing still adds no movement penalty or infection roll, but leaves you unable to attack until you reach safe footing.
+Swimming splashes for -3 Stealth. Each water square entered while healthy has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no movement penalty or infection roll, but leaves you unable to attack until you reach safe footing.
 
 Trigger: Feature 100 is on the player square or visibly adjacent and marked; the observation expires when no known deep water remains nearby.
 

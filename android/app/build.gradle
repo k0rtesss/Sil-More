@@ -72,9 +72,9 @@ if (!achievementEnum.find()) {
 }
 def playAchievementKeys = (achievementEnum.group(1) =~ /\bSIL_ACH_([A-Z][A-Z0-9_]*)\b/)
         .collect { match -> match[1] }.findAll { it != 'COUNT' }
-if (!playAchievementKeys || playAchievementKeys.size() >= 64 ||
+if (!playAchievementKeys ||
         playAchievementKeys.toSet().size() != playAchievementKeys.size()) {
-    throw new GradleException('The native achievement catalogue must have 1-63 unique bitmask indexes.')
+    throw new GradleException('The native achievement catalogue must have unique indexes.')
 }
 // Provider IDs are public build configuration. Keep release builds configured
 // across shells and CI; command-line properties/environment still take priority.

@@ -714,11 +714,6 @@ static int door_minigame_question(int y, int x)
         player_skill_check_success_percent(p_ptr->stat_use[A_STR] * 2,
             door_bash_difficulty(y, x), 10, 10));
 
-    SDL_strlcpy(desc,
-        "Interaction check: choose an action, then the game rolls automatically. "
-        "The displayed percentage is the success probability; a tie fails. "
-        "Acting spends one turn, while Leave spends none. ",
-        sizeof(desc));
     if (door_retry.active && door_retry.y == y && door_retry.x == x
         && door_retry.previous[0])
     {
@@ -729,6 +724,10 @@ static int door_minigame_question(int y, int x)
             p_ptr->command_new = 0;
         SDL_strlcpy(desc, door_retry.previous, sizeof(desc));
         SDL_strlcat(desc, " ", sizeof(desc));
+    }
+    else
+    {
+        SDL_strlcpy(desc, ui_question_interaction_help_once(), sizeof(desc));
     }
 
     if (stuck)

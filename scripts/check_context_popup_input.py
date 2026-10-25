@@ -32,6 +32,34 @@ static void popup(int choice, const char* label)
     sdl_question_menu_set_context_hint();
 }
 
+static void popup_three_actions(void)
+{
+    Term_flush();
+    inkey_next_set(NULL);
+    sdl_question_menu_begin("5 Ruby Gems {unknown}");
+    sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
+    sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION, "Use",
+        TERM_L_WHITE);
+    sdl_question_menu_add_button('g', "Pack", TERM_L_BLUE);
+    sdl_question_menu_finish();
+    sdl_question_menu_set_context_hint();
+}
+
+static bool rect_inside(SDL_FRect outer, SDL_FRect inner)
+{
+    const float epsilon = 0.01f;
+
+    return inner.x + epsilon >= outer.x && inner.y + epsilon >= outer.y
+        && inner.x + inner.w <= outer.x + outer.w + epsilon
+        && inner.y + inner.h <= outer.y + outer.h + epsilon;
+}
+
+static bool rects_overlap(SDL_FRect a, SDL_FRect b)
+{
+    return a.x < b.x + b.w && a.x + a.w > b.x
+        && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
 static void mouse_button(int button)
 {
     sdl_question_menu_layout_info layout;
@@ -91,6 +119,29 @@ int main(void)
     angband_term[0] = &test_term;
     character_dungeon = true;
     p_ptr->playing = true;
+
+    /* A three-action normal-font popup may wrap to a second row.  Every
+     * rendered and controller-focus target must remain inside the panel. */
+    popup_three_actions();
+    sdl_question_menu_layout_info three_action_layout;
+    assert(sdl_question_menu_layout(&three_action_layout));
+    assert(three_action_layout.button_count == 3);
+    assert(three_action_layout.buttons[2].y
+        > three_action_layout.buttons[0].y);
+    sdl_controller_focus_target focus_targets[3];
+    assert(sdl_question_menu_collect_controller_focus_targets(
+        focus_targets, (int)N_ELEMENTS(focus_targets)) == 3);
+    for (int i = 0; i < three_action_layout.button_count; i++)
+    {
+        assert(rect_inside(three_action_layout.panel,
+            three_action_layout.buttons[i]));
+        assert(rect_inside(three_action_layout.panel,
+            focus_targets[i].rect));
+        for (int j = 0; j < i; j++)
+            assert(!rects_overlap(three_action_layout.buttons[i],
+                three_action_layout.buttons[j]));
+    }
+    sdl_question_menu_clear();
 
     /* Aiming owns Enter/Escape just like a question or inventory menu. */
     assert(!tutorial_menu_owns_input());
@@ -202,6 +253,7 @@ int main(void)
     puts("PASS: Escape dismisses a gameplay hint once and preserves modal/ordinary Escape input.");
     puts("PASS: early hint rejects action/suppression input until command wait;");
     puts("      modal input and forced movement cannot activate stale hints.");
+    puts("PASS: three-action popup rendering and controller focus stay inside the panel.");
     puts("PASS: SDL mouse events and command parser, four keysets, remap isolation,");
     puts("      interact-here direction, item actions, secondary click and controller activation.");
     return 0;

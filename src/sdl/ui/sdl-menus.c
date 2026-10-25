@@ -351,6 +351,18 @@ bool sdl_depth_menu_pane_handle_pointer(float x, float y)
 int sdl_touch_pane_yes_no_prompt_font_px(float cell_h, int screen_h)
 {
     bool handheld = sdl_handheld_ui_active();
+
+    /* PC handhelds have a shallow landscape viewport and can use a large
+     * map-cell scale.  Deriving confirmation text from that cell height made
+     * a normal Steam Deck prompt as large as 56 px.  Size it from the
+     * viewport instead: 24 px at 1280x800, or 32 px with Big Font. */
+    if (g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD) {
+        bool bigger = get_sdl_menu_bigger_font();
+        int percent = bigger ? 4 : 3;
+        int minimum = bigger ? 24 : 20;
+
+        return MAX(minimum, (screen_h * percent + 99) / 100);
+    }
     if (handheld && get_sdl_menu_bigger_font())
         return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     /* Main cells are already enlarged; resolve the normal prompt first and
@@ -2102,7 +2114,10 @@ void sdl_touch_pane_render_yes_no_prompt(void)
         return;
     }
 
-    if (view->term_ready && view->cell_h > 0 && view->rows > 0) {
+    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
+        /* Match the full-screen bounds used by the layout calculation. */
+        screen = sdl_get_layout_screen_rect();
+    } else if (view->term_ready && view->cell_h > 0 && view->rows > 0) {
         screen = (SDL_Rect){
             .h = sdl_main_view_visual_rows(view) * view->cell_h
         };
@@ -2156,10 +2171,19 @@ void sdl_touch_pane_render_yes_no_prompt(void)
 
     sdl_touch_pane_draw_wrapped_prompt(&prompt_rect, prompt_text, text,
         prompt_font_px);
-    sdl_touch_pane_draw_button_text_scaled(&yes_rect, NULL, "Yes",
-        button_text, 0.44f, 0.58f);
-    sdl_touch_pane_draw_button_text_scaled(&no_rect, NULL, "No", button_text,
-        0.44f, 0.58f);
+    if (g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD) {
+        /* Keep the labels in proportion with the Deck-specific prompt size;
+         * the button rectangles remain full-size touch targets. */
+        sdl_touch_pane_draw_readable_label(&yes_rect, "Yes", button_text,
+            prompt_font_px);
+        sdl_touch_pane_draw_readable_label(&no_rect, "No", button_text,
+            prompt_font_px);
+    } else {
+        sdl_touch_pane_draw_button_text_scaled(&yes_rect, NULL, "Yes",
+            button_text, 0.44f, 0.58f);
+        sdl_touch_pane_draw_button_text_scaled(&no_rect, NULL, "No",
+            button_text, 0.44f, 0.58f);
+    }
 }
 
 static int sdl_unified_look_log_text_font_px(void)

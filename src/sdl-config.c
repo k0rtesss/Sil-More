@@ -18,13 +18,13 @@ static const char* const menu_font_keys[SDL_MENU_FONT_COUNT] = {
     "main", "inventory", "abilities",
     "character", "smithing", "settings", "knowledge", "help", "messages",
     "scores", "songs", "quests", "birth", "narrative", "questions",
-    "logOptions", "paneOptions", "look"
+    "logOptions", "paneOptions", "look", "about"
 };
 static const char* const menu_font_labels[SDL_MENU_FONT_COUNT] = {
     "Main menu", "Inventory (all tabs)", "Abilities",
     "Character sheet", "Smithing", "Settings", "Knowledge", "Help", "Messages",
     "Halls of Mandos", "Songs", "Quests", "Character creation", "Story pages",
-    "Questions and choices", "Log menu", "Pane menu", "Look"
+    "Questions and choices", "Log menu", "Pane menu", "Look", "About"
 };
 
 const char* sdl_menu_font_key(enum sdl_menu_font menu)
@@ -35,6 +35,15 @@ const char* sdl_menu_font_key(enum sdl_menu_font menu)
 const char* sdl_menu_font_label(enum sdl_menu_font menu)
 {
     return menu >= 0 && menu < SDL_MENU_FONT_COUNT ? menu_font_labels[menu] : "";
+}
+
+static int sdl_clamp_terminal_menu_scale_offset(int value)
+{
+    if (value < SDL_TERMINAL_MENU_SCALE_OFFSET_MIN)
+        return SDL_TERMINAL_MENU_SCALE_OFFSET_MIN;
+    if (value > SDL_TERMINAL_MENU_SCALE_OFFSET_MAX)
+        return SDL_TERMINAL_MENU_SCALE_OFFSET_MAX;
+    return value;
 }
 
 static bool sdl_config_gamepad_dpad_source_is_valid(int source)
@@ -1755,6 +1764,7 @@ static bool g_app_touch_tutorial_seen = false;
 static bool g_app_mouse_tutorial_seen = false;
 static bool g_app_character_wheel_tutorial_seen = false;
 static bool g_app_keyboard_preset_prompt_seen = false;
+static bool g_app_interaction_check_help_seen = false;
 
 static const byte app_input_options[] = {
     OPT_hjkl_movement, OPT_angband_keyset,
@@ -2125,6 +2135,7 @@ void sdl_config_load_app_options(const char* filename)
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
     g_app_keyboard_preset_prompt_seen = false;
+    g_app_interaction_check_help_seen = false;
 
     if (!filename || !filename[0]) {
         log_warn("sdl_config_load_app_options: no config filename provided");
@@ -2179,6 +2190,11 @@ void sdl_config_load_app_options(const char* filename)
         "keyboardPresetPromptSeen");
     if (cJSON_IsBool(item))
         g_app_keyboard_preset_prompt_seen = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItemCaseSensitive(app_options,
+        "interactionCheckHelpSeen");
+    if (cJSON_IsBool(item))
+        g_app_interaction_check_help_seen = cJSON_IsTrue(item);
 
     sdl_config_load_app_option_group(app_options, "input", app_input_options);
     sdl_config_load_app_option_group(app_options, "interface", app_interface_options);
@@ -2356,6 +2372,16 @@ bool sdl_config_keyboard_preset_prompt_seen(void)
 void sdl_config_mark_keyboard_preset_prompt_seen(void)
 {
     g_app_keyboard_preset_prompt_seen = true;
+}
+
+bool sdl_config_take_interaction_check_help(void)
+{
+    if (g_app_interaction_check_help_seen)
+        return false;
+
+    g_app_interaction_check_help_seen = true;
+    (void)save_pane_config_to_json();
+    return true;
 }
 
 static void sdl_config_load_touch_binding_array(cJSON* array, int* dst, int max_count)
@@ -2743,8 +2769,13 @@ static void sdl_config_load_pane_array(cJSON* panes, struct pane_config* pane_co
             pc->font_size = font_size->valueint;
             if (pc->font_size < 0)
                 pc->font_size = 0;
-            if (pc->font_size > 48)
-                pc->font_size = 48;
+            if (pc->font_size > 0
+                && pc->font_size < SDL_AUX_VIEW_FONT_MIN)
+            {
+                pc->font_size = SDL_AUX_VIEW_FONT_MIN;
+            }
+            if (pc->font_size > SDL_AUX_VIEW_FONT_MAX)
+                pc->font_size = SDL_AUX_VIEW_FONT_MAX;
             log_debug("Pane %d: fontSize=%d", count, pc->font_size);
         }
 
@@ -2840,8 +2871,18 @@ static void sdl_config_load_pane_profile(cJSON* profile_obj,
     }
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj, "auxViewFontSize");
-    if (cJSON_IsNumber(item))
+    if (cJSON_IsNumber(item)) {
         profile->aux_view_font_size = item->valueint;
+        if (profile->aux_view_font_size < 0)
+            profile->aux_view_font_size = 0;
+        if (profile->aux_view_font_size > 0
+            && profile->aux_view_font_size < SDL_AUX_VIEW_FONT_MIN)
+        {
+            profile->aux_view_font_size = SDL_AUX_VIEW_FONT_MIN;
+        }
+        if (profile->aux_view_font_size > SDL_AUX_VIEW_FONT_MAX)
+            profile->aux_view_font_size = SDL_AUX_VIEW_FONT_MAX;
+    }
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj, "enableRightPanes");
     if (cJSON_IsBool(item))
@@ -3717,6 +3758,27 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
                     config->main_view_scale);
         }
 
+        /* Older files have one shared offset. Seed every menu from it, then
+         * overlay the independently saved values when present. */
+        for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+            config->terminal_menu_scale_offsets[menu] =
+                config->terminal_menu_scale_offset;
+        cJSON* menu_scales = cJSON_GetObjectItemCaseSensitive(sdl,
+            "terminalMenuScaleOffsets");
+        if (cJSON_IsObject(menu_scales)) {
+            for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++) {
+                item = cJSON_GetObjectItemCaseSensitive(menu_scales,
+                    sdl_menu_font_key(menu));
+                if (cJSON_IsNumber(item)) {
+                    config->terminal_menu_scale_offsets[menu] =
+                        sdl_clamp_terminal_menu_scale_offset(item->valueint);
+                    log_debug("Loaded terminalMenuScaleOffsets.%s: %d",
+                        sdl_menu_font_key(menu),
+                        config->terminal_menu_scale_offsets[menu]);
+                }
+            }
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(sdl,
             "compactInventoryMenus");
         if (cJSON_IsBool(item)) {
@@ -3799,6 +3861,15 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
         item = cJSON_GetObjectItemCaseSensitive(sdl, "auxViewFontSize");
         if (cJSON_IsNumber(item)) {
             config->aux_view_font_size = item->valueint;
+            if (config->aux_view_font_size < 0)
+                config->aux_view_font_size = 0;
+            if (config->aux_view_font_size > 0
+                && config->aux_view_font_size < SDL_AUX_VIEW_FONT_MIN)
+            {
+                config->aux_view_font_size = SDL_AUX_VIEW_FONT_MIN;
+            }
+            if (config->aux_view_font_size > SDL_AUX_VIEW_FONT_MAX)
+                config->aux_view_font_size = SDL_AUX_VIEW_FONT_MAX;
             log_debug("Loaded auxViewFontSize: %d", config->aux_view_font_size);
         } else {
             log_warn("auxViewFontSize not found or not a number");
@@ -5428,6 +5499,11 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
     cJSON_AddNumberToObject(sdl, "terminalMenuScaleOffset",
         config->terminal_menu_scale_offset);
+    cJSON* menu_scales = cJSON_AddObjectToObject(sdl,
+        "terminalMenuScaleOffsets");
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+        cJSON_AddNumberToObject(menu_scales, sdl_menu_font_key(menu),
+            config->terminal_menu_scale_offsets[menu]);
     cJSON_AddBoolToObject(sdl, "compactInventoryMenus",
         config->compact_inventory_menus);
     cJSON_AddBoolToObject(sdl, "debugCharacterSheet",
@@ -5923,6 +5999,8 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
                 g_app_character_wheel_tutorial_seen);
             cJSON_AddBoolToObject(app_options, "keyboardPresetPromptSeen",
                 g_app_keyboard_preset_prompt_seen);
+            cJSON_AddBoolToObject(app_options, "interactionCheckHelpSeen",
+                g_app_interaction_check_help_seen);
 
             sdl_config_save_app_option_group(app_options, "input", app_input_options);
             sdl_config_save_app_option_group(app_options, "interface", app_interface_options);
@@ -6176,6 +6254,9 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->terminal_menu_scale_offset =
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
             config->main_view_scale);
+    for (int menu = 0; menu < SDL_MENU_FONT_COUNT; menu++)
+        config->terminal_menu_scale_offsets[menu] =
+            config->terminal_menu_scale_offset;
     config->compact_inventory_menus = false;
     config->debug_character_sheet = false;
     config->bigger_font = false;
@@ -6338,6 +6419,10 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
                 const char* size_str = argv[++i];
                 int size = atoi(size_str);
                 if (size > 0) {
+                    if (size < SDL_AUX_VIEW_FONT_MIN)
+                        size = SDL_AUX_VIEW_FONT_MIN;
+                    if (size > SDL_AUX_VIEW_FONT_MAX)
+                        size = SDL_AUX_VIEW_FONT_MAX;
                     config->aux_view_font_size = size;
                     log_info("Command line: auxiliary view font size set to %d", size);
                 }

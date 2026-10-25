@@ -72,6 +72,7 @@ void regenhp(int regen_multiplier)
     /* Notice changes */
     if (old_chp != p_ptr->chp)
     {
+        if (p_ptr->chp > old_chp) sil_achievements_on_healing();
         /* Redraw */
         p_ptr->redraw |= (PR_HP);
 

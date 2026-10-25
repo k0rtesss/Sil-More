@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "meta_state.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "monster/monster-tactics.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
@@ -1268,6 +1269,18 @@ void calc_stance(monster_type* m_ptr)
     int stance;
     int stances[3];
 
+    /* Thralls do not regard the player as an enemy. Clear old fear silently,
+     * including magical fear, without combat stance messages or rewards. */
+    if (monster_is_thrall(m_ptr))
+    {
+        if (m_ptr->stance != STANCE_CONFIDENT)
+            m_ptr->min_range = 0;
+        m_ptr->morale = 60;
+        m_ptr->tmp_morale = 0;
+        m_ptr->stance = STANCE_CONFIDENT;
+        return;
+    }
+
     // set the default stances
     stances[0] = STANCE_FLEEING;
     stances[1] = STANCE_CONFIDENT;
@@ -1393,6 +1406,8 @@ void calc_stance(monster_type* m_ptr)
     }
 
     // update the monster's stance
+    if (stance == STANCE_FLEEING && m_ptr->stance != STANCE_FLEEING)
+        sil_achievement_lore_on_flee(m_ptr);
     if (stance == STANCE_FLEEING && m_ptr->stance != STANCE_FLEEING
         && m_ptr->achievement_elbereth_turn
         && (m_ptr->achievement_elbereth_turn == (u32b)playerturn
@@ -1948,4 +1963,6 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
     }
     if (main_roll)
         silent_passage_exchange_target = 0;
+    if (player_centered && main_roll)
+        sil_achievement_lore_on_perception();
 }

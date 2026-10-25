@@ -480,9 +480,9 @@ typedef enum sdl_character_sheet_context {
 
 /* Narrative book (quest offer/completion, etc.): a text-only book paginated
  * across N parchment pages, reusing the select_page/page-curl machinery. */
-#define SDL_BOOK_MAX_PARAS 64   /* most paragraphs/actions a single book may hold */
+#define SDL_BOOK_MAX_PARAS 128  /* includes achievement entries and book controls */
 #define SDL_BOOK_PARA_LEN  1024 /* longest single paragraph (re-flowed text) */
-#define SDL_BOOK_MAX_PAGES 64   /* allow a full page for every semantic paragraph */
+#define SDL_BOOK_MAX_PAGES 128  /* allow a full page for every semantic paragraph */
 #define SDL_BOOK_MAX_CONTENTS 8 /* persistent contents links beside the leaf */
 
 typedef struct sdl_character_sheet_live_item {
@@ -635,9 +635,16 @@ typedef struct sdl_character_sheet_screen_state {
     char narrative_paras[SDL_BOOK_MAX_PARAS][SDL_BOOK_PARA_LEN];
     short narrative_icon_row[SDL_BOOK_MAX_PARAS]; /* -1: no atlas sprite */
     short narrative_icon_col[SDL_BOOK_MAX_PARAS];
+    short narrative_icon_row2[SDL_BOOK_MAX_PARAS];
+    short narrative_icon_col2[SDL_BOOK_MAX_PARAS];
+    byte narrative_icon_count[SDL_BOOK_MAX_PARAS];
+    byte narrative_icon_source_size[SDL_BOOK_MAX_PARAS]; /* Atlas square, normally 16px. */
     bool narrative_icon_book; /* Preserve native-size text with narrow icon columns. */
+    bool narrative_full_width; /* Let a semantic page frame fill the safe area. */
+    bool narrative_terminal_style; /* Native layout with the terminal font/colours. */
     int narrative_para_choice[SDL_BOOK_MAX_PARAS]; /* >= 0: clickable action */
     byte narrative_para_attr[SDL_BOOK_MAX_PARAS];
+    byte narrative_para_char_attr[SDL_BOOK_MAX_PARAS][SDL_BOOK_PARA_LEN];
     bool narrative_para_break[SDL_BOOK_MAX_PARAS]; /* force a new page before this para */
     bool narrative_pending_break; /* next added paragraph starts a fresh page */
     bool narrative_para_highlight[SDL_BOOK_MAX_PARAS]; /* draw this para in the accent colour (task/reward) */
@@ -1808,6 +1815,7 @@ bool sdl_controller_keyboard_handle_button(const SDL_GamepadButtonEvent* ev);
 bool sdl_controller_keyboard_handle_axis(const SDL_GamepadAxisEvent* ev);
 bool sdl_controller_keyboard_handle_pointer(const SDL_Event* ev);
 void sdl_controller_keyboard_render(void);
+cptr sdl_controller_menu_hint(bool selectable, bool scrollable);
 void sdl_controller_glyphs_paint(TTF_Font* font, SDL_Surface* surface,
     cptr text, int wrap_width);
 SDL_GamepadType sdl_gamepad_prompt_type(void);
@@ -2242,7 +2250,11 @@ void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title);
 void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
 void sdl_character_sheet_screen_set_select_confirm_label(cptr label);
 void sdl_character_sheet_screen_begin_book(cptr title);
+void sdl_character_sheet_screen_set_book_full_width(bool enabled);
+void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 void sdl_character_sheet_screen_add_book_paragraph(cptr text);
+void sdl_character_sheet_screen_add_book_paragraph_styled(cptr text,
+    const byte* attrs, int attr_count);
 void sdl_character_sheet_screen_break_book_page(void);
 void sdl_character_sheet_screen_highlight_book_paragraph(void);
 void sdl_character_sheet_screen_commit_book(void);
@@ -2783,6 +2795,7 @@ bool sdl_screen_back_gesture_flush_pending_press(Uint64 now_ns);
 void sdl_menu_scroll_send_key_repeated(int key, int count);
 void sdl_menu_scroll_send_lines(int lines);
 bool sdl_menu_scroll_handle_mouse_wheel(const SDL_MouseWheelEvent* wheel);
+bool sdl_menu_scroll_handle_gamepad_direction(int direction);
 bool sdl_menu_scroll_handle_mouse_button(float x, float y);
 void sdl_menu_scroll_cancel(void);
 int sdl_minimap_clamp_zoom_step(int step);
@@ -2932,6 +2945,7 @@ void sdl_log_pane_menu_cancel_long_press(SDL_FingerID finger_id);
 int sdl_log_pane_menu_pending_timeout_ms(Uint64 now_ns);
 bool sdl_log_pane_menu_flush_pending_press(Uint64 now_ns);
 void sdl_log_pane_menu_render(void);
+bool sdl_pane_menu_handle_key(int key);
 const char* sdl_side_pane_menu_label(enum pane_type pane);
 bool sdl_side_pane_menu_config_is_entry(int index);
 int sdl_side_pane_menu_collect(side_pane_menu_entry* entries);
@@ -3930,6 +3944,7 @@ void sdl_question_menu_render(void);
 bool sdl_question_menu_handle_pointer(float x, float y, int action);
 bool sdl_question_menu_handle_hover_pointer(float x, float y);
 bool sdl_question_menu_handle_mouse_wheel(const SDL_MouseWheelEvent* wheel);
+bool sdl_question_menu_scroll_content(int direction, bool page);
 void sdl_hint_quest_menu_render(void);
 bool sdl_hint_quest_menu_handle_event(const SDL_Event* ev);
 int sdl_hint_quest_menu_pending_timeout_ms(Uint64 now_ns);
@@ -3954,6 +3969,7 @@ void sdl_question_menu_set_context_hint(void);
 void sdl_question_menu_clear_context_hint(void);
 bool sdl_question_menu_context_hint_active(void);
 bool sdl_question_menu_is_active(void);
+bool sdl_question_menu_current_rect(SDL_FRect* rect);
 int sdl_question_menu_collect_controller_focus_targets(
     sdl_controller_focus_target* targets, int max_targets);
 void sdl_question_menu_set_controller_focus(int choice);

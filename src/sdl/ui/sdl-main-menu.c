@@ -190,12 +190,15 @@ int sdl_main_menu_pane_font_px(void)
         return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
     int auxiliary_size = sdl_menu_base_aux_font_size();
     int font_size = (auxiliary_size > 0)
-        ? sdl_menu_font_px(MAX(8, MIN(48, auxiliary_size)))
+        ? sdl_menu_font_px(MAX(SDL_AUX_VIEW_FONT_MIN,
+            MIN(SDL_AUX_VIEW_FONT_MAX, auxiliary_size)))
         : sdl_menu_font_px(sdl_handheld_ui_active()
             ? sdl_menu_auto_font_size_from_main(4, 5)
             : sdl_menu_auto_font_size_from_main(3, 4));
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
 
+    /* font_px is already density-scaled; the logical minimum is enforced
+     * before this conversion by the automatic font-size helpers. */
     if (font_px < 8)
         font_px = 8;
 
@@ -514,27 +517,18 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         }
     }
 
-    if (sdl_handheld_ui_active() && !get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active())
     {
-        float overlay_margin = (float)sdl_overlay_margin_px();
-
-        max_panel_h = (float)screen.h - overlay_margin * 2.0f;
-        if (max_panel_h < 1.0f)
-            max_panel_h = (float)screen.h;
-
         float native_row_h = row_h;
 
-        panel_h = max_panel_h;
-        row_h = (panel_h - pad_y * 2.0f) / (float)MAIN_MENU_MAX;
-        /* Keep the empty vertical gap between adjacent labels no larger than
-         * the rendered label height. */
-        if (row_h > (float)text_h * 2.0f)
-            row_h = (float)text_h * 2.0f;
-        /* Short handheld windows scroll rather than clipping native glyphs. */
-        row_h = MAX(row_h, native_row_h);
+        /* The screen rect already excludes unsafe display areas. Use its
+         * full height in both font modes; short windows scroll at the native
+         * row size, while taller windows spread the visible rows evenly. */
+        max_panel_h = (float)screen.h;
         visible_count = MAX(1, MIN(MAIN_MENU_MAX,
-            (int)((max_panel_h - pad_y * 2.0f) / row_h)));
-        panel_h = pad_y * 2.0f + row_h * (float)visible_count;
+            (int)((max_panel_h - pad_y * 2.0f) / native_row_h)));
+        panel_h = max_panel_h;
+        row_h = (panel_h - pad_y * 2.0f) / (float)visible_count;
     }
     else
     {
@@ -653,6 +647,7 @@ void sdl_main_menu_overlay_close(void)
     g_main_menu_overlay_hover_choice = 0;
     g_main_menu_pane_hover = false;
     sdl_main_menu_overlay_reset_nav_input();
+    sdl_sound_update_environment();
     g_state.need_present = true;
 }
 
@@ -985,13 +980,15 @@ static Uint8 sdl_popup_notification_scaled_alpha(Uint8 alpha,
 }
 
 static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
-    TTF_Font** out_font)
+    SDL_FRect* out_text, TTF_Font** out_font)
 {
     SDL_FRect menu_rect;
     SDL_Rect screen;
     TTF_Font* font;
     int font_px;
     int text_w;
+    int text_h;
+    int wrap_w;
     float pad_x;
     float pad_y;
     float gap;
@@ -1032,14 +1029,14 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
     if (panel_w > max_panel_w)
         panel_w = max_panel_w;
 
-    panel_h = (float)font_px * 1.10f + pad_y * 2.0f;
-    if (get_sdl_menu_bigger_font()) {
-        int width = 0;
-        int height = 0;
-        if (TTF_GetStringSizeWrapped(font, g_popup_notification.text, 0,
-                MAX(1, (int)(panel_w - pad_x * 2.0f)), &width, &height))
-            panel_h = MAX(panel_h, height + pad_y * 2.0f);
-    }
+    /* Measure and draw in the same padded rectangle for every font profile.
+     * A one-line height clips wrapped achievement titles in normal mode. */
+    wrap_w = MAX(1, (int)(panel_w - pad_x * 2.0f));
+    if (!TTF_GetStringSizeWrapped(font, g_popup_notification.text, 0,
+            wrap_w, &text_w, &text_h))
+        return false;
+    panel_h = MAX((float)font_px * 1.10f, (float)text_h)
+        + pad_y * 2.0f;
     panel = (SDL_FRect){ .w = panel_w, .h = panel_h };
     if (menu_button_visible) {
         panel.x = menu_rect.x + (menu_rect.w - panel_w) * 0.5f;
@@ -1066,6 +1063,9 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
 
     if (out_panel)
         *out_panel = panel;
+    if (out_text)
+        *out_text = (SDL_FRect){ panel.x + pad_x, panel.y + pad_y,
+            (float)wrap_w, panel.h - pad_y * 2.0f };
     if (out_font)
         *out_font = font;
     return true;
@@ -1074,6 +1074,7 @@ static bool sdl_popup_notification_layout(SDL_FRect* out_panel,
 void sdl_popup_notification_render(void)
 {
     SDL_FRect panel;
+    SDL_FRect text_rect;
     SDL_FRect shadow;
     TTF_Font* font;
     SDL_Color accent;
@@ -1081,7 +1082,7 @@ void sdl_popup_notification_render(void)
     Uint8 alpha;
 
     alpha = sdl_popup_notification_alpha(SDL_GetTicksNS());
-    if (!alpha || !sdl_popup_notification_layout(&panel, &font))
+    if (!alpha || !sdl_popup_notification_layout(&panel, &text_rect, &font))
         return;
 
     shadow = panel;
@@ -1103,7 +1104,7 @@ void sdl_popup_notification_render(void)
     text = g_state.palette[TERM_L_WHITE];
     text.a = alpha;
     (void)sdl_main_menu_draw_text(font, g_popup_notification.text,
-        panel.x + panel.w * 0.07f, panel.y, panel.w * 0.86f, panel.h,
+        text_rect.x, text_rect.y, text_rect.w, text_rect.h,
         text, MAIN_MENU_TEXT_CENTER);
 }
 

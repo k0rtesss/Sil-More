@@ -15,6 +15,8 @@ typedef struct sdl_song_menu_layout_info {
     SDL_FRect title_row;
     SDL_FRect prev;
     SDL_FRect next;
+    SDL_FRect controller_hint;
+    cptr controller_hint_text;
     SDL_FRect rows[SDL_SONG_MENU_MAX_ENTRIES];
     float divider_y;
     float letter_w;
@@ -110,6 +112,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
     float max_panel_h;
     float rows_top;
     float title_h;
+    float controller_hint_h = 0;
 
     if (!out)
         return false;
@@ -212,7 +215,18 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         title_h = MAX(title_h, h + 6.0f * sdl_ui_density_scale());
     }
 
-    panel_h = pad_y * 2.0f + row_h * (float)g_song_menu.count;
+    bool selectable = false;
+    for (int i = 0; i < g_song_menu.count; i++)
+        if (g_song_menu.entries[i].choice >= 0) selectable = true;
+    out->controller_hint_text = sdl_controller_menu_hint(selectable, false);
+    if (out->controller_hint_text[0])
+    {
+        int w = 0, h = 0;
+        TTF_GetStringSizeWrapped(story_font, out->controller_hint_text, 0,
+            MAX(1, (int)(panel_w - pad_x * 2)), &w, &h);
+        controller_hint_h = h + divider_gap;
+    }
+    panel_h = pad_y * 2.0f + row_h * (float)g_song_menu.count + controller_hint_h;
     if (out->has_title)
         panel_h += title_h + divider_gap;
     max_panel_h = (float)anchor.h - (float)margin * 2.0f;
@@ -222,9 +236,9 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         panel_h = max_panel_h;
 
     out->visible_count = g_song_menu.count;
-    if (get_sdl_menu_bigger_font()) {
+    if (get_sdl_menu_bigger_font() || steamdeck_controls_active()) {
         float header_h = out->has_title ? title_h + divider_gap : 0.0f;
-        float available_h = max_panel_h - pad_y * 2.0f - header_h;
+        float available_h = max_panel_h - pad_y * 2.0f - header_h - controller_hint_h;
 
         if (row_h * g_song_menu.count > available_h) {
             out->visible_count = MAX(1, (int)((available_h - row_h) / row_h));
@@ -244,7 +258,7 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
             }
             out->first_entry = g_song_menu_first_entry;
             panel_h = pad_y * 2.0f + header_h
-                + row_h * (out->visible_count + 1);
+                + row_h * (out->visible_count + 1) + controller_hint_h;
         } else
             g_song_menu_first_entry = 0;
         g_song_menu_last_highlight = g_song_menu.highlight;
@@ -257,6 +271,10 @@ static bool sdl_song_menu_layout(sdl_song_menu_layout_info* out)
         .h = panel_h,
     };
     out->font_px = font_px;
+    if (controller_hint_h > 0)
+        out->controller_hint = (SDL_FRect){ out->panel.x + pad_x,
+            out->panel.y + out->panel.h - pad_y - controller_hint_h + divider_gap,
+            panel_w - pad_x * 2, controller_hint_h - divider_gap };
     out->letter_w = letter_w;
     out->letter_gap = letter_gap;
 
@@ -477,6 +495,11 @@ void sdl_song_menu_render(void)
         sdl_song_menu_draw_text(story_font, "Next >", color,
             layout.next.x, layout.next.y, layout.next.w, layout.next.h, true);
     }
+    if (layout.controller_hint.h > 0)
+        sdl_song_menu_draw_text(story_font, layout.controller_hint_text,
+            g_state.palette[TERM_L_WHITE], layout.controller_hint.x,
+            layout.controller_hint.y, layout.controller_hint.w,
+            layout.controller_hint.h, true);
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 }
 

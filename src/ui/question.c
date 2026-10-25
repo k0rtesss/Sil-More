@@ -4,6 +4,16 @@
 #include "ui/menu-click.h"
 #include "ui/question.h"
 
+cptr ui_question_interaction_help_once(void)
+{
+    if (!sdl_config_take_interaction_check_help())
+        return "";
+
+    return "Interaction check: choose an action, then the game rolls automatically. "
+        "The displayed percentage is the success probability; a tie fails. "
+        "Acting spends one turn. Closing this prompt or choosing Leave spends none. ";
+}
+
 /*
  * Rebuild the overlay panel for the current loop iteration.
  */
@@ -226,9 +236,8 @@ static int ui_question_ask_aux(cptr title, cptr desc,
             }
         }
 
-        if (desc_on_demand && which == '?')
+        if (desc_on_demand && sdl_question_menu_handle_help_key(which))
         {
-            (void)sdl_question_menu_toggle_help();
             continue;
         }
 

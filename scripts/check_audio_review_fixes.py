@@ -11,8 +11,18 @@ OUT = ROOT / "scripts/output/audio-review-fixes"
 
 HARNESS = r'''
 #include "sdl-sound.c"
+#include "cloud-saves.h"
 #include <assert.h>
 #include <stdio.h>
+
+/* Fix the listener's surroundings while exercising the production loop
+ * mixer and menu transitions; no player save or generated dungeon is used. */
+int __wrap_cave_flowing_water_sound_level_at(int y, int x) { return 2; }
+int __wrap_cave_still_liquid_sound_level_at(int y, int x) { return 2; }
+float __wrap_cave_fixture_sound_gain_at(int y, int x) { return .5f; }
+int __wrap_cave_lava_sound_level_at(int y, int x) { return 2; }
+int __wrap_cave_forge_sound_level_at(int y, int x) { return 2; }
+int __wrap_cave_bridge_work_sound_level_at(int y, int x) { return 2; }
 
 /* Use the production Android watch with the real mixer, while autosave remains
  * a fixture so no player save is opened. SDL headers already selected Windows. */
@@ -153,13 +163,14 @@ static void test_reload(void) {
 
     sdl_music_play_menu_theme();
     assert(MIX_TrackPlaying(sound_state.music_menu_track));
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
     save_reload();
     assert(MIX_TrackPlaying(sound_state.music_menu_track));
-    assert(MIX_TrackPlaying(sound_state.music_ambient_track));
-    sdl_music_stop_main(); /* Actual options exit: clear overlay, keep ambient. */
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
+    sdl_music_stop_main(); /* Actual options exit restores gameplay ambient. */
     assert(!MIX_TrackPlaying(sound_state.music_menu_track));
     assert(MIX_TrackPlaying(sound_state.music_ambient_track));
-    puts("PASS: reload preserves active menu overlay; returning to the game retains only ambient.");
+    puts("PASS: reload preserves the menu theme without ambient underneath; closing restores gameplay ambient.");
 
     void (*play[])(void) = {sdl_music_play_main, sdl_music_play_main_full, sdl_music_play_death};
     const char* paths[] = {"music/main.ogg", "music/main_full.ogg", "music/death.ogg"};
@@ -199,6 +210,51 @@ static void test_reload(void) {
     sdl_sound_shutdown(); sdl_sound_reload(); assert_silent();
     sdl_sound_shutdown();
     puts("PASS: fallback retains full-title intent; shutdown clears playback intent before fresh initialization.");
+}
+static void assert_environment(bool playing) {
+    MIX_Track* tracks[]={sound_state.river_loop_track,sound_state.still_water_loop_track,
+        sound_state.torch_loop_track,sound_state.lava_loop_track,
+        sound_state.forge_loop_track,sound_state.bridge_work_loop_track};
+    for (int i=0; i<6; ++i) assert(!!MIX_TrackPlaying(tracks[i])==playing);
+}
+static void test_menu_environment(void) {
+    static byte terrain[1][MAX_DUNGEON_WID];
+    character_generated=true; cave_feat=terrain;
+    sound_config_set_defaults(&g_sound_config);
+    g_sound_config.enabled=true;
+    save_reload(); sdl_music_play_ambient(); sdl_sound_update_environment();
+    assert_environment(true);
+    sdl_music_play_menu_theme();
+    assert(MIX_TrackPlaying(sound_state.music_menu_track));
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
+    assert_environment(false);
+    sdl_sound_update_environment(); assert_environment(false);
+    save_reload();
+    assert(MIX_TrackPlaying(sound_state.music_menu_track));
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
+    assert_environment(false);
+    g_sound_config.music_main_enabled=false; save_reload(); assert_silent();
+    g_sound_config.music_main_enabled=true; save_reload();
+    assert(MIX_TrackPlaying(sound_state.music_menu_track));
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
+    g_sound_config.enabled=false; save_reload(); assert(!sound_state.mixer);
+    g_sound_config.enabled=true; save_reload();
+    assert(MIX_TrackPlaying(sound_state.music_menu_track));
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
+    assert_environment(false);
+    sdl_music_stop_main();
+    assert(MIX_TrackPlaying(sound_state.music_ambient_track));
+    assert_environment(true); /* No movement, input, or world update. */
+    sdl_music_play_menu_theme();
+    g_sound_config.music_ambient_enabled=false; save_reload();
+    sdl_music_stop_main();
+    assert(!MIX_TrackPlaying(sound_state.music_ambient_track));
+    assert_environment(true); /* Water is independent of ambient music. */
+    sdl_music_play_menu_theme(); p_ptr->leaving=true;
+    sdl_music_stop_main(); assert_silent(); assert_environment(false);
+    p_ptr->leaving=false;
+    character_generated=false; cave_feat=NULL; sdl_sound_shutdown();
+    puts("PASS: all six environment loops resume immediately on menu exit, stay stopped under the theme, respect ambient mute, and survive music/master reloads without overlapping music.");
 }
 static void assert_no_sfx(void) {
     for (int i=0; i<SDL_SOUND_MAX_ACTIVE_TRACKS; ++i) {
@@ -291,11 +347,11 @@ static void test_background_pause(void) {
     sdl_sound_reload(); sdl_music_play_menu_theme();
     assert(SDL_AudioDevicePaused(mixer_device()));
     assert(MIX_TrackPaused(sound_state.music_menu_track));
-    assert(MIX_TrackPaused(sound_state.music_ambient_track));
+    assert(!MIX_TrackPaused(sound_state.music_ambient_track));
     save_reload();
     assert(SDL_AudioDevicePaused(mixer_device()));
     assert(MIX_TrackPaused(sound_state.music_menu_track));
-    assert(MIX_TrackPaused(sound_state.music_ambient_track));
+    assert(!MIX_TrackPaused(sound_state.music_ambient_track));
     sdl_music_stop_main();
     sdl_sound_set_suspended(false);
     assert(!SDL_AudioDevicePaused(mixer_device()));
@@ -323,6 +379,7 @@ static void test_background_pause(void) {
     puts("PASS: background mixer creation/reload, menu cues, explicit stops and master toggles preserve mobile pause independently of sound settings.");
 }
 int main(int argc, char** argv) {
+    player_type player={0}; player.playing=true; p_ptr=&player;
     assert(argc == 4);
     log_set_quiet(true);
     ANGBAND_DIR_XTRA = argv[1]; ANGBAND_DIR_USER = argv[2]; ANGBAND_DIR_PREF = argv[3];
@@ -332,7 +389,7 @@ int main(int argc, char** argv) {
     sound_config_set_defaults(&g_sound_config); g_sound_config.enabled = true;
     test_cache();
     snprintf(g_sound_config_path, sizeof(g_sound_config_path), "%s/sound.json", argv[2]);
-    test_reload(); test_background_pause(); SDL_Quit();
+    test_reload(); test_menu_environment(); test_background_pause(); SDL_Quit();
     return 0;
 }
 '''
@@ -355,10 +412,14 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     exe = OUT / "check.exe"
+    wraps = ["cave_flowing_water_sound_level_at", "cave_still_liquid_sound_level_at",
+             "cave_fixture_sound_gain_at", "cave_lava_sound_level_at",
+             "cave_forge_sound_level_at", "cave_bridge_work_sound_level_at"]
     subprocess.run([
         "C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O1",
         "-ffunction-sections", "-fdata-sections", "@CMakeFiles/sil-more.dir/includes_C.rsp",
         str(source), "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
+        "-Wl," + ",".join("--wrap=" + w for w in wraps),
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     result = subprocess.run([
         str(exe), str(ROOT / "lib/xtra"), str(OUT), str(ROOT / "lib/pref")],

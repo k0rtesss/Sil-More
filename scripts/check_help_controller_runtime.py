@@ -590,6 +590,42 @@ static void check_song_controller_owner(void)
     puts("Native Songs modal owner: remap-safe A/B, D-pad/sticks, held-trigger cleanup and no dungeon movement PASS");
 }
 
+static void check_right_stick_scroll_override(void)
+{
+    int offset=0;
+    SDL_GamepadAxisEvent axis={0};
+
+    sdl_config_set_defaults(&config);
+    config.gamepad_enabled=true;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    config.gamepad_use_right_stick=false;
+    config.gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_DOWN]='b';
+    character_icky=1;inkey_flag=true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    sdl_gamepad_reset_movement_controls();
+    g_gamepad_state.right_x=g_gamepad_state.right_y=0;
+    g_gamepad_state.right_ui_dir=-1;
+    ui_scroll_area_begin(1,10,SDL_TOUCH_MENU_CATEGORY_OTHER);
+    ui_scroll_area_set_keys('8','2','6','4');
+    ui_scroll_area_set_offset_target(&offset,8);
+
+    axis.axis=SDL_GAMEPAD_AXIS_RIGHTY;axis.value=32767;
+    sdl_gamepad_handle_axis(&axis);
+    assert(offset==3);expect_key(UI_MENU_CLICK_WAKE_KEY);expect_key(0);
+    sdl_gamepad_handle_axis(&axis);
+    assert(offset==3);expect_key(0);
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+
+    offset=8;axis.value=32767;sdl_gamepad_handle_axis(&axis);
+    assert(offset==8);expect_key(0);
+    axis.value=0;sdl_gamepad_handle_axis(&axis);expect_key(0);
+
+    ui_scroll_area_clear();character_icky=0;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    sdl_gamepad_reset_movement_controls();
+    puts("Right stick: modal scroll region overrides configured command, advances three rows, latches and clamps PASS");
+}
+
 
 
 static void blocked_axis(int axis,int value)
@@ -1298,6 +1334,7 @@ int main(void)
     check_dpad_menu_navigation();
     check_controller();
     check_song_controller_owner();
+    check_right_stick_scroll_override();
     check_yes_no_controller_owner();
     check_question_held_modifiers();
     check_terminal_held_modifiers();

@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-character.h"
+#include "achievements-lore.h"
 #include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "quest/quest-challenges.h"
@@ -4315,6 +4316,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
                 if ((eq_f3 & TR3_PERMA_CURSE) && cursed_p(eq_ptr))
                 {
+                    sil_achievement_lore_on_curse_lifted(o_ptr, eq_ptr);
                     /* Break the curse - the holy light overcomes the oath */
                     eq_ptr->ident &= ~IDENT_CURSED;
                     oath_broken = true;
@@ -5177,6 +5179,7 @@ void shatter_weapon(int silnum)
     int anger_level;
 
     log_debug("shatter_weapon: called for silmaril #%d", silnum);
+    sil_achievement_lore_on_shatter(silnum, w_ptr);
     
     /* Set the appropriate shatter flag for this silmaril */
     if (silnum == 2)
@@ -5338,6 +5341,8 @@ static bool prise_silmaril(void)
         // undo the dexterity adjustment to the attack
         attack_mod += 3;
     }
+
+    bool morgoth_was_asleep = sil_achievement_lore_morgoth_asleep();
 
     /* Test for hit */
     hit_result = hit_roll(attack_mod, 0, PLAYER, NULL, true);
@@ -5601,6 +5606,7 @@ static bool prise_silmaril(void)
             // add a note to the notes file
             do_cmd_note("Cut a Silmaril from Morgoth's crown", p_ptr->depth);
             sil_achievements_on_silmaril();
+            sil_achievement_lore_on_silmaril_cut(morgoth_was_asleep);
         }
     }
 

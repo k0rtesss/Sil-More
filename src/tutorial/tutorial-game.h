@@ -31,10 +31,14 @@ void tutorial_game_item_used(const object_type *item);
 void tutorial_game_identified(const object_type *item, const char *reason);
 void tutorial_game_ability(int skill, int ability, bool before_purchase);
 void tutorial_game_attack(const monster_type *target);
+/* Records committed damage without displaying a card until a safe checkpoint. */
+void tutorial_game_damage(int damage);
 void tutorial_game_combat_roll(const combat_roll *roll);
 void tutorial_game_lifecycle(const char *id);
 bool tutorial_game_command_allowed(int command, int direction);
 bool tutorial_game_action_allowed(const char *action, const object_type *item);
+/* Read-only role check; a throwing-capable item may also be used in melee. */
+bool tutorial_game_active_weapon_allowed(int kind);
 bool tutorial_game_target_allowed(int y, int x);
 /* Shared read-only eligibility for offering and completing ranged tutorials. */
 bool tutorial_game_ranged_path_allowed(int range, int y, int x, bool exact);

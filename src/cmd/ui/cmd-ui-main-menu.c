@@ -433,19 +433,60 @@ static void main_menu_about_draw_spans(int row, int indent, int wrap_right,
     text_out_indent = old_indent;
 }
 
-/* The native book owns wrapping, paging and its Back control. Source credit
- * lines remain semantic paragraphs, so no terminal footer can erase a tail. */
-static void main_menu_about_mobile_build(const main_menu_about_line* lines)
+/* The semantic book owns wrapping, paging and its Back control. Source credit
+ * lines remain paragraphs, and the bordered page fills the SDL safe area. */
+static void main_menu_about_semantic_attrs(int index,
+    const main_menu_about_line* line, byte* attrs, int capacity)
+{
+    cptr text = line && line->text ? line->text : "";
+    int length = MIN((int)strlen(text), capacity);
+
+    SDL_memset(attrs, line ? line->attr : TERM_WHITE, (size_t)length);
+    if (index == 0)
+    {
+        cptr silq = strstr(text, "SilQ");
+        int name_len = MIN((int)strlen("Sil-More"), length);
+
+        SDL_memset(attrs, TERM_VIOLET, (size_t)name_len);
+        if (silq)
+        {
+            int start = (int)(silq - text);
+            int count = MIN((int)strlen("SilQ"), length - start);
+            if (count > 0)
+                SDL_memset(attrs + start, TERM_L_BLUE, (size_t)count);
+        }
+    }
+    else if ((index >= 3 && index <= 8) || index == 15)
+    {
+        cptr colon = strchr(text, ':');
+        int label_len = colon ? (int)(colon - text) + 1 : length;
+
+        SDL_memset(attrs, TERM_YELLOW,
+            (size_t)MIN(label_len, length));
+    }
+}
+
+static void main_menu_about_semantic_build(const main_menu_about_line* lines)
 {
     sdl_character_sheet_screen_begin_book("About Sil-More");
+    sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_ABOUT);
+    sdl_character_sheet_screen_set_book_full_width(true);
+    sdl_character_sheet_screen_set_book_terminal_style(true);
     sdl_character_sheet_screen_set_book_close_button(true);
     sdl_character_sheet_screen_set_book_close_label("Back");
     for (int i = 0; lines[i].text; ++i)
     {
-        byte attr = lines[i].attr;
-        if ((i >= 3 && i <= 8) || i == 15)
-            attr = TERM_YELLOW;
-        sdl_character_sheet_screen_add_book_paragraph_colored(lines[i].text, attr);
+        char blank[] = " ";
+        cptr text = lines[i].text[0] ? lines[i].text : blank;
+        byte attrs[160];
+        int length = MIN((int)strlen(text), (int)sizeof(attrs));
+
+        main_menu_about_semantic_attrs(i, &lines[i], attrs,
+            (int)sizeof(attrs));
+        if (!lines[i].text[0])
+            attrs[0] = TERM_WHITE;
+        sdl_character_sheet_screen_add_book_paragraph_styled(text, attrs,
+            length);
     }
     sdl_character_sheet_screen_commit_book();
 }
@@ -494,10 +535,13 @@ static bool main_menu_mobile_book_wait(void)
     return completed;
 }
 
-static void main_menu_about_mobile(const main_menu_about_line* lines)
+static bool main_menu_about_semantic(const main_menu_about_line* lines)
 {
-    main_menu_about_mobile_build(lines);
+    main_menu_about_semantic_build(lines);
+    if (!sdl_character_sheet_screen_active())
+        return false;
     (void)main_menu_mobile_book_wait();
+    return true;
 }
 
 static void main_menu_about(void)
@@ -513,6 +557,7 @@ static void main_menu_about(void)
     int row;
     char ch;
     bool saved_hide_cursor;
+    bool terminal_scale_pushed = false;
     static const main_menu_about_line about_lines[] = {
         { TERM_WHITE, "Sil-More is an evolution of SilQ, a famous roguelike" },
         { TERM_WHITE, "taking place in the First Age of Beleriand." },
@@ -543,15 +588,15 @@ static void main_menu_about(void)
 
     screen_save();
     screen_push_supporting_panes_hidden();
-    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
+
+    if (main_menu_about_semantic(about_lines))
+        goto about_cleanup;
+
+    /* Renderer-less fallback for tests and non-SDL emergency paths. */
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_ABOUT);
+    terminal_scale_pushed = true;
 
 about_font_redraw:
-    if (get_sdl_menu_bigger_font() && sdl_touch_only_device_active())
-    {
-        main_menu_about_mobile(about_lines);
-        goto about_cleanup;
-    }
-
     Term_get_size(&wid, &hgt);
     if (wid < 1)
         wid = 80;
@@ -719,7 +764,8 @@ about_font_redraw:
     (void)ch;
 
 about_cleanup:
-    sdl_pop_terminal_menu_scale();
+    if (terminal_scale_pushed)
+        sdl_pop_terminal_menu_scale();
     screen_pop_supporting_panes_hidden();
     screen_load();
 
@@ -2040,6 +2086,9 @@ bool do_cmd_main_menu_execute_choice(int actiontype)
         do_cmd_look_at(pending_hint_look_y, pending_hint_look_x);
     }
 
+    /* Modal actions can finish inside the outer command wait. Restore local
+     * loops now, without requiring the player to spend a turn or move. */
+    sdl_sound_update_environment();
     return executed;
 }
 
@@ -2088,6 +2137,33 @@ static hint_message_action hint_message_tab_action(int choice)
     default:
         return HINT_MESSAGE_ACTION_NONE;
     }
+}
+
+static hint_message_action hint_message_controller_tab_action(int ch,
+    hint_quest_page current)
+{
+    if (!steamdeck_controls_active() || (ch != '[' && ch != ']'))
+        return HINT_MESSAGE_ACTION_NONE;
+    hint_quest_page next = hint_quest_adjacent_page(current, ch == '[' ? -1 : 1);
+    return next == HINT_QUEST_PAGE_HINTS ? HINT_MESSAGE_ACTION_OPEN_HINTS
+        : next == HINT_QUEST_PAGE_QUESTS ? HINT_MESSAGE_ACTION_OPEN_QUESTS
+        : HINT_MESSAGE_ACTION_OPEN_THRALLS;
+}
+
+static void hint_message_add_button(int choice, cptr label, byte attr)
+{
+    cptr button = "";
+    if (steamdeck_controls_active())
+        switch (choice)
+        {
+        case HINT_MESSAGE_CLICK_CONTINUE: button = "<A> "; break;
+        case HINT_MESSAGE_CLICK_BACK: button = "<B> "; break;
+        case HINT_MESSAGE_CLICK_LOOK: button = "<X> "; break;
+        case HINT_MESSAGE_CLICK_MAP: button = "<View> "; break;
+        case HINT_MESSAGE_CLICK_TOGGLE_TIPS: button = "<Y> "; break;
+        default: break;
+        }
+    sdl_hint_quest_menu_add_button(choice, format("%s%s", button, label), attr);
 }
 
 static hint_quest_page hint_message_action_page(hint_message_action action)
@@ -2275,9 +2351,9 @@ static hint_message_action skeleton_tip_show(int index)
         sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_HINTS, "Hints & Quests",
             "Survival Tip", true, true, 0);
         sdl_hint_quest_menu_add_contextual_block(tip_text, TERM_WHITE, 0, 0);
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
+        hint_message_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
+        hint_message_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
             TERM_L_WHITE);
         sdl_hint_quest_menu_finish();
         Term_fresh();
@@ -2302,6 +2378,9 @@ static hint_message_action skeleton_tip_show(int index)
                 continue;
         }
         ch = (char)steamdeck_menu_key(ch, 0, 0);
+        action = hint_message_controller_tab_action(ch, HINT_QUEST_PAGE_HINTS);
+        if (action != HINT_MESSAGE_ACTION_NONE)
+            break;
         if (hint_quest_tab_key(ch))
             action = HINT_MESSAGE_ACTION_OPEN_QUESTS;
         break;
@@ -2357,16 +2436,16 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
         {
             sdl_hint_quest_menu_add_block(body_text, TERM_WHITE, 0, 0);
         }
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
+        hint_message_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
         if (hint_message_has_source(&meta))
         {
-            sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_LOOK, "Look",
+            hint_message_add_button(HINT_MESSAGE_CLICK_LOOK, "Look",
                 TERM_L_BLUE);
-            sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
+            hint_message_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
                 TERM_L_BLUE);
         }
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
+        hint_message_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
             TERM_L_WHITE);
         sdl_hint_quest_menu_finish();
         Term_fresh();
@@ -2417,6 +2496,9 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
         }
         ch = (char)steamdeck_menu_key(ch, 0, 0);
 
+        action = hint_message_controller_tab_action(ch, HINT_QUEST_PAGE_HINTS);
+        if (action != HINT_MESSAGE_ACTION_NONE)
+            break;
         if (hint_quest_tab_key(ch))
         {
             action = HINT_MESSAGE_ACTION_OPEN_QUESTS;
@@ -2438,7 +2520,8 @@ static hint_message_action hint_message_show_internal(int index, int* source_y, 
             break;
         }
 
-        if ((ch == 'm' || ch == 'M')
+        if ((ch == 'm' || ch == 'M'
+                || (steamdeck && ch == steamdeck_info_key()))
             && hint_message_has_source(&meta))
         {
             if (source_y)
@@ -2640,7 +2723,7 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
         }
 
         if (tip_n > 0)
-            sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_TOGGLE_TIPS,
+            hint_message_add_button(HINT_MESSAGE_CLICK_TOGGLE_TIPS,
                 show_all_tips ? "Level Hints" : "All Tips", TERM_L_WHITE);
         if (!show_all_tips && n > 0)
         {
@@ -2649,13 +2732,13 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
             hint_messages_message_meta(sel, &meta);
             if (hint_message_has_source(&meta))
             {
-                sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_LOOK,
+                hint_message_add_button(HINT_MESSAGE_CLICK_LOOK,
                     "Look", TERM_L_BLUE);
-                sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_MAP,
+                hint_message_add_button(HINT_MESSAGE_CLICK_MAP,
                     "Map", TERM_L_BLUE);
             }
         }
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
+        hint_message_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
             TERM_L_WHITE);
         sdl_hint_quest_menu_finish();
 
@@ -2797,7 +2880,7 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
         if (ch == ESCAPE || (steamdeck && ch == steamdeck_back_key()))
             break;
 
-        if (ch == 'h' || ch == 'H'
+        if ((!steamdeck && (ch == 'h' || ch == 'H'))
             || (steamdeck && ch == steamdeck_secondary_key()))
         {
             if (tip_n <= 0)
@@ -2898,7 +2981,8 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
             continue;
         }
 
-        if (ch == 'm' || ch == 'M')
+        if (ch == 'm' || ch == 'M'
+            || (steamdeck && ch == steamdeck_info_key()))
         {
             hint_message_meta meta;
 
@@ -3045,13 +3129,13 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
         sdl_hint_quest_menu_add_contextual_block(
             "Location: on this dungeon level. Use Look or Map to find the thrall.",
             TERM_SLATE, 0, 0);
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_CONTINUE,
+        hint_message_add_button(HINT_MESSAGE_CLICK_CONTINUE,
             "Continue", TERM_L_WHITE);
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_LOOK, "Look",
+        hint_message_add_button(HINT_MESSAGE_CLICK_LOOK, "Look",
             TERM_L_BLUE);
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
+        hint_message_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
             TERM_L_BLUE);
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
+        hint_message_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
             TERM_L_WHITE);
         sdl_hint_quest_menu_finish();
         Term_fresh();
@@ -3084,6 +3168,9 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
         }
 
         ch = (char)steamdeck_menu_key(ch, 0, 0);
+        action = hint_message_controller_tab_action(ch, HINT_QUEST_PAGE_THRALLS);
+        if (action != HINT_MESSAGE_ACTION_NONE)
+            break;
         if (hint_quest_tab_key(ch))
         {
             action = HINT_MESSAGE_ACTION_OPEN_HINTS;
@@ -3097,7 +3184,8 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
             action = HINT_MESSAGE_ACTION_LOOK;
             break;
         }
-        if (ch == 'm' || ch == 'M')
+        if (ch == 'm' || ch == 'M'
+            || (steamdeck && ch == steamdeck_info_key()))
         {
             action = HINT_MESSAGE_ACTION_MAP;
             break;
@@ -3187,12 +3275,12 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
         }
         if (count > 0)
         {
-            sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_LOOK, "Look",
+            hint_message_add_button(HINT_MESSAGE_CLICK_LOOK, "Look",
                 TERM_L_BLUE);
-            sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
+            hint_message_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
                 TERM_L_BLUE);
         }
-        sdl_hint_quest_menu_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
+        hint_message_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
             TERM_L_WHITE);
         sdl_hint_quest_menu_finish();
 
@@ -3353,7 +3441,8 @@ static hint_quest_page do_cmd_thrall_quests(bool* out_pending_look,
             look_x = m_ptr->fx;
             break;
         }
-        if (ch == 'm' || ch == 'M')
+        if (ch == 'm' || ch == 'M'
+            || (steamdeck && ch == steamdeck_info_key()))
         {
             monster_type* m_ptr = &mon_list[entries[sel]];
 

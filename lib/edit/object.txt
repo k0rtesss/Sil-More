@@ -2306,6 +2306,7 @@ D: identify the cure herb. Discoveries last for the current
 D: infection and are saved. A new infection gets a new name
 D: and cure and resets them. Each use also gives a chance
 D: to reveal one active curse.
+D: Also shows how many diseases you are immune to for this run.
 
 
 N:203:Warding
@@ -2453,6 +2454,7 @@ D: blindness, and fear. It halves any current bleeding,
 D: restores 20 health and 20% of your maximum health,
 D: and restores all your voice. It also cures disease and
 D: restores all attribute points lost to that disease.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:315:Orcish Liquor
@@ -2508,6 +2510,7 @@ D: herbs and ancient craft. It halves any current bleeding
 D: and restores 15 health and 16% of your maximum health.
 D: It also cures disease and restores all attribute points
 D: lost to that disease.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:319:Voice
@@ -2829,6 +2832,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:381:Sustenance
@@ -2847,6 +2851,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 # Do not move Herb of Terror from this location, used by quests.
 
@@ -2867,6 +2872,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:383:Healing
@@ -2886,6 +2892,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:384:Restoration
@@ -2904,6 +2911,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:385:Emptiness
@@ -2921,6 +2929,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:386:Visions
@@ -2941,6 +2950,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:387:Entrancement
@@ -2959,6 +2969,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:388:Weakness
@@ -2976,6 +2987,7 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
 
 
 N:389:Sickness
@@ -2986,10 +2998,10 @@ P:0:0d0:0:0d0
 A:8/30
 F:EASY_KNOW
 D:A sickly herb, spotted and foul, that gnaws at the body's
-D: endurance. Its normal effect is to infect a healthy eater
+D: endurance. Its normal effect is to attempt to infect a healthy eater
 D: with disease:
 D: -1 Constitution immediately, then -1 to a random attribute
-D: every 100 player turns until cured. Rest does not cure it.
+D: every 150 player turns (300 with Hardiness) until cured. Rest does not cure it.
 D: Potions of Healing or Miruvor cure disease directly and restore only
 D: the attribute points lost to disease. It provides
 D: nourishment for about 250 turns under normal conditions.
@@ -2997,6 +3009,8 @@ D:If this is the cure for your current disease, eating it cures the
 D: disease and restores its disease penalties instead of applying
 D: this herb's normal effect or nourishment. Otherwise, its usual
 D: effect applies.
+D: Curing disease grants immunity to that disease for this run.
+D: Immunity blocks a previously cured disease; Hardiness halves infection chances.
 
 
 N:399:& Piece~ of Dark Bread
@@ -3026,10 +3040,11 @@ D:Strips of meat dried and salted for long marches. These
 D: poorly kept provisions are beginning to spoil, with a
 D: sour taint beneath the salt. Eating a strip provides
 D: nourishment for about 2,000 turns under normal conditions,
-D: with a 20% chance of causing disease.
+D: with a 20% base chance of disease exposure.
 D: Disease causes -1 Constitution immediately, then -1 to a
-D: random attribute every 100 player turns until cured by a
+D: random attribute every 150 player turns (300 with Hardiness) until cured by a
 D: potion of Healing or Miruvor. Rest does not cure it.
+D: Immunity blocks a previously cured disease; Hardiness halves infection chances.
 
 
 N:401:& Fragment~ of Lembas

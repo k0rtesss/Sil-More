@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "1.1.0"
 /*
- * Version components (1.1.0.8).  All on-disk formats (saves, scores, metaruns)
+ * Version components (1.1.0.9).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 1
 #define VERSION_PATCH 0
-#define VERSION_EXTRA 8  /* Expanded achievement discovery and provenance. */
+#define VERSION_EXTRA 9  /* Master achievement, disease and song save updates. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -333,6 +333,9 @@
 #define R_IDX_GOSTIR 215
 #define R_IDX_SHELOB 224
 #define R_IDX_THURINGWETHIL 234
+#define R_IDX_WEREWOLF 131
+#define R_IDX_GREATER_WEREWOLF 172
+#define R_IDX_TEVILDO 185
 #define R_IDX_VARDA 321
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
@@ -347,7 +350,9 @@
 #define R_IDX_CAT_ASSASSIN 175
 #define R_IDX_YOUNG_FIRE_DRAKE 181
 #define R_IDX_TROLL_GUARD 192
+#define R_IDX_MAEGLIN 196
 #define R_IDX_SILENT_WATCHER 203
+#define R_IDX_ANCALAGON 233
 #define R_IDX_GOTHMOG 241 // the location of Gothmog
 #define R_IDX_UNGOLIANT 242 // the location of Ungoliant
 #define R_IDX_GLAURUNG 243 // the location of Glaurung
@@ -785,7 +790,9 @@
 #define WIL_INNER_LIGHT 4
 #define WIL_INDOMITABLE 5
 #define WIL_OATH 6
-#define WIL_RETIRED_POISON_RESISTANCE 7 /* Retired ability slot; save compatibility. */
+#define WIL_HARDINESS 7
+#define WIL_POISON_RESISTANCE WIL_HARDINESS /* Historical name; same saved slot. */
+#define WIL_RETIRED_POISON_RESISTANCE WIL_HARDINESS /* Legacy slot alias. */
 #define WIL_VENGEANCE 8
 #define WIL_MAJESTY 9
 #define WIL_CON 10
@@ -1454,6 +1461,28 @@
 /*** Important artefact indexes (see "lib/edit/artefact.txt") ***/
 
 #define ART_MAEGLIN 32
+#define ART_BARAHIR 1
+#define ART_MELIAN_RING 2
+#define ART_NAUGLAMIR 6
+#define ART_MAIRON 7
+#define ART_FEANOR 9
+#define ART_AZAGHAL 50
+#define ART_IDRIL_ROBE 22
+#define ART_FINGOLFIN_SHIELD 46
+#define ART_ANGRIST 54
+#define ART_STING 61
+#define ART_NARSIL 66
+#define ART_GURTHANG 70
+#define ART_CELEG_AITHORN 80
+#define ART_RINGIL 81
+#define ART_MELKOR 90
+#define ART_GOTHMOG_AXE 97
+#define ART_TURGON_STAFF 105
+#define ART_ULMO_CLOAK 133
+#define ART_BELTHRONDING 145
+#define ART_DAILIR 150
+#define ART_CELEBRIMBOR_GLOVES 162
+#define ART_FINWE_LAMP 171
 #define ART_DURIN 35
 #define ART_ORCRIST 64
 #define ART_GLAMDRING 65
@@ -1793,9 +1822,10 @@
 
 /* Disease exposure odds and progression, measured in completed player turns. */
 #define DISEASE_MEAT_ONE_IN 5
-#define DISEASE_SKELETON_ONE_IN 20
+#define DISEASE_SKELETON_PERCENT 3
 #define DISEASE_WATER_ONE_IN 200
-#define DISEASE_INTERVAL 100
+#define DISEASE_INTERVAL 150
+#define DISEASE_COUNTDOWN_MAX (DISEASE_INTERVAL * 2)
 #define DISEASE_NAME_COUNT 8
 #define DISEASE_HERB_COUNT 10 /* Contiguous herb svals, Rage through Sickness. */
 #define DISEASE_KNOWN_NAME 0x01

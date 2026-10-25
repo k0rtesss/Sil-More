@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -207,6 +208,7 @@ void aule_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(2); /* Aulë is quest index 2 */
+        sil_achievements_on_event(SIL_ACH_AULES_APPRENTICE);
 
         msg_print("Aulë smiles with approval and returns to his eternal labors.");
 
@@ -388,6 +390,7 @@ void mandos_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(3); /* Mandos is quest index 3 */
+        sil_achievements_on_event(SIL_ACH_THE_DOOMSMANS_DUE);
 
         msg_print("Mandos bows deeply and fades into shadow, his task complete.");
 
@@ -696,6 +699,7 @@ void niena_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(4); /* Nienna is quest index 4 */
+        sil_achievements_on_event(SIL_ACH_PITY_FOR_THE_FORSAKEN);
 
         /* Mark quest completion in metarun for score/persistence */
         metarun_mark_quest_completed(METARUN_QUEST_NIENA);
@@ -821,32 +825,13 @@ void orome_quest_interaction(void)
             quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
 
-        /* Determine hunt target based on dungeon depth */
-        int depth = p_ptr->depth * 50;
-        cptr target_name;
-        int target_count;
-
-        if (depth <= 250) {
-            p_ptr->orome_target_type = OROME_TARGET_WOLF;
-            target_count = 100;
-            target_name = "wolves";
-        } else if (depth <= 500) {
-            p_ptr->orome_target_type = OROME_TARGET_SPIDER;
-            target_count = 80;
-            target_name = "spiders";
-        } else if (depth <= 750) {
-            p_ptr->orome_target_type = OROME_TARGET_SERPENT;
-            target_count = 60;
-            target_name = "serpents";
-        } else {
-            p_ptr->orome_target_type = OROME_TARGET_VAMPIRE;
-            target_count = 30;
-            target_name = "vampires";
-        }
+        /* The hunt accepts any one of the four kindred totals. These legacy
+         * fields no longer select or restrict a target species. */
+        p_ptr->orome_target_type = 0;
 
         /* Accept the quest */
         p_ptr->orome_quest = OROME_QUEST_ACTIVE;
-        p_ptr->orome_target_count = target_count;
+        p_ptr->orome_target_count = 0;
         p_ptr->orome_killed_count = 0;
 
         /* Remove the quest giver now that quest is accepted without
@@ -854,12 +839,12 @@ void orome_quest_interaction(void)
          */
         remove_quest_giver_silent(R_IDX_OROME);
 
-        msg_format("You must hunt and slay %d %s to prove your prowess.", target_count, target_name);
+        msg_print("Hunt 100 wolves, 80 spiders, 60 serpents, or 30 vampires.");
+        msg_print("Complete any one of these counts to prove your prowess.");
         msg_print("Return when the hunt is complete to claim your reward.");
         msg_print("Oromë fades into the wild, but his presence lingers in your soul.");
 
-        log_trace("Oromë quest started - hunt %d %s at depth %d",
-                 target_count, target_name, depth);
+        log_trace("Oromë quest started - any kindred total qualifies, depth=%d", p_ptr->depth);
         sdl_popup_notification_show("New quest added");
     }
     else if (p_ptr->orome_quest == OROME_QUEST_SUCCESS)
@@ -883,13 +868,7 @@ void orome_quest_interaction(void)
             quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
 
-        /* Show the specific numbers after the main dialogue */
-        cptr monster_names[] = {"wolves", "spiders", "serpents", "vampires"};
-        cptr monster_name = (p_ptr->orome_target_type >= 1 && p_ptr->orome_target_type <= 4)
-                           ? monster_names[p_ptr->orome_target_type - 1] : "creatures";
-
-        msg_format("You have slain %d %s as commanded.",
-                  p_ptr->orome_target_count, monster_name);
+        msg_print("You have completed the great hunt as commanded.");
         msg_print("You learn the secret of hunting unique creatures!");
 
         /* Clear quest state */
@@ -898,6 +877,7 @@ void orome_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(5); /* Oromë is quest index 5 */
+        sil_achievements_on_event(SIL_ACH_THE_GREAT_HUNT);
 
         /* Mark quest as completed in metarun */
         metarun_mark_quest_completed(METARUN_QUEST_OROME);

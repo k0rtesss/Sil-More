@@ -110,6 +110,8 @@ typedef struct sdl_hint_quest_layout {
     SDL_FRect section;
     SDL_FRect body;
     SDL_FRect footer;
+    SDL_FRect controller_hint;
+    cptr controller_hint_text;
     int body_px;
     int title_px;
     float line_h;
@@ -119,6 +121,18 @@ typedef struct sdl_hint_quest_layout {
 } sdl_hint_quest_layout;
 
 static sdl_hint_quest_state g_hint_quest;
+
+static cptr sdl_hint_quest_tab_label(int index, char* label, size_t size)
+{
+    static const cptr names[] = { "I. Hints", "II. Quests", "III. Thralls" };
+    if (!steamdeck_controls_active()) return names[index];
+    int current = (int)g_hint_quest.page - 1;
+    cptr button = index == (current + 2) % 3 ? "<LB> "
+        : index == (current + 1) % 3 ? "<RB> " : "";
+    strnfmt(label, size, "%s%s", button, names[index]);
+    return label;
+}
+
 static sdl_hint_quest_press g_hint_quest_press;
 static sdl_hint_quest_turn g_hint_quest_turn;
 static sdl_hint_quest_context_cache_entry
@@ -795,10 +809,15 @@ static void sdl_hint_quest_draw_contextual_text(TTF_Font* font,
 
 static int sdl_hint_quest_body_px(const SDL_Rect* screen)
 {
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active())
     {
-        (void)screen;
-        return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
+        if (get_sdl_menu_bigger_font())
+            return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
+
+        /* Keep the normal quest book aligned with Questions and Songs.  The
+         * old viewport percentage made a 1280x800 handheld resolve to a
+         * roughly 65px body font, much larger than the other menus. */
+        return (int)((float)sdl_main_menu_pane_font_px() * 1.18f + 0.5f);
     }
     float short_side;
     bool portrait;
@@ -865,7 +884,8 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
         /* Larger prose needs a wider reading leaf as well as a larger font.
          * Keep the frame comfortably inside the safe layout rectangle while
          * giving wrapped quest and hint text useful line lengths. */
-        float panel_max = (float)screen.w * (portrait ? 0.94f : 0.82f);
+        float panel_max = (float)screen.w
+            * (portrait || steamdeck_controls_active() ? 0.94f : 0.82f);
 
         if (!portrait && panel_max < 680.0f)
             panel_max = 680.0f;
@@ -927,7 +947,7 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
     /* On short tabbed pages, navigation already names this book and section.
      * Reserve two readable body lines before retaining those duplicate
      * headings. Keep the resolved body font and the tabs/Back actions. */
-    if (g_hint_quest.show_tabs)
+    if (g_hint_quest.show_tabs && !steamdeck_controls_active())
     {
         float minimum_body_h = out->line_h * 2.0f;
         float chrome_h = pad_y * 2.0f + title_h + tabs_h + section_h
@@ -959,6 +979,51 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
                     footer_h = control_h * rows + gap * (rows - 1);
                 }
             }
+        }
+    }
+    float controller_hint_h = 0;
+    if (steamdeck_controls_active())
+    {
+        TTF_Font* font = sdl_story_font_for_height_slot(out->body_px,
+            SDL_STORY_FONT_SLOT_MENU);
+        float width = panel_w - pad_x * 2;
+        int w = 0, h = 0;
+        bool selectable = false;
+        for (int i = 0; i < g_hint_quest.block_count; i++)
+            if (g_hint_quest.blocks[i].choice != 0) selectable = true;
+        out->controller_hint_text = sdl_controller_menu_hint(selectable, true);
+        TTF_GetStringSizeWrapped(font, out->controller_hint_text, 0,
+            MAX(1, (int)width), &w, &h);
+        controller_hint_h = h + gap;
+        int columns = sdl_handheld_ui_active() && get_sdl_menu_bigger_font() && portrait
+            ? 2 : MAX(1, g_hint_quest.button_count);
+        int rows = (g_hint_quest.button_count + columns - 1) / columns;
+        float button_h = 0;
+        for (int i = 0; i < g_hint_quest.button_count; i++)
+        {
+            TTF_GetStringSizeWrapped(font, g_hint_quest.buttons[i].label, 0,
+                MAX(1, (int)((width - gap * (columns - 1)) / columns)), &w, &h);
+            button_h = MAX(button_h, h + 8.0f);
+        }
+        footer_h = MAX(footer_h, button_h * rows + gap * MAX(0, rows - 1));
+        footer_h += controller_hint_h;
+        if (g_hint_quest.show_tabs)
+            for (int i = 0; i < 3; i++)
+            {
+                char label[64];
+                TTF_GetStringSizeWrapped(font, sdl_hint_quest_tab_label(i, label, sizeof(label)),
+                    0, MAX(1, (int)((width - gap * 2) / 3)), &w, &h);
+                tabs_h = MAX(tabs_h, h + 8.0f);
+            }
+        /* Measure the complete controller chrome before deciding whether
+         * repeated headings fit. Preserve the font and scrolling body. */
+        float chrome_h = pad_y * 2 + title_h + tabs_h + section_h
+            + footer_h + gap * 3;
+        if (panel_h - chrome_h < out->line_h * 2)
+        {
+            title_h = section_h = 0;
+            pad_y = 14;
+            gap = 8;
         }
     }
     cursor_y = out->panel.y + pad_y;
@@ -1021,6 +1086,13 @@ static bool sdl_hint_quest_layout_compute(sdl_hint_quest_layout* out)
         out->body.h = out->panel.y + out->panel.h - pad_y - cursor_y;
     if (out->body.h < 1.0f)
         out->body.h = 1.0f;
+    if (controller_hint_h > 0)
+    {
+        out->controller_hint = out->footer;
+        out->controller_hint.h = controller_hint_h - gap;
+        out->footer.y += controller_hint_h;
+        out->footer.h -= controller_hint_h;
+    }
 
     return true;
 }
@@ -1237,9 +1309,6 @@ static void sdl_hint_quest_draw_center_ornament(float center_x, float y,
 static void sdl_hint_quest_draw_chrome(const sdl_hint_quest_layout* layout,
     TTF_Font* title_font, TTF_Font* body_font)
 {
-    static const char* const tab_labels[] = {
-        "I. Hints", "II. Quests", "III. Thralls"
-    };
     static const int tab_choices[] = {
         HINT_QUEST_CLICK_HINTS_TAB,
         HINT_QUEST_CLICK_QUESTS_TAB,
@@ -1292,8 +1361,10 @@ static void sdl_hint_quest_draw_chrome(const sdl_hint_quest_layout* layout,
                 sdl_char_sheet_draw_focus_rect(focus, false);
                 text = sdl_color_from_attr(TERM_DARK);
             }
-            sdl_hint_quest_draw_text(body_font, tab_labels[i], text,
-                &layout->tabs[i], true, false);
+            char label[64];
+            sdl_hint_quest_draw_text(body_font,
+                sdl_hint_quest_tab_label(i, label, sizeof(label)), text,
+                &layout->tabs[i], true, steamdeck_controls_active());
             if (active)
             {
                 SDL_FRect underline = {
@@ -1339,6 +1410,10 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
     float rule_h;
     SDL_Color gold = sdl_color_from_attr(TERM_YELLOW);
 
+    if (layout->controller_hint.h > 0)
+        sdl_hint_quest_draw_text(font, layout->controller_hint_text,
+            sdl_color_from_attr(TERM_L_WHITE), &layout->controller_hint,
+            true, true);
     if (g_hint_quest.button_count <= 0)
         return;
     rule_h = MAX(1.0f, (float)layout->body_px * 0.035f);
@@ -1421,7 +1496,7 @@ static void sdl_hint_quest_draw_footer(const sdl_hint_quest_layout* layout,
             text = sdl_color_from_attr(TERM_DARK);
         }
         sdl_hint_quest_draw_text(font, button->label, text, &rect, true,
-            false);
+            steamdeck_controls_active());
         if (!hover)
         {
             SDL_FRect underline = {

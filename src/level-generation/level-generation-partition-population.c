@@ -725,6 +725,12 @@ void level_partition_meta_set(const partition_meta_save* in)
     }
 
     remember_partition_grid(rows, cols, count);
+    /* Validate in local arrays, then restore the thread-local state together.
+     * Direct indexed writes to external TLS arrays are miscompiled by the
+     * Windows release toolchain in this loop. */
+    quadrant_mode_t modes[PARTITION_META_MAX];
+    density_level_t densities[PARTITION_META_MAX];
+    big_cave_type_t cave_types[PARTITION_META_MAX];
     for (int i = 0; i < PARTITION_META_MAX; ++i)
     {
         quadrant_mode_t mode = QUAD_MODE_ROOMY;
@@ -741,10 +747,13 @@ void level_partition_meta_set(const partition_meta_save* in)
                     cave_type = (big_cave_type_t)raw_type;
             }
         }
-        current_partition_modes[i] = mode;
-        current_partition_densities[i] = DENSITY_NORMAL;
-        current_partition_big_cave_types[i] = cave_type;
+        modes[i] = mode;
+        densities[i] = DENSITY_NORMAL;
+        cave_types[i] = cave_type;
     }
+    memcpy(current_partition_modes, modes, sizeof(modes));
+    memcpy(current_partition_densities, densities, sizeof(densities));
+    memcpy(current_partition_big_cave_types, cave_types, sizeof(cave_types));
     cave_atmosphere_set_partitions(in->atmospheres, count);
 }
 

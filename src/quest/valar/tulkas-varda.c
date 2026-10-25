@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "quest/quest-runtime.h"
+#include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -231,6 +232,7 @@ void tulkas_quest_interaction(void)
 
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(1); /* Tulkas is quest index 1 */
+        sil_achievements_on_event(SIL_ACH_TULKAS_LAST_LAUGH);
 
         /* Extract completion texts from quest data */
         int completion_count = 0;
@@ -601,6 +603,7 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
     p_ptr->varda_vault_placed = 1;
 
     metarun_mark_quest_completed(METARUN_QUEST_VARDA);
+    sil_achievements_on_event(SIL_ACH_A_STAR_AGAINST_THE_BALROG);
     metarun_unlock_oath(OATH_LIGHT);
     award_quest_completion_exp();
     gain_insight_points(1, "You complete a Valar quest.");

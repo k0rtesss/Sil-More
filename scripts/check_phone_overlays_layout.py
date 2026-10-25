@@ -258,11 +258,20 @@ static void check(void){
     inside(panel);inside(prompt);inside(yes);inside(no);
     assert(yes.h>=sdl_ui_min_tap_px()&&yes.w>=sdl_ui_min_tap_px());
     assert(no.h>=sdl_ui_min_tap_px()&&no.w>=sdl_ui_min_tap_px());
-    assert(sdl_touch_pane_yes_no_prompt_font_px(5,height)==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+    int confirmation_px=sdl_touch_pane_yes_no_prompt_font_px(5,height);
+#if SIL_SDL_MOBILE_BUILD
+    assert(confirmation_px==sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+#else
+    assert(confirmation_px==MAX(24,(height*4+99)/100));
+    config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=false;
+    assert(sdl_touch_pane_yes_no_prompt_font_px(48,height)
+        ==MAX(20,(height*3+99)/100));
+    config.menu_bigger_font[SDL_MENU_FONT_QUESTIONS]=true;
+#endif
     sdl_touch_pane_render_yes_no_prompt();snapshot("confirmation");
     char lines[SDL_TOUCH_YES_NO_MAX_LINES][SDL_TOUCH_YES_NO_LINE_LEN];
     TTF_Font *prompt_font=sdl_story_font_for_height_slot(
-        sdl_ui_role_font_px(SDL_UI_FONT_BODY),SDL_STORY_FONT_SLOT_MENU);
+        confirmation_px,SDL_STORY_FONT_SLOT_MENU);
     int line_count=sdl_touch_pane_wrap_prompt_lines(g_touch_pane_yes_no_prompt_text,
         prompt_font,prompt.w,lines,SDL_TOUCH_YES_NO_MAX_LINES);
     assert(line_count>0 && strstr(lines[line_count-1],"exploring."));

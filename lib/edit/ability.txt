@@ -603,6 +603,11 @@ I:5:6:6
 D:Swearing a great oath as did Fëanor and his sons upon Taniquetil, calling Manwë and Varda and the everlasting darkness upon themselves should they fail or falter. Such binding vows carry terrible power, granting strength to those who keep them and ruin to those who break their word.
 E:Swear a great oath for a reward. Breaking the oath has consequences.
 
+N:107:Hardiness
+I:5:7:7
+D:Hardy in body as the Folk of Haleth who endured the venoms of Ungoliant's spawn in the passes of the Ered Gorgoroth. Through strength of constitution or long exposure, the body learns to withstand both venom and the wasting fevers of the deep.
+E:Grants one layer of poison resistance. Halves disease infection chances and doubles the interval between disease penalties to 300 player turns.
+
 N:108:Vengeance
 I:5:8:8
 P:5/2:4/3

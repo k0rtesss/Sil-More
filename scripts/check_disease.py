@@ -34,9 +34,10 @@ def caller_source_guards():
     capture = loop.index("bool disease_was_active = p_ptr->diseased != 0;")
     command_loop = loop.index("p_ptr->energy_use = 0;")
     completed = loop.index("while (!p_ptr->energy_use && !p_ptr->leaving);")
-    leaving = loop.index("if (p_ptr->leaving) return;", completed)
+    leaving = loop.index("if (p_ptr->leaving) {", completed)
+    leaving_return = loop.index("return;", leaving)
     tick = loop.index("if (disease_was_active) process_disease();")
-    assert capture < command_loop < completed < leaving < tick < loop.index("playerturn++;")
+    assert capture < command_loop < completed < leaving < leaving_return < tick < loop.index("playerturn++;", tick)
     assert loop.count("process_disease();") == 1
 
     move = compact(function("src/cmd/movement/cmd-run.c", "move_player"))
@@ -64,8 +65,11 @@ def caller_source_guards():
 
 PRELUDE = r'''
 #include "angband.h"
+#include "achievements.h"
 #include <assert.h>
 #include <stdio.h>
+_Static_assert(WIL_HARDINESS == 7 && WIL_POISON_RESISTANCE == 7,
+    "Hardiness must preserve the saved Poison Resistance slot");
 static player_type player;
 player_type *p_ptr=&player;
 static object_type objects[2];
@@ -75,12 +79,14 @@ int stealth_score;
 static int random_value, random_calls, expected_bound, disturbances;
 static int identity_calls, name_roll, herb_roll, diagnosis_calls, diagnosis_rolls[2];
 static int healing_calls, stat_loss_calls;
+static int extra_version,patch_version;
 u32b Rand_div(u32b bound) {
     if(bound==DISEASE_NAME_COUNT) {++identity_calls;return name_roll;}
     if(bound==DISEASE_HERB_COUNT) {++identity_calls;return herb_roll;}
     if(bound==2) {assert(diagnosis_calls<2);return diagnosis_rolls[diagnosis_calls++];}
     ++random_calls;
-    if(bound==100) return 99; /* A skeleton can infect without yielding loot. */
+    /* The first skeleton roll is exposure; the next returns no loot. */
+    if(bound==100 && (expected_bound!=100 || random_calls>1)) return 99;
     assert(bound==(u32b)expected_bound);
     assert(random_value>=0 && random_value<(int)bound);
     return random_value;
@@ -116,20 +122,25 @@ char supplies_label_char(void) {assert(false);return 'a';}
 char player_inventory_label(int n) {(void)n;assert(false);return 'a';}
 s16b drop_near(object_type *o,int c,int y,int x) {(void)o;(void)c;(void)y;(void)x;assert(false);return 0;}
 void break_truce(bool b) {(void)b;assert(false);}
+void sil_achievements_on_event(sil_achievement_id id) {(void)id;}
 static void reset(void) {
     memset(p_ptr,0,sizeof(*p_ptr)); memset(objects,0,sizeof(objects));
     random_calls=disturbances=0; expected_bound=A_MAX; random_value=0;
+    patch_version=9;extra_version=2;
     identity_calls=name_roll=herb_roll=diagnosis_calls=healing_calls=stat_loss_calls=0;
     diagnosis_rolls[0]=diagnosis_rolls[1]=0;
     p_ptr->sustain_str=p_ptr->sustain_dex=p_ptr->sustain_con=p_ptr->sustain_gra=1;
 }
 static byte bytes[1024];
-static int write_pos,read_pos,extra_version;
+static int write_pos,read_pos;
 static void wr_byte(byte n) {assert(write_pos<1024);bytes[write_pos++]=n;}
 static void rd_byte(byte *n) {assert(read_pos<write_pos);*n=bytes[read_pos++];}
 static void wr_s16b(s16b n) {assert(write_pos+2<=1024);bytes[write_pos++]=(byte)n;bytes[write_pos++]=(byte)((u16b)n>>8);}
 static void rd_s16b(s16b *n) {assert(read_pos+2<=write_pos);*n=(s16b)(bytes[read_pos]|((u16b)bytes[read_pos+1]<<8));read_pos+=2;}
-static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {assert(a==0&&b==9&&c==8);return extra_version>=d;}
+static bool savefile_version_at_least(byte a,byte b,byte c,byte d) {
+    if(a==1&&b==1)return false; /* This fixture exercises the master line. */
+    assert(a==0&&b==9);return patch_version*256+extra_version>=c*256+d;
+}
 static void note(cptr s) {(void)s;}
 '''
 
@@ -169,15 +180,15 @@ static void identity_and_diagnosis(void) {
 static void progression(void) {
     reset(); process_disease(); assert(!random_calls&&!disturbances);
     p_ptr->stat_base[A_CON]=5;p_ptr->stat_drain[A_CON]=-2;
-    assert(infect_disease()); assert(p_ptr->diseased==100&&p_ptr->stat_disease[A_CON]==-1);
+    assert(infect_disease()); assert(p_ptr->diseased==300&&p_ptr->stat_disease[A_CON]==-1);
     assert(p_ptr->stat_drain[A_CON]==-2); calc_stats();assert(p_ptr->stat_use[A_CON]==2);
     assert(p_ptr->update&PU_BONUS);assert(p_ptr->redraw&PR_STATS);assert(p_ptr->redraw&PR_EXTRA);
-    for(int n=0;n<99;n++)process_disease();
-    assert(p_ptr->diseased==1&&random_calls==0&&p_ptr->stat_disease[A_STR]==0);
-    assert(!infect_disease()&&p_ptr->diseased==1);
-    process_disease(); assert(p_ptr->diseased==100&&p_ptr->stat_disease[A_STR]==-1&&random_calls==1);
-    random_value=A_GRA;for(int n=0;n<100;n++)process_disease();
-    assert(p_ptr->diseased==100&&p_ptr->stat_disease[A_GRA]==-1&&random_calls==2);
+    for(int n=0;n<149;n++)process_disease();
+    assert(p_ptr->diseased==2&&random_calls==0&&p_ptr->stat_disease[A_STR]==0);
+    assert(!infect_disease()&&p_ptr->diseased==2);
+    process_disease(); assert(p_ptr->diseased==300&&p_ptr->stat_disease[A_STR]==-1&&random_calls==1);
+    random_value=A_GRA;for(int n=0;n<150;n++)process_disease();
+    assert(p_ptr->diseased==300&&p_ptr->stat_disease[A_GRA]==-1&&random_calls==2);
     assert(res_stat(A_CON,20));assert(p_ptr->stat_drain[A_CON]==0&&p_ptr->stat_disease[A_CON]==-1);
     assert(!res_stat(A_CON,20));p_ptr->stat_drain[A_DEX]=-4;
     for(int s=0;s<A_MAX;s++) {expected_bound=A_MAX;random_value=s;p_ptr->diseased=1;process_disease();assert(p_ptr->stat_disease[s]<0);}
@@ -187,13 +198,14 @@ static void progression(void) {
     assert(cure_disease());assert(!p_ptr->diseased&&p_ptr->stat_drain[A_DEX]==-4);
     for(int s=0;s<A_MAX;s++)assert(!p_ptr->stat_disease[s]);
     assert(!cure_disease());int calls=random_calls;process_disease();assert(calls==random_calls);
-    assert(infect_disease()&&p_ptr->stat_disease[A_CON]==-1&&p_ptr->diseased==100);
-    puts("Disease: immediate CON despite sustain; 99/100/200 ticks; repeated exposure; all four stats; restore/cure isolation; bounds and saturation: PASS");
+    name_roll=1;assert(p_ptr->disease_immunity==1);
+    assert(infect_disease()&&p_ptr->stat_disease[A_CON]==-1&&p_ptr->diseased==300);
+    puts("Disease: immediate CON despite sustain; 149/150/300 ticks; repeated exposure; all four stats; restore/cure isolation; bounds and saturation: PASS");
 }
 static void consumables(void) {
     object_type item={0};bool ident;
     reset();item.tval=TV_FOOD;item.sval=SV_FOOD_SICKNESS;ident=false;
-    assert(eat_food(&item,&ident)&&ident&&p_ptr->diseased==100&&!random_calls);
+    assert(eat_food(&item,&ident)&&ident&&p_ptr->diseased==300&&!random_calls);
     for(int roll=0;roll<5;roll++) {
         reset();expected_bound=5;random_value=roll;item.sval=SV_FOOD_MEAT;ident=false;
         assert(eat_food(&item,&ident)&&ident);assert(random_calls==1);assert((p_ptr->diseased>0)==(roll==0));
@@ -241,58 +253,153 @@ static void exposure(void) {
     reset();expected_bound=200;random_value=0;
     player_water_movement(FEAT_FLOOR,FEAT_FLOOR);player_water_displaced(FEAT_FLOOR,FEAT_FLOOR);
     assert(!random_calls&&!p_ptr->diseased);
-    player_water_movement(FEAT_WATER,FEAT_WATER);assert(random_calls==1&&p_ptr->diseased==100);
+    player_water_movement(FEAT_WATER,FEAT_WATER);assert(random_calls==1&&p_ptr->diseased==300);
     reset();infect_disease();p_ptr->diseased=7;player_water_movement(FEAT_WATER,FEAT_WATER);player_water_displaced(FEAT_FLOOR,FEAT_WATER);
     assert(!random_calls&&p_ptr->diseased==7);
-    for(int roll=0;roll<20;roll++) {
-        reset();expected_bound=20;random_value=roll;objects[1].sval=SV_SKELETON_ORC;objects[1].pval=1;
-        do_cmd_search_skeleton(1,1,1);assert((p_ptr->diseased>0)==(roll==0));assert(random_calls==2&&!objects[1].pval);
+    for(int roll=0;roll<100;roll++) {
+        reset();expected_bound=100;random_value=roll;objects[1].sval=SV_SKELETON_ORC;objects[1].pval=1;
+        do_cmd_search_skeleton(1,1,1);assert((p_ptr->diseased>0)==(roll<3));assert(random_calls==2&&!objects[1].pval);
         cure_disease();int calls=random_calls;do_cmd_search_skeleton(1,1,1);assert(random_calls==calls&&!p_ptr->diseased);
     }
     reset();objects[1].sval=SV_SKELETON_ELF;objects[1].pval=1;do_cmd_search_skeleton(1,1,1);assert(!p_ptr->diseased&&random_calls==1);
-    puts("Exposure: movement/displacement exactly 1/200, bank exit excluded, repeats preserve clock; first orc search exactly 1/20 even without loot, searched/elf excluded: PASS");
+    puts("Exposure: movement/displacement exactly 1/200, bank exit excluded, repeats preserve clock; first orc search exactly 3/100 even without loot, searched/elf excluded: PASS");
+}
+static void immunity_and_hardiness(void) {
+    reset();p_ptr->active_ability[S_WIL][WIL_INDOMITABLE]=true;
+    assert(infect_disease()&&!diagnosis_calls);
+    for(int n=0;n<149;n++)process_disease();
+    assert(p_ptr->diseased==2&&!random_calls);
+    process_disease();assert(p_ptr->diseased==300&&random_calls==1);
+    reset();p_ptr->active_ability[S_WIL][WIL_INDOMITABLE]=true;
+    p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;diagnosis_rolls[0]=1;
+    assert(infect_disease()&&diagnosis_calls==1);
+    for(int n=0;n<299;n++)process_disease();
+    assert(p_ptr->diseased==1&&!random_calls);
+    process_disease();assert(p_ptr->diseased==300&&random_calls==1);
+    for(int mask=0;mask<256;mask++)for(int name=0;name<8;name++) {
+        reset();p_ptr->disease_immunity=mask;name_roll=name;
+        player_type before=*p_ptr;
+        bool infected=infect_disease();
+        assert(infected==!(mask&(1u<<name)));
+        if(!infected) {
+            assert(identity_calls==1&&!diagnosis_calls);
+            assert(memcmp(&before,p_ptr,sizeof(before))==0);
+        } else {
+            assert(identity_calls==2&&p_ptr->disease_name==name+1);
+            assert(p_ptr->disease_immunity==mask&&cure_disease());
+            assert(p_ptr->disease_immunity==(mask|(1u<<name)));
+            int calls=identity_calls;assert(!infect_disease()&&identity_calls==calls+1);
+            assert(!p_ptr->diseased&&!p_ptr->disease_name&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge);
+        }
+    }
+    reset();
+    for(int name=0;name<8;name++) {name_roll=name;assert(infect_disease()&&cure_disease());}
+    assert(p_ptr->disease_immunity==255);
+    for(int name=0;name<8;name++) {name_roll=name;assert(!infect_disease());}
+    reset();assert(!p_ptr->disease_immunity&&infect_disease());
+
+    int meat=0,skeleton=0,water=0,sickness=0;
+    for(int coin=0;coin<2;coin++) {
+        for(int roll=0;roll<5;roll++) {
+            reset();expected_bound=5;random_value=roll;
+            p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;diagnosis_rolls[0]=coin;
+            object_type item={.tval=TV_FOOD,.sval=SV_FOOD_MEAT};bool ident=false;
+            eat_food(&item,&ident);assert((p_ptr->diseased>0)==(roll==0&&coin==1));meat+=p_ptr->diseased>0;
+        }
+        for(int roll=0;roll<100;roll++) {
+            reset();expected_bound=100;random_value=roll;objects[1].sval=SV_SKELETON_ORC;objects[1].pval=1;
+            p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;diagnosis_rolls[0]=coin;
+            do_cmd_search_skeleton(1,1,1);assert((p_ptr->diseased>0)==(roll<3&&coin==1));skeleton+=p_ptr->diseased>0;
+        }
+        for(int roll=0;roll<200;roll++) {
+            reset();expected_bound=200;random_value=roll;p_ptr->energy_use=100;
+            p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;diagnosis_rolls[0]=coin;
+            player_water_movement(FEAT_FLOOR,FEAT_WATER);
+            assert((p_ptr->diseased>0)==(roll==0&&coin==1));water+=p_ptr->diseased>0;
+        }
+        reset();p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;diagnosis_rolls[0]=coin;
+        object_type item={.tval=TV_FOOD,.sval=SV_FOOD_SICKNESS};bool ident=false;
+        eat_food(&item,&ident);assert((p_ptr->diseased>0)==(coin==1));sickness+=p_ptr->diseased>0;
+    }
+    assert(meat==1&&skeleton==3&&water==1&&sickness==1);
+    reset();assert(infect_disease());p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;
+    for(int n=0;n<299;n++)process_disease();
+    assert(p_ptr->diseased==1&&!p_ptr->stat_disease[A_STR]&&!random_calls);
+    process_disease();assert(p_ptr->diseased==300&&p_ptr->stat_disease[A_STR]==-1&&random_calls==1);
+    for(int n=0;n<300;n++)process_disease();
+    assert(p_ptr->diseased==300&&p_ptr->stat_disease[A_STR]==-2&&random_calls==2);
+    reset();assert(infect_disease());
+    for(int n=0;n<50;n++)process_disease();
+    assert(p_ptr->diseased==200);
+    p_ptr->active_ability[S_WIL][WIL_HARDINESS]=true;
+    for(int n=0;n<199;n++)process_disease();
+    assert(p_ptr->diseased==1&&!random_calls);
+    p_ptr->active_ability[S_WIL][WIL_HARDINESS]=false;
+    process_disease();assert(p_ptr->diseased==300&&random_calls==1);
+    puts("Immunity: all 256 masks x 8 full-list rolls; cures accumulate, immune results block without reroll, all-eight immunity; Hardiness exact 10% meat, 1.5% skeleton, 0.25% water, 50% Sickness; 299/300/600 turns and live toggling; Indomitable alone has no disease benefit and both abilities do not stack: PASS");
+}
+static void remove_immunity_byte(void) {
+    int offset=4*A_MAX+2*(A_MAX+1)+3;
+    memmove(bytes+offset,bytes+offset+1,write_pos-offset-1);write_pos--;
 }
 static void save_records(void) {
-    for(int version=2;version<=9;version++)for(int countdown=0;countdown<=100;countdown++) {
+    for(int version=2;version<=9;version++)for(int countdown=0;countdown<=150;countdown++) {
         reset();p_ptr->diseased=countdown;
         if(countdown) {p_ptr->disease_name=DISEASE_NAME_COUNT;p_ptr->disease_cure=DISEASE_HERB_COUNT-1;p_ptr->disease_knowledge=DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE;}
         for(int s=0;s<A_MAX;s++){p_ptr->stat_base[s]=s+2;p_ptr->stat_drain[s]=-s;p_ptr->stat_disease[s]=countdown?-s-1:0;}
         for(int s=0;s<S_MAX;s++)p_ptr->skill_base[s]=101+s;
-        write_pos=read_pos=0;extra_version=version;write_stats();
+        write_pos=read_pos=0;patch_version=8;extra_version=version;write_stats();remove_immunity_byte();
         if(version<9){int offset=4*A_MAX+2*(A_MAX+1);memmove(bytes+offset,bytes+offset+3,write_pos-offset-3);write_pos-=3;}
         if(version==2){memmove(bytes+4*A_MAX,bytes+4*A_MAX+2*(A_MAX+1),write_pos-4*A_MAX-2*(A_MAX+1));write_pos-=2*(A_MAX+1);}
         memset(p_ptr,0x55,sizeof(*p_ptr));assert(read_stats()==0);assert(read_pos==write_pos);
-        assert(p_ptr->diseased==(version==2?0:countdown));
+        assert(p_ptr->diseased==(version==2?0:countdown*2));assert(!p_ptr->disease_immunity);
         if(version==2||!countdown)assert(!p_ptr->disease_name&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge&&!identity_calls);
         else if(version<9)assert(identity_calls==2&&p_ptr->disease_name==1&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge);
         else assert(!identity_calls&&p_ptr->disease_name==DISEASE_NAME_COUNT&&p_ptr->disease_cure==DISEASE_HERB_COUNT-1&&p_ptr->disease_knowledge==(DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE));
         for(int s=0;s<A_MAX;s++){assert(p_ptr->stat_base[s]==s+2&&p_ptr->stat_drain[s]==-s);assert(p_ptr->stat_disease[s]==(version==2||!countdown?0:-s-1));}
         for(int s=0;s<S_MAX;s++)assert(p_ptr->skill_base[s]==101+s);
     }
+    for(int version=0;version<=1;version++)for(int countdown=0;countdown<=150;countdown++) {
+        reset();patch_version=9;extra_version=version;p_ptr->diseased=countdown;
+        p_ptr->disease_name=countdown?1:0;p_ptr->stat_disease[A_CON]=countdown?-1:0;
+        p_ptr->skill_base[S_WIL]=31;write_pos=read_pos=0;write_stats();remove_immunity_byte();
+        memset(p_ptr,0x55,sizeof(*p_ptr));assert(read_stats()==0&&read_pos==write_pos);
+        assert(p_ptr->diseased==countdown*2&&!p_ptr->disease_immunity&&p_ptr->skill_base[S_WIL]==31);
+    }
+    for(int mask=0;mask<256;mask++)for(int countdown=0;countdown<=300;countdown++) {
+        reset();p_ptr->diseased=countdown;p_ptr->disease_immunity=mask;
+        p_ptr->disease_name=countdown?8:0;p_ptr->stat_disease[A_CON]=countdown?-1:0;
+        p_ptr->skill_base[S_WIL]=41;write_pos=read_pos=0;write_stats();
+        memset(p_ptr,0x55,sizeof(*p_ptr));int error=read_stats();
+        if(countdown&&(mask&128)) {assert(error==-1);continue;}
+        assert(!error&&read_pos==write_pos&&p_ptr->diseased==countdown);
+        assert(p_ptr->disease_immunity==mask&&p_ptr->skill_base[S_WIL]==41);
+    }
     for(int bad=0;bad<4;bad++) {
-        reset();extra_version=9;p_ptr->diseased=bad==0?-1:bad==1?101:bad==2?1:0;
+        reset();p_ptr->diseased=bad==0?-1:bad==1?301:bad==2?1:0;
         p_ptr->stat_disease[A_CON]=bad==2?1:bad==3?-1:0;
         write_pos=read_pos=0;write_stats();assert(read_stats()==-1);
     }
     for(int name=1;name<=DISEASE_NAME_COUNT;name++)for(int herb=0;herb<DISEASE_HERB_COUNT;herb++)for(int known=0;known<=3;known++) {
         if(known==DISEASE_KNOWN_CURE)continue;
-        reset();extra_version=9;p_ptr->diseased=17;p_ptr->disease_name=name;p_ptr->disease_cure=herb;p_ptr->disease_knowledge=known;
+        reset();p_ptr->diseased=17;p_ptr->disease_name=name;p_ptr->disease_cure=herb;p_ptr->disease_knowledge=known;
         write_pos=read_pos=0;write_stats();memset(p_ptr,0,sizeof(*p_ptr));assert(read_stats()==0);
         assert(p_ptr->disease_name==name&&p_ptr->disease_cure==herb&&p_ptr->disease_knowledge==known&&!identity_calls);
     }
-    for(int bad=0;bad<8;bad++) {
-        reset();extra_version=9;p_ptr->diseased=17;p_ptr->disease_name=1;
+    for(int bad=0;bad<9;bad++) {
+        reset();p_ptr->diseased=17;p_ptr->disease_name=1;
         if(bad==0)p_ptr->disease_name=0;
         if(bad==1)p_ptr->disease_name=DISEASE_NAME_COUNT+1;
         if(bad==2)p_ptr->disease_cure=DISEASE_HERB_COUNT;
         if(bad==3)p_ptr->disease_knowledge=4;
         if(bad==4)p_ptr->disease_knowledge=DISEASE_KNOWN_CURE;
-        if(bad>=5){p_ptr->diseased=0;p_ptr->disease_name=bad==5?1:0;p_ptr->disease_cure=bad==6?1:0;p_ptr->disease_knowledge=bad==7?DISEASE_KNOWN_NAME:0;}
+        if(bad>=5&&bad<=7){p_ptr->diseased=0;p_ptr->disease_name=bad==5?1:0;p_ptr->disease_cure=bad==6?1:0;p_ptr->disease_knowledge=bad==7?DISEASE_KNOWN_NAME:0;}
+        if(bad==8)p_ptr->disease_immunity=1;
         write_pos=read_pos=0;write_stats();assert(read_stats()==-1);
     }
-    puts("Stat save record: 101 countdowns for every .2-.9 version; .8 legacy identity migration preserves penalties/clock and skill alignment; all identities/knowledge roundtrip; 12 corrupt states rejected: PASS");
+    puts("Stat save record: legacy .8.2-.8.9 and .9.0-.9.1 timer migration, zero immunity defaults; all 256 masks x 301 countdowns; identity/knowledge and skill alignment; corrupt and active-immune states rejected: PASS");
 }
-int main(void) {identity_and_diagnosis();progression();consumables();exposure();save_records();return 0;}
+int main(void) {identity_and_diagnosis();progression();consumables();exposure();immunity_and_hardiness();save_records();return 0;}
 '''
 
 

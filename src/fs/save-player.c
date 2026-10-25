@@ -71,6 +71,7 @@ void wr_extra(void)
     wr_byte(p_ptr->disease_name);
     wr_byte(p_ptr->disease_cure);
     wr_byte(p_ptr->disease_knowledge);
+    wr_byte(p_ptr->disease_immunity);
 
     /* Dump the skill bases */
     for (i = 0; i < S_MAX; ++i)
@@ -314,6 +315,7 @@ void wr_extra(void)
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
     /* 1.1.0.7 (master 0.9.8.31): preserve run-wide achievement conditions. */
+    /* The positive chasm/shaft route bit is recognized from 1.1.0.9 / 0.9.8.37. */
     wr_byte(0xAC);
     wr_u32b(p_ptr->achievement_flags & SIL_ACH_RUN_FLAGS);
     wr_u32b(p_ptr->achievement_kills);
@@ -367,7 +369,16 @@ void wr_extra(void)
             wr_byte(i / MAX_DUNGEON_WID);
             wr_byte(i % MAX_DUNGEON_WID);
         }
-    log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d", 
+    /* 1.1.0.9 (master 0.9.8.38): accepted lore deeds, including distinct forged artefact rings. */
+    wr_byte(0xAF);
+    wr_u32b(p_ptr->achievement_lore_flags);
+    wr_byte(p_ptr->achievement_ringil_wounds);
+    wr_s16b(p_ptr->achievement_glorfindel_depth);
+    for (int i = 0; i < 3; ++i) wr_u16b(p_ptr->achievement_artefact_rings[i]);
+    /* 1.1.0.9 (master 0.9.8.39): each named Balrog counts once within this adventure. */
+    wr_byte(0xB0);
+    wr_byte(p_ptr->achievement_balrogs & 0x7F);
+    log_info("SAVE: About to write quest marker 0x51, oath_type=%d, oaths_broken=%d",
              p_ptr->oath_type, p_ptr->oaths_broken);
 
     /* From 0.8.6 onward, write quest block preceded by marker 0x51 */

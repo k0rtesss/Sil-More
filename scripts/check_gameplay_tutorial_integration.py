@@ -13,8 +13,16 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/tutorial-integration-check"
 
 HARNESS = core.HARNESS.split("int main(", 1)[0] + r'''
+#include "achievements.h"
+#include "player/killer.h"
+#include "meta_state.h"
+#include "score/score_guid.h"
+#include "quest/quest-rewards-beta.h"
+void attempt_to_cheat_death(void);
 __DISEASE_IMPLEMENTATION__
 __GAME_IMPLEMENTATION__
+__VITALS_IMPLEMENTATION__
+__DAMAGE_IMPLEMENTATION__
 __RANGED_AIM_IMPLEMENTATION__
 __TUTORIAL_COMMAND_IMPLEMENTATION__
 static bool eat_food(object_type *,bool *);
@@ -28,41 +36,41 @@ __DESCRIPTION_IMPLEMENTATION__
 __MAIN_MENU_IMPLEMENTATION__
 
 static player_type test_player;
-player_type *p_ptr=&test_player;
+_Thread_local player_type *p_ptr=&test_player;
 static player_other test_options;
-player_other *op_ptr=&test_options;
+_Thread_local player_other *op_ptr=&test_options;
 static maxima test_maxima;
 maxima *z_info=&test_maxima;
 static ability_type test_abilities[1];
 ability_type *b_info=test_abilities;
 char *b_name="Ability";
 static object_type test_floor_objects[4];
-object_type *o_list=test_floor_objects;
+_Thread_local object_type *o_list=test_floor_objects;
 static object_type test_inventory[INVEN_TOTAL], test_extra, test_supply;
-object_type *inventory=test_inventory;
+_Thread_local object_type *inventory=test_inventory;
 static object_kind test_kinds[8];
-object_kind *k_info=test_kinds;
+_Thread_local object_kind *k_info=test_kinds;
 static monster_type test_monsters[3];
-monster_type *mon_list=test_monsters;
+_Thread_local monster_type *mon_list=test_monsters;
 static monster_race test_races[3];
-monster_race *r_info=test_races;
+_Thread_local monster_race *r_info=test_races;
 static monster_lore test_lore[3];
-monster_lore *l_list=test_lore;
-s16b mon_max=2;
+_Thread_local monster_lore *l_list=test_lore;
+_Thread_local s16b mon_max=2;
 static ego_item_type test_egos[2];
 ego_item_type *e_info=test_egos;
 bool character_generated=true;
-s32b playerturn=50;
+_Thread_local s32b playerturn=50;
 const s16b ddx[10]={0,-1,0,1,-1,0,1,-1,0,1};
 const s16b ddy[10]={0,1,1,1,0,0,0,-1,-1,-1};
 static u16b test_info[12][256];
 static byte test_feat[12][MAX_DUNGEON_WID];
 static s16b test_mon_idx[12][MAX_DUNGEON_WID];
 static s16b test_obj_idx[12][MAX_DUNGEON_WID];
-u16b (*cave_info)[256]=test_info;
-byte (*cave_feat)[MAX_DUNGEON_WID]=test_feat;
-s16b (*cave_m_idx)[MAX_DUNGEON_WID]=test_mon_idx;
-s16b (*cave_o_idx)[MAX_DUNGEON_WID]=test_obj_idx;
+_Thread_local u16b (*cave_info)[256]=test_info;
+_Thread_local byte (*cave_feat)[MAX_DUNGEON_WID]=test_feat;
+_Thread_local s16b (*cave_m_idx)[MAX_DUNGEON_WID]=test_mon_idx;
+_Thread_local s16b (*cave_o_idx)[MAX_DUNGEON_WID]=test_obj_idx;
 static bool mock_merciless, mock_cowardly;
 static bool mock_broken,mock_smith_forbidden;
 static int extra_count,supply_count;
@@ -74,7 +82,7 @@ static int test_path_count;
 static bool effect_commits=true;
 static int effect_calls;
 static bool pack_pending;
-metarun metar;
+_Thread_local metarun metar;
 metarun *metarun_current_mutable(void) { return &test_tale; }
 errr save_metaruns(void) { return 0; }
 int ui_question_ask_overlay(cptr title,cptr desc,const ui_question_option *options,
@@ -128,6 +136,27 @@ s16b wield_slot(const object_type *item) { (void)item;return INVEN_BODY; }
 void monster_desc(char *buf,size_t size,const monster_type *m,int mode)
 { (void)mode; SDL_snprintf(buf,size,"Monster %d",m->r_idx); }
 void msg_print(cptr message) { (void)message; }
+s16b character_xtra;
+char notes_buffer[NOTES_LENGTH];
+void attempt_to_cheat_death(void) {}
+bool quest_beta_resurrect(void) { return false; }
+bool meta_memory_enabled(int option) { (void)option; return false; }
+bool meta_monster_record_player_death(const meta_monster_death_event* event)
+{ (void)event; assert(false); return false; }
+guid64 score_guid_from_u64(u64b value) { guid64 result = {0}; (void)value; return result; }
+_Thread_local s32b turn;
+void sil_achievements_on_healing(void) {}
+void sil_achievements_on_damage(int damage,int before) { (void)damage;(void)before; }
+void sil_achievements_on_wolf_death(bool first) { (void)first; }
+void sil_achievements_on_death(void) {}
+void killer_commit(cptr cause) { (void)cause; }
+const killer_info *killer_last(void) { return NULL; }
+void disturb(int stop,int unused) { (void)stop;(void)unused; }
+void message(u16b type,s16b extra,cptr text) { (void)type;(void)extra;(void)text; }
+void message_flush(void) {}
+void do_cmd_note(char *note,int depth) { (void)note;(void)depth; }
+void bell(cptr reason) { (void)reason; }
+bool set_entranced(int value) { p_ptr->entranced=value;return true; }
 int project_path(u16b *path,int range,int y,int x,int *ty,int *tx,u32b flags)
 { (void)range;(void)y;(void)x;(void)ty;(void)tx;(void)flags;
   assert(test_path_count>=0 && test_path_count<=4);
@@ -255,6 +284,183 @@ static void check_description_routes(const object_type *item)
     assert(character_icky==0);
 }
 
+static bool pending_lesson(const char *id);
+
+static void check_item_description_scenarios(void)
+{
+    static const struct {
+        int tval;
+        const char *lesson;
+        const char *explanation;
+    } cases[] = {
+        {TV_GEM, "item.gem", "Gems are single-use"},
+        {TV_POTION, "item.description.potion", "consumed when drunk"},
+        {TV_FOOD, "item.description.food", "nourishment"},
+        {TV_SWORD, "item.description.weapon", "2d5"},
+        {TV_HAFTED, "item.description.weapon", "2d5"},
+        {TV_POLEARM, "item.description.weapon", "2d5"},
+        {TV_BOW, "item.description.bow", "2d5"},
+        {TV_ARROW, "item.description.arrows", "Attack modifier"},
+        {TV_BOOTS, "item.description.armour", "1d3"},
+        {TV_GLOVES, "item.description.armour", "1d3"},
+        {TV_HELM, "item.description.armour", "1d3"},
+        {TV_CROWN, "item.description.armour", "1d3"},
+        {TV_CLOAK, "item.description.armour", "1d3"},
+        {TV_SOFT_ARMOR, "item.description.armour", "1d3"},
+        {TV_MAIL, "item.description.armour", "1d3"},
+        {TV_SHIELD, "item.description.armour", "1d3"},
+        {TV_RING, "item.description.jewelry", "bonuses to attributes"},
+        {TV_AMULET, "item.description.jewelry", "bonuses to attributes"},
+        {TV_STAFF, "item.description.staff", "charges"},
+        {TV_HORN, "item.description.horn", "Voice cost"},
+        {TV_LIGHT, "item.description.light", "Light radius"},
+        {TV_FLASK, "item.description.oil", "lantern fuel"},
+        {TV_DIGGING, "item.description.digging", "tunnelling"},
+        {TV_METAL, "item.description.metal", "smithing resource"},
+        {0, "item.description", "volume in qt"},
+    };
+    tutorial_view view;
+    memset(p_ptr,0,sizeof(*p_ptr));
+    memset(test_kinds,0,sizeof(test_kinds));
+    p_ptr->playing=true;
+    started=true; character_generated=true;
+    tutorial_game_item_description_closed();
+    assert(tutorial_load_catalogue("actual-catalogue.json"));
+    ++test_tale.id; tutorial_sync_tale();
+    tutorial_set_character_blocked(false);
+    tutorial_set_mode(TUTORIAL_MODE_NORMAL);
+
+    for (int i=0;i<(int)N_ELEMENTS(cases);++i) {
+        /* Exercise a completely unknown kind, a known kind with a possibly
+         * unidentified instance, and a fully identified item. */
+        for (int state=0;state<3;++state) {
+            object_type item={.k_idx=1,.tval=cases[i].tval,.number=2,.weight=12,.pval=8};
+            k_info[1].aware=state>0;
+            item.ident=state==2?IDENT_KNOWN:0;
+            object_type before=item;
+            int energy=p_ptr->energy_use, voice=p_ptr->csp;
+            s32b turn_before=playerturn;
+            tutorial_game_item_description_closed();
+            tutorial_reset_tale();
+            tutorial_game_item(&item);
+            tutorial_checkpoint(true);
+            assert(tutorial_get_view(&view) && !strcmp(view.id,"item.first_description"));
+            assert(!strstr(view.body,"2d5") && !strstr(view.body,"1d3"));
+            tutorial_continue(); tutorial_checkpoint(true);
+            assert(tutorial_get_view(&view) && !strcmp(view.action,"examine"));
+            tutorial_game_item_described(&item);
+            tutorial_checkpoint(true);
+            assert(tutorial_lesson_status("item.first_description")==TUTORIAL_COMPLETED);
+            assert(tutorial_get_view(&view) && !strcmp(view.id,cases[i].lesson));
+            assert(strstr(view.body,cases[i].explanation));
+            if (object_known_p(&item)) assert(strstr(view.body,"This item is identified."));
+            else if (!object_aware_p(&item) && (item.tval==TV_GEM
+                || item.tval==TV_POTION || item.tval==TV_FOOD
+                || item.tval==TV_STAFF || item.tval==TV_HORN))
+                assert(strstr(view.body,"Its effect is still unknown."));
+            else assert(strstr(view.body,"not fully identified"));
+            if (item.tval==TV_GEM) {
+                assert(!strstr(view.body,"2d5") && !strstr(view.body,"Protection"));
+                if (!state) {
+                    char unknown_body[sizeof(view.body)];
+                    SDL_strlcpy(unknown_body,view.body,sizeof(unknown_body));
+                    object_type other=item;
+                    other.sval=99; other.pval=123; other.name1=1;
+                    /* Hidden subtype, potency and artefact identity cannot
+                     * change advice for the same public item family. */
+                    tutorial_game_item_described(&other); tutorial_checkpoint(true);
+                    assert(tutorial_get_view(&view) && !strcmp(view.body,unknown_body));
+                }
+            }
+            assert(!memcmp(&item,&before,sizeof(item)));
+            assert(k_info[1].aware==(state>0));
+            assert(p_ptr->energy_use==energy && p_ptr->csp==voice && playerturn==turn_before);
+            tutorial_game_item_description_closed(); tutorial_checkpoint(true);
+            assert(!tutorial_is_active());
+            assert(tutorial_lesson_status(cases[i].lesson)==TUTORIAL_IN_PROGRESS);
+        }
+    }
+
+    /* Existing history for the old generic card must not suppress the new
+     * family cards, and gem-first play must retain equipment explanations. */
+    tutorial_reset_tale();
+    save_step("item.description",1,"completed");
+    object_type gem={.k_idx=1,.tval=TV_GEM,.number=1};
+    object_type weapon={.k_idx=2,.tval=TV_SWORD,.number=1,.ident=IDENT_KNOWN};
+    object_type armour={.k_idx=3,.tval=TV_MAIL,.number=1,.ident=IDENT_KNOWN};
+    k_info[1].aware=false;
+    tutorial_game_item_described(&gem); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"item.gem"));
+    tutorial_game_item_described(&weapon); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"item.description.weapon"));
+    assert(!pending_lesson("item.gem"));
+    assert(tutorial_lesson_status("item.gem")==TUTORIAL_IN_PROGRESS);
+    tutorial_game_item_described(&gem); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"item.gem"));
+    tutorial_continue();
+    assert(tutorial_lesson_status("item.gem")==TUTORIAL_COMPLETED);
+    tutorial_game_item_described(&weapon); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && strstr(view.body,"2d5"));
+    tutorial_continue();
+    tutorial_game_item_described(&armour); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && strstr(view.body,"1d3"));
+    assert(tutorial_lesson_status("item.description")==TUTORIAL_COMPLETED);
+    tutorial_game_item_description_closed(); tutorial_checkpoint(true);
+    assert(!tutorial_is_active());
+    /* Exercise both encounter/preview orders and another gem afterwards.
+     * Exactly one shared overview is offered; the archive alias stays inert. */
+    for (int preview_first=0;preview_first<2;++preview_first) {
+        tutorial_reset_tale();
+        save_step("item.first_description",2,"completed");
+        if (preview_first) tutorial_game_item_described(&gem);
+        else tutorial_game_item(&gem);
+        tutorial_checkpoint(true);
+        assert(tutorial_get_view(&view) && !strcmp(view.id,"item.gem"));
+        assert(strstr(view.body,"Its effect is still unknown."));
+        assert(!pending_lesson("item.description.gem"));
+        tutorial_continue();
+        assert(tutorial_lesson_status("item.gem")==TUTORIAL_COMPLETED);
+        tutorial_game_item_description_closed();
+        if (preview_first) tutorial_game_item(&gem);
+        else tutorial_game_item_described(&gem);
+        tutorial_checkpoint(true);
+        assert(!pending_lesson("item.gem") && !pending_lesson("item.description.gem"));
+        object_type another_gem=gem; another_gem.k_idx=2;
+        k_info[2].aware=false;
+        tutorial_game_item(&another_gem);
+        tutorial_game_item_described(&another_gem);
+        tutorial_checkpoint(true);
+        assert(!tutorial_is_active() && queue_count==0);
+        tutorial_game_item_description_closed();
+    }
+    tutorial_reset_tale();
+    tutorial_game_item(&gem); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"item.first_description"));
+    tutorial_continue(); tutorial_checkpoint(true);
+    tutorial_game_item_described(&gem); tutorial_checkpoint(true);
+    assert(tutorial_get_view(&view) && !strcmp(view.id,"item.gem"));
+    assert(tutorial_lesson_status("item.first_description")==TUTORIAL_COMPLETED);
+    tutorial_continue(); tutorial_game_item_description_closed();
+    tutorial_game_item(&gem); tutorial_checkpoint(true);
+    assert(!tutorial_is_active() && queue_count==0);
+
+    /* Existing read/skipped progress under either gem ID suppresses both
+     * routes, including the separate card introduced by the earlier change. */
+    for (int preview_id=0;preview_id<2;++preview_id)
+        for (int skipped=0;skipped<2;++skipped) {
+            tutorial_reset_tale();
+            save_step("item.first_description",2,"completed");
+            save_step(preview_id?"item.description.gem":"item.gem",1,
+                skipped?"skipped":"completed");
+            tutorial_game_item(&gem);
+            tutorial_game_item_described(&gem);
+            tutorial_checkpoint(true);
+            assert(!tutorial_is_active() && queue_count==0);
+            tutorial_game_item_description_closed();
+        }
+    puts("Item descriptions: PASS (25 item types, three knowledge states, gem-first equipment follow-ups, shared encounter/preview gem progress, legacy history, hidden properties, preview switching and expiry)");
+}
+
 static void check_feature_tips(void)
 {
     tutorial_view view;
@@ -299,6 +505,86 @@ static void live_checkpoint(void)
     waiting=true; /* Inspect offers without a simulated frontend reading them. */
     tutorial_game_checkpoint();
     waiting=false;
+}
+
+static void prepare_damage_scenario(void)
+{
+    memset(p_ptr,0,sizeof(*p_ptr));
+    memset(inventory,0,sizeof(test_inventory));
+    memset(mon_list,0,sizeof(test_monsters));
+    memset(cave_m_idx,0,sizeof(test_mon_idx));
+    memset(cave_o_idx,0,sizeof(test_obj_idx));
+    memset(cave_info,0,sizeof(test_info));
+    for (int y=0;y<12;++y) for (int x=0;x<12;++x) cave_feat[y][x]=FEAT_FLOOR;
+    p_ptr->playing=true; p_ptr->py=p_ptr->px=5;
+    p_ptr->cur_map_hgt=p_ptr->cur_map_wid=12;
+    p_ptr->csp=p_ptr->msp=20; p_ptr->food=PY_FOOD_ALERT;
+    p_ptr->stat_use[A_CON]=8; calc_hitpoints();
+    op_ptr->hitpoint_warn=3; character_generated=true;
+    playerturn=50; started=false; ++test_tale.id;
+    tutorial_game_start();
+    live_checkpoint();
+    assert(!pending_lesson("combat.first_damage"));
+}
+
+static void check_damage_observations(void)
+{
+    tutorial_view view;
+    /* Disease, drain, expiring buffs and removed equipment all rescale Health
+     * through calc_hitpoints(). Even rounding at partial Health is not damage. */
+    for (int wounded=0;wounded<2;++wounded) {
+        prepare_damage_scenario();
+        if (wounded) { p_ptr->chp=p_ptr->mhp*3/5; live_checkpoint(); }
+        int before=p_ptr->chp;
+        p_ptr->diseased=1; p_ptr->stat_disease[A_CON]=-1;
+        --p_ptr->stat_use[A_CON]; calc_hitpoints();
+        assert(p_ptr->chp<before);
+        if (!wounded) assert(p_ptr->chp==61 && p_ptr->mhp==61);
+        live_checkpoint();
+        assert(!pending_lesson("combat.first_damage"));
+        assert(tutorial_lesson_status("combat.first_damage")==TUTORIAL_UNSEEN);
+    }
+    prepare_damage_scenario();
+    take_hit(0,"fully protected attack"); live_checkpoint();
+    assert(!pending_lesson("combat.first_damage"));
+
+    /* Real damage survives same-turn healing or Constitution changes in either
+     * direction. The card uses the final Health and waits for a safe boundary. */
+    for (int scenario=0;scenario<4;++scenario) {
+        prepare_damage_scenario();
+        take_hit(1,"a tutorial fixture hit");
+        assert(!pending_lesson("combat.first_damage") && !tutorial_is_active());
+        if (scenario==1) { --p_ptr->stat_use[A_CON]; calc_hitpoints(); }
+        if (scenario==2) { ++p_ptr->stat_use[A_CON]; calc_hitpoints(); }
+        if (scenario==3) p_ptr->chp=p_ptr->mhp;
+        live_checkpoint();
+        assert(tutorial_get_view(&view) && !strcmp(view.id,"combat.first_damage"));
+        char health[64]; strnfmt(health,sizeof(health),"Health: %d/%d.",p_ptr->chp,p_ptr->mhp);
+        assert(strstr(view.body,health));
+        tutorial_continue();
+        take_hit(1,"another fixture hit"); live_checkpoint();
+        assert(!pending_lesson("combat.first_damage"));
+    }
+    /* Preserve a hit across ordinary level travel, but never across a restore
+     * or a fresh hero, including another hero in the same Tale. */
+    prepare_damage_scenario(); take_hit(1,"a hit before travel");
+    ++p_ptr->depth; tutorial_game_start(); live_checkpoint();
+    assert(pending_lesson("combat.first_damage"));
+    for (int restoring=0;restoring<2;++restoring) {
+        prepare_damage_scenario(); take_hit(1,"a hit before restart");
+        if (restoring) p_ptr->restoring=true;
+        else playerturn=0;
+        tutorial_game_start(); p_ptr->restoring=false; playerturn=50;
+        live_checkpoint(); assert(!pending_lesson("combat.first_damage"));
+    }
+    prepare_damage_scenario();
+    tutorial_set_enabled(false); take_hit(1,"a hit with tutorials disabled");
+    tutorial_set_enabled(true); live_checkpoint();
+    assert(!pending_lesson("combat.first_damage"));
+    prepare_damage_scenario();
+    take_hit(p_ptr->chp,"a lethal hit"); live_checkpoint();
+    assert(p_ptr->is_dead && !pending_lesson("combat.first_damage"));
+    puts("First damage tutorial: real hits only, full/partial CON rescaling, zero hits, healing, safe checkpoints and lifecycle: PASS");
 }
 
 static void check_opening_first_turn(void)
@@ -901,20 +1187,46 @@ int main(void)
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
 
     activate("item.bow.active","bow");
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_THROWING));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_MELEE;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
+    object_type bow={.k_idx=1,.tval=TV_BOW,.number=1};
+    tutorial_game_action_done("change-active",&bow);
+    assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_IN_PROGRESS);
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.bow.active")==TUTORIAL_COMPLETED);
     activate("item.throwing.active","throwing");
+    object_type spear={.k_idx=1,.tval=TV_POLEARM,.sval=SV_SPEAR,.number=1};
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_THROWING));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
+    assert(tutorial_game_begin_action("change-active",&spear));
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    tutorial_game_end_action();
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_MELEE;
+    tutorial_game_action_done("change-active",&spear);
+    assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_IN_PROGRESS);
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    tutorial_game_action_done("change-active",&spear);
+    assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_COMPLETED);
+    activate("item.throwing.active","throwing");
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.throwing.active")==TUTORIAL_COMPLETED);
+    activate("item.throwing.active","throwing");
+    tutorial_skip();
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
     activate("item.arrows.active","arrows");
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_BOW));
+    assert(!tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_THROWING));
     active_weapon_kind=PLAYER_ACTIVE_WEAPON_KIND_BOW;
     tutorial_game_action_done("change-active",NULL);
     assert(tutorial_lesson_status("item.arrows.active")==TUTORIAL_IN_PROGRESS);
@@ -924,6 +1236,7 @@ int main(void)
 
     activate("item.staff.ready","staff");
     assert(tutorial_game_begin_action("ready",&staff));
+    assert(tutorial_game_active_weapon_allowed(PLAYER_ACTIVE_WEAPON_KIND_MELEE));
     tutorial_checkpoint(false); /* Pack's paid multi-turn access hides the card. */
     assert(!tutorial_get_view(&view));
     assert(tutorial_game_action_allowed("ready",&staff));
@@ -991,12 +1304,14 @@ int main(void)
         tutorial_game_start();
         assert(!tutorial_character_blocked());
     }
+    check_damage_observations();
     check_opening_first_turn();
     check_information_only_movement();
     check_live_checkpoints();
     check_main_menu_tutorial();
     check_menu_wait_lifecycle();
     check_ranged_tutorial_availability();
+    check_item_description_scenarios();
     tutorial_shutdown(); SDL_Quit();
     puts("Gameplay tutorial integration: PASS (typed actions, known instruments/remedies, post-cure completion, ranged path safety, movement/oath gates, hidden paid actions, inline/modal description success/failure and visibility, Off replay, level/reload history)");
     return 0;
@@ -1192,7 +1507,8 @@ def main():
         lessons.append({'id':id,'title':id,'level':'extended',
                         'steps':[{'kind':'info','text':'Detailed terrain context.'}]})
     actual = json.loads((ROOT / 'lib/help/tutorials.json').read_text())['lessons']
-    for lesson_id in ('menu.main-menu', 'menu.halls'):
+    (OUT / "actual-catalogue.json").write_text(json.dumps({"version": 1, "lessons": actual}))
+    for lesson_id in ('menu.main-menu', 'menu.halls', 'combat.first_damage'):
         lessons.append(next(entry for entry in actual if entry['id'] == lesson_id))
     for lesson_id in ('opening.move', 'combat.first_adjacent'):
         lesson = next(entry for entry in actual if entry['id'] == lesson_id)
@@ -1213,6 +1529,9 @@ def main():
     game = game.replace('#include "externs.h"', '')
     game = game.replace('#include "tutorial-game.h"', '#include "tutorial/tutorial-game.h"')
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')
+    vitals_source = (ROOT / 'src/player/player-vitals.c').read_text()
+    vitals = '\n'.join(c_function(vitals_source, name) for name in ('rescale_vital', 'calc_hitpoints'))
+    damage = c_function((ROOT / 'src/spell/spell-damage.c').read_text(), 'take_hit')
     ranged = (ROOT / "src/cmd/combat/cmd-ranged.c").read_text()
     tutorial_frontend = (ROOT / "src/sdl/ui/sdl-gameplay-tutorial.c").read_text()
     tutorial_command = c_function(tutorial_frontend, 'tutorial_command')
@@ -1233,6 +1552,8 @@ def main():
             'object_info_configure_footer', 'object_info_screen_capture_view',
             'object_info_screen_multi_with_actions'))
     source.write_text(HARNESS.replace("__GAME_IMPLEMENTATION__", game)
+                      .replace("__VITALS_IMPLEMENTATION__", vitals)
+                      .replace("__DAMAGE_IMPLEMENTATION__", damage)
                       .replace("__DISEASE_IMPLEMENTATION__", disease)
                       .replace("__RANGED_AIM_IMPLEMENTATION__", aim)
                       .replace("__TUTORIAL_COMMAND_IMPLEMENTATION__", tutorial_command)

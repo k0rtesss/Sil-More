@@ -80,7 +80,13 @@ float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Co
 {
     TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_TUTORIAL);
     int w=0,h=0;
-    if (text && text[0] && font && TTF_GetStringSize(font,text,0,&w,&h)) {
+    if (text && text[0] && font) {
+        /* Record the actual wrapped texture drawn by the shared text helper.
+         * A shrink-to-fit estimate misses labels wrapping below their button. */
+        SDL_Texture *texture=width>0
+            ?sdl_ui_wrapped_text_texture(font,text,MAX(1,(int)width),color,&w,&h)
+            :sdl_ui_text_texture(font,text,color,&w,&h);
+        fixture_assert(texture!=NULL);
         SDL_strlcat(drawn_content,text,sizeof(drawn_content));
         SDL_strlcat(drawn_content,"\n",sizeof(drawn_content));
         if (!centered && color.r==182 && color.g==191 && color.b==204) {
@@ -92,9 +98,8 @@ float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Co
         if (centered && !strcmp(text,"Continue")) drawn_continue_px=px;
         if (centered && !strcmp(text,"<A>") && drawn_continue_px)
             fixture_assert(px>=drawn_continue_px);
-        float scale=w>width && width>0?width/w:1;
         fixture_assert(drawn_count<64);
-        drawn_text[drawn_count]=(SDL_FRect){centered?x-w*scale/2:x,y,w*scale,h*scale};
+        drawn_text[drawn_count]=(SDL_FRect){centered?x-w/2.0f:x,y,w,h};
         drawn_button[drawn_count++]=centered;
     }
     return sdl_touch_tutorial_draw_text_line(text,x,y,width,px,color,centered);
@@ -178,12 +183,13 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         ?SDL_INPUT_UI_MODE_CONTROLLER:SDL_INPUT_UI_MODE_AUTO;
     fixture.kind=fixture.can_continue?TUTORIAL_STEP_INFO:TUTORIAL_STEP_ACTION;
     character_icky=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"menu"));
+    bool weapon_menu=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"weapon_menu"));
     sdl_gameplay_tutorial_set_menu_preview(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"preview")),false);
     sdl_gameplay_tutorial_set_menu_preview_control("View");
     ui_menu_click_clear();
     if (character_icky) {
         ui_menu_click_begin();
-        if (!cJSON_GetObjectItemCaseSensitive(entry,"surface"))
+        if (!weapon_menu && !cJSON_GetObjectItemCaseSensitive(entry,"surface"))
             for (int row=2;row<MIN(view->rows-2,10);++row)
                 ui_menu_click_add_full_row(row,row);
     }
@@ -191,6 +197,16 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     tutorial_focus=0; tutorial_scroll=scroll;
     tutorial_reading=scroll>0 && !fixture.can_continue;
     config.aux_view_font_size=font_size;
+    if (weapon_menu) {
+        sdl_question_menu_begin("Change active weapon");
+        sdl_question_menu_set_help("A spear has separate Melee and Throwing choices. Choose the Throwing row for this tutorial.");
+        sdl_question_menu_add_entry(-1,"a)","Melee [active]\ta Spear (+0,1d11) {unknown} (+12,1d13)",TERM_SLATE);
+        sdl_question_menu_add_entry(-1,"b)","Melee\ta Shortsword (+0,1d7) [+1] (+12,1d8)",TERM_SLATE);
+        sdl_question_menu_add_entry(-1,"c)","Melee\ta Shortsword (+0,1d7) [+1] (+12,1d9)",TERM_SLATE);
+        sdl_question_menu_add_entry(3,"d)","Throwing\ta Spear (+0,1d11) {unknown} (+12,1d11)",TERM_WHITE);
+        sdl_question_menu_set_highlight(3);
+        sdl_question_menu_finish();
+    }
     SDL_SetRenderDrawColor(g_state.renderer,34,38,39,255);
     SDL_RenderClear(g_state.renderer);
     SDL_SetRenderDrawColor(g_state.renderer,56,61,57,255);
@@ -207,6 +223,19 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         SDL_RenderRect(g_state.renderer,&fixture_quick_access);
         sdl_touch_round_draw_circle(fixture_wheel.x+radius,fixture_wheel.y+radius,
             radius,(SDL_Color){160,210,190,255});
+    }
+    SDL_Rect menu_probe={0};
+    Uint8 menu_pixel[4]={0};
+    if (weapon_menu) {
+        SDL_FRect menu;
+        fixture_assert(sdl_question_menu_current_rect(&menu));
+        fixture_assert(menu.x>=0 && menu.y>=0 && menu.x+menu.w<=width && menu.y+menu.h<=height);
+        sdl_question_menu_render();
+        menu_probe=(SDL_Rect){(int)(menu.x+menu.w/2),(int)(menu.y+menu.h/2),1,1};
+        pixels=SDL_RenderReadPixels(g_state.renderer,&menu_probe);
+        fixture_assert(pixels!=NULL);
+        fixture_assert(SDL_ReadSurfacePixel(pixels,0,0,&menu_pixel[0],&menu_pixel[1],&menu_pixel[2],&menu_pixel[3]));
+        SDL_DestroySurface(pixels);
     }
     drawn_count=0; drawn_hints[0]=drawn_content[0]='\0'; drawn_space=drawn_enter=false;
     drawn_continue_px=0;
@@ -268,7 +297,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         for (int b=0;b<3;++b) fixture_assert(!tutorial_buttons[b].w);
     } else if (character_icky && !fixture.can_continue && !tutorial_reading) {
         SDL_FRect rows;
-        if (tutorial_menu_cells_rect(&rows))
+        if (tutorial_menu_rect(&rows))
             fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&rows));
     }
     if (fixture_touch_controls && !tutorial_reading) {
@@ -279,6 +308,19 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
             fixture_assert(tutorial_movement_neighborhood_rect(&neighborhood));
             fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&neighborhood));
         }
+    }
+    if (weapon_menu) {
+        SDL_FRect menu,anchor;
+        Uint8 r,g,b,a;
+        fixture_assert(sdl_question_menu_current_rect(&menu));
+        fixture_assert(tutorial_anchor_rect(&fixture,&anchor));
+        fixture_assert(SDL_RectsEqualFloat(&menu,&anchor));
+        fixture_assert(!SDL_HasRectIntersectionFloat(&tutorial_card,&menu));
+        pixels=SDL_RenderReadPixels(g_state.renderer,&menu_probe);
+        fixture_assert(pixels!=NULL);
+        fixture_assert(SDL_ReadSurfacePixel(pixels,0,0,&r,&g,&b,&a));
+        fixture_assert(r==menu_pixel[0] && g==menu_pixel[1] && b==menu_pixel[2] && a==menu_pixel[3]);
+        SDL_DestroySurface(pixels);
     }
     if (!character_icky) {
         bool scrolling_hint=strstr(drawn_hints,"PgUp")
@@ -308,6 +350,9 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     }
     for (int i=0;i<drawn_count;++i) {
         SDL_FRect *r=&drawn_text[i];
+        if (r->y<tutorial_card.y-0.01f || r->y+r->h>tutorial_card.y+tutorial_card.h+0.01f)
+            fprintf(stderr,"text %d %.1f,%.1f %.1fx%.1f outside card %.1f,%.1f %.1fx%.1f\n",
+                i,r->x,r->y,r->w,r->h,tutorial_card.x,tutorial_card.y,tutorial_card.w,tutorial_card.h);
         fixture_assert(r->x>=tutorial_card.x-0.01f);
         fixture_assert(r->y>=tutorial_card.y-0.01f);
         fixture_assert(r->x+r->w<=tutorial_card.x+tutorial_card.w+0.01f);
@@ -370,6 +415,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         sdl_tale_screen_hide();
         sdl_character_sheet_screen_hide();
     }
+    if (weapon_menu) sdl_question_menu_clear();
     sdl_story_font_cache_clear();
     SDL_DestroyTexture(view->canvas); view->canvas=NULL;
     term_nuke(&view->t); view->term_ready=false; term_screen=NULL; Term=NULL;
@@ -499,6 +545,37 @@ def main():
         fixtures.append(dict(fixtures[0], id=f"{fixtures[0]['id']}.mode{mode}", mode=mode))
     fixtures.extend(dict(fixture, id=f"{fixture['id']}.font48", font_size=48)
                      for fixture in fixtures[:selected_count])
+    throwing = next(lesson for lesson in lessons if lesson["id"] == "item.throwing.active")
+    for size, font_size in (([580, 1280], 28), ([360, 800], 20),
+                            ([800, 360], 20), ([1280, 720], 28)):
+        for menu in (False, True):
+            for device in range(1, 5):
+                fixture = make_fixture(throwing, throwing["steps"][0], menu, device, False,
+                    fixture_id=f"{throwing['id']}.menu{int(menu)}.input{device}",
+                    capture=device == 3 and size[0] == 580)
+                fixture.update(size=size, font_size=font_size, anchor="weapon")
+                fixtures.append(fixture)
+                if menu:
+                    fixtures.append(dict(fixture, id=fixture["id"]+".native",
+                        weapon_menu=True))
+    for lesson in lessons:
+        if lesson.get("alias_of") or (not lesson["id"].startswith("item.description.")
+                                     and lesson["id"] != "item.gem"):
+            continue
+        unknown = "This item is not fully identified. The preview shows only what your hero has learned; undiscovered properties remain hidden."
+        if lesson["id"].rsplit(".", 1)[-1] in ("gem", "potion", "food", "staff", "horn"):
+            unknown = "Its effect is still unknown. Examining does not identify it, and an unknown effect is not necessarily safe."
+        for state, detail in (("unknown", unknown),
+                ("identified", "This item is identified. Read its known properties and any drawbacks.")):
+            for size, font_size in (([1280, 720], 28), ([360, 800], 20), ([800, 360], 20),
+                                    ([1280, 720], 48), ([360, 800], 48), ([800, 360], 48)):
+                fixture = make_fixture(
+                    lesson, lesson["steps"][0], True, 3, False,
+                    fixture_id=f"{lesson['id']}.{state}.{size[0]}x{size[1]}.font{font_size}",
+                    context_text=detail, subject_name="The selected item",
+                    capture=lesson["id"] == "item.gem" and state == "unknown")
+                fixture.update(size=size, font_size=font_size, subject_type="item")
+                fixtures.append(fixture)
     # Reported image dimensions plus the Deck's 1280x800 output: exercise all
     # opening pages and the item preview with controller prompts at each size.
     for size in ([1280, 960], [1280, 800]):

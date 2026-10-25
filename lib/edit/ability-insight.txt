@@ -372,6 +372,11 @@ X:3:0:8:0
 F:Swear a binding vow for a reward. Breaking the vow has consequences.
 Z:Vows
 
+N:107:Hardiness
+X:1:800:5:7
+F:One layer of poison resistance; halve disease infection chances and double the interval between penalties to 300 player turns.
+Z:Endurance
+
 N:108:Vengeance
 X:2:1:5:8
 O:5/2:4/3

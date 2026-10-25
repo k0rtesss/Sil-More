@@ -176,6 +176,18 @@ static void remaining_text_paths(void)
     inspect_text = native_text = false;
 }
 
+static void title_menu(void)
+{
+    g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
+    assert(sdl_welcome_screen_show_menu(false, false));
+    SDL_Rect canvas = {0, 0, width, height};
+    clear(); inspect_text = native_text = true;
+    sdl_welcome_screen_render_canvas(&canvas);
+    inspect_text = native_text = false;
+    capture("title-menu");
+    sdl_welcome_screen_hide();
+}
+
 static void menus(void)
 {
     g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
@@ -253,6 +265,7 @@ int main(int argc, char** argv)
             sample(kind, false);
             if (!big || kind == 1 || kind == 4) sample(kind, true);
         }
+        title_menu();
         menus();
         complete_poetry_title();
         remaining_text_paths();
@@ -275,7 +288,7 @@ def audit_sources():
     for path in sorted((ROOT / "src/sdl/ui").glob("*.c")):
         source = path.read_text(encoding="utf-8")
         assert "SDL_BlitSurfaceScaled" not in source, path
-        for match in re.finditer(r"SDL_RenderTexture\(g_state\.renderer,\s*(g_state\.\w+|\w+)", source):
+        for match in re.finditer(r"SDL_RenderTexture\(g_state\.renderer,\s*([\w.]+)", source):
             texture = match.group(1)
             assert texture in art.get(path.name, set()), (path, texture)
             reviewed.append({"file": str(path.relative_to(ROOT)),
@@ -285,7 +298,7 @@ def audit_sources():
                  "sdl-touch-controls", "sdl-touch-tutorial", "sdl-tooltips"):
         path = ROOT / "src/sdl/input" / (name + ".c")
         source = path.read_text(encoding="utf-8")
-        for match in re.finditer(r"SDL_RenderTexture\(g_state\.renderer,\s*(\w+)", source):
+        for match in re.finditer(r"SDL_RenderTexture\(g_state\.renderer,\s*([\w.]+)", source):
             assert name == "sdl-tooltips" and match.group(1) == "atlas", path
             reviewed.append({"file": str(path.relative_to(ROOT)),
                 "line": source.count("\n", 0, match.start()) + 1,
@@ -323,6 +336,8 @@ def main():
         objects = [p for p in link if p.endswith(".o")]
         start = link.index("-o") + 2
         libraries = link[start:link.index("&&", start)] if "&&" in link[start:] else link[start:]
+        libraries.append("-lstdc++")
+    if os.name == "nt" and any(obj.endswith(".cpp.obj") for obj in objects):
         libraries.append("-lstdc++")
     excluded = tuple(f"/src/{name}.c.{ext}" for name in
         ("main", "sdl/ui/sdl-main-menu", "sdl/ui/sdl-question-menu", "sdl/ui/sdl-song-menu", "sdl/ui/sdl-screens", "sdl/input/sdl-tooltips") for ext in ("obj", "o"))

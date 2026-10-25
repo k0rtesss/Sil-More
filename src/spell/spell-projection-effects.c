@@ -58,7 +58,7 @@ bool project_f(
         if (cave_transform_elemental_terrain(y, x, typ))
         {
             obvious = !p_ptr->blind && (cave_info[y][x] & CAVE_SEEN);
-            if (who < 0)
+            if (who < 0 || typ == GF_FIRE)
                 sil_achievements_on_elemental_terrain(y, x, old_feat, typ);
         }
         break;
@@ -684,6 +684,9 @@ bool project_m(
     m_ptr = &mon_list[cave_m_idx[y][x]];
     r_ptr = &r_info[m_ptr->r_idx];
     l_ptr = &l_list[m_ptr->r_idx];
+    /* Fear must not alert or produce cowering messages for friendly thralls. */
+    if (typ == GF_FEAR && monster_is_thrall(m_ptr))
+        return false;
     if (m_ptr->ml)
         seen = true;
 

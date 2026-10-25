@@ -2756,8 +2756,10 @@ static const birth_coach_step birth_coach_select_step = {
 static const birth_coach_step birth_coach_stats_step = {
     NULL, 0, 999, "Assign attributes",
     "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
-    "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-    "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
+    "<t>Str:</t> weapon damage die sides & carried-weight limit.\n"
+    "<t>Dex:</t> Melee, Evasion, Archery and Stealth.\n"
+    "<t>Con:</t> maximum Health.\n"
+    "<t>Gra:</t> Will, Perception, Song, Smithing and maximum Voice.\n"
     "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.\n"
     "Every point ripples into the skills shown alongside."
 };
@@ -2831,8 +2833,10 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
                 "<a>Tap</a> a stat to select it; <a>tap it again</a> to raise it.\n"
                 "<a>Long-tap</a> a stat to lower it. <a>Confirm</a> accepts; <a>Back</a> returns to heroes.\n"
-                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.\n"
+                "<t>Dex:</t> Melee, Evasion, Archery and Stealth.\n"
+                "<t>Con:</t> maximum Health.\n"
+                "<t>Gra:</t> Will, Perception, Song, Smithing and maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }
@@ -2846,8 +2850,10 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "Spend your points across <t>Str, Dex, Con and Gra</t>.\n"
                 "<a>D-pad Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>%s</a> accepts; <a>%s</a> returns to heroes.\n"
-                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.\n"
+                "<t>Dex:</t> Melee, Evasion, Archery and Stealth.\n"
+                "<t>Con:</t> maximum Health.\n"
+                "<t>Gra:</t> Will, Perception, Song, Smithing and maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 confirm_label, back_label);
         }
@@ -2858,8 +2864,10 @@ static cptr birth_coach_body_for_step(const birth_coach_step* step, char* buf,
                 "<a>Up/Down</a> picks a stat; <a>Left/Right</a> lowers or raises it.\n"
                 "<a>Enter</a> accepts; <a>Esc</a> returns to heroes.\n"
                 "<a>Click</a> a stat to select it; <a>click again</a> to raise; <a>right-click</a> lowers.\n"
-                "<t>Str:</t> weapon damage die sides & carried-weight limit.  <t>Dex:</t> melee/evasion/archery/stealth.\n"
-                "<t>Con:</t> maximum Health.  <t>Gra:</t> Will/Perception/Song/Smithing & maximum Voice.\n"
+                "<t>Str:</t> weapon damage die sides & carried-weight limit.\n"
+                "<t>Dex:</t> Melee, Evasion, Archery and Stealth.\n"
+                "<t>Con:</t> maximum Health.\n"
+                "<t>Gra:</t> Will, Perception, Song, Smithing and maximum Voice.\n"
                 "<y>Cost =</y> price of the next point; <y>Points Left =</y> your budget.",
                 buflen);
         }

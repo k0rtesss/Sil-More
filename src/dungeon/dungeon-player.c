@@ -8,6 +8,7 @@
 #include "quest/quest-runtime.h"
 #include "meta_state.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "cave/cave-flood.h"
 #include "cave/cave-events.h"
 #include "monster/monster-ai.h"
@@ -931,6 +932,11 @@ void process_player(void)
 
         in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));
+
+        /* This is an actual boundary crossing even after the room's one-time
+         * narrative has been consumed. Equipping the cloak inside is no entry. */
+        if (in_morgoth_vault && !was_in_morgoth_vault)
+            sil_achievement_lore_on_throne_entry();
 
         if (p_ptr->morgoth_hall_entered && was_in_morgoth_vault && !in_morgoth_vault
             && (silmarils_possessed() == 0))

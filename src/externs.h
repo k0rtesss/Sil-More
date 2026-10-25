@@ -558,6 +558,7 @@ extern void monster_poison_terrain_end_action(int m_idx);
 extern void monster_poison_add(int m_idx, int amount);
 extern void monster_poison_add_from(int m_idx, int amount, int who);
 extern bool monster_poison_tick(int m_idx);
+extern bool monster_is_thrall(const monster_type* m_ptr);
 extern bool monster_thrall_turn(monster_type* m_ptr);
 extern void monster_poison_brand(int m_idx, const object_type* first,
     const object_type* second, int damage);
@@ -1924,6 +1925,7 @@ extern void sdl_halls_screen_add_action(int choice, cptr label, byte attr,
     bool enabled);
 extern void sdl_halls_screen_hide(void);
 extern bool sdl_halls_screen_active(void);
+extern bool sdl_halls_screen_handle_key(int key);
 extern bool sdl_character_sheet_screen_active(void);
 extern void sdl_character_sheet_screen_hide(void);
 extern void sdl_character_sheet_screen_begin_live(int focus_choice);
@@ -1994,7 +1996,11 @@ extern bool sdl_character_sheet_screen_commit_select(int selected_index);
 /* Narrative "book" (N pages with optional actions): quest text, stats, etc.  Reuses the page-turn
  * navigation accessors above (select_page / page_turning / begin_page_turn). */
 extern void sdl_character_sheet_screen_begin_book(cptr title);
+extern void sdl_character_sheet_screen_set_book_full_width(bool enabled);
+extern void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 extern void sdl_character_sheet_screen_add_book_paragraph(cptr text);
+extern void sdl_character_sheet_screen_add_book_paragraph_styled(cptr text,
+    const byte* attrs, int attr_count);
 extern void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,
     int attr);
 extern void sdl_character_sheet_screen_add_book_action(cptr text, int choice);
@@ -2388,7 +2394,7 @@ extern bool allow_player_confusion(monster_type* m_ptr);
 extern bool set_confused(int v);
 extern bool set_poisoned(int v);
 extern bool infect_disease(void);
-extern void disease_assign_identity(void);
+extern bool disease_assign_identity(void);
 extern void disease_identify(void);
 extern cptr disease_name(void);
 extern cptr disease_cure_name(void);
@@ -2659,6 +2665,7 @@ extern void set_sdl_bigger_font(bool value);
 extern void set_sdl_compact_inventory_menus(bool value);
 extern bool get_sdl_show_context_square_popups(void);
 extern void set_sdl_show_context_square_popups(bool value);
+extern bool sdl_handheld_ui_active(void);
 extern int get_sdl_mobile_starting_zoom_offset(void);
 extern void set_sdl_mobile_starting_zoom_offset(int value);
 extern bool get_sdl_mobile_portrait_mode(void);
@@ -2720,6 +2727,7 @@ extern void sdl_question_menu_clear_nonblocking(void);
 extern void sdl_question_menu_set_scroll_offset_target(int* offset,
     bool follow_highlight);
 extern bool sdl_question_menu_take_touch_scrolled(void);
+extern bool sdl_question_menu_handle_help_key(int key);
 extern void sdl_question_menu_set_blocking_input(bool blocking);
 extern bool sdl_question_menu_blocks_input(void);
 extern bool sdl_question_menu_queue_navigation(int direction);

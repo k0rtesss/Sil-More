@@ -13,6 +13,7 @@ CHECKS = r'''
 #include "melee/melee-attack.h"
 #undef assert
 #define assert(expr) do { if (!(expr)) { fprintf(stderr, "assertion failed: %s (line %d)\n", #expr, __LINE__); exit(1); } } while (0)
+#include "object/object-place.h"
 static int riposte_messages;
 static bool accept_attack_prompt;
 static int attack_prompts;
@@ -392,6 +393,64 @@ static void check_assassination_bump(void)
 
     puts("Assassination: unaware bumps make one free opportunity attack; standing still adds the stealth bonus: PASS.");
 }
+
+static void check_disarm_liquids(void)
+{
+    const int liquids[] = {FEAT_WATER, FEAT_DEEP_WATER, FEAT_POISON, FEAT_LAVA};
+    bool was_dungeon = character_dungeon;
+    character_dungeon = true;
+    for (int t = 0; t < (int)N_ELEMENTS(liquids); t++)
+    {
+        /* A liquid landing square must win over surrounding dry ground. */
+        combat_fixture(105, -100);
+        cave_set_feat(10, 12, liquids[t]);
+        object_type weapon;
+        object_prep(&weapon, lookup_kind(TV_SWORD, SV_LONG_SWORD));
+        weapon.att = 3;
+        int idx = drop_near(&weapon, 0, 10, 12);
+        assert(idx > 0 && cave_feat[o_list[idx].iy][o_list[idx].ix] == FEAT_FLOOR);
+        delete_object_idx(idx);
+        idx = drop_disarmed_weapon(&weapon, 10, 12);
+        assert(idx > 0 && o_list[idx].iy == 10 && o_list[idx].ix == 12);
+        assert(o_list[idx].number == 1 && o_list[idx].att == 3);
+
+        /* Real enemy attacks must unequip and drop exactly one weapon locally. */
+        int liquid_landings = 0;
+        for (int seed = 1; seed <= 8; seed++)
+        {
+            monster_type* m = combat_fixture(105, -100);
+            /* Keep the defences stable when damage refreshes player bonuses. */
+            p_ptr->stat_base[A_STR] = p_ptr->stat_use[A_STR] = -4;
+            p_ptr->skill_base[S_EVN] = -100;
+            cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+            object_prep(&inventory[INVEN_WIELD], weapon.k_idx);
+            for (int y = 9; y <= 11; y++)
+                for (int x = 10; x <= 12; x++)
+                    if (y != m->fy || x != m->fx)
+                        cave_set_feat(y, x, liquids[t]);
+            Rand_state_init(seed);
+            for (int attempt = 0; attempt < 64 && inventory[INVEN_WIELD].k_idx; attempt++)
+                assert(make_attack_normal(m));
+            assert(!inventory[INVEN_WIELD].k_idx);
+            int found = 0;
+            for (int i = 1; i < o_max; i++)
+                if (o_list[i].k_idx == weapon.k_idx)
+                {
+                    found++;
+                    assert(o_list[i].number == 1);
+                    assert(ABS(o_list[i].iy - p_ptr->py) <= 1);
+                    assert(ABS(o_list[i].ix - p_ptr->px) <= 1);
+                    liquid_landings += cave_feat[o_list[i].iy][o_list[i].ix] == liquids[t];
+                }
+            assert(found == 1);
+            for (int i = 0; i < INVEN_TOTAL; i++)
+                assert(inventory[i].k_idx != weapon.k_idx);
+        }
+        assert(liquid_landings > 0);
+    }
+    character_dungeon = was_dungeon;
+    puts("Disarmed weapons: shallow/deep water, poisonous acid and lava accept local landings; 32 real enemy disarms preserve exactly one weapon: PASS.");
+}
 '''
 
 
@@ -401,7 +460,7 @@ def main():
     source = out / "check.c"
     harness = engine.HARNESS.replace(
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
-    harness = harness.replace("    check_combat();", "    check_blunt_challenge();\n    check_attack_energy();\n    check_assassination_bump();\n    check_interrupted_monster_move();\n    check_riposte_terrain();")
+    harness = harness.replace("    check_combat();", "    check_blunt_challenge();\n    check_attack_energy();\n    check_assassination_bump();\n    check_interrupted_monster_move();\n    check_riposte_terrain();\n    check_disarm_liquids();")
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())

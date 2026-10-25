@@ -3,13 +3,14 @@
 """
 Calculate smithing difficulty for each artefact in artefact.txt and special.txt
 
-Based on smithing_difficulty_baseline() in src/drop_system.c.
+Mirrors the shared neutral evaluator in src/object/object-difficulty.c.
 which includes proper costs for flags like slays, brands, sharpness, etc.
 """
 
 import re
 import os
 import sys
+from itertools import product
 
 
 BONUS_TOKEN_ALIASES = {
@@ -166,6 +167,72 @@ def c_trunc_div(numer: int, denom: int) -> int:
     if denom == 0:
         raise ZeroDivisionError("division by zero")
     return abs(numer) // abs(denom) * (1 if numer == 0 or numer * denom > 0 else -1)
+
+
+def component_flags(component):
+    """Include flag changes performed by the C M: token parser."""
+    flags = {normalize_bonus_token(f) for f in component.get('flags', [])}
+    for token, value in component.get('bonus_overrides', {}).items():
+        token = normalize_bonus_token(token)
+        base = token.removeprefix('NEG_')
+        hi = value[-1] if isinstance(value, tuple) else value
+        if token.startswith('NEG_'):
+            hi = -abs(hi)
+        if base in STAT_TOKENS:
+            flags.difference_update((base, f'NEG_{base}'))
+            flags.add(f'NEG_{base}' if hi < 0 else base)
+        elif base in SKILL_TOKENS:
+            flags.add(base)
+    return flags
+
+
+def component_bonus_variants(obj, *egos):
+    """Mirror kind/ego pval masks and independent M: ranges in drop_system.c.
+
+    A kind's explicit bonuses replace its pval defaults. Ego explicit bonuses
+    add to those arrays, while each component's pval affects only its own
+    non-overridden flags. Equal total pvals can therefore have different arrays.
+    """
+    kind_flags = component_flags(obj)
+    kind_overrides = obj.get('bonus_overrides', {})
+    kind_lo = obj.get('pval', 0)
+    kind_hi = max(kind_lo, obj.get('max_pval', kind_lo))
+    kind_values = range(kind_lo, kind_hi + 1)
+    ego_values = [range(min(1 if ego['max_pval'] > 0 else 0, ego['max_pval']),
+                        ego['max_pval'] + 1) for ego in egos]
+    # C combines each token's ego ranges before enumerating the sum.
+    explicit_ranges = {}
+    for ego in egos:
+        for token, value in ego.get('bonus_overrides', {}).items():
+            token = normalize_bonus_token(token)
+            base = token.removeprefix('NEG_')
+            lo, hi = value if isinstance(value, tuple) else (value, value)
+            if token.startswith('NEG_'):
+                lo, hi = sorted((-abs(lo), -abs(hi)))
+            old_lo, old_hi = explicit_ranges.get(base, (0, 0))
+            explicit_ranges[base] = (old_lo + lo, old_hi + hi)
+    tokens = list(explicit_ranges)
+    result = []
+    for values in product(kind_values, *ego_values):
+        stats, skills = compute_stat_skill_bonuses(kind_flags, values[0], kind_overrides)
+        for ego, pval in zip(egos, values[1:]):
+            overrides = {normalize_bonus_token(token).removeprefix('NEG_')
+                         for token in ego.get('bonus_overrides', {})}
+            mask = {f for f in component_flags(ego)
+                    if f.removeprefix('NEG_') not in overrides}
+            ego_stats, ego_skills = compute_stat_skill_bonuses(mask, pval, None)
+            stats = {token: stats[token] + ego_stats[token] for token in STAT_TOKENS}
+            skills = {token: skills[token] + ego_skills[token] for token in SKILL_TOKENS}
+        for explicit_values in product(*(range(lo, hi + 1) for lo, hi in explicit_ranges.values())):
+            variant_stats, variant_skills = stats.copy(), skills.copy()
+            for token, value in zip(tokens, explicit_values):
+                if token in variant_stats:
+                    variant_stats[token] += value
+                elif token in variant_skills:
+                    variant_skills[token] += value
+            result.append(dict(pval=sum(values), stat_bonus_values=variant_stats,
+                               skill_bonus_values=variant_skills))
+    return result
 
 
 def parse_artefact_file(filepath):
@@ -409,6 +476,8 @@ def parse_special_file(filepath):
                 if len(parts) >= 2:
                     token = parts[0].strip()
                     value = int(parts[1].strip())
+                    if len(parts) > 2:
+                        value = (value, int(parts[2].strip()))
                     current['bonus_overrides'][token] = value
     
     # Don't forget the last special
@@ -420,7 +489,7 @@ def parse_special_file(filepath):
 
 def calculate_difficulty(art):
     """
-    Calculate smithing difficulty using src/drop_system.c.
+    Calculate neutral smithing difficulty using object-difficulty.c.
     This accounts for all flags, slays, brands, sharpness, etc.
     
     For normal items: Use the actual stats from the generated variant.
@@ -432,7 +501,8 @@ def calculate_difficulty(art):
     dif_mult = 100  # Percentage multiplier
     brands = 0
     
-    flags = set(art['flags'])
+    own_flags = component_flags(art)
+    flags = own_flags.copy()
     tval = art['tval']
     sval = art['sval']
     is_special = (art['type'] == 'special')
@@ -443,11 +513,10 @@ def calculate_difficulty(art):
     # special, and dual-ego variants already carry those flags; parsed
     # artefacts need their base flags merged here.
     is_artefact = (art['type'] == 'artefact')
+    if is_artefact and (tval, sval) not in OBJECTS_BY_TYPE:
+        raise ValueError(f"No base kind for artefact {art.get('idx')}: ({tval}, {sval})")
     if is_artefact:
-        base_key = (tval, sval)
-        if base_key in OBJECTS_BY_TYPE:
-            base_obj_flags = set(OBJECTS_BY_TYPE[base_key].get('flags', []))
-            flags |= base_obj_flags
+        flags |= get_base_flags(tval, sval)
 
     # Get base item stats
     if is_special or is_normal or is_dual_ego:
@@ -486,9 +555,6 @@ def calculate_difficulty(art):
     # For protection, calculate new_prot from variant's pd/ps
     new_prot = (art['ps'] + 1) * art['pd'] if art['ps'] > 0 else 0
     prot_bonus = new_prot - base_prot
-    # For protection, calculate new_prot from variant's pd/ps
-    new_prot = (art['ps'] + 1) * art['pd'] if art['ps'] > 0 else 0
-    prot_bonus = new_prot - base_prot
     
     # Base item level contribution (k_ptr->level / 2)
     # For non-jewelry items: dif_inc += k_ptr->level / 2
@@ -498,7 +564,7 @@ def calculate_difficulty(art):
     # Weight factor calculation
     # Unusual weight items (lighter or heavier than base) get difficulty bonus
     item_weight = art.get('weight', 0)
-    base_weight = get_base_weight(tval, sval)
+    base_weight = art.get('base_weight', get_base_weight(tval, sval))
     if base_weight > 0:  # Only calculate if we have base weight data
         if item_weight == 0:
             weight_factor = 1100
@@ -633,17 +699,23 @@ def calculate_difficulty(art):
     # For specials: total_pval = base_pval + smithed bonus
     # For artefacts: total_pval = art['pval']
     # pval_bonus = total_pval - base_pval (used for TUNNEL)
-    pval_bonus = smithed_pval_bonus if smithed_pval_bonus > 0 else 0
+    pval_bonus = smithed_pval_bonus
     
     # TUNNEL: uses pval_bonus (difference from base)
     # Special case: digging tools already have TUNNEL, so only extra pval counts
     if 'TUNNEL' in flags:
-        if pval_bonus > 0:
-            dif_inc += dif_mod_calc(pval_bonus, 8)
+        dif_inc += dif_mod_calc(pval_bonus, 8)
     
     # Per-stat/per-skill bonuses (no longer necessarily tied to a single pval).
     overrides = art.get('bonus_overrides', None)
-    stat_bonus, skill_bonus = compute_stat_skill_bonuses(flags, total_pval, overrides)
+    # Artefact arrays replace the base kind's arrays; intrinsic flags still
+    # contribute their fixed costs, but cannot create extra pval bonuses.
+    bonus_flags = own_flags if is_artefact else flags
+    if 'stat_bonus_values' in art:
+        stat_bonus = art['stat_bonus_values']
+        skill_bonus = art['skill_bonus_values']
+    else:
+        stat_bonus, skill_bonus = compute_stat_skill_bonuses(bonus_flags, total_pval, overrides)
     art['stat_bonus'] = stat_bonus
     art['skill_bonus'] = skill_bonus
 
@@ -693,8 +765,8 @@ def calculate_difficulty(art):
         dif_dec += dif_mod_calc(-skill_bonus['SONG'], 3)
 
     # Extra difficulty for multiple distinct stat/skill bonuses (first is "free").
-    stat_count = sum(1 for k in STAT_TOKENS if stat_bonus.get(k, 0) > 0)
-    skill_count = sum(1 for k in SKILL_TOKENS if skill_bonus.get(k, 0) > 0)
+    stat_count = sum(1 for k in STAT_TOKENS if k in flags and stat_bonus.get(k, 0) > 0)
+    skill_count = sum(1 for k in SKILL_TOKENS if k in flags and skill_bonus.get(k, 0) > 0)
     if stat_count > 1:
         dif_inc += (stat_count - 1) * 7
     if skill_count > 1:
@@ -819,8 +891,7 @@ def calculate_difficulty(art):
     # === ENCHANTABILITY BONUS ===
     # Items with ENCHANTABLE flag on base item OR artefact get -30% difficulty
     # Check both base item flags and artefact's own flags
-    base_item_flags = get_base_flags(tval, sval)
-    if 'ENCHANTABLE' in base_item_flags or 'ENCHANTABLE' in flags:
+    if 'ENCHANTABLE' in flags:
         dif_mult -= 30
 
     # Apply multiplier
@@ -836,7 +907,7 @@ def calculate_difficulty(art):
 def dif_mod_calc(value, positive_base):
     """
     Calculates difficulty modification using the triangular number formula.
-    From drop_system.c drop_dif_mod():
+    From object-difficulty.c difficulty_add_signed():
         int mod = 1 + ((positive_base - 1) / 5);
         if (value > 0)
             *dif_inc += positive_base * value + mod * (value * (value - 1) / 2);
@@ -1254,8 +1325,7 @@ def parse_object_file(filepath):
             
             # New object entry
             if line.startswith('N:'):
-                if current and 'INSTA_ART' not in current['flags']:
-                    # Skip INSTA_ART items - they're artefact-only templates
+                if current:
                     objects.append(current)
                 parts = line[2:].split(':')
                 idx = int(parts[0])
@@ -1281,6 +1351,7 @@ def parse_object_file(filepath):
                     'weight': 0,
                     'alloc_pairs': [],
                     'flags': [],
+                    'bonus_overrides': {},
                 }
             
             # Item info (contains tval:sval:pval)
@@ -1350,13 +1421,17 @@ def parse_object_file(filepath):
                         current['max_ps'] = value
                     elif stat == 'PVAL':
                         current['max_pval'] = value
+
+            elif line.startswith('M:') and current:
+                token, value = line[2:].split(':', 1)
+                current['bonus_overrides'][token.strip()] = int(value)
             
             # Flags
             elif line.startswith('F:') and current:
                 flags = [f.strip() for f in line[2:].split('|')]
                 current['flags'].extend(flags)
     
-    if current and 'INSTA_ART' not in current['flags']:
+    if current:
         objects.append(current)
 
     return objects
@@ -1368,7 +1443,8 @@ def populate_objects_dict(objects):
     OBJECTS_BY_TYPE = {}
     for obj in objects:
         key = (obj['tval'], obj['sval'])
-        OBJECTS_BY_TYPE[key] = obj
+        # lookup_kind() returns the first numeric kind, not the last duplicate.
+        OBJECTS_BY_TYPE.setdefault(key, obj)
 
 
 def resolve_artefact_name(art):
@@ -1408,7 +1484,7 @@ def has_pval_mask(flags):
 def generate_special_variants(special, objects):
     """
     Generate all possible variants of a special item (ego) based on game logic.
-    Mirrors build_ego_variants() from drop_system.c lines 1149-1410.
+    Mirrors build_ego_variants() from drop_system.c.
     """
     variants = []
     
@@ -1420,6 +1496,8 @@ def generate_special_variants(special, objects):
         
         # Find all base objects that match this tval/sval range
         for obj in objects:
+            if 'INSTA_ART' in obj['flags']:
+                continue
             if obj['tval'] != tval:
                 continue
             if obj['sval'] < min_sval or obj['sval'] > max_sval:
@@ -1437,18 +1515,11 @@ def generate_special_variants(special, objects):
             evn_max = obj['max_evn'] + special['max_evn']
             ps_min = obj['ps'] + smithing_step_from_ego_bonus_py(special['to_ps'])
             ps_max = obj['max_ps'] + special['to_ps']
-            pval_min_inc = special.get('min_pval', 0) if special.get('min_pval', 0) > 0 else (1 if special['max_pval'] > 0 else 0)
-            pval_min = obj['pval'] + pval_min_inc
-            pval_max = obj['max_pval'] + special['max_pval']
             dd_min = obj['dd'] + smithing_step_from_ego_bonus_py(special['to_dd'])
             dd_max = obj['dd'] + special['to_dd']
             pd_min = obj['pd'] + smithing_step_from_ego_bonus_py(special['to_pd'])
             pd_max = get_base_pd_max(obj) + special['to_pd']
             
-            # Check if pval is allowed (base has pval flags or pval != 0 or ego grants pval)
-            base_flags = set(obj['flags'])
-            pval_allowed = has_pval_mask(base_flags) or obj['pval'] != 0 or special['max_pval'] > 0
-
             if ds_min < 0:
                 ds_min = 0
             if ds_max < 0:
@@ -1475,8 +1546,6 @@ def generate_special_variants(special, objects):
                 evn_min = evn_max
             if ps_min > ps_max:
                 ps_min = ps_max
-            if pval_min > pval_max:
-                pval_min = pval_max
             if dd_min > dd_max:
                 dd_min = dd_max
             if pd_min > pd_max:
@@ -1490,18 +1559,21 @@ def generate_special_variants(special, objects):
             _ego_name  = special['name']
             _variant_name = f"{_ego_name} {_obj_name}" if _is_prefix else f"{_obj_name} {_ego_name}"
 
-            # Generate all combinations (lines 1377-1407)
+            bonus_variants = component_bonus_variants(obj, special)
+            combined_flags = component_flags(obj) | component_flags(special)
+            # Generate all combat-stat and component-bonus combinations.
             for att in range(att_min, att_max + 1):
                 for ds in range(ds_min, ds_max + 1):
                     for evn in range(evn_min, evn_max + 1):
                         for ps in range(ps_min, ps_max + 1):
-                            pval_hi = pval_max if pval_allowed else pval_min
-                            for pval in range(pval_min, pval_hi + 1):
+                            for bonuses in bonus_variants:
+                                pval = bonuses['pval']
                                 for dd in range(dd_min, dd_max + 1):
                                     for pd in range(pd_min, pd_max + 1):
                                         variant = {
                                             'type': 'special',
                                             'special_idx': special['idx'],
+                                            'k_idx': obj['k_idx'],
                                             'name': _variant_name,
                                             'base_name': _obj_name,
                                             'special_name': _ego_name,
@@ -1516,7 +1588,7 @@ def generate_special_variants(special, objects):
                                             'pd': pd,
                                             'pval': pval,
                                             'ability_list': special['ability_list'][:],  # Copy ability list
-                                            'flags': obj['flags'][:] + [f for f in special['flags'] if f not in obj['flags']],  # Combine base + ego flags
+                                            'flags': sorted(combined_flags),
                                             'depth': eff_depth,
                                             'rarity': eff_rarity,
                                             'rarity_schedule': eff_schedule,
@@ -1530,8 +1602,10 @@ def generate_special_variants(special, objects):
                                             'base_dd': obj['dd'],
                                             'base_pval': obj['pval'],
                                             'base_level': obj['level'],
+                                            'base_weight': obj.get('weight', 0),
                                             'weight': obj.get('weight', 0),  # Inherit base item weight
                                         }
+                                        variant.update(bonuses)
                                         variants.append(variant)
     
     return variants
@@ -1560,6 +1634,8 @@ def generate_dual_ego_variants(specials_raw, objects):
 
             # Find base items that can have BOTH this prefix AND this suffix
             for obj in objects:
+                if 'INSTA_ART' in obj['flags']:
+                    continue
                 # Skip supplies and lights (TV_POTION=75, TV_STAFF=70, TV_GEM=56, TV_FOOD=80, TV_FLASK=77)
                 if obj['tval'] in [75, 70, 56, 80, 77, 39]:
                     continue
@@ -1621,25 +1697,6 @@ def generate_dual_ego_variants(specials_raw, objects):
                     + smithing_step_from_ego_bonus_py(suffix['to_pd'])
                 pd_max = get_base_pd_max(obj) + prefix['to_pd'] + suffix['to_pd']
 
-                prefix_pval_min = (
-                    prefix.get('min_pval', 0)
-                    if prefix.get('min_pval', 0) > 0
-                    else (1 if prefix['max_pval'] > 0 else 0)
-                )
-                suffix_pval_min = (
-                    suffix.get('min_pval', 0)
-                    if suffix.get('min_pval', 0) > 0
-                    else (1 if suffix['max_pval'] > 0 else 0)
-                )
-                pval_min = obj['pval'] + prefix_pval_min + suffix_pval_min
-                pval_max = obj['max_pval'] + prefix['max_pval'] + suffix['max_pval']
-                pval_allowed = (
-                    has_pval_mask(set(obj.get('flags', [])))
-                    or obj['pval'] != 0
-                    or prefix['max_pval'] > 0
-                    or suffix['max_pval'] > 0
-                )
-
                 if ds_min < 0:
                     ds_min = 0
                 if ds_max < 0:
@@ -1669,12 +1726,11 @@ def generate_dual_ego_variants(specials_raw, objects):
                     dd_min = dd_max
                 if pd_min > pd_max:
                     pd_min = pd_max
-                if pval_min > pval_max:
-                    pval_min = pval_max
 
                 # Combined flags and abilities.
-                combined_flags = prefix['flags'][:] + [f for f in suffix['flags'] if f not in prefix['flags']]
+                combined_flags = sorted(component_flags(obj) | component_flags(prefix) | component_flags(suffix))
                 combined_ability_list = prefix['ability_list'][:] + suffix['ability_list'][:]
+                bonus_variants = component_bonus_variants(obj, prefix, suffix)
 
                 for att in range(att_min, att_max + 1):
                     for ds in range(ds_min, ds_max + 1):
@@ -1682,12 +1738,13 @@ def generate_dual_ego_variants(specials_raw, objects):
                             for ps in range(ps_min, ps_max + 1):
                                 for dd in range(dd_min, dd_max + 1):
                                     for pd in range(pd_min, pd_max + 1):
-                                        pval_hi = pval_max if pval_allowed else pval_min
-                                        for pval in range(pval_min, pval_hi + 1):
+                                        for bonuses in bonus_variants:
+                                            pval = bonuses['pval']
                                             variant = {
                                                 'type': 'dual_ego',
                                                 'prefix_idx': prefix['idx'],
                                                 'suffix_idx': suffix['idx'],
+                                                'k_idx': obj['k_idx'],
                                                 'name': f"{prefix['name']} {_obj_name_d} {suffix['name']}",
                                                 'base_name': _obj_name_d,
                                                 'prefix_name': prefix['name'],
@@ -1717,8 +1774,10 @@ def generate_dual_ego_variants(specials_raw, objects):
                                                 'base_dd': obj['dd'],
                                                 'base_pval': obj['pval'],
                                                 'base_level': obj['level'],
+                                                'base_weight': obj.get('weight', 0),
                                                 'weight': obj.get('weight', 0),  # Inherit base item weight
                                             }
+                                            variant.update(bonuses)
                                             variants.append(variant)
 
     return variants
@@ -1726,7 +1785,7 @@ def generate_dual_ego_variants(specials_raw, objects):
 
 def get_base_flags(tval, sval):
     """Get current intrinsic flags for an object kind from object.txt."""
-    return set(OBJECTS_BY_TYPE.get((tval, sval), {}).get('flags', []))
+    return component_flags(OBJECTS_BY_TYPE.get((tval, sval), {}))
 
 
 def get_slot(tval):
@@ -1772,12 +1831,14 @@ def get_tval_name(tval):
 def generate_normal_variants(objects):
     """
     Generate all possible variants of normal (non-ego, non-artefact) items.
-    Mirrors build_normal_variants() from drop_system.c lines 974-1144.
+    Mirrors build_normal_variants() from drop_system.c.
     This includes rings and amulets with all stat combinations.
     """
     variants = []
     
     for obj in objects:
+        if 'INSTA_ART' in obj['flags']:
+            continue
         # Skip supplies (no smithing variants)
         # TV_POTION=75, TV_STAFF=70, TV_GEM=56, TV_FOOD=80, TV_FLASK=77
         if obj['tval'] in [75, 70, 56, 80, 77]:
@@ -1787,10 +1848,6 @@ def generate_normal_variants(objects):
         if obj['tval'] == 39:  # Light
             continue
             
-        # Determine if pval is allowed
-        base_flags = set(obj['flags'])
-        pval_allowed = has_pval_mask(base_flags) or obj['pval'] != 0
-        
         # Set up smithing caps based on item type
         att_min = obj['att']
         att_max = obj['max_att']
@@ -1800,8 +1857,6 @@ def generate_normal_variants(objects):
         evn_max = obj['max_evn']
         ps_min = obj['ps']
         ps_max = obj['max_ps']
-        pval_min = obj['pval']
-        pval_max = obj['max_pval']
         pd_min = obj['pd']
         pd_max = get_base_pd_max(obj)
         dd_min = obj['dd']
@@ -1819,6 +1874,7 @@ def generate_normal_variants(objects):
         # max_depth: 0 = no cap, >0 = hard cap from A:.../0 trailing marker
         _max_depth_cap = schedule_max_depth_cap_py(_base_allocs)
         _max_depth = max(_max_depth_cap, 0)  # -1 (never) treated as 0; filter by weight instead
+        bonus_variants = component_bonus_variants(obj)
 
         # Generate all combinations
         for att in range(att_min, att_max + 1):
@@ -1827,8 +1883,8 @@ def generate_normal_variants(objects):
                     for ps in range(ps_min, ps_max + 1):
                         for dd in range(dd_min, dd_max + 1):
                             for pd in range(pd_min, pd_max + 1):
-                                pval_hi = pval_max if pval_allowed else pval_min
-                                for pval in range(pval_min, pval_hi + 1):
+                                for bonuses in bonus_variants:
+                                    pval = bonuses['pval']
                                     variant = {
                                         'type': 'normal',
                                         'k_idx': obj['k_idx'],
@@ -1843,7 +1899,7 @@ def generate_normal_variants(objects):
                                         'pd': pd,
                                         'pval': pval,
                                         'ability_list': [],
-                                        'flags': obj['flags'][:],
+                                        'flags': sorted(component_flags(obj)),
                                         'depth': _eff_depth,
                                         'rarity': _eff_rarity,
                                         'rarity_schedule': _norm_schedule,
@@ -1857,8 +1913,10 @@ def generate_normal_variants(objects):
                                         'base_dd': obj['dd'],
                                         'base_pval': obj['pval'],
                                         'base_level': obj['level'],
+                                        'base_weight': obj.get('weight', 0),
                                         'weight': obj.get('weight', 0),  # Base item weight
                                     }
+                                    variant.update(bonuses)
                                     variants.append(variant)
 
     return variants
@@ -1906,6 +1964,44 @@ def export_csv(items, output_file):
     return len(items_sorted)
 
 
+def sync_difficulty_comments(filepath, artefacts, update=False):
+    """Check/update existing annotations, preserving all other bytes and CRLFs.
+
+    Comments precede their N: entry. Random-art templates are not instantiated
+    objects and are deliberately never annotated by this workflow.
+    """
+    with open(filepath, 'r', encoding='utf-8', newline='') as source:
+        lines = source.readlines()
+    by_id = {art['idx']: art for art in artefacts}
+    pending = []
+    checked = changed = 0
+    for line_number, line in enumerate(lines):
+        match = re.fullmatch(r'(# Smithing difficulty:\s*)(-?\d+)(\r?\n)?', line)
+        if match:
+            pending.append((line_number, match))
+        elif line.startswith('N:'):
+            idx = int(line.split(':', 2)[1])
+            art = by_id[idx]
+            for comment_line, match in pending:
+                if not art['tval'] or not art['sval']:
+                    raise ValueError(f"Difficulty annotation on uninstantiated template {idx}")
+                expected = calculate_difficulty(dict(art, type='artefact'))
+                checked += 1
+                if int(match[2]) != expected:
+                    changed += 1
+                    print(f"{idx}: {resolve_artefact_name(art)}: {match[2]} -> {expected}")
+                    lines[comment_line] = f"{match[1]}{expected}{match[3] or ''}"
+            pending.clear()
+    if pending:
+        raise ValueError('Difficulty annotation without a following artefact')
+    if update and changed:
+        with open(filepath, 'w', encoding='utf-8', newline='') as target:
+            target.writelines(lines)
+    action = 'updated' if update else 'stale'
+    print(f"Checked {checked} smithing difficulty comments; {changed} {action}.")
+    return changed
+
+
 def main(argv=None):
     import argparse
     
@@ -1913,7 +2009,12 @@ def main(argv=None):
     parser.add_argument('--csv', '-c', metavar='FILE',
                         help='Export results to CSV file')
     parser.add_argument('--artefacts-only', '-a', action='store_true',
-                        help='Show only artefacts in output')
+                        help='Calculate only artefacts, skipping normal/ego variants')
+    comment_mode = parser.add_mutually_exclusive_group()
+    comment_mode.add_argument('--check-comments', action='store_true',
+                              help='Quickly check existing artefact difficulty comments (exit 1 if stale)')
+    comment_mode.add_argument('--update-comments', action='store_true',
+                              help='Quickly refresh existing artefact difficulty comments in place')
     args = parser.parse_args(argv)
     
     # Try to determine script location, fallback to current working directory
@@ -1991,6 +2092,10 @@ def main(argv=None):
         populate_objects_dict(objects)
         print(f"Loaded {len(OBJECTS_BY_TYPE)} base item types for weight lookup")
 
+    if args.check_comments or args.update_comments:
+        changed = sync_difficulty_comments(artefact_file, artefacts, args.update_comments)
+        return 1 if args.check_comments and changed else 0
+
     # Filter out "Ultimate" template artefacts (idx 182-198) and Morgoth Crown (idx 175-178)
     artefacts = [a for a in artefacts if not (
         (a['name'].startswith("'Ultimate") and a['idx'] >= 182) or
@@ -1999,13 +2104,13 @@ def main(argv=None):
     
     # Generate all normal item variants (including rings/amulets)
     print(f"Generating normal item variants from {len(objects)} base items...")
-    normals = generate_normal_variants(objects)
+    normals = [] if args.artefacts_only else generate_normal_variants(objects)
     print(f"Total normal variants: {len(normals)}")
     
     # Generate all special item variants (matching game logic)
     print(f"\nGenerating special item variants from {len(specials_raw)} special types and {len(objects)} base items...")
     specials = []
-    for spec in specials_raw:
+    for spec in ([] if args.artefacts_only else specials_raw):
         variants = generate_special_variants(spec, objects)
         specials.extend(variants)
         if variants:
@@ -2018,7 +2123,7 @@ def main(argv=None):
     prefix_count = len([s for s in specials_raw if s.get('is_prefix', False)])
     suffix_count = len(specials_raw) - prefix_count
     print(f"  Found {prefix_count} prefix egos and {suffix_count} suffix egos")
-    dual_egos = generate_dual_ego_variants(specials_raw, objects)
+    dual_egos = [] if args.artefacts_only else generate_dual_ego_variants(specials_raw, objects)
     print(f"Total dual-ego variants: {len(dual_egos)}")
 
     print(f"\nTotal artefacts: {len(artefacts)}")
@@ -2234,24 +2339,29 @@ def main(argv=None):
     
     print()
     print("=" * 120)
-    print("DIFFICULTY FORMULA (from src/drop_system.c smithing_difficulty_baseline()):")
+    print("DIFFICULTY FORMULA (from src/object/object-difficulty.c):")
+    print("  - Positive progression: b*n + (1 + (b-1)//5)*n*(n-1)//2")
+    print("  - Negative combat progression uses b=(positive base+1)//2")
     print("  - Base item level / 2")
     print("  - Attack bonus: weapons +3/point, others +6/point; negatives reduce at half rate")
     print("  - Evasion bonus: +6/point armor, +9/point others; negatives reduce at half rate")
     print("  - Damage sides: +3*x+2 per extra side (triangular); negatives reduce at half rate")
-    print("  - Protection: +3/point; amulet/hauberk flat offsets only apply on positive bonuses")
+    print("  - Protection: base 3, amulet/long corslet base 1; +4/+2 offset only when positive")
     print("  - Slays: +3-5 each (Spider/Rauko/Dragon +4, Man/Elf +5, others +3)")
     print("  - Brands: Cold +18, Fire +14, Poison +16 (+20 per extra brand)")
     print("  - Sharpness: +24 (arrows +14), Sharpness2: +40")
     print("  - Stats (STR/DEX/CON/GRA): +14 per stat bonus")
+    print("  - Negative stats: discount progression base 10 (-2 gives -22)")
     print("  - Skills: Perception/Will +3 per skill bonus, Stealth/Song/Archery/Smithing +4 per skill bonus")
+    print("  - Negative skills: discount progression base 2 Perception/Will, base 3 others")
     print("  - Extra multi-bonus penalty: +7 per extra stat, +3 per extra skill")
     print("  - Sustains: +2 each")
     print("  - Resistances: Fire/Cold/Poison +5, Fear/Blind/Confu/Stun +2, Bleed/Hallu +1")
     print("  - Free Action: +7, Light: +8, Radiance: +6, Regen: +4, See Invis: +4")
     print("  - Speed: +40, Cheat Death: +13, Accurate: +15, Vampiric: +6")
-    print("  - Abilities: +6 each (5 + level/3)")
+    print("  - Abilities: 5 + level//3 each")
     print("  - Minor slots (ring/cloak/gloves/boots/light/arrow/horn): +20% multiplier")
+    print("  - ENCHANTABLE: -30 percentage points; penalty/curse flags also discount artefacts")
     print("  - Artefact arrows: difficulty halved")
     print("=" * 120)
     print()
@@ -2266,6 +2376,9 @@ if __name__ == '__main__':
     # Capture arguments on start to preserve them when rerunning
     # Defaults to sys.argv[1:] if we pass None, but capturing explicit list is safer for reruns
     current_argv = sys.argv[1:]
+    # Explicit CLI requests are one-shot commands suitable for CI and scripts.
+    if current_argv:
+        sys.exit(main(current_argv) or 0)
     while True:
         main(current_argv)
         try:

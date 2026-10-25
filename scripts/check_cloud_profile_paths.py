@@ -61,7 +61,7 @@ int main(int argc, char** argv)
     void* bytes = SDL_LoadFile(path, &length);
     assert(bytes && length == sizeof(artefacts) && !memcmp(bytes, artefacts, length)); SDL_free(bytes);
     sil_achievements_init();
-    assert(sil_achievements_mask() == 1 && sil_achievement_unlocked_at(0) == 17);
+    assert(sil_achievements_mask(0) == 1 && sil_achievement_unlocked_at(0) == 17);
     // A later launch must preserve the active profile rather than re-importing.
     SDL_snprintf(path, sizeof(path), "%s/achievements.json", apex);
     const char* changed = "{\"version\":1,\"unlocked\":{\"LIGHT_IN_DARKNESS\":23}}";

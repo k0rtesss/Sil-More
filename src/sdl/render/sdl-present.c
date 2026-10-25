@@ -2034,6 +2034,9 @@ static void sdl_render_command_prompt_row(void)
 
 bool sdl_render_current_window_frame(void)
 {
+    /* Dismiss gameplay banners before drawing the tutorial's background so
+     * even its first frame leaves the highlighted map square visible. */
+    sdl_gameplay_tutorial_sync();
     if (!sdl_render_current_window_contents())
         return false;
 

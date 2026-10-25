@@ -940,10 +940,13 @@ bool sdl_player_action_menu_layout(player_action_menu_entry* entries,
         return false;
 
     max_outer = ((bounds.w < bounds.h) ? bounds.w : bounds.h) * 0.5f - 4.0f;
-    /* Use the same compact wheel on phones and PC handhelds. Sector hit
-     * testing and rendering both consume these bounds. */
+    /* Sector hit testing and rendering both consume these bounds. */
     outer_radius = sdl_touch_pane_clampf((float)view->cell_h * 5.4f,
         104.0f, 196.0f);
+#if defined(SDL_PLATFORM_ANDROID)
+    /* Give the character wheel 25 percent more room on Android. */
+    outer_radius *= 1.25f;
+#endif
     if (outer_radius > max_outer)
         outer_radius = max_outer;
     if (outer_radius < 44.0f)

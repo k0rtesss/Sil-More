@@ -5,6 +5,8 @@
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "achievements.h"
+#include "achievements-character.h"
+#include "achievements-lore.h"
 #include "dungeon-internal.h"
 #include "tutorial/tutorial-game.h"
 
@@ -267,6 +269,7 @@ void dungeon(void)
     sdl_touch_maybe_show_first_game_tutorial();
     sdl_mouse_maybe_show_first_game_tutorial();
     tutorial_game_start();
+    sil_achievement_character_on_start(first_dungeon_entry);
     /* Existing saves can establish this milestone from their recorded depth. */
     sil_achievements_on_depth(p_ptr->max_depth);
     sil_achievements_on_level_entry(p_ptr->restoring);
@@ -340,6 +343,8 @@ void dungeon(void)
     varda_quest_notice_bastion_level_entry();
 
     was_in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH) && (cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT);
+    if (was_in_morgoth_vault && !p_ptr->restoring)
+        sil_achievement_lore_on_throne_entry();
     if ((p_ptr->depth == MORGOTH_DEPTH) && !p_ptr->morgoth_hall_entered
         && (was_in_morgoth_vault || (silmarils_possessed() > 0)))
     {

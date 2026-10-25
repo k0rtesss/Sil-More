@@ -144,9 +144,9 @@ static void check_menu_sizes(char **argv) {
         int normal_main=config.main_view_scale;
         int normal_px=sdl_main_menu_pane_font_px();
         set_sdl_bigger_font(true); config.main_view_scale=SDL_MAIN_VIEW_MIN_SCALE;
-        assert(sdl_menu_auto_font_size_from_main(4,5)==MAX(8,MIN(48,
+        assert(sdl_menu_auto_font_size_from_main(4,5)==MAX(SDL_AUX_VIEW_FONT_MIN,MIN(SDL_AUX_VIEW_FONT_MAX,
             ((int)(normal_main*TILE_SIZE/g_state.system_scale+.5f)*4+4)/5))
-            || normal_main*TILE_SIZE/g_state.system_scale<=8);
+            || normal_main*TILE_SIZE/g_state.system_scale<=SDL_AUX_VIEW_FONT_MIN);
         assert(sdl_main_menu_pane_font_px()==normal_px);
         sdl_menu_font_set_render_context(previous);
         for(int i=0;i<SDL_PANE_PROFILE_COUNT;i++)

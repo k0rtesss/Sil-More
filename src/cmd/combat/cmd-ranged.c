@@ -3,6 +3,7 @@
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
 #include "achievements.h"
+#include "achievements-lore.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "item_set.h"
@@ -1124,10 +1125,15 @@ void do_cmd_fire(int quiver)
                         armor_sides, prt, prt_percent, GF_HURT, false);
 
                     // hit the monster, check for death
+                    sil_achievement_lore_attack_begin(cave_m_idx[y][x],
+                        i_ptr, net_dam, false);
                     p_ptr->killed_enemy_with_arrow = mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1);
                     if (!p_ptr->killed_enemy_with_arrow || !silent_kill_candidate)
                         player_attack_audible = true;
+                    sil_achievement_lore_attack_end();
+                    if (p_ptr->killed_enemy_with_arrow && i_ptr->tval == TV_ARROW)
+                        sil_achievement_lore_on_archery_kill((int)(r_ptr - r_info));
                     if (p_ptr->killed_enemy_with_arrow && deadly_hail_bonus)
                         sil_achievements_on_event(SIL_ACH_A_FEW_LEAVES);
                     if (!p_ptr->killed_enemy_with_arrow)
@@ -2773,8 +2779,16 @@ void do_cmd_throw(bool automatic)
                  */
                 if (!potion_effect)
                 {
+                    int lore_melee_damage = power_throw_hit && melee_hit
+                        ? MIN(melee_dam, net_dam) : 0;
+                    sil_achievement_lore_attack_begin(cave_m_idx[y][x],
+                        thrown_hit && net_dam > lore_melee_damage ? i_ptr : NULL,
+                        net_dam, false);
+                    if (lore_melee_damage > 0)
+                        sil_achievement_lore_attack_add_weapon(melee_o_ptr);
                     fatal_blow = (mon_take_hit(
                         cave_m_idx[y][x], net_dam, note_dies, -1));
+                    sil_achievement_lore_attack_end();
                     if (fatal_blow && power_throw_hit && thrown_hit && melee_hit)
                         sil_achievements_on_event(SIL_ACH_TWO_WEAPONS);
                     if (!fatal_blow)

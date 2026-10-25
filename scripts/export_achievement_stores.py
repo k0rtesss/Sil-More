@@ -17,7 +17,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Points are multiples of five, with harder victories worth more (1000 total).
+# Published point values stay fixed. Reserve room within Google's 2000-point cap.
 POINTS = {
     "INTO_THE_DEEP": 10, "LIGHT_IN_DARKNESS": 25,
     "BACK_TO_STARLIGHT": 50, "THREE_LIGHTS_IN_EXILE": 100,
@@ -66,6 +66,62 @@ POINTS = {
     "A_DREAM_UPON_THE_DARK_LORD": 5,
     "NEITHER_VOICE_DIMINISHED": 5,
     "DOOM_CAN_WAIT": 5,
+    "THE_HIGH_CAPTAIN_FALLS": 25,
+    "DAGNIR_GLAURUNGA": 25,
+    "THE_ABHORRED": 25,
+    "UNLIGHT_UNWOVEN": 25,
+    "THE_DRAGON_HOST_BROKEN": 25,
+    "THE_RED_MAW": 25,
+    "LORD_OF_THE_FOUNTAIN": 50,
+    "MASTER_OF_DOOM": 50,
+    "FOR_IDRIL_AND_EARENDIL": 50,
+    "BEFORE_THE_RISING_OF_THE_SUN": 50,
+    "TULKAS_LAST_LAUGH": 10,
+    "AULES_APPRENTICE": 10,
+    "THE_DOOMSMANS_DUE": 10,
+    "PITY_FOR_THE_FORSAKEN": 10,
+    "THE_GREAT_HUNT": 10,
+    "A_STAR_AGAINST_THE_BALROG": 10,
+    "NO_STEPS_REQUIRED": 25,
+    "THERE_AND_ALMOST_BACK_AGAIN": 5,
+    "THE_HALLS_OF_UTUMNO": 10,
+    "WHERE_GROND_WAS_WROUGHT": 10,
+    "NOT_THE_DOOM_OF_THE_SILMARILS": 10,
+    "THE_KING_WHO_KEPT_HIS_OATH": 10,
+    "THURINGWETHIL_I_AM": 10,
+    "HIS_DEATH_AND_FINAL_END": 10,
+    "SEVEN_TIMES_HE_CRIED": 10,
+    "THE_CAT_AND_THE_NECROMANCER": 10,
+    "EVER_FOUND_AGAIN": 10,
+    "THE_GOLDEN_FLOWER_STANDS": 10,
+    "BELEGOST_REMEMBERS": 10,
+    "BITER_AND_BEATER": 10,
+    "AT_MOST_SEVEN": 10,
+    "HEAVY_IS_THE_STOLEN_CROWN": 10,
+    "THESE_THINGS_ARE_MINE": 10,
+    "THE_OATH_HE_SHOULD_HAVE_SWORN": 10,
+    "HIS_FATHERS_LIGHT": 10,
+    "HEIRLOOMS_OF_THE_HIDDEN_KING": 10,
+    "THE_RING_MAKER_OVERRULED": 10,
+    "NO_PHIAL_REQUIRED": 10,
+    "THREE_UNTOUCHED": 10,
+    "A_BURGLARS_BUSINESS": 10,
+    "STRONGBOW": 10,
+    "ONE_JEWEL_IS_ENOUGH": 10,
+    "A_DESPERATE_VICTORY": 25,
+    "THEIR_WORK_HAD_NO_RIVAL": 50,
+    "FIND_NAUGLAMIR": 15,
+    "FIND_GURTHANG": 25,
+    "FIND_MELKOR": 25,
+    "FIND_GOTHMOG_AXE": 25,
+    "FIND_ANGRIST": 10,
+    "FIND_BELTHRONDING": 10,
+    "FIND_IDRIL_ROBE": 10,
+    "FIND_CELEBRIMBOR_GLOVES": 10,
+    "FIND_MELIAN_RING": 10,
+    "FIND_ULMO_CLOAK": 10,
+    "FIND_FINGOLFIN_SHIELD": 10,
+    "FIND_TURGON_STAFF": 10,
 }
 
 # Existing 16x16 gameplay tiles. Coordinates are (row, column), matching the
@@ -75,14 +131,36 @@ def icon_tiles():
     source = (ROOT / "src/achievement-icons.h").read_text(encoding="utf-8")
     icons = {}
     pattern = r"^SIL_ACHIEVEMENT_ICON\(([A-Z_]+), (\d+), (\d+), (\d+), (\d+), (\d+)\) /\* (.*?) \*/$"
-    for key, row, col, row2, col2, count, origin in re.findall(pattern, source, re.M):
-        first, last = (int(row), int(col)), (int(row2), int(col2))
-        tiles = [first] * int(count) if first == last else [first, last]
-        icons[key] = {"tiles": tiles, "source": origin}
+    rectangle = r"^SIL_ACHIEVEMENT_ICON_RECT\(([A-Z_]+), (\d+), (\d+), (\d+)\) /\* (.*?) \*/$"
+    for line in source.splitlines():
+        match = re.fullmatch(pattern, line)
+        if match:
+            key, row, col, row2, col2, count, origin = match.groups()
+            first, last = (int(row), int(col)), (int(row2), int(col2))
+            tiles = [first] * int(count) if first == last else [first, last]
+            icons[key] = {"tiles": tiles, "source": origin}
+        else:
+            match = re.fullmatch(rectangle, line)
+            if match:
+                key, row, col, size, origin = match.groups()
+                icons[key] = {"tiles": [(int(row), int(col))],
+                              "source": origin, "tile_size": int(size)}
     return icons
 
 
 ICON_TILES = icon_tiles()
+
+# Google rejects an icon already assigned to another achievement. Preserve the
+# Tolkien references and distinguish repeated base sprites with related game art.
+# Steam and the in-game book use the shared sprite compositions above.
+GOOGLE_ICON_ACCENTS = {
+    "THE_ROAD_GOES_EVER_ON": [(32, 19)],  # Traveller and descending stairs.
+    "A_MAP_OF_THE_IRON_HELLS": [(32, 26)],  # Map and water: terrain discoveries.
+    "IRON_CLEAVER": [(12, 16)],  # Blade and the Silmaril it cuts free.
+    "A_DREAM_UPON_THE_DARK_LORD": [(32, 24)],  # Morgoth and Luthien's song.
+    "FOR_IDRIL_AND_EARENDIL": [(5, 18)],  # Tuor protects his family: Maeglin, blade and shield.
+    "FIND_MELIAN_RING": [(32, 0)],  # Ring and the existing discovery symbol: Melian's foresight.
+}
 
 def catalogue():
     source = (ROOT / "src/achievements.c").read_text(encoding="utf-8")
@@ -99,7 +177,7 @@ def catalogue():
     keys = re.findall(r"\bSIL_ACH_([A-Z_]+)\b", enum[1])[:-1]
     if [row["key"] for row in rows] != keys or set(keys) != set(POINTS) or set(keys) != set(ICON_TILES):
         raise ValueError("Native catalogue, enum, point values and icon artwork must match")
-    if not all(5 <= value <= 200 and value % 5 == 0 for value in POINTS.values()) or sum(POINTS.values()) > 1000:
+    if not all(5 <= value <= 200 and value % 5 == 0 for value in POINTS.values()) or sum(POINTS.values()) > 2000:
         raise ValueError("Invalid Google achievement points")
     return rows
 
@@ -110,38 +188,70 @@ def csv_text(rows):
     return stream.getvalue()
 
 
+def display_order():
+    source = (ROOT / "src/achievement-order.h").read_text(encoding="utf-8")
+    keys = re.findall(r'^SIL_ACHIEVEMENT_ORDER\(([A-Z_]+), "[^"]+"\)', source, re.M)
+    native = [row["key"] for row in catalogue()]
+    if len(keys) != len(native) or len(set(keys)) != len(keys) or set(keys) != set(native):
+        raise ValueError("Achievement display order must contain every stable key exactly once")
+    return {key: position for position, key in enumerate(keys, 1)}
+
+
+def steam_excluded_keys():
+    source = (ROOT / "src/achievement-steam-exclusions.h").read_text(encoding="utf-8")
+    keys = set(re.findall(r"^SIL_ACH_STEAM_EXCLUDED\(([A-Z_]+)\)", source, re.M))
+    if not keys <= {row["key"] for row in catalogue()}:
+        raise ValueError("Steam exclusions must refer to stable achievement keys")
+    return keys
+
+
 def export(output, node, sharp):
     rows = catalogue()
+    excluded = steam_excluded_keys()
+    order = display_order()
     steam_dir = output / "steam"
     play_dir = output / "google-play"
     for folder in (steam_dir, play_dir):
         folder.mkdir(parents=True, exist_ok=True)
+    # Remove obsolete Steam upload artwork while retaining Google artwork.
+    for key in excluded:
+        (steam_dir / (key + "_ACHIEVED.png")).unlink(missing_ok=True)
     definitions = [["api_name", "setid", "permission", "spoiler", "archived", "progress_stat_name", "progress_stat_min", "progress_stat_max"]]
     localizations = [["api_name", "field", "english"]]
     metadata = []
     mappings = []
     for index, row in enumerate(rows, 1):
         key = row["key"]
-        definitions.append([key, "", "Client", str(row["hidden"]).lower(), "false", "", 0, 0])
-        localizations.extend([[key, "name", row["title"]], [key, "description", row["description"]]])
+        if key not in excluded:
+            definitions.append([key, "", "Client", str(row["hidden"]).lower(), "false", "", 0, 0])
+            localizations.extend([[key, "name", row["title"]], [key, "description", row["description"]]])
         # Google disallows commas in these fields even when CSV-quoted.
         description = row["description"].replace(", 20 trained Song and", " and 20 trained Song with").replace(", before", " before")
         title = row["title"].replace(",", "")
         description = description.replace(",", ";")
         if len(title) > 100 or len(description) > 500:
             raise ValueError("Invalid Google metadata for " + key)
-        metadata.append([title, description, "False", "", "Hidden" if row["hidden"] else "Revealed", POINTS[key], index])
+        metadata.append([title, description, "False", "", "Hidden" if row["hidden"] else "Revealed", POINTS[key], order[key]])
         mappings.append([title, key + ".png"])
+    definitions[1:] = sorted(definitions[1:], key=lambda row: order[row[0]])
+    localizations[1:] = sorted(localizations[1:], key=lambda row: order[row[0]])
     (steam_dir / "5442160-achievements-definitions.csv").write_text(csv_text(definitions), encoding="utf-8")
     (steam_dir / "5442160-achievements-localization.csv").write_text(csv_text(localizations), encoding="utf-8")
     (play_dir / "AchievementsMetadata.csv").write_text(csv_text(metadata), encoding="utf-8")
     (play_dir / "AchievementsIconsMappings.csv").write_text(csv_text(mappings), encoding="utf-8")
     (output / "catalogue.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+    (output / "steam-catalogue.json").write_text(json.dumps(
+        [row for row in rows if row["key"] not in excluded], indent=2) + "\n", encoding="utf-8")
+    (output / "display-order.json").write_text(json.dumps(
+        [row["key"] for row in sorted(rows, key=lambda row: order[row["key"]])], indent=2) + "\n",
+        encoding="utf-8")
     atlas = ROOT / "lib/xtra/graf/16x16.png"
     manifest = {
         "atlas": "lib/xtra/graf/16x16.png",
         "atlas_sha256": __import__("hashlib").sha256(atlas.read_bytes()).hexdigest(),
         "icons": ICON_TILES,
+        "google_icon_accents": GOOGLE_ICON_ACCENTS,
+        "steam_excluded": sorted(excluded),
     }
     (output / "icon-sources.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     render = r'''
@@ -152,11 +262,15 @@ const root = process.argv[2], atlas = process.argv[3];
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'icon-sources.json')));
   for (const [key, info] of Object.entries(manifest.icons)) {
     for (const [folder, size, singleScale] of [['steam',256,12],['google-play',512,24]]) {
-      const scale = info.tiles.length === 1 ? singleScale : Math.floor(singleScale / info.tiles.length);
-      const width = 16 * scale, total = width * info.tiles.length;
+      if (folder === 'steam' && manifest.steam_excluded.includes(key)) continue;
+      const sourceSize = info.tile_size || 16;
+      const tiles = folder === 'google-play' && sourceSize === 16
+        ? [...info.tiles, ...(manifest.google_icon_accents[key] || [])] : info.tiles;
+      const scale = tiles.length === 1 ? singleScale : Math.floor(singleScale / tiles.length);
+      const width = 16 * scale, total = width * tiles.length;
       const layers = [];
-      for (const [i, [row, col]] of info.tiles.entries()) {
-        const tile = await sharp(atlas).extract({left:col*16, top:row*16, width:16, height:16})
+      for (const [i, [row, col]] of tiles.entries()) {
+        const tile = await sharp(atlas).extract({left:col*16, top:row*16, width:sourceSize, height:sourceSize})
           .resize(width,width,{kernel:'nearest'}).png().toBuffer();
         layers.push({input:tile,left:(size-total)/2+i*width,top:(size-width)/2});
       }
@@ -168,9 +282,13 @@ const root = process.argv[2], atlas = process.argv[3];
 })().catch(error => { console.error(error.message); process.exit(1); });
 '''
     subprocess.run([node, "-e", render, sharp, str(output), str(atlas)], check=True)
+    google_hashes = [__import__("hashlib").sha256((play_dir / (row["key"] + ".png")).read_bytes()).hexdigest()
+                     for row in rows]
+    if len(set(google_hashes)) != len(rows):
+        raise ValueError("Every Google achievement must have a distinct icon")
     import base64
     cards = []
-    for index, row in enumerate(rows):
+    for index, row in enumerate(sorted(rows, key=lambda row: order[row["key"]])):
         x, y = (index % 4) * 300, (index // 4) * 275
         encoded = base64.b64encode((play_dir / (row["key"] + ".png")).read_bytes()).decode("ascii")
         icon = f'<image x="{x + 62}" y="{y + 20}" width="176" height="176" href="data:image/png;base64,{encoded}" style="image-rendering:pixelated"/>'
@@ -198,15 +316,18 @@ const root = process.argv[2], atlas = process.argv[3];
                 archive.write(path, path.name)
     # Existing projects must append only the new rows; importing all rows creates
     # duplicates instead of preserving the original opaque provider IDs.
-    first_new = next(i for i, row in enumerate(rows) if row["key"] == "THE_LONG_TALE") + 1
+    configured = dict(re.findall(r"^SIL_MORE_PLAY_ACH_([A-Z_]+)=(\S*)\s*$",
+                                (ROOT / "android/play-games.properties").read_text(), re.M))
+    new_indexes = [i for i, row in enumerate(rows) if not configured.get(row["key"])]
     expansion = output / "google-play-new-achievements.zip"
     with zipfile.ZipFile(expansion, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("AchievementsMetadata.csv", csv_text(metadata[first_new:]))
-        archive.writestr("AchievementsIconsMappings.csv", csv_text(mappings[first_new:]))
-        for row in rows[first_new:]:
+        archive.writestr("AchievementsMetadata.csv", csv_text([metadata[i] for i in new_indexes]))
+        archive.writestr("AchievementsIconsMappings.csv", csv_text([mappings[i] for i in new_indexes]))
+        for i in new_indexes:
+            row = rows[i]
             path = play_dir / (row["key"] + ".png")
             archive.write(path, path.name)
-    print(f"Exported {len(rows)} achievements ({sum(POINTS.values())} Google points) to {output}")
+    print(f"Exported {len(rows) - len(excluded)} Steam and {len(rows)} Google achievements ({sum(POINTS.values())} Google points) to {output}")
     print(f"Steam: upload the two CSV files and all *_ACHIEVED.png icons in {steam_dir}")
     print(f"Google Play new project: import {bundle}")
     print(f"Google Play existing project: append only {expansion}; edit existing metadata by existing ID")

@@ -13,6 +13,7 @@
 #include "metarun.h"
 #include "sdl-config.h"
 #include "supplies.h"
+#include "tutorial/tutorial-game.h"
 #include <math.h>
 
 void attempt_to_cheat_death(void)
@@ -88,6 +89,7 @@ void take_hit(int dam, cptr kb_str)
     attempt_to_cheat_death();
     quest_beta_resurrect();
     sil_achievements_on_damage(dam, old_chp);
+    tutorial_game_damage(dam);
 
     /* Display the hitpoints */
     p_ptr->redraw |= (PR_HP);
@@ -114,6 +116,7 @@ void take_hit(int dam, cptr kb_str)
 
         killer_commit(kb_str);
         sil_achievements_on_wolf_death(killer_last() && killer_last()->first_wolf);
+        sil_achievements_on_death();
 
         {
             const killer_info* killer = killer_last();

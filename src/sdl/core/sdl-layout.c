@@ -4553,13 +4553,13 @@ int sdl_auto_font_size_from_main(int numerator, int denominator)
     main_font_size = (int)((float)main_cell_h_px / system_scale + 0.5f);
     size = (main_font_size * numerator + denominator - 1) / denominator;
 
-    if (size >= main_font_size && main_font_size > 8)
+    if (size >= main_font_size && main_font_size > SDL_AUX_VIEW_FONT_MIN)
         size = main_font_size - 1;
 
-    if (size < 8)
-        size = 8;
-    if (size > 48)
-        size = 48;
+    if (size < SDL_AUX_VIEW_FONT_MIN)
+        size = SDL_AUX_VIEW_FONT_MIN;
+    if (size > SDL_AUX_VIEW_FONT_MAX)
+        size = SDL_AUX_VIEW_FONT_MAX;
 
     return size;
 }
@@ -4592,10 +4592,10 @@ int sdl_resolve_aux_view_font_size(int requested_size)
 
     if (size <= 0)
         size = sdl_auto_aux_view_font_size();
-    if (size < 8)
-        size = 8;
-    if (size > 48)
-        size = 48;
+    if (size < SDL_AUX_VIEW_FONT_MIN)
+        size = SDL_AUX_VIEW_FONT_MIN;
+    if (size > SDL_AUX_VIEW_FONT_MAX)
+        size = SDL_AUX_VIEW_FONT_MAX;
 
     return sdl_ui_font_px(size);
 }
@@ -4606,10 +4606,10 @@ int sdl_resolve_pane_font_size(enum pane_type type, int requested_size)
 
     if (size <= 0)
         size = sdl_auto_pane_font_size(type);
-    if (size < 8)
-        size = 8;
-    if (size > 48)
-        size = 48;
+    if (size < SDL_AUX_VIEW_FONT_MIN)
+        size = SDL_AUX_VIEW_FONT_MIN;
+    if (size > SDL_AUX_VIEW_FONT_MAX)
+        size = SDL_AUX_VIEW_FONT_MAX;
 
     return sdl_ui_font_px(size);
 }
@@ -5549,9 +5549,9 @@ bool sdl_apply_default_main_scale_for_layout(const char* reason)
         config.min_terminal_mode);
 
     config.main_view_scale = new_scale;
-    config.terminal_menu_scale_offset =
+    set_sdl_terminal_menu_scale_offset(
         SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(
-            config.main_view_scale);
+            config.main_view_scale));
     g_main_view_zoom_scale = 0;
 
     if (old_scale != new_scale) {

@@ -1,0 +1,884 @@
+{
+  "size": 64,
+  "atlas_first_row": 64,
+  "sprites": {
+    "traveller": {
+      "tile": [
+        32,
+        19
+      ],
+      "origin": "existing human traveller symbol"
+    },
+    "scroll": {
+      "tile": [
+        32,
+        25
+      ],
+      "origin": "object.txt N:492 Scroll of the First Sentence"
+    },
+    "ward": {
+      "tile": [
+        11,
+        6
+      ],
+      "origin": "terrain.txt N:3 glyph of warding"
+    },
+    "crown": {
+      "tile": [
+        1,
+        9
+      ],
+      "origin": "object.txt N:104 Crown"
+    },
+    "ironCrownTwo": {
+      "tile": [
+        5,
+        28
+      ],
+      "origin": "object.txt N:20 Iron Crown with the central Silmaril removed",
+      "empty_jewel": [
+        6,
+        6,
+        4,
+        5
+      ]
+    },
+    "jewel": {
+      "tile": [
+        12,
+        16
+      ],
+      "origin": "object.txt N:131 Silmaril"
+    },
+    "lesserJewel": {
+      "tile": [
+        2,
+        27
+      ],
+      "origin": "object.txt N:21 Lesser Jewel"
+    },
+    "cloak": {
+      "tile": [
+        5,
+        2
+      ],
+      "origin": "object.txt N:106 Cloak"
+    },
+    "ring": {
+      "tile": [
+        6,
+        20
+      ],
+      "origin": "existing ring sprite"
+    },
+    "upStair": {
+      "tile": [
+        0,
+        22
+      ],
+      "origin": "terrain.txt N:80 up staircase"
+    },
+    "chasm": {
+      "tile": [
+        34,
+        0
+      ],
+      "origin": "terrain.txt N:2 chasm"
+    },
+    "shaft": {
+      "tile": [
+        0,
+        28
+      ],
+      "origin": "terrain.txt N:83 down shaft"
+    },
+    "bones": {
+      "tile": [
+        3,
+        29
+      ],
+      "origin": "object.txt N:41 Human Skeleton"
+    },
+    "wolf": {
+      "tile": [
+        8,
+        17
+      ],
+      "origin": "monster.txt ordinary wolf sprite"
+    },
+    "water": {
+      "tile": [
+        32,
+        26
+      ],
+      "origin": "existing gameplay water surface"
+    },
+    "ice": {
+      "tile": [
+        32,
+        27
+      ],
+      "origin": "existing gameplay ice sheet"
+    },
+    "lava": {
+      "tile": [
+        32,
+        28
+      ],
+      "origin": "existing gameplay lava flow"
+    },
+    "poison": {
+      "file": "transition_acid_on_stone.png",
+      "origin": "existing gameplay poison terrain"
+    },
+    "shelob": {
+      "tile": [
+        7,
+        9
+      ],
+      "origin": "monster.txt N:224 Shelob"
+    },
+    "attercop": {
+      "tile": [
+        7,
+        8
+      ],
+      "origin": "monster.txt N:71 Attercop"
+    },
+    "sword": {
+      "tile": [
+        6,
+        3
+      ],
+      "origin": "object.txt N:64 Longsword"
+    },
+    "blackSword": {
+      "tile": [
+        6,
+        6
+      ],
+      "origin": "object.txt N:70 Star-Iron Greatsword"
+    },
+    "ringil": {
+      "tile": [
+        6,
+        4
+      ],
+      "origin": "existing Ringil base-kind sprite"
+    },
+    "axe": {
+      "tile": [
+        6,
+        15
+      ],
+      "origin": "object.txt N:81 Great Axe"
+    },
+    "spear": {
+      "tile": [
+        6,
+        9
+      ],
+      "origin": "object.txt N:71 Spear"
+    },
+    "arrow": {
+      "tile": [
+        5,
+        27
+      ],
+      "origin": "object.txt N:116 Arrow"
+    },
+    "bow": {
+      "tile": [
+        5,
+        30
+      ],
+      "origin": "object.txt N:111 Longbow"
+    },
+    "trap": {
+      "tile": [
+        10,
+        20
+      ],
+      "origin": "terrain.txt N:19 dart trap"
+    },
+    "orc": {
+      "tile": [
+        7,
+        29
+      ],
+      "origin": "monster.txt N:41 ordinary Orc soldier"
+    },
+    "music": {
+      "tile": [
+        32,
+        24
+      ],
+      "origin": "existing music symbol"
+    },
+    "rubble": {
+      "tile": [
+        0,
+        21
+      ],
+      "origin": "terrain.txt N:49 pile of rubble"
+    },
+    "gorthaur": {
+      "tile": [
+        10,
+        17
+      ],
+      "origin": "monster.txt N:244 Gorthaur"
+    },
+    "forge": {
+      "tile": [
+        15,
+        0
+      ],
+      "origin": "terrain.txt N:69 forge"
+    },
+    "sunlight": {
+      "tile": [
+        0,
+        16
+      ],
+      "origin": "terrain.txt N:9 patch of sunlight, light +3"
+    },
+    "lantern": {
+      "tile": [
+        2,
+        29
+      ],
+      "origin": "object.txt N:129 Brass Lantern"
+    },
+    "wight": {
+      "tile": [
+        7,
+        11
+      ],
+      "origin": "monster.txt N:75 Tattered wight"
+    },
+    "greatSpear": {
+      "tile": [
+        6,
+        10
+      ],
+      "origin": "object.txt N:72 Great Spear"
+    },
+    "shadowCloak": {
+      "tile": [
+        5,
+        3
+      ],
+      "origin": "object.txt N:107 Shadow Cloak"
+    },
+    "staff": {
+      "tile": [
+        6,
+        8
+      ],
+      "origin": "object.txt N:86 Quarterstaff"
+    },
+    "gloves": {
+      "tile": [
+        5,
+        20
+      ],
+      "origin": "object.txt N:125 Gloves"
+    },
+    "hand": {
+      "tile": [
+        32,
+        23
+      ],
+      "origin": "existing bare-hand symbol"
+    },
+    "one": {
+      "tile": [
+        12,
+        1
+      ],
+      "origin": "existing numeral 1"
+    },
+    "seven": {
+      "tile": [
+        12,
+        7
+      ],
+      "origin": "existing numeral 7"
+    },
+    "aule": {
+      "tile": [
+        21,
+        2
+      ],
+      "origin": "existing Aule sprite"
+    },
+    "mandos": {
+      "tile": [
+        21,
+        3
+      ],
+      "origin": "existing Mandos sprite"
+    },
+    "spirit": {
+      "tile": [
+        7,
+        19
+      ],
+      "origin": "monster.txt N:117 Brodda's bound spirit"
+    },
+    "varda": {
+      "tile": [
+        11,
+        8
+      ],
+      "origin": "monster.txt N:321 Varda"
+    },
+    "duruin": {
+      "tile": [
+        10,
+        10
+      ],
+      "origin": "monster.txt N:126 Duruin"
+    },
+    "werewolf": {
+      "tile": [
+        8,
+        20
+      ],
+      "origin": "monster.txt N:131 Werewolf"
+    },
+    "morgoth": {
+      "tile": [
+        10,
+        18
+      ],
+      "origin": "monster.txt N:251 Morgoth"
+    },
+    "herb": {
+      "tile": [
+        1,
+        12
+      ],
+      "origin": "existing herb appearance"
+    }
+  },
+  "icons": {
+    "THE_QUIET_ROAD": {
+      "row": 64,
+      "col": 0,
+      "size": 64,
+      "label": "Cloak and Silmaril",
+      "layout": "pair",
+      "sprites": [
+        "cloak",
+        "jewel"
+      ],
+      "rgba_sha256": "eac42729a5df2e138489751c2700a74f7e914deac63a3c1e5852dbaba247f9bc"
+    },
+    "TWO_WEAPONS": {
+      "row": 64,
+      "col": 4,
+      "size": 64,
+      "label": "Melee sword and thrown spear",
+      "layout": "pair",
+      "sprites": [
+        "sword",
+        "spear"
+      ],
+      "rgba_sha256": "545de4a7ee845166ddeef8e8521c79aff8866509d750709d36be647bf4fd0245"
+    },
+    "ATHELAS_OUT_OF_STOCK": {
+      "row": 64,
+      "col": 8,
+      "size": 64,
+      "label": "Enlarged herb",
+      "layout": "single",
+      "sprites": [
+        "herb"
+      ],
+      "rgba_sha256": "3f6faea63d90a10d651ac8e17fd78fcba04171bf0d1ef5619182e919ed870371"
+    },
+    "SOMETHING_TOOKISH": {
+      "row": 64,
+      "col": 12,
+      "size": 64,
+      "label": "Traveller and learning scroll",
+      "layout": "pair",
+      "sprites": [
+        "traveller",
+        "scroll"
+      ],
+      "rgba_sha256": "a9e0d6280d948e13dcccf1fbe606a923d5f63b3708799d26d947ef581979df9f"
+    },
+    "THREE_LIGHTS_IN_EXILE": {
+      "row": 64,
+      "col": 20,
+      "size": 64,
+      "label": "Three Silmarils in a triangle",
+      "layout": "trio",
+      "sprites": [
+        "jewel",
+        "jewel",
+        "jewel"
+      ],
+      "rgba_sha256": "2610cbbd241cec98c58e47ec870fbfa4ca0df421367289f1b9eb40c4e5ac9767"
+    },
+    "WORD_UNBROKEN": {
+      "row": 64,
+      "col": 24,
+      "size": 64,
+      "label": "Oath ring and Silmaril",
+      "layout": "pair",
+      "sprites": [
+        "ring",
+        "jewel"
+      ],
+      "rgba_sha256": "f57c090c65f0a9832c81c4176a1b67e5d4ba115c57b4e4253d9a0fdc12794a37"
+    },
+    "THERE_AND_ALMOST_BACK_AGAIN": {
+      "row": 64,
+      "col": 28,
+      "size": 64,
+      "label": "Ascending stairs and human bones",
+      "layout": "pair",
+      "sprites": [
+        "upStair",
+        "bones"
+      ],
+      "rgba_sha256": "36155f4d356f9225bd1b8540653258e337c84ccdf62430b855e71a58a9bc6902"
+    },
+    "CABED_EN_ARAS": {
+      "row": 68,
+      "col": 0,
+      "size": 64,
+      "label": "Traveller crossing a chasm",
+      "layout": "scene",
+      "sprites": [
+        "chasm",
+        "traveller"
+      ],
+      "rgba_sha256": "76cb9f2904c395336aea7c7d897a14193e10f215197d028561653c87fc633621"
+    },
+    "THE_FORDS_OF_SIRION": {
+      "row": 68,
+      "col": 4,
+      "size": 64,
+      "label": "Traveller on water",
+      "layout": "scene",
+      "sprites": [
+        "water",
+        "traveller"
+      ],
+      "rgba_sha256": "3ee31835ede40288ee756fc2e7ae8d301e6accd1a601d4b9edf154d57feb9012"
+    },
+    "THROUGH_NAN_DUNGORTHEB": {
+      "row": 68,
+      "col": 8,
+      "size": 64,
+      "label": "Spider over poison terrain",
+      "layout": "scene",
+      "sprites": [
+        "poison",
+        "shelob"
+      ],
+      "rgba_sha256": "a6f382404642a7b9ec3e99dfc07f2e77ef517ee9f7a9b9d7109f75972b3b007d"
+    },
+    "BY_A_THREAD": {
+      "row": 68,
+      "col": 12,
+      "size": 64,
+      "label": "Axe and one hit point",
+      "layout": "pair",
+      "sprites": [
+        "axe",
+        "one"
+      ],
+      "rgba_sha256": "23ad43e2d573a47ccbdb9447f85b16c5b9ac011c754d7f833629192c603027fe"
+    },
+    "A_FEW_LEAVES": {
+      "row": 68,
+      "col": 16,
+      "size": 64,
+      "label": "Bow and three fanned arrows",
+      "layout": "fan",
+      "sprites": [
+        "bow",
+        "arrow"
+      ],
+      "rgba_sha256": "1f590e7264725f0e65a9a4201eaeb73654cf7d9c36ac767240afe3dc14278b2b"
+    },
+    "NO_LONGER_BINDING": {
+      "row": 68,
+      "col": 20,
+      "size": 64,
+      "label": "Equipment ring and warding glyph",
+      "layout": "pair",
+      "sprites": [
+        "ring",
+        "ward"
+      ],
+      "rgba_sha256": "3c1b77525fef33902950cd3827a7855f10628aacbfd01401882a7fe3fa6bc27c"
+    },
+    "TWO_THEMES_ONE_VOICE": {
+      "row": 68,
+      "col": 28,
+      "size": 64,
+      "label": "Two interlocked music symbols",
+      "layout": "interlock",
+      "sprites": [
+        "music",
+        "music"
+      ],
+      "rgba_sha256": "3d13b6d5c342df8b9d39f06a366630284ae53d864e5365681764f64da09d8bea"
+    },
+    "FELAGUNDS_ANSWER": {
+      "row": 72,
+      "col": 0,
+      "size": 64,
+      "label": "Gorthaur and music",
+      "layout": "pair",
+      "sprites": [
+        "gorthaur",
+        "music"
+      ],
+      "rgba_sha256": "3918d3d9c42a81c62dd6b4e66a1b7ae848475daf924e153f475a73fa2dfe3c89"
+    },
+    "A_NAME_WORTH_REMEMBERING": {
+      "row": 72,
+      "col": 4,
+      "size": 64,
+      "label": "Forge and lesser jewel",
+      "layout": "pair",
+      "sprites": [
+        "forge",
+        "lesserJewel"
+      ],
+      "rgba_sha256": "bdcbd091eb72ffaa13b2796d223321f53a09cfc08a632c90720a62ff1fd90a5e"
+    },
+    "FIND_GURTHANG": {
+      "row": 72,
+      "col": 8,
+      "size": 64,
+      "label": "Gurthang alone",
+      "layout": "single",
+      "sprites": [
+        "blackSword"
+      ],
+      "rgba_sha256": "e46d16cd3ec62c2b9158c79a9aaa6d8de2a8332cd69800f4dd3ed0a1f63f1384"
+    },
+    "FIND_TURGON_STAFF": {
+      "row": 72,
+      "col": 12,
+      "size": 64,
+      "label": "Staff and crown",
+      "layout": "pair",
+      "sprites": [
+        "staff",
+        "crown"
+      ],
+      "rgba_sha256": "e8e75ee96f043c6a6294f0c29d7d087ccc245192b29a17b1a7919d32d0248114"
+    },
+    "FIND_CELEBRIMBOR_GLOVES": {
+      "row": 72,
+      "col": 16,
+      "size": 64,
+      "label": "Gloves and forge",
+      "layout": "pair",
+      "sprites": [
+        "gloves",
+        "forge"
+      ],
+      "rgba_sha256": "d9691de346028f13fe782314004c869bff62d284351a0412fef01adcdea2c1e7"
+    },
+    "AULES_APPRENTICE": {
+      "row": 72,
+      "col": 20,
+      "size": 64,
+      "label": "Aule and forge",
+      "layout": "pair",
+      "sprites": [
+        "aule",
+        "forge"
+      ],
+      "rgba_sha256": "1ef712a21d8088fc45f360a8b6b4972f5ab028ce5af8fb9bee4428f0e5a46751"
+    },
+    "THE_DOOMSMANS_DUE": {
+      "row": 72,
+      "col": 24,
+      "size": 64,
+      "label": "Mandos and Brodda's spirit",
+      "layout": "pair",
+      "sprites": [
+        "mandos",
+        "spirit"
+      ],
+      "rgba_sha256": "733e6270a3b11906d9d53712cb0ea088660b7fbb8dfd9caef271ab22c407a410"
+    },
+    "THE_LONG_TALE": {
+      "row": 72,
+      "col": 28,
+      "size": 64,
+      "label": "Scroll and two travellers",
+      "layout": "trio",
+      "sprites": [
+        "scroll",
+        "traveller",
+        "traveller"
+      ],
+      "rgba_sha256": "ef598a1c903b955f09415427b0b63a739e3cc6e8abf5e3f5e042530c7025b132"
+    },
+    "THREE_UNTOUCHED": {
+      "row": 76,
+      "col": 0,
+      "size": 64,
+      "label": "Three artefact rings in a triangle",
+      "layout": "trio",
+      "sprites": [
+        "ring",
+        "ring",
+        "ring"
+      ],
+      "rgba_sha256": "18c4e0e5bbb92f1fb38a39b656617b23e67cbe5dfabd04ea6a6934693e428d84"
+    },
+    "NEITHER_VOICE_DIMINISHED": {
+      "row": 76,
+      "col": 4,
+      "size": 64,
+      "label": "Two full-strength music symbols and mastery crown",
+      "layout": "trio",
+      "sprites": [
+        "music",
+        "music",
+        "crown"
+      ],
+      "rgba_sha256": "51c6ef997a258cfb603b1f771444bdec89a1fdb9cf9c1283de76fcdeadf828d7"
+    },
+    "THESE_THINGS_ARE_MINE": {
+      "row": 76,
+      "col": 8,
+      "size": 64,
+      "label": "Feanor crown and three Silmarils",
+      "layout": "crownJewels",
+      "sprites": [
+        "crown",
+        "jewel"
+      ],
+      "rgba_sha256": "da7a651a1543299defde262ec3947a8a42795775e776dca5e42c40a539d83693"
+    },
+    "THE_OATH_HE_SHOULD_HAVE_SWORN": {
+      "row": 76,
+      "col": 12,
+      "size": 64,
+      "label": "Feanor crown and oath ring",
+      "layout": "pair",
+      "sprites": [
+        "crown",
+        "ring"
+      ],
+      "rgba_sha256": "09936b3425098d9a37294698c14c9b949f09aad44412185bb42b94acdc1eda37"
+    },
+    "THE_KING_WHO_KEPT_HIS_OATH": {
+      "row": 76,
+      "col": 16,
+      "size": 64,
+      "label": "Werewolf and bare hand",
+      "layout": "pair",
+      "sprites": [
+        "werewolf",
+        "hand"
+      ],
+      "rgba_sha256": "3583f41e409e9403e9a81a1156190e8f17a6f41fd8c770b1c232dc96322f421b"
+    },
+    "SEVEN_TIMES_HE_CRIED": {
+      "row": 76,
+      "col": 20,
+      "size": 64,
+      "label": "Ringil, Morgoth and seven wounds",
+      "layout": "trio",
+      "sprites": [
+        "ringil",
+        "morgoth",
+        "seven"
+      ],
+      "rgba_sha256": "1cda73e9049a15389c2fb97e4900b35c85c4e918221806a5f48bc93784d7e771"
+    },
+    "LIGHT_IN_DARKNESS": {
+      "row": 76,
+      "col": 24,
+      "size": 64,
+      "label": "Two jewels remain in the Iron Crown and one has been freed",
+      "layout": "pair",
+      "sprites": [
+        "ironCrownTwo",
+        "jewel"
+      ],
+      "rgba_sha256": "c858fec997b88b279163ace5d5014b5c49d44aeeb0d73fc548ed432b5afc6be9"
+    },
+    "FLIES_AND_SPIDERS": {
+      "row": 76,
+      "col": 28,
+      "size": 64,
+      "label": "Attercop",
+      "layout": "single",
+      "sprites": [
+        "attercop"
+      ],
+      "rgba_sha256": "773aeacb74eea34b9b27e0034004b2c57978cf7c88540a969ca0b26ae2f01e4a"
+    },
+    "NO_STEPS_REQUIRED": {
+      "row": 80,
+      "col": 0,
+      "size": 64,
+      "label": "Large tumbling traveller falling into a jagged stone chasm",
+      "layout": "fall",
+      "sprites": [
+        "chasm",
+        "rubble",
+        "traveller"
+      ],
+      "rgba_sha256": "9ad50f12c633b18fe0bd4321ff32f13200a8c0b47064a5cfa954a33ea539edbd"
+    },
+    "NOT_EVEN_CARCHAROTH": {
+      "row": 80,
+      "col": 4,
+      "size": 64,
+      "label": "Ordinary wolf alone",
+      "layout": "single",
+      "sprites": [
+        "wolf"
+      ],
+      "rgba_sha256": "5aad3547be853b0e8e3f93764ee80078dc4dc96c292f749655ac053b3252c068"
+    },
+    "HELCARAXE": {
+      "row": 80,
+      "col": 8,
+      "size": 64,
+      "label": "Traveller on ice",
+      "layout": "scene",
+      "sprites": [
+        "ice",
+        "traveller"
+      ],
+      "rgba_sha256": "71f3077bdc4d68ecdbcbbc71d053e6a4b0a72f99f040c443fdf4cf7a596155f5"
+    },
+    "THE_FIRES_OF_THANGORODRIM": {
+      "row": 80,
+      "col": 12,
+      "size": 64,
+      "label": "Traveller crossing lava",
+      "layout": "scene",
+      "sprites": [
+        "lava",
+        "traveller"
+      ],
+      "rgba_sha256": "cb6eb7f43ecc72ea13fbe6076716e429a2944dc978247bd55892c07db42f06e3"
+    },
+    "A_JOURNEY_IN_THE_DARK": {
+      "row": 80,
+      "col": 16,
+      "size": 64,
+      "label": "Brass lantern and map",
+      "layout": "pair",
+      "sprites": [
+        "lantern",
+        "scroll"
+      ],
+      "rgba_sha256": "6aaa5f93e3c3a14024de7992b66638b22f6adc3b0a74b5d5a5b8ff57abc2338f"
+    },
+    "A_DESPERATE_VICTORY": {
+      "row": 80,
+      "col": 20,
+      "size": 64,
+      "label": "Sword above a quarter-full native HP bar",
+      "layout": "health",
+      "sprites": [
+        "sword"
+      ],
+      "rgba_sha256": "a5d8c2e8edba42de235f69ea500dbece2e49ac2e8a55f66b399d6d69f756efeb"
+    },
+    "LIGHT_OF_THE_ELDAR": {
+      "row": 80,
+      "col": 24,
+      "size": 64,
+      "label": "Sunlight floor patch, light +3, and wight",
+      "layout": "pair",
+      "sprites": [
+        "sunlight",
+        "wight"
+      ],
+      "rgba_sha256": "33b736bc7f1c960bb4dc5f3f48dabaa8d70661e2a966ce3c6a515b97c2a93a23"
+    },
+    "ANGBAND_MAINTENANCE": {
+      "row": 80,
+      "col": 28,
+      "size": 64,
+      "label": "Ordinary Orc soldier and trap",
+      "layout": "pair",
+      "sprites": [
+        "orc",
+        "trap"
+      ],
+      "rgba_sha256": "8aad35b6738abb548a9a5fc5211db34c91c84ecd98ec71808418e6fae742649b"
+    },
+    "FIND_MELKOR": {
+      "row": 84,
+      "col": 0,
+      "size": 64,
+      "label": "Great Spear and Morgoth",
+      "layout": "pair",
+      "sprites": [
+        "greatSpear",
+        "morgoth"
+      ],
+      "rgba_sha256": "cb7a4ae56db794424440329d5e053a26870e90db1537aa48ab050be274a35701"
+    },
+    "FIND_ULMO_CLOAK": {
+      "row": 84,
+      "col": 4,
+      "size": 64,
+      "label": "Shadow Cloak on water",
+      "layout": "scene",
+      "sprites": [
+        "water",
+        "shadowCloak"
+      ],
+      "rgba_sha256": "0f8316f0262f3191bc0f9ff0a0889082e27a4afc0e337717e0264ac2c8e806a0"
+    },
+    "A_STAR_AGAINST_THE_BALROG": {
+      "row": 84,
+      "col": 8,
+      "size": 64,
+      "label": "Duruin and Varda",
+      "layout": "pair",
+      "sprites": [
+        "duruin",
+        "varda"
+      ],
+      "rgba_sha256": "43c34eca2fa3ce4b90e9852eb1b520e742b80ff6cf4950660f26b9e96c6bc23b"
+    },
+    "A_WILL_OF_YOUR_OWN": {
+      "row": 64,
+      "col": 16,
+      "size": 64,
+      "label": "Warding glyph",
+      "layout": "single",
+      "sprites": [
+        "ward"
+      ],
+      "rgba_sha256": "b682ed8562110e0898062f511518a00d79894f043d0eb5913d785af5e84ef36a"
+    },
+    "RELEASE_FROM_BONDAGE": {
+      "row": 68,
+      "col": 24,
+      "size": 64,
+      "label": "Rubble and music",
+      "layout": "pair",
+      "sprites": [
+        "rubble",
+        "music"
+      ],
+      "rgba_sha256": "7737a8dfcca68e22e7914a0806440d8e6933e3a6446a411f9ee555f03d42e055"
+    }
+  }
+}

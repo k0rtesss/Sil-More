@@ -13,7 +13,7 @@ void sil_achievements_discovery_reset(bool new_run)
 {
     p_ptr->achievement_discovery_flags = new_run ? SIL_ACH_DISC_TRACKED
         : p_ptr->achievement_discovery_flags
-            & (SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN);
+            & SIL_ACH_DISC_RUN_FLAGS;
     p_ptr->achievement_water_from_y = p_ptr->achievement_water_from_x = -1;
     p_ptr->achievement_water_entry_y = p_ptr->achievement_water_entry_x = -1;
     p_ptr->achievement_poison_from_y = p_ptr->achievement_poison_from_x = -1;
@@ -82,6 +82,17 @@ void sil_achievements_on_partition_entry(int y, int x)
     if (bit) sil_achievements_on_partition_discovered(bit);
 }
 
+void sil_achievements_on_terrain_seen(int y, int x)
+{
+    if (!p_ptr || p_ptr->depth != UTUMNO_FORGE_DEPTH
+        || sil_achievement_unlocked_at(SIL_ACH_WHERE_GROND_WAS_WROUGHT)
+        || !in_bounds(y, x) || !(cave_info[y][x] & CAVE_SEEN)
+        || !sil_achievements_eligible()) return;
+    int feature = cave_feat[y][x];
+    if (feature >= FEAT_FORGE_UNIQUE_HEAD && feature <= FEAT_FORGE_UNIQUE_TAIL)
+        sil_achievements_on_event(SIL_ACH_WHERE_GROND_WAS_WROUGHT);
+}
+
 void sil_achievements_on_movement(int fy, int fx, int ty, int tx)
 {
     if (!sil_achievements_eligible() || !in_bounds(fy, fx) || !in_bounds(ty, tx))
@@ -91,7 +102,7 @@ void sil_achievements_on_movement(int fy, int fx, int ty, int tx)
     bool step = ABS(ty - fy) <= 1 && ABS(tx - fx) <= 1 && (fy != ty || fx != tx);
     if (!step || p_ptr->leaping)
     {
-        *flags &= SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN;
+        *flags &= SIL_ACH_DISC_RUN_FLAGS;
         return;
     }
     int from = cave_feat[fy][fx], to = cave_feat[ty][tx];

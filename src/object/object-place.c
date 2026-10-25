@@ -19,12 +19,14 @@ bool object_terrain_allows_generation(int feat, int tval)
     return true;
 }
 
-/* Drops use dry ground, ice or bridges; gems can settle in either water depth. */
-static bool object_drop_grid(int feat, int tval)
+/* Disarmed weapons can fall into liquids; other drops only allow water gems. */
+static bool object_drop_grid(int feat, int tval, bool allow_liquids)
 {
     return feat == FEAT_FLOOR || feat == FEAT_SUNLIGHT || FEAT_IS_ICE(feat)
         || FEAT_IS_BRIDGE(feat)
-        || ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && tval == TV_GEM);
+        || ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER)
+            && (allow_liquids || tval == TV_GEM))
+        || (allow_liquids && (feat == FEAT_LAVA || feat == FEAT_POISON));
 }
 
 s16b floor_carry(int y, int x, object_type* j_ptr)
@@ -147,7 +149,8 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
  * auto-recovery objects will try very hard to be placed, including
  * "teleporting" to a useful grid if needed.
  */
-s16b drop_near(object_type* j_ptr, int chance, int y, int x)
+static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
+    bool allow_liquids)
 {
     int i, k, d, s;
 
@@ -168,6 +171,8 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT)
         || (cave_feat[y][x] == FEAT_WATER)
         || (cave_feat[y][x] == FEAT_DEEP_WATER)
+        || (allow_liquids
+            && (cave_feat[y][x] == FEAT_LAVA || cave_feat[y][x] == FEAT_POISON))
         || (FEAT_IS_ICE(cave_feat[y][x]))
         || FEAT_IS_BRIDGE(cave_feat[y][x]);
     const bool force_place = artefact_p(j_ptr) || is_silmaril || j_ptr->pickup;
@@ -253,7 +258,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             ////if ((ty != ty2) || (tx != tx2)) continue;
 
             /* Require floor space */
-            if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval))
+            if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval, allow_liquids))
                 continue;
 
             /* Don't put things under peaceful monsters */
@@ -354,7 +359,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             continue;
 
         /* Require floor space */
-        if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval))
+        if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval, allow_liquids))
             continue;
 
         /* Don't put things under peaceful monsters */
@@ -383,7 +388,7 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
             continue;
 
         /* Require floor space */
-        if (!object_drop_grid(cave_feat[by][bx], j_ptr->tval))
+        if (!object_drop_grid(cave_feat[by][bx], j_ptr->tval, allow_liquids))
             continue;
 
         /* Okay */
@@ -472,6 +477,16 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
     }
 
     return (o_idx);
+}
+
+s16b drop_near(object_type* j_ptr, int chance, int y, int x)
+{
+    return drop_near_aux(j_ptr, chance, y, x, false);
+}
+
+s16b drop_disarmed_weapon(object_type* j_ptr, int y, int x)
+{
+    return drop_near_aux(j_ptr, 0, y, x, true);
 }
 
 /*

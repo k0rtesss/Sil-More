@@ -26,6 +26,26 @@ extern void fixture_reset_map(void);
 void __wrap_handle_stuff(void) { }
 void __wrap_update_stuff(void) { }
 void __wrap_msg_print(cptr text) { (void)text; }
+static int permitted_kind=-1, menu_role;
+bool __wrap_tutorial_game_active_weapon_allowed(int kind)
+{ return permitted_kind < 0 || kind == permitted_kind; }
+int __wrap_ui_question_ask_objects_with_help(cptr title, cptr desc,
+    const ui_question_option* options, const object_type* const icons[],
+    int count, int y, int x, int def)
+{
+    (void)title; (void)desc; (void)icons; (void)y; (void)x;
+    assert(def >= 0 && def < count && !options[def].disabled);
+    int selected=-1, melee=0, throwing=0;
+    for(int i=0;i<count;i++) {
+        bool is_throwing=!strncmp(options[i].label,"Throwing",8);
+        bool is_melee=!strncmp(options[i].label,"Melee",5);
+        if(is_melee) { melee++; assert(options[i].disabled); }
+        if(is_throwing) { throwing++; assert(!options[i].disabled); }
+        if((menu_role ? is_throwing : is_melee) && selected<0) selected=i;
+    }
+    assert(melee && throwing && selected>=0);
+    return selected;
+}
 bool __wrap_tutorial_game_action_allowed(const char* action,const object_type* item)
 { (void)action; (void)item; return true; }
 void __wrap_tutorial_game_action_done(const char* action,const object_type* item)
@@ -106,6 +126,25 @@ void checks(void)
     assert(player_set_active_weapon_mode(PLAYER_ACTIVE_WEAPON_RANGED_1,false,true));
     assert(fixture_tooltip_cleared());
     puts("PASS: real tooltip cache clears for both role directions, same-mode choices and direct mode changes.");
+    prepare(0,false);
+    permitted_kind=PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    /* Same physical Spear: a disabled row cannot bypass the apply guard even
+     * when a frontend returns it. The eligible role receives default focus. */
+    menu_role=0;
+    do_cmd_toggle_active_weapon();
+    assert(player_active_weapon_kind()==PLAYER_ACTIVE_WEAPON_KIND_MELEE);
+    assert(p_ptr->energy_use==0);
+    menu_role=1;
+    do_cmd_toggle_active_weapon();
+    assert(player_active_weapon_kind()==PLAYER_ACTIVE_WEAPON_KIND_THROWING);
+    assert(p_ptr->energy_use==100);
+    p_ptr->energy_use=0;
+    assert(!player_set_active_weapon_mode(PLAYER_ACTIVE_WEAPON_MELEE,false,true));
+    assert(player_active_weapon_kind()==PLAYER_ACTIVE_WEAPON_KIND_THROWING);
+    assert(p_ptr->energy_use==0);
+    permitted_kind=-1;
+    assert(player_set_active_weapon_mode(PLAYER_ACTIVE_WEAPON_MELEE,false,true));
+    puts("PASS: tutorial role disables Melee Spear, focuses Throwing, guards apply/direct switches and preserves turn cost.");
 }
 '''
 
@@ -150,7 +189,8 @@ def main():
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / p) for p in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
-    wrapped = ("handle_stuff", "update_stuff", "msg_print", "tutorial_game_action_allowed", "tutorial_game_action_done")
+    wrapped = ("handle_stuff", "update_stuff", "msg_print", "tutorial_game_action_allowed", "tutorial_game_action_done",
+               "tutorial_game_active_weapon_allowed", "ui_question_ask_objects_with_help")
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), str(support), str(tooltip), "@"+str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap="+s for s in wrapped), "-o", str(exe)],

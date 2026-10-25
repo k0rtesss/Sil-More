@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "achievements-lore.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
@@ -1663,7 +1664,11 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel,
         if (pickup_partial_volume_stack(o_ptr, pickup_ptr, pickup_storage))
             return;
 
+        int lore_artefact = o_ptr->name1;
+        int lore_quantity = pickup_ptr->number;
         give_player_item_to_storage(pickup_ptr, pickup_storage);
+        if (pickup_ptr->number < lore_quantity)
+            sil_achievement_lore_on_recovered(lore_artefact);
         break_truce(false);
 
         /* inven_carry() leaves any stack excess in its source object. */
@@ -1751,7 +1756,11 @@ static void py_pickup_aux_internal(int o_idx, bool allow_channel,
             }
         }
         
+        int lore_artefact = o_ptr->name1;
+        int lore_quantity = o_ptr->number;
         give_player_item(o_ptr);
+        if (o_ptr->number < lore_quantity)
+            sil_achievement_lore_on_recovered(lore_artefact);
 
         // Break the truce if creatures see
         break_truce(false);

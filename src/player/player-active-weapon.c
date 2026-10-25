@@ -1799,7 +1799,14 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
     {
         object_type* arrow = player_quiver_arrow_object(choices[i].arrow_item);
         object_icons[i] = arrow ? arrow : choices[i].o_ptr;
+        if (choices[i].action == ACTIVE_ITEM_SETUP
+            && !tutorial_game_active_weapon_allowed(choices[i].kind))
+            options[i].disabled = true;
     }
+
+    if (default_index >= 0 && default_index < count && options[default_index].disabled)
+        for (int i = 0; i < count; i++)
+            if (!options[i].disabled) { default_index = i; break; }
 
     selected_index = ui_question_ask_objects_with_help(
             item >= 0 ? "Choose item setup" : "Change active weapon",
@@ -2321,6 +2328,7 @@ bool player_set_active_weapon_mode(int mode, bool confirm, bool take_turn)
         return true;
 
     new_kind = active_weapon_kind_for_mode(mode);
+    if (take_turn && !tutorial_game_active_weapon_allowed(new_kind)) return false;
     needs_turn = player_switch_needs_turn(old_mode, mode);
     free_switch = player_active_weapon_change_is_free(old_kind, new_kind);
 
@@ -2693,6 +2701,7 @@ static void apply_active_weapon_choice(const active_weapon_choice* choice)
     const char *action = tutorial_action_waiting()
         && !strcmp(tutorial_current_action(), "ready") ? "ready" : "change-active";
     if (!choice || !choice->o_ptr
+        || !tutorial_game_active_weapon_allowed(choice->kind)
         || !tutorial_subject || !tutorial_game_begin_action(action, tutorial_subject)) return;
     object_type subject = *tutorial_subject;
     int old_arrow = player_quiver_selected_arrow_slot();

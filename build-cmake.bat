@@ -2,7 +2,8 @@
 setlocal
 REM Build Sil-More for native Windows with pinned SDL source submodules.
 REM This script uses MSYS2's MinGW64 environment for the toolchain.
-REM Builds standard, portable, both, or a separate Steamworks version.
+REM Builds standard, portable, and Steamworks versions by default.
+REM Individual targets remain available for focused rebuilds.
 
 set "BUILD_TARGET=%~1"
 if "%BUILD_TARGET%"=="" set "BUILD_TARGET=all"
@@ -33,11 +34,11 @@ echo Using repo-pinned SDL source submodules from external\.
 echo.
 
 REM ========================================
-REM BUILD 1: Standard build (user folder mode)
+REM BUILD 1 OF 3: Standard build (user folder mode)
 REM ========================================
 if /I "%BUILD_TARGET%"=="portable" goto :build_portable
 
-echo [1/2] Building standard version (user folder mode)...
+echo [1/3] Building standard version (user folder mode)...
 echo.
 
 REM Run CMake configuration and build
@@ -153,10 +154,10 @@ if /I "%BUILD_TARGET%"=="standard" goto :build_complete
 if /I "%BUILD_TARGET%"=="steam" goto :build_complete
 
 REM ========================================
-REM BUILD 2: Local build (SIL_USE_LOCAL_DATA mode)
+REM BUILD 2 OF 3: Local build (SIL_USE_LOCAL_DATA mode)
 REM ========================================
 :build_portable
-echo [2/2] Building local version (SIL_USE_LOCAL_DATA mode)...
+echo [2/3] Building local version (SIL_USE_LOCAL_DATA mode)...
 echo.
 
 REM Run CMake configuration and build with local data flag
@@ -260,12 +261,28 @@ echo.
 
 if /I "%BUILD_TARGET%"=="portable" goto :build_complete
 
+if /I "%BUILD_TARGET%"=="all" (
+    echo ========================================
+    echo [3/3] Building Windows Steam version...
+    echo ========================================
+    echo.
+    REM Re-enter through the existing isolated Steamworks target so the
+    REM standard and portable configurations remain Steamworks-disabled.
+    call "%~f0" steam
+    if errorlevel 1 (
+        echo Steam build failed!
+        exit /b 1
+    )
+    echo.
+)
+
 echo ========================================
-echo Both builds complete!
+echo All three Windows builds complete!
 echo ========================================
 echo.
 echo Standard (user folder): sil-more-windows-sdl3\sil-more.exe
 echo Local (lib folder):     sil-more-windows-sdl3-portable\sil-more.exe
+echo Steam:                  sil-more-windows-steam\sil-more.exe
 echo.
 
 :build_complete

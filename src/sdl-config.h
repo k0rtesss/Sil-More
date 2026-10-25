@@ -153,11 +153,13 @@
 #define SDL_MAIN_VIEW_MIN_SCALE 1
 #define SDL_MAIN_VIEW_PREFERRED_MIN_SCALE 2
 #define SDL_MAIN_VIEW_MAX_SCALE 20
+#define SDL_AUX_VIEW_FONT_MIN 10
+#define SDL_AUX_VIEW_FONT_MAX 48
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_MIN (-3)
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT (-1)
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_MAX 0
 #define SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT_FOR_MAIN_SCALE(scale) \
-    ((scale) <= 3 ? 0 : SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT)
+    ((scale) < 3 ? 0 : SDL_TERMINAL_MENU_SCALE_OFFSET_DEFAULT)
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_MIN 0
 #define SDL_MOBILE_STARTING_ZOOM_OFFSET_DEFAULT 2
 #define SDL_MOBILE_TABLET_STARTING_ZOOM_OFFSET_DEFAULT 1
@@ -263,10 +265,14 @@ enum sdl_menu_font {
     SDL_MENU_FONT_LOG_OPTIONS,
     SDL_MENU_FONT_PANE_OPTIONS,
     SDL_MENU_FONT_LOOK,
+    SDL_MENU_FONT_ABOUT,
     SDL_MENU_FONT_COUNT
 };
 const char* sdl_menu_font_key(enum sdl_menu_font menu);
 const char* sdl_menu_font_label(enum sdl_menu_font menu);
+int get_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu);
+void set_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu,
+    int value);
 bool get_sdl_menu_bigger_font(void);
 bool get_sdl_menu_bigger_font_for(enum sdl_menu_font menu);
 void set_sdl_menu_bigger_font(enum sdl_menu_font menu, bool value);
@@ -285,6 +291,9 @@ struct sdl_config {
     int main_view_scale;
     // Scale steps relative to the largest terminal-menu scale that fits.
     int terminal_menu_scale_offset;
+    // Per-menu scale steps. The scalar above remains the legacy/all-menu
+    // setting and is used to migrate older configuration files.
+    int terminal_menu_scale_offsets[SDL_MENU_FONT_COUNT];
     // Use focus-dependent compact layouts for Inventory-style browsers.
     bool compact_inventory_menus;
     // Enlarge gameplay UI text. Menus have independent choices below.
@@ -293,7 +302,7 @@ struct sdl_config {
     bool show_menu_font_button;
     // Use the paginated Big font character sheet (legacy JSON key retained).
     bool debug_character_sheet;
-    // Extra scale steps applied when mobile gameplay first appears.
+    // Extra scale steps when gameplay first appears on mobile or handheld PCs.
     int mobile_starting_zoom_offset;
     // On mobile, request a real portrait device orientation.  Landscape
     // remains the default for existing desktop and handheld layouts.
@@ -515,8 +524,18 @@ bool sdl_config_character_wheel_tutorial_seen(void);
 void sdl_config_mark_character_wheel_tutorial_seen(void);
 bool sdl_config_keyboard_preset_prompt_seen(void);
 void sdl_config_mark_keyboard_preset_prompt_seen(void);
+/* Claim the shared chest/door explanation once per app config, across restarts. */
+bool sdl_config_take_interaction_check_help(void);
 bool option_is_app_persistent(int opt);
 
 /* Optional existing-atlas sprite beside a normal book paragraph. */
 void sdl_character_sheet_screen_add_book_icon_paragraph(const char* text,
     int attr, int row, int col);
+/* Existing sprites in the same fixed reading gutter (compact triangles for
+ * three on narrow screens). Equal coordinates repeat count times; different
+ * coordinates compose two sprites. */
+void sdl_character_sheet_screen_add_book_composite_icon_paragraph(const char* text,
+    int attr, int row, int col, int row2, int col2, int count);
+/* One precomposed square, using the same fixed gutter and 16px grid origin. */
+void sdl_character_sheet_screen_add_book_atlas_icon_paragraph(const char* text,
+    int attr, int row, int col, int source_size);

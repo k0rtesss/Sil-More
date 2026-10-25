@@ -40,9 +40,10 @@ Second, it uses metaruns so consecutive runs are connected into one storyline, c
    .\build-cmake.bat
    ```
    On the first successful run, this also configures and builds the SDL libraries from `external/`.
-6. The script builds both Windows deployments:
+6. The script builds all three Windows deployments:
    - `sil-more-windows-sdl3\sil-more.exe`
    - `sil-more-windows-sdl3-portable\sil-more.exe`
+   - `sil-more-windows-steam\sil-more.exe`
 7. Run the build you want:
    ```powershell
    .\sil-more-windows-sdl3\sil-more.exe
@@ -51,13 +52,19 @@ Second, it uses metaruns so consecutive runs are connected into one storyline, c
    ```powershell
    .\sil-more-windows-sdl3-portable\sil-more.exe
    ```
+   or
+   ```powershell
+   .\sil-more-windows-steam\sil-more.exe
+   ```
 
 ### Optional: Steamworks builds
 
-Normal builds keep Steamworks disabled and do not require Valve's SDK. Steam
-builds explicitly enable `SIL_STEAMWORKS` and use a separately obtained SDK,
-which stays local and is excluded from Git. See the [Steam build guide](docs/steam-build.md)
-for SDK setup, Windows/Linux/macOS commands and release packaging.
+The standard and portable deployments keep Steamworks disabled. The default
+Windows build also creates a separate Steam deployment, which explicitly
+enables `SIL_STEAMWORKS` and therefore requires a separately obtained Valve
+SDK in `external/steamworks_sdk/`; the SDK stays local and is excluded from
+Git. See the [Steam build guide](docs/steam-build.md) for SDK setup,
+Windows/Linux/macOS commands and release packaging.
 
 ### Optional: package-based desktop build
 

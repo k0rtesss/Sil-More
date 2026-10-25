@@ -24,8 +24,10 @@ static char pending_ui_lesson[80];
 static char ui_scoped_lessons[768][80];
 static int ui_scoped_count;
 static char visible_description_type[48];
+static char visible_description_lesson[80];
 static int authorized_action_depth;
 static bool reached_kinds[65536];
+static bool damage_pending;
 static const char *item_types[] = {"item", "staff", "horn", "bow", "arrows",
     "ring", "amulet", "potion", "food", "light", "oil", "gem", "digging",
     "metal", "shield", "armour", "throwing", "weapon"};
@@ -38,7 +40,7 @@ static const char *item_action_ids[] = {
 };
 static bool offered_item_actions[N_ELEMENTS(item_action_ids)];
 static u32b observed_tale;
-static int previous_y, previous_x, previous_depth, previous_hp, previous_voice;
+static int previous_y, previous_x, previous_depth, previous_voice;
 static int previous_mode, previous_min_depth;
 static bool level_changed;
 static s16b previous_drain[A_MAX];
@@ -54,7 +56,7 @@ typedef struct condition_lesson {
 #define CONDITION(FIELD, NAME, EFFECT) \
     { "status." #FIELD, NAME, offsetof(player_type, FIELD), EFFECT }
 static const condition_lesson conditions[] = {
-    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 100 player turns. Rest does not cure it."),
+    CONDITION(diseased, "Diseased", "Disease lowers Constitution by 1 on infection and a random attribute by 1 every 150 player turns (300 with Hardiness). Rest does not cure it."),
     CONDITION(poisoned, "Poisoned", "Poison prevents ordinary Health regeneration."),
     CONDITION(cut, "Bleeding", "Bleeding prevents ordinary Health regeneration. Healing halves bleeding; it does not always stop it."),
     CONDITION(stun, "Stunned", "Stun penalizes every skill. More than 100 stun prevents acting."),
@@ -302,6 +304,51 @@ static const char *item_type(const object_type *item)
     }
 }
 
+static const char *item_description_lesson(const object_type *item)
+{
+    /* Select by public item family, never by an unrevealed subtype or flag.
+     * Each family keeps its own progress: a gem must not consume the weapon
+     * or armour explanation before the player has seen those descriptions. */
+    switch (item->tval) {
+    case TV_SWORD: case TV_HAFTED: case TV_POLEARM:
+        return "item.description.weapon";
+    case TV_BOW: return "item.description.bow";
+    case TV_ARROW: return "item.description.arrows";
+    case TV_BOOTS: case TV_GLOVES: case TV_HELM: case TV_CROWN:
+    case TV_CLOAK: case TV_SOFT_ARMOR: case TV_MAIL: case TV_SHIELD:
+        return "item.description.armour";
+    case TV_RING: case TV_AMULET: return "item.description.jewelry";
+    case TV_POTION: return "item.description.potion";
+    case TV_FOOD: return "item.description.food";
+    case TV_GEM: {
+        /* Encounter and preview share the original gem introduction. Honour
+         * completed/skipped history from the former separate preview card. */
+        tutorial_status previous = tutorial_lesson_status("item.description.gem");
+        if (previous == TUTORIAL_COMPLETED || previous == TUTORIAL_SKIPPED)
+            return "item.description.gem";
+        return "item.gem";
+    }
+    case TV_STAFF: return "item.description.staff";
+    case TV_HORN: return "item.description.horn";
+    case TV_LIGHT: return "item.description.light";
+    case TV_FLASK: return "item.description.oil";
+    case TV_DIGGING: return "item.description.digging";
+    case TV_METAL: return "item.description.metal";
+    default: return "item.description";
+    }
+}
+
+static const char *item_identification_detail(const object_type *item)
+{
+    if (object_known_p(item))
+        return "This item is identified. Read its known properties and any drawbacks.";
+    if (!object_aware_p(item) && (item->tval == TV_GEM
+        || item->tval == TV_POTION || item->tval == TV_FOOD
+        || item->tval == TV_STAFF || item->tval == TV_HORN))
+        return "Its effect is still unknown. Examining does not identify it, and an unknown effect is not necessarily safe.";
+    return "This item is not fully identified. The preview shows only what your hero has learned; undiscovered properties remain hidden.";
+}
+
 static bool item_is_remedy(const object_type *item, const char *condition)
 {
     if (!item || !item->k_idx || !object_aware_p(item)) return false;
@@ -405,12 +452,16 @@ static void tutorial_game_item_at(const object_type *item, int map_y, int map_x)
         if (!strcmp(type, item_types[i])) present_item_types[i] = true;
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
-    strnfmt(detail, sizeof(detail), "Examine %s to read its known properties and handling requirements.", name);
-    observe("item.first_description", type, name, detail);
+    observe("item.first_description", type, name, item_identification_detail(item));
     if (tutorial_lesson_status("item.first_description") == TUTORIAL_UNSEEN
         || tutorial_lesson_status("item.first_description") == TUTORIAL_IN_PROGRESS) return;
-    strnfmt(id, sizeof(id), "item.%s", type);
-    observe(id, type, name, detail);
+    strnfmt(detail, sizeof(detail), "Examine %s to read its known properties and handling requirements.", name);
+    if (item->tval == TV_GEM)
+        SDL_strlcpy(id, item_description_lesson(item), sizeof(id));
+    else
+        strnfmt(id, sizeof(id), "item.%s", type);
+    observe(id, type, name, item->tval == TV_GEM
+        ? item_identification_detail(item) : detail);
     if (tutorial_lesson_status(id) == TUTORIAL_UNSEEN
         || tutorial_lesson_status(id) == TUTORIAL_IN_PROGRESS) return;
     /* Effect cards use aware kinds only; no hidden subtype is exposed. */
@@ -430,25 +481,35 @@ void tutorial_game_item(const object_type *item)
 
 void tutorial_game_item_described(const object_type *item)
 {
-    char name[160], detail[384];
+    char name[160];
+    const char *lesson;
     if (!item || !item->k_idx || !gameplay_available() || p_ptr->image) return;
     if (item->tval == TV_SKELETON || item->tval == TV_CHEST) {
         tutorial_game_item_description_closed();
         tutorial_game_item(item);
         return;
     }
+    lesson = item_description_lesson(item);
+    if (strcmp(visible_description_lesson, lesson))
+        tutorial_game_item_description_closed();
     SDL_strlcpy(visible_description_type, item_type(item), sizeof(visible_description_type));
+    SDL_strlcpy(visible_description_lesson, lesson, sizeof(visible_description_lesson));
     reached_kinds[(u16b)item->k_idx] = true;
     object_desc(name, sizeof(name), item, true, 3);
-    strnfmt(detail, sizeof(detail), "%s. Weight: %.1f lb. Only revealed properties belong in this description.", name, item->weight / 10.0);
     tutorial_game_action_done("examine", item);
-    observe("item.description", item_type(item), name, detail);
+    observe(lesson, item_type(item), name, item_identification_detail(item));
     ui_checkpoint_requested = true;
 }
 
 void tutorial_game_item_description_closed(void)
 {
     visible_description_type[0] = '\0';
+    if (visible_description_lesson[0]) {
+        tutorial_forget_observation(visible_description_lesson);
+        if (!strcmp(pending_ui_lesson, visible_description_lesson))
+            pending_ui_lesson[0] = '\0';
+        visible_description_lesson[0] = '\0';
+    }
     tutorial_forget_observation("item.description");
     tutorial_forget_observation("menu.item-description");
     if (!strcmp(pending_ui_lesson, "item.description")
@@ -818,6 +879,14 @@ void tutorial_game_attack(const monster_type *monster)
     (void)monster;
 }
 
+void tutorial_game_damage(int damage)
+{
+    /* Health also falls when Constitution rescales the maximum. Only a
+     * committed hit counts, and the card waits for the next safe checkpoint. */
+    if (damage > 0 && gameplay_available() && tutorial_enabled())
+        damage_pending = true;
+}
+
 void tutorial_game_combat_roll(const combat_roll *roll)
 {
     char detail[384];
@@ -829,6 +898,18 @@ void tutorial_game_combat_roll(const combat_roll *roll)
     else strnfmt(detail, sizeof(detail), "Attack total %d; Evasion total %d. Damage rolled %d; Protection rolled %d (%d%% applies). The combat history keeps the complete result.",
         roll->att + roll->att_roll, roll->evn + roll->evn_roll, roll->dam, roll->prot, roll->prt_percent);
     observe("combat.first_result", "combat", "Your combat roll", detail);
+}
+
+bool tutorial_game_active_weapon_allowed(int kind)
+{
+    tutorial_view view;
+    if (managing || authorized_action_depth || !tutorial_peek_view(&view)
+        || !view.active || strcmp(view.action, "change-active")) return true;
+    if (!strcmp(view.action_subject, "throwing"))
+        return kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING;
+    if (!strcmp(view.action_subject, "bow") || !strcmp(view.action_subject, "arrows"))
+        return kind == PLAYER_ACTIVE_WEAPON_KIND_BOW;
+    return true;
 }
 
 bool tutorial_game_action_allowed(const char *action, const object_type *item)
@@ -867,11 +948,12 @@ void tutorial_game_action_done(const char *action, const object_type *item)
 {
     tutorial_view view;
     const char *type = item_type(item);
-    /* Direct pointer/keyboard mode switches have no selected item pointer.
-     * Credit the resulting weapon role, but never an arrow-stack change:
+    /* Credit the resulting role even when the selected physical weapon can
+     * serve several roles. Never infer an arrow-stack change:
      * that requires the chooser's committed, specific arrow subject. */
-    if (!item && !strcmp(action, "change-active")) {
+    if ((!item || item->tval != TV_ARROW) && !strcmp(action, "change-active")) {
         int kind = player_active_weapon_kind();
+        type = "";
         if (kind == PLAYER_ACTIVE_WEAPON_KIND_BOW) type = "bow";
         else if (kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING) type = "throwing";
     }
@@ -1173,13 +1255,14 @@ void tutorial_game_start(void)
      * Only ordinary level travel (the return above) preserves reached items. */
     memset(reached_kinds, 0, sizeof(reached_kinds));
     started = true;
+    damage_pending = false;
     level_changed = false;
     authorized_action_depth = 0;
     ui_checkpoint_requested = false;
     tutorial_world_start();
     observed_tale = tale ? tale->id : 0;
     previous_y = p_ptr->py; previous_x = p_ptr->px;
-    previous_depth = p_ptr->depth; previous_hp = p_ptr->chp;
+    previous_depth = p_ptr->depth;
     previous_voice = p_ptr->csp; previous_mode = player_active_weapon_mode();
     previous_min_depth = min_depth();
     memcpy(previous_drain, p_ptr->stat_drain, sizeof(previous_drain));
@@ -1202,7 +1285,11 @@ void tutorial_game_checkpoint(void)
     char detail[384], id[80];
     const metarun *tale = metarun_current();
     if (!started || (tale && tale->id != observed_tale)) tutorial_game_start();
-    if (!gameplay_available()) { tutorial_invalidate_context(); return; }
+    if (!gameplay_available()) {
+        damage_pending = false;
+        tutorial_invalidate_context();
+        return;
+    }
     if (opening_turn_gate && playerturn > 0) opening_turn_gate = false;
     end_ui_lessons();
     if (level_changed || p_ptr->depth != previous_depth) {
@@ -1285,9 +1372,10 @@ void tutorial_game_checkpoint(void)
     }
     if (drained) offer_remedy("drain", "Drained attributes");
     else tutorial_forget_observation("status.drain.remedy");
-    if (p_ptr->chp < previous_hp) {
+    if (damage_pending) {
         strnfmt(detail, sizeof(detail), "Health: %d/%d. Read the last attack and its effects before acting again.", p_ptr->chp, p_ptr->mhp);
         observe("combat.first_damage", "health", "Health lost", detail);
+        damage_pending = false;
     }
     if (p_ptr->chp <= p_ptr->mhp * op_ptr->hitpoint_warn / 10) {
         observe("status.health", "health", "Low Health", "Your Health is at or below your warning threshold. Inspect known healing options and the escape route.");
@@ -1296,7 +1384,6 @@ void tutorial_game_checkpoint(void)
         tutorial_forget_observation("status.health");
         tutorial_forget_observation("status.health.remedy");
     }
-    previous_hp = p_ptr->chp;
     if (p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4)
         observe("status.voice", "voice", "Low Voice", "Voice fuels songs and horns. It does not regenerate while singing; stop singing to recover it.");
     if (p_ptr->msp > 0 && p_ptr->csp <= p_ptr->msp / 4)
