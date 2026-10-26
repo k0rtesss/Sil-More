@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-cache.h"
 #include "blitz.h"
 #include "externs.h"
@@ -572,6 +573,8 @@ void wr_item(const object_type* o_ptr)
     int i;
 
     wr_s16b(o_ptr->k_idx);
+    wr_u32b((u32b)o_ptr->site_token);
+    wr_u32b((u32b)(o_ptr->site_token >> 32));
 
     wr_s16b(o_ptr->image_k_idx);
 
@@ -668,6 +671,9 @@ void wr_monster(const monster_type* m_ptr)
 {
     u32b tmp32u;
     int i;
+
+    wr_u32b((u32b)m_ptr->site_token);
+    wr_u32b((u32b)(m_ptr->site_token >> 32));
 
     wr_s16b(m_ptr->r_idx);
     wr_s16b(m_ptr->image_r_idx);
@@ -1022,6 +1028,8 @@ static void wr_options(void)
  */
 static bool wr_savefile(void)
 {
+    /* Ownership must settle before inventory and resident maps are written. */
+    if (!p_ptr->is_dead) level_cache_stream_capture_sites();
     int i;
 
     u32b now;
@@ -1304,6 +1312,7 @@ static bool wr_savefile(void)
         log_trace("Writing dungeon...");
         wr_dungeon();
         level_cache_write();
+        level_stream_write();
     }
     else
     {

@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "level-generation/level-cache.h"
+#include "level-generation/level-stream.h"
 #include "quest/quest-challenges.h"
 #include "meta_state.h"
 #include "achievements.h"
@@ -19,6 +20,7 @@
 void dungeon(void)
 {
     level_cache_poll();
+    level_stream_update();
     monster_type* m_ptr;
     int i;
     int previous_depth = last_music_depth;
@@ -456,6 +458,8 @@ void dungeon(void)
             Term_fresh();
 
         level_cache_poll();
+
+        level_stream_update();
 
         /* Handle "leaving" */
     if (p_ptr->leaving) {

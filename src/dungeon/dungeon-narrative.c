@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-narrative.c */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "cave/cave-atmosphere.h"
 #include "dungeon-internal.h"
 #include "meta_state.h"
@@ -26,6 +27,25 @@ static cptr partition_display_name(level_partition_kind kind);
 
 char greater_vault_xp_name[80] = "";
 bool greater_vault_xp_awarded = false;
+
+void level_stream_rebase_narrative(int dy, int dx)
+{
+    u32b moved = 0;
+    for (int i = 0; i < PARTITION_META_MAX; i++) {
+        int row = i / LEVEL_STREAM_GRID - dy / LEVEL_STREAM_PART_SIZE;
+        int col = i % LEVEL_STREAM_GRID - dx / LEVEL_STREAM_PART_SIZE;
+        if ((partition_narrated_mask & (1u << i)) && row >= 0 && col >= 0
+            && row < LEVEL_STREAM_GRID && col < LEVEL_STREAM_GRID)
+            moved |= 1u << (row * LEVEL_STREAM_GRID + col);
+    }
+    partition_narrated_mask = moved;
+    last_partition_pi = level_partition_index_for_point(p_ptr->py, p_ptr->px);
+    last_partition_kind = level_partition_kind_for_point(p_ptr->py, p_ptr->px);
+    last_player_y = p_ptr->py; last_player_x = p_ptr->px;
+    g_banner_force_redraw_remaining = 0;
+    g_active_partition_banner_text[0] = '\0';
+    g_active_partition_banner_consumes_input = false;
+}
 
 void reset_level_entry_tracking(void)
 {

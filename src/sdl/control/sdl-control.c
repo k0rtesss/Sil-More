@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "sdl/main-sdl-private.h"
 #include "sdl/control/sdl-control.h"
 #include "cJSON.h"
@@ -268,6 +269,13 @@ static cJSON* control_state(bool waiting)
         cJSON_AddNumberToObject(player, "x", p_ptr->px);
         cJSON_AddNumberToObject(player, "y", p_ptr->py);
         cJSON_AddNumberToObject(player, "depth", p_ptr->depth);
+        level_stream_frame frame = level_stream_get_frame();
+        cJSON_AddBoolToObject(player, "streaming", frame.enabled);
+        char address[48];
+        SDL_snprintf(address, sizeof(address), "%lld", (long long)(frame.x + p_ptr->px - 1));
+        cJSON_AddStringToObject(player, "world_x", address);
+        SDL_snprintf(address, sizeof(address), "%lld", (long long)(frame.y + p_ptr->py - 1));
+        cJSON_AddStringToObject(player, "world_y", address);
         cJSON_AddNumberToObject(player, "hp", p_ptr->chp);
         cJSON_AddNumberToObject(player, "max_hp", p_ptr->mhp);
     }

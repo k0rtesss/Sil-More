@@ -2,9 +2,11 @@
 
 The resident dungeon remains the current floor plus one floor above and below.
 An extra destination may exist while completing a long fall or shaft journey.
-Older floors are discarded. Returning generates a new map, constrained by the
-stairs, openings, watercourses and vault halves belonging to resident neighbors.
-There is no archive of distant floor maps.
+Older ordinary floors are discarded. Returning generates fresh surroundings,
+constrained by resident neighbors and the fixed great-vault/quest sites. Those
+sites keep their progress in a sparse archive; distant ordinary floor maps are
+not archived. Each depth also streams horizontal partitions using a shared
+world origin; see [Endless dungeon partitions](endless-world.md).
 
 ## Water and volcanic passages
 

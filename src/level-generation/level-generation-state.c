@@ -1,6 +1,7 @@
 /* File: level-generation-state.c */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-generation-internal.h"
 #include "cave/cave-fixtures.h"
 
@@ -553,6 +554,9 @@ bool room_build_in_bounds(int typ, int y1, int y2, int x1, int x2);
 /* Partition helper: compute bounds for a given partition index */
 bool compute_partition_bounds(int pi, int rows, int cols, int *y1, int *y2, int *x1, int *x2)
 {
+    if (level_stream_enabled() && p_ptr->cur_map_hgt == LEVEL_STREAM_SIZE
+        && p_ptr->cur_map_wid == LEVEL_STREAM_SIZE && rows == LEVEL_STREAM_GRID && cols == LEVEL_STREAM_GRID
+        && level_stream_partition_bounds(pi, y1, y2, x1, x2)) return true;
     if (rows <= 0 || cols <= 0)
         return false;
     int total = rows * cols;

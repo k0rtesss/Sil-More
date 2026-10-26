@@ -1986,6 +1986,14 @@ bool sdl_hint_quest_menu_handle_event(const SDL_Event* ev)
 
     switch (ev->type)
     {
+    case SDL_EVENT_KEY_DOWN:
+        if (ev->key.key == SDLK_PAGEUP || ev->key.key == SDLK_PAGEDOWN)
+        {
+            (void)sdl_hint_quest_menu_scroll(ev->key.key == SDLK_PAGEUP ? -1 : 1, true);
+            return true;
+        }
+        return false;
+
     case SDL_EVENT_MOUSE_MOTION:
         if (ev->motion.which != SDL_TOUCH_MOUSEID)
             sdl_hint_quest_set_hover(sdl_hint_quest_choice_at(

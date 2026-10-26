@@ -1,6 +1,9 @@
 #include "angband.h"
 #include "level-generation/level-cache.h"
 #include "level-generation/level-state.h"
+#include "level-generation/level-stream.h"
+#include "cave/cave-fixtures.h"
+#include "cave/cave-flood.h"
 #include "cave/cave-water-flow.h"
 #include "quest/quest-runtime.h"
 #include "quest/quest-challenges.h"
@@ -49,6 +52,9 @@ typedef struct level_job {
     void* meta_state;
     s32b turn, playerturn, minimum_depth_counter;
     u64b seed;
+    bool persistent_depth;
+    byte site_mask[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    level_image* site_geometry;
 } level_job;
 
 static level_image* floors[LEVEL_CACHE_SLOTS];
@@ -147,7 +153,8 @@ static void reserve_floor(const level_image* floor, int sign)
 {
     for (int i = 1; i < floor->mon_max; i++) {
         int race = floor->monsters[i].r_idx;
-        if (race > 0 && race < z_info->r_max && (r_info[race].flags1 & RF1_UNIQUE))
+        if (race > 0 && race < z_info->r_max && (r_info[race].flags1 & RF1_UNIQUE)
+            && !floor->monsters[i].site_token)
             r_info[race].cur_num = MAX(0, r_info[race].cur_num + sign);
     }
 }
@@ -156,6 +163,7 @@ static void evict_floor(int slot)
 {
     level_image* floor = floors[slot];
     if (!floor || floor == active) return;
+    level_stream_capture_sites(floor);
     sync_vaults();
     sync_vertical_regions();
     cave_vertical_capture(&active->vertical);
@@ -190,7 +198,7 @@ static void evict_floor(int slot)
         }
     }
     cave_vertical_restore(&active->vertical);
-    if (floor->visited) {
+    if (floor->visited && !level_stream_has_sites(floor->depth)) {
         quest_followup_discard_depth(floor->depth);
         for (int i = 1; i < floor->mon_max; i++) {
             int race = floor->monsters[i].r_idx;
@@ -214,6 +222,7 @@ static void evict_floor(int slot)
     for (int i = 1; i < floor->o_max; i++) {
         const object_type* object = &floor->objects[i];
         if (object->k_idx && object->name1 && !object->marked
+            && !level_stream_site_artefact(object->name1)
             && !(a_info[object->name1].seen & ART_SEEN_PHYSICAL)) {
             a_info[object->name1].cur_num = 0;
             a_info[object->name1].found_num = 0;
@@ -334,6 +343,11 @@ void level_cache_generation_reserve(void)
         }
     }
     cave_vertical_generation_reserve();
+    if (worker_job) for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++) if (worker_job->site_mask[y][x]) {
+            cave_info[y][x] |= CAVE_ICKY;
+            terrain_generation_reserve(y, x);
+        }
     if (!worker_job) return;
     for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
         for (int x = 1; x < p_ptr->cur_map_wid - 1; x++) {
@@ -355,7 +369,7 @@ bool level_cache_generation_vault_fits(int y1, int x1, int y2, int x2)
     if (!worker_job || p_ptr->depth == 0 || p_ptr->depth == UTUMNO_FORGE_DEPTH) return true;
     for (int y = MAX(1, y1); y <= MIN(p_ptr->cur_map_hgt - 2, y2); y++)
         for (int x = MAX(1, x1); x <= MIN(p_ptr->cur_map_wid - 2, x2); x++)
-            if (worker_job->links.feat[y][x]) return false;
+            if (worker_job->links.feat[y][x] || worker_job->site_mask[y][x]) return false;
     return true;
 }
 
@@ -585,6 +599,51 @@ int level_cache_chasm_fall_depth(int y, int x)
     return MIN(p_ptr->depth + (drop ? drop : 2), MORGOTH_DEPTH);
 }
 
+bool level_cache_stream_has_sites(void)
+{ return worker_job && worker_job->persistent_depth; }
+
+static void generate_stream_revisit(void)
+{
+    character_dungeon = false;
+    p_ptr->cur_map_hgt = p_ptr->cur_map_wid = LEVEL_STREAM_SIZE;
+    p_ptr->py = p_ptr->px = 0;
+    o_max = mon_max = 1; o_cnt = mon_cnt = num_repro = 0;
+    SDL_memset(dun, 0, sizeof(*dun));
+    cave_environment_reset(); cave_fixtures_clear(); cave_flood_clear();
+    cave_atmosphere_reset(); terrain_generation_reset();
+    styles_init_for_level(); basic_granite();
+    remember_partition_grid(LEVEL_STREAM_GRID, LEVEL_STREAM_GRID, PARTITION_META_MAX);
+    level_stream_prepare_generation();
+    level_cache_generation_reserve();
+    /* Publish a private, immutable copy of the actual authored terrain to
+     * the worker. Access checks must see its doors and stairs, not a solid
+     * reservation rectangle waiting to be restored on the main thread. */
+    if (worker_job->site_geometry) {
+        const level_image* site = worker_job->site_geometry;
+        for (int y = 1; y < LEVEL_STREAM_SIZE - 1; y++) for (int x = 1; x < LEVEL_STREAM_SIZE - 1; x++) {
+            if (!worker_job->site_mask[y][x] || !site->feat[y][x]) continue;
+            cave_set_feat(y, x, site->feat[y][x]);
+            cave_info[y][x] = site->info[y][x] | CAVE_ICKY;
+            cave_color[y][x] = site->color[y][x];
+            cave_natural[y][x] = site->natural[y][x];
+            cave_rewired[y][x] = site->rewired[y][x];
+        }
+    }
+    level_stream_foundation();
+    for (int pi = 0; pi < PARTITION_META_MAX; pi++) {
+        if (level_cache_generation_cancelled()) return;
+        level_stream_generate_partition(pi);
+    }
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1 && !p_ptr->py; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            if (!cave_m_idx[y][x] && cave_floor_bold(y, x) && player_passable(y, x, false)
+                && !(cave_info[y][x] & CAVE_ICKY)) { player_place(y, x); break; }
+    if (!p_ptr->py) { SDL_SetAtomicInt(&worker_job->cancel, 1); return; }
+    if (!level_cache_generation_links()) { SDL_SetAtomicInt(&worker_job->cancel, 1); return; }
+    skeleton_note_level_reset(); cave_atmosphere_generate(); cave_environment_seed();
+    character_dungeon = true;
+}
+
 static int SDLCALL generate_neighbor(void* data)
 {
     level_job* next = data;
@@ -616,7 +675,8 @@ static int SDLCALL generate_neighbor(void* data)
     p_ptr->depth = next->depth;
     p_ptr->create_stair = p_ptr->create_rubble = 0;
     if (cave_cost && view_g && temp_g && temp_y && temp_x && !level_cache_generation_cancelled()) {
-        generate_cave();
+        if (next->persistent_depth) generate_stream_revisit();
+        else generate_cave();
         if (!level_cache_generation_cancelled() && character_dungeon) {
             level_cache_generation_finished();
             level_image_capture(next->image);
@@ -644,6 +704,7 @@ static void free_job(level_job* old)
     SDL_free(old->drop_catalog);
     meta_state_free_generation_copy(old->meta_state);
     level_image_free(old->image);
+    level_image_free(old->site_geometry);
     SDL_free(old);
 }
 
@@ -666,6 +727,7 @@ static void start_job(int depth)
     level_job* next = SDL_calloc(1, sizeof(*next));
     if (!next) return;
     next->depth = depth;
+    next->persistent_depth = level_stream_has_sites(depth);
     next->wake_event_type = ready_event_type;
     next->player = *p_ptr;
     for (int i = 0; i < LEVEL_CACHE_SLOTS; i++)
@@ -679,8 +741,27 @@ static void start_job(int depth)
     next->smith = *smith_o_ptr;
     next->turn = turn; next->playerturn = playerturn;
     next->minimum_depth_counter = min_depth_counter;
-    next->seed = ((u64b)Rand_div(UINT32_MAX) << 32) | Rand_div(UINT32_MAX);
+    level_stream_frame generation_frame = level_stream_get_frame();
+    if (generation_frame.enabled) {
+        if (generation_frame.serial == UINT64_MAX) { SDL_free(next); return; }
+        generation_frame.serial++;
+        level_stream_set_frame(generation_frame);
+        next->seed = level_stream_hash(generation_frame.seed ^ generation_frame.serial, depth,
+            generation_frame.y, generation_frame.x, 1);
+    } else next->seed = ((u64b)Rand_div(UINT32_MAX) << 32) | Rand_div(UINT32_MAX);
     next->image = level_image_new();
+    if (next->image) next->image->stream = generation_frame;
+    level_stream_site_mask(depth, active->stream, next->site_mask);
+    if (next->persistent_depth) {
+        next->site_geometry = level_image_new();
+        if (next->site_geometry) {
+            next->site_geometry->depth = depth;
+            next->site_geometry->hgt = next->site_geometry->wid = LEVEL_STREAM_SIZE;
+            next->site_geometry->stream = generation_frame;
+            next->site_geometry->mon_max = next->site_geometry->o_max = 1;
+            level_stream_restore_sites(next->site_geometry);
+        }
+    }
     next->races = copy_array(r_info, z_info->r_max * sizeof(*r_info));
     next->kinds = copy_array(k_info, z_info->k_max * sizeof(*k_info));
     next->artefacts = copy_array(a_info, z_info->art_max * sizeof(*a_info));
@@ -691,7 +772,8 @@ static void start_job(int depth)
     next->reserved_artefacts = copy_array(valar_reserved_artifacts, z_info->art_max * sizeof(bool));
     next->drop_catalog = drop_catalog_copy_for_worker();
     next->meta_state = meta_state_copy_for_generation();
-    if (!next->image || !next->races || !next->kinds || !next->artefacts
+    if (!next->image || (next->persistent_depth && !next->site_geometry)
+        || !next->races || !next->kinds || !next->artefacts
         || !next->lore || !next->race_alloc || !next->kind_alloc || !next->ego_alloc
         || !next->reserved_artefacts || !next->drop_catalog || !next->meta_state) { free_job(next); return; }
     level_cache_generation_finished();
@@ -783,6 +865,7 @@ void level_cache_poll(void)
         if (conflict) log_debug("Level cache: regenerating depth %d after a run-state conflict", job->depth);
         if (job->success && !conflict && (ABS(job->depth - active->depth) <= 1
                 || job->depth == requested_depth || job->depth == pending_depth)) {
+            level_cache_stream_capture_sites();
             prune_cache();
             for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) if (!floors[i]) {
                 floors[i] = job->image;
@@ -791,6 +874,8 @@ void level_cache_poll(void)
                 floors[i]->generation_after = job->player;
                 floors[i]->pending_player = true;
                 reserve_floor(floors[i], 1);
+                level_stream_restore_sites(floors[i]);
+                level_stream_capture_sites(floors[i]);
                 for (int n = 1; n < floors[i]->o_max; n++) {
                     int art = floors[i]->objects[n].name1;
                     if (art) a_info[art].cur_num = MAX(a_info[art].cur_num, 1);
@@ -841,6 +926,13 @@ void level_cache_start(void)
     running = true;
     quest_challenge_prune_stairs();
     level_image_capture(active);
+    if (!active->stream.enabled) {
+        level_stream_prepare_generation();
+        level_stream_capture_frame(active);
+    }
+    level_stream_capture_sites(active);
+    for (int m = 1; m < mon_max; m++) mon_list[m].site_token = active->monsters[m].site_token;
+    for (int o = 1; o < o_max; o++) o_list[o].site_token = active->objects[o].site_token;
     level_cache_generation_finished();
     level_cache_poll();
 }
@@ -876,6 +968,7 @@ bool level_cache_change_level(void)
     level_cache_generation_finished();
     level_image_capture(active);
     sync_vaults();
+    level_stream_capture_sites(active);
     p_ptr->depth = destination;
     if (destination == active->depth) {
         /* Explicit same-depth regeneration (wizard/cheat death) discards it. */
@@ -962,6 +1055,7 @@ bool level_cache_change_level(void)
     else p_ptr->smithing = 0;
     p_ptr->leaving = false;
     active = target;
+    level_stream_project_quests();
     cave_vertical_combat_reset();
     cave_vertical_refresh();
     if (!target->visited) {
@@ -1172,6 +1266,152 @@ bool level_cache_transfer_object(int depth, int index, int y, int x)
     return true;
 }
 
+void level_cache_stream_capture_sites(void)
+{
+    if (worker_job || !active) return;
+    level_stream_normalize_carried();
+    level_image_capture(active);
+    level_stream_capture_sites(active);
+    for (int m = 1; m < mon_max; m++) mon_list[m].site_token = active->monsters[m].site_token;
+    for (int o = 1; o < o_max; o++) o_list[o].site_token = active->objects[o].site_token;
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++)
+        if (floors[i] && floors[i] != active) level_stream_capture_sites(floors[i]);
+}
+
+bool level_cache_stream_actor_present(u64b token)
+{
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) if (floors[i])
+        for (int m = 1; m < floors[i]->mon_max; m++)
+            if (floors[i]->monsters[m].r_idx && floors[i]->monsters[m].site_token == token) return true;
+    return false;
+}
+
+/* Keep the same world origin on every resident floor. Existing local vertical
+ * endpoints therefore remain projections of the same world column. A worker
+ * is cancelled before the transaction and restarted using the new frame. */
+bool level_cache_rebase_window(int dy, int dx)
+{
+    if (worker_job || !active || pending_depth >= 0 || p_ptr->leaving) return false;
+    if (job) {
+        SDL_SetAtomicInt(&job->cancel, 1); SDL_WaitThread(job->thread, NULL);
+        free_job(job); job = NULL;
+    }
+    level_image_capture(active); sync_vaults(); sync_vertical_regions();
+    level_image* next[LEVEL_CACHE_SLOTS] = {0};
+    int active_slot = -1;
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) if (floors[i]) {
+        if (floors[i] == active) active_slot = i;
+        if (!floors[i]->stream.enabled) floors[i]->stream = active->stream;
+        level_stream_capture_sites(floors[i]);
+        next[i] = level_image_clone(floors[i]);
+        if (!next[i] || !level_window_translate(next[i], dy, dx, LEVEL_STREAM_SIZE, LEVEL_STREAM_SIZE)) {
+            for (int n = 0; n < LEVEL_CACHE_SLOTS; n++) level_image_free(next[n]);
+            return false;
+        }
+    }
+    if (active_slot < 0) return false;
+    player_type* live = p_ptr;
+    player_type saved = *live;
+    dun_data* saved_dun = dun;
+    u64b rng = Rand_state_export();
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) {
+        if (!next[i]) continue;
+        level_image* image = next[i]; const level_image* old = floors[i];
+        level_stream_restore_sites(image);
+        player_type scratch = saved;
+        p_ptr = &scratch;
+        level_image_restore(image);
+        character_dungeon = false;
+        dun_data workspace; SDL_memset(&workspace, 0, sizeof(workspace)); dun = &workspace;
+        terrain_generation_reset();
+        /* Incoming portions of a legacy finite map can share a partition
+         * with retained cells. Protect those cells during bounded carving. */
+        for (int y = 1; y < LEVEL_STREAM_SIZE - 1; y++) for (int x = 1; x < LEVEL_STREAM_SIZE - 1; x++) {
+            int sy = y + dy, sx = x + dx;
+            if (sy > 0 && sx > 0 && sy < old->hgt - 1 && sx < old->wid - 1)
+                cave_info[y][x] |= CAVE_ICKY;
+        }
+        for (int pi = 0; pi < PARTITION_META_MAX; pi++) {
+            int y1, y2, x1, x2;
+            level_stream_partition_bounds(pi, &y1, &y2, &x1, &x2);
+            bool retained = y1 + dy > 0 && x1 + dx > 0
+                && y2 + dy < old->hgt - 1 && x2 + dx < old->wid - 1;
+            if (retained) continue;
+            level_stream_frame f = level_stream_get_frame();
+            if (f.serial == UINT64_MAX) quit("Dungeon materialization counter exhausted");
+            f.serial++; level_stream_set_frame(f);
+            Rand_state_init(level_stream_hash(f.seed ^ f.serial, image->depth,
+                f.y + y1 - 1, f.x + x1 - 1, 2));
+            level_stream_generate_partition(pi);
+        }
+        for (int y = 1; y < LEVEL_STREAM_SIZE - 1; y++) for (int x = 1; x < LEVEL_STREAM_SIZE - 1; x++) {
+            int sy = y + dy, sx = x + dx;
+            if (sy > 0 && sx > 0 && sy < old->hgt - 1 && sx < old->wid - 1)
+                cave_info[y][x] = old->info[sy][sx] & ~(CAVE_VIEW | CAVE_SEEN | CAVE_TEMP);
+            else {
+                cave_environment_seed_cell(y, x);
+            }
+        }
+        level_image_capture(image);
+        level_stream_restore_sites(image);
+        image->visited = old->visited;
+        image->pending_player = old->pending_player;
+    }
+    p_ptr = live; dun = saved_dun; Rand_state_import(rng);
+    for (int i = 0; i < LEVEL_CACHE_SLOTS; i++) if (next[i]) {
+        const level_image* old = floors[i];
+        for (int m = 1; m < old->mon_max; m++) {
+            const monster_type* actor = &old->monsters[m];
+            int y = actor->fy - dy, x = actor->fx - dx;
+            bool retained = y > 0 && x > 0 && y < LEVEL_STREAM_SIZE - 1 && x < LEVEL_STREAM_SIZE - 1;
+            if (!actor->r_idx || actor->site_token || retained) continue;
+            if (r_info[actor->r_idx].flags1 & RF1_UNIQUE)
+                r_info[actor->r_idx].cur_num = MAX(0, r_info[actor->r_idx].cur_num - 1);
+        }
+        for (int o = 1; o < old->o_max; o++) {
+            const object_type* obj = &old->objects[o];
+            int y = obj->iy - dy, x = obj->ix - dx;
+            if (obj->held_m_idx > 0 && obj->held_m_idx < old->mon_max) {
+                y = old->monsters[obj->held_m_idx].fy - dy;
+                x = old->monsters[obj->held_m_idx].fx - dx;
+            }
+            bool retained = y > 0 && x > 0 && y < LEVEL_STREAM_SIZE - 1 && x < LEVEL_STREAM_SIZE - 1;
+            if (obj->k_idx && obj->name1 && !retained && !obj->marked
+                && !level_stream_site_artefact(obj->name1) && !(a_info[obj->name1].seen & ART_SEEN_PHYSICAL)) {
+                a_info[obj->name1].cur_num = a_info[obj->name1].found_num = 0;
+            }
+        }
+        level_image_free(floors[i]); floors[i] = next[i];
+    }
+    active = floors[active_slot];
+    level_image_restore(active);
+    saved.py = active->py; saved.px = active->px;
+    saved.cur_map_hgt = active->hgt; saved.cur_map_wid = active->wid;
+    /* The camera is another local coordinate. Preserve its world-space view
+     * so a window shift cannot draw an unrelated corner or hide the player. */
+    saved.wy -= dy;
+    saved.wx -= dx;
+    *p_ptr = saved;
+    verify_panel();
+    level_stream_project_quests();
+    if (p_ptr->target_set) target_set_monster(0);
+    health_track(0);
+#ifdef USE_SDL
+    sdl_mouse_path_rebase_window(dy, dx);
+    sdl_side_map_pane_forget_level();
+#endif
+    cave_vertical_combat_reset();
+    level_stream_rebase_narrative(dy, dx);
+    view_n = temp_n = 0;
+    p_ptr->update |= PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_DISTANCE | PU_MONSTERS | PU_TORCH;
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_OVERHEAD;
+    log_debug("Streaming window: depth=%d world=(%lld,%lld) local=(%d,%d)",
+        p_ptr->depth, (long long)active->stream.y, (long long)active->stream.x, p_ptr->py, p_ptr->px);
+    level_cache_poll();
+    return true;
+}
+
 void level_cache_clear(void)
 {
     if (worker_job) return;
@@ -1322,8 +1562,13 @@ static bool read_regions(level_image* image)
         if (p->upper_template >= z_info->v_max || p->lower_template >= z_info->v_max
             || p->transform > 7 || p->discovered_layers > 3 || p->reward_layers > 3
             || !p->identity || p->upper_depth < 1 || p->upper_depth >= MORGOTH_DEPTH - 1
-            || p->y < 1 || p->x < 1 || p->y >= image->hgt || p->x >= image->wid
+            || p->y <= -MAX_DUNGEON_HGT || p->x <= -MAX_DUNGEON_WID
+            || p->y >= image->hgt - 1 || p->x >= image->wid - 1
             || (image->depth != p->upper_depth && image->depth != p->upper_depth + 1)) return false;
+        const vault_type* v = &v_info[p->upper_template];
+        int h = (p->transform & 4) ? v->wid : v->hgt;
+        int w = (p->transform & 4) ? v->hgt : v->wid;
+        if (p->y + h <= 1 || p->x + w <= 1) return false;
     }
     vertical_vault_restore(&image->vertical_vaults);
     return vertical_vault_get()->count == image->vertical_vaults.count
@@ -1333,6 +1578,7 @@ static bool read_regions(level_image* image)
 
 static void write_vertical(const level_image* image)
 {
+    level_stream_write_frame(image);
     save_wr_byte(image->visited ? 1 : 0);
     save_wr_byte(image->pending_player ? 1 : 0);
     if (image->pending_player) {
@@ -1376,6 +1622,7 @@ static void write_vertical(const level_image* image)
 
 static bool read_vertical(level_image* image)
 {
+    if (savefile_version_at_least(1, 1, 0, 10) && !level_stream_read_frame(image)) return false;
     byte visited = 0, pending = 0, hgt = 0, wid = 0;
     s32b suspended = 0;
     u32b offset = load_byte_offset;

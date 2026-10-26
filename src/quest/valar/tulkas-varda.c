@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "quest/quest-runtime.h"
 #include "achievements.h"
 #include "externs.h"
@@ -740,6 +741,7 @@ bool varda_quest_confirm_leave_bastion(void)
 
 void varda_quest_fail_if_bastion_missed(void)
 {
+    if (level_stream_has_sites(p_ptr->depth)) return;
     if (!quest_enabled(QUEST_ID_VARDA)) return;
     if (!varda_quest_bastion_level_active()) return;
 

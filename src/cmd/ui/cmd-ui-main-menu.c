@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
@@ -2688,6 +2689,17 @@ static hint_quest_page do_cmd_hint_messages(bool* out_pending_look,
         sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_HINTS, "Hints & Quests",
             section, true, false,
             n > 0 ? HINT_MESSAGE_CLICK_ENTRY_BASE + sel : 0);
+
+        if (!show_all_tips) {
+            level_cache_stream_capture_sites();
+            int bookmarks = level_stream_bookmark_count();
+            if (bookmarks) sdl_hint_quest_menu_add_block("Remembered places", TERM_L_BLUE, 0, 0);
+            for (int i = 0; i < bookmarks; i++) {
+                char place[256];
+                if (level_stream_bookmark(i, place, sizeof(place)))
+                    sdl_hint_quest_menu_add_block(place, TERM_WHITE, 1, 0);
+            }
+        }
 
         if (n <= 0)
         {

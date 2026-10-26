@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain.h"
@@ -839,6 +840,7 @@ static void terrain_melt_ice(void)
 
 void place_dungeon_terrain(void)
 {
+    if (level_stream_enabled() && p_ptr->depth != UTUMNO_DEPTH) return;
     const terrain_theme_profile* profile = terrain_theme_for_depth(p_ptr->depth);
     cave_water_flow_generation_plan_reset();
     if (!terrain_history_active()) terrain_generation_reset();

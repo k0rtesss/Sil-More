@@ -35,11 +35,17 @@ size_t fixture_write_end(void) {
 LEGACY_WRITER = r'''
 void fixture_legacy_monster(const monster_type*);
 void __real_save_wr_monster(const monster_type*);
+void fixture_legacy_item(const object_type*);
+void __real_save_wr_item(const object_type*);
 static bool fixture_legacy_monsters;
 void fixture_set_legacy_monsters(bool legacy) { fixture_legacy_monsters=legacy; }
 void __wrap_save_wr_monster(const monster_type* monster) {
     if(fixture_legacy_monsters)fixture_legacy_monster(monster);
     else __real_save_wr_monster(monster);
+}
+void __wrap_save_wr_item(const object_type* object) {
+    if(fixture_legacy_monsters)fixture_legacy_item(object);
+    else __real_save_wr_item(object);
 }
 '''
 
@@ -561,11 +567,15 @@ static void test_v5_metadata(void)
     size_t metadata=fixture_write_end();
     fixture_write_begin(altered,sizeof(altered));write_regions(image);
     size_t regions=fixture_write_end();
-    assert(metadata>regions);
+    fixture_write_begin(altered,sizeof(altered));level_stream_write_frame(image);
+    size_t frame=fixture_write_end();
+    assert(metadata>regions+frame);
     /* v5 metadata is byte-identical through hint metadata and has no v6
-     * region suffix. Preserve its following field at the exact boundary. */
+     * region suffix or later streaming-frame prefix. Preserve its following
+     * field at the exact historical boundary. */
     decode(encoded,plain,metadata);
-    size_t v5_length=metadata-regions;
+    size_t v5_length=metadata-regions-frame;
+    memmove(plain,plain+frame,v5_length);
     plain[v5_length]=0xCD;plain[v5_length+1]=0xAB;
     plain[v5_length+2]=0x28;plain[v5_length+3]=0x19;
     encode(plain,altered,v5_length+4);
@@ -611,15 +621,19 @@ static void test_public_v5_cache(void)
     build_upper();floors[1]=active=capture();running=true;
     inherited_worker(9);worker_job=NULL;floors[2]=capture();
     level_image_restore(active);
-    /* Construct the historical cache lane using unchanged production writers
-     * for each field, omitting precisely the version6 region suffix. */
+    /* Construct the historical cache lane from the unchanged metadata body,
+     * omitting the v6 region suffix and v10 stream-frame prefix. Historical
+     * monster/item writers below also omit ownership fields absent in v5. */
     for(int i=0;i<3;i++) {
         fixture_write_begin(encoded,sizeof(encoded));write_vertical(floors[i]);
         size_t full=fixture_write_end();
         fixture_write_begin(altered,sizeof(altered));write_regions(floors[i]);
-        size_t suffix=fixture_write_end();assert(full>suffix);
-        sizes[i]=full-suffix;assert(sizes[i]<sizeof(legacy_metadata[i]));
-        decode(encoded,legacy_metadata[i],sizes[i]);
+        size_t suffix=fixture_write_end();
+        fixture_write_begin(altered,sizeof(altered));level_stream_write_frame(floors[i]);
+        size_t prefix=fixture_write_end();assert(full>suffix+prefix);
+        sizes[i]=full-suffix-prefix;assert(sizes[i]<sizeof(legacy_metadata[i]));
+        decode(encoded,plain,full);
+        memcpy(legacy_metadata[i],plain+prefix,sizes[i]);
     }
     fixture_write_begin(encoded,sizeof(encoded));
     save_wr_u16b(LEVEL_CACHE_SAVE_MAGIC);save_wr_byte(1);
@@ -1160,7 +1174,13 @@ def main(case="all"):
     start = save.index("void wr_monster(")
     legacy_monster = save[start:save.index("\n}", start) + 2]
     legacy_monster = legacy_monster.replace("void wr_monster(", "void fixture_legacy_monster(")
-    for name, content in (("check.c", harness), ("writer.c", WRITER + LEGACY_WRITER + legacy_monster), ("reader.c", READER)):
+    previous_save = subprocess.check_output(["git", "show", "HEAD:src/fs/save.c"],
+                                            cwd=ROOT, text=True, encoding="utf-8")
+    start = previous_save.index("void wr_item(")
+    legacy_item = previous_save[start:previous_save.index("\n}", start) + 2]
+    legacy_item = legacy_item.replace("void wr_item(", "void fixture_legacy_item(")
+    assert "site_token" not in legacy_item
+    for name, content in (("check.c", harness), ("writer.c", WRITER + LEGACY_WRITER + legacy_monster + "\n" + legacy_item), ("reader.c", READER)):
         source = OUT / name
         source.write_text(content, encoding="utf-8")
         sources.append(str(source))
@@ -1172,7 +1192,7 @@ def main(case="all"):
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env.get("PATH", "")])
     exe = OUT / f"check-{case}.exe"
-    wraps = ["level_cache_generation_links", "cave_vertical_generation_finish", "check_connectivity", "place_rubble_player", "terrain_history_finish", "update_view", "update_lore", "metarun_check_and_update_quests", "save_wr_monster"]
+    wraps = ["level_cache_generation_links", "cave_vertical_generation_finish", "check_connectivity", "place_rubble_player", "terrain_history_finish", "update_view", "update_lore", "metarun_check_and_update_quests", "save_wr_monster", "save_wr_item"]
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", *sources, "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap=" + name for name in wraps), "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=OUT) as data:
         assert Path(data).resolve().is_relative_to(OUT.resolve())

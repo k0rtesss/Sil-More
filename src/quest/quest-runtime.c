@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-cache.h"
 #include "externs.h"
 #include "metarun.h"
@@ -384,7 +385,7 @@ void quest_followup_leave(int new_depth)
         quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_SUCCESS);
         complete(QUEST_ID_NIENA_MORGOTH, true);
     }
-    if (!level_cache_retains(p_ptr->depth)) quest_followup_discard_level();
+    if (!level_cache_retains(p_ptr->depth) && !level_stream_has_sites(p_ptr->depth)) quest_followup_discard_level();
 }
 
 /* The map is going away even when a quest is paused. The player's depth may
@@ -399,6 +400,7 @@ void quest_followup_discard_depth(int depth)
 {
     for (int id = Q_FIRST; id <= Q_LAST; ++id) {
         if (depth >= 0 && p_ptr->quest_followup_depth[Q_INDEX(id)] != depth) continue;
+        if (level_stream_has_sites(p_ptr->quest_followup_depth[Q_INDEX(id)])) continue;
         byte *flags = &p_ptr->quest_followup_flags[Q_INDEX(id)];
         if (!(*flags & Q_PLACED) || (*flags & Q_FAILED)) continue;
         byte state = quest_get_state(id);

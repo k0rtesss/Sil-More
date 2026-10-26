@@ -1,6 +1,7 @@
 /* File: level-generation-layout-connectivity.c */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-generation-internal.h"
 
 #if 0
@@ -202,6 +203,10 @@ void ensure_partition_connectivity(void)
 
 int partition_index_from_point(int y, int x, int rows, int cols)
 {
+    if (level_stream_enabled() && rows == LEVEL_STREAM_GRID && cols == LEVEL_STREAM_GRID
+        && p_ptr->cur_map_hgt == LEVEL_STREAM_SIZE && p_ptr->cur_map_wid == LEVEL_STREAM_SIZE)
+        return MAX(0, MIN(LEVEL_STREAM_GRID - 1, (y - 1) / LEVEL_STREAM_PART_SIZE)) * LEVEL_STREAM_GRID
+            + MAX(0, MIN(LEVEL_STREAM_GRID - 1, (x - 1) / LEVEL_STREAM_PART_SIZE));
     if (rows <= 0 || cols <= 0) return -1;
     if (p_ptr->cur_map_hgt <= 0 || p_ptr->cur_map_wid <= 0) return -1;
     int row = (y * rows) / p_ptr->cur_map_hgt;

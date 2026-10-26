@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-cache.h"
 #include "meta_state.h"
 #include "monster/monster-ai.h"
@@ -610,6 +611,12 @@ errr rd_item(object_type* o_ptr)
 
     /* Kind */
     rd_s16b(&o_ptr->k_idx);
+    o_ptr->site_token = 0;
+    if (savefile_version_at_least(1, 1, 0, 10)) {
+        u32b lo = 0, hi = 0;
+        rd_u32b(&lo); rd_u32b(&hi);
+        o_ptr->site_token = ((u64b)hi << 32) | lo;
+    }
 
     /* Paranoia */
     if ((o_ptr->k_idx < 0) || (o_ptr->k_idx >= z_info->k_max))
@@ -981,6 +988,13 @@ errr rd_item(object_type* o_ptr)
 void rd_monster(monster_type* m_ptr)
 {
     int i;
+
+    m_ptr->site_token = 0;
+    if (savefile_version_at_least(1, 1, 0, 10)) {
+        u32b lo = 0, hi = 0;
+        rd_u32b(&lo); rd_u32b(&hi);
+        m_ptr->site_token = ((u64b)hi << 32) | lo;
+    }
 
     /* Read the monster race */
     rd_s16b(&m_ptr->r_idx);
@@ -3142,6 +3156,10 @@ static errr rd_savefile_new_aux(void)
         if (savefile_version_at_least(1, 1, 0, 5) && level_cache_read())
         {
             note("Invalid neighbouring dungeon levels");
+            return -1;
+        }
+        if (savefile_version_at_least(1, 1, 0, 10) && level_stream_read()) {
+            note("Invalid streamed dungeon sites");
             return -1;
         }
     }

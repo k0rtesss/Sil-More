@@ -109,10 +109,13 @@ void vertical_vault_inherit(const vertical_vault_state *neighbor, int target_dep
     for (int i = 0; i < MIN(neighbor->count, VERTICAL_VAULT_MAX); ++i)
     {
         const vertical_vault_placement *p = &neighbor->placements[i];
-        if (!p->identity || p->transform > 7 || p->y < 1 || p->x < 1
+        if (!p->identity || p->transform > 7 || p->y <= -MAX_DUNGEON_HGT || p->x <= -MAX_DUNGEON_WID
             || p->upper_depth < 1 || p->upper_depth >= MORGOTH_DEPTH - 1
             || layer_of(p, target_depth) < 0
             || !pair_valid(p->upper_template, p->lower_template)) continue;
+        int h, w; bounds(p, &h, &w);
+        if (p->y + h <= 1 || p->x + w <= 1
+            || p->y >= p_ptr->cur_map_hgt - 1 || p->x >= p_ptr->cur_map_wid - 1) continue;
         int n;
         for (n = 0; n < current.count; ++n)
             if (current.placements[n].identity == p->identity) break;

@@ -1,6 +1,7 @@
 /* File: level-generation-layout-modes.c */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-internal.h"
 
@@ -175,6 +176,10 @@ void apply_quadrant_generation_modes(void)
         grid_rows = 5; grid_cols = 5;
     }
 
+    if (level_stream_enabled() && p_ptr->cur_map_hgt == LEVEL_STREAM_SIZE) {
+        grid_rows = grid_cols = LEVEL_STREAM_GRID;
+        partition_count = LEVEL_STREAM_GRID * LEVEL_STREAM_GRID;
+    }
     remember_partition_grid(grid_rows, grid_cols, partition_count);
 
     int utumno_partition = -1;

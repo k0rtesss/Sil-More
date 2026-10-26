@@ -8,6 +8,7 @@
 #include "monster/monster-social.h"
 #include "cave/cave-vertical.h"
 #include "level-generation/level-generation-vertical-vaults.h"
+#include "level-generation/level-stream.h"
 
 /* Scalar run changes made by generation. Keep this list in one place for the
  * deferred commit and its portable, typed save representation. */
@@ -24,6 +25,9 @@
  * Objects have their own allocation because o_max is a template limit. */
 typedef struct level_image {
     int depth, hgt, wid, py, px;
+    level_stream_frame stream;
+    byte stream_site_count;
+    level_stream_site_def stream_sites[LEVEL_STREAM_SITE_DEFS];
     s32b suspended_turn;
     bool visited;
     bool pending_player;
@@ -85,9 +89,11 @@ typedef struct level_image {
 } level_image;
 
 level_image* level_image_new(void);
+level_image* level_image_clone(const level_image* source);
 void level_image_free(level_image* image);
 void level_image_capture(level_image* image);
 void level_image_restore(const level_image* image);
 void level_image_bind_grids(level_image* image);
+void level_image_repair_social(level_image* image);
 
 #endif

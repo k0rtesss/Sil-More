@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "level-generation/level-cache.h"
+#include "level-generation/level-stream.h"
 #include "cave/cave-vertical.h"
 #include "level-generation/level-generation-vertical-vaults.h"
 #include "meta_state.h"
@@ -423,6 +424,8 @@ bool cave_gen(void)
     level_cache_generation_size(&l);
     p_ptr->cur_map_hgt = l * (PANEL_HGT);
     p_ptr->cur_map_wid = l * (PANEL_HGT);  // Use PANEL_HGT for both to make square
+    if (level_stream_enabled())
+        p_ptr->cur_map_hgt = p_ptr->cur_map_wid = LEVEL_STREAM_SIZE;
 
     /* Fewer room attempts to reduce long regen loops; vault bias handled later */
     room_attempts = l * l * l * 2;
@@ -449,6 +452,7 @@ bool cave_gen(void)
     /*start with basic granite*/
     basic_granite();
     level_cache_generation_reserve();
+    if (!is_utumno_level) level_stream_foundation();
     log_trace("cave_gen: after styles_init/basic_granite");
 
     log_trace("cave_gen: before connection table init (DUN_ROOMS=%d, conn_size=%zu)", DUN_ROOMS, sizeof(dun->connection));
@@ -652,6 +656,10 @@ bool cave_gen(void)
     if (!is_utumno_level) seed_prefab_anchors();
     /* Apply quadrant generation modes - this is now the primary room generation */
     apply_quadrant_generation_modes();
+    if (level_stream_enabled() && !is_utumno_level) {
+        level_stream_foundation();
+        for (int pi = 0; pi < current_partition_count; pi++) level_stream_connect_partition(pi);
+    }
     if (is_utumno_level && (g_vault_name[0] == '\0'
         || terrain_history_count() != 3))
         return false;
@@ -1565,6 +1573,7 @@ bool cave_gen(void)
     /* All liquid geometry is final after population and quest placement.  The
      * source-to-outlet graph is kept as level metadata for the renderer. */
     cave_water_flow_build();
+    if (level_stream_enabled() && !is_utumno_level) level_stream_foundation();
     cave_vertical_flow_build();
 
     /* Level generation successful - log completion */
@@ -1823,6 +1832,7 @@ void unring_a_bell(void)
  */
 void generate_cave(void)
 {
+    level_stream_prepare_generation();
     int y, x, i;
     bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
     const bool protect_tutorial_start = !level_cache_in_worker()
@@ -2245,6 +2255,7 @@ if (playerturn == 0) {
     monster_routine_finish_level();
     if (!level_cache_in_worker()) catastrophe_prepare_level();
     cave_environment_seed();
+    level_stream_record_generation_sites();
     level_gen_screen_finish(true);
 
     // Valar quest doesn't provide map rewards like the old thrall quest

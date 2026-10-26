@@ -3410,7 +3410,7 @@ static bool skeleton_note_find_nearest_quest_site(
     {
         int y = p_ptr->mandos_vault_y;
         int x = p_ptr->mandos_vault_x;
-        if (in_bounds(y, x))
+        if (in_bounds_fully(y, x))
         {
             int dist = skeleton_note_map_distance(from_y, from_x, y, x);
             if (best_y < 0 || dist < best_dist)

@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "1.1.0"
 /*
- * Version components (1.1.0.9).  All on-disk formats (saves, scores, metaruns)
+ * Version components (1.1.0.10).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 1
 #define VERSION_PATCH 0
-#define VERSION_EXTRA 9  /* Master achievement, disease and song save updates. */
+#define VERSION_EXTRA 10 /* Streamed world frames, permanent sites and ownership. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */

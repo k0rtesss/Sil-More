@@ -312,6 +312,10 @@ set(SIL_MORE_SOURCES
     src/level-generation/level-generation.c
     src/level-generation/level-cache.c
     src/level-generation/level-state.c
+    src/level-generation/level-stream.c
+    src/level-generation/level-stream-sites.c
+    src/level-generation/level-stream-generation.c
+    src/level-generation/level-window.c
     src/level-generation/level-generation-vertical-vaults.c
     src/level-generation/level-generation-utumno.c
     src/level-generation/level-generation-access.c

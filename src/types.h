@@ -681,6 +681,7 @@ struct vault_type
 struct object_type
 {
     s16b k_idx; /* Kind index (zero if "dead") */
+    u64b site_token; /* Persistent site ownership; zero for ordinary objects. */
 
     s16b image_k_idx; /* Hallucinatory kind index */
 
@@ -813,6 +814,7 @@ typedef struct monster_world_state
 struct monster_type
 {
     s16b r_idx; /* Monster race index */
+    u64b site_token; /* Stable identity while a permanent site is unloaded. */
 
     s16b image_r_idx; /* Monster race index (when hallucinating) */
 

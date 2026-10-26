@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "level-generation/level-generation-internal.h"
 #include "level-generation/level-generation-terrain-history.h"
 #include "level-generation/level-generation-landmarks.h"
@@ -29,6 +30,10 @@ int terrain_history_epoch(int system)
 
 void terrain_history_begin(void)
 {
+    if (level_stream_enabled() && p_ptr->depth != UTUMNO_DEPTH) {
+        history_started = true;
+        return;
+    }
     bool utumno = (p_ptr->depth == UTUMNO_DEPTH);
     if (morgoth_level_active || p_ptr->depth < 1
         || (p_ptr->depth > MORGOTH_DEPTH && !utumno)) return;
@@ -115,6 +120,11 @@ static int history_ancient_feature(int y, int x)
 
 bool terrain_history_reserved(int y, int x)
 {
+    if (level_stream_enabled() && p_ptr->depth != UTUMNO_DEPTH && in_bounds_fully(y, x)) {
+        level_stream_frame f = level_stream_get_frame();
+        int feat, flow;
+        if (level_stream_major_feature(f.seed, p_ptr->depth, f.y + y - 1, f.x + x - 1, &feat, &flow)) return true;
+    }
     if (!history_phase || !in_bounds_fully(y, x)) return false;
     if (history_ancient_feature(y, x)) return true;
     for (int s = 0; s < history_count; s++)
@@ -123,7 +133,7 @@ bool terrain_history_reserved(int y, int x)
 }
 bool terrain_history_vault_fits(int y1, int x1, int y2, int x2)
 {
-    if (!history_phase) return true;
+    if (!history_phase && !level_stream_enabled()) return true;
     for (int y = MAX(1, y1); y <= MIN(p_ptr->cur_map_hgt - 2, y2); y++)
         for (int x = MAX(1, x1); x <= MIN(p_ptr->cur_map_wid - 2, x2); x++)
             if (terrain_history_reserved(y, x)) return false;

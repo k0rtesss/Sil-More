@@ -944,6 +944,47 @@ void sdl_mouse_path_cancel(void)
     g_state.need_present = true;
 }
 
+static bool mouse_rebase_point(int* y, int* x, int dy, int dx)
+{
+    int ny = *y - dy, nx = *x - dx;
+    if (!in_bounds_fully(ny, nx)) return false;
+    *y = ny; *x = nx;
+    return true;
+}
+
+void sdl_mouse_path_rebase_window(int dy, int dx)
+{
+    if (g_mouse_path.follow_active || g_mouse_path.hover_visible || g_mouse_path.path_valid) {
+        if (!mouse_rebase_point(&g_mouse_path.target_y, &g_mouse_path.target_x, dy, dx)) {
+            sdl_mouse_path_cancel();
+            g_mouse_path.recall_pending = false;
+            return;
+        }
+        (void)mouse_rebase_point(&g_mouse_path.source_y, &g_mouse_path.source_x, dy, dx);
+    }
+    if (g_mouse_path.last_step_door_pending
+        && (!mouse_rebase_point(&g_mouse_path.last_step_door_y, &g_mouse_path.last_step_door_x, dy, dx)
+            || !mouse_rebase_point(&g_mouse_path.last_step_player_y, &g_mouse_path.last_step_player_x, dy, dx)))
+        g_mouse_path.last_step_door_pending = false;
+    if (g_mouse_path.stuck_door_bash_pending
+        && !mouse_rebase_point(&g_mouse_path.stuck_door_bash_y, &g_mouse_path.stuck_door_bash_x, dy, dx))
+        g_mouse_path.stuck_door_bash_pending = false;
+    if (g_mouse_path.grid_question_pending
+        && !mouse_rebase_point(&g_mouse_path.grid_question_y, &g_mouse_path.grid_question_x, dy, dx))
+        g_mouse_path.grid_question_pending = false;
+    if (g_mouse_path.recall_pending
+        && !mouse_rebase_point(&g_mouse_path.recall_y, &g_mouse_path.recall_x, dy, dx))
+        g_mouse_path.recall_pending = false;
+    /* The next automatic step recomputes its route on the translated map.
+     * Keep the chosen world destination and don't spend another input turn. */
+    g_mouse_path.path_valid = false;
+    g_mouse_path.path_len = 0;
+    g_mouse_path.hover_visible = false;
+    g_map_touch_press.active = false;
+    g_map_touch_selected = false;
+    g_state.need_present = true;
+}
+
 bool sdl_mouse_stuck_door_bash_queue_prompt(int map_y, int map_x)
 {
     int dir = 0;

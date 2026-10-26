@@ -235,6 +235,9 @@ void legendary_area_level_reset(void);
 void* legendary_area_capture_runtime(void);
 void legendary_area_restore_runtime(const void* snapshot);
 void legendary_area_free_runtime_snapshot(void* snapshot);
+void* legendary_area_clone_runtime_snapshot(const void* snapshot);
+bool legendary_area_translate_runtime_snapshot(void* snapshot, int dy, int dx,
+    int height, int width);
 void* meta_state_copy_for_generation(void);
 void meta_state_use_generation_copy(void* snapshot);
 void meta_state_free_generation_copy(void* snapshot);

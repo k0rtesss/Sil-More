@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-player.c */
 
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "cave/cave-vertical.h"
 #include "level-generation/level-generation-vertical-vaults.h"
 #include "quest/quest-runtime.h"
@@ -892,11 +893,12 @@ void process_player(void)
 
                     describe_greater_vault_entry(g_vault_name);
                     msg_print("From within you hear the harsh din of feasting in Morgoth's own hall.");
-                    if (!greater_vault_xp_awarded)
+                    if (!greater_vault_xp_awarded && !level_stream_site_discovery_awarded(p_ptr->py, p_ptr->px))
                     {
                         gain_exp(vault_xp);
                         gain_insight_points(1, "You discover a greater vault.");
                         greater_vault_xp_awarded = true;
+                        level_stream_note_site_discovery(p_ptr->py, p_ptr->px);
                     }
 
                     pause_with_text(throne_poetry, 5, 13, NULL, 0);
@@ -914,11 +916,12 @@ void process_player(void)
 
                 do_cmd_note(note, p_ptr->depth);
                 describe_greater_vault_entry(g_vault_name);
-                if (!greater_vault_xp_awarded)
+                if (!greater_vault_xp_awarded && !level_stream_site_discovery_awarded(p_ptr->py, p_ptr->px))
                 {
                     gain_exp(vault_xp);
                     gain_insight_points(1, "You discover a greater vault.");
                     greater_vault_xp_awarded = true;
+                    level_stream_note_site_discovery(p_ptr->py, p_ptr->px);
                 }
             }
 

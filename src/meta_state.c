@@ -345,6 +345,28 @@ void legendary_area_free_runtime_snapshot(void* snapshot)
     SDL_free(copy);
 }
 
+void* legendary_area_clone_runtime_snapshot(const void* snapshot)
+{
+    const legendary_runtime_area* source = snapshot;
+    if (!source) return NULL;
+    legendary_runtime_area* copy = SDL_malloc(sizeof(*copy));
+    if (!copy) return NULL;
+    *copy = *source;
+    copy->area.tile_blob = SDL_malloc(copy->area.tile_blob_size);
+    if (!copy->area.tile_blob) { SDL_free(copy); return NULL; }
+    SDL_memcpy(copy->area.tile_blob, source->area.tile_blob, copy->area.tile_blob_size);
+    return copy;
+}
+
+bool legendary_area_translate_runtime_snapshot(void* snapshot, int dy, int dx,
+    int height, int width)
+{
+    /* The template and singer positions are relative to its source blob;
+     * only the level's legendary_area_id grid anchors it to local cells. */
+    (void)snapshot; (void)dy; (void)dx;
+    return height >= 3 && width >= 3;
+}
+
 void legendary_area_map_reset(void)
 {
     if (legendary_area_map_ensure())

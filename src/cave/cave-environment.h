@@ -12,7 +12,8 @@ enum environment_cell_flags {
     ENV_MINERAL_SPENT = 8, ENV_BRIDGE = 16, ENV_NATURAL = 32,
     ENV_DEPOSIT = 64
 };
-#define ENV_SOURCES_MAX 32
+/* Keep the ordinary 29-source budget; extra slots project sleeping sites. */
+#define ENV_SOURCES_MAX 64
 typedef struct environment_cell {
     byte flags, base_feat, known_feat, bridge_feat, underlay, material;
     byte integrity, work, pending_feat, owner;
@@ -40,6 +41,8 @@ typedef struct environment_bridge_job {
 
 void cave_environment_reset(void);
 void cave_environment_seed(void);
+/* Initialize an incoming streaming cell without resetting resident sources. */
+void cave_environment_seed_cell(int y, int x);
 void cave_environment_process(void);
 void cave_environment_set_speed(byte speed);
 void cave_environment_changed(int y, int x, int old_feat, int new_feat);

@@ -255,6 +255,32 @@ static void restore_lava_fringe_owners(void)
     }
 }
 
+void cave_environment_seed_cell(int y, int x)
+{
+    if (!in_bounds(y, x)) return;
+    environment_cell* c = &cells[y][x];
+    SDL_memset(c, 0, sizeof(*c));
+    int f = cave_feat[y][x];
+    c->base_feat = f;
+    c->known_feat = (cave_info[y][x] & CAVE_MARK) ? f : 0;
+    c->integrity = (f == FEAT_DAMAGED_WALL || f == FEAT_CRACKED_QUARTZ) ? 60 : 100;
+    level_partition_kind part = level_partition_kind_for_point(y, x);
+    if (cave_natural[y][x] || part == LEVEL_PART_CAVEY || part == LEVEL_PART_RUINED
+        || part == LEVEL_PART_BIG_CAVE || part == LEVEL_PART_CHASM) c->flags |= ENV_NATURAL;
+    if (!in_bounds_fully(y, x) || anchor(y, x) || (cave_info[y][x] & (CAVE_G_VAULT | CAVE_ICKY | CAVE_MORGOTH_TUNNEL))
+        || cave_fixture_at(y, x)) c->flags |= ENV_PROTECTED;
+    bool vertical = false;
+    if (in_bounds_fully(y, x) && (FEAT_IS_BRIDGE(f) || floor_bridge(y, x, &vertical))) {
+        c->flags |= ENV_BRIDGE; c->bridge_feat = f;
+        c->underlay = FEAT_IS_BRIDGE(f) ? cave_bridge_underlay(f) : FEAT_CHASM;
+        c->material = (f == FEAT_FLOOR || c->underlay == FEAT_CHASM || c->underlay == FEAT_LAVA
+            || c->underlay == FEAT_POISON || FEAT_IS_ICE(c->underlay)) ? ENV_BRIDGE_STONE : ENV_BRIDGE_WOOD;
+    }
+    c->heat = origin_heat(y, x);
+    c->known_underlay = c->flags & ENV_BRIDGE ? c->underlay : cave_bridge_underlay(f);
+    c->known_material = c->material;
+}
+
 void cave_environment_seed(void)
 {
     cave_environment_reset();
@@ -298,7 +324,7 @@ void cave_environment_seed(void)
     for (int y = 1; y < p_ptr->cur_map_hgt-1; y++) for (int x = 1; x < p_ptr->cur_map_wid-1; x++) {
         int f = liquid(cave_feat[y][x]);
         if (!f || cells[y][x].owner || (cells[y][x].flags & ENV_PROTECTED)
-            || state.source_count >= ENV_SOURCES_MAX-3) continue;
+            || state.source_count >= 29) continue;
         int id = ++state.source_count, head = 0, tail = 1;
         queue[0] = y * MAX_DUNGEON_WID + x;
         cells[y][x].owner = id;

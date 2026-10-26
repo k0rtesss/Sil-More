@@ -22,8 +22,24 @@ void level_image_free(level_image* image)
     SDL_free(image);
 }
 
+level_image* level_image_clone(const level_image* source)
+{
+    level_image* copy = level_image_new();
+    if (!copy) return NULL;
+    object_type* objects = copy->objects;
+    *copy = *source;
+    copy->objects = objects;
+    copy->legendary_runtime = legendary_area_clone_runtime_snapshot(source->legendary_runtime);
+    if (source->legendary_runtime && !copy->legendary_runtime) {
+        level_image_free(copy); return NULL;
+    }
+    SDL_memcpy(copy->objects, source->objects, z_info->o_max * sizeof(*objects));
+    return copy;
+}
+
 void level_image_bind_grids(level_image* image)
 {
+    level_stream_restore_frame(image);
     cave_info = image->info;
     cave_feat = image->feat;
     cave_color = image->color;
@@ -38,11 +54,40 @@ void level_image_bind_grids(level_image* image)
     o_list = image->objects;
 }
 
+void level_image_repair_social(level_image* image)
+{
+    monster_type* saved_list = mon_list;
+    s16b saved_max = mon_max;
+    mon_list = image->monsters; mon_max = image->mon_max;
+    bool changed;
+    do {
+        changed = false;
+        for (int i = 1; i < mon_max; i++) {
+            monster_type* m = &mon_list[i];
+            if (!m->r_idx) continue;
+            bool valid = monster_social_valid(m);
+            if (valid && m->social_rival)
+                valid = mon_list[m->social_rival].social_rival == i
+                    && mon_list[m->social_rival].social_state == m->social_state;
+            if (valid && m->social_state == MON_SOCIAL_HELP)
+                valid = mon_list[m->social_ally].social_rival == m->social_focus
+                    && mon_list[m->social_ally].social_state == MON_SOCIAL_FIGHT;
+            if (valid) continue;
+            m->social_rival = m->social_focus = m->social_ally = 0;
+            m->social_state = m->social_timer = m->social_memory = 0;
+            m->social_cooldown = MON_SOCIAL_COOLDOWN;
+            changed = true;
+        }
+    } while (changed);
+    mon_list = saved_list; mon_max = saved_max;
+}
+
 #define COPY_TO(field, global) SDL_memmove(image->field, global, sizeof(image->field))
 #define COPY_FROM(global, field) SDL_memmove(global, image->field, sizeof(image->field))
 
 void level_image_capture(level_image* image)
 {
+    level_stream_capture_frame(image);
     image->depth = p_ptr->depth;
     image->hgt = p_ptr->cur_map_hgt; image->wid = p_ptr->cur_map_wid;
     image->py = p_ptr->py; image->px = p_ptr->px;
@@ -114,6 +159,7 @@ void level_image_capture(level_image* image)
 
 void level_image_restore(const level_image* image)
 {
+    level_stream_restore_frame(image);
     s32b elapsed = MAX(0, turn - image->suspended_turn);
     p_ptr->depth = image->depth;
     p_ptr->cur_map_hgt = image->hgt; p_ptr->cur_map_wid = image->wid;

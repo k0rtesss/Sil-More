@@ -1,5 +1,113 @@
 # Session notes
 
+## 2026-10-25/26: Endless horizontal dungeon - implementation and playtest
+
+Status: implemented and playtested. Standard/portable Windows builds, focused
+production fixtures and isolated real-game save/reload checks pass.
+
+- New modules: `level-stream.c/.h`, `level-stream-generation.c`,
+  `level-stream-sites.c`, `level-window.c`. Save extra is now `1.1.0.10`.
+- Active worlds use a moving 5x5 grid of 44-tile partitions. Sparse permanent
+  sites retain mutable terrain, actors/loot, reservoir state and discovery/quest
+  progress; ordinary outgoing terrain, objects, map and hints are discarded.
+- Complete coordinate translation covers actors' AI/patrol/work state, owned
+  stacks, fluids, environment sources, clues, camera and resident vertical links.
+  SDL mouse travel retains its world destination and rebuilds its route.
+- New production fixtures: `check_stream_geography.py`,
+  `check_stream_generation.py`, `check_level_window.py`,
+  `check_endless_stream.py`, `check_stream_mouse_path.py`.
+- Fixed independently exposed defects: reused-slot ownership reservations,
+  cross-depth site entities, carried split identities before serialization,
+  archived-only unique reservations on load, partial/parked timer baselines,
+  legacy site inference, archive truncation, camera reset, mouse recall expiry,
+  signed paired-vault save origins, and worker access checks on reserved bedrock.
+- Also fixed absent monster tokens resolving to ordinary slot zero, relationship
+  rebinding on retained actors, expired social references, signed 64-bit text
+  formatting, keyboard paging of the remembered-place list and unstyled new
+  granite/guard cells.
+- Final live profile: `scripts/output/control-playtests/endless-map-final-20261026/`.
+  Seven westward shifts reached world `(-242,64)` while Aule's site was outside
+  the resident window. A real save/quit/relaunch retained HP53, turn111 and
+  playerturn10. Six eastward shifts and normal walking returned to the original
+  forge at `(66,68)`; the quest remained Active and the forge retained 3 uses.
+- Normal combat after return, inventory, equipment, unified Look, and keyboard
+  scrolling of remembered places were replayed through SDL controls. A second
+  real save/quit/relaunch retained `(66,68)`, HP45/53, turn211, playerturn20.
+  The isolated game was saved and closed normally. Debug tools supplied quest
+  setup and long-distance travel; normal walking/combat exercised action costs.
+- `playtest-results.json` in that profile records commands/results, exact final
+  state, build/deployment SHA256 matches and validation limits. Final live log
+  has no errors. It retains 267 wall-style fallback warnings from chunks made
+  by the earlier QA executable; new incoming granite/guard styles are now
+  encoded explicitly. The earlier pre-fix profile is preserved separately at
+  `scripts/output/control-playtests/endless-map-20261025-ea437eb9/`.
+- All ten `check_endless_stream.py` cases pass, including real asynchronous
+  20 -> 19 -> 18 -> 20 generation/eviction/return, clipped paired-vault saves,
+  valid ordinary/site feuds, inventory splitting and truncation rejection.
+  Window/mouse/generation/geography fixtures, old cache save/migration, cache
+  links/seeded generation, and the full vertical-water suite also pass.
+- This is headless SDL desktop replay and production-engine fixture proof;
+  physical-device input and encounter balance were not tested.
+
+### Agreed behavior
+
+- Each depth is an endless horizontal world. Generate the usual starting area, then additional partitions ahead of movement; no visible level-edge travel or loading-room transition.
+- Ordinary partitions outside the retention radius are discarded, including explored terrain, local edits, occupants, loose loot, skeleton clue records and clue overlays. Returning materializes a fresh layout and population. The user explicitly chose **fresh layout, stable major features**.
+- Major geography is independent of materialization: rivers keep their course and downstream direction across partitions; connected lakes, rifts and other large features share a world plan.
+- Great vaults and quest sites remain at their original world positions. Preserve their actual state, including opened doors, dug walls, emptied chests, defeated occupants, claimed rewards and discovery credit. Returning must not respawn their treasure or restart a quest.
+- A discovered permanent site's location remains known; ordinary routes and clues expire with their partitions. An undiscovered site is not revealed by being persistent. A clue's persistent destination does not make its forgotten source note permanent.
+
+### World addressing and residency
+
+- Introduce a signed 64-bit world tile/partition address `(depth, y, x)`, separate from the engine's bounded local map coordinates. Use floor division for negative partition coordinates. Do not widen every byte-coordinate engine field as the first step.
+- A moving local window holds the resident partitions. Use a bounded prefetch band and a wider retention band to avoid generating on every step or repeatedly forgetting a boundary. Keep the configured maximum compatible with `PARTITION_META_MAX` and the fixed map arrays; derive the tile dimensions from partition width plus a guard border rather than silently exceeding 231 cells.
+- Rebase only at a safe gameplay boundary. It consumes no player energy or world turns. The overlapping resident region retains its exact terrain, actors, objects and memory; only outgoing partitions are forgotten and incoming partitions generated.
+- Adjacent depths must resolve stairs, shafts, chasms and fluid portals through world-space endpoints. Each local window projects those endpoints; never assume two independently moved windows have the same local `y/x`.
+- Use a sparse archive for persistent site footprints and compact connection records. Do not archive distant ordinary partition images or an ever-growing list of ordinary visits.
+
+### Lazy basis / preplan
+
+- Use one saved world seed and a versioned, coordinate-addressed macro planner. It evaluates only nearby macro regions; an endless world cannot require a complete initial preplan.
+- Neighboring partitions derive a shared boundary contract from the same canonical world edge key. The contract specifies walking openings and any river mouths, channel widths, downstream directions and bank elevations. It must agree regardless of discovery order, including diagonals and negative coordinates.
+- River routes come from coordinate-addressed watersheds with shared control points, smooth channels, widened lake sections and a stable downstream orientation. They are sampled independently through each partition. Independent random edge rolls alone are insufficient: they can create disconnected channels or flow reversals.
+- Generate local rooms, tunnels and populations around these reserved features. Shared boundary geometry comes from the world plan; ordinary interiors use a fresh generation nonce. A saved monotonic materialization counter avoids retaining a visit counter for every forgotten partition. Use a separate generation RNG so background generation/rendering cannot perturb gameplay RNG.
+- Persistent site reservations take priority over ordinary construction. Preserve compatible approaches at the site boundary; fresh surrounding generation must provide access without carving through authored protected walls or changing the site's state.
+
+### Persistent sites
+
+- Give each site a stable ID and world footprint, template identity/transform, discovery/experience/reward bits, quest association and serialized mutable state. Capture a complete site with a small approach apron, including a footprint spanning multiple partitions.
+- Site serialization contains only the protected footprint/apron, relevant actors and owned objects, environmental state and applicable paired-vault/portal metadata. A full distant ordinary map is not an acceptable site snapshot.
+- Sleeping sites retain unique-monster and artefact ownership reservations. Snapshot/unload/load must transfer ownership once; actors, carried loot and claimed rewards must not be duplicated. Store links by stable identity rather than raw local monster/object indexes.
+- Freeze unloaded site simulation at suspension; retain deadlines relative to that suspension so returning does not apply an arbitrary backlog of off-screen environmental/actor actions. Run-wide quest progress remains live.
+- Store discovered site bookmarks in world coordinates, independently of ordinary map memory. A map can show a known site's direction/position while the route to it is forgotten. Do not create a global map history of ordinary terrain to support this.
+- Preserve both halves of paired great vaults and their shared discovery/reward state across horizontal and vertical eviction. Ordinary stair/portal endpoint metadata is compact topology, not an exception allowing full map retention.
+
+### Existing integration points and constraints
+
+- `src/level-generation/level-generation.c`: current whole-floor pipeline, size selection, quest lottery, terrain history, access validation and population. Introduce a bounds-scoped ordinary-partition pipeline; keep quest/great-vault selection subject to existing run limits instead of rerunning the whole floor lottery for each strip.
+- `src/level-generation/level-generation-layout-modes.c`: existing bounded carvers/room builders can be reused. `apply_quadrant_generation_modes()` itself is not a strip generator: it resets metadata and makes whole-level reservations/budget choices.
+- `src/level-generation/level-generation-terrain-history.c` and `level-generation-landmarks.c`: current plans are local and generation-only. Replace their world-scale input with macro/boundary contracts while retaining appropriate local realization and terrain-access checks.
+- `src/level-generation/level-state.c/.h`: inventory of local grid and runtime state. Add a transactional window translation/reconstruction path that handles environment cells/sources, events, catastrophe cells, fixtures, floods, water flow, scent, partition metadata and vertical state. Rebuild derived view/pursuit/noise caches.
+- `src/types.h`: monster position is only one reference. Sense anchors/recent positions, AI goals/previous/player/attack/feedback positions, patrols/homes, world-work targets and `target_y/x` must also project or invalidate safely. Remap partition territory indexes and all surviving object ownership chains.
+- `src/level-generation/level-cache.c`: current `prepare_links()` assumes identical local coordinates across floors. Current `evict_floor()` resets unfinished Aule/Mandos and present-giver states, discards quest followups, and releases unique/artefact reservations. These actions must be replaced by site-aware ownership transfers before enabling streaming.
+- `src/types.h` / live player state: Aule forge and Mandos vault coordinates need stable site/world addresses and local projection. They are not restored as quest fields by `level_image_restore()`.
+- Skeleton hint source/destination positions, destination partition indexes, clue discovery/bounds/hit-testing and stored message indexes must expire/remap together. Retained clues must not point into a new unrelated partition occupying the old local slot.
+- `src/dungeon/dungeon-narrative.c` and SDL map state: move partition narration/discovery identity from local slots to resident world partitions; translate/cancel transient targets, routes and hover state. Do not call a blanket level-entry reset that re-awards permanent-site discovery.
+- Save/load: add a gated format revision containing the world seed/planner version, active/resident origins, materialization counter, persistent sites/bookmarks and connection metadata. Existing finite saves need a defined conversion retaining the current map and all existing quest/vault state before any eviction. Do not mutate real player saves during migration tests.
+
+### Implementation order and acceptance
+
+1. World addresses, floor division, boundary contracts and lazy macro geography; production-linked tests for positive/negative coordinates, order independence, river direction/confluences and bounded planning storage.
+2. Site identity/footprint capture, ownership transfer, bookmarks and versioned serialization; prove Aule/Mandos/giver/followup preservation, great-vault partial clearance and shared two-floor reward suppression.
+3. Bounds-scoped partition generation and access checks. Generate new strips without touching retained cells, running quest lotteries again or granting player discovery/encounter credit.
+4. Transactional window rebase with complete coordinate translation and world-space vertical endpoints; exercise all four directions, diagonals, AI patrol/target state, object stacks, flows and pending transfers.
+5. Map/hint forgetting and UI projection; verify both visible overlays and their bounds/hitboxes. Great-vault/quest bookmarks survive, ordinary terrain and obsolete clue destinations do not.
+6. Legacy conversion and save/reload of shifted windows plus sleeping sites. Reject truncated/malformed coordinates, duplicate site/actor identities and overlapping incompatible footprints without partial activation.
+7. Stress exploration/return over many windows: ordinary resident memory and ordinary save data remain bounded, generation is fresh on return, geography matches across seams, protected sites retain their exact progress and no terrain is generated synchronously by rendering/inspection.
+8. Build through `build-cmake.bat`, then isolated game-control replay covering walking, running, mouse travel, map/hint panels, save/reload, stairs/falls/streams and an actual return to a partly cleared persistent site. Measure generation latency and test narrow layouts separately from physical-device input.
+
+Initial read-only audit: gpt-6.1-sol, medium reasoning, one bounded pass over coordinate/persistence hazards. Implementation used two gpt-6.1-sol agents at high reasoning for independent world-generation and window-translation work and production regression fixtures. Their tests exposed ownership, truncation, mouse-reference, camera, social-link and real-worker revisit failures, all corrected before the final passing checks. The main agent integrated persistence/cache/UI/save changes and performed the actual SDL playtest.
+
 ## 2026-10-18: Port further master updates into 1.1
 
 - Merged `origin/master` through `bdd309e2` (three new commits): the 54-entry achievement catalogue and discovery/character provenance, optional Play Games cloud archive/sync and privacy disclosures, handheld input/layout improvements, and native-size semantic text rendering.

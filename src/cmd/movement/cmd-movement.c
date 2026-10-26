@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "level-generation/level-stream.h"
 #include "cave/cave-vertical.h"
 #include "level-generation/level-cache.h"
 #include "quest/quest-runtime.h"
@@ -397,7 +398,7 @@ finish_ascent:
     sil_achievements_on_level_travel(p_ptr->depth, new, cave_feat[p_ptr->py][p_ptr->px]);
     p_ptr->depth = new;
 
-    if (!level_cache_retains(new))
+    if (!level_cache_retains(new) && !level_stream_enabled())
     {
         /* Reset tulkas quest */
         if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
@@ -622,7 +623,7 @@ finish_descent:
     sil_achievements_on_level_travel(p_ptr->depth, new, cave_feat[p_ptr->py][p_ptr->px]);
     p_ptr->depth = new;
 
-    if (!level_cache_retains(new))
+    if (!level_cache_retains(new) && !level_stream_enabled())
     {
         /* Reset tulkas quest */
         if (quest_enabled(QUEST_ID_TULKAS) && p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
