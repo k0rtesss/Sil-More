@@ -61,6 +61,14 @@ void calc_bonuses(void)
 
     int armour_weight = 0;
 
+    /* Older saves may contain a learned ability or an item grant which this
+     * character cannot use. Keep its saved ownership, but never activate it. */
+    if (player_ability_restriction(S_MEL, MEL_TWO_WEAPON))
+    {
+        p_ptr->have_ability[S_MEL][MEL_TWO_WEAPON] = false;
+        p_ptr->active_ability[S_MEL][MEL_TWO_WEAPON] = false;
+    }
+
     // Remove off-hand weapons if you cannot wield them
     if (!bonuses_preview_active
         && !player_offhand_weapon_allowed(&inventory[INVEN_WIELD],
@@ -426,6 +434,10 @@ void calc_bonuses(void)
             p_ptr->skill_equip_mod[S_EVN] += 1;
         }
     }
+
+    /* Equipment cannot grant a permanently forbidden ability. */
+    if (player_ability_restriction(S_MEL, MEL_TWO_WEAPON))
+        p_ptr->have_ability[S_MEL][MEL_TWO_WEAPON] = false;
 
     /* Clear the old item granted abilities */
     for (i = 0; i < S_MAX; i++)

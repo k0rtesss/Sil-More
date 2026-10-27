@@ -142,6 +142,10 @@ errr rd_extra(void)
         (void)disease_assign_identity();
     }
 
+    /* Preserve the saved disease slot while updating its former random cure. */
+    if (disease_is_angband_plague())
+        p_ptr->disease_cure = SV_FOOD_HEALING;
+
     /* Read the skill info - all skills including S_SPC (Special) present in 0.9.0 */
     for (i = 0; i < S_MAX; i++)
         rd_s16b(&p_ptr->skill_base[i]);

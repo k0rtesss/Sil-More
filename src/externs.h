@@ -842,6 +842,7 @@ extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
 extern bool do_cmd_can_wield_offhand(const object_type* o_ptr);
+extern cptr player_ability_restriction(int skilltype, int abilitynum);
 extern bool player_offhand_weapon_allowed(const object_type* weapon,
     const object_type* offhand);
 extern bool do_cmd_wield_to_slot(
@@ -2365,6 +2366,7 @@ extern bool infect_disease(void);
 extern bool disease_assign_identity(void);
 extern void disease_identify(void);
 extern cptr disease_name(void);
+extern bool disease_is_angband_plague(void);
 extern cptr disease_cure_name(void);
 extern bool disease_herb_matches(const object_type* o_ptr);
 extern bool cure_disease(void);

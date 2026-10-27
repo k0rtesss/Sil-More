@@ -134,6 +134,57 @@ static void short_title(void)
     draw("password-title");
     sdl_question_menu_clear(); ui_menu_click_clear();
 }
+static void wrapped_setup_columns(void)
+{
+    SDL_strlcpy(fixture_id,"wrapped-item-setup-columns",sizeof(fixture_id));
+    ui_menu_click_begin(); sdl_question_menu_begin("Choose item setup");
+    sdl_question_menu_set_help(setup_help);
+    cptr label="Make active: Two weapons\tMain: a Chipped Dagger of Accompaniment (+0,1d5) [+1] + Off-hand: a Dagger (+1,1d5) {unknown}\t(+12,1d6); off-hand (+10,1d6)";
+    sdl_question_menu_add_entry(0,"a)",label,TERM_ORANGE);
+    sdl_question_menu_add_entry(1,"b)",
+        "Make active: Throwing\ta Chipped Dagger of Accompaniment (+0,1d5) [+1]\t(+12,1d6)",TERM_ORANGE);
+    sdl_question_menu_add_entry(2,"c)","Return to Harness",TERM_WHITE);
+    for(int i=0;i<2;i++) {
+        g_question_menu.entries[i].has_icon=true;
+        g_question_menu.entries[i].icon_attr=TERM_WHITE;
+        g_question_menu.entries[i].icon_char='/';
+    }
+    sdl_question_menu_set_highlight(0); sdl_question_menu_finish();
+    sdl_question_menu_layout_info layout;
+    fixture_assert(sdl_question_menu_layout(&layout)); inside(layout.panel);
+    fixture_assert(layout.has_table);
+    TTF_Font *font=sdl_story_font_for_height_slot(layout.font_px,SDL_STORY_FONT_SLOT_MENU);
+    if(fixture_height>fixture_width && !get_sdl_menu_bigger_font()) {
+        fixture_assert(layout.table_column_count==2);
+        float total=layout.table_column_w[0]+layout.table_column_w[1];
+        fixture_assert(layout.table_column_w[1]>=total*.65f-1);
+        fixture_assert(sdl_question_menu_wrapped_text_height(font,
+            "Make active: Two weapons",layout.table_column_w[0])>TTF_GetFontHeight(font));
+        int word_w=0; fixture_assert(TTF_GetStringSize(font,"Accompaniment",0,&word_w,NULL));
+        fixture_assert(layout.table_column_w[1]>=word_w);
+    }
+    for(int i=0;i<2;i++) {
+        char columns[SDL_QUESTION_MENU_MAX_COLUMNS][SDL_QUESTION_MENU_TEXT_LEN];
+        int count=sdl_question_menu_display_columns(g_question_menu.entries[i].text,
+            layout.compact_table,columns);
+        for(int col=0;col<count;col++)
+            fixture_assert(layout.rows[i].h>=sdl_question_menu_wrapped_text_height(
+                font,columns[col],layout.table_column_w[col]));
+    }
+    draw("setup-wrapped-columns");
+    if(layout.max_scroll_offset>0) {
+        fixture_assert(sdl_question_menu_scroll_offset_by(&layout,100000));
+        fixture_assert(sdl_question_menu_layout(&layout));
+    }
+    SDL_FRect hit;
+    fixture_assert(SDL_GetRectIntersectionFloat(&layout.rows[2],&layout.entries_rect,&hit));
+    fixture_assert(hit.h>=layout.row_h-1);
+    fixture_assert(sdl_question_menu_handle_pointer(hit.x+hit.w/2,hit.y+hit.h/2,UI_MENU_CLICK_PRIMARY));
+    int choice=-1,action=0;
+    fixture_assert(ui_menu_click_take_action(&choice,&action));
+    fixture_assert(choice==2 && action==UI_MENU_CLICK_PRIMARY);
+    sdl_question_menu_clear(); ui_menu_click_clear();
+}
 static void quantity_title(void)
 {
     ui_menu_click_begin();
@@ -188,7 +239,7 @@ static void quantity_title(void)
     for(int big=0;big<2;big++) {
         config.bigger_font=big;
         for(int menu=0;menu<SDL_MENU_FONT_COUNT;menu++) config.menu_bigger_font[menu]=big;
-        fixture.active=false; short_question(); short_title(); quantity_title();
+        fixture.active=false; short_question(); short_title(); quantity_title(); wrapped_setup_columns();
     }
     printf("Short question %dx%d @%.3f Off/On natural height, Help paging, IDs: PASS\n",
         fixture_width,fixture_height,fixture_density);
@@ -221,7 +272,7 @@ def main():
         "@CMakeFiles/sil-more.dir/includes_C.rsp",str(source),"@"+str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp","-Wl,"+",".join("--wrap="+w for w in wraps),
         "-o",str(exe)],cwd=BUILD,env=env,check=True)
-    for width,height,density in [(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
+    for width,height,density in [(582,1280,2),(720,1600,2),(1080,2340,2.75),(1080,2400,2.625)]:
         for w,h in [(width,height),(height,width)]:
             subprocess.run([str(exe),str(w),str(h),str(density),
                 str(ROOT/"lib/xtra/font/EBGaramond-Regular.ttf"),str(ROOT/"lib/xtra/font/Cinzel-Medium.ttf"),

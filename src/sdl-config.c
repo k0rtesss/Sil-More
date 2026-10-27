@@ -1796,6 +1796,7 @@ static const byte app_other_options[] = {
 
 static const byte app_gameplay_options[] = {
     OPT_active_weapon_switch_confirm,
+    OPT_ignore_monster_alarms,
     OPT_load_blitz_by_default,
     OPT_lockpick_minigame,
     OPT_chest_trap_minigame,

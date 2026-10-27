@@ -177,6 +177,8 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     cJSON *mode=cJSON_GetObjectItemCaseSensitive(entry,"mode");
     fixture_mode=cJSON_IsNumber(mode)?mode->valueint:TUTORIAL_MODE_EXTENDED;
     fixture.can_continue=!fixture.action[0];
+    bool aiming=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"aiming"));
+    g_pointer_aim=(pointer_aim_state){.active=aiming,.select_mode=aiming};
     cJSON *input=cJSON_GetObjectItemCaseSensitive(entry,"input");
     tutorial_last_input=cJSON_IsNumber(input)?input->valueint:TUTORIAL_INPUT_KEYBOARD;
     config.input_ui_mode=tutorial_last_input==TUTORIAL_INPUT_CONTROLLER
@@ -195,7 +197,9 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     }
     tutorial_seen_revision=1; tutorial_was_active=true;
     tutorial_focus=0; tutorial_scroll=scroll;
-    tutorial_reading=scroll>0 && !fixture.can_continue;
+    tutorial_reading=(scroll>0
+        || cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"reading")))
+        && !fixture.can_continue;
     config.aux_view_font_size=font_size;
     if (weapon_menu) {
         sdl_question_menu_begin("Change active weapon");
@@ -291,7 +295,18 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     cJSON *expected_text=cJSON_GetObjectItemCaseSensitive(entry,"expected_text");
     if (cJSON_IsString(expected_text))
         fixture_assert(strstr(drawn_content,expected_text->valuestring)!=NULL);
-    bool suspended=character_icky && !fixture.can_continue && !tutorial_reading && !tutorial_card.w;
+    bool suspended=tutorial_menu_owns_input() && !fixture.can_continue && !tutorial_reading && !tutorial_card.w;
+    if (aiming && !fixture.can_continue && !tutorial_reading) {
+        fixture_assert(suspended && fixture.active && !tutorial_max_scroll);
+        /* Neither the card nor its surrounding shade may obscure the map. */
+        Uint8 r,g,b,a;
+        SDL_Rect probe={width/2+3,height/2+3,1,1};
+        pixels=SDL_RenderReadPixels(g_state.renderer,&probe);
+        fixture_assert(pixels!=NULL);
+        fixture_assert(SDL_ReadSurfacePixel(pixels,0,0,&r,&g,&b,&a));
+        fixture_assert(r==34 && g==38 && b==39);
+        SDL_DestroySurface(pixels);
+    }
     if (suspended) {
         fixture_assert(drawn_count==0);
         for (int b=0;b<3;++b) fixture_assert(!tutorial_buttons[b].w);
@@ -409,6 +424,13 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         SDL_DestroySurface(pixels);
         printf("%s: card %.0fx%.0f; scroll %d/%d\n",file,tutorial_card.w,tutorial_card.h,tutorial_scroll,tutorial_max_scroll);
     }
+    if (aiming && !fixture.can_continue && !tutorial_reading) {
+        g_pointer_aim.active=false;
+        drawn_count=0;
+        sdl_gameplay_tutorial_render();
+        fixture_assert(tutorial_card.w>0 && drawn_count>0 && fixture.active);
+    }
+    g_pointer_aim=(pointer_aim_state){0};
     if (cJSON_IsString(surface)) {
         sdl_halls_screen_hide();
         sdl_hint_quest_menu_hide();
@@ -666,6 +688,21 @@ def main():
                     fixtures.append(fixture)
                     fixtures.append(dict(fixture, menu=True, capture=False,
                                          id=fixture["id"]+".menu"))
+    # Aiming hides the card and its shade without completing the lesson.
+    # Cancel restores it, and explicit reading can still display the body.
+    for lesson_id in ("item.bow.use", "item.throwing.use"):
+        lesson = next(entry for entry in lessons if entry["id"] == lesson_id)
+        for size, font_size in (([582, 1280], 28), ([360, 800], 20),
+                                ([800, 360], 20), ([1280, 800], 28)):
+            for device in range(1, 5):
+                fixture = make_fixture(lesson, lesson["steps"][0], False,
+                                       device, False, capture=device == 3)
+                fixture.update(id=fixture["id"]+".aiming", aiming=True,
+                               touch_controls=True, size=size, font_size=font_size)
+                fixtures.append(fixture)
+                fixtures.append(dict(fixture, id=fixture["id"]+".reading",
+                                     reading=True, expected_scroll=True, size=[320, 240],
+                                     capture=False))
     if "--all" in sys.argv[1:]:
         for lesson in lessons:
             for step in lesson["steps"]:

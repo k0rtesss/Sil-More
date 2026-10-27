@@ -70,6 +70,7 @@ static bool detect_monster_noise_aux(monster_type* m_ptr, int skill, bool previe
     if (result > 10)
     {
         m_ptr->ml = true;
+        m_ptr->mflag |= MFLAG_LISTEN;
         if (!suppress_visuals)
             lite_spot(y, x);
         return true;
@@ -232,6 +233,10 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
 
     /* Seen at all */
     bool flag = false;
+
+    /* Recompute sound-only visibility; sight, detection and telepathy below
+     * take precedence over Resonance for movement interruptions. */
+    m_ptr->mflag &= ~MFLAG_LISTEN;
 
     /* Seen by vision */
     bool easy = false;

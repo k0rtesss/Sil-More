@@ -6,6 +6,16 @@
 #include "supplies.h"
 #include "item_set.h"
 
+/* Permanent character restrictions apply to learning, item grants and use. */
+cptr player_ability_restriction(int skilltype, int abilitynum)
+{
+    if (skilltype == S_MEL && abilitynum == MEL_TWO_WEAPON
+        && p_ptr && c_info
+        && (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS))
+        return "Your injury prevents Two Weapon Fighting.";
+    return NULL;
+}
+
 int affinity_level(int skilltype)
 {
     int  level         = 0;

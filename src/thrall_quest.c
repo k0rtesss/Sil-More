@@ -72,7 +72,9 @@ enum
     THRALL_REWARD_SANCTIFY = 2,
     THRALL_REWARD_IDENTIFY_ONE = 3,
     THRALL_REWARD_IDENTIFY_NATURE = 4,
-    THRALL_REWARD_LATER = 5
+    THRALL_REWARD_LATER = 5,
+    THRALL_REWARD_DIAGNOSE_DISEASE = 6,
+    THRALL_REWARD_CURE_HERB = 7
 };
 
 typedef struct thrall_reward_option
@@ -1911,10 +1913,95 @@ bool reveal_random_artifact(void)
     return true;
 }
 
+static bool thrall_can_diagnose_disease(void)
+{
+    return p_ptr->diseased && p_ptr->disease_knowledge
+        != (DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE);
+}
+
+static bool thrall_diagnose_disease(void)
+{
+    if (!thrall_can_diagnose_disease())
+        return false;
+
+    p_ptr->disease_knowledge = DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE;
+    msg_format("The thrall recognises your illness as %s.", disease_name());
+    if (disease_is_angband_plague())
+        msg_print("\"Healing is the only herb that cures this plague. Potions of Healing or Miruvor also cure it.\"");
+    else
+        msg_format("\"A herb of %s%s, or a potion of Healing or Miruvor, will cure it.\"",
+            disease_cure_name(), p_ptr->disease_cure == SV_FOOD_HEALING
+                ? "" : " or Healing");
+    msg_print("\"A cure herb restores the attributes lost to disease; its usual effects and nourishment do not apply.\"");
+    return true;
+}
+
+static bool thrall_can_provide_cure_herb(void)
+{
+    return p_ptr->diseased && !disease_is_angband_plague()
+        && p_ptr->disease_cure < DISEASE_HERB_COUNT
+        && lookup_kind(TV_FOOD, p_ptr->disease_cure) > 0;
+}
+
+static bool thrall_provide_cure_herb(void)
+{
+    object_type herb, known_herb;
+    char name[160];
+
+    if (!thrall_can_provide_cure_herb())
+        return false;
+
+    object_prep(&herb, lookup_kind(TV_FOOD, p_ptr->disease_cure));
+    herb.number = 1;
+    object_known(&herb);
+    object_copy(&known_herb, &herb);
+    if (inven_carry(&herb, false) < 0)
+    {
+        msg_print("Make room in your supplies to receive the thrall's cure herb.");
+        return false;
+    }
+
+    object_aware(&known_herb);
+    object_desc(name, sizeof(name), &known_herb, true, 0);
+    (void)thrall_diagnose_disease();
+    msg_format("The thrall gives you %s to cure your illness.", name);
+    p_ptr->window |= PW_INVEN | PW_SUPPLY;
+    return true;
+}
+
+static cptr thrall_reward_unavailable_reason(int reward)
+{
+    switch (reward)
+    {
+    case THRALL_REWARD_ARTEFACT:
+        return "The thrall has no undiscovered artefact knowledge to share.";
+    case THRALL_REWARD_REPAIR:
+        return "You are not carrying a damaged item the thrall can repair.";
+    case THRALL_REWARD_SANCTIFY:
+        return "You are not carrying a cursed or jinxed item the thrall can sanctify.";
+    case THRALL_REWARD_IDENTIFY_ONE:
+        return "You are not carrying an unidentified item for the thrall to identify.";
+    case THRALL_REWARD_IDENTIFY_NATURE:
+        return "You are not carrying unidentified potions, gems, or herbs for the thrall to identify.";
+    case THRALL_REWARD_DIAGNOSE_DISEASE:
+        return !p_ptr->diseased ? "You have no active disease to diagnose."
+            : "You already know your disease's name and cure.";
+    case THRALL_REWARD_CURE_HERB:
+        if (!p_ptr->diseased)
+            return "You have no active disease that needs a cure herb.";
+        if (disease_is_angband_plague())
+            return "The thrall cannot provide a cure herb for Angband Plague. You need a herb or potion of Healing, or Miruvor.";
+        return "The thrall cannot provide the herb needed to cure your disease.";
+    default:
+        return NULL;
+    }
+}
+
 static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 {
-    thrall_reward_option options[6];
-    ui_question_option question_options[6];
+    thrall_reward_option options[7];
+    ui_question_option question_options[7];
+    cptr disabled_reasons[7];
     int option_count = 0;
     int default_index = -1;
     char title[80];
@@ -1947,6 +2034,20 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     }
 
     {
+        char diagnosis_hotkey = (char)('a' + option_count);
+        options[option_count++] = (thrall_reward_option){
+            THRALL_REWARD_DIAGNOSE_DISEASE, diagnosis_hotkey,
+            "Diagnose disease (name and cure)", thrall_can_diagnose_disease() };
+    }
+
+    {
+        char herb_hotkey = (char)('a' + option_count);
+        options[option_count++] = (thrall_reward_option){
+            THRALL_REWARD_CURE_HERB, herb_hotkey,
+            "Receive your disease's cure herb", thrall_can_provide_cure_herb() };
+    }
+
+    {
         char later_hotkey = (char)('a' + option_count);
         options[option_count++] = (thrall_reward_option){
             THRALL_REWARD_LATER, later_hotkey, "Come later", true };
@@ -1954,8 +2055,15 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 
     for (int i = 0; i < option_count; i++)
     {
+        /* This unavailable gift remains grey, but trying it opens the
+         * thrall's explanation instead of granting a cure. */
+        bool explain_plague = options[i].reward == THRALL_REWARD_CURE_HERB
+            && p_ptr->diseased && disease_is_angband_plague();
         question_options[i] = (ui_question_option){ options[i].hotkey,
-            options[i].label, TERM_L_WHITE, !options[i].enabled };
+            options[i].label, options[i].enabled ? TERM_L_WHITE : TERM_L_DARK,
+            !options[i].enabled && !explain_plague };
+        disabled_reasons[i] = question_options[i].disabled
+            ? thrall_reward_unavailable_reason(options[i].reward) : NULL;
         if (default_index < 0 && options[i].enabled)
             default_index = i;
     }
@@ -1963,7 +2071,7 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
     {
         SDL_strlcpy(title, "The Elven Thrall's Reward", sizeof(title));
-        strnfmt(desc, sizeof(desc), "%s Gifts written in grey cannot yet be granted.",
+        strnfmt(desc, sizeof(desc), "%s Try a grey gift to learn why it is unavailable.",
             pending_reward
                 ? "The elven thrall still waits to grant the boon you earned."
                 : "Choose what gift the elven thrall will grant you.");
@@ -1971,15 +2079,16 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     else
     {
         SDL_strlcpy(title, "The Human Thrall's Reward", sizeof(title));
-        strnfmt(desc, sizeof(desc), "%s Gifts written in grey cannot yet be granted.",
+        strnfmt(desc, sizeof(desc), "%s Try a grey gift to learn why it is unavailable.",
             pending_reward
                 ? "The human thrall still waits to grant the boon you earned."
                 : "Choose what gift the human thrall will grant you.");
     }
 
     {
-        int selected = ui_question_ask(title, desc, question_options,
-            option_count, m_ptr->fy, m_ptr->fx, default_index);
+        int selected = ui_question_ask_with_reasons(title, desc,
+            question_options, disabled_reasons, option_count, m_ptr->fy,
+            m_ptr->fx, default_index);
 
         return (selected < 0) ? THRALL_REWARD_LATER
                               : options[selected].reward;
@@ -2044,6 +2153,24 @@ static bool offer_thrall_reward(monster_type* m_ptr, bool pending_reward)
                 return true;
 
             msg_print("The thrall finds no hidden virtues among your potions, gems, or herbs.");
+            break;
+
+        case THRALL_REWARD_DIAGNOSE_DISEASE:
+            if (thrall_diagnose_disease())
+                return true;
+            break;
+
+        case THRALL_REWARD_CURE_HERB:
+            if (p_ptr->diseased && disease_is_angband_plague())
+            {
+                show_thrall_dialog(m_ptr,
+                    "\"I cannot cure Angband Plague. I have no herb potent enough for it.\"\n\n"
+                    "\"You must find a herb of Healing, a potion of Healing, or Miruvor. "
+                    "I can still offer you another gift.\"");
+                break;
+            }
+            if (thrall_provide_cure_herb())
+                return true;
             break;
 
         case THRALL_REWARD_LATER:

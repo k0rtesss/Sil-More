@@ -948,7 +948,7 @@ Priority: **95** (higher appears first).
 
 **1. Info**
 
-{detail} Exposure rolls one of eight diseases; a disease you have cured cannot infect you again for this run. Infection assigns a random cure herb from the ten herbs. It immediately lowers Constitution by 1, then lowers a random attribute by 1 every 150 player turns (300 with Hardiness), including rest. Hardiness halves infection chances. A Gem of Self Knowledge with Alchemy reveals the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name, then a 50% chance to identify the cure once the name is known. Discoveries and immunity are saved. Eating the correct herb cures disease, restores its penalties, and grants immunity, replacing its normal effect and nourishment. Other herbs act normally. Healing or Miruvor always cures it.
+{detail} Exposure rolls one of eight diseases; a disease you have cured cannot infect you again for this run. A Herb of Healing cures every disease, even before diagnosis. Angband Plague has no other herbal cure. Other diseases also have a random cure herb. Potions of Healing or Miruvor cure every disease. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 150 player turns (300 with Hardiness), including rest. Hardiness halves infection chances. A Gem of Self Knowledge with Alchemy reveals the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name, then a 50% chance to identify the cure once the name is known. Human and elven thralls can fully diagnose disease as a quest reward. For diseases other than Angband Plague, they can instead diagnose it and give you one matching cure herb to eat. Discoveries and immunity are saved. A cure restores disease penalties and grants immunity. A cure herb replaces its normal effects and nourishment; other herbs act normally.
 
 Trigger: The disease condition is active and its lesson is unseen or in progress, or disease has just appeared.
 
@@ -1412,7 +1412,7 @@ Priority: **90** (higher appears first).
 
 **1. Info**
 
-Healing, Miruvor, or the identified cure herb cures disease, restores the attribute points it took, and grants immunity to it for this run. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.
+A Herb of Healing cures every disease, restores the attribute points it took, and grants immunity for this run. Angband Plague requires Healing if you use a herb; other diseases also respond to their assigned cure herb. Potions of Healing or Miruvor cure every disease. A cure herb replaces its normal effects and nourishment. A known remedy is available now. Skip if you prefer another action.
 
 **2. Action**
 
@@ -2002,7 +2002,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting; cure it with its cure herb once identified, Healing or Miruvor before a long rest.
+Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Other cure herbs work except against Angband Plague. Treat disease before a long rest.
 
 Trigger: The rest menu is opened, the rest command is invoked, or the public Resting status first becomes active.
 
@@ -5114,7 +5114,7 @@ Moving into, through or out of shallow water costs 50% more movement time and gi
 
 **2. Info**
 
-When healthy, each water square entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.
+When healthy, each water square entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Other cure herbs work except against Angband Plague.
 
 Trigger: Feature 84 is on the player square or visibly adjacent and marked; secret/unrevealed terrain is excluded.
 
@@ -5834,7 +5834,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment. It also provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of applying the normal effect or nourishment; otherwise, its normal effect applies.
+When healthy, halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment, and provides ordinary herb nourishment. When diseased, cures every disease and restores its attribute penalties instead of healing wounds, halving bleeding, or providing nourishment. Works before diagnosis. Healing is the only herb that cures Angband Plague; potions of Healing or Miruvor also cure it.
 
 Trigger: Item kind 383 is aware and publicly encountered; no forced use.
 
@@ -5930,7 +5930,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
+Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Cures restore disease penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.
 
 Trigger: Item kind 389 is aware and publicly encountered; no forced use.
 
@@ -5962,7 +5962,7 @@ Priority: **34** (higher appears first).
 
 **1. Info**
 
-Provides about 2,000 ordinary turns of nourishment, with a 20% base chance of disease exposure: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure it; potions of Healing or Miruvor do.
+Provides about 2,000 ordinary turns of nourishment, with a 20% base chance of disease exposure: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure it. A Herb of Healing or a potion of Healing or Miruvor cures every disease.
 
 Trigger: Item kind 400 is aware and publicly encountered; no forced use.
 
@@ -8674,7 +8674,7 @@ Archive compatibility entry. New encounters use `menu.rest`.
 
 **1. Info**
 
-Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting; cure it with its cure herb once identified, or with Healing or Miruvor.
+Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Other cure herbs work except against Angband Plague.
 
 Trigger: Legacy lesson retained for saved progress and archive review. New encounters use menu.rest.
 

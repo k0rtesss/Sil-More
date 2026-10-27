@@ -1179,6 +1179,7 @@ void sdl_menu_touch_cancel(void)
     g_menu_touch_press.finger_id = 0;
     g_menu_touch_press.col = 0;
     g_menu_touch_press.row = 0;
+    g_menu_touch_press.choice = 0;
     g_menu_touch_press.start_x = 0.0f;
     g_menu_touch_press.start_y = 0.0f;
     g_menu_touch_press.start_time = 0;
@@ -1189,8 +1190,10 @@ bool sdl_menu_touch_handle_pointer_down(float x, float y,
 {
     int col = 0;
     int row = 0;
+    int choice = 0;
 
-    if (!sdl_menu_touch_point_to_click_cell(x, y, !mouse, &col, &row))
+    if (!sdl_menu_touch_point_to_click_cell(x, y, !mouse, &col, &row)
+        || !ui_menu_click_get_cell_choice(col, row, &choice))
         return false;
 
     if (!mouse
@@ -1204,6 +1207,7 @@ bool sdl_menu_touch_handle_pointer_down(float x, float y,
     g_menu_touch_press.finger_id = finger_id;
     g_menu_touch_press.col = col;
     g_menu_touch_press.row = row;
+    g_menu_touch_press.choice = choice;
     g_menu_touch_press.start_x = x;
     g_menu_touch_press.start_y = y;
     g_menu_touch_press.start_time = SDL_GetTicksNS();
@@ -1215,6 +1219,7 @@ bool sdl_menu_touch_handle_pointer_motion(float x, float y,
 {
     int col = 0;
     int row = 0;
+    int choice = 0;
     float dx;
     float dy;
 
@@ -1222,7 +1227,8 @@ bool sdl_menu_touch_handle_pointer_motion(float x, float y,
         || g_menu_touch_press.finger_id != finger_id)
         return false;
 
-    if (!sdl_menu_touch_point_to_click_cell(x, y, !mouse, &col, &row))
+    if (!sdl_menu_touch_point_to_click_cell(x, y, !mouse, &col, &row)
+        || !ui_menu_click_get_cell_choice(col, row, &choice))
     {
         sdl_menu_touch_cancel();
         return true;
@@ -1235,7 +1241,9 @@ bool sdl_menu_touch_handle_pointer_motion(float x, float y,
     if (dy < 0.0f)
         dy = -dy;
 
-    if (col != g_menu_touch_press.col || row != g_menu_touch_press.row
+    /* Wrapped entries register several rows for one choice. A small wobble
+     * across those rows or columns must stay inside the item's touch box. */
+    if (choice != g_menu_touch_press.choice
         || dx > sdl_touch_swipe_threshold_px()
         || dy > sdl_touch_swipe_threshold_px())
     {
@@ -1266,13 +1274,19 @@ bool sdl_menu_touch_handle_pointer_up(float x, float y,
 {
     int col = 0;
     int row = 0;
+    int choice = 0;
 
     if (!g_menu_touch_press.active || g_menu_touch_press.mouse != mouse
         || g_menu_touch_press.finger_id != finger_id)
         return false;
 
     if (!sdl_menu_touch_point_to_click_cell(x, y, !mouse, &col, &row)
-        || col != g_menu_touch_press.col || row != g_menu_touch_press.row)
+        || !ui_menu_click_get_cell_choice(col, row, &choice)
+        || choice != g_menu_touch_press.choice
+        || SDL_fabsf(x - g_menu_touch_press.start_x)
+            > sdl_touch_swipe_threshold_px()
+        || SDL_fabsf(y - g_menu_touch_press.start_y)
+            > sdl_touch_swipe_threshold_px())
     {
         sdl_menu_touch_cancel();
         return true;

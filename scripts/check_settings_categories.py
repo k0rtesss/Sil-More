@@ -268,20 +268,45 @@ static void check_persistence(void)
     op_ptr->opt[OPT_show_smithing_difficulty] = true;
     op_ptr->opt[OPT_show_dungeon_events] = true;
     op_ptr->opt[OPT_generic] = true;
+    op_ptr->opt[OPT_ignore_monster_alarms] = true;
     op_ptr->intro_style = INTRO_STYLE_HURIN;
     op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_OFF;
     assert(sdl_config_save(config_file, &config, profiles, SDL_PANE_PROFILE_COUNT));
     op_ptr->opt[OPT_show_smithing_difficulty] = false;
     op_ptr->opt[OPT_show_dungeon_events] = false;
     op_ptr->opt[OPT_generic] = false;
+    op_ptr->opt[OPT_ignore_monster_alarms] = false;
     op_ptr->intro_style = 0;
     op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_BANNER;
     sdl_config_load_app_options(config_file);
     assert(op_ptr->opt[OPT_show_smithing_difficulty]);
     assert(op_ptr->opt[OPT_show_dungeon_events] && op_ptr->opt[OPT_generic]);
+    assert(op_ptr->opt[OPT_ignore_monster_alarms]);
     assert(op_ptr->intro_style == INTRO_STYLE_HURIN);
     assert(op_ptr->level_entry_narrative_mode == LEVEL_ENTRY_NARRATIVE_OFF);
     puts("Moved diagnostics, lore and narrative options round-trip through their existing JSON groups: PASS");
+}
+
+static void check_alarm_option(void)
+{
+    assert(!option_norm[OPT_ignore_monster_alarms]);
+    assert(option_is_app_persistent(OPT_ignore_monster_alarms));
+    /* Older configurations have no alarm preference; defaults must win over
+     * any value inherited from a save or a previous character. */
+    op_ptr->opt[OPT_ignore_monster_alarms] = true;
+    sdl_config_load_app_options(config_file);
+    assert(!op_ptr->opt[OPT_ignore_monster_alarms]);
+    inspect(GAMEPLAY_PAGE);
+    int row = find_row("Ignore monster alarms");
+    if (row < 0) row = find_row("Ignore alarms");
+    assert(row >= 0);
+    next_click = choices[row];
+    page(GAMEPLAY_PAGE, "\177\177\033");
+    assert(op_ptr->opt[OPT_ignore_monster_alarms]);
+    next_click = SETTINGS_CLICK_RESET_ROW_BASE + choices[row];
+    page(GAMEPLAY_PAGE, "\177\033");
+    assert(!op_ptr->opt[OPT_ignore_monster_alarms]);
+    puts("Ignore monster alarms: Gameplay row, off default, legacy-config default, touch toggle and reset: PASS");
 }
 '''
 
@@ -297,7 +322,8 @@ def main():
     char filename[2048]; strnfmt(filename, sizeof(filename), "%s/settings.json", argv[2]);
     config_file = filename;
     check_categories(); check_navigation(); check_diagnostics();
-    check_progress_reset_warnings(); check_extra_controls(); check_persistence();
+    check_progress_reset_warnings(); check_extra_controls();
+    check_alarm_option(); check_persistence();
     SDL_Quit(); return 0;
 }
 '''

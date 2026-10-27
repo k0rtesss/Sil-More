@@ -1045,7 +1045,7 @@ int main(void)
         assert(tutorial_game_action_allowed("use-item",&healing));
         assert(tutorial_game_action_allowed("use-item",&miruvor));
         assert(!tutorial_game_action_allowed("use-item",&potion));
-        assert(!tutorial_game_action_allowed("use-item",&herb));
+        assert(tutorial_game_action_allowed("use-item",&herb));
         herb.sval=SV_FOOD_RESTORATION;
         assert(!tutorial_game_action_allowed("use-item",&herb));
         p_ptr->disease_name=1;p_ptr->disease_cure=herb.sval;
@@ -1062,7 +1062,7 @@ int main(void)
         herb.sval=SV_FOOD_SUSTENANCE;p_ptr->disease_cure=herb.sval;
         assert(item_is_remedy(&herb,"diseased")&&!item_is_remedy(&herb,"hunger"));
         herb.sval=SV_FOOD_HEALING;
-        assert(!item_is_remedy(&herb,"diseased")&&item_is_remedy(&herb,"health"));
+        assert(item_is_remedy(&herb,"diseased")&&!item_is_remedy(&herb,"health"));
         supply_count=0;p_ptr->disease_knowledge=0;
         assert(!available_remedy("diseased"));
         test_supply=miruvor; supply_count=1;
@@ -1071,6 +1071,16 @@ int main(void)
         p_ptr->stun=101; assert(!available_remedy("diseased")); p_ptr->stun=0;
         supply_count=0; test_extra=healing; extra_count=1;
         assert(available_remedy("diseased")); extra_count=0;
+        p_ptr->disease_name=DISEASE_ANGBAND_PLAGUE;
+        assert(item_is_remedy(&healing,"diseased")&&item_is_remedy(&miruvor,"diseased"));
+        assert(item_is_remedy(&healing,"health")&&item_is_remedy(&miruvor,"health"));
+        test_supply=miruvor;supply_count=1;assert(available_remedy("diseased"));
+        test_extra=healing;extra_count=1;assert(available_remedy("diseased"));
+        test_supply=herb;assert(available_remedy("diseased"));
+        herb.sval=SV_FOOD_SUSTENANCE;
+        p_ptr->disease_knowledge=DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE;
+        assert(!item_is_remedy(&herb,"diseased")&&item_is_remedy(&herb,"hunger"));
+        supply_count=extra_count=0;p_ptr->disease_name=1;
         effect_calls=0; effect_commits=false;
         assert(!use_object(&healing,&identified) && effect_calls==1);
         assert(tutorial_lesson_status("status.diseased.remedy")==TUTORIAL_IN_PROGRESS);
@@ -1511,7 +1521,9 @@ def main():
     # externs.h contains unguarded enum declarations. A unity fixture has
     # already read it through tutorial.c; omit only that repeated include.
     game = (ROOT / "src/tutorial/tutorial-game.c").read_text()
-    disease = c_function((ROOT / "src/player/effects.c").read_text(), 'disease_herb_matches')
+    disease_source = (ROOT / "src/player/effects.c").read_text()
+    disease = '\n'.join(c_function(disease_source, name) for name in
+                        ('disease_is_angband_plague', 'disease_herb_matches'))
     game = game.replace('#include "externs.h"', '')
     game = game.replace('#include "tutorial-game.h"', '#include "tutorial/tutorial-game.h"')
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')

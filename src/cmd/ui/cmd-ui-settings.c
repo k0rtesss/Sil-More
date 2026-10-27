@@ -379,6 +379,7 @@ static const struct option_group_marker gameplay_option_groups[] = {
     { OPT_lockpick_minigame, "Interaction" },
     { OPT_chest_trap_minigame, "Interaction" },
     { OPT_stop_singing_on_rest, "Rest and Song" },
+    { OPT_ignore_monster_alarms, "Rest and Song" },
     { OPT_visual_recognition, "Monster Behavior" },
     { OPT_know_monster_info, "Information" },
     { OPT_disable_skeleton_note_tutorial, "Tutorial" },
@@ -980,6 +981,8 @@ static cptr option_menu_label(int opt)
     case OPT_load_blitz_by_default:
         return compact ? (narrow ? "Load Blitz" : "Load Blitz first")
                        : "Load Blitz by default";
+    case OPT_ignore_monster_alarms:
+        return narrow ? "Ignore alarms" : "Ignore monster alarms";
     case OPT_show_level_generation_debug:
         return narrow ? "Generation screen" : "Level generation screen";
     case OPT_show_elemental_item_rolls:

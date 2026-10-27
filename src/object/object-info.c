@@ -112,11 +112,15 @@ static bool describe_consumable_healing(const object_type* o_ptr)
         return false;
     }
 
-    if ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+    if (((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+            || (o_ptr->tval == TV_FOOD && o_ptr->sval == SV_FOOD_HEALING))
         && disease_herb_matches(o_ptr))
     {
-        p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
-            disease_name()));
+        if (p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
+            p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
+                disease_name()));
+        else
+            p_text_out("It cures your disease, restoring the attributes lost to it.  ");
         p_text_out("Its usual effects and nourishment do not apply while curing this disease.  ");
         return true;
     }

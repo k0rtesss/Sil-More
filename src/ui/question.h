@@ -45,6 +45,12 @@ cptr ui_question_interaction_help_once(void);
 int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index);
 
+/* As above, with an optional reason per row logged when a disabled choice is
+ * attempted. NULL or empty reasons retain the ordinary unavailable message. */
+int ui_question_ask_with_reasons(cptr title, cptr desc,
+    const ui_question_option* options, const cptr disabled_reasons[],
+    int count, int anchor_y, int anchor_x, int default_index);
+
 /* As above, with an optional inventory-style object icon for each row. */
 struct object_type;
 int ui_question_ask_objects(cptr title, cptr desc,

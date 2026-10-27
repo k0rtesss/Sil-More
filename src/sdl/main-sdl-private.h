@@ -729,6 +729,7 @@ typedef struct menu_touch_press_state {
     SDL_FingerID finger_id;
     int col;
     int row;
+    int choice;
     float start_x;
     float start_y;
     Uint64 start_time;
@@ -1044,7 +1045,7 @@ enum {
     SDL_QUESTION_MENU_MAX_ENTRIES = 320,
     SDL_QUESTION_MENU_MAX_BUTTONS = 4,
     SDL_QUESTION_MENU_LETTER_LEN = 4,
-    SDL_QUESTION_MENU_TEXT_LEN = 256,
+    SDL_QUESTION_MENU_TEXT_LEN = 400,
     SDL_QUESTION_MENU_TITLE_LEN = 80,
     SDL_QUESTION_MENU_DESC_LEN = 480
 };
@@ -2649,6 +2650,9 @@ void sdl_description_overlay_render(void);
 void sdl_touch_exit_button_render(void);
 bool sdl_touch_exit_button_handle_pointer(float x, float y);
 int sdl_touch_menu_button_reserved_rows(void);
+bool sdl_menu_scale_controls_active(void);
+bool sdl_touch_menu_font_control_rail(int count, float size, float gap,
+    SDL_FRect* out);
 bool sdl_description_overlay_handle_close_hover(float x, float y);
 bool sdl_description_overlay_handle_close_pointer(float x, float y);
 int sdl_description_overlay_footer_action_at(float x, float y);

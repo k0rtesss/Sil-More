@@ -122,6 +122,8 @@ bool player_inventory_handle_is_carried(int item)
 
 bool player_inventory_handle_is_equipped(int item)
 {
+    /* Physical save-slot membership also includes inactive Harness storage.
+     * Use player_equipment_slot_counts_as_equipped() for gameplay rules. */
     return item >= INVEN_WIELD && item < INVEN_TOTAL;
 }
 

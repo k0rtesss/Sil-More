@@ -511,10 +511,10 @@ static int sdl_question_menu_wrapped_text_height(TTF_Font* font, cptr text,
     return height;
 }
 
-/* Preserve the short role/stat columns and give the object-name column the
- * remaining width when a tabular question row is narrower than its ideal
- * content width.  All columns retain enough room to wrap at word boundaries
- * on a narrow panel. */
+/* Wrap long role labels as well as descriptions. In a two-column portrait
+ * table, reserve most of the reading width for the equipment details rather
+ * than squeezing them to a few characters beside "Make active: Two weapons".
+ * Wider tables keep their short role/stat columns. */
 static void sdl_question_menu_fit_table_columns(float widths[], int count,
     float available_w, float table_gap, int font_px)
 {
@@ -534,6 +534,15 @@ static void sdl_question_menu_fit_table_columns(float widths[], int count,
 
         for (int column = 0; column < count; column++)
             widths[column] = column_w;
+        return;
+    }
+
+    if (count == 2)
+    {
+        float role_w = MIN(widths[0], available_columns * 0.35f);
+
+        widths[1] = MIN(widths[1], available_columns - role_w);
+        widths[0] = MIN(widths[0], available_columns - widths[1]);
         return;
     }
 
@@ -560,23 +569,13 @@ static void sdl_question_menu_fit_table_columns(float widths[], int count,
     }
 
     overflow = desired_w - available_columns;
-    if (count == 2)
+    for (int column = 1; column < count - 1 && overflow > 0.0f;
+        column++)
     {
-        float shrink = MIN(overflow, widths[1] - min_w[1]);
+        float shrink = MIN(overflow, widths[column] - min_w[column]);
 
-        widths[1] -= shrink;
+        widths[column] -= shrink;
         overflow -= shrink;
-    }
-    else
-    {
-        for (int column = 1; column < count - 1 && overflow > 0.0f;
-            column++)
-        {
-            float shrink = MIN(overflow, widths[column] - min_w[column]);
-
-            widths[column] -= shrink;
-            overflow -= shrink;
-        }
     }
 
     for (int column = 0; column < count && overflow > 0.0f; column++)

@@ -1881,7 +1881,7 @@ void do_cmd_throw(bool automatic)
     }
 
     /* Hack -- Cannot remove cursed items */
-    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr))
+    if (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr))
     {
         if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
         {

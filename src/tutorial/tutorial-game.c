@@ -303,10 +303,12 @@ static bool item_is_remedy(const object_type *item, const char *condition)
     }
     if (item->tval == TV_FOOD) {
         if (!strcmp(condition, "diseased"))
-            return (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+            return (item->sval == SV_FOOD_HEALING
+                    || (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE))
                 && disease_herb_matches(item);
         /* Once diagnosed, this herb is known to replace its normal effects. */
-        if ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+        if ((item->sval == SV_FOOD_HEALING
+                || (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE))
             && disease_herb_matches(item)) return false;
         if (!strcmp(condition, "cut") || !strcmp(condition, "health"))
             return item->sval == SV_FOOD_HEALING;

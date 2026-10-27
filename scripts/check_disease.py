@@ -82,7 +82,7 @@ static int healing_calls, stat_loss_calls;
 static int extra_version,patch_version;
 u32b Rand_div(u32b bound) {
     if(bound==DISEASE_NAME_COUNT) {++identity_calls;return name_roll;}
-    if(bound==DISEASE_HERB_COUNT) {++identity_calls;return herb_roll;}
+    if(bound==DISEASE_HERB_COUNT-1) {++identity_calls;return herb_roll;}
     if(bound==2) {assert(diagnosis_calls<2);return diagnosis_rolls[diagnosis_calls++];}
     ++random_calls;
     /* The first skeleton roll is exposure; the next returns no loot. */
@@ -144,13 +144,17 @@ static void note(cptr s) {(void)s;}
 TESTS = r'''
 static void identity_and_diagnosis(void) {
     reset();disease_identify();assert(!diagnosis_calls&&!identity_calls);
-    for(int name=0;name<DISEASE_NAME_COUNT;name++)for(int herb=0;herb<DISEASE_HERB_COUNT;herb++) {
+    for(int name=0;name<DISEASE_NAME_COUNT;name++)for(int herb=0;herb<DISEASE_HERB_COUNT-1;herb++) {
         reset();name_roll=name;herb_roll=herb;assert(infect_disease());
-        assert(identity_calls==2&&p_ptr->disease_name==name+1&&p_ptr->disease_cure==herb);
+        bool plague=name+1==DISEASE_ANGBAND_PLAGUE;
+        int cure=plague?SV_FOOD_HEALING:herb+(herb>=SV_FOOD_HEALING);
+        int calls=plague?1:2;
+        assert(identity_calls==calls&&p_ptr->disease_name==name+1&&p_ptr->disease_cure==cure);
+        assert(disease_is_angband_plague()==plague);
         assert(!p_ptr->disease_knowledge);
         assert(disease_name()&&*disease_name()&&disease_cure_name()&&*disease_cure_name());
-        assert(!infect_disease()&&identity_calls==2);
-        assert(p_ptr->disease_name==name+1&&p_ptr->disease_cure==herb);
+        assert(!infect_disease()&&identity_calls==calls);
+        assert(p_ptr->disease_name==name+1&&p_ptr->disease_cure==cure);
         assert(cure_disease());assert(!p_ptr->disease_name&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge);
     }
     for(int name=0;name<2;name++)for(int cure=0;cure<2;cure++) {
@@ -172,7 +176,7 @@ static void identity_and_diagnosis(void) {
         p_ptr->active_ability[S_PER][PER_ALCHEMY]=true;disease_identify();
         assert(!diagnosis_calls&&p_ptr->disease_knowledge==(DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE));
     }
-    puts("Identity/diagnosis: every disease/herb assignment; unchanged on exposure; cure reset; all 50% branches; retained partial knowledge; Alchemist certainty: PASS");
+    puts("Identity/diagnosis: seven ordinary diseases each have nine alternate herbs; Angband Plague requires Healing; unchanged on exposure; cure reset; all 50% branches; retained partial knowledge; Alchemist certainty: PASS");
 }
 static void progression(void) {
     reset(); process_disease(); assert(!random_calls&&!disturbances);
@@ -207,26 +211,33 @@ static void consumables(void) {
         reset();expected_bound=5;random_value=roll;item.sval=SV_FOOD_MEAT;ident=false;
         assert(eat_food(&item,&ident)&&ident);assert(random_calls==1);assert((p_ptr->diseased>0)==(roll==0));
     }
-    for(int sval=0;sval<256;sval++) {
-        reset();infect_disease();p_ptr->diseased=17;for(int s=0;s<A_MAX;s++)p_ptr->stat_drain[s]=-3;
+    for(int name=1;name<=DISEASE_NAME_COUNT;name++)for(int sval=0;sval<256;sval++) {
+        reset();name_roll=name-1;infect_disease();p_ptr->diseased=17;for(int s=0;s<A_MAX;s++)p_ptr->stat_drain[s]=-3;
         p_ptr->disease_cure=(sval+1)%DISEASE_HERB_COUNT;
         item.tval=TV_FOOD;item.sval=sval;ident=false;eat_food(&item,&ident);
-        assert(p_ptr->diseased==17&&p_ptr->stat_disease[A_CON]==-1);
+        bool cures=sval==SV_FOOD_HEALING;
+        assert(p_ptr->diseased==(cures?0:17)&&p_ptr->stat_disease[A_CON]==(cures?0:-1));
         if(sval==SV_FOOD_RESTORATION)for(int s=0;s<A_MAX;s++)assert(p_ptr->stat_drain[s]==0);
-        reset();infect_disease();p_ptr->diseased=17;p_ptr->stat_drain[A_CON]=-2;
+        reset();name_roll=name-1;infect_disease();p_ptr->diseased=17;p_ptr->stat_drain[A_CON]=-2;
         item.tval=TV_POTION;item.sval=sval;ident=false;quaff_potion(&item,&ident);
-        bool cures=sval==SV_POTION_HEALING||sval==SV_POTION_MIRUVOR;
+        cures=sval==SV_POTION_HEALING||sval==SV_POTION_MIRUVOR;
         assert(p_ptr->diseased==(cures?0:17));assert(p_ptr->stat_disease[A_CON]==(cures?0:-1));
         assert(p_ptr->stat_drain[A_CON]==-2);
         if(cures)assert(!p_ptr->disease_name&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge);
     }
-    for(int herb=0;herb<DISEASE_HERB_COUNT;herb++)for(int known=0;known<2;known++) {
-        reset();herb_roll=herb;infect_disease();p_ptr->diseased=17;
+    for(int name=1;name<=DISEASE_NAME_COUNT;name++)
+    for(int herb=0;herb<DISEASE_HERB_COUNT;herb++)for(int known=0;known<2;known++)
+    for(int universal=0;universal<2;universal++) {
+        reset();name_roll=name-1;infect_disease();p_ptr->disease_cure=herb;p_ptr->diseased=17;
+        if(name==DISEASE_ANGBAND_PLAGUE&&!universal&&herb!=SV_FOOD_HEALING) {
+            item.tval=TV_FOOD;item.sval=herb;
+            assert(!disease_herb_matches(&item));continue;
+        }
         p_ptr->disease_knowledge=known?(DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE):0;
         p_ptr->food=2000;p_ptr->afraid=17;p_ptr->rage=7;p_ptr->cut=20;p_ptr->blind=13;
         for(int s=0;s<A_MAX;s++)p_ptr->stat_drain[s]=-3;
         player_type before=*p_ptr;assert(cure_disease());player_type expected=*p_ptr;*p_ptr=before;
-        item.tval=TV_FOOD;item.sval=herb;item.pval=250;ident=false;
+        item.tval=TV_FOOD;item.sval=universal?SV_FOOD_HEALING:herb;item.pval=250;ident=false;
         assert(disease_herb_matches(&item));assert(eat_food(&item,&ident)&&ident);
         assert(memcmp(p_ptr,&expected,sizeof(expected))==0);
         assert(!random_calls&&!healing_calls&&!stat_loss_calls);
@@ -236,7 +247,7 @@ static void consumables(void) {
     item.tval=TV_POTION;item.sval=p_ptr->disease_cure;assert(!disease_herb_matches(&item));
     item.tval=TV_FOOD;item.sval=SV_FOOD_BREAD;assert(!disease_herb_matches(&item));
     item.pval=125;p_ptr->food=2000;eat_food(&item,&ident);assert(p_ptr->food==2125&&p_ptr->diseased);
-    puts("Consumables: exposure odds and every food/potion subtype; all ten matching herbs suppress normal effects and nourishment even with unknown cure; wrong herbs remain normal; Healing/Miruvor clear identity: PASS");
+    puts("Consumables: every disease x every food/potion subtype; universal Healing and assigned herbs suppress normal effects and nourishment before diagnosis; Angband Plague rejects every other herb; Healing/Miruvor cure every disease and preserve unrelated drain: PASS");
 }
 static void exposure(void) {
     for(int mode=0;mode<2;mode++)for(int roll=0;roll<200;roll++) {
@@ -282,7 +293,7 @@ static void immunity_and_hardiness(void) {
             assert(identity_calls==1&&!diagnosis_calls);
             assert(memcmp(&before,p_ptr,sizeof(before))==0);
         } else {
-            assert(identity_calls==2&&p_ptr->disease_name==name+1);
+            assert(identity_calls==(name+1==DISEASE_ANGBAND_PLAGUE?1:2)&&p_ptr->disease_name==name+1);
             assert(p_ptr->disease_immunity==mask&&cure_disease());
             assert(p_ptr->disease_immunity==(mask|(1u<<name)));
             int calls=identity_calls;assert(!infect_disease()&&identity_calls==calls+1);
@@ -352,7 +363,7 @@ static void save_records(void) {
         assert(p_ptr->diseased==(version==2?0:countdown*2));assert(!p_ptr->disease_immunity);
         if(version==2||!countdown)assert(!p_ptr->disease_name&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge&&!identity_calls);
         else if(version<9)assert(identity_calls==2&&p_ptr->disease_name==1&&!p_ptr->disease_cure&&!p_ptr->disease_knowledge);
-        else assert(!identity_calls&&p_ptr->disease_name==DISEASE_NAME_COUNT&&p_ptr->disease_cure==DISEASE_HERB_COUNT-1&&p_ptr->disease_knowledge==(DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE));
+        else assert(!identity_calls&&p_ptr->disease_name==DISEASE_NAME_COUNT&&p_ptr->disease_cure==SV_FOOD_HEALING&&p_ptr->disease_knowledge==(DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE));
         for(int s=0;s<A_MAX;s++){assert(p_ptr->stat_base[s]==s+2&&p_ptr->stat_drain[s]==-s);assert(p_ptr->stat_disease[s]==(version==2||!countdown?0:-s-1));}
         for(int s=0;s<S_MAX;s++)assert(p_ptr->skill_base[s]==101+s);
     }
@@ -381,7 +392,7 @@ static void save_records(void) {
         if(known==DISEASE_KNOWN_CURE)continue;
         reset();p_ptr->diseased=17;p_ptr->disease_name=name;p_ptr->disease_cure=herb;p_ptr->disease_knowledge=known;
         write_pos=read_pos=0;write_stats();memset(p_ptr,0,sizeof(*p_ptr));assert(read_stats()==0);
-        assert(p_ptr->disease_name==name&&p_ptr->disease_cure==herb&&p_ptr->disease_knowledge==known&&!identity_calls);
+        assert(p_ptr->disease_name==name&&p_ptr->disease_cure==(name==DISEASE_ANGBAND_PLAGUE?SV_FOOD_HEALING:herb)&&p_ptr->disease_knowledge==known&&!identity_calls);
     }
     for(int bad=0;bad<9;bad++) {
         reset();p_ptr->diseased=17;p_ptr->disease_name=1;
@@ -404,7 +415,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     caller_result = caller_source_guards()
     implementation = "\n".join(function(path, name) for path, names in [
-        ("src/player/effects.c", ["disease_name", "disease_cure_name", "disease_assign_identity", "disease_identify", "disease_herb_matches", "disease_changed", "infect_disease", "cure_disease", "process_disease"]),
+        ("src/player/effects.c", ["disease_name", "disease_is_angband_plague", "disease_cure_name", "disease_assign_identity", "disease_identify", "disease_herb_matches", "disease_changed", "infect_disease", "cure_disease", "process_disease"]),
         ("src/player/player-skills.c", ["calc_stats"]),
         ("src/spell/spell-damage.c", ["res_stat"]),
         ("src/spell/spell-utility.c", ["do_res_stat"]),

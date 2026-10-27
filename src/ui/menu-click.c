@@ -391,6 +391,17 @@ bool ui_menu_click_has_cell(int col, int row)
     return ui_menu_click_find_cell(col, row) != NULL;
 }
 
+bool ui_menu_click_get_cell_choice(int col, int row, int* choice)
+{
+    const ui_menu_click_entry* entry = ui_menu_click_find_cell(col, row);
+
+    if (!entry)
+        return false;
+    if (choice)
+        *choice = entry->choice;
+    return true;
+}
+
 bool ui_menu_click_handle_hover_cell(int col, int row, bool* wake)
 {
     const ui_menu_click_entry* entry = NULL;

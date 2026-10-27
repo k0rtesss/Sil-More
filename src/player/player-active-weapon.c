@@ -22,6 +22,10 @@ static bool active_weapon_is_one_handed(const object_type* o_ptr);
 static bool active_weapon_shield_candidate(const object_type* o_ptr);
 static bool active_weapon_choice_allows_shield(int mode, int target_slot,
     const object_type* weapon, const object_type* shield);
+static bool active_weapon_choice_allows_offhand(int mode, int target_slot,
+    const object_type* weapon, const object_type* offhand);
+static int active_weapon_find_physical_item(const object_type* wanted,
+    int preferred_item, int excluded_slot);
 static bool active_weapon_offhand_removal_allowed(int item);
 static bool active_weapon_shield_selection_allowed(int item);
 static bool active_weapon_current_shield_name(char* buf, size_t buflen,
@@ -518,9 +522,10 @@ typedef struct active_weapon_choice
     int kind;
     int target_slot;
     int arrow_item;
+    /* The secondary item in INVEN_ARM: a shield or a second melee weapon. */
     int shield_item;
     object_type shield_object;
-    char label[240];
+    char label[400];
 } active_weapon_choice;
 
 typedef struct active_weapon_preview
@@ -568,23 +573,40 @@ static void active_weapon_preview_stow(const object_type* o_ptr,
     }
 }
 
-static void active_weapon_preview_move_to_slot(int item, int target_slot)
+static void active_weapon_preview_move_to_slot(int item, int target_slot,
+    bool take_one)
 {
     object_type candidate;
     object_type displaced;
     object_type* source;
 
-    if (item == target_slot)
-        return;
-
     source = player_inventory_object(item);
     if (!source || !source->k_idx)
         return;
+    if (item == target_slot)
+    {
+        if (take_one && source->number > 1)
+        {
+            object_copy(&candidate, source);
+            candidate.number--;
+            source->number = 1;
+            active_weapon_preview_stow(&candidate, -1);
+        }
+        return;
+    }
+
     object_copy(&candidate, source);
     object_copy(&displaced, &inventory[target_slot]);
+    if (take_one)
+        candidate.number = 1;
     object_copy(&inventory[target_slot], &candidate);
 
-    if (player_inventory_handle_is_carried(item))
+    if (source->number > candidate.number)
+    {
+        source->number -= candidate.number;
+        active_weapon_preview_stow(&displaced, -1);
+    }
+    else if (player_inventory_handle_is_carried(item))
     {
         if (displaced.k_idx)
             object_copy(source, &displaced);
@@ -598,7 +620,7 @@ static void active_weapon_preview_move_to_slot(int item, int target_slot)
     }
 }
 
-static void active_weapon_preview_activate_item_abilities(
+static void active_weapon_activate_new_item_abilities(
     const object_type* o_ptr)
 {
     if (!o_ptr || !o_ptr->k_idx)
@@ -612,7 +634,8 @@ static void active_weapon_preview_activate_item_abilities(
         int ability = o_ptr->abilitynum[i];
 
         if (skill < 0 || skill >= S_MAX || ability < 0
-            || ability >= ABILITIES_MAX)
+            || ability >= ABILITIES_MAX
+            || player_ability_restriction(skill, ability))
         {
             continue;
         }
@@ -631,7 +654,8 @@ static void active_weapon_preview_activate_item_abilities(
 bool player_offhand_weapon_allowed(const object_type* weapon,
     const object_type* offhand)
 {
-    if (!offhand || !offhand->k_idx
+    if (player_ability_restriction(S_MEL, MEL_TWO_WEAPON)
+        || !offhand || !offhand->k_idx
         || (offhand->tval != TV_SWORD && offhand->tval != TV_POLEARM
             && offhand->tval != TV_HAFTED && offhand->tval != TV_DIGGING)
         || (k_info[offhand->k_idx].flags3
@@ -674,6 +698,7 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     object_type inventory_snapshot[INVEN_TOTAL];
     object_type extra_source_snapshot;
     object_type extra_shield_source_snapshot;
+    object_type offhand_snapshot;
     object_type* extra_source = player_carried_extra_handle_valid(item)
         ? player_inventory_object(item) : NULL;
     object_type* extra_shield_source =
@@ -683,6 +708,7 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     const object_type* weapon;
     const object_type* ammo;
     bool available = false;
+    bool two_weapons = false;
 
     if (!preview || !p_ptr || !player_inventory_handle_valid(item)
         || target_slot < INVEN_WIELD || target_slot >= INVEN_TOTAL)
@@ -691,7 +717,9 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     }
     if (shield_item >= 0
         && (!player_inventory_handle_valid(shield_item)
-            || !active_weapon_choice_allows_shield(mode, target_slot,
+            || (item == shield_item
+                && player_inventory_object(item)->number < 2)
+            || !active_weapon_choice_allows_offhand(mode, target_slot,
                 player_inventory_object(item),
                 player_inventory_object(shield_item))))
     {
@@ -705,8 +733,13 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
         object_copy(&extra_source_snapshot, extra_source);
     if (extra_shield_source && extra_shield_source != extra_source)
         object_copy(&extra_shield_source_snapshot, extra_shield_source);
+    if (shield_item >= 0)
+    {
+        object_copy(&offhand_snapshot, player_inventory_object(shield_item));
+        two_weapons = offhand_snapshot.tval != TV_SHIELD;
+    }
 
-    active_weapon_preview_move_to_slot(item, target_slot);
+    active_weapon_preview_move_to_slot(item, target_slot, two_weapons);
 
     if (shield_item == ACTIVE_WEAPON_SHIELD_NONE
         && inventory[INVEN_ARM].k_idx)
@@ -718,7 +751,14 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
         active_weapon_preview_stow(&removed, -1);
     }
     else if (shield_item >= 0)
-        active_weapon_preview_move_to_slot(shield_item, INVEN_ARM);
+    {
+        /* Moving the main weapon may have stowed the selected off-hand item
+         * elsewhere, especially when exchanging the two hands. */
+        int offhand_item = active_weapon_find_physical_item(&offhand_snapshot,
+            shield_item, target_slot);
+        active_weapon_preview_move_to_slot(offhand_item, INVEN_ARM,
+            two_weapons);
+    }
 
     if (mode == PLAYER_ACTIVE_WEAPON_RANGED_1
         && target_slot == INVEN_WIELD
@@ -734,8 +774,10 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
 
     p_ptr->active_weapon_mode = (byte)normalize_active_weapon_mode(mode);
     if (target_slot != INVEN_QUIVER1 && target_slot != INVEN_BELT)
-        active_weapon_preview_activate_item_abilities(
+        active_weapon_activate_new_item_abilities(
             &inventory[target_slot]);
+    if (shield_item >= 0)
+        active_weapon_activate_new_item_abilities(&inventory[INVEN_ARM]);
     if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
         active_weapon_preview_prepare_melee_equipment();
     calc_bonuses_for_preview();
@@ -1091,7 +1133,7 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
 {
     active_weapon_choice* choice;
     active_weapon_preview preview;
-    char source_label[240];
+    char source_label[300];
     char role_label[32];
     char* active_marker;
     bool active = false;
@@ -1150,9 +1192,22 @@ static bool add_active_weapon_choice(active_weapon_choice choices[],
     if (active_weapon_choice_preview(mode, item, target_slot, arrow_item,
             shield_item, &preview))
     {
-        strnfmt(choice->label, sizeof(choice->label),
-            "%s\t%s\t(%+d,%dd%d)", role_label,
-            source_label, preview.attack, preview.dd, preview.ds);
+        if (shield_item >= 0 && choice->shield_object.tval != TV_SHIELD
+            && !preview.has_offhand)
+            return false;
+        if (preview.has_offhand)
+        {
+            strnfmt(choice->label, sizeof(choice->label),
+                "%s\t%s\t(%+d,%dd%d); off-hand (%+d,%dd%d)", role_label,
+                source_label, preview.attack, preview.dd, preview.ds,
+                preview.offhand_attack, preview.offhand_dd, preview.offhand_ds);
+        }
+        else
+        {
+            strnfmt(choice->label, sizeof(choice->label),
+                "%s\t%s\t(%+d,%dd%d)", role_label,
+                source_label, preview.attack, preview.dd, preview.ds);
+        }
     }
     else
     {
@@ -1337,9 +1392,11 @@ static bool active_weapon_offhand_removal_allowed(int item)
      * removed or replaced. */
     if (item == INVEN_ARM)
         return !inventory[INVEN_WIELD].k_idx
+            || !player_equipment_slot_counts_as_equipped(INVEN_WIELD)
             || !cursed_p(&inventory[INVEN_WIELD]);
 
     return !inventory[INVEN_ARM].k_idx
+        || !player_equipment_slot_counts_as_equipped(INVEN_ARM)
         || !cursed_p(&inventory[INVEN_ARM]);
 }
 
@@ -1377,6 +1434,8 @@ static void add_melee_and_throwing_active_weapon_choices(
     cptr role;
     int choice_index;
     bool has_current_shield;
+    bool has_offhand_weapon = object_is_melee_combat_weapon(
+        &inventory[INVEN_ARM]);
 
     if (!object_is_melee_combat_weapon(o_ptr))
         return;
@@ -1385,7 +1444,7 @@ static void add_melee_and_throwing_active_weapon_choices(
         current_shield_name, sizeof(current_shield_name),
         PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, o_ptr);
 
-    role = (item == INVEN_WIELD
+    role = (item == INVEN_WIELD && !has_offhand_weapon
                && current_mode == PLAYER_ACTIVE_WEAPON_MELEE)
         ? "Melee [active]"
         : "Melee";
@@ -1400,10 +1459,13 @@ static void add_melee_and_throwing_active_weapon_choices(
     }
 
     choice_index = *count;
-    if (add_active_weapon_choice(choices, options, capacity, count, item,
-            o_ptr, PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, -1, -1, role,
+    if ((!has_offhand_weapon || active_weapon_offhand_removal_allowed(item))
+        && add_active_weapon_choice(choices, options, capacity, count, item,
+            o_ptr, PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, -1,
+            has_offhand_weapon ? ACTIVE_WEAPON_SHIELD_NONE : -1, role,
             label, has_current_shield ? current_shield_name : NULL)
-        && item == INVEN_WIELD && current_mode == PLAYER_ACTIVE_WEAPON_MELEE
+        && item == INVEN_WIELD && !has_offhand_weapon
+        && current_mode == PLAYER_ACTIVE_WEAPON_MELEE
         && default_index)
     {
         *default_index = choice_index;
@@ -1483,6 +1545,92 @@ static void add_melee_and_throwing_active_weapon_choices(
             add_active_weapon_choice(choices, options, capacity, count, item,
                 o_ptr, PLAYER_ACTIVE_WEAPON_RANGED_1, INVEN_WIELD, -1,
                 shield_item, "Throwing", label, shield_name);
+        }
+    }
+}
+
+static int active_weapon_collect_melee_items(int items[], int capacity)
+{
+    const int slots[] = { INVEN_WIELD, INVEN_ARM, INVEN_BELT };
+    int count = 0;
+
+    for (int i = 0; i < (int)N_ELEMENTS(slots) && count < capacity; i++)
+    {
+        const object_type* weapon = &inventory[slots[i]];
+        if (object_is_melee_combat_weapon(weapon)
+            && !object_has_broken_prefix(weapon))
+            items[count++] = slots[i];
+    }
+    for (int ordinal = 0; ordinal < player_pack_entry_count()
+        && count < capacity; ordinal++)
+    {
+        int item = player_pack_entry_handle_at(ordinal);
+        const object_type* weapon = player_inventory_object(item);
+        if (object_is_harness_weapon(weapon)
+            && object_is_melee_combat_weapon(weapon))
+            items[count++] = item;
+    }
+    return count;
+}
+
+static void add_two_weapon_active_weapon_choices(active_weapon_choice choices[],
+    ui_question_option options[], int capacity, int* count,
+    const int items[], int item_count, int* default_index)
+{
+    for (int main_index = 0; main_index < item_count; main_index++)
+    {
+        int item = items[main_index];
+        object_type* weapon = player_inventory_object(item);
+        object_type single_weapon;
+        char weapon_name[120];
+        char main_label[140];
+
+        if (!active_weapon_is_one_handed(weapon)
+            || ((item != INVEN_WIELD || weapon->number > 1)
+                && player_equipment_slot_counts_as_equipped(INVEN_WIELD)
+                && cursed_p(&inventory[INVEN_WIELD]))
+            || (player_equipment_slot_counts_as_equipped(item)
+                && item != INVEN_WIELD && cursed_p(weapon)))
+            continue;
+
+        object_copy(&single_weapon, weapon);
+        single_weapon.number = 1;
+        object_desc(weapon_name, sizeof(weapon_name), &single_weapon, true, 3);
+        strnfmt(main_label, sizeof(main_label), "Main: %s", weapon_name);
+        for (int off_index = 0; off_index < item_count; off_index++)
+        {
+            int offhand_item = items[off_index];
+            object_type* offhand = player_inventory_object(offhand_item);
+            object_type single_offhand;
+            char offhand_name[120];
+            char offhand_label[140];
+            bool active;
+            int choice_index = *count;
+
+            /* A stack can supply both hands, but each hand needs a member. */
+            if ((item == offhand_item && weapon->number < 2)
+                || !active_weapon_choice_allows_offhand(
+                    PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD, weapon, offhand)
+                || (offhand_item != INVEN_ARM
+                    && !active_weapon_shield_selection_allowed(item))
+                || (player_equipment_slot_counts_as_equipped(offhand_item)
+                    && offhand_item != INVEN_ARM && cursed_p(offhand)))
+                continue;
+
+            active = item == INVEN_WIELD && offhand_item == INVEN_ARM
+                && player_active_weapon_is_melee();
+            object_copy(&single_offhand, offhand);
+            single_offhand.number = 1;
+            object_desc(offhand_name, sizeof(offhand_name), &single_offhand,
+                true, 3);
+            strnfmt(offhand_label, sizeof(offhand_label), "Off-hand: %s",
+                offhand_name);
+            if (add_active_weapon_choice(choices, options, capacity, count,
+                    item, weapon, PLAYER_ACTIVE_WEAPON_MELEE, INVEN_WIELD,
+                    -1, offhand_item,
+                    active ? "Two weapons [active]" : "Two weapons",
+                    main_label, offhand_label) && active)
+                *default_index = choice_index;
         }
     }
 }
@@ -1575,6 +1723,7 @@ static void prepare_active_weapon_menu_choices(
         ui_question_option option = options[i];
         int category = active_weapon_choice_category(&choice);
         int insert_at = i;
+        bool inserting_active = active_index == i;
 
         while (insert_at > 0
             && active_weapon_choice_category(&choices[insert_at - 1])
@@ -1589,7 +1738,7 @@ static void prepare_active_weapon_menu_choices(
 
         choices[insert_at] = choice;
         options[insert_at] = option;
-        if (active_index == i)
+        if (inserting_active)
             active_index = insert_at;
     }
 
@@ -1634,10 +1783,12 @@ static bool active_weapon_choice_uses_item(const active_weapon_choice* choice,
 
     if (!obj || !obj->k_idx)
         return false;
-    if (obj->tval != TV_SHIELD)
-        return choice->item == item;
+    if (choice->item == item)
+        return true;
     if (choice->shield_item >= 0)
         return choice->shield_item == item;
+    if (obj->tval != TV_SHIELD)
+        return false;
     return choice->shield_item != ACTIVE_WEAPON_SHIELD_NONE
         && item == INVEN_ARM
         && active_weapon_choice_allows_shield(choice->mode,
@@ -1688,6 +1839,178 @@ static void active_item_add_storage_choice(active_weapon_choice choices[],
     (*count)++;
 }
 
+enum
+{
+    ACTIVE_WEAPON_GROUP_MELEE,
+    ACTIVE_WEAPON_GROUP_SHIELD,
+    ACTIVE_WEAPON_GROUP_TWO_HANDED,
+    ACTIVE_WEAPON_GROUP_TWO_WEAPONS,
+    ACTIVE_WEAPON_GROUP_RANGED,
+    ACTIVE_WEAPON_GROUP_THROWING,
+    ACTIVE_WEAPON_GROUP_COUNT
+};
+
+static int active_weapon_choice_group(const active_weapon_choice* choice)
+{
+    const object_type* offhand = NULL;
+    u32b f1 = 0, f2 = 0, f3 = 0;
+
+    if (choice->action != ACTIVE_ITEM_SETUP)
+        return -1;
+    if (choice->kind == PLAYER_ACTIVE_WEAPON_KIND_BOW)
+        return ACTIVE_WEAPON_GROUP_RANGED;
+    if (choice->kind == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
+        return ACTIVE_WEAPON_GROUP_THROWING;
+
+    if (choice->shield_item >= 0)
+        offhand = &choice->shield_object;
+    else if (choice->shield_item != ACTIVE_WEAPON_SHIELD_NONE
+        && active_weapon_choice_allows_shield(choice->mode,
+            choice->target_slot, choice->o_ptr, &inventory[INVEN_ARM]))
+        offhand = &inventory[INVEN_ARM];
+
+    if (offhand && offhand->k_idx)
+        return offhand->tval == TV_SHIELD ? ACTIVE_WEAPON_GROUP_SHIELD
+            : ACTIVE_WEAPON_GROUP_TWO_WEAPONS;
+
+    if (choice->o_ptr && choice->o_ptr->k_idx)
+        object_flags(choice->o_ptr, &f1, &f2, &f3);
+    if (f3 & (TR3_TWO_HANDED | TR3_HAND_AND_A_HALF))
+        return ACTIVE_WEAPON_GROUP_TWO_HANDED;
+    return ACTIVE_WEAPON_GROUP_MELEE;
+}
+
+static int ask_active_weapon_menu(cptr title, cptr help,
+    const active_weapon_choice choices[], const ui_question_option options[],
+    const object_type* const object_icons[], int count, int default_index)
+{
+    static cptr group_names[ACTIVE_WEAPON_GROUP_COUNT] = {
+        "Melee", "Melee + shield", "Two-handed melee", "Two weapons",
+        "Ranged", "Throwing"
+    };
+    int group_counts[ACTIVE_WEAPON_GROUP_COUNT] = { 0 };
+    bool group_enabled[ACTIVE_WEAPON_GROUP_COUNT] = { false };
+    bool group_active[ACTIVE_WEAPON_GROUP_COUNT] = { false };
+    const object_type* group_icons[ACTIVE_WEAPON_GROUP_COUNT] = { NULL };
+    /* Item menus can also have Harness, Pack, and Belt actions. */
+    ui_question_option root_options[ACTIVE_WEAPON_GROUP_COUNT + 3];
+    const object_type* root_icons[ACTIVE_WEAPON_GROUP_COUNT + 3];
+    int root_sources[ACTIVE_WEAPON_GROUP_COUNT + 3];
+    char group_labels[ACTIVE_WEAPON_GROUP_COUNT][80];
+    int setup_count = 0, group_count = 0, root_count = 0;
+    int root_default = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        int group = active_weapon_choice_group(&choices[i]);
+
+        if (group < 0)
+            continue;
+        if (!group_counts[group]++)
+        {
+            group_count++;
+            group_icons[group] = object_icons[i];
+        }
+        setup_count++;
+        if (!options[i].disabled)
+            group_enabled[group] = true;
+        if (strstr(options[i].label, "[active]"))
+            group_active[group] = true;
+        if (i == default_index)
+            group_icons[group] = object_icons[i];
+    }
+
+    /* Decide from the actual setup list on every platform. Short lists and
+     * lists with only one category are easier to navigate directly. Storage
+     * actions do not make a small set of combat choices need categories. */
+    if (setup_count <= 8 || group_count <= 1)
+        return ui_question_ask_objects_with_help(title, help, options,
+            object_icons, count, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL,
+            default_index);
+
+    for (int group = 0; group < ACTIVE_WEAPON_GROUP_COUNT; group++)
+    {
+        if (!group_counts[group])
+            continue;
+        strnfmt(group_labels[group], sizeof(group_labels[group]),
+            "%s (%d)%s", group_names[group], group_counts[group],
+            group_active[group] ? " [active]" : "");
+        root_options[root_count] = (ui_question_option){
+            active_weapon_menu_key(root_count), group_labels[group],
+            TERM_L_WHITE, !group_enabled[group] };
+        root_icons[root_count] = group_icons[group];
+        /* Negative sources identify groups; nonnegative ones are actions. */
+        root_sources[root_count] = -group - 1;
+        if (default_index >= 0 && default_index < count
+            && active_weapon_choice_group(&choices[default_index]) == group)
+            root_default = root_count;
+        root_count++;
+    }
+    for (int i = 0; i < count; i++)
+    {
+        if (choices[i].action == ACTIVE_ITEM_SETUP)
+            continue;
+        root_options[root_count] = options[i];
+        root_options[root_count].key = active_weapon_menu_key(root_count);
+        root_icons[root_count] = object_icons[i];
+        root_sources[root_count] = i;
+        if (i == default_index)
+            root_default = root_count;
+        root_count++;
+    }
+
+    while (true)
+    {
+        int row = ui_question_ask_objects_with_help(title, help,
+            root_options, root_icons, root_count, UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, root_default);
+        int group, sub_count = 1, sub_default = 1;
+        ui_question_option* sub_options;
+        const object_type** sub_icons;
+        int* sub_sources;
+        int result = -1;
+
+        if (row < 0 || row >= root_count)
+            return -1;
+        if (root_sources[row] >= 0)
+            return root_sources[row];
+        root_default = row;
+        group = -root_sources[row] - 1;
+        sub_options = mem_alloc_array(group_counts[group] + 1,
+            ui_question_option);
+        sub_icons = mem_alloc_array(group_counts[group] + 1,
+            const object_type*);
+        sub_sources = mem_alloc_array(group_counts[group] + 1, int);
+        sub_options[0] = (ui_question_option){ active_weapon_menu_key(0),
+            "Back to categories", TERM_L_WHITE, false };
+        sub_icons[0] = NULL;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (active_weapon_choice_group(&choices[i]) != group)
+                continue;
+            sub_options[sub_count] = options[i];
+            sub_options[sub_count].key = active_weapon_menu_key(sub_count);
+            sub_icons[sub_count] = object_icons[i];
+            sub_sources[sub_count] = i;
+            if (i == default_index)
+                sub_default = sub_count;
+            sub_count++;
+        }
+        row = ui_question_ask_objects_with_help(group_names[group], help,
+            sub_options, sub_icons, sub_count, UI_QUESTION_GLOBAL,
+            UI_QUESTION_GLOBAL, sub_default);
+        if (row > 0 && row < sub_count)
+            result = sub_sources[row];
+        sub_options = mem_free(sub_options);
+        sub_icons = mem_free(sub_icons);
+        sub_sources = mem_free(sub_sources);
+        if (result >= 0)
+            return result;
+        /* Back, Escape and the close control all return to the categories. */
+    }
+}
+
 static bool choose_active_weapon(active_weapon_choice* selected, int item)
 {
     int pack_count = player_pack_entry_count();
@@ -1695,8 +2018,13 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
     int* shield_items = mem_alloc_array(shield_capacity, int);
     int shield_count = active_weapon_collect_shield_items(shield_items,
         shield_capacity);
+    int melee_capacity = pack_count + 3;
+    int* melee_items = mem_alloc_array(melee_capacity, int);
+    int melee_count = active_weapon_collect_melee_items(melee_items,
+        melee_capacity);
     int capacity = 2 * (pack_count + 5)
-        * (player_quiver_store_entry_count() + 1) * (shield_count + 2) + 3;
+        * (player_quiver_store_entry_count() + 1) * (shield_count + 2)
+        + melee_count * melee_count + 3;
     active_weapon_choice* choices;
     ui_question_option* options;
     const object_type** object_icons;
@@ -1707,6 +2035,7 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
 
     if (!selected)
     {
+        melee_items = mem_free(melee_items);
         shield_items = mem_free(shield_items);
         return false;
     }
@@ -1743,6 +2072,10 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
             capacity, &count, item, o_ptr, current_mode, shield_items,
             shield_count, &default_index);
     }
+
+    add_two_weapon_active_weapon_choices(choices, options, capacity, &count,
+        melee_items, melee_count, &default_index);
+    melee_items = mem_free(melee_items);
 
     add_ranged_active_weapon_choices(choices, options, capacity, &count,
         INVEN_BOW, &inventory[INVEN_BOW], shield_items, shield_count,
@@ -1788,7 +2121,7 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
             in_use ? "Return to Harness" : "Harness [stored]", !in_use);
         if (object_can_choose_pack_or_harness(obj))
             active_item_add_storage_choice(choices, options, &count, item,
-                ACTIVE_ITEM_PACK, "Store in Pack", equipped && cursed_p(obj));
+                ACTIVE_ITEM_PACK, "Store in Pack", in_use && cursed_p(obj));
         if (item != INVEN_BELT && object_is_belt_weapon(obj))
             active_item_add_storage_choice(choices, options, &count, item,
                 ACTIVE_ITEM_BELT, "Equip on Belt",
@@ -1808,13 +2141,12 @@ static bool choose_active_weapon(active_weapon_choice* selected, int item)
         for (int i = 0; i < count; i++)
             if (!options[i].disabled) { default_index = i; break; }
 
-    selected_index = ui_question_ask_objects_with_help(
+    selected_index = ask_active_weapon_menu(
             item >= 0 ? "Choose item setup" : "Change active weapon",
             item >= 0
-                ? "Make this item active, including a compatible Harness shield and arrows where available, or choose where to keep it. [active] marks your current setup. Only active combat gear grants combat bonuses. Changing only arrows is free. Other changes keep their normal turn cost and ability exceptions. Pack actions take three turns."
-                : "Choose how to ready a weapon; the current choice is marked [active]. Each bow row selects one arrow type from the mixed Quiver, and changing only that arrow choice always takes no time. A throwing-capable weapon has separate Melee and Throwing choices. One-handed melee and throwing rows list available Harness shield combinations; Point Blank Archery also allows a round shield with a shortbow. Expected attack and damage are shown at the end of each row. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
-            options, object_icons, count, UI_QUESTION_GLOBAL,
-            UI_QUESTION_GLOBAL, default_index);
+                ? "Make this item active, including a compatible second weapon, Harness shield and arrows where available, or choose where to keep it. Two weapons lists the main hand first and the off-hand second. The Dagger of Accompaniment grants Two Weapon Fighting in either hand. [active] marks your current setup. Only active combat gear grants combat bonuses. Changing only arrows is free. Other changes keep their normal turn cost and ability exceptions. Pack actions take three turns."
+                : "Choose how to ready a weapon; the current choice is marked [active]. Two weapons lists the main hand first and the off-hand second, with attack and damage for each. Two Weapon Fighting allows a second one-handed weapon; the Dagger of Accompaniment grants it in either hand. Each bow row selects one arrow type from the mixed Quiver, and changing only arrows takes no time. Throwing-capable weapons have separate Melee and Throwing choices. Compatible Harness shields are also listed; Point Blank Archery allows a round shield with a shortbow. Other active-weapon changes take one turn unless an ability makes your first change before your next action free.",
+            choices, options, object_icons, count, default_index);
 
     if (selected_index < 0 || selected_index >= count)
     {
@@ -2466,6 +2798,33 @@ static bool active_weapon_shield_candidate(const object_type* o_ptr)
     return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS;
 }
 
+static bool active_weapon_choice_allows_offhand(int mode, int target_slot,
+    const object_type* weapon, const object_type* offhand)
+{
+    if (offhand && offhand->tval == TV_SHIELD)
+        return active_weapon_choice_allows_shield(mode, target_slot, weapon,
+            offhand);
+    if (player_ability_restriction(S_MEL, MEL_TWO_WEAPON)
+        || mode != PLAYER_ACTIVE_WEAPON_MELEE || target_slot != INVEN_WIELD
+        || !active_weapon_is_one_handed(weapon)
+        || object_has_broken_prefix(weapon)
+        || !object_is_melee_combat_weapon(offhand)
+        || object_has_broken_prefix(offhand)
+        || (k_info[offhand->k_idx].flags3
+            & (TR3_TWO_HANDED | TR3_HAND_AND_A_HALF)))
+        return false;
+    if (player_offhand_weapon_allowed(weapon, offhand))
+        return true;
+
+    /* Either hand can supply a new ability. Keep an owned ability's explicit
+     * off toggle, as the ordinary wield command does. */
+    return !p_ptr->have_ability[S_MEL][MEL_TWO_WEAPON]
+        && ((object_known_p(weapon)
+                && object_grants_ability(weapon, S_MEL, MEL_TWO_WEAPON))
+            || (object_known_p(offhand)
+                && object_grants_ability(offhand, S_MEL, MEL_TWO_WEAPON)));
+}
+
 static bool active_weapon_wield_to_slot(const object_type* source, int item,
     int slot, bool full_stack)
 {
@@ -2489,14 +2848,15 @@ static bool active_weapon_wield_to_slot(const object_type* source, int item,
 }
 
 static int active_weapon_find_physical_item(const object_type* wanted,
-    int preferred_item)
+    int preferred_item, int excluded_slot)
 {
     object_type* o_ptr;
 
     if (!wanted || !wanted->k_idx)
         return -1;
 
-    if (preferred_item >= 0 && player_inventory_handle_valid(preferred_item))
+    if (preferred_item >= 0 && preferred_item != excluded_slot
+        && player_inventory_handle_valid(preferred_item))
     {
         o_ptr = player_inventory_object(preferred_item);
         if (active_weapon_same_physical_item(wanted, o_ptr))
@@ -2508,13 +2868,15 @@ static int active_weapon_find_physical_item(const object_type* wanted,
         int item = player_pack_entry_handle_at(ordinal);
 
         o_ptr = player_inventory_object(item);
-        if (active_weapon_same_physical_item(wanted, o_ptr))
+        if (item != excluded_slot
+            && active_weapon_same_physical_item(wanted, o_ptr))
             return item;
     }
 
     for (int slot = INVEN_WIELD; slot < INVEN_TOTAL; slot++)
     {
-        if (active_weapon_same_physical_item(wanted, &inventory[slot]))
+        if (slot != excluded_slot
+            && active_weapon_same_physical_item(wanted, &inventory[slot]))
             return slot;
     }
 
@@ -2554,7 +2916,12 @@ static void apply_active_weapon_choice_internal(const active_weapon_choice* choi
         cleared_throwing_marker = true;
     }
 
-    if (choice->item != choice->target_slot)
+    /* Active Throwing can already hold a stack in the main hand. Re-wield
+     * one member there so the remaining weapons are available to the off-hand. */
+    if (choice->item != choice->target_slot
+        || (choice->shield_item >= 0
+            && choice->shield_object.tval != TV_SHIELD
+            && choice->o_ptr->number > 1))
     {
         wielded_item = active_weapon_wield_to_slot(choice->o_ptr,
             choice->item, choice->target_slot,
@@ -2608,14 +2975,27 @@ static void apply_active_weapon_choice_internal(const active_weapon_choice* choi
 
     if (choice->shield_item >= 0)
     {
+        if (choice->shield_object.tval != TV_SHIELD)
+        {
+            /* Ready melee before the second wield so an ability supplied by
+             * the main weapon remains active when coming from a bow setup. */
+            active_weapon_activate_new_item_abilities(&inventory[INVEN_WIELD]);
+            if (!player_set_active_weapon_mode(PLAYER_ACTIVE_WEAPON_MELEE,
+                    false, false))
+                return;
+        }
         int shield_item = active_weapon_find_physical_item(
-            &choice->shield_object, choice->shield_item);
+            &choice->shield_object, choice->shield_item, choice->target_slot);
         object_type* shield = player_inventory_object(shield_item);
 
-        if (shield_item >= 0 && shield && shield->k_idx)
+        if (shield_item >= 0 && shield && shield->k_idx
+            && (shield_item != INVEN_ARM
+                || (shield->tval != TV_SHIELD && shield->number > 1)))
         {
             wielded_shield = active_weapon_wield_to_slot(shield,
                 shield_item, INVEN_ARM, false);
+            if (!wielded_shield)
+                return;
         }
     }
 

@@ -1180,45 +1180,96 @@ static bool log_history_filter_key(char ch)
         || (ch == '\t') || (ch == 'f') || (ch == 'F');
 }
 
-static void log_history_putstr_scrolled(int* col, int row, int offset,
-    byte attr, cptr text)
+/* Keep the overlay's text, colors and sprites together while wrapping.  The
+ * printable placeholders reserve sprite cells without treating tile bytes as
+ * text.  Search descriptions are separate from this display representation. */
+typedef struct log_history_combat_line
 {
-    int len = (int)strlen(text);
-    int draw_col = *col - offset;
-    int text_offset = 0;
+    char text[256];
+    byte attrs[256];
+    char icons[256];
+    bool is_tile[256];
+} log_history_combat_line;
 
-    if (draw_col < 0)
+static void log_history_build_combat_line(const combat_roll* roll,
+    log_history_combat_line* line)
+{
+    combat_roll_token tokens[COMBAT_ROLL_MAX_TOKENS];
+    int count = combat_roll_emit_tokens(roll, tokens, N_ELEMENTS(tokens));
+    int tile_width = use_bigtile && !graphics_are_ascii() ? 2 : 1;
+    int col = 0;
+
+    memset(line, 0, sizeof(*line));
+    for (int i = 0; i < count; i++)
     {
-        text_offset = -draw_col;
-        draw_col = 0;
+        const combat_roll_token* token = &tokens[i];
+        int width = token->is_tile ? tile_width : (int)strlen(token->text);
+
+        if (col + width >= (int)sizeof(line->text))
+            break;
+        if (token->is_tile)
+        {
+            memset(line->text + col, '?', tile_width);
+            line->attrs[col] = token->attr;
+            line->icons[col] = token->tile_char;
+            line->is_tile[col] = true;
+            if (tile_width > 1)
+                line->attrs[col + 1] = 255;
+        }
+        else
+        {
+            memcpy(line->text + col, token->text, width);
+            memset(line->attrs + col, token->attr, width);
+        }
+        col += width;
     }
-
-    if (text_offset < len)
-        Term_putstr(draw_col, row, -1, attr, text + text_offset);
-
-    *col += len;
 }
 
-static void log_history_put_tile_scrolled(int* col, int row, int offset,
-    byte attr, char chr)
+static void log_history_draw_combat_span(const log_history_combat_line* line,
+    int start, int length, int row, int offset, cptr highlight)
 {
-    int draw_col = *col - offset;
+    int tile_width = use_bigtile && !graphics_are_ascii() ? 2 : 1;
+    int highlight_len = highlight ? (int)strlen(highlight) : 0;
+    int highlight_end = 0;
+    int wid, hgt;
 
-    if (draw_col >= 0)
+    Term_get_size(&wid, &hgt);
+    if (row < 0 || row >= hgt)
+        return;
+
+    for (int pos = 0; pos < start + length; pos++)
     {
-        Term_queue_char(draw_col, row, attr, chr, 0, 0);
-        if (use_bigtile && !graphics_are_ascii())
+        int col = pos - start - offset;
+        if (highlight_len && !strncmp(line->text + pos, highlight, highlight_len))
+            highlight_end = pos + highlight_len;
+        if (pos < start)
+            continue;
+
+        if (line->is_tile[pos])
         {
-            if ((attr & 0x80) && ((byte)chr & 0x80))
-                Term_queue_char(draw_col + 1, row, 255, -1, 0, 0);
-            else
-                Term_queue_char(draw_col + 1, row, TERM_WHITE, ' ', 0, 0);
+            /* A sprite and its double-width continuation stay together. */
+            if (col >= 0 && col + tile_width <= wid
+                && pos + tile_width <= start + length)
+            {
+                byte attr = line->attrs[pos];
+                char chr = line->icons[pos];
+                Term_queue_char(col, row, attr, chr, 0, 0);
+                if (tile_width > 1)
+                {
+                    bool graphical = (attr & 0x80) && ((byte)chr & 0x80);
+                    Term_queue_char(col + 1, row,
+                        graphical ? 255 : TERM_WHITE,
+                        graphical ? -1 : ' ', 0, 0);
+                }
+            }
+            pos += tile_width - 1;
+        }
+        else if (line->attrs[pos] != 255 && col >= 0 && col < wid)
+        {
+            byte attr = pos < highlight_end ? TERM_YELLOW : line->attrs[pos];
+            Term_queue_char(col, row, attr, line->text[pos], 0, 0);
         }
     }
-
-    *col += 1;
-    if (use_bigtile && !graphics_are_ascii())
-        *col += 1;
 }
 
 static void log_history_format_damage_dice(const combat_roll* roll,
@@ -1239,137 +1290,11 @@ static void log_history_format_damage_dice(const combat_roll* roll,
 static void log_history_draw_combat_entry(const log_history_entry* entry,
     int row, int offset)
 {
-    combat_roll* roll = entry->roll;
-    int a_att, a_evn, a_hit, a_dam_roll, a_prot_roll, a_net_dam;
-    int col = 0;
-    char buf[120];
-    bool is_player_attack = roll->is_attacker_player;
+    log_history_combat_line line;
 
-    if (is_player_attack)
-    {
-        a_att = TERM_L_BLUE;
-        a_evn = TERM_WHITE;
-        a_hit = TERM_L_RED;
-        a_dam_roll = TERM_L_BLUE;
-        a_net_dam = TERM_L_RED;
-        if (roll->prt_percent >= 100)
-            a_prot_roll = TERM_WHITE;
-        else if (roll->prt_percent >= 1)
-            a_prot_roll = TERM_SLATE;
-        else
-            a_prot_roll = TERM_DARK;
-    }
-    else
-    {
-        a_att = TERM_WHITE;
-        a_evn = TERM_L_BLUE;
-        a_hit = TERM_L_RED;
-        a_dam_roll = TERM_WHITE;
-        a_net_dam = TERM_L_RED;
-        if (roll->prt_percent >= 100)
-            a_prot_roll = TERM_L_BLUE;
-        else if (roll->prt_percent >= 1)
-            a_prot_roll = TERM_BLUE;
-        else
-            a_prot_roll = TERM_DARK;
-    }
-
-    log_history_putstr_scrolled(&col, row, offset, TERM_WHITE, " ");
-    log_history_put_tile_scrolled(&col, row, offset, roll->attacker_attr,
-        roll->attacker_char);
-
-    if (roll->att_type == COMBAT_ROLL_ROLL)
-    {
-        int net_att;
-
-        if (roll->att < 10)
-            strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
-        else
-            strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
-        log_history_putstr_scrolled(&col, row, offset, a_att, buf);
-
-        strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
-        log_history_putstr_scrolled(&col, row, offset, a_att, buf);
-
-        net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
-        if (net_att > 0)
-            strnfmt(buf, sizeof(buf), "%4d", net_att);
-        else
-            SDL_strlcpy(buf, "   -", sizeof(buf));
-        log_history_putstr_scrolled(&col, row, offset,
-            (net_att > 0) ? a_hit : TERM_SLATE, buf);
-
-        strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
-        log_history_putstr_scrolled(&col, row, offset, a_evn, buf);
-
-        if (roll->evn < 10)
-            strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
-        else
-            strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
-        log_history_putstr_scrolled(&col, row, offset, a_evn, buf);
-
-        log_history_putstr_scrolled(&col, row, offset, TERM_WHITE, " ");
-        log_history_put_tile_scrolled(&col, row, offset, roll->defender_attr,
-            roll->defender_char);
-
-        if (!roll->no_damage && (net_att > 0 || roll->force_damage))
-        {
-            int net_dam = roll->dam - roll->prot;
-            if (net_dam < 0)
-                net_dam = 0;
-
-            log_history_putstr_scrolled(&col, row, offset, TERM_L_DARK,
-                "  ->");
-
-            log_history_format_damage_dice(roll, buf, sizeof(buf));
-            log_history_putstr_scrolled(&col, row, offset, a_dam_roll, buf);
-
-            strnfmt(buf, sizeof(buf), "%4d", roll->dam);
-            log_history_putstr_scrolled(&col, row, offset, a_dam_roll, buf);
-
-            if (net_dam > 0)
-                strnfmt(buf, sizeof(buf), "%4d", net_dam);
-            else
-                SDL_strlcpy(buf, "   -", sizeof(buf));
-            log_history_putstr_scrolled(&col, row, offset,
-                (net_dam > 0) ? a_net_dam : TERM_SLATE, buf);
-
-            strnfmt(buf, sizeof(buf), "%4d", roll->prot);
-            log_history_putstr_scrolled(&col, row, offset, a_prot_roll, buf);
-        }
-    }
-    else if (roll->att_type == COMBAT_ROLL_AUTO)
-    {
-        int net_dam = roll->dam - roll->prot;
-        if (net_dam < 0)
-            net_dam = 0;
-
-        log_history_putstr_scrolled(&col, row, offset, TERM_L_DARK,
-            "                         ");
-        log_history_putstr_scrolled(&col, row, offset, TERM_WHITE, " ");
-        log_history_put_tile_scrolled(&col, row, offset, roll->defender_attr,
-            roll->defender_char);
-        log_history_putstr_scrolled(&col, row, offset, TERM_L_DARK, "  ->");
-
-        if (roll->ds < 10)
-            strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
-        else
-            strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
-        log_history_putstr_scrolled(&col, row, offset, a_dam_roll, buf);
-
-        strnfmt(buf, sizeof(buf), "%4d", roll->dam);
-        log_history_putstr_scrolled(&col, row, offset, a_dam_roll, buf);
-
-        if (net_dam > 0)
-            strnfmt(buf, sizeof(buf), "%4d", net_dam);
-        else
-            SDL_strlcpy(buf, "   -", sizeof(buf));
-        log_history_putstr_scrolled(&col, row, offset,
-            (net_dam > 0) ? a_net_dam : TERM_SLATE, buf);
-
-        strnfmt(buf, sizeof(buf), "%4d", roll->prot);
-        log_history_putstr_scrolled(&col, row, offset, a_prot_roll, buf);
-    }
+    log_history_build_combat_line(entry->roll, &line);
+    log_history_draw_combat_span(&line, 0, (int)strlen(line.text), row, offset,
+        NULL);
 }
 
 static void log_history_entry_search_text(const log_history_entry* entry,
@@ -1388,8 +1313,7 @@ static void log_history_entry_search_text(const log_history_entry* entry,
         char attacker[3] = { '?', '\0', '\0' };
         char defender[3] = { '?', '\0', '\0' };
 
-        /* Tile indices are not text (or UTF-8). Reserve printable cells for
-         * them; the wrapped renderer replaces these with the stored icons. */
+        /* Keep graphical sprite indices out of searchable text. */
         if (!(roll->attacker_attr & 0x80)
             && !((byte)roll->attacker_char & 0x80))
             attacker[0] = roll->attacker_char;
@@ -1442,7 +1366,9 @@ static void log_history_wrapped_entry_text(int filter, int idx, char* out,
         return;
     }
 
-    log_history_entry_search_text(&log_history_entries[idx], out, out_sz);
+    log_history_combat_line line;
+    log_history_build_combat_line(log_history_entries[idx].roll, &line);
+    SDL_strlcpy(out, line.text, out_sz);
 }
 
 static bool log_history_wrap_next(cptr* cursor, int width, char* line,
@@ -1526,43 +1452,23 @@ static void log_history_draw_wrapped_text(int row, int width, byte attr,
 static void log_history_draw_wrapped_combat(const log_history_entry* entry,
     int row, int width, cptr highlight, int first_line, int max_rows)
 {
-    char text[256];
-    char line[256];
-    cptr cursor = text;
-    int tile_width = use_bigtile && !graphics_are_ascii() ? 2 : 1;
-    int icon_cols[] = { sizeof("Combat ") - 1,
-        sizeof("Combat ") - 1 + tile_width + sizeof(" to ") - 1 };
-    byte attrs[] = { entry->roll->attacker_attr, entry->roll->defender_attr };
-    char chars[] = { entry->roll->attacker_char, entry->roll->defender_char };
+    log_history_combat_line line;
+    char wrapped[256];
     int index = 0;
     int drawn = 0;
 
-    log_history_entry_search_text(entry, text, sizeof(text));
+    log_history_build_combat_line(entry->roll, &line);
+    cptr cursor = line.text;
     while (drawn < max_rows)
     {
-        int start = (int)(cursor - text);
-        if (!log_history_wrap_next(&cursor, width, line, sizeof(line)))
+        int start = (int)(cursor - line.text);
+        if (!log_history_wrap_next(&cursor, width, wrapped, sizeof(wrapped)))
             break;
         if (index++ < first_line)
             continue;
 
-        /* Erase the placeholders before drawing text, then queue icons into
-         * the same cells. Never pass a graphical tile byte to text output. */
-        for (size_t i = 0; i < N_ELEMENTS(icon_cols); i++)
-        {
-            int col = icon_cols[i] - start;
-            if (col >= 0 && col + tile_width <= (int)strlen(line))
-                memset(line + col, ' ', tile_width);
-        }
-        log_history_draw_wrapped_text(row + drawn, width, TERM_WHITE,
-            line, highlight);
-        for (size_t i = 0; i < N_ELEMENTS(icon_cols); i++)
-        {
-            int col = icon_cols[i] - start;
-            if (col >= 0 && col + tile_width <= (int)strlen(line))
-                log_history_put_tile_scrolled(&col, row + drawn, 0,
-                    attrs[i], chars[i]);
-        }
+        log_history_draw_combat_span(&line, start, (int)strlen(wrapped),
+            row + drawn, 0, highlight);
         drawn++;
     }
 }

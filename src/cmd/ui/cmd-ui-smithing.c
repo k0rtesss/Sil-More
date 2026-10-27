@@ -8372,7 +8372,7 @@ static bool smith_begin_reforge(int slot, int prefix_idx)
     if (smith_pending_reforge() || !target || !target->k_idx
         || target->number == 0 || !object_can_preview_reforge_prefix(target))
         return false;
-    if (player_inventory_handle_is_equipped(slot) && cursed_p(target))
+    if (player_equipment_slot_counts_as_equipped(slot) && cursed_p(target))
     {
         msg_print("You cannot remove that cursed item to reforge it.");
         return false;

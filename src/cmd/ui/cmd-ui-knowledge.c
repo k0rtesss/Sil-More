@@ -418,7 +418,8 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
     {
         object_type* o_ptr = &inventory[entry->equip_idx];
         if (!overlay)
-            (void)player_try_identify_smithing_object_on_examine(o_ptr, true);
+            (void)player_try_identify_smithing_object_on_examine(o_ptr,
+                player_equipment_slot_counts_as_equipped(entry->equip_idx));
         if (overlay)
         {
             const object_type* objects[1] = { o_ptr };
@@ -3806,7 +3807,7 @@ static bool supply_take_category_return(int choice, int action, int* column)
 }
 
 static void supply_draw_category_return(const knowledge_browser_layout* layout,
-    int first_row, bool slots, cptr context)
+    int first_row, bool slots, cptr context, byte context_attr)
 {
     if (!get_sdl_menu_bigger_font())
         return;
@@ -3826,7 +3827,7 @@ static void supply_draw_category_return(const knowledge_browser_layout* layout,
     if (last_row == layout->divider_row && context)
     {
         Term_erase(0, last_row, 255);
-        supply_put_fitted(0, last_row, layout->term_wid, TERM_SLATE, context);
+        supply_put_fitted(0, last_row, layout->term_wid, context_attr, context);
     }
 }
 
@@ -5840,7 +5841,8 @@ static bool equipment_menu_show_entry_description(equipment_list_entry* entry,
     }
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
-        (void)player_try_identify_smithing_object_on_examine(o_ptr, true);
+        (void)player_try_identify_smithing_object_on_examine(o_ptr,
+            player_equipment_slot_counts_as_equipped(entry->equip_idx));
     else if (player_inventory_handle_is_carried(entry->item_idx))
         (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
 
@@ -6537,37 +6539,33 @@ static void inventory_browser_weight_status(char* buf, size_t buflen)
         carried / 10L, carried % 10L, maximum / 10L, maximum % 10L);
 }
 
-static byte inventory_browser_status_attr(inventory_menu_group group)
+static bool inventory_browser_group_over_limit(inventory_menu_group group)
 {
-    enum inventory_limit_group limit_group = INV_LIMIT_NONE;
-
-    if (!p_ptr)
-        return TERM_L_BLUE;
+    enum inventory_limit_group limit_group;
+    int limit;
 
     if (group == INVENTORY_MENU_GROUP_PACK)
         limit_group = INV_LIMIT_PACK;
     else if (group == INVENTORY_MENU_GROUP_HARNESS)
         limit_group = INV_LIMIT_HARNESS;
+    else
+        return false;
 
-    if (group == INVENTORY_MENU_GROUP_ALL)
-    {
-        int pack_limit = inventory_limit_limit_for_group(INV_LIMIT_PACK);
-        int harness_limit = inventory_limit_limit_for_group(INV_LIMIT_HARNESS);
+    limit = inventory_limit_limit_for_group(limit_group);
+    return limit >= 0
+        && inventory_limit_usage_for_group(limit_group) > limit;
+}
 
-        if ((pack_limit >= 0
-                && inventory_limit_usage_for_group(INV_LIMIT_PACK)
-                    > pack_limit)
-            || (harness_limit >= 0
-                && inventory_limit_usage_for_group(INV_LIMIT_HARNESS)
-                    > harness_limit))
-        {
-            return TERM_RED;
-        }
-    }
+static byte inventory_browser_status_attr(inventory_menu_group group)
+{
+    if (!p_ptr)
+        return TERM_L_BLUE;
 
-    if (limit_group != INV_LIMIT_NONE
-        && inventory_limit_usage_for_group(limit_group)
-            > inventory_limit_limit_for_group(limit_group))
+    if (inventory_browser_group_over_limit(group)
+        || (group == INVENTORY_MENU_GROUP_ALL
+            && (inventory_browser_group_over_limit(INVENTORY_MENU_GROUP_PACK)
+                || inventory_browser_group_over_limit(
+                    INVENTORY_MENU_GROUP_HARNESS))))
     {
         return TERM_RED;
     }
@@ -6577,20 +6575,13 @@ static byte inventory_browser_status_attr(inventory_menu_group group)
 
 static byte inventory_browser_section_attr(inventory_menu_group group)
 {
-    enum inventory_limit_group limit_group;
-    int limit;
-
     if (group == INVENTORY_MENU_GROUP_QUIVER)
         return TERM_L_GREEN;
 
     if (group == INVENTORY_MENU_GROUP_JEWELRY)
         return TERM_VIOLET;
 
-    limit_group = (group == INVENTORY_MENU_GROUP_PACK)
-        ? INV_LIMIT_PACK : INV_LIMIT_HARNESS;
-    limit = inventory_limit_limit_for_group(limit_group);
-
-    if (limit >= 0 && inventory_limit_usage_for_group(limit_group) > limit)
+    if (inventory_browser_group_over_limit(group))
         return TERM_RED;
 
     return (group == INVENTORY_MENU_GROUP_PACK)
@@ -7130,6 +7121,7 @@ static void display_inventory_browser_group_list(int col, int row, int wid,
         char buf[8];
         bool selected;
         bool highlighted;
+        bool over_limit;
 
         Term_erase(col, row + i, erase_w);
 
@@ -7139,9 +7131,14 @@ static void display_inventory_browser_group_list(int col, int row, int wid,
         group = inventory_browser_groups[grp_pos];
         selected = (grp_pos == grp_cur);
         highlighted = selected && active;
+        over_limit = inventory_browser_group_over_limit(group);
 
         if (highlighted)
-            attr = supply_browser_selected_attr(TERM_L_BLUE);
+            attr = over_limit
+                ? (byte)(TERM_UI_SELECTED + TERM_RED)
+                : supply_browser_selected_attr(TERM_L_BLUE);
+        else if (over_limit)
+            attr = TERM_RED;
         else if (selected)
             attr = TERM_L_BLUE;
         else if (totals[grp_pos] == 0)
@@ -7480,7 +7477,9 @@ static bool inventory_storage_exchange_equipment_allowed(
 {
     if (!request || !request->storage_exchange_include_equip
         || slot < INVEN_WIELD || slot >= INVEN_TOTAL
-        || !inventory[slot].k_idx || cursed_p(&inventory[slot]))
+        || !inventory[slot].k_idx
+        || (player_equipment_slot_counts_as_equipped(slot)
+            && cursed_p(&inventory[slot])))
     {
         return false;
     }
@@ -12395,7 +12394,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 overlay_cache.active, true);
             if (compact_entry_only && sdl_touch_only_device_active())
                 supply_draw_category_return(&layout, layout.tabs_row, true,
-                    equipment_slot_text(selected_slot));
+                    equipment_slot_text(selected_slot), TERM_SLATE);
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
@@ -13386,7 +13385,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     get_sdl_menu_bigger_font() ? "Category (scroll up/down)" : "Category");
                 knowledge_draw_stacked_entry_divider(&layout);
                 Term_putstr(0, layout.entry_header_row, layout.term_wid,
-                    TERM_SLATE,
+                    ordinary_inventory
+                            && inventory_browser_group_over_limit(selected_group)
+                        ? TERM_RED : TERM_SLATE,
                     storage_exchange_mode ? "Storage exchange"
                     : replacement_mode ? "Replacement candidates"
                     : item_select_mode ? "Matching items"
@@ -13406,7 +13407,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_putstr(0, layout.header_row, layout.group_w, TERM_SLATE,
                     "Category");
                 Term_putstr(layout.list_col, layout.header_row, layout.list_w,
-                    TERM_SLATE,
+                    ordinary_inventory
+                            && inventory_browser_group_over_limit(selected_group)
+                        ? TERM_RED : TERM_SLATE,
                     storage_exchange_mode ? "Storage exchange"
                     : replacement_mode ? "Replacement candidates"
                     : slot_pick_mode ? "Destination slots"
@@ -14170,7 +14173,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 overlay_cache.active, true);
             if (compact_entry_only && sdl_touch_only_device_active())
                 supply_draw_category_return(&layout, layout.tabs_row, false,
-                    inventory_browser_group_text(selected_group));
+                    inventory_browser_group_text(selected_group),
+                    inventory_browser_group_over_limit(selected_group)
+                        ? TERM_RED : TERM_SLATE);
             char ch = inkey();
             bool click_generated_command = false;
             pack_combat_notice = false;
@@ -15319,7 +15324,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (single_column && column && compact_menu
             && sdl_touch_only_device_active())
             supply_draw_category_return(&draw_layout, draw_layout.header_row,
-                false, supply_group_text[grp_idx[grp_cur]]);
+                false, supply_group_text[grp_idx[grp_cur]], TERM_SLATE);
         char ch = inkey();
         bool click_generated_command = false;
         pack_combat_notice = false;

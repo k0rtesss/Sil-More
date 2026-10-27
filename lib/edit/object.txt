@@ -2888,10 +2888,12 @@ D: mending what battle has broken. It halves any current
 D: bleeding and restores 11 health and 12% of your maximum
 D: health. Herbs provide nourishment for about 250 turns under
 D: normal conditions.
-D:If this is the cure for your current disease, eating it cures the
-D: disease and restores its disease penalties instead of applying
-D: this herb's normal effect or nourishment. Otherwise, its usual
-D: effect applies.
+D:It cures every disease, including Angband Plague, even before
+D: diagnosis. When diseased, eating it restores the attribute
+D: points lost to disease instead of healing wounds, halving
+D: bleeding, or providing nourishment. Healing is the only herb
+D: that cures Angband Plague; potions of Healing or Miruvor also
+D: cure it.
 D: Curing disease grants immunity to that disease for this run.
 
 
@@ -3002,7 +3004,8 @@ D: endurance. Its normal effect is to attempt to infect a healthy eater
 D: with disease:
 D: -1 Constitution immediately, then -1 to a random attribute
 D: every 150 player turns (300 with Hardiness) until cured. Rest does not cure it.
-D: Potions of Healing or Miruvor cure disease directly and restore only
+D: A Herb of Healing or a potion of Healing or Miruvor cures
+D: every disease. Cures restore only
 D: the attribute points lost to disease. It provides
 D: nourishment for about 250 turns under normal conditions.
 D:If this is the cure for your current disease, eating it cures the
@@ -3042,8 +3045,9 @@ D: sour taint beneath the salt. Eating a strip provides
 D: nourishment for about 2,000 turns under normal conditions,
 D: with a 20% base chance of disease exposure.
 D: Disease causes -1 Constitution immediately, then -1 to a
-D: random attribute every 150 player turns (300 with Hardiness) until cured by a
-D: potion of Healing or Miruvor. Rest does not cure it.
+D: random attribute every 150 player turns (300 with Hardiness) until cured.
+D: A Herb of Healing or a potion of Healing or Miruvor cures
+D: every disease. Rest does not cure it.
 D: Immunity blocks a previously cured disease; Hardiness halves infection chances.
 
 

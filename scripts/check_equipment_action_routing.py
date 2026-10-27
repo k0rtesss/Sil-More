@@ -59,10 +59,15 @@ int __wrap_ui_question_ask_objects_with_help(cptr title, cptr desc,
     int count, int y, int x, int def)
 {
     (void)title; (void)desc; (void)y; (void)x; (void)def;
-    combat_rows = pack_rows = belt_rows = harness_rows = combo_rows = 0;
-    pack_disabled = belt_disabled = false;
+    bool submenu = streq(options[0].label, "Back to categories");
+    combat_rows = combo_rows = 0;
+    if (!submenu) {
+        pack_rows = belt_rows = harness_rows = 0;
+        pack_disabled = belt_disabled = false;
+    }
     int combo_index = -1;
     for (int i = 0; i < count; i++) {
+        if (submenu && i == 0) continue;
         if (strstr(options[i].label, "Store in Pack")) {
             pack_rows++; pack_disabled = options[i].disabled;
         } else if (strstr(options[i].label, "Equip on Belt")) {
@@ -78,7 +83,8 @@ int __wrap_ui_question_ask_objects_with_help(cptr title, cptr desc,
             }
         }
     }
-    return select_combo ? combo_index : menu_result;
+    return select_combo ? combo_index
+        : (submenu && menu_result >= 0 ? menu_result + 1 : menu_result);
 }
 
 static void reset_calls(void)

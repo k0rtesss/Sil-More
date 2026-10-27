@@ -186,7 +186,7 @@ cptr option_text[OPT_MAX] = {
     "assassination_over_charge", /* OPT_assassination_over_charge */
     "pacifist_attack_warning", /* OPT_pacifist_attack_warning */
     "active_weapon_switch_confirm", /* OPT_active_weapon_switch_confirm */
-    NULL, /* reserved legacy slot: view_torch_grids */
+    "ignore_monster_alarms", /* OPT_ignore_monster_alarms */
     NULL, /* reserved legacy slot: dungeon_align */
     NULL, /* reserved legacy slot: dungeon_stair */
     NULL, /* reserved legacy slot */
@@ -424,7 +424,7 @@ cptr option_desc[OPT_MAX] = {
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
     "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
-    NULL, /* reserved legacy slot: view_torch_grids */
+    "Keep resting, running and working through monster warning calls and shrieks for help; their messages and effects remain", /* OPT_ignore_monster_alarms */
     NULL, /* reserved legacy slot: dungeon_align */
     NULL, /* reserved legacy slot: dungeon_stair */
     NULL, /* reserved legacy slot */
@@ -678,7 +678,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_assassination_over_charge */
     false, /* OPT_pacifist_attack_warning */
     true, /* OPT_active_weapon_switch_confirm */
-    false, /* reserved legacy slot: view_torch_grids */
+    false, /* OPT_ignore_monster_alarms */
     false, /* reserved legacy slot: dungeon_align */
     false, /* reserved legacy slot: dungeon_stair */
     false, /* reserved legacy slot */
@@ -927,12 +927,13 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_active_weapon_switch_confirm,
         OPT_forgo_attacking_unwary, OPT_assassination_over_charge,
         OPT_lockpick_minigame, OPT_chest_trap_minigame,
-        OPT_stop_singing_on_rest, OPT_visual_recognition, OPT_know_monster_info,
+        OPT_stop_singing_on_rest, OPT_ignore_monster_alarms,
+        OPT_visual_recognition, OPT_know_monster_info,
         OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size, OPT_more_stairs,
         OPT_utumno_corridors, OPT_illusory_walls,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_NONE, OPT_NONE, OPT_NONE },
 
     /*** Display ***/
 

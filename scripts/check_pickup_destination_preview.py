@@ -214,7 +214,7 @@ int main(void)
         inkey_next_set(keys[i]);
         assert(ui_question_ask_aux("Pick up where?", "Choose destination.",
             preview.options, preview.icons, preview.count, -1, -1, 0,
-            false, NULL, 0, false) == expected[i]);
+            false, NULL, 0, false, NULL) == expected[i]);
         inkey_next_set(NULL);
     }
     puts("PASS: Direct keys, up/down plus Enter, and Escape return correct heading/cancel values.");

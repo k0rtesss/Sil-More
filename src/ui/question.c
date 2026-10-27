@@ -116,9 +116,9 @@ static int ui_question_next_enabled(const ui_question_option* options,
     return highlight;
 }
 
-static void ui_question_unavailable(void)
+static void ui_question_unavailable(cptr reason)
 {
-    bell("That choice is not available.");
+    bell(reason && reason[0] ? reason : "That choice is not available.");
 }
 
 static int ui_question_ask_aux(cptr title, cptr desc,
@@ -126,7 +126,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
     const object_type* const object_icons[], int count, int anchor_y,
     int anchor_x, int default_index, bool repaint_background,
     const ui_question_button* buttons, int button_count,
-    bool desc_on_demand)
+    bool desc_on_demand, const cptr disabled_reasons[])
 {
     int highlight;
     int result = -1;
@@ -202,7 +202,8 @@ static int ui_question_ask_aux(cptr title, cptr desc,
 
                     if (options[clicked_choice].disabled)
                     {
-                        ui_question_unavailable();
+                        ui_question_unavailable(disabled_reasons
+                            ? disabled_reasons[clicked_choice] : NULL);
                         continue;
                     }
 
@@ -220,7 +221,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
                             continue;
                         if (button->disabled)
                         {
-                            ui_question_unavailable();
+                            ui_question_unavailable(NULL);
                             continue;
                         }
 
@@ -269,7 +270,8 @@ static int ui_question_ask_aux(cptr title, cptr desc,
                         matched = true;
                         highlight = i;
                         if (options[i].disabled)
-                            ui_question_unavailable();
+                            ui_question_unavailable(disabled_reasons
+                                ? disabled_reasons[i] : NULL);
                         else
                         {
                             result = i;
@@ -287,7 +289,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
                     {
                         matched = true;
                         if (buttons[i].disabled)
-                            ui_question_unavailable();
+                            ui_question_unavailable(NULL);
                         else
                         {
                             result = buttons[i].choice;
@@ -310,7 +312,8 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         case '6': /* right: select the highlighted answer */
         {
             if (options[highlight].disabled)
-                ui_question_unavailable();
+                ui_question_unavailable(disabled_reasons
+                    ? disabled_reasons[highlight] : NULL);
             else
             {
                 result = highlight;
@@ -353,7 +356,15 @@ int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, true, NULL, 0, false);
+        anchor_x, default_index, true, NULL, 0, false, NULL);
+}
+
+int ui_question_ask_with_reasons(cptr title, cptr desc,
+    const ui_question_option* options, const cptr disabled_reasons[],
+    int count, int anchor_y, int anchor_x, int default_index)
+{
+    return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
+        anchor_x, default_index, true, NULL, 0, false, disabled_reasons);
 }
 
 int ui_question_ask_objects(cptr title, cptr desc,
@@ -362,7 +373,7 @@ int ui_question_ask_objects(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, object_icons, count,
-        anchor_y, anchor_x, default_index, true, NULL, 0, false);
+        anchor_y, anchor_x, default_index, true, NULL, 0, false, NULL);
 }
 
 int ui_question_ask_objects_with_help(cptr title, cptr desc,
@@ -371,7 +382,7 @@ int ui_question_ask_objects_with_help(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, object_icons, count,
-        anchor_y, anchor_x, default_index, true, NULL, 0, true);
+        anchor_y, anchor_x, default_index, true, NULL, 0, true, NULL);
 }
 
 int ui_question_ask_overlay(cptr title, cptr desc,
@@ -379,7 +390,7 @@ int ui_question_ask_overlay(cptr title, cptr desc,
     int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, false, NULL, 0, false);
+        anchor_x, default_index, false, NULL, 0, false, NULL);
 }
 
 int ui_question_ask_overlay_buttons(cptr title, cptr desc,
@@ -388,5 +399,5 @@ int ui_question_ask_overlay_buttons(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, false, buttons, button_count, false);
+        anchor_x, default_index, false, buttons, button_count, false, NULL);
 }

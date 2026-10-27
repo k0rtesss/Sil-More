@@ -1110,11 +1110,18 @@ void self_knowledge(void)
             (p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
                 ? disease_name() : "Unknown");
         if (p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
-            strnfmt(t[i], sizeof(t[i]),
-                "Cure: a herb of %s. It only cures disease; its usual effects do not apply.",
-                disease_cure_name());
+        {
+            if (disease_is_angband_plague())
+                strnfmt(t[i], sizeof(t[i]),
+                    "Herb cure: Healing only. Potions of Healing or Miruvor also cure it. A cure herb replaces its usual effects and nourishment.");
+            else
+                strnfmt(t[i], sizeof(t[i]),
+                    "Cure: a herb of %s%s, or a potion of Healing or Miruvor. A cure herb replaces its usual effects and nourishment.",
+                    disease_cure_name(), p_ptr->disease_cure == SV_FOOD_HEALING
+                        ? "" : " or Healing");
+        }
         else
-            strnfmt(t[i], sizeof(t[i]), "Herb cure: Unknown. A potion of Healing or Miruvor also cures disease.");
+            strnfmt(t[i], sizeof(t[i]), "Herb cure: Unknown. A herb of Healing cures every disease, as do potions of Healing or Miruvor. Cure herbs replace their usual effects and nourishment.");
         good[i] = false;
         i++;
     }

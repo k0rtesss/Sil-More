@@ -96,6 +96,20 @@ static bool tutorial_menu_owns_input(void)
         || g_minimap.active || g_unified_look_active;
 }
 
+static bool tutorial_map_selection_active(const tutorial_view *view)
+{
+    return !view->can_continue && !tutorial_reading && g_pointer_aim.active;
+}
+
+static void tutorial_hide_card(void)
+{
+    tutorial_card = (SDL_FRect){0};
+    memset(tutorial_buttons, 0, sizeof(tutorial_buttons));
+    tutorial_max_scroll = 0;
+    tutorial_pressed_button = -1;
+    tutorial_scrolling = false;
+}
+
 void sdl_gameplay_tutorial_sync(void)
 {
     unsigned int revision = tutorial_revision();
@@ -689,6 +703,13 @@ void sdl_gameplay_tutorial_render(void)
     sdl_gameplay_tutorial_sync();
     if (tutorial_mode_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
+    /* Aiming needs the whole map: the target, other creatures and the path
+     * can all lie under the card or its shade. Keep the lesson pending and
+     * restore it when aiming ends; explicit reading still opens the card. */
+    if (tutorial_map_selection_active(&view)) {
+        tutorial_hide_card();
+        return;
+    }
     lore_copy(view.title, sizeof(view.title), view.title);
     lore_copy(view.body, sizeof(view.body), view.body);
     tutorial_build_controls(&view,&controls,false);
@@ -747,9 +768,7 @@ void sdl_gameplay_tutorial_render(void)
              * the selection use the whole menu; the tutorial remains active
              * and returns when the menu closes (or the controller opens the
              * card for reading). Never cover the rows needed to finish it. */
-            tutorial_card = (SDL_FRect){0};
-            memset(tutorial_buttons,0,sizeof(tutorial_buttons));
-            tutorial_max_scroll = 0;
+            tutorial_hide_card();
             return;
         }
         if (action_space.h >= minimum) card_space = action_space;
@@ -957,6 +976,9 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     sdl_gameplay_tutorial_sync();
     if (tutorial_mode_selector_active) return false;
     active = tutorial_get_view(&view);
+    /* The selector can open before the next present. Discard stale card
+     * hitboxes immediately so the first tap on its former area can aim. */
+    if (active && tutorial_map_selection_active(&view)) tutorial_hide_card();
     tutorial_note_input(ev);
     switch (ev->type) {
     case SDL_EVENT_QUIT:

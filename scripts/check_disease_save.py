@@ -61,6 +61,7 @@ static void checks(void)
         assert(p_ptr->disease_immunity == cases[n].immunity);
         assert(p_ptr->diseased == cases[n].countdown);
         assert(p_ptr->disease_name == (cases[n].countdown ? 8 : 0));
+        assert(p_ptr->disease_cure == (cases[n].countdown ? SV_FOOD_HEALING : 0));
         assert(p_ptr->stat_disease[A_CON] == (cases[n].countdown ? -1 : 0));
         assert(p_ptr->stat_drain[A_CON] == -2);
         assert(!!p_ptr->active_ability[S_WIL][WIL_HARDINESS] == cases[n].hardiness);

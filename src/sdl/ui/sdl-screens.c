@@ -7657,6 +7657,10 @@ int sdl_touch_menu_button_reserved_rows(void)
         }
 #endif
     }
+    /* Zoom controls can share the footer without enlarging its action labels.
+     * Keep their full touch targets below the menu's last text row. */
+    if (sdl_menu_scale_controls_active())
+        button_h = MAX(button_h, (float)sdl_ui_min_tap_px());
     margin = sdl_char_sheet_clampf(content_h * 0.018f, 8.0f, 26.0f);
     covered_h = button_h + margin;
     reserved_rows = (int)(covered_h / (float)view->cell_h);
@@ -7993,6 +7997,42 @@ static int sdl_touch_menu_button_layout(
     }
 
     return count;
+}
+
+bool sdl_touch_menu_font_control_rail(int count, float size, float gap,
+    SDL_FRect* out)
+{
+    const sdl_view* view = &g_views[PANE_MAIN];
+    sdl_touch_menu_button_layout_entry buttons[SDL_TOUCH_MENU_BUTTON_MAX];
+    float content_h;
+    float margin;
+    float hit_pad;
+    float row_h;
+    float width;
+    SDL_FRect rail;
+
+    if (out)
+        *out = (SDL_FRect){0};
+    if (!out || count <= 0 || size <= 0
+        || sdl_touch_menu_button_layout(buttons, N_ELEMENTS(buttons)) <= 0)
+        return false;
+
+    content_h = (float)(sdl_main_view_visual_rows(view) * view->cell_h);
+    margin = sdl_char_sheet_clampf(content_h * 0.018f, 8.0f, 26.0f);
+    hit_pad = MAX(0.0f, ((float)sdl_ui_min_tap_px() - size) * 0.5f);
+    row_h = MAX(buttons[0].rect.h, size + hit_pad * 2.0f);
+    width = count * size + (count - 1) * gap;
+    rail = (SDL_FRect){view->rect.x + view->margin_x + margin + hit_pad,
+        buttons[0].rect.y + buttons[0].rect.h - (row_h + size) * 0.5f,
+        width, size};
+
+    /* Leave the registered actions and Exit in place. A full row keeps the
+     * font controls in their usual corner rather than crowding those actions. */
+    if (rail.x + rail.w + hit_pad + gap > buttons[0].rect.x)
+        return false;
+
+    *out = rail;
+    return true;
 }
 
 void sdl_touch_exit_button_render(void)
@@ -8373,9 +8413,12 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             && g_sdl_character_sheet_screen.select_book_mode
             && page < page_count - 1))
     {
+        bool jump_to_last_page = (g_sdl_character_sheet_screen.context
+            == SDL_CHARACTER_SHEET_BIRTH_SELECT);
         cptr close_label = g_sdl_character_sheet_screen.narrative_close_label;
         cptr display_close_label =
-            g_sdl_narrative_portrait_rendering
+            jump_to_last_page ? "Jump to last page"
+            : g_sdl_narrative_portrait_rendering
                 && close_label
                 && streq(close_label, "Proceed to character creation")
             ? "Create character" : close_label;
@@ -8395,15 +8438,12 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             : MIN(content_w * 0.22f, bh * 6.0f);
         float ccx = content_x + (content_w - cw) * 0.5f;
         SDL_FRect r = { ccx, close_y, cw, close_h };
-        bool jump_to_last_page = (g_sdl_character_sheet_screen.context
-            == SDL_CHARACTER_SHEET_BIRTH_SELECT);
         TTF_Font* close_font = prompt_font;
         byte a = (hov == SDL_SELECT_CLICK_CLOSE) ? TERM_WHITE
             : (jump_to_last_page ? TERM_L_BLUE
                 : (emphasized_close ? TERM_L_GREEN : TERM_SLATE));
         char controller_jump_label[48];
-        cptr label = jump_to_last_page
-            ? "Jump to last page" : display_close_label;
+        cptr label = display_close_label;
 
         /* The race-book shortcut needs a full third of a portrait footer.
          * A single long line was scaled down to half the neighboring labels. */
@@ -8436,6 +8476,13 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             if (larger_font)
                 close_font = larger_font;
         }
+        /* Size the center control from the label actually being drawn. The
+         * birth book stores "Close", but displays a longer page shortcut. */
+        cw = MIN(content_w * control_width_fraction,
+            MAX(cw, (float)sdl_char_sheet_text_width(close_font, label)));
+        ccx = content_x + (content_w - cw) * 0.5f;
+        r.x = ccx;
+        r.w = cw;
         if (g_sdl_character_sheet_screen.narrative_icon_book
             && g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_NARRATIVE)
         {

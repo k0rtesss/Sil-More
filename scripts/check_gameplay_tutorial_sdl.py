@@ -268,6 +268,36 @@ int main(void)
         g_pointer_aim.active=false;
     }
     {
+        /* Opening aim must clear old card hitboxes even before another
+         * render. The target selector owns the former card area and hover. */
+        show(false,"fire","bow");
+        tutorial_card=(SDL_FRect){10,400,560,350};
+        tutorial_buttons[1]=(SDL_FRect){20,690,260,60};
+        tutorial_max_scroll=4;
+        g_pointer_aim.active=true;
+        e=(SDL_Event){0}; e.motion.type=SDL_EVENT_MOUSE_MOTION;
+        e.motion.timestamp=tutorial_input_barrier+1000000;
+        e.motion.x=40; e.motion.y=710; e.motion.xrel=1;
+        assert(!sdl_gameplay_tutorial_handle_event(&e));
+        assert(!tutorial_card.w && !tutorial_max_scroll);
+        for(int i=0;i<3;i++) assert(!tutorial_buttons[i].w);
+        e=(SDL_Event){0}; e.tfinger.type=SDL_EVENT_FINGER_DOWN;
+        e.tfinger.timestamp=tutorial_input_barrier+1000000;
+        e.tfinger.fingerID=130; e.tfinger.x=40; e.tfinger.y=710;
+        assert(!sdl_gameplay_tutorial_handle_event(&e));
+        e.tfinger.type=SDL_EVENT_FINGER_UP;
+        assert(!sdl_gameplay_tutorial_handle_event(&e));
+        assert(current.active && key_count==0);
+        e=(SDL_Event){0}; e.wheel.type=SDL_EVENT_MOUSE_WHEEL;
+        e.wheel.timestamp=tutorial_input_barrier+1000000; e.wheel.y=-1;
+        assert(!sdl_gameplay_tutorial_handle_event(&e) && !tutorial_reading);
+        e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_START);
+        assert(sdl_gameplay_tutorial_handle_event(&e) && tutorial_reading);
+        tutorial_activate(0,&current);
+        assert(!tutorial_reading && current.active && key_count==0);
+        g_pointer_aim.active=false;
+    }
+    {
         tutorial_controls labels;
         config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
         show(true,"","");

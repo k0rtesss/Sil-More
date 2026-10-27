@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check saved terminal-menu scales, corner input, and native exclusions.
+"""Check saved terminal-menu scales, footer/corner input, and native exclusions.
 
 Reuses the existing SDL renderer/empty-inventory fixture and links production
 objects. All JSON and screenshots stay in scripts/output; no user data is read.
@@ -186,6 +186,8 @@ static void check_corner_input(void)
     SDL_Rect canvas = {0, 0, fixture_width, fixture_height};
     SDL_Rect after = sdl_menu_content_rect(canvas);
     fixture_assert(!memcmp(&canvas, &after, sizeof(canvas)));
+    ui_menu_click_begin();
+    ui_menu_click_set_touch_exit_button(true);
     for (int big = 0; big < 2; big++) {
         set_sdl_menu_bigger_font(SDL_MENU_FONT_INVENTORY, big);
         sdl_apply_config_no_redraw(); Term_flush();
@@ -195,6 +197,17 @@ static void check_corner_input(void)
         SDL_FRect mh = sdl_menu_control_hit_rect(minus), ph = sdl_menu_control_hit_rect(plus);
         fixture_assert(mh.w >= sdl_ui_min_tap_px() && ph.w >= sdl_ui_min_tap_px());
         fixture_assert(mh.x + mh.w <= ph.x + .01f);
+        sdl_touch_menu_button_layout_entry footer[SDL_TOUCH_MENU_BUTTON_MAX];
+        fixture_assert(sdl_touch_menu_button_layout(footer, N_ELEMENTS(footer)) == 1);
+        fixture_assert(minus.x < fixture_width * .5f && minus.y > fixture_height * .5f);
+        fixture_assert(!SDL_HasRectIntersectionFloat(&mh, &footer[0].rect));
+        fixture_assert(!SDL_HasRectIntersectionFloat(&ph, &footer[0].rect));
+        sdl_view *view = &g_views[PANE_MAIN];
+        float bottom = view->rect.y + view->margin_y
+            + sdl_main_view_visual_rows(view) * view->cell_h;
+        float text_bottom = bottom - sdl_touch_menu_button_reserved_rows() * view->cell_h;
+        fixture_assert(mh.y + .01f >= text_bottom && ph.y + .01f >= text_bottom);
+        fixture_assert(mh.y + mh.h <= bottom && ph.y + ph.h <= bottom);
         font_button_mouse(true, plus.x + plus.w / 2, plus.y + plus.h / 2);
         font_button_mouse(false, minus.x + minus.w / 2, minus.y + minus.h / 2);
         fixture_assert(get_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY) == -1);
@@ -238,6 +251,27 @@ static void check_corner_input(void)
         scale_drain_wakes(false);
         set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, -1);
     }
+    /* A full action row must keep every command and move zoom back upstairs. */
+    for (int i = 0; i < 8; i++)
+        ui_menu_click_add_touch_button(100 + i, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW", TERM_DARK);
+    sdl_touch_menu_button_layout_entry crowded[SDL_TOUCH_MENU_BUTTON_MAX];
+    fixture_assert(sdl_touch_menu_button_layout(crowded, N_ELEMENTS(crowded)) == 9);
+    fixture_assert(scale_control(false).y < fixture_height * .5f);
+    for (int i = 0; i < 9; i++)
+        fixture_assert(crowded[i].rect.w > 0);
+    ui_menu_click_begin();
+    ui_menu_click_set_touch_exit_button(true);
+    set_sdl_show_menu_font_button(false);
+    fixture_assert(scale_control(false).y > fixture_height * .5f);
+    set_sdl_show_menu_font_button(true);
+    fixture_assert(sdl_touch_menu_button_layout(crowded, N_ELEMENTS(crowded)) == 1);
+    fixture_assert(sdl_touch_exit_button_handle_pointer(
+        crowded[0].rect.x + crowded[0].rect.w / 2,
+        crowded[0].rect.y + crowded[0].rect.h / 2));
+    char exit_key = 0;
+    fixture_assert(Term_inkey(&exit_key, false, true) == 0 && exit_key == ESCAPE);
+    ui_menu_click_clear();
+    fixture_assert(scale_control(false).y < fixture_height * .5f);
     set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_HELP, -3);
     sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_HELP);
     set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_HELP, -2);
@@ -252,7 +286,7 @@ static void check_corner_input(void)
     sdl_pop_terminal_menu_scale(); Term_flush(); ui_menu_click_clear();
     set_sdl_show_menu_font_button(false);
     fixture_assert(sdl_menu_font_button_bounds().w == 0);
-    puts("Terminal scales: mouse/touch, cross-button cancellation, limits, immediate save, nested restore: PASS");
+    puts("Terminal scales: footer/corner layout, reserved touch targets, crowded actions, mouse/touch, limits, save, nested restore: PASS");
 }
 
 static bool actual_scale_active;
@@ -297,7 +331,7 @@ static int actual_scale_inkey(void)
     int phase = step % 3;
     fixture_assert(sdl_terminal_menu_font() == SDL_MENU_FONT_INVENTORY);
     fixture_assert(sdl_menu_scale_controls_active());
-    if (step < 3 && (fixture_width == 1280 || fixture_width == 3840)) {
+    if (step < 3) {
         /* Show the real terminal canvas plus its controls. Gameplay HUD
          * overlays require a loaded dungeon, which this empty fixture lacks. */
         sdl_view *view = &g_views[PANE_MAIN];

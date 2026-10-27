@@ -37,7 +37,8 @@ harness=r"""
 #include <string.h>
 #include <stdarg.h>
 typedef const char *cptr;typedef unsigned char byte;
-static bool get_sdl_menu_bigger_font(void) {return true;}
+static bool bigger=true;
+static bool get_sdl_menu_bigger_font(void) {return bigger;}
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define ABS(x) abs(x)
@@ -99,6 +100,7 @@ static cptr inventory_browser_group_text(inventory_menu_group g){return "Pack";}
 static int player_quiver_arrow_count(void){return 23;}
 static int player_quiver_arrow_space(void){return 76;}
 static char screen[48][96];static int hits[48],hit_count;
+static int hit_cols[48],hit_rows[48],hit_widths[48];
 static int strnfmt(char *s,size_t n,cptr f,...) {va_list a;va_start(a,f);int r=vsnprintf(s,n,f,a);va_end(a);return r;}
 static void strnfcat(char *s,size_t n,size_t *used,cptr f,...) {va_list a;va_start(a,f);vsnprintf(s+*used,n-*used,f,a);va_end(a);*used=strlen(s);}
 static size_t cat(char *s,cptr a,size_t n) {size_t len=strlen(s);if(len<n)snprintf(s+len,n-len,"%s",a);return strlen(s);}
@@ -108,7 +110,7 @@ static int utf8_display_width_n(cptr s,int n){return n;}
 static int utf8_safe_prefix_len(cptr s,int n){return n;}
 static void Term_erase(int x,int y,int n){assert(x>=0&&x<draw_w&&y>=0&&y<40);memset(screen[y]+x,' ',MIN(n,draw_w-x));screen[y][draw_w]=0;}
 static void Term_putstr(int x,int y,int n,byte a,cptr s){assert(x>=0&&x<draw_w&&y>=0&&y<40);int len=MIN(n,(int)strlen(s));assert(x+len<=draw_w);memcpy(screen[y]+x,s,len);}
-static void ui_menu_click_add(int id,int x,int y,int w){assert(x>=0&&x+w<=30&&y>=0&&y<40);hits[hit_count++]=id;}
+static void ui_menu_click_add(int id,int x,int y,int w){assert(x>=0&&x+w<=draw_w&&y>=0&&y<40);assert(hit_count<48);hit_cols[hit_count]=x;hit_rows[hit_count]=y;hit_widths[hit_count]=w;hits[hit_count++]=id;}
 static void supply_put_fitted(int x,int y,int w,byte a,cptr s){Term_putstr(x,y,MIN(w,(int)strlen(s)),a,s);}
 static void supply_browser_fill_row(int x,int y,int w,byte a){Term_erase(x,y,w);}
 static byte supply_browser_selected_attr(byte a){return a+TERM_UI_SELECTED;}
@@ -160,7 +162,7 @@ int main(void){
  assert(rows==3);char text[4096];all_text(text,sizeof(text),rows);
  assert(strstr(text,"Shortsword")&&strstr(text,"(+0,1d7)")&&strstr(text,"[+1]")&&strstr(text,"[active]"));
  assert(strstr(text,"1.3 qt")&&strstr(text,"2.0 lb")&&hit_count==3);
- for(int i=0;i<hit_count;i++)assert(hits[i]==SUPPLY_CLICK_ENTRY_BASE);
+ for(int i=0;i<hit_count;i++)assert(hits[i]==SUPPLY_CLICK_ENTRY_BASE&&hit_rows[i]==i&&hit_cols[i]==0&&hit_widths[i]==30);
 
  /* Full authored prefix/name/suffix/curse plus every floor and metadata token. */
  equipment_list_entry long_item={.item_idx=-7,.equip_idx=-1,.supply_idx=-1,.floor_idx=7,.source="Floor",
@@ -180,6 +182,28 @@ int main(void){
  equipment_entry_init_columns(&k,&empty,1,true,&e);clear();
  display_equipment_slot_entries_wrapped(&k,0,20,&empty,1,0,0,0,&e,&rows);
  all_text(text,sizeof(text),rows);assert(rows==1&&strstr(text,"(empty) L ring"));
+
+ /* Match every painted continuation row to its full-width touch box, including
+  * a scrolled list with the global entry IDs used by Harness/Quiver sections.
+  * Cover both the compact phone cards and the screenshot's side columns. */
+ equipment_list_entry mixed[]={long_item,sword};
+ for(int big=0;big<2;big++){
+  bigger=big;draw_w=Term->wid=k.term_wid=k.list_w=big?30:44;
+  equipment_entry_init_columns(&k,mixed,2,false,&e);e.entry_index_base=7;
+  for(int top=0;top<2;top++){
+   clear();int visible=display_equipment_slot_entries_wrapped(&k,3,20,mixed,2,top,top,1,&e,&rows);
+   assert(visible==2-top&&rows>visible&&hit_count==rows);
+   int painted_entry=top-1;
+   for(int i=0;i<rows;i++){
+    if(screen[3+i][0]=='*')painted_entry++;
+    assert(painted_entry>=top&&painted_entry<2);
+    assert(hit_rows[i]==3+i&&hit_cols[i]==0&&hit_widths[i]==draw_w);
+    assert(hits[i]==SUPPLY_CLICK_ENTRY_BASE+7+painted_entry);
+   }
+   assert(painted_entry==1);
+  }
+ }
+ bigger=true;draw_w=Term->wid=k.term_wid=k.list_w=30;
 
  supply_list_columns s;supply_init_columns(&k,SUPPLY_GROUP_LIGHTS,&s);
  assert(s.name_w==29&&!s.show_qty&&!s.show_turns&&!s.show_weight);

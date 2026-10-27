@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.9"
 /*
- * Version components (0.9.9.0).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.9.6).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 3
+#define VERSION_EXTRA 7
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -1795,6 +1795,7 @@
 #define DISEASE_INTERVAL 150
 #define DISEASE_COUNTDOWN_MAX (DISEASE_INTERVAL * 2)
 #define DISEASE_NAME_COUNT 8
+#define DISEASE_ANGBAND_PLAGUE 8 /* Saved name index, formerly Shadow Pox. */
 #define DISEASE_HERB_COUNT 10 /* Contiguous herb svals, Rage through Sickness. */
 #define DISEASE_KNOWN_NAME 0x01
 #define DISEASE_KNOWN_CURE 0x02
@@ -2640,6 +2641,7 @@
     0x00040000 /* Monster was just meleed by player last turn */
 #define MFLAG_DURUIN_PROVOKED                                                   \
     0x00080000 /* Duruin may leave his inner bastion enclosure */
+#define MFLAG_LISTEN 0x00100000 /* Runtime-only: visible solely through Resonance. */
 
 /*
  * New monster race bit flags
@@ -3011,6 +3013,7 @@
 #define OPT_pacifist_attack_warning (OPT_GAME_PLAY + 5)
 /* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
+#define OPT_ignore_monster_alarms (OPT_GAME_PLAY + 7)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
 // reserved legacy slot: allow_themed_levels
@@ -3233,6 +3236,7 @@
 #define assassination_over_charge op_ptr->opt[OPT_assassination_over_charge]
 #define pacifist_attack_warning op_ptr->opt[OPT_pacifist_attack_warning]
 #define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
+#define ignore_monster_alarms op_ptr->opt[OPT_ignore_monster_alarms]
 #define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
 #define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
 #define utumno_corridors op_ptr->opt[OPT_utumno_corridors]

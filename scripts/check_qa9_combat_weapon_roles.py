@@ -34,16 +34,21 @@ int __wrap_ui_question_ask_objects_with_help(cptr title, cptr desc,
     int count, int y, int x, int def)
 {
     (void)title; (void)desc; (void)icons; (void)y; (void)x;
-    assert(def >= 0 && def < count && !options[def].disabled);
+    assert(def >= 0 && def < count);
+    bool submenu=streq(options[0].label,"Back to categories");
+    if(!submenu) assert(!options[def].disabled);
     int selected=-1, melee=0, throwing=0;
     for(int i=0;i<count;i++) {
         bool is_throwing=!strncmp(options[i].label,"Throwing",8);
-        bool is_melee=!strncmp(options[i].label,"Melee",5);
+        bool is_melee=!strncmp(options[i].label,"Melee",5)
+            || !strncmp(options[i].label,"Two-handed melee",16);
         if(is_melee) { melee++; assert(options[i].disabled); }
         if(is_throwing) { throwing++; assert(!options[i].disabled); }
         if((menu_role ? is_throwing : is_melee) && selected<0) selected=i;
     }
-    assert(melee && throwing && selected>=0);
+    if(submenu) assert(menu_role ? throwing && !melee : melee && !throwing);
+    else assert(melee && throwing);
+    assert(selected>=0);
     return selected;
 }
 bool __wrap_tutorial_game_action_allowed(const char* action,const object_type* item)

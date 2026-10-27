@@ -856,7 +856,8 @@ static bool queue_deferred_pickup_equipment_drop(int item, int amount)
         return false;
 
     drop_ptr = &inventory[item];
-    if (!drop_ptr->k_idx || cursed_p(drop_ptr))
+    if (!drop_ptr->k_idx
+        || (player_equipment_slot_counts_as_equipped(item) && cursed_p(drop_ptr)))
         return false;
 
     if (delay_pickup_for_pack_replacement(drop_ptr))
@@ -1048,7 +1049,7 @@ static pickup_failure_result prompt_replace_light_limit_item(
                 continue;
             }
 
-            if (item >= INVEN_WIELD && item < INVEN_TOTAL
+            if (player_equipment_slot_counts_as_equipped(item)
                 && cursed_p(drop_ptr))
             {
                 char equipped_name[80];
@@ -2217,7 +2218,7 @@ static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,
         return PICKUP_FAILURE_ABORT;
     }
 
-    if (cursed_p(equip_ptr))
+    if (player_equipment_slot_counts_as_equipped(slot) && cursed_p(equip_ptr))
     {
         char equipped_name[80];
         object_desc(equipped_name, sizeof(equipped_name), equip_ptr, true, 3);

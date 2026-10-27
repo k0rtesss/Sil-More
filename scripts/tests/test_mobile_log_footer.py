@@ -13,6 +13,7 @@ tree=ast.parse((ROOT/'scripts/tests/test_mobile_about_blitz.py').read_text())
 harness=next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='harness' for t in n.targets))
 harness=harness.replace('static void Term_get_size(int*w,int*h){*w=30;*h=12;}','static int test_w=30,test_h=12,reserved=3; static void Term_get_size(int*w,int*h){*w=test_w;*h=test_h;}')
 harness=harness.replace('static void text_out_to_screen(byte a,cptr t){}','static void text_out_to_screen(byte a,cptr t);')
+harness=harness.replace('bool playing,is_dead,quit_to_menu,leaving;','bool playing,is_dead,quit_to_menu,leaving;unsigned redraw;')
 fixtures=r'''
 #define USE_SDL
 #define SDL_strlcpy(d,s,n) snprintf(d,n,"%s",s)
@@ -34,6 +35,11 @@ fixtures=r'''
 #define SDL_TOUCH_MENU_CATEGORY_OTHER 0
 #define TERM_L_DARK 8
 #define TERM_SHADE 0
+#define PR_MAP 1
+#define PR_BASIC 2
+#define PR_EXTRA 4
+static bool character_generated,character_dungeon,character_icky;
+static void handle_stuff(void){}
 typedef short s16b;
 typedef struct {byte attacker_attr,defender_attr;char attacker_char,defender_char;} combat_roll;
 static combat_roll roll={0x81,0x82,(char)0x8a,(char)0x8b};
@@ -41,7 +47,7 @@ typedef struct {int kind,message_age;combat_roll*roll;} log_history_entry;
 typedef struct {cptr text;int len;} log_history_note_line;
 static log_history_entry log_history_entries[3];static log_history_note_line log_history_note_lines[3];
 static cptr text[]={"FIRST A very long recorded message with all words and numbers 12345 retained. A very long recorded message with all words and numbers 12345 retained. A very long recorded message with all words and numbers 12345 retained. LASTTAIL",
- "Combat @ to o att +14 hit 7 evn +8 damage (2d7+1d5) net 12 protection 3 COMBATTAIL", "Oldest message OLDESTTAIL"};
+ "Combat ?? to ?? att +14 hit 7 evn +8 damage (2d7+1d5) net 12 protection 3 COMBATTAIL", "Oldest message OLDESTTAIL"};
 static int cursor_y,cursor_x,body_bottom_seen,prompt_seen;static char reached[8192];
 static void Term_gotoxy(int x,int y){cursor_x=x;cursor_y=y;}
 static void text_out_to_screen(byte a,cptr t){assert(cursor_y>=0&&cursor_y<=body_bottom_seen);assert(cursor_x+(int)strlen(t)<=test_w);strncat(reached,t,sizeof(reached)-strlen(reached)-1);cursor_x+=strlen(t);}
@@ -63,7 +69,10 @@ static void log_history_draw_combat_entry(const log_history_entry*e,int y,int of
 static bool use_bigtile=true;
 static bool graphics_are_ascii(void){return false;}
 static int icon_count;
-static void Term_queue_char(int x,int y,byte a,char c,byte ta,char tc){assert(x>=0&&x<test_w&&y>=0&&y<=body_bottom_seen);if(a==roll.attacker_attr||a==roll.defender_attr)icon_count++;else assert(a==255);}
+static void Term_queue_char(int x,int y,byte a,char c,byte ta,char tc){assert(x>=0&&x<test_w&&y>=0&&y<=body_bottom_seen);if(a==roll.attacker_attr||a==roll.defender_attr)icon_count++;else if(a==255)assert(c==-1);else {char glyph[2]={c,0};strncat(reached,glyph,sizeof(reached)-strlen(reached)-1);}}
+/* The SDL fixture checks actual overlay content. Here retain a deliberately
+ * oversized synthetic entry to exercise the caller's continuation handling. */
+static void log_history_build_combat_line(const combat_roll*r,log_history_combat_line*line){memset(line,0,sizeof(*line));strnfmt(line->text,sizeof(line->text),"%s",text[1]);memset(line->attrs,TERM_WHITE,strlen(line->text));line->is_tile[7]=line->is_tile[13]=true;line->icons[7]=r->attacker_char;line->icons[13]=r->defender_char;line->attrs[7]=r->attacker_attr;line->attrs[13]=r->defender_attr;line->attrs[8]=line->attrs[14]=255;}
 static void ui_scroll_area_begin(int top,int bottom,int cat){body_bottom_seen=bottom;assert(bottom<test_h-1-reserved);}
 static void ui_scroll_area_set_indicator(int current,int maximum){assert(current>=0&&current<=maximum);}
 static bool ui_scroll_area_add_cols(int a,int b,int c,int d,int e){return true;}
@@ -91,7 +100,8 @@ static void bell(cptr t){}
 static void queue(int key,int click){events[event_count]=key;clicks[event_count]=click;actions[event_count++]=UI_MENU_CLICK_PRIMARY;}
 '''
 filter_type=SOURCE[SOURCE.index('typedef struct log_history_filter_control {'):SOURCE.index('static int log_history_filter_layout(')]
-parts=[filter_type,function('static int log_history_filter_layout(')]+[function(x) for x in ['static void log_history_put_tile_scrolled(', 'static void log_history_wrapped_entry_text(', 'static bool log_history_wrap_next(',
+combat_line_type=SOURCE[SOURCE.index('typedef struct log_history_combat_line'):SOURCE.index('static void log_history_build_combat_line(')]
+parts=[filter_type,function('static int log_history_filter_layout(')]+[function(x) for x in ['static void log_history_draw_combat_span(', 'static void log_history_wrapped_entry_text(', 'static bool log_history_wrap_next(',
  'static int log_history_wrapped_entry_rows(', 'static void log_history_draw_wrapped_text(',
  'static void log_history_draw_wrapped_combat(',
  'static int log_history_wrapped_last_page_start(', 'static void log_history_draw_wrapped_slice(',
@@ -123,6 +133,6 @@ int main(void){
 msys=Path(r'C:\msys64\mingw64\bin');cc=os.environ.get('CC') or shutil.which('gcc') or str(msys/'gcc.exe')
 env=os.environ.copy();env['PATH']=str(msys)+os.pathsep+str(msys.parent/'usr/bin')+os.pathsep+env.get('PATH','')
 with tempfile.TemporaryDirectory(prefix='sil-log-footer-') as tmp:
- src=Path(tmp)/'test.c';exe=Path(tmp)/'check.exe';src.write_text(harness+fixtures+'\n'.join(parts)+main)
+ src=Path(tmp)/'test.c';exe=Path(tmp)/'check.exe';src.write_text(harness+combat_line_type+fixtures+'\n'.join(parts)+main)
  subprocess.run([cc,'-std=c17',str(src),'-o',str(exe)],check=True,env=env)
  subprocess.run([str(exe)],check=True,env=env)

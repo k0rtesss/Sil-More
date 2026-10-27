@@ -981,6 +981,9 @@ bool prereqs(int skilltype, int abilitynum)
 {
     ability_type* b_ptr;
 
+    if (player_ability_restriction(skilltype, abilitynum))
+        return false;
+
     b_ptr = &b_info[ability_index(skilltype, abilitynum)];
 
     if (p_ptr->skill_base[skilltype] < b_ptr->level)
@@ -3820,6 +3823,12 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
 
     abilitynum = entry->abilitynum;
 
+    if (player_ability_restriction(skilltype, abilitynum))
+    {
+        SDL_strlcpy(buf, "unavailable", buflen);
+        return;
+    }
+
     if (p_ptr->have_ability[skilltype][abilitynum])
     {
         if ((skilltype != S_SPC)
@@ -4494,7 +4503,12 @@ static int ability_browser_build_description(int skilltype,
     b_ptr = entry->b_ptr;
     ability_desc_add_line(lines, &line_count, TERM_YELLOW, entry->name);
 
-    if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+    cptr restriction = player_ability_restriction(skilltype, b_ptr->abilitynum);
+    if (restriction)
+    {
+        SDL_strlcpy(status, restriction, sizeof(status));
+    }
+    else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
     {
         strnfmt(status, sizeof(status), "%s; %s.",
             p_ptr->innate_ability[skilltype][b_ptr->abilitynum]
@@ -5099,6 +5113,13 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
     if (death_spectator_active())
     {
         msg_print("You can no longer take that action.");
+        return false;
+    }
+
+    cptr restriction = player_ability_restriction(skilltype, abilitynum);
+    if (restriction)
+    {
+        bell(restriction);
         return false;
     }
 

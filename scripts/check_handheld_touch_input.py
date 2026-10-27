@@ -101,6 +101,153 @@ static void finger(SDL_FPoint point)
     check_choice(true);
 }
 
+static int legacy_offset;
+
+static void open_legacy_menu(void)
+{
+    sdl_question_menu_clear(); sdl_menu_touch_cancel();
+    sdl_menu_scroll_cancel(); ui_scroll_area_clear();
+    ui_menu_click_begin(); empty_keys(); legacy_offset = 10;
+    ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+    for (int row = 5; row < 11; ++row)
+        ui_menu_click_add(row < 8 ? 111 : 222, 0, row, 40);
+    ui_scroll_area_begin_cols(0, 39, 5, 10,
+        SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
+    ui_scroll_area_set_offset_target(&legacy_offset, 20);
+}
+
+static void check_legacy_choice(int expected, int expected_action)
+{
+    int choice = -1, action = -1;
+    assert(ui_menu_click_take_action(&choice, &action) == (expected != 0));
+    if (expected) {
+        assert(choice == expected && action == expected_action);
+        assert(!ui_menu_click_take_action(&choice, &action));
+        char key;
+        assert(!Term_inkey(&key, false, true));
+        assert(key == (action == UI_MENU_CLICK_SECONDARY
+            ? UI_MENU_CLICK_WAKE_KEY : '\r'));
+    }
+    char key;
+    assert(Term_inkey(&key, false, true));
+}
+
+static void legacy_tap(float x, float y, float end_x, float end_y,
+    bool motion, bool mouse, int expected)
+{
+    open_legacy_menu();
+    assert(sdl_menu_touch_handle_pointer_down(x, y, 456, mouse));
+    if (motion)
+        assert(sdl_menu_touch_handle_pointer_motion(end_x, end_y, 456, mouse));
+    if (g_menu_touch_press.active)
+        assert(sdl_menu_touch_handle_pointer_up(end_x, end_y, 456, mouse));
+    if (ui_menu_click_has_pending() != (expected != 0))
+        fprintf(stderr, "Legacy tap %.1f,%.1f -> %.1f,%.1f motion=%d mouse=%d expected=%d\n",
+            x, y, end_x, end_y, motion, mouse, expected);
+    check_legacy_choice(expected, UI_MENU_CLICK_PRIMARY);
+    if (expected) assert(legacy_offset == 10 && !g_menu_scroll_drag.active);
+}
+
+static void legacy_finger(float y, float end_y)
+{
+    open_legacy_menu();
+    int w, h;
+    assert(SDL_GetWindowSize(g_state.window, &w, &h));
+    const Uint32 types[] = {SDL_EVENT_FINGER_DOWN,
+        SDL_EVENT_FINGER_MOTION, SDL_EVENT_FINGER_UP};
+    for (int i = 0; i < 3; ++i) {
+        float x, window_y;
+        assert(SDL_RenderCoordinatesToWindow(g_state.renderer,
+            160, i ? end_y : y, &x, &window_y));
+        SDL_Event event = {0}; event.type = types[i];
+        event.tfinger.touchID = 123; event.tfinger.fingerID = 456;
+        event.tfinger.windowID = SDL_GetWindowID(g_state.window);
+        event.tfinger.x = x / w; event.tfinger.y = window_y / h;
+        sdl_handle_event(&g_state, &event);
+        if (i < 2) assert(g_menu_touch_press.active);
+    }
+    assert(!g_menu_touch_press.active && legacy_offset == 10);
+    check_legacy_choice(111, UI_MENU_CLICK_PRIMARY);
+}
+
+static void check_wrapped_menu(void)
+{
+    sdl_view* view = &g_views[PANE_MAIN];
+    view->term_ready = true; view->cols = 40; view->rows = 24;
+    view->cell_w = 16; view->cell_h = 32;
+    view->rect = (SDL_Rect){0, 0, 640, 768};
+    view->canvas = SDL_CreateTexture(g_state.renderer, SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET, 640, 768);
+    assert(view->canvas);
+    config.touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT] = true;
+
+    /* Replay native finger packets at both renderer scales as well. */
+    for (int scaled = 0; scaled < 2; ++scaled) {
+        assert(SDL_SetRenderScale(g_state.renderer,
+            scaled ? 1.5f : 1.0f, scaled ? 1.5f : 1.0f));
+        legacy_finger(191.5f, 192.5f);
+        legacy_finger(192.5f, 191.5f);
+    }
+
+    /* Every column of every continuation line belongs to its item. */
+    for (int row = 5; row < 11; ++row)
+        for (int col = 0; col < 40; ++col)
+            legacy_tap(col * 16 + 8, row * 32 + 16,
+                col * 16 + 8, row * 32 + 16, false, false,
+                row < 8 ? 111 : 222);
+
+    for (int mouse = 0; mouse < 2; ++mouse)
+        for (int motion = 0; motion < 2; ++motion) {
+            /* A one-pixel wobble across a column or wrapped line stays a tap. */
+            for (int direction = -1; direction <= 1; direction += 2) {
+                legacy_tap(160 - direction * .5f, 176,
+                    160 + direction * .5f, 176, motion, mouse, 111);
+                for (int boundary = 6; boundary <= 7; ++boundary)
+                    legacy_tap(160, boundary * 32 - direction * .5f,
+                        160, boundary * 32 + direction * .5f,
+                        motion, mouse, 111);
+                /* Crossing into the next item must never select either one. */
+                legacy_tap(160, 256 - direction * .5f,
+                    160, 256 + direction * .5f, motion, mouse, 0);
+            }
+            /* A drag exceeding the threshold cancels even within one item. */
+            legacy_tap(160, 160.5f, 160,
+                161.5f + sdl_touch_swipe_threshold_px(), motion, mouse, 0);
+        }
+
+    /* Real vertical drags still hand off to scrolling without selecting. */
+    open_legacy_menu();
+    assert(sdl_menu_touch_handle_pointer_down(160, 160.5f, 456, false));
+    assert(sdl_menu_touch_handle_pointer_motion(160, 226, 456, false));
+    assert(!g_menu_touch_press.active && g_menu_scroll_drag.active);
+    assert(legacy_offset != 10);
+    sdl_menu_scroll_cancel(); empty_keys(); check_legacy_choice(0, 0);
+
+    /* A long press survives the same small movement and fires exactly once. */
+    open_legacy_menu();
+    assert(sdl_menu_touch_handle_pointer_down(160, 191.5f, 456, false));
+    assert(sdl_menu_touch_handle_pointer_motion(160, 192.5f, 456, false));
+    assert(sdl_menu_touch_flush_pending_press(g_menu_touch_press.start_time
+        + (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL));
+    check_legacy_choice(111, UI_MENU_CLICK_SECONDARY);
+    assert(!sdl_menu_touch_handle_pointer_up(160, 192.5f, 456, false));
+    check_legacy_choice(0, 0);
+
+    /* Cancellation and another finger cannot finish the original press. */
+    open_legacy_menu();
+    assert(sdl_menu_touch_handle_pointer_down(160, 176, 456, false));
+    assert(!sdl_menu_touch_handle_pointer_motion(161, 176, 789, false));
+    assert(!sdl_menu_touch_handle_pointer_up(161, 176, 789, false));
+    assert(g_menu_touch_press.active);
+    sdl_menu_touch_cancel();
+    assert(!sdl_menu_touch_handle_pointer_up(160, 176, 456, false));
+    check_legacy_choice(0, 0);
+
+    ui_scroll_area_clear(); ui_menu_click_clear();
+    SDL_DestroyTexture(view->canvas); view->canvas = NULL; view->term_ready = false;
+    puts("Wrapped menu: full rows, cell-boundary taps, scrolling, long press and cancellation PASS");
+}
+
 int main(int argc, char** argv)
 {
     assert(argc == 2); log_set_quiet(true);
@@ -144,6 +291,7 @@ int main(int argc, char** argv)
             finger(open_menu()); ++cases;
         }
     }
+    check_wrapped_menu();
     sdl_question_menu_clear(); ui_menu_click_clear();
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear();
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer = NULL;
