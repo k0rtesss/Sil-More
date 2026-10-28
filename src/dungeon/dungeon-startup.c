@@ -142,17 +142,19 @@ PlayResult play_game(void)
     {
         /* get_sdl_min_terminal_mode() returns 0=normal, 1=compact. */
         const bool compact_mode = (get_sdl_min_terminal_mode() != 0);
-        int min_hgt = compact_mode ? 18 : 24;
-        int min_wid = compact_mode ? 50 : 80;
+        int min_hgt = compact_mode ? SIL_UI_COMPACT_MIN_ROWS
+                                   : SIL_UI_NORMAL_MIN_ROWS;
+        int min_wid = compact_mode ? SIL_UI_COMPACT_MIN_COLS
+                                   : SIL_UI_NORMAL_MIN_COLS;
 #if defined(__ANDROID__) || defined(SIL_IOS)
         if (get_sdl_mobile_portrait_mode()) {
             /* Preserve the same cell/tile scale when the same physical
              * screen rotates.  Cell width is half the cell height, so the
-             * compact layout's 18-row physical width becomes 36 portrait
+             * compact layout's 16-row physical width becomes 32 portrait
              * columns.  Keep the compact gameplay row floor; the portrait
              * HUD consumes the rest of the rotated height. */
-            min_wid = 18 * 2;
-            min_hgt = 18;
+            min_wid = SIL_UI_COMPACT_MIN_ROWS * 2;
+            min_hgt = SIL_UI_COMPACT_MIN_ROWS;
         }
 #endif
         if ((Term->hgt < min_hgt) || (Term->wid < min_wid))

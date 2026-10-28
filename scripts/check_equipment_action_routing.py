@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import shlex
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
@@ -16,7 +17,7 @@ HARNESS = r'''
 static object_type held[INVEN_TOTAL];
 static object_kind kinds[6];
 static maxima limits;
-static int active_calls, wield_slot_seen, storage_seen, use_calls;
+static int active_calls, wield_slot_seen, storage_seen, storage_item_seen, use_calls;
 static int item_seen, menu_result = -1, expected_icon;
 static int combat_rows, pack_rows, belt_rows, harness_rows, combo_rows;
 static bool select_combo, simulate_wield;
@@ -45,7 +46,7 @@ bool __wrap_do_cmd_wield_to_slot(object_type* obj, int item, int slot)
     return true;
 }
 bool __wrap_do_cmd_move_item_to_storage(int item, byte storage)
-{ assert(item == 0); storage_seen = storage; return true; }
+{ storage_item_seen = item; storage_seen = storage; return true; }
 void __wrap_do_cmd_use_item_by_index(int item)
 { assert(item == 0); use_calls++; }
 bool __wrap_get_check(cptr prompt) { (void)prompt; return confirmation; }
@@ -90,7 +91,7 @@ int __wrap_ui_question_ask_objects_with_help(cptr title, cptr desc,
 static void reset_calls(void)
 {
     active_calls = use_calls = 0;
-    wield_slot_seen = storage_seen = -1;
+    wield_slot_seen = storage_seen = storage_item_seen = -1;
     confirmation = true;
     item_seen = -1;
 }
@@ -240,7 +241,7 @@ int main(void)
         failure, sizeof(failure), NULL));
     assert(p_ptr->active_weapon_mode == PLAYER_ACTIVE_WEAPON_RANGED_1);
     char where[80];
-    assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Harness"));
+    assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Harness (stored)"));
     p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
     reserved.equipped = true;
     assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Active"));
@@ -249,6 +250,116 @@ int main(void)
     assert(streq(equipment_menu_use_action_text(&reserved, INVEN_WIELD,
         SUPPLY_FLOOR_ACTION_DEFAULT), "Change setup"));
     puts("PASS: Reserved weapons use the same menu as loose Harness weapons; cancellation preserves active mode.");
+
+    /* Off-hand slots can contain a Harness weapon while the bow is active.
+     * Opening that entry must offer a real setup, not silently stow it again. */
+    set_item(INVEN_WIELD, 1);
+    set_item(INVEN_ARM, 1);
+    set_item(INVEN_BOW, 3);
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
+    p_ptr->energy_use = 0;
+    equipment_entry_clear(&reserved);
+    reserved.equip_idx = INVEN_ARM;
+    assert(!player_equipment_slot_counts_as_equipped(INVEN_ARM));
+    equipment_list_entry slot_row;
+    int slot_count = 0;
+    assert(equipment_add_slot_entry(&slot_row, &slot_count, 1, INVEN_ARM));
+    assert(slot_count == 1 && !slot_row.equipped && !slot_row.show_empty_slot);
+    assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)),
+        "Harness (stored)"));
+    object_type *display;
+    byte attr;
+    char label[180];
+    assert(equipment_entry_display_values(&reserved, 0, false, label,
+        sizeof(label), &display, &attr));
+    assert(display == &held[INVEN_ARM] && strstr(label, "[stored on Harness]"));
+    assert(equipment_entry_display_values(&reserved, 0, true, label,
+        sizeof(label), &display, &attr));
+    assert(!strstr(label, "[stored on Harness]"));
+    assert(streq(equipment_menu_use_action_text(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Make active"));
+    reset_calls();
+    confirmation = false;
+    assert(!equipment_menu_use_entry(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(active_calls == 1 && item_seen == INVEN_ARM && use_calls == 0
+        && p_ptr->energy_use == 0 && held[INVEN_ARM].k_idx == 1
+        && p_ptr->active_weapon_mode == PLAYER_ACTIVE_WEAPON_RANGED_1);
+    reset_calls();
+    assert(equipment_menu_use_entry(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(active_calls == 1 && item_seen == INVEN_ARM && use_calls == 0);
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_MELEE;
+    reserved.equipped = true;
+    assert(streq(equipment_entry_source_text(&reserved, where, sizeof(where)), "Active"));
+    assert(equipment_entry_display_values(&reserved, 0, false, label,
+        sizeof(label), &display, &attr));
+    assert(strstr(label, "[active]") && !strstr(label, "[stored on Harness]"));
+    assert(streq(equipment_menu_use_action_text(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Change setup"));
+    reset_calls();
+    assert(equipment_menu_use_entry(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(active_calls == 1 && item_seen == INVEN_ARM && use_calls == 0);
+
+    /* Choosing a loose item from Off-hand still targets that hand directly. */
+    set_item(0, 1);
+    reset_calls();
+    assert(streq(equipment_menu_use_action_text(&entry, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Equip"));
+    assert(equipment_menu_use_entry(&entry, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(wield_slot_seen == INVEN_ARM && active_calls == 0);
+
+    /* A round shield with Point Blank Archery is actually active with a
+     * shortbow; the same shield is stored when that ability is unavailable. */
+    set_item(INVEN_ARM, 5);
+    p_ptr->active_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
+    p_ptr->active_ability[S_ARC][ARC_POINT_BLANK] = true;
+    reserved.equipped = true;
+    assert(player_equipment_slot_counts_as_equipped(INVEN_ARM));
+    assert(streq(equipment_menu_use_action_text(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Change setup"));
+    p_ptr->active_ability[S_ARC][ARC_POINT_BLANK] = false;
+    reserved.equipped = false;
+    assert(!player_equipment_slot_counts_as_equipped(INVEN_ARM));
+    assert(streq(equipment_menu_use_action_text(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Make active"));
+    object_wipe(&held[INVEN_ARM]);
+    puts("PASS: Off-hand distinguishes stored and active gear, routes setup/cancellation, preserves direct equip and respects Point Blank Archery.");
+
+    /* Broken inactive weapons cannot be readied; stowable ones still have a
+     * real three-turn Pack route instead of a spurious one-turn removal. */
+    set_item(INVEN_ARM, 1);
+    object_set_runtime_state(&held[INVEN_ARM], OBJECT_RUNTIME_STATE_FIRE_BROKEN);
+    assert(!player_active_item_menu_available(INVEN_ARM));
+    assert(streq(equipment_menu_use_action_text(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Store in Pack"));
+    assert(streq(inventory_page_use_action_text(&reserved,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Store in Pack"));
+    reset_calls(); confirmation = false; p_ptr->energy_use = 0;
+    assert(!equipment_menu_use_entry(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(storage_seen == -1 && use_calls == 0 && !p_ptr->energy_use);
+    reset_calls();
+    assert(equipment_menu_use_entry(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(storage_seen == OBJECT_STORAGE_PACK && storage_item_seen == INVEN_ARM
+        && use_calls == 0);
+    reset_calls();
+    assert(inventory_page_use_entry(&reserved, SUPPLY_FLOOR_ACTION_DEFAULT,
+        failure, sizeof(failure), NULL));
+    assert(storage_seen == OBJECT_STORAGE_PACK && storage_item_seen == INVEN_ARM);
+    kinds[1].flags4 &= ~TR4_HARNESS_STOWABLE;
+    assert(streq(equipment_menu_use_action_text(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT), "Repair first"));
+    reset_calls(); p_ptr->energy_use = 0;
+    assert(!equipment_menu_use_entry(&reserved, INVEN_ARM,
+        SUPPLY_FLOOR_ACTION_DEFAULT));
+    assert(storage_seen == -1 && use_calls == 0 && !p_ptr->energy_use);
+    kinds[1].flags4 |= TR4_HARNESS_STOWABLE;
+    object_wipe(&held[INVEN_ARM]);
+    puts("PASS: Broken inactive gear routes to Pack or a free repair notice; cancellation keeps it in place.");
 
     reset_calls();
     set_item(0, 1);
@@ -409,6 +520,8 @@ def main():
     rsp.write_text("\n".join('"' + p + '"' for p in objects
                              if not p.endswith(excluded)), encoding="utf-8")
     env = os.environ.copy()
+    env["SDL_VIDEODRIVER"] = "dummy"
+    env["SDL_AUDIODRIVER"] = "dummy"
     env["PATH"] = os.pathsep.join([
         *[str(BUILD / "_deps" / x) for x in ("SDL", "SDL_image", "SDL_ttf", "SDL_mixer")],
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
@@ -423,7 +536,8 @@ def main():
         "@" + str(rsp), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         *["-Wl,--wrap=" + s for s in wrapped], "-o", str(exe)],
         cwd=BUILD, env=env, check=True)
-    subprocess.run([str(exe)], cwd=ROOT, env=env, check=True, timeout=30)
+    with tempfile.TemporaryDirectory(prefix="equipment-routing-") as state:
+        subprocess.run([str(exe)], cwd=state, env=env, check=True, timeout=30)
 
 
 if __name__ == "__main__":

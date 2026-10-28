@@ -177,11 +177,14 @@ int main(int argc,char **argv)
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
     fixture_assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS)); fixture_assert(TTF_Init());
     sdl_config_set_defaults(&config); config.bigger_font=true;
+    for(int i=0;i<SDL_MENU_FONT_COUNT;i++) config.menu_bigger_font[i]=true;
+    g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
     SDL_strlcpy(config.story_font,argv[5],sizeof(config.story_font));
     SDL_strlcpy(config.story_font2,argv[1],sizeof(config.story_font2));
     SDL_strlcpy(config.monospace_font,argv[4],sizeof(config.monospace_font));
     config.input_ui_mode=SDL_INPUT_UI_MODE_PLATFORM; config.use_unsafe_area=true;
     config.aux_view_font_size=24; g_state.system_scale=1;
+    player.song1=player.song2=SNG_NOTHING;
     z_info=&limits; p_ptr=&player; op_ptr=&options; inventory=items;
     player.playing=true; character_generated=character_dungeon=true;
     fixture_width=atoi(argv[2]); fixture_height=atoi(argv[3]); fixture_font=24;
@@ -230,8 +233,10 @@ def main():
     screens = (ROOT / "src/sdl/ui/sdl-screens.c").read_text()
     start = screens.index("static SDL_FRect sdl_char_sheet_draw_text_aligned(")
     end = screens.index("static SDL_FRect sdl_char_sheet_draw_text_alpha(", start)
-    drawing = screens[start:end].replace("SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);",
-        "fixture_record_text(font, text, dst);\n    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);")
+    call = "sdl_ui_render_text_texture(texture, &src, &dst);"
+    assert screens[start:end].count(call) == 1, "Birth text trace missed the renderer"
+    drawing = screens[start:end].replace(call,
+        "fixture_record_text(font, text, dst);\n    " + call)
     screens = screens[:start] + drawing + screens[end:]
     source.write_text(HARNESS.replace("/* ACTUAL SCREENS SOURCE */", screens), encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())

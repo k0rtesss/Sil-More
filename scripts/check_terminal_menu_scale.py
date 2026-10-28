@@ -364,6 +364,64 @@ static int actual_scale_inkey(void)
     return step == 11 ? ESCAPE : KTRL('N');
 }
 
+static void check_clamped_desktop_scale(int width, int height)
+{
+    SDL_Rect screen = {0, 0, width, height};
+    struct sdl_config saved_config = config;
+    int saved_max[SDL_MIN_TERMINAL_MODE_COUNT];
+    sdl_view *view = &g_views[PANE_MAIN];
+
+    if (sdl_handheld_ui_active()
+        || sdl_max_scale_for_rect_mode(&screen, SDL_MIN_TERMINAL_NORMAL)
+            <= SDL_MAIN_VIEW_MIN_SCALE)
+        return;
+    for (int i = 0; i < SDL_MIN_TERMINAL_MODE_COUNT; i++) {
+        saved_max[i] = g_platform_max_main_view_scale[i];
+        g_platform_max_main_view_scale[i] = SDL_MAIN_VIEW_MIN_SCALE;
+    }
+    fixture_set_all_fonts(false);
+    config.min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
+    screen_push_supporting_panes_hidden();
+    set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, 0);
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_INVENTORY);
+    fixture_assert(g_terminal_menu_scale_override > SDL_MAIN_VIEW_MIN_SCALE);
+    fixture_assert(sdl_current_main_view_scale() == SDL_MAIN_VIEW_MIN_SCALE);
+    int automatic = sdl_terminal_menu_font_px();
+    fixture_assert(automatic == sdl_menu_role_font_px(SDL_UI_FONT_TITLE));
+    fixture_assert(view->cell_h == automatic);
+    fixture_assert(view->cols >= sdl_min_terminal_cols_for_mode(SDL_MIN_TERMINAL_NORMAL));
+    fixture_assert(view->rows >= sdl_min_terminal_rows_for_mode(SDL_MIN_TERMINAL_NORMAL));
+    int previous = automatic;
+    for (int offset = -1; offset >= SDL_TERMINAL_MENU_SCALE_OFFSET_MIN; offset--) {
+        set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, offset);
+        sdl_apply_config_no_redraw();
+        fixture_assert(sdl_current_main_view_scale() == SDL_MAIN_VIEW_MIN_SCALE);
+        fixture_assert(view->cell_h == sdl_terminal_menu_font_px());
+        fixture_assert(view->cell_h < previous);
+        previous = view->cell_h;
+    }
+    set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, 0);
+    sdl_apply_config_no_redraw();
+    fixture_assert(view->cell_h == automatic);
+    sdl_pop_terminal_menu_scale();
+    screen_pop_supporting_panes_hidden();
+    for (int i = 0; i < SDL_MIN_TERMINAL_MODE_COUNT; i++)
+        g_platform_max_main_view_scale[i] = saved_max[i];
+
+    /* When the larger scale is actually available, retain that choice. */
+    screen_push_supporting_panes_hidden();
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_INVENTORY);
+    int effective = sdl_current_main_view_scale();
+    fixture_assert(effective > SDL_MAIN_VIEW_MIN_SCALE);
+    fixture_assert(sdl_terminal_menu_font_px() == 0);
+    fixture_assert(view->cell_h == effective * TILE_SIZE);
+    sdl_pop_terminal_menu_scale();
+    screen_pop_supporting_panes_hidden();
+    config = saved_config;
+    printf("desktop %dx%d: clamped menu %d, offsets shrink and restore; native scale %d preserved: PASS\n",
+        width, height, automatic, effective);
+}
+
 static void check(int width, int height)
 {
     fixture_width = width; fixture_height = height;
@@ -385,6 +443,38 @@ static void check(int width, int height)
     term_init(&view->t, 80, 24, 256); Term_activate(&view->t); term_screen = &view->t;
     character_icky = 1;
     g_suppress_layout_refresh_present = true;
+    check_clamped_desktop_scale(width, height);
+    if (!sdl_handheld_ui_active()) {
+        int saved_main = config.main_view_scale;
+        int saved_offset = get_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY);
+        config.main_view_scale = 1;
+        fixture_set_all_fonts(false);
+        set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, 0);
+        screen_push_supporting_panes_hidden();
+        sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_INVENTORY);
+        if (g_terminal_menu_scale_override == SDL_MAIN_VIEW_MIN_SCALE) {
+            int automatic = view->cell_h;
+            int min_px = (int)SDL_ceilf(scale_density * SDL_AUX_VIEW_FONT_MIN);
+            int cols = sdl_min_terminal_cols_for_mode(SDL_MIN_TERMINAL_NORMAL);
+            int rows = sdl_min_terminal_rows_for_mode(SDL_MIN_TERMINAL_NORMAL);
+            fixture_assert(automatic == sdl_terminal_menu_font_px());
+            fixture_assert(automatic >= min_px);
+            if (width / MAX(1,min_px/2) >= cols && height / min_px >= rows) {
+                fixture_assert(view->cols >= cols && view->rows >= rows);
+            }
+            set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, -1);
+            sdl_apply_config_no_redraw();
+            fixture_assert(view->cell_h <= automatic);
+            if (automatic > min_px)
+                fixture_assert(view->cell_h < automatic);
+            printf("desktop %dx%d @%.2f menu: auto=%d smaller=%d grid=%dx%d\n",
+                width,height,scale_density,automatic,view->cell_h,view->cols,view->rows);
+        }
+        sdl_pop_terminal_menu_scale();
+        screen_pop_supporting_panes_hidden();
+        set_sdl_terminal_menu_scale_offset_for(SDL_MENU_FONT_INVENTORY, saved_offset);
+        config.main_view_scale = saved_main;
+    }
     check_scale_persistence(); check_corner_input(); check_blitz_scale();
     fixture_set_all_fonts(false);
     set_sdl_terminal_menu_scale_offset(-1);
@@ -428,6 +518,16 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     print("Terminal scale artifacts:", OUT, flush=True)
     harness = layout.HARNESS
+    # This fixture supplies its own density wrapper below.  The shared layout
+    # harness also defines one for its main-menu density sweep.
+    shared_density_wrapper = '''float __real_SDL_GetDisplayContentScale(SDL_DisplayID display);
+float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display) {
+    return fixture_main_menu_density>0 ? fixture_main_menu_density
+        : __real_SDL_GetDisplayContentScale(display);
+}
+'''
+    if shared_density_wrapper in harness:
+        harness = harness.replace(shared_density_wrapper, "", 1)
     start = harness.index("static void check(int width,int height)")
     end = harness.index("int main(int argc,char **argv)", start)
     blitz = (ROOT / "src/birth/birth-blitz.c").read_text()
@@ -453,7 +553,8 @@ def main():
     excluded = ("/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
                 "/src/sdl/ui/sdl-screens.c.obj", "/src/sdl/ui/sdl-song-menu.c.obj",
                 "/src/sdl/ui/sdl-question-menu.c.obj", "/src/sdl/ui/sdl-main-menu.c.obj",
-                "/src/sdl/ui/sdl-halls-screen.c.obj", "/src/sdl/ui/sdl-menu-font.c.obj")
+                "/src/sdl/ui/sdl-halls-screen.c.obj", "/src/sdl/ui/sdl-menu-font.c.obj",
+                "/src/sdl/core/sdl-layout.c.obj", "/src/sdl/config/sdl-settings.c.obj")
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects
                                  if not obj.endswith(excluded)), encoding="utf-8")
@@ -467,18 +568,22 @@ def main():
              "sdl_touch_thumb_current_bounds", "sdl_map_grid_cell_rect",
              "sdl_touch_only_device_active", "sdl_get_layout_screen_rect",
              "sdl_character_sheet_screen_commit_select", "save_pane_config_to_json",
-             "inkey", "SDL_GetDisplayContentScale"]
+             "inkey", "SDL_GetDisplayContentScale", "sdl_touch_pane_point_to_slot"]
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
-                    "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),
+                    "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
+                    str(ROOT / "src/sdl/core/sdl-layout.c"),
+                    str(ROOT / "src/sdl/config/sdl-settings.c"), "@" + str(response),
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl," + ",".join("--wrap=" + w for w in wraps),
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    for width, height, density in [(360, 800, 1), (800, 360, 1), (1280, 720, 1),
-                                   (1280, 800, 1),
-                                   (580, 1280, 1.5), (1080, 2400, 2.75), (2400, 1080, 2.75),
-                                   (3840, 2160, 1)]:
+    for width, height, density, handheld in [(360, 800, 1, False), (800, 360, 1, False),
+                                   (640, 480, 1, False), (1024, 768, 1, False),
+                                   (1280, 720, 1, False), (1280, 720, 2, False),
+                                   (1920, 1080, 1, False), (1280, 800, 1, True),
+                                   (580, 1280, 1.5, True), (1080, 2400, 2.75, True),
+                                   (2400, 1080, 2.75, True), (3840, 2160, 1, False)]:
         env["SIL_SCALE_TEST_DENSITY"] = str(density)
-        if density > 1 or (width == 1280 and height == 800):
+        if handheld:
             env["SIL_SCALE_TEST_HANDHELD"] = "1"
         else:
             env.pop("SIL_SCALE_TEST_HANDHELD", None)

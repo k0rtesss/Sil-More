@@ -31,13 +31,29 @@ typedef struct sdl_main_menu_button_press_state {
     Uint64 start_time;
 } sdl_main_menu_button_press_state;
 
+typedef struct sdl_main_menu_touch_state {
+    bool active;
+    bool dragged;
+    bool vertical;
+    bool first_scroll_step;
+    bool in_panel;
+    bool in_touch_pane;
+    SDL_TouchID touch_id;
+    SDL_FingerID finger_id;
+    SDL_WindowID window_id;
+    int choice;
+    int touch_slot;
+    int scroll_direction;
+    float start_x;
+    float start_y;
+    float last_y;
+    float scroll_distance;
+} sdl_main_menu_touch_state;
+
 static sdl_popup_notification_state g_popup_notification;
 static sdl_main_menu_button_press_state g_main_menu_button_press;
 static bool g_main_menu_button_disable_prompt_pending;
-static bool g_main_menu_large_touch_active;
-static bool g_main_menu_large_touch_dragged;
-static SDL_FingerID g_main_menu_large_touch_finger;
-static float g_main_menu_large_touch_y;
+static sdl_main_menu_touch_state g_main_menu_touch;
 
 static bool sdl_main_menu_button_run_pending_disable_prompt(void);
 
@@ -189,13 +205,37 @@ int sdl_main_menu_pane_font_px(void)
     if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
         return sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
     int auxiliary_size = sdl_menu_base_aux_font_size();
-    int font_size = (auxiliary_size > 0)
-        ? sdl_menu_font_px(MAX(SDL_AUX_VIEW_FONT_MIN,
-            MIN(SDL_AUX_VIEW_FONT_MAX, auxiliary_size)))
-        : sdl_menu_font_px(sdl_handheld_ui_active()
+    int base_size = (auxiliary_size > 0)
+        ? MAX(SDL_AUX_VIEW_FONT_MIN,
+            MIN(SDL_AUX_VIEW_FONT_MAX, auxiliary_size))
+        : (sdl_handheld_ui_active()
             ? sdl_menu_auto_font_size_from_main(4, 5)
             : sdl_menu_auto_font_size_from_main(3, 4));
+    int font_size = sdl_menu_font_px(base_size);
     int font_px = sdl_aux_cell_height_for_font_size(font_size);
+
+#if !SIL_SDL_MOBILE_BUILD
+    if (auxiliary_size <= 0 && !sdl_handheld_ui_active()) {
+        int preferred = MAX(font_px, sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+
+        /* Popups wrap and scroll, and an explicit Big Font choice should
+         * remain readable even if it needs additional pages. Normal auto
+         * text can use the available compact-grid geometry as a fit bound. */
+        if (!get_sdl_menu_bigger_font() && g_state.window) {
+            SDL_Rect screen = sdl_font_fit_drawable_rect(
+                sdl_menu_content_rect(sdl_get_layout_screen_rect()));
+            int cols = sdl_min_terminal_cols_for_mode(SDL_MIN_TERMINAL_COMPACT);
+            int rows = sdl_min_terminal_rows_for_mode(SDL_MIN_TERMINAL_COMPACT);
+            int fit_px;
+            int min_px = sdl_aux_cell_height_for_font_size(SDL_AUX_VIEW_FONT_MIN);
+
+            fit_px = MIN(2 * (screen.w / cols) + 1, screen.h / rows);
+            if (sdl_rect_has_area(&screen))
+                preferred = MAX(min_px, MIN(preferred, fit_px));
+        }
+        font_px = preferred;
+    }
+#endif
 
     /* font_px is already density-scaled; the logical minimum is enforced
      * before this conversion by the automatic font-size helpers. */
@@ -336,6 +376,7 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
     float pad_x;
     float panel_w;
     float panel_h;
+    int previous_font_context;
     cptr label = "Menu";
 
     if (out)
@@ -350,12 +391,17 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
         return false;
     }
 
+    /* The button is rendered in the independent Main Menu font context.
+     * Measure that same context for layout blockers and pointer hit tests. */
+    previous_font_context = sdl_menu_font_set_render_context(SDL_MENU_FONT_MAIN);
     font_px = sdl_main_menu_pane_font_px();
     font = sdl_story_font_for_height(font_px);
     text_w = font ? sdl_touch_pane_story_text_width(font, label)
                   : (int)strlen(label) * font_px / 2;
-    if (text_w < 1)
+    if (text_w < 1) {
+        sdl_menu_font_set_render_context(previous_font_context);
         return false;
+    }
 
     pad_x = (float)font_px * 0.78f;
     if (pad_x < 8.0f)
@@ -368,8 +414,10 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
         panel_w = (float)screen.w;
 
     panel_h = (float)sdl_main_menu_button_height_for_screen(&screen);
-    if (panel_h <= 0.0f)
+    if (panel_h <= 0.0f) {
+        sdl_menu_font_set_render_context(previous_font_context);
         return false;
+    }
 
     if (out) {
         *out = sdl_overlay_panel_rect(&anchor,
@@ -379,6 +427,7 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
         out->y = (float)screen.y;
     }
 
+    sdl_menu_font_set_render_context(previous_font_context);
     return true;
 }
 
@@ -448,6 +497,11 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     anchor = sdl_menu_content_rect(anchor);
 
     font_px = sdl_main_menu_pane_font_px();
+    /* Keep the automatic normal-font handheld menu readable without changing
+     * the shared pane font or overriding an explicitly selected size. */
+    if (sdl_handheld_ui_active() && !get_sdl_menu_bigger_font()
+        && sdl_menu_base_aux_font_size() <= 0)
+        font_px = MAX(font_px, sdl_menu_role_font_px(SDL_UI_FONT_BODY));
     story_font = sdl_story_font_for_height(font_px);
     mono_font = sdl_main_menu_mono_font_for_height(font_px);
     if (!story_font)
@@ -490,11 +544,6 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
         shortcut_w = 0;
         row_h = MAX(44.0f, (float)text_h * 1.35f);
     }
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) {
-        shortcut_w = 0;
-        row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
-    }
-
     shortcut_gap = shortcut_w > 0 ? (float)font_px * 0.38f : 0.0f;
     if (shortcut_w > 0 && shortcut_gap < 5.0f)
         shortcut_gap = 5.0f;
@@ -508,11 +557,19 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     panel_w = sdl_touch_pane_clampf(panel_w, 1.0f, max_panel_w);
 
     {
+        int wrap_w = MAX(1, (int)(panel_w - pad_x * 2.0f));
+        if (sdl_handheld_ui_active() && !get_sdl_menu_bigger_font()) {
+            /* Match the title width used by the renderer, including the
+             * shortcut column, when the panel is screen-width constrained. */
+            float title_space = panel_w - pad_x * 1.72f
+                - (float)shortcut_w - shortcut_gap;
+            wrap_w = MAX(1, (int)MIN((float)title_w, title_space));
+        }
         for (int i = 1; i <= MAIN_MENU_MAX; i++) {
             int width = 0;
             int height = 0;
             if (TTF_GetStringSizeWrapped(story_font, main_menu_title(i), 0,
-                    MAX(1, (int)(panel_w - pad_x * 2.0f)), &width, &height))
+                    wrap_w, &width, &height))
                 row_h = MAX(row_h, height + 8.0f);
         }
     }
@@ -521,14 +578,16 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     {
         float native_row_h = row_h;
 
-        /* The screen rect already excludes unsafe display areas. Use its
-         * full height in both font modes; short windows scroll at the native
-         * row size, while taller windows spread the visible rows evenly. */
+        /* The screen rect already excludes unsafe display areas. Keep rows
+         * at the measured text size, scrolling if they do not all fit. */
         max_panel_h = (float)screen.h;
+        /* On a very short screen, make room for one measured row first. */
+        pad_y = MIN(pad_y, MAX(0.0f,
+            (max_panel_h - MIN(max_panel_h, native_row_h)) * 0.5f));
         visible_count = MAX(1, MIN(MAIN_MENU_MAX,
             (int)((max_panel_h - pad_y * 2.0f) / native_row_h)));
         panel_h = max_panel_h;
-        row_h = (panel_h - pad_y * 2.0f) / (float)visible_count;
+        row_h = MIN(native_row_h, max_panel_h - pad_y * 2.0f);
     }
     else
     {
@@ -608,6 +667,7 @@ bool sdl_main_menu_choice_disabled_now(int choice)
 
 void sdl_main_menu_overlay_reset_nav_input(void)
 {
+    memset(&g_main_menu_touch, 0, sizeof(g_main_menu_touch));
     /* A movement accepted before the menu opened must not survive its wake
      * key being consumed by the overlay and run after the menu closes. */
     movement_input_clear_commands();
@@ -643,7 +703,6 @@ void sdl_main_menu_overlay_close(void)
         return;
 
     g_main_menu_overlay_active = false;
-    g_main_menu_large_touch_active = false;
     g_main_menu_overlay_hover_choice = 0;
     g_main_menu_pane_hover = false;
     sdl_main_menu_overlay_reset_nav_input();
@@ -733,23 +792,24 @@ void sdl_main_menu_overlay_move(int delta)
     }
 }
 
-static void sdl_main_menu_overlay_scroll_rows(int delta)
+static int sdl_main_menu_overlay_scroll_rows(int delta)
 {
     main_menu_pane_layout layout;
     int first;
     int moved;
 
     if (!sdl_main_menu_overlay_layout(&layout))
-        return;
+        return 0;
     first = MAX(1, MIN(g_main_menu_overlay_first_choice + delta,
         MAX(1, MAIN_MENU_MAX - layout.visible_count + 1)));
     moved = first - g_main_menu_overlay_first_choice;
     if (!moved)
-        return;
+        return 0;
     g_main_menu_overlay_first_choice = first;
     g_main_menu_overlay_highlight = MAX(first,
         MIN(g_main_menu_overlay_highlight + moved, first + layout.visible_count - 1));
     g_state.need_present = true;
+    return moved;
 }
 
 void sdl_main_menu_overlay_choose(int choice)
@@ -1856,6 +1916,64 @@ bool sdl_main_menu_overlay_handle_gamepad_button(
     return true;
 }
 
+static bool sdl_main_menu_touch_matches(const SDL_TouchFingerEvent* finger)
+{
+    return g_main_menu_touch.active
+        && finger->touchID == g_main_menu_touch.touch_id
+        && finger->fingerID == g_main_menu_touch.finger_id;
+}
+
+static void sdl_main_menu_touch_motion(float x, float y)
+{
+    float dx = x - g_main_menu_touch.start_x;
+    float dy = y - g_main_menu_touch.start_y;
+    float threshold = sdl_touch_swipe_threshold_px();
+
+    if (!g_main_menu_touch.dragged
+        && (SDL_fabsf(dx) >= threshold || SDL_fabsf(dy) >= threshold))
+    {
+        g_main_menu_touch.dragged = true;
+        g_main_menu_touch.vertical = SDL_fabsf(dy) >= SDL_fabsf(dx);
+        /* Include the distance already travelled when the drag starts. */
+        g_main_menu_touch.last_y = g_main_menu_touch.start_y;
+        g_main_menu_touch.first_scroll_step = true;
+    }
+
+    if (g_main_menu_touch.dragged && g_main_menu_touch.vertical
+        && g_main_menu_touch.in_panel)
+    {
+        float delta = g_main_menu_touch.last_y - y;
+        int dir = (delta > 0.0f) - (delta < 0.0f);
+        main_menu_pane_layout layout;
+
+        if (dir && sdl_main_menu_overlay_layout(&layout)) {
+            float step;
+
+            /* Restart the distance on a reversal or at a list boundary, so
+             * an overscroll never has to be unwound before scrolling back. */
+            if (dir != g_main_menu_touch.scroll_direction) {
+                g_main_menu_touch.scroll_direction = dir;
+                g_main_menu_touch.scroll_distance = 0.0f;
+                g_main_menu_touch.first_scroll_step = true;
+            }
+            g_main_menu_touch.scroll_distance += SDL_fabsf(delta);
+            step = g_main_menu_touch.first_scroll_step ? threshold
+                : MAX(threshold, layout.row_h * 0.7f);
+            while (g_main_menu_touch.scroll_distance >= step) {
+                if (!sdl_main_menu_overlay_scroll_rows(dir)) {
+                    g_main_menu_touch.scroll_distance = 0.0f;
+                    g_main_menu_touch.first_scroll_step = true;
+                    break;
+                }
+                g_main_menu_touch.scroll_distance -= step;
+                g_main_menu_touch.first_scroll_step = false;
+                step = MAX(threshold, layout.row_h * 0.7f);
+            }
+        }
+    }
+    g_main_menu_touch.last_y = y;
+}
+
 bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
 {
     float x;
@@ -1863,6 +1981,11 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
 
     if (!g_main_menu_overlay_active || !ev)
         return false;
+
+    /* The event dispatcher translates touch-only mouse fallback into finger
+     * events, and discards duplicates when direct touch is available. */
+    if (sdl_event_is_touch_mouse_input(ev))
+        return true;
 
     switch (ev->type)
     {
@@ -1906,63 +2029,76 @@ bool sdl_main_menu_overlay_handle_event(const SDL_Event* ev)
     case SDL_EVENT_MOUSE_BUTTON_UP:
         return true;
     case SDL_EVENT_MOUSE_WHEEL:
-        if (get_sdl_menu_bigger_font() && ev->wheel.y != 0.0f)
+        if (ev->wheel.y != 0.0f)
             sdl_main_menu_overlay_scroll_rows(ev->wheel.y > 0.0f ? -1 : 1);
         return true;
     case SDL_EVENT_FINGER_DOWN:
-    case SDL_EVENT_FINGER_MOTION:
         if (ev->tfinger.windowID != SDL_GetWindowID(g_state.window))
             return true;
+        if (g_main_menu_touch.active)
+            return true;
+        sdl_note_touch_event_device(ev->tfinger.touchID);
         if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             return true;
-        if (get_sdl_menu_bigger_font()) {
-            main_menu_pane_layout layout;
-
-            if (ev->type == SDL_EVENT_FINGER_DOWN) {
-                g_main_menu_large_touch_active = true;
-                g_main_menu_large_touch_dragged = false;
-                g_main_menu_large_touch_finger = ev->tfinger.fingerID;
-                g_main_menu_large_touch_y = y;
-            } else if (g_main_menu_large_touch_active
-                && g_main_menu_large_touch_finger == ev->tfinger.fingerID
-                && sdl_main_menu_overlay_layout(&layout)) {
-                float delta = g_main_menu_large_touch_y - y;
-                float step = MAX(24.0f, layout.row_h * 0.7f);
-
-                while (delta >= step || delta <= -step) {
-                    int dir = delta > 0.0f ? 1 : -1;
-                    sdl_main_menu_overlay_scroll_rows(dir);
-                    g_main_menu_large_touch_y -= dir * step;
-                    delta = g_main_menu_large_touch_y - y;
-                    g_main_menu_large_touch_dragged = true;
-                }
-            }
+        g_main_menu_touch = (sdl_main_menu_touch_state){
+            .active = true,
+            .touch_id = ev->tfinger.touchID,
+            .finger_id = ev->tfinger.fingerID,
+            .window_id = ev->tfinger.windowID,
+            .start_x = x,
+            .start_y = y,
+            .last_y = y,
+            .touch_slot = -1
+        };
+        g_main_menu_touch.choice = sdl_main_menu_overlay_choice_at(x, y,
+            &g_main_menu_touch.in_panel);
+        if (!g_main_menu_touch.in_panel)
+            g_main_menu_touch.in_touch_pane = sdl_touch_pane_point_to_slot(
+                x, y, &g_main_menu_touch.touch_slot);
+        return true;
+    case SDL_EVENT_FINGER_MOTION:
+        if (!sdl_main_menu_touch_matches(&ev->tfinger)
+            || ev->tfinger.windowID != g_main_menu_touch.window_id)
             return true;
-        }
-        {
+        if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
+            sdl_main_menu_touch_motion(x, y);
+        return true;
+    case SDL_EVENT_FINGER_UP:
+        if (sdl_main_menu_touch_matches(&ev->tfinger)
+            && ev->tfinger.windowID == g_main_menu_touch.window_id) {
+            sdl_main_menu_touch_state press;
             bool in_panel = false;
+            int choice;
+            int slot = -1;
 
-            (void)sdl_main_menu_overlay_choice_at(x, y, &in_panel);
-            if (!in_panel && sdl_main_menu_overlay_handle_touch_pane_point(x, y,
-                    ev->type == SDL_EVENT_FINGER_DOWN))
-            {
+            if (!sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y)) {
+                memset(&g_main_menu_touch, 0, sizeof(g_main_menu_touch));
                 return true;
             }
-        }
-        if (ev->type == SDL_EVENT_FINGER_DOWN)
-            return sdl_main_menu_overlay_handle_pointer_down(x, y);
-        return sdl_main_menu_overlay_handle_pointer_motion(x, y);
-    case SDL_EVENT_FINGER_UP:
-        if (get_sdl_menu_bigger_font() && g_main_menu_large_touch_active
-            && g_main_menu_large_touch_finger == ev->tfinger.fingerID) {
-            g_main_menu_large_touch_active = false;
-            if (!g_main_menu_large_touch_dragged
-                && sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
-                return sdl_main_menu_overlay_handle_pointer_down(x, y);
+            /* A platform may send the last movement only with finger-up. */
+            sdl_main_menu_touch_motion(x, y);
+            press = g_main_menu_touch;
+            memset(&g_main_menu_touch, 0, sizeof(g_main_menu_touch));
+            if (press.dragged)
+                return true;
+
+            choice = sdl_main_menu_overlay_choice_at(x, y, &in_panel);
+            if (press.choice > 0 && press.choice == choice)
+                sdl_main_menu_overlay_choose(choice);
+            else if (press.in_touch_pane && !in_panel
+                && sdl_touch_pane_point_to_slot(x, y, &slot)
+                && slot == press.touch_slot)
+                (void)sdl_main_menu_overlay_handle_touch_pane_point(x, y, true);
+            else if (!press.in_panel && !press.in_touch_pane && !in_panel
+                && !sdl_touch_pane_point_to_slot(x, y, &slot))
+                sdl_main_menu_overlay_close();
         }
         return true;
     case SDL_EVENT_FINGER_CANCELED:
-        g_main_menu_large_touch_active = false;
+        if (sdl_main_menu_touch_matches(&ev->tfinger)
+            && (!ev->tfinger.windowID
+                || ev->tfinger.windowID == g_main_menu_touch.window_id))
+            memset(&g_main_menu_touch, 0, sizeof(g_main_menu_touch));
         return true;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP:

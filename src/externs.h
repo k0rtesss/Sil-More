@@ -1436,7 +1436,7 @@ extern void show_inven_enhanced(void);
 extern bool inventory_menu_set_include_equip(bool include);
 extern bool inventory_menu_set_expand_supplies(bool enabled);
 extern void show_equip_enhanced(void);
-extern void show_floor(const int* floor_list, int floor_num);
+extern void show_floor(const int* floor_list, int floor_num, int scroll_offset);
 extern void toggle_inven_equip(void);
 extern bool get_item(int* cp, cptr pmt, cptr str, int mode);
 extern bool player_can_treat_as_throwing(const object_type* o_ptr);

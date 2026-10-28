@@ -12,6 +12,7 @@ OUT = ROOT / "scripts/output/pickup-destination-preview"
 HARNESS = r'''
 #include "angband.h"
 #include <assert.h>
+#include <stdarg.h>
 #include "sdl/ui/sdl-question-menu.c"
 static object_type test_dropped;
 
@@ -38,6 +39,18 @@ static byte test_cave_feat[8][MAX_DUNGEON_WID];
 static s16b test_cave_objects[8][MAX_DUNGEON_WID];
 static s16b test_cave_monsters[8][MAX_DUNGEON_WID];
 static int skeleton_searches, chest_opens;
+static bool stored_message, wielded_message;
+void __wrap_msg_format(cptr fmt, ...)
+{
+    char text[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    if (strstr(text, "You stored ")) stored_message = true;
+    if (strstr(text, "You were wielding ")) wielded_message = true;
+    msg_print(text);
+}
 void __wrap_do_cmd_search_skeleton(int y, int x, s16b o_idx)
 {
     assert(y==p_ptr->py && x==p_ptr->px && o_idx==1);
@@ -361,10 +374,13 @@ int main(void)
         assert(do_cmd_move_item_to_storage(INVEN_WIELD, OBJECT_STORAGE_PACK));
         assert(player_pack_action_pending() && p_ptr->energy_use == 100);
         assert(held[INVEN_WIELD].number == 2);
+        stored_message = wielded_message = false;
         player_pack_action_process();
         assert(player_pack_action_pending() && held[INVEN_WIELD].number == 2);
         player_pack_action_process();
         assert(!player_pack_action_pending() && !held[INVEN_WIELD].k_idx);
+        assert(mode == 0 ? wielded_message : stored_message);
+        assert(mode == 0 ? !stored_message : !wielded_message);
         assert(p_ptr->equip_cnt == 0);
         int stored = 0;
         for (int i = 0; i < player_pack_entry_count(); i++) {
@@ -507,12 +523,15 @@ def main():
           ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")],
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env["SDL_VIDEO_DRIVER"] = "dummy"
+    env["SDL_VIDEODRIVER"] = "dummy"
+    env["SDL_AUDIODRIVER"] = "dummy"
     env["SDL_RENDER_DRIVER"] = "software"
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17",
         "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-Wl,--wrap=do_cmd_search_skeleton", "-Wl,--wrap=do_cmd_open_chest",
+        "-Wl,--wrap=msg_format",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=ROOT, env=env, check=True, timeout=30)
 

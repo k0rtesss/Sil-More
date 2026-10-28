@@ -35,7 +35,10 @@ int get_player_choice(birth_menu* choices, int num, int def,
         steamdeck = steamdeck_controls_active();
 
         ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
+        /* Hover still shows pointer feedback, but only an actual click moves
+         * the selected hero or race.  Otherwise motion immediately before a
+         * click makes the first click confirm the newly hovered row. */
+        ui_menu_click_set_hover_enabled(false);
         /*
          * Pixel-semantic path: drive the SDL selection screen instead of the
          * terminal grid.  With select_intro set this is the book-mode race page

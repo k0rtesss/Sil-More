@@ -150,7 +150,9 @@ NavResult player_birth_aux_2(int stats[A_MAX])
         p_ptr->csp = p_ptr->msp;
 
         ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
+        /* The first click selects a different attribute; moving the pointer
+         * must not preselect it and make that click spend a point. */
+        ui_menu_click_set_hover_enabled(false);
 
         sdl_character_sheet_screen_show_birth_stats(stats, stat_costs,
             stat, MAX_COST - cost);

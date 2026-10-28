@@ -49,6 +49,7 @@ typedef struct sdl_question_menu_layout_info {
     float letter_gap;
     float icon_w;
     float icon_size;
+    float entry_right_inset;
     float table_column_w[SDL_QUESTION_MENU_MAX_COLUMNS];
     float table_gap;
     float divider_gap;
@@ -648,6 +649,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     float letter_gap;
     float icon_w = 0.0f;
     float icon_size = 0.0f;
+    float entry_right_inset;
     float table_column_w[SDL_QUESTION_MENU_MAX_COLUMNS] = { 0 };
     float table_gap = 0.0f;
     float close_reserve = 0.0f;
@@ -845,6 +847,9 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         icon_size = MAX(1.0f, row_h - 4.0f);
         icon_w = row_h + icon_gap;
     }
+    /* Selected rows have a visible outline. Give every entry enough inset
+     * that the last glyph does not sit on that outline or the clip edge. */
+    entry_right_inset = MAX(4.0f, SDL_ceilf(4.0f * sdl_ui_density_scale()));
     close_button = sdl_question_menu_close_button_enabled();
     if (close_button)
     {
@@ -953,7 +958,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         }
     }
 
-    content_w = letter_w + letter_gap + icon_w + text_w;
+    content_w = letter_w + letter_gap + icon_w + text_w + entry_right_inset;
     if (out->has_title)
     {
         float title_content_w = title_w + close_reserve + info_reserve
@@ -1061,7 +1066,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
      * and shield names use the actual space available to them. */
     {
         float available_text_w = panel_w - pad_x * 2.0f - letter_w
-            - letter_gap - icon_w;
+            - letter_gap - icon_w - entry_right_inset;
         float row_padding = row_h
             - (float)TTF_GetFontHeight(story_font);
 
@@ -1316,6 +1321,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     out->letter_gap = letter_gap;
     out->icon_w = icon_w;
     out->icon_size = icon_size;
+    out->entry_right_inset = entry_right_inset;
     out->table_gap = table_gap;
     out->divider_gap = divider_gap;
     out->table_column_count = table_column_count;
@@ -2492,7 +2498,7 @@ void sdl_question_menu_render(void)
             float icon_x = row.x + layout.letter_w + layout.letter_gap;
             float text_x = icon_x + layout.icon_w;
             float text_w = row.w - layout.letter_w - layout.letter_gap
-                - layout.icon_w;
+                - layout.icon_w - layout.entry_right_inset;
 
             if (selected || hovered)
             {

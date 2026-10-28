@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 7
+#define VERSION_EXTRA 8
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -120,6 +120,12 @@
  */
 #define PANEL_WID_FIXED 33
 #define PANEL_WID (use_bigtile ? 16 : PANEL_WID_FIXED)
+
+/* Minimum main-terminal sizes shared by the frontend and game startup. */
+#define SIL_UI_NORMAL_MIN_COLS 80
+#define SIL_UI_NORMAL_MIN_ROWS 24
+#define SIL_UI_COMPACT_MIN_COLS 50
+#define SIL_UI_COMPACT_MIN_ROWS 16
 
 /*
  * SDL renders messages, status, and the depth/menu affordance through panes or
@@ -918,8 +924,8 @@
 /*
  * Maximum number of objects allowed in a single dungeon grid.
  *
- * The main-screen has a minimum size of 24 rows, so we can always
- * display 23 objects + 1 header line.
+ * A stack can exceed the visible terminal height; item selectors scroll to
+ * keep every object accessible on compact displays.
  */
 #define MAX_FLOOR_STACK 23
 

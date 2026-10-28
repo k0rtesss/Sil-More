@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 import shlex
 import subprocess
+import sys
 
 from check_gameplay_tutorial_render import HARNESS as CARD_HARNESS
 
@@ -26,10 +27,34 @@ HARNESS = CARD_HARNESS[:CARD_HARNESS.index("static void field(")].replace(
 #include "sdl/ui/sdl-screens.c"
 #include "sdl/ui/sdl-song-menu.c"
 #include "sdl/ui/sdl-question-menu.c"
+bool fixture_main_menu_choice(int choice);
+#define do_cmd_main_menu_execute_choice fixture_main_menu_choice
 #include "sdl/ui/sdl-main-menu.c"
+#undef do_cmd_main_menu_execute_choice
 #include "sdl/ui/sdl-halls-screen.c"
 #include "sdl/ui/sdl-menu-font.c"
 #include "cJSON.h"
+
+static int fixture_main_menu_choices, fixture_main_menu_last_choice;
+static float fixture_main_menu_density;
+static bool fixture_main_menu_touch_pane;
+static float fixture_main_menu_touch_pane_right;
+bool fixture_main_menu_choice(int choice) {
+    fixture_main_menu_choices++; fixture_main_menu_last_choice=choice;
+    return false;
+}
+float __real_SDL_GetDisplayContentScale(SDL_DisplayID display);
+float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display) {
+    return fixture_main_menu_density>0 ? fixture_main_menu_density
+        : __real_SDL_GetDisplayContentScale(display);
+}
+bool __real_sdl_touch_pane_point_to_slot(float x,float y,int *slot);
+bool __wrap_sdl_touch_pane_point_to_slot(float x,float y,int *slot) {
+    if(!fixture_main_menu_touch_pane)
+        return __real_sdl_touch_pane_point_to_slot(x,y,slot);
+    if(slot) *slot=x<fixture_main_menu_touch_pane_right ? 0 : -1;
+    return x<fixture_main_menu_touch_pane_right;
+}
 
 static void fixture_set_all_fonts(bool big) {
     config.bigger_font=big;
@@ -659,49 +684,379 @@ static void check_text_pages(void)
     }
 }
 
+static main_menu_pane_layout fixture_main_menu_open(int first)
+{
+    main_menu_pane_layout layout;
+    g_main_menu_overlay_active=true;
+    memset(&g_main_menu_touch,0,sizeof(g_main_menu_touch));
+    g_main_menu_overlay_highlight=first;
+    g_main_menu_overlay_first_choice=first;
+    fixture_assert(sdl_main_menu_overlay_layout(&layout));
+    return layout;
+}
+
+static void fixture_menu_touch(Uint32 type,SDL_TouchID touch,SDL_FingerID finger,
+    SDL_WindowID window,float x,float y)
+{
+    SDL_Event ev={0}; ev.type=type; ev.tfinger.windowID=window;
+    ev.tfinger.touchID=touch; ev.tfinger.fingerID=finger;
+    ev.tfinger.x=x/fixture_width; ev.tfinger.y=y/fixture_height;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
+}
+
+static void check_main_menu_gestures(void)
+{
+    SDL_WindowID window=SDL_GetWindowID(g_state.window);
+    main_menu_pane_layout layout=fixture_main_menu_open(1);
+    float threshold=sdl_touch_swipe_threshold_px();
+    SDL_FRect row=layout.rows[layout.first_choice];
+    float x=row.x+row.w*.5f, y=row.y+row.h*.5f;
+    int count=fixture_main_menu_choices, first=layout.first_choice;
+    SDL_Event mouse={0};
+
+    /* No selection on down, even when SDL also emits synthetic mouse events. */
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    mouse.type=SDL_EVENT_MOUSE_BUTTON_DOWN; mouse.button.which=SDL_TOUCH_MOUSEID;
+    mouse.button.button=SDL_BUTTON_LEFT; mouse.button.x=x; mouse.button.y=y;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&mouse));
+    mouse.type=SDL_EVENT_MOUSE_MOTION; mouse.motion.which=SDL_TOUCH_MOUSEID;
+    mouse.motion.x=x; mouse.motion.y=y;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&mouse));
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+    fixture_assert(fixture_main_menu_last_choice==first);
+    layout=fixture_main_menu_open(1);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+
+    /* A second finger, another touch device or window cannot steal or cancel
+     * the original press. Its owner can still complete exactly one tap. */
+    row=layout.rows[layout.first_choice]; x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    count=fixture_main_menu_choices;
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,8,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,8,window,x,y-threshold*2);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,8,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_CANCELED,1,8,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,2,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_CANCELED,2,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window+1,x,y-threshold*2);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window+1,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_CANCELED,1,7,window+1,x,y);
+    fixture_assert(g_main_menu_touch.active && !g_main_menu_touch.dragged);
+    fixture_assert(g_main_menu_overlay_first_choice==1 && fixture_main_menu_choices==count);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+
+    /* Cancellation and releases over another row never select anything. */
+    layout=fixture_main_menu_open(1); row=layout.rows[1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f; count=fixture_main_menu_choices;
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_CANCELED,1,7,0,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    if(layout.visible_count>1) {
+        y=row.y+row.h-1;
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y+2);
+        fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    }
+
+    /* Crossing the swipe threshold scrolls even if the only movement arrives
+     * on release. It cannot select, including when the whole list fits. */
+    row=layout.rows[layout.first_choice+layout.visible_count-1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f; first=layout.first_choice;
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y-threshold*1.25f);
+    fixture_assert(sdl_main_menu_overlay_layout(&layout));
+    if(layout.visible_count<MAIN_MENU_MAX) fixture_assert(layout.first_choice>first);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+
+    /* Reverse a drag back to its starting point: both directions scroll but
+     * the release must never turn the finished swipe into a tap. */
+    layout=fixture_main_menu_open(1);
+    row=layout.rows[layout.first_choice+layout.visible_count-1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y-threshold*1.25f);
+    if(layout.visible_count<MAIN_MENU_MAX) fixture_assert(g_main_menu_overlay_first_choice>1);
+    fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y);
+    if(layout.visible_count<MAIN_MENU_MAX) fixture_assert(g_main_menu_overlay_first_choice==1);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+
+    /* Reach the real Save/Quit rows and the end of the list by touch alone,
+     * then activate Save/Quit exactly once with a tap. */
+    layout=fixture_main_menu_open(1);
+    bool reached_save_quit=layout.rows[MAIN_MENU_SAVE_QUIT].h>0;
+    int guard=0;
+    while(layout.first_choice<MAIN_MENU_MAX-layout.visible_count+1) {
+        row=layout.rows[layout.first_choice+layout.visible_count-1];
+        x=row.x+row.w*.5f; y=row.y+row.h*.5f; first=layout.first_choice;
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y-threshold*1.25f);
+        fixture_assert(sdl_main_menu_overlay_layout(&layout));
+        fixture_assert(layout.first_choice>first && fixture_main_menu_choices==count);
+        reached_save_quit |= layout.rows[MAIN_MENU_SAVE_QUIT].h>0;
+        fixture_assert(++guard<=MAIN_MENU_MAX);
+    }
+    fixture_assert(reached_save_quit && layout.rows[MAIN_MENU_MAX].h>0);
+    layout=fixture_main_menu_open(MAIN_MENU_SAVE_QUIT);
+    row=layout.rows[MAIN_MENU_SAVE_QUIT]; x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+    fixture_assert(fixture_main_menu_last_choice==MAIN_MENU_SAVE_QUIT);
+    count=fixture_main_menu_choices;
+
+    /* Overscroll at the top is equally reversible. */
+    layout=fixture_main_menu_open(1);
+    if(layout.visible_count<MAIN_MENU_MAX) {
+        row=layout.rows[1]; x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y+threshold*2.5f);
+        fixture_assert(g_main_menu_overlay_first_choice==1);
+        fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y+threshold*1.25f);
+        fixture_assert(g_main_menu_overlay_first_choice==2);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y+threshold*1.25f);
+        fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    }
+
+    /* Overscroll at the bottom cannot accumulate dead distance. Reversing
+     * immediately moves back toward earlier rows. */
+    if(layout.visible_count<MAIN_MENU_MAX) {
+        int last_first=MAIN_MENU_MAX-layout.visible_count+1;
+        layout=fixture_main_menu_open(last_first);
+        row=layout.rows[MAIN_MENU_MAX]; x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y-threshold*2.5f);
+        fixture_assert(g_main_menu_overlay_first_choice==last_first);
+        fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y-threshold*1.25f);
+        fixture_assert(g_main_menu_overlay_first_choice==last_first-1);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y-threshold*1.25f);
+        fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    }
+
+    /* Horizontal drags and release on the original point also cancel. */
+    layout=fixture_main_menu_open(1); row=layout.rows[1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x+threshold*1.25f,y);
+    fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+
+    /* Physical mouse and wheel retain their own input behavior. */
+    layout=fixture_main_menu_open(1); row=layout.rows[1];
+    mouse=(SDL_Event){0}; mouse.type=SDL_EVENT_MOUSE_WHEEL;
+    mouse.wheel.which=1; mouse.wheel.y=-1;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&mouse));
+    if(layout.visible_count<MAIN_MENU_MAX) fixture_assert(g_main_menu_overlay_first_choice==2);
+    layout=fixture_main_menu_open(1); row=layout.rows[1];
+    mouse=(SDL_Event){0}; mouse.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    mouse.button.which=1; mouse.button.button=SDL_BUTTON_LEFT;
+    mouse.button.x=row.x+row.w*.5f; mouse.button.y=row.y+row.h*.5f;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&mouse));
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+
+    /* Exercise the full event dispatcher too: tagged mouse duplicates must
+     * stay consumed before and after the finger release closes the menu. */
+    count=fixture_main_menu_choices;
+    layout=fixture_main_menu_open(1); row=layout.rows[1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    SDL_Event ev={0}; ev.type=SDL_EVENT_FINGER_DOWN; ev.tfinger.windowID=window;
+    ev.tfinger.touchID=1; ev.tfinger.fingerID=7;
+    ev.tfinger.x=x/fixture_width; ev.tfinger.y=y/fixture_height;
+    sdl_handle_event(&g_state,&ev);
+    mouse=(SDL_Event){0}; mouse.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    mouse.button.windowID=window; mouse.button.which=SDL_TOUCH_MOUSEID;
+    mouse.button.button=SDL_BUTTON_LEFT; mouse.button.x=x; mouse.button.y=y;
+    sdl_handle_event(&g_state,&mouse);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    ev.type=SDL_EVENT_FINGER_UP; sdl_handle_event(&g_state,&ev);
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+    mouse.type=SDL_EVENT_MOUSE_BUTTON_UP; sdl_handle_event(&g_state,&mouse);
+    fixture_assert(fixture_main_menu_choices==count+1);
+
+    /* Some handhelds only report SDL's touch-mouse stream. The dispatcher
+     * converts that stream into a single press/drag/release, not mouse clicks. */
+    g_direct_touch_present=false;
+    count=fixture_main_menu_choices;
+    layout=fixture_main_menu_open(1);
+    row=layout.rows[layout.first_choice+layout.visible_count-1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    mouse=(SDL_Event){0}; mouse.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    mouse.button.windowID=window; mouse.button.which=SDL_TOUCH_MOUSEID;
+    mouse.button.button=SDL_BUTTON_LEFT; mouse.button.x=x; mouse.button.y=y;
+    sdl_handle_event(&g_state,&mouse);
+    fixture_assert(g_main_menu_touch.active && fixture_main_menu_choices==count);
+    mouse=(SDL_Event){0}; mouse.type=SDL_EVENT_MOUSE_MOTION;
+    mouse.motion.windowID=window; mouse.motion.which=SDL_TOUCH_MOUSEID;
+    mouse.motion.x=x; mouse.motion.y=y-threshold*1.25f;
+    mouse.motion.yrel=-threshold*1.25f;
+    sdl_handle_event(&g_state,&mouse);
+    if(layout.visible_count<MAIN_MENU_MAX) fixture_assert(g_main_menu_overlay_first_choice>1);
+    mouse=(SDL_Event){0}; mouse.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    mouse.button.windowID=window; mouse.button.which=SDL_TOUCH_MOUSEID;
+    mouse.button.button=SDL_BUTTON_LEFT; mouse.button.x=x;
+    mouse.button.y=y-threshold*1.25f;
+    sdl_handle_event(&g_state,&mouse);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    layout=fixture_main_menu_open(1); row=layout.rows[1];
+    x=row.x+row.w*.5f; y=row.y+row.h*.5f;
+    mouse.button.x=x; mouse.button.y=y; mouse.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    sdl_handle_event(&g_state,&mouse);
+    fixture_assert(g_main_menu_overlay_active && fixture_main_menu_choices==count);
+    mouse.type=SDL_EVENT_MOUSE_BUTTON_UP; sdl_handle_event(&g_state,&mouse);
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+    g_direct_touch_present=true;
+
+    /* Controller navigation and confirmation are still handled by the menu. */
+    bool gamepad_enabled=config.gamepad_enabled; config.gamepad_enabled=true;
+    count=fixture_main_menu_choices;
+    (void)fixture_main_menu_open(1);
+    ev=(SDL_Event){0}; ev.type=SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+    ev.gbutton.down=true; ev.gbutton.button=SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
+    fixture_assert(g_main_menu_overlay_highlight==2);
+    ev.gbutton.button=SDL_GAMEPAD_BUTTON_SOUTH;
+    fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
+    fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count+1);
+    fixture_assert(fixture_main_menu_last_choice==2);
+    config.gamepad_enabled=gamepad_enabled;
+
+    /* A touch-pane direction outside the menu still navigates on release;
+     * sliding off it or dragging does not activate it. */
+    layout=fixture_main_menu_open(1);
+    if(layout.panel.x>2) {
+        int old_binding=config.touch_pane_bindings[0];
+        bool old_panel=g_touch_pane_second_panel;
+        fixture_main_menu_touch_pane=true;
+        fixture_main_menu_touch_pane_right=layout.panel.x;
+        config.touch_pane_bindings[0]='2'; g_touch_pane_second_panel=false;
+        x=layout.panel.x*.5f; y=layout.panel.h*.5f;
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_assert(g_main_menu_overlay_highlight==1);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+        fixture_assert(g_main_menu_overlay_highlight==2);
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_menu_touch(SDL_EVENT_FINGER_MOTION,1,7,window,x,y+threshold*1.25f);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+        fixture_assert(g_main_menu_overlay_highlight==2);
+        fixture_main_menu_touch_pane=false;
+        config.touch_pane_bindings[0]=old_binding; g_touch_pane_second_panel=old_panel;
+    }
+}
+
 static void check_main_menu(void)
 {
+    sdl_startup_device_class saved_device=g_startup_device_class;
+    bool saved_direct_touch=g_direct_touch_present;
+    bool saved_gamepad_auto_ui=g_gamepad_auto_ui;
+    gamepad_input_state saved_gamepad=g_gamepad_state;
+    int saved_aux_font_size=config.aux_view_font_size;
     SDL_strlcpy(fixture_id,"main-menu",sizeof(fixture_id));
-    character_icky=0; g_main_menu_overlay_active=true;
+    character_icky=0; g_direct_touch_present=true;
+    g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
+    const float densities[]={1.0f,2.0f,2.625f};
     for(int big=0;big<2;big++) {
         fixture_set_all_fonts(big);
-        for(int choice=1;choice<=MAIN_MENU_MAX;choice++) {
-            g_main_menu_overlay_highlight=choice;
-            main_menu_pane_layout layout;
-            fixture_assert(sdl_main_menu_overlay_layout(&layout));
-            inside(layout.panel); inside(layout.rows[choice]);
-            fixture_assert(fabsf(layout.panel.h-fixture_height)<1.0f);
-            fixture_assert(fabsf(layout.panel.y)<1.0f);
-            fixture_assert(choice>=layout.first_choice);
-            fixture_assert(choice<layout.first_choice+layout.visible_count);
+        for(int d=0;d<N_ELEMENTS(densities);d++) {
+            fixture_main_menu_density=densities[d];
+            for(int explicit_size=0;explicit_size<2;explicit_size++) {
+                config.aux_view_font_size=explicit_size ? SDL_AUX_VIEW_FONT_MIN : 0;
+                for(int choice=1;choice<=MAIN_MENU_MAX;choice++) {
+                    main_menu_pane_layout layout=fixture_main_menu_open(choice);
+                    SDL_FRect row=layout.rows[choice];
+                    float inner=layout.pad_x*.42f;
+                    float available=row.w-inner*2;
+                    char shortcut[32];
+                    int w=0,h=0;
+                    TTF_Font *font=sdl_story_font_for_height(layout.font_px);
+                    fixture_assert(font!=NULL);
+                    if(!big && !explicit_size) {
+                        fixture_assert(layout.font_px>=sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+                        fixture_assert(TTF_GetFontSize(font)>=sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+                    } else {
+                        /* Explicit normal sizes and all large-font layouts keep
+                         * the shared resolver's original result. */
+                        fixture_assert(layout.font_px==sdl_main_menu_pane_font_px());
+                    }
+                    if(!big && explicit_size)
+                        fixture_assert(layout.font_px<sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+                    inside(layout.panel); inside(row);
+                    fixture_assert(fabsf(layout.panel.h-fixture_height)<1.0f);
+                    fixture_assert(fabsf(layout.panel.y)<1.0f);
+                    fixture_assert(choice>=layout.first_choice);
+                    fixture_assert(choice<layout.first_choice+layout.visible_count);
+                    fixture_assert(row.w>=sdl_ui_min_tap_px());
+                    if(!big && fixture_width==2400 && fixture_height==1080 && d==2) {
+                        /* A phone-density landscape menu keeps the selected
+                         * font without forcing every row to 48 dp. */
+                        fixture_assert(row.h<sdl_ui_min_tap_px());
+                        fixture_assert(layout.visible_count>=12);
+                    }
+                    {
+                        sdl_main_menu_shortcut_display_label(choice,shortcut,sizeof(shortcut));
+                        if(shortcut[0] && layout.shortcut_w>0)
+                            available-=layout.shortcut_w+layout.shortcut_gap;
+                        float title_w=MAX(1.0f,MIN(layout.title_w,available));
+                        fixture_assert(sdl_ui_wrapped_text_texture(font,main_menu_title(choice),
+                            MAX(1,(int)title_w),(SDL_Color){255,255,255,255},&w,&h)!=NULL);
+                        if(w>title_w || (h>row.h && h<=fixture_height))
+                            fprintf(stderr,"main-menu text fit: density=%.3f explicit=%d choice=%d size=%d texture=%dx%d title=%.1f row=%.1f\n",
+                                densities[d],explicit_size,choice,layout.font_px,w,h,title_w,row.h);
+                        /* Text taller than the entire viewport cannot fit at
+                         * the selected font size (the 132px extreme case). */
+                        fixture_assert(w<=title_w && (h<=row.h || h>fixture_height));
+                        if(shortcut[0] && layout.shortcut_w>0) {
+                            TTF_Font *mono=sdl_main_menu_mono_font_for_height(layout.font_px);
+                            fixture_assert(mono!=NULL);
+                            fixture_assert(sdl_ui_wrapped_text_texture(mono,shortcut,
+                                MAX(1,(int)layout.shortcut_w),(SDL_Color){255,255,255,255},&w,&h)!=NULL);
+                            fixture_assert(w<=layout.shortcut_w && h<=row.h);
+                        }
+                    }
+                }
+            }
+            config.aux_view_font_size=0;
+            check_main_menu_gestures();
+            if(fixture_width==2400 && fixture_height==1080 && d==2) {
+                /* Once the whole list fits, extra screen height must not
+                 * inflate every row in either font profile. */
+                int saved_height=fixture_height;
+                fixture_height=4096;
+                main_menu_pane_layout tall=fixture_main_menu_open(1);
+                fixture_height=8192;
+                main_menu_pane_layout taller=fixture_main_menu_open(1);
+                fixture_assert(tall.visible_count==MAIN_MENU_MAX);
+                fixture_assert(taller.visible_count==MAIN_MENU_MAX);
+                fixture_assert(fabsf(tall.row_h-taller.row_h)<0.01f);
+                fixture_height=saved_height;
+            }
+            if ((fixture_width==2400 && fixture_height==1080 && d==2)
+                || (fixture_width==1920 && fixture_height==1200 && d==1)) {
+                (void)fixture_main_menu_open(1);
+                SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255);
+                SDL_RenderClear(g_state.renderer); sdl_main_menu_pane_render();
+                capture("main-menu-first");
+                (void)fixture_main_menu_open(MAIN_MENU_MAX);
+                SDL_RenderClear(g_state.renderer); sdl_main_menu_pane_render();
+                capture("main-menu-bottom");
+            }
         }
     }
+    fixture_main_menu_density=0; fixture_set_all_fonts(true);
+    (void)fixture_main_menu_open(MAIN_MENU_MAX);
     SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255); SDL_RenderClear(g_state.renderer);
     sdl_main_menu_pane_render(); capture("main-menu-last");
-    main_menu_pane_layout layout;
-    g_main_menu_overlay_highlight=1;
-    g_main_menu_overlay_first_choice=1;
-    fixture_assert(sdl_main_menu_overlay_layout(&layout));
-    int first_before=layout.first_choice;
-    int visible_before=layout.visible_count;
-    SDL_Event ev={0}; ev.tfinger.windowID=SDL_GetWindowID(g_state.window);
-    ev.tfinger.touchID=1; ev.tfinger.fingerID=7;
-    ev.tfinger.x=(layout.panel.x+layout.panel.w/2)/fixture_width;
-    ev.tfinger.y=(layout.panel.y+layout.panel.h*.75f)/fixture_height;
-    ev.type=SDL_EVENT_FINGER_DOWN;
-    fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
-    ev.tfinger.y-=MIN(200.0f,layout.panel.h*.5f)/fixture_height;
-    ev.type=SDL_EVENT_FINGER_MOTION;
-    fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
-    ev.type=SDL_EVENT_FINGER_UP;
-    fixture_assert(sdl_main_menu_overlay_handle_event(&ev));
-    fixture_assert(g_main_menu_large_touch_dragged);
-    fixture_assert(sdl_main_menu_overlay_layout(&layout));
-    if(visible_before<MAIN_MENU_MAX)
-        fixture_assert(layout.first_choice>first_before);
-    fixture_assert(g_main_menu_overlay_active);
-    char key=0; fixture_assert(Term_inkey(&key,false,true)!=0);
     sdl_main_menu_overlay_close(); character_icky=1;
+    g_startup_device_class=saved_device;
+    g_direct_touch_present=saved_direct_touch;
+    g_gamepad_auto_ui=saved_gamepad_auto_ui;
+    g_gamepad_state=saved_gamepad;
+    config.aux_view_font_size=saved_aux_font_size;
 }
 
 static void check_halls(void)
@@ -790,6 +1145,10 @@ static void check_live_sheet(void)
 static void check_bottom_buttons(void)
 {
     SDL_strlcpy(fixture_id,"bottom-buttons",sizeof(fixture_id));
+    /* The wrapped touch-only fixture exercises the mobile policy.  The
+     * linked desktop objects otherwise keep their default desktop class. */
+    sdl_startup_device_class saved_device=g_startup_device_class;
+    g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
     sdl_view *view=&g_views[PANE_MAIN];
     SDL_Rect saved_rect=view->rect;
     int saved_w=view->cell_w,saved_h=view->cell_h;
@@ -843,6 +1202,7 @@ static void check_bottom_buttons(void)
     view->rect=saved_rect; view->cell_w=saved_w; view->cell_h=saved_h;
     view->cols=saved_cols; view->rows=saved_rows;
     view->margin_x=saved_x; view->margin_y=saved_y; view->term_ready=saved_ready;
+    g_startup_device_class=saved_device;
 }
 
 static void check_large_tutorial(void)
@@ -1255,6 +1615,11 @@ static void check(int width,int height)
     term_init(&view->t,80,24,256); Term_activate(&view->t); term_screen=&view->t;
     character_icky=1; fixture.active=false;
     set_sdl_show_menu_font_button(true); /* Explicitly enable the control for its layout fixtures. */
+    if(SDL_getenv("SIL_MAIN_MENU_TEST_ONLY")) {
+        check_main_menu();
+        printf("%dx%d: main menu compact rows, touch, scrolling, mouse, controller and event dispatch in both fonts at 3 densities: PASS\n",width,height);
+        goto cleanup;
+    }
     check_actual_cell_metrics();
     check_auto_font_metrics();
     fixture_set_all_fonts(false);
@@ -1279,8 +1644,9 @@ static void check(int width,int height)
     check_settings_rotation();
     check_actual_general();
     g_suppress_layout_refresh_present=true; /* No dungeon is loaded after the native settings resize. */
-    printf("%dx%d: pane %d -> %d, native settings %d -> %d; settings taps, song paging/choice, question wrapping/scroll, birth final skill, text paging, main menu drag, Halls: PASS\n",
+    printf("%dx%d: pane %d -> %d, native settings %d -> %d; settings taps, song paging/choice, question wrapping/scroll, birth final skill, text paging, main menu touch/scroll at 3 densities in both fonts, Halls: PASS\n",
         width,height,pane,sdl_main_menu_pane_font_px(),normal,large);
+cleanup:
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
     term_nuke(&view->t); term_screen=NULL; Term=NULL;
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
@@ -1332,11 +1698,13 @@ def main():
     env["PATH"] = os.pathsep.join(
         [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
         ["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
+    if "--main-menu-only" in sys.argv[1:]:
+        env["SIL_MAIN_MENU_TEST_ONLY"] = "1"
     wraps = ["tutorial_get_view", "tutorial_is_active", "tutorial_revision",
              "get_sdl_gameplay_tutorial_mode", "SDL_WaitEvent",
              "sdl_touch_round_layer_controls_active", "sdl_touch_round_compute_layout",
              "sdl_touch_thumb_current_bounds", "sdl_map_grid_cell_rect",
-             "sdl_touch_only_device_active", "sdl_get_layout_screen_rect",
+             "sdl_touch_only_device_active", "sdl_get_layout_screen_rect", "SDL_GetDisplayContentScale", "sdl_touch_pane_point_to_slot",
              "sdl_character_sheet_screen_commit_select", "save_pane_config_to_json", "inkey"]
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
@@ -1345,8 +1713,11 @@ def main():
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     # Each offscreen renderer gets a fresh process: some production font
     # caches live for the application lifetime and retain font pointers.
-    for width, height in [(360, 800), (800, 360), (580, 1280), (1280, 720),
-                          (1080, 2400), (2400, 1080)]:
+    sizes = [(360, 800), (800, 360), (580, 1280), (1280, 720),
+             (1080, 2400), (2400, 1080), (1920, 1200)]
+    if "--main-menu-only" in sys.argv[1:]:
+        sizes.append((800, 132))  # A very short viewport at phone density.
+    for width, height in sizes:
         subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"),
                         str(width), str(height), str(ROOT / "lib/xtra/font/VictorMono-Medium.ttf"),
                         str(ROOT / "lib/xtra/font/Cinzel-Medium.ttf")],

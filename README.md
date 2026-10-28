@@ -8,6 +8,12 @@ Sil-Morë — Shining Darkness is a version of SIL-Q built around two main ideas
 First, it adds characters and story material from Tolkien's First Age.
 Second, it uses metaruns so consecutive runs are connected into one storyline, closer to modern roguelite games.
 
+## Desktop display
+
+The desktop interface targets a game window of at least 1280×720 pixels.
+Smaller windows remain available, but may need additional scrolling. Text
+sizes can be adjusted in Options → Text Options → Text Size and Fonts.
+
 # Compiling (SDL3)
 
 ## Windows

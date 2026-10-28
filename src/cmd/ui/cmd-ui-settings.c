@@ -632,7 +632,8 @@ void settings_ui_fit_text(char* buf, size_t buflen, cptr text,
 static cptr settings_ui_pick_label(int max_chars, cptr long_label,
     cptr medium_label, cptr short_label)
 {
-    if (sdl_character_sheet_screen_active() && get_sdl_menu_bigger_font()
+    if (sdl_character_sheet_screen_active()
+        && (get_sdl_menu_bigger_font() || sdl_handheld_ui_active())
         && long_label && long_label[0])
         return long_label;
     cptr labels[3] = { long_label, medium_label, short_label };
@@ -664,7 +665,8 @@ static void settings_menu_begin_scroll_area(int list_start_row, int visible_rows
 static void settings_ui_format_pair_line(char* buf, size_t buflen, cptr label,
     cptr value, int max_chars, int min_value_chars)
 {
-    if (sdl_character_sheet_screen_active() && get_sdl_menu_bigger_font()) {
+    if (sdl_character_sheet_screen_active()
+        && (get_sdl_menu_bigger_font() || sdl_handheld_ui_active())) {
         strnfmt(buf, buflen, "%s: %s", label ? label : "", value ? value : "");
         return;
     }
@@ -3490,7 +3492,7 @@ static void format_font_size_value(char* buf, size_t buflen, int raw, int effect
 
 static const char* sdl_min_terminal_mode_label(int mode)
 {
-    return (mode == 1) ? "compact (50x18)" : "normal (80x24)";
+    return (mode == 1) ? "compact (50x16)" : "normal (80x24)";
 }
 
 static const char* sdl_config_path_leaf(const char* path)
@@ -6046,6 +6048,24 @@ static bool iface_pane_row_pick_value(const struct iface_pane_row* row,
  * immediate-apply behaviour of do_cmd_pane_settings and the pane sub-editors.
  * Returns true if anything changed.
  */
+static float touch_top_widget_next_size(float value, int delta)
+{
+    if (value == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
+        return delta < 0 ? SDL_TOUCH_TOP_PANEL_SIZE_MAX
+                         : SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+    if (value == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        return delta < 0 ? SDL_TOUCH_TOP_PANEL_SIZE_AUTO
+                         : SDL_TOUCH_TOP_PANEL_SIZE_MIN;
+
+    value += delta < 0 ? -SDL_TOUCH_TOP_PANEL_SIZE_STEP
+                       : SDL_TOUCH_TOP_PANEL_SIZE_STEP;
+    if (value < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
+        return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+    if (value > SDL_TOUCH_TOP_PANEL_SIZE_MAX)
+        return SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
+    return value;
+}
+
 static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
 {
     int idx = iface_pane_row_live_index(row);
@@ -6100,20 +6120,7 @@ static bool iface_pane_row_adjust(const struct iface_pane_row* row, int delta)
     case IFACE_PANE_FIELD_SIZE:
     {
         float value = get_sdl_touch_top_panel_size();
-        float next;
-
-        if (value == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
-            next = (delta < 0) ? SDL_TOUCH_TOP_PANEL_SIZE_MAX
-                               : SDL_TOUCH_TOP_PANEL_SIZE_MIN;
-        } else {
-            next = value + ((delta < 0) ? -SDL_TOUCH_TOP_PANEL_SIZE_STEP
-                                        : SDL_TOUCH_TOP_PANEL_SIZE_STEP);
-            if (next < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
-                next = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
-            else if (next > SDL_TOUCH_TOP_PANEL_SIZE_MAX)
-                next = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
-        }
-        set_sdl_touch_top_panel_size(next);
+        set_sdl_touch_top_panel_size(touch_top_widget_next_size(value, delta));
         changed = (get_sdl_touch_top_panel_size() != value);
         break;
     }
@@ -7661,6 +7668,10 @@ static void touch_top_widget_format_size(char* buf, size_t buflen, float size)
 
     if (!buf || !buflen)
         return;
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO) {
+        SDL_strlcpy(buf, "Auto", buflen);
+        return;
+    }
     if (size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
         SDL_strlcpy(buf, "Stretch", buflen);
         return;
@@ -7676,16 +7687,14 @@ static void touch_top_widget_format_size(char* buf, size_t buflen, float size)
             (quarters % 4) == 1 ? "2" : "7");
 }
 
-static bool touch_top_widget_pick_size(void)
+static int touch_top_widget_size_choices(struct settings_value_choice choices[32],
+    char labels[32][12])
 {
-    struct settings_value_choice choices[32];
-    char labels[32][12];
-    float current_size = get_sdl_touch_top_panel_size();
-    int current = (current_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
-        ? 0 : (int)(current_size * 4.0f + 0.5f);
-    int picked = current;
     int count = 0;
 
+    choices[count].value = -1;
+    choices[count].label = "Auto";
+    count++;
     choices[count].value = 0;
     choices[count].label = "Stretch";
     count++;
@@ -7696,17 +7705,30 @@ static bool touch_top_widget_pick_size(void)
         choices[count].label = labels[count];
         count++;
     }
+    return count;
+}
+
+static bool touch_top_widget_pick_size(void)
+{
+    struct settings_value_choice choices[32];
+    char labels[32][12];
+    float current_size = get_sdl_touch_top_panel_size();
+    int current = (current_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO) ? -1
+        : (current_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+            ? 0 : (int)(current_size * 4.0f + 0.5f);
+    int picked = current;
+    int count = touch_top_widget_size_choices(choices, labels);
 
     if (!settings_pick_value_ex("Quick Access Size",
-            "Stretch fills the clear horizontal space. Fixed sizes use quarter-step scaling.",
+            "Auto fits readable controls to the available space. Stretch fills the clear horizontal space. Fixed sizes use quarter-step scaling.",
             choices, count, current, &picked, false)
         || picked == current)
     {
         return false;
     }
 
-    set_sdl_touch_top_panel_size((picked == 0)
-        ? SDL_TOUCH_TOP_PANEL_SIZE_STRETCH : (float)picked / 4.0f);
+    set_sdl_touch_top_panel_size(picked < 0 ? SDL_TOUCH_TOP_PANEL_SIZE_AUTO
+        : picked == 0 ? SDL_TOUCH_TOP_PANEL_SIZE_STRETCH : (float)picked / 4.0f);
     return true;
 }
 

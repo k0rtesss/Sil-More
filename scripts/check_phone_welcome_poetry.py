@@ -10,6 +10,10 @@ ROOT=Path(__file__).resolve().parents[1]
 BUILD=ROOT/"build-standard"
 OUT=ROOT/"scripts/output/phone-welcome-poetry-check"
 PREFIX=AUX[:AUX.index("static void check_touch_panels(void)")]
+PREFIX=PREFIX.replace(
+    'bool __wrap_sdl_touch_only_device_active(void) { return true; }',
+    'static bool fixture_touch_only=true;\n'
+    'bool __wrap_sdl_touch_only_device_active(void) { return fixture_touch_only; }')
 PREFIX=PREFIX.replace("footer_glyphs[64]","footer_glyphs[512]").replace("footer_glyph_count<64","footer_glyph_count<512")
 PREFIX=PREFIX.replace("if(footer_capture && dest) {",r'''if(footer_capture && dest) {
         float tw=0,th=0; fixture_assert(SDL_GetTextureSize(texture,&tw,&th));
@@ -72,6 +76,32 @@ static void welcome(void)
 {
     SDL_Rect canvas={0,0,fixture_width,fixture_height};
     SDL_strlcpy(fixture_id,"welcome-full-size",sizeof(fixture_id));
+    /* Switching input devices must update the cue and invalidate its measured
+     * layout, including after a saved Tale changes Begin to Continue. */
+    int saved_input_mode=config.input_ui_mode;
+    config.input_ui_mode=SDL_INPUT_UI_MODE_PLATFORM;
+    fixture_touch_only=false;
+    fixture_assert(sdl_welcome_screen_show_intro(0,true));
+    fixture_assert(sdl_welcome_screen_show_menu(false,true));
+    fixture_assert(!strcmp(sdl_welcome_big_menu_hint(),"Press any key to begin"));
+    sdl_welcome_screen_render_canvas(&canvas);
+    fixture_assert(sdl_welcome_layout_cache_matches(&canvas));
+    config.input_ui_mode=SDL_INPUT_UI_MODE_CONTROLLER;
+    fixture_assert(!strcmp(sdl_welcome_big_menu_hint(),"Press A to begin"));
+    fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
+    config.input_ui_mode=SDL_INPUT_UI_MODE_PLATFORM;
+    fixture_touch_only=true;
+    fixture_assert(!strcmp(sdl_welcome_big_menu_hint(),"Tap to begin"));
+    fixture_assert(!sdl_welcome_layout_cache_matches(&canvas));
+    {
+        char line[96], quit[32]; cptr primary=NULL;
+        sdl_welcome_compose_menu_line(line,sizeof(line),quit,sizeof(quit),&primary);
+        fixture_assert(!strcmp(line,"[Tap] Begin    Quit"));
+        fixture_assert(!strcmp(quit,"Quit") && !strcmp(primary,"Begin"));
+    }
+    fixture_assert(sdl_welcome_screen_show_menu(false,false));
+    fixture_assert(!strcmp(sdl_welcome_big_menu_hint(),"Tap to continue"));
+    config.input_ui_mode=saved_input_mode;
     for(int style=0;style<INTRO_STYLE_MAX;style++) for(int variant=0;variant<2;variant++) {
         fixture_assert(sdl_welcome_screen_show_intro(style,true));
         fixture_assert(sdl_welcome_screen_show_menu(variant==0,variant==1));
@@ -117,14 +147,22 @@ static void welcome(void)
         inside(g_sdl_welcome_screen.quit_rect);
         if(config.bigger_font) {
             ink(g_sdl_welcome_screen.quit_rect,sdl_ui_role_font_px(SDL_UI_FONT_CONTROL));
-            fixture_assert(g_sdl_welcome_screen.continue_rect.w==0);
-            fixture_assert(g_sdl_welcome_screen.continue_rect.h==0);
+            SDL_FRect hint=g_sdl_welcome_screen.continue_rect;
+            inside(hint);
+            int hint_w=0,hint_h=0;
+            TTF_HorizontalAlignment alignment=TTF_GetFontWrapAlignment(metrics.footer_font);
+            TTF_SetFontWrapAlignment(metrics.footer_font,TTF_HORIZONTAL_ALIGN_CENTER);
+            fixture_assert(TTF_GetStringSizeWrapped(metrics.footer_font,
+                sdl_welcome_big_menu_hint(),0,(int)metrics.footer_w,&hint_w,&hint_h));
+            TTF_SetFontWrapAlignment(metrics.footer_font,alignment);
+            fixture_assert(SDL_fabsf(hint.w-hint_w)<=1 && SDL_fabsf(hint.h-hint_h)<=1);
+            fixture_assert(hint.y>=metrics.intro_bottom);
+            fixture_assert(hint.y+hint.h<=canvas.h-sdl_welcome_bottom_margin(&canvas)+1);
+            ink(hint,TTF_GetFontSize(metrics.footer_font));
             SDL_FRect close=g_sdl_welcome_screen.quit_rect;
             fixture_assert(close.h>=sdl_ui_min_tap_px() && close.w>=sdl_ui_min_tap_px());
             fixture_assert(close.x>canvas.w*.5f && close.y<close.h);
             fixture_assert(close.y+close.h<metrics.top);
-            if(variant==1)
-                fixture_assert(metrics.intro_bottom==canvas.h-sdl_welcome_bottom_margin(&canvas));
         } else inside(g_sdl_welcome_screen.continue_rect);
         fixture_assert(!SDL_HasRectIntersectionFloat(&g_sdl_welcome_screen.continue_rect,&g_sdl_welcome_screen.quit_rect));
         char name[96]; strnfmt(name,sizeof(name),"welcome-style%d-variant%d-start",style,variant); capture(name);
@@ -174,6 +212,11 @@ static void welcome(void)
             fixture_assert(sdl_welcome_touch_handle_pointer_up(x,y-drag,7));
             fixture_assert(Term_inkey(&key,false,true)!=0);
             start_capture(); sdl_welcome_screen_render_canvas(&canvas); stop_capture();
+            if(config.bigger_font) {
+                inside(g_sdl_welcome_screen.continue_rect);
+                fixture_assert(g_sdl_welcome_screen.continue_rect.y>=viewport.y+viewport.h);
+                ink(g_sdl_welcome_screen.continue_rect,TTF_GetFontSize(metrics.footer_font));
+            }
             sdl_welcome_layout_line last=lines[count-1];
             last.box.y-=g_sdl_standalone_pager.offset;
             int tw=0,th=0;
@@ -182,6 +225,14 @@ static void welcome(void)
             fixture_assert(last.box.y>=metrics.top-1);
             fixture_assert(last.box.y+last.box.h<=viewport.y+viewport.h+1);
             ink(last.box,sdl_welcome_font_px_for_role(metrics.base_px,last.source->role));
+            if(fixture_width==2400 && fixture_height==1080 && style==0 && variant==1) {
+                /* The final line must remain visible at maximum scroll even
+                 * when the logical viewport ends on a fractional pixel. */
+                float top=SDL_roundf(last.box.y+MAX(0.f,last.box.h-th)*.5f);
+                SDL_FRect final_line={last.box.x,top+th-TTF_GetFontHeight(last.font),
+                    last.box.w,(float)TTF_GetFontHeight(last.font)};
+                ink(final_line,sdl_welcome_font_px_for_role(metrics.base_px,last.source->role));
+            }
             strnfmt(name,sizeof(name),"welcome-style%d-variant%d-end",style,variant); capture(name);
         }
         Term_flush(); g_sdl_blocking_key_wait=true;

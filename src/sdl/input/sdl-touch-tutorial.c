@@ -30,7 +30,7 @@ enum {
 static int tutorial_panel_part;
 static int tutorial_panel_parts = 1;
 
-static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
+static SDL_FRect sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
     float x, float y, float w, cptr title, cptr body, float max_bottom);
 
 static int sdl_touch_tutorial_text_px(float px, float min_px, float max_px)
@@ -1305,23 +1305,22 @@ bool sdl_touch_tutorial_compact_layout(const SDL_Rect* screen)
     return screen && (screen->w < 900 || screen->h < 560);
 }
 
-void sdl_touch_tutorial_draw_compact_zone_label(
-    const SDL_Rect* screen, const SDL_FRect* zone, cptr label)
-{
-    SDL_Color text = g_state.palette[TERM_YELLOW];
-    SDL_Color border = g_state.palette[TERM_L_WHITE];
-    TTF_Font* font;
-    SDL_FRect badge;
-    float badge_pad_x;
-    float badge_pad_y;
-    int font_px;
-    int label_w;
-    float text_y;
-    float max_w;
+enum {
+    SDL_TOUCH_TUTORIAL_MAX_COMPACT_ZONES = 12,
+    SDL_TOUCH_TUTORIAL_MAX_BADGE_OBSTACLES =
+        SDL_TOUCH_TUTORIAL_MAX_COMPACT_ZONES + 3
+};
 
-    if (!screen || !zone || !label || !label[0])
-        return;
-    if (zone->w <= 1.0f || zone->h <= 1.0f)
+typedef struct sdl_touch_tutorial_compact_zone {
+    SDL_FRect rect;
+    cptr label;
+} sdl_touch_tutorial_compact_zone;
+
+static void sdl_touch_tutorial_compact_zone_highlight(const SDL_FRect* zone)
+{
+    SDL_Color border = g_state.palette[TERM_L_WHITE];
+
+    if (!zone || zone->w <= 1.0f || zone->h <= 1.0f)
         return;
 
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
@@ -1330,6 +1329,87 @@ void sdl_touch_tutorial_draw_compact_zone_label(
     SDL_SetRenderDrawColor(g_state.renderer, border.r, border.g, border.b,
         228);
     SDL_RenderRect(g_state.renderer, zone);
+}
+
+/* Search positions next to the zone and the occupied rectangles.  This keeps
+ * the label close to its target while leaving the heading, legend, footer and
+ * other labels unobscured, even when the target is narrower than the text. */
+static bool sdl_touch_tutorial_place_compact_badge(const SDL_Rect* screen,
+    const SDL_FRect* zone, SDL_FRect* badge, const SDL_FRect* occupied,
+    int occupied_count, bool require_target)
+{
+    float xs[3 + SDL_TOUCH_TUTORIAL_MAX_BADGE_OBSTACLES * 2];
+    float ys[3 + SDL_TOUCH_TUTORIAL_MAX_BADGE_OBSTACLES * 2];
+    float left = (float)screen->x + 2.0f;
+    float top = (float)screen->y + 2.0f;
+    float right = (float)(screen->x + screen->w) - 2.0f - badge->w;
+    float bottom = (float)(screen->y + screen->h) - 2.0f - badge->h;
+    float wanted_x = zone->x + (zone->w - badge->w) * 0.5f;
+    float wanted_y = zone->y + (zone->h - badge->h) * 0.5f;
+    float best_score = 0.0f;
+    int nx = 0, ny = 0;
+    bool found = false;
+
+    if (right < left || bottom < top)
+        return false;
+    xs[nx++] = sdl_touch_pane_clampf(wanted_x, left, right);
+    xs[nx++] = left;
+    xs[nx++] = right;
+    ys[ny++] = sdl_touch_pane_clampf(wanted_y, top, bottom);
+    ys[ny++] = top;
+    ys[ny++] = bottom;
+    for (int i = 0; i < occupied_count; i++) {
+        xs[nx++] = sdl_touch_pane_clampf(occupied[i].x - badge->w - 3.0f,
+            left, right);
+        xs[nx++] = sdl_touch_pane_clampf(occupied[i].x + occupied[i].w + 3.0f,
+            left, right);
+        ys[ny++] = sdl_touch_pane_clampf(occupied[i].y - badge->h - 3.0f,
+            top, bottom);
+        ys[ny++] = sdl_touch_pane_clampf(occupied[i].y + occupied[i].h + 3.0f,
+            top, bottom);
+    }
+
+    for (int x = 0; x < nx; x++) {
+        for (int y = 0; y < ny; y++) {
+            SDL_FRect candidate = { xs[x], ys[y], badge->w, badge->h };
+            float dx = candidate.x - wanted_x;
+            float dy = candidate.y - wanted_y;
+            float score = dx * dx + dy * dy;
+            bool overlaps = false;
+
+            if (require_target && !SDL_HasRectIntersectionFloat(&candidate, zone))
+                continue;
+            for (int i = 0; i < occupied_count; i++) {
+                if (SDL_HasRectIntersectionFloat(&candidate, &occupied[i])) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (!overlaps && (!found || score < best_score)) {
+                *badge = candidate;
+                best_score = score;
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+static bool sdl_touch_tutorial_draw_compact_badge(const SDL_Rect* screen,
+    const SDL_FRect* zone, cptr label, SDL_FRect* occupied,
+    int* occupied_count)
+{
+    SDL_Color text = g_state.palette[TERM_YELLOW];
+    SDL_FRect badge;
+    SDL_Texture* texture;
+    int font_px;
+    int preferred_px;
+    int text_w, text_h;
+    bool placed = false;
+
+    if (!screen || !zone || !label || !label[0] || !occupied_count
+        || zone->w <= 1.0f || zone->h <= 1.0f)
+        return false;
 
     if (sdl_touch_only_mobile_device_active()) {
         font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.038f,
@@ -1338,39 +1418,60 @@ void sdl_touch_tutorial_draw_compact_zone_label(
         font_px = sdl_touch_tutorial_text_px((float)screen->h * 0.032f,
             18.0f, 28.0f);
     }
-    font = sdl_touch_tutorial_font_for_height(font_px);
-    if (!font)
-        return;
-    label_w = sdl_touch_tutorial_story_width_n(font, label,
-        (int)strlen(label));
-    badge_pad_x = sdl_touch_pane_clampf((float)font_px * 0.36f,
-        5.0f, 10.0f);
-    badge_pad_y = sdl_touch_pane_clampf((float)font_px * 0.16f,
-        3.0f, 6.0f);
-    badge.w = MIN(zone->w - 4.0f, (float)label_w + badge_pad_x * 2.0f);
-    badge.h = MIN(zone->h - 4.0f,
-        (float)font_px * 1.20f + badge_pad_y * 2.0f);
-    if (badge.w <= 8.0f || badge.h <= 8.0f)
-        return;
-    badge.x = zone->x + (zone->w - badge.w) * 0.5f;
-    badge.y = zone->y + (zone->h - badge.h) * 0.5f;
+    preferred_px = font_px;
 
+    /* Use the actual unwrapped texture dimensions, not the target width or a
+     * nominal line height.  Prefer a smaller badge attached to its target;
+     * if the target is completely covered by a panel, place the full-size
+     * badge as close as the free space permits. */
+    for (int pass = 0; pass < 2 && !placed; pass++) {
+        int min_px = pass == 0 ? MAX(12, preferred_px / 2) : 8;
+        for (font_px = preferred_px; font_px >= min_px; font_px--) {
+            TTF_Font* font = sdl_touch_tutorial_font_for_height(font_px);
+            float pad_x = sdl_touch_pane_clampf((float)font_px * 0.36f, 5.0f, 10.0f);
+            float pad_y = sdl_touch_pane_clampf((float)font_px * 0.16f, 3.0f, 6.0f);
+
+            if (!font)
+                return false;
+            texture = sdl_ui_text_texture(font, label, text, &text_w, &text_h);
+            if (!texture)
+                return false;
+            badge = (SDL_FRect){ 0, 0, text_w + pad_x * 2.0f,
+                text_h + pad_y * 2.0f };
+            placed = sdl_touch_tutorial_place_compact_badge(screen, zone,
+                &badge, occupied, *occupied_count, pass == 0);
+            if (placed)
+                break;
+        }
+    }
+    if (!placed)
+        return false;
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(g_state.renderer, 3, 8, 12,
         SDL_TOUCH_TUTORIAL_PANEL_ALPHA);
     SDL_RenderFillRect(g_state.renderer, &badge);
     SDL_SetRenderDrawColor(g_state.renderer, text.r, text.g, text.b, 238);
     SDL_RenderRect(g_state.renderer, &badge);
 
-    text_y = badge.y + (badge.h - (float)font_px * 1.20f) * 0.5f;
-    if (text_y < badge.y + 1.0f)
-        text_y = badge.y + 1.0f;
-    max_w = badge.w - badge_pad_x * 2.0f;
-
-    (void)sdl_touch_tutorial_draw_text_line(label,
-        badge.x + badge.w * 0.5f, text_y, max_w, font_px, text, true);
+    SDL_FRect text_rect = { badge.x + (badge.w - text_w) * 0.5f,
+        badge.y + (badge.h - text_h) * 0.5f, (float)text_w, (float)text_h };
+    sdl_ui_render_text_texture(texture, NULL, &text_rect);
+    if (occupied && *occupied_count < SDL_TOUCH_TUTORIAL_MAX_BADGE_OBSTACLES)
+        occupied[(*occupied_count)++] = badge;
+    return true;
 }
 
-void sdl_touch_tutorial_draw_compact_zone_legend(
+void sdl_touch_tutorial_draw_compact_zone_label(
+    const SDL_Rect* screen, const SDL_FRect* zone, cptr label)
+{
+    int occupied_count = 0;
+    sdl_touch_tutorial_compact_zone_highlight(zone);
+    (void)sdl_touch_tutorial_draw_compact_badge(screen, zone, label, NULL,
+        &occupied_count);
+}
+
+static SDL_FRect sdl_touch_tutorial_draw_compact_zone_legend_box(
     const SDL_Rect* screen, float min_y, const char* const* lines,
     int line_count, bool mouse, bool mobile_section)
 {
@@ -1392,14 +1493,14 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     int min_font_px;
 
     if (!screen || !lines || line_count <= 0)
-        return;
+        return (SDL_FRect){ 0 };
 
     footer_top = (float)(screen->y + screen->h)
         - sdl_touch_tutorial_footer_height(screen)
         - 10.0f;
     available_h = footer_top - min_y - 8.0f;
     if (available_h < 56.0f)
-        return;
+        return (SDL_FRect){ 0 };
 
     font_px = mobile_section
         ? sdl_touch_tutorial_text_px((float)screen->h * 0.036f, 22.0f, 30.0f)
@@ -1416,7 +1517,7 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     if (w < 240.0f)
         w = (float)screen->w - pad * 2.0f;
     if (w <= 40.0f)
-        return;
+        return (SDL_FRect){ 0 };
     text_w = w - pad * 2.0f;
 
     if (config.bigger_font) {
@@ -1426,10 +1527,9 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
                 SDL_strlcat(body, "\n", sizeof(body));
             SDL_strlcat(body, lines[i], sizeof(body));
         }
-        sdl_touch_tutorial_draw_info_panel_before(screen,
+        return sdl_touch_tutorial_draw_info_panel_before(screen,
             screen->x + (screen->w - w) * 0.5f, min_y + 8.0f, w,
             mouse ? "Mouse shortcuts" : "Touch shortcuts", body, footer_top);
-        return;
     }
 
     min_font_px = mobile_section && screen->h >= 560 ? 16 : 14;
@@ -1472,7 +1572,7 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
     h = pad * 2.0f + title_h + 4.0f
         + line_h * (float)body_lines;
     if (h > available_h)
-        return;
+        return (SDL_FRect){ 0 };
 
     box = (SDL_FRect){
         .x = (float)screen->x + ((float)screen->w - w) * 0.5f,
@@ -1511,6 +1611,15 @@ void sdl_touch_tutorial_draw_compact_zone_legend(
             y += MAX(line_h, used);
         }
     }
+    return box;
+}
+
+void sdl_touch_tutorial_draw_compact_zone_legend(
+    const SDL_Rect* screen, float min_y, const char* const* lines,
+    int line_count, bool mouse, bool mobile_section)
+{
+    (void)sdl_touch_tutorial_draw_compact_zone_legend_box(screen, min_y,
+        lines, line_count, mouse, mobile_section);
 }
 
 enum {
@@ -1657,7 +1766,7 @@ void sdl_touch_tutorial_draw_zone_prompt(const SDL_Rect* screen,
     }
 }
 
-static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
+static SDL_FRect sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
     float x, float y, float w, cptr title, cptr body, float max_bottom)
 {
     SDL_Color title_color = g_state.palette[TERM_YELLOW];
@@ -1677,7 +1786,7 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
     int page_lines;
 
     if (!screen || !body || !body[0] || w <= 20.0f)
-        return;
+        return (SDL_FRect){ 0 };
 
     pad = sdl_touch_pane_clampf((float)screen->h * 0.018f, 11.0f, 20.0f);
     title_px = sdl_touch_tutorial_text_px((float)screen->h * 0.040f,
@@ -1697,7 +1806,7 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
     }
     text_w = w - pad * 2.0f;
     if (text_w <= 40.0f)
-        return;
+        return (SDL_FRect){ 0 };
 
     footer_top = (float)(screen->y + screen->h)
         - sdl_touch_tutorial_footer_height(screen) - pad;
@@ -1772,6 +1881,7 @@ static void sdl_touch_tutorial_draw_info_panel_before(const SDL_Rect* screen,
     (void)sdl_touch_tutorial_rich_draw_lines(body, box.x + pad, y, text_w,
         body_px, text_color, false, true,
         tutorial_panel_part * page_lines, page_lines);
+    return box;
 }
 
 void sdl_touch_tutorial_draw_info_panel(const SDL_Rect* screen,
@@ -1796,6 +1906,18 @@ static float sdl_touch_tutorial_legend_y_below_top_zone(
     return y;
 }
 
+static void sdl_touch_tutorial_queue_compact_zone(
+    sdl_touch_tutorial_compact_zone* zones, int* count,
+    const SDL_FRect* rect, cptr label)
+{
+    if (!zones || !count || !rect || !label
+        || rect->w <= 1.0f || rect->h <= 1.0f)
+        return;
+    sdl_touch_tutorial_compact_zone_highlight(rect);
+    if (*count < SDL_TOUCH_TUTORIAL_MAX_COMPACT_ZONES)
+        zones[(*count)++] = (sdl_touch_tutorial_compact_zone){ *rect, label };
+}
+
 void sdl_touch_tutorial_draw_main_screen_zones_compact(
     const SDL_Rect* screen, float header_bottom, bool mouse, int section)
 {
@@ -1807,6 +1929,9 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     const char* legend_lines[8];
     int legend_n = 0;
     float legend_y = header_bottom;
+    sdl_touch_tutorial_compact_zone zones[SDL_TOUCH_TUTORIAL_MAX_COMPACT_ZONES];
+    SDL_FRect occupied[SDL_TOUCH_TUTORIAL_MAX_BADGE_OBSTACLES];
+    int zone_count = 0, occupied_count = 0;
     bool supporting_pane_seen = false;
     bool reserve_top_zones;
     bool show_main = section < 0 || section == 0;
@@ -1820,16 +1945,16 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     map_cols = SCREEN_WID * (use_bigtile ? 2 : 1);
 
     if (show_main && sdl_main_menu_pane_current_rect(&rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Menu");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Menu");
         legend_lines[legend_n++] = mouse
             ? "<t>Menu:</t> <a>click</a> for the <t>main menu</t>."
             : "<t>Menu:</t> <a>tap</a> for the <t>main menu</t>.";
     }
 
     if (show_main && sdl_depth_menu_pane_current_rect(&rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Depth");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Depth");
         legend_lines[legend_n++] = mouse
-            ? "<t>Depth:</t> <a>click</a> for the <t>map</t>; use <y>+/-</y> for <n>temporary zoom</n>."
+            ? "<t>Depth:</t> <a>click</a> for the <t>map</t>; <a>click</a> the <y>+/- buttons</y> below depth to <n>zoom</n>."
             : "<t>Depth:</t> <a>tap</a> for the <t>map</t>; <a>pinch</a> the main map for <n>temporary zoom</n>.";
     }
 
@@ -1841,7 +1966,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
         && sdl_touch_tutorial_cell_rect(0, ROW_MAP, COL_MAP,
             panel_rows, &rect))
     {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Character");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Character");
         legend_lines[legend_n++] = mouse
             ? "<t>Character:</t> <a>click</a> sidebar rows for matching sheets."
             : "<t>Character:</t> <a>tap</a> sidebar rows for matching sheets.";
@@ -1851,7 +1976,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
         && sdl_touch_tutorial_cell_rect(COL_MAP, ROW_MAP, map_cols,
             SCREEN_HGT, &rect))
     {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect,
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect,
             "Map / Player");
         legend_lines[legend_n++] = mouse
             ? "<t>Map/player:</t> <a>left-click</a> to path or target; <a>right-click</a> for actions."
@@ -1861,7 +1986,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     if (show_overlays && sdl_combat_overlay_pane_current_rect(&pane_rect)) {
         rect = (SDL_FRect){ (float)pane_rect.x, (float)pane_rect.y,
             (float)pane_rect.w, (float)pane_rect.h };
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Combat");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Combat");
         if (reserve_top_zones)
             legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                 screen, &rect, legend_y);
@@ -1876,7 +2001,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
 
         if (sdl_touch_top_panel_compute_layout_for_display(qa_rects, &rect)) {
             sdl_touch_top_panel_render_buttons(qa_rects);
-            sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Quick");
+            sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Quick");
             if (reserve_top_zones)
                 legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                     screen, &rect, legend_y);
@@ -1888,7 +2013,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
         }
     }
     if (show_overlays && sdl_touch_tutorial_status_rect(&rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Status");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Status");
         if (reserve_top_zones)
             legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                 screen, &rect, legend_y);
@@ -1897,7 +2022,7 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
                 "<t>Status:</t> current conditions and remaining durations.";
     }
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_ROLLS, &rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Rolls");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Rolls");
         if (reserve_top_zones)
             legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                 screen, &rect, legend_y);
@@ -1916,21 +2041,21 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
     }
 
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_INVENTORY, &rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Inventory");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Inventory");
         if (reserve_top_zones)
             legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                 screen, &rect, legend_y);
         supporting_pane_seen = true;
     }
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_WORN, &rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Equipment");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Equipment");
         if (reserve_top_zones)
             legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                 screen, &rect, legend_y);
         supporting_pane_seen = true;
     }
     if (show_overlays && sdl_touch_tutorial_view_rect(PANE_LOG, &rect)) {
-        sdl_touch_tutorial_draw_compact_zone_label(screen, &rect, "Messages");
+        sdl_touch_tutorial_queue_compact_zone(zones, &zone_count, &rect, "Messages");
         if (reserve_top_zones)
             legend_y = sdl_touch_tutorial_legend_y_below_top_zone(
                 screen, &rect, legend_y);
@@ -1942,8 +2067,32 @@ void sdl_touch_tutorial_draw_main_screen_zones_compact(
             : "<t>Panes:</t> <a>tap</a> inventory, equipment, or messages panes.";
     }
 
-    sdl_touch_tutorial_draw_compact_zone_legend(screen, legend_y,
-        legend_lines, legend_n, mouse, section >= 0);
+    SDL_FRect legend = sdl_touch_tutorial_draw_compact_zone_legend_box(screen,
+        legend_y, legend_lines, legend_n, mouse, section >= 0);
+    float header_margin = sdl_touch_pane_clampf((float)screen->w * 0.035f,
+        10.0f, 34.0f);
+    float header_pad = sdl_touch_pane_clampf((float)screen->h * 0.012f,
+        8.0f, 15.0f);
+    float header_w = MIN((float)screen->w - header_margin * 2.0f, 1180.0f);
+    float header_y = sdl_touch_tutorial_default_header_y(screen) - header_pad;
+    if (header_w > 0.0f && header_bottom > header_y) {
+        occupied[occupied_count++] = (SDL_FRect){
+            screen->x + (screen->w - header_w) * 0.5f, header_y,
+            header_w + 3.0f, header_bottom - header_y + 3.0f };
+    }
+    if (legend.w > 0.0f && legend.h > 0.0f) {
+        /* The panel's shadow extends three pixels past its right/bottom. */
+        legend.w += 3.0f;
+        legend.h += 3.0f;
+        occupied[occupied_count++] = legend;
+    }
+    float footer_top = screen->y + screen->h
+        - sdl_touch_tutorial_footer_height(screen) - 8.0f;
+    occupied[occupied_count++] = (SDL_FRect){ (float)screen->x, footer_top,
+        (float)screen->w, screen->y + screen->h - footer_top };
+    for (int i = 0; i < zone_count; i++)
+        (void)sdl_touch_tutorial_draw_compact_badge(screen, &zones[i].rect,
+            zones[i].label, occupied, &occupied_count);
 }
 
 void sdl_touch_tutorial_draw_main_screen_zones(
@@ -1975,7 +2124,7 @@ void sdl_touch_tutorial_draw_main_screen_zones(
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Depth pane",
             mouse
-                ? "<a>Click depth:</a> open the <t>map</t>.\n<a>+/-:</a> change <n>temporary zoom</n>."
+                ? "<a>Click depth:</a> open the <t>map</t>.\n<a>Click +/- buttons below depth:</a> change <n>temporary zoom</n>."
                 : "<a>Tap depth:</a> open the <t>map</t>.\n<a>Pinch the main map:</a> change <n>temporary zoom</n>.");
     }
     if (sdl_status_depth_pane_current_rect(&rect)) {

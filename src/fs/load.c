@@ -2670,7 +2670,9 @@ static void queue_oil_container_migration_messages(
 static void rd_messages(void)
 {
     int i;
-    char buf[128];
+    /* message_add() accepts strings shorter than a quarter of its ring
+     * buffer; preserve that same range when loading saved history. */
+    char buf[MESSAGE_BUF / 4];
     u16b tmp16u;
     u32b sequence;
 

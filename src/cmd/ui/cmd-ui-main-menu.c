@@ -1119,8 +1119,7 @@ static int log_history_filter_layout(int term_wid,
     int col = 8;
     int ignored_wid, hgt;
     Term_get_size(&ignored_wid, &hgt);
-    int prompt_row = hgt - 1 - (get_sdl_menu_bigger_font()
-        ? sdl_touch_menu_button_reserved_rows() : 0);
+    int prompt_row = hgt - 1 - sdl_touch_menu_button_reserved_rows();
 
     if (term_wid < 1)
         term_wid = 80;
@@ -1406,7 +1405,7 @@ static int log_history_wrapped_entry_rows(int filter, int idx, int width)
     byte attr;
 
     log_history_wrapped_entry_text(filter, idx, text, sizeof(text), &attr);
-    if (!get_sdl_menu_bigger_font()
+    if (!get_sdl_menu_bigger_font() && !sdl_touch_only_device_active()
         && (filter == LOG_HISTORY_FILTER_NOTES
             || log_history_entries[idx].kind != LOG_HISTORY_ENTRY_COMBAT))
         return count_wrapped_lines(text, width, 0);
@@ -1646,7 +1645,7 @@ static void main_menu_blitz_intro_mobile_build(void)
 static void log_history_draw_wrapped_slice(int row, int width, byte attr,
     cptr text, cptr highlight, int first_line, int max_rows)
 {
-    if (!get_sdl_menu_bigger_font()) {
+    if (!get_sdl_menu_bigger_font() && !sdl_touch_only_device_active()) {
         log_history_draw_wrapped_text(row, width, attr, text, highlight);
         return;
     }
@@ -1667,13 +1666,8 @@ static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
     log_history_filter_control controls[4];
     Term_get_size(&wid, &ignored_hgt);
     int body_top = log_history_filter_layout(wid, controls) + 2;
-    if (!get_sdl_menu_bigger_font()) {
-        *prompt = hgt - 1;
-        *top = body_top;
-        *bottom = hgt - 3;
-        if (*bottom < *top) *bottom = *prompt - 1;
-        return;
-    }
+    /* Touch actions and menu zoom controls occupy the footer at both font
+     * sizes. On non-touch devices the reservation is zero. */
     *prompt = MAX(0, hgt - 1 - sdl_touch_menu_button_reserved_rows());
     *bottom = MAX(0, *prompt - 2);
     *top = body_top;
@@ -3454,6 +3448,12 @@ void do_cmd_messages_with_filter(int initial_filter)
         /* Clear screen */
         Term_clear();
 
+        /* Register Exit before measuring the footer: the native button and
+         * zoom rail determine how much space the log and hint can use. */
+        ui_menu_click_begin();
+        ui_menu_click_set_hover_enabled(true);
+        ui_menu_click_set_touch_exit_button(true);
+
         log_history_layout(hgt, &body_top, &body_bottom, &prompt_row);
 
         visible_rows = body_bottom - body_top + 1;
@@ -3474,7 +3474,8 @@ void do_cmd_messages_with_filter(int initial_filter)
             i = max_i;
         if (i < 0)
             i = 0;
-        int entry_line_max = get_sdl_menu_bigger_font() && n > 0 ? MAX(0,
+        int entry_line_max = (get_sdl_menu_bigger_font()
+            || sdl_touch_only_device_active()) && n > 0 ? MAX(0,
             log_history_wrapped_entry_rows(filter, i, wid) - visible_rows) : 0;
         entry_line_top = MIN(entry_line_top, entry_line_max);
 
@@ -3494,10 +3495,6 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_scroll_area_enable_horizontal_page_swipe(
                 LOG_HISTORY_PREV_FILTER_KEY, LOG_HISTORY_NEXT_FILTER_KEY);
         }
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-        ui_menu_click_set_touch_exit_button(true);
-
         /* Dump log entries */
         for (j = 0; (i + j < n); j++)
         {
@@ -3507,7 +3504,8 @@ void do_cmd_messages_with_filter(int initial_filter)
                 i + j, wid);
             int line_y;
 
-            bool continued = get_sdl_menu_bigger_font()
+            bool continued = (get_sdl_menu_bigger_font()
+                || sdl_touch_only_device_active())
                 && j == 0 && wrapped_rows > visible_rows;
             int drawn_rows = continued
                 ? MIN(visible_rows, wrapped_rows - entry_line_top) : wrapped_rows;

@@ -27,6 +27,8 @@ static const unsigned char* inputs;
 static int input_index, pending_choice = -9999, next_click;
 static int app_saves, meta_saves, url_opens, lore_changes;
 static bool lore_failure;
+static bool force_semantic_active;
+static bool force_handheld;
 static const char* config_file;
 static int reset_answers[3], reset_questions, reset_requests, reset_errors;
 
@@ -96,6 +98,12 @@ const char* __wrap_get_sdl_config_path(void) { return config_file; }
 void __wrap_tutorial_game_menu(const char* id, const char* description) {}
 bool __wrap_sdl_menu_letters_enabled(void) { return true; }
 bool __wrap_sdl_touch_only_device_active(void) { return false; }
+bool __real_sdl_character_sheet_screen_active(void);
+bool __wrap_sdl_character_sheet_screen_active(void)
+{ return force_semantic_active || __real_sdl_character_sheet_screen_active(); }
+bool __real_sdl_handheld_ui_active(void);
+bool __wrap_sdl_handheld_ui_active(void)
+{ return force_handheld || __real_sdl_handheld_ui_active(); }
 bool __wrap_lore_set_generic(bool enabled)
 {
     if (lore_failure) return false;
@@ -177,6 +185,30 @@ static void check_navigation(void)
     keys("\033"); assert(about_actions_menu(&focus) == ABOUT_ACTION_RETURN); consumed();
     assert(find_row("Palette") < 0 && find_row("Generic") < 0);
     puts("Developer is reachable in scored games; keyboard and touch Back return to play; page cycling and action grouping: PASS");
+}
+
+static void check_handheld_settings_labels(void)
+{
+    bool old_big=config.bigger_font;
+    bool old_menus[SDL_MENU_FONT_COUNT];
+    memcpy(old_menus,config.menu_bigger_font,sizeof(old_menus));
+    force_handheld=true;
+    config.bigger_font=false;
+    for(int i=0;i<SDL_MENU_FONT_COUNT;i++) config.menu_bigger_font[i]=false;
+    force_semantic_active=true;
+    keys("\033"); do_cmd_pane_settings(); consumed();
+    assert(streq(title,"Display and Layout"));
+    assert(find_row("Camera Vertical Recenter Distance")>=0);
+    assert(find_row("Camera Horizontal Recenter Distance")>=0);
+#if SIL_SDL_MOBILE_BUILD
+    assert(find_row("Portrait Button Wheel Position")>=0);
+    assert(find_row("Use Unsafe Area (notch/cutout area)")>=0);
+#endif
+    force_semantic_active=false;
+    force_handheld=false;
+    config.bigger_font=old_big;
+    memcpy(config.menu_bigger_font,old_menus,sizeof(old_menus));
+    puts("Handheld normal-font settings preserve complete semantic labels: PASS");
 }
 
 static void check_diagnostics(void)
@@ -321,7 +353,7 @@ def main():
     body += '''    sdl_config_set_defaults(&config);
     char filename[2048]; strnfmt(filename, sizeof(filename), "%s/settings.json", argv[2]);
     config_file = filename;
-    check_categories(); check_navigation(); check_diagnostics();
+    check_categories(); check_navigation(); check_handheld_settings_labels(); check_diagnostics();
     check_progress_reset_warnings(); check_extra_controls();
     check_alarm_option(); check_persistence();
     SDL_Quit(); return 0;
@@ -342,6 +374,8 @@ def main():
         "sdl_character_sheet_screen_set_last_select_row_reset", "sdl_character_sheet_screen_commit_select",
         "ui_menu_click_take_action", "SDL_OpenURL", "get_sdl_config_path",
         "tutorial_game_menu", "sdl_menu_letters_enabled", "sdl_touch_only_device_active",
+        "sdl_character_sheet_screen_active",
+        "sdl_handheld_ui_active",
         "lore_set_generic", "sdl_lore_changed", "ui_question_ask_overlay",
         "sil_progress_reset_request_restart"]
     for name, defines in (("desktop", []), ("mobile-policy", ["-DSIL_IOS"])):

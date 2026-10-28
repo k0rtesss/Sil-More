@@ -63,8 +63,9 @@ void get_sdl_config_info(char* buf, size_t size)
         config.left_panel_compact_health_bar ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset,
         "Quick Access Size: %s\nQuick Access Grid: %d x %d\n\n",
-        (config.touch_top_panel_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
-            ? "Stretch" : "Fixed",
+        (config.touch_top_panel_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
+            ? "Auto" : (config.touch_top_panel_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+                ? "Stretch" : "Fixed",
         get_sdl_touch_top_panel_columns(), config.touch_top_panel_rows);
     
     // Pane configurations
@@ -2810,6 +2811,10 @@ void set_sdl_touch_top_panel_size(float size)
 float get_sdl_touch_top_panel_default_size(void)
 {
     sdl_touch_pane_load_default_bindings();
+#if !SIL_SDL_MOBILE_BUILD
+    if (!sdl_handheld_ui_active() && config.bigger_font)
+        return SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
+#endif
 #if SIL_SDL_MOBILE_BUILD
     if (config.mobile_portrait_mode)
         return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
@@ -3836,15 +3841,53 @@ int get_sdl_terminal_menu_scale(void)
  * menu to wrap/page rather than silently reducing this font to fit 50 columns. */
 int sdl_terminal_menu_font_px(void)
 {
+    enum sdl_menu_font menu = sdl_terminal_menu_font();
+
     if (sdl_handheld_ui_active() && g_terminal_menu_scale_depth > 0
-        && get_sdl_menu_bigger_font_for(sdl_terminal_menu_font()))
+        && get_sdl_menu_bigger_font_for(menu))
     {
         int logical_px = MAX(SDL_AUX_VIEW_FONT_MIN,
             16 + 2 * get_sdl_terminal_menu_scale_offset_for(
-                sdl_terminal_menu_font()));
+                menu));
         return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale()
             * (logical_px + (logical_px + 1) / 2)));
     }
+#if !SIL_SDL_MOBILE_BUILD
+    if (!sdl_handheld_ui_active() && g_state.window
+        && g_terminal_menu_scale_depth > 0
+        /* The requested menu scale can exceed the platform limit. Match the
+         * effective scale that will actually be used to create the view. */
+        && sdl_current_main_view_scale() == SDL_MAIN_VIEW_MIN_SCALE
+        && !get_sdl_menu_bigger_font_for(menu))
+    {
+        SDL_Rect screen = sdl_font_fit_drawable_rect(sdl_get_layout_screen_rect());
+        SDL_Rect panes[PANE_MAX] = { 0 };
+        int previous = sdl_menu_font_set_render_context(menu);
+        int title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
+        int body_px = sdl_menu_role_font_px(SDL_UI_FONT_BODY);
+        int offset = get_sdl_terminal_menu_scale_offset_for(menu);
+        int min_px = (int)SDL_ceilf(sdl_ui_density_scale()
+            * SDL_AUX_VIEW_FONT_MIN);
+        int cols = sdl_min_terminal_cols_for_mode(SDL_MIN_TERMINAL_NORMAL);
+        int rows = sdl_min_terminal_rows_for_mode(SDL_MIN_TERMINAL_NORMAL);
+        int fit_px;
+
+        sdl_menu_font_set_render_context(previous);
+        sdl_place_active_panes(&screen, panes, g_active_side_panes,
+            g_active_bottom_panes, !sdl_should_show_supporting_panes());
+        if (sdl_rect_has_area(&panes[PANE_MAIN]))
+            screen = panes[PANE_MAIN];
+        screen = sdl_menu_content_rect(screen);
+        if (!sdl_rect_has_area(&screen))
+            return 0;
+        fit_px = MIN(2 * (screen.w / cols) + 1, screen.h / rows);
+        /* Between integer map scales, use the semantic reading size while
+         * retaining the established desktop minimum grid. Each negative
+         * per-menu offset remains an actual smaller text choice. */
+        return MAX(min_px, MIN(title_px, fit_px)
+            + offset * MAX(1, title_px - body_px));
+    }
+#endif
     return 0;
 }
 

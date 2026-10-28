@@ -2772,12 +2772,13 @@ void show_equip(void)
 /*
  * Display a list of the items on the floor at the given location.
  */
-void show_floor(const int* floor_list, int floor_num)
+void show_floor(const int* floor_list, int floor_num, int scroll_offset)
 {
     int i, j, k, l;
     int col, len, lim;
     int term_wid = menu_term_width();
     int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
+    int display_rows = inventory_menu_visible_rows_for_height(menu_term_height());
     int weight_col = menu_weight_col_for_width(term_wid);
     int label_col = menu_label_col_for_width(term_wid, show_weights);
 
@@ -2804,6 +2805,8 @@ void show_floor(const int* floor_list, int floor_num)
         lim = weight_col - 1;
     if (lim < 0)
         lim = 0;
+    if (lim >= (int)sizeof(o_name))
+        lim = sizeof(o_name) - 1;
 
     /* Display the inventory */
     for (k = 0, i = 0; i < floor_num; i++)
@@ -2847,11 +2850,15 @@ void show_floor(const int* floor_list, int floor_num)
     /* Find the column to start in */
     col = menu_center_col_for_len(term_wid, len);
 
-    /* Output each entry */
-    for (j = 0; j < k; j++)
+    scroll_offset = inventory_menu_clamp_scroll(scroll_offset, k, display_rows);
+
+    /* Output the current viewport; list indices/letters stay absolute. */
+    for (j = 0; j < display_rows && scroll_offset + j < k; j++)
     {
+        int entry = scroll_offset + j;
+
         /* Get the index */
-        i = floor_list[out_index[j]];
+        i = floor_list[out_index[entry]];
 
         /* Get the item */
         o_ptr = &o_list[i];
@@ -2867,21 +2874,21 @@ void show_floor(const int* floor_list, int floor_num)
         }
 
         /* Display the entry itself */
-        c_put_str(out_color[j], out_desc[j], j + 1, text_col);
+        c_put_str(out_color[entry], out_desc[entry], j + 1, text_col);
 
         /* Display the weight if needed */
         if (show_weights)
         {
             int wgt = o_ptr->weight * o_ptr->number;
             sprintf(tmp_val, "%3d.%1d lb", wgt / 10, wgt % 10);
-            c_put_str(out_color[j], tmp_val, j + 1, weight_col);
+            c_put_str(out_color[entry], tmp_val, j + 1, weight_col);
         }
 
         /* Print the item letter at the end */
         if (steamdeck_controls_active())
             SDL_strlcpy(tmp_val, "    ", sizeof(tmp_val));
         else
-            sprintf(tmp_val, " (%c)", index_to_label(out_index[j]));
+            sprintf(tmp_val, " (%c)", I2A(out_index[entry]));
         put_str(tmp_val, j + 1, label_col);
     }
 

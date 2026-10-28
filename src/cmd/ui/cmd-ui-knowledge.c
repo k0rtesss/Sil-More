@@ -10,6 +10,7 @@ extern struct sound_config g_sound_config;
 #include "fs/path.h"
 #include "log/log.h"
 #include <ctype.h>
+#include <math.h>
 #include "h-define.h"
 #include "metarun.h"
 #include "score/score_artefact.h"
@@ -2782,7 +2783,7 @@ static int collect_supply_entries(int group_idx, supply_list_entry entries[],
     return count;
 }
 
-static byte get_supply_item_color(int k_idx, bool aware)
+static byte get_supply_item_base_color(int k_idx, bool aware)
 {
     object_kind* k_ptr;
 
@@ -2920,6 +2921,50 @@ static byte get_supply_item_color(int k_idx, bool aware)
         default:
             return TERM_WHITE;
     }
+}
+
+/* Supply names are normally drawn on black. Keep each item's color family,
+ * but prefer its lighter counterpart when the active palette makes the
+ * original fall below 4.5:1.  Do not touch the palette itself: it is also
+ * used for map glyphs, configured object colors, and unavailable rows.
+ * Violet has no lighter violet counterpart in the terminal palette. */
+static double supply_color_luminance(byte attr)
+{
+    static const double weights[3] = { 0.2126, 0.7152, 0.0722 };
+    double luminance = 0.0;
+
+    for (int channel = 0; channel < 3; channel++)
+    {
+        double value = angband_color_table[attr][channel + 1] / 255.0;
+        value = (value <= 0.04045) ? value / 12.92
+            : pow((value + 0.055) / 1.055, 2.4);
+        luminance += weights[channel] * value;
+    }
+
+    return luminance;
+}
+
+static byte get_supply_item_color(int k_idx, bool aware)
+{
+    byte attr = get_supply_item_base_color(k_idx, aware);
+    byte lighter;
+    double luminance;
+
+    switch (attr)
+    {
+    case TERM_RED:    lighter = TERM_L_RED; break;
+    case TERM_GREEN:  lighter = TERM_L_GREEN; break;
+    case TERM_BLUE:   lighter = TERM_L_BLUE; break;
+    case TERM_UMBER:  lighter = TERM_L_UMBER; break;
+    case TERM_L_DARK: lighter = TERM_SLATE; break;
+    default: return attr;
+    }
+
+    luminance = supply_color_luminance(attr);
+    if (luminance < 0.175 && supply_color_luminance(lighter) > luminance)
+        return lighter;
+
+    return attr;
 }
 
 static byte supply_browser_selected_attr(byte source_attr)
@@ -3882,7 +3927,8 @@ static bool supply_page_header_uses_wrapped_title(
 
 static bool supply_page_tabs_need_paging(const knowledge_browser_layout* layout)
 {
-    return get_sdl_menu_bigger_font() && layout && supply_browser_page_tab_col(SUPPLY_MENU_PAGE_SUPPLIES)
+    return layout && (get_sdl_menu_bigger_font() || sdl_handheld_ui_active())
+        && supply_browser_page_tab_col(SUPPLY_MENU_PAGE_SUPPLIES)
             + supply_browser_page_token_width(SUPPLY_MENU_PAGE_SUPPLIES)
         > layout->term_wid;
 }
@@ -3897,25 +3943,67 @@ static int supply_page_summary_row(const knowledge_browser_layout* layout)
         : layout->tabs_row;
 }
 
+static bool supply_page_summary_fits(cptr text, int width, int rows)
+{
+    cptr cursor = text;
+    char line[180];
+
+    if (!text || width <= 0 || rows <= 0)
+        return false;
+    for (int row = 0; row < rows && cursor[0]; row++)
+    {
+        if (!equipment_entry_wrap_next(&cursor, width, line, sizeof(line)))
+            return false;
+    }
+    return !cursor[0];
+}
+
 static void supply_draw_page_summary(const knowledge_browser_layout* layout,
     byte attr, cptr text)
 {
     int row;
     int rows;
+    bool mobile_summary = false;
 
     if (!layout)
         return;
 
-    if (get_sdl_menu_bigger_font() && layout->term_wid < 55 && text
-        && (streq(text, "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds")
-            || streq(text, "Active combat gear, worn items, and Belt equipment")))
-    {
-        return;
-    }
     row = supply_page_summary_row(layout);
     rows = layout->header_row - row;
     if (rows < 1)
         rows = 1;
+
+    if (sdl_handheld_ui_active() && text)
+    {
+        if (streq(text, "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds"))
+        {
+            text = "Pack, Harness, Quiver, Jewelry; equipment and floor finds";
+            if (!supply_page_summary_fits(text, layout->term_wid, rows))
+                text = "Pack, Harness, Quiver, Jewelry";
+            mobile_summary = true;
+        }
+        else if (streq(text, "All equipped shows active gear; slots include available items"))
+        {
+            text = "Active gear; slots include available items";
+            mobile_summary = true;
+        }
+        else if (streq(text, "Browse jewelry and save or name equipment sets"))
+        {
+            text = "Pouch and saved sets";
+            mobile_summary = true;
+        }
+        /* Category/slot names remain in the browser list when a compact
+         * summary cannot fit in its allotted rows. */
+        if (mobile_summary
+            && !supply_page_summary_fits(text, layout->term_wid, rows))
+            return;
+    }
+    else if (get_sdl_menu_bigger_font() && layout->term_wid < 55 && text
+        && (streq(text, "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds")
+            || streq(text, "All equipped shows active gear; slots include available items")))
+    {
+        return;
+    }
     supply_put_wrapped(0, row, layout->term_wid, rows, attr, text);
 }
 
@@ -3926,6 +4014,11 @@ static void supply_draw_page_header(const knowledge_browser_layout* layout,
 
     if (!layout)
         return;
+
+    /* Handheld layouts already name the selected tab and list categories below.
+     * Repeating those words after the tabs is both redundant and clipped. */
+    if (sdl_handheld_ui_active())
+        title = NULL;
 
     Term_erase(0, layout->title_row, 255);
 
@@ -4490,6 +4583,33 @@ static cptr equipment_entry_active_action_text(
         ? "Change setup" : "Make active";
 }
 
+/* In the Off-hand category, loose candidates still equip into that hand.
+ * An item already in the off-hand slot instead belongs to a combat setup,
+ * which may be inactive and only stored on the Harness. */
+static bool equipment_menu_entry_uses_active_menu(
+    const equipment_list_entry* entry, int selected_slot)
+{
+    return entry && selected_slot != INVEN_BELT
+        && (selected_slot != INVEN_ARM || entry->equip_idx == INVEN_ARM)
+        && equipment_entry_has_active_item_menu(entry);
+}
+
+static bool equipment_entry_is_broken_stored_combat_item(
+    const equipment_list_entry* entry)
+{
+    int item = equipment_entry_item_handle(entry);
+    return (item == INVEN_WIELD || item == INVEN_BOW || item == INVEN_ARM)
+        && equipment_slot_is_inactive_harness_item(item)
+        && object_has_broken_prefix(&inventory[item]);
+}
+
+static cptr equipment_entry_broken_stored_action_text(
+    const equipment_list_entry* entry)
+{
+    return object_can_choose_pack_or_harness(equipment_entry_object(entry))
+        ? "Store in Pack" : "Repair first";
+}
+
 static bool equipment_entry_is_quiver_arrow(
     const equipment_list_entry* entry)
 {
@@ -4547,7 +4667,7 @@ static bool equipment_add_slot_entry(equipment_list_entry entries[], int* count,
     entry = &entries[*count];
     equipment_entry_clear(entry);
     entry->equip_idx = slot;
-    entry->equipped = occupied;
+    entry->equipped = occupied && equipment_slot_active_for_display(slot);
     entry->show_empty_slot = !occupied;
     (*count)++;
     return true;
@@ -5038,7 +5158,7 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         if (!entry->equipped
             && equipment_slot_is_inactive_harness_item(entry->equip_idx))
         {
-            return "Harness";
+            return "Harness (stored)";
         }
         if (equipment_entry_is_active_combat(entry))
             return "Active";
@@ -5416,6 +5536,12 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
     if (entry->equipped && !show_source)
         SDL_strlcat(name, equipment_entry_is_active_combat(entry)
             ? " [active]" : " [equipped]", sizeof(name));
+    else if (!show_source && entry->equip_idx >= INVEN_WIELD
+        && entry->equip_idx < INVEN_TOTAL
+        && equipment_slot_is_inactive_harness_item(entry->equip_idx))
+    {
+        SDL_strlcat(name, " [stored on Harness]", sizeof(name));
+    }
     else if (entry->floor_idx > 0 && entry->floor_idx < o_max && !show_source)
         SDL_strlcat(name, " [floor]", sizeof(name));
     /* Keep the floor shortcut visible alongside the ordinary letter hotkey. */
@@ -6009,6 +6135,20 @@ static bool confirm_equipment_entry_action(cptr action,
     return confirm_object_action(action, o_ptr, floor);
 }
 
+static bool equipment_use_broken_stored_item(equipment_list_entry* entry)
+{
+    object_type* o_ptr = equipment_entry_object(entry);
+
+    if (!object_can_choose_pack_or_harness(o_ptr))
+    {
+        msg_print("This item is already on your Harness. Repair it before equipping it.");
+        return false;
+    }
+    if (!confirm_equipment_entry_action("Store in Pack", entry))
+        return false;
+    return do_cmd_move_item_to_storage(entry->equip_idx, OBJECT_STORAGE_PACK);
+}
+
 /* A successful physical wield fills a reserved Harness slot.  Finish the
  * semantic equip operation by making that slot's weapon set active. */
 static bool equipment_ready_after_wield(int selected_slot)
@@ -6047,9 +6187,10 @@ static cptr equipment_menu_use_action_text(const equipment_list_entry* entry,
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
         return floor_touch_action_text(floor_action,
             &o_list[entry->floor_idx], entry->floor_idx);
-    if (selected_slot != INVEN_BELT && selected_slot != INVEN_ARM
-        && equipment_entry_has_active_item_menu(entry))
+    if (equipment_menu_entry_uses_active_menu(entry, selected_slot))
         return equipment_entry_active_action_text(entry);
+    if (equipment_entry_is_broken_stored_combat_item(entry))
+        return equipment_entry_broken_stored_action_text(entry);
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
         return browser_item_use_action_text(&inventory[entry->equip_idx],
             entry->equip_idx);
@@ -6092,9 +6233,10 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         return equipment_ready_after_wield(selected_slot);
     }
 
-    if (selected_slot != INVEN_BELT && selected_slot != INVEN_ARM
-        && equipment_entry_has_active_item_menu(entry))
+    if (equipment_menu_entry_uses_active_menu(entry, selected_slot))
         return do_cmd_active_item(equipment_entry_item_handle(entry));
+    if (equipment_entry_is_broken_stored_combat_item(entry))
+        return equipment_use_broken_stored_item(entry);
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
@@ -8115,6 +8257,8 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
 
     if (equipment_entry_has_active_item_menu(entry))
         return equipment_entry_active_action_text(entry);
+    if (equipment_entry_is_broken_stored_combat_item(entry))
+        return equipment_entry_broken_stored_action_text(entry);
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
@@ -8200,6 +8344,8 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (equipment_entry_has_active_item_menu(entry))
         return do_cmd_active_item(equipment_entry_item_handle(entry));
+    if (equipment_entry_is_broken_stored_combat_item(entry))
+        return equipment_use_broken_stored_item(entry);
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
     {
@@ -12114,7 +12260,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             supply_draw_page_header(&layout, page,
                 supply_browser_hover_page(), "Equipped");
             supply_draw_page_summary(&layout, TERM_SLATE,
-                "Active combat gear, worn items, and Belt equipment");
+                "All equipped shows active gear; slots include available items");
             Term_erase(0, layout.header_row, 255);
             if (layout.stacked)
             {

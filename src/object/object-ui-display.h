@@ -14,7 +14,7 @@ void display_equip(void);
 void display_supplies(void);
 void show_inven(void);
 void show_equip(void);
-void show_floor(const int* floor_list, int floor_num);
+void show_floor(const int* floor_list, int floor_num, int scroll_offset);
 void toggle_inven_equip(void);
 
 #endif /* INCLUDED_OBJECT_UI_DISPLAY_H */

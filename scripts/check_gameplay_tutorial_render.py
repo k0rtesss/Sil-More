@@ -22,6 +22,11 @@ HARNESS = r'''
 #include <stdlib.h>
 #include <stdio.h>
 #include "cJSON.h"
+#ifdef SDL_DESKTOP_FONT_FIXTURE
+static float desktop_font_density = 1.0f;
+float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display)
+{ (void)display; return desktop_font_density; }
+#endif
 #define sdl_touch_tutorial_draw_text_line fixture_draw_text_line
 #include "sdl/ui/sdl-gameplay-tutorial.c"
 #undef sdl_touch_tutorial_draw_text_line
@@ -139,6 +144,9 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     if (font_override>0) font_size=font_override;
     field(entry,"id",fixture_id,sizeof(fixture_id));
     fixture_width=width; fixture_height=height; fixture_font=font_size;
+    bool big_font=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"big_font"));
+    config.bigger_font=big_font;
+    for (int i=0;i<SDL_MENU_FONT_COUNT;i++) config.menu_bigger_font[i]=big_font;
     fixture_touch_controls=cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"touch_controls"));
     float radius=MIN(160,MIN(width*0.30f,height*0.30f));
     fixture_wheel=width>height
@@ -295,6 +303,15 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     cJSON *expected_text=cJSON_GetObjectItemCaseSensitive(entry,"expected_text");
     if (cJSON_IsString(expected_text))
         fixture_assert(strstr(drawn_content,expected_text->valuestring)!=NULL);
+    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"named_buttons"))) {
+        fixture_assert(strstr(drawn_content,"Continue")!=NULL);
+        fixture_assert(strstr(drawn_content,"Skip tutorial")!=NULL);
+        fixture_assert(strstr(drawn_content,"Mode: Extended")!=NULL);
+        if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"hide_shortcuts")))
+            fixture_assert(!drawn_space);
+        else
+            fixture_assert(drawn_space);
+    }
     bool suspended=tutorial_menu_owns_input() && !fixture.can_continue && !tutorial_reading && !tutorial_card.w;
     if (aiming && !fixture.can_continue && !tutorial_reading) {
         fixture_assert(suspended && fixture.active && !tutorial_max_scroll);
@@ -345,7 +362,8 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
             || strstr(drawn_hints,": read");
         fixture_assert(scrolling_hint==(tutorial_max_scroll>0));
     }
-    if (tutorial_last_input==TUTORIAL_INPUT_KEYBOARD && fixture.can_continue) {
+    if (tutorial_last_input==TUTORIAL_INPUT_KEYBOARD && fixture.can_continue
+        && !cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"hide_shortcuts"))) {
         fixture_assert(drawn_space);
         fixture_assert(!drawn_enter);
     }
@@ -467,6 +485,181 @@ int main(int argc,char **argv)
     p_ptr->playing=true; p_ptr->py=7;p_ptr->px=8;
     p_ptr->cur_map_hgt=32;p_ptr->cur_map_wid=64;
     character_generated=character_dungeon=true;
+#if defined(SDL_DESKTOP_FONT_FIXTURE) && !SIL_SDL_MOBILE_BUILD
+    /* Test auto text against several available canvases, including a
+     * constrained side pane, explicit choices, and doubled display density. */
+    int saved_scale=config.main_view_scale;
+    int saved_normal_max=g_platform_max_main_view_scale[SDL_MIN_TERMINAL_NORMAL];
+    int saved_compact_max=g_platform_max_main_view_scale[SDL_MIN_TERMINAL_COMPACT];
+    struct sdl_config saved_config=config;
+    struct pane_config saved_panes[MAX_PANE_CONFIGS];
+    int saved_count=pane_config_count;
+    memcpy(saved_panes,pane_config,sizeof(saved_panes));
+    int auto_panes[4], auto_popups[4];
+    const int sizes[][2]={{320,240},{640,480},{1280,720},{1920,1080}};
+    config.main_view_scale=1; config.aux_view_font_size=0;
+    config.min_terminal_mode=SDL_MIN_TERMINAL_NORMAL;
+    config.enable_right_panes=false; config.enable_bottom_panes=false;
+    pane_config_count=0;
+    for(int n=0;n<4;n++) {
+        int w=sizes[n][0], h=sizes[n][1];
+        g_state.window=SDL_CreateWindow("font geometry",w,h,SDL_WINDOW_HIDDEN);
+        fixture_assert(g_state.window);
+        sdl_store_platform_max_main_view_scales(w,h);
+        auto_panes[n]=sdl_auto_pane_font_size(PANE_LEFT_PANEL);
+        auto_popups[n]=sdl_main_menu_pane_font_px();
+        fixture_assert(auto_panes[n]>=SDL_AUX_VIEW_FONT_MIN);
+        fixture_assert(auto_popups[n]>=SDL_AUX_VIEW_FONT_MIN);
+        if(n) {
+            fixture_assert(auto_panes[n]>=auto_panes[n-1]);
+            fixture_assert(auto_popups[n]>=auto_popups[n-1]);
+        }
+        if(!n) {
+            int context=sdl_menu_font_set_render_context(SDL_MENU_FONT_MAIN);
+            set_sdl_menu_bigger_font(SDL_MENU_FONT_MAIN,true);
+            fixture_assert(sdl_main_menu_pane_font_px()>=sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+            set_sdl_menu_bigger_font(SDL_MENU_FONT_MAIN,false);
+            sdl_menu_font_set_render_context(context);
+        }
+        printf("desktop %dx%d @1: pane=%d popup=%d\n",w,h,auto_panes[n],auto_popups[n]);
+        SDL_DestroyWindow(g_state.window); g_state.window=NULL;
+    }
+    fixture_assert(auto_panes[0]<auto_panes[2]);
+    fixture_assert(auto_popups[0]<auto_popups[2]);
+    fixture_assert(auto_panes[2]>=sdl_ui_role_font_px(SDL_UI_FONT_BODY));
+    fixture_assert(auto_popups[2]>=sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+    /* The window/safe-area can report a larger canvas than the renderer. Use
+     * real smaller software surfaces, including one with a texture targeted. */
+    g_state.window=SDL_CreateWindow("drawable mismatch",1280,720,SDL_WINDOW_HIDDEN);
+    fixture_assert(g_state.window); sdl_store_platform_max_main_view_scales(1280,720);
+    const int outputs[][2]={{800,360},{320,240}};
+    for(int n=0;n<2;n++) {
+        int w=outputs[n][0], h=outputs[n][1], actual_w=0, actual_h=0;
+        SDL_Surface *surface=SDL_CreateSurface(w,h,SDL_PIXELFORMAT_RGBA32);
+        fixture_assert(surface);
+        g_state.renderer=SDL_CreateSoftwareRenderer(surface);
+        fixture_assert(g_state.renderer);
+        fixture_assert(SDL_GetRenderOutputSize(g_state.renderer,&actual_w,&actual_h));
+        fixture_assert(actual_w==w && actual_h==h);
+        fixture_assert(sdl_get_layout_screen_rect().w==1280);
+        int pane_px=sdl_auto_pane_font_size(PANE_LEFT_PANEL);
+        int popup_px=sdl_main_menu_pane_font_px();
+        g_terminal_menu_scale_depth=1;
+        g_terminal_menu_scale_override=SDL_MAIN_VIEW_MIN_SCALE;
+        config.terminal_menu_scale_offsets[SDL_MENU_FONT_MAIN]=0;
+        fixture_assert(sdl_terminal_menu_font()==SDL_MENU_FONT_MAIN);
+        int terminal_px=sdl_terminal_menu_font_px();
+        fixture_assert(pane_px==(n?10:15));
+        fixture_assert(popup_px==(n?13:16));
+        fixture_assert(terminal_px==(n?10:15));
+        SDL_Texture *target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA32,
+            SDL_TEXTUREACCESS_TARGET,32,32);
+        fixture_assert(target && SDL_SetRenderTarget(g_state.renderer,target));
+        if(sdl_auto_pane_font_size(PANE_LEFT_PANEL)!=pane_px) {
+            SDL_GetRenderOutputSize(g_state.renderer,&actual_w,&actual_h);
+            fprintf(stderr,"target mismatch output=%dx%d pane=%d->%d\n",actual_w,actual_h,
+                pane_px,sdl_auto_pane_font_size(PANE_LEFT_PANEL));
+        }
+        fixture_assert(sdl_auto_pane_font_size(PANE_LEFT_PANEL)==pane_px);
+        fixture_assert(sdl_main_menu_pane_font_px()==popup_px);
+        fixture_assert(sdl_terminal_menu_font_px()==terminal_px);
+        fixture_assert(SDL_SetRenderTarget(g_state.renderer,NULL));
+        SDL_DestroyTexture(target);
+        config.terminal_menu_scale_offsets[SDL_MENU_FONT_MAIN]=-1;
+        fixture_assert(sdl_terminal_menu_font_px()<=terminal_px);
+        if(terminal_px>SDL_AUX_VIEW_FONT_MIN)
+            fixture_assert(sdl_terminal_menu_font_px()<terminal_px);
+        config.terminal_menu_scale_offsets[SDL_MENU_FONT_MAIN]=0;
+        config.aux_view_font_size=18;
+        fixture_assert(sdl_resolve_pane_font_size(PANE_LEFT_PANEL,18)==18);
+        fixture_assert(sdl_main_menu_pane_font_px()==18);
+        config.aux_view_font_size=0;
+        pane_config_count=1;
+        pane_config[0]=(struct pane_config){.pane=PANE_LEFT_PANEL,.where=PLACE_TOP_LEFT,
+            .enabled=true,.font_size=18};
+        fixture_assert(sdl_effective_pane_font_size_for_config(&pane_config[0])==18);
+        pane_config_count=0;
+        set_sdl_menu_bigger_font(SDL_MENU_FONT_MAIN,true);
+        fixture_assert(sdl_main_menu_pane_font_px()>=sdl_menu_role_font_px(SDL_UI_FONT_BODY));
+        set_sdl_menu_bigger_font(SDL_MENU_FONT_MAIN,false);
+        g_terminal_menu_scale_depth=0; g_terminal_menu_scale_override=0;
+        printf("window 1280x720 drawable %dx%d: pane=%d popup=%d terminal=%d\n",
+            w,h,pane_px,popup_px,terminal_px);
+        SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
+        SDL_DestroySurface(surface);
+    }
+    /* The window-backed software backend has the same target-size quirk. */
+    g_state.renderer=SDL_CreateRenderer(g_state.window,"software");
+    fixture_assert(g_state.renderer);
+    SDL_Texture *window_target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA32,
+        SDL_TEXTUREACCESS_TARGET,32,32);
+    fixture_assert(window_target && SDL_SetRenderTarget(g_state.renderer,window_target));
+    fixture_assert(sdl_auto_pane_font_size(PANE_LEFT_PANEL)==auto_panes[2]);
+    fixture_assert(sdl_main_menu_pane_font_px()==auto_popups[2]);
+    g_terminal_menu_scale_depth=1; g_terminal_menu_scale_override=SDL_MAIN_VIEW_MIN_SCALE;
+    fixture_assert(sdl_terminal_menu_font_px()==sdl_menu_role_font_px(SDL_UI_FONT_TITLE));
+    fixture_assert(SDL_GetRenderTarget(g_state.renderer)==window_target);
+    g_terminal_menu_scale_depth=0; g_terminal_menu_scale_override=0;
+    fixture_assert(SDL_SetRenderTarget(g_state.renderer,NULL));
+    SDL_DestroyTexture(window_target);
+    SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
+    SDL_Surface *safe_surface=SDL_CreateSurface(800,600,SDL_PIXELFORMAT_RGBA32);
+    fixture_assert(safe_surface);
+    g_state.renderer=SDL_CreateSoftwareRenderer(safe_surface);
+    fixture_assert(g_state.renderer);
+    config.use_unsafe_area=false; g_state.safe_area=(SDL_Rect){200,0,700,600};
+    fixture_assert(sdl_auto_pane_font_size(PANE_LEFT_PANEL)==15);
+    g_terminal_menu_scale_depth=1; g_terminal_menu_scale_override=SDL_MAIN_VIEW_MIN_SCALE;
+    fixture_assert(sdl_terminal_menu_font_px()==15);
+    g_terminal_menu_scale_depth=0; g_terminal_menu_scale_override=0;
+    config.use_unsafe_area=true;
+    SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
+    SDL_DestroySurface(safe_surface);
+    SDL_DestroyWindow(g_state.window); g_state.window=NULL;
+    g_state.window=SDL_CreateWindow("constrained pane",1024,768,SDL_WINDOW_HIDDEN);
+    fixture_assert(g_state.window);
+    sdl_store_platform_max_main_view_scales(1024,768);
+    pane_config_count=1;
+    pane_config[0]=(struct pane_config){.pane=PANE_INVENTORY,.where=PLACE_RIGHT,
+        .enabled=true,.rect.cols=60};
+    config.enable_right_panes=true;
+    int constrained=sdl_auto_pane_font_size(PANE_INVENTORY);
+    SDL_Rect screen=sdl_get_layout_screen_rect(), panes[PANE_MAX]={0};
+    sdl_place_active_panes(&screen,panes,true,false,false);
+    fixture_assert(constrained<auto_panes[2]);
+    fixture_assert(panes[PANE_INVENTORY].w>0);
+    fixture_assert(panes[PANE_MAIN].w/(TILE_SIZE/2)>=sdl_current_min_terminal_cols());
+    printf("desktop 1024x768 constrained pane: font=%d main=%dx%d\n",
+        constrained,panes[PANE_MAIN].w,panes[PANE_MAIN].h);
+    pane_config[0].font_size=18;
+    fixture_assert(sdl_effective_pane_font_size_for_config(&pane_config[0])==18);
+    config.aux_view_font_size=10;
+    fixture_assert(sdl_resolve_pane_font_size(PANE_LEFT_PANEL,10)==10);
+    fixture_assert(sdl_main_menu_pane_font_px()==10);
+    SDL_DestroyWindow(g_state.window); g_state.window=NULL;
+    config.aux_view_font_size=0; pane_config_count=0;
+    config.enable_right_panes=false; desktop_font_density=2.0f; g_state.system_scale=2.0f;
+    g_state.window=SDL_CreateWindow("density font",2560,1440,SDL_WINDOW_HIDDEN);
+    fixture_assert(g_state.window); sdl_store_platform_max_main_view_scales(2560,1440);
+    fixture_assert(sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL)==2*auto_panes[2]);
+    fixture_assert(sdl_main_menu_pane_font_px()==2*auto_popups[2]);
+    printf("desktop 2560x1440 @2: pane=%d popup=%d\n",
+        sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL),sdl_main_menu_pane_font_px());
+    SDL_DestroyWindow(g_state.window); g_state.window=NULL;
+    desktop_font_density=1.5f; g_state.system_scale=1.5f;
+    g_state.window=SDL_CreateWindow("fractional density",1920,1080,SDL_WINDOW_HIDDEN);
+    fixture_assert(g_state.window); sdl_store_platform_max_main_view_scales(1920,1080);
+    fixture_assert(sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL)==24);
+    fixture_assert(sdl_main_menu_pane_font_px()==24);
+    printf("desktop 1920x1080 @1.5: pane=%d popup=%d\n",
+        sdl_effective_pane_cell_height_for_type(PANE_LEFT_PANEL),sdl_main_menu_pane_font_px());
+    SDL_DestroyWindow(g_state.window); g_state.window=NULL;
+    desktop_font_density=1.0f; g_state.system_scale=1.0f;
+    config=saved_config; config.main_view_scale=saved_scale;
+    pane_config_count=saved_count; memcpy(pane_config,saved_panes,sizeof(saved_panes));
+    g_platform_max_main_view_scale[SDL_MIN_TERMINAL_NORMAL]=saved_normal_max;
+    g_platform_max_main_view_scale[SDL_MIN_TERMINAL_COMPACT]=saved_compact_max;
+#endif
     /* Exercise the real device-tutorial event loop too: holding confirm must
      * not skip a page, but a new confirm must still advance it. */
     device_events[0].type=SDL_EVENT_KEY_DOWN;
@@ -567,6 +760,18 @@ def main():
         fixtures.append(dict(fixtures[0], id=f"{fixtures[0]['id']}.mode{mode}", mode=mode))
     fixtures.extend(dict(fixture, id=f"{fixture['id']}.font48", font_size=48)
                      for fixture in fixtures[:selected_count])
+    # Labels and shortcuts depend on the space needed by the content, not a
+    # particular screen-size threshold. The smaller window still has room.
+    for size in ([900, 680], [1024, 768], [1280, 720], [1920, 1080]):
+        fixture = make_fixture(opening, opening["steps"][0], False, 1, False,
+                               fixture_id=f"desktop.named-buttons.{size[0]}x{size[1]}")
+        fixture.update(size=size, font_size=16, big_font=True, named_buttons=True)
+        fixtures.append(fixture)
+    fixture = make_fixture(opening, opening["steps"][0], False, 1, False,
+                           fixture_id="desktop.named-buttons.measured-overflow")
+    fixture.update(size=[900, 140], font_size=48, big_font=True, body="A",
+                   named_buttons=True, hide_shortcuts=True)
+    fixtures.append(fixture)
     throwing = next(lesson for lesson in lessons if lesson["id"] == "item.throwing.active")
     for size, font_size in (([580, 1280], 28), ([360, 800], 20),
                             ([800, 360], 20), ([1280, 720], 28)):
@@ -716,6 +921,7 @@ def main():
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     excluded = ("/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
                 "/src/sdl/ui/sdl-main-menu.c.obj", "/src/sdl-config.c.obj",
+                "/src/sdl/core/sdl-layout.c.obj", "/src/sdl/config/sdl-settings.c.obj",
                 "/src/tutorial/tutorial.c.obj")
     objects = [obj for obj in objects if not obj.endswith(excluded)]
     response = OUT / "objects.rsp"
@@ -725,12 +931,13 @@ def main():
         [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
         ["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
-    subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
+    subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-DSDL_DESKTOP_FONT_FIXTURE", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
                     str(ROOT / "src/sdl/ui/sdl-main-menu.c"), str(ROOT / "src/sdl-config.c"),
+                    str(ROOT / "src/sdl/core/sdl-layout.c"), str(ROOT / "src/sdl/config/sdl-settings.c"),
                     str(ROOT / "src/tutorial/tutorial.c"), "@" + str(response),
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp",
-                    "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode,--wrap=SDL_WaitEvent,--wrap=sdl_touch_round_layer_controls_active,--wrap=sdl_touch_round_compute_layout,--wrap=sdl_touch_thumb_current_bounds,--wrap=sdl_map_grid_cell_rect",
+                    "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode,--wrap=SDL_WaitEvent,--wrap=sdl_touch_round_layer_controls_active,--wrap=sdl_touch_round_compute_layout,--wrap=sdl_touch_thumb_current_bounds,--wrap=sdl_map_grid_cell_rect,--wrap=SDL_GetDisplayContentScale",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
                    cwd=OUT, env=env, check=True, timeout=600 if "--all" in sys.argv[1:] else 60)

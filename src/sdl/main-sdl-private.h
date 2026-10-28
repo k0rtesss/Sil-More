@@ -1822,6 +1822,9 @@ bool sdl_android_has_controller_device(void);
 SDL_Rect sdl_get_android_display_cutout_rect(void);
 void sdl_refresh_safe_area(void);
 SDL_Rect sdl_get_layout_screen_rect(void);
+#if !SIL_SDL_MOBILE_BUILD
+SDL_Rect sdl_font_fit_drawable_rect(SDL_Rect screen);
+#endif
 bool sdl_mobile_prefer_safe_edge_alignment(void);
 void sdl_resize_for_current_layout(void);
 void sdl_sync_palette(void);

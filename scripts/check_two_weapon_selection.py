@@ -32,6 +32,7 @@ extern bool render_check;
 extern void render_options(const char*,const ui_question_option*,const object_type* const*,int,int);
 extern void fixture_render_init(void);
 extern void fixture_render_resize(int,int,bool);
+extern void fixture_render_720p_final_glyph(void);
 extern void fixture_render_finish(void);
 extern bool fixture_try_ability(int skill,int ability);
 extern bool prereqs(int skill,int ability);
@@ -338,6 +339,39 @@ static void checks(void)
     assert(active_rows==1 && p_ptr->energy_use==0);
     puts("Learned TWF: both arrangements, hand swap, one active row, no-op cost and exact two-attack previews PASS.");
 
+    /* Reproduce a dual-wield setup reserved behind an active bow and select
+     * it from the off-hand item's focused menu. Verify both the ordinary
+     * turn and the free Versatility switch, as well as cancellation/repeat. */
+    for(int free_switch=0;free_switch<2;free_switch++) {
+        prepare(true,true);put(INVEN_ARM,TV_SWORD,SV_DAGGER);
+        object_wipe(&inventory[0]);p_ptr->inven_cnt=0;p_ptr->equip_cnt++;
+        if(free_switch) {
+            p_ptr->innate_ability[S_ARC][ARC_VERSATILITY]=true;
+            p_ptr->have_ability[S_ARC][ARC_VERSATILITY]=true;
+            p_ptr->active_ability[S_ARC][ARC_VERSATILITY]=true;
+        }
+        calc_bonuses();
+        assert(player_active_weapon_kind()==PLAYER_ACTIVE_WEAPON_KIND_BOW);
+        assert(!player_equipment_slot_counts_as_equipped(INVEN_ARM));
+        player_type canceled=*p_ptr;
+        object_type canceled_items[INVEN_TOTAL];
+        memcpy(canceled_items,inventory,sizeof(canceled_items));
+        wanted[0]=0;expected_rows=-1;
+        assert(!do_cmd_active_item(INVEN_ARM));
+        assert(!memcmp(&canceled,p_ptr,sizeof(canceled)));
+        assert(!memcmp(canceled_items,inventory,sizeof(canceled_items)));
+        want_pair(&inventory[INVEN_WIELD],&inventory[INVEN_ARM]);
+        assert(do_cmd_active_item(INVEN_ARM));
+        verify_pair(sword,dagger);
+        assert(p_ptr->energy_use==(free_switch?0:100));
+        assert(p_ptr->free_active_weapon_change_used==free_switch);
+        want_pair(&inventory[INVEN_WIELD],&inventory[INVEN_ARM]);
+        assert(do_cmd_active_item(INVEN_ARM));
+        verify_pair(sword,dagger);
+        assert(active_rows==1 && p_ptr->energy_use==0);
+    }
+    puts("Reserved off-hand from bow: cancel, active pair, ordinary/free cost and repeat selection PASS.");
+
     for(int ranged=0;ranged<2;ranged++)for(int main=0;main<2;main++) {
         prepare(false,ranged);accompaniment();
         want_pair(&inventory[main?0:INVEN_WIELD],&inventory[main?INVEN_WIELD:0]);
@@ -426,8 +460,8 @@ static void checks(void)
 static void check_render(void)
 {
     fixture_render_init();
-    const int sizes[][2]={{1280,800},{360,800}};
-    for(int size=0;size<2;size++)for(int big=0;big<2;big++) {
+    const int sizes[][2]={{1280,720},{1280,800},{360,800}};
+    for(size_t size=0;size<N_ELEMENTS(sizes);size++)for(int big=0;big<2;big++) {
         fixture_render_resize(sizes[size][0],sizes[size][1],big);
         prepare(false,false);accompaniment();
         /* Long inscriptions exercise both item names and both combat previews. */
@@ -437,6 +471,8 @@ static void check_render(void)
         prepare(true,false);put(0,TV_POLEARM,SV_HAND_AXE);inventory[0].number=2;
         want_pair(&inventory[0],&inventory[0]);do_cmd_toggle_active_weapon();
     }
+    fixture_render_resize(1280,720,false);
+    fixture_render_720p_final_glyph();
     fixture_render_finish();
     puts("SDL weapon menu: desktop/portrait, Normal/Big Font, long names and complete previews render within bounds PASS.");
 }
@@ -506,6 +542,116 @@ void fixture_render_resize(int width,int height,bool big)
     config.bigger_font=big;
     for(int i=0;i<SDL_MENU_FONT_COUNT;i++)config.menu_bigger_font[i]=big;
 }
+void fixture_render_720p_final_glyph(void)
+{
+    const char* complete="Two weapons\t[active] Main: a Dagger (+0,1d5) + Off-hand: a Shortsword (+0,1d7) [+1]\t(+10,1d5); off-hand (+7,1d6)";
+    const char* reversed="Two weapons\tMain: a Shortsword (+0,1d7) [+1] + Off-hand: a Dagger (+0,1d5)\t(+10,1d9); off-hand (+7,1d5)";
+    const char* font_dir=SDL_getenv("SIL_MORE_TEST_FONT_DIR");assert(font_dir);
+    sdl_ui_text_cache_clear();sdl_story_font_cache_clear();
+    strnfmt(config.story_font,sizeof(config.story_font),"%s/Cinzel-Medium.ttf",font_dir);
+    strnfmt(config.story_font2,sizeof(config.story_font2),"%s/EBGaramond-Regular.ttf",font_dir);
+    strnfmt(config.monospace_font,sizeof(config.monospace_font),"%s/VictorMono-Medium.ttf",font_dir);
+    config.aux_view_font_size=16;
+    sdl_question_menu_begin("Change active weapon");
+    sdl_question_menu_set_help("Choose an active weapon.");
+    sdl_question_menu_add_object_entry(0,"a)",complete,TERM_L_GREEN,&inventory[INVEN_WIELD]);
+    sdl_question_menu_add_object_entry(1,"b)",complete,TERM_L_GREEN,&inventory[INVEN_WIELD]);
+    sdl_question_menu_add_object_entry(2,"c)",reversed,TERM_RED,&inventory[INVEN_WIELD]);
+    sdl_question_menu_set_highlight(0);sdl_question_menu_finish();
+    assert(streq(g_question_menu.entries[0].text,complete));
+    sdl_question_menu_layout_info a,b;assert(sdl_question_menu_layout(&a));
+    int chosen=-1;bool in_panel=false;
+    assert(sdl_question_menu_choice_at(a.rows[0].x+a.rows[0].w-1.0f,
+        a.rows[0].y+a.rows[0].h/2.0f,&chosen,&in_panel));
+    assert(in_panel && chosen==0);
+    assert(sdl_question_menu_choice_at(a.rows[1].x+1.0f,
+        a.rows[1].y+a.rows[1].h/2.0f,&chosen,&in_panel));
+    assert(in_panel && chosen==1);
+    TTF_Font* font=sdl_story_font_for_height_slot(a.font_px,SDL_STORY_FONT_SLOT_MENU);
+    char cols[SDL_QUESTION_MENU_MAX_COLUMNS][SDL_QUESTION_MENU_TEXT_LEN];
+    assert(sdl_question_menu_display_columns(complete,a.compact_table,cols)==3);
+    float colx=a.rows[0].x+a.letter_w+a.letter_gap+a.icon_w;
+    for(int i=0;i<3;i++) {
+        int w=0,h=0;SDL_Color white={255,255,255,255};
+        SDL_Surface* t=TTF_RenderText_Blended_Wrapped(font,cols[i],0,white,
+            MAX(1,(int)(a.table_column_w[i]+0.5f)));assert(t);
+        TTF_GetStringSizeWrapped(font,cols[i],0,MAX(1,(int)(a.table_column_w[i]+0.5f)),&w,&h);
+        printf("720p col %d x=%.2f allotted=%.2f texture=%dx%d measured=%dx%d row=%.2fx%.2f\n",i,colx,a.table_column_w[i],t->w,t->h,w,h,a.rows[0].w,a.rows[0].h);
+        SDL_DestroySurface(t);colx+=a.table_column_w[i]+a.table_gap;
+    }
+    SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255);SDL_RenderClear(g_state.renderer);
+    sdl_question_menu_render();SDL_Surface* full=SDL_RenderReadPixels(g_state.renderer,NULL);assert(full);
+    IMG_SavePNG(full,"two-weapons-720p-full.png");
+    size_t len=strlen(g_question_menu.entries[0].text);assert(len && g_question_menu.entries[0].text[len-1]==')');
+    g_question_menu.entries[0].text[len-1]='\0';
+    assert(sdl_question_menu_layout(&b));
+    assert(a.rows[0].x==b.rows[0].x && a.rows[0].y==b.rows[0].y
+        && a.rows[0].w==b.rows[0].w && a.rows[0].h==b.rows[0].h);
+    for(int i=0;i<3;i++) assert(a.table_column_w[i]==b.table_column_w[i]);
+    SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255);SDL_RenderClear(g_state.renderer);
+    sdl_question_menu_render();SDL_Surface* missing=SDL_RenderReadPixels(g_state.renderer,NULL);assert(missing);
+    assert(full->format==missing->format && full->pitch==missing->pitch);
+    /* Compare the actual row with an independent TTF raster of the complete
+     * and truncated attack column. Every visibly changed glyph pixel must be
+     * painted inside the selected-row border, including the final ')'. */
+    SDL_Color white={255,255,255,255};
+    char short_stats[SDL_QUESTION_MENU_TEXT_LEN];
+    SDL_strlcpy(short_stats,cols[2],sizeof(short_stats));
+    short_stats[strlen(short_stats)-1]='\0';
+    int wrap=MAX(1,(int)(a.table_column_w[2]+0.5f));
+    SDL_Surface* reference=TTF_RenderText_Blended_Wrapped(font,cols[2],0,white,wrap);
+    SDL_Surface* reference_short=TTF_RenderText_Blended_Wrapped(font,short_stats,0,white,wrap);
+    assert(reference && reference_short);
+    float col_x=a.rows[0].x+a.letter_w+a.letter_gap+a.icon_w
+        +a.table_column_w[0]+a.table_gap+a.table_column_w[1]+a.table_gap;
+    float pad=MAX(0.0f,MIN(2.0f,(a.rows[0].h-reference->h)*0.5f));
+    int text_x=(int)SDL_roundf(col_x),text_y=(int)SDL_roundf(a.rows[0].y+pad);
+    int expected=0,observed=0,inside=0;
+    for(int y=0;y<reference->h;y++)for(int x=0;x<reference->w;x++) {
+        Uint8 r,g,blue,alpha,prior=0;
+        assert(SDL_ReadSurfacePixel(reference,x,y,&r,&g,&blue,&alpha));
+        if(x<reference_short->w && y<reference_short->h)
+            assert(SDL_ReadSurfacePixel(reference_short,x,y,&r,&g,&blue,&prior));
+        if(abs((int)alpha-(int)prior)<32)continue;
+        expected++;
+        int px=text_x+x,py=text_y+y;
+        if(px>=(int)ceilf(a.rows[0].x+2.0f)
+            && px<(int)floorf(a.rows[0].x+a.rows[0].w-2.0f))inside++;
+        if(px>=0 && px<full->w && py>=0 && py<full->h) {
+            Uint8 fr,fg,fb,fa,mr,mg,mb,ma;
+            assert(SDL_ReadSurfacePixel(full,px,py,&fr,&fg,&fb,&fa));
+            assert(SDL_ReadSurfacePixel(missing,px,py,&mr,&mg,&mb,&ma));
+            if(fr!=mr || fg!=mg || fb!=mb)observed++;
+        }
+    }
+    printf("720p final glyph: expected %d, rendered %d, inside border %d\n",expected,observed,inside);
+    assert(expected>0 && observed==expected && inside==expected);
+    /* Remove the whole stats column and compare again: every sufficiently
+     * opaque pixel of the independent full-column raster must be present. */
+    char* stats=strrchr(g_question_menu.entries[0].text,'\t');assert(stats);
+    stats[1]='\0';assert(sdl_question_menu_layout(&b));
+    assert(a.rows[0].x==b.rows[0].x && a.rows[0].y==b.rows[0].y
+        && a.rows[0].w==b.rows[0].w && a.rows[0].h==b.rows[0].h);
+    SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255);SDL_RenderClear(g_state.renderer);
+    sdl_question_menu_render();SDL_Surface* no_stats=SDL_RenderReadPixels(g_state.renderer,NULL);assert(no_stats);
+    int stat_pixels=0,drawn_pixels=0;
+    for(int y=0;y<reference->h;y++)for(int x=0;x<reference->w;x++) {
+        Uint8 r,g,blue,alpha;assert(SDL_ReadSurfacePixel(reference,x,y,&r,&g,&blue,&alpha));
+        if(alpha<32)continue;
+        stat_pixels++;int px=text_x+x,py=text_y+y;
+        if(px>=0 && px<full->w && py>=0 && py<full->h) {
+            Uint8 fr,fg,fb,fa,mr,mg,mb,ma;
+            assert(SDL_ReadSurfacePixel(full,px,py,&fr,&fg,&fb,&fa));
+            assert(SDL_ReadSurfacePixel(no_stats,px,py,&mr,&mg,&mb,&ma));
+            if(fr!=mr || fg!=mg || fb!=mb)drawn_pixels++;
+        }
+    }
+    printf("720p full stats column: expected %d pixels, rendered %d\n",stat_pixels,drawn_pixels);
+    assert(stat_pixels>0 && drawn_pixels==stat_pixels);
+    SDL_DestroySurface(no_stats);
+    SDL_DestroySurface(reference);SDL_DestroySurface(reference_short);
+    SDL_DestroySurface(full);SDL_DestroySurface(missing);sdl_question_menu_clear();
+}
 void fixture_render_finish(void)
 {
     sdl_ui_text_cache_clear();sdl_story_font_cache_clear();
@@ -549,6 +695,9 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"'+p+'"' for p in objects if not p.endswith(tuple(excluded))))
     env = os.environ.copy()
+    env["SDL_VIDEODRIVER"] = "dummy"
+    env["SDL_AUDIODRIVER"] = "dummy"
+    env["SIL_MORE_TEST_FONT_DIR"] = (ROOT / "lib/xtra/font").as_posix()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / dep) for dep in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"

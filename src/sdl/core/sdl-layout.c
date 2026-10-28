@@ -4564,26 +4564,189 @@ int sdl_auto_font_size_from_main(int numerator, int denominator)
     return size;
 }
 
-int sdl_auto_aux_view_font_size(void)
+static int sdl_auto_pane_preferred_font_size(enum pane_type type)
 {
-    if (sdl_handheld_ui_active() && config.bigger_font)
-        return 16;
-    return sdl_auto_font_size_from_main(2, 3);
-}
+    int size;
 
-int sdl_auto_pane_font_size(enum pane_type type)
-{
     if (sdl_handheld_ui_active() && config.bigger_font)
         return (type == PANE_STATUS || type == PANE_STATUS_DEPTH
                 || type == PANE_DEPTH) ? 14 : 16;
     if (type == PANE_STATUS || type == PANE_STATUS_DEPTH)
-        return sdl_auto_font_size_from_main(1, 2);
-    if (type == PANE_LEFT_PANEL || type == PANE_COMBAT || type == PANE_LOG)
-        return sdl_handheld_ui_active()
+        size = sdl_auto_font_size_from_main(1, 2);
+    else if (type == PANE_LEFT_PANEL || type == PANE_COMBAT || type == PANE_LOG)
+        size = sdl_handheld_ui_active()
             ? sdl_auto_font_size_from_main(4, 5)
             : sdl_auto_font_size_from_main(3, 4);
+    else
+        size = sdl_auto_font_size_from_main(2, 3);
 
-    return sdl_auto_aux_view_font_size();
+#if !SIL_SDL_MOBILE_BUILD
+    if (!sdl_handheld_ui_active() && !config.bigger_font) {
+        float scale = g_state.system_scale > 0.0f ? g_state.system_scale : 1.0f;
+        int body = (int)SDL_ceilf(sdl_ui_role_font_px(SDL_UI_FONT_BODY) / scale);
+        size = MAX(size, MIN(SDL_AUX_VIEW_FONT_MAX, body));
+    }
+#endif
+    return size;
+}
+
+#if !SIL_SDL_MOBILE_BUILD
+SDL_Rect sdl_font_fit_drawable_rect(SDL_Rect screen)
+{
+    SDL_Rect drawable = { 0 }, clipped;
+    SDL_Renderer* renderer = g_state.renderer;
+
+    if (!renderer)
+        return screen;
+    if (SDL_GetRenderTarget(renderer)) {
+        SDL_Surface* surface = (SDL_Surface*)SDL_GetPointerProperty(
+            SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_SURFACE_POINTER, NULL);
+        const char* name = SDL_GetRendererName(renderer);
+
+        /* SDL's software backend can report the active texture's size here.
+         * Use its output surface, or its window's pixel size, without changing
+         * the caller's render target. */
+        if (surface) {
+            drawable.w = surface->w;
+            drawable.h = surface->h;
+        } else if (name && streq(name, "software") && g_state.window) {
+            SDL_GetWindowSizeInPixels(g_state.window, &drawable.w, &drawable.h);
+        }
+    }
+    if (!sdl_rect_has_area(&drawable))
+        SDL_GetRenderOutputSize(renderer, &drawable.w, &drawable.h);
+    if (!sdl_rect_has_area(&drawable))
+        return screen;
+    return SDL_GetRectIntersection(&screen, &drawable, &clipped)
+        ? clipped : drawable;
+}
+
+/* Preview the same pane allocator used by the actual layout.  All automatic
+ * pane sizes share one cap, so the result is independent of call order and
+ * doesn't depend on the previous frame's pane rectangles. */
+static int sdl_desktop_auto_pane_font_cap(void)
+{
+    struct pane_config base[MAX_PANE_CONFIGS] = { 0 };
+    SDL_Rect screen;
+    int count;
+    int max_size = SDL_AUX_VIEW_FONT_MIN;
+    int preferred[PANE_MAX] = { 0 };
+    int min_cols = sdl_current_min_terminal_cols();
+    int min_rows = sdl_current_min_terminal_rows();
+    int margin = (int)(g_state.system_scale * config.margin);
+    float system_scale = g_state.system_scale > 0.0f ? g_state.system_scale : 1.0f;
+
+    for (int type = PANE_MAIN + 1; type < PANE_MAX; type++) {
+        preferred[type] = sdl_auto_pane_preferred_font_size(type);
+        max_size = MAX(max_size, preferred[type]);
+    }
+    if (!g_state.window)
+        return max_size;
+    screen = sdl_font_fit_drawable_rect(sdl_get_layout_screen_rect());
+    if (!sdl_rect_has_area(&screen))
+        return max_size;
+
+    /* Keep enough space for a minimum terminal at the chosen text size when
+     * possible. Cell widths are half the height, rounded down. */
+    int fit_px = MIN(2 * (screen.w / min_cols) + 1, screen.h / min_rows);
+    int initial_cap = MAX(SDL_AUX_VIEW_FONT_MIN,
+        MIN(max_size, (int)(fit_px / system_scale)));
+    while (initial_cap > SDL_AUX_VIEW_FONT_MIN
+        && sdl_aux_cell_height_for_font_size(initial_cap) > fit_px)
+        initial_cap--;
+    count = sdl_build_active_pane_config(base, config.enable_right_panes,
+        config.enable_bottom_panes, false);
+
+    for (int cap = initial_cap; cap >= SDL_AUX_VIEW_FONT_MIN; cap--) {
+        struct pane_config active[MAX_PANE_CONFIGS] = { 0 };
+        SDL_Rect panes[PANE_MAX] = { 0 };
+        int widths[PANE_MAX] = { 0 }, heights[PANE_MAX] = { 0 };
+        int bottom_rows = 0, double_bottom_rows = 0;
+        bool fits = true;
+
+        memcpy(active, base, sizeof(struct pane_config) * count);
+        heights[PANE_MAIN] = sdl_main_view_font_px(
+            sdl_main_view_layout_scale() * TILE_SIZE);
+        widths[PANE_MAIN] = MAX(1, heights[PANE_MAIN] / 2);
+        for (int i = 0; i < count; i++) {
+            const struct pane_config* pc = &active[i];
+            int type = pc->pane;
+            int size;
+
+            if (type <= PANE_MAIN || type >= PANE_MAX)
+                continue;
+            size = pc->font_size > 0 ? pc->font_size : config.aux_view_font_size;
+            if (size <= 0)
+                size = MIN(cap, preferred[type]);
+            size = MAX(SDL_AUX_VIEW_FONT_MIN, MIN(SDL_AUX_VIEW_FONT_MAX, size));
+            heights[type] = sdl_aux_cell_height_for_font_size(size);
+            widths[type] = sdl_supporting_pane_cell_width(type, pc->where,
+                heights[type]);
+        }
+        sdl_apply_dynamic_auto_pane_sizes(active, count, &screen, widths,
+            heights, margin);
+        place_panes_ex(active, count, panes, &screen, widths, heights, margin,
+            true);
+        for (int i = 0; i < count; i++) {
+            const struct pane_config* pc = &active[i];
+            int type = pc->pane;
+            int cols, rows, need_cols, need_rows;
+
+            if (!pc->enabled || type <= PANE_MAIN || type >= PANE_MAX
+                || widths[type] <= 0 || heights[type] <= 0)
+                continue;
+            cols = panes[type].w / widths[type];
+            rows = panes[type].h / heights[type];
+            if (pc->where == PLACE_BOTTOM)
+                bottom_rows = MAX(bottom_rows, rows);
+            else if (pc->where == PLACE_DOUBLE_BOTTOM)
+                double_bottom_rows = MAX(double_bottom_rows, rows);
+            if (pc->font_size > 0 || config.aux_view_font_size > 0)
+                continue;
+            if (pane_placement_is_side(pc->where)) {
+                need_cols = pane_primary_min_cells(type, pc->where);
+                need_rows = pane_secondary_min_cells(type, pc->where);
+            } else {
+                need_cols = pane_secondary_min_cells(type, pc->where);
+                need_rows = pane_primary_min_cells(type, pc->where);
+            }
+            if (type == PANE_COMBAT)
+                need_rows = MIN(need_rows, PANE_COMBAT_OVERLAY_MIN_ROWS);
+            if (cols < need_cols || rows < need_rows)
+                fits = false;
+        }
+        if (sdl_main_view_logical_cols_for_visual_cols(
+                panes[PANE_MAIN].w / widths[PANE_MAIN]) < min_cols
+            || panes[PANE_MAIN].h / heights[PANE_MAIN] + bottom_rows
+                + double_bottom_rows < min_rows)
+            fits = false;
+        if (fits)
+            return cap;
+    }
+    /* If explicit pane sizes or the window itself make fitting impossible,
+     * leave the allocator's existing pane-pruning/recovery behavior intact. */
+    return initial_cap;
+}
+#endif
+
+int sdl_auto_aux_view_font_size(void)
+{
+    int size = sdl_auto_pane_preferred_font_size(PANE_MAX);
+#if !SIL_SDL_MOBILE_BUILD
+    if (!sdl_handheld_ui_active() && !config.bigger_font)
+        size = MIN(size, sdl_desktop_auto_pane_font_cap());
+#endif
+    return size;
+}
+
+int sdl_auto_pane_font_size(enum pane_type type)
+{
+    int size = sdl_auto_pane_preferred_font_size(type);
+#if !SIL_SDL_MOBILE_BUILD
+    if (!sdl_handheld_ui_active() && !config.bigger_font)
+        size = MIN(size, sdl_desktop_auto_pane_font_cap());
+#endif
+    return size;
 }
 
 int sdl_resolve_aux_view_font_size(int requested_size)
@@ -6022,7 +6185,7 @@ bool sdl_prompt_mobile_startup_portrait_mode(void)
             "Portrait is recommended for a more book-style appearance and "
             "one-handed movement.\n"
             "Landscape offers more traditional two-handed gameplay.\n\n"
-            "You can change this later in Options > General Settings > "
+            "You can change this later in Options > Display and Layout > "
             "Orientation.",
         .numbuttons = (int)(sizeof(buttons) / sizeof(buttons[0])),
         .buttons = buttons,
@@ -6065,12 +6228,13 @@ bool sdl_prompt_mobile_startup_bigger_font(void)
         .message = "Normal font is recommended for a more beautiful game.\n\n"
             "Big font makes the game less beautiful, but can help if smaller "
             "text is difficult for you to read.\n\n"
-            "You can always change this in General Settings > Big Font, "
+            "You can always change this in Options > Text Options > "
+            "Text Size and Fonts > Big Font, "
             "for everything together or one menu at a time.\n\n"
             "Big font shows a B button in menu corners. Tap B to switch "
             "that menu between normal and big text in real time. "
             "Normal font starts with B hidden. You can turn B on or off "
-            "in General Settings > Big Font.",
+            "in the same Big Font settings.",
         .numbuttons = N_ELEMENTS(buttons),
         .buttons = buttons,
     };

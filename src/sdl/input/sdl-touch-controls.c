@@ -4877,6 +4877,8 @@ float sdl_touch_top_panel_size_normalized(float size)
 {
     int steps;
 
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
+        return SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
     if (size <= SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
         return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
     if (size < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
@@ -5300,12 +5302,36 @@ static float sdl_touch_top_panel_min_button_size(void)
     return (float)sdl_ui_min_tap_px();
 }
 
+/* Desktop profiles can be moved to a handheld. Keep the handheld's existing
+ * Stretch layout in that case, without rewriting the saved preference. */
+static float sdl_touch_top_panel_layout_size(void)
+{
+    float size = get_sdl_touch_top_panel_size();
+
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO && sdl_handheld_ui_active())
+        return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+    return size;
+}
+
 static void sdl_touch_top_panel_button_metrics_for_size(float size,
     float* out_button_size, float* out_gap)
 {
     float button_size;
     float gap;
 
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO) {
+        float control = (float)sdl_ui_role_font_px(SDL_UI_FONT_CONTROL);
+
+        /* Use the same density-aware text and tap roles as other controls.
+         * The layout caps this preferred size to the actual clear space. */
+        button_size = MAX(sdl_touch_top_panel_min_button_size(), control * 2.5f);
+        gap = MAX(1.0f, control * 0.25f);
+        if (out_button_size)
+            *out_button_size = button_size;
+        if (out_gap)
+            *out_gap = gap;
+        return;
+    }
     if (size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
         size = SDL_TOUCH_TOP_PANEL_SIZE_DEFAULT;
     size = sdl_touch_top_panel_size_normalized(size);
@@ -5372,7 +5398,7 @@ int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen)
     if (rows <= 0 || columns <= 0)
         return 0;
 
-    configured_size = get_sdl_touch_top_panel_size();
+    configured_size = sdl_touch_top_panel_layout_size();
     sdl_touch_top_panel_button_metrics_for_size(configured_size,
         &button_size, &gap);
 
@@ -5381,6 +5407,14 @@ int sdl_touch_top_panel_reserved_stack_height(const SDL_Rect* screen)
     available_w = (float)screen->w - side_margin * 2.0f;
     if (available_w <= 0.0f)
         return 0;
+
+    if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO) {
+        float available_h = (float)screen->h - side_margin * 2.0f;
+        if (available_h <= gap * (float)(rows - 1))
+            return 0;
+        button_size = MIN(button_size,
+            (available_h - gap * (float)(rows - 1)) / (float)rows);
+    }
 
     if (sdl_handheld_ui_active() && config.bigger_font) {
         float minimum = sdl_touch_top_panel_min_button_size();
@@ -5624,9 +5658,16 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* s
     if (columns < 1 || rows < 1 || active_count < 1)
         return false;
 
-    configured_size = get_sdl_touch_top_panel_size();
+    configured_size = sdl_touch_top_panel_layout_size();
     sdl_touch_top_panel_button_metrics_for_size(configured_size,
         &button_size, &gap);
+
+    if (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO) {
+        if (max_panel_h <= gap * (float)(rows - 1))
+            return false;
+        button_size = MIN(button_size,
+            (max_panel_h - gap * (float)(rows - 1)) / (float)rows);
+    }
 
     if (sdl_handheld_ui_active() && config.bigger_font) {
         float minimum = sdl_touch_top_panel_min_button_size();
@@ -5678,7 +5719,8 @@ static bool sdl_touch_top_panel_compute_layout_for_anchor_impl(const SDL_Rect* s
      * the bounded Stretch fit for this layout and its measured clear span.
      * Keep the saved fixed size intact for layouts where it fits.
      */
-    if (!vertical && configured_size != SDL_TOUCH_TOP_PANEL_SIZE_STRETCH) {
+    if (!vertical && configured_size != SDL_TOUCH_TOP_PANEL_SIZE_STRETCH
+        && configured_size != SDL_TOUCH_TOP_PANEL_SIZE_AUTO) {
         float fixed_panel_w = button_size * (float)columns
             + gap * (float)(columns - 1);
         float fixed_panel_h = button_size * (float)rows
@@ -6336,7 +6378,8 @@ static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
     } else {
         float configured_size = get_sdl_touch_top_panel_size();
 
-        icon_size = (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
+        icon_size = (configured_size == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH
+                || configured_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
             ? MIN(button_rect->w, button_rect->h) * 0.68f
             : (float)TILE_SIZE * configured_size;
         max_icon = MIN(button_rect->w, button_rect->h)
@@ -6400,6 +6443,17 @@ static void sdl_touch_top_panel_render_icon(const SDL_FRect* button_rect,
             fallback, glyph, sizeof(glyph));
         sdl_touch_pane_draw_button_text_scaled(button_rect, NULL, fallback,
             color, .78f, .82f);
+        return;
+    }
+    if (!sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
+        && fallback[0]) {
+        /* Big Font is applied to the symbol size as well as the compact
+         * button. Fit the real glyph before drawing, otherwise the clipped
+         * top of its texture can leave a blank Quick Access button. */
+        int px = sdl_menu_font_px(MAX(12, (int)(rect.h * 0.74f)));
+        px = sdl_ui_fitted_font_px(fallback, SDL_STORY_FONT_SLOT_MENU, px,
+            MAX(1.0f, rect.w - 12.0f), MAX(1.0f, rect.h - 8.0f), false);
+        sdl_touch_pane_draw_button_text_px(&rect, NULL, fallback, color, 8, px);
         return;
     }
     sdl_touch_pane_draw_button_text_scaled(&rect, NULL, fallback, color,

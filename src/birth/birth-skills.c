@@ -164,7 +164,9 @@ static NavResult gain_skills_aux(bool birth)
         update_stuff();
 
         ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
+        /* The first click selects a different skill; moving the pointer must
+         * not preselect it and make that click spend experience. */
+        ui_menu_click_set_hover_enabled(false);
 
         sdl_character_sheet_screen_show_birth_skills(old_base,
             skill_gain, skill_costs, skill, p_ptr->new_exp);
