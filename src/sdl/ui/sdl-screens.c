@@ -2881,6 +2881,19 @@ void sdl_char_sheet_fitted_wrap_cache_clear(void)
     sdl_char_sheet_book_body_px_cache_clear();
 }
 
+/* Evict only entries that borrow this font.  The book's cached body sizes are
+ * values, not font pointers, and remain valid when an unrelated font closes. */
+void sdl_char_sheet_fitted_wrap_cache_clear_font(TTF_Font* font)
+{
+    if (!font)
+        return;
+    for (int i = 0; i < FITTED_WRAP_CACHE_SIZE; i++)
+    {
+        if (g_fitted_wrap_cache[i].font == font)
+            SDL_zero(g_fitted_wrap_cache[i]);
+    }
+}
+
 static int sdl_char_sheet_select_description_line_count(TTF_Font* font,
     cptr fallback, float width)
 {
@@ -14089,6 +14102,9 @@ static bool sdl_char_sheet_split_intro_four_pages_balanced(cptr intro,
     size_t best_second = 0;
     size_t best_third = 0;
     size_t intro_len;
+    int prefix_lines[32];
+    int suffix_lines[32];
+    int between_lines[32][32];
 
     if (first && first_len > 0)
         first[0] = '\0';
@@ -14109,16 +14125,34 @@ static bool sdl_char_sheet_split_intro_four_pages_balanced(cptr intro,
     if (break_count < 3)
         return false;
 
+    /* Each sentence slice occurs in many triples.  Measure it once, while
+     * retaining the same boundaries and scoring as the exhaustive search. */
+    for (int a = 0; a < break_count; a++)
+    {
+        char slice[2048];
+        cptr suffix = sdl_char_sheet_skip_story_ws(intro + breaks[a]);
+
+        sdl_char_sheet_copy_story_slice(intro, breaks[a], slice,
+            sizeof(slice));
+        prefix_lines[a] = slice[0]
+            ? sdl_char_sheet_story_lines(font, slice, width) : -1;
+        suffix_lines[a] = suffix[0]
+            ? sdl_char_sheet_story_lines(font, suffix, width) : -1;
+        for (int b = a + 1; b < break_count; b++)
+        {
+            sdl_char_sheet_copy_story_slice(intro + breaks[a],
+                breaks[b] - breaks[a], slice, sizeof(slice));
+            between_lines[a][b] = slice[0]
+                ? sdl_char_sheet_story_lines(font, slice, width) : -1;
+        }
+    }
+
     for (int a = 0; a < break_count - 2; a++)
     {
         for (int b = a + 1; b < break_count - 1; b++)
         {
             for (int c = b + 1; c < break_count; c++)
             {
-                char one[2048];
-                char two[2048];
-                char three_buf[2048];
-                cptr four = sdl_char_sheet_skip_story_ws(intro + breaks[c]);
                 int l0;
                 int l1;
                 int l2;
@@ -14132,20 +14166,14 @@ static bool sdl_char_sheet_split_intro_four_pages_balanced(cptr intro,
                 if (breaks[a] >= intro_len || breaks[b] >= intro_len
                     || breaks[c] >= intro_len)
                     continue;
-
-                sdl_char_sheet_copy_story_slice(intro, breaks[a], one,
-                    sizeof(one));
-                sdl_char_sheet_copy_story_slice(intro + breaks[a],
-                    breaks[b] - breaks[a], two, sizeof(two));
-                sdl_char_sheet_copy_story_slice(intro + breaks[b],
-                    breaks[c] - breaks[b], three_buf, sizeof(three_buf));
-                if (!one[0] || !two[0] || !three_buf[0] || !four[0])
+                if (prefix_lines[a] < 0 || between_lines[a][b] < 0
+                    || between_lines[b][c] < 0 || suffix_lines[c] < 0)
                     continue;
 
-                l0 = head_lines + sdl_char_sheet_story_lines(font, one, width);
-                l1 = sdl_char_sheet_story_lines(font, two, width);
-                l2 = sdl_char_sheet_story_lines(font, three_buf, width);
-                l3 = tail_lines + sdl_char_sheet_story_lines(font, four, width);
+                l0 = head_lines + prefix_lines[a];
+                l1 = between_lines[a][b];
+                l2 = between_lines[b][c];
+                l3 = tail_lines + suffix_lines[c];
                 max_l = MAX(MAX(l0, l1), MAX(l2, l3));
                 min_l = MIN(MIN(l0, l1), MIN(l2, l3));
                 spread = max_l - min_l;
@@ -14462,6 +14490,13 @@ static Uint64 sdl_char_sheet_book_layout_hash(void)
     hash ^= (Uint64)
         g_sdl_character_sheet_screen.select_desc_candidate_count;
     hash *= 1099511628211ULL;
+    if (g_sdl_character_sheet_screen.select_desc_candidate_count == 0)
+        hash = sdl_char_sheet_book_layout_hash_bytes(hash,
+            g_sdl_character_sheet_screen.select_description);
+    hash ^= g_sdl_narrative_portrait_rendering ? 1U : 0U;
+    hash *= 1099511628211ULL;
+    hash ^= (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()) ? 1U : 0U;
+    hash *= 1099511628211ULL;
 
     for (int i = 0; i < row_count; i++)
     {
@@ -14494,37 +14529,40 @@ static int sdl_char_sheet_cached_book_body_px(float canvas_h, float content_w,
             ? g_sdl_character_sheet_screen.narrative_body_px : 20;
     }
 
-    if (g_sdl_character_sheet_screen.select_book_body_px > 0
-        && g_sdl_character_sheet_screen.select_book_choice_body_px > 0
-        && g_sdl_character_sheet_screen.select_book_body_for_h == h
-        && g_sdl_character_sheet_screen.select_book_body_for_w == w
-        && g_sdl_character_sheet_screen.select_book_body_for_region_h
-            == region_h
-        && g_sdl_character_sheet_screen.select_book_body_for_title_px
-            == title_px
-        && g_sdl_character_sheet_screen.select_book_body_for_layout_hash
-            == layout_hash)
+    if (g_sdl_character_sheet_screen.select_book_body_for_h != h
+        || g_sdl_character_sheet_screen.select_book_body_for_w != w
+        || g_sdl_character_sheet_screen.select_book_body_for_region_h
+            != region_h
+        || g_sdl_character_sheet_screen.select_book_body_for_title_px
+            != title_px
+        || g_sdl_character_sheet_screen.select_book_body_for_layout_hash
+            != layout_hash)
     {
-        return choice_page
-            ? g_sdl_character_sheet_screen.select_book_choice_body_px
-            : g_sdl_character_sheet_screen.select_book_body_px;
+        g_sdl_character_sheet_screen.select_book_body_px = 0;
+        g_sdl_character_sheet_screen.select_book_choice_body_px = 0;
+        g_sdl_character_sheet_screen.select_book_body_for_h = h;
+        g_sdl_character_sheet_screen.select_book_body_for_w = w;
+        g_sdl_character_sheet_screen.select_book_body_for_region_h = region_h;
+        g_sdl_character_sheet_screen.select_book_body_for_title_px = title_px;
+        g_sdl_character_sheet_screen.select_book_body_for_layout_hash =
+            layout_hash;
     }
 
-    g_sdl_character_sheet_screen.select_book_body_px =
-        sdl_char_sheet_book_body_px(canvas_h, content_w, top_y,
-            region_bottom, title_px);
-    g_sdl_character_sheet_screen.select_book_choice_body_px =
-        sdl_char_sheet_book_choice_body_px(canvas_h, content_w, top_y,
-            region_bottom, title_px);
-    g_sdl_character_sheet_screen.select_book_body_for_h = h;
-    g_sdl_character_sheet_screen.select_book_body_for_w = w;
-    g_sdl_character_sheet_screen.select_book_body_for_region_h = region_h;
-    g_sdl_character_sheet_screen.select_book_body_for_title_px = title_px;
-    g_sdl_character_sheet_screen.select_book_body_for_layout_hash =
-        layout_hash;
-    return choice_page
-        ? g_sdl_character_sheet_screen.select_book_choice_body_px
-        : g_sdl_character_sheet_screen.select_book_body_px;
+    /* A choice-only redraw needs no chronicle pagination.  In particular, the
+     * four-page phone story is much more expensive to fit than the race list. */
+    if (choice_page)
+    {
+        if (g_sdl_character_sheet_screen.select_book_choice_body_px <= 0)
+            g_sdl_character_sheet_screen.select_book_choice_body_px =
+                sdl_char_sheet_book_choice_body_px(canvas_h, content_w, top_y,
+                    region_bottom, title_px);
+        return g_sdl_character_sheet_screen.select_book_choice_body_px;
+    }
+    if (g_sdl_character_sheet_screen.select_book_body_px <= 0)
+        g_sdl_character_sheet_screen.select_book_body_px =
+            sdl_char_sheet_book_body_px(canvas_h, content_w, top_y,
+                region_bottom, title_px);
+    return g_sdl_character_sheet_screen.select_book_body_px;
 }
 
 /* A book-page frame: a parchment border with an inner hairline, drawn into the

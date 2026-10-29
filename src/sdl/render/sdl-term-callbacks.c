@@ -287,7 +287,19 @@ errr callback_sdl_xtra(int n, int v)
             }
         }
         sil_steamworks_run_callbacks();
-        sdl_present_if_needed(d);
+        /* A semantic selection click wakes the owning menu, which will update
+         * its highlight and description before waiting again.  Presenting here
+         * redraws the old selection first and can make the click feel stalled
+         * when laying out the screen is expensive.  Still present immediately
+         * for pointer-only changes and for other kinds of input. */
+        if (!(Term->key_head != Term->key_tail
+                && ui_menu_click_has_pending()
+                && sdl_character_sheet_screen_active()
+                && g_sdl_character_sheet_screen.context
+                    == SDL_CHARACTER_SHEET_BIRTH_SELECT))
+        {
+            sdl_present_if_needed(d);
+        }
         return 0;
     }
     case TERM_XTRA_FLUSH:

@@ -113,3 +113,5 @@ SIL_ACHIEVEMENT_ICON(FIND_MELIAN_RING, 6, 20, 6, 20, 1) /* flavor.txt N:1 ring, 
 SIL_ACHIEVEMENT_ICON_RECT(FIND_ULMO_CLOAK, 84, 4, 64) /* Shadow Cloak on water */
 SIL_ACHIEVEMENT_ICON(FIND_FINGOLFIN_SHIELD, 5, 18, 5, 18, 1) /* object.txt N:44 Kite Shield, Fingolfin's shining shield */
 SIL_ACHIEVEMENT_ICON_RECT(FIND_TURGON_STAFF, 72, 12, 64) /* Staff and crown */
+SIL_ACHIEVEMENT_ICON_RECT(SWIFT_AS_THE_WIND, 84, 12, 64) /* Arrow and Silmaril */
+SIL_ACHIEVEMENT_ICON_RECT(TENFOLD_DOOM, 84, 16, 64) /* Morgoth and traveller */

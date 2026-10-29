@@ -121,6 +121,8 @@ typedef enum sil_achievement_id {
     SIL_ACH_FIND_ULMO_CLOAK,
     SIL_ACH_FIND_FINGOLFIN_SHIELD,
     SIL_ACH_FIND_TURGON_STAFF,
+    SIL_ACH_SWIFT_AS_THE_WIND,
+    SIL_ACH_TENFOLD_DOOM,
     SIL_ACH_COUNT
 } sil_achievement_id;
 

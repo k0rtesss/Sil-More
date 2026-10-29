@@ -17,7 +17,7 @@ panel or its player message history reminders. Characters without visible
 unique deeds skip the panel. Restoring a save or entering another level does not
 repeat it. Debug, cheat and practice games omit it.
 
-Steam omits ten achievements, leaving 100 active Steam achievements: **A Will
+Steam currently omits ten achievements: **A Will
 of Your Own**, **Release from Bondage**, **A Fool's Hope**, **The Hasty Stroke
 Goes Oft Astray**, **Neither Voice Diminished**, **The Fords of Sirion**, **The
 Oath He Should Have Sworn**, **Out of Thin Ore**, **The Ring-maker Overruled**
@@ -26,6 +26,11 @@ including Google Play, with their original provider IDs. The Steam book,
 unlocks, profile import and synchronization ignore their stable bits; existing
 shared profile records are preserved for other builds.
 `src/achievement-steam-exclusions.h` controls both runtime and export exclusions.
+The two new Blitz achievements bring the native catalogue to **112** and the
+Steam candidates to **102**. Both Blitz entries are included for Steam; two
+additional exclusions remain undecided. Until they are chosen, store exports
+write Steam and Game Center candidates to explicitly named **draft** folders.
+No existing Steam exclusions or published Google provider IDs were changed.
 
 | Stable key / Steam API name | Name | Unlock condition | Hidden until earned | Category |
 | --- | --- | --- | --- | --- |
@@ -45,6 +50,8 @@ shared profile records are preserved for other builds.
 | `HEAVY_IS_THE_STOLEN_CROWN` | Heavy Is the Stolen Crown | Escape with Morgoth's Iron Crown and at least one Silmaril, loose or still set in the Crown. | Yes | Journeys |
 | `NO_STEPS_REQUIRED` | No Steps Required | From the start of the adventure, reach Morgoth's level using only chasms and down shafts for descent. Upward stairs are allowed. | No | Journeys |
 | `THERE_AND_ALMOST_BACK_AGAIN` | There and Almost Back Again | Die at the Gates of Angband, on the surface. | Yes | Journeys |
+| `SWIFT_AS_THE_WIND` | Swift as the Wind | Win a Blitz run by escaping with a Silmaril or defeating Morgoth. | No | Journeys |
+| `TENFOLD_DOOM` | Tenfold Doom | Win a Blitz run with at least 10 net curse stacks (curses minus blessings). | No | Journeys |
 | `NOT_EVEN_CARCHAROTH` | Not Even Carcharoth | Be killed by the first ordinary wolf you encounter before making your first kill. | Yes | Exploration and Terrain |
 | `CABED_EN_ARAS` | Cabed-en-Aras | Successfully leap over a chasm and land safely. | No | Exploration and Terrain |
 | `THE_FORDS_OF_SIRION` | The Fords of Sirion | Cross a stream from one dry bank to the other. | No | Exploration and Terrain |
@@ -140,7 +147,7 @@ shared profile records are preserved for other builds.
 | `HEIRLOOMS_OF_THE_HIDDEN_KING` | Heirlooms of the Hidden King | As a Man, escape with a Silmaril, Narsil and the Ring of Barahir. | No | Heroes and Lore |
 | `THE_RING_MAKER_OVERRULED` | The Ring-maker Overruled | Permanently weaken Gorthaur with the Song of Contest while wearing the Ring of Mairon. | Yes | Heroes and Lore |
 
-The 110 achievements preserve all previous 96 stable keys and native indexes;
+The original 110 achievements preserve all previous 96 stable keys and native indexes;
 the reviewed additions occupy indexes 96–109; the unassigned provisional sword
 slot at index 99 now recognizes Gurthang instead of Celeg Aithorn. Sixty are visible,
 including introductory actions, ordinary mechanic goals and character-specific
@@ -231,7 +238,7 @@ Unchanged entries retain their existing atlas sprites and compositions.
 Water, ice and lava tiles in row 32 and the native violet fleeing marker are
 maintained by `scripts/sync_achievement_terrain_icons.cjs`. Google-only accents
 remain only for unchanged legacy entries that need distinct exported images.
-The exporter verifies that all 110 Google images are distinct. Regenerate the
+The exporter verifies that all 112 Google images are distinct. Regenerate the
 approved compositions with `node scripts/sync_achievement_icons.cjs`, or append
 `--check` to verify the shipped image and mappings without changing files.
 
@@ -551,7 +558,7 @@ device first recorded an unlock; imported platform unlocks use the import date.
 
 This is one local profile per OS/app data directory. Its progress is merged
 with the platform account currently using that profile. There is no new game
-account, account selection UI, or direct Steam-to-Google cloud service. Moving
+account, account selection UI, or direct cloud service between stores. Moving
 the same local file between installations carries these milestones with it.
 
 Existing normal character saves can establish **To Dungeons Deep** from their
@@ -585,11 +592,91 @@ unlocks or invents completed adventures. The current Tale's character set is
 retained. Unknown extension fields remain preserved; if they alone prevent a
 profile from fitting, saving reports failure and retains the previous file.
 
+## Blitz completion achievements
+
+**Swift as the Wind** and **Tenfold Doom** are appended stable IDs 110 and 111.
+They are one-shot profile achievements. Winning means a finalized Silmaril
+escape or Morgoth victory; death, an empty-handed escape, abandonment and a run
+still in progress do not count. Debug, practice, cheat and previously tainted
+runs remain ineligible. Saves without the persisted tracked-run provenance do
+not invent a previously completed win.
+
+The harder achievement sums all 64 signed runtime curse slots: positive curse
+stacks minus negative blessing stacks, including repeated stacks of the same
+curse. It checks **net total >= 10 at completion**, rather than setup sliders,
+the number of distinct curse types or a Tale's history. The existing Blitz
+save/restore data already contains these stacks; no save-format change is needed.
+
+## Apple Game Center setup
+
+The iOS build links GameKit and signs with `ios/Sil-More.entitlements`.
+`src/achievements-game-center.m` initializes the local player after SDL and the
+local achievement profile are ready. UIKit/GameKit work runs on the main queue;
+the engine reads a locked snapshot. Sign-in cancellation leaves local play
+available. The achievement book offers **Game Center achievements** when signed
+in and opens Apple's achievement dashboard.
+
+IDs are permanent: `com.silqh.silmore.achievement.<STABLE_KEY>`. The exporter
+reads the same prefix from `src/achievements-game-center.h`; renaming an app or
+achievement must not rename its ID. On authentication, the adapter downloads
+the registered descriptions and earned progress. Only known registered IDs
+can upload, so an unpublished or excluded candidate is skipped. Completed
+remote entries merge silently into local progress. Uploads are confirmed only
+by successful callbacks. Failures and missing callbacks retry after 60 seconds;
+registered/remote state refreshes every five minutes. Account changes clear
+provider state and invalidate old asynchronous callbacks. As on other stores,
+the shared device profile supplies the durable offline queue.
+
+The Apple catalogue currently mirrors the existing Steam exclusions for review:
+**102 candidates**, **850 points**, with **two additional exclusions undecided**.
+This is a draft, not a submitted selection. `--apple-exclusions path.json` can
+provide a separate complete JSON array of excluded stable keys. This controls
+the export; runtime discovery follows whichever IDs are actually registered.
+Apple point tiers are independent of Google's published points: Google
+5/10/15 map to Apple 5, 25 to 10, 50 to 20, and 100 to 40.
+
+Run `python scripts/export_achievement_stores.py` with the existing Node/sharp
+options. It writes `store-readiness.json`, Apple metadata in
+`apple-game-center-draft/achievements.json`, and 1024px RGB PNGs at 72 ppi.
+The JSON is a review/registration manifest, **not** an Apple bulk-import format.
+Steam CSVs and icons go into `steam-draft/` while its selection exceeds 100.
+`--require-ready` rejects unfinished selections before exporting. Once the
+catalogues meet their limits, output uses `steam/` and `apple-game-center/`.
+No credentials or store uploads are part of this exporter.
+
+On a Mac with Xcode and access to the app's developer account:
+
+1. Enable Game Center for App ID `com.silqh.silmore` in Certificates, Identifiers
+   & Profiles. Refresh the signing/provisioning profile and confirm the signed
+   app contains `com.apple.developer.game-center`.
+2. Finalize at most 100 entries and at most 1,000 Apple points. In App Store
+   Connect > the app > Game Center, register the exact exported IDs, points,
+   hidden flags, English names, pre/post-earned descriptions and images. These
+   are non-repeatable achievements. IDs and live point values must stay fixed.
+3. Generate the existing iOS CMake project with the Xcode generator, sign it
+   with the team's provisioning profile, and enable Game Center for the app
+   version in App Store Connect.
+4. Test on iPhone/iPad and through TestFlight: authentication/cancellation,
+   dashboard dismissal, offline unlock/restart/reconnect, remote restore,
+   account switching, hidden entries, and both Blitz victories and thresholds.
+5. Submit the first Game Center components together with the new app version.
+   Later component additions may be reviewed separately.
+
+The portable C state and build wiring are checked on Windows. Apple SDK
+compilation, signing, device presentation and live synchronization require a
+Mac/device pass; a Windows build does not establish those results.
+
+Apple references: [Game Center setup](https://developer.apple.com/documentation/gamekit/initializing-and-configuring-game-center),
+[achievement limits](https://developer.apple.com/help/app-store-connect/configure-game-center/manage-achievements/),
+[metadata and image requirements](https://developer.apple.com/help/app-store-connect/reference/game-center/achievements/),
+[first submission](https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-game-center-components).
+
 ## Steam setup
 
 Build with the optional Steamworks integration described in
 [steam-build.md](steam-build.md). In the Steamworks dashboard for the configured
-App ID, create and **publish** the 100 Steam achievements using the exact API names
+App ID, finalize the two pending exclusions, then create and **publish** at most
+100 Steam achievements using the exact API names
 in the table above. Supply their names, descriptions, and unlocked/locked icons.
 These are ordinary one-shot achievements; no Steam stat definitions are needed
 for progress tracking. Keep the API names stable after release.
@@ -617,7 +704,7 @@ Unconfigured Play builds also work locally and do not initialize Play Games.
    Android application ID and the signing certificate SHA-1 of each build you
    will test/distribute, including the **Play App Signing** certificate for Play
    delivery. Register test accounts while the service is unpublished.
-2. Create 110 **standard**, one-shot achievements with the conditions in the
+2. Create 112 **standard**, one-shot achievements with the conditions in the
    table above. Supply the Console metadata, points, and icons, and publish the
    Play Games configuration when releasing it.
 3. The public project and achievement IDs for Sil-More are supplied by
@@ -692,16 +779,17 @@ $env:SIL_MORE_PLAY_ACH_DOOM_CAN_WAIT = '<Console achievement ID>'
 
 The IDs are build configuration, not secrets. No OAuth secret or service
 account key belongs in the app. Malformed IDs, duplicate nonempty IDs, or achievement IDs without a project
-ID fail Gradle configuration. The checked-in configuration contains all 54
-actual Console-assigned IDs, preserving the original 14 provider identities.
+ID fail Gradle configuration. The checked-in configuration preserves all 110
+existing Console-assigned IDs, including the original 14 provider identities.
 Existing mapped achievements continue synchronizing. Unmapped achievements
 remain durable in local progress and are uploaded after their real IDs are
 configured in a later build. They never send an empty ID to Google. An entirely
-unmapped build keeps achievements local. Assign and verify all 110 IDs before
-shipping the expanded Play catalogue; no provider IDs are fabricated.
+unmapped build keeps achievements local. The two new Blitz IDs remain blank
+until assigned by the Console. Assign and verify them before shipping their
+Play integration; no provider IDs are fabricated.
 
 Use `scripts/export_achievement_stores.py` to export the two Steam CSVs, Steam
-256px icons, and the Google 512px icon/import package. It reads the native
+256px icons, the Google 512px icon/import package and Apple 1024px assets. It reads the native
 catalogue and extracts existing sprites from `lib/xtra/graf/16x16.png`; all
 scaling uses nearest-neighbor sampling. `icon-sources.json` records the template
 entry, atlas coordinates, and source hash. The three-Silmaril achievement uses
@@ -714,7 +802,9 @@ bringing the previous 93-entry catalogue to 1650 points. The next three
 entries add 10 points each, for 1680 points. The five reviewed additions add
 140 points: 25 for A Desperate Victory, 50 for Their Work Had No Rival, 15 for
 Nauglamír and 25 each for Gurthang and the Spear of Melkor. The Great Axe of Gothmog adds 25 points and the eight appended discoveries add
-10 each, bringing the current total to 1925. All previously published point values remain unchanged.
+10 each, bringing the previous total to 1925. Swift as the Wind adds 10 and
+Tenfold Doom adds 25, for **1960 Google points**. All previously published point
+values remain unchanged.
 The exporter enforces the current
 [2000-point allowance](https://developer.android.com/games/pgs/achievements#points_and_experience_points).
 Google import titles omit commas and descriptions replace
@@ -728,11 +818,11 @@ catalogue and verify **100** Steam records before publishing. Successful file im
 only prepares pending changes. Publish the Steamworks configuration with images
 included. Google edits must keep the existing achievement IDs. The full
 `google-play-achievements.zip` is for a new project. For the existing project,
-import only `google-play-new-achievements.zip` for the 56 entries without
+import only `google-play-new-achievements.zip` for the two Blitz entries without
 configured provider IDs, then update existing names and icons in place. Published initial
 states cannot be changed. Reimporting existing entries would create duplicates
-and lose their provider identity. The prior 54 assigned IDs remain in
-`android/play-games.properties`; the newest 56 IDs remain blank until assigned.
+and lose their provider identity. The prior 110 assigned IDs remain in
+`android/play-games.properties`; the two new IDs remain blank until assigned.
 
 Google Play cloud backups are a separate explicit main-menu action; see
 [cloud saves](cloud-saves.md).
@@ -775,6 +865,9 @@ python scripts/check_achievement_legends.py
 python scripts/check_achievement_journeys.py
 python scripts/check_achievement_lore.py
 python scripts/check_achievement_review.py
+python scripts/check_achievement_blitz.py
+python scripts/check_achievement_game_center.py
+python scripts/check_achievement_store_exports.py --sharp <sharp module path>
 python scripts/check_achievement_play_games.py
 python scripts/check_achievement_save.py
 python scripts/check_android_achievement_catalogue.py --gradle
@@ -786,12 +879,12 @@ cd android
 ```
 
 The combined playtest command runs every achievement suite and records saved
-production unlock evidence for all 110 entries in
+production unlock evidence for all 112 entries in
 `scripts/output/achievement-playtest/catalogue-coverage.json`. It also checks
 the actual singing payment and final-Morgoth combat completion paths.
 
 The focused checks use temporary profiles and SDK-boundary doubles. They do
-not authenticate to Steam/Google or modify real achievements. Before release,
+not authenticate to platform services or modify real achievements. Before release,
 test real published IDs on authorized accounts: each gameplay trigger; an
 offline unlock followed by reconnection/restart; an existing remote unlock
 with a fresh local profile; sign-in cancellation; Android pause/resume; and
@@ -805,7 +898,7 @@ and Java ID array. Add its existing-atlas sprite to
 `src/achievement-icons.h`, used by the in-game viewer and store exporter, and
 its category and position to `src/achievement-order.h`. Choose its Play point
 allocation within the catalogue's 2000-point allowance.
-Gradle and both native bridge masks derive from the enum;
+Gradle and the platform bridge masks derive from the enum;
 the catalogue check verifies Java's order against it.
 Hook a successful production gameplay event after its outcome is known. Keep
 eligibility, local persistence, notifications, and platform synchronization in
@@ -814,4 +907,4 @@ shipping a configured release.
 
 The full catalogue above is implemented. The No Armour proposal is excluded
 at the user's request. Native book pagination supports up to 128 pages; each achievement occupies one
-semantic paragraph, so all 110 remain present with large text and narrow screens.
+semantic paragraph, so all 112 remain present with large text and narrow screens.

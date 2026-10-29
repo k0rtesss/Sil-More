@@ -3410,6 +3410,7 @@ bool sdl_store_mono_font_atlas_cells(const char* font_path, int cell_width, int 
 SDL_Texture* sdl_acquire_mono_font_atlas_cells_ex(const char* font_path, int cell_width, int cell_height, bool* out_cached, int* out_atlas_cell_w, int* out_atlas_cell_h, bool* out_exact, bool allow_fallback);
 void sdl_story_font_cache_clear(void);
 void sdl_char_sheet_fitted_wrap_cache_clear(void);
+void sdl_char_sheet_fitted_wrap_cache_clear_font(TTF_Font* font);
 bool sdl_story_font_cache_matches_config(void);
 void sdl_story_font_cache_mark_config(void);
 const char* sdl_story_font_path_for_slot(int slot);

@@ -4656,6 +4656,15 @@ static int sdl_desktop_auto_pane_font_cap(void)
         initial_cap--;
     count = sdl_build_active_pane_config(base, config.enable_right_panes,
         config.enable_bottom_panes, false);
+    for (int i = 0; i < count; i++) {
+        /* Modal overlays reserve a large text capacity, not gameplay space.
+         * Fitting their shared stack can shrink every HUD font just to expose
+         * an unused menu below the description. Keep their real placement;
+         * exclude them only from this automatic HUD font preview. */
+        if (base[i].pane == PANE_DESCRIPTION
+            || base[i].pane == PANE_OVERLAY_MENU)
+            base[i].enabled = false;
+    }
 
     for (int cap = initial_cap; cap >= SDL_AUX_VIEW_FONT_MIN; cap--) {
         struct pane_config active[MAX_PANE_CONFIGS] = { 0 };

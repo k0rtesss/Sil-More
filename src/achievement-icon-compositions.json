@@ -97,6 +97,8 @@
     { "key": "ANGBAND_MAINTENANCE", "layout": "pair", "sprites": ["orc", "trap"], "label": "Ordinary Orc soldier and trap" },
     { "key": "FIND_MELKOR", "layout": "pair", "sprites": ["greatSpear", "morgoth"], "label": "Great Spear and Morgoth" },
     { "key": "FIND_ULMO_CLOAK", "layout": "scene", "sprites": ["water", "shadowCloak"], "label": "Shadow Cloak on water" },
-    { "key": "A_STAR_AGAINST_THE_BALROG", "layout": "pair", "sprites": ["duruin", "varda"], "label": "Duruin and Varda" }
+    { "key": "A_STAR_AGAINST_THE_BALROG", "layout": "pair", "sprites": ["duruin", "varda"], "label": "Duruin and Varda" },
+    { "key": "SWIFT_AS_THE_WIND", "layout": "pair", "sprites": ["arrow", "jewel"], "label": "Arrow and Silmaril" },
+    { "key": "TENFOLD_DOOM", "layout": "pair", "sprites": ["morgoth", "traveller"], "label": "Morgoth and traveller" }
   ]
 }

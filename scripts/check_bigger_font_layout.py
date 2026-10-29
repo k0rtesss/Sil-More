@@ -947,6 +947,23 @@ static void check_main_menu_gestures(void)
         fixture_main_menu_touch_pane=false;
         config.touch_pane_bindings[0]=old_binding; g_touch_pane_second_panel=old_panel;
     }
+
+    /* Space below a content-sized panel is outside the menu: a tap there
+     * dismisses it rather than selecting a row or activating a touch pane. */
+    layout=fixture_main_menu_open(1);
+    if(layout.panel.y+layout.panel.h+2<fixture_height) {
+        bool in_panel=true;
+        x=layout.panel.x+layout.panel.w*.5f;
+        y=layout.panel.y+layout.panel.h+1;
+        fixture_assert(sdl_main_menu_overlay_choice_at(x,y,&in_panel)==0 && !in_panel);
+        fixture_main_menu_touch_pane=true;
+        fixture_main_menu_touch_pane_right=0;
+        count=fixture_main_menu_choices;
+        fixture_menu_touch(SDL_EVENT_FINGER_DOWN,1,7,window,x,y);
+        fixture_menu_touch(SDL_EVENT_FINGER_UP,1,7,window,x,y);
+        fixture_assert(!g_main_menu_overlay_active && fixture_main_menu_choices==count);
+        fixture_main_menu_touch_pane=false;
+    }
 }
 
 static void check_main_menu(void)
@@ -986,8 +1003,17 @@ static void check_main_menu(void)
                     if(!big && explicit_size)
                         fixture_assert(layout.font_px<sdl_menu_role_font_px(SDL_UI_FONT_BODY));
                     inside(layout.panel); inside(row);
-                    fixture_assert(fabsf(layout.panel.h-fixture_height)<1.0f);
                     fixture_assert(fabsf(layout.panel.y)<1.0f);
+                    {
+                        SDL_FRect first=layout.rows[layout.first_choice];
+                        SDL_FRect last=layout.rows[layout.first_choice+layout.visible_count-1];
+                        float top_pad=first.y-layout.panel.y;
+                        float bottom_pad=layout.panel.y+layout.panel.h-last.y-last.h;
+                        /* The background ends at the visible rows, including
+                         * equally sized padding, even when the list scrolls. */
+                        fixture_assert(top_pad>=0 && bottom_pad>=-1.0f);
+                        fixture_assert(fabsf(top_pad-bottom_pad)<1.1f);
+                    }
                     fixture_assert(choice>=layout.first_choice);
                     fixture_assert(choice<layout.first_choice+layout.visible_count);
                     fixture_assert(row.w>=sdl_ui_min_tap_px());
@@ -1023,20 +1049,32 @@ static void check_main_menu(void)
             config.aux_view_font_size=0;
             check_main_menu_gestures();
             if(fixture_width==2400 && fixture_height==1080 && d==2) {
-                /* Once the whole list fits, extra screen height must not
-                 * inflate every row in either font profile. */
+                /* A scrolling short screen stays compact. As the same list
+                 * starts to fit, spacing grows, then reaches a sensible cap. */
                 int saved_height=fixture_height;
-                fixture_height=4096;
-                main_menu_pane_layout tall=fixture_main_menu_open(1);
+                fixture_height=540;
+                main_menu_pane_layout compact=fixture_main_menu_open(1);
+                float pad=compact.rows[1].y-compact.panel.y;
+                fixture_assert(compact.visible_count<MAIN_MENU_MAX);
+                fixture_height=(int)ceilf(2*pad+compact.row_h*MAIN_MENU_MAX*1.18f);
+                main_menu_pane_layout roomy=fixture_main_menu_open(1);
                 fixture_height=8192;
+                main_menu_pane_layout tall=fixture_main_menu_open(1);
+                fixture_height=12288;
                 main_menu_pane_layout taller=fixture_main_menu_open(1);
+                fixture_assert(roomy.visible_count==MAIN_MENU_MAX);
+                fixture_assert(roomy.row_h>compact.row_h*1.15f);
+                fixture_assert(tall.row_h>roomy.row_h);
+                fixture_assert(tall.row_h<=compact.row_h*1.65f+0.01f);
                 fixture_assert(tall.visible_count==MAIN_MENU_MAX);
                 fixture_assert(taller.visible_count==MAIN_MENU_MAX);
                 fixture_assert(fabsf(tall.row_h-taller.row_h)<0.01f);
+                fixture_assert(taller.panel.h<fixture_height);
                 fixture_height=saved_height;
             }
             if ((fixture_width==2400 && fixture_height==1080 && d==2)
-                || (fixture_width==1920 && fixture_height==1200 && d==1)) {
+                || (fixture_width==1920 && fixture_height==1200 && d==1)
+                || (fixture_width==720 && fixture_height==1560 && d==2)) {
                 (void)fixture_main_menu_open(1);
                 SDL_SetRenderDrawColor(g_state.renderer,20,24,28,255);
                 SDL_RenderClear(g_state.renderer); sdl_main_menu_pane_render();
@@ -1617,7 +1655,7 @@ static void check(int width,int height)
     set_sdl_show_menu_font_button(true); /* Explicitly enable the control for its layout fixtures. */
     if(SDL_getenv("SIL_MAIN_MENU_TEST_ONLY")) {
         check_main_menu();
-        printf("%dx%d: main menu compact rows, touch, scrolling, mouse, controller and event dispatch in both fonts at 3 densities: PASS\n",width,height);
+        printf("%dx%d: main menu adaptive spacing, fitted panel, touch, scrolling, mouse, controller and event dispatch in both fonts at 3 densities: PASS\n",width,height);
         goto cleanup;
     }
     check_actual_cell_metrics();
@@ -1713,7 +1751,8 @@ def main():
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     # Each offscreen renderer gets a fresh process: some production font
     # caches live for the application lifetime and retain font pointers.
-    sizes = [(360, 800), (800, 360), (580, 1280), (1280, 720),
+    sizes = [(360, 800), (800, 360), (580, 1280), (720, 1560),
+             (1280, 720), (1560, 720),
              (1080, 2400), (2400, 1080), (1920, 1200)]
     if "--main-menu-only" in sys.argv[1:]:
         sizes.append((800, 132))  # A very short viewport at phone density.

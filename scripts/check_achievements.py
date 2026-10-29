@@ -48,6 +48,8 @@ static bool broken_oath, blitz;
 metarun metar;
 bool oath_invalid(int oath) { (void)oath; return broken_oath; }
 bool run_mode_is_blitz(void) { return blitz; }
+static int8_t curse_stacks[METAR_CURSE_SLOTS];
+int8_t* active_curse_stacks(void) { return curse_stacks; }
 
 Uint64 __wrap_SDL_GetTicks(void) { return ticks; }
 bool __real_SDL_FlushIO(SDL_IOStream *file);
@@ -202,11 +204,11 @@ static void expanded_conditions(const char *test)
     sil_achievements_begin_run();
     player.depth = 5;
     if (!strcmp(test, "new-events")) {
-        assert(SIL_ACH_COUNT == 110);
+        assert(SIL_ACH_COUNT == 112);
 #ifdef SIL_STEAMWORKS
-        assert(SIL_ACH_ACTIVE_COUNT == 100);
+        assert(SIL_ACH_ACTIVE_COUNT == 102); /* Two additional exclusions remain undecided. */
 #else
-        assert(SIL_ACH_ACTIVE_COUNT == 110);
+        assert(SIL_ACH_ACTIVE_COUNT == 112);
 #endif
         int hidden = 0;
         for (int id = 0; id < SIL_ACH_COUNT; ++id)
@@ -225,7 +227,8 @@ static void expanded_conditions(const char *test)
         for (int id = SIL_ACH_NO_RINGS_ATTACHED; id < SIL_ACH_COUNT; ++id) {
             int before = notifications;
             sil_achievements_on_event((sil_achievement_id)id);
-            if (!sil_achievement_get(id)) {
+            if (!sil_achievement_get(id) || id == SIL_ACH_SWIFT_AS_THE_WIND
+                || id == SIL_ACH_TENFOLD_DOOM) {
                 assert(!earned(id) && notifications == before);
                 continue;
             }

@@ -147,7 +147,9 @@ final class PlayGamesAchievements {
             activity.getString(R.string.play_ach_find_melian_ring),
             activity.getString(R.string.play_ach_find_ulmo_cloak),
             activity.getString(R.string.play_ach_find_fingolfin_shield),
-            activity.getString(R.string.play_ach_find_turgon_staff)
+            activity.getString(R.string.play_ach_find_turgon_staff),
+            activity.getString(R.string.play_ach_swift_as_the_wind),
+            activity.getString(R.string.play_ach_tenfold_doom)
         };
         int words = (ids.length + Long.SIZE - 1) / Long.SIZE;
         allMask = new long[words];

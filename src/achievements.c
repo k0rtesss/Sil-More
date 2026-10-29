@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-play-games.h"
+#include "achievements-game-center.h"
 #include "achievements-character.h"
 #include "achievements-lore.h"
 #include "blitz.h"
@@ -239,7 +240,11 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "FIND_FINGOLFIN_SHIELD", "The Shield of the High King",
         "Fingolfin's blue, crystal-set shield, borne when he rode alone to challenge Morgoth.", true },
     { "FIND_TURGON_STAFF", "The Staff of the Hidden King",
-        "The Quarterstaff of Turgon, the 'staff of doom' before which Eöl faced judgment in Gondolin.", true }
+        "The Quarterstaff of Turgon, the 'staff of doom' before which Eöl faced judgment in Gondolin.", true },
+    { "SWIFT_AS_THE_WIND", "Swift as the Wind",
+        "Win a Blitz run by escaping with a Silmaril or defeating Morgoth.", false },
+    { "TENFOLD_DOOM", "Tenfold Doom",
+        "Win a Blitz run with at least 10 net curse stacks (curses minus blessings).", false }
 };
 
 static uint64_t unlocked_at[SIL_ACH_COUNT];
@@ -493,6 +498,10 @@ void sil_achievements_on_event(sil_achievement_id id)
     if (id < SIL_ACH_NO_RINGS_ATTACHED || id >= SIL_ACH_COUNT) return;
     switch (id)
     {
+        case SIL_ACH_SWIFT_AS_THE_WIND:
+        case SIL_ACH_TENFOLD_DOOM:
+            /* Only a confirmed victorious Blitz completion can grant these. */
+            return;
         case SIL_ACH_OFT_EVIL_WILL:
         case SIL_ACH_THE_HASTY_STROKE:
         case SIL_ACH_A_FEW_LEAVES:
@@ -912,7 +921,26 @@ void sil_achievements_on_partition_discovered(unsigned mask)
 
 void sil_achievements_on_run_completed(void)
 {
-    if (!achievement_run_eligible() || !p_ptr->is_dead || run_mode_is_blitz()) return;
+    if (!achievement_run_eligible() || !p_ptr->is_dead) return;
+    if (run_mode_is_blitz())
+    {
+        /* Both victory routes close the living run before close_game_aux()
+         * reports completion. A death, abandoned run or empty-handed escape
+         * is not a Blitz win. Use the saved run history and actual signed
+         * stacks, never the setup sliders or a Tale's curse history. */
+        if (p_ptr->playing || !p_ptr->leaving || p_ptr->chp <= 0
+            || !(p_ptr->achievement_flags & SIL_ACH_RUN_STARTED)
+            || (!p_ptr->morgoth_slain
+                && !(p_ptr->escaped && p_ptr->depth == 0
+                    && silmarils_possessed() > 0))) return;
+        int net_curses = 0;
+        for (int id = 0; id < METAR_CURSE_SLOTS; ++id)
+            net_curses += CURSE_GET(id);
+        unlock_achievement(SIL_ACH_SWIFT_AS_THE_WIND, true);
+        if (net_curses >= 10) unlock_achievement(SIL_ACH_TENFOLD_DOOM, true);
+        sil_achievements_flush();
+        return;
+    }
     sil_achievements_init();
     if (unlocked_at[SIL_ACH_THE_LONG_TALE]) return;
     cJSON *characters = current_tale_characters(true);
@@ -963,10 +991,11 @@ void sil_achievements_update(void)
         masks[word] = sil_achievements_mask(word);
     sil_steamworks_sync_achievements(masks);
     sil_play_games_sync(masks);
+    sil_game_center_sync(masks);
     for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
     {
         uint64_t remote = sil_steamworks_achievements_unlocked(word)
-            | sil_play_games_unlocked(word);
+            | sil_play_games_unlocked(word) | sil_game_center_unlocked(word);
         for (unsigned bit = 0; bit < 64 && word * 64 + bit < SIL_ACH_COUNT; ++bit)
             if (remote & (UINT64_C(1) << bit)) unlock_achievement(word * 64 + bit, false);
     }

@@ -871,7 +871,8 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
         }
         /* These caches hold borrowed font pointers/textures.  Drop references
          * to the victim before closing it without flushing unrelated labels. */
-        sdl_char_sheet_fitted_wrap_cache_clear();
+        sdl_char_sheet_fitted_wrap_cache_clear_font(
+            g_state.story_fonts[target_index].font);
         sdl_ui_text_cache_clear_font(
             g_state.story_fonts[target_index].font);
         TTF_CloseFont(g_state.story_fonts[target_index].font);

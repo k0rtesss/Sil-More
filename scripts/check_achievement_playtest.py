@@ -394,7 +394,7 @@ def check_catalogue():
     production = ("check_achievement_playtest", "check_achievement_expansion",
                   "check_achievement_discoveries", "check_achievement_characters",
                   "check_achievement_legends", "check_achievement_journeys",
-                  "check_achievement_lore", "check_achievement_review")
+                  "check_achievement_lore", "check_achievement_review", "check_achievement_blitz")
     for active_suite in production:
         print("Running production suite:", active_suite, flush=True)
         with patch.object(tempfile, "TemporaryDirectory", RecordedDirectory):
@@ -404,7 +404,7 @@ def check_catalogue():
                 importlib.import_module(active_suite).main()
     supporting = ("check_achievements", "check_achievement_events", "check_achievement_save",
                   "check_achievement_steam", "check_achievement_play_games", "check_achievement_viewer",
-                  "check_android_achievement_catalogue")
+                  "check_android_achievement_catalogue", "check_achievement_game_center")
     for name in supporting:
         print("Running supporting suite:", name, flush=True)
         module = importlib.import_module(name)
@@ -427,7 +427,9 @@ def check_catalogue():
     sources.extend(ROOT / "src" / name for name in (
         "achievement-order.h", "achievements-ui.c", "cmd/ui/cmd-ui-smithing.c",
         "player/player-lore.c", "sdl/ui/sdl-screens.c", "sdl/main-sdl-private.h",
-        "sdl-config.h", "dungeon/dungeon-world.c"))
+        "sdl-config.h", "dungeon/dungeon-world.c", "blitz.c", "blitz.h",
+        "achievements-game-center.m", "achievements-game-center.h",
+        "achievements-game-center-state.h"))
     receipt = dict(total=len(keys), covered=len(keys) - len(missing), missing=missing,
                    production_suites=list(production), supporting_suites=list(supporting),
                    source_sha256={str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()

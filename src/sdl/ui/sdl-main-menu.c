@@ -578,16 +578,27 @@ bool sdl_main_menu_overlay_layout(main_menu_pane_layout* out)
     {
         float native_row_h = row_h;
 
-        /* The screen rect already excludes unsafe display areas. Keep rows
-         * at the measured text size, scrolling if they do not all fit. */
+        /* The screen rect already excludes unsafe display areas. Keep short
+         * screens compact and scrollable; when the whole list fits, use
+         * spare height for more comfortable spacing and touch targets. */
         max_panel_h = (float)screen.h;
         /* On a very short screen, make room for one measured row first. */
         pad_y = MIN(pad_y, MAX(0.0f,
             (max_panel_h - MIN(max_panel_h, native_row_h)) * 0.5f));
         visible_count = MAX(1, MIN(MAIN_MENU_MAX,
             (int)((max_panel_h - pad_y * 2.0f) / native_row_h)));
-        panel_h = max_panel_h;
         row_h = MIN(native_row_h, max_panel_h - pad_y * 2.0f);
+        if (visible_count == MAIN_MENU_MAX) {
+            float roomy_row_h = MAX(native_row_h * 1.35f,
+                MIN(native_row_h * 1.65f, (float)sdl_ui_min_tap_px()));
+            float available_row_h = (max_panel_h - pad_y * 2.0f)
+                / (float)MAIN_MENU_MAX;
+
+            row_h = MIN(roomy_row_h, available_row_h);
+        }
+        /* Do not cover the game below the rows with an empty black panel. */
+        panel_h = MIN(max_panel_h,
+            pad_y * 2.0f + row_h * (float)visible_count);
     }
     else
     {

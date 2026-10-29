@@ -582,7 +582,8 @@ if(ANDROID)
   add_library(sil-more SHARED ${SIL_MORE_SOURCES})
 elseif(SIL_IOS)
   enable_language(OBJC)
-  list(APPEND SIL_MORE_SOURCES src/main-sdl-ios.m)
+  list(APPEND SIL_MORE_SOURCES src/main-sdl-ios.m src/achievements-game-center.m)
+  set_source_files_properties(src/achievements-game-center.m PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   add_executable(sil-more MACOSX_BUNDLE ${SIL_MORE_SOURCES})
 else()
   add_executable(sil-more ${SIL_MORE_SOURCES})
@@ -609,6 +610,7 @@ if(SIL_IOS)
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${SIL_VERSION_STRING}"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
     XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
+    XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_SOURCE_DIR}/ios/Sil-More.entitlements"
   )
 
   set(SIL_IOS_ASSET_CATALOG "${CMAKE_SOURCE_DIR}/ios/Assets.xcassets")
@@ -715,7 +717,7 @@ if(UNIX)
 endif()
 
 if(SIL_IOS)
-  target_link_libraries(sil-more PRIVATE SDL3::SDL3-static SDL3_ttf::SDL3_ttf-static SDL3_image::SDL3_image-static SDL3_mixer::SDL3_mixer-static log m "-framework UIKit")
+  target_link_libraries(sil-more PRIVATE SDL3::SDL3-static SDL3_ttf::SDL3_ttf-static SDL3_image::SDL3_image-static SDL3_mixer::SDL3_mixer-static log m "-framework UIKit" "-framework GameKit")
 else()
   target_link_libraries(sil-more PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer log m)
 endif()

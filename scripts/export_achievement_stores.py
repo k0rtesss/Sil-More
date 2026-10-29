@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the native achievement catalogue for Steamworks and Play Console.
+"""Export the native achievement catalogue for Steam, Google Play and Game Center.
 
 Uses existing gameplay tiles, with nearest-neighbor scaling via Node.js/sharp.
 Provider IDs are assigned by Google after import; this exporter never invents IDs.
@@ -122,7 +122,27 @@ POINTS = {
     "FIND_ULMO_CLOAK": 10,
     "FIND_FINGOLFIN_SHIELD": 10,
     "FIND_TURGON_STAFF": 10,
+    "SWIFT_AS_THE_WIND": 10,
+    "TENFOLD_DOOM": 25,
 }
+
+# Apple's independent schedule leaves room within its 1,000-point budget.
+# Once live these values, like the IDs, must stay fixed. Google points above
+# belong to already published achievements and must never be rescaled.
+APPLE_POINT_TIERS = {5: 5, 10: 5, 15: 5, 25: 10, 50: 20, 100: 40}
+APPLE_POINTS = {key: APPLE_POINT_TIERS[value] for key, value in POINTS.items()}
+STORE_ACHIEVEMENT_LIMIT = 100
+
+
+def apple_identifier(key):
+    source = (ROOT / "src/achievements-game-center.h").read_text(encoding="utf-8")
+    prefix = re.search(r'^#define SIL_GAME_CENTER_ID_PREFIX "([^"]+)"', source, re.M)
+    if not prefix:
+        raise ValueError("Missing permanent Game Center ID prefix")
+    identifier = prefix[1] + key
+    if len(identifier) > 100 or not re.fullmatch(r"[A-Za-z0-9_.]+", identifier):
+        raise ValueError("Invalid Game Center identifier for " + key)
+    return identifier
 
 # Existing 16x16 gameplay tiles. Coordinates are (row, column), matching the
 # T: entries in the named lib/edit template. No new artwork is drawn.
@@ -205,14 +225,79 @@ def steam_excluded_keys():
     return keys
 
 
-def export(output, node, sharp):
+def store_readiness(rows, steam_excluded, apple_excluded):
+    keys = {row["key"] for row in rows}
+    if not steam_excluded <= keys or not apple_excluded <= keys:
+        raise ValueError("Store exclusions must refer to stable achievement keys")
+    readiness = {}
+    for provider, excluded in (("steam", steam_excluded), ("apple-game-center", apple_excluded)):
+        selected = keys - excluded
+        remaining = max(0, len(selected) - STORE_ACHIEVEMENT_LIMIT)
+        points = sum(APPLE_POINTS[key] for key in selected) if provider == "apple-game-center" else None
+        readiness[provider] = {
+            "achievement_count": len(selected),
+            "achievement_limit": STORE_ACHIEVEMENT_LIMIT,
+            "additional_exclusions_required": remaining,
+            "ready_for_submission": remaining == 0 and (points is None or points <= 1000),
+            "excluded_keys": sorted(excluded),
+        }
+        if points is not None:
+            readiness[provider].update(point_total=points, point_limit=1000)
+    return readiness
+
+
+def apple_catalogue(rows, excluded, order):
+    entries = []
+    for row in sorted(rows, key=lambda row: order[row["key"]]):
+        key = row["key"]
+        if key in excluded:
+            continue
+        if len(row["title"]) > 100 or len(row["description"]) > 500:
+            raise ValueError("Invalid Game Center localization for " + key)
+        entries.append({
+            "key": key,
+            "referenceName": key,
+            "achievementID": apple_identifier(key),
+            "points": APPLE_POINTS[key],
+            "hidden": row["hidden"],
+            "repeatable": False,
+            "displayOrder": order[key],
+            "localizations": [{
+                "locale": "en-US",
+                "name": row["title"],
+                "beforeEarnedDescription": row["description"],
+                "afterEarnedDescription": row["description"],
+                "image": key + ".png",
+            }],
+        })
+    return entries
+
+
+def export(output, node, sharp, apple_excluded=None, require_ready=False):
     rows = catalogue()
     excluded = steam_excluded_keys()
+    # Start the Apple review from the existing Steam selection. No additional
+    # removals are guessed to make a draft fit either store's entry limit.
+    apple_excluded = excluded if apple_excluded is None else set(apple_excluded)
     order = display_order()
-    steam_dir = output / "steam"
+    readiness = store_readiness(rows, excluded, apple_excluded)
+    if require_ready and not all(item["ready_for_submission"] for item in readiness.values()):
+        raise ValueError("Steam/Game Center selection is not ready; choose the remaining exclusions first")
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "store-readiness.json").write_text(json.dumps(readiness, indent=2) + "\n", encoding="utf-8")
+    steam_folder = "steam" if readiness["steam"]["ready_for_submission"] else "steam-draft"
+    apple_folder = "apple-game-center" if readiness["apple-game-center"]["ready_for_submission"] else "apple-game-center-draft"
+    steam_dir = output / steam_folder
     play_dir = output / "google-play"
-    for folder in (steam_dir, play_dir):
+    apple_dir = output / apple_folder
+    for folder in (steam_dir, play_dir, apple_dir):
         folder.mkdir(parents=True, exist_ok=True)
+    if steam_folder != "steam":
+        # Invalidate only the two generated upload CSVs from a previous export.
+        for name in ("5442160-achievements-definitions.csv", "5442160-achievements-localization.csv"):
+            (output / "steam" / name).unlink(missing_ok=True)
+    if apple_folder != "apple-game-center":
+        (output / "apple-game-center/achievements.json").unlink(missing_ok=True)
     # Remove obsolete Steam upload artwork while retaining Google artwork.
     for key in excluded:
         (steam_dir / (key + "_ACHIEVED.png")).unlink(missing_ok=True)
@@ -242,6 +327,13 @@ def export(output, node, sharp):
     (output / "catalogue.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
     (output / "steam-catalogue.json").write_text(json.dumps(
         [row for row in rows if row["key"] not in excluded], indent=2) + "\n", encoding="utf-8")
+    apple_entries = apple_catalogue(rows, apple_excluded, order)
+    (apple_dir / "achievements.json").write_text(json.dumps({
+        "format": "sil-more-game-center-catalogue-v1",
+        "readyForSubmission": readiness["apple-game-center"]["ready_for_submission"],
+        "note": "Review metadata for App Store Connect; this JSON is not an Apple bulk-import format.",
+        "achievements": apple_entries,
+    }, indent=2) + "\n", encoding="utf-8")
     (output / "display-order.json").write_text(json.dumps(
         [row["key"] for row in sorted(rows, key=lambda row: order[row["key"]])], indent=2) + "\n",
         encoding="utf-8")
@@ -252,6 +344,9 @@ def export(output, node, sharp):
         "icons": ICON_TILES,
         "google_icon_accents": GOOGLE_ICON_ACCENTS,
         "steam_excluded": sorted(excluded),
+        "apple_excluded": sorted(apple_excluded),
+        "steam_folder": steam_folder,
+        "apple_folder": apple_folder,
     }
     (output / "icon-sources.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     render = r'''
@@ -261,8 +356,10 @@ const root = process.argv[2], atlas = process.argv[3];
 (async () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'icon-sources.json')));
   for (const [key, info] of Object.entries(manifest.icons)) {
-    for (const [folder, size, singleScale] of [['steam',256,12],['google-play',512,24]]) {
-      if (folder === 'steam' && manifest.steam_excluded.includes(key)) continue;
+    for (const [folder, size, singleScale] of [[manifest.steam_folder,256,12],['google-play',512,24],[manifest.apple_folder,1024,48]]) {
+      const isSteam = folder === manifest.steam_folder, isApple = folder === manifest.apple_folder;
+      if (isSteam && manifest.steam_excluded.includes(key)) continue;
+      if (isApple && manifest.apple_excluded.includes(key)) continue;
       const sourceSize = info.tile_size || 16;
       const tiles = folder === 'google-play' && sourceSize === 16
         ? [...info.tiles, ...(manifest.google_icon_accents[key] || [])] : info.tiles;
@@ -274,9 +371,10 @@ const root = process.argv[2], atlas = process.argv[3];
           .resize(width,width,{kernel:'nearest'}).png().toBuffer();
         layers.push({input:tile,left:(size-total)/2+i*width,top:(size-width)/2});
       }
-      const name = key + (folder === 'steam' ? '_ACHIEVED.png' : '.png');
+      const name = key + (isSteam ? '_ACHIEVED.png' : '.png');
       await sharp({create:{width:size,height:size,channels:3,background:'#000000'}})
-        .composite(layers).removeAlpha().png().toFile(path.join(root,folder,name));
+        .composite(layers).removeAlpha().toColourspace('srgb').withMetadata({density:72})
+        .png().toFile(path.join(root,folder,name));
     }
   }
 })().catch(error => { console.error(error.message); process.exit(1); });
@@ -328,7 +426,11 @@ const root = process.argv[2], atlas = process.argv[3];
             path = play_dir / (row["key"] + ".png")
             archive.write(path, path.name)
     print(f"Exported {len(rows) - len(excluded)} Steam and {len(rows)} Google achievements ({sum(POINTS.values())} Google points) to {output}")
-    print(f"Steam: upload the two CSV files and all *_ACHIEVED.png icons in {steam_dir}")
+    for provider, item in readiness.items():
+        if not item["ready_for_submission"]:
+            print(f"DRAFT {provider}: {item['additional_exclusions_required']} additional exclusions required; do not upload")
+    print(f"Steam {'upload' if readiness['steam']['ready_for_submission'] else 'review draft'}: {steam_dir}")
+    print(f"Game Center {'metadata' if readiness['apple-game-center']['ready_for_submission'] else 'review draft'}: {apple_dir} ({readiness['apple-game-center']['point_total']} Apple points)")
     print(f"Google Play new project: import {bundle}")
     print(f"Google Play existing project: append only {expansion}; edit existing metadata by existing ID")
 
@@ -338,10 +440,17 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "scripts/output/achievement-stores")
     parser.add_argument("--node", default=shutil.which("node"))
     parser.add_argument("--sharp", default="sharp", help="sharp package name or absolute module path")
+    parser.add_argument("--apple-exclusions", type=Path,
+                        help="JSON array of excluded native keys; defaults to the existing Steam exclusions")
+    parser.add_argument("--require-ready", action="store_true", help="Fail before exporting if either 100-entry store selection is unfinished")
     args = parser.parse_args()
     if not args.node:
         parser.error("Node.js is required; supply --node with its executable path")
-    export(args.output.resolve(), args.node, args.sharp)
+    apple_excluded = None if args.apple_exclusions is None else json.loads(args.apple_exclusions.read_text(encoding="utf-8"))
+    if apple_excluded is not None and (not isinstance(apple_excluded, list)
+                                       or not all(isinstance(key, str) for key in apple_excluded)):
+        parser.error("--apple-exclusions must contain a JSON array of stable achievement keys")
+    export(args.output.resolve(), args.node, args.sharp, apple_excluded, args.require_ready)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,14 @@
 
 # Sil-Morë
 
+## Big news: Sil-Morë is out on mobile!
+
+Sil-Morë is now available on the [App Store](https://apps.apple.com/cy/app/sil-mor%C3%AB/id6809162092) and [Google Play](https://play.google.com/store/apps/details?id=com.silmore.myapp)! Buying the game there is a great way to support its development.
+
+We're also coming to Steam soon! [Add Sil-Morë to your Steam wishlist](https://store.steampowered.com/app/5442160/SilMore__Shining_Darkness/?beta=0) to help more players discover the game.
+
+You can still download Sil-Morë for free from [GitHub Releases](https://github.com/k0rtesss/Sil-More/releases) or [itch.io](https://k0rtess.itch.io/sil-mor-shining-darkness). If you'd like to support us, you can also contribute on itch.io. Thank you for playing!
+
 Sil-Morë — Shining Darkness is a version of SIL-Q built around two main ideas.
 First, it adds characters and story material from Tolkien's First Age.
 Second, it uses metaruns so consecutive runs are connected into one storyline, closer to modern roguelite games.
