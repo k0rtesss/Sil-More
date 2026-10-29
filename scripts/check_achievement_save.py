@@ -448,6 +448,35 @@ static void test_save(void)
     assert(fixture_read(modified,size,-1,&restored,current_end)!=0);
     puts("Current format: corrupt encoded checksum rejected by production footer validator PASS");
 }
+
+static void test_crossing_resume(void)
+{
+    for (int water=0;water<=1;water++) for (int legacy=1;legacy>=0;legacy--) {
+        prepare_player();sil_achievements_begin_run();
+        p_ptr->playing=true;p_ptr->is_dead=false;
+        int feat=water?FEAT_WATER:FEAT_POISON;
+        int achievement=water?SIL_ACH_THE_FORDS_OF_SIRION:SIL_ACH_THROUGH_NAN_DUNGORTHEB;
+        cave_feat[10][9]=cave_feat[10][13]=FEAT_FLOOR;
+        cave_feat[10][10]=cave_feat[10][11]=cave_feat[10][12]=feat;
+        sil_achievements_on_movement(10,9,10,10);
+        sil_achievements_on_movement(10,10,10,11);
+        assert((p_ptr->achievement_discovery_flags & SIL_ACH_DISC_LIQUID_FLAGS)
+            ==(SIL_ACH_DISC_LIQUID_FIRST|SIL_ACH_DISC_LIQUID_SECOND));
+        if(legacy) p_ptr->achievement_discovery_flags &= ~SIL_ACH_DISC_LIQUID_FLAGS;
+        monster_type source={0},restored={0};source.r_idx=41;source.hp=source.maxhp=20;
+        size_t player_end;
+        size_t size=fixture_write(0,&source,current,sizeof(current),&player_end);
+        clear_for_load();
+        assert(fixture_read(current,size,-1,&restored,player_end)==0);
+        p_ptr->cur_map_hgt=p_ptr->cur_map_wid=88;p_ptr->playing=true;p_ptr->is_dead=false;
+        assert((p_ptr->achievement_discovery_flags & SIL_ACH_DISC_LIQUID_FLAGS)
+            ==(legacy?0:(SIL_ACH_DISC_LIQUID_FIRST|SIL_ACH_DISC_LIQUID_SECOND)));
+        sil_achievements_on_movement(10,11,10,12);
+        sil_achievements_on_movement(10,12,10,13);
+        assert((sil_achievement_unlocked_at(achievement)!=0)==!legacy);
+    }
+    puts("Crossing progress: distinct water/poison cells survive save/resume; unknown old progress never grants a false award PASS");
+}
 '''
 
 
@@ -517,7 +546,7 @@ def main():
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
     harness = prefix + fixture_function("terminal_extra") + "\n" + fixture_function("reset_map")
-    harness += TESTS + init + "    ANGBAND_DIR_APEX=argv[2];\n    test_save(); SDL_Quit(); return 0;\n}\n"
+    harness += TESTS + init + "    ANGBAND_DIR_APEX=argv[2];\n    test_save(); test_crossing_resume(); SDL_Quit(); return 0;\n}\n"
     sources = []
     for name, text in (("check.c", harness), ("writer.c", WRITER), ("reader.c", reader), ("legacy.c", old_writer), ("previous.c", previous_writer), ("v34.c", v34_writer), ("v37.c", v37_writer), ("v38.c", v38_writer), ("v39.c", v39_writer)):
         path = OUT / name

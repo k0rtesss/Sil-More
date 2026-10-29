@@ -225,6 +225,21 @@ def steam_excluded_keys():
     return keys
 
 
+def game_center_excluded_keys():
+    source = (ROOT / "src/achievement-game-center-exclusions.h").read_text(encoding="utf-8")
+    keys = set(re.findall(r"^SIL_ACH_GAME_CENTER_EXCLUDED\(([A-Z_]+)\)", source, re.M))
+    if not keys <= {row["key"] for row in catalogue()}:
+        raise ValueError("Game Center exclusions must refer to stable achievement keys")
+    return keys
+
+
+def game_center_selection_exclusions(steam_excluded, requested=None):
+    # A custom selection may differ from Steam, but explicit Game Center
+    # exclusions always apply to both exports and runtime synchronization.
+    selected = steam_excluded if requested is None else set(requested)
+    return set(selected) | game_center_excluded_keys()
+
+
 def store_readiness(rows, steam_excluded, apple_excluded):
     keys = {row["key"] for row in rows}
     if not steam_excluded <= keys or not apple_excluded <= keys:
@@ -278,7 +293,7 @@ def export(output, node, sharp, apple_excluded=None, require_ready=False):
     excluded = steam_excluded_keys()
     # Start the Apple review from the existing Steam selection. No additional
     # removals are guessed to make a draft fit either store's entry limit.
-    apple_excluded = excluded if apple_excluded is None else set(apple_excluded)
+    apple_excluded = game_center_selection_exclusions(excluded, apple_excluded)
     order = display_order()
     readiness = store_readiness(rows, excluded, apple_excluded)
     if require_ready and not all(item["ready_for_submission"] for item in readiness.values()):
@@ -301,6 +316,10 @@ def export(output, node, sharp, apple_excluded=None, require_ready=False):
     # Remove obsolete Steam upload artwork while retaining Google artwork.
     for key in excluded:
         (steam_dir / (key + "_ACHIEVED.png")).unlink(missing_ok=True)
+    # Do the same for the selected Game Center output directory: a previous
+    # export may have rendered artwork for an achievement now excluded.
+    for key in apple_excluded:
+        (apple_dir / (key + ".png")).unlink(missing_ok=True)
     definitions = [["api_name", "setid", "permission", "spoiler", "archived", "progress_stat_name", "progress_stat_min", "progress_stat_max"]]
     localizations = [["api_name", "field", "english"]]
     metadata = []
@@ -441,7 +460,7 @@ def main():
     parser.add_argument("--node", default=shutil.which("node"))
     parser.add_argument("--sharp", default="sharp", help="sharp package name or absolute module path")
     parser.add_argument("--apple-exclusions", type=Path,
-                        help="JSON array of excluded native keys; defaults to the existing Steam exclusions")
+                        help="JSON array of excluded native keys; defaults to Steam exclusions; explicit Game Center exclusions always apply")
     parser.add_argument("--require-ready", action="store_true", help="Fail before exporting if either 100-entry store selection is unfinished")
     args = parser.parse_args()
     if not args.node:

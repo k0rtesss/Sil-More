@@ -90,8 +90,58 @@ static void checks(void)
         kill_player(m);assert(earned(SIL_ACH_NOT_EVEN_CARCHAROTH));
     } else if(!strcmp(name,"water")) {
         remove_enemy();cave_feat[10][10]=FEAT_WATER;
-        step(10,10);step(10,9);assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION));
-        step(10,10);step(10,11);assert(earned(SIL_ACH_THE_FORDS_OF_SIRION));
+        step(10,10);step(10,11);assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION));
+        step(10,10);step(10,9);
+        cave_feat[10][11]=FEAT_DEEP_WATER;
+        step(10,10);step(10,11);step(10,10);step(10,11);step(10,12);
+        assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION)); /* Only two distinct cells. */
+        step(10,11);step(10,10);step(10,9);
+        cave_feat[11][10]=cave_feat[12][10]=FEAT_WATER;
+        step(10,10);step(11,10);step(12,10);step(12,9);
+        assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION)); /* Back to the same bank. */
+        step(11,9);step(10,9);
+        cave_feat[10][12]=FEAT_WATER;
+        cave_feat[10][13]=FEAT_BRIDGE_WATER_H;
+        step(10,10);step(10,11);step(10,12);step(10,13);
+        assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION)); /* A bridge is not a bank. */
+        step(10,12);step(10,11);step(10,10);step(10,9);
+        assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION));
+        cave_feat[10][13]=FEAT_FLOOR;
+        step(10,10);step(10,11);step(10,12);step(10,13);
+        assert(earned(SIL_ACH_THE_FORDS_OF_SIRION));
+    } else if(!strcmp(name,"water-mixed")) {
+        remove_enemy();cave_feat[10][10]=FEAT_WATER;cave_feat[10][11]=FEAT_ICE;
+        cave_feat[10][12]=FEAT_WATER;
+        step(10,10);step(10,11);step(10,12);step(10,13);
+        assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION)); /* Ice is not water. */
+        step(10,12);step(10,11);step(10,10);step(10,9);
+        cave_feat[10][13]=FEAT_DEEP_WATER;
+        step(10,10);step(10,11);step(10,12);step(10,13);step(10,14);
+        assert(earned(SIL_ACH_THE_FORDS_OF_SIRION));
+    } else if(!strcmp(name,"water-angled")) {
+        remove_enemy();cave_feat[11][10]=cave_feat[12][11]=cave_feat[13][12]=FEAT_WATER;
+        step(11,10);step(12,11);step(13,12);step(14,13);
+        assert(earned(SIL_ACH_THE_FORDS_OF_SIRION));
+    } else if(!strcmp(name,"water-bend") || !strcmp(name,"poison-bend")) {
+        bool water=!strcmp(name,"water-bend");int feat=water?FEAT_WATER:FEAT_POISON;
+        int achievement=water?SIL_ACH_THE_FORDS_OF_SIRION:SIL_ACH_THROUGH_NAN_DUNGORTHEB;
+        remove_enemy();p_ptr->resist_pois=3;
+        cave_feat[10][10]=cave_feat[10][11]=cave_feat[10][12]=cave_feat[11][11]=feat;
+        step(10,10);step(11,11);step(10,12);step(10,13);
+        assert(earned(achievement)); /* A winding path can cross genuine banks. */
+    } else if(!strcmp(name,"water-shore") || !strcmp(name,"poison-shore")) {
+        bool water=!strcmp(name,"water-shore");int feat=water?FEAT_WATER:FEAT_POISON;
+        int achievement=water?SIL_ACH_THE_FORDS_OF_SIRION:SIL_ACH_THROUGH_NAN_DUNGORTHEB;
+        remove_enemy();p_ptr->resist_pois=3;
+        cave_feat[10][10]=cave_feat[11][10]=cave_feat[12][10]=cave_feat[12][11]=feat;
+        step(10,10);step(11,10);step(12,10);step(12,11);step(12,12);
+        assert(!earned(achievement)); /* Following a curved shore is not crossing it. */
+    } else if(!strcmp(name,"water-teleport")) {
+        remove_enemy();cave_feat[10][10]=cave_feat[10][11]=cave_feat[10][12]=FEAT_WATER;
+        step(10,10);step(10,12);step(10,13);
+        assert(!earned(SIL_ACH_THE_FORDS_OF_SIRION));
+        step(10,12);step(10,11);step(10,10);step(10,9);
+        assert(earned(SIL_ACH_THE_FORDS_OF_SIRION));
     } else if(!strcmp(name,"ice")) {
         remove_enemy();cave_feat[10][10]=FEAT_ICE;
         step(10,10);step(10,11);assert(!earned(SIL_ACH_HELCARAXE));
@@ -137,8 +187,27 @@ static void checks(void)
         assert(earned(SIL_ACH_THE_FIRES_OF_THANGORODRIM));
     } else if(!strcmp(name,"poison")) {
         remove_enemy();p_ptr->resist_pois=3;cave_feat[10][10]=FEAT_POISON;
-        step(10,10);step(10,9);assert(!earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
-        step(10,10);step(10,11);assert(!p_ptr->is_dead);
+        step(10,10);step(10,11);assert(!earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
+        step(10,10);step(10,9);cave_feat[10][11]=FEAT_POISON;
+        step(10,10);step(10,11);step(10,10);step(10,11);step(10,12);
+        assert(!earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
+        step(10,11);step(10,10);step(10,9);
+        cave_feat[11][10]=cave_feat[12][10]=FEAT_POISON;
+        step(10,10);step(11,10);step(12,10);step(12,9);
+        assert(!earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
+        step(11,9);step(10,9);cave_feat[10][12]=FEAT_POISON;
+        cave_feat[10][13]=FEAT_BRIDGE_POISON_H;
+        step(10,10);step(10,11);step(10,12);step(10,13);
+        assert(!earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
+        step(10,12);step(10,11);step(10,10);step(10,9);
+        assert(!earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
+        cave_feat[10][13]=FEAT_FLOOR;
+        step(10,10);step(10,11);step(10,12);step(10,13);assert(!p_ptr->is_dead);
+        assert(earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
+    } else if(!strcmp(name,"poison-angled")) {
+        remove_enemy();p_ptr->resist_pois=3;
+        cave_feat[11][10]=cave_feat[12][11]=cave_feat[13][12]=FEAT_POISON;
+        step(11,10);step(12,11);step(13,12);step(14,13);
         assert(earned(SIL_ACH_THROUGH_NAN_DUNGORTHEB));
     } else if(!strcmp(name,"labyrinth")) {
         remove_enemy();partition_meta_save meta;memset(&meta,0,sizeof(meta));
@@ -276,7 +345,7 @@ def main():
                     "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
                     *("-Wl,--wrap=" + name for name in wraps), "-o", str(exe)],
                    cwd=BUILD, env=env, check=True)
-    cases = ("depth", "purchase", "web", "wolf", "water", "ice", "fire", "fire-monster", "fire-environment", "lava", "poison",
+    cases = ("depth", "purchase", "web", "wolf", "water", "water-mixed", "water-angled", "water-bend", "water-shore", "water-teleport", "ice", "fire", "fire-monster", "fire-environment", "lava", "poison", "poison-angled", "poison-bend", "poison-shore",
              "labyrinth", "map", "elbereth", "freedom", "thresholds", "contest", "will",
              "indomitable", "curse", "checks")
     for case in cases:

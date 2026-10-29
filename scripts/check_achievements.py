@@ -206,7 +206,7 @@ static void expanded_conditions(const char *test)
     if (!strcmp(test, "new-events")) {
         assert(SIL_ACH_COUNT == 112);
 #ifdef SIL_STEAMWORKS
-        assert(SIL_ACH_ACTIVE_COUNT == 102); /* Two additional exclusions remain undecided. */
+        assert(SIL_ACH_ACTIVE_COUNT == 100);
 #else
         assert(SIL_ACH_ACTIVE_COUNT == 112);
 #endif
@@ -214,7 +214,7 @@ static void expanded_conditions(const char *test)
         for (int id = 0; id < SIL_ACH_COUNT; ++id)
             if (sil_achievement_get(id)) hidden += sil_achievement_get(id)->hidden;
 #ifdef SIL_STEAMWORKS
-        assert(hidden == 48);
+        assert(hidden == 47);
 #else
         assert(hidden == 50);
 #endif

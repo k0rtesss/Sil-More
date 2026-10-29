@@ -68,6 +68,35 @@ static void take_click(int want, int action)
     char key;
     while(!Term_inkey(&key,false,true)) {}
 }
+static void check_selection_hover(int choice, cptr label)
+{
+    SDL_FRect row=row_hit(choice);
+    int selected=g_sdl_character_sheet_screen.selected_index;
+    char description[4096];
+    SDL_strlcpy(description,g_sdl_character_sheet_screen.select_description,sizeof(description));
+    fixture_assert(choice!=selected);
+    fixture_assert(sdl_character_sheet_screen_handle_pointer_motion(row.x+row.w/2,row.y+row.h/2));
+    fixture_assert(!ui_menu_click_has_pending());
+    fixture_assert(g_sdl_character_sheet_screen.selected_index==selected);
+    fixture_assert(g_sdl_character_sheet_screen.focus_choice==selected);
+    fixture_assert(streq(g_sdl_character_sheet_screen.select_description,description));
+    frame();
+    bool highlighted=false;
+    for(int i=0;i<painted_count;i++)
+        if(streq(painted[i].text,label)) highlighted=painted[i].attr==TERM_DARK;
+    fixture_assert(highlighted);
+    if(fixture_width==1280 && fixture_height==720)
+        capture(g_sdl_character_sheet_screen.select_intro[0] ? "race-hover" : "hero-hover");
+    fixture_assert(sdl_character_sheet_screen_handle_pointer_motion(-1,-1));
+    fixture_assert(!ui_menu_click_has_pending());
+    frame();
+    bool cleared=false;
+    for(int i=0;i<painted_count;i++)
+        if(streq(painted[i].text,label)) cleared=painted[i].attr==TERM_WHITE;
+    fixture_assert(cleared);
+    fixture_assert(g_sdl_character_sheet_screen.selected_index==selected);
+    fixture_assert(streq(g_sdl_character_sheet_screen.select_description,description));
+}
 static float srgb_linear(Uint8 channel)
 {
     float value = channel / 255.0f;
@@ -141,10 +170,8 @@ static void check_hero_and_skill(void)
         cptr name=getenv("BIRTH_CONTRAST_CAPTURE");
         capture(name && name[0] ? name : "contrast-classic-after");
     }
+    check_selection_hover(1,"Maedhros");
     SDL_FRect row=row_hit(1);
-    fixture_assert(sdl_character_sheet_screen_handle_pointer_motion(row.x+row.w/2,row.y+row.h/2));
-    fixture_assert(!ui_menu_click_has_pending());
-    fixture_assert(sdl_char_sheet_choice_focused(0) && !sdl_char_sheet_choice_focused(1));
     fixture_assert(sdl_character_sheet_screen_handle_pointer_button(row.x+row.w/2,row.y+row.h/2,UI_MENU_CLICK_PRIMARY));
     take_click(1,UI_MENU_CLICK_PRIMARY);
     fixture_assert(sdl_character_sheet_screen_commit_select(1));
@@ -188,6 +215,7 @@ static void check_race(void)
     }
     sdl_character_sheet_screen_set_select_description(lore);
     fixture_assert(sdl_character_sheet_screen_commit_select(0)); frame();
+    check_selection_hover(1,"Fingolfinrim");
     int max=g_sdl_character_sheet_screen.sheet_scroll_max;
     if(max>0) {
         fixture_assert(sdl_character_sheet_scroll_active());

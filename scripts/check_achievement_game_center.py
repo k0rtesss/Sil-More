@@ -29,9 +29,17 @@ int main(void)
     sil_game_center_state state = {0};
     sil_game_center_masks all, available = {0}, remote = {0}, extra = {0};
     for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word) all.words[word] = UINT64_MAX;
+    const int excluded[] = {SIL_ACH_ANGBAND_MAINTENANCE, SIL_ACH_FOR_IDRIL_AND_EARENDIL};
+    for (unsigned i = 0; i < sizeof(excluded)/sizeof(excluded[0]); ++i) {
+        int id = excluded[i];
+        assert(sil_achievement_word_mask(id / 64) & (UINT64_C(1) << (id % 64)));
+        assert(!(sil_gc_achievement_word_mask(id / 64) & (UINT64_C(1) << (id % 64))));
+    }
     sil_gc_reset(&state);
     sil_gc_want(&state, &all);
-    assert(state.wanted.words[1] == sil_achievement_word_mask(1));
+    assert(state.wanted.words[1] == sil_gc_achievement_word_mask(1));
+    for (unsigned i = 0; i < sizeof(excluded)/sizeof(excluded[0]); ++i)
+        assert(!has(&state.wanted, excluded[i]));
     assert(!sil_gc_begin_report(&state, 0));
     assert(sil_gc_begin_load(&state, 0));
     uint64_t stale_load = state.serial;
@@ -39,10 +47,18 @@ int main(void)
     assert(sil_gc_begin_load(&state, 60000));
     assert(!sil_gc_finish_load(&state, stale_load, &all, &all, true, 60000));
     bit(&available, 0); bit(&available, 1); bit(&available, 63); bit(&available, 64);
+    for (unsigned i = 0; i < sizeof(excluded)/sizeof(excluded[0]); ++i)
+        bit(&available, excluded[i]);
     bit(&available, SIL_ACH_SWIFT_AS_THE_WIND); bit(&available, SIL_ACH_TENFOLD_DOOM);
     bit(&remote, 0); bit(&remote, 2); /* Unknown/unregistered IDs cannot import. */
+    for (unsigned i = 0; i < sizeof(excluded)/sizeof(excluded[0]); ++i)
+        bit(&remote, excluded[i]);
     assert(sil_gc_finish_load(&state, state.serial, &available, &remote, true, 60000));
     assert(has(&state.remote, 0) && !has(&state.remote, 2));
+    for (unsigned i = 0; i < sizeof(excluded)/sizeof(excluded[0]); ++i) {
+        assert(!has(&state.available, excluded[i]));
+        assert(!has(&state.remote, excluded[i]));
+    }
     assert(sil_gc_begin_report(&state, 60000));
     uint64_t first_report = state.serial;
     assert(!has(&state.pending, 0) && !has(&state.pending, 2));

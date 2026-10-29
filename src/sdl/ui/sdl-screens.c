@@ -3282,14 +3282,11 @@ bool sdl_char_sheet_choice_focused(int choice)
         return true;
     if (sdl_char_sheet_menu_command_choice(choice))
         return false;
-    /* On birth pickers the bright row means selected, not merely hovered:
-     * a second click on that row confirms or spends a point.  Keep pointer
-     * hover for its tooltip without suggesting that another row is selected. */
+    /* Allocation rows highlight the selection because another click spends a
+     * point. Race and hero rows can also highlight on hover; their click-only
+     * selection state is kept separately in focus_choice/selected_index. */
     if (choice < SDL_CHAR_SHEET_INFO_CHOICE_BASE
-        && ((g_sdl_character_sheet_screen.context
-                == SDL_CHARACTER_SHEET_BIRTH_SELECT
-                && !g_sdl_character_sheet_screen.select_menu_style)
-            || g_sdl_character_sheet_screen.context
+        && (g_sdl_character_sheet_screen.context
                 == SDL_CHARACTER_SHEET_BIRTH_STATS
             || g_sdl_character_sheet_screen.context
                 == SDL_CHARACTER_SHEET_BIRTH_SKILLS))

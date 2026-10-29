@@ -187,8 +187,14 @@ static inline uint64_t sil_achievement_word_mask(unsigned word)
  * These were unused bits in the existing saved u32b, so its layout is unchanged. */
 #define SIL_ACH_DISC_REGIONS_SHIFT 7u
 #define SIL_ACH_DISC_REGIONS 0xF80u
+/* Three distinct liquid tiles in the current water or poison crossing.
+ * The first two coordinates occupy the inactive crossing's saved fields. */
+#define SIL_ACH_DISC_LIQUID_FIRST 0x1000u
+#define SIL_ACH_DISC_LIQUID_SECOND 0x2000u
+#define SIL_ACH_DISC_LIQUID_THREE 0x4000u
+#define SIL_ACH_DISC_LIQUID_FLAGS 0x7000u
 #define SIL_ACH_DISC_RUN_FLAGS (SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN | SIL_ACH_DISC_REGIONS)
-#define SIL_ACH_DISC_FLAGS 0xFFFu
+#define SIL_ACH_DISC_FLAGS 0x7FFFu
 
 typedef struct sil_achievement_definition {
     const char *key;

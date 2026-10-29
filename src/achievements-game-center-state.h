@@ -18,6 +18,16 @@ typedef struct sil_game_center_state {
     bool loaded;
 } sil_game_center_state;
 
+static inline uint64_t sil_gc_achievement_word_mask(unsigned word)
+{
+    uint64_t mask = sil_achievement_word_mask(word);
+#define SIL_ACH_GAME_CENTER_EXCLUDED(key) \
+    if (word == SIL_ACH_##key / 64) mask &= ~(UINT64_C(1) << (SIL_ACH_##key % 64));
+#include "achievement-game-center-exclusions.h"
+#undef SIL_ACH_GAME_CENTER_EXCLUDED
+    return mask;
+}
+
 static inline void sil_gc_reset(sil_game_center_state* state)
 {
     uint64_t serial = state->serial + 1;
@@ -29,7 +39,7 @@ static inline void sil_gc_want(sil_game_center_state* state,
     const sil_game_center_masks* masks)
 {
     for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
-        state->wanted.words[word] |= masks->words[word] & sil_achievement_word_mask(word);
+        state->wanted.words[word] |= masks->words[word] & sil_gc_achievement_word_mask(word);
 }
 
 static inline bool sil_gc_begin_load(sil_game_center_state* state, uint64_t now)
@@ -52,7 +62,7 @@ static inline bool sil_gc_finish_load(sil_game_center_state* state, uint64_t ser
     if (!success) return true;
     for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
     {
-        state->available.words[word] = available->words[word] & sil_achievement_word_mask(word);
+        state->available.words[word] = available->words[word] & sil_gc_achievement_word_mask(word);
         state->remote.words[word] = remote->words[word] & state->available.words[word];
         state->confirmed.words[word] = state->remote.words[word];
     }

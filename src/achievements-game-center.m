@@ -210,7 +210,7 @@ void sil_game_center_sync(const uint64_t* unlocked_masks)
     if (!unlocked_masks) return;
     sil_game_center_masks masks;
     for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
-        masks.words[word] = unlocked_masks[word] & sil_achievement_word_mask(word);
+        masks.words[word] = unlocked_masks[word] & sil_gc_achievement_word_mask(word);
     dispatch_async(dispatch_get_main_queue(), ^{
         reconcile_account();
         sil_gc_want(&state, &masks);
@@ -224,7 +224,7 @@ uint64_t sil_game_center_unlocked(unsigned word)
     SDL_LockSpinlock(&snapshot_lock);
     uint64_t result = remote_snapshot.words[word];
     SDL_UnlockSpinlock(&snapshot_lock);
-    return result & sil_achievement_word_mask(word);
+    return result & sil_gc_achievement_word_mask(word);
 }
 
 bool sil_game_center_available(void)

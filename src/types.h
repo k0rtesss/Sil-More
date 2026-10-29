@@ -1264,6 +1264,8 @@ struct player_type
     byte achievement_jammed_doors[(MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 7) / 8];
     u32b achievement_discovery_flags; /* Crossings, first wolf and this run's region visits. */
     u32b achievement_rage_epoch; /* Separates distinct bouts of rage. */
+    /* Water and poison crossings are mutually exclusive. While one is active,
+     * the other's four coordinates hold the first two distinct liquid tiles. */
     s16b achievement_water_from_y, achievement_water_from_x;
     s16b achievement_water_entry_y, achievement_water_entry_x;
     s16b achievement_poison_from_y, achievement_poison_from_x;

@@ -17,20 +17,21 @@ panel or its player message history reminders. Characters without visible
 unique deeds skip the panel. Restoring a save or entering another level does not
 repeat it. Debug, cheat and practice games omit it.
 
-Steam currently omits ten achievements: **A Will
+Steam currently omits twelve achievements: **A Will
 of Your Own**, **Release from Bondage**, **A Fool's Hope**, **The Hasty Stroke
 Goes Oft Astray**, **Neither Voice Diminished**, **The Fords of Sirion**, **The
-Oath He Should Have Sworn**, **Out of Thin Ore**, **The Ring-maker Overruled**
-and **One Jewel Is Enough**. All ten remain earnable in every other build,
+Oath He Should Have Sworn**, **Out of Thin Ore**, **The Ring-maker Overruled**,
+**One Jewel Is Enough**, **Angband's Maintenance Department** and **For Idril
+and Eärendil**. All twelve
+remain earnable in every other build,
 including Google Play, with their original provider IDs. The Steam book,
 unlocks, profile import and synchronization ignore their stable bits; existing
 shared profile records are preserved for other builds.
 `src/achievement-steam-exclusions.h` controls both runtime and export exclusions.
 The two new Blitz achievements bring the native catalogue to **112** and the
-Steam candidates to **102**. Both Blitz entries are included for Steam; two
-additional exclusions remain undecided. Until they are chosen, store exports
-write Steam and Game Center candidates to explicitly named **draft** folders.
-No existing Steam exclusions or published Google provider IDs were changed.
+Steam selection to **100**. Both Blitz entries are included for Steam. The
+default Steam and Game Center selections meet their export limits; published
+Google provider IDs are unchanged.
 
 | Stable key / Steam API name | Name | Unlock condition | Hidden until earned | Category |
 | --- | --- | --- | --- | --- |
@@ -54,11 +55,11 @@ No existing Steam exclusions or published Google provider IDs were changed.
 | `TENFOLD_DOOM` | Tenfold Doom | Win a Blitz run with at least 10 net curse stacks (curses minus blessings). | No | Journeys |
 | `NOT_EVEN_CARCHAROTH` | Not Even Carcharoth | Be killed by the first ordinary wolf you encounter before making your first kill. | Yes | Exploration and Terrain |
 | `CABED_EN_ARAS` | Cabed-en-Aras | Successfully leap over a chasm and land safely. | No | Exploration and Terrain |
-| `THE_FORDS_OF_SIRION` | The Fords of Sirion | Cross a stream from one dry bank to the other. | No | Exploration and Terrain |
+| `THE_FORDS_OF_SIRION` | The Fords of Sirion | Cross at least three water tiles from one dry bank to the other. | No | Exploration and Terrain |
 | `HELCARAXE` | Helcaraxë | Freeze water with a cold-branded attack, then cross your ice from one bank to the other. | Yes | Exploration and Terrain |
 | `FIRE_AND_WATER` | Fire and Water | Melt the ice beneath an enemy with fire. | Yes | Exploration and Terrain |
 | `THE_FIRES_OF_THANGORODRIM` | The Fires of Thangorodrim | Leap across lava and survive its heat. | No | Exploration and Terrain |
-| `THROUGH_NAN_DUNGORTHEB` | Through Nan Dungortheb | Cross a poison pool and reach dry ground alive. | No | Exploration and Terrain |
+| `THROUGH_NAN_DUNGORTHEB` | Through Nan Dungortheb | Cross at least three poison tiles from one dry bank to the other and survive. | No | Exploration and Terrain |
 | `A_JOURNEY_IN_THE_DARK` | A Journey in the Dark | Enter a labyrinth and leave through a different passage. | No | Exploration and Terrain |
 | `A_MAP_OF_THE_IRON_HELLS` | A Map of the Iron Hells | Enter labyrinth, chasm, ice, fire and poison regions within one run. | No | Exploration and Terrain |
 | `THE_HALLS_OF_UTUMNO` | The Halls of Utumno | Reach the frozen ruins of Utumno. | Yes | Exploration and Terrain |
@@ -197,10 +198,10 @@ progress as unavailable.
 Google's published initial states cannot be changed. The original 14 retain
 their published revealed states; the following 40 retain their original Console
 states (36 hidden, four revealed), even where the local viewer now reveals a
-goal for planning. Existing provider IDs and unlocks are preserved. The newest
-56 entries have no assigned provider IDs yet. New-project exports follow the
-current 60-visible/50-hidden catalogue policy. Existing-project imports contain
-only those 56 unmapped entries.
+goal for planning. Existing provider IDs and unlocks are preserved. All 112
+entries now have configured provider IDs, including the two newly imported
+Blitz drafts. New-project exports follow the current 62-visible/50-hidden
+native catalogue policy. Existing-project imports contain only unmapped entries.
 
 The in-game list displays existing game sprites beside each revealed entry,
 including in ASCII map mode. `src/achievement-icons.h` is the shared mapping
@@ -282,6 +283,16 @@ or monster-created ice alone does not qualify. **The Golden Flower Stands**
 retains its close-quarters requirement: Glorfindel must be adjacent to the
 Balrog and beside a chasm when the Balrog dies, then leave that level alive.
 
+**The Fords of Sirion** and **Through Nan Dungortheb** require at least three
+distinct water or poison tiles, respectively, within one uninterrupted
+crossing. Returning to the same bank, pacing between two tiles, crossing a
+bridge, or teleporting/leaping does not qualify. The line between the entry
+and exit banks must pass through the same liquid (water or ice for the Fords),
+although the player's path can bend. Ice does not count as a water tile, and
+the separate Helcaraxë requirement is unchanged. Crossing progress survives
+saves using previously unused discovery bits and inactive crossing coordinates;
+older saves cannot reconstruct liquid tiles visited before this update.
+
 **The Great Hunt** continues to accept any one of Oromë's four totals: 100 wolves,
 80 spiders excluding hatchlings, 60 serpents or 30 vampires. Completion of one
 kindred is sufficient. Quest dialogue, supplemental messages and reward text
@@ -334,8 +345,9 @@ remaining item types within the provider's total-point allowance.
 
 The full review PDF is generated from the same catalogue, display order and
 shared sprite map by `scripts/export_achievement_pdf.py`. It reveals all names,
-icons and descriptions, labels every entry Hidden or Visible, and numbers the
-complete catalogue in the in-game display order. Its default output is
+icons and descriptions, labels native visibility, and shows Google points,
+pending Google IDs, Game Center proposal points and store selection status.
+It numbers the complete catalogue in the in-game display order. Its default output is
 `output/pdf/sil-more-achievements.pdf`.
 
 Smithing, item descriptions and drop selection now share the intrinsic evaluator
@@ -627,17 +639,19 @@ registered/remote state refreshes every five minutes. Account changes clear
 provider state and invalidate old asynchronous callbacks. As on other stores,
 the shared device profile supplies the durable offline queue.
 
-The Apple catalogue currently mirrors the existing Steam exclusions for review:
-**102 candidates**, **850 points**, with **two additional exclusions undecided**.
-This is a draft, not a submitted selection. `--apple-exclusions path.json` can
-provide a separate complete JSON array of excluded stable keys. This controls
-the export; runtime discovery follows whichever IDs are actually registered.
+The default Apple catalogue mirrors the Steam selection: **100 achievements**
+worth **825 points**. This selection has not been submitted to App Store Connect.
+`--apple-exclusions path.json` can
+provide a separate complete JSON array of excluded stable keys. The explicit
+Game Center exclusions in `src/achievement-game-center-exclusions.h` also apply
+to custom exports and runtime synchronization. Local iOS achievements remain
+available. Other runtime discovery follows whichever IDs are actually registered.
 Apple point tiers are independent of Google's published points: Google
 5/10/15 map to Apple 5, 25 to 10, 50 to 20, and 100 to 40.
 
 Run `python scripts/export_achievement_stores.py` with the existing Node/sharp
 options. It writes `store-readiness.json`, Apple metadata in
-`apple-game-center-draft/achievements.json`, and 1024px RGB PNGs at 72 ppi.
+`apple-game-center/achievements.json`, and 1024px RGB PNGs at 72 ppi.
 The JSON is a review/registration manifest, **not** an Apple bulk-import format.
 Steam CSVs and icons go into `steam-draft/` while its selection exceeds 100.
 `--require-ready` rejects unfinished selections before exporting. Once the
@@ -675,8 +689,7 @@ Apple references: [Game Center setup](https://developer.apple.com/documentation/
 
 Build with the optional Steamworks integration described in
 [steam-build.md](steam-build.md). In the Steamworks dashboard for the configured
-App ID, finalize the two pending exclusions, then create and **publish** at most
-100 Steam achievements using the exact API names
+App ID, create and **publish** the selected 100 Steam achievements using the exact API names
 in the table above. Supply their names, descriptions, and unlocked/locked icons.
 These are ordinary one-shot achievements; no Steam stat definitions are needed
 for progress tracking. Keep the API names stable after release.
@@ -780,13 +793,14 @@ $env:SIL_MORE_PLAY_ACH_DOOM_CAN_WAIT = '<Console achievement ID>'
 The IDs are build configuration, not secrets. No OAuth secret or service
 account key belongs in the app. Malformed IDs, duplicate nonempty IDs, or achievement IDs without a project
 ID fail Gradle configuration. The checked-in configuration preserves all 110
-existing Console-assigned IDs, including the original 14 provider identities.
+existing Console-assigned IDs, including the original 14 provider identities,
+and includes the two new IDs assigned by Play Console to the Blitz drafts.
 Existing mapped achievements continue synchronizing. Unmapped achievements
 remain durable in local progress and are uploaded after their real IDs are
 configured in a later build. They never send an empty ID to Google. An entirely
-unmapped build keeps achievements local. The two new Blitz IDs remain blank
-until assigned by the Console. Assign and verify them before shipping their
-Play integration; no provider IDs are fabricated.
+unmapped build keeps achievements local. The two Blitz achievements were
+imported as Play Console drafts; publish the Games Services changes before
+expecting their provider unlocks to work for all players.
 
 Use `scripts/export_achievement_stores.py` to export the two Steam CSVs, Steam
 256px icons, the Google 512px icon/import package and Apple 1024px assets. It reads the native
@@ -818,11 +832,11 @@ catalogue and verify **100** Steam records before publishing. Successful file im
 only prepares pending changes. Publish the Steamworks configuration with images
 included. Google edits must keep the existing achievement IDs. The full
 `google-play-achievements.zip` is for a new project. For the existing project,
-import only `google-play-new-achievements.zip` for the two Blitz entries without
-configured provider IDs, then update existing names and icons in place. Published initial
-states cannot be changed. Reimporting existing entries would create duplicates
-and lose their provider identity. The prior 110 assigned IDs remain in
-`android/play-games.properties`; the two new IDs remain blank until assigned.
+import only genuinely unmapped entries from `google-play-new-achievements.zip`,
+then update existing names and icons in place. The two Blitz entries have already
+been imported and their assigned IDs are recorded in `android/play-games.properties`;
+do not import them a second time. Published initial states cannot be changed.
+Reimporting existing entries would create duplicates and lose their provider identity.
 
 Google Play cloud backups are a separate explicit main-menu action; see
 [cloud saves](cloud-saves.md).
