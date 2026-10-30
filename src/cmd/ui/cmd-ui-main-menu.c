@@ -21,6 +21,7 @@ extern struct sound_config g_sound_config;
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/story_font.h"
 #include "ui/question.h"
+#include "thrall_quest.h"
 
 #define MAIN_MENU_LABEL_WIDTH 21
 #define MAIN_MENU_SHORTCUT_WIDTH 6
@@ -2021,6 +2022,7 @@ enum {
     HINT_MESSAGE_CLICK_LOOK = -3,
     HINT_MESSAGE_CLICK_MAP = -4,
     HINT_MESSAGE_CLICK_CONTINUE = -5,
+    HINT_MESSAGE_CLICK_STORY = -6,
     HINT_MESSAGE_CLICK_ENTRY_BASE = 1000
 };
 
@@ -2061,6 +2063,7 @@ static void hint_message_add_button(int choice, cptr label, byte attr)
         case HINT_MESSAGE_CLICK_LOOK: button = "<X> "; break;
         case HINT_MESSAGE_CLICK_MAP: button = "<View> "; break;
         case HINT_MESSAGE_CLICK_TOGGLE_TIPS: button = "<Y> "; break;
+        case HINT_MESSAGE_CLICK_STORY: button = "<Y> "; break;
         default: break;
         }
     sdl_hint_quest_menu_add_button(choice, format("%s%s", button, label), attr);
@@ -2948,7 +2951,8 @@ static int thrall_quest_collect(s16b entries[], int limit)
         {
             continue;
         }
-        if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARDED)
+        if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARDED
+            && !minimum_text_mode)
             continue;
 
         entries[count++] = (s16b)m_idx;
@@ -2980,14 +2984,30 @@ static void thrall_quest_format_goal(const monster_type* m_ptr, char* buf,
     giver = thrall_quest_giver_name(m_ptr);
     item = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
 
-    if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING)
+    if (minimum_text_mode
+        && m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARDED)
     {
-        strnfmt(buf, buflen,
-            "Return to the %s and choose the aid he will grant you.", giver);
+        strnfmt(buf, buflen, "Completed. Reward: %d XP and a chosen service.",
+            THRALL_QUEST_COMPLETION_EXP);
+    }
+    else if (m_ptr->thrall_quest_completed == THRALL_QUEST_STATE_REWARD_PENDING)
+    {
+        if (minimum_text_mode)
+            strnfmt(buf, buflen,
+                "Completed. Reward: %d XP received; return to the %s for a service.",
+                THRALL_QUEST_COMPLETION_EXP, giver);
+        else
+            strnfmt(buf, buflen,
+                "Return to the %s and choose the aid he will grant you.", giver);
     }
     else
     {
-        strnfmt(buf, buflen, "Bring %s to the %s.", item, giver);
+        if (minimum_text_mode)
+            strnfmt(buf, buflen,
+                "Objective: Give %s to the %s. Reward: %d XP and a chosen service.",
+                item, giver, THRALL_QUEST_COMPLETION_EXP);
+        else
+            strnfmt(buf, buflen, "Bring %s to the %s.", item, giver);
         if (include_inventory_status
             && player_has_thrall_quest_item(m_ptr->thrall_quest_item) >= 0)
         {
@@ -3034,6 +3054,9 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
             TERM_L_BLUE);
         hint_message_add_button(HINT_MESSAGE_CLICK_MAP, "Map",
             TERM_L_BLUE);
+        if (minimum_text_mode)
+            hint_message_add_button(HINT_MESSAGE_CLICK_STORY,
+                steamdeck ? "Story" : "s Story", TERM_L_BLUE);
         hint_message_add_button(HINT_MESSAGE_CLICK_BACK, "Back",
             TERM_L_WHITE);
         sdl_hint_quest_menu_finish();
@@ -3052,6 +3075,13 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
                 if (click_action == UI_MENU_CLICK_HOVER)
                     continue;
 
+                if (minimum_text_mode && clicked_choice == HINT_MESSAGE_CLICK_STORY)
+                {
+                    ui_menu_click_clear();
+                    sdl_hint_quest_menu_hide();
+                    thrall_quest_show_request_story(m_ptr);
+                    continue;
+                }
                 action = hint_message_tab_action(clicked_choice);
                 if (action != HINT_MESSAGE_ACTION_NONE)
                     break;
@@ -3066,6 +3096,14 @@ static hint_message_action thrall_quest_show_internal(int m_idx,
                 continue;
         }
 
+        if (minimum_text_mode && (ch == 's' || ch == 'S'
+            || (steamdeck && ch == steamdeck_secondary_key())))
+        {
+            ui_menu_click_clear();
+            sdl_hint_quest_menu_hide();
+            thrall_quest_show_request_story(m_ptr);
+            continue;
+        }
         ch = (char)steamdeck_menu_key(ch, 0, 0);
         action = hint_message_controller_tab_action(ch, HINT_QUEST_PAGE_THRALLS);
         if (action != HINT_MESSAGE_ACTION_NONE)

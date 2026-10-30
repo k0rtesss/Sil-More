@@ -1,0 +1,147 @@
+# Short monster descriptions for Minimum text mode.
+# R:<monster.txt N: serial>:<description>
+# Known resistances, weaknesses, speed, and attacks are calculated separately.
+R:6:Before you stands Nienna, the Lady of Pity, she who mourns for every hurt that Arda has suffered.
+R:11:A lean and hungry wolf, bred in the kennels of Angband to run with the orcish packs.
+R:12:A thorn-covered plant.
+R:13:A scarred and dirty man clad only in a loincloth.
+R:14:A shackled elf labours slowly at the quartz, filthy hair hanging to his shoulders and eyes vacant.
+R:15:A brutish orc set to oversee the wretched thralls who labour in Morgoth's mines.
+R:16:A scarred and dirty man shackled to the wall with a long chain.
+R:17:A chained elf crouches here, filthy hair hanging to his shoulders.
+R:18:Tulkas the Strong, the Vala of strength.
+R:19:Here stands Aulë, the great Smith among the Valar, patient and intent.
+R:20:Mandos, keeper of the Houses of the Dead.
+R:21:A wretched creature clad in scraps of leather, barely armed but vicious in its desperation.
+R:22:A raptor bred in the eyries of Angband, favoured by the orc-scouts as a mount and messenger.
+R:23:A lurking creature of the marshes.
+R:31:A furtive orc scout.
+R:32:Monstrous newly-hatched spiders; already the height of a dog.
+R:33:A serpent the length of a man, armoured in hard blue scales that glitter like ice.
+R:41:He is one of Morgoth's grim mockeries of the firstborn.
+R:42:A thorny plant found in Taur-nu-Fuin.
+R:43:A foul bird of Morgoth's making, bred alongside the Crebain to harry and torment his enemies.
+R:44:A huge ponderous spider with clusters of eggs on its back.
+R:51:An orc of Morgoth’s army.
+R:52:A great white wolf from the frozen wastes north of Angband, where even orcs fear to tread.
+R:53:A serpent the length of a man, clad in scales of dull red that radiate a fierce heat.
+R:54:An orc captain feared by his own warband.
+R:61:A battle-hardened orc warrior.
+R:62:A giant black spider with mandibles sharp as sword-blades, bred in the dark pits beneath Angband.
+R:63:Crebain are dark crows bred by Morgoth's servants as spies and scouts.
+R:64:A faded spirit bound to the world of shadow.
+R:71:A large spider covered in dark bristles.
+R:72:A twisted growth born of Morgoth's malice.
+R:73:A serpent the length of a man, its mottled green scales slick with a foul secretion.
+R:74:A tall troll from the mountains north of Angband, where Morgoth's servants first bred their kind.
+R:75:A wretched undead thing, wrapped in the remnants of a burial shroud long since rotted to rags.
+R:76:An Orc captain hardened by years of raids against the Eldar, Baugon rules his warband through fear.
+R:81:A champion of the orc fighting-pits.
+R:82:A warrior of the Easterlings.
+R:83:A monstrous wasp, larger than any natural insect, bred in the poisoned pits beneath Angband.
+R:84:A huge champion of the orcs, clad in thick black armour and bearing a shield and much-notched axe.
+R:85:A small and exceptionally ugly orc, the most twisted of Morgoth's mockeries.
+R:91:An orc who has clawed his way to rank through blood and cunning.
+R:92:A Warg, bred in the pits of Angband to be larger and more cunning than any natural wolf.
+R:93:A spirit wrapped in a rotting shroud.
+R:94:A serpent wrought in Morgoth's darkness, its scales drinking all light that falls upon them.
+R:95:Orcobal has risen through the ranks of Morgoth's orc-hosts by strength of arm and ruthless cunning.
+R:101:A flickering darkness that spreads through the halls like a stain, multiplying as it feeds.
+R:102:A swollen spider of Ungoliant’s brood.
+R:103:An archer of the Easterling host, sworn to Morgoth's service.
+R:104:A bat warped beyond all natural shape by Morgoth's corruption.
+R:105:An orc-lord of great cunning, who has served Morgoth long enough to have earned his master's favour.
+R:111:A snow troll from the frozen wastes of the far north.
+R:112:A spirit chained to the earth by dark enchantment, unable to pass into the halls of Mandos.
+R:113:A lurking creature with claws and teeth.
+R:114:A giant of Morgoth's hosts, as tall as three men and armed with a massive club.
+R:115:Son of Ulfang the Black, Uldor led the Easterling treachery in the Nirnaeth Arnoediad.
+R:117:A cruel Easterling who ruled Dor-lomin with an iron fist after the Nirnaeth Arnoediad.
+R:121:A spy of the Easterling host, clad in dark garb and armed for silent work.
+R:122:A bat twisted by Morgoth's power into something feral and unnatural.
+R:123:A spirit of the winds that was seduced to Morgoth's service in the days before the Sun.
+R:124:A newly hatched fire-drake.
+R:125:An Easterling chieftain allied with Morgoth.
+R:126:The Valaraukar, demons of power, are among the mightiest of Morgoth's servants and widely feared.
+R:131:No mere wolf, but a foul spirit bound into wolf-form by Sauron's dark arts.
+R:132:A great black spider wreathed in clinging shadow, kin to the spawn of Ungoliant.
+R:133:A moving patch of shadow.
+R:134:A great serpent with scales of gleaming sapphire, ancient and terrible.
+R:135:A giant from the lands of Eruman.
+R:141:A great serpent with ruby scales.
+R:142:A low, crawling horror.
+R:143:A fallen spirit in Morgoth’s service.
+R:145:Some have called the Balrogs 'Demons of Terror', but none inspires such dread as Delthaur.
+R:146:Brother to Gilim, Nan is the giant of summer and the southern lands.
+R:151:A troll bred in the deepest pits of Angband, where no light has ever reached.
+R:152:A great serpent with emerald scales.
+R:153:The spirit of one who broke a sacred oath and was cursed to wander forever in darkness.
+R:154:A great cat and warrior of Tevildo’s court.
+R:161:A great serpent with scales of darkly glinting amethyst.
+R:162:A spirit of earth and stone, corrupted by Morgoth to serve as guardian of his deep halls.
+R:163:A monstrous, statue-like horror.
+R:164:A young cold-drake.
+R:165:Grizzled and cunning, Umuiyan has kept watch at the gates of Tevildo's fortress since the early days.
+R:166:A Balrog shrouded in darkness.
+R:167:An insubstantial wraith, barely more than a shred of shadow given form.
+R:171:A great spider of Ungoliant’s brood.
+R:172:A large werewolf.
+R:173:A great serpent with prismatic scales.
+R:174:A servant of Thuringwethil.
+R:175:A black cat from Tevildo’s court.
+R:176:A young cold-drake, long and sinuous, coiling upon the stone floor.
+R:177:One of Tevildo’s guards.
+R:181:A young fire-drake.
+R:182:A small, many-limbed horror.
+R:183:A mantled shape of void that was once perhaps man or elf.
+R:184:A spirit of fire given terrible form, blazing so fiercely that its shape is hard to discern.
+R:185:Tevildo is a mighty fay in the service of Melko, lord and master of all the cats.
+R:186:A Balrog who has earned his rank not by terror alone, but by the winning of battles.
+R:191:This great wyrm has coiled in the frozen depths of Angband since before the rising of the Sun.
+R:192:A troll of Gothmog’s personal guard.
+R:193:A nightmarish creature of the vampire kindred, servants of Sauron who dwell in darkness.
+R:194:A vast, grub-like nameless thing.
+R:195:A fire-drake who hoards stolen treasure.
+R:196:Son of Eol the Dark Elf and Aredhel of Gondolin, Maeglin rose high in the counsels of King Turgon.
+R:201:An ancient serpent with ruby scales.
+R:202:An ancient cold-drake of immense size.
+R:203:A silent figure seated upon a throne.
+R:204:A fallen spirit of shadow.
+R:205:The sire of werewolves.
+R:206:Vallach, Balrog of Sudden Flame.
+R:211:An ancient spider of Ungoliant’s brood.
+R:212:An enormous serpent with emerald scales.
+R:213:An ancient vampire of great power, graceful and terrible.
+R:214:An immense troll clad in iron.
+R:215:Gostir, a cold-drake of the North.
+R:221:Darkness clings to this ancient wyrm like a living shroud.
+R:222:A great Uruloki, fire-drake of Angband, grown vast and terrible over centuries of slaughter.
+R:223:A Rauko of mist.
+R:224:A monstrous spider, child of Ungoliant.
+R:225:Second only to Gothmog among the Valaraukar, Lungorthin commands the guard of Angband itself.
+R:231:A great serpent with adamant scales.
+R:232:An unrecognisable horror.
+R:233:A colossal winged dragon.
+R:234:A vampire messenger serving Sauron and Morgoth.
+R:241:Gothmog, Lord of Balrogs, is the high-captain of Angband and marshal of the hosts of Morgoth.
+R:242:A hideous spirit out of the outer darkness, walking now in the form of a spider of monstrous size.
+R:243:A great dragon known as the Deceiver.
+R:244:Morgoth’s chief servant, once a Maia of Aulë.
+R:245:A pale scion of Ancalagon's winged brood, this cold-drake sweeps through the dark on vast white wings.
+R:246:A red-winged flying drake.
+R:251:He is Morgoth Bauglir, the Black Enemy of the World, mightiest and most terrible of all beings in Arda.
+R:253:A giant wolf guarding the gates of Angband.
+R:260:Before you stands Nienna, the Lady of Pity, she who mourns for every hurt that Arda has suffered.
+R:321:Starlight gathers around the Lady of the Stars.
+R:332:Oromë, Lord of Forests.
+R:401:Clothed in shining white, he appears as a beacon of hope and strength in this fallen world.
+R:402:A great weight of green scales lies coiled among the remnants of an unfinished tale.
+R:403:A figure carrying a narrow blade.
+R:404:Rime lies thick upon his shoulders.
+R:405:Brown wings unfold above a heap of stolen things.
+R:406:An Orc's face looks out beneath the dark helm, but the malice behind it is older than the Orcs.
+R:407:His cloak streams behind him though the air is still.
+R:408:The figure stands apart from the wall, yet its shadow joins every shadow about it.
+R:409:Red and gold still adorn the envoy's dark raiment.
+R:410:What seemed a fallen pillar rises from the floor.
+R:411:Pale hands close about the haft of a great hammer.

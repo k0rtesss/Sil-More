@@ -1559,6 +1559,9 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
+        if (sdl_description_overlay_handle_view_hover((float)ev->motion.x,
+                (float)ev->motion.y))
+            return;
         if (sdl_description_overlay_handle_close_hover((float)ev->motion.x,
                 (float)ev->motion.y))
         {
@@ -1706,6 +1709,12 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             if (sdl_touch_top_panel_handle_description_pointer(
                     (float)ev->button.x, (float)ev->button.y))
             {
+                return;
+            }
+            if (sdl_description_overlay_handle_view_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                sdl_description_overlay_claim_mouse_release();
                 return;
             }
             if (sdl_description_overlay_handle_close_pointer(
@@ -2142,6 +2151,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         (void)sdl_object_tooltip_dismiss_persistent_on_press();
         if (sdl_touch_exit_button_handle_pointer(x, y))
             return;
+        if (sdl_description_overlay_handle_view_pointer(x, y))
+        {
+            sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);
+            return;
+        }
         if (sdl_description_overlay_handle_close_pointer(x, y))
         {
             sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);

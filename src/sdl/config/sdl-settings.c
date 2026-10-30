@@ -4003,19 +4003,25 @@ void sdl_pop_terminal_menu_scale(void)
         sdl_apply_config_no_redraw();
 }
 
-bool sdl_description_overlay_present(const byte* attrs, const char* chars,
-    const byte* tattrs, const char* tchars, const byte* story,
-    const byte* health, int width, int height, int target_cols, int scroll,
-    bool interactive, int* out_visible_rows, int* out_max_scroll)
+bool sdl_description_overlay_present_views(const sdl_description_content* full,
+    const sdl_description_content* comparison, bool comparison_view,
+    int scroll, bool interactive, int* out_visible_rows, int* out_max_scroll)
 {
     description_overlay_layout layout;
+    bool can_compare = full && full->attrs && full->chars
+        && full->width > 0 && full->height > 0
+        && comparison && comparison->attrs && comparison->chars
+        && comparison->width > 0 && comparison->height > 0;
+    const sdl_description_content* content =
+        can_compare && comparison_view ? comparison : full;
 
     if (out_visible_rows)
         *out_visible_rows = 1;
     if (out_max_scroll)
         *out_max_scroll = 0;
 
-    if (!attrs || !chars || width <= 0 || height <= 0)
+    if (!content || !content->attrs || !content->chars
+        || content->width <= 0 || content->height <= 0)
     {
         sdl_description_overlay_clear();
         return false;
@@ -4023,15 +4029,20 @@ bool sdl_description_overlay_present(const byte* attrs, const char* chars,
 
     g_description_overlay.active = true;
     g_description_overlay.interactive = interactive;
-    g_description_overlay.attrs = attrs;
-    g_description_overlay.chars = chars;
-    g_description_overlay.tattrs = tattrs;
-    g_description_overlay.tchars = tchars;
-    g_description_overlay.story = story;
-    g_description_overlay.health = health;
-    g_description_overlay.width = width;
-    g_description_overlay.height = height;
-    g_description_overlay.target_cols = target_cols;
+    g_description_overlay.attrs = content->attrs;
+    g_description_overlay.chars = content->chars;
+    g_description_overlay.tattrs = content->tattrs;
+    g_description_overlay.tchars = content->tchars;
+    g_description_overlay.story = content->story;
+    g_description_overlay.health = content->health;
+    g_description_overlay.width = content->width;
+    g_description_overlay.height = content->height;
+    g_description_overlay.target_cols = content->target_cols;
+    g_description_overlay.has_view_toggle = can_compare;
+    g_description_overlay.comparison_view = can_compare && comparison_view;
+    g_description_overlay.view_toggle_hover = false;
+    g_description_overlay.alternate_view = can_compare
+        ? (comparison_view ? *full : *comparison) : (sdl_description_content){ 0 };
     g_description_overlay.scroll = scroll;
     if (interactive)
     {
@@ -4058,6 +4069,55 @@ bool sdl_description_overlay_present(const byte* attrs, const char* chars,
 
     g_state.need_present = true;
     sdl_present_if_needed(&g_views[PANE_MAIN]);
+    return true;
+}
+
+bool sdl_description_overlay_present(const byte* attrs, const char* chars,
+    const byte* tattrs, const char* tchars, const byte* story,
+    const byte* health, int width, int height, int target_cols, int scroll,
+    bool interactive, int* visible_rows, int* max_scroll)
+{
+    sdl_description_content content = { attrs, chars, tattrs, tchars, story,
+        health, width, height, target_cols };
+    return sdl_description_overlay_present_views(&content, NULL, false,
+        scroll, interactive, visible_rows, max_scroll);
+}
+
+bool sdl_description_overlay_comparison_view(void)
+{
+    return g_description_overlay.active && g_description_overlay.has_view_toggle
+        && g_description_overlay.comparison_view;
+}
+
+bool sdl_description_overlay_toggle_view(void)
+{
+    description_overlay_state* overlay = &g_description_overlay;
+    sdl_description_content current;
+    sdl_description_content next;
+    if (!overlay->active || !overlay->has_view_toggle)
+        return false;
+    current = (sdl_description_content){ overlay->attrs, overlay->chars,
+        overlay->tattrs, overlay->tchars, overlay->story, overlay->health,
+        overlay->width, overlay->height, overlay->target_cols };
+    next = overlay->alternate_view;
+    overlay->alternate_view = current;
+    overlay->attrs = next.attrs;
+    overlay->chars = next.chars;
+    overlay->tattrs = next.tattrs;
+    overlay->tchars = next.tchars;
+    overlay->story = next.story;
+    overlay->health = next.health;
+    overlay->width = next.width;
+    overlay->height = next.height;
+    overlay->target_cols = next.target_cols;
+    overlay->comparison_view = !overlay->comparison_view;
+    overlay->scroll = 0;
+    overlay->close_hover = false;
+    overlay->footer_hover_key = 0;
+    sdl_description_overlay_touch_scroll_cancel();
+    g_state.need_present = true;
+    sdl_present_if_needed(&g_views[PANE_MAIN]);
+    Term_keypress(UI_MENU_CLICK_WAKE_KEY);
     return true;
 }
 

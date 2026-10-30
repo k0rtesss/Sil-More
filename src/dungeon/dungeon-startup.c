@@ -198,7 +198,7 @@ PlayResult play_game(void)
     }
 
     if (!run_mode_is_blitz() && !prefer_blitz_startup) {
-        if (metarun_created) /* show only the first time ever */
+        if (metarun_created && !minimum_text_mode) /* first-time story */
         {
             print_story_intro();
             screen_clear_all_terms_no_fresh();
@@ -489,7 +489,8 @@ PlayResult play_game(void)
     }
 
     /* Only show story when no alive character exists (fresh start or all characters dead) */
-    if (!run_mode_is_blitz() && score_count_alive_entries() == 0)
+    if (!run_mode_is_blitz() && !minimum_text_mode
+        && score_count_alive_entries() == 0)
     {
         sdl_music_play_main_full();
         print_story(15,1);

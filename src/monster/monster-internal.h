@@ -37,6 +37,10 @@ void describe_monster_drop(int r_idx, const monster_lore* l_ptr);
 void describe_monster_attack(
     int r_idx, const monster_lore* l_ptr, const monster_type* m_ptr);
 void describe_monster_abilities(int r_idx, const monster_lore* l_ptr);
+void describe_monster_compact(int r_idx, const monster_lore* lore,
+    const monster_type* live);
+void describe_monster_mode(int r_idx, bool spoilers, const monster_type* live,
+    bool compact);
 
 /*
  * Hallucination guard for the recall screen.  Defined in monster-lore.c and

@@ -351,14 +351,14 @@ static bool supply_object_show_with_compare(object_type* o_ptr,
         const object_type* single[1] = { o_ptr };
 
         if (overlay)
-            return object_info_overlay_show_multi(single, NULL, 1);
+            return object_info_overlay_show_multi(single, NULL, 1, false);
         object_info_screen(o_ptr);
         return true;
     }
 
     if (overlay)
-        return object_info_overlay_show_multi(objects, headings, count);
-    object_info_screen_multi(objects, headings, count);
+        return object_info_overlay_show_multi(objects, headings, count, true);
+    object_info_screen_multi(objects, headings, count, true);
     return true;
 }
 
@@ -402,8 +402,8 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
         if (count > 0)
         {
             if (overlay)
-                return object_info_overlay_show_multi(objects, headings, count);
-            object_info_screen_multi(objects, headings, count);
+                return object_info_overlay_show_multi(objects, headings, count, false);
+            object_info_screen_multi(objects, headings, count, false);
             return true;
         }
 
@@ -424,7 +424,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
         if (overlay)
         {
             const object_type* objects[1] = { o_ptr };
-            return object_info_overlay_show_multi(objects, NULL, 1);
+            return object_info_overlay_show_multi(objects, NULL, 1, false);
         }
         object_info_screen(o_ptr);
         return true;
@@ -6015,15 +6015,15 @@ static bool equipment_menu_show_entry_description(equipment_list_entry* entry,
         {
             if (overlay)
                 return object_info_overlay_show_multi(objects, headings,
-                    count);
-            object_info_screen_multi(objects, headings, count);
+                    count, true);
+            object_info_screen_multi(objects, headings, count, true);
             return true;
         }
 
         if (overlay)
         {
             const object_type* single[1] = { o_ptr };
-            return object_info_overlay_show_multi(single, NULL, 1);
+            return object_info_overlay_show_multi(single, NULL, 1, false);
         }
         object_info_screen(o_ptr);
     }
@@ -7767,7 +7767,7 @@ static bool inventory_storage_exchange_overlay_entry(
     objects[0] = request->storage_exchange_incoming;
     objects[1] = candidate;
 
-    return object_info_overlay_show_multi(objects, headings, 2);
+    return object_info_overlay_show_multi(objects, headings, 2, false);
 }
 
 static void inventory_storage_exchange_volume_status(
@@ -8021,7 +8021,7 @@ static bool inventory_replacement_overlay_entry(
     objects[0] = request->replacement_incoming;
     objects[1] = candidate;
 
-    return object_info_overlay_show_multi(objects, headings, 2);
+    return object_info_overlay_show_multi(objects, headings, 2, false);
 }
 
 static void inventory_replacement_volume_status(
@@ -8238,13 +8238,9 @@ static bool inventory_slot_pick_overlay_entry(
     current = equipment_entry_object(entry);
     objects[0] = request->slot_pick_incoming;
 
-    /* Empty destination slot: just describe the item being placed. */
-    if (!current || !current->k_idx)
-        return object_info_overlay_show_multi(objects, headings, 1);
+    objects[1] = current && current->k_idx ? current : NULL;
 
-    objects[1] = current;
-
-    return object_info_overlay_show_multi(objects, headings, 2);
+    return object_info_overlay_show_multi(objects, headings, 2, true);
 }
 
 static cptr inventory_page_use_action_text(const equipment_list_entry* entry,

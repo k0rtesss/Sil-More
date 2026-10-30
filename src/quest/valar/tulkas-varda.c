@@ -175,7 +175,7 @@ void tulkas_quest_interaction(void)
             }
 
             /* Display typewriter quest dialog */
-            quest_typewriter_menu("Quest of Tulkas the Strong", processed_texts, text_count, TERM_YELLOW, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_TULKAS, false, "Quest of Tulkas the Strong", processed_texts, text_count, TERM_YELLOW, TERM_WHITE);
 
             /* Clean up */
             for (int i = 0; i < text_count; i++) {
@@ -184,8 +184,15 @@ void tulkas_quest_interaction(void)
             mem_free_null(processed_texts);
             free_quest_texts(init_texts, text_count);
         } else {
-            /* Fallback to simple message if text extraction fails */
-            msg_print("Tulkas the Strong speaks of a great quest, but the words are lost in thunder.");
+            /* Keep the objective available even if the narrative is missing. */
+            if (minimum_text_mode)
+            {
+                cptr fallback[] = {"The quest story is unavailable."};
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_TULKAS, false,
+                    "Quest of Tulkas the Strong", fallback, 1, TERM_YELLOW, TERM_WHITE);
+            }
+            else
+                msg_print("Tulkas the Strong speaks of a great quest, but the words are lost in thunder.");
         }
         sdl_popup_notification_show("New quest added");
     }
@@ -217,8 +224,8 @@ void tulkas_quest_interaction(void)
                      valar_reserved_artifacts, p_ptr->tulkas_prize_a_idx, z_info->art_max);
         }
         p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
-        p_ptr->tulkas_target_r_idx = 0;
-        p_ptr->tulkas_prize_a_idx = 0;
+        /* These existing saved fields are no longer active after the reward,
+         * but retaining them lets the journal replay the actual assignment. */
         p_ptr->tulkas_quest_complete = 0;
 
         /* Unlock oath for future characters in this metarun */
@@ -238,7 +245,7 @@ void tulkas_quest_interaction(void)
 
         if (completion_texts && completion_count > 0) {
             /* Display typewriter completion dialog */
-            quest_typewriter_menu("Quest Complete: Tulkas Rewards Your Valor", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_TULKAS, true, "Quest Complete: Tulkas Rewards Your Valor", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts, completion_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -246,7 +253,7 @@ void tulkas_quest_interaction(void)
                 "Tulkas appears with a great laugh of triumph!",
                 "'Well fought, warrior! You have proven your valor in battle.'"
             };
-            quest_typewriter_menu("Quest Complete: Tulkas Rewards Your Valor", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_TULKAS, true, "Quest Complete: Tulkas Rewards Your Valor", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
         }
 
         metarun_mark_quest_completed(METARUN_QUEST_TULKAS);
@@ -565,6 +572,13 @@ static int prompt_varda_reward_choice_menu(const int* choices,
         labels[i] = descriptions[i];
     }
 
+    if (minimum_text_mode)
+    {
+        QUEST_PRESENT_DIALOGUE(QUEST_ID_VARDA, true, "Starlight Triumph",
+            completion_texts, text_count, TERM_L_GREEN, TERM_WHITE);
+        completion_texts = NULL;
+        text_count = 0;
+    }
     return quest_reward_book_choice("Starlight Triumph", completion_texts,
         text_count, "Choose your radiant gift:", choices, labels, NULL,
         choice_count, 0, inspect_varda_reward);
@@ -765,14 +779,14 @@ void varda_quest_interaction(void)
         cptr* init_texts = extract_quest_init_texts(QUEST_ID_VARDA, &text_count);
         init_texts = prepend_repeat_context(QUEST_ID_VARDA, init_texts, &text_count, false);
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Varda, Lady of the Stars", init_texts, text_count, TERM_WHITE, TERM_L_BLUE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_VARDA, false, "Varda, Lady of the Stars", init_texts, text_count, TERM_WHITE, TERM_L_BLUE);
             free_quest_texts(init_texts, text_count);
         } else {
             cptr fallback[] = {
                 "Varda's voice is clear as starlight:",
                 "\"Seek Duruin's bastion of shadow and break it open to the Sun.\""
             };
-            quest_typewriter_menu("Varda, Lady of the Stars", fallback, 2, TERM_WHITE, TERM_L_BLUE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_VARDA, false, "Varda, Lady of the Stars", fallback, 2, TERM_WHITE, TERM_L_BLUE);
         }
 
         do_cmd_note("Varda sent me to destroy Duruin and cleanse his bastion.", p_ptr->depth);

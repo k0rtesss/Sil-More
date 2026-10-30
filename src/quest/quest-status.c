@@ -5,7 +5,9 @@
 #include "metarun.h"
 #include "sdl-config.h"
 #include "quest/quest-internal.h"
+#include "fs/path.h"
 #include "ui/story_font.h"
+#include "ui/question.h"
 
 /* Forward declarations for quest text helpers used before their definitions */
 static cptr get_quest_title(int quest_idx);
@@ -635,6 +637,152 @@ static cptr get_quest_reward_text(int quest_idx)
     return reward_buf;
 }
 
+/* Concise objectives live beside the normal quest template, while rewards are
+ * derived from the same data that actually grants them. */
+static cptr quest_minimum_objective(int quest_idx, char* out, size_t size)
+{
+    static bool attempted;
+    static char* catalog;
+    char path[1024];
+    size_t length = 0;
+    cptr line;
+
+    if (!out || !size) return "";
+    out[0] = '\0';
+    if (!attempted)
+    {
+        attempted = true;
+        if (ANGBAND_DIR_EDIT && path_build(path, sizeof(path), ANGBAND_DIR_EDIT,
+                "quest-minimum.txt"))
+            catalog = SDL_LoadFile(path, &length);
+        if (!catalog)
+            log_warn("Minimum quest text unavailable; using the normal objective");
+    }
+    line = catalog;
+    while (line && *line)
+    {
+        cptr end = strchr(line, '\n');
+        char* after;
+        long id;
+        if (!end) end = line + strlen(line);
+        if (line[0] == 'Q' && line + 2 < end && line[1] == ':')
+        {
+            id = strtol(line + 2, &after, 10);
+            if (after > line + 2 && after < end && *after == ':'
+                && id == quest_idx)
+            {
+                size_t n = (size_t)(end - after - 1);
+                while (n && (after[n] == '\r' || after[n] == ' ')) n--;
+                n = MIN(n, size - 1);
+                memcpy(out, after + 1, n);
+                out[n] = '\0';
+                break;
+            }
+        }
+        line = *end ? end + 1 : end;
+    }
+    if (!out[0])
+        SDL_strlcpy(out, get_quest_challenge(quest_idx), size);
+
+    if (quest_idx == QUEST_ID_TULKAS)
+    {
+        if (p_ptr && p_ptr->tulkas_target_r_idx > 0 && z_info
+            && p_ptr->tulkas_target_r_idx < z_info->r_max && r_info && r_name)
+        {
+            char copy[512];
+            SDL_strlcpy(copy, process_quest_placeholders(out, quest_idx),
+                sizeof(copy));
+            SDL_strlcpy(out, copy, size);
+        }
+        else
+        {
+            SDL_strlcpy(out, "Defeat the named target and return to Tulkas.", size);
+        }
+    }
+    return out;
+}
+
+static void quest_minimum_reward_add(char* out, size_t size, cptr text)
+{
+    if (!text || !text[0]) return;
+    if (out[0]) SDL_strlcat(out, ", ", size);
+    SDL_strlcat(out, text, size);
+}
+
+static void quest_minimum_reward(int quest_idx, char* out, size_t size)
+{
+    static cptr stat_names[] = {"Str", "Dex", "Con", "Gra"};
+    const quest_type* quest;
+    char part[160];
+
+    if (!out || !size) return;
+    out[0] = '\0';
+    if (!z_info || !quest_info || quest_idx <= 0 || quest_idx >= z_info->quest_max)
+    {
+        SDL_strlcpy(out, "unknown", size);
+        return;
+    }
+    quest = &quest_info[quest_idx];
+    if (quest_idx == QUEST_ID_TULKAS)
+    {
+        cptr prize = (p_ptr && p_ptr->tulkas_prize_a_idx > 0
+            && p_ptr->tulkas_prize_a_idx < z_info->art_max)
+            ? get_quest_reward_text(quest_idx) : "an artefact";
+        quest_minimum_reward_add(out, size, prize);
+    }
+    if (quest_idx == QUEST_ID_VARDA)
+        quest_minimum_reward_add(out, size, "choose a radiant artefact");
+    for (int i = 0; i < A_MAX; i++)
+        if (quest->stat_bonuses[i])
+        {
+            strnfmt(part, sizeof(part), "+%d %s (up to cap)",
+                quest->stat_bonuses[i], stat_names[i]);
+            quest_minimum_reward_add(out, size, part);
+        }
+    if (quest->skill_bonus && quest->skill_type < S_MAX)
+    {
+        strnfmt(part, sizeof(part), "+%d %s", quest->skill_bonus,
+            skill_names_full[quest->skill_type]);
+        quest_minimum_reward_add(out, size, part);
+    }
+    if (quest->ability_type == S_SPC && quest->ability_id < ABILITIES_MAX
+        && b_info && b_name)
+    {
+        int index = ability_index(S_SPC, quest->ability_id);
+        if (index >= 0 && index < z_info->b_max && b_info[index].name)
+            quest_minimum_reward_add(out, size, b_name + b_info[index].name);
+    }
+    if (quest->oath_id && oath_info && oath_name_text
+        && quest->oath_id < z_info->oath_max)
+    {
+        strnfmt(part, sizeof(part), "unlock %s for future characters",
+            get_oath_name_from_id(quest->oath_id));
+        quest_minimum_reward_add(out, size, part);
+    }
+    strnfmt(part, sizeof(part), "%d XP", QUEST_COMPLETION_EXP);
+    quest_minimum_reward_add(out, size, part);
+}
+
+void quest_minimum_summary(int quest_idx, bool complete, char* out, size_t size)
+{
+    char objective[512], reward[320];
+    u64b saved_rng;
+    if (!out || !size) return;
+    if (!z_info || !quest_info || quest_idx <= 0 || quest_idx >= z_info->quest_max)
+    {
+        out[0] = '\0';
+        return;
+    }
+    /* Artefact name previews call object_prep(), which rolls cosmetic data and
+     * weight. A read-only quest summary must not advance the gameplay RNG. */
+    saved_rng = Rand_state_export();
+    quest_minimum_objective(quest_idx, objective, sizeof(objective));
+    quest_minimum_reward(quest_idx, reward, sizeof(reward));
+    strnfmt(out, size, "%sObjective: %s  Reward: %s.",
+        complete ? "Completed. " : "", objective, reward);
+    Rand_state_pop(saved_rng);
+}
+
 /*
  * Free quest text array returned by extract functions
  */
@@ -654,6 +802,233 @@ void free_quest_texts(cptr* texts, int count)
     mem_free_null(texts);
 }
 
+/* The compact journal keeps progress and failure states visible alongside the
+ * objective/reward brief, rather than losing the useful parts of the journal. */
+static int quest_minimum_state(int quest_idx)
+{
+    if (!p_ptr) return 0;
+    switch (quest_idx)
+    {
+    case QUEST_ID_TULKAS: return p_ptr->tulkas_quest;
+    case QUEST_ID_AULE: return p_ptr->aule_quest;
+    case QUEST_ID_MANDOS: return p_ptr->mandos_quest;
+    case QUEST_ID_NIENA: return p_ptr->niena_quest;
+    case QUEST_ID_OROME: return p_ptr->orome_quest;
+    case QUEST_ID_VARDA: return p_ptr->varda_quest;
+    default: return 0;
+    }
+}
+
+static bool quest_minimum_failed(int quest_idx, int state)
+{
+    return (quest_idx == QUEST_ID_AULE && state == AULE_QUEST_FAILED)
+        || (quest_idx == QUEST_ID_NIENA && state == NIENA_QUEST_FAILED)
+        || (quest_idx == QUEST_ID_VARDA && state == VARDA_QUEST_FAILED);
+}
+
+static bool quest_minimum_completed(int quest_idx, int state)
+{
+    if (quest_minimum_failed(quest_idx, state)) return false;
+    if (quest_idx == QUEST_ID_AULE)
+        return state == AULE_QUEST_SUCCESS || state == AULE_QUEST_REWARDED;
+    return state == 3 || state == 4;
+}
+
+static bool quest_minimum_rewarded(int quest_idx, int state)
+{
+    return quest_idx == QUEST_ID_AULE ? state == AULE_QUEST_REWARDED
+        : state == 4;
+}
+
+static cptr quest_minimum_name(int quest_idx)
+{
+    if (z_info && quest_info && quest_name_text && quest_idx > 0
+        && quest_idx < z_info->quest_max && quest_info[quest_idx].name)
+        return lore_text(quest_name_text + quest_info[quest_idx].name);
+    return "Quest";
+}
+
+static bool quest_status_put_minimum(int col, int wid, int hgt, int* row)
+{
+    bool any = false;
+    bool escaped = p_ptr->escaped != 0;
+    bool sil = escaped || silmarils_possessed() > 0;
+    bool throne = sil || p_ptr->morgoth_hall_entered;
+    bool depth = throne || p_ptr->max_depth >= MORGOTH_DEPTH
+        || p_ptr->depth >= MORGOTH_DEPTH;
+    cptr main_objective = !depth ? "Reach Morgoth's level"
+        : !throne ? "Find Morgoth's throne room"
+        : !sil ? "Take a Silmaril from the Iron Crown"
+        : !escaped ? "Escape Angband with a Silmaril"
+        : "Escaped with a Silmaril";
+    char line[768];
+
+    quest_status_put_line(col, hgt, row, TERM_ORANGE, "Main Quest: The Silmaril");
+    strnfmt(line, sizeof(line), "Objective: %s. Reward: a Silmaril and victory.",
+        main_objective);
+    quest_status_put_wrapped(col, wid, hgt, row, TERM_WHITE, line);
+    quest_status_put_line(col, hgt, row, TERM_WHITE, "");
+
+    for (int id = QUEST_ID_TULKAS; id <= QUEST_ID_VARDA; id++)
+    {
+        int state = quest_minimum_state(id);
+        bool failed, completed, rewarded;
+        cptr status;
+        if (state <= 1 || !z_info || id >= z_info->quest_max) continue;
+        any = true;
+        failed = quest_minimum_failed(id, state);
+        completed = quest_minimum_completed(id, state);
+        rewarded = quest_minimum_rewarded(id, state) && !failed;
+        status = failed ? "Failed" : rewarded ? "Reward claimed"
+            : completed ? "Complete; return for reward" : "Active";
+        strnfmt(line, sizeof(line), "%s - %s", quest_minimum_name(id), status);
+        quest_status_put_line(col, hgt, row, failed ? TERM_RED
+            : completed ? TERM_L_GREEN : TERM_YELLOW, line);
+        quest_minimum_summary(id, false, line, sizeof(line));
+        quest_status_put_wrapped(col, wid, hgt, row, TERM_WHITE, line);
+        if (id == QUEST_ID_NIENA
+            && (state == NIENA_QUEST_ACTIVE || state == NIENA_QUEST_FAILED))
+        {
+            strnfmt(line, sizeof(line), "Seen: %d; killed: %d.",
+                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
+            quest_status_put_line(col, hgt, row, TERM_SLATE, line);
+        }
+        if (id == QUEST_ID_OROME && state == OROME_QUEST_ACTIVE)
+        {
+            strnfmt(line, sizeof(line), "Wolves %d/100; spiders %d/80; serpents %d/60; vampires %d/30.",
+                p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
+                p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+            quest_status_put_wrapped(col, wid, hgt, row, TERM_SLATE, line);
+        }
+        if (id == QUEST_ID_VARDA && state == VARDA_QUEST_ACTIVE
+            && varda_quest_bastion_level_active())
+            quest_status_put_wrapped(col, wid, hgt, row, TERM_ORANGE,
+                "Duruin's Bastion is on this level; do not leave before defeating him.");
+        quest_status_put_line(col, hgt, row, TERM_WHITE, "");
+    }
+    if (!any)
+        quest_status_put_line(col, hgt, row, TERM_SLATE,
+            "No active or completed side quests this run.");
+    if (z_info && quest_info)
+    {
+        bool heading = false;
+        for (int id = QUEST_ID_TULKAS; id <= QUEST_ID_VARDA && id < z_info->quest_max; id++)
+        {
+            u32b flag = get_metarun_quest_flag(id);
+            int previous = flag ? metarun_quest_completion_count(flag) : 0;
+            if (!previous || quest_minimum_rewarded(id, quest_minimum_state(id)))
+                continue;
+            if (!heading)
+            {
+                quest_status_put_line(col, hgt, row, TERM_SLATE, "Earlier Tale completions:");
+                heading = true;
+            }
+            strnfmt(line, sizeof(line), "%s: %d", quest_minimum_name(id), previous);
+            quest_status_put_line(col, hgt, row, TERM_SLATE, line);
+        }
+    }
+    return any;
+}
+
+static void quest_story_replace_tulkas(cptr* texts, int count)
+{
+    cptr target = "the named foe";
+    char prize[200];
+    if (p_ptr && p_ptr->tulkas_target_r_idx > 0 && z_info
+        && p_ptr->tulkas_target_r_idx < z_info->r_max && r_info && r_name)
+        target = lore_text(r_name + r_info[p_ptr->tulkas_target_r_idx].name);
+    {
+        u64b saved_rng = Rand_state_export();
+        SDL_strlcpy(prize, p_ptr && z_info && p_ptr->tulkas_prize_a_idx > 0
+            && p_ptr->tulkas_prize_a_idx < z_info->art_max
+            ? get_quest_reward_text(QUEST_ID_TULKAS) : "the promised artefact",
+            sizeof(prize));
+        Rand_state_pop(saved_rng);
+    }
+    for (int i = 0; texts && i < count; i++)
+    {
+        cptr source = texts[i];
+        char changed[2048];
+        size_t used = 0;
+        if (!source) continue;
+        while (*source && used + 1 < sizeof(changed))
+        {
+            cptr replacement = NULL;
+            if (prefix(source, "[monster name]"))
+            {
+                replacement = target;
+                source += strlen("[monster name]");
+            }
+            else if (prefix(source, "[artifact name]"))
+            {
+                replacement = prize;
+                source += strlen("[artifact name]");
+            }
+            if (replacement)
+            {
+                size_t n = MIN(strlen(replacement), sizeof(changed) - used - 1);
+                memcpy(changed + used, replacement, n);
+                used += n;
+            }
+            else changed[used++] = *source++;
+        }
+        changed[used] = '\0';
+        str_free((char*)texts[i]);
+        texts[i] = str_dup(changed);
+    }
+}
+
+static void quest_status_show_story(void)
+{
+    ui_question_option choices[6];
+    int ids[6], count = 0, selected, quest_idx, phase, text_count = 0;
+    cptr* texts;
+    const ui_question_option phases[] = {
+        {'i', "Introduction", TERM_WHITE, false},
+        {'c', "Completion", TERM_WHITE, false}
+    };
+    ui_question_option available_phases[2];
+
+    for (int id = QUEST_ID_TULKAS; id <= QUEST_ID_VARDA; id++)
+    {
+        if (quest_minimum_state(id) <= 1 || !z_info || id >= z_info->quest_max)
+            continue;
+        ids[count] = id;
+        choices[count] = (ui_question_option){(char)('a' + count),
+            quest_minimum_name(id), TERM_WHITE, false};
+        count++;
+    }
+    if (!count) return;
+    selected = ui_question_ask_overlay("Quest stories", "Choose a quest.",
+        choices, count, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+    if (selected < 0 || selected >= count) return;
+    quest_idx = ids[selected];
+    available_phases[0] = phases[0];
+    available_phases[1] = phases[1];
+    available_phases[1].disabled = !quest_minimum_completed(quest_idx,
+        quest_minimum_state(quest_idx));
+    phase = ui_question_ask_overlay(quest_minimum_name(quest_idx),
+        "Choose which story to read.", available_phases, 2,
+        UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+    if (phase < 0 || phase > 1 || (phase == 1 && available_phases[1].disabled))
+        return;
+    texts = phase == 0 ? extract_quest_init_texts(quest_idx, &text_count)
+                       : extract_quest_completion_texts(quest_idx, &text_count);
+    if (!texts || !text_count)
+    {
+        if (texts) free_quest_texts(texts, text_count);
+        msg_print("The quest story is unavailable.");
+        return;
+    }
+    if (quest_idx == QUEST_ID_TULKAS)
+        quest_story_replace_tulkas(texts, text_count);
+    quest_typewriter_menu(quest_minimum_name(quest_idx), texts, text_count,
+        TERM_WHITE, TERM_WHITE);
+    free_quest_texts(texts, text_count);
+}
+
+#define QUEST_STATUS_CLICK_STORY (-20106)
+
 /*
  * Show quest status for current metarun - only active and completed quests
  * Now uses quest.txt data instead of hardcoded values
@@ -664,6 +1039,7 @@ hint_quest_page do_cmd_quest_status_page(void)
     int row = 0;
     int col = 0;
     bool any_quests = false;
+    bool show_story = false;
     int wid = 0;
     int hgt = 0;
     hint_quest_page next_page = HINT_QUEST_PAGE_EXIT;
@@ -682,6 +1058,12 @@ hint_quest_page do_cmd_quest_status_page(void)
 
     quest_status_tabs_focus = true;
     quest_status_reset_page(col, &row);
+
+    if (minimum_text_mode)
+    {
+        any_quests = quest_status_put_minimum(col, wid, hgt, &row);
+        goto quest_status_finish;
+    }
 
     /* The purpose of every run remains visible even before a side quest is
      * discovered.  Existing endgame state supplies each milestone. */
@@ -1157,7 +1539,11 @@ hint_quest_page do_cmd_quest_status_page(void)
             "Side-quest vaults may appear as you delve deeper...");
     }
 
+quest_status_finish:
     quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
+    if (minimum_text_mode && any_quests)
+        sdl_hint_quest_menu_add_button(QUEST_STATUS_CLICK_STORY,
+            steamdeck_controls_active() ? "<X> Stories" : "s Stories", TERM_L_BLUE);
     sdl_hint_quest_menu_add_button(HINT_QUEST_CLICK_RETURN,
         steamdeck_controls_active() ? "<B> Back" : "Back",
         TERM_L_WHITE);
@@ -1175,6 +1561,12 @@ hint_quest_page do_cmd_quest_status_page(void)
 
         if (ui_menu_click_take_action(&clicked_choice, &click_action))
         {
+            if (clicked_choice == QUEST_STATUS_CLICK_STORY && minimum_text_mode && any_quests)
+            {
+                if (click_action == UI_MENU_CLICK_HOVER) continue;
+                show_story = true;
+                break;
+            }
             if (clicked_choice == HINT_QUEST_CLICK_RETURN)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -1218,6 +1610,13 @@ hint_quest_page do_cmd_quest_status_page(void)
         }
         if (ch == UI_MENU_CLICK_WAKE_KEY)
             continue;
+        if (minimum_text_mode && any_quests
+            && (ch == 's' || ch == 'S'
+                || (steamdeck_controls_active() && ch == steamdeck_alt_action_key())))
+        {
+            show_story = true;
+            break;
+        }
         ch = (char)steamdeck_menu_key(ch, 0, 0);
         if (quest_status_handle_body_navigation(ch))
             continue;
@@ -1243,6 +1642,13 @@ hint_quest_page do_cmd_quest_status_page(void)
     }
 
     ui_menu_click_clear();
+    if (show_story)
+    {
+        sdl_hint_quest_menu_hide();
+        quest_status_show_story();
+        quest_status_tabs_focus = false;
+        return HINT_QUEST_PAGE_QUESTS;
+    }
     if (next_page != HINT_QUEST_PAGE_EXIT)
         sdl_hint_quest_menu_prepare_page_turn(next_page);
     else

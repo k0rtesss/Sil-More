@@ -3020,6 +3020,7 @@
 /* Confirm before paid melee/ranged active switches */
 #define OPT_active_weapon_switch_confirm (OPT_GAME_PLAY + 6)
 #define OPT_ignore_monster_alarms (OPT_GAME_PLAY + 7)
+#define OPT_minimum_text_mode (OPT_GAME_PLAY + 8)
 // reserved legacy slot: auto_haggle
 // reserved legacy slot: auto_scum
 // reserved legacy slot: allow_themed_levels
@@ -3243,6 +3244,7 @@
 #define pacifist_attack_warning op_ptr->opt[OPT_pacifist_attack_warning]
 #define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
 #define ignore_monster_alarms op_ptr->opt[OPT_ignore_monster_alarms]
+#define minimum_text_mode op_ptr->opt[OPT_minimum_text_mode]
 #define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
 #define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
 #define utumno_corridors op_ptr->opt[OPT_utumno_corridors]

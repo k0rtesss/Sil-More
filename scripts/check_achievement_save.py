@@ -166,7 +166,9 @@ static void prepare_player(void)
     p_ptr->achievement_jammed_doors[door/8] |= 1u<<(door%8);
     ++door;
     p_ptr->achievement_jammed_doors[door/8] |= 1u<<(door%8);
-    p_ptr->tulkas_target_r_idx=41; p_ptr->niena_level=17;
+    p_ptr->tulkas_quest=TULKAS_QUEST_REWARDED;
+    p_ptr->tulkas_target_r_idx=41; p_ptr->tulkas_prize_a_idx=17;
+    p_ptr->niena_level=17;
     p_ptr->skill_base[S_SNG]=20;
     turn=888; playerturn=777;
     SDL_strlcpy(op_ptr->full_name,"Achievement codec",sizeof(op_ptr->full_name));
@@ -174,7 +176,9 @@ static void prepare_player(void)
 }
 static void assert_player_tail(void)
 {
-    assert(p_ptr->tulkas_target_r_idx==41 && p_ptr->niena_level==17);
+    assert(p_ptr->tulkas_quest==TULKAS_QUEST_REWARDED);
+    assert(p_ptr->tulkas_target_r_idx==41 && p_ptr->tulkas_prize_a_idx==17);
+    assert(p_ptr->niena_level==17);
     assert(turn==888 && playerturn==777);
     assert(!strcmp(op_ptr->full_name,"Achievement codec"));
     assert(p_ptr->chp==1 && p_ptr->mhp==80);
@@ -195,6 +199,7 @@ static void test_save(void)
     prepare_player();
     monster_type source={0}, restored;
     source.r_idx=41; source.image_r_idx=7; source.fy=8; source.fx=9;
+    source.thrall_quest_item=THRALL_QUEST_FLASK_OIL; source.thrall_quest_requested=1;
     source.mflag=MFLAG_PLAYER_KNOCKBACK;
     source.hp=source.maxhp=120; source.poisoned=27; source.player_poisoned=11; source.potion_poisoned=7;
     source.vengeance=1; source.smite_recovery=2;
@@ -220,6 +225,7 @@ static void test_save(void)
     assert(p_ptr->achievement_comeback_depth==10);
     assert(p_ptr->achievement_balrogs==0x45);
     assert(restored.poisoned==27 && restored.player_poisoned==11 && restored.potion_poisoned==7);
+    assert(restored.thrall_quest_requested==1 && restored.thrall_quest_item==THRALL_QUEST_FLASK_OIL);
     assert(!(restored.mflag & MFLAG_PLAYER_KNOCKBACK));
     assert(p_ptr->achievement_fall_depth==8);
     int first=8*MAX_DUNGEON_WID+9, second=first+1;

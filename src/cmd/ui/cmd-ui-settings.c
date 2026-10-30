@@ -371,6 +371,7 @@ static const struct option_group_marker text_option_groups[] = {
 };
 
 static const struct option_group_marker gameplay_option_groups[] = {
+    { OPT_minimum_text_mode, "Text" },
     { OPT_valorous_oath_auto_attack_safety, "Combat Behavior" },
     { OPT_pacifist_attack_warning, "Combat Behavior" },
     { OPT_active_weapon_switch_confirm, "Combat Behavior" },
@@ -985,6 +986,8 @@ static cptr option_menu_label(int opt)
                        : "Load Blitz by default";
     case OPT_ignore_monster_alarms:
         return narrow ? "Ignore alarms" : "Ignore monster alarms";
+    case OPT_minimum_text_mode:
+        return "Minimum text mode";
     case OPT_show_level_generation_debug:
         return narrow ? "Generation screen" : "Level generation screen";
     case OPT_show_elemental_item_rolls:

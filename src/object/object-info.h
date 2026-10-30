@@ -19,13 +19,15 @@ cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     size_t out_sz);
 void note_info_screen(const object_type* o_ptr);
 void object_info_screen(const object_type* o_ptr);
+/* Enable a Full/Comparison switch for a candidate and replacement alternatives.
+ * Full is the initial view. Leave compare false for sets/storage exchanges. */
 void object_info_screen_multi(const object_type** objects, const char** headings,
-    int count);
+    int count, bool compare);
 char object_info_screen_multi_with_actions(const object_type** objects,
     const char** headings, int count, cptr footer,
-    const object_info_screen_action* actions, int action_count);
+    const object_info_screen_action* actions, int action_count, bool compare);
 bool object_info_overlay_show_multi(const object_type** objects,
-    const char** headings, int count);
+    const char** headings, int count, bool compare);
 void object_info_overlay_clear(void);
 
 #endif /* INCLUDED_OBJECT_INFO_H */

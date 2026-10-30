@@ -243,3 +243,349 @@ static void check_generic_tutorial_ui(cptr path)
     tutorial_shutdown();
     printf("Actual tutorial UI: %d complete rewrites before context expansion, reversible PASS\n", viewed);
 }
+
+/* Exercise real description builders with the mode toggled, including the
+ * boundary between visible appearances and unidentified properties. */
+static void check_minimum_text_ui(void)
+{
+    void (*old_hook)(byte, cptr) = text_out_hook;
+    int ability_count = 0, kind_count = 0;
+    bool old_aware;
+    u32b old_flags2, old_flags4;
+    char buffer[8192];
+    object_type item;
+
+    assert(lore_set_generic(false));
+    assert(object_minimum_catalog());
+    op_ptr->opt[OPT_minimum_text_mode] = true;
+    p_ptr->oath_type = p_ptr->oaths_broken = 0;
+    for (int i = 0; i < z_info->b_max; ++i) {
+        ability_type* ability = &b_info[i];
+        if (!ability->name || !ability->effect || !ability->text)
+            continue;
+        ability_browser_entry entry = {0};
+        ability_browser_desc_line lines[ABILITY_BROWSER_DESC_MAX_LINES];
+        entry.b_ptr = ability;
+        entry.abilitynum = ability->abilitynum;
+        SDL_strlcpy(entry.name, b_name + ability->name, sizeof(entry.name));
+        int count = ability_browser_build_description(ability->skilltype,
+            &entry, lines, 100);
+        char joined[32768] = "", normalized[32768], expected[8192], adapted[8192];
+        for (int line = 0; line < count; ++line) {
+            assert(strcmp(lines[line].text, "Lore"));
+            SDL_strlcat(joined, lines[line].text, sizeof(joined));
+            SDL_strlcat(joined, " ", sizeof(joined));
+        }
+        generic_normalize(joined, normalized, sizeof(normalized));
+        generic_normalize(ability_menu_controller_text(b_text + ability->effect,
+            adapted, sizeof(adapted)), expected, sizeof(expected));
+        if (!strstr(normalized, expected)) {
+            fprintf(stderr, "Missing minimum-text ability effect %d: %s\n", i, expected);
+            abort();
+        }
+        ++ability_count;
+    }
+    assert(ability_count > 100);
+
+    for (int i = 1; i < z_info->k_max; ++i) {
+        if (!k_info[i].text) continue;
+        object_prep(&item, i);
+        if (!object_minimum_needs_kind_text(&item)) continue;
+        assert(object_minimum_lookup('K', i, buffer, sizeof(buffer)));
+        assert(object_lore_select_base_text(&item, buffer, sizeof(buffer)));
+        /* Some descriptions are already entirely gameplay information. */
+        assert(buffer[0]);
+        ++kind_count;
+    }
+    assert(kind_count > 50);
+    object_prep(&item, 96);
+    assert(object_lore_select_base_text(&item, buffer, sizeof(buffer)));
+    assert(strstr(buffer, "equipped as a weapon") && strstr(buffer, "dig through rubble"));
+    object_prep(&item, 98);
+    assert(object_lore_select_base_text(&item, buffer, sizeof(buffer)));
+    assert(strstr(buffer, "damaged walls or quartz"));
+
+    text_out_hook = generic_capture_output;
+    object_prep(&item, 344); /* Potion of Poison */
+    old_aware = k_info[344].aware;
+    k_info[344].aware = false;
+    item.ident = 0;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(!strstr(generic_object_output, "5d4 points of poison"));
+    k_info[344].aware = true;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output, "5d4 points of poison"));
+    k_info[344].aware = old_aware;
+
+    /* Every special with lore is visible when known, but not while hidden. */
+    int special_count = 0;
+    for (int i = 1; i < z_info->e_max; ++i) {
+        if (!e_info[i].text) continue;
+        int kind = 0;
+        for (int k = 1; k < z_info->k_max && !kind; ++k)
+            for (size_t slot = 0; slot < N_ELEMENTS(e_info[i].tval); ++slot)
+                if (e_info[i].tval[slot] == k_info[k].tval
+                    && k_info[k].sval >= e_info[i].min_sval[slot]
+                    && k_info[k].sval <= e_info[i].max_sval[slot]) {
+                    kind = k;
+                    break;
+                }
+        assert(kind);
+        assert(object_minimum_lookup('E', i, buffer, sizeof(buffer)));
+        object_prep(&item, kind);
+        object_set_ego_suffix(&item, i);
+        old_aware = k_info[kind].aware;
+        k_info[kind].aware = false;
+        item.ident = 0;
+        generic_object_output[0] = '\0';
+        screen_out_head(&item);
+        assert(!strstr(generic_object_output, buffer));
+        item.ident = IDENT_KNOWN;
+        generic_object_output[0] = '\0';
+        screen_out_head(&item);
+        if (!strstr(generic_object_output, buffer)) {
+            fprintf(stderr, "Missing short special description %d: %s\n", i, buffer);
+            abort();
+        }
+        k_info[kind].aware = old_aware;
+        ++special_count;
+    }
+    assert(special_count > 100);
+
+    /* Golden Flower lore keeps the original idea, and its exact gameplay
+     * description remains the same in both modes. */
+    int cloak_kind = lookup_kind(TV_CLOAK, SV_CLOAK);
+    assert(cloak_kind);
+    object_prep(&item, cloak_kind);
+    object_set_ego_suffix(&item, 88);
+    old_aware = k_info[cloak_kind].aware;
+    k_info[cloak_kind].aware = true;
+    item.ident = 0;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(!strstr(generic_object_output, "It brings courage"));
+    item.ident = IDENT_KNOWN;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output,
+        "It brings courage and a grace that does not readily bow to fear."));
+    object_info_out_flags = object_flags_known;
+    generic_object_output[0] = '\0';
+    new_paragraph = true;
+    object_info_out(&item);
+    assert(strstr(generic_object_output, "It provides resistance to fear."));
+    assert(strstr(generic_object_output, "It sustains your grace."));
+    char golden_flower_mechanics[sizeof(generic_object_output)];
+    SDL_strlcpy(golden_flower_mechanics, generic_object_output,
+        sizeof(golden_flower_mechanics));
+    op_ptr->opt[OPT_minimum_text_mode] = false;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output,
+        "bright courage and a grace that does not readily bow to fear"));
+    generic_object_output[0] = '\0';
+    new_paragraph = true;
+    object_info_out(&item);
+    assert(!strcmp(generic_object_output, golden_flower_mechanics));
+    op_ptr->opt[OPT_minimum_text_mode] = true;
+    k_info[cloak_kind].aware = old_aware;
+
+    /* Prefix and suffix descriptions coexist, and the ordinary mechanics
+     * output is identical when the mode is toggled. */
+    int short_sword = lookup_kind(TV_SWORD, SV_SHORT_SWORD);
+    assert(short_sword);
+    object_prep(&item, short_sword);
+    object_set_ego_prefix(&item, 47); /* Balanced */
+    object_set_ego_suffix(&item, 21); /* Gondolin */
+    item.ident = IDENT_KNOWN;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output, "Its weight is carefully balanced."));
+    assert(strstr(generic_object_output,
+        "It recalls Gondolin's craft and defiance of Orcs and Raukar."));
+    object_info_out_flags = object_flags_known;
+    generic_object_output[0] = '\0';
+    new_paragraph = true;
+    object_info_out(&item);
+    char compact_mechanics[sizeof(generic_object_output)];
+    SDL_strlcpy(compact_mechanics, generic_object_output, sizeof(compact_mechanics));
+    assert(compact_mechanics[0]);
+    op_ptr->opt[OPT_minimum_text_mode] = false;
+    generic_object_output[0] = '\0';
+    new_paragraph = true;
+    object_info_out(&item);
+    assert(!strcmp(generic_object_output, compact_mechanics));
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output, "the easy obedience"));
+    assert(strstr(generic_object_output, "Its edge keeps the cold bright pride of Gondolin"));
+    op_ptr->opt[OPT_minimum_text_mode] = true;
+
+    /* The damaged-lantern special has an actual rule in its prose. */
+    object_prep(&item, 129);
+    object_set_ego_prefix(&item, EGO_BROKEN_BRASS_LANTERN);
+    old_aware = k_info[129].aware;
+    k_info[129].aware = false;
+    item.ident = 0;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(!strstr(generic_object_output, "until a smith mends"));
+    item.ident = IDENT_KNOWN;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output, "no steady light can be kept within it until a smith mends"));
+    k_info[129].aware = old_aware;
+
+    object_prep(&item, 101); /* Great Helm: explicit appearance clauses. */
+    old_aware = k_info[101].aware;
+    old_flags2 = k_info[101].flags2;
+    old_flags4 = k_info[101].flags4;
+    k_info[101].aware = true;
+    k_info[101].flags4 |= TR4_EVIL_ITEM;
+    k_info[101].flags2 |= TR2_FEAR;
+    item.ident = 0;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(strstr(generic_object_output, "Appearance: evil."));
+    object_info_out_flags = object_flags_known;
+    new_paragraph = true;
+    object_info_out(&item);
+    assert(!strstr(generic_object_output, "panic"));
+    item.ident = IDENT_KNOWN;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    new_paragraph = true;
+    object_info_out(&item);
+    assert(strstr(generic_object_output, "Appearance: evil."));
+    assert(strstr(generic_object_output, "panic"));
+    k_info[101].aware = old_aware;
+    k_info[101].flags2 = old_flags2;
+    k_info[101].flags4 = old_flags4;
+
+    /* An aware but unidentified plain-looking item must not reveal an evil
+     * ego's alignment when its normal lore has no evil appearance clause. */
+    object_prep(&item, 104);
+    old_aware = k_info[104].aware;
+    old_flags4 = k_info[104].flags4;
+    k_info[104].aware = true;
+    k_info[104].flags4 |= TR4_EVIL_ITEM;
+    item.ident = 0;
+    generic_object_output[0] = '\0';
+    screen_out_head(&item);
+    assert(!strstr(generic_object_output, "Appearance: evil."));
+    k_info[104].aware = old_aware;
+    k_info[104].flags4 = old_flags4;
+    text_out_hook = old_hook;
+    new_paragraph = false;
+
+    object_prep(&item, 344);
+    op_ptr->opt[OPT_minimum_text_mode] = false;
+    cptr original = object_lore_select_base_text(&item, buffer, sizeof(buffer));
+    assert(original && strstr(original, "draught"));
+    printf("Minimum text: %d ability effects, %d functional kinds, %d specials, identification and toggle PASS\n",
+        ability_count, kind_count, special_count);
+}
+
+extern void quest_minimum_summary(int quest_idx, bool complete, char* out, size_t size);
+extern void describe_monster_mode(int r_idx, bool spoilers,
+    const monster_type* live, bool compact);
+
+static void check_minimum_quests_and_monsters(void)
+{
+    char summary[768];
+    int race_id = 51;
+    monster_race saved_race = r_info[race_id];
+    monster_lore saved_lore = l_list[race_id];
+    void (*old_hook)(byte, cptr) = text_out_hook;
+    bool old_cheat = op_ptr->opt[OPT_cheat_know];
+    bool old_know = op_ptr->opt[OPT_know_monster_info];
+    u64b random_before = Rand_state_export();
+    s16b old_target = p_ptr->tulkas_target_r_idx;
+    s16b old_prize = p_ptr->tulkas_prize_a_idx;
+
+    p_ptr->tulkas_target_r_idx = race_id;
+    p_ptr->tulkas_prize_a_idx = 1;
+    for (int id = QUEST_ID_TULKAS; id <= QUEST_ID_VARDA; ++id) {
+        quest_minimum_summary(id, false, summary, sizeof(summary));
+        assert(strstr(summary, "Objective:") && strstr(summary, "Reward:"));
+        assert(strstr(summary, "300 XP"));
+        assert(!strstr(summary, "[monster name]") && !strstr(summary, "Unknown reward"));
+    }
+    quest_minimum_summary(QUEST_ID_TULKAS, false, summary, sizeof(summary));
+    assert(strstr(summary, r_name + r_info[race_id].name));
+    assert(strstr(summary, "+1 Str") && strstr(summary, "future characters"));
+    quest_minimum_summary(QUEST_ID_AULE, false, summary, sizeof(summary));
+    assert(strstr(summary, "difficulty above 20") && strstr(summary, "+2 Smithing"));
+    quest_minimum_summary(QUEST_ID_OROME, false, summary, sizeof(summary));
+    assert(strstr(summary, "100 wolves") && strstr(summary, "30 vampires"));
+    quest_minimum_summary(QUEST_ID_VARDA, false, summary, sizeof(summary));
+    assert(strstr(summary, "500 ft") && strstr(summary, "leaving"));
+    quest_minimum_summary(QUEST_ID_VARDA, true, summary, sizeof(summary));
+    assert(strstr(summary, "Completed.") && strstr(summary, "radiant artefact"));
+    p_ptr->tulkas_target_r_idx = p_ptr->tulkas_prize_a_idx = 0;
+    quest_minimum_summary(QUEST_ID_TULKAS, false, summary, sizeof(summary));
+    assert(strstr(summary, "named target") && strstr(summary, "an artefact"));
+    p_ptr->tulkas_target_r_idx = old_target;
+    p_ptr->tulkas_prize_a_idx = old_prize;
+
+    op_ptr->opt[OPT_minimum_text_mode] = true;
+    op_ptr->opt[OPT_cheat_know] = op_ptr->opt[OPT_know_monster_info] = false;
+    r_info[race_id].flags3 = RF3_RES_FIRE | RF3_HURT_COLD | RF3_NO_SLEEP;
+    r_info[race_id].flags4 = RF4_BRTH_FIRE | RF4_SCARE;
+    r_info[race_id].flags2 = RF2_CHARGE;
+    r_info[race_id].speed = 4;
+    r_info[race_id].blow[0] = (monster_blow){.method=RBM_CLAW,
+        .effect=RBE_POISON, .att=9, .dd=2, .ds=5};
+    memset(&l_list[race_id], 0, sizeof(monster_lore));
+    text_out_hook = generic_capture_output;
+    generic_object_output[0] = '\0';
+    describe_monster(race_id, false, NULL);
+    assert(strstr(generic_object_output, "An orc of Morgoth"));
+    assert(strstr(generic_object_output, "Speed: 4"));
+    assert(strstr(generic_object_output, "Resists: unknown"));
+    assert(strstr(generic_object_output, "Vulnerable: unknown"));
+    assert(strstr(generic_object_output, "Immune to: unknown"));
+    assert(strstr(generic_object_output, "Melee: unknown"));
+    assert(strstr(generic_object_output, "Ranged and spells: unknown"));
+    assert(!strstr(generic_object_output, "fire breath"));
+    assert(!strstr(generic_object_output, "poison (+9"));
+    assert(!strstr(generic_object_output, r_text + r_info[race_id].text));
+
+    l_list[race_id].flags3 = RF3_RES_FIRE | RF3_NO_SLEEP;
+    l_list[race_id].flags4 = RF4_BRTH_FIRE;
+    l_list[race_id].flags2 = RF2_CHARGE;
+    l_list[race_id].blows[0] = 1;
+    monster_lore observed = l_list[race_id];
+    generic_object_output[0] = '\0';
+    describe_monster(race_id, false, NULL);
+    assert(strstr(generic_object_output, "Resists: fire"));
+    assert(strstr(generic_object_output, "Vulnerable: unknown"));
+    assert(strstr(generic_object_output, "Immune to: sleep"));
+    assert(strstr(generic_object_output, "claw: poison (+9, 2d5)"));
+    assert(strstr(generic_object_output, "fire breath"));
+    /* The original mechanics remain below the compact summary. */
+    assert(strstr(generic_object_output, "can claw to poison"));
+    assert(strstr(generic_object_output, "may breathe fire"));
+    assert(strstr(generic_object_output, "Abilities: Charge"));
+    assert(!memcmp(&l_list[race_id], &observed, sizeof(observed)));
+
+    op_ptr->opt[OPT_know_monster_info] = true;
+    generic_object_output[0] = '\0';
+    describe_monster(race_id, false, NULL);
+    assert(strstr(generic_object_output, "Vulnerable: cold"));
+    assert(!memcmp(&l_list[race_id], &observed, sizeof(observed)));
+    op_ptr->opt[OPT_know_monster_info] = false;
+    generic_object_output[0] = '\0';
+    describe_monster_mode(race_id, false, NULL, false);
+    assert(strstr(generic_object_output, r_text + r_info[race_id].text));
+    assert(Rand_state_export() == random_before);
+    r_info[race_id] = saved_race;
+    l_list[race_id] = saved_lore;
+    text_out_hook = old_hook;
+    op_ptr->opt[OPT_cheat_know] = old_cheat;
+    op_ptr->opt[OPT_know_monster_info] = old_know;
+    op_ptr->opt[OPT_minimum_text_mode] = false;
+    puts("Minimum quest objectives/rewards and monster known-only traits/full view PASS");
+}

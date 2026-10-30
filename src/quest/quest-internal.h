@@ -15,6 +15,19 @@ cptr* prepend_repeat_context(
 char* my_strstr(const char* haystack, const char* needle);
 void display_wrapped_text(
     int col, int* row, cptr text, byte color, int max_width);
+void quest_minimum_summary(int quest_idx, bool complete, char* out, size_t size);
+void quest_minimum_dialogue(int quest_idx, bool complete, cptr title,
+    cptr texts[], int count, byte title_color, byte text_color);
+void quest_minimum_custom_dialogue(cptr title, cptr summary, cptr texts[],
+    int count, byte title_color, byte text_color, int pages);
+/* Keep the ordinary dialogue path intact when the presentation option is off. */
+#define QUEST_PRESENT_DIALOGUE(id, done, title, texts, count, tc, bc) \
+    do { \
+        if (minimum_text_mode) \
+            quest_minimum_dialogue((id), (done), (title), (texts), (count), (tc), (bc)); \
+        else \
+            quest_typewriter_menu((title), (texts), (count), (tc), (bc)); \
+    } while (0)
 void remove_quest_giver_silent(int quest_giver_r_idx);
 bool trigger_adjacent_quest_giver_interaction(
     int quest_giver_r_idx, cptr quest_giver_name,

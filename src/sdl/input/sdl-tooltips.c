@@ -2225,6 +2225,14 @@ bool sdl_description_overlay_fit_around_avoid(
     return true;
 }
 
+static void sdl_description_overlay_view_label(char* label, size_t size)
+{
+    const description_overlay_state* overlay = &g_description_overlay;
+    strnfmt(label, size, "%s%s",
+        overlay->interactive ? (steamdeck_controls_active() ? "<Y> " : "V ") : "",
+        overlay->comparison_view ? "Full" : "Comparison");
+}
+
 bool sdl_description_overlay_layout(description_overlay_layout* out)
 {
     SDL_Rect anchor;
@@ -2246,6 +2254,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     int footer_cols = 0;
     int footer_gap = 0;
     int header_rows;
+    int view_toggle_w = 0;
     int text_px;
     int visible_cols;
     int visible_rows;
@@ -2290,11 +2299,30 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (max_panel_w <= pad_x * 2 || max_panel_h <= pad_y * 2 + cell_h)
         return false;
 
-    header_rows = overlay->interactive ? 1 : 0;
+    header_rows = overlay->interactive || overlay->has_view_toggle ? 1 : 0;
     if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
-        if (overlay->interactive)
+        if (overlay->interactive || overlay->has_view_toggle)
             header_rows = (sdl_ui_min_tap_px() + cell_h - 1) / cell_h;
+    }
+    if (overlay->has_view_toggle && sdl_handheld_ui_active())
+        header_rows = MAX(header_rows,
+            (sdl_ui_min_tap_px() + cell_h - 1) / cell_h);
+    if (overlay->has_view_toggle)
+    {
+        char label[32];
+        int text_w, text_h;
+        sdl_description_overlay_view_label(label, sizeof(label));
+        int label_px = sdl_ui_fitted_font_px(label, STORY_FONT_SLOT_SECONDARY,
+            cell_h, 0, MAX(1, header_rows * cell_h - 4), false);
+        TTF_Font* font = sdl_story_font_for_height_slot(label_px,
+            STORY_FONT_SLOT_SECONDARY);
+        text_w = (int)strlen(label) * cell_w;
+        if (font)
+            (void)TTF_GetStringSize(font, lore_text(label), 0, &text_w, &text_h);
+        view_toggle_w = text_w + 2 * MAX(2, cell_w / 2);
+        if (sdl_handheld_ui_active())
+            view_toggle_w = MAX(view_toggle_w, sdl_ui_min_tap_px());
     }
     max_cols = (max_panel_w - pad_x * 2) / cell_w;
     max_rows_no_footer =
@@ -2342,6 +2370,13 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
             text_px = visible_cols * cell_w;
         }
 
+        if (overlay->has_view_toggle)
+        {
+            int header_cols = (view_toggle_w + (overlay->interactive
+                ? header_rows * cell_h + cell_w : 0) + cell_w - 1) / cell_w;
+            visible_cols = MAX(visible_cols, header_cols);
+            text_px = MAX(text_px, visible_cols * cell_w);
+        }
         if (visible_cols < footer_cols)
         {
             visible_cols = footer_cols;
@@ -2388,6 +2423,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     out->max_scroll = MAX(0, overlay->height - visible_rows);
     out->scroll = overlay->scroll;
     out->close_button = overlay->interactive;
+    out->view_toggle = overlay->has_view_toggle;
     if (out->scroll < 0)
         out->scroll = 0;
     if (out->scroll > out->max_scroll)
@@ -2419,6 +2455,15 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
             .w = close_size,
             .h = close_size,
         };
+    }
+    if (out->view_toggle)
+    {
+        float right = out->close_button
+            ? out->close_rect.x - (float)cell_w : out->panel.x + out->panel.w - pad_x;
+        float width = MIN((float)view_toggle_w, right - out->text_x);
+        out->view_toggle_rect = (SDL_FRect){
+            right - width, out->panel.y + pad_y, width,
+            (float)(header_rows * cell_h) };
     }
 
     return true;
@@ -3157,6 +3202,44 @@ void sdl_description_overlay_render(void)
         }
     }
 
+    if (layout.view_toggle)
+    {
+        SDL_FRect rect = layout.view_toggle_rect;
+        bool hover = overlay->view_toggle_hover;
+        char label[32];
+        sdl_description_overlay_view_label(label, sizeof(label));
+        SDL_SetRenderDrawColor(g_state.renderer, hover ? 35 : 18,
+            hover ? 60 : 30, hover ? 85 : 44, 255);
+        SDL_RenderFillRect(g_state.renderer, &rect);
+        SDL_SetRenderDrawColor(g_state.renderer, 125, 185, 255, hover ? 255 : 180);
+        SDL_RenderRect(g_state.renderer, &rect);
+        int font_px = sdl_ui_fitted_font_px(label, STORY_FONT_SLOT_SECONDARY,
+            layout.cell_h, MAX(1.0f, rect.w - 4.0f),
+            MAX(1.0f, rect.h - 4.0f), false);
+        TTF_Font* font = sdl_story_font_for_height_slot(font_px,
+            STORY_FONT_SLOT_SECONDARY);
+        if (font)
+        {
+            int width, height;
+            SDL_Texture* text = sdl_ui_text_texture(font, label,
+                (SDL_Color){ 210, 230, 255, 255 }, &width, &height);
+            if (text && width > 0 && height > 0)
+            {
+                SDL_FRect dst = { rect.x + (rect.w - width) * 0.5f,
+                    rect.y + (rect.h - height) * 0.5f,
+                    (float)width, (float)height };
+                sdl_ui_render_text_texture(text, NULL, &dst);
+            }
+        }
+        else
+        {
+            float width = (float)strlen(label) * layout.cell_w;
+            sdl_description_overlay_render_text(atlas, atlas_cell_w, atlas_cell_h,
+                label, rect.x + MAX(0.0f, (rect.w - width) * 0.5f),
+                rect.y + (rect.h - layout.cell_h) * 0.5f,
+                (float)layout.cell_w, (float)layout.cell_h, TERM_L_BLUE);
+        }
+    }
     sdl_description_overlay_render_close_button(&layout,
         overlay->close_hover);
 
@@ -3183,6 +3266,8 @@ static bool sdl_description_overlay_close_button_at(float x, float y)
 
     if (!sdl_description_overlay_layout(&layout) || !layout.close_button)
         return false;
+    if (layout.view_toggle && sdl_point_in_frect(&layout.view_toggle_rect, x, y))
+        return false;
 
     hit = layout.close_rect;
     hit.x -= hit.w * 0.75f;
@@ -3193,6 +3278,28 @@ static bool sdl_description_overlay_close_button_at(float x, float y)
         hit.h = layout.close_rect.h;
 
     return sdl_point_in_frect(&hit, x, y);
+}
+
+bool sdl_description_overlay_handle_view_hover(float x, float y)
+{
+    description_overlay_layout layout;
+    bool hit = sdl_description_overlay_layout(&layout) && layout.view_toggle
+        && sdl_point_in_frect(&layout.view_toggle_rect, x, y);
+    if (g_description_overlay.view_toggle_hover != hit)
+    {
+        g_description_overlay.view_toggle_hover = hit;
+        g_state.need_present = true;
+    }
+    return hit;
+}
+
+bool sdl_description_overlay_handle_view_pointer(float x, float y)
+{
+    description_overlay_layout layout;
+    if (!sdl_description_overlay_layout(&layout) || !layout.view_toggle
+        || !sdl_point_in_frect(&layout.view_toggle_rect, x, y))
+        return false;
+    return sdl_description_overlay_toggle_view();
 }
 
 bool sdl_description_overlay_handle_close_hover(float x, float y)

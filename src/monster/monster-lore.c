@@ -3,6 +3,7 @@
 #include "monster-internal.h"
 #include "monster-ai.h"
 #include "monster-social.h"
+#include "fs/path.h"
 
 /*
  * Pronoun arrays, by gender.
@@ -121,6 +122,55 @@ static void describe_monster_desc(int r_idx)
     /* Dump it */
     text_out(buf);
     text_out("\n");
+}
+
+/* The optional short description is authored separately from learned traits. */
+static void describe_monster_minimum_text(int r_idx)
+{
+    static bool attempted;
+    static char* catalog;
+    char path[1024];
+    size_t size = 0;
+    cptr line;
+
+    if (!attempted)
+    {
+        attempted = true;
+        if (ANGBAND_DIR_EDIT && path_build(path, sizeof(path), ANGBAND_DIR_EDIT,
+                "monster-minimum.txt"))
+            catalog = SDL_LoadFile(path, &size);
+        if (!catalog)
+            log_warn("Minimum monster descriptions unavailable");
+    }
+    line = catalog;
+    while (line && *line)
+    {
+        cptr end = strchr(line, '\n');
+        char* after;
+        long id;
+        if (!end) end = line + strlen(line);
+        if (line[0] == 'R' && line + 2 < end && line[1] == ':')
+        {
+            id = strtol(line + 2, &after, 10);
+            if (after > line + 2 && after < end && *after == ':' && id == r_idx)
+            {
+                char description[512];
+                size_t length = (size_t)(end - after - 1);
+                while (length && (after[length] == '\r' || after[length] == ' '))
+                    length--;
+                length = MIN(length, sizeof(description) - 1);
+                memcpy(description, after + 1, length);
+                description[length] = '\0';
+                if (description[0])
+                {
+                    text_out(lore_text(description));
+                    text_out("\n");
+                }
+                return;
+            }
+        }
+        line = *end ? end + 1 : end;
+    }
 }
 
 static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)
@@ -981,7 +1031,8 @@ void monster_recall_show_hallucination_block(void)
     Term_fresh();
 }
 
-void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
+void describe_monster_mode(int r_idx, bool spoilers, const monster_type* m_ptr,
+    bool compact)
 {
     monster_lore lore;
 
@@ -1022,6 +1073,34 @@ void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
     if ((cheat_know) || know_monster_info || spoilers)
     {
         cheat_monster_lore(r_idx, &lore);
+    }
+
+    if (compact)
+    {
+        describe_monster_minimum_text(r_idx);
+        describe_monster_compact(r_idx, &lore, m_ptr);
+        /* The summary is a quick index, not a substitute for the original
+         * gameplay wording: retain every learned rule and live detail. */
+        text_out("\n");
+        if (!spoilers)
+        {
+            describe_monster_kills(r_idx, &lore);
+            describe_monster_exp(r_idx, &lore);
+        }
+        describe_monster_movement(r_idx, &lore, m_ptr);
+        describe_monster_spells(r_idx, &lore);
+        describe_monster_abilities(r_idx, &lore);
+        describe_monster_attack(r_idx, &lore, m_ptr);
+        describe_monster_toughness(r_idx, &lore, m_ptr);
+        describe_monster_skills(r_idx, &lore, m_ptr);
+        describe_monster_song_duel_progress(&lore, m_ptr);
+        describe_monster_drop(r_idx, &lore);
+        if (!spoilers && m_ptr && m_ptr->r_idx == r_idx)
+            describe_monster_live_state(m_ptr);
+        text_out("\n");
+        if (cheat_know || know_monster_info)
+            memcpy(l_ptr, &save_mem, sizeof(monster_lore));
+        return;
     }
 
     /* Show kills of monster vs. player(s) */
@@ -1072,4 +1151,11 @@ void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
         /* Hack -- restore memory */
         memcpy(l_ptr, &save_mem, sizeof(monster_lore));
     }
+}
+
+/* Spoiler exports keep their complete description regardless of UI preference. */
+void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
+{
+    describe_monster_mode(r_idx, spoilers, m_ptr,
+        minimum_text_mode && !spoilers);
 }

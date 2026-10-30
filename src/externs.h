@@ -1372,12 +1372,13 @@ extern cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     size_t out_sz);
 extern void note_info_screen(const object_type* o_ptr);
 extern void object_info_screen(const object_type* o_ptr);
-extern void object_info_screen_multi(const object_type** objects, const char** headings, int count);
+extern void object_info_screen_multi(const object_type** objects,
+    const char** headings, int count, bool compare);
 extern char object_info_screen_multi_with_actions(const object_type** objects,
     const char** headings, int count, cptr footer,
-    const object_info_screen_action* actions, int action_count);
+    const object_info_screen_action* actions, int action_count, bool compare);
 extern bool object_info_overlay_show_multi(const object_type** objects,
-    const char** headings, int count);
+    const char** headings, int count, bool compare);
 extern void object_info_overlay_clear(void);
 extern void describe_item_with_comparisons(int item_index, bool include_comparisons);
 extern void describe_object_with_comparisons(object_type* o_ptr,
@@ -2621,6 +2622,7 @@ extern bool sdl_description_overlay_present(const byte* attrs,
     const byte* story, const byte* health, int width, int height,
     int target_cols, int scroll, bool interactive, int* out_visible_rows,
     int* out_max_scroll);
+#include "sdl/ui/sdl-description.h"
 extern void sdl_description_overlay_set_footer(cptr text, bool always);
 extern void sdl_description_overlay_set_footer_gap(bool enabled);
 extern void sdl_description_overlay_clear_footer_actions(void);

@@ -4577,7 +4577,7 @@ static int ability_browser_build_description(int skilltype,
             ? ability_menu_controller_text(b_text + b_ptr->effect,
                 effect_controller_text, sizeof(effect_controller_text))
             : NULL;
-        desc_text = b_ptr->text
+        desc_text = !minimum_text_mode && b_ptr->text
             ? ability_menu_controller_text(b_text + b_ptr->text,
                 desc_controller_text, sizeof(desc_controller_text))
             : NULL;
@@ -5850,7 +5850,7 @@ int abilities_menu2(int skilltype, int* highlight)
                     /* Display effect first, then prerequisites and lore. */
                     char desc_controller_text[2048];
                     char effect_controller_text[2048];
-                    const char *desc_text = (b_ptr->text)
+                    const char *desc_text = (!minimum_text_mode && b_ptr->text)
                         ? ability_menu_controller_text(b_text + b_ptr->text,
                               desc_controller_text, sizeof(desc_controller_text))
                         : NULL;

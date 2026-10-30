@@ -945,6 +945,10 @@ typedef struct description_overlay_state {
     bool footer_gap;
     int footer_hover_key;
     bool close_hover;
+    bool has_view_toggle;
+    bool comparison_view;
+    bool view_toggle_hover;
+    sdl_description_content alternate_view;
     int footer_action_count;
     char footer_text[SDL_DESCRIPTION_OVERLAY_FOOTER_LEN];
     description_overlay_action footer_actions[SDL_DESCRIPTION_OVERLAY_MAX_ACTIONS];
@@ -953,6 +957,7 @@ typedef struct description_overlay_state {
 typedef struct description_overlay_layout {
     SDL_FRect panel;
     SDL_FRect close_rect;
+    SDL_FRect view_toggle_rect;
     float text_x;
     float text_y;
     float footer_y;
@@ -964,6 +969,7 @@ typedef struct description_overlay_layout {
     int scroll;
     bool footer;
     bool close_button;
+    bool view_toggle;
 } description_overlay_layout;
 
 enum {
@@ -2657,6 +2663,8 @@ bool sdl_menu_scale_controls_active(void);
 bool sdl_touch_menu_font_control_rail(int count, float size, float gap,
     SDL_FRect* out);
 bool sdl_description_overlay_handle_close_hover(float x, float y);
+bool sdl_description_overlay_handle_view_hover(float x, float y);
+bool sdl_description_overlay_handle_view_pointer(float x, float y);
 bool sdl_description_overlay_handle_close_pointer(float x, float y);
 int sdl_description_overlay_footer_action_at(float x, float y);
 bool sdl_description_overlay_handle_footer_hover(float x, float y);

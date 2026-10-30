@@ -1797,6 +1797,7 @@ static const byte app_other_options[] = {
 };
 
 static const byte app_gameplay_options[] = {
+    OPT_minimum_text_mode,
     OPT_active_weapon_switch_confirm,
     OPT_ignore_monster_alarms,
     OPT_load_blitz_by_default,

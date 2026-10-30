@@ -13,6 +13,7 @@
 #include "object/object-ui-select.h"
 #include "supplies.h"
 #include "thrall_quest.h"
+#include "quest/quest-internal.h"
 #include "ui/question.h"
 
 static s16b get_upgrade_kind(const object_type* o_ptr);
@@ -502,7 +503,8 @@ static void thrall_print_collapsed_message(cptr text)
     msg_print(msg_buf);
 }
 
-static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
+static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text,
+    bool full_story)
 {
     char text_buf[2048];
     cptr texts[1];
@@ -526,19 +528,52 @@ static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
     /* This is one short conversation, not a multi-page quest chronicle.  Keep
      * its paragraph spacing, but fit the request onto one coherent book page
      * instead of distributing individual sentences across three pages. */
-    quest_typewriter_menu_pages(title, texts, 1, title_color, TERM_WHITE, 1);
+    if (minimum_text_mode && !full_story)
+    {
+        char summary[240];
+        strnfmt(summary, sizeof(summary),
+            "Objective: Give %s. Reward: %d XP and a choice of available services.",
+            get_thrall_quest_item_name(m_ptr->thrall_quest_item),
+            THRALL_QUEST_COMPLETION_EXP);
+        quest_minimum_custom_dialogue(title, summary, texts, 1,
+            title_color, TERM_WHITE, 1);
+    }
+    else
+        quest_typewriter_menu_pages(title, texts, 1, title_color, TERM_WHITE, 1);
 }
 
 #define THRALL_TEXT_VARIANTS 6
 
+/* These existing saved fields remain stable after a hand-in, so a minimum-text
+ * request can be replayed without adding a save field or consuming more RNG. */
+static int thrall_request_story_variant(const monster_type* m_ptr)
+{
+    return ((unsigned)m_ptr->r_idx * 31u + m_ptr->thrall_quest_item * 7u)
+        % THRALL_TEXT_VARIANTS;
+}
+
 static void thrall_request_dialog(monster_type* m_ptr)
 {
-    int variant = rand_int(THRALL_TEXT_VARIANTS);
+    int random_variant = rand_int(THRALL_TEXT_VARIANTS);
+    int variant = minimum_text_mode ? thrall_request_story_variant(m_ptr)
+                                    : random_variant;
 
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-        show_thrall_dialog(m_ptr, elf_request_texts[variant]);
+        show_thrall_dialog(m_ptr, elf_request_texts[variant], false);
     else
-        show_thrall_dialog(m_ptr, human_request_texts[variant]);
+        show_thrall_dialog(m_ptr, human_request_texts[variant], false);
+}
+
+void thrall_quest_show_request_story(monster_type* m_ptr)
+{
+    int variant;
+    if (!m_ptr || !is_alert_thrall(m_ptr) || !m_ptr->thrall_quest_requested)
+        return;
+    variant = thrall_request_story_variant(m_ptr);
+    show_thrall_dialog(m_ptr,
+        m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL ? elf_request_texts[variant]
+                                               : human_request_texts[variant],
+        true);
 }
 
 static void thrall_thanks_dialog(monster_type* m_ptr)
@@ -553,6 +588,11 @@ static void thrall_thanks_dialog(monster_type* m_ptr)
     else
         text = human_thanks_texts[variant];
 
+    if (minimum_text_mode)
+    {
+        msg_print("The thrall thanks you.");
+        return;
+    }
     format_thrall_quest_text(m_ptr, text, text_buf, sizeof(text_buf));
     thrall_text_to_prompt_desc(text_buf, msg_buf, sizeof(msg_buf));
     msg_print(msg_buf);
@@ -567,6 +607,13 @@ static void thrall_pre_give_desc(monster_type* m_ptr, char* desc,
 
     if (!desc || !desc_sz)
         return;
+    if (minimum_text_mode)
+    {
+        strnfmt(desc, desc_sz, "Give %s for %d XP and a choice of available services.",
+            get_thrall_quest_item_name(m_ptr->thrall_quest_item),
+            THRALL_QUEST_COMPLETION_EXP);
+        return;
+    }
 
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
         text = elf_pre_give_texts[variant];
@@ -2166,7 +2213,7 @@ static bool offer_thrall_reward(monster_type* m_ptr, bool pending_reward)
                 show_thrall_dialog(m_ptr,
                     "\"I cannot cure Angband Plague. I have no herb potent enough for it.\"\n\n"
                     "\"You must find a herb of Healing, a potion of Healing, or Miruvor. "
-                    "I can still offer you another gift.\"");
+                    "I can still offer you another gift.\"", true);
                 break;
             }
             if (thrall_provide_cure_herb())

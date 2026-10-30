@@ -464,6 +464,7 @@ set(SIL_MORE_SOURCES
     src/object/object-difficulty.c
     src/object/object-flavor.c
     src/object/object-info.c
+    src/object/object-compare.c
     src/object/object-inventory.c
     src/object/object-inventory-limits.c
     src/object/object-knowledge.c

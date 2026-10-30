@@ -17,6 +17,7 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/birth-selection-response"
 
 HELPERS = r'''
+#include <SDL3_image/SDL_image.h>
 typedef struct birth_menu { bool ghost; cptr name; cptr text; } birth_menu;
 typedef struct birth_select_page {
     cptr title, frame_top, intro, frame_bottom;
@@ -27,7 +28,8 @@ typedef struct birth_select_page {
 extern int get_player_choice(birth_menu*, int, int, void (*)(birth_menu),
     const birth_select_page*);
 
-static bool driving;
+static bool driving, minimum_birth_driving;
+static int minimum_birth_stage;
 static int click_stage, stale_presents, presented, changed_frames;
 static cptr expected_description;
 
@@ -41,6 +43,28 @@ void __wrap_sdl_present_if_needed(sdl_view* view)
     __real_sdl_present_if_needed(view);
     if (!painting) return;
     presented++;
+    if (minimum_birth_driving && sdl_character_sheet_screen_active()) {
+        const sdl_character_sheet_screen_state* screen = &g_sdl_character_sheet_screen;
+        bool race = !strcmp(screen->select_title, "Choose Race");
+        bool hero = !strcmp(screen->select_title, "Choose Hero");
+        if ((race && minimum_birth_stage == 0) || (hero && minimum_birth_stage == 1)) {
+            assert(!screen->select_book_mode && !screen->select_intro[0]);
+            assert(!screen->select_description[0] && screen->select_detail_count >= A_MAX);
+            assert(screen->select_row_count > 0 && screen->hit_count > 0);
+            assert(SDL_SetRenderTarget(g_state.renderer, NULL));
+            assert(sdl_render_current_window_frame());
+            SDL_Surface* pixels = SDL_RenderReadPixels(g_state.renderer, NULL);
+            assert(pixels);
+            char path[1024];
+            strnfmt(path, sizeof(path), "%s/%s.png", SDL_getenv("MINIMUM_BIRTH_CAPTURE"),
+                race ? "race" : "hero");
+            assert(IMG_SavePNG(pixels, path));
+            SDL_DestroySurface(pixels);
+            ++minimum_birth_stage;
+            assert(!Term_keypress('\r'));
+        }
+        return;
+    }
     if (!driving || !sdl_character_sheet_screen_active()) return;
 
     if (click_stage == 1
@@ -100,6 +124,21 @@ static void selection_case(bool book)
     SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
     printf("%s: first click updates description, second confirms, no stale presentation: PASS\n",
         book ? "Race book" : "Hero picker");
+}
+
+static void minimum_birth_case(void)
+{
+    op_ptr->opt[OPT_minimum_text_mode] = true;
+    p_ptr->prace = p_ptr->pcharacter = 0;
+    minimum_birth_stage = 0;
+    minimum_birth_driving = true;
+    assert(character_creation() == NAV_OK);
+    minimum_birth_driving = false;
+    op_ptr->opt[OPT_minimum_text_mode] = false;
+    assert(minimum_birth_stage == 2);
+    ui_menu_click_clear();
+    SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+    puts("Minimum text birth: race then hero, no story or lore, stats and hit targets visible: PASS");
 }
 
 static void settings_case(void)
@@ -169,6 +208,7 @@ CASES = r'''
     screen_set_startup_touch_pane_hidden(false);
     selection_case(true);
     selection_case(false);
+    minimum_birth_case();
     settings_case();
     pointer_only_case();
     sdl_control_shutdown();
@@ -193,7 +233,8 @@ def main():
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env.update(SDL_VIDEO_DRIVER="dummy", SDL_RENDER_DRIVER="software",
-               SDL_AUDIO_DRIVER="dummy", CONTROL_TEST_ASSETS=str(ROOT / "lib"))
+               SDL_AUDIO_DRIVER="dummy", CONTROL_TEST_ASSETS=str(ROOT / "lib"),
+               MINIMUM_BIRTH_CAPTURE=str(OUT))
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),

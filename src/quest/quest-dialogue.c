@@ -5,6 +5,7 @@
 #include "metarun.h"
 #include "sdl-config.h"
 #include "quest/quest-internal.h"
+#include "ui/question.h"
 
 static void quest_book_flush_paragraph(char *para, size_t *para_len)
 {
@@ -751,4 +752,44 @@ bool ensure_reward_quest_giver_near_player(
     log_trace("%s reward: failed to place quest giver near player",
         quest_giver_name ? quest_giver_name : "Quest");
     return false;
+}
+
+/* A single brief summarizes the objective and reward. The player can open
+ * the original book from the same prompt without changing quest state. */
+void quest_minimum_custom_dialogue(cptr title, cptr summary, cptr texts[],
+    int count, byte title_color, byte text_color, int pages)
+{
+    bool restore_context_hint = false;
+    if (minimum_text_mode && summary && summary[0])
+    {
+        const ui_question_option options[] = {
+            {'c', "Continue", TERM_L_WHITE, false},
+            {'s', "Read story", TERM_L_BLUE, false}
+        };
+        restore_context_hint = sdl_question_menu_context_hint_active();
+        int choice = ui_question_ask_overlay(title, summary, options,
+            (int)N_ELEMENTS(options), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+        if (choice != 1)
+        {
+            if (restore_context_hint)
+                (void)do_cmd_context_square_action_popup();
+            return;
+        }
+    }
+    if (pages >= 0)
+        quest_typewriter_menu_pages(title, texts, count, title_color,
+            text_color, pages);
+    else
+        quest_typewriter_menu(title, texts, count, title_color, text_color);
+    if (restore_context_hint)
+        (void)do_cmd_context_square_action_popup();
+}
+
+void quest_minimum_dialogue(int quest_idx, bool complete, cptr title,
+    cptr texts[], int count, byte title_color, byte text_color)
+{
+    char summary[480];
+    quest_minimum_summary(quest_idx, complete, summary, sizeof(summary));
+    quest_minimum_custom_dialogue(title, summary, texts, count, title_color,
+        text_color, -1);
 }

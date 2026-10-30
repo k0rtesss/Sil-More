@@ -508,7 +508,7 @@ static bool get_player_race(bool open_on_choice_page)
     {
         menu[i].name = p_name + p_info[i].name;
         menu[i].ghost = false;
-        menu[i].text = p_text + p_info[i].text;   /* shown at the bottom */
+        menu[i].text = minimum_text_mode ? "" : p_text + p_info[i].text;
         headings[i] = NULL;
     }
 
@@ -531,6 +531,13 @@ static bool get_player_race(bool open_on_choice_page)
             open_on_choice_page        /* back from character -> list page */
         };
 
+        if (minimum_text_mode)
+        {
+            /* Use the stat/trait picker directly, without the story pages. */
+            page.title = "Choose Race";
+            page.frame_top = page.intro = page.frame_bottom = NULL;
+            page.detail_stat_rows_hint = A_MAX;
+        }
         race = get_player_choice(menu, num, p_ptr->prace, race_aux_hook,
             &page);
     }
@@ -639,7 +646,11 @@ static bool get_character_profile(void)
                 max_trait_rows = trait_rows;
 
             character_menu[character].name = c_name + c_info[i].name;
-            if (character < (int)N_ELEMENTS(character_desc_buf))
+            if (minimum_text_mode)
+            {
+                character_menu[character].text = "";
+            }
+            else if (character < (int)N_ELEMENTS(character_desc_buf))
             {
                 if (welcome && welcome[0])
                     strnfmt(character_desc_buf[character],
@@ -669,6 +680,8 @@ static bool get_character_profile(void)
             0, 0, 0,
             false                         /* not book mode: no choice-page jump */
         };
+        if (minimum_text_mode)
+            page.title = "Choose Hero";
         page.detail_stat_rows_hint = A_MAX;
         page.detail_ability_rows_hint = max_ability_rows;
         page.detail_trait_rows_hint = max_trait_rows;

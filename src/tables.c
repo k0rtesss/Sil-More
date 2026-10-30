@@ -187,7 +187,7 @@ cptr option_text[OPT_MAX] = {
     "pacifist_attack_warning", /* OPT_pacifist_attack_warning */
     "active_weapon_switch_confirm", /* OPT_active_weapon_switch_confirm */
     "ignore_monster_alarms", /* OPT_ignore_monster_alarms */
-    NULL, /* reserved legacy slot: dungeon_align */
+    "minimum_text_mode", /* OPT_minimum_text_mode */
     NULL, /* reserved legacy slot: dungeon_stair */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -425,7 +425,7 @@ cptr option_desc[OPT_MAX] = {
     "Warn before making direct attacks (useful for pacifist runs)", /* OPT_pacifist_attack_warning */
     "Confirm before paid melee/ranged active switches", /* OPT_active_weapon_switch_confirm */
     "Keep resting, running and working through monster warning calls and shrieks for help; their messages and effects remain", /* OPT_ignore_monster_alarms */
-    NULL, /* reserved legacy slot: dungeon_align */
+    "Skip introductions, shorten descriptive lore, and show compact quests and monster traits; gameplay details remain visible", /* OPT_minimum_text_mode */
     NULL, /* reserved legacy slot: dungeon_stair */
     NULL, /* reserved legacy slot */
     NULL, /* reserved legacy slot */
@@ -679,7 +679,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_pacifist_attack_warning */
     true, /* OPT_active_weapon_switch_confirm */
     false, /* OPT_ignore_monster_alarms */
-    false, /* reserved legacy slot: dungeon_align */
+    false, /* OPT_minimum_text_mode */
     false, /* reserved legacy slot: dungeon_stair */
     false, /* reserved legacy slot */
     false, /* reserved legacy slot */
@@ -923,7 +923,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     /*** Game-Play ***/
 
-    { OPT_valorous_oath_auto_attack_safety, OPT_pacifist_attack_warning,
+    { OPT_minimum_text_mode, OPT_valorous_oath_auto_attack_safety, OPT_pacifist_attack_warning,
         OPT_active_weapon_switch_confirm,
         OPT_forgo_attacking_unwary, OPT_assassination_over_charge,
         OPT_lockpick_minigame, OPT_chest_trap_minigame,
@@ -933,7 +933,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_utumno_corridors, OPT_illusory_walls,
         OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
         OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
-        OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_NONE, OPT_NONE },
 
     /*** Display ***/
 

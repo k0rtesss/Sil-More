@@ -4,6 +4,8 @@
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-info.h"
+#include "object/object-compare.h"
+#include "fs/path.h"
 #include "log/log.h"
 #include "sdl-config.h"
 
@@ -35,12 +37,14 @@ typedef struct object_info_screen_capture
 } object_info_screen_capture;
 
 static object_info_screen_capture object_info_overlay_capture;
+static object_info_screen_capture object_info_overlay_comparison;
 static bool object_info_overlay_capture_active = false;
 
 static void object_info_screen_multi_body(const object_type** objects,
-    const char** headings, int count, bool clear_current_line);
+    const char** headings, int count, bool clear_current_line, bool compare);
 static char object_info_screen_capture_view(
-    const object_info_screen_capture* capture, const object_type* item, cptr footer,
+    const object_info_screen_capture* capture,
+    const object_info_screen_capture* comparison, const object_type* item, cptr footer,
     const object_info_screen_action* actions, int action_count);
 
 static int object_info_screen_preferred_capture_width(bool use_story_font)
@@ -2233,6 +2237,91 @@ static bool object_lore_select_segment(cptr raw,
     return (out[0] != '\0');
 }
 
+/* The short catalogue is independent of raw templates and save files.  If it
+ * is unavailable, retain the original descriptions rather than losing rules. */
+static const char* object_minimum_catalog(void)
+{
+    static bool attempted = false;
+    static char* catalog = NULL;
+    char path[1024];
+    size_t size = 0;
+
+    if (!attempted)
+    {
+        attempted = true;
+        if (ANGBAND_DIR_EDIT && path_build(path, sizeof(path), ANGBAND_DIR_EDIT,
+                "object-minimum.txt"))
+            catalog = SDL_LoadFile(path, &size);
+        if (!catalog)
+            log_warn("Minimum text item catalogue unavailable; using full descriptions");
+    }
+    return catalog;
+}
+
+/* Each line uses K:<kind>, E:<special>, or A:<artefact>, followed by :text. */
+static bool object_minimum_lookup(char type, int id, char* out, size_t out_sz)
+{
+    const char* line = object_minimum_catalog();
+
+    if (!out || out_sz == 0)
+        return false;
+    out[0] = '\0';
+    while (line && *line)
+    {
+        const char* end = strchr(line, '\n');
+        char* after_id;
+        long number;
+        if (!end)
+            end = line + strlen(line);
+        if (line[0] == type && line + 2 < end && line[1] == ':')
+        {
+            number = strtol(line + 2, &after_id, 10);
+            if (after_id > line + 2 && after_id < end && *after_id == ':'
+                && number == id)
+            {
+                object_lore_trim_copy(after_id + 1,
+                    (size_t)(end - after_id - 1), out, out_sz);
+                return out[0] != '\0';
+            }
+        }
+        line = *end ? end + 1 : end;
+    }
+    return false;
+}
+
+/* These kinds carry rules in their D: text, not just in object flags. */
+static bool object_minimum_needs_kind_text(const object_type* o_ptr)
+{
+    switch (o_ptr->tval)
+    {
+    case TV_LIGHT: case TV_METAL: case TV_CHEST: case TV_STAFF:
+    case TV_GEM: case TV_HORN: case TV_POTION: case TV_FLASK: case TV_FOOD:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static cptr object_minimum_appearance(const object_type* o_ptr)
+{
+    object_lore_alignment alignment = object_lore_actual_alignment(o_ptr);
+    cptr raw = k_info[o_ptr->k_idx].text
+        ? k_text + k_info[o_ptr->k_idx].text : NULL;
+    cptr tag = alignment == OBJECT_LORE_ALIGNMENT_NOBLE ? "[noble]"
+        : alignment == OBJECT_LORE_ALIGNMENT_EVIL ? "[evil]" : "[neutral]";
+
+    /* Before identification, show alignment only if the ordinary visible
+     * base description already has the corresponding appearance clause. */
+    if (!object_known_p(o_ptr)
+        && (!raw || !object_lore_text_is_structured(raw) || !strstr(raw, tag)))
+        return NULL;
+    if (alignment == OBJECT_LORE_ALIGNMENT_NOBLE)
+        return "Appearance: noble.";
+    if (alignment == OBJECT_LORE_ALIGNMENT_EVIL)
+        return "Appearance: evil.";
+    return NULL;
+}
+
 cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     size_t out_sz)
 {
@@ -2243,6 +2332,15 @@ cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
         return NULL;
 
     raw = lore_text(k_text + k_info[o_ptr->k_idx].text);
+    if (minimum_text_mode && object_minimum_catalog())
+    {
+        if (object_minimum_lookup('K', o_ptr->k_idx, out, out_sz))
+            return out;
+        if (!object_minimum_needs_kind_text(o_ptr))
+            return NULL;
+        /* A newly added functional kind without a short entry keeps its full
+         * description until one is authored. */
+    }
     if (!object_lore_text_is_structured(raw))
         return raw;
 
@@ -2421,16 +2519,65 @@ static bool screen_out_head(const object_type* o_ptr)
         has_description = true;
     }
 
-    /* Display the known artefact description */
-    if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)
-        && a_info[o_ptr->name1].text)
+    if (minimum_text_mode && object_minimum_catalog()
+        && (object_aware_p(o_ptr) || object_known_p(o_ptr)))
+    {
+        cptr appearance = object_minimum_appearance(o_ptr);
 
+        if (appearance)
+        {
+            p_text_out("\n\n   ");
+            p_text_out(appearance);
+            has_description = true;
+        }
+
+        if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr))
+        {
+            base_desc = object_minimum_lookup('A', o_ptr->name1,
+                base_desc_buf, sizeof(base_desc_buf)) ? base_desc_buf : NULL;
+        }
+        else
+        {
+            base_desc = object_lore_select_base_text(o_ptr, base_desc_buf,
+                sizeof(base_desc_buf));
+        }
+        if (base_desc && base_desc[0])
+        {
+            p_text_out("\n\n   ");
+            p_text_out(base_desc);
+            has_description = true;
+        }
+        if (object_known_p(o_ptr) && (adult_rand_artefacts || !o_ptr->name1))
+        {
+            byte prefix = object_ego_prefix(o_ptr);
+            byte suffix = object_ego_suffix(o_ptr);
+            if (prefix && object_minimum_lookup('E', prefix, base_desc_buf,
+                    sizeof(base_desc_buf)))
+            {
+                p_text_out("\n\n   ");
+                p_text_out(base_desc_buf);
+                has_description = true;
+            }
+            if (suffix && suffix != prefix
+                && object_minimum_lookup('E', suffix, base_desc_buf,
+                    sizeof(base_desc_buf)))
+            {
+                p_text_out("\n\n   ");
+                p_text_out(base_desc_buf);
+                has_description = true;
+            }
+        }
+    }
+    /* Full descriptions remain available when the mode is off or its
+     * catalogue is missing.  Mechanical properties are rendered below in
+     * either case, with the existing identification rules. */
+    else if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)
+        && a_info[o_ptr->name1].text)
     {
         p_text_out("\n\n   ");
         p_text_out(a_text + a_info[o_ptr->name1].text);
         has_description = true;
     }
-    /* Display the known object description */
     else if (object_aware_p(o_ptr) || object_known_p(o_ptr))
     {
         base_desc = object_lore_select_base_text(o_ptr, base_desc_buf,
@@ -2501,12 +2648,25 @@ void object_info_screen(const object_type* o_ptr)
     const object_type* objects[1];
 
     objects[0] = o_ptr;
-    object_info_screen_multi(objects, NULL, 1);
+    object_info_screen_multi(objects, NULL, 1, false);
 }
 
 static void object_info_screen_multi_body(const object_type** objects,
-    const char** headings, int count, bool clear_current_line)
+    const char** headings, int count, bool clear_current_line, bool compare)
 {
+    if (compare)
+    {
+        char name[512];
+        object_desc_display(name, sizeof(name), objects[0], true, 0);
+        text_out_c(TERM_L_BLUE, "Selected item\n");
+        byte base_color = weapon_glows(objects[0]) ? TERM_L_BLUE
+            : tval_to_attr[objects[0]->tval % N_ELEMENTS(tval_to_attr)];
+        text_out_c(object_display_color(objects[0], base_color), name);
+        text_out("\n\n");
+        object_compare_summary_out(objects, headings, count);
+        return;
+    }
+
     for (int i = 0; i < count; i++)
     {
         if (i > 0)
@@ -2574,6 +2734,7 @@ static void object_info_overlay_capture_release(void)
         return;
 
     object_info_screen_capture_free(&object_info_overlay_capture);
+    object_info_screen_capture_free(&object_info_overlay_comparison);
     object_info_overlay_capture_active = false;
 }
 
@@ -2636,7 +2797,7 @@ static int object_info_screen_capture_used_cols(term* t, int rows)
 static bool object_info_screen_capture_build(
     const object_type** objects, const char** headings, int count,
     object_info_screen_capture* capture, int preferred_width,
-    bool use_story_font, bool interactive)
+    bool use_story_font, bool interactive, bool compare)
 {
     term scratch;
     term* saved_term = Term;
@@ -2697,7 +2858,7 @@ static bool object_info_screen_capture_build(
 
     Term_clear();
     Term_gotoxy(0, 0);
-    object_info_screen_multi_body(objects, headings, count, true);
+    object_info_screen_multi_body(objects, headings, count, true, compare);
 
     used_rows = object_info_screen_capture_used_rows(Term);
     if (used_rows < 1)
@@ -2755,10 +2916,34 @@ cleanup:
     return success;
 }
 
+static bool object_info_capture_present(const object_info_screen_capture* full,
+    const object_info_screen_capture* comparison, bool comparison_view,
+    int scroll, bool interactive, int* visible_rows, int* max_scroll)
+{
+    if (comparison && comparison->attrs)
+    {
+        sdl_description_content full_content = { full->attrs, full->chars,
+            full->tattrs, full->tchars, full->story, NULL,
+            full->width, full->height, full->target_cols };
+        sdl_description_content comparison_content = { comparison->attrs,
+            comparison->chars, comparison->tattrs, comparison->tchars,
+            comparison->story, NULL, comparison->width, comparison->height,
+            comparison->target_cols };
+        return sdl_description_overlay_present_views(&full_content,
+            &comparison_content, comparison_view, scroll, interactive,
+            visible_rows, max_scroll);
+    }
+    return sdl_description_overlay_present(full->attrs, full->chars,
+        full->tattrs, full->tchars, full->story, NULL, full->width,
+        full->height, full->target_cols, scroll, interactive,
+        visible_rows, max_scroll);
+}
+
 bool object_info_overlay_show_multi(const object_type** objects,
-    const char** headings, int count)
+    const char** headings, int count, bool compare)
 {
     object_info_screen_capture capture;
+    object_info_screen_capture comparison = { 0 };
     int overlay_width;
     bool use_story_font;
 
@@ -2778,22 +2963,19 @@ bool object_info_overlay_show_multi(const object_type** objects,
     overlay_width = object_info_screen_preferred_capture_width(use_story_font);
 
     if (!object_info_screen_capture_build(objects, headings, count, &capture,
-            overlay_width, use_story_font, false))
+            overlay_width, use_story_font, false, false))
         return false;
+    if (compare && object_compare_has_targets(objects, count))
+        (void)object_info_screen_capture_build(objects, headings, count,
+            &comparison, overlay_width, use_story_font, false, true);
 
     object_info_overlay_capture_release();
     object_info_overlay_capture = capture;
+    object_info_overlay_comparison = comparison;
     object_info_overlay_capture_active = true;
 
-    if (!sdl_description_overlay_present(object_info_overlay_capture.attrs,
-            object_info_overlay_capture.chars,
-            object_info_overlay_capture.tattrs,
-            object_info_overlay_capture.tchars,
-            object_info_overlay_capture.story,
-            NULL,
-            object_info_overlay_capture.width,
-            object_info_overlay_capture.height,
-            object_info_overlay_capture.target_cols, 0, false, NULL, NULL))
+    if (!object_info_capture_present(&object_info_overlay_capture,
+            &object_info_overlay_comparison, false, 0, false, NULL, NULL))
     {
         object_info_overlay_clear();
         return false;
@@ -2946,12 +3128,14 @@ static void object_info_configure_footer(cptr footer,
 }
 
 static char object_info_screen_capture_view(
-    const object_info_screen_capture* capture, const object_type* item, cptr footer,
+    const object_info_screen_capture* capture,
+    const object_info_screen_capture* comparison, const object_type* item, cptr footer,
     const object_info_screen_action* actions, int action_count)
 {
     int scroll = 0;
     char result = 0;
     bool described = false;
+    bool comparison_view = false;
 
     if (!capture)
         return 0;
@@ -2966,11 +3150,8 @@ static char object_info_screen_capture_view(
 
         Term_get_size(NULL, &term_hgt);
         object_info_configure_footer(footer, actions, action_count);
-        if (!sdl_description_overlay_present(capture->attrs, capture->chars,
-                capture->tattrs, capture->tchars, capture->story,
-                NULL,
-                capture->width, capture->height, capture->target_cols, scroll,
-                true, &visible_rows, &max_scroll))
+        if (!object_info_capture_present(capture, comparison, comparison_view,
+                scroll, true, &visible_rows, &max_scroll))
         {
             break;
         }
@@ -2988,6 +3169,11 @@ static char object_info_screen_capture_view(
         ui_scroll_area_set_tap_key(ESCAPE);
 
         ch = inkey();
+        if (comparison_view != sdl_description_overlay_comparison_view())
+        {
+            comparison_view = sdl_description_overlay_comparison_view();
+            scroll = 0;
+        }
         dir = target_dir(ch);
         if ((dir == 8) || (dir == 2))
             ch = I2D(dir);
@@ -2995,6 +3181,13 @@ static char object_info_screen_capture_view(
         if (ch == UI_MENU_CLICK_WAKE_KEY)
         {
             continue;
+        }
+        else if ((ch == 'v' || ch == 'V') && comparison && comparison->attrs
+            && !object_info_screen_key_is_action(ch, actions, action_count))
+        {
+            (void)sdl_description_overlay_toggle_view();
+            comparison_view = sdl_description_overlay_comparison_view();
+            scroll = 0;
         }
         else if (ch == ESCAPE)
         {
@@ -3041,17 +3234,19 @@ static char object_info_screen_capture_view(
     return result;
 }
 
-void object_info_screen_multi(const object_type** objects, const char** headings, int count)
+void object_info_screen_multi(const object_type** objects,
+    const char** headings, int count, bool compare)
 {
     (void)object_info_screen_multi_with_actions(objects, headings, count,
-        NULL, NULL, 0);
+        NULL, NULL, 0, compare);
 }
 
 char object_info_screen_multi_with_actions(const object_type** objects,
     const char** headings, int count, cptr footer,
-    const object_info_screen_action* actions, int action_count)
+    const object_info_screen_action* actions, int action_count, bool compare)
 {
     object_info_screen_capture capture;
+    object_info_screen_capture comparison = { 0 };
     object_info_screen_action effective_actions[OBJECT_INFO_MAX_ACTIONS];
     char effective_footer[160];
     char understanding_token[32];
@@ -3122,10 +3317,14 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     have_capture =
         object_info_screen_capture_build(objects, headings, count, &capture,
             object_info_screen_preferred_capture_width(use_story_font),
-            use_story_font, true);
+            use_story_font, true, false);
+    if (have_capture && compare && object_compare_has_targets(objects, count))
+        (void)object_info_screen_capture_build(objects, headings, count,
+            &comparison, object_info_screen_preferred_capture_width(use_story_font),
+            use_story_font, true, true);
     if (have_capture)
     {
-        result = object_info_screen_capture_view(&capture, objects[0], footer,
+        result = object_info_screen_capture_view(&capture, &comparison, objects[0], footer,
             effective_action_count ? effective_actions : NULL,
             effective_action_count);
     }
@@ -3146,6 +3345,7 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     {
         sdl_description_overlay_clear();
         object_info_screen_capture_free(&capture);
+        object_info_screen_capture_free(&comparison);
     }
 
     text_out_hook = text_out_to_screen;

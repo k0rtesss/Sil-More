@@ -139,7 +139,7 @@ static int monster_recall_screen_capture_used_cols(term* t, int rows)
 
 static bool monster_recall_screen_capture_build(
     int r_idx, const monster_type* m_ptr,
-    monster_recall_screen_capture* capture)
+    monster_recall_screen_capture* capture, bool compact)
 {
     term scratch;
     term* saved_term = Term;
@@ -191,7 +191,7 @@ static bool monster_recall_screen_capture_build(
     roff_top_live(r_idx, m_ptr);
     Term_gotoxy(0, 1);
     Term_erase(0, 1, 255);
-    describe_monster(r_idx, false, m_ptr);
+    describe_monster_mode(r_idx, false, m_ptr, compact);
 
     used_rows = monster_recall_screen_capture_used_rows(Term);
     if (used_rows < 1)
@@ -341,7 +341,8 @@ static int monster_recall_screen_capture_view(
 int screen_roff(int r_idx, const monster_type* m_ptr)
 {
     monster_recall_screen_capture capture;
-    bool have_capture;
+    bool compact = minimum_text_mode;
+    int exit_key = ESCAPE;
 
     if (monster_recall_blocked_by_hallucination())
     {
@@ -352,16 +353,48 @@ int screen_roff(int r_idx, const monster_type* m_ptr)
     /* Flush messages */
     message_flush();
 
-    have_capture = monster_recall_screen_capture_build(r_idx, m_ptr, &capture);
-    if (have_capture)
+    while (true)
     {
-        int exit_key = monster_recall_screen_capture_view(&capture);
+        if (!monster_recall_screen_capture_build(r_idx, m_ptr, &capture,
+                compact))
+        {
+            log_warn("Unable to build the monster recall overlay for race %d", r_idx);
+            break;
+        }
 
+        if (minimum_text_mode)
+        {
+            cptr toggle = compact ? "x Full details" : "x Compact";
+            cptr back = "Esc Back";
+            cptr footer = compact ? "x Full details   Esc Back"
+                                  : "x Compact   Esc Back";
+            if (steamdeck_controls_active())
+            {
+                toggle = compact ? "<X> Full details" : "<X> Compact";
+                back = "<B> Back";
+                footer = compact ? "<X> Full details   <B> Back"
+                                 : "<X> Compact   <B> Back";
+            }
+            sdl_description_overlay_set_footer(footer, true);
+            sdl_description_overlay_clear_footer_actions();
+            sdl_description_overlay_add_footer_action('x', toggle);
+            sdl_description_overlay_add_footer_action(ESCAPE, back);
+        }
+        exit_key = monster_recall_screen_capture_view(&capture);
         monster_recall_screen_capture_free(&capture);
+        sdl_description_overlay_clear_footer_actions();
+        sdl_description_overlay_set_footer(NULL, false);
+        if (minimum_text_mode && (exit_key == 'x' || exit_key == 'X'
+            || (steamdeck_controls_active()
+                && exit_key == steamdeck_alt_action_key())))
+        {
+            compact = !compact;
+            continue;
+        }
         return exit_key;
     }
-
-    log_warn("Unable to build the monster recall overlay for race %d", r_idx);
+    sdl_description_overlay_clear_footer_actions();
+    sdl_description_overlay_set_footer(NULL, false);
     return ESCAPE;
 }
 

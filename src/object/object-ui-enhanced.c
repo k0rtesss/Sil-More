@@ -790,7 +790,8 @@ comparisons_done:
             };
 
             return object_info_screen_multi_with_actions(objects, headings,
-                count, "Esc close", actions, N_ELEMENTS(actions));
+                count, "Esc close", actions, N_ELEMENTS(actions),
+                include_comparisons);
         }
 
         floor_context_action context_actions[FLOOR_CONTEXT_MAX_ACTIONS];
@@ -846,10 +847,10 @@ comparisons_done:
         }
 
         return object_info_screen_multi_with_actions(objects, headings, count,
-            prompt, actions, display_action_count);
+            prompt, actions, display_action_count, include_comparisons);
     }
 
-    object_info_screen_multi(objects, headings, count);
+    object_info_screen_multi(objects, headings, count, include_comparisons);
     return 0;
 }
 

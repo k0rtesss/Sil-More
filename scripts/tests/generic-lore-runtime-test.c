@@ -73,6 +73,7 @@ int main(int argc, char** argv)
     Term_activate(&test_term);
     assert(!init_z_info() && !init_f_info());
     assert(!init_k_info() && !init_b_info());
+    assert(!init_flavor_info());
     assert(!init_a_info() && !init_e_info());
     assert(!init_r_info() && !init_v_info());
     assert(!init_p_info() && !init_c_info());
@@ -200,6 +201,8 @@ int main(int argc, char** argv)
     assert(random_state == Rand_state_export());
     puts("Parsed story pools and unchanged gameplay RNG PASS");
     check_generic_ui();
+    check_minimum_text_ui();
+    check_minimum_quests_and_monsters();
     check_generic_quest_ui();
     check_generic_help_ui();
     char tutorials[1024];

@@ -2950,6 +2950,14 @@ void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
     if (sdl_gamepad_context_focus_handle_button(button, down))
         return;
 
+    if (button == SDL_GAMEPAD_BUTTON_NORTH && g_description_overlay.active
+        && g_description_overlay.interactive && g_description_overlay.has_view_toggle)
+    {
+        if (down)
+            (void)sdl_description_overlay_toggle_view();
+        return;
+    }
+
     bool modal_ui = sdl_gamepad_back_button_is_modal()
         || (movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_NONE
             && movement_input_active_context() != MOVEMENT_INPUT_CONTEXT_DUNGEON);

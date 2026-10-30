@@ -199,8 +199,8 @@ Google's published initial states cannot be changed. The original 14 retain
 their published revealed states; the following 40 retain their original Console
 states (36 hidden, four revealed), even where the local viewer now reveals a
 goal for planning. Existing provider IDs and unlocks are preserved. All 112
-entries now have configured provider IDs, including the two newly imported
-Blitz drafts. New-project exports follow the current 62-visible/50-hidden
+entries now have configured provider IDs, including the two newly published
+Blitz achievements. New-project exports follow the current 62-visible/50-hidden
 native catalogue policy. Existing-project imports contain only unmapped entries.
 
 The in-game list displays existing game sprites beside each revealed entry,
@@ -794,13 +794,13 @@ The IDs are build configuration, not secrets. No OAuth secret or service
 account key belongs in the app. Malformed IDs, duplicate nonempty IDs, or achievement IDs without a project
 ID fail Gradle configuration. The checked-in configuration preserves all 110
 existing Console-assigned IDs, including the original 14 provider identities,
-and includes the two new IDs assigned by Play Console to the Blitz drafts.
+and includes the two new IDs assigned by Play Console to the Blitz achievements.
 Existing mapped achievements continue synchronizing. Unmapped achievements
 remain durable in local progress and are uploaded after their real IDs are
 configured in a later build. They never send an empty ID to Google. An entirely
 unmapped build keeps achievements local. The two Blitz achievements were
-imported as Play Console drafts; publish the Games Services changes before
-expecting their provider unlocks to work for all players.
+published in Play Games Services on 29 October 2026. Android builds need the
+new provider IDs to synchronize those two unlocks.
 
 Use `scripts/export_achievement_stores.py` to export the two Steam CSVs, Steam
 256px icons, the Google 512px icon/import package and Apple 1024px assets. It reads the native

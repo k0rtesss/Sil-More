@@ -46,8 +46,8 @@ void __wrap_tutorial_game_explain(const char* id, const char* title, const char*
 { (void)id; (void)title; (void)text; }
 void __wrap_object_info_screen(const object_type* obj) { (void)obj; }
 void __wrap_object_info_screen_multi(const object_type** objs,
-    const char** headings, int count)
-{ (void)objs; (void)headings; (void)count; }
+    const char** headings, int count, bool compare)
+{ (void)objs; (void)headings; (void)count; (void)compare; }
 bool __wrap_player_try_identify_smithing_object_on_examine(
     object_type* obj, bool equipped)
 {
