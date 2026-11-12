@@ -2,6 +2,7 @@
 #include "externs.h"
 #include "melee/melee-movement-internal.h"
 #include "melee/melee-util.h"
+#include "melee/melee-attack.h"
 #include "monster/monster-abilities.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-social.h"
@@ -40,6 +41,29 @@ typedef struct tactical_choice
 
 static int squad_position_score(const tactical_context* c, int y, int x);
 static int squad_job_score(const monster_type* m, int y, int x);
+
+static bool tactical_has_shot(const monster_type* m, int y, int x, int ty, int tx)
+{
+    /* A candidate move vacates the actor's old square. Keep the real map
+     * untouched, and restore any enclosing projection preview's ignore state. */
+    bool saved_ignore = project_path_ignore;
+    int saved_y = project_path_ignore_y, saved_x = project_path_ignore_x;
+    project_path_ignore = true;
+    project_path_ignore_y = m->fy;
+    project_path_ignore_x = m->fx;
+    int path = projectable(y, x, ty, tx, PROJECT_CHCK);
+    project_path_ignore = saved_ignore;
+    project_path_ignore_y = saved_y;
+    project_path_ignore_x = saved_x;
+    if (path != PROJECT_NOT_CLEAR) return path == PROJECT_CLEAR;
+    /* Arrows, boulders and thrown webs stop at an intervening creature.
+     * Other authored player-directed attacks retain their existing path rules. */
+    for (int bit = 3; bit <= 24; ++bit)
+        if (bit != 21 && bit != 22 && bit != 23
+            && (r_info[m->r_idx].flags4 & (1UL << bit))
+            && monster_ranged_targets_player(96 + bit)) return true;
+    return false;
+}
 
 static int tactical_confidence(const monster_type* m_ptr, int feature)
 {
@@ -379,7 +403,7 @@ static int tactical_position_details(const tactical_context* c, int y, int x,
     int impale = MAX(0, tactical_confidence(m_ptr, MON_AI_IMPALE));
     int sweep = MAX(0, tactical_confidence(m_ptr, MON_AI_WHIRLWIND));
     int follow = MAX(0, tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH));
-    bool has_shot = !c->ranged || projectable(y, x, c->py, c->px, PROJECT_CHCK);
+    bool has_shot = !c->ranged || tactical_has_shot(m_ptr, y, x, c->py, c->px);
     if (!c->ranged && dist == 1) score += 8;
     if (c->ranged && !has_shot) score -= 24;
     if (c->ranged && dist < m_ptr->min_range) score -= 15;
@@ -618,7 +642,7 @@ bool monster_squad_hold_position(const monster_type* m)
         && distance(m->fy, m->fx, m->squad.target_y, m->squad.target_x) >= 2
         && !monster_terrain_penalty((monster_type*)m, m->fy, m->fx)
         && monster_ai_poison_safe(m, m->fy, m->fx, 2)
-        && (post || projectable(m->fy, m->fx, m->squad.target_y, m->squad.target_x, PROJECT_CHCK));
+        && (post || tactical_has_shot(m, m->fy, m->fx, m->squad.target_y, m->squad.target_x));
 }
 
 static int squad_position_score(const tactical_context* c, int y, int x)
@@ -802,7 +826,7 @@ static bool squad_assign_position(monster_type* m, monster_type* leader,
         /* Ranged units need an actual shot, not just their preferred range.
          * Melee without a reachable contact square gets an approach position. */
         if (!reserved && dist && (m->squad.plan == MON_PLAN_REGROUP || !c.ranged || (dist >= 2
-                && projectable(y, x, c.py, c.px, PROJECT_CHCK))))
+                && tactical_has_shot(m, y, x, c.py, c.px))))
         {
             int score = tactical_position_score(&c, y, x) + formation - costs[at]
                 + squad_job_score(m, y, x);

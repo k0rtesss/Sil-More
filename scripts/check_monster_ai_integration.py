@@ -311,6 +311,41 @@ static void check_protected_terrain_movement(void)
     puts("Production melee values knockback into lava; movement enters protected lava footing, then resumes attacking PASS.");
 }
 
+static void check_archer_vacated_square(void)
+{
+    monster_type* m = adaptive_fixture(103, 0);
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = 15;
+    cave_m_idx[10][15] = -1;
+    for (int x = 1; x < p_ptr->cur_map_wid - 1; ++x) {
+        cave_set_feat(9, x, FEAT_WALL_PERM);
+        cave_set_feat(11, x, FEAT_WALL_PERM);
+    }
+    m->cdis = 5; m->min_range = 7; m->best_range = 8;
+    m->stance = STANCE_AGGRESSIVE;
+    assert(projectable(10, 9, 10, 15, PROJECT_CHCK) == PROJECT_NOT_CLEAR);
+    /* A candidate retreat must ignore its own old square, while restoring
+     * the enclosing caller's projection state and leaving the world pure. */
+    project_path_ignore = true;
+    project_path_ignore_y = 4; project_path_ignore_x = 4;
+    monster_type before = *m;
+    u64b rng = Rand_state_export();
+    int utility = monster_tactical_move_utility(m);
+    assert(utility > 0 && monster_tactical_move_utility(m) == utility);
+    assert(!memcmp(m, &before, sizeof(before)) && Rand_state_export() == rng);
+    assert(project_path_ignore && project_path_ignore_y == 4 && project_path_ignore_x == 4);
+    assert(cave_m_idx[10][10] == (int)(m - mon_list) && cave_m_idx[10][9] == 0);
+    project_path_ignore = false;
+    project_path_ignore_y = project_path_ignore_x = 0;
+    int y, x;
+    bool bash = false, fear = false;
+    assert(get_move(m, &y, &x, &fear, false) && y == 10 && x == 9);
+    assert(make_move(m, &y, &x, false, &bash));
+    process_move(m, y, x, bash);
+    assert(projectable(m->fy, m->fx, 10, 15, PROJECT_CHCK) == PROJECT_CLEAR);
+    puts("Real corridor archer retreats through its vacated firing line; previews preserve map, actor, RNG and nested projection state PASS.");
+}
+
 static void check_cooperative_movement(void)
 {
     monster_type* m = adaptive_fixture(403, 0);
@@ -464,6 +499,7 @@ static void check_adaptive_integration(void)
     puts("Real complete player actions apply pool contact before poison tick and suppress regeneration PASS.");
     check_weapon_fear();
     check_protected_terrain_movement();
+    check_archer_vacated_square();
     check_cooperative_movement();
     check_commanded_squad();
     check_ordinary_squad();

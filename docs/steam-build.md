@@ -116,6 +116,23 @@ Runtime 4.0. Saves and settings normally live under `~/sil-more/`, outside the
 installation. The helper creates local packages; upload and branch activation
 are separate release steps.
 
+Before uploading, test Continue in the packaged executable on an isolated
+Steam Deck-sized display (requires Xvfb and xauth in the SDK):
+
+```bash
+xvfb-run -a -s '-screen 0 1280x800x24 -nolisten tcp' \
+  python3 scripts/check_linux_package_startup.py \
+  --package scripts/output/linux-release/sil-more-linux-steam \
+  --output scripts/output/linux-release/startup-check
+```
+
+Use a fresh output directory. The check copies the package, creates private
+profiles, and continues past the welcome screen with both fresh and reloaded
+settings on a 53-column, 16-row terminal. Merely reaching the welcome screen
+does not test the game's minimum-size guard. After uploading, verify that the
+intended build is active on the test/release branch; an uploaded build alone
+does not change what Steam installs.
+
 ## SteamPipe upload helper
 
 `build-cmake.bat` and `build_linux_steam.py` prepare deployment folders; they do

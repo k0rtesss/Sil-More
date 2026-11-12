@@ -34,13 +34,13 @@ size_t ability_save_lore(byte* data, size_t capacity, int r_idx)
 }
 #elif defined(ABILITY_SAVE_READER)
 #include "../../src/fs/load.c"
-size_t ability_load_record(const byte* data, size_t size, byte extra,
+size_t ability_load_record(const byte* data, size_t size, byte patch, byte extra,
     monster_type* m, u16b* sentinel)
 {
     fff = SDL_IOFromConstMem(data, size);
     if (!fff) return 0;
     xor_byte = 0; v_check = x_check = 0; load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 8; sf_extra = extra;
+    sf_major = VERSION_MAJOR; sf_minor = VERSION_MINOR; sf_patch = patch; sf_extra = extra;
     savefile_has_song_duels = true;
     savefile_has_monster_shatter = true;
     savefile_has_thrall_quest = true;
@@ -51,13 +51,13 @@ size_t ability_load_record(const byte* data, size_t size, byte extra,
     SDL_CloseIO(fff); fff = NULL;
     return consumed;
 }
-size_t ability_load_lore(const byte* data, size_t size, byte extra,
+size_t ability_load_lore(const byte* data, size_t size, byte patch, byte extra,
     int r_idx, u16b* sentinel)
 {
     fff = SDL_IOFromConstMem(data, size);
     if (!fff) return 0;
     xor_byte = 0; v_check = x_check = 0; load_byte_offset = 0;
-    sf_major = 0; sf_minor = 9; sf_patch = 8; sf_extra = extra;
+    sf_major = VERSION_MAJOR; sf_minor = VERSION_MINOR; sf_patch = patch; sf_extra = extra;
     rd_lore(r_idx);
     rd_u16b(sentinel);
     size_t consumed = (size_t)SDL_TellIO(fff);
@@ -69,9 +69,9 @@ size_t ability_load_lore(const byte* data, size_t size, byte extra,
 #include "log/log.h"
 
 size_t ability_save_record(byte*, size_t, const monster_type*);
-size_t ability_load_record(const byte*, size_t, byte, monster_type*, u16b*);
+size_t ability_load_record(const byte*, size_t, byte, byte, monster_type*, u16b*);
 size_t ability_save_lore(byte*, size_t, int);
-size_t ability_load_lore(const byte*, size_t, byte, int, u16b*);
+size_t ability_load_lore(const byte*, size_t, byte, byte, int, u16b*);
 
 /* Deterministic state-transition fixtures against the production ability
  * module. Hit rolls, AI path selection, rendering and save I/O are not mocked
@@ -389,6 +389,11 @@ static void test_save_records(void)
         m->skip_next_turn = recovery == 1;
         m->energy = -120;
         m->poisoned = 37;
+        m->player_poisoned = 19;
+        m->potion_poisoned = 7;
+        m->achievement_doom_rage_epoch = 123;
+        m->achievement_elbereth_turn = 87;
+        m->achievement_first_wolf = true;
         m->consecutive_attacks = 3;
         m->turns_stationary = 4;
         m->previous_action[0] = 6;
@@ -417,10 +422,13 @@ static void test_save_records(void)
         size_t size = ability_save_record(encoded, sizeof(encoded), m);
         CHECK(size > 4);
         memset(&restored, 0xff, sizeof(restored));
-        CHECK(ability_load_record(encoded, size, VERSION_EXTRA, &restored, &sentinel) == size);
+        CHECK(ability_load_record(encoded, size, VERSION_PATCH, VERSION_EXTRA, &restored, &sentinel) == size);
         CHECK(sentinel == 0xa53c);
         CHECK(restored.r_idx == m->r_idx && restored.hp == m->hp);
         CHECK(restored.energy == -120 && restored.poisoned == 37);
+        CHECK(restored.player_poisoned == 19 && restored.potion_poisoned == 7);
+        CHECK(restored.achievement_doom_rage_epoch == 123
+            && restored.achievement_elbereth_turn == 87 && restored.achievement_first_wolf);
         CHECK(restored.vengeance == 1 && restored.smite_recovery == recovery);
         CHECK(restored.skip_next_turn == (recovery == 1));
         CHECK(restored.consecutive_attacks == 3);
@@ -454,8 +462,14 @@ static void test_save_records(void)
             plain[i] = encoded[i] ^ previous;
             previous = encoded[i];
         }
+        /* .31/.34/.35 inserted poison ownership and achievement metadata
+         * before the two ability bytes; remove them before truncating AI. */
+        const size_t later_bytes = 2 + 2 + 4 + 4 + 1;
+        size_t later_start = size - 2 - ai_bytes - 2 - later_bytes;
+        memmove(plain + later_start, plain + later_start + later_bytes,
+            size - later_start - later_bytes);
         for (int extra = 4; extra <= 5; ++extra) {
-            size_t payload = size - 2 - ai_bytes - (extra < 5 ? 2 : 0);
+            size_t payload = size - later_bytes - 2 - ai_bytes - (extra < 5 ? 2 : 0);
             previous = 0;
             for (size_t i = 0; i < payload + 2; ++i) {
                 byte value = i < payload ? plain[i]
@@ -464,10 +478,13 @@ static void test_save_records(void)
                 legacy[i] = previous;
             }
             memset(&restored, 0xff, sizeof(restored));
-            CHECK(ability_load_record(legacy, payload + 2, extra,
+            CHECK(ability_load_record(legacy, payload + 2, 8, extra,
                 &restored, &sentinel) == payload + 2);
             CHECK(sentinel == 0xa53c);
             CHECK(restored.energy == -120 && restored.poisoned == 37);
+            CHECK(!restored.player_poisoned && !restored.potion_poisoned);
+            CHECK(!restored.achievement_doom_rage_epoch
+                && !restored.achievement_elbereth_turn && !restored.achievement_first_wolf);
             CHECK(restored.vengeance == (extra >= 5 ? 1 : 0));
             CHECK(restored.smite_recovery == (extra >= 5 ? recovery : 0));
             CHECK(restored.consecutive_attacks == (extra >= 5 ? 3 : 0));
@@ -484,13 +501,13 @@ static void test_save_records(void)
     m->skip_next_turn = false; /* Reader repairs pending recovery's skip bit. */
     size_t size = ability_save_record(encoded, sizeof(encoded), m);
     memset(&restored, 0, sizeof(restored));
-    CHECK(ability_load_record(encoded, size, VERSION_EXTRA, &restored, &sentinel) == size);
+    CHECK(ability_load_record(encoded, size, VERSION_PATCH, VERSION_EXTRA, &restored, &sentinel) == size);
     CHECK(restored.smite_recovery == 1 && restored.skip_next_turn);
     CHECK(!monster_abilities_can_react(&restored));
     m->smite_recovery = 255;
     m->vengeance = 255;
     size = ability_save_record(encoded, sizeof(encoded), m);
-    CHECK(ability_load_record(encoded, size, VERSION_EXTRA, &restored, &sentinel) == size);
+    CHECK(ability_load_record(encoded, size, VERSION_PATCH, VERSION_EXTRA, &restored, &sentinel) == size);
     CHECK(sentinel == 0xa53c);
     CHECK(restored.smite_recovery == 2 && restored.vengeance == 1);
 }
@@ -541,7 +558,7 @@ static void test_save_lore(void)
     CHECK(size > 4);
     memset(&lore[1], 0xff, sizeof(lore[1]));
     races[1].max_num = 0;
-    CHECK(ability_load_lore(encoded, size, 5, 1, &sentinel) == size);
+    CHECK(ability_load_lore(encoded, size, VERSION_PATCH, VERSION_EXTRA, 1, &sentinel) == size);
     CHECK(sentinel == 0xb64d);
     CHECK(lore[1].flags5 == (RF5_SMITE | RF5_DODGING));
     CHECK(lore[1].psights == 123 && lore[1].blows[0] == 17);
@@ -564,7 +581,7 @@ static void test_save_lore(void)
     }
     memset(&lore[1], 0xff, sizeof(lore[1]));
     races[1].max_num = 0;
-    CHECK(ability_load_lore(legacy, size - 4, 4, 1, &sentinel) == size - 4);
+    CHECK(ability_load_lore(legacy, size - 4, 8, 4, 1, &sentinel) == size - 4);
     CHECK(sentinel == 0xb64d);
     CHECK(lore[1].flags5 == 0);
     CHECK(lore[1].psights == 123 && lore[1].blows[0] == 17);
@@ -583,7 +600,7 @@ static void test_save_lore(void)
         }
         races[1].max_num = 7;
         lore[1].flags5 = RF5_SMITE;
-        CHECK(ability_load_lore(legacy, size - 4, 4, 1, &sentinel) == size - 4);
+        CHECK(ability_load_lore(legacy, size - 4, 8, 4, 1, &sentinel) == size - 4);
         CHECK(sentinel == 0xb64d);
         CHECK(races[1].max_num == (saved_limit ? 1 : 0));
         CHECK(lore[1].flags5 == 0);

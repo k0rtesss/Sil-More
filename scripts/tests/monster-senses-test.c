@@ -46,6 +46,8 @@ int dwarf_bane_bonus(monster_type* m) { (void)m; return 0; }
 int edain_bane_bonus(monster_type* m) { (void)m; return 0; }
 int ability_bonus(int skill, int ability) { (void)skill; (void)ability; return 0; }
 void msg_format(cptr fmt, ...) { (void)fmt; }
+/* Achievement bookkeeping does not affect the perception result. */
+void sil_achievement_lore_on_perception(void) {}
 int monster_ai_confidence(const monster_type* m, int feature)
 { (void)m; (void)feature; return 0; }
 int health_level(int hp, int maxhp) { (void)hp; (void)maxhp; CHECK(false); return 0; }

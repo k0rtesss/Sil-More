@@ -379,13 +379,14 @@ static void test_monster_record_legacy_compatibility(void)
     decode(encoded, plain, modern_length);
     size_t record_size = modern_length - 4;
     size_t ai_start = record_size - MON_AI_FEATURE_COUNT * 7 - (22 + 13 + 8);
-    /* .31 adds the player-origin poison component immediately before the
-     * existing vengeance/smite bytes. Historical .6 records have no component. */
-    size_t player_poison_start = ai_start - 4;
-    memmove(plain + player_poison_start, plain + player_poison_start + 2,
-        modern_length - player_poison_start - 2);
-    modern_length -= 2;
-    ai_start -= 2;
+    /* .31/.34/.35 inserted poison ownership and achievement metadata
+     * immediately before vengeance/smite; historical .6 has none of it. */
+    const size_t later_bytes = 2 + 2 + 4 + 4 + 1;
+    size_t later_start = ai_start - 2 - later_bytes;
+    memmove(plain + later_start, plain + later_start + later_bytes,
+        modern_length - later_start - later_bytes);
+    modern_length -= later_bytes;
+    ai_start -= later_bytes;
     size_t appended = (MON_AI_FEATURE_COUNT - MON_AI_IMPALE) * 7;
     size_t removed_start = ai_start + MON_AI_IMPALE * 7;
     memmove(plain + removed_start, plain + removed_start + appended,
@@ -488,6 +489,27 @@ def main(extra_tests="", extra_calls="", legacy_dungeons=()):
                 line = f"        {write}(m->{field});"
                 assert historical.count(line) == 1
                 historical = historical.replace(line, "")
+        # Dungeon writers call a separate monster serializer. Keep that record
+        # historical too; pairing old dungeon lanes with today's monster fields
+        # produces a byte stream that never existed in the stated save version.
+        historical_save = subprocess.check_output(["git", "-c", "core.fsmonitor=false",
+            "show", f"{ref}:src/fs/save.c"], cwd=ROOT, text=True)
+        match = re.search(r"^(?:static )?void wr_monster\([^\n]*\)\n\{",
+                          historical_save, re.M)
+        assert match
+        monster_writer = historical_save[match.start():
+            historical_save.index("\n}", match.end()) + 2]
+        legacy_monster_name = f"fixture_legacy_v{extra}_wr_monster"
+        monster_writer = monster_writer.replace("void wr_monster(",
+                                                f"void {legacy_monster_name}(", 1)
+        flags_start = historical_save.index("#define SAVE_MON_FLAGS")
+        flags = historical_save[flags_start:historical_save.index("\n\n", flags_start)]
+        historical = historical.replace("        wr_monster(m_ptr);",
+            f"        {legacy_monster_name}(m_ptr);")
+        insertion = historical.index("static void ")
+        historical = (historical[:insertion] + '#include "monster/monster-ai.h"\n'
+                      + flags + "\n" + monster_writer
+                      + "\n" + historical[insertion:])
         old_source = OUT / f"legacy-v{extra}-writer.c"
         old_source.write_text(historical, encoding="utf-8")
         sources.append(str(old_source))

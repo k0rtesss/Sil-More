@@ -52,7 +52,7 @@ void shriek(monster_type* m) { (void)m; CHECK(false); }
 void calc_morale(monster_type* m) { (void)m; CHECK(false); }
 void calc_stance(monster_type* m) { (void)m; CHECK(false); }
 byte projectable(int y1, int x1, int y2, int x2, u32b flags)
-{ (void)flags; return los(y1, x1, y2, x2); }
+{ (void)flags; return los(y1, x1, y2, x2) ? PROJECT_CLEAR : PROJECT_NO; }
 void monster_desc(char* out, size_t len, const monster_type* m, int mode)
 { (void)m; (void)mode; snprintf(out, len, "the test monster"); }
 void msg_format(cptr fmt, ...)

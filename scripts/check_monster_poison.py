@@ -23,6 +23,7 @@ def function(path, name):
 PRELUDE = r'''
 #include "angband.h"
 #include "monster/monster-ai.h"
+#include "achievements.h"
 #include "monster/monster-senses.h"
 #include <assert.h>
 #include <stdio.h>
@@ -36,6 +37,7 @@ static monster_lore lore[3];
 monster_lore *l_list=lore;
 s16b mon_max=3;
 static int dealt, hits;
+void sil_achievements_on_event(sil_achievement_id id) { (void)id;assert(false); }
 bool mon_take_hit(int idx,int damage,cptr note,int who) {
     (void)note;assert(who==0);hits++;dealt+=damage;
     monsters[idx].hp-=damage;
@@ -56,6 +58,7 @@ static bool savefile_has_song_duels=true,savefile_has_monster_shatter=true;
 static bool savefile_has_thrall_quest=true,savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte n){assert(wp<1024);bytes[wp++]=n;}
 static void rd_byte(byte *n){assert(rp<wp);*n=bytes[rp++];}
+static void rd_bool(bool *n){byte b;rd_byte(&b);*n=b!=0;}
 static void wr_s16b(s16b n){wr_byte((byte)n);wr_byte((byte)((u16b)n>>8));}
 static void rd_s16b(s16b *n){byte a,b;rd_byte(&a);rd_byte(&b);*n=(s16b)(a|((u16b)b<<8));}
 static void wr_u32b(u32b n){for(int i=0;i<4;i++)wr_byte((byte)(n>>(8*i)));}
@@ -107,7 +110,8 @@ int main(void){
     }
     puts("Brands: positive post-armor damage adds ceil(half), zero blocked hit, bow/ammo either or both apply once: PASS");
     for(int version=2;version<=8;version++)for(int poison=0;poison<=100;poison++){
-        monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.player_poisoned=poison/2;src.thrall_quest_requested=1;
+        monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.player_poisoned=poison/2;src.potion_poisoned=poison/4;src.thrall_quest_requested=1;
+        src.achievement_doom_rage_epoch=123;src.achievement_elbereth_turn=87;src.achievement_first_wolf=true;
         src.song_will_penalty=7;src.blow_ds_reduction[0]=3;
         src.vengeance=1;src.smite_recovery=2;
         src.ai.observations[MON_AI_FIRE].value=2;
@@ -120,6 +124,15 @@ int main(void){
         src.ai.cast_reserve=2;src.ai.goal_age=3;
         wp=rp=0;extra_version=version;current_version=version==8;
         src.mflag=MFLAG_ACTV;wr_monster(&src);
+        /* .31/.34/.35 inserted poison ownership and achievement metadata
+         * between poison and abilities. Remove that lane for every old record
+         * before truncating abilities/AI or the four .7 observations. */
+        if(!current_version){
+            int later_bytes=abilities_offset-player_poison_offset;
+            memmove(bytes+player_poison_offset,bytes+abilities_offset,
+                wp-abilities_offset);wp-=later_bytes;
+            abilities_offset-=later_bytes;ai_offset-=later_bytes;
+        }
         if(version<4)wp=poison_offset;
         else if(version<5)wp=abilities_offset;
         else if(version<6)wp=ai_offset;
@@ -127,14 +140,13 @@ int main(void){
             int start=ai_offset+29*7, count=(MON_AI_FEATURE_COUNT-29)*7;
             memmove(bytes+start,bytes+start+count,wp-start-count);wp-=count;
         }
-        /* All legacy records predate the v31 player poison attribution. */
-        if(!current_version && version>=4){
-            memmove(bytes+player_poison_offset,bytes+player_poison_offset+2,
-                wp-player_poison_offset-2);wp-=2;
-        }
         wr_byte(0xA5);memset(&dst,0x55,sizeof(dst));rd_monster(&dst);
         assert(dst.poisoned==(version<4?0:poison));assert(dst.r_idx==2&&dst.hp==123&&dst.energy==-50);
         assert(dst.player_poisoned==(current_version?poison/2:0));
+        assert(dst.potion_poisoned==(current_version?poison/4:0));
+        assert(dst.achievement_doom_rage_epoch==(current_version?123U:0));
+        assert(dst.achievement_elbereth_turn==(current_version?87U:0));
+        assert(dst.achievement_first_wolf==current_version);
         assert(dst.thrall_quest_requested==1&&dst.song_will_penalty==7&&dst.blow_ds_reduction[0]==3);
         assert(dst.vengeance==(version<5?0:1));
         assert(dst.smite_recovery==(version<5?0:2));

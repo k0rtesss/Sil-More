@@ -3,6 +3,7 @@
 import check_monster_scent_save as persistence
 
 TESTS = r'''
+size_t fixture_write_v20_dungeon(byte*, size_t, size_t*);
 #include "monster/monster-routine.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"
@@ -68,7 +69,7 @@ static void test_routine_territory(void)
         size_t size, bytes = fixture_write_dungeon(encoded, sizeof(encoded), &size);
         size_t consumed; u32b sentinel;
         routine_map(QUAD_MODE_ROOMY);
-        assert(!fixture_read_dungeon(encoded, bytes, VERSION_EXTRA, &sentinel, &consumed));
+        assert(!fixture_read_current_dungeon(encoded, bytes, &sentinel, &consumed));
         m = &mon_list[cave_m_idx[my][mx]];
         assert(!memcmp(&saved, &m->routine, sizeof(saved)));
         assert(level_partition_index_for_point(m->routine.home_y, m->routine.home_x) == 0);
@@ -135,7 +136,7 @@ static void test_routine_patrol(void)
     size_t size, length_bytes = fixture_write_dungeon(encoded, sizeof(encoded), &size);
     u32b sentinel; size_t consumed;
     routine_map(QUAD_MODE_ROOMY);
-    assert(!fixture_read_dungeon(encoded, length_bytes, VERSION_EXTRA, &sentinel, &consumed));
+    assert(!fixture_read_current_dungeon(encoded, length_bytes, &sentinel, &consumed));
     assert(consumed == length_bytes && sentinel == 0xA1B2C3D4U);
     m = &mon_list[cave_m_idx[my][mx]];
     assert(!memcmp(&saved, &m->routine, sizeof(saved)));
@@ -146,20 +147,24 @@ static void test_routine_patrol(void)
     for (size_t cut = block; cut < size; cut++)
     {
         routine_map(QUAD_MODE_ROOMY);
-        assert(fixture_read_dungeon(encoded, cut, VERSION_EXTRA, &sentinel, &consumed));
+        assert(fixture_read_current_dungeon(encoded, cut, &sentinel, &consumed));
     }
     size_t bad[] = {block, block + 2, block + 8, block + 10};
     for (int i = 0; i < 4; i++)
     {
         byte old = plain[bad[i]]; plain[bad[i]] = 255;
         encode(plain, modified, length_bytes); routine_map(QUAD_MODE_ROOMY);
-        assert(fixture_read_dungeon(modified, length_bytes, VERSION_EXTRA, &sentinel, &consumed));
+        assert(fixture_read_current_dungeon(modified, length_bytes, &sentinel, &consumed));
         plain[bad[i]] = old;
     }
     /* Version 20 retains all previous state, with no inferred birth location. */
-    memmove(plain + block, plain + size, 8);
-    encode(plain, modified, block + 8); routine_map(QUAD_MODE_ROOMY);
-    assert(!fixture_read_dungeon(modified, block + 8, 20, &sentinel, &consumed));
+    routine_map(QUAD_MODE_ROOMY);
+    assert(!fixture_read_current_dungeon(encoded, length_bytes, &sentinel, &consumed));
+    size_t legacy_size;
+    size_t legacy_length = fixture_write_v20_dungeon(modified, sizeof(modified), &legacy_size);
+    routine_map(QUAD_MODE_ROOMY);
+    assert(!fixture_read_dungeon(modified, legacy_length, 20, &sentinel, &consumed));
+    assert(sentinel == 0xA1B2C3D4U && consumed == legacy_length);
     m = &mon_list[cave_m_idx[my][mx]];
     assert(!m->routine.territory && !m->routine.style && !m->routine.count);
     puts("Patrol route/progress roundtrip, truncated/corrupt saves and v20 compatibility PASS.");
@@ -210,4 +215,4 @@ static void test_monster_routines(void)
 
 if __name__ == "__main__":
     persistence.OUT = persistence.ROOT / "scripts/output/monster-routines"
-    persistence.main(TESTS, "    test_monster_routines();")
+    persistence.main(TESTS, "    test_monster_routines();", ((20, "d6bb1948"),))

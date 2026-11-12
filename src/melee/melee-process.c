@@ -534,13 +534,13 @@ static void process_monster(monster_type* m_ptr)
     if (m_ptr->r_idx == R_IDX_MORGOTH)
         update_flow(p_ptr->py, p_ptr->px, m_idx);
 
-    /* Calculate the monster's preferred combat range when needed */
+    /* Keep the range unset while following a sensory trace. Caching a melee
+     * fallback here prevents archers from choosing their real range when they
+     * first recognize the player. */
     if (m_ptr->min_range == 0)
     {
         if (m_ptr->r_idx == R_IDX_MORGOTH || monster_ai_can_see_player(m_ptr))
             find_range(m_ptr);
-        else
-            m_ptr->min_range = m_ptr->best_range = 1;
     }
 
     // determine if the monster should be active:

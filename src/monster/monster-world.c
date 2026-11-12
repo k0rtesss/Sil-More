@@ -17,8 +17,10 @@
 static bool world_hazard(monster_type* m, int feat)
 {
     monster_race* r = &r_info[m->r_idx];
-    if (!feat || (r->flags2 & RF2_FLYING)) return false;
+    if (!feat) return false;
+    /* Flight avoids ground contact, but not the heat above molten lava. */
     if (feat == FEAT_LAVA) return !(r->flags3 & RF3_RES_FIRE);
+    if (r->flags2 & RF2_FLYING) return false;
     if (feat == FEAT_POISON) return !(r->flags3 & RF3_RES_POIS);
     return feat == FEAT_CHASM || feat == FEAT_DEEP_WATER
         || feat == FEAT_RUBBLE;
