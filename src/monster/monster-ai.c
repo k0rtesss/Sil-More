@@ -3,6 +3,7 @@
 #include "monster/monster-ai.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-social.h"
+#include "monster/monster-tactics.h"
 #include <string.h>
 
 _Static_assert(MON_AI_SLAY_FEAR + 1 == MON_AI_FEATURE_COUNT,
@@ -23,6 +24,17 @@ bool monster_ai_enabled(const monster_type* m_ptr)
 {
     return m_ptr && m_ptr->r_idx > 0 && m_ptr->r_idx != R_IDX_MORGOTH
         && !(r_info[m_ptr->r_idx].flags2 & RF2_MINDLESS);
+}
+
+/* Challenge suppresses ranged actions for aggressive enemies. This movement
+ * intent must not depend on a cached range or the separate mana-drain roll. */
+bool monster_ai_challenge_melee(const monster_type* m_ptr)
+{
+    if (!monster_ai_enabled(m_ptr))
+        return false;
+    const monster_race* r = &r_info[m_ptr->r_idx];
+    return singing(SNG_CHALLENGE) && m_ptr->stance == STANCE_AGGRESSIVE
+        && !(r->flags3 & RF3_NO_CONF) && !(r->flags1 & RF1_NEVER_BLOW);
 }
 
 bool monster_ai_can_see_player(const monster_type* m_ptr)
@@ -260,7 +272,8 @@ static void monster_ai_report_action(monster_type* m_ptr, int old_y, int old_x,
         "takes advantage of the hazardous ground.",
         "holds back, wary of your retreating strike.",
         "moves into position at its commander's direction.",
-        "moves into position with its pack."
+        "moves into position with its pack.",
+        "moves to a better firing position."
     };
     int reason = m_ptr->ai.feedback_reason;
     bool moved = old_y != m_ptr->fy || old_x != m_ptr->fx;
@@ -271,7 +284,15 @@ static void monster_ai_report_action(monster_type* m_ptr, int old_y, int old_x,
         || reason <= MON_TACTIC_NONE || reason >= MON_TACTIC_MAX
         || m_ptr->fy != m_ptr->ai.feedback_y || m_ptr->fx != m_ptr->ai.feedback_x)
         return;
-    if (reason == MON_TACTIC_RETREAT_WAIT)
+    const char* message = messages[reason];
+    if (reason == MON_TACTIC_ORDER && !moved)
+    {
+        if (m_ptr->ability_melee || m_ptr->previous_action[0] == ACTION_ARCHERY
+            || !monster_squad_hold_position(m_ptr)) return;
+        message = m_ptr->min_range > 1 ? "holds its firing position."
+            : "holds its ground.";
+    }
+    else if (reason == MON_TACTIC_RETREAT_WAIT)
     {
         if (moved || m_ptr->ability_melee
             || m_ptr->previous_action[0] == ACTION_ARCHERY) return;
@@ -279,13 +300,53 @@ static void monster_ai_report_action(monster_type* m_ptr, int old_y, int old_x,
     else if (!moved) return;
     char name[80];
     monster_desc(name, sizeof(name), m_ptr, 0);
-    msg_format("%^s %s", name, messages[reason]);
+    msg_format("%^s %s", name, message);
     m_ptr->ai.feedback_cooldown = 8;
     last_message_turn = playerturn;
 }
 
+static void monster_ai_report_command(monster_type* m)
+{
+    static s32b last_command_turn = -1;
+    if (m->squad.role != MON_SQUAD_COMMANDER)
+    {
+        m->ai.reported_role = m->squad.role;
+        return;
+    }
+    bool changed_plan = m->ai.reported_role == MON_SQUAD_COMMANDER
+        && m->ai.reported_plan != m->squad.plan;
+    if ((!changed_plan && m->ai.reported_role == MON_SQUAD_COMMANDER)
+        || (!changed_plan && m->ai.feedback_cooldown)
+        || last_command_turn == playerturn || !monster_squad_order_valid(m)) return;
+    /* A visible actor's posture must not disclose unseen allies or command. */
+    bool visible_ally = false;
+    for (int i = 1; i < mon_max; ++i)
+        if (&mon_list[i] != m && mon_list[i].r_idx && mon_list[i].ml
+            && mon_list[i].squad.commander == m->squad.commander
+            && mon_list[i].squad.role == MON_SQUAD_SOLDIER)
+        { visible_ally = true; break; }
+    if (!visible_ally) return;
+    const char* message = m->squad.plan == MON_PLAN_REGROUP
+        ? "calls its allies to regroup."
+        : m->squad.plan == MON_PLAN_HOLD ? "signals its allies to hold formation."
+        : r_info[m->r_idx].command_style == MON_COMMAND_PACK
+            ? "leads its pack forward."
+        : r_info[m->r_idx].command_grade >= MON_COMMAND_COMMANDER
+            ? "orders its allies to advance." : "leads its group forward.";
+    char name[80];
+    monster_desc(name, sizeof(name), m, 0);
+    msg_format("%^s %s", name, message);
+    m->ai.reported_role = m->squad.role;
+    m->ai.reported_plan = m->squad.plan;
+    m->ai.feedback_cooldown = 8;
+    last_command_turn = playerturn;
+}
+
 void monster_ai_end_turn(monster_type* m_ptr, int old_y, int old_x, bool skipped)
 {
+    if (monster_ai_enabled(m_ptr) && !skipped && !m_ptr->ability_displaced
+        && m_ptr->ml && !p_ptr->image && !p_ptr->is_dead)
+        monster_ai_report_command(m_ptr);
     monster_ai_report_action(m_ptr, old_y, old_x, skipped);
     m_ptr->ai.previous_y = old_y;
     m_ptr->ai.previous_x = old_x;
@@ -315,6 +376,7 @@ void monster_ai_sanitize(monster_type* m_ptr)
     m_ptr->ai.cast_reserve = MIN(3, m_ptr->ai.cast_reserve);
     m_ptr->ai.cast_checked = m_ptr->ai.cast_available = false;
     m_ptr->ai.feedback_reason = m_ptr->ai.feedback_cooldown = 0;
+    m_ptr->ai.reported_role = m_ptr->ai.reported_plan = 0;
     m_ptr->ai.goal_age = MIN(3, m_ptr->ai.goal_age);
     m_ptr->ai.waits = MIN(2, m_ptr->ai.waits);
     monster_sense_state* sense = &m_ptr->ai.sense;

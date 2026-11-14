@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "monster-world.h"
 #include "monster-routine.h"
+#include "melee/melee-util.h"
 #include "monster-ai.h"
 #include "monster-senses.h"
 #include "cave/cave-environment.h"
@@ -35,7 +36,8 @@ static bool world_safe(monster_type* m, int y, int x)
 
 static bool world_inside(monster_type* m, int y, int x)
 {
-    int radius = (r_info[m->r_idx].flags2 & RF2_TERRITORIAL) ? 6 : WORLD_RADIUS;
+    int radius = (r_info[m->r_idx].flags2 & RF2_TERRITORIAL)
+        ? MONSTER_LAIR_RADIUS : WORLD_RADIUS;
     return monster_routine_allows(m, y, x)
         && distance(m->world.home_y, m->world.home_x, y, x) <= radius;
 }
@@ -181,6 +183,58 @@ static bool world_step(monster_type* m, int ty, int tx, bool adjacent)
     return false;
 }
 
+/* A ranged/fleeing creature's distance goal can strand it in a flooded passage
+ * with no dry adjacent cell. Find a bank through connected water and spend a
+ * normal movement action. Melee pursuit retains its useful forward crossing. */
+static bool world_escape_water(monster_type* m)
+{
+    monster_race* r = &r_info[m->r_idx];
+    byte seen[WORLD_SIDE][WORLD_SIDE] = {{0}};
+    s16b qy[WORLD_CELLS], qx[WORLD_CELLS];
+    byte first[WORLD_CELLS];
+    u16b depth[WORLD_CELLS];
+    int known_y, known_x, best_dir = 0, best_depth = WORLD_CELLS;
+    int best_range_error = WORLD_CELLS;
+    bool known = monster_senses_target(m, &known_y, &known_x);
+    int head = 0, tail = 1;
+    if (cave_feat[m->fy][m->fx] != FEAT_DEEP_WATER || (r->flags2 & RF2_FLYING)
+        || m->best_range <= 1)
+        return false;
+    qy[0] = m->fy; qx[0] = m->fx; first[0] = 0; depth[0] = 0;
+    seen[WORLD_RADIUS][WORLD_RADIUS] = 1;
+    while (head < tail)
+    {
+        int cy = qy[head], cx = qx[head], dir = first[head], steps = depth[head++];
+        if (dir && world_safe(m, cy, cx))
+        {
+            /* Equal-length exits should preserve the creature's established
+             * combat distance, using only its own legitimate sensory anchor. */
+            int error = known ? ABS(distance(cy, cx, known_y, known_x) - m->best_range) : 0;
+            if (steps < best_depth || (steps == best_depth && error < best_range_error))
+            { best_dir = dir; best_depth = steps; best_range_error = error; }
+            continue;
+        }
+        if (steps >= best_depth) continue;
+        for (int k = 1; k <= 9; ++k)
+        {
+            int ny = cy + ddy[k], nx = cx + ddx[k];
+            int sy = ny - m->fy + WORLD_RADIUS, sx = nx - m->fx + WORLD_RADIUS;
+            if (k == 5 || sy < 0 || sy >= WORLD_SIDE || sx < 0 || sx >= WORLD_SIDE
+                || seen[sy][sx] || !in_bounds_fully(ny, nx)
+                || !monster_routine_allows(m, ny, nx)
+                || (cave_feat[ny][nx] != FEAT_DEEP_WATER && !world_safe(m, ny, nx))
+                || !cave_exist_mon(r, ny, nx, false, false)
+                || !monster_step_cost(m, cy, cx, ny, nx)) continue;
+            seen[sy][sx] = 1;
+            qy[tail] = ny; qx[tail] = nx; depth[tail] = steps + 1;
+            first[tail++] = dir ? dir : k;
+        }
+    }
+    if (!best_dir) return false;
+    process_move(m, m->fy + ddy[best_dir], m->fx + ddx[best_dir], false);
+    return true;
+}
+
 bool monster_world_turn(monster_type* m)
 {
     monster_race* r = &r_info[m->r_idx];
@@ -199,7 +253,7 @@ bool monster_world_turn(monster_type* m)
                 && cave_exist_mon(r, y, x, false, false))
             { process_move(m, y, x, false); return true; }
         }
-        return false;
+        return world_escape_water(m);
     }
     if ((r->flags2 & RF2_MINDLESS) || m->stance == STANCE_FLEEING
         || monster_ai_can_see_player(m)

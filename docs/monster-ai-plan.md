@@ -1,9 +1,80 @@
 # Monster AI implementation plan
 
+## Deep-water archery corrections (2026-11-13)
+
+An archer with no adjacent dry square can now follow a bounded local route
+through deep water to a bank. It pays the existing swimming movement cost;
+equal-length exits favor its established combat distance using its own sensory
+anchor. Ordinary melee crossing retains its forward pursuit.
+
+Squad, tactical and native archer retreat positions now reject deep water as a
+grounded firing post. This also prevents returning to water immediately after
+escaping when the opposite bank is harmful or warned. A cornered archer can
+resume melee. Shallow-water shooting and flight retain their existing rules.
+
+Headless SDL coverage includes every combat-capable template, old support and
+spell behaviors, water widths/orientations, unavailable exits, dangerous banks,
+confusion, Challenge, flooding with a protected dry route, and live save/load.
+The chosen melee blow/effect and ordinary/reaction/Smite choice are available in
+DEBUG diagnostics without consuming RNG. Evidence is under
+`scripts/output/monster-ai-round7/`; no persistent format or combat-stat change.
+
+## Coordinated archer corrections (2026-11-13)
+
+Headless gameplay exposed three additional movement failures. Aggressive enemies
+affected by Challenge now advance for melee instead of retaining firing, guard,
+or assembly jobs while the song suppresses their ranged actions. A resisted
+mana-drain check also retains a melee approach; ending the song restores ordinary
+ranged spacing. The song's existing morale, resistance and mana rules are retained.
+
+Missile posts require the archer's own recognition range as well as a clear ray.
+Members receive their commander's shared sighting even when no final post is
+reachable within the bounded search, allowing an ordinary approach. Ranged actors
+also no longer collect melee surrounding/Flanking rewards that previously kept
+them in an adjacent ring despite an available firing position.
+
+Regressions cover the production scoring and range decisions and real SDL
+GameControl replays: strong/weak Challenge, voluntary stopping and Voice
+exhaustion, mixed morale, doorways, crowded squads, two captains, cross-kin
+authority, withdrawal cover and moving targets.
+
+Further varied encounters reproduced a warning/positioning loop: combat movement
+could return an archer to announced lava, then world behavior immediately moved
+it back out. Shared terrain scoring now rejects announced lava, chasm, deep water,
+rubble and acid where they are harmful, using the escape rule's existing flight
+and immunity distinctions. Route costs enforce this too, so ordinary pursuit can
+take a safe detour. The virtual player endpoint remains an attack. Safe warnings
+and ordinary shallow-water movement are retained. The same 30-turn corridor
+replay changes from five hazard re-entries and ten wasted moves to zero
+re-entries/moves, with 17 versus 22 arrows (each run also has one rally).
+
+## Commander and song lifecycle corrections (2026-11-13)
+
+Further lifecycle tests found two related gaps. A temporary commander's death
+must cancel its orders while retaining each survivor's own spent regroup/assembly
+budget, so reacquiring leadership cannot restart the same retreat condition.
+Disguise pacification, recognition history and same-turn attacker flags, together
+with Revealing hints, now follow their creature during monster-list compaction.
+Removed/reused slots are cleared even when Disguise buffers have not been
+initialized. These are runtime bookkeeping corrections with no save-format or
+combat-stat changes.
+
+## Dragon scent within a lair (2026-11-13)
+
+Territorial dragons may now follow an acquired scent, including the existing
+bounded search after that trail ends, within six squares of their saved home.
+This reuses the territorial world-work radius. Existing vault membership and
+partition boundaries also apply. A sound, shared sighting, or old visual target
+alone does not grant this exception. Other territorial races retain their rule;
+ordinary wolf/cat tracking and visible combat keep their existing behavior.
+The home coordinates already persist in monster routines, so no save format
+change is needed.
+
 ## Commander and soldier coordination (2026-09-25)
 
 `monster_squad_prepare()` in `src/melee/melee-movement-tactics.c` now makes one
-shared plan before each `process_monsters()` pass. Leadership is authored in
+shared plan before the first eligible action of each `process_monsters()` pass;
+empty scheduler polls do not consume planning budgets. Leadership is authored in
 `lib/edit/monster.txt` as `L:grade:doctrine:kin[:additional command kin]`.
 Rally and Escort no longer determine eligibility. There are 105 explicit
 profiles, including 50 non-unique types capable of leading a compatible group.
@@ -361,3 +432,15 @@ Required automated coverage:
 Manual encounter cases: a mixed group around water/ice/fire/poison; a poison crossing under pursuit; an injured poisoned regenerator; Balrog cover for allies with different light preferences; Ringwion versus mobile and stationary play; Fankil's shield-and-archer escort; Langon's useful sprint/warning choice; Dúron's mobile darkness; Carcharoth's poison/Vengeance retaliation; Lhamthanc's flying scent pursuit; and a development-only Nambatur encounter testing safe and unsafe Smite commitments.
 
 Passing source checks or a build is not proof of balanced or convincing encounter behavior. Record automated results separately from manual playtesting.
+
+### Action transparency
+
+Visible leaders announce a new advance, hold, or regroup order after actually taking an action. A visible ally must also be present before a message identifies group activity. Archers explain useful repositioning and deliberate holds at assigned firing posts. Explanations are suppressed for lost actions, forced displacement, unseen actors, hallucinations, and failed moves. Per-actor cooldowns and separate per-player-turn limits for command and movement messages keep formations readable without a message for every soldier.
+
+Desktop `log.txt` records completed active monster actions at the default DEBUG level: actor/race identity, positions, HP/mana/energy changes, sensory evidence and remembered position, commander, role, plan, job, order validity, command budget, and tactical reason. Ranged records include the committed attack ID and distinguish arrows, boulders, and spell/support actions. Action-start deaths retain the original actor's identity; missing turns show the cause instead of claiming a move. Unchanged sleepers are available at TRACE. `SIL_LOG_LEVEL=TRACE` enables those records; `SIL_LOG_LEVEL=INFO` suppresses per-action diagnostics. Mobile keeps its existing INFO default.
+
+Detailed diagnostics may describe offscreen actors, but player-facing messages use only visible actions and visible allies. Logging and message generation must not roll dice or change decisions. `scripts/check_monster_ai_transparency_gameplay.py` checks real SDL-input encounters, log/action correspondence, visibility-safe messages, exact replay equivalence at different log levels, and live save/reload continuations.
+
+Squad role selection follows the ordinary range selector's specialization threshold: occasional arrows or boulders at 15% frequency or below supplement melee instead of forcing a melee-oriented creature to hold a firing post. Current long-range preferences, bow specialists and creatures unable to strike retain ranged roles. Missile opportunities remain available when melee cannot reach the target.
+
+The bright-player penalty to light-averse morale requires actual monster sight, including recognition and range. An unseen player's lighting cannot lower morale through a wall. Completed-action diagnostics include morale, current player sight, local light and player light so this interaction can be checked against the actual encounter.

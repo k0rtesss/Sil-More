@@ -5,6 +5,7 @@
 #include "melee/melee-attack.h"
 #include "object/object-place.h"
 #include "player/killer.h"
+#include "log/log.h"
 
 
 /*
@@ -785,6 +786,12 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
     b = monster_choose_blow(m_ptr, ordinary);
     smite = monster_commit_smite(m_ptr, ordinary,
         monster_choose_smite(m_ptr, b, ordinary));
+    /* Use template fields directly: description helpers can consume RNG while
+     * hallucinating. Record the committed choice even when the hit later misses. */
+    log_debug("[monster-ai] player_turn=%ld actor=%d race=%d selected=melee "
+        "blow=%d method=%d effect=%d ordinary=%d smite=%d from=(%d,%d)",
+        (long)playerturn, m_idx, m_ptr->r_idx, b, r_ptr->blow[b].method,
+        r_ptr->blow[b].effect, ordinary, smite, m_ptr->fy, m_ptr->fx);
     if (smite)
         msg_format("%^s smites you with all its strength!", m_name);
 

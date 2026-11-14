@@ -88,7 +88,16 @@ void monster_social_remap(int old_idx, int new_idx)
         if (m->squad.commander == old_idx)
         {
             if (new_idx) m->squad.commander = new_idx;
-            else memset(&m->squad, 0, sizeof(m->squad));
+            else
+            {
+                /* Cancel the dead leader's orders, not a survivor's own
+                 * already-spent assembly/regroup allowance. */
+                monster_squad_order previous = m->squad;
+                memset(&m->squad, 0, sizeof(m->squad));
+                m->squad.budget_plan = previous.budget_plan;
+                m->squad.plan_age = previous.plan_age;
+                m->squad.plan_turn = previous.plan_turn;
+            }
         }
         if (!new_idx && (m->social_rival == old_idx
                 || m->social_focus == old_idx || m->social_ally == old_idx))

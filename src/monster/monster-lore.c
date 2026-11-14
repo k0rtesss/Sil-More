@@ -950,7 +950,11 @@ static void describe_monster_movement(
         else if (r_ptr->flags1 & RF1_MALE)
             msex = 1;
 
-        text_out(format("%^s does not deign to pursue you.  ", wd_he[msex]));
+        if (r_ptr->flags3 & RF3_DRAGON)
+            text_out(format("%^s can follow your scent within %s lair.  ",
+                wd_he[msex], wd_his[msex]));
+        else
+            text_out(format("%^s does not deign to pursue you.  ", wd_he[msex]));
     }
 }
 

@@ -13,6 +13,25 @@
 #include "monster/monster-social.h"
 #include "monster/monster-routine.h"
 #include "cave/cave-events.h"
+#include "log/log.h"
+
+/* Diagnostics must never call monster_desc(): hallucination naming can roll
+ * dice. These names go only to the developer log, never the message window. */
+static const char* monster_log_name(int race)
+{
+    return r_name && race > 0 ? r_name + r_info[race].name : "monster";
+}
+
+static void log_monster_ranged(const monster_type* m, int attack)
+{
+    const char* kind = attack == 96 || attack == 97 ? "arrow"
+        : attack == 98 ? "boulder" : "spell/support";
+    log_debug("[monster-ai] player_turn=%ld actor=%d race=%d name=%s "
+        "completed=%s attack=%d from=(%d,%d) player=(%d,%d) mana=%d",
+        (long)playerturn, (int)(m - mon_list), m->r_idx,
+        monster_log_name(m->r_idx), kind, attack, m->fy, m->fx,
+        p_ptr->py, p_ptr->px, m->mana);
+}
 
 int challenge_check(monster_type* m_ptr)
 {
@@ -104,6 +123,12 @@ void find_range(monster_type* m_ptr)
         m_ptr->best_range = 0;
         m_ptr->min_range = 0;
     }
+    else if (monster_ai_challenge_melee(m_ptr) && m_ptr->min_range < FLEE_RANGE)
+    {
+        /* Casting is suppressed even when the extra mana-drain check fails.
+         * Keep a real melee approach instead of an unusable firing range. */
+        m_ptr->min_range = m_ptr->best_range = 1;
+    }
     else if ((r_ptr->freq_ranged > 15) && (m_ptr->r_idx != R_IDX_MORGOTH))
     {
         /* Breathers like range 2  */
@@ -119,6 +144,19 @@ void find_range(monster_type* m_ptr)
             if (m_ptr->best_range > 8)
                 m_ptr->best_range = 8;
             m_ptr->min_range = m_ptr->best_range - 1;
+        }
+
+        /* A firing position must stay within visual recognition. Otherwise
+         * archers retreat out of sight, pursue the last sighting back into
+         * range, and repeat; squad orders can strand them out of sight too. */
+        if (m_ptr->min_range < FLEE_RANGE)
+        {
+            int sight_range = MAX(1, monster_sight_range(m_ptr));
+            if (m_ptr->best_range > sight_range)
+            {
+                m_ptr->best_range = sight_range;
+                m_ptr->min_range = MIN(m_ptr->min_range, MAX(1, sight_range - 1));
+            }
         }
     }
 
@@ -282,7 +320,8 @@ void wander(monster_type* m_ptr)
         && (m_ptr->alertness < ALERTNESS_ALERT)
         && (m_ptr->mana >= MON_MANA_COST))
     {
-        make_attack_ranged(m_ptr, 96 + 19);
+        if (make_attack_ranged(m_ptr, 96 + 19))
+            log_monster_ranged(m_ptr, 96 + 19);
     }
 
     // occasionally update the flow (keeping the centre the same)
@@ -338,7 +377,8 @@ static void maybe_start_morgoth_piercing(monster_type* m_ptr)
     if (morgoth_has_player_track(m_ptr))
         return;
 
-    make_attack_ranged(m_ptr, 96 + 19);
+    if (make_attack_ranged(m_ptr, 96 + 19))
+        log_monster_ranged(m_ptr, 96 + 19);
 }
 
 int get_chance_of_ranged_attack(monster_type* m_ptr)
@@ -768,6 +808,7 @@ static void process_monster(monster_type* m_ptr)
             {
                 if (make_attack_ranged(m_ptr, choice))
                 {
+                    log_monster_ranged(m_ptr, choice);
                     monster_ai_spend_casting_opportunity(m_ptr);
                     return;
                 }
@@ -980,7 +1021,10 @@ static void process_monster(monster_type* m_ptr)
         /* Reuse the action's opportunity and candidate; never roll twice. */
         if (choice && m_ptr->ai.cast_available
             && make_attack_ranged(m_ptr, choice))
+        {
+            log_monster_ranged(m_ptr, choice);
             monster_ai_spend_casting_opportunity(m_ptr);
+        }
 
         return;
     }
@@ -1196,7 +1240,8 @@ void calc_morale(monster_type* m_ptr)
 
     // Reduce morale for light averse monsters facing a brightly lit player
     if ((r_ptr->flags3 & (RF3_HURT_LITE))
-        && (cave_light[p_ptr->py][p_ptr->px] >= 4))
+        && (cave_light[p_ptr->py][p_ptr->px] >= 4)
+        && monster_ai_can_see_player(m_ptr))
     {
         morale -= (cave_light[p_ptr->py][p_ptr->px] - 3) * 10;
     }
@@ -1587,13 +1632,65 @@ static void recover_monster(monster_type* m_ptr)
  * the processor time in normal situations.  If the character is resting,
  * this may rise substantially.
  */
-static void finish_monster_ability_action(
-    monster_type* m_ptr, int old_y, int old_x, bool skipped)
+typedef struct monster_action_start
 {
+    int index, race, y, x, hp, mana, energy;
+} monster_action_start;
+
+static const char* monster_log_label(const char* const* labels, int count, int value)
+{
+    return value >= 0 && value < count ? labels[value] : "unknown";
+}
+
+static void finish_monster_ability_action(monster_type* m_ptr,
+    const monster_action_start* start, bool skipped, const char* status)
+{
+    static const char* const roles[] = { "none", "commander", "soldier" };
+    static const char* const plans[] = { "advance", "hold", "regroup" };
+    static const char* const jobs[] = {
+        "none", "advance", "flank", "guard", "cover", "hold", "regroup" };
+    static const char* const senses[] = {
+        "none", "sight", "sound", "scent", "search", "shared-trace" };
+    static const char* const tactics[MON_TACTIC_MAX] = {
+        "none", "avoid-impale", "avoid-sweep", "break-concentration",
+        "intercept-retreat", "guard-archer", "cover-withdrawal", "song-distance",
+        "song-pressure", "terrain", "retreat-wait", "orders", "pack", "firing-position" };
+    bool moved = m_ptr->r_idx && (m_ptr->fy != start->y || m_ptr->fx != start->x);
+    const char* action = !m_ptr->r_idx ? "removed" : skipped ? "lost-turn"
+        : m_ptr->ability_displaced ? "displaced" : m_ptr->ability_melee ? "melee"
+        : moved ? "move" : m_ptr->previous_action[0] == ACTION_ARCHERY
+            ? "ranged" : "hold/work";
+    /* Sleeping, unchanged creatures are available at TRACE without filling
+     * the default desktop log with hundreds of idle entries per turn. */
+    int level = !m_ptr->r_idx || moved || m_ptr->hp != start->hp
+        || m_ptr->alertness >= ALERTNESS_UNWARY ? LOG_DEBUG : LOG_TRACE;
+    log_log(level, __FILE__, __LINE__,
+        "[monster-ai] player_turn=%ld world_turn=%ld actor=%d race=%d name=%s "
+        "completed=%s status=%s from=(%d,%d) to=(%d,%d) "
+        "hp=%d->%d mana=%d->%d energy=%d->%d stance=%d alertness=%d "
+        "morale=%d player_seen=%d own_light=%d player_light=%d "
+        "sense=%s remembered=(%d,%d) leader=%d role=%s plan=%s job=%s "
+        "order=(%d,%d) target=(%d,%d) order_valid=%d budget=%d tactic=%s world_task=%d",
+        (long)playerturn, (long)turn, start->index, start->race,
+        monster_log_name(start->race), action, status, start->y, start->x,
+        m_ptr->fy, m_ptr->fx, start->hp, m_ptr->hp, start->mana, m_ptr->mana,
+        start->energy, m_ptr->energy, m_ptr->stance, m_ptr->alertness,
+        m_ptr->morale, monster_ai_can_see_player(m_ptr),
+        cave_light[m_ptr->fy][m_ptr->fx], cave_light[p_ptr->py][p_ptr->px],
+        monster_log_label(senses, N_ELEMENTS(senses), m_ptr->ai.sense.kind),
+        m_ptr->ai.sense.y, m_ptr->ai.sense.x,
+        m_ptr->squad.commander,
+        monster_log_label(roles, N_ELEMENTS(roles), m_ptr->squad.role),
+        m_ptr->squad.role ? monster_log_label(plans, N_ELEMENTS(plans), m_ptr->squad.plan) : "none",
+        monster_log_label(jobs, N_ELEMENTS(jobs), m_ptr->squad.job),
+        m_ptr->squad.y, m_ptr->squad.x, m_ptr->squad.target_y, m_ptr->squad.target_x,
+        m_ptr->r_idx && monster_squad_order_valid(m_ptr), m_ptr->squad.plan_age,
+        monster_log_label(tactics, N_ELEMENTS(tactics), m_ptr->ai.feedback_reason),
+        m_ptr->world.task);
     if (!m_ptr->r_idx)
         return;
-    monster_ai_end_turn(m_ptr, old_y, old_x, skipped);
-    monster_abilities_end_action(m_ptr, old_y, old_x, skipped);
+    monster_ai_end_turn(m_ptr, start->y, start->x, skipped);
+    monster_abilities_end_action(m_ptr, start->y, start->x, skipped);
     calc_monster_speed(m_ptr->fy, m_ptr->fx);
 }
 
@@ -1601,18 +1698,16 @@ void process_monsters(s16b minimum_energy)
 {
     int i;
     monster_type* m_ptr;
+    bool squads_prepared = false;
 
     // if time is stopped, no monsters can move
     if (cheat_timestop)
         return;
 
-    /* One common plan before individual actions, independent of action order. */
-    monster_squad_prepare();
-
     /* Process the monsters (backwards) */
     for (i = mon_max - 1; i >= 1; i--)
     {
-        int old_y, old_x;
+        monster_action_start start;
         /* Player is dead or leaving the current level */
         if (p_ptr->leaving)
             break;
@@ -1632,8 +1727,16 @@ void process_monsters(s16b minimum_energy)
         if (m_ptr->energy < 100)
             continue;
 
-        old_y = m_ptr->fy;
-        old_x = m_ptr->fx;
+        /* Plan once before any actual action. Empty scheduler polls must not
+         * consume assembly/regroup budgets while every monster lacks energy. */
+        if (!squads_prepared)
+        {
+            monster_squad_prepare();
+            squads_prepared = true;
+        }
+
+        start = (monster_action_start){ i, m_ptr->r_idx, m_ptr->fy, m_ptr->fx,
+            m_ptr->hp, m_ptr->mana, m_ptr->energy };
         monster_ai_begin_turn(m_ptr);
         monster_social_tick(m_ptr);
         monster_abilities_begin_action(m_ptr);
@@ -1641,7 +1744,7 @@ void process_monsters(s16b minimum_energy)
         /* Lava also affects sleeping monsters and those missing their turn. */
         if (monster_lava_begin_action(i))
         {
-            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            finish_monster_ability_action(m_ptr, &start, true, "lava");
             monster_lava_end_action(i);
             continue;
         }
@@ -1652,7 +1755,7 @@ void process_monsters(s16b minimum_energy)
         monster_poison_terrain_begin_action(i);
         if (monster_poison_tick(i))
         {
-            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            finish_monster_ability_action(m_ptr, &start, true, "poison");
             monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
@@ -1669,7 +1772,7 @@ void process_monsters(s16b minimum_energy)
         monster_world_observe(m_ptr);
         if (m_ptr->alertness < ALERTNESS_UNWARY)
         {
-            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            finish_monster_ability_action(m_ptr, &start, true, "sleeping");
             monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
@@ -1690,7 +1793,7 @@ void process_monsters(s16b minimum_energy)
             m_ptr->previous_action[0] = ACTION_MISC;
 
             m_ptr->skip_next_turn = false;
-            finish_monster_ability_action(m_ptr, old_y, old_x, true);
+            finish_monster_ability_action(m_ptr, &start, true, "recovery/notice");
             monster_melting_ice_end_action(i);
             monster_poison_terrain_end_action(i);
             monster_lava_end_action(i);
@@ -1699,7 +1802,8 @@ void process_monsters(s16b minimum_energy)
 
         /* Let the monster take its turn */
         process_monster(m_ptr);
-        finish_monster_ability_action(m_ptr, old_y, old_x, m_ptr->skip_this_turn);
+        finish_monster_ability_action(m_ptr, &start, m_ptr->skip_this_turn,
+            m_ptr->skip_this_turn ? "mastery/skip" : "acted");
         monster_melting_ice_end_action(i);
         monster_poison_terrain_end_action(i);
         monster_lava_end_action(i);

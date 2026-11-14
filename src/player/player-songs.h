@@ -17,6 +17,7 @@ cptr song_voice_cost_desc(int song);
 void sing(void);
 void song_disguise_new_player_turn(void);
 void song_disguise_handle_monster_removed(int m_idx);
+void song_disguise_handle_monster_moved(int old_idx, int new_idx);
 void song_disguise_note_monster_attack(int m_idx);
 void song_disguise_note_player_attack(int m_idx);
 bool song_disguise_monster_is_fooled(const monster_type* m_ptr);

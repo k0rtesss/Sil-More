@@ -445,7 +445,7 @@ SAVE_TEST = r'''
 static byte bytes[2048];
 static int write_pos, read_pos, extra_version;
 static bool current_version;
-static int poison_offset, abilities_offset, ai_offset;
+static int poison_offset, player_poison_offset, abilities_offset, ai_offset;
 static const bool savefile_has_song_duels=true, savefile_has_monster_shatter=true;
 static const bool savefile_has_thrall_quest=true, savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte x) { assert(write_pos < 2048); bytes[write_pos++]=x; }
@@ -454,6 +454,7 @@ static void wr_s16b(s16b x) {wr_u16b((u16b)x);}
 static void wr_u32b(u32b x) {wr_u16b(x);wr_u16b(x>>16);}
 static void wr_s32b(s32b x) {wr_u32b((u32b)x);}
 static void rd_byte(byte* x) {assert(read_pos<write_pos);*x=bytes[read_pos++];}
+static void rd_bool(bool* x) {byte value;rd_byte(&value);*x=value!=0;}
 static void rd_u16b(u16b* x) {byte a,b;rd_byte(&a);rd_byte(&b);*x=a|((u16b)b<<8);}
 static void rd_s16b(s16b* x) {u16b n;rd_u16b(&n);*x=(s16b)n;}
 static void rd_u32b(u32b* x) {u16b a,b;rd_u16b(&a);rd_u16b(&b);*x=a|((u32b)b<<16);}
@@ -476,6 +477,9 @@ void monster_save_tests(void) {
         before.hp=39;before.maxhp=46;before.alertness=ALERTNESS_ALERT;
         before.energy=version>=2?-50:213;before.mspeed=2;before.stunned=9;
         before.poisoned=17;
+        before.player_poisoned=8;before.potion_poisoned=4;
+        before.achievement_doom_rage_epoch=123;
+        before.achievement_elbereth_turn=87;before.achievement_first_wolf=true;
         before.vengeance=1;before.smite_recovery=2;
         before.ai.cast_reserve=2;
         before.ai.observations[MON_AI_FIRE].value=2;
@@ -487,6 +491,14 @@ void monster_save_tests(void) {
         extra_version=version;current_version=version==8;
         before.mflag=MFLAG_ACTV;
         write_pos=read_pos=0;wr_monster(&before);
+        /* Current poison-credit and achievement fields predate the ability
+         * tail in the record, but were absent from these historical saves. */
+        if(!current_version) {
+            int later_bytes=abilities_offset-player_poison_offset;
+            memmove(bytes+player_poison_offset,bytes+abilities_offset,
+                write_pos-abilities_offset);write_pos-=later_bytes;
+            abilities_offset-=later_bytes;ai_offset-=later_bytes;
+        }
         /* Construct each historical tail explicitly, independent of the
          * size of subsequently appended ability and observation records. */
         if(version<4)write_pos=poison_offset;
@@ -509,6 +521,11 @@ void monster_save_tests(void) {
         assert(after.previous_action[1]==8);
         assert(after.mflag&MFLAG_ACTV);
         assert(after.poisoned==(version>=4?17:0));
+        assert(after.player_poisoned==(current_version?8:0));
+        assert(after.potion_poisoned==(current_version?4:0));
+        assert(after.achievement_doom_rage_epoch==(current_version?123U:0));
+        assert(after.achievement_elbereth_turn==(current_version?87U:0));
+        assert(after.achievement_first_wolf==current_version);
         assert(after.vengeance==(version>=5?1:0));
         assert(after.smite_recovery==(version>=5?2:0));
         assert(after.ai.cast_reserve==(version>=6?2:0));
@@ -535,22 +552,24 @@ def c_function(path, name):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     idle.OUT.mkdir(parents=True, exist_ok=True)
+    output_path = OUT.relative_to(ROOT).as_posix()
+    tests = TESTS.replace("scripts/output/water-check", output_path)
     # Keep the original fixture regression suite and its minimal environment.
-    gen_start = TESTS.index("int terrain_generation_components(")
-    gen_end = TESTS.index("static void water_render_tests(void)")
+    gen_start = tests.index("int terrain_generation_components(")
+    gen_end = tests.index("static void water_render_tests(void)")
     gen = OUT / "generation-check.c"
     gen.write_text('#include "angband.h"\n#include "level-generation/level-generation-internal.h"\n#include "level-generation/level-generation-terrain.h"\n#include "level-generation/level-generation-landmarks.h"\n#include <assert.h>\n'
         'void water_map(int,int,int);\n'
         'void water_preview(const char*,int);\n'
         'void water_test_reset_partition(void) { current_partition_rows = current_partition_cols = current_partition_count = 1; current_partition_modes[0] = QUAD_MODE_CAVEY; current_partition_big_cave_types[0] = BIG_CAVE_NONE; }\n'
-        + TESTS[gen_start:gen_end], encoding="utf-8")
+        + tests[gen_start:gen_end], encoding="utf-8")
     vault_text = (ROOT / "lib/edit/vault.txt").read_text(encoding="utf-8").split("N:407:Kheled-Zaram", 1)[1].split("\nN:", 1)[0]
     rows = [line[2:] for line in vault_text.splitlines() if line.startswith("D:")]
     assert len({len(row) for row in rows}) == 1
     style = (ROOT / "lib/edit/style.txt").read_text(encoding="utf-8").split("N:57:", 1)[1].split("\nN:", 1)[0]
     wall = next(line[2:].split(":") for line in style.splitlines() if line.startswith("W:"))
     floor = next(line[2:].split()[0].split(":") for line in style.splitlines() if line.startswith("F:"))
-    vault_test = VAULT_TEST
+    vault_test = VAULT_TEST.replace("scripts/output/water-check", output_path)
     values = {"ROWS": json.dumps("".join(rows)), "HEIGHT": len(rows), "WIDTH": len(rows[0]),
               "WET": sum(row.count("_") for row in rows), "WALL_ROW": wall[0], "WALL_COL": wall[1],
               "FLOOR_ROW": floor[0], "FLOOR_COL": floor[1]}
@@ -564,7 +583,11 @@ def main():
         elif line.startswith("T:"):
             row, col = map(int, line[2:].split(":"))
             terrain_init.append(f'f_info[{feature}].x_attr=TILE_FLAG|{row};f_info[{feature}].x_char=(char)(TILE_FLAG|{col});')
-    harness = idle.HARNESS.replace("int main(void) {", TESTS[:gen_start] + TESTS[gen_end:] + vault_test + "\nint main(void) {")
+    # Derived terrain checks must not race over the idle fixture's config and
+    # temporary filenames when they run in parallel.
+    base_harness = idle.HARNESS.replace("scripts/output/idle-animation-check",
+                                      output_path)
+    harness = base_harness.replace("int main(void) {", tests[:gen_start] + tests[gen_end:] + vault_test + "\nint main(void) {")
     harness = harness.replace("    sdl_idle_animation_shutdown();\n    SDL_Quit();", "    water_tests();\n    sdl_idle_animation_shutdown();\n    SDL_Quit();")
     harness = harness.replace("    water_tests();", "    " + "".join(terrain_init) + "\n    water_tests();")
     source = OUT / "check.c"
@@ -575,6 +598,7 @@ def main():
     saved_flags = saved_flags[:saved_flags.index("\n\n")]
     writer = c_function(ROOT / "src/fs/save.c", "wr_monster")
     writer = writer.replace("wr_s16b(m_ptr->poisoned);", "poison_offset=write_pos;wr_s16b(m_ptr->poisoned);")
+    writer = writer.replace("wr_s16b(m_ptr->player_poisoned);", "player_poison_offset=write_pos;wr_s16b(m_ptr->player_poisoned);")
     writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=write_pos;wr_byte(m_ptr->vengeance);")
     writer = writer.replace("for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)",
                             "ai_offset=write_pos;for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)", 1)

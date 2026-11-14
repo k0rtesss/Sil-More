@@ -844,6 +844,8 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
         int best_score = 0;
         int best_y = m_ptr->fy, best_x = m_ptr->fx;
         int dist;
+        bool current_footing = cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_DEEP_WATER
+            || (r_ptr->flags2 & RF2_FLYING);
 
         // Set up the 'score to beat' as the score for the monster's current
         // square
@@ -852,11 +854,11 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
             m_ptr, m_ptr->fy, m_ptr->fx);
         if (projectable(
                 m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px, PROJECT_STOP)
-            && (m_ptr->cdis > 1))
+            && (m_ptr->cdis > 1) && current_footing)
             best_score += 100;
 
         // the position is only acceptable if it is not adjacent to the player
-        if (m_ptr->cdis > 1)
+        if (m_ptr->cdis > 1 && current_footing)
             acceptable = true;
 
         // Set some hacky global variables so that the project_path()
@@ -886,6 +888,11 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
 
             /* Grid must be pretty easy to enter */
             if (cave_passable_mon(m_ptr, y, x, &dummy) < 50)
+                continue;
+
+            /* A retreating archer needs a usable shooting place. Entering
+             * attack-suppressing water only causes another escape action. */
+            if (cave_feat[y][x] == FEAT_DEEP_WATER && !(r_ptr->flags2 & RF2_FLYING))
                 continue;
 
             // skip adjacent squares
@@ -1303,7 +1310,14 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
     monster_senses_refresh(m_ptr);
     bool sight = monster_has_sight(m_ptr);
     if ((r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL) && !sight)
-        return;
+    {
+        /* Dragons investigate actual scent, including its bounded search,
+         * inside their saved lair. Sound/shared sightings alone do not relax
+         * the ordinary territorial rule. Candidate steps enforce the boundary. */
+        if (!(r_info[m_ptr->r_idx].flags3 & RF3_DRAGON)
+            || !monster_senses_tracking_scent(m_ptr))
+            return;
+    }
     if (!monster_senses_advance(m_ptr, ty, tx))
         return;
     /* Scent and bounded search already selected a legal adjacent move. */

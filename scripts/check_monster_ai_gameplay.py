@@ -44,6 +44,26 @@ FIXTURE = r'''
 void dungeon(void);
 extern bool current_build_vault_exact_token;
 
+/* Observer-only identities follow live array compaction; index is not an ID. */
+static unsigned fixture_actor_ids[MAX_MONSTERS], fixture_next_actor_id;
+static unsigned fixture_actor_id(const monster_type* m)
+{
+    int i = (int)(m - mon_list);
+    if (!fixture_actor_ids[i]) fixture_actor_ids[i] = ++fixture_next_actor_id;
+    return fixture_actor_ids[i];
+}
+void __real_monster_social_remap(int, int);
+void __wrap_monster_social_remap(int from, int to)
+{
+    if (from > 0 && from < MAX_MONSTERS && from != to)
+    {
+        if (to > 0 && to < MAX_MONSTERS)
+            fixture_actor_ids[to] = fixture_actor_ids[from];
+        fixture_actor_ids[from] = 0;
+    }
+    __real_monster_social_remap(from, to);
+}
+
 static int number(const cJSON* object, const char* key, int fallback)
 {
     const cJSON* n = cJSON_GetObjectItemCaseSensitive(object, key);
@@ -71,14 +91,14 @@ static void action_event(const char* kind, const monster_type* m, int detail,
     FILE* file = fopen(path, "ab");
     assert(file);
     fprintf(file, "{\"kind\":\"%s\",\"turn\":%ld,\"player_turn\":%ld,"
-        "\"race\":%d,\"index\":%d,\"detail\":%d,\"y\":%d,\"x\":%d,"
+        "\"race\":%d,\"index\":%d,\"actor_id\":%u,\"detail\":%d,\"y\":%d,\"x\":%d,"
         "\"old_y\":%d,\"old_x\":%d,\"melee\":%d,\"skipped\":%d,"
-        "\"hp\":%d,\"mana\":%d,\"energy\":%d,\"speed\":%d,"
+        "\"hp\":%d,\"mana\":%d,\"energy\":%d,\"speed\":%d,\"alertness\":%d,"
         "\"poison\":%d,\"concentration\":%d,\"recovery\":%d,\"vengeance\":%d,"
         "\"min_range\":%d,\"best_range\":%d,\"sees_player\":%d}\n",
-        kind, (long)turn, (long)playerturn, m->r_idx, (int)(m - mon_list), detail,
+        kind, (long)turn, (long)playerturn, m->r_idx, (int)(m - mon_list), fixture_actor_id(m), detail,
         m->fy, m->fx, old_y, old_x, melee, skipped, m->hp, m->mana, m->energy,
-        m->mspeed, m->poisoned, m->consecutive_attacks, m->smite_recovery, m->vengeance,
+        m->mspeed, m->alertness, m->poisoned, m->consecutive_attacks, m->smite_recovery, m->vengeance,
         m->min_range, m->best_range, monster_ai_can_see_player(m));
     assert(fclose(file) == 0);
 }
@@ -117,8 +137,7 @@ bool __wrap_make_attack_reaction(monster_type* m)
 }
 
 /* Instrument only the linked test executable, never the shipped interface. */
-bool __real_sdl_control_poll(bool waiting);
-bool __wrap_sdl_control_poll(bool waiting)
+static void fixture_snapshot(bool waiting)
 {
     if (waiting && character_dungeon && p_ptr) {
         cJSON* root = cJSON_CreateObject();
@@ -145,6 +164,7 @@ bool __wrap_sdl_control_poll(bool waiting)
             cJSON* o = cJSON_CreateObject();
             cJSON_AddItemToArray(monsters, o);
             cJSON_AddNumberToObject(o, "index", i);
+            cJSON_AddNumberToObject(o, "actor_id", fixture_actor_id(m));
             cJSON_AddNumberToObject(o, "race", m->r_idx);
             cJSON_AddStringToObject(o, "name", r_name + r->name);
             cJSON_AddNumberToObject(o, "y", m->fy);
@@ -156,6 +176,7 @@ bool __wrap_sdl_control_poll(bool waiting)
             cJSON_AddNumberToObject(o, "speed", m->mspeed);
             cJSON_AddNumberToObject(o, "min_range", m->min_range);
             cJSON_AddNumberToObject(o, "best_range", m->best_range);
+            cJSON_AddNumberToObject(o, "noise_distance", flow_dist(FLOW_PLAYER_NOISE, m->fy, m->fx));
             cJSON_AddNumberToObject(o, "blocking", monster_blocking_bonus_dice_preview(m));
             cJSON_AddNumberToObject(o, "dodging", monster_dodging_bonus_preview(m));
             cJSON_AddNumberToObject(o, "alertness", m->alertness);
@@ -232,6 +253,12 @@ bool __wrap_sdl_control_poll(bool waiting)
         cJSON_free(bytes);
         cJSON_Delete(root);
     }
+}
+
+bool __real_sdl_control_poll(bool waiting);
+bool __wrap_sdl_control_poll(bool waiting)
+{
+    fixture_snapshot(waiting);
     return __real_sdl_control_poll(waiting);
 }
 
@@ -245,6 +272,8 @@ static void fixture_prepare(void)
     current_character_profile = &c_info[0];
     SDL_strlcpy(op_ptr->full_name, "AI Playtest", sizeof(op_ptr->full_name));
     process_player_name(true);
+    /* Use the game's presentation setting; AI turns and RNG are unchanged. */
+    op_ptr->delay_factor = number(spec, "animation_delay", 0);
     p_ptr->playing = p_ptr->wizard = p_ptr->restoring = true;
     p_ptr->noscore = 0x000a;
     p_ptr->game_type = number(spec, "game_type", 0);
@@ -256,6 +285,8 @@ static void fixture_prepare(void)
     p_ptr->energy = 100;
     p_ptr->food = PY_FOOD_FULL;
     p_ptr->song1 = p_ptr->song2 = SNG_NOTHING;
+    p_ptr->image = number(spec, "hallucination", 0);
+    p_ptr->blind = number(spec, "blindness", 0);
     for (int a = 0; a < A_MAX; a++) p_ptr->stat_base[a] = 3;
     /* Long encounters without changing monster stats or granting invulnerability.
      * This is correctness testing, not a claim about normal-character balance. */
@@ -416,7 +447,7 @@ static void fixture_prepare(void)
 '''
 
 
-def build() -> tuple[Path, dict]:
+def build(extra_wraps: tuple[str, ...] = ()) -> tuple[Path, dict]:
     OUT.mkdir(parents=True, exist_ok=True)
     build_dir = OUT / ("build-" + uuid.uuid4().hex[:8])
     build_dir.mkdir()
@@ -424,7 +455,7 @@ def build() -> tuple[Path, dict]:
     harness = adapter.HARNESS.replace("int main(int argc, char** argv)", FIXTURE + "\nint main(int argc, char** argv)")
     harness = harness.replace('    if (SDL_getenv("CONTROL_TEST_INTERACTIVE")) {',
         '    if (SDL_getenv("AI_PLAYTEST")) {\n'
-        '        fixture_prepare(); dungeon(); sdl_control_shutdown(); return 0;\n'
+        '        fixture_prepare(); dungeon(); fixture_snapshot(true); sdl_control_shutdown(); return 0;\n'
         '    }\n    if (SDL_getenv("CONTROL_TEST_INTERACTIVE")) {')
     source.write_text(harness, encoding="utf-8")
     cmake = BUILD / "CMakeFiles/sil-more.dir"
@@ -450,7 +481,7 @@ def build() -> tuple[Path, dict]:
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp",
                     *("-Wl,--wrap=" + name for name in ("sdl_control_poll",
                       "monster_abilities_end_action", "make_attack_ranged", "make_attack_normal",
-                      "make_attack_reaction")),
+                      "make_attack_reaction", "monster_social_remap", *extra_wraps)),
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     return exe, env
 
@@ -533,7 +564,7 @@ def validate(profile: Path, spec: dict, frames: list[dict]) -> dict:
                         if max(dy, dx) + min(dy, dx) // 2 <= 4:
                             assert not m["commander"] or m["commander"] == leaders[0], f"Nearby viable Fankil loses command: {profile}"
         elif check == "archer_lanes":
-            archers = {m["index"] for m in frames[0]["monsters"] if m["race"] == 103}
+            archers = {m["index"] for m in frames[0]["monsters"] if m["race"] in (51, 103)}
             assert archers
             for idx in archers:
                 assert any(e["kind"] == "ranged" and e["index"] == idx
@@ -551,8 +582,29 @@ def validate(profile: Path, spec: dict, frames: list[dict]) -> dict:
             sightings = [e for e in actions if e["sees_player"] and not e["skipped"]]
             assert sightings, f"Archer never recognizes player: {profile}"
             assert all(not (e["min_range"] == 1 and e["best_range"] == 1) for e in sightings), f"Cached melee range: {profile}"
-            assert any(m["best_range"] == 8 for m in monsters), f"No shooting range established: {profile}"
+            if not spec.get("recognition", 1):
+                assert any(m["best_range"] == 8 for m in monsters), f"No shooting range established: {profile}"
+            else:
+                assert any(2 <= m["best_range"] <= 8 for m in monsters), f"No recognized shooting range: {profile}"
             assert not any(e["kind"] == "melee" for e in events), f"Archer closes for melee: {profile}"
+        elif check == "archer_recognition":
+            # An archer must not repeatedly retreat beyond recognition and
+            # chase its old sighting. A crowded squad may briefly detour out
+            # of sight while moving around an ally to a clear firing position.
+            archers = {m["index"] for m in frames[0]["monsters"] if m["race"] in (51, 103)}
+            assert archers
+            for idx in archers:
+                actor = [(f, m) for f in frames for m in f["monsters"] if m["index"] == idx]
+                acquired = next((i for i, (_, m) in enumerate(actor) if m["sees_player"]), None)
+                assert acquired is not None, f"Archer never acquires player: {profile}"
+                lost = 0
+                allowance = 2 if len(frames[0]["monsters"]) > 1 else 0
+                for _, m in actor[acquired:]:
+                    lost = 0 if m["sees_player"] else lost + 1
+                    assert lost <= allowance, f"Archer abandons visual contact: {profile}"
+                assert any(e["kind"] == "ranged" and e["index"] == idx
+                           and e["player_turn"] >= frames[0]["player_turn"] + 20
+                           for e in events), f"Archer does not sustain fire: {profile}"
         elif check == "concentration":
             assert any(e["concentration"] == 3 for e in actions), f"No concentration chain: {profile}"
             assert all(e["concentration"] <= 3 for e in actions)
@@ -673,8 +725,14 @@ def validate(profile: Path, spec: dict, frames: list[dict]) -> dict:
         elif check == "song":
             assert sum(f["player"]["song"] == spec["song"] for f in frames[1:]) >= 5, f"Song not sustained: {profile}"
         elif check == "song_spacing":
-            assert any("draws back from your song" in message for f in frames
-                       for message in f.get("messages", [])), f"No completed song counterplay: {profile}"
+            # A simultaneous squad order can be the chosen feedback message.
+            # Verify the paid retreat and subsequent fire, not its wording.
+            initial = {m["index"]: m["noise_distance"] for m in frames[0]["monsters"]}
+            assert any(m["noise_distance"] > initial[m["index"]]
+                       and m["shot_projection"] == 2
+                       and any(e["kind"] == "ranged" and e["index"] == m["index"]
+                               and e["player_turn"] > f["player_turn"] for e in events)
+                       for f in frames for m in f["monsters"]), f"No paid song retreat followed by fire: {profile}"
         elif check == "song_fear":
             assert any(m["stance"] == 1 and distance_from_player(f, m) >= 8
                        for f in frames for m in f["monsters"]), f"Elbereth provokes no retreat: {profile}"
@@ -708,7 +766,9 @@ def run(exe: Path, env: dict, name: str, spec: dict, keys: list[str]) -> dict:
         game.observe(output=profile / "initial.png")
         frames.append(dict(key="initial", **brief(telemetry(profile))))
         died = False
-        for key in keys:
+        pending_keys = list(keys)
+        while pending_keys:
+            key = pending_keys.pop(0)
             response = game.key(key, capture=False)
             assert response["ok"], response.get("error", "Control request failed")
             assert response["state"]["video_driver"] == "dummy"
@@ -722,6 +782,10 @@ def run(exe: Path, env: dict, name: str, spec: dict, keys: list[str]) -> dict:
             frame.update(key=key, messages=response["state"]["messages"],
                          terminal=[x.rstrip() for x in response["state"]["terminal"] if x.strip()])
             frames.append(frame)
+            if (spec.get("confirm_acid") and not died
+                    and frame.get("question", "").startswith("Step into poisonous acid?")):
+                game.observe(output=profile / f"acid-confirmation-{len(frames):03}.png")
+                pending_keys.insert(0, "y")
             if died:
                 break
             assert frame["player"]["hp"] > 0, f"Player died: {profile}"
@@ -766,7 +830,13 @@ def scenarios() -> list[tuple[str, dict, list[str]]]:
     for name, race, stun in [("orc-first-sighting", 51, 0), ("easterling-first-sighting", 103, 0),
                               ("easterling-stunned-sighting", 103, 6)]:
         add(name, {"monsters": [{"race": race, "x": 32, "heard": 1, "stunned": stun}]},
-            30, checks=["ranged", "archer_range"])
+            30, checks=["ranged", "archer_range", "archer_recognition"])
+    archer_corridor = [
+        {"y1": 1, "y2": 38, "x1": 1, "x2": 62, "feat": 63},
+        {"y1": 20, "x1": 25, "x2": 50, "feat": 1}]
+    add("archer-recognition-boundary", {"tiles": archer_corridor,
+        "monsters": [{"race": 51, "x": 37, "heard": 1}]}, 36,
+        checks=["ranged", "archer_range", "archer_recognition"])
     add("orc-squad", {"recognition": 0, "monsters": [
         {"race": 91, "x": 31}, {"race": 41, "y": 18, "x": 29},
         {"race": 61, "y": 22, "x": 29}, {"race": 51, "y": 21, "x": 27}]}, 36, checks=["squad", "pursuit", "ranged"])
@@ -774,6 +844,21 @@ def scenarios() -> list[tuple[str, dict, list[str]]]:
         {"race": 409, "x": 32}, {"race": 82, "y": 18, "x": 30},
         {"race": 82, "y": 22, "x": 30}, {"race": 103, "y": 21, "x": 28},
         {"race": 103, "y": 19, "x": 28}]}, 40, checks=["squad", "pursuit", "ranged", "archer_lanes"])
+    # Factory recognition and ordinary morale exercise the conditions of real
+    # encounters, including archers guided into contact by a perceptive leader.
+    add("orc-squad-recognition", {"monsters": [
+        {"race": 91, "x": 35, "heard": 1, "morale": 0},
+        {"race": 41, "y": 18, "x": 34, "heard": 1, "morale": 0},
+        {"race": 61, "y": 22, "x": 34, "heard": 1, "morale": 0},
+        {"race": 51, "y": 21, "x": 33, "heard": 1, "morale": 0}]}, 36,
+        checks=["squad", "pursuit", "ranged", "archer_lanes", "archer_recognition"])
+    add("fankil-squad-recognition", {"monsters": [
+        {"race": 409, "x": 34, "heard": 1, "morale": 0},
+        {"race": 82, "y": 18, "x": 33, "heard": 1, "morale": 0},
+        {"race": 82, "y": 22, "x": 33, "heard": 1, "morale": 0},
+        {"race": 103, "y": 19, "x": 31, "heard": 1, "morale": 0},
+        {"race": 103, "y": 21, "x": 31, "heard": 1, "morale": 0}]}, 36,
+        checks=["squad", "pursuit", "ranged", "archer_lanes", "archer_recognition"])
     for name, races in [("wolf-pack", [11, 11, 11, 11]), ("spider-pack", [44, 62, 32, 32])]:
         add(name, {"recognition": 0, "monsters": [dict(race=r, y=y, x=x)
             for r, (y, x) in zip(races, [(20, 34), (18, 32), (22, 32), (20, 30)])]}, 26, checks=["squad", "pursuit"])
@@ -842,7 +927,7 @@ def scenarios() -> list[tuple[str, dict, list[str]]]:
             28, checks=["pursuit", name.replace("-", "_")])
     for name, song in [("ordinary", 100), ("lorien", 14), ("mastery", 16)]:
         add(f"corridor-archer-{name}", {"recognition": 0, "song": song, "song_skill": 0,
-            "tiles": corridor[:-1], "monsters": [{"race": 103, "x": 35}]}, 16,
+            "tiles": corridor[:-1], "monsters": [{"race": 103, "x": 35}]}, 24,
             checks=["archer_retreat", "ranged"] + (["song", "song_spacing"] if song != 100 else []))
     for name, race in [("tunnel-wall", 410), ("phase-wall", 167)]:
         add(name, {"recognition": 0, "tiles": [

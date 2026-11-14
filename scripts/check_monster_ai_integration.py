@@ -12,7 +12,9 @@ CHECKS = r'''
 #include "monster/monster-tactics.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
+#include "melee/melee-process.h"
 #include "spell/spell-projection-internal.h"
+#include "player/player-song-internal.h"
 void process_player(void); /* Internal production scheduler entry point. */
 
 static void check_command_profiles(void)
@@ -311,9 +313,187 @@ static void check_protected_terrain_movement(void)
     puts("Production melee values knockback into lava; movement enters protected lava footing, then resumes attacking PASS.");
 }
 
+static int disguise_notice_count(void)
+{
+    int count = 0;
+    for (int i = 0; i < message_num(); ++i)
+        if (strstr(message_str(i), "sees through your disguise")) ++count;
+    return count;
+}
+
+static void check_revealing_removal_before_disguise(void)
+{
+    monster_type* first = adaptive_fixture(41, 0);
+    first->ml = false;
+    update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
+    song_revealing_clear();
+    sing_song_of_revealing(1000);
+    assert(first->ml);
+    delete_monster_idx((int)(first - mon_list));
+    compact_monsters(0);
+    assert(place_monster_one(9, 10, 51, false, true, NULL));
+    monster_type* newcomer = &mon_list[cave_m_idx[9][10]];
+    newcomer->ml = false;
+    byte attr = 0; char glyph = 0;
+    assert(!song_revealing_overlay((int)(newcomer - mon_list), &attr, &glyph));
+    assert(!newcomer->ml);
+    song_revealing_clear();
+    puts("Revealing removal clears an empty/reused slot before any Disguise buffers are needed PASS.");
+}
+
+static void check_light_morale_perception(void)
+{
+    monster_type* m = adaptive_fixture(51, 0);
+    bool saved_recognition = visual_recognition;
+    visual_recognition = false;
+    assert(r_info[m->r_idx].flags3 & RF3_HURT_LITE);
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = 15;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    m->cdis = distance(m->fy, m->fx, p_ptr->py, p_ptr->px);
+    cave_set_feat(10,12,FEAT_WALL_PERM);
+    assert(!monster_ai_can_see_player(m));
+    cave_light[p_ptr->py][p_ptr->px] = 3;
+    calc_morale(m);
+    int hidden_dim = m->morale;
+    cave_light[p_ptr->py][p_ptr->px] = 9;
+    calc_morale(m);
+    assert(m->morale == hidden_dim);
+    cave_set_feat(10,12,FEAT_FLOOR);
+    assert(monster_ai_can_see_player(m));
+    cave_light[p_ptr->py][p_ptr->px] = 3;
+    calc_morale(m);
+    int visible_dim = m->morale;
+    cave_light[p_ptr->py][p_ptr->px] = 9;
+    calc_morale(m);
+    assert(m->morale == visible_dim - 60);
+    visual_recognition = true;
+    p_ptr->cur_light = 0;
+    cave_info[p_ptr->py][p_ptr->px] &= ~CAVE_GLOW;
+    assert(!monster_ai_can_see_player(m));
+    calc_morale(m);
+    assert(m->morale == hidden_dim);
+    visual_recognition = false;
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = 40;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    cave_light[p_ptr->py][p_ptr->px] = 9;
+    assert(!monster_ai_can_see_player(m));
+    calc_morale(m);
+    assert(m->morale == hidden_dim);
+    visual_recognition = saved_recognition;
+    puts("Light morale requires actual sight; walls, recognition and range block remote fear, visible light retains its full penalty PASS.");
+}
+
+static void check_disguise_observation_range(void)
+{
+    monster_type* m = adaptive_fixture(51, 0);
+    bool saved_recognition = visual_recognition;
+    visual_recognition = false;
+    assert(song_disguise_any_monster_observes_player());
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = 40;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    assert(los(m->fy, m->fx, p_ptr->py, p_ptr->px));
+    assert(!monster_has_sight(m));
+    assert(!song_disguise_any_monster_observes_player());
+    /* A clear geometric ray also cannot override visual recognition. */
+    visual_recognition = true;
+    p_ptr->cur_light = 0;
+    int range = monster_sight_range(m);
+    assert(range < MAX_SIGHT);
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = m->fx + range + 1;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    assert(!song_disguise_any_monster_observes_player());
+    visual_recognition = false;
+    u32b saved_flags = r_info[m->r_idx].flags2;
+    r_info[m->r_idx].flags2 |= RF2_SHORT_SIGHTED;
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = m->fx + 3;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    assert(!song_disguise_any_monster_observes_player());
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    --p_ptr->px;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    assert(song_disguise_any_monster_observes_player());
+    m->alertness = ALERTNESS_UNWARY;
+    assert(!song_disguise_any_monster_observes_player());
+    r_info[m->r_idx].flags2 = saved_flags;
+    visual_recognition = saved_recognition;
+    puts("Disguise observation obeys MAX_SIGHT, recognition, short sight and alertness PASS.");
+}
+
+static void check_song_tracking_compaction(void)
+{
+    for (int i = 1; i < MAX_MONSTERS; ++i)
+        song_disguise_handle_monster_removed(i);
+    monster_type* first = adaptive_fixture(41, 0);
+    assert(place_monster_one(9, 10, 51, false, true, NULL));
+    monster_type* survivor = &mon_list[cave_m_idx[9][10]];
+    survivor->alertness = ALERTNESS_ALERT;
+    p_ptr->song1 = SNG_DISGUISE;
+    song_disguise_start();
+    sing_song_of_disguise(1000);
+    assert(song_disguise_monster_is_fooled(first));
+    assert(song_disguise_monster_is_fooled(survivor));
+    delete_monster_idx((int)(first - mon_list));
+    compact_monsters(0);
+    assert(mon_list[1].r_idx == 51);
+    assert(song_disguise_monster_is_fooled(&mon_list[1]));
+    assert(place_monster_one(8, 12, 51, false, true, NULL));
+    monster_type* newcomer = &mon_list[cave_m_idx[8][12]];
+    newcomer->alertness = ALERTNESS_ALERT;
+    assert(!song_disguise_monster_is_fooled(newcomer));
+    song_disguise_stop();
+    for (int i = 1; i < mon_max; ++i)
+        if (mon_list[i].r_idx) delete_monster_idx(i);
+
+    first = adaptive_fixture(41, 0);
+    assert(place_monster_one(9, 10, 51, false, true, NULL));
+    mon_list[cave_m_idx[9][10]].alertness = ALERTNESS_ALERT;
+    p_ptr->song1 = SNG_DISGUISE;
+    song_disguise_start();
+    sing_song_of_disguise(-1000);
+    delete_monster_idx((int)(first - mon_list));
+    compact_monsters(0);
+    msg_print("Disguise compaction test boundary.");
+    int notices = disguise_notice_count();
+    sing_song_of_disguise(-1000);
+    assert(disguise_notice_count() == notices);
+    song_disguise_stop();
+    for (int i = 1; i < mon_max; ++i)
+        if (mon_list[i].r_idx) delete_monster_idx(i);
+
+    first = adaptive_fixture(41, 0);
+    assert(place_monster_one(9, 10, 175, false, true, NULL));
+    survivor = &mon_list[cave_m_idx[9][10]];
+    first->ml = survivor->ml = false;
+    update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
+    song_revealing_clear();
+    sing_song_of_revealing(1000);
+    assert(survivor->ml);
+    survivor->ml = false;
+    byte attr = 0; char glyph = 0;
+    assert(!song_revealing_overlay((int)(survivor - mon_list), &attr, &glyph));
+    assert(survivor->ml);
+    survivor->ml = false;
+    delete_monster_idx((int)(first - mon_list));
+    compact_monsters(0);
+    assert(mon_list[1].r_idx == 175);
+    assert(!song_revealing_overlay(1, &attr, &glyph) && mon_list[1].ml);
+    song_revealing_clear();
+    p_ptr->song1 = SNG_NOTHING;
+    puts("Disguise pacification/recognition and Revealing hints follow real monster compaction; empty slots cannot inherit them PASS.");
+}
+
 static void check_archer_vacated_square(void)
 {
     monster_type* m = adaptive_fixture(103, 0);
+    bool saved_recognition = visual_recognition;
+    /* Isolate the projection preview at full sight. Recognition-bound posts
+     * are covered independently below and must not invalidate this retreat. */
+    visual_recognition = false;
     cave_m_idx[p_ptr->py][p_ptr->px] = 0;
     p_ptr->px = 15;
     cave_m_idx[10][15] = -1;
@@ -343,7 +523,139 @@ static void check_archer_vacated_square(void)
     assert(make_move(m, &y, &x, false, &bash));
     process_move(m, y, x, bash);
     assert(projectable(m->fy, m->fx, 10, 15, PROJECT_CHCK) == PROJECT_CLEAR);
+    visual_recognition = saved_recognition;
     puts("Real corridor archer retreats through its vacated firing line; previews preserve map, actor, RNG and nested projection state PASS.");
+}
+
+static void check_archer_recognition_range(void)
+{
+    monster_type* m = adaptive_fixture(51, 0);
+    bool saved_recognition = visual_recognition;
+    visual_recognition = true;
+    p_ptr->cur_light = 1;
+    cave_info[p_ptr->py][p_ptr->px] |= CAVE_GLOW;
+    int vision = monster_skill(m, S_PER) / 2 + p_ptr->cur_light + 2;
+    assert(vision >= 2 && vision < 8 && monster_ai_can_see_player(m));
+    find_range(m);
+    assert(m->best_range <= vision && m->min_range < m->best_range);
+    visual_recognition = false;
+    find_range(m);
+    assert(m->best_range == 8 && m->min_range == 7);
+    visual_recognition = saved_recognition;
+    puts("Archer combat spacing respects actual visual recognition; disabling recognition preserves full shooting range PASS.");
+}
+
+static void check_deep_water_archer_escape(void)
+{
+    bool saved_recognition = visual_recognition;
+    visual_recognition = false;
+    for (int race = 0; race < 2; ++race)
+    {
+        monster_type* m = adaptive_fixture(race ? 103 : 51, 0);
+        cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+        p_ptr->px = 13;
+        cave_m_idx[10][13] = -1;
+        m->cdis = 3;
+        m->stance = STANCE_AGGRESSIVE;
+        m->tmp_morale = 1000;
+        /* A flooded corridor has no immediately dry adjacent square. */
+        for (int y = 1; y < p_ptr->cur_map_hgt - 1; ++y)
+            for (int x = 1; x < p_ptr->cur_map_wid - 1; ++x)
+                if (y != 10) cave_set_feat(y, x, FEAT_WALL_PERM);
+        for (int x = 9; x <= 11; ++x) cave_set_feat(10, x, FEAT_DEEP_WATER);
+        m->min_range = 7; m->best_range = 8;
+        for (int step = 0; step < 3 && cave_feat[m->fy][m->fx] == FEAT_DEEP_WATER; ++step)
+        {
+            m->energy = 100;
+            process_monsters(100);
+            assert(m->energy <= -300); /* The real 400% water movement cost. */
+            ++playerturn;
+        }
+        assert(cave_feat[m->fy][m->fx] != FEAT_DEEP_WATER);
+        assert(m->fy == 10 && ABS((int)m->fx - 10) == 2);
+    }
+    visual_recognition = saved_recognition;
+    puts("Flooded-corridor archers take paid water steps to shore before choosing firing posts PASS.");
+}
+
+static void check_challenge_melee_range(void)
+{
+    monster_type* m = adaptive_fixture(51, 0);
+    p_ptr->song1 = SNG_CHALLENGE;
+    p_ptr->skill_use[S_SNG] = 0;
+    m->stance = STANCE_AGGRESSIVE;
+    int drained = 0, resisted = 0;
+    for (int i = 0; i < 100; ++i)
+    {
+        m->mana = MON_MANA_MAX;
+        m->min_range = 2; m->best_range = 3;
+        find_range(m);
+        assert(monster_ai_challenge_melee(m));
+        if (m->mana == 0)
+        {
+            ++drained;
+            assert(m->min_range == 0 && m->best_range == 0);
+        }
+        else
+        {
+            ++resisted;
+            assert(m->min_range == 1 && m->best_range == 1);
+        }
+    }
+    assert(resisted > 0);
+    p_ptr->song1 = SNG_NOTHING;
+    m->mana = MON_MANA_MAX;
+    find_range(m);
+    assert(!monster_ai_challenge_melee(m) && m->best_range > 1);
+    printf("Real Challenge range: %d mana-drain successes, %d resisted checks retain melee approach; stopping restores bow spacing PASS.\n",
+        drained, resisted);
+}
+
+static void check_squad_idle_scheduler_budget(void)
+{
+    monster_type* leader = adaptive_fixture(91, 0);
+    bool saved_recognition = visual_recognition;
+    visual_recognition = false;
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->px = 17;
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    assert(place_monster_one(9, 13, 41, false, true, NULL));
+    assert(place_monster_one(10, 7, 61, false, true, NULL));
+    for (int i = 1; i < mon_max; ++i)
+    {
+        monster_type* m = &mon_list[i];
+        m->alertness = ALERTNESS_ALERT;
+        m->stance = STANCE_CONFIDENT;
+        m->skip_this_turn = m->skip_next_turn = false;
+        m->min_range = m->best_range = 1;
+        m->energy = 0;
+        m->cdis = distance(m->fy, m->fx, p_ptr->py, p_ptr->px);
+    }
+    assert(monster_ai_can_see_player(leader));
+    /* Empty pre/post-player scheduler polls must not use up the commander's
+     * finite assembly window before the squad gets its first actual action. */
+    playerturn = 100;
+    for (int i = 0; i < 3; ++i)
+    {
+        process_monsters(100);
+        ++playerturn;
+    }
+    for (int i = 1; i < mon_max; ++i) mon_list[i].energy = 100;
+    process_monsters(100);
+    assert(leader->squad.plan == MON_PLAN_HOLD && leader->squad.plan_age == 0);
+    /* The commander's own withdrawal/lost sight must not renew this same
+     * persistent assembly condition when it recognizes the player again. */
+    cave_set_feat(10, 14, FEAT_WALL_PERM);
+    assert(!monster_ai_can_see_player(leader));
+    ++playerturn;
+    monster_squad_prepare();
+    playerturn += 3;
+    cave_set_feat(10, 14, FEAT_FLOOR);
+    assert(monster_ai_can_see_player(leader));
+    monster_squad_prepare();
+    assert(leader->squad.plan == MON_PLAN_ADVANCE);
+    visual_recognition = saved_recognition;
+    puts("Command budgets start with real actions and cannot renew through lost sight/reacquisition PASS.");
 }
 
 static void check_cooperative_movement(void)
@@ -500,9 +812,16 @@ static void check_adaptive_integration(void)
     check_weapon_fear();
     check_protected_terrain_movement();
     check_archer_vacated_square();
+    check_archer_recognition_range();
+    check_deep_water_archer_escape();
+    check_challenge_melee_range();
+    check_squad_idle_scheduler_budget();
     check_cooperative_movement();
     check_commanded_squad();
     check_ordinary_squad();
+    check_light_morale_perception();
+    check_disguise_observation_range();
+    check_song_tracking_compaction();
 }
 '''
 
@@ -512,7 +831,8 @@ def main():
     engine.HARNESS = engine.HARNESS.replace(
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
     engine.HARNESS = engine.HARNESS.replace(
-        "    check_combat();", "    check_combat();\n    check_adaptive_integration();")
+        "    check_combat();",
+        "    check_revealing_removal_before_disguise();\n    check_combat();\n    check_adaptive_integration();")
     engine.HARNESS = engine.HARNESS.replace(
         "    check_templates();", "    check_command_profiles();\n    check_templates();")
     engine.main()

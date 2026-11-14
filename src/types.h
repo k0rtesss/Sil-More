@@ -739,6 +739,7 @@ typedef struct monster_ai_state
     bool cast_checked, cast_available; /* Current action only; never saved. */
     /* Presentation only, never saved; losing a cooldown cannot change combat. */
     byte feedback_reason, feedback_y, feedback_x, feedback_cooldown;
+    byte reported_role, reported_plan;
 } monster_ai_state;
 
 /* Rebuilt before each monster processing pass; never serialized. */
@@ -747,6 +748,7 @@ typedef struct monster_squad_order
     s16b commander;
     byte role, y, x, target_y, target_x;
     byte job, plan, plan_age, anchor_y, anchor_x;
+    byte budget_plan; /* Personal command budget, retained while following. */
     u32b plan_turn;
 } monster_squad_order;
 

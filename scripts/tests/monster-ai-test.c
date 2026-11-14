@@ -12,6 +12,7 @@
 static byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte rewired[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte scents[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte pending_features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u16b info[MAX_DUNGEON_HGT][256];
 static s16b occupants[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static monster_type monsters[8];
@@ -31,6 +32,8 @@ bool varda_quest_duruin_can_enter(const monster_type* m, int y, int x)
 /* These isolated combat maps do not have generated partition metadata. */
 int level_partition_index_for_point(int y, int x)
 { (void)y; (void)x; return -1; }
+int cave_environment_pending_hazard(int y, int x)
+{ return pending_features[y][x]; }
 int monster_skill(monster_type* m, int skill)
 { (void)m; (void)skill; return 10; }
 int success_chance(int sides, int skill, int difficulty)
@@ -84,6 +87,7 @@ static monster_type* reset_map(int h, int w, int my, int mx, int py, int px)
     memset(occupants, 0, sizeof(occupants));
     memset(rewired, 0, sizeof(rewired));
     memset(scents, 0, sizeof(scents));
+    memset(pending_features, 0, sizeof(pending_features));
     visual_recognition = false;
     p_ptr->cur_map_hgt = h; p_ptr->cur_map_wid = w;
     p_ptr->py = py; p_ptr->px = px;
@@ -495,7 +499,15 @@ int main(void)
     test_flow_fast_path();
     test_tactical_extension();
     test_squads();
-    test_squad_grades(); test_squad_jobs(); test_squad_group_plans();
+    test_squad_action_messages();
+    test_squad_hybrid_melee_roles();
+    test_squad_grades(); test_squad_jobs(); test_squad_challenge_melee();
+    test_squad_archer_recognition_posts();
+    test_archer_retreat_from_melee_ring();
+    test_warned_squad_posts();
+    test_water_firing_posts();
+    test_squad_death_preserves_personal_budget();
+    test_squad_group_plans();
     test_pursuit_flow();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;

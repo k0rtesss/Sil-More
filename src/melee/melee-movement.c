@@ -220,7 +220,11 @@ bool get_move(
          * confirmed anchor. This never selects an occupied attack square. */
         if (get_move_tactical(m_ptr, ty, tx))
             return true;
-        if (monster_squad_hold_position(m_ptr)) return false;
+        if (monster_squad_hold_position(m_ptr))
+        {
+            monster_ai_plan_feedback(m_ptr, MON_TACTIC_ORDER, m_ptr->fy, m_ptr->fx);
+            return false;
+        }
         get_move_advance(m_ptr, ty, tx);
         return *ty != m_ptr->fy || *tx != m_ptr->fx;
     }
@@ -344,7 +348,11 @@ bool get_move(
      * player in different directions. Fear and immediate escape still win. */
     if (monster_squad_order_valid(m_ptr) && get_move_tactical(m_ptr, ty, tx))
         return true;
-    if (monster_squad_hold_position(m_ptr)) return false;
+    if (monster_squad_hold_position(m_ptr))
+    {
+        monster_ai_plan_feedback(m_ptr, MON_TACTIC_ORDER, m_ptr->fy, m_ptr->fx);
+        return false;
+    }
 
     // Smart monsters try to lure the character into the open.
     if ((!*fear) && (r_ptr->flags2 & (RF2_SMART))

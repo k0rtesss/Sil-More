@@ -9,8 +9,9 @@
 #include "melee/melee-util.h"
 #include <stdio.h>
 
+static int lair_partition_x;
 int level_partition_index_for_point(int y, int x)
-{ (void)y; (void)x; return -1; }
+{ (void)y; return lair_partition_x ? (x < lair_partition_x ? 0 : 1) : -1; }
 
 /* Link real sensing, perception, scent deposition, movement costs and flows.
  * Only unrelated quest boundaries, messages and character skill setup are
@@ -77,6 +78,7 @@ static monster_type* reset_map(void)
     cave_m_idx = occupants; cave_rewired = rewired;
     mon_list = monsters; r_info = races; l_list = lore; c_info = profiles;
     mon_max = 3; playerturn = 100; scent_when = 150;
+    lair_partition_x = 0;
     cave_events_reset(); cave_water_flow_reset();
     visual_recognition = false; cheat_timestop = false; cheat_skill_rolls = false;
     for (int y = 0; y < 15; y++) for (int x = 0; x < 22; x++)
@@ -350,6 +352,90 @@ static void test_world_sound_masking(void)
     CHECK(masked < quiet);
 }
 
+static monster_type* lair_dragon(void)
+{
+    monster_type* m = reset_map();
+    races[1].flags2 = RF2_TERRITORIAL;
+    races[1].flags3 = RF3_DRAGON;
+    m->routine.home_y = m->fy;
+    m->routine.home_x = m->fx;
+    return m;
+}
+
+static void test_dragon_lair_scent(void)
+{
+    int y, x;
+    monster_type* m = lair_dragon();
+    CHECK(!monster_has_sight(m));
+    scents[5][3] = scent_when + 5;
+    scents[5][4] = scent_when + 4;
+    u64b rng = Rand_state_export();
+    get_move_advance(m, &y, &x);
+    CHECK(y == 5 && x == 4);
+    CHECK(m->ai.sense.kind == MON_SENSE_SCENT);
+    CHECK(Rand_state_export() == rng);
+    CHECK(m->ai.sense.y != p_ptr->py || m->ai.sense.x != p_ptr->px);
+
+    /* A younger trace beyond six squares must not erase an admissible one. */
+    m = lair_dragon(); move(m, 5, 9);
+    scents[5][9] = scent_when + 4;
+    scents[5][10] = scent_when + 1;
+    scents[5][8] = scent_when + 2;
+    get_move_advance(m, &y, &x);
+    CHECK(y == 5 && x == 8);
+
+    /* Vault ownership and an existing partition are independent boundaries. */
+    m = lair_dragon(); info[5][3] |= CAVE_ICKY;
+    scents[5][3] = scent_when + 4;
+    scents[5][4] = scent_when + 1;
+    scents[4][3] = scent_when + 2; info[4][3] |= CAVE_ICKY;
+    get_move_advance(m, &y, &x);
+    CHECK(y == 4 && x == 3);
+    m = lair_dragon(); move(m, 5, 4); lair_partition_x = 5;
+    m->routine.territory = 1;
+    scents[5][4] = scent_when + 4;
+    scents[5][5] = scent_when + 1;
+    scents[4][4] = scent_when + 2;
+    get_move_advance(m, &y, &x);
+    CHECK(y == 4 && x == 4);
+
+    /* A displaced dragon cannot use scent to establish a new lair. */
+    m = lair_dragon(); move(m, 5, 10);
+    scents[5][10] = scent_when + 4; scents[5][9] = scent_when + 3;
+    get_move_advance(m, &y, &x);
+    CHECK(y == 5 && x == 10);
+    CHECK(m->routine.home_y == 5 && m->routine.home_x == 3);
+
+    /* Sound/last sighting alone and other territorial races keep their rule. */
+    m = lair_dragon(); monster_senses_hear(m, 5, 8);
+    get_move_advance(m, &y, &x); CHECK(y == 5 && x == 3);
+    monster_senses_see(m, 5, 8); ++playerturn;
+    get_move_advance(m, &y, &x); CHECK(y == 5 && x == 3);
+    m = lair_dragon(); races[1].flags3 = RF3_WOLF;
+    scents[5][3] = scent_when + 5; scents[5][4] = scent_when + 4;
+    get_move_advance(m, &y, &x); CHECK(y == 5 && x == 3);
+
+    /* Wolves still track outside the dragon-only local boundary. */
+    m = lair_dragon(); races[1].flags2 = 0; races[1].flags3 = RF3_WOLF;
+    move(m, 5, 9);
+    scents[5][9] = scent_when + 4; scents[5][10] = scent_when + 3;
+    get_move_advance(m, &y, &x); CHECK(y == 5 && x == 10);
+
+    /* An exhausted scent starts only the existing bounded local search. */
+    m = lair_dragon(); scents[5][3] = scent_when + 5;
+    monster_senses_refresh(m); m->ai.sense.stale_decisions = 8;
+    int moves = 0;
+    while (m->ai.sense.kind != MON_SENSE_NONE && moves < 12)
+    {
+        get_move_advance(m, &y, &x);
+        CHECK(distance(5, 3, y, x) <= 6);
+        if (y != m->fy || x != m->fx) move(m, y, x);
+        ++moves;
+    }
+    CHECK(m->ai.sense.kind == MON_SENSE_NONE && moves <= 9);
+    puts("Dragon scent: local pursuit, radius/vault/partition boundaries, sound-only and non-dragon controls, bounded search PASS.");
+}
+
 int main(void)
 {
     test_world_sound_masking();
@@ -358,6 +444,7 @@ int main(void)
     test_hearing_and_recognition(); test_deposition_and_roundtrip();
     test_known_target_pursuit();
     test_flow_targets_and_poison_merge();
+    test_dragon_lair_scent();
     printf("Monster sensing: %d production-path checks passed.\n", checks);
     return 0;
 }

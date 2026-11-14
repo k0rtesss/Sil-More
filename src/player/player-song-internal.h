@@ -25,6 +25,7 @@ void sing_song_of_disguise(int score);
 void song_revealing_decay(void);
 void song_revealing_clear(void);
 void song_revealing_handle_monster_removed(int m_idx);
+void song_revealing_handle_monster_moved(int old_idx, int new_idx);
 void sing_song_of_revealing(int score);
 
 void sing_song_of_freedom(int score);

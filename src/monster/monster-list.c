@@ -279,6 +279,8 @@ static void compact_monsters_aux(int i1, int i2)
     if (p_ptr->song_target_idx == i1)
         p_ptr->song_target_idx = i2;
 
+    /* Per-creature song effects follow the same actor into the empty slot. */
+    song_disguise_handle_monster_moved(i1, i2);
     /* Hack -- move monster */
     monster_social_remap(i1, i2);
     memcpy(&mon_list[i2], &mon_list[i1], sizeof(monster_type));
