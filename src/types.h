@@ -742,7 +742,8 @@ typedef struct monster_ai_state
     byte reported_role, reported_plan;
 } monster_ai_state;
 
-/* Rebuilt before each monster processing pass; never serialized. */
+/* Orders are rebuilt before each monster pass. Only the personal budget
+ * (budget_plan, plan_age, plan_turn) survives saving/loading. */
 typedef struct monster_squad_order
 {
     s16b commander;

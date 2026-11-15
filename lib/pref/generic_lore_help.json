@@ -11,10 +11,6 @@
       "Set aside lumesilver and star iron for making or improving equipment. These metals do not replace the need for a forge, suitable abilities, or sufficient Smithing. Consult the smithing preview for the required materials and every other cost."
     ],
     [
-      "{detail} Exposure rolls one of eight diseases; a disease you have cured cannot infect you again for this run. Infection assigns a random cure herb from the ten herbs. It immediately lowers Constitution by 1, then lowers a random attribute by 1 every 150 player turns (300 with Hardiness), including rest. Hardiness halves infection chances. A Gem of Self Knowledge with Alchemy reveals the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name, then a 50% chance to identify the cure once the name is known. Discoveries and immunity are saved. Eating the correct herb cures disease, restores its penalties, and grants immunity, replacing its normal effect and nourishment. Other herbs act normally. Healing or Miruvor always cures it.",
-      "{detail} Each exposure chooses randomly from eight diseases. A disease already cured in this run is blocked by immunity. A successful infection chooses its cure from ten herbs, removes 1 Constitution immediately, and removes 1 random attribute every 150 player turns (300 with Hardiness), including rest. Hardiness also halves infection chances. With Alchemy, a Gem of Self Knowledge reveals the disease name and cure herb. Without Alchemy, each use has a 50% chance to learn the name and, once it is known, a 50% chance to learn the cure. Diagnosis and immunity are saved. The correct herb cures the infection, returns its attribute losses, and grants immunity, replacing its usual effect and nourishment. Other herbs work normally. Healing or spring cordial always cures disease."
-    ],
-    [
       "{detail} Poison deals damage over time and prevents ordinary Health regeneration. The next tick removes one fifth of current poison severity, rounded up, as Health. Antidote or Miruvor removes the poison; you may still need healing afterward.",
       "{detail} While poisoned, you take recurring damage and cannot regenerate Health normally. The next tick costs Health equal to one fifth of your current poison severity, rounded up. Use Antidote or spring cordial to clear the poison; clearing it does not necessarily repair the Health already lost."
     ],
@@ -51,10 +47,6 @@
       "{detail} Songs and horns consume Voice, which recovers when you are not singing. Voice potions and spring cordial refill it completely. Reedwine instead restores one quarter of maximum Voice."
     ],
     [
-      "Healing, Miruvor, or the identified cure herb cures disease, restores the attribute points it took, and grants immunity to it for this run. A cure herb replaces its normal effect and nourishment. A known remedy is available now. Skip if you prefer another action.",
-      "You have an identified disease remedy available. Healing, spring cordial, or the identified cure herb removes disease and restores the attribute points it drained. A cure herb does this instead of providing its normal effect or nourishment. Skip if you want to take another action."
-    ],
-    [
       "Antidote or Miruvor removes poison. It stops future poison damage, though lost Health may still need healing. A known remedy is available now. Skip if you prefer another action.",
       "An identified poison remedy is available now. Antidote or spring cordial clears the poison and prevents its later damage, but you may still need to heal the Health already lost. Skip if you want another action."
     ],
@@ -85,10 +77,6 @@
     [
       "Voice or Miruvor restores all Voice. Esgalduin restores one quarter of maximum Voice. Stop singing to allow ordinary Voice recovery. A known remedy is available now. Skip if you prefer another action.",
       "You can use an identified Voice remedy now. Voice or spring cordial restores the entire reserve; reedwine restores one quarter of maximum Voice. Stop singing if you want normal Voice recovery. Skip if you prefer another action."
-    ],
-    [
-      "Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting; cure it with its cure herb once identified, Healing or Miruvor before a long rest.",
-      "Rest keeps spending turns until its goal is reached or it is interrupted. Enemies still act and the minimum-depth timer still advances. Health and Voice can recover, but poison, bleeding, and starvation block ordinary Health recovery, while singing blocks Voice recovery. Disease also progresses during rest. Before resting for a long time, cure it with its identified cure herb, Healing, or spring cordial."
     ],
     [
       "Forge mithril or star-iron gear, or alloy suitable weapons and armour with those metals. Alloying adds no extra difficulty cost, but still requires the material.",
@@ -151,18 +139,6 @@
       "Each use of this Black Kilns forge is limited. Check how many remain and inspect the smithing proposal before committing one. Working here grants +7 effective Smithing, so you can attempt more difficult items."
     ],
     [
-      "When healthy, each water square entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting; its cure herb, Healing, or Miruvor cures it.",
-      "For a healthy character, entering each water square on foot makes a 0.5% base disease exposure check, before immunity or Hardiness. Remaining still makes no additional infection roll. A successful leap avoids touching the water and making a water splash, although the landing still makes noise. Rest does not halt disease; its cure herb, Healing, or spring cordial cures it."
-    ],
-    [
-      "Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A potion of Healing or Miruvor cures disease and restores its attribute penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.",
-      "Normally, eating this herb attempts to infect a healthy character: Constitution falls by -1 immediately, then a random attribute falls by -1 every 150 player turns (300 with Hardiness) until the disease is cured. It supplies normal herb nourishment, and resting does not cure the infection. Healing potions or spring cordial cure the disease and restore the attribute penalties it caused. If the herb is the cure for your current disease, eating it instead cures that disease and restores its penalties, without infecting you or providing nourishment. Otherwise the normal effect applies."
-    ],
-    [
-      "Provides about 2,000 ordinary turns of nourishment, with a 20% base chance of disease exposure: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure it; potions of Healing or Miruvor do.",
-      "This food supplies about 2,000 ordinary turns of nourishment and carries a 20% base disease exposure chance. Infection causes -1 Constitution immediately, followed by -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure disease. Healing potions and spring cordial do."
-    ],
-    [
       "{detail} You have obtained a Silmaril. Check the main quest and prepare your route out of Angband. You must still reach the surface with it to complete the escape.",
       "{detail} You now carry a dawnseed. Consult the main quest and plan your way out of Karth Vault. Recovery alone is not the escape: you must take the dawnseed all the way to the surface."
     ],
@@ -217,10 +193,6 @@
     [
       "Stun severity is at least 50, so every skill is reduced by 4. Above 100, you lose the ability to act. Clarity or Miruvor can remove stun while you can still use an item.",
       "At stun severity 50 or higher, every skill takes a penalty of 4. Once severity is above 100, you cannot act. Use Clarity or spring cordial to clear stun while item use is still possible."
-    ],
-    [
-      "Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting; cure it with its cure herb once identified, or with Healing or Miruvor.",
-      "Rest consumes turns while you recover. Poison, bleeding, and starvation block normal Health regeneration; singing blocks Voice regeneration. Disease continues through those turns. Cure it with its cure herb after identification, or use Healing or spring cordial."
     ],
     [
       "Bleeding severity is above 100. The next damage tick will cost more than 20 Health, and ordinary Health regeneration is blocked. Healing herbs or potions and Miruvor halve bleeding; one use may leave substantial bleeding. Song of Staunching can stop it.",
@@ -303,12 +275,56 @@
       "- Finishing custodian assignments can unlock "
     ],
     [
-      "- Potions of Healing or Miruvor cure it and restore all disease penalties, leaving unrelated drain unchanged.",
-      "- Healing potions or spring cordial cure disease and restore every penalty it caused. Other attribute drain remains."
+      "{detail} Exposure rolls one of eight diseases; a disease you have cured cannot infect you again for this run. A Herb of Healing cures every disease, even before diagnosis. Angband Plague has no other herbal cure. Other diseases also have a random cure herb. Potions of Healing or Miruvor cure every disease. Disease immediately lowers Constitution by 1, then lowers a random attribute by 1 every 150 player turns (300 with Hardiness), including rest. Hardiness halves infection chances. A Gem of Self Knowledge with Alchemy reveals the name and cure herb. Without Alchemy, each use has a 50% chance to identify the name, then a 50% chance to identify the cure once the name is known. Human and elven thralls can fully diagnose disease as a quest reward. For diseases other than Angband Plague, they can instead diagnose it and give you one matching cure herb to eat. Discoveries and immunity are saved. A cure restores disease penalties and grants immunity. A cure herb replaces its normal effects and nourishment; other herbs act normally.",
+      "{detail} Each exposure chooses one of eight diseases; immunity blocks a disease already cured in this run. A medicinal Healing herb cures any disease before or after diagnosis. The fortress plague has no other herbal cure; other diseases also have an assigned cure herb. Potions of Healing and spring cordial cure every disease. Infection removes 1 Constitution immediately and 1 random attribute every 150 player turns, including rest (300 with Hardiness). Hardiness halves infection chances. Alchemy lets a Gem of Self Knowledge reveal both the name and cure. Without Alchemy, each use has a 50% chance to learn the name, then a 50% chance to learn the cure once the name is known. Human and elven captives can fully diagnose disease as a quest reward; except for the fortress plague, they can instead diagnose it and supply one matching herb. Diagnosis and immunity are saved. Curing restores disease penalties and grants immunity. A cure herb replaces its ordinary effects and nourishment; other herbs work normally."
     ],
     [
-      "- Other herbs act normally. Healing potions and Miruvor always cure disease directly.",
-      "- Herbs other than the cure retain their usual effects; Healing potions and spring cordial always cure disease outright."
+      "A Herb of Healing cures every disease, restores the attribute points it took, and grants immunity for this run. Angband Plague requires Healing if you use a herb; other diseases also respond to their assigned cure herb. Potions of Healing or Miruvor cure every disease. A cure herb replaces its normal effects and nourishment. A known remedy is available now. Skip if you prefer another action.",
+      "A medicinal Healing herb cures any disease, restores the attributes it removed, and grants immunity for this run. The fortress plague accepts no other herbal cure; other diseases also respond to their assigned herb. Potions of Healing and spring cordial cure every disease. A cure herb replaces its ordinary effects and nourishment. You have a known remedy available. Skip if you prefer a different action."
+    ],
+    [
+      "Rest repeats turns until its goal is met or something interrupts it. Enemies and the minimum-depth timer continue. Rest can recover Health and Voice, but poison, bleeding and starvation stop ordinary Health recovery and singing stops Voice recovery. Disease continues while resting. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Other cure herbs work except against Angband Plague. Treat disease before a long rest.",
+      "Rest repeats turns until its goal is reached or an interruption occurs. Enemies and the minimum-depth timer continue. Rest can restore Health and Voice, but poison, bleeding and starvation prevent normal Health regeneration, and singing prevents Voice regeneration. Disease keeps progressing during rest. A medicinal Healing herb, a potion of Healing or spring cordial cures every disease. Other cure herbs work except against the fortress plague. Treat disease before resting for a long time."
+    ],
+    [
+      "When healthy, each water square entered on foot has a 0.5% base chance of disease exposure, before immunity or Hardiness. Standing still adds no infection roll. A successful leap avoids contact and the water splash, though landing still makes noise. Disease continues while resting. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Other cure herbs work except against Angband Plague.",
+      "While healthy, each water square entered on foot has a 0.5% base chance of disease exposure before immunity or Hardiness. Standing still makes no infection roll. A successful leap avoids water contact and its splash, although landing still makes noise. Disease keeps progressing during rest. A medicinal Healing herb, a potion of Healing or spring cordial cures every disease; other cure herbs work except against the fortress plague."
+    ],
+    [
+      "When healthy, halves bleeding and heals 11 + floor(12% of maximum Health), increased by Medicine equipment, and provides ordinary herb nourishment. When diseased, cures every disease and restores its attribute penalties instead of healing wounds, halving bleeding, or providing nourishment. Works before diagnosis. Healing is the only herb that cures Angband Plague; potions of Healing or Miruvor also cure it.",
+      "While healthy, these medicinal leaves halve bleeding, heal 11 + floor(12% of maximum Health), improved by Medicine equipment, and provide ordinary herb nourishment. While diseased, they instead cure any disease and restore its attribute penalties, without healing wounds, halving bleeding or providing nourishment. They work before diagnosis. No other herb cures the fortress plague; potions of Healing or spring cordial also cure it."
+    ],
+    [
+      "Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Cures restore disease penalties. It provides ordinary herb nourishment. If this is the cure for your current disease, it cures the disease and restores its penalties instead of infecting you or providing nourishment; otherwise, its normal effect applies.",
+      "Normally, these unhealthy leaves attempt to infect a healthy eater. Infection removes 1 Constitution immediately, then 1 random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure disease. A medicinal Healing herb, a potion of Healing or spring cordial cures any disease and restores its attribute penalties. The leaves normally provide ordinary herb nourishment. If they are the assigned cure for your current disease, they instead cure it and restore its penalties, without infecting or nourishing you; otherwise their normal effects apply."
+    ],
+    [
+      "Provides about 2,000 ordinary turns of nourishment, with a 20% base chance of disease exposure: -1 Constitution on infection, then -1 to a random attribute every 150 player turns (300 with Hardiness). Rest does not cure it. A Herb of Healing or a potion of Healing or Miruvor cures every disease.",
+      "These provisions provide about 2,000 ordinary turns of nourishment and a 20% base disease exposure risk. Infection removes 1 Constitution immediately, then 1 random attribute every 150 player turns (300 with Hardiness). Rest does not cure disease. A medicinal Healing herb, a potion of Healing or spring cordial cures any disease."
+    ],
+    [
+      "Rest spends turns to recover. Poison, bleeding and starvation stop ordinary Health regeneration; singing stops Voice regeneration. Disease continues while resting. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Other cure herbs work except against Angband Plague.",
+      "Rest consumes turns to recover. Poison, bleeding and starvation block normal Health regeneration; singing blocks Voice regeneration. Disease keeps progressing during rest. A medicinal Healing herb, a potion of Healing or spring cordial cures any disease. Other cure herbs work except against the fortress plague."
+    ],
+    [
+      "- A Herb of Healing cures every disease and restores its penalties, leaving unrelated drain unchanged.",
+      "- Medicinal Healing leaves cure any disease and restore only the attribute losses caused by that disease."
+    ],
+    [
+      "- Healing is the only herb that cures Angband Plague. Other diseases also have a random cure herb.",
+      "- Only a Healing herb cures the fortress plague. Each other disease also has a randomly assigned herbal cure."
+    ],
+    [
+      "- Potions of Healing or Miruvor cure every disease, including Angband Plague. Hardiness halves infection chances.",
+      "- A Healing potion or spring cordial cures any disease, including the fortress plague. Hardiness reduces infection chances by half."
+    ],
+    [
+      "- For diseases other than Angband Plague, they can instead diagnose it and give you one matching cure herb.",
+      "- Except for the fortress plague, captives can instead diagnose your disease and give you one herb that cures it."
+    ],
+    [
+      "- Other herbs act normally. Healing cures disease even before its name or other cure herb is known.",
+      "- Unmatched herbs retain their usual effects. Medicinal Healing leaves cure disease even when its name and assigned cure are unknown."
     ]
   ]
 }

@@ -1558,8 +1558,43 @@ static object_storage_type pickup_destination_for_preference(
     return OBJECT_STORAGE_NONE;
 }
 
-static void py_pickup_aux_internal(int o_idx, bool allow_channel,
+static void py_pickup_aux_execute(int o_idx, bool allow_channel,
     object_storage_type preferred_storage);
+
+/* A rejected destination/quantity choice is free. Successful menu pickups
+ * share keyboard pickup's cost; automatic pickup reuses a paid movement action. */
+static bool py_pickup_aux_internal(int o_idx, bool allow_channel,
+    object_storage_type preferred_storage)
+{
+    if (o_idx <= 0 || o_idx >= o_max)
+        return false;
+
+    int old_kind = o_list[o_idx].k_idx;
+    int old_number = o_list[o_idx].number;
+    int old_weight = p_ptr->total_weight;
+    int old_oil = player_lamp_oil();
+    int old_energy = p_ptr->energy_use;
+
+    py_pickup_aux_execute(o_idx, allow_channel, preferred_storage);
+
+    bool accepted = player_pack_action_pending()
+        || o_list[o_idx].k_idx != old_kind
+        || o_list[o_idx].number < old_number
+        || p_ptr->total_weight != old_weight
+        || player_lamp_oil() != old_oil;
+    if (accepted && old_energy <= 0)
+    {
+        p_ptr->previous_action[0] = ACTION_MISC;
+        if (p_ptr->energy_use <= 0)
+            p_ptr->energy_use = 100;
+    }
+    log_debug("[pickup] source=%d kind=%d accepted=%d remaining=%d/%d "
+        "energy=%d->%d pack=%d destination=%d", o_idx, old_kind,
+        accepted ? 1 : 0, o_list[o_idx].number, old_number,
+        old_energy, p_ptr->energy_use, player_pack_action_pending() ? 1 : 0,
+        (int)preferred_storage);
+    return accepted;
+}
 
 void py_pickup_aux(int o_idx)
 {
@@ -1576,7 +1611,7 @@ void py_pickup_aux_to_harness(int o_idx)
     py_pickup_aux_internal(o_idx, false, OBJECT_STORAGE_HARNESS);
 }
 
-static void py_pickup_aux_internal(int o_idx, bool allow_channel,
+static void py_pickup_aux_execute(int o_idx, bool allow_channel,
     object_storage_type preferred_storage)
 {
     object_type* o_ptr;
@@ -2403,16 +2438,9 @@ static void py_pickup_with_preference(object_storage_type preferred_storage)
             continue;
         }
 
-        // store the action type
-        p_ptr->previous_action[0] = ACTION_MISC;
-
-        /* Take a turn */
-        p_ptr->energy_use = 100;
-
         /* Pick up the object */
-        py_pickup_aux_internal(this_o_idx, false, preferred_storage);
-
-        done_pickup = true;
+        if (py_pickup_aux_internal(this_o_idx, false, preferred_storage))
+            done_pickup = true;
         if (player_pack_action_pending())
             break;
     }

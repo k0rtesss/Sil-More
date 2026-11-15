@@ -48,6 +48,9 @@ void __wrap_quest_typewriter_menu_pages(cptr t,cptr texts[],int n,byte a,byte b,
 { (void)t;(void)texts;(void)n;(void)a;(void)b;(void)p; }
 int __wrap_ui_question_ask(cptr t,cptr d,const ui_question_option* o,int n,int y,int x,int initial)
 { (void)t;(void)d;(void)o;(void)n;(void)y;(void)x;(void)initial;return question_choice; }
+int __wrap_ui_question_ask_with_reasons(cptr t,cptr d,const ui_question_option* o,
+    const cptr reasons[],int n,int y,int x,int initial)
+{ (void)reasons;return __wrap_ui_question_ask(t,d,o,n,y,x,initial); }
 bool __wrap_get_aim_dir(int* dir,int range) { (void)range;*dir=5;return true; }
 int __wrap_show_interaction_skill_roll_animation_actor(monster_type* m,cptr t,cptr a,int y,int x,int s,int d,skill_roll_details* r)
 { (void)m;(void)t;(void)a;(void)y;(void)x;(void)s;(void)d;(void)r;return actor_result; }
@@ -307,7 +310,7 @@ def main():
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     wraps = ("sil_achievements_on_event", "handle_stuff", "update_stuff", "msg_print",
              "message_flush", "get_sdl_config_path", "pause_with_text",
-             "quest_typewriter_menu_pages", "ui_question_ask", "get_aim_dir",
+             "quest_typewriter_menu_pages", "ui_question_ask", "ui_question_ask_with_reasons", "get_aim_dir",
              "show_interaction_skill_roll_animation_actor", "hit_roll", "hit_roll_details")
     exe = OUT / "check.exe"
     subprocess.run([

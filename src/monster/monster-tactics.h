@@ -26,6 +26,7 @@ enum monster_squad_job
     MON_JOB_HOLD, MON_JOB_REGROUP
 };
 enum monster_squad_plan { MON_PLAN_ADVANCE, MON_PLAN_HOLD, MON_PLAN_REGROUP };
+#define MON_SQUAD_BUDGET_MAX_AGE 8
 
 void monster_squad_prepare(void);
 bool monster_squad_order_valid(const monster_type* m_ptr);

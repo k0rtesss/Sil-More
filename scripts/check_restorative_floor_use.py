@@ -56,8 +56,12 @@ static void prepare(int tval,int sval) {
     input_index=confirmations=quantity_calls=0;
 }
 static void menu(supply_menu_action action,int group,bool yes,cptr label) {
-    accept=yes;expected_action=label;inputs="-\r\033";input_index=confirmations=0;
+    /* '-' activates the floor row directly; Enter would attempt it twice on No. */
+    accept=yes;expected_action=label;inputs="-\033";input_index=confirmations=0;
     (void)open_supplies_menu_with_context(action,group,true,true);
+    if (turn!=101 || playerturn!=10 || confirmations!=1)
+        fprintf(stderr,"floor menu action=%d group=%d accept=%d inputs=%d confirmations=%d turn=%ld playerturn=%ld energy=%d\n",
+            action,group,yes,input_index,confirmations,(long)turn,(long)playerturn,p_ptr->energy_use);
     assert(turn==101 && playerturn==10 && confirmations==1);
     assert(item_tester_tval==0);
 }

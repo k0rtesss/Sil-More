@@ -18,6 +18,7 @@ import shlex
 import subprocess
 import sys
 import time
+from typing import Callable
 import uuid
 
 import check_game_control as adapter
@@ -143,6 +144,22 @@ static void fixture_snapshot(bool waiting)
         cJSON* root = cJSON_CreateObject();
         cJSON_AddNumberToObject(root, "turn", turn);
         cJSON_AddNumberToObject(root, "player_turn", playerturn);
+        /* Observe the same native choice rows displayed in the PNG. Some
+         * terrain interactions are question menus, not yes/no prompts. */
+        if (g_question_menu.active && !g_question_menu.context_hint) {
+            cJSON* menu = cJSON_AddObjectToObject(root, "question_menu");
+            cJSON_AddStringToObject(menu, "title", g_question_menu.title);
+            cJSON* choices = cJSON_AddArrayToObject(menu, "choices");
+            for (int i = 0; i < g_question_menu.count; ++i) {
+                const sdl_question_menu_entry_state* row = &g_question_menu.entries[i];
+                if (row->choice < 0 || row->text_attr == TERM_L_DARK || !row->letter[0]) continue;
+                cJSON* choice = cJSON_CreateObject();
+                char key[2] = { row->letter[0], 0 };
+                cJSON_AddStringToObject(choice, "key", key);
+                cJSON_AddStringToObject(choice, "label", row->text);
+                cJSON_AddItemToArray(choices, choice);
+            }
+        }
         cJSON* player = cJSON_AddObjectToObject(root, "player");
         cJSON_AddNumberToObject(player, "y", p_ptr->py);
         cJSON_AddNumberToObject(player, "x", p_ptr->px);
@@ -759,16 +776,20 @@ def validate(profile: Path, spec: dict, frames: list[dict]) -> dict:
                 moves=sum((e["y"], e["x"]) != (e["old_y"], e["old_x"]) for e in actions))
 
 
-def run(exe: Path, env: dict, name: str, spec: dict, keys: list[str]) -> dict:
+def run(exe: Path, env: dict, name: str, spec: dict,
+        keys: list[str] | Callable[[Path, list[dict]], str | None]) -> dict:
     profile, process, game = start(exe, env, name, spec)
     frames = []
     try:
         game.observe(output=profile / "initial.png")
         frames.append(dict(key="initial", **brief(telemetry(profile))))
         died = False
-        pending_keys = list(keys)
-        while pending_keys:
-            key = pending_keys.pop(0)
+        policy = keys if callable(keys) else None
+        pending_keys = [] if policy else list(keys)
+        while pending_keys or policy:
+            key = pending_keys.pop(0) if pending_keys else policy(profile, frames)
+            if key is None:
+                break
             response = game.key(key, capture=False)
             assert response["ok"], response.get("error", "Control request failed")
             assert response["state"]["video_driver"] == "dummy"
@@ -786,6 +807,16 @@ def run(exe: Path, env: dict, name: str, spec: dict, keys: list[str]) -> dict:
                     and frame.get("question", "").startswith("Step into poisonous acid?")):
                 game.observe(output=profile / f"acid-confirmation-{len(frames):03}.png")
                 pending_keys.insert(0, "y")
+            if spec.get("confirm_traps") and not died:
+                for choice in frame.get("question_menu", {}).get("choices", []):
+                    if choice["label"] == "Step onto it":
+                        game.observe(output=profile / f"trap-confirmation-{len(frames):03}.png")
+                        pending_keys.insert(0, choice["key"])
+                        break
+            if (spec.get("decline_chasms") and not died
+                    and frame.get("question", "").startswith("Step into the chasm?")):
+                game.observe(output=profile / f"chasm-confirmation-{len(frames):03}.png")
+                pending_keys.insert(0, "n")
             if died:
                 break
             assert frame["player"]["hp"] > 0, f"Player died: {profile}"

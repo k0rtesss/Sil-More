@@ -603,6 +603,8 @@ void process_player(void)
 
             /* Reduce smithing count */
             p_ptr->smithing--;
+            if (!p_ptr->smithing)
+                p_ptr->update |= PU_TORCH;
 
             /* Reduce smithing leftover counter */
             p_ptr->smithing_leftover--;

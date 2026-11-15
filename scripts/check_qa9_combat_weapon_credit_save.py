@@ -32,16 +32,16 @@ size_t fixture_write(byte* buffer,size_t capacity,int legacy)
 READER = r"""
 #include "fs/load.c"
 #include <assert.h>
-bool fixture_supported(int extra)
+bool fixture_supported(int patch, int extra)
 {
-    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=patch;sf_extra=extra;
     return savefile_version_supported();
 }
 int fixture_read(const byte* buffer,size_t size,int extra)
 {
     fff=SDL_IOFromConstMem(buffer,size); assert(fff);
     xor_byte=0;v_check=x_check=load_byte_offset=0;
-    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=extra==26?8:VERSION_PATCH;sf_extra=extra;
     savefile_has_song_duels=savefile_has_ability_timeline=true;
     savefile_has_varda_quest=savefile_has_skeleton_notes=true;
     savefile_has_skeleton_hint_mask32=savefile_has_skeleton_hint_counts=true;
@@ -57,13 +57,13 @@ int fixture_read(const byte* buffer,size_t size,int extra)
 CHECKS = r"""
 extern size_t fixture_write(byte*,size_t,int);
 extern int fixture_read(const byte*,size_t,int);
-extern bool fixture_supported(int);
+extern bool fixture_supported(int,int);
 static void checks(void)
 {
-    byte buffer[262144];size_t canonical_size=0;
-    assert(fixture_supported(26) && fixture_supported(27)
-        && fixture_supported(VERSION_EXTRA)
-        && !fixture_supported(VERSION_EXTRA + 1));
+    byte buffer[262144];size_t canonical_size[3]={0};
+    assert(fixture_supported(8,26) && fixture_supported(8,27)
+        && fixture_supported(VERSION_PATCH,VERSION_EXTRA)
+        && !fixture_supported(VERSION_PATCH,VERSION_EXTRA + 1));
     memset(inventory,0,INVEN_TOTAL*sizeof(*inventory));
     player_carried_extra_reset_store();player_quiver_reset_store();supplies_reset_store();
     for(int legacy=0;legacy<3;legacy++) for(int used=0;used<3;used++) {
@@ -76,8 +76,9 @@ static void checks(void)
         p_ptr->lamp_oil=1234;p_ptr->stat_base[A_STR]=7;
         p_ptr->discovery_lore_flags=3;
         size_t size=fixture_write(buffer,sizeof(buffer),legacy);
-        if(!canonical_size)canonical_size=size;
-        assert(size==canonical_size); /* Reserved byte preserves stream length. */
+        if(!canonical_size[legacy])canonical_size[legacy]=size;
+        assert(size==canonical_size[legacy]); /* Credit values preserve each format's length. */
+        if(legacy==2)assert(size==canonical_size[1]); /* Only old padding differs. */
         p_ptr->free_active_weapon_change_used=255;
         p_ptr->lamp_oil=0;p_ptr->stat_base[A_STR]=0;p_ptr->discovery_lore_flags=0;
         assert(!fixture_read(buffer,size,legacy?26:VERSION_EXTRA));

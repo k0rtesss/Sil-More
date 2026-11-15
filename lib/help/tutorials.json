@@ -3503,7 +3503,6 @@
           "src/birth/birth-traits.c",
           "src/player/player-active-weapon.c",
           "src/player/player-bonuses.c",
-          "src/sdl/core/sdl-layout.c",
           "src/cmd/item/cmd-item-core.c",
           "src/cmd/ui/cmd-ui-abilities.c"
         ]

@@ -1,5 +1,50 @@
 # Monster AI implementation plan
 
+## Additional compound gameplay coverage (2026-11-15)
+
+The follow-up headless audit adds 765 accepted scenario cases: 264 concealed or
+recovering catalogue encounters, 264 mixed-party terrain/song/orientation cases,
+48 sensory cases, 39 action-clock/knowledge-expiry cases, 64 demonstrated or
+unused technique cases, 16 otherwise identical ability-absence controls, 64
+distinct test-generated mazes and six active-crowd cases. All player actions use
+the real SDL queue; observations and technique diagnostics are read-only.
+
+The maze controller replans from the character's position, its declared starting
+map and currently visible terrain, and answers visible native prompts. Active
+groups of 40–240 monsters exercise the sixteen-squad/eight-member bounds. The
+mass-loss case preserves actor identities through compaction and permits the
+legitimate rout after twenty commanders die. Twelve speed families show the
+expected haste/base/slow action ordering. Loud physical noises are investigated
+without revealing the hidden player, and unused abilities leave enemy actions
+unchanged in sixteen paired comparisons.
+
+Entry points are `check_monster_ai_stress_gameplay.py`,
+`check_monster_ai_reactions_gameplay.py`, `check_monster_ai_maze_gameplay.py` and
+`check_monster_ai_capacity_gameplay.py` under `scripts/`. The reactions driver
+accepts completed control reports through `--reference-report` for its optional
+`--negative-equivalence` comparison. Exact traces, source/object fingerprints,
+corrected fixture controls and the final audit are under
+`scripts/output/monster-ai-round9/`. This expansion changes the test harness,
+without changing production AI statistics, rules or save data.
+
+## Blocked firing-lane detours (2026-11-15)
+
+A personally recognized player behind a melee screen can require more than the
+ordinary two-action tactical lookahead. Missile actors with a blocked ray now
+search up to eight steps within the existing actor-centred 9-by-9 area for a
+usable firing post. A paid route to that post can take precedence over repeated
+small improvements among blocked squares. Assembly and regroup plans retain
+their existing behavior; route legality, poison accounting and reaction costs
+still apply. This adds no monster statistics, attack frequency or save fields.
+
+The same 38-turn SDL-input encounter changed from zero to 17 arrows for the
+previously blocked archer. Twelve orientation/seed variants pass, and the real
+engine regression checks the movement route and read-only preview behavior.
+The broader audit covers the combat catalogue, long mixed encounters, native
+terrain prompts, save/reload and logging equivalence. Evidence and exact inputs
+are retained under `scripts/output/monster-ai-round8/`; the reusable entry point
+is `scripts/check_monster_ai_audit_gameplay.py`.
+
 ## Deep-water archery corrections (2026-11-13)
 
 An archer with no adjacent dry square can now follow a bounded local route

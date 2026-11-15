@@ -126,6 +126,27 @@ static char* control_replace_invalid_utf8(char* data)
     return clean;
 }
 
+static bool control_publish_file(const char* temp, const char* path)
+{
+    /* Windows readers can briefly hold the previous JSON or PNG without
+     * delete sharing. Retry publication of the completed file only; input
+     * has already been applied and must never be replayed. This also lets
+     * shutdown reliably publish running=false before the process exits. */
+#ifdef _WIN32
+    Uint64 deadline = SDL_GetTicksNS() + 250 * SDL_NS_PER_MS;
+    do
+    {
+        if (SDL_RenamePath(temp, path))
+            return true;
+        if (SDL_GetTicksNS() >= deadline)
+            return false;
+        SDL_Delay(CONTROL_POLL_MS);
+    } while (true);
+#else
+    return SDL_RenamePath(temp, path);
+#endif
+}
+
 static bool control_write_json(const char* name, const cJSON* json)
 {
     char path[1200], temp[1200], temp_name[96];
@@ -147,7 +168,7 @@ static bool control_write_json(const char* name, const cJSON* json)
         ok = false;
     cJSON_free(data);
     if (ok)
-        ok = SDL_RenamePath(temp, path);
+        ok = control_publish_file(temp, path);
     if (!ok) {
         log_warn("Control interface could not publish %s: %s", name, SDL_GetError());
         (void)SDL_RemovePath(temp);
@@ -295,26 +316,6 @@ static cJSON* control_state(bool waiting)
     return state;
 }
 
-static bool control_publish_screenshot(const char* temp, const char* path)
-{
-    /* Windows image readers can briefly hold the old PNG without delete
-     * sharing. Retry only publication of this completed frame; the request's
-     * input has already been applied and must never be replayed. */
-#ifdef _WIN32
-    Uint64 deadline = SDL_GetTicksNS() + 250 * SDL_NS_PER_MS;
-    do
-    {
-        if (SDL_RenamePath(temp, path))
-            return true;
-        if (SDL_GetTicksNS() >= deadline)
-            return false;
-        SDL_Delay(CONTROL_POLL_MS);
-    } while (true);
-#else
-    return SDL_RenamePath(temp, path);
-#endif
-}
-
 static bool control_capture(void)
 {
     char path[1200], temp[1200];
@@ -335,7 +336,7 @@ static bool control_capture(void)
         owned = true;
     }
     if (surface) {
-        ok = IMG_SavePNG(surface, temp) && control_publish_screenshot(temp, path);
+        ok = IMG_SavePNG(surface, temp) && control_publish_file(temp, path);
         if (owned)
             SDL_DestroySurface(surface);
     }

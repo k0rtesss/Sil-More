@@ -527,6 +527,49 @@ static void check_archer_vacated_square(void)
     puts("Real corridor archer retreats through its vacated firing line; previews preserve map, actor, RNG and nested projection state PASS.");
 }
 
+static void check_archer_crowded_detour(void)
+{
+    monster_type* m = adaptive_fixture(51, 0);
+    bool saved_recognition = visual_recognition;
+    visual_recognition = false;
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->py = p_ptr->px = 9;
+    cave_m_idx[9][9] = -1;
+    int idx = (int)(m - mon_list);
+    cave_m_idx[m->fy][m->fx] = 0;
+    m->fy = 11; m->fx = 8; cave_m_idx[11][8] = idx;
+    m->min_range = 2; m->best_range = 3; m->cdis = 2;
+    m->stance = STANCE_AGGRESSIVE;
+    const int allies[][2] = {{8,10},{9,8},{10,8},{10,9},{9,10},{10,10}};
+    for (int i = 0; i < 6; ++i)
+    {
+        assert(place_monster_one(allies[i][0], allies[i][1], 61, false, true, NULL));
+        mon_list[cave_m_idx[allies[i][0]][allies[i][1]]].alertness = ALERTNESS_ALERT;
+    }
+    assert(projectable(m->fy, m->fx, 9, 9, PROJECT_CHCK) == PROJECT_NOT_CLEAR);
+    monster_type before = *m;
+    u64b rng = Rand_state_export();
+    int utility = monster_tactical_move_utility(m);
+    assert(utility > 0 && monster_tactical_move_utility(m) == utility);
+    assert(!memcmp(m, &before, sizeof(before)) && Rand_state_export() == rng);
+    int moves = 0;
+    while (projectable(m->fy, m->fx, 9, 9, PROJECT_CHCK) != PROJECT_CLEAR && moves < 12)
+    {
+        int y, x, old_y = m->fy, old_x = m->fx;
+        bool bash = false, fear = false;
+        assert(get_move(m, &y, &x, &fear, false));
+        assert(distance(old_y, old_x, y, x) == 1 && !cave_m_idx[y][x]);
+        assert(make_move(m, &y, &x, false, &bash));
+        process_move(m, y, x, bash);
+        monster_ai_end_turn(m, old_y, old_x, false);
+        ++playerturn; ++moves;
+    }
+    assert(moves > 2 && moves < 12 && distance(m->fy, m->fx, 9, 9) >= 2);
+    assert(projectable(m->fy, m->fx, 9, 9, PROJECT_CHCK) == PROJECT_CLEAR);
+    visual_recognition = saved_recognition;
+    puts("Real blocked archer walks around six contact fighters to a clear lane; preview preserves actor and RNG PASS.");
+}
+
 static void check_archer_recognition_range(void)
 {
     monster_type* m = adaptive_fixture(51, 0);
@@ -713,6 +756,42 @@ static void check_cooperative_movement(void)
     puts("Production archer buys sound distance from Lorien while retaining a shot PASS.");
 }
 
+static void check_visible_unarmed_disarm_utility(void)
+{
+    monster_type* m = adaptive_fixture(406, 0);
+    bool saved_recognition = visual_recognition;
+    visual_recognition = false;
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->py = 10; p_ptr->px = 13;
+    cave_m_idx[10][13] = -1;
+    m->cdis = distance(m->fy, m->fx, 10, 13);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    assert(monster_ai_can_see_player(m));
+    int armed = monster_melee_utility(m, 1, true, false);
+    assert(armed > 0);
+    object_wipe(&inventory[INVEN_WIELD]);
+    assert(monster_melee_utility(m, 1, true, false) == 0);
+    m->blow_ds_reduction[0] = r_info[406].blow[0].ds - 1;
+    assert(monster_melee_utility(m, 0, true, false) > 0);
+
+    cave_set_feat(10, 11, FEAT_WALL_PERM);
+    assert(!monster_ai_can_see_player(m));
+    int unseen_empty = monster_melee_utility(m, 1, true, false);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    assert(monster_melee_utility(m, 1, true, false) == unseen_empty);
+    cave_set_feat(10, 11, FEAT_FLOOR);
+    assert(monster_melee_utility(m, 1, true, false) == armed);
+
+    m = adaptive_fixture(241, 0);
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    assert(monster_ai_can_see_player(m));
+    assert(monster_melee_utility(m, 1, true, false) > 0);
+    object_wipe(&inventory[INVEN_WIELD]);
+    assert(monster_melee_utility(m, 1, true, false) == 0);
+    visual_recognition = saved_recognition;
+    puts("Disarm utility: visible empty hand has no value, rearming restores it, unseen equipment stays private, whip rolls cannot supply phantom damage PASS.");
+}
+
 static void check_adaptive_integration(void)
 {
     monster_type* m = adaptive_fixture(403, 0);
@@ -810,8 +889,10 @@ static void check_adaptive_integration(void)
     assert(p_ptr->poisoned == POISON_TERRAIN_DOSE - contact_tick - bank_tick);
     puts("Real complete player actions apply pool contact before poison tick and suppress regeneration PASS.");
     check_weapon_fear();
+    check_visible_unarmed_disarm_utility();
     check_protected_terrain_movement();
     check_archer_vacated_square();
+    check_archer_crowded_detour();
     check_archer_recognition_range();
     check_deep_water_archer_escape();
     check_challenge_melee_range();

@@ -481,7 +481,24 @@ void process_command(void)
     /* Eat some food */
     case 'E':
     {
-        do_cmd_eat_food(NULL, 0);
+        int group = SUPPLY_GROUP_FOOD;
+        if (supplies_has_group(SUPPLY_GROUP_HERBS))
+            group = SUPPLY_GROUP_HERBS;
+        else
+        {
+            for (int o_idx = cave_o_idx[p_ptr->py][p_ptr->px]; o_idx;
+                 o_idx = o_list[o_idx].next_o_idx)
+            {
+                if (supplies_group_matches_object(SUPPLY_GROUP_HERBS,
+                        &o_list[o_idx]))
+                {
+                    group = SUPPLY_GROUP_HERBS;
+                    break;
+                }
+            }
+        }
+        open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE,
+            group, true, true);
         break;
     }
 

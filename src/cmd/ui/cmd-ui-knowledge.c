@@ -26,6 +26,16 @@ static int equipment_menu_compare_slots(int selected_slot, int slots[],
 static object_type* equipment_menu_floor_item_for_object(
     const object_type* ref);
 
+/* Synthetic icons and lore previews must not change later gameplay rolls.
+ * object_prep assigns a random hallucination kind even to these temporary
+ * objects, so retain that field without consuming the game RNG. */
+static void knowledge_prepare_display_object(object_type* object, int kind)
+{
+    u64b saved_state = Rand_state_export();
+    object_prep(object, kind);
+    Rand_state_pop(saved_state);
+}
+
 int g_knowledge_last_page = KNOWLEDGE_PAGE_ARTEFACTS;
 
 static bool floor_entry_perform_action(int floor_idx,
@@ -458,7 +468,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
                 object_type* i_ptr = &object_type_body;
 
                 object_wipe(i_ptr);
-                object_prep(i_ptr, entry->k_idx);
+                knowledge_prepare_display_object(i_ptr, entry->k_idx);
                 apply_magic_fake(i_ptr);
                 i_ptr->ident |= IDENT_KNOWN;
                 return supply_object_show_with_compare(i_ptr,
@@ -1291,7 +1301,7 @@ static object_type* supply_entry_display_object(const supply_list_entry* entry,
     else if (fake)
     {
         object_wipe(fake);
-        object_prep(fake, entry->k_idx);
+        knowledge_prepare_display_object(fake, entry->k_idx);
         if (aware)
             fake->ident |= IDENT_KNOWN;
         fake->number = (entry->total > 0) ? entry->total : 1;
@@ -1994,7 +2004,7 @@ static void choose_supply_group_icon_kinds(
             group_icon_kinds[group] = supply_group_random_icon_kind(group);
     }
 
-    Rand_state_import(saved_state);
+    Rand_state_pop(saved_state);
 }
 
 static void prepare_supply_group_icons(supply_group_icon icons[SUPPLY_GROUP_MAX],
@@ -2023,7 +2033,7 @@ static void prepare_supply_group_icons(supply_group_icon icons[SUPPLY_GROUP_MAX]
         if (k_idx <= 0 || k_idx >= z_info->k_max)
             continue;
 
-        object_prep(icon_obj, k_idx);
+        knowledge_prepare_display_object(icon_obj, k_idx);
         icon_obj->ident |= IDENT_KNOWN;
         icons[group].has_icon = true;
     }
@@ -3551,7 +3561,7 @@ static int display_supply_list(const knowledge_browser_layout* layout, int row,
             }
             else if (entry->k_idx > 0 && entry->k_idx < z_info->k_max)
             {
-                object_prep(&fake, entry->k_idx);
+                knowledge_prepare_display_object(&fake, entry->k_idx);
                 fake.ident |= IDENT_KNOWN;
                 draw_obj = &fake;
             }
@@ -4895,7 +4905,7 @@ static bool equipment_prepare_icon_from_kind(int slot, object_type* icon_obj)
             continue;
 
         object_wipe(&fake);
-        object_prep(&fake, i);
+        knowledge_prepare_display_object(&fake, i);
         fake.ident |= IDENT_KNOWN;
 
         if (!equipment_slot_accepts_object(slot, &fake))
@@ -8485,7 +8495,7 @@ static bool prepare_fake_artefact(object_type* o_ptr, byte name1)
         return (false);
 
     /* Create the artefact */
-    object_prep(o_ptr, i);
+    knowledge_prepare_display_object(o_ptr, i);
 
     /* Save the name */
     o_ptr->name1 = name1;
@@ -8922,7 +8932,7 @@ static void desc_obj_fake(int k_idx)
     object_wipe(i_ptr);
 
     /* Create the object */
-    object_prep(i_ptr, k_idx);
+    knowledge_prepare_display_object(i_ptr, k_idx);
 
     /*add minimum bonuses so the descriptions don't look strange*/
     apply_magic_fake(i_ptr);

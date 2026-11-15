@@ -483,7 +483,7 @@ int main(int argc, char **argv)
     int prompt_px = sdl_menu_font_px(sdl_char_sheet_clampi((int)(height*0.025f),13,30));
     if (fixture_mobile && bigger) prompt_px = sdl_menu_role_font_px(SDL_UI_FONT_CONTROL);
     TTF_Font* back_font = sdl_story_font_for_height_slot(prompt_px, SDL_STORY_FONT_SLOT_DEFAULT);
-    if (!(fixture_mobile && bigger)
+    if (!bigger
         && book->narrative_paginated_for_w >= 700 * (fixture_mobile ? fixture_density : 1)) {
         float prompt_h = sdl_char_sheet_line_h(back_font,prompt_px,1.02f);
         back_font = sdl_story_font_for_height_slot((int)(prompt_h*1.12f+0.5f),SDL_STORY_FONT_SLOT_DEFAULT);

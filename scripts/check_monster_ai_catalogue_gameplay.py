@@ -152,7 +152,11 @@ def legacy_cases():
             actor(race,36,group=8,alertness=20), actor(41,34,19,alertness=-30,group=8),
             actor(61,34,21,alertness=-30,group=8)]), 60, dict(cast=104))
     for race in (54,91,95,105,125,409):
-        add(f'legacy-rally-{race}', dict(tiles=support_room,monsters=[actor(race,36,group=8,alertness=20),
+        # Hide the player so offensive control does not compete with Rally
+        # until the allies' temporary fear naturally expires. Support must
+        # remain available without a player-directed line of sight.
+        rally_room = support_room + [dict(y1=17,y2=23,x1=38,x2=39,feat=63)]
+        add(f'legacy-rally-{race}', dict(tiles=rally_room,monsters=[actor(race,36,group=8,alertness=20),
             actor(41,34,19,morale=-150,stance=1,group=8),
             actor(61,34,21,morale=-150,stance=1,group=8)]),80,dict(cast=120))
     for name,race,attack in [('cold',33,100),('fire',53,99),('poison',73,101),

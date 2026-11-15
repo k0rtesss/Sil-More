@@ -579,6 +579,12 @@ static int melee_effect_feature(int effect)
     }
 }
 
+static bool monster_disarm_has_target(const monster_type* m_ptr)
+{
+    /* Weapon presence is visible; absence behind a wall is not evidence. */
+    return !monster_ai_can_see_player(m_ptr) || inventory[INVEN_WIELD].k_idx;
+}
+
 int monster_melee_utility(const monster_type* m_ptr, int blow,
     bool ordinary, bool smite)
 {
@@ -618,7 +624,13 @@ int monster_melee_utility(const monster_type* m_ptr, int blow,
     case RBE_SHATTER: control = 12; break;
     case RBE_CONFUSE: case RBE_ENTRANCE: case RBE_TERRIFY: case RBE_SLOW:
         control = MAX(0, 18 - 5 * evidence); break;
-    case RBE_DISARM: control = MAX(0, 15 - 4 * evidence); break;
+    case RBE_DISARM:
+        /* The execution branch attempts weapon removal without applying its
+         * rolled damage. An empty hand therefore leaves no useful effect. */
+        damage = 0;
+        if (monster_disarm_has_target(m_ptr))
+            control = MAX(0, 15 - 4 * evidence);
+        break;
     case RBE_LOSE_MANA:
         control = 8 + 3 * MAX(0, monster_ai_confidence(m_ptr, MON_AI_SONG));
         break;
@@ -677,7 +689,10 @@ static int monster_choose_blow(const monster_type* m_ptr, bool ordinary)
     bool simple = (r_ptr->flags2 & RF2_MINDLESS) || m_ptr->r_idx == R_IDX_MORGOTH;
     for (i = 0; i < MONSTER_BLOW_MAX; ++i)
     {
+        /* Exclude a known no-op even when every damage estimate rounds to
+         * zero; a score tie must not reintroduce disarming an empty hand. */
         scores[i] = r_ptr->blow[i].method
+            && (r_ptr->blow[i].effect != RBE_DISARM || monster_disarm_has_target(m_ptr))
             ? monster_melee_utility(m_ptr, i, ordinary, false) : -1;
         if (scores[i] >= 0)
         {
@@ -789,9 +804,10 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
     /* Use template fields directly: description helpers can consume RNG while
      * hallucinating. Record the committed choice even when the hit later misses. */
     log_debug("[monster-ai] player_turn=%ld actor=%d race=%d selected=melee "
-        "blow=%d method=%d effect=%d ordinary=%d smite=%d from=(%d,%d)",
+        "blow=%d method=%d effect=%d ordinary=%d smite=%d from=(%d,%d) player_armed=%d",
         (long)playerturn, m_idx, m_ptr->r_idx, b, r_ptr->blow[b].method,
-        r_ptr->blow[b].effect, ordinary, smite, m_ptr->fy, m_ptr->fx);
+        r_ptr->blow[b].effect, ordinary, smite, m_ptr->fy, m_ptr->fx,
+        inventory[INVEN_WIELD].k_idx != 0);
     if (smite)
         msg_format("%^s smites you with all its strength!", m_name);
 

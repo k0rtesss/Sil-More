@@ -225,12 +225,12 @@ static void checks(void)
 
 def pre_achievement_player_writer():
     """Write genuine v25-v27 player fields rather than a mislabeled current stream."""
-    player = (ROOT / 'src/fs/save-player.c').read_text(encoding='utf-8')
+    player = subprocess.check_output([
+        'git', '-c', f'safe.directory={ROOT.as_posix()}', 'show',
+        '6bd7b2f1:src/fs/save-player.c'], cwd=ROOT).decode('utf-8')
     player = player[player.index('static void wr_tutorial_character_state(void)'):
                     player.index('\nvoid wr_randarts(void)')]
-    start = player.index('    /* 0.9.8.31:')
-    end = player.index('    log_info("SAVE: About to write quest marker', start)
-    return (player[:start] + player[end:]).replace(
+    return player.replace(
         'void wr_extra(void)', 'static void fixture_pre_achievement_extra(void)')
 
 
@@ -260,7 +260,7 @@ def main():
     writer.write_text('#include "fs/save.c"\n' + pre_achievement_player_writer()
         + '\nsize_t fixture_write_work(byte *buf,size_t capacity,int extra) {\n'
         'fff=SDL_IOFromMem(buf,capacity); xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;\n'
-        'if(extra<31)fixture_pre_achievement_extra();else wr_extra();\n'
+        'if(extra==25)fixture_pre_achievement_extra();else wr_extra();\n'
         'wr_item(smith_o_ptr);size_t n=SDL_TellIO(fff);SDL_CloseIO(fff);fff=NULL;return n;\n}\n',encoding='utf-8')
     loader_text=(ROOT/'src/fs/load.c').read_text(encoding='utf-8')
     start=loader_text.index('    savefile_has_runtime_overrides =',loader_text.index('static errr rd_savefile_new_aux'))
@@ -268,7 +268,7 @@ def main():
     reader=OUT/'reader.c'
     reader.write_text('#include "fs/load.c"\nint fixture_read_work(const byte *buf,size_t length,int extra) {\n'
         'fff=SDL_IOFromConstMem(buf,length);xor_byte=0;v_check=x_check=load_byte_offset=0;\n'
-        'sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;\n'
+        'sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=extra==25?8:VERSION_PATCH;sf_extra=extra;\n'
         +flags+'savefile_has_varda_quest=true;\nint result=rd_extra();if(!result)result=rd_item(smith_o_ptr);\n'
         'if(!result && SDL_TellIO(fff)!=(Sint64)length)result=-1;SDL_CloseIO(fff);fff=NULL;return result;\n}\n',encoding='utf-8')
     objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text())

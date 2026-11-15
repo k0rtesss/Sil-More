@@ -54,14 +54,14 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.9"
 /*
- * Version components (0.9.9.6).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.9.10).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 9
-/* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
+#define VERSION_EXTRA 10
+/* Earlier saves omit optional version-gated fields. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
 /* Pending smithing alloy: type and its four already-applied stat bonuses. */

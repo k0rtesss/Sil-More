@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "monster/monster-tactics.h"
 #include "monster/monster-ai.h"
 #include "blitz.h"
 #include "externs.h"
@@ -1194,6 +1195,22 @@ void rd_monster(monster_type* m_ptr)
         rd_byte(&m_ptr->ai.attack_chain);
         rd_s32b(&m_ptr->ai.player_action_turn); rd_s32b(&m_ptr->ai.attack_turn);
         monster_ai_sanitize(m_ptr);
+    }
+
+    memset(&m_ptr->squad, 0, sizeof(m_ptr->squad));
+    if (savefile_version_at_least(0, 9, 9, 10))
+    {
+        rd_byte(&m_ptr->squad.budget_plan);
+        rd_byte(&m_ptr->squad.plan_age);
+        rd_u32b(&m_ptr->squad.plan_turn);
+        if (m_ptr->squad.budget_plan > MON_PLAN_REGROUP
+            || m_ptr->squad.plan_age > MON_SQUAD_BUDGET_MAX_AGE
+            || m_ptr->squad.plan_turn > (u32b)playerturn)
+        {
+            log_warn("Invalid saved monster command budget for race %d; resetting it",
+                m_ptr->r_idx);
+            memset(&m_ptr->squad, 0, sizeof(m_ptr->squad));
+        }
     }
 }
 

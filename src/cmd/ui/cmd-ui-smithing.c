@@ -960,6 +960,13 @@ static int smith_ui_lookup_kind_quiet(int tval, int sval)
     return 0;
 }
 
+static void smith_prepare_display_object(object_type* object, int kind)
+{
+    u64b saved_state = Rand_state_export();
+    object_prep(object, kind);
+    Rand_state_pop(saved_state);
+}
+
 static bool smith_ui_prepare_icon(object_type* icon, int tval, int sval)
 {
     int k_idx;
@@ -972,7 +979,7 @@ static bool smith_ui_prepare_icon(object_type* icon, int tval, int sval)
     if (!k_idx)
         return false;
 
-    object_prep(icon, k_idx);
+    smith_prepare_display_object(icon, k_idx);
     icon->ident |= (IDENT_KNOWN | IDENT_SPOIL);
     if (icon->number < 1)
         icon->number = 1;
@@ -4171,7 +4178,7 @@ void create_base_object(int tval, int sval)
     smith_clear_alloy_state(&smith_alloy);
 
     /* Prepare the item */
-    object_prep(smith_o_ptr, lookup_kind(tval, sval));
+    smith_prepare_display_object(smith_o_ptr, lookup_kind(tval, sval));
 
     // set the pval to 1 if needed (and evasion/accuracy for rings)
     apply_magic_fake(smith_o_ptr);
@@ -8928,7 +8935,7 @@ void do_cmd_smithing_screen(void)
             sound(MSG_FORGE);
 
         /* Recalculate bonuses */
-        p_ptr->update |= (PU_BONUS);
+        p_ptr->update |= (PU_BONUS | PU_TORCH);
 
         /* Redraw the state */
         p_ptr->redraw |= (PR_STATE);

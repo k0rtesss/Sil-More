@@ -11,8 +11,9 @@
 #include "cave/cave-light.h"
 #include "melee/melee-movement-morgoth.h"
 
-/* Actor-centred search, at most one additional own action. Three bounded
- * non-dominated labels retain a safe alternative when local routes merge. */
+/* Actor-centred search, normally at most one additional own action. Blocked
+ * missile lanes can require a longer route within the same local map. Three
+ * bounded non-dominated labels retain a safe alternative when routes merge. */
 #define TACTICAL_RADIUS 4
 #define TACTICAL_WIDTH 9
 #define TACTICAL_CELLS 81
@@ -748,7 +749,8 @@ static void squad_assign_jobs(monster_type* leader, monster_type** members, int 
     if (plan != MON_PLAN_ADVANCE && previous->budget_plan == plan)
     {
         u32b elapsed = (u32b)playerturn - previous->plan_turn;
-        age = MIN(8, previous->plan_age + MIN(8U, elapsed));
+        age = MIN(MON_SQUAD_BUDGET_MAX_AGE,
+            previous->plan_age + MIN((u32b)MON_SQUAD_BUDGET_MAX_AGE, elapsed));
     }
     leader->squad.budget_plan = plan;
     leader->squad.plan_age = age;
@@ -1010,6 +1012,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     tactical_label labels[TACTICAL_CELLS][TACTICAL_LABELS] = { 0 };
     int start = TACTICAL_RADIUS * TACTICAL_WIDTH + TACTICAL_RADIUS;
     int baseline, best_score, best_first = -1, best_goal = -1;
+    int shot_score = -100000, shot_first = -1, shot_goal = -1;
     bool adjacent, avoid_sweep;
     if (!monster_ai_enabled(m_ptr)
         || m_ptr->confused || m_ptr->alertness < ALERTNESS_ALERT || m_ptr->stance == STANCE_FLEEING
@@ -1027,6 +1030,13 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     if (c.original_distance > MAX(6, m_ptr->best_range + 1)) return false;
     c.ranged = m_ptr->min_range > 1 || (r_ptr->flags1 & RF1_NEVER_BLOW)
         || (c.commanded && squad_ranged(m_ptr));
+    /* A two-action horizon can trap a bow behind an otherwise stationary
+     * melee ring. Look for a personally recognized shot around those allies,
+     * without enlarging the observed map or overriding regroup/assembly. */
+    bool seek_shot = c.ranged && c.sight && (r_ptr->flags4 & RF4_ARCHERY_MASK)
+        && (!c.commanded || m_ptr->squad.plan == MON_PLAN_ADVANCE)
+        && projectable(m_ptr->fy, m_ptr->fx, c.py, c.px, PROJECT_CHCK) == PROJECT_NOT_CLEAR;
+    int max_steps = seek_shot ? TACTICAL_RADIUS * 2 : TACTICAL_STEPS;
     adjacent = c.original_distance == 1;
     avoid_sweep = tactical_confidence(m_ptr, MON_AI_WHIRLWIND) > 0
         || tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH) > 0;
@@ -1059,8 +1069,11 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             /* Small deterministic variation does not consume game RNG. */
             score += (at + m_ptr->r_idx + m_ptr->fy + m_ptr->fx) % 3;
             if (score > best_score) { best_score = score; best_first = here.first; best_goal = at; }
+            if (seek_shot && dist >= MAX(2, m_ptr->min_range)
+                && tactical_has_shot(m_ptr, y, x, c.py, c.px) && score > shot_score)
+            { shot_score = score; shot_first = here.first; shot_goal = at; }
         }
-        if (here.steps >= TACTICAL_STEPS || (adjacent && at != start)) continue;
+        if (here.steps >= max_steps || (adjacent && at != start)) continue;
         for (int d = 0; d < 8; ++d)
         {
             int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
@@ -1086,6 +1099,18 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             next.cost += monster_terrain_penalty(m_ptr, yy, xx);
             tactical_add_label(labels[next_cell], next);
         }
+    }
+    /* A useful post can cost more than its immediate positional reward.
+     * Prefer that paid, legal route to repeatedly improving blocked squares.
+     * Path labels above still enforce terrain, poison and reaction costs. */
+    if (shot_first >= 0 && (best_goal < 0
+            || distance(c.oy + best_goal / TACTICAL_WIDTH,
+                c.ox + best_goal % TACTICAL_WIDTH, c.py, c.px) < MAX(2, m_ptr->min_range)
+            || !tactical_has_shot(m_ptr, c.oy + best_goal / TACTICAL_WIDTH,
+                c.ox + best_goal % TACTICAL_WIDTH, c.py, c.px)))
+    {
+        best_first = shot_first; best_goal = shot_goal;
+        best_score = MAX(baseline + 1, shot_score);
     }
     if (best_first < 0) return false;
     choice->y = c.oy + best_first / TACTICAL_WIDTH;

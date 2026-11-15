@@ -130,6 +130,12 @@ int fixture_read_current_monster(const byte* buffer, size_t length,
     return fixture_read_monster_version(buffer, length, VERSION_MAJOR,
         VERSION_MINOR, VERSION_PATCH, VERSION_EXTRA, monster, sentinel, consumed);
 }
+int fixture_read_previous_monster(const byte* buffer, size_t length,
+    monster_type* monster, u32b* sentinel, size_t* consumed)
+{
+    return fixture_read_monster_version(buffer, length, 0, 9, 9, 9,
+        monster, sentinel, consumed);
+}
 
 '''
 
@@ -140,6 +146,7 @@ int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 size_t fixture_write_monster(const monster_type*, byte*, size_t);
 int fixture_read_monster(const byte*, size_t, int, monster_type*, u32b*, size_t*);
 int fixture_read_current_monster(const byte*, size_t, monster_type*, u32b*, size_t*);
+int fixture_read_previous_monster(const byte*, size_t, monster_type*, u32b*, size_t*);
 static byte encoded[65536], plain[65536], modified[65536];
 static byte expected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 
@@ -206,6 +213,8 @@ static void test_current_roundtrip(void)
     m->alertness = ALERTNESS_ALERT;
     m->poisoned = 27; m->vengeance = 1; m->smite_recovery = 1;
     m->consecutive_attacks = 2;
+    m->squad.budget_plan = 2; m->squad.plan_age = 8;
+    m->squad.plan_turn = playerturn - 3;
     m->ai.observations[MON_AI_FIRE].value = 2;
     m->ai.observations[MON_AI_FIRE].ttl = 40;
     m->ai.observations[MON_AI_FIRE].turn = playerturn - 7;
@@ -285,6 +294,9 @@ static void test_current_roundtrip(void)
     assert(m->r_idx == 41 && mon_max == 2);
     assert(m->poisoned == 27 && m->vengeance == 1 && m->smite_recovery == 1);
     assert(m->skip_next_turn && m->consecutive_attacks == 2);
+    assert(m->squad.budget_plan == 2 && m->squad.plan_age == 8
+        && m->squad.plan_turn == (u32b)playerturn - 3);
+    assert(!m->squad.commander && !m->squad.role);
     assert(memcmp(&m->ai, &expected_ai, sizeof(expected_ai)) == 0);
     assert(monster_ai_confidence(m, MON_AI_FIRE) == 2);
     assert(monster_ai_confidence(m, MON_AI_FLANKING) == 3);
@@ -354,6 +366,9 @@ static void test_monster_record_legacy_compatibility(void)
     source.ai.player_action_turn = playerturn - 1;
     source.ai.attack_y = 5; source.ai.attack_x = 5; source.ai.attack_chain = 2;
     source.ai.attack_turn = playerturn - 2;
+    source.squad.commander = 1; source.squad.role = 1;
+    source.squad.budget_plan = 1; source.squad.plan_age = 1;
+    source.squad.plan_turn = playerturn - 1;
 
     size_t modern_length = fixture_write_monster(&source, encoded, sizeof(encoded));
     u32b sentinel; size_t consumed;
@@ -373,10 +388,42 @@ static void test_monster_record_legacy_compatibility(void)
         && restored.ai.player_action_turn == playerturn - 1);
     assert(restored.ai.attack_chain == 2
         && restored.ai.attack_turn == playerturn - 2);
+    assert(restored.squad.budget_plan == 1 && restored.squad.plan_age == 1
+        && restored.squad.plan_turn == (u32b)playerturn - 1);
+    assert(!restored.squad.commander && !restored.squad.role);
+
+    /* The six-byte budget suffix is optional in .9 saves. The following
+     * sentinel proves the legacy reader consumes exactly the old record. */
+    decode(encoded, plain, modern_length);
+    size_t budget_start = modern_length - 4 - 6;
+    memmove(plain + budget_start, plain + budget_start + 6, 4);
+    size_t previous_length = modern_length - 6;
+    encode(plain, modified, previous_length);
+    memset(&restored, 0x55, sizeof(restored));
+    assert(fixture_read_previous_monster(modified, previous_length, &restored,
+        &sentinel, &consumed) == 0);
+    assert(sentinel == 0xB4C3D2E1U && consumed == previous_length);
+    assert(!restored.squad.budget_plan && !restored.squad.plan_age
+        && !restored.squad.plan_turn && !restored.squad.commander);
+
+    /* Malformed optional memory recovers without importing runtime orders
+     * or shifting the next record. */
+    decode(encoded, plain, modern_length);
+    plain[budget_start] = 255;
+    encode(plain, modified, modern_length);
+    memset(&restored, 0, sizeof(restored));
+    assert(fixture_read_current_monster(modified, modern_length, &restored,
+        &sentinel, &consumed) == 0);
+    assert(sentinel == 0xB4C3D2E1U && consumed == modern_length);
+    assert(!restored.squad.budget_plan && !restored.squad.plan_age
+        && !restored.squad.plan_turn);
+    puts("Command budget roundtrip: spent window preserved, transient orders absent, .9 defaults and malformed memory recovery PASS.");
 
     /* Remove the four appended .7 observations and make the retired .6 slot
      * nonzero, as a historical save could have written its catch-all value. */
     decode(encoded, plain, modern_length);
+    memmove(plain + budget_start, plain + budget_start + 6, 4);
+    modern_length -= 6;
     size_t record_size = modern_length - 4;
     size_t ai_start = record_size - MON_AI_FEATURE_COUNT * 7 - (22 + 13 + 8);
     /* .31/.34/.35 inserted poison ownership and achievement metadata

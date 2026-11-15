@@ -72,7 +72,9 @@ char __wrap_inkey_movement_context(u16b context)
     u16b previous=movement_input_active_context();
     assert(context==MOVEMENT_INPUT_CONTEXT_TARGETING);
     inkey_xtra=false;
-    Term_keypress(next_aim_key());
+    char pending;
+    if (Term_inkey(&pending,false,false)!=0)
+        Term_keypress(next_aim_key());
     char key=__real_inkey_movement_context(context);
     assert(movement_input_active_context()==previous);
     return key;
@@ -172,7 +174,14 @@ static void run(int sval,bool channel,bool reject,bool cancel,bool pointer,
             assert(Term_inkey(&key,false,true)==0 && key==UI_MENU_CLICK_WAKE_KEY);
             assert(Term_inkey(&key,false,true)==0 && key==KTRL('Q'));
         }
-        assert(Term_inkey(&key,false,true)!=0);
+        /* Resize events may queue a free redraw while this menu opens. */
+        int redraws=0;
+        while (Term_inkey(&key,false,true)==0) {
+            if (key!=KTRL('R'))
+                log_error("Unexpected horn browser key=%u paid=%d reject=%d cancel=%d",
+                    (unsigned char)key,paid,reject,cancel);
+            assert(key==KTRL('R') && ++redraws<=4);
+        }
     }
     character_dungeon=false;
 }

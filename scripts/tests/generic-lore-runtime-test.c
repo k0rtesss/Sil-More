@@ -183,16 +183,16 @@ int main(int argc, char** argv)
     printf("SDL opening content: %d complete prose/poem blocks rewritten before layout PASS\n", quotes);
 
     p_ptr->playing = false;
-    settings_keys = "igo";
+    settings_keys = "e\r\033o";
     do_cmd_options();
     if (*settings_keys || op_ptr->opt[OPT_generic] || setting_saves != 1)
         fprintf(stderr, "Settings result: remaining=%d generic=%d saves=%d letters=%d\n",
             *settings_keys, op_ptr->opt[OPT_generic], setting_saves, sdl_menu_letters_enabled());
     assert(!*settings_keys && !op_ptr->opt[OPT_generic] && setting_saves == 1);
-    settings_keys = "ig\033";
+    settings_keys = "e\r\033\033";
     do_cmd_options();
     assert(!*settings_keys && op_ptr->opt[OPT_generic] && setting_saves == 2);
-    puts("Other Options: g toggles both directions, saves preference, Return/Escape work PASS");
+    puts("Text Options: Names and Lore toggles both directions, saves preference, Return/Escape work PASS");
 
     for (int i = 0; i < z_info->st_max; ++i)
         if (st_info[i].text)
