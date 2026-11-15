@@ -263,6 +263,8 @@ static void test_tactical_protected_terrain(void)
 
     m = reset_map(11, 11, 5, 2, 5, 5);
     m->min_range = 2; m->best_range = 3;
+    races[1].flags4 = RF4_ARROW1;
+    races[1].freq_ranged = 75;
     races[1].flags2 |= RF2_FLYING;
     tile(4, 2, FEAT_DEEP_WATER);
     CHECK(get_move_tactical(m, &y, &x));
@@ -375,6 +377,8 @@ static void test_tactical_songs(void)
 {
     monster_type* m = reset_map(15, 15, 7, 4, 7, 7);
     m->min_range = 2; m->best_range = 3;
+    races[1].flags4 = RF4_ARROW1;
+    races[1].freq_ranged = 75;
     update_flow(7, 7, FLOW_PLAYER_NOISE);
     tactical_choice choice, again;
     CHECK(!tactical_choose(m, &choice));
@@ -390,7 +394,8 @@ static void test_tactical_songs(void)
     CHECK(again.y == choice.y && again.x == choice.x);
     CHECK(!memcmp(m, &snapshot, sizeof(snapshot)) && rng == Rand_state_export());
     p_ptr->song2 = SNG_CHALLENGE;
-    CHECK(!tactical_choose(m, &again)); /* compelled aggressive approach is retained */
+    CHECK(tactical_choose(m, &again));
+    CHECK(distance(again.y, again.x, 7, 7) < 3); /* compelled melee approach */
     p_ptr->song2 = SNG_NOTHING;
     p_ptr->song1 = SNG_LORIEN;
     CHECK(tactical_choose(m, &choice));
@@ -435,8 +440,25 @@ static void test_tactical_songs(void)
     CHECK(!spacing && !pressure); /* no reward for losing our shot */
 }
 
+static void test_missile_post_ranges(void)
+{
+    monster_type* m = reset_map(25, 25, 10, 3, 10, 20);
+    races[1].flags4 = RF4_ARROW1;
+    races[1].freq_ranged = 75;
+    CHECK(!tactical_has_shot(m, 10, 19, 10, 20)); /* Adjacent is not a bow post. */
+    CHECK(tactical_has_shot(m, 10, 10, 10, 20));
+    CHECK(!tactical_has_shot(m, 10, 9, 10, 20)); /* Shortbow limit is ten. */
+    races[1].flags4 = RF4_ARROW2;
+    CHECK(tactical_has_shot(m, 10, 4, 10, 20));
+    CHECK(!tactical_has_shot(m, 10, 3, 10, 20)); /* Longbow limit is sixteen. */
+    races[1].flags4 = RF4_BOULDER;
+    CHECK(tactical_has_shot(m, 10, 15, 10, 20));
+    CHECK(!tactical_has_shot(m, 10, 14, 10, 20));
+}
+
 static void test_tactical_extension(void)
 {
+    test_missile_post_ranges();
     test_tactical_poison_preview();
     test_tactical_light();
     test_tactical_history_and_evidence();

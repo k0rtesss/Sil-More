@@ -64,7 +64,7 @@ def cases():
     for name, x, recognition, light, starts in [
             ('remote', 12, 0, 10000, True), ('max-sight-outside', 19, 0, 10000, True),
             ('max-sight-boundary', 20, 0, 10000, False), ('near', 37, 0, 10000, False),
-            ('dark-unrecognized', 34, 1, 0, True), ('lit-recognized', 39, 1, 10000, False)]:
+            ('dark-alert-observer', 34, 1, 0, False), ('lit-recognized', 39, 1, 10000, False)]:
         spec = dict(evasion=42, song_skill=80, recognition=recognition, glow=0,
                     torch_fuel=light, abilities=[dict(skill=7, ability=13)],
                     monsters=[troop(51, x, energy=-100)])

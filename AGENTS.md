@@ -84,6 +84,7 @@ These templates drive gameplay content (monsters, vaults, objects, terrain, ques
   - If you need to force a rebuild after template changes, delete the relevant `*.raw` in the active data folder (`<user-root>/data/` for standard builds, `lib/data/` for portable builds) and rerun.
 
 ## Key Subsystems (Fast Pointers)
+- Monster sight versus stealth: `visual_recognition` only controls the light-dependent visual bonus in perception-versus-stealth checks. Alert monsters, including archers, can fight and shoot from darkness. Use `monster_has_visual_perception_bonus()` only for that roll/its stealth indicators; use `monster_ai_can_see_player()` for alerted combat targeting and `monster_has_sight()`/`monster_sight_range()` for physical LOS/range. Never use recognition or player light as a combat, pursuit, retreat, spell, or squad-post gate. Unwary monsters must still pass detection before acquiring the player's current position. See `src/monster/monster-senses.h` and `docs/monster-ai-plan.md`.
 - Key handling pipeline (SDL -> command): see `docs/key_handling_report.md` and `src/z-term.c`, `src/util.c:inkey()`/`request_command()`.
 - SDL UI configuration: `src/sdl-config.c` reads/writes `sil_sdl.json` (pane layout, scaling, fullscreen, etc.).
 - Sound system: `src/sdl-sound.c` + `src/sound-config.c` read `sound.json` and map events (see `angband_sound_name[]` in `src/variable.c`).

@@ -1,5 +1,43 @@
 # Monster AI implementation plan
 
+## Physical sight and stealth recognition are separate (2026-11-15)
+
+**Shooters firing from darkness are intended gameplay.** The
+`visual_recognition` setting controls the light-dependent visual bonus to a
+monster's perception-versus-stealth check. Failing to receive that bonus does
+not blind the monster. Disguise's reduction of that bonus also does not blind
+an already-alert enemy. This supersedes the earlier recognition-limited combat
+range described in historical audit notes below.
+
+Use `monster_has_visual_perception_bonus()` only for that stealth-roll bonus
+and its stealth-vision indicators. Use `monster_has_sight()` for physical LOS,
+MAX_SIGHT and short sight, and `monster_ai_can_see_player()` for an alerted
+enemy's current combat target. Unwary monsters must still pass detection before
+physical LOS can supply a combat target; successfully heard sounds and scent
+remain separate investigation evidence.
+
+No light/recognition gate belongs in attack legality, combat spacing, retreat,
+sensory pursuit, squad firing posts, command authority, reactions, or support
+targeting. An alerted orc archer in an unlit room must take a legal retreat and
+shoot when it has a clear lane. Walls, doors, distance, short sight, alertness,
+status restrictions and projectile-blocking actors still matter. Tests cover
+all named templates' legal attack masks with the setting on/off, the actual
+stealth-roll bonus, failed detection, and headless dark combat encounters.
+
+Archer post previews also obey actual minimum/maximum missile ranges. A clear
+lane closer than the preferred spacing is usable. When an allied melee screen
+blocks the bow, the local search can expand with its combat spacing, up to a
+17-by-17 area of personally visible cells and sixteen paid steps. Ordinary
+movement retains its 9-by-9/two-step bounds. This prevents archers circling a
+blocked preferred-distance ring when the open lane lies outside that ring.
+
+Dry missile-position routes cannot enter deep water, where mandatory escape
+would cancel the route and return the archer to the same shore. A dry archer
+with no usable retreat can fight in melee. Native bow retreat uses the same
+fallback for ordinary/unique and visible/hidden actors; the player's ability
+to see the monster does not change that choice. Shallow water, flying routes,
+normal pursuit crossings and escape from water already occupied remain legal.
+
 ## Additional compound gameplay coverage (2026-11-15)
 
 The follow-up headless audit adds 765 accepted scenario cases: 264 concealed or
@@ -72,7 +110,7 @@ or assembly jobs while the song suppresses their ranged actions. A resisted
 mana-drain check also retains a melee approach; ending the song restores ordinary
 ranged spacing. The song's existing morale, resistance and mana rules are retained.
 
-Missile posts require the archer's own recognition range as well as a clear ray.
+Missile posts require the archer's physical sight range as well as a clear ray.
 Members receive their commander's shared sighting even when no final post is
 reachable within the bounded search, allowing an ordinary approach. Ranged actors
 also no longer collect melee surrounding/Flanking rewards that previously kept
@@ -488,4 +526,4 @@ Detailed diagnostics may describe offscreen actors, but player-facing messages u
 
 Squad role selection follows the ordinary range selector's specialization threshold: occasional arrows or boulders at 15% frequency or below supplement melee instead of forcing a melee-oriented creature to hold a firing post. Current long-range preferences, bow specialists and creatures unable to strike retain ranged roles. Missile opportunities remain available when melee cannot reach the target.
 
-The bright-player penalty to light-averse morale requires actual monster sight, including recognition and range. An unseen player's lighting cannot lower morale through a wall. Completed-action diagnostics include morale, current player sight, local light and player light so this interaction can be checked against the actual encounter.
+The bright-player penalty to light-averse morale requires actual physical monster sight, including LOS and range. Stealth recognition does not gate it. An unseen player's lighting cannot lower morale through a wall. Completed-action diagnostics include morale, current player sight, local light and player light so this interaction can be checked against the actual encounter.

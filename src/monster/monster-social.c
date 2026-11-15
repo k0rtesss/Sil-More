@@ -3,6 +3,7 @@
 #include "monster/monster-social.h"
 #include "monster/monster-routine.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-ai.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-events.h"
 #include "melee/melee-movement.h"
@@ -376,7 +377,7 @@ static bool safe_step(monster_type* m, int y, int x)
  * Actual player aggression and a nearby visible player still take priority. */
 static bool player_urgent(const monster_type* m, int rival_distance)
 {
-    return m->social_player_threat || (monster_has_sight(m)
+    return m->social_player_threat || (monster_ai_can_see_player(m)
         && distance(m->fy, m->fx, p_ptr->py, p_ptr->px) <= MAX(3, rival_distance));
 }
 
@@ -434,7 +435,7 @@ static bool retreat(monster_type* m)
                 if (mon_list[i].r_idx && &mon_list[i] != m && sees(m, &mon_list[i])
                     && monster_social_relation(m, &mon_list[i]) == MON_REL_HOSTILE)
                     score -= MAX(0, 4 - distance(y, x, mon_list[i].fy, mon_list[i].fx)) * 30;
-            if (monster_has_sight(m))
+            if (monster_ai_can_see_player(m))
                 score -= MAX(0, 4 - distance(y, x, p_ptr->py, p_ptr->px)) * 30;
             if (score > best) { best = score; by = y; bx = x; }
         }

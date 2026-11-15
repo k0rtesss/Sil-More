@@ -231,6 +231,7 @@ static void fixture_snapshot(bool waiting)
             cJSON_AddNumberToObject(o, "social", m->social_state);
             cJSON_AddNumberToObject(o, "rival", m->social_rival);
             cJSON_AddBoolToObject(o, "sees_player", monster_ai_can_see_player(m));
+            cJSON_AddBoolToObject(o, "visual_perception_bonus", monster_has_visual_perception_bonus(m));
             cJSON_AddBoolToObject(o, "visible", m->ml);
             cJSON* knowledge = cJSON_AddArrayToObject(o, "knowledge");
             for (int f = 0; f < MON_AI_FEATURE_COUNT; f++)
@@ -322,6 +323,7 @@ static void fixture_prepare(void)
     object_prep(&inventory[INVEN_LITE], lookup_kind(TV_LIGHT, SV_LIGHT_TORCH));
     inventory[INVEN_LITE].timeout = 10000;
     inventory[INVEN_WIELD].name2 = number(spec, "weapon_ego", 0);
+    inventory[INVEN_ARM].name2 = number(spec, "shield_ego", 0);
     u32b resistance = number(spec, "fire_resistance", 0) ? TR2_RES_FIRE
         : number(spec, "cold_resistance", 0) ? TR2_RES_COLD
         : number(spec, "poison_resistance", 0) ? TR2_RES_POIS : 0;
@@ -416,6 +418,7 @@ static void fixture_prepare(void)
         m->smite_recovery = number(entry, "recovery", 0);
         m->confused = number(entry, "confused", 0);
         m->stunned = number(entry, "stunned", 0);
+        m->mana = number(entry, "mana", m->mana);
         if (m->smite_recovery) m->skip_next_turn = true;
         if (number(entry, "heard", 0))
             monster_senses_hear(m, p_ptr->py, p_ptr->px);

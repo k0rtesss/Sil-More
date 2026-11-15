@@ -3,6 +3,7 @@
 #include "cave/cave-events.h"
 #include "cave/cave-water-flow.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-ai.h"
 #include "melee/melee-process.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-movement-internal.h"
@@ -49,8 +50,6 @@ int ability_bonus(int skill, int ability) { (void)skill; (void)ability; return 0
 void msg_format(cptr fmt, ...) { (void)fmt; }
 /* Achievement bookkeeping does not affect the perception result. */
 void sil_achievement_lore_on_perception(void) {}
-int monster_ai_confidence(const monster_type* m, int feature)
-{ (void)m; (void)feature; return 0; }
 int health_level(int hp, int maxhp) { (void)hp; (void)maxhp; CHECK(false); return 0; }
 bool similar_monsters(int y1, int x1, int y2, int x2)
 { (void)y1; (void)x1; (void)y2; (void)x2; CHECK(false); return false; }
@@ -191,9 +190,11 @@ static void test_hearing_and_recognition(void)
     for (int yy = 1; yy < 14; yy++) tile(yy, 11, FEAT_FLOOR);
     CHECK(monster_has_sight(m));
     visual_recognition = true; races[1].flags2 = RF2_SMART;
-    CHECK(!monster_has_sight(m));
+    CHECK(monster_has_sight(m));
+    CHECK(!monster_has_visual_perception_bonus(m));
     p_ptr->cur_light = 30;
     CHECK(monster_has_sight(m));
+    CHECK(monster_has_visual_perception_bonus(m));
     monster_senses_refresh(m); CHECK(m->ai.sense.kind == MON_SENSE_SIGHT);
     monster_senses_hear(m, 5, 6); CHECK(m->ai.sense.kind == MON_SENSE_SIGHT);
     monster_senses_share_trace(m, 3, 3); CHECK(m->ai.sense.kind == MON_SENSE_SIGHT);
@@ -219,14 +220,17 @@ static void test_known_target_pursuit(void)
 
     m = reset_map();
     scents[5][3] = scent_when + 1; scents[5][4] = scent_when;
-    /* Scent points at a player square that recognition cannot identify. */
+    /* An unwary tracker can investigate scent without a successful detection.
+     * Recognition bonuses do not turn that scent into a combat target. */
     occupants[5][18] = 0; occupants[5][4] = -1;
     p_ptr->py = 5; p_ptr->px = 4;
     visual_recognition = true; races[1].flags2 = RF2_SMART;
     p_ptr->cur_light = -20;
+    m->alertness = ALERTNESS_UNWARY;
     get_move_advance(m, &y, &x);
     CHECK(!(y == 5 && x == 4));
-    CHECK(!monster_has_sight(m));
+    CHECK(monster_has_sight(m));
+    CHECK(!monster_ai_can_see_player(m));
 }
 
 static void test_deposition_and_roundtrip(void)

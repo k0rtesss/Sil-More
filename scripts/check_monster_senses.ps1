@@ -10,7 +10,7 @@ try {
     & C:\msys64\mingw64\bin\gcc.exe -std=c17 -O1 -flto -fwhole-program -DUSE_SDL `
         -I src -I external/SDL/include `
         scripts/tests/monster-senses-test.c src/variable.c src/tables.c src/rng.c `
-        src/monster/monster-senses.c src/cmd/movement/cmd-run.c `
+        src/monster/monster-senses.c src/monster/monster-ai.c src/cmd/movement/cmd-run.c `
         src/melee/melee-util.c src/melee/melee-process.c src/melee/melee-movement-path.c `
         src/monster/monster-routine.c `
         src/ui/targeting/direction.c `

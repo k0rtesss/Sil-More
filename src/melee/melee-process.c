@@ -138,7 +138,8 @@ void find_range(monster_type* m_ptr)
         }
 
         /* Specialized ranged attackers will sit back */
-        else if (m_ptr->mana >= MON_MANA_MAX / 5)
+        else if (m_ptr->mana >= MON_MANA_MAX / 5
+            || (r_ptr->flags4 & (RF4_ARROW1 | RF4_ARROW2)))
         {
             m_ptr->best_range += (r_ptr->freq_ranged - 15) / 5;
             if (m_ptr->best_range > 8)
@@ -146,9 +147,8 @@ void find_range(monster_type* m_ptr)
             m_ptr->min_range = m_ptr->best_range - 1;
         }
 
-        /* A firing position must stay within visual recognition. Otherwise
-         * archers retreat out of sight, pursue the last sighting back into
-         * range, and repeat; squad orders can strand them out of sight too. */
+        /* Respect physical sight (including short sight), not the lighting
+         * bonus used by perception-versus-stealth checks. */
         if (m_ptr->min_range < FLEE_RANGE)
         {
             int sight_range = MAX(1, monster_sight_range(m_ptr));
@@ -158,6 +158,12 @@ void find_range(monster_type* m_ptr)
                 m_ptr->min_range = MIN(m_ptr->min_range, MAX(1, sight_range - 1));
             }
         }
+        /* A bow cannot fire at contact range. Its minimum usable range must
+         * survive physical short sight, including after Challenge has
+         * drained mana (arrows themselves cost no mana). */
+        if ((r_ptr->flags4 & (RF4_ARROW1 | RF4_ARROW2))
+            && m_ptr->best_range >= 2 && m_ptr->min_range < FLEE_RANGE)
+            m_ptr->min_range = MAX(2, m_ptr->min_range);
     }
 
     // Deal with the 'truce' on Morgoth's level (overrides everything else)
@@ -1888,7 +1894,7 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
     for (i = mon_max - 1; i >= 1; i--)
     {
         int movement_mask = 0;
-        bool sees_player;
+        bool visual_bonus;
 
         /* Access the monster */
         m_ptr = &mon_list[i];
@@ -1948,7 +1954,9 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
                 m_perception += p_ptr->aggravate * 10;
             }
 
-            sees_player = monster_has_sight(m_ptr);
+            visual_bonus = monster_has_visual_perception_bonus(m_ptr);
+            if (monster_ai_can_see_player(m_ptr))
+                monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
             if (player_centered && main_roll && !combat_noise_bonus
                 && cave_events_player_is_moving())
                 movement_mask = cave_sound_mask_at(m_ptr->fy, m_ptr->fx);
@@ -1959,12 +1967,11 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
                 movement_mask = MAX(movement_mask,
                     cave_fighting_mask_at(m_ptr->fy, m_ptr->fx));
             /* Hearing is masked; visual recognition retains its quiet baseline. */
-            if (!sees_player) m_perception -= movement_mask;
+            if (!visual_bonus) m_perception -= movement_mask;
 
             // awake creatures who have line of sight on player get a bonus
-            if (sees_player)
+            if (visual_bonus)
             {
-                monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
                 {
                     int d, dir, y, x, open_squares = 0;
 
@@ -2013,12 +2020,14 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
                  * sound's recorded epicenter. Monster noise changes alertness
                  * but supplies no information about the player's position. */
                 if (player_centered && noise_dist < FLOW_MAX_DIST
-                    && (!sees_player || result > movement_mask))
+                    && (!visual_bonus || result > movement_mask))
                     monster_senses_hear(m_ptr,
                         flow_center_y[FLOW_PLAYER_NOISE],
                         flow_center_x[FLOW_PLAYER_NOISE]);
                 // Partly alert monster
                 set_alertness(m_ptr, m_ptr->alertness + result);
+                if (monster_ai_can_see_player(m_ptr))
+                    monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
 
                 /* Still not alert */
                 if (m_ptr->alertness < ALERTNESS_ALERT)

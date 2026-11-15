@@ -416,7 +416,7 @@ static void test_squad_challenge_melee(void)
     puts("Challenge-forced melee keeps coordinated advance without firing/guard/assembly posts; unaffected archers retain their role PASS.");
 }
 
-static void test_squad_archer_recognition_posts(void)
+static void test_squad_archer_sight_posts(void)
 {
     squad_fixture();
     occupants[monsters[1].fy][monsters[1].fx] = 0;
@@ -425,30 +425,40 @@ static void test_squad_archer_recognition_posts(void)
     occupants[archer->fy][archer->fx] = 0;
     archer->fy = 7; archer->fx = 5; occupants[7][5] = 4;
     visual_recognition = true;
-    p_ptr->cur_light = -3; /* Real recognition rule gives this fixture range 2. */
+    p_ptr->cur_light = -3;
+    races[3].flags2 |= RF2_SHORT_SIGHTED; /* A real physical range limit. */
     monster_squad_prepare();
     CHECK(monster_ai_can_see_player(&monsters[1]));
     CHECK(!monster_ai_can_see_player(archer));
     CHECK(distance(archer->squad.y, archer->squad.x, 7, 8) <= 2);
-    /* A post from before a lighting/formation change must not hold a blind bow. */
+    /* A post outside physical sight must not hold a blind bow. */
     archer->squad.y = archer->fy; archer->squad.x = archer->fx;
     CHECK(monster_squad_order_valid(archer));
     CHECK(!monster_squad_hold_position(archer));
 
     squad_fixture();
     occupants[monsters[1].fy][monsters[1].fx] = 0;
-    monsters[1].fy = 6; monsters[1].fx = 6; occupants[6][6] = 1;
+    monsters[1].fy = 7; monsters[1].fx = 3; occupants[7][3] = 1;
     archer = &monsters[4];
     occupants[archer->fy][archer->fx] = 0;
     archer->fx = 1; occupants[7][1] = 4;
     visual_recognition = true; p_ptr->cur_light = -3;
+    races[3].flags2 |= RF2_SHORT_SIGHTED;
     monster_squad_prepare();
     CHECK(monster_ai_can_see_player(&monsters[1]));
     CHECK(!monster_ai_can_see_player(archer));
-    CHECK(!archer->squad.job); /* No recognized post within the local search. */
+    CHECK(!archer->squad.job); /* No personally sighted post in the local search. */
     CHECK(archer->ai.sense.kind == MON_SENSE_SHARED_TRACE);
     CHECK(archer->ai.sense.y == p_ptr->py && archer->ai.sense.x == p_ptr->px);
-    puts("Archer posts require personal recognition; distant members receive shared sightings even before a post is reachable PASS.");
+    squad_fixture();
+    visual_recognition = true; p_ptr->cur_light = -3;
+    archer = &monsters[4];
+    CHECK(!monster_has_visual_perception_bonus(archer));
+    CHECK(monster_ai_can_see_player(archer));
+    monster_squad_prepare();
+    CHECK(monster_squad_order_valid(archer));
+    CHECK(distance(archer->squad.y, archer->squad.x, 7, 8) >= 2);
+    puts("Archer posts respect physical short sight and shared traces; darkness/stealth recognition cannot blind an alerted squad PASS.");
 }
 
 static void test_archer_retreat_from_melee_ring(void)
@@ -563,6 +573,7 @@ static void test_squad_death_preserves_personal_budget(void)
     /* An unseen original leader can follow a currently visible replacement. */
     move_monster(original, 7, 4);
     visual_recognition = true; p_ptr->cur_light = -3;
+    races[1].flags2 |= RF2_SHORT_SIGHTED;
     races[4] = races[1]; races[4].level = 200;
     monster_type* replacement = squad_add(5, 4, 7, 6);
     monster_squad_prepare();
@@ -578,6 +589,7 @@ static void test_squad_death_preserves_personal_budget(void)
     CHECK(original->squad.plan_turn == saved.plan_turn);
     occupants[replacement->fy][replacement->fx] = 0;
     memset(replacement, 0, sizeof(*replacement));
+    races[1].flags2 &= ~RF2_SHORT_SIGHTED;
     visual_recognition = false;
     ++playerturn;
     monster_squad_prepare();

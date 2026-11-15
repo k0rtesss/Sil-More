@@ -418,7 +418,7 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* reserved legacy slot: allow_quantity */
     NULL, /* reserved legacy slot */
     "Disable automatic attacks of fleeing enemies under Oath of Valor", /* OPT_valorous_oath_auto_attack_safety */
-    "Smart monsters need light to visually recognize you", /* OPT_visual_recognition */
+    "Light affects smart monsters' visual bonuses to spotting you", /* OPT_visual_recognition */
     "Stealth vision mode: show when monsters can see you", /* OPT_stealth_vision */
     "Show an overlay icon on sleeping monsters", /* OPT_sleep_icon */
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */

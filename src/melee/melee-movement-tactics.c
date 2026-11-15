@@ -11,12 +11,15 @@
 #include "cave/cave-light.h"
 #include "melee/melee-movement-morgoth.h"
 
-/* Actor-centred search, normally at most one additional own action. Blocked
- * missile lanes can require a longer route within the same local map. Three
- * bounded non-dominated labels retain a safe alternative when routes merge. */
+/* Actor-centred search, normally at most one additional own action in 9x9.
+ * A blocked missile lane can need the actor's combat spacing to get around
+ * a melee screen: expand to at most 17x17, using only personally visible
+ * cells. Three non-dominated labels retain safe alternatives at route merges. */
 #define TACTICAL_RADIUS 4
 #define TACTICAL_WIDTH 9
 #define TACTICAL_CELLS 81
+#define TACTICAL_MAX_RADIUS 8
+#define TACTICAL_MAX_CELLS 289
 #define TACTICAL_LABELS 3
 #define TACTICAL_STEPS 2
 
@@ -29,7 +32,7 @@ typedef struct tactical_label
 typedef struct tactical_context
 {
     monster_type* actor;
-    monster_type* allies[TACTICAL_CELLS];
+    monster_type* allies[TACTICAL_MAX_CELLS];
     int ally_count, oy, ox, py, px, original_distance;
     bool ranged, shadow, sight, commanded, pack;
 } tactical_context;
@@ -48,8 +51,7 @@ static bool tactical_has_shot(const monster_type* m, int y, int x, int ty, int t
     /* Grounded creatures cannot make player-directed attacks while swimming. */
     if (cave_feat[y][x] == FEAT_DEEP_WATER
         && !(r_info[m->r_idx].flags2 & RF2_FLYING)) return false;
-    /* A clear geometric ray is not a usable missile post beyond the actor's
-     * own recognition range. A commander can share a location, not eyesight. */
+    /* A commander can share a location but cannot extend physical sight. */
     if ((r_info[m->r_idx].flags4 & RF4_ARCHERY_MASK)
         && distance(y, x, ty, tx) > monster_sight_range(m))
         return false;
@@ -64,13 +66,23 @@ static bool tactical_has_shot(const monster_type* m, int y, int x, int ty, int t
     project_path_ignore = saved_ignore;
     project_path_ignore_y = saved_y;
     project_path_ignore_x = saved_x;
-    if (path != PROJECT_NOT_CLEAR) return path == PROJECT_CLEAR;
-    /* Arrows, boulders and thrown webs stop at an intervening creature.
-     * Other authored player-directed attacks retain their existing path rules. */
-    for (int bit = 3; bit <= 24; ++bit)
-        if (bit != 21 && bit != 22 && bit != 23
-            && (r_info[m->r_idx].flags4 & (1UL << bit))
-            && monster_ranged_targets_player(96 + bit)) return true;
+    if (path == PROJECT_NO) return false;
+    int dist = distance(y, x, ty, tx);
+    /* A clear ray at distance one is not a firing post for arrows, boulders
+     * or spit. Match their execution restrictions before rewarding a hold.
+     * Arrows, boulders and thrown webs also stop at intervening creatures. */
+    for (int bit = 0; bit <= 24; ++bit)
+    {
+        if (!(r_info[m->r_idx].flags4 & (1UL << bit))
+            || !monster_ranged_targets_player(96 + bit)) continue;
+        if (spell_info_RF4[bit][COL_SPELL_MANA_COST] > m->mana) continue;
+        if ((bit <= 2 || bit == 7) && dist <= 1) continue;
+        if ((bit == 0 && dist > 10) || (bit == 1 && dist > 16)
+            || (bit == 2 && dist > 5) || (bit == 7 && dist > 3)
+            || (bit == 9 && dist > 2)) continue;
+        if ((bit <= 2 || bit == 23) && path != PROJECT_CLEAR) continue;
+        return true;
+    }
     return false;
 }
 
@@ -1009,8 +1021,8 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     tactical_context c = { 0 };
-    tactical_label labels[TACTICAL_CELLS][TACTICAL_LABELS] = { 0 };
-    int start = TACTICAL_RADIUS * TACTICAL_WIDTH + TACTICAL_RADIUS;
+    tactical_label labels[TACTICAL_MAX_CELLS][TACTICAL_LABELS] = { 0 };
+    int start;
     int baseline, best_score, best_first = -1, best_goal = -1;
     int shot_score = -100000, shot_first = -1, shot_goal = -1;
     bool adjacent, avoid_sweep;
@@ -1025,41 +1037,45 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     if (c.sight) { c.py = p_ptr->py; c.px = p_ptr->px; }
     else if (c.commanded) { c.py = m_ptr->squad.target_y; c.px = m_ptr->squad.target_x; }
     else if (!c.shadow || !monster_senses_target(m_ptr, &c.py, &c.px)) return false;
-    c.oy = m_ptr->fy - TACTICAL_RADIUS; c.ox = m_ptr->fx - TACTICAL_RADIUS;
     c.original_distance = distance(m_ptr->fy, m_ptr->fx, c.py, c.px);
     if (c.original_distance > MAX(6, m_ptr->best_range + 1)) return false;
-    c.ranged = m_ptr->min_range > 1 || (r_ptr->flags1 & RF1_NEVER_BLOW)
-        || (c.commanded && squad_ranged(m_ptr));
-    /* A two-action horizon can trap a bow behind an otherwise stationary
-     * melee ring. Look for a personally recognized shot around those allies,
-     * without enlarging the observed map or overriding regroup/assembly. */
+    c.ranged = squad_ranged(m_ptr);
+    /* A preferred-distance ring can be wider than the ordinary search.
+     * Look around the visible screen instead of endlessly circling behind it;
+     * no unobserved cells or regroup/assembly orders are overridden. */
     bool seek_shot = c.ranged && c.sight && (r_ptr->flags4 & RF4_ARCHERY_MASK)
         && (!c.commanded || m_ptr->squad.plan == MON_PLAN_ADVANCE)
-        && projectable(m_ptr->fy, m_ptr->fx, c.py, c.px, PROJECT_CHCK) == PROJECT_NOT_CLEAR;
-    int max_steps = seek_shot ? TACTICAL_RADIUS * 2 : TACTICAL_STEPS;
+        && (c.original_distance == 1
+            || projectable(m_ptr->fy, m_ptr->fx, c.py, c.px, PROJECT_CHCK) == PROJECT_NOT_CLEAR);
+    int radius = seek_shot ? MAX(TACTICAL_RADIUS,
+        MIN(TACTICAL_MAX_RADIUS, m_ptr->best_range)) : TACTICAL_RADIUS;
+    int width = radius * 2 + 1, cells = width * width;
+    int max_steps = seek_shot ? radius * 2 : TACTICAL_STEPS;
+    start = radius * width + radius;
+    c.oy = m_ptr->fy - radius; c.ox = m_ptr->fx - radius;
     adjacent = c.original_distance == 1;
     avoid_sweep = tactical_confidence(m_ptr, MON_AI_WHIRLWIND) > 0
         || tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH) > 0;
-    for (int i = 0; i < TACTICAL_CELLS; ++i)
+    for (int i = 0; i < cells; ++i)
     {
-        int y = c.oy + i / TACTICAL_WIDTH, x = c.ox + i % TACTICAL_WIDTH;
+        int y = c.oy + i / width, x = c.ox + i % width;
         if (tactical_ally(m_ptr, y, x)) c.allies[c.ally_count++] = &mon_list[cave_m_idx[y][x]];
     }
     baseline = tactical_position_score(&c, m_ptr->fy, m_ptr->fx)
         - monster_ai_poison_damage(m_ptr, m_ptr->fy, m_ptr->fx, 1) * 3;
     best_score = baseline + ((r_ptr->flags2 & RF2_FLANKING) ? 3 : 6);
     labels[start][0] = (tactical_label){ .pending = m_ptr->poisoned, .first = -1, .used = true };
-    for (int visit = 0; visit < TACTICAL_CELLS * TACTICAL_LABELS; ++visit)
+    for (int visit = 0; visit < cells * TACTICAL_LABELS; ++visit)
     {
         int at = -1, which = -1;
-        for (int i = 0; i < TACTICAL_CELLS; ++i)
+        for (int i = 0; i < cells; ++i)
             for (int n = 0; n < TACTICAL_LABELS; ++n)
                 if (labels[i][n].used && !labels[i][n].done
                     && (at < 0 || labels[i][n].cost < labels[at][which].cost)) { at = i; which = n; }
         if (at < 0) break;
         labels[at][which].done = true;
         tactical_label here = labels[at][which];
-        int y = c.oy + at / TACTICAL_WIDTH, x = c.ox + at % TACTICAL_WIDTH;
+        int y = c.oy + at / width, x = c.ox + at % width;
         int dist = distance(y, x, c.py, c.px);
         if (at != start && (!adjacent || dist == 1 || c.ranged || c.shadow
                 || (c.commanded && m_ptr->squad.plan == MON_PLAN_REGROUP)
@@ -1069,18 +1085,30 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             /* Small deterministic variation does not consume game RNG. */
             score += (at + m_ptr->r_idx + m_ptr->fy + m_ptr->fx) % 3;
             if (score > best_score) { best_score = score; best_first = here.first; best_goal = at; }
-            if (seek_shot && dist >= MAX(2, m_ptr->min_range)
+            /* Preferred spacing is a score, not a prerequisite for firing.
+             * A nearer clear lane beats waiting behind a melee screen when
+             * no post at the ideal distance is reachable in this search. */
+            if (seek_shot && dist >= 2
                 && tactical_has_shot(m_ptr, y, x, c.py, c.px) && score > shot_score)
             { shot_score = score; shot_first = here.first; shot_goal = at; }
         }
-        if (here.steps >= max_steps || (adjacent && at != start)) continue;
+        if (here.steps >= max_steps || (adjacent && at != start && !c.ranged)) continue;
         for (int d = 0; d < 8; ++d)
         {
             int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
             int ry = yy - c.oy, rx = xx - c.ox;
-            if (ry < 0 || ry >= TACTICAL_WIDTH || rx < 0 || rx >= TACTICAL_WIDTH
+            if (ry < 0 || ry >= width || rx < 0 || rx >= width
                 || !tactical_enterable(m_ptr, yy, xx)) continue;
-            int next_cell = ry * TACTICAL_WIDTH + rx;
+            /* A dry missile user cannot keep a swimming plan: mandatory
+             * water escape cancels it on the next action, producing a
+             * shore/water loop. Keep firing-position routes on usable ground;
+             * normal pursuit and already-swimming escape retain crossings. */
+            if (c.ranged && (r_ptr->flags4 & RF4_ARCHERY_MASK)
+                && !(r_ptr->flags2 & RF2_FLYING)
+                && cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_DEEP_WATER
+                && cave_feat[yy][xx] == FEAT_DEEP_WATER) continue;
+            if (radius > TACTICAL_RADIUS && !los(m_ptr->fy, m_ptr->fx, yy, xx)) continue;
+            int next_cell = ry * width + rx;
             if (next_cell == start) continue;
             bool pool = cave_feat[yy][xx] == FEAT_POISON
                 && !(r_ptr->flags2 & RF2_FLYING) && !(r_ptr->flags3 & RF3_RES_POIS);
@@ -1104,19 +1132,19 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
      * Prefer that paid, legal route to repeatedly improving blocked squares.
      * Path labels above still enforce terrain, poison and reaction costs. */
     if (shot_first >= 0 && (best_goal < 0
-            || distance(c.oy + best_goal / TACTICAL_WIDTH,
-                c.ox + best_goal % TACTICAL_WIDTH, c.py, c.px) < MAX(2, m_ptr->min_range)
-            || !tactical_has_shot(m_ptr, c.oy + best_goal / TACTICAL_WIDTH,
-                c.ox + best_goal % TACTICAL_WIDTH, c.py, c.px)))
+            || distance(c.oy + best_goal / width,
+                c.ox + best_goal % width, c.py, c.px) < 2
+            || !tactical_has_shot(m_ptr, c.oy + best_goal / width,
+                c.ox + best_goal % width, c.py, c.px)))
     {
         best_first = shot_first; best_goal = shot_goal;
         best_score = MAX(baseline + 1, shot_score);
     }
     if (best_first < 0) return false;
-    choice->y = c.oy + best_first / TACTICAL_WIDTH;
-    choice->x = c.ox + best_first % TACTICAL_WIDTH;
-    choice->goal_y = c.oy + best_goal / TACTICAL_WIDTH;
-    choice->goal_x = c.ox + best_goal % TACTICAL_WIDTH;
+    choice->y = c.oy + best_first / width;
+    choice->x = c.ox + best_first % width;
+    choice->goal_y = c.oy + best_goal / width;
+    choice->goal_x = c.ox + best_goal % width;
     choice->gain = best_score - baseline;
     /* Explain only an improvement already made by the first step, not an
      * unexecuted second step of the local plan. Previews remain side-effect free. */

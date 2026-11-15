@@ -793,7 +793,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
          * scent trail while out of LOS of the character, it will
          * communicate this to similar monsters.
          */
-        if ((!monster_has_sight(m_ptr)) && !singing(SNG_SILENCE)
+        if ((!monster_ai_can_see_player(m_ptr)) && !singing(SNG_SILENCE)
             && (r_ptr->flags1 & (RF1_FRIENDS))
             && (monster_can_smell(m_ptr)) && (get_scent(oy, ox) == -1)
             && (!m_ptr->target_y) && (!m_ptr->target_x))

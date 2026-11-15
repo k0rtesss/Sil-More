@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 9
-#define VERSION_EXTRA 10
+#define VERSION_EXTRA 11
 /* Earlier saves omit optional version-gated fields. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -3007,7 +3007,8 @@
 // reserved legacy slot
 /* Prevent automatic attacks from hitting fleeing enemies under Oath of Valor */
 #define OPT_valorous_oath_auto_attack_safety (OPT_GAME_PLAY + 0)
-/* Visual recognition: intelligent monsters need light to see player */
+/* Stealth detection bonus only: light helps smart monsters recognize the
+ * player. This setting never limits an alerted monster's physical sight. */
 #define OPT_visual_recognition (OPT_GAME_PLAY + 1)
 /* Stealth vision mode: show whether monsters can see you */
 #define OPT_stealth_vision (OPT_GAME_PLAY + 2)

@@ -2,26 +2,16 @@
 #include "externs.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-routine.h"
+#include "monster/monster-ai.h"
 #include "melee/melee-util.h"
 
-/* These are sensory rules, shared by perception and AI. Player UI visibility
- * and monster lore deliberately have no part in recognition. */
+/* Physical sight is independent of the recognition bonus in stealth checks.
+ * Darkness/Disguise can deny that bonus without blinding an alerted enemy. */
 int monster_sight_range(const monster_type* m_ptr)
 {
     if (!m_ptr || !m_ptr->r_idx || m_ptr->alertness < ALERTNESS_UNWARY)
         return 0;
-    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
-    int range = (r_ptr->flags2 & RF2_SHORT_SIGHTED) ? 2 : MAX_SIGHT;
-    if (!monster_race_is_vala(m_ptr->r_idx) && visual_recognition
-        && (r_ptr->flags2 & RF2_SMART))
-    {
-        int divisor = p_ptr->active_ability[S_STL][STL_DISGUISE] ? 4 : 2;
-        int vision = monster_skill((monster_type*)m_ptr, S_PER) / divisor
-            + p_ptr->cur_light
-            + ((cave_info[p_ptr->py][p_ptr->px] & CAVE_GLOW) ? 2 : 0);
-        range = MIN(range, MAX(0, vision));
-    }
-    return range;
+    return (r_info[m_ptr->r_idx].flags2 & RF2_SHORT_SIGHTED) ? 2 : MAX_SIGHT;
 }
 
 bool monster_has_sight(const monster_type* m_ptr)
@@ -30,6 +20,25 @@ bool monster_has_sight(const monster_type* m_ptr)
     return range > 0
         && distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) <= range
         && los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
+}
+
+/* Eligibility for the visual bonus to a perception-versus-stealth roll.
+ * This does not acquire a combat target or change an attack's legal range. */
+bool monster_has_visual_perception_bonus(const monster_type* m_ptr)
+{
+    if (!monster_has_sight(m_ptr)) return false;
+    const monster_race* r_ptr = &r_info[m_ptr->r_idx];
+    if (!monster_race_is_vala(m_ptr->r_idx) && visual_recognition
+        && (r_ptr->flags2 & RF2_SMART))
+    {
+        int divisor = p_ptr->active_ability[S_STL][STL_DISGUISE] ? 4 : 2;
+        int vision = monster_skill((monster_type*)m_ptr, S_PER) / divisor
+            + p_ptr->cur_light
+            + ((cave_info[p_ptr->py][p_ptr->px] & CAVE_GLOW) ? 2 : 0);
+        if (distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) > vision)
+            return false;
+    }
+    return true;
 }
 
 int monster_scent_limit(const monster_race* r_ptr)
@@ -86,7 +95,7 @@ void monster_senses_hear(monster_type* m_ptr, int y, int x)
 void monster_senses_share_trace(monster_type* m_ptr, int y, int x)
 {
     const monster_sense_state* s = &m_ptr->ai.sense;
-    if (monster_has_sight(m_ptr)
+    if (monster_ai_can_see_player(m_ptr)
         || ((s->kind == MON_SENSE_SIGHT || s->kind == MON_SENSE_SOUND)
             && s->observed_turn == (u32b)playerturn))
         return;
@@ -111,7 +120,7 @@ void monster_senses_refresh(monster_type* m_ptr)
     if (!m_ptr->r_idx || m_ptr->alertness < ALERTNESS_UNWARY
         || m_ptr->r_idx == R_IDX_MORGOTH)
         return;
-    if (monster_has_sight(m_ptr))
+    if (monster_ai_can_see_player(m_ptr))
     {
         monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
         return;

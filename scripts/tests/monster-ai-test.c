@@ -502,7 +502,7 @@ int main(void)
     test_squad_action_messages();
     test_squad_hybrid_melee_roles();
     test_squad_grades(); test_squad_jobs(); test_squad_challenge_melee();
-    test_squad_archer_recognition_posts();
+    test_squad_archer_sight_posts();
     test_archer_retreat_from_melee_ring();
     test_warned_squad_posts();
     test_water_firing_posts();

@@ -1027,7 +1027,7 @@ static cptr option_menu_label(int opt)
         case OPT_chest_trap_minigame: return narrow ? "Chest checks" : "Chest interaction checks";
         case OPT_stop_singing_on_rest: return narrow ? "Stop song on rest" : "Stop singing on rest";
         case OPT_know_monster_info: return narrow ? "Know monsters" : "Know monster info";
-        case OPT_visual_recognition: return narrow ? "Need light to spot" : "Need light to spot";
+        case OPT_visual_recognition: return narrow ? "Light aids recognition" : "Light aids recognition";
         case OPT_disable_skeleton_note_tutorial: return narrow ? "Hide skeleton tips" : "Hide skeleton tutorials";
         case OPT_smaller_level_size: return narrow ? "Smaller levels" : "Smaller level size";
         case OPT_more_stairs: return narrow ? "More stairs" : "Extra stairs";

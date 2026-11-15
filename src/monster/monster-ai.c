@@ -39,7 +39,10 @@ bool monster_ai_challenge_melee(const monster_type* m_ptr)
 
 bool monster_ai_can_see_player(const monster_type* m_ptr)
 {
-    return m_ptr && m_ptr->r_idx > 0 && monster_has_sight(m_ptr);
+    /* Geometric LOS alone must not give an unwary creature a combat target
+     * before it wins its normal perception-versus-stealth check. */
+    return m_ptr && m_ptr->r_idx > 0
+        && m_ptr->alertness >= ALERTNESS_ALERT && monster_has_sight(m_ptr);
 }
 
 static int observation_remaining(const monster_ai_observation* observation)

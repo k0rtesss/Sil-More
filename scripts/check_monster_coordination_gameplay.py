@@ -154,9 +154,9 @@ def varied_cases():
         environment=1,tiles=[dict(y1=20,x1=37,feat=86)],
         environment_cells=[dict(y=20,x=37,pending=84,due=160)],
         check=dict(shots="all",melee=True))
-    add("varied-minimal-archer-recognition",[
+    add("varied-dark-archer-combat",[
         troop(91,37),troop(41,36,18),troop(51,36,19),troop(51,36,21)],
-        glow=0,torch_fuel=0,check=dict(melee=True,low_sight=True))
+        glow=0,torch_fuel=0,check=dict(melee=True,shots="all",dark_combat=True))
     add("varied-commander-around-wall",[
         troop(91,35,18),troop(81,36,22),troop(51,33,18),troop(51,33,22)],
         tiles=[dict(y1=17,y2=23,x1=38,feat=63)],
@@ -278,8 +278,9 @@ def verify_varied(result, check):
         assert any(f["hazard_probe"]==85 for f in frames),"Scheduled lava never commits"
         assert any(m["index"]==3 and (m["y"],m["x"])!=(20,37)
                    for f in frames[1:6] for m in f["monsters"]),"Archer stays on threatened ground"
-    if check.get("low_sight"):
-        assert any(m["missile"] and m["sight_range"]<=1 for f in frames for m in f["monsters"])
+    if check.get("dark_combat"):
+        assert all(f["player"]["light"] == 0 for f in frames)
+        assert all(m["sight_range"] == 20 for f in frames for m in f["monsters"] if m["missile"])
     if check.get("challenge"):
         assert any(e["kind"]=="melee" and e["actor_id"] in missile_ids for e in events)
     if check.get("social"):

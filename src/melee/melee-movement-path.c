@@ -24,7 +24,7 @@ bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
     int head = 0, tail = 0, best = -1, best_depth = CELLS, best_dist = CELLS;
     int known_y = my, known_x = mx;
     bool known = monster_senses_target(m_ptr, &known_y, &known_x);
-    if (m_ptr->r_idx == R_IDX_MORGOTH || monster_has_sight(m_ptr))
+    if (m_ptr->r_idx == R_IDX_MORGOTH || monster_ai_can_see_player(m_ptr))
     {
         known_y = p_ptr->py; known_x = p_ptr->px; known = true;
     }
@@ -750,7 +750,7 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
-    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_has_sight(m_ptr))
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_ai_can_see_player(m_ptr))
     {
         /* Fear does not confer knowledge of an unseen player's new position.
          * Retain a retreat order, otherwise withdraw from remembered evidence. */
@@ -939,6 +939,13 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
             /* Success */
             return (true);
         }
+
+        /* A non-fleeing bow with no adjacent firing post can still use the
+         * tactical dry route or fight at contact. Do not send it through the
+         * generic fear search, which can lead straight back into deep water.
+         * This decision is independent of whether the player sees the bow. */
+        if (m_ptr->stance != STANCE_FLEEING && (r_ptr->flags4 & RF4_ARCHERY_MASK))
+            return false;
 
         // Sil-y:
         // This step is artificial stupidity for archers and other serious
@@ -1308,7 +1315,7 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
         return;
     }
     monster_senses_refresh(m_ptr);
-    bool sight = monster_has_sight(m_ptr);
+    bool sight = monster_ai_can_see_player(m_ptr);
     if ((r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL) && !sight)
     {
         /* Dragons investigate actual scent, including its bounded search,
@@ -1368,7 +1375,7 @@ static bool vulnerability_attack_grid(monster_type* m_ptr, int y, int x)
 
 int calc_vulnerability(monster_type* m_ptr)
 {
-    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_has_sight(m_ptr))
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_ai_can_see_player(m_ptr))
         return 0;
     int fy = m_ptr->fy;
     int fx = m_ptr->fx;

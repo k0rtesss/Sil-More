@@ -25,15 +25,16 @@ class ControlError(RuntimeError):
 
 
 def read_json(path: Path) -> dict:
-    for attempt in range(4):
+    for attempt in range(20):
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
             break
         except (PermissionError, FileNotFoundError) as exc:
-            # A Windows atomic replace can briefly make the filename busy.
-            if attempt == 3:
+            # Atomic replacement/virus scanning can hold a Windows filename
+            # busy beyond 15ms. Retry only this read; never replay the input.
+            if attempt == 19:
                 raise ControlError(f"Cannot read {path}: {exc}") from exc
-            time.sleep(0.005)
+            time.sleep(0.01)
         except (OSError, ValueError) as exc:
             raise ControlError(f"Cannot read {path}: {exc}") from exc
     if not isinstance(value, dict):
