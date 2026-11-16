@@ -16,7 +16,13 @@ typedef struct sdl_description_content
     int width;
     int height;
     int target_cols;
+    int fixed_rows;
 } sdl_description_content;
+
+/* Measure the text space beside the internal Full/Comparison and Close
+ * controls before the description is captured. */
+bool sdl_description_overlay_capture_flow(bool story, bool interactive,
+    bool comparison_view, int target_cols, int* rows, int* columns, int* pixels);
 
 bool sdl_description_overlay_present_views(const sdl_description_content* full,
     const sdl_description_content* comparison, bool comparison_view,

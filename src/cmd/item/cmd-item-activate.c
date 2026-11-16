@@ -396,7 +396,9 @@ static bool item_tester_hook_sanctity_target(const object_type* o_ptr)
     if (can_remove_jinx)
         return true;
 
-    if (!object_known_p(o_ptr))
+    /* Match the identify menu and visible unknown marker.  Supply lights can
+     * be known to the player without an instance-level IDENT_KNOWN flag. */
+    if (object_is_unidentified_for_display(o_ptr))
         return true;
 
     return false;

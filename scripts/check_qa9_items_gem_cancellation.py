@@ -14,9 +14,25 @@ OUT = ROOT / 'scripts/output/qa9-items-gem-cancellation'
 
 CHECKS = r'''
 #include "init/init2-internal.h"
+#include "object/object-internal.h"
+#include "object/object-ui-select.h"
 #undef assert
 #define assert(expr) do { if (!(expr)) { fprintf(stderr,"Assertion failed: %s line %d\n",#expr,__LINE__); exit(1); } } while (0)
 static int next_key, input_calls, truce_calls;
+static int sanctity_picker_calls, sanctity_target_count;
+static const object_type* sanctity_expected_target;
+bool __real_object_choice_overlay(cptr title, cptr desc,
+    const object_choice_entry* entries, int count, int initial, int* selected);
+bool __wrap_object_choice_overlay(cptr title, cptr desc,
+    const object_choice_entry* entries, int count, int initial, int* selected)
+{
+    if (strcmp(title,"Cleanse which item?"))
+        return __real_object_choice_overlay(title,desc,entries,count,initial,selected);
+    sanctity_picker_calls++;
+    sanctity_target_count=count;
+    assert(count==1 && entries[0].o_ptr==sanctity_expected_target);
+    return false;
+}
 char __wrap_inkey(void)
 { assert(++input_calls==1); return (char)next_key; }
 bool __real_display_unified_identify_menu(bool include_floor, int* item,
@@ -181,6 +197,65 @@ static void check_recharging(void)
     assert(p_ptr->energy_use==100 && truce_calls==1 && supplies_entry_units(0)==3);
     puts("Recharging: real carried/floor target cancel and no-target free; paid charge transfer/Channeling/empty recovery; Warding refusal paid PASS.");
 }
+static void check_sanctity_target(const object_type* expected)
+{
+    object_type* gem=supplies_entry_at(0);
+    sanctity_expected_target=expected;
+    sanctity_picker_calls=sanctity_target_count=0;
+    u64b rng=Rand_state_export();
+    use_gem(gem,ESCAPE);
+    assert(sanctity_picker_calls==(expected ? 1 : 0));
+    assert(sanctity_target_count==(expected ? 1 : 0));
+    assert(!input_calls && !p_ptr->energy_use && !truce_calls);
+    assert(p_ptr->previous_action[0]==7 && supplies_entry_units(0)==3);
+    assert(gem->xtra1==0 && Rand_state_export()==rng);
+}
+static void check_sanctity_targets(void)
+{
+    int lantern=lookup_kind(TV_LIGHT,SV_LIGHT_LANTERN);
+    int staff=lookup_kind(TV_STAFF,SV_STAFF_IMPRISONMENT);
+    assert(lantern && staff);
+    memset(inventory,0,INVEN_TOTAL*sizeof(*inventory));
+    memset(o_list,0,z_info->o_max*sizeof(*o_list));
+    player_carried_extra_reset_store(); player_quiver_reset_store();
+    cave_o_idx[p_ptr->py][p_ptr->px]=0; o_max=1;
+    prepare_gem(SV_GEM_SANCTITY);
+    object_type* light=&inventory[INVEN_LITE];
+    object_prep(light,lantern); light->number=1;
+    object_aware(light);
+    assert(!object_known_p(light) && !object_is_unidentified_for_display(light));
+    char desc[160]; object_desc_display(desc,sizeof(desc),light,true,3);
+    assert(strstr(desc,"Brass Lantern") && !strstr(desc,"unknown"));
+    check_sanctity_target(NULL); /* Display-known supply light, no IDENT_KNOWN. */
+    object_known(light);
+    check_sanctity_target(NULL); /* Fully identified, uncursed lantern. */
+    light->ident|=IDENT_CURSED;
+    check_sanctity_target(light); /* A real curse remains targetable. */
+    light->ident&=~IDENT_CURSED;
+    object_set_ego_prefix(light,135); /* Flickering: a removable lantern jinx. */
+    assert(object_has_ego_flag4(light,TR4_JINX));
+    p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING]=false;
+    check_sanctity_target(NULL);
+    p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING]=true;
+    check_sanctity_target(light);
+    p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING]=false;
+    object_set_ego_prefix(light,0);
+    object_prep(&inventory[0],staff); inventory[0].number=1;
+    object_aware(&inventory[0]);
+    assert(object_is_unidentified_for_display(&inventory[0]));
+    check_sanctity_target(&inventory[0]); /* Unknown staff still permits a probe. */
+    inventory[0].ident|=IDENT_UNCURSED;
+    check_sanctity_target(NULL); /* An already cleansed item stays excluded. */
+    object_wipe(&inventory[0]);
+    object_copy(&o_list[1],light); object_wipe(light);
+    o_list[1].ident&=~IDENT_KNOWN;
+    o_list[1].iy=p_ptr->py; o_list[1].ix=p_ptr->px;
+    o_list[1].next_o_idx=0; o_max=2; cave_o_idx[p_ptr->py][p_ptr->px]=1;
+    check_sanctity_target(NULL); /* The same display rule applies on the floor. */
+    o_list[1].ident|=IDENT_CURSED;
+    check_sanctity_target(&o_list[1]);
+    puts("Sanctity: display-known/identified lanterns excluded; real curses, removable jinxes and unknown staffs preserved; cancellation free PASS.");
+}
 '''
 
 
@@ -193,7 +268,7 @@ def main():
     source = OUT / 'check.c'
     source.write_text(prefix + CHECKS + init +
                       '    assert(init_flavor_info()==0); flavor_init();\n'
-                      '    check_gem_cancellation(); check_recharging(); SDL_Quit(); return 0;\n}\n', encoding='utf-8')
+                      '    check_gem_cancellation(); check_recharging(); check_sanctity_targets(); SDL_Quit(); return 0;\n}\n', encoding='utf-8')
     objects = shlex.split((BUILD / 'CMakeFiles/sil-more.dir/objects1.rsp').read_text())
     response = OUT / 'objects.rsp'
     response.write_text('\n'.join('"' + p + '"' for p in objects
@@ -208,7 +283,7 @@ def main():
                     '@CMakeFiles/sil-more.dir/linkLibs.rsp',
                     *(f'-Wl,--wrap={name}' for name in ('display_unified_identify_menu','message_flush','handle_stuff','inkey',
                         'break_truce','tutorial_game_action_allowed',
-                        'light_area','ident_spell')),
+                        'light_area','ident_spell','object_choice_overlay')),
                     '-o', str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix='fixture-', dir=OUT) as state:
         subprocess.run([str(exe), str(ROOT / 'lib/edit'), state], cwd=state,

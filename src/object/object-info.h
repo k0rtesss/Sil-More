@@ -15,6 +15,8 @@ typedef struct object_info_screen_action
 #endif
 
 bool object_info_out(const object_type* o_ptr);
+/* Shared item name, combat notation, volume and weight in both views. */
+void object_info_item_header_out(const object_type* o_ptr);
 cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     size_t out_sz);
 void note_info_screen(const object_type* o_ptr);

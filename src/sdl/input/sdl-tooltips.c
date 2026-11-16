@@ -2233,6 +2233,18 @@ static void sdl_description_overlay_view_label(char* label, size_t size)
         overlay->comparison_view ? "Full" : "Comparison");
 }
 
+static void sdl_description_overlay_view_button_size(cptr label,
+    int cell_w, int cell_h, int* width, int* height)
+{
+    int text_w = (int)strlen(label) * cell_w, text_h = cell_h;
+    TTF_Font* font = sdl_story_font_for_height_slot(cell_h,
+        STORY_FONT_SLOT_SECONDARY);
+    if (font)
+        (void)TTF_GetStringSize(font, lore_text(label), 0, &text_w, &text_h);
+    *width = text_w + 4;
+    *height = MAX(cell_h, text_h + 4);
+}
+
 bool sdl_description_overlay_layout(description_overlay_layout* out)
 {
     SDL_Rect anchor;
@@ -2255,6 +2267,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     int footer_gap = 0;
     int header_rows;
     int view_toggle_w = 0;
+    int view_toggle_h = 0;
     int text_px;
     int visible_cols;
     int visible_rows;
@@ -2299,30 +2312,21 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (max_panel_w <= pad_x * 2 || max_panel_h <= pad_y * 2 + cell_h)
         return false;
 
-    header_rows = overlay->interactive || overlay->has_view_toggle ? 1 : 0;
+    /* Text flows beside the comparison controls in the first rows, then
+     * fills the panel below them. No separate blank header is needed. */
+    header_rows = overlay->interactive && !overlay->has_view_toggle ? 1 : 0;
     if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
-        if (overlay->interactive || overlay->has_view_toggle)
+        if (header_rows)
             header_rows = (sdl_ui_min_tap_px() + cell_h - 1) / cell_h;
     }
-    if (overlay->has_view_toggle && sdl_handheld_ui_active())
-        header_rows = MAX(header_rows,
-            (sdl_ui_min_tap_px() + cell_h - 1) / cell_h);
     if (overlay->has_view_toggle)
     {
         char label[32];
-        int text_w, text_h;
         sdl_description_overlay_view_label(label, sizeof(label));
-        int label_px = sdl_ui_fitted_font_px(label, STORY_FONT_SLOT_SECONDARY,
-            cell_h, 0, MAX(1, header_rows * cell_h - 4), false);
-        TTF_Font* font = sdl_story_font_for_height_slot(label_px,
-            STORY_FONT_SLOT_SECONDARY);
-        text_w = (int)strlen(label) * cell_w;
-        if (font)
-            (void)TTF_GetStringSize(font, lore_text(label), 0, &text_w, &text_h);
-        view_toggle_w = text_w + 2 * MAX(2, cell_w / 2);
-        if (sdl_handheld_ui_active())
-            view_toggle_w = MAX(view_toggle_w, sdl_ui_min_tap_px());
+        /* Fit the button to the label without reducing the label's font. */
+        sdl_description_overlay_view_button_size(label, cell_w, cell_h,
+            &view_toggle_w, &view_toggle_h);
     }
     max_cols = (max_panel_w - pad_x * 2) / cell_w;
     max_rows_no_footer =
@@ -2356,6 +2360,13 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
             max_rows = 1;
 
         visible_rows = overlay->height;
+        if (overlay->has_view_toggle)
+        {
+            int control_rows = (view_toggle_h + cell_h - 1) / cell_h;
+            if (max_rows < control_rows)
+                return false;
+            visible_rows = MAX(visible_rows, control_rows);
+        }
         if (visible_rows > max_rows)
             visible_rows = max_rows;
 
@@ -2373,7 +2384,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
         if (overlay->has_view_toggle)
         {
             int header_cols = (view_toggle_w + (overlay->interactive
-                ? header_rows * cell_h + cell_w : 0) + cell_w - 1) / cell_w;
+                ? cell_h + cell_w : 0) + cell_w - 1) / cell_w;
             visible_cols = MAX(visible_cols, header_cols);
             text_px = MAX(text_px, visible_cols * cell_w);
         }
@@ -2398,13 +2409,18 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
             * cell_h + pad_y * 2 + footer_gap);
         panel_x = (float)anchor.x + ((float)anchor.w - panel_w) * 0.5f;
         panel_y = (float)anchor.y + ((float)anchor.h - panel_h) * 0.5f;
-
         if (!sdl_description_overlay_fit_around_avoid(&anchor, margin,
                 pad_y, cell_h, footer, header_rows, panel_x, panel_w,
                 &visible_rows, &panel_h, &panel_y))
         {
             return false;
         }
+        if (overlay->has_view_toggle
+            && visible_rows * cell_h < view_toggle_h)
+            return false;
+        if (overlay->height > overlay->fixed_rows
+            && visible_rows <= overlay->fixed_rows)
+            return false;
 
         if (!footer && visible_rows < overlay->height)
         {
@@ -2419,6 +2435,7 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     out->cell_h = cell_h;
     out->visible_cols = visible_cols;
     out->visible_rows = visible_rows;
+    out->fixed_rows = MIN(overlay->fixed_rows, visible_rows);
     out->footer = footer;
     out->max_scroll = MAX(0, overlay->height - visible_rows);
     out->scroll = overlay->scroll;
@@ -2444,7 +2461,8 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
     if (out->close_button)
     {
         float close_size = (float)cell_h;
-        if (sdl_handheld_ui_active() && get_sdl_bigger_font())
+        if (!overlay->has_view_toggle
+            && sdl_handheld_ui_active() && get_sdl_bigger_font())
         {
             close_size = MAX(close_size, (float)sdl_ui_min_tap_px());
         }
@@ -2462,10 +2480,57 @@ bool sdl_description_overlay_layout(description_overlay_layout* out)
             ? out->close_rect.x - (float)cell_w : out->panel.x + out->panel.w - pad_x;
         float width = MIN((float)view_toggle_w, right - out->text_x);
         out->view_toggle_rect = (SDL_FRect){
-            right - width, out->panel.y + pad_y, width,
-            (float)(header_rows * cell_h) };
+            right - width, out->text_y, width,
+            (float)view_toggle_h };
     }
 
+    return true;
+}
+
+bool sdl_description_overlay_capture_flow(bool story, bool interactive,
+    bool comparison_view, int target_cols, int* rows, int* columns, int* pixels)
+{
+    description_overlay_state saved = g_description_overlay;
+    description_overlay_layout layout;
+    const byte attr = TERM_WHITE, story_flag = story ? STORY_FLAG_USE : 0;
+    const char ch = ' ';
+    bool success;
+
+    g_description_overlay.active = true;
+    g_description_overlay.interactive = interactive;
+    g_description_overlay.has_view_toggle = true;
+    g_description_overlay.comparison_view = comparison_view;
+    g_description_overlay.attrs = &attr;
+    g_description_overlay.chars = &ch;
+    g_description_overlay.story = &story_flag;
+    g_description_overlay.width = g_description_overlay.height = 1;
+    g_description_overlay.fixed_rows = 0;
+    g_description_overlay.target_cols = target_cols;
+    success = sdl_description_overlay_layout(&layout);
+    g_description_overlay = saved;
+    if (!success)
+        return false;
+
+    int width = (int)layout.view_toggle_rect.w;
+    int height = (int)layout.view_toggle_rect.h;
+    if (interactive)
+    {
+        /* Changing input device while the popup is open may add a controller
+         * hint. Reserve its measured width without enlarging the button. */
+        int hint_width, hint_height;
+        sdl_description_overlay_view_button_size(
+            comparison_view ? "<Y> Full" : "<Y> Comparison",
+            layout.cell_w, layout.cell_h, &hint_width, &hint_height);
+        width = MAX(width, hint_width);
+        height = MAX(height, hint_height);
+    }
+    int available = (int)(layout.view_toggle_rect.x + layout.view_toggle_rect.w
+        - layout.text_x) - width - layout.cell_w;
+    if (available < layout.cell_w * 2)
+        return false;
+    *rows = (height + layout.cell_h - 1) / layout.cell_h;
+    *columns = available / layout.cell_w;
+    *pixels = available;
     return true;
 }
 
@@ -2515,7 +2580,7 @@ bool sdl_description_overlay_scroll_page(int direction)
     if (!sdl_description_overlay_layout(&layout))
         return false;
 
-    rows = layout.visible_rows;
+    rows = layout.visible_rows - layout.fixed_rows;
     if (rows < 1)
         rows = 1;
     return sdl_description_overlay_scroll_to_layout(&layout,
@@ -3094,7 +3159,9 @@ void sdl_description_overlay_render(void)
 
     for (int row = 0; row < layout.visible_rows; row++)
     {
-        int src_row = row + layout.scroll;
+        /* Keep the text beside the fixed controls in place while scrolling
+         * the full-width body below it. */
+        int src_row = row < layout.fixed_rows ? row : row + layout.scroll;
 
         if (src_row >= overlay->height)
             break;
@@ -3169,7 +3236,7 @@ void sdl_description_overlay_render(void)
         if (layout.max_scroll > 0)
         {
             strnfmt(scroll_buf, sizeof(scroll_buf), "%d/%d",
-                layout.scroll + 1, overlay->height);
+                layout.scroll + 1, overlay->height - layout.fixed_rows);
 
             if (footer_font)
             {
@@ -3243,12 +3310,13 @@ void sdl_description_overlay_render(void)
     sdl_description_overlay_render_close_button(&layout,
         overlay->close_hover);
 
-    SDL_FRect indicator = { layout.text_x, layout.text_y,
+    SDL_FRect indicator = { layout.text_x,
+        layout.text_y + layout.fixed_rows * layout.cell_h,
         layout.panel.x + layout.panel.w - 3.0f * sdl_ui_density_scale()
             - layout.text_x,
-        layout.visible_rows * layout.cell_h };
+        (layout.visible_rows - layout.fixed_rows) * layout.cell_h };
     sdl_ui_render_scroll_indicator(indicator, layout.scroll,
-        layout.max_scroll, layout.visible_rows);
+        layout.max_scroll, layout.visible_rows - layout.fixed_rows);
 
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 
@@ -3271,9 +3339,9 @@ static bool sdl_description_overlay_close_button_at(float x, float y)
 
     hit = layout.close_rect;
     hit.x -= hit.w * 0.75f;
-    hit.y = layout.panel.y;
+    hit.y = MIN(layout.panel.y, layout.close_rect.y);
     hit.w = layout.panel.x + layout.panel.w - hit.x;
-    hit.h = layout.close_rect.y + layout.close_rect.h - layout.panel.y;
+    hit.h = layout.close_rect.y + layout.close_rect.h - hit.y;
     if (hit.h < layout.close_rect.h)
         hit.h = layout.close_rect.h;
 

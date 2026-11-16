@@ -4038,6 +4038,7 @@ bool sdl_description_overlay_present_views(const sdl_description_content* full,
     g_description_overlay.width = content->width;
     g_description_overlay.height = content->height;
     g_description_overlay.target_cols = content->target_cols;
+    g_description_overlay.fixed_rows = content->fixed_rows;
     g_description_overlay.has_view_toggle = can_compare;
     g_description_overlay.comparison_view = can_compare && comparison_view;
     g_description_overlay.view_toggle_hover = false;
@@ -4063,7 +4064,7 @@ bool sdl_description_overlay_present_views(const sdl_description_content* full,
 
     g_description_overlay.scroll = layout.scroll;
     if (out_visible_rows)
-        *out_visible_rows = layout.visible_rows;
+        *out_visible_rows = MAX(1, layout.visible_rows - layout.fixed_rows);
     if (out_max_scroll)
         *out_max_scroll = layout.max_scroll;
 
@@ -4078,7 +4079,7 @@ bool sdl_description_overlay_present(const byte* attrs, const char* chars,
     bool interactive, int* visible_rows, int* max_scroll)
 {
     sdl_description_content content = { attrs, chars, tattrs, tchars, story,
-        health, width, height, target_cols };
+        health, width, height, target_cols, 0 };
     return sdl_description_overlay_present_views(&content, NULL, false,
         scroll, interactive, visible_rows, max_scroll);
 }
@@ -4098,7 +4099,7 @@ bool sdl_description_overlay_toggle_view(void)
         return false;
     current = (sdl_description_content){ overlay->attrs, overlay->chars,
         overlay->tattrs, overlay->tchars, overlay->story, overlay->health,
-        overlay->width, overlay->height, overlay->target_cols };
+        overlay->width, overlay->height, overlay->target_cols, overlay->fixed_rows };
     next = overlay->alternate_view;
     overlay->alternate_view = current;
     overlay->attrs = next.attrs;
@@ -4110,6 +4111,7 @@ bool sdl_description_overlay_toggle_view(void)
     overlay->width = next.width;
     overlay->height = next.height;
     overlay->target_cols = next.target_cols;
+    overlay->fixed_rows = next.fixed_rows;
     overlay->comparison_view = !overlay->comparison_view;
     overlay->scroll = 0;
     overlay->close_hover = false;

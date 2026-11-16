@@ -5,6 +5,32 @@
 #include "support/utf8.h"
 #include "ui/story_font.h"
 
+static text_out_wrap_region wrap_region;
+
+void text_out_wrap_region_push(int rows, int columns, int pixels,
+    text_out_wrap_region* previous)
+{
+    *previous = wrap_region;
+    wrap_region = (text_out_wrap_region){ Term, rows, columns, pixels };
+}
+
+void text_out_wrap_region_pop(const text_out_wrap_region* previous)
+{
+    wrap_region = *previous;
+}
+
+int text_out_row_columns(int row, int full_width)
+{
+    return wrap_region.owner == Term && row < wrap_region.rows
+        ? MIN(full_width, MAX(2, wrap_region.columns)) : full_width;
+}
+
+int text_out_row_pixels(int row, int full_width)
+{
+    return wrap_region.owner == Term && row < wrap_region.rows
+        ? MIN(full_width, MAX(1, wrap_region.pixels)) : full_width;
+}
+
 /*
  * Print some (colored) text to the screen at the current cursor position,
  * automatically "wrapping" existing text (at spaces) when necessary to
@@ -151,10 +177,13 @@ void text_out_to_screen(byte a, cptr str)
     else
         wrap = wid;
 
+    int full_wrap = wrap;
+
     /* Process the string */
     for (s = str; *s; s++)
     {
         char ch;
+        wrap = text_out_row_columns(y, full_wrap);
 
         /* Force wrap */
         if (*s == '\n')
@@ -227,6 +256,7 @@ void text_out_to_screen(byte a, cptr str)
             }
         }
 
+        wrap = text_out_row_columns(y, full_wrap);
         /* Dump */
         Term_addch(a, ch);
 

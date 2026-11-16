@@ -4,6 +4,7 @@
 #include "../externs.h"
 #include "../log/log.h"
 #include "story_font.h"
+#include "../support/utf8.h"
 
 static int story_font_cell_width(void)
 {
@@ -306,15 +307,16 @@ void text_out_to_screen_overlay_story(byte a, cptr str)
     (void)Term_locate(&x, &y);
 
     int slot = (Term ? Term->story_font_slot : 0);
-    int wrap_pixels = sdl_description_overlay_text_px();
-    if (wrap_pixels <= 0)
-        wrap_pixels = wid * story_font_cell_width();
+    int full_wrap_pixels = sdl_description_overlay_text_px();
+    if (full_wrap_pixels <= 0)
+        full_wrap_pixels = wid * story_font_cell_width();
 
     overlay_story_seed_line(line, sizeof(line), y, x, &line_len);
 
     s = str;
     while (*s)
     {
+        int wrap_pixels = text_out_row_pixels(y, full_wrap_pixels);
         if (*s == '\n')
         {
             x = text_out_indent;
@@ -400,11 +402,63 @@ void text_out_to_screen_overlay_story(byte a, cptr str)
             line[line_len] = '\0';
         }
 
-        Term_addstr(word_bytes, a, word_start);
-        x += word_bytes;
-        for (int i = 0; i < word_bytes && line_len < (int)sizeof(line) - 1; i++)
-            line[line_len++] = word_start[i];
-        line[line_len] = '\0';
+        /* A long name/word may be wider than the space beside the controls.
+         * Split on UTF-8 boundaries, continuing at full width below them. */
+        int remaining = word_bytes;
+        cptr part = word_start;
+        while (remaining > 0)
+        {
+            int take = 0;
+            wrap_pixels = text_out_row_pixels(y, full_wrap_pixels);
+            if (x + remaining < wid && line_len + remaining < (int)sizeof(line))
+            {
+                memcpy(line + line_len, part, remaining);
+                line[line_len + remaining] = '\0';
+                if (sdl_description_overlay_story_text_width(line,
+                        line_len + remaining, slot) <= wrap_pixels)
+                    take = remaining;
+                line[line_len] = '\0';
+            }
+            if (!take)
+            {
+                int prefix = 0;
+                while (prefix < remaining)
+                {
+                    int bytes = utf8_sequence_len_n(part + prefix, remaining - prefix);
+                    if (bytes <= 0 || x + prefix + bytes >= wid
+                        || line_len + prefix + bytes >= (int)sizeof(line))
+                        break;
+                    memcpy(line + line_len + prefix, part + prefix, bytes);
+                    line[line_len + prefix + bytes] = '\0';
+                    if (sdl_description_overlay_story_text_width(line,
+                            line_len + prefix + bytes, slot) > wrap_pixels)
+                        break;
+                    prefix += bytes;
+                }
+                take = prefix;
+            }
+            line[line_len] = '\0';
+            if (!take && line_len <= text_out_indent
+                && wrap_pixels == full_wrap_pixels)
+                take = MAX(1, utf8_sequence_len_n(part, remaining));
+            if (take)
+            {
+                Term_addstr(take, a, part);
+                x += take;
+                memcpy(line + line_len, part, take);
+                line_len += take;
+                line[line_len] = '\0';
+                part += take;
+                remaining -= take;
+            }
+            if (remaining)
+            {
+                x = text_out_indent;
+                y++;
+                Term_erase(x, y, 255);
+                overlay_story_seed_line(line, sizeof(line), y, x, &line_len);
+            }
+        }
 
         s += space_bytes + word_bytes;
     }

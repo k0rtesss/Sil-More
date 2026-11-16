@@ -39,7 +39,8 @@ def main():
         str(ROOT / "scripts/tests/equipment-comparison-test.c"), str(fixture),
         "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",
         "-Wl,--wrap=sdl_get_layout_screen_rect,--wrap=sdl_overlay_pane_anchor_rect,"
-        "--wrap=sdl_present_if_needed,--wrap=inkey",
+        "--wrap=sdl_present_if_needed,--wrap=inkey,"
+        "--wrap=sdl_mobile_portrait_layout_active,--wrap=sdl_touch_only_device_active",
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=OUT) as data:
         subprocess.run([str(exe), str(ROOT / "lib/edit"), data, str(OUT)],

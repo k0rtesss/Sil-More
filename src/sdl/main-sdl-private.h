@@ -937,6 +937,7 @@ typedef struct description_overlay_state {
     int height;
     int target_cols;
     int scroll;
+    int fixed_rows;
     int avoid_term_col;
     int avoid_term_row;
     int avoid_term_wid;
@@ -965,6 +966,7 @@ typedef struct description_overlay_layout {
     int cell_h;
     int visible_cols;
     int visible_rows;
+    int fixed_rows;
     int max_scroll;
     int scroll;
     bool footer;

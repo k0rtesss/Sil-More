@@ -5170,7 +5170,8 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         {
             return "Harness (stored)";
         }
-        if (equipment_entry_is_active_combat(entry))
+        if (equipment_entry_is_active_combat(entry)
+            && !sdl_mobile_portrait_layout_active())
             return "Active";
         return equipment_slot_where_text(entry->equip_idx);
     }
@@ -5178,7 +5179,10 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
     if (entry->item_idx >= QUIVER_INDEX
         && entry->item_idx < QUIVER_INDEX_END)
     {
-        return entry->equipped ? "Quiver [active]" : "Quiver";
+        return entry->equipped
+            ? (sdl_mobile_portrait_layout_active()
+                  ? "Quiver\n[active]" : "Quiver [active]")
+            : "Quiver";
     }
 
     if (entry->equipped)
@@ -5236,6 +5240,7 @@ typedef struct equipment_entry_columns
     bool show_source;
     bool inline_metadata;
     bool inline_source;
+    bool compact_units;
     int entry_index_base;
 } equipment_entry_columns;
 
@@ -5243,8 +5248,9 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
     equipment_list_entry entries[], int entry_cnt, bool show_source,
     equipment_entry_columns* cols)
 {
-    const int volume_w = 8;
-    const int weight_w = 8;
+    const bool compact_units = sdl_mobile_portrait_layout_active();
+    const int volume_w = compact_units ? 5 : 8;
+    const int weight_w = compact_units ? 5 : 8;
     const int min_name_w = 6;
     int sym_w = use_bigtile ? 2 : 1;
     int list_right;
@@ -5254,6 +5260,7 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
         return;
 
     memset(cols, 0, sizeof(*cols));
+    cols->compact_units = compact_units;
 
     if (!layout)
         return;
@@ -5290,16 +5297,22 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
         {
             char source_buf[24];
             cptr source;
-            int len;
 
             source = equipment_entry_source_text(&entries[idx], source_buf,
                 sizeof(source_buf));
             if (!source || !source[0])
                 continue;
 
-            len = (int)strlen(source);
-            if (len > width)
-                width = len;
+            for (cptr line = source; *line;)
+            {
+                cptr newline = strchr(line, '\n');
+                int len = newline ? (int)(newline - line) : (int)strlen(line);
+
+                width = MAX(width, len);
+                if (!newline)
+                    break;
+                line = newline + 1;
+            }
         }
 
         if (max_source_w >= (int)strlen("Where"))
@@ -5445,8 +5458,8 @@ static int equipment_entry_wrapped_rows(cptr text, int width)
     return MAX(rows, 1);
 }
 
-static bool equipment_entry_volume_text(const object_type* o_ptr, char* buf,
-    size_t buflen)
+static bool equipment_entry_volume_text(const object_type* o_ptr,
+    bool show_units, char* buf, size_t buflen)
 {
     enum inventory_limit_group group;
     int volume;
@@ -5468,7 +5481,8 @@ static bool equipment_entry_volume_text(const object_type* o_ptr, char* buf,
     if (volume <= 0)
         return false;
 
-    strnfmt(buf, buflen, "%3d.%1d qt", volume / 10, volume % 10);
+    strnfmt(buf, buflen, show_units ? "%3d.%1d qt" : "%3d.%1d",
+        volume / 10, volume % 10);
     return true;
 }
 
@@ -5543,9 +5557,13 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
                   tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
     }
     object_desc(name, sizeof(name), o_ptr, true, 3);
-    if (entry->equipped && !show_source)
+    if (entry->equipped && (!show_source
+            || (sdl_mobile_portrait_layout_active()
+                && equipment_entry_is_active_combat(entry))))
         SDL_strlcat(name, equipment_entry_is_active_combat(entry)
-            ? " [active]" : " [equipped]", sizeof(name));
+            ? (sdl_mobile_portrait_layout_active()
+                  ? "\n[active]" : " [active]")
+            : " [equipped]", sizeof(name));
     else if (!show_source && entry->equip_idx >= INVEN_WIELD
         && entry->equip_idx < INVEN_TOTAL
         && equipment_slot_is_inactive_harness_item(entry->equip_idx))
@@ -5595,7 +5613,7 @@ static bool equipment_entry_wrapped_values(equipment_list_entry* entry,
 
     if (o_ptr->number > 1)
         strnfcat(metadata, sizeof(metadata), &used, "x%d | ", o_ptr->number);
-    if (equipment_entry_volume_text(o_ptr, volume, sizeof(volume)))
+    if (equipment_entry_volume_text(o_ptr, true, volume, sizeof(volume)))
     {
         cptr value = volume;
         while (*value == ' ')
@@ -5854,7 +5872,8 @@ static int display_equipment_slot_entries_wrapped(
             int wgt = o_ptr->weight * MAX(o_ptr->number, 1);
             char weight_buf[16];
 
-            strnfmt(weight_buf, sizeof(weight_buf), "%3d.%1d lb",
+            strnfmt(weight_buf, sizeof(weight_buf),
+                cols->compact_units ? "%3d.%1d" : "%3d.%1d lb",
                 wgt / 10, wgt % 10);
             supply_put_fitted(cols->weight_col, row + used_rows,
                 cols->weight_w, base_attr, weight_buf);
@@ -5863,8 +5882,8 @@ static int display_equipment_slot_entries_wrapped(
         {
             char volume_buf[16];
 
-            if (equipment_entry_volume_text(o_ptr, volume_buf,
-                    sizeof(volume_buf)))
+            if (equipment_entry_volume_text(o_ptr, !cols->compact_units,
+                    volume_buf, sizeof(volume_buf)))
             {
                 supply_put_fitted(cols->volume_col, row + used_rows,
                     cols->volume_w, base_attr, volume_buf);
@@ -12277,10 +12296,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     TERM_SLATE, equipment_slot_text(selected_slot));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.entry_header_row,
-                        entry_cols.volume_w, TERM_SLATE, "Volume");
+                        entry_cols.volume_w, TERM_SLATE,
+                        entry_cols.compact_units ? "V(qt)" : "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.entry_header_row,
-                        entry_cols.weight_w, TERM_SLATE, "Weight");
+                        entry_cols.weight_w, TERM_SLATE,
+                        entry_cols.compact_units ? "W(lb)" : "Weight");
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.entry_header_row,
                         entry_cols.source_w, TERM_SLATE, "Where");
@@ -12293,10 +12314,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     TERM_SLATE, equipment_slot_text(selected_slot));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.header_row,
-                        entry_cols.volume_w, TERM_SLATE, "Volume");
+                        entry_cols.volume_w, TERM_SLATE,
+                        entry_cols.compact_units ? "V(qt)" : "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.header_row,
-                        entry_cols.weight_w, TERM_SLATE, "Weight");
+                        entry_cols.weight_w, TERM_SLATE,
+                        entry_cols.compact_units ? "W(lb)" : "Weight");
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.header_row,
                         entry_cols.source_w, TERM_SLATE, "Where");
@@ -13546,10 +13569,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     : inventory_browser_group_text(selected_group));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.entry_header_row,
-                        entry_cols.volume_w, TERM_SLATE, "Volume");
+                        entry_cols.volume_w, TERM_SLATE,
+                        entry_cols.compact_units ? "V(qt)" : "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.entry_header_row,
-                        entry_cols.weight_w, TERM_SLATE, "Weight");
+                        entry_cols.weight_w, TERM_SLATE,
+                        entry_cols.compact_units ? "W(lb)" : "Weight");
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.entry_header_row,
                         entry_cols.source_w, TERM_SLATE, "Where");
@@ -13569,10 +13594,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     : inventory_browser_group_text(selected_group));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.header_row,
-                        entry_cols.volume_w, TERM_SLATE, "Volume");
+                        entry_cols.volume_w, TERM_SLATE,
+                        entry_cols.compact_units ? "V(qt)" : "Volume");
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.header_row,
-                        entry_cols.weight_w, TERM_SLATE, "Weight");
+                        entry_cols.weight_w, TERM_SLATE,
+                        entry_cols.compact_units ? "W(lb)" : "Weight");
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.header_row,
                         entry_cols.source_w, TERM_SLATE, "Where");

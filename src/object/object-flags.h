@@ -12,6 +12,9 @@ void object_flags_known(const object_type* o_ptr, u32b* f1, u32b* f2,
     u32b* f3);
 void object_flags_known4(const object_type* o_ptr, u32b* f1, u32b* f2,
     u32b* f3, u32b* f4);
+/* Scope full flag reads to observable properties while recalculating a
+ * comparison. Returns the previous setting; callers must restore it. */
+bool object_flags_known_preview(bool enabled);
 bool object_grants_ability(const object_type* o_ptr, int skilltype,
     int abilitynum);
 

@@ -1454,11 +1454,7 @@ void object_desc(
 
     default: /* not a weapon */
     {
-        /* don't display for unidentified rings */
-        if ((o_ptr->tval == TV_RING) && !object_known_p(o_ptr))
-        {
-            break;
-        }
+        /* Numeric combat values are observable before identification. */
         if (o_ptr->att)
         {
             object_desc_chr_macro(t, ' ');
@@ -1471,12 +1467,7 @@ void object_desc(
 
     /* show evasion/protection info */
 
-    /* but don't display for unidentified rings */
-    if ((o_ptr->tval == TV_RING) && !object_known_p(o_ptr))
-    {
-        // do nothing
-    }
-    else if (o_ptr->pd && o_ptr->ps)
+    if (o_ptr->pd && o_ptr->ps)
     {
         object_desc_chr_macro(t, ' ');
         object_desc_chr_macro(t, b1);
