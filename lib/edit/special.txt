@@ -669,9 +669,6 @@ D:[sword]A harsh authority clings to it, as though it had often been
 D: raised less against true foes than against those beneath command.
 
 
-# Warhammers, hand and battle axes, curved swords, longswords
-# and bastard swords
-
 # Curved swords, greatswords, battle axes, greataxes
 
 N:43:of Udun
@@ -780,7 +777,7 @@ D:[default]Weight and measure have been set with uncommon care, and
 D: the hand finds its true line in it almost at once.
 
 
-# Non-curved swords and glaives
+# Longswords and larger straight swords, plus glaives
 
 N:48:(Defender)
 W:0:80:0:1000
@@ -867,7 +864,7 @@ D: shield-wall refuses the sea. It remembers captains of the Free
 D: Peoples who would not bow, though the dark pressed close.
 
 
-# Includes light sources
+# Includes light sources, including Mallorn torches
 
 N:73:of true Sight
 W:0:75:0:2000
@@ -1418,7 +1415,7 @@ D: the bright intent of its makers, until its beam seems less earthly
 D: than wrought of remembered dawn.
 
 
-# 'of true Sight' is already defined above
+# 'of true Sight' is already defined above (also valid on Mallorn torches)
 
 
 # 'of Grace' is already defined above (for Lesser Jewels)
@@ -1441,7 +1438,7 @@ D: than the dark would have done alone.
 ##### Additional Weapon Prefixes #####
 
 
-# Curved swords, bastard sword, great axe, glaive
+# Curved swords, bastard swords, battle axes, great axes and glaives
 # Crude, brutal weapons with jagged edges (orcish/crude weapons)
 
 N:140:(Jagged)
@@ -1467,7 +1464,7 @@ D: than to cut cleanly.
 
 
 # Daggers, shortswords, longswords, bastard swords, mithril/Elven blades, star-iron greatswords,
-# spears, hand axes, battle axes
+# spears, great spears, hand axes, battle axes
 
 N:141:(Nimble)
 W:8:50:0:2000
@@ -2133,14 +2130,14 @@ D: the stroke as armour does, but lets it go awry, as if cloth,
 D: step, and sudden turning had entered into quiet agreement.
 
 
-# Light shields and helms (count as light armour)
+# Shields and normal helms only (count as light armour)
 
 N:185:(Light)
 W:0:40:0:800
 Y:-20
 C:0:0:0:1:0:0:0
 T:34:0:99
-T:32:0:99
+T:32:5:5
 F:LIGHT_ARMOR
 D:[shield]Its frame has been pared down and the boss set close, so that
 D: it guards the arm without burdening the step. One who bears it can

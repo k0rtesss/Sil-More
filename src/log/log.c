@@ -135,6 +135,22 @@ void log_set_quiet(bool enable) {
 }
 
 
+bool log_is_enabled(int level) {
+  if (!L.quiet && level >= L.level) return true;
+#if defined(__ANDROID__)
+#ifdef NDEBUG
+  if (level >= LOG_INFO) return true;
+#else
+  if (level >= L.level) return true;
+#endif
+#endif
+  for (int i = 0; i < MAX_CALLBACKS && L.callbacks[i].fn; i++) {
+    if (level >= L.callbacks[i].level) return true;
+  }
+  return false;
+}
+
+
 int log_add_callback(log_LogFn fn, void *udata, int level) {
   for (int i = 0; i < MAX_CALLBACKS; i++) {
     if (!L.callbacks[i].fn) {
@@ -161,6 +177,7 @@ static void init_event(log_Event *ev, void *udata) {
 
 
 void log_log(int level, const char *file, int line, const char *fmt, ...) {
+  if (!log_is_enabled(level)) return;
   log_Event ev = {
     .fmt   = fmt,
     .file  = file,

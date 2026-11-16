@@ -452,7 +452,9 @@ static bool achievement_run_eligible(void)
 
 static bool achievements_eligible(void)
 {
-    return achievement_run_eligible() && p_ptr->playing && !p_ptr->is_dead;
+    /* Final Look borrows playing/alive flags for menus and map inspection. */
+    return achievement_run_eligible() && p_ptr->playing && !p_ptr->is_dead
+        && !death_spectator_active();
 }
 
 bool sil_achievements_eligible(void) { return achievements_eligible(); }

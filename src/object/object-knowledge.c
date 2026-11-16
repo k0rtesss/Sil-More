@@ -14,6 +14,10 @@ bool object_can_see_floor(int y, int x)
 
     if (!in_bounds(y, x))
         return false;
+    /* Postmortem revelation includes submerged floor items. Final Look
+     * borrows the live UI flags, but has no Perception or sight restriction. */
+    if (p_ptr->is_dead || death_spectator_active())
+        return true;
     if (cave_feat[y][x] != FEAT_WATER
         && cave_feat[y][x] != FEAT_DEEP_WATER)
         return true;

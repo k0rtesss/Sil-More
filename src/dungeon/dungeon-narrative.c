@@ -277,7 +277,7 @@ void display_partition_narrative_banner(int old_sidx, int new_sidx,
 
 void update_labyrinth_view_state(bool handle_now)
 {
-    if (!p_ptr || p_ptr->is_dead)
+    if (!p_ptr || p_ptr->is_dead || death_spectator_active())
         return;
 
     level_partition_kind kind = level_partition_kind_for_point(p_ptr->py, p_ptr->px);

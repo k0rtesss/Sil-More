@@ -10,9 +10,11 @@ CHECKS = r'''
 #include "monster/monster-ai.h"
 #include "monster/monster-senses.h"
 #include "monster/monster-tactics.h"
+#include "monster/monster-routine.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"
+#include "melee/melee-util.h"
 #include "spell/spell-projection-internal.h"
 #include "player/player-song-internal.h"
 void process_player(void); /* Internal production scheduler entry point. */
@@ -83,6 +85,108 @@ static monster_type* adaptive_fixture(int race, int evasion)
             else if (distance(y,x,p_ptr->py,p_ptr->px) <= MAX_SIGHT)
                 cave_info[y][x] |= CAVE_FIRE | CAVE_VIEW;
     return m;
+}
+
+static void corner_point(int orientation, int dy, int dx, int* y, int* x)
+{
+    if (orientation & 4) dx = -dx;
+    for (int i = 0; i < (orientation & 3); ++i) {
+        int old = dy; dy = dx; dx = -old;
+    }
+    *y = 30 + dy; *x = 30 + dx;
+}
+
+static monster_type* territorial_corner(int race, int orientation)
+{
+    monster_type* m = adaptive_fixture(race, 0);
+    cave_m_idx[m->fy][m->fx] = 0;
+    cave_m_idx[p_ptr->py][p_ptr->px] = 0;
+    p_ptr->py = p_ptr->px = 30;
+    for (int dy = -1; dy <= 5; ++dy) for (int dx = -3; dx <= 3; ++dx) {
+        int y, x; corner_point(orientation, dy, dx, &y, &x);
+        bool floor = (dx == 0 && dy >= -1 && dy <= 1)
+            || (dy >= 2 && dy <= 4 && dx >= -1 && dx <= 1);
+        cave_set_feat(y, x, floor ? FEAT_FLOOR : FEAT_WALL_PERM);
+        cave_info[y][x] |= CAVE_ICKY;
+    }
+    int my, mx; corner_point(orientation, 2, -1, &my, &mx);
+    m->fy = my; m->fx = mx;
+    cave_m_idx[m->fy][m->fx] = (int)(m - mon_list);
+    cave_m_idx[30][30] = -1;
+    m->routine.home_y = m->fy; m->routine.home_x = m->fx;
+    m->cdis = 2; m->min_range = 0; m->best_range = 0;
+    m->stance = STANCE_CONFIDENT;
+    m->tmp_morale = 100;
+    memset(&m->ai.sense, 0, sizeof(m->ai.sense));
+    assert(!monster_ai_can_see_player(m) && monster_lair_contains(m, m->fy, m->fx));
+    return m;
+}
+
+static void check_territorial_defense(void)
+{
+    int y, x, by, bx;
+    bool fear, bash;
+    const int races[] = {124, 15, 32}; /* dragon, orc and spider */
+    for (int i = 0; i < (int)N_ELEMENTS(races); ++i)
+        for (int orientation = 0; orientation < 8; ++orientation)
+            for (int evidence = 0; evidence < 3; ++evidence) {
+                monster_type* m = territorial_corner(races[i], orientation);
+                fear = bash = false;
+                assert(!get_move(m, &y, &x, &fear, false));
+                if (evidence == 0) monster_senses_hear(m, 30, 30);
+                if (evidence == 1) { monster_senses_see(m, 30, 30); ++playerturn; }
+                if (evidence == 2) monster_senses_share_trace(m, 30, 30);
+                u64b rng = Rand_state_export();
+                assert(get_move(m, &y, &x, &fear, false));
+                corner_point(orientation, 1, 0, &by, &bx);
+                assert(y == by && x == bx && !fear);
+                assert(Rand_state_export() == rng);
+                assert(cave_passable_mon(m, y, x, &bash) == 100);
+                assert(make_move(m, &y, &x, fear, &bash));
+                process_move(m, y, x, bash);
+                assert(m->fy == by && m->fx == bx);
+            }
+    puts("Territorial doorway: 72 dragon/orc/spider orientation/evidence cases take the legal adjacent block without blind targeting PASS.");
+
+    /* Real scheduler with the race's original random trait: every step stays
+     * in its saved lair even while the visible player remains beyond it. */
+    monster_type* m = adaptive_fixture(124, 0);
+    cave_m_idx[10][10] = cave_m_idx[10][11] = 0;
+    p_ptr->py = 30; p_ptr->px = 40; cave_m_idx[30][40] = -1;
+    m->fy = 30; m->fx = 35; cave_m_idx[30][35] = (int)(m - mon_list);
+    m->routine.home_y = m->routine.home_x = 30;
+    m->stance = STANCE_CONFIDENT; m->tmp_morale = 100;
+    for (int action = 0; action < 32; ++action) {
+        m->cdis = distance(m->fy, m->fx, 30, 40);
+        ++playerturn; m->energy = 100; process_monsters(100);
+        assert(monster_lair_contains(m, m->fy, m->fx));
+        assert(m->routine.home_y == 30 && m->routine.home_x == 30);
+    }
+
+    m = territorial_corner(124, 0); bash = false;
+    cave_info[31][30] &= ~CAVE_ICKY;
+    assert(!cave_passable_mon(m, 31, 30, &bash));
+    int oy = m->fy, ox = m->fx;
+    process_move(m, 31, 30, false);
+    assert(m->fy == oy && m->fx == ox);
+
+    /* Forced displacement is a return journey, even with a nearer visible
+     * player outside the vault. It must not establish a new pursuit center. */
+    m = adaptive_fixture(124, 0);
+    cave_m_idx[10][10] = cave_m_idx[10][11] = 0;
+    p_ptr->py = 30; p_ptr->px = 34; cave_m_idx[30][34] = -1;
+    cave_info[30][30] |= CAVE_ICKY;
+    m->fy = 30; m->fx = 33; cave_m_idx[30][33] = (int)(m - mon_list);
+    m->routine.home_y = m->routine.home_x = 30;
+    m->cdis = 1;
+    assert(monster_routine_needs_return(m));
+    for (int action = 0; action < 3; ++action) {
+        m->energy = 100; ++playerturn; process_monsters(100);
+        assert(m->fx < 33 - action);
+        assert(m->routine.home_y == 30 && m->routine.home_x == 30);
+    }
+    assert(m->fy == 30 && m->fx == 30 && !monster_routine_needs_return(m));
+    puts("Territorial scheduler: visible pursuit/random movement stays local; vault exits rejected; displaced defender returns to its saved home PASS.");
 }
 
 static void check_weapon_fear(void)
@@ -1053,6 +1157,7 @@ static void check_adaptive_integration(void)
     assert(p_ptr->poisoned == POISON_TERRAIN_DOSE - contact_tick - bank_tick);
     puts("Real complete player actions apply pool contact before poison tick and suppress regeneration PASS.");
     check_weapon_fear();
+    check_territorial_defense();
     check_visible_unarmed_disarm_utility();
     check_protected_terrain_movement();
     check_archer_vacated_square();

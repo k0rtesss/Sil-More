@@ -1,5 +1,29 @@
 # Monster AI implementation plan
 
+## Territorial lair defense (2026-11-16)
+
+Territorial creatures can approach an actually heard threat, a remembered
+sighting or a shared sensory anchor within their lair. A corner that breaks
+sight no longer suppresses an otherwise legal defensive step into a doorway.
+No observation means no new target, and following a sound never authorizes an
+attack against the hidden player's current square.
+
+Movement legality bounds local defense, visible pursuit, tactical posts and
+random movement to six squares from the saved birth/home position, on the
+home side of vault membership and within any saved partition. Adjacent melee
+attacks across that boundary remain attacks without moving outside. Forced
+displacement starts a paid return journey rather than establishing a new home
+or continuing combat outside. Older saves without a trustworthy home retain
+their former movement behavior. The existing home record, finite sensory
+search budgets, monster statistics and innate erratic movement are retained.
+
+Regressions cover the reported hatchling corner in eight orientations for
+dragons, orcs and spiders, legitimate sound/old sight/shared anchors, absent
+evidence, radius/vault/partition limits, displaced return and legacy records.
+The native sensing and AI integration checks and
+`scripts/check_territorial_defense_gameplay.py` exercise these rules; the latter
+uses real SDL input, original monster traits and disposable save/reload runs.
+
 ## Physical sight and stealth recognition are separate (2026-11-15)
 
 **Shooters firing from darkness are intended gameplay.** The
@@ -147,11 +171,11 @@ combat-stat changes.
 Territorial dragons may now follow an acquired scent, including the existing
 bounded search after that trail ends, within six squares of their saved home.
 This reuses the territorial world-work radius. Existing vault membership and
-partition boundaries also apply. A sound, shared sighting, or old visual target
-alone does not grant this exception. Other territorial races retain their rule;
-ordinary wolf/cat tracking and visible combat keep their existing behavior.
-The home coordinates already persist in monster routines, so no save format
-change is needed.
+partition boundaries also apply. The later territorial-defense rule above
+extends local investigation to heard and remembered threats and uses these
+boundaries for all territorial movement. Ordinary non-territorial wolf/cat
+tracking retains its existing range. Home coordinates already persist in
+monster routines, so no save format change is needed.
 
 ## Commander and soldier coordination (2026-09-25)
 
@@ -520,7 +544,7 @@ Passing source checks or a build is not proof of balanced or convincing encounte
 
 Visible leaders announce a new advance, hold, or regroup order after actually taking an action. A visible ally must also be present before a message identifies group activity. Archers explain useful repositioning and deliberate holds at assigned firing posts. Explanations are suppressed for lost actions, forced displacement, unseen actors, hallucinations, and failed moves. Per-actor cooldowns and separate per-player-turn limits for command and movement messages keep formations readable without a message for every soldier.
 
-Desktop `log.txt` records completed active monster actions at the default DEBUG level: actor/race identity, positions, HP/mana/energy changes, sensory evidence and remembered position, commander, role, plan, job, order validity, command budget, and tactical reason. Ranged records include the committed attack ID and distinguish arrows, boulders, and spell/support actions. Action-start deaths retain the original actor's identity; missing turns show the cause instead of claiming a move. Unchanged sleepers are available at TRACE. `SIL_LOG_LEVEL=TRACE` enables those records; `SIL_LOG_LEVEL=INFO` suppresses per-action diagnostics. Mobile keeps its existing INFO default.
+Release builds and mobile default to INFO logging. `SIL_LOG_LEVEL=DEBUG` enables completed active monster action records: actor/race identity, positions, HP/mana/energy changes, sensory evidence and remembered position, commander, role, plan, job, order validity, command budget, and tactical reason. Ranged records include the committed attack ID and distinguish arrows, boulders, and spell/support actions. Action-start deaths retain the original actor's identity; missing turns show the cause instead of claiming a move. `SIL_LOG_LEVEL=TRACE` also includes unchanged sleepers. Desktop Debug builds retain their DEBUG default. Filtered action diagnostics skip sight/order previews; popup timing traces require `SIL_PERF=1`.
 
 Detailed diagnostics may describe offscreen actors, but player-facing messages use only visible actions and visible allies. Logging and message generation must not roll dice or change decisions. `scripts/check_monster_ai_transparency_gameplay.py` checks real SDL-input encounters, log/action correspondence, visibility-safe messages, exact replay equivalence at different log levels, and live save/reload continuations.
 

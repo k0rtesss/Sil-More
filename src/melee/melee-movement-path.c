@@ -128,10 +128,9 @@ bool monster_can_smell(monster_type* m_ptr)
 bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
 {
     if (m_ptr->routine.style == MON_ROUTINE_PATROL
+        || monster_routine_needs_return(m_ptr)
         || (m_ptr->routine.territory
-            && (!(r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL)
-                || level_partition_index_for_point(m_ptr->fy, m_ptr->fx)
-                    != m_ptr->routine.territory - 1)))
+            && !(r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL)))
         return monster_routine_move(m_ptr, ty, tx);
 
     int d;
@@ -1318,11 +1317,10 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
     bool sight = monster_ai_can_see_player(m_ptr);
     if ((r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL) && !sight)
     {
-        /* Dragons investigate actual scent, including its bounded search,
-         * inside their saved lair. Sound/shared sightings alone do not relax
-         * the ordinary territorial rule. Candidate steps enforce the boundary. */
-        if (!(r_info[m_ptr->r_idx].flags3 & RF3_DRAGON)
-            || !monster_senses_tracking_scent(m_ptr))
+        /* Defend a known lair using actual sound, last sighting, shared trace
+         * or scent. The sensory selector never substitutes the hidden player's
+         * current square; ordinary movement legality keeps every step inside. */
+        if (!monster_lair_contains(m_ptr, m_ptr->fy, m_ptr->fx))
             return;
     }
     if (!monster_senses_advance(m_ptr, ty, tx))

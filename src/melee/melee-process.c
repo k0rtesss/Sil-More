@@ -549,9 +549,7 @@ static void process_monster(monster_type* m_ptr)
     monster_senses_refresh(m_ptr);
 
     /* Displacement does not replace the home territory with the new location. */
-    if (m_ptr->routine.territory && !m_ptr->confused
-        && level_partition_index_for_point(m_ptr->fy, m_ptr->fx)
-            != m_ptr->routine.territory - 1)
+    if (!m_ptr->confused && monster_routine_needs_return(m_ptr))
     {
         wander(m_ptr);
         return;
@@ -1666,11 +1664,12 @@ static void finish_monster_ability_action(monster_type* m_ptr,
         : m_ptr->ability_displaced ? "displaced" : m_ptr->ability_melee ? "melee"
         : moved ? "move" : m_ptr->previous_action[0] == ACTION_ARCHERY
             ? "ranged" : "hold/work";
-    /* Sleeping, unchanged creatures are available at TRACE without filling
-     * the default desktop log with hundreds of idle entries per turn. */
+    /* Sleeping, unchanged creatures require TRACE rather than DEBUG. Skip
+     * diagnostic sight/order previews entirely when no sink accepts them. */
     int level = !m_ptr->r_idx || moved || m_ptr->hp != start->hp
         || m_ptr->alertness >= ALERTNESS_UNWARY ? LOG_DEBUG : LOG_TRACE;
-    log_log(level, __FILE__, __LINE__,
+    if (log_is_enabled(level))
+        log_log(level, __FILE__, __LINE__,
         "[monster-ai] player_turn=%ld world_turn=%ld actor=%d race=%d name=%s "
         "completed=%s status=%s from=(%d,%d) to=(%d,%d) "
         "hp=%d->%d mana=%d->%d energy=%d->%d stance=%d alertness=%d "

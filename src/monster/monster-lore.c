@@ -939,7 +939,7 @@ static void describe_monster_movement(
     /* End this sentence */
     text_out(".  ");
 
-    /*note if this monster does not pursue you*/
+    /* Known territorial behavior describes local defense, not immobility. */
     if (l_ptr->flags2 & (RF2_TERRITORIAL))
     {
         int msex = 0;
@@ -950,11 +950,11 @@ static void describe_monster_movement(
         else if (r_ptr->flags1 & RF1_MALE)
             msex = 1;
 
+        text_out(format("%^s defends %s lair but will not pursue you beyond it.  ",
+            wd_he[msex], wd_his[msex]));
         if (r_ptr->flags3 & RF3_DRAGON)
             text_out(format("%^s can follow your scent within %s lair.  ",
                 wd_he[msex], wd_his[msex]));
-        else
-            text_out(format("%^s does not deign to pursue you.  ", wd_he[msex]));
     }
 }
 

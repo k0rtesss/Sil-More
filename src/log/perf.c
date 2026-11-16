@@ -64,7 +64,7 @@ void sil_popup_trace_begin(int from_y, int from_x, int to_y, int to_x)
 {
     unsigned int next_id = popup_trace.id + 1;
 
-    if (from_y == to_y && from_x == to_x)
+    if (!sil_perf_enabled() || (from_y == to_y && from_x == to_x))
         return;
     sil_popup_trace_end("moved-again-before-popup");
     if (!p_ptr || !cave_o_idx || !character_dungeon

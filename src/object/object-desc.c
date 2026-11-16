@@ -743,7 +743,10 @@ bool object_is_unidentified_for_display(const object_type* o_ptr)
     if (!object_aware_p(o_ptr))
         return true;
 
-    if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN)
+    /* Supply lights can still have unidentified affixes.  Their storage and
+     * smithing category does not make the individual light known. */
+    if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN
+        || o_ptr->tval == TV_LIGHT)
         return !object_known_p(o_ptr);
 
     if (object_uses_smithing_difficulty(o_ptr))

@@ -492,8 +492,67 @@ static void test_pursuit_flow(void)
 
 #include "monster-squad-tests.h"
 
+static void test_tactical_frontier(void)
+{
+    unsigned state = 0x16b0a9e3u;
+    /* The former full scan is an independent ordering oracle. Exercise ties,
+     * dominance, replaced/done slots and removal at both search sizes. */
+    for (int size = 0; size < 2; ++size)
+    {
+        int cells = size ? TACTICAL_MAX_CELLS : TACTICAL_CELLS;
+        tactical_label labels[TACTICAL_MAX_CELLS][TACTICAL_LABELS] = {0};
+        tactical_frontier frontier = {0};
+        for (int i = 0; i < cells; ++i) frontier.index[i] = -1;
+        for (int step = 0; step < 8000; ++step)
+        {
+            state = state * 1664525u + 1013904223u;
+            int cell = (state >> 8) % cells;
+            if (step < cells || (state & 3))
+            {
+                tactical_label next = { .cost = (state >> 16) % 32,
+                    .damage = (state >> 22) % 8, .pending = (state >> 25) % 8,
+                    .steps = (state >> 28) % 8, .first = cell, .used = true };
+                tactical_add_label(labels[cell], next);
+                tactical_frontier_update(&frontier, cell, labels[cell]);
+            }
+            else if (frontier.count)
+            {
+                cell = frontier.heap[0];
+                labels[cell][frontier.label[cell]].done = true;
+                tactical_frontier_update(&frontier, cell, labels[cell]);
+            }
+            int at = -1, which = -1, active = 0;
+            for (int i = 0; i < cells; ++i)
+            {
+                bool pending = false;
+                for (int n = 0; n < TACTICAL_LABELS; ++n)
+                    if (labels[i][n].used && !labels[i][n].done)
+                    {
+                        pending = true;
+                        if (at < 0 || labels[i][n].cost < labels[at][which].cost)
+                        { at = i; which = n; }
+                    }
+                if (pending) ++active;
+                CHECK(pending == (frontier.index[i] >= 0));
+                if (pending) CHECK(frontier.heap[frontier.index[i]] == i);
+            }
+            CHECK(frontier.count == active);
+            CHECK(at < 0 || (frontier.heap[0] == at && frontier.label[at] == which));
+        }
+        /* Drain the queue as well as replacing entries in a full frontier. */
+        while (frontier.count)
+        {
+            int cell = frontier.heap[0];
+            labels[cell][frontier.label[cell]].done = true;
+            tactical_frontier_update(&frontier, cell, labels[cell]);
+        }
+    }
+    puts("Tactical frontier: 16,000 mutations match original scan ordering PASS.");
+}
+
 int main(void)
 {
+    test_tactical_frontier();
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
     test_poison_ai();
     test_flow_fast_path();

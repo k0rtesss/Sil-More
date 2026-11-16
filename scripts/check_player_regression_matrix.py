@@ -44,7 +44,7 @@ GROUPS = {
         "combat_action_energy", "qa9_combat_weapon_roles", "qa9_combat_polearm_roles",
         "qa9_combat_exchange_redirect", "qa9_combat_peaceful_primary",
         "qa9_combat_weapon_credit_save", "interaction_roll_actor",
-        "silmaril_possession", "kinslayer", "truce", "postmortem_identification",
+        "silmaril_possession", "kinslayer", "truce", "postmortem_identification", "final_look",
         "rest_interruptions", "vitals_and_terrain_memory",
     ),
     "crafting_songs": (

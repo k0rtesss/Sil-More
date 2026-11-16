@@ -279,6 +279,23 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         d = m_ptr->cdis;
     }
 
+    /* Death revelation is inspection, not a new sighting. Final Look uses
+     * live UI flags, so is_dead alone cannot guard encounter XP, quest/lore
+     * counters, invisible-item identification or listening side effects.
+     * The final level's monsters remain visible even after a view rebuild. */
+    if (!preview && (p_ptr->is_dead || death_spectator_active()))
+    {
+        if (!m_ptr->ml)
+        {
+            m_ptr->ml = true;
+            lite_spot(fy, fx);
+            p_ptr->window |= PW_MONLIST;
+            if (p_ptr->health_who == m_idx)
+                p_ptr->redraw |= PR_HEALTHBAR;
+        }
+        return;
+    }
+
     /* Detected */
     if (m_ptr->mflag & (MFLAG_MARK))
         flag = true;

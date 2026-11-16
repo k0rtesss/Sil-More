@@ -1270,8 +1270,19 @@ static void strip_supply_light_turns_suffix(char* name)
         return;
 
     suffix = strstr(name, " (");
-    if (suffix && strstr(suffix, " turns)"))
-        *suffix = '\0';
+    while (suffix)
+    {
+        char* turns = suffix + 2;
+        while (isdigit((unsigned char)*turns))
+            turns++;
+        if (turns > suffix + 2 && strncmp(turns, " turns)", 7) == 0)
+        {
+            /* Keep the identification status and inscriptions after fuel. */
+            memmove(suffix, turns + 7, strlen(turns + 7) + 1);
+            return;
+        }
+        suffix = strstr(suffix + 2, " (");
+    }
 }
 
 static object_type* supply_entry_display_object(const supply_list_entry* entry,
@@ -1465,7 +1476,8 @@ static void supply_entry_display_name(char* buf, size_t buflen,
         return;
     }
 
-    if (current_group == SUPPLY_GROUP_JEWELRY)
+    if (current_group == SUPPLY_GROUP_JEWELRY
+        || current_group == SUPPLY_GROUP_LIGHTS)
         object_desc(buf, buflen, o_ptr, true, 3);
     else
         object_desc(buf, buflen, o_ptr, false, 0);

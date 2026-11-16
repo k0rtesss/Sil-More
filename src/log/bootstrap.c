@@ -26,10 +26,10 @@ void init_logger(bool quiet, const char* exe_path)
 #endif
 
     const char* log_level_str = getenv("SIL_LOG_LEVEL");
-#if defined(__ANDROID__) || defined(SIL_IOS)
+#if defined(__ANDROID__) || defined(SIL_IOS) || defined(NDEBUG)
     /*
-     * Mobile storage can make the logger's flush-after-every-line policy
-     * visible as gameplay stalls.  Keep diagnostics available through
+     * Per-action diagnostics and synchronous file writes can stall gameplay,
+     * especially on mobile storage. Keep diagnostics available through
      * SIL_LOG_LEVEL, but do not enable hot-path DEBUG logging by default.
      */
     int level = LOG_INFO;

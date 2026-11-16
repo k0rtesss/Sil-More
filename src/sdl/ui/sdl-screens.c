@@ -12881,9 +12881,8 @@ static float sdl_char_sheet_narrative_para_gap(float line_h)
     return sdl_char_sheet_terminal_book_style() ? 0.0f : line_h * 0.6f;
 }
 
-/* Tale Statistics is a chaptered chronicle.  Readability takes priority over
- * keeping every authored chapter on one physical page in either orientation;
- * dense chapters flow onto continuation pages. */
+/* Tale Statistics is a chaptered chronicle. Each chapter keeps its own leaf;
+ * dense chapters scroll at a readable body size in either orientation. */
 static bool sdl_char_sheet_chronicle(void)
 {
     return g_sdl_character_sheet_screen.context
@@ -13065,7 +13064,7 @@ static float sdl_char_sheet_portrait_contents_height(int body_px,
     if (!g_sdl_narrative_portrait_rendering)
         px = sdl_menu_font_px(10);
 #endif
-    if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
+    if (sdl_handheld_ui_active())
     {
         px = sdl_menu_role_font_px(SDL_UI_FONT_BODY);
     }
@@ -13101,7 +13100,7 @@ static float sdl_char_sheet_portrait_contents_height(int body_px,
             row_lines = MAX(row_lines, MAX(1, lines));
         }
         height += MAX((float)row_lines * lh,
-            sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
+            sdl_handheld_ui_active()
                 ? (float)sdl_ui_min_tap_px() : 0.0f);
         if (row + 1 < rows)
             height += lh * 0.24f;
@@ -13164,12 +13163,10 @@ int sdl_char_sheet_narrative_pack(int body_px, float content_w,
     if (page_start)
         page_start[0] = 0;
 
-    /* Landscape chaptered books retain one physical page per authored section;
-     * overflow is handled by the page's vertical scroller.  Portrait
-     * chronicles instead gain continuation pages because their tall book
-     * composition already makes those leaves natural. */
-    if (g_sdl_character_sheet_screen.narrative_contents_count > 0
-        && !sdl_char_sheet_portrait_chronicle())
+    /* Keep each chapter together in both orientations. In particular, a
+     * difficulty preview, its warning, and both confirmation actions must
+     * share the same vertical scroller instead of spilling onto other leaves. */
+    if (g_sdl_character_sheet_screen.narrative_contents_count > 0)
     {
         page = 0;
         for (i = 1; i < para_count; i++)
@@ -13609,6 +13606,12 @@ int sdl_char_sheet_narrative_choose_px(float canvas_h, float content_w,
     if (sdl_char_sheet_mobile_icon_book())
         return MAX(1, (int)SDL_ceilf(sdl_ui_density_scale() * sdl_menu_font_px(24)));
 
+    /* A scrollable phone Chronicle uses the selected readable text size.
+     * Scaling it from framebuffer height can make the Contents taller than
+     * the leaf, leaving the reading viewport below the page frame. */
+    if (sdl_handheld_ui_active() && sdl_char_sheet_chronicle())
+        return sdl_menu_role_font_px(SDL_UI_FONT_BODY);
+
     if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
         && !sdl_char_sheet_terminal_book_style())
     {
@@ -13637,8 +13640,7 @@ int sdl_char_sheet_narrative_choose_px(float canvas_h, float content_w,
     if (max_px < min_px)
         max_px = min_px;
 
-    /* Portrait has enough height for the large Chronicle typography and
-     * continuation leaves. */
+    /* Desktop portrait books retain their larger Chronicle typography. */
     if (sdl_char_sheet_portrait_chronicle())
     {
         g_sdl_character_sheet_screen.narrative_lamp_side = false;
@@ -15482,8 +15484,8 @@ void sdl_char_sheet_render_book_page(int page, float canvas_h,
                     x = book_x
                         + (float)column * (column_w + column_gap);
                     h = MAX((float)lines * toc_lh,
-                        sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
-                ? (float)sdl_ui_min_tap_px() : 0.0f);
+                        sdl_handheld_ui_active()
+                            ? (float)sdl_ui_min_tap_px() : 0.0f);
                     hit = (SDL_FRect){ x, toc_y, column_w, h };
 
                     if (focused)
@@ -15497,8 +15499,8 @@ void sdl_char_sheet_render_book_page(int page, float canvas_h,
                         sdl_char_sheet_add_hit(hit, choice, "", TERM_WHITE);
                 }
                 toc_y += MAX((float)row_lines * toc_lh,
-                    sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
-                ? (float)sdl_ui_min_tap_px() : 0.0f);
+                    sdl_handheld_ui_active()
+                        ? (float)sdl_ui_min_tap_px() : 0.0f);
                 if (row + 1 < (contents_count + columns - 1) / columns)
                     toc_y += toc_lh * 0.24f;
             }
@@ -19408,6 +19410,8 @@ bool sdl_character_sheet_screen_handle_pointer_button(float x, float y,
     int action)
 {
     const sdl_character_sheet_hit* hit;
+    bool live_sheet;
+    bool needs_keypress;
 
     if (!sdl_character_sheet_screen_active())
         return false;
@@ -19452,14 +19456,24 @@ bool sdl_character_sheet_screen_handle_pointer_button(float x, float y,
         g_state.need_present = true;
         return true;
     }
+    live_sheet = g_sdl_character_sheet_screen.context
+        == SDL_CHARACTER_SHEET_LIVE;
+    needs_keypress = !live_sheet || !ui_menu_click_has_pending();
     if (!ui_menu_click_handle_choice_action(hit->choice, action, NULL))
         return true;
+    /* A handled live-sheet press may open another menu immediately.  Its
+     * held finger must not turn into Back inside that child menu.  Reuse an
+     * already queued hover wake so its extra Enter cannot activate a choice
+     * in the newly opened menu. */
+    if (live_sheet)
+        sdl_screen_back_touch_cancel();
     /* Prompt buttons use -1 for Back and -2 for Choose/Confirm.  The
      * semantic settings menus still inspect the key returned by inkey(), so
      * injecting Enter for both buttons makes Back activate the selected row.
      * Keep the click choice pending for callers that consume it explicitly,
      * while also injecting the matching keyboard equivalent. */
-    Term_keypress(hit->choice == -1 ? ESCAPE : '\r');
+    if (needs_keypress)
+        Term_keypress(hit->choice == -1 ? ESCAPE : '\r');
     g_state.need_present = true;
     return true;
 }

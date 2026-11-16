@@ -39,6 +39,7 @@ monster_type *mon_list;
 monster_race *r_info;
 s16b mon_max;
 static int silmarils, notices;
+bool death_spectator_active(void) { return false; }
 int silmarils_possessed(void) { return silmarils; }
 void metarun_apply_runtime_effects(void) {}
 bool oath_invalid(int oath) { (void)oath;return false; }

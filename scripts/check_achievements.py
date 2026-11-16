@@ -35,6 +35,8 @@ cptr ANGBAND_DIR_APEX;
 bool character_generated = true;
 static int notifications, messages, syncs;
 static int carried_silmarils;
+static bool spectator;
+bool death_spectator_active(void) { return spectator; }
 int silmarils_possessed(void) { return carried_silmarils; }
 static uint64_t remote, submitted, remote_upper, submitted_upper;
 maxima *z_info;
@@ -99,6 +101,7 @@ static void clean_player(void)
     memset(&player, 0, sizeof(player));
     memset(&options, 0, sizeof(options));
     carried_silmarils = 0;
+    spectator = false;
     player.playing = true;
     player.chp = player.mhp = 20;
     player.energy_use = 100;
@@ -126,6 +129,7 @@ static void blocked_games(void)
     clean_player(); character_generated = false; try_all();
     clean_player(); player.playing = false; try_all();
     clean_player(); player.is_dead = true; try_all();
+    clean_player(); spectator = true; try_all();
     clean_player(); player.wizard = true; try_all();
     clean_player(); player.game_type = 1; try_all();
     for (int bit = 1; bit <= 8; bit <<= 1) {

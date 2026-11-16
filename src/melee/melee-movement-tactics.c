@@ -29,6 +29,70 @@ typedef struct tactical_label
     bool used, done;
 } tactical_label;
 
+/* Indexed frontier: expanding the firing search must not require scanning
+ * every label at every step. Equal costs retain the original cell/label order
+ * so route choices and gameplay RNG outcomes remain unchanged. */
+typedef struct tactical_frontier
+{
+    int heap[TACTICAL_MAX_CELLS], index[TACTICAL_MAX_CELLS];
+    int cost[TACTICAL_MAX_CELLS], label[TACTICAL_MAX_CELLS];
+    int count;
+} tactical_frontier;
+
+static bool tactical_frontier_before(const tactical_frontier* f, int a, int b)
+{
+    return f->cost[a] < f->cost[b] || (f->cost[a] == f->cost[b] && a < b);
+}
+
+static void tactical_frontier_swap(tactical_frontier* f, int a, int b)
+{
+    int cell = f->heap[a];
+    f->heap[a] = f->heap[b]; f->heap[b] = cell;
+    f->index[f->heap[a]] = a; f->index[f->heap[b]] = b;
+}
+
+static void tactical_frontier_update(tactical_frontier* f, int cell,
+    const tactical_label labels[TACTICAL_LABELS])
+{
+    int best = -1, at = f->index[cell];
+    for (int n = 0; n < TACTICAL_LABELS; ++n)
+        if (labels[n].used && !labels[n].done
+            && (best < 0 || labels[n].cost < labels[best].cost)) best = n;
+    if (best < 0)
+    {
+        if (at < 0) return;
+        f->index[cell] = -1;
+        --f->count;
+        if (at == f->count) return;
+        f->heap[at] = f->heap[f->count];
+        f->index[f->heap[at]] = at;
+    }
+    else
+    {
+        f->cost[cell] = labels[best].cost; f->label[cell] = best;
+        if (at < 0)
+        {
+            at = f->count++;
+            f->heap[at] = cell; f->index[cell] = at;
+        }
+    }
+    while (at > 0)
+    {
+        int parent = (at - 1) / 2;
+        if (!tactical_frontier_before(f, f->heap[at], f->heap[parent])) break;
+        tactical_frontier_swap(f, at, parent); at = parent;
+    }
+    for (;;)
+    {
+        int child = at * 2 + 1;
+        if (child >= f->count) break;
+        if (child + 1 < f->count
+            && tactical_frontier_before(f, f->heap[child + 1], f->heap[child])) ++child;
+        if (!tactical_frontier_before(f, f->heap[child], f->heap[at])) break;
+        tactical_frontier_swap(f, at, child); at = child;
+    }
+}
+
 typedef struct tactical_context
 {
     monster_type* actor;
@@ -1021,7 +1085,6 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     tactical_context c = { 0 };
-    tactical_label labels[TACTICAL_MAX_CELLS][TACTICAL_LABELS] = { 0 };
     int start;
     int baseline, best_score, best_first = -1, best_goal = -1;
     int shot_score = -100000, shot_first = -1, shot_goal = -1;
@@ -1050,6 +1113,14 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     int radius = seek_shot ? MAX(TACTICAL_RADIUS,
         MIN(TACTICAL_MAX_RADIUS, m_ptr->best_range)) : TACTICAL_RADIUS;
     int width = radius * 2 + 1, cells = width * width;
+    /* Allocate/clear search state only after the eligibility checks. Heap
+     * costs and label slots are initialized as their cells enter the queue. */
+    tactical_label labels[TACTICAL_MAX_CELLS][TACTICAL_LABELS] = { 0 };
+    tactical_frontier frontier;
+    int position_scores[TACTICAL_MAX_CELLS];
+    bool position_scored[TACTICAL_MAX_CELLS] = { false };
+    frontier.count = 0;
+    for (int i = 0; i < cells; ++i) frontier.index[i] = -1;
     int max_steps = seek_shot ? radius * 2 : TACTICAL_STEPS;
     start = radius * width + radius;
     c.oy = m_ptr->fy - radius; c.ox = m_ptr->fx - radius;
@@ -1065,15 +1136,13 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
         - monster_ai_poison_damage(m_ptr, m_ptr->fy, m_ptr->fx, 1) * 3;
     best_score = baseline + ((r_ptr->flags2 & RF2_FLANKING) ? 3 : 6);
     labels[start][0] = (tactical_label){ .pending = m_ptr->poisoned, .first = -1, .used = true };
+    tactical_frontier_update(&frontier, start, labels[start]);
     for (int visit = 0; visit < cells * TACTICAL_LABELS; ++visit)
     {
-        int at = -1, which = -1;
-        for (int i = 0; i < cells; ++i)
-            for (int n = 0; n < TACTICAL_LABELS; ++n)
-                if (labels[i][n].used && !labels[i][n].done
-                    && (at < 0 || labels[i][n].cost < labels[at][which].cost)) { at = i; which = n; }
-        if (at < 0) break;
+        if (!frontier.count) break;
+        int at = frontier.heap[0], which = frontier.label[at];
         labels[at][which].done = true;
+        tactical_frontier_update(&frontier, at, labels[at]);
         tactical_label here = labels[at][which];
         int y = c.oy + at / width, x = c.ox + at % width;
         int dist = distance(y, x, c.py, c.px);
@@ -1081,7 +1150,12 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
                 || (c.commanded && m_ptr->squad.plan == MON_PLAN_REGROUP)
                 || (avoid_sweep && dist == 2)))
         {
-            int score = tactical_position_score(&c, y, x) - here.cost - here.damage * 3;
+            if (!position_scored[at])
+            {
+                position_scores[at] = tactical_position_score(&c, y, x);
+                position_scored[at] = true;
+            }
+            int score = position_scores[at] - here.cost - here.damage * 3;
             /* Small deterministic variation does not consume game RNG. */
             score += (at + m_ptr->r_idx + m_ptr->fy + m_ptr->fx) % 3;
             if (score > best_score) { best_score = score; best_first = here.first; best_goal = at; }
@@ -1126,6 +1200,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             next.cost += tactical_reaction_cost(&c, y, x, yy, xx);
             next.cost += monster_terrain_penalty(m_ptr, yy, xx);
             tactical_add_label(labels[next_cell], next);
+            tactical_frontier_update(&frontier, next_cell, labels[next_cell]);
         }
     }
     /* A useful post can cost more than its immediate positional reward.
