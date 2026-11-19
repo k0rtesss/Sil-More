@@ -366,6 +366,30 @@ static void craft_and_combat(void)
     sil_achievements_on_light_kill(); sil_achievements_on_morgoth_defeated();
     sil_achievements_on_smithing_completed(true); assert(notifications == before);
 }
+static void easy_difficulty(void)
+{
+    player.run_blessings = 0x0f;
+    sil_achievements_begin_run();
+    sil_achievements_on_depth(10);
+    sil_achievements_on_escape(3);
+    sil_achievements_on_morgoth_defeated();
+    sil_achievements_on_artefact_created(65);
+    assert(earned(SIL_ACH_INTO_THE_DEEP) && earned(SIL_ACH_BACK_TO_STARLIGHT));
+    assert(!earned(SIL_ACH_THREE_LIGHTS_IN_EXILE) && !earned(SIL_ACH_THE_QUIET_ROAD));
+    assert(!earned(SIL_ACH_THE_SHADOW_FALLS) && !earned(SIL_ACH_THEIR_WORK_HAD_NO_RIVAL));
+    assert(!earned(SIL_ACH_NO_STEPS_REQUIRED));
+    char text[100];
+    assert(sil_achievement_progress_text(SIL_ACH_THE_QUIET_ROAD, text, sizeof(text)));
+    assert(strstr(text, RUN_BLESSING_MODE_NAME));
+
+    player.run_blessings = 0;
+    sil_achievements_begin_run();
+    sil_achievements_on_escape(3);
+    sil_achievements_on_morgoth_defeated();
+    sil_achievements_on_artefact_created(65);
+    assert(earned(SIL_ACH_THREE_LIGHTS_IN_EXILE) && earned(SIL_ACH_THE_QUIET_ROAD));
+    assert(earned(SIL_ACH_THE_SHADOW_FALLS) && earned(SIL_ACH_THEIR_WORK_HAD_NO_RIVAL));
+}
 static void tale(const char *test)
 {
     metar.id = 17; player.is_dead = true; player.playing = false;
@@ -460,6 +484,7 @@ int main(int argc, char **argv)
         || !strcmp(argv[1], "fall-arrival")) expanded_conditions(argv[1]);
     else if (!strcmp(argv[1], "comeback")) comeback();
     else if (!strcmp(argv[1], "craft-combat")) craft_and_combat();
+    else if (!strcmp(argv[1], "easy-difficulty")) easy_difficulty();
     else if (!strncmp(argv[1], "tale-", 5)) tale(argv[1]);
     else if (!strcmp(argv[1], "all-import")) {
         remote = sil_achievement_word_mask(0); remote_upper = UINT64_MAX; sil_achievements_update();
@@ -508,6 +533,7 @@ def main():
         assert payload["version"] == 1 and len(payload["unlocked"]) == 4
         for case in ("failed-write", "import"):
             run(case, base / case)
+        run("easy-difficulty", base / "easy-difficulty")
         for case in ("triple", "pacifist", "killer", "legacy-run", "oath", "song", "gates", "taint", "comeback", "craft-combat", "tale-repeat", "tale-blitz", "tale-discard", "new-events", "door-history", "door-level", "fall-arrival"):
             run(case, base / case)
         run("tale-first", base / "long-tale")

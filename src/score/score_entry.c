@@ -309,14 +309,9 @@ errr create_score(high_score* the_score)
     /* Save the version */
     strnfmt(the_score->what, sizeof(the_score->what), "%s", VERSION_STRING);
 
-    /* Store the net curse count (curses - blessings)
-     * curse_stacks[i] > 0 means curses, < 0 means blessings, so sum gives net value */
-    int curse_total = 0;
-    for (int id = 0; id < METAR_CURSE_SLOTS; ++id)
-    {
-        curse_total += CURSE_GET(id);
-    }
-    strnfmt(the_score->pts, sizeof(the_score->pts), "%4d", curse_total);
+    strnfmt(the_score->pts, sizeof(the_score->pts), "%4d", metarun_net_curse_stacks());
+    if (metarun_run_blessings(p_ptr))
+        the_score->unused[1] = SCORE_LEGACY_BLESSED_MARKER;
 
     /* Save the current player turn */
     strnfmt(

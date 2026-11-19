@@ -1005,9 +1005,13 @@ bool sdl_welcome_touch_handle_pointer_down(float x, float y,
     int slot = -1;
 
     if (!sdl_screen_shows_welcome_screen()
-        && !(get_sdl_menu_bigger_font() && sdl_pause_text_screen_active()))
+        && !(get_sdl_menu_bigger_font() && sdl_pause_text_screen_active())
+        && !sdl_poetry_screen_captures_pointer())
         return false;
-    if (sdl_touch_pane_point_to_slot(x, y, &slot) && slot >= 0)
+    if (sdl_poetry_screen_captures_pointer() && g_welcome_touch_press.active
+        && g_welcome_touch_press.finger_id != finger_id)
+        return true;
+    if (!sdl_poetry_screen_captures_pointer() && sdl_touch_pane_point_to_slot(x, y, &slot) && slot >= 0)
         return false;
 
     (void)sdl_narrative_portrait_transform_pointer(&x, &y);
@@ -1062,7 +1066,8 @@ bool sdl_welcome_touch_handle_pointer_motion(float x, float y,
     if (g_welcome_pager_dragged) return true;
     /* Enlarged welcome screens advance only on a short tap. Suppress the
      * legacy horizontal swipe actions, including drags outside the text. */
-    if (get_sdl_menu_bigger_font() && sdl_welcome_screen_active()) {
+    if ((get_sdl_menu_bigger_font() && sdl_welcome_screen_active())
+        || sdl_poetry_screen_captures_pointer()) {
         g_welcome_pager_dragged = true;
         return true;
     }
@@ -1115,12 +1120,16 @@ bool sdl_welcome_touch_handle_pointer_up(float x, float y,
         dy = -dy;
 
     threshold = sdl_touch_swipe_threshold_px();
+    float start_x = g_welcome_touch_press.start_x;
+    float start_y = g_welcome_touch_press.start_y;
     elapsed = g_welcome_touch_press.start_time
         ? SDL_GetTicksNS() - g_welcome_touch_press.start_time
         : 0;
     sdl_welcome_touch_cancel_press();
     if (dx > threshold || dy > threshold)
         return true;
+    if (sdl_poetry_screen_captures_pointer())
+        return sdl_poetry_screen_handle_tap(start_x, start_y, raw_x, raw_y);
     if (sdl_pause_text_screen_active()) {
         if (!sdl_standalone_screen_handle_pointer(raw_x, raw_y,
                 UI_MENU_CLICK_PRIMARY))

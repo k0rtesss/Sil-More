@@ -223,7 +223,6 @@ bool metarun_inline_choose_minor_blessing(int id)
             && -MIN(stacks, 0) >= CURSE_BLESSING_CAP(id)))
         return false;
     CURSE_ADD(id, -1);
-    CURSE_SEEN_SET(id);
     blessing_spend_points(1);
     metar.pending_blessing_count = 0;
     for (int i = 0; i < 3; i++)
@@ -706,7 +705,6 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
     }
 
     CURSE_ADD(blessing_id, -1);
-    CURSE_SEEN_SET(blessing_id);
 
     blessing_spend_points(1);
 

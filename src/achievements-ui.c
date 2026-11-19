@@ -107,13 +107,15 @@ static void build_achievement_book(int page, bool character_only)
             used = strlen(text);
             strnfmt(text + used, sizeof(text) - used, "\n%s", progress);
         }
+        byte attr = unlocked ? TERM_YELLOW : TERM_SLATE;
+        if (current_character && !sil_achievement_difficulty_allows(i))
+            attr = TERM_L_DARK;
         if (achievement_icons[i].source_size > 16)
             sdl_character_sheet_screen_add_book_atlas_icon_paragraph(text,
-                unlocked ? TERM_YELLOW : TERM_SLATE, row, col,
-                achievement_icons[i].source_size);
+                attr, row, col, achievement_icons[i].source_size);
         else
             sdl_character_sheet_screen_add_book_composite_icon_paragraph(text,
-                unlocked ? TERM_YELLOW : TERM_SLATE, row, col,
+                attr, row, col,
                 achievement_icons[i].row2, achievement_icons[i].col2,
                 achievement_icons[i].count);
     }

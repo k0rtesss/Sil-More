@@ -1342,20 +1342,29 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
+        return true;
     case SDL_EVENT_MOUSE_WHEEL:
+        (void)sdl_standalone_screen_drag(ev->wheel.mouse_x, ev->wheel.mouse_y,
+            -ev->wheel.y * sdl_ui_min_tap_px());
+        return true;
+    case SDL_EVENT_FINGER_CANCELED:
+        if (g_welcome_touch_press.finger_id == ev->tfinger.fingerID)
+            sdl_welcome_touch_cancel_press();
+        return true;
     case SDL_EVENT_FINGER_DOWN:
     case SDL_EVENT_FINGER_MOTION:
-    case SDL_EVENT_FINGER_CANCELED:
-        return true;
-
     case SDL_EVENT_FINGER_UP:
         if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window))
         {
             sdl_note_touch_event_device(ev->tfinger.touchID);
             if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             {
-                (void)sdl_poetry_screen_handle_pointer(x, y,
-                    UI_MENU_CLICK_PRIMARY);
+                if (ev->type == SDL_EVENT_FINGER_DOWN)
+                    (void)sdl_welcome_touch_handle_pointer_down(x, y, ev->tfinger.fingerID);
+                else if (ev->type == SDL_EVENT_FINGER_MOTION)
+                    (void)sdl_welcome_touch_handle_pointer_motion(x, y, ev->tfinger.fingerID);
+                else
+                    (void)sdl_welcome_touch_handle_pointer_up(x, y, ev->tfinger.fingerID);
             }
         }
         return true;

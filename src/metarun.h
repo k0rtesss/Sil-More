@@ -16,6 +16,7 @@
 #define METARUN_H
 
 #include "angband.h"          /* basic types (u32b, byte, errr ...)      */
+#include "blitz.h"
 
 extern curse_type* cu_info;
 
@@ -24,6 +25,9 @@ extern curse_type* cu_info;
 /* ------------------------------------------------------------------ */
 #define WINCON_SILMARILS 15   /* Recover 15 Silmarils -> victory        */
 #define LOSECON_DEATHS    15   /* Two deaths end the run  (test value)  */
+#define RUN_BLESSING_COUNT 4
+#define RUN_BLESSING_OFFER_COUNT 12
+#define RUN_BLESSING_MODE_NAME "Nienna's Mercy"
 
 /* ------------------------------------------------------------------ */
 /*  Quest completion tracking                                         */
@@ -101,7 +105,7 @@ typedef struct metarun
     u32b best_run_score;/* best individual run score                  */
 
     int8_t curse_stacks[METAR_CURSE_SLOTS]; /* signed stacks: >0 curses, <0 blessings */
-    u64b curses_seen;      /* bit i == 1  -> curse i is known/revealed */
+    u64b curses_seen;      /* Curse lore only; blessings are known when received. */
 
     /* ----- persistent settings ----------------------------------- */
     u32b persistent_options[8];  /* Persistent options across the metarun */
@@ -135,7 +139,8 @@ typedef struct metarun
     
     byte blessing_threshold_mode;     /* 0=normal (default), 1=easier, 2=harder          */
     byte tutorial_upgrade_pending;   /* 0.9.8 notice for this Tale, preserved until acknowledged. */
-    byte reserved_runtime[30];        /* Remaining runtime expansion space; record size unchanged. */
+    byte reserved_runtime[27];
+    u32b next_blessing_seed;          /* Fixed until a new Story hero enters the dungeon. */
 
 } metarun;
 
@@ -182,6 +187,7 @@ void metarun_increment_deaths(void);             /* Shortcut: +1 death      */
 void metarun_gain_silmarils(byte n);             /* Shortcut: +n Silmarils  */
 
 void print_metarun_stats(void);                  /* Pretty single-run view  */
+bool print_metarun_startup(u64b *run_blessings);  /* False if the player quits. */
 void list_metaruns(void);                        /* Full meta-run history   */
 void refresh_current_metar_score(void);          /* Recompute cached score for active run */
 const metarun *metarun_current(void);            /* Read-only pointer to current metarun */
@@ -236,6 +242,14 @@ bool metarun_record_artefact_revealed(int a_idx);
 bool metarun_try_identify_remembered_artefact(object_type *o_ptr);
 
 void metarun_apply_runtime_effects(void);        /* Sync blessing effects into runtime systems */
+static inline u64b metarun_run_blessings(const player_type *player)
+{
+    if (!player || !player->run_blessings || player->game_type || run_mode_is_blitz())
+        return 0;
+    return player->run_blessings;
+}
+int run_blessing_stack(int id);
+int metarun_net_curse_stacks(void);
 bool metarun_has_major_blessing_effect(metarun_major_effect effect);
 bool metarun_has_major_blessing_index(int idx);
 int  metarun_major_blessing_count(void);
@@ -279,6 +293,8 @@ static inline bool CURSE_SEEN(int id)
 {
     u64b* seen = active_curses_seen_ptr();
     if (id < 0 || id >= METAR_CURSE_SLOTS) return false;  // Add bounds check
+    /* Blitz exposes curse effects regardless of saved discovery state. */
+    if (run_mode_is_blitz()) return true;
     if (!seen) return false;
     return ((*seen) & (1ULL << id)) != 0;
 }
@@ -302,7 +318,7 @@ static inline int CURSE_CURSE_STACK(int id)
 static inline int CURSE_BLESSING_STACK(int id)
 {
     int v = CURSE_GET(id);
-    return (v < 0) ? -v : 0;
+    return MAX(-v, 0) + run_blessing_stack(id);
 }
 
 static inline int CURSE_CURSE_CAP(int id)

@@ -28,6 +28,22 @@ static void rd_tutorial_character_state(void)
     p_ptr->tutorial_deferred = deferred != 0;
 }
 
+static bool valid_run_blessings(u64b blessings)
+{
+    if (!blessings) return true;
+    if (p_ptr->game_type) return false;
+
+    int count = 0;
+    for (int id = 0; id < METAR_CURSE_SLOTS; id++) {
+        if (!(blessings & (1ULL << id))) continue;
+        if (id >= z_info->cu_max || !cu_info[id].blessing_name
+            || !cu_info[id].blessing_power)
+            return false;
+        count++;
+    }
+    return count == RUN_BLESSING_COUNT;
+}
+
 /*
  * Read the "extra" information
  */
@@ -903,13 +919,14 @@ errr rd_extra(void)
         hint_messages_level_reset();
     }
 
+    p_ptr->run_blessings = 0;
     if (savefile_version_at_least(0, 9, 5, 6))
     {
         byte marker = 0;
         byte mode = RUN_MODE_STORY;
         int8_t stacks[METAR_CURSE_SLOTS];
-        u32b seen_lo = 0;
-        u32b seen_hi = 0;
+        u32b flags_lo = 0;
+        u32b flags_hi = 0;
 
         rd_byte(&marker);
         if (marker != 0x55)
@@ -928,15 +945,24 @@ errr rd_extra(void)
             rd_byte(&raw);
             stacks[bi] = (int8_t)raw;
         }
-        rd_u32b(&seen_lo);
-        rd_u32b(&seen_hi);
+        rd_u32b(&flags_lo);
+        rd_u32b(&flags_hi);
+        u64b flags = ((u64b)flags_hi << 32) | flags_lo;
 
         run_mode_set_current((run_mode)mode);
         run_mode_set_pending((run_mode)mode);
         if (mode == RUN_MODE_BLITZ)
-            blitz_runtime_restore(stacks, ((u64b)seen_hi << 32) | seen_lo);
-        else
+            blitz_runtime_restore(stacks, flags);
+        else {
             blitz_runtime_reset();
+            if (savefile_version_at_least(0, 9, 9, 16)) {
+                if (!valid_run_blessings(flags)) {
+                    note("Invalid run blessings");
+                    return -1;
+                }
+                p_ptr->run_blessings = flags;
+            }
+        }
     }
     else
     {

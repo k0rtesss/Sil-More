@@ -483,6 +483,7 @@ typedef enum sdl_character_sheet_context {
 #define SDL_BOOK_PARA_LEN  1024 /* longest single paragraph (re-flowed text) */
 #define SDL_BOOK_MAX_PAGES 128  /* allow a full page for every semantic paragraph */
 #define SDL_BOOK_MAX_CONTENTS 8 /* persistent contents links beside the leaf */
+#define SDL_CHAR_SHEET_TOOLTIP_LEN 512
 
 typedef struct sdl_character_sheet_live_item {
     int choice;
@@ -497,7 +498,7 @@ typedef struct sdl_character_sheet_hit {
     SDL_FRect rect;
     int choice;
     byte attr;
-    char desc[256];
+    char desc[SDL_CHAR_SHEET_TOOLTIP_LEN];
 } sdl_character_sheet_hit;
 
 /* One row on the race/character selection screen: a selectable choice, or a
@@ -642,6 +643,7 @@ typedef struct sdl_character_sheet_screen_state {
     bool narrative_full_width; /* Let a semantic page frame fill the safe area. */
     bool narrative_terminal_style; /* Native layout with the terminal font/colours. */
     int narrative_para_choice[SDL_BOOK_MAX_PARAS]; /* >= 0: clickable action */
+    char narrative_para_desc[SDL_BOOK_MAX_PARAS][SDL_CHAR_SHEET_TOOLTIP_LEN];
     byte narrative_para_attr[SDL_BOOK_MAX_PARAS];
     byte narrative_para_char_attr[SDL_BOOK_MAX_PARAS][SDL_BOOK_PARA_LEN];
     bool narrative_para_break[SDL_BOOK_MAX_PARAS]; /* force a new page before this para */
@@ -672,6 +674,9 @@ typedef struct sdl_character_sheet_screen_state {
     u32b narrative_lamp_maximum;
     int narrative_lamp_page;
     bool narrative_lamp_side;     /* place lamp beside text when width permits */
+    int narrative_lamp_choice;
+    bool narrative_lamp_active;
+    bool narrative_quit_enabled;
     bool narrative_close_enabled;  /* show an on-screen exit button (mouse/touch) */
     char narrative_close_label[48]; /* context-specific exit button label */
     touch_swipe_state birth_swipe;
@@ -2130,11 +2135,12 @@ int sdl_poetry_screen_add_block(cptr text, byte attr);
 void sdl_poetry_screen_set_block_visible(int block, bool visible);
 void sdl_poetry_screen_set_block_alpha(int block, byte alpha);
 void sdl_poetry_screen_set_block_attr(int block, byte attr);
-void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body);
+void sdl_poetry_screen_add_choice(int choice, cptr label, cptr effect, cptr body);
 void sdl_poetry_screen_set_choice_visible(int choice, bool visible,
     byte label_attr, byte body_attr);
 void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha);
-void sdl_poetry_screen_set_highlight(int choice);
+void sdl_poetry_screen_set_highlight(int choice, bool follow);
+void sdl_poetry_screen_set_selection(u16b marked, int count, int required);
 void sdl_poetry_screen_set_prompt(cptr prompt, bool visible);
 void sdl_poetry_screen_set_alpha(byte title_alpha, byte body_alpha,
     byte transition_alpha, byte prompt_alpha);
@@ -2145,6 +2151,7 @@ void sdl_poetry_screen_hide(void);
 bool sdl_poetry_screen_active(void);
 bool sdl_poetry_screen_captures_pointer(void);
 bool sdl_poetry_screen_handle_pointer(float x, float y, int action);
+bool sdl_poetry_screen_handle_tap(float start_x, float start_y, float x, float y);
 bool sdl_poetry_screen_handle_hover_pointer(float x, float y);
 void sdl_poetry_screen_render(void);
 bool sdl_pause_text_screen_begin(void);
@@ -2259,6 +2266,7 @@ void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title);
 void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
 void sdl_character_sheet_screen_set_select_confirm_label(cptr label);
 void sdl_character_sheet_screen_begin_book(cptr title);
+void sdl_character_sheet_screen_begin_book_update(cptr title, bool keep_view);
 void sdl_character_sheet_screen_set_book_full_width(bool enabled);
 void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 void sdl_character_sheet_screen_add_book_paragraph(cptr text);
@@ -2270,6 +2278,7 @@ void sdl_character_sheet_screen_commit_book(void);
 void sdl_character_sheet_screen_set_book_target_page_count(int page_count);
 int sdl_character_sheet_screen_book_contents_page(int contents_index);
 void sdl_character_sheet_screen_set_book_focus(int choice);
+void sdl_character_sheet_screen_anchor_book_choice(int choice);
 int sdl_character_sheet_screen_book_action_page(int choice);
 void sdl_character_sheet_screen_add_select_row(int choice, cptr label, int attr, cptr desc);
 void sdl_character_sheet_screen_set_last_select_row_reset(int reset_choice);

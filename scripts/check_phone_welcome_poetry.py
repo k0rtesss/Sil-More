@@ -325,7 +325,7 @@ static void poetry(void)
     }
     sdl_poetry_screen_begin_choices("Choose the next path of your remembered tale");
     for(int i=0;i<3;i++) {
-        sdl_poetry_screen_add_choice(i,"A complete descriptive choice that can wrap onto another line",
+        sdl_poetry_screen_add_choice(i,"A complete descriptive choice that can wrap onto another line", "",
             "The complete consequence remains readable at the selected font size.");
         sdl_poetry_screen_set_choice_visible(i,true,TERM_WHITE,TERM_WHITE);
         sdl_poetry_screen_set_choice_alpha(i,255);

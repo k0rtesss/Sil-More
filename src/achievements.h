@@ -206,6 +206,7 @@ typedef struct sil_achievement_definition {
 const sil_achievement_definition *sil_achievement_get(int id);
 bool sil_achievement_revealed(int id);
 bool sil_achievement_progress_text(int id, char* out, size_t size);
+bool sil_achievement_difficulty_allows(int id);
 uint64_t sil_achievement_unlocked_at(int id);
 uint64_t sil_achievements_mask(unsigned word);
 bool sil_achievements_eligible(void);

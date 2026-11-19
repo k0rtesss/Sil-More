@@ -296,6 +296,22 @@ extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
     create_chosen_artefact_marked(name1, y, x, identify, 0);
 }
 
+static void drop_carried_objects(monster_type* m_ptr, u32b source_ident)
+{
+    while (m_ptr->hold_o_idx)
+    {
+        int idx = m_ptr->hold_o_idx;
+        object_type loot;
+        object_copy(&loot, &o_list[idx]);
+        /* Delete while still linked to the carrier, so its list is updated. */
+        delete_object_idx(idx);
+        loot.held_m_idx = loot.next_o_idx = 0;
+        loot.ident &= ~IDENT_HIDE_CARRY;
+        loot.ident |= source_ident;
+        drop_near(&loot, -1, m_ptr->fy, m_ptr->fx);
+    }
+}
+
 /*
  * Drops the objects
  */
@@ -306,8 +322,6 @@ int drop_loot(monster_type* m_ptr)
     int dump_item = 0;
 
     int number = 0;
-
-    s16b this_o_idx, next_o_idx = 0;
 
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
@@ -352,39 +366,7 @@ int drop_loot(monster_type* m_ptr)
         cave_set_feat(y, x, FEAT_RUBBLE);
     }
 
-    /* Drop objects being carried */
-    for (this_o_idx = m_ptr->hold_o_idx; this_o_idx; this_o_idx = next_o_idx)
-    {
-        object_type* o_ptr;
-
-        /* Get the object */
-        o_ptr = &o_list[this_o_idx];
-
-        /*Remove the mark to hide when monsters carry this object*/
-        o_ptr->ident &= ~(IDENT_HIDE_CARRY);
-
-        /* Get the next object */
-        next_o_idx = o_ptr->next_o_idx;
-
-        /* Paranoia */
-        o_ptr->held_m_idx = 0;
-
-        /* Get local object */
-        i_ptr = &object_type_body;
-
-        /* Copy the object */
-        object_copy(i_ptr, o_ptr);
-        i_ptr->ident |= source_ident;
-
-        /* Delete the object */
-        delete_object_idx(this_o_idx);
-
-        /* Drop it */
-        drop_near(i_ptr, -1, y, x);
-    }
-
-    /* Forget objects */
-    m_ptr->hold_o_idx = 0;
+    drop_carried_objects(m_ptr, source_ident);
 
     /* Mega-Hack -- drop special treasures */
     if (r_ptr->flags1 & (RF1_DROP_CHOSEN))
@@ -1140,6 +1122,12 @@ void monster_death(int m_idx)
         if (!(r_ptr->flags2 & (RF2_TERRITORIAL)))
         {
             normal_loot_count = drop_loot(m_ptr);
+        }
+        else
+        {
+            /* Hoards were generated at spawn, but acquired possessions (such
+             * as a thrallmaster's gathered gems) still drop on death. */
+            drop_carried_objects(m_ptr, monster_drop_source_ident(r_ptr));
         }
 
         // Every orc has an additional independent 10% chance to drop Orcish Liquor.

@@ -1,3 +1,18 @@
+set(_sil_version_parts)
+foreach(_component MAJOR MINOR PATCH)
+  file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/defines.h" _definition
+    REGEX "^#define[ \t]+VERSION_${_component}[ \t]+[0-9]+$")
+  if(NOT _definition)
+    message(FATAL_ERROR "Missing numeric VERSION_${_component} in src/defines.h")
+  endif()
+  string(REGEX MATCH "[0-9]+$" _number "${_definition}")
+  list(APPEND _sil_version_parts "${_number}")
+endforeach()
+list(JOIN _sil_version_parts "." _sil_runtime_version)
+if(NOT SIL_VERSION_STRING STREQUAL _sil_runtime_version)
+  message(FATAL_ERROR "VERSION_STRING (${SIL_VERSION_STRING}) must match the runtime version (${_sil_runtime_version})")
+endif()
+
 # Keep the normal init_info consumers in sync without duplicating their list.
 # Three runtime templates bypass the raw cache and call init_info_txt directly.
 set(_sil_template_loader "${CMAKE_CURRENT_SOURCE_DIR}/src/init/init-info.c")

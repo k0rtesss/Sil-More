@@ -95,13 +95,13 @@ static void curse_menu_fade_title(void)
     Term_fresh();
 }
 
-static bool curse_menu_fade_choice(int choice)
+static bool curse_menu_fade_choice(int choice, byte color)
 {
     const int duration_ms = 600;
     const int frame_ms = 16;
 
     sdl_poetry_screen_set_choice_visible(choice, true,
-        TERM_L_RED, TERM_SLATE);
+        color, TERM_L_WHITE);
     sdl_poetry_screen_set_choice_alpha(choice, 0);
     for (int elapsed = 0; elapsed < duration_ms; elapsed += frame_ms)
     {
@@ -139,225 +139,244 @@ void add_curse_stack(int idx)
     save_metaruns();
 }
 
-static int menu_choose_one_curse_aux(int n, bool force_menu)
+/* Affinities use the same colours as the ability browser. */
+static byte blessing_choice_color(const curse_type *cu)
 {
-    /* if any active curse has the "no-choice" flag, skip the menu */
-    if (!force_menu && any_curse_flag_active(CUR_NOCHOICE))
-        return weighted_random_curse();
+    static const byte stat_colors[A_MAX] = {
+        TERM_ORANGE, TERM_L_BLUE, TERM_L_GREEN, TERM_VIOLET
+    };
+    static const u32b affinities[S_SPC] = {
+        RHF_MEL_AFFINITY, RHF_ARC_AFFINITY, RHF_EVN_AFFINITY, RHF_STL_AFFINITY,
+        RHF_PER_AFFINITY, RHF_WIL_AFFINITY, RHF_SMT_AFFINITY, RHF_SNG_AFFINITY
+    };
+    u32b flags = cu->blessing_flags_u;
 
-    int pick[CURSE_MENU_LINES], sel;
-    bool steamdeck = steamdeck_controls_active();
-    bool menu_letters = sdl_menu_letters_enabled();
-
-    for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        bool dup;
-        do {
-            dup     = false;
-            pick[i] = weighted_random_curse();
-            for (int j = 0; j < i; j++)
-                if (pick[i] == pick[j]) { dup = true; break; }
-
-            byte cap = (byte)CURSE_CURSE_CAP(pick[i]);
-            if (cap && CURSE_CURSE_STACK(pick[i]) >= cap) { dup = true; continue; }
-
-        } while (dup);
+    for (int s = 0; s < A_MAX; s++)
+        if (cu->cu_adj[s]) return stat_colors[s];
+    for (int s = 0; s < S_SPC; s++) {
+        if (cu->blessing_flags & affinities[s]) {
+            byte color = ability_skill_color(s);
+            if (color == TERM_RED) return TERM_L_RED;
+            if (color == TERM_GREEN) return TERM_L_GREEN;
+            return color;
+        }
     }
+    if (flags & (CUR_RES_FIRE_SHIFT | CUR_MDS_SHIFT)) return TERM_ORANGE;
+    if (flags & (CUR_LIGHTR | CUR_LIGHTP | CUR_CHEST_WOOD)) return TERM_YELLOW;
+    if (flags & (CUR_RES_COLD_SHIFT | CUR_RES_STUN_SHIFT | CUR_MON_ARM_SIDE
+            | CUR_ARMOR_SIDE_SHIFT)) return TERM_L_BLUE;
+    if (flags & (CUR_RES_FEAR_SHIFT | CUR_RES_CONFU_SHIFT | CUR_RES_HALLU_SHIFT
+            | CUR_MON_WIL | CUR_IDENT_DIFF)) return TERM_VIOLET;
+    if (flags & (CUR_HUNGER | CUR_RES_POIS_SHIFT | CUR_WEAK)) return TERM_L_GREEN;
+    return TERM_L_UMBER;
+}
+
+/* The draft edits a local set of offer rows until Confirm. A curse still
+ * resolves to one row (including the historical first choice on Escape). */
+static u16b menu_choose_effects(cptr title, const int *offers, int count, bool blessings)
+{
+    static const byte curse_colors[CURSE_MENU_LINES] = { TERM_L_RED, TERM_ORANGE, TERM_L_UMBER };
+    bool steamdeck = steamdeck_controls_active();
+    bool letters = sdl_menu_letters_enabled();
+    int focus = 0;
+    bool follow = false;
+    u16b marked = 0;
+    int marked_count = 0;
 
     screen_save();
     screen_push_supporting_panes_hidden();
     Term_clear();
-
-    /* Fade in the title */
-    char str[96];
-    cptr ordinal;
-
-    switch (n)
-    {
-        case 1: ordinal = "the second"; break;
-        case 2: ordinal = "the third"; break;
-        case 3: ordinal = "the fourth"; break;
-        default: ordinal = "a"; break;
-    }
-    strnfmt(str, sizeof(str),
-        "Dark powers demand their price - choose %s curse:", ordinal);
-    sdl_poetry_screen_begin_choices(str);
+    sdl_poetry_screen_begin_choices(title);
     if (!sdl_poetry_screen_active())
-        quit("Mandatory SDL curse menu renderer is unavailable");
-    for (int i = 0; i < CURSE_MENU_LINES; i++)
-    {
-        curse_type* cu = &cu_info[pick[i]];
-        char name_buf[128];
+        quit("Mandatory SDL effect menu renderer is unavailable");
 
-        if (menu_letters)
-            strnfmt(name_buf, sizeof(name_buf), "%c) %s", 'a' + i,
-                cu_name + cu->name);
+    for (int row = 0; row < count; row++) {
+        int id = offers[row];
+        const curse_type *cu = &cu_info[id];
+        cptr name = blessings ? blessing_display_name(id) : cu_name + cu->name;
+        u32b power = blessings ? cu->blessing_power : (CURSE_SEEN(id) ? cu->power : 0);
+        u32b lore = blessings ? cu->blessing_text : cu->text;
+        char label[160];
+        if (letters)
+            strnfmt(label, sizeof(label), "%c) %s", 'a' + row, name);
         else
-            SDL_strlcpy(name_buf, cu_name + cu->name, sizeof(name_buf));
-        sdl_poetry_screen_add_choice(i, name_buf, cu_text + cu->text);
-    }
-    curse_menu_fade_title();
-    Term_xtra(TERM_XTRA_DELAY, 1000);
-
-    /* Show each curse one by one with fade-in effect */
-    bool fast_forward = false;
-
-    for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        if (fast_forward)
-        {
-            sdl_poetry_screen_set_choice_visible(i, true,
-                TERM_L_RED, TERM_SLATE);
-            sdl_poetry_screen_set_choice_alpha(i, 255);
-        }
-        else if (!curse_menu_fade_choice(i))
-            fast_forward = true;
-
-        /* 1 second delay between curses (except for the last one) */
-        if (i < CURSE_MENU_LINES - 1) {
-            Term_xtra(TERM_XTRA_DELAY, 1000);
+            SDL_strlcpy(label, name, sizeof(label));
+        sdl_poetry_screen_add_choice(row, label, power ? cu_text + power : "",
+            lore ? cu_text + lore : "");
+        if (blessings) {
+            sdl_poetry_screen_set_choice_visible(row, true, blessing_choice_color(cu), TERM_L_WHITE);
+            sdl_poetry_screen_set_choice_alpha(row, 255);
         }
     }
 
-    /* Show the prompt immediately without fade */
-    char curse_prompt[96];
-    curse_prompt[0] = '\0';
-    if (steamdeck)
-    {
-        char accept_label[16];
-        char back_label[16];
-        char hint_buf[96];
-
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
-            sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        {
-            char prompt_full[96];
-            char prompt_short[80];
-            const char* variants[2];
-
-            strnfmt(prompt_full, sizeof(prompt_full),
-                "D-pad navigate  [%s] accept  [%s] cancel",
-                accept_label, back_label);
-            strnfmt(prompt_short, sizeof(prompt_short),
-                "[%s] accept  [%s] cancel", accept_label, back_label);
-            variants[0] = prompt_full;
-            variants[1] = prompt_short;
-            terminal_prompt_pick_variant(hint_buf, sizeof(hint_buf),
-                metarun_term_width() - 2, false, variants,
-                N_ELEMENTS(variants));
+    if (blessings) {
+        sdl_poetry_screen_update(true, TERM_YELLOW, false, TERM_WHITE, false, TERM_WHITE, false);
+        sdl_poetry_screen_set_alpha(255, 0, 0, 255);
+        sdl_poetry_screen_set_prompt("", true);
+    } else {
+        bool fast_forward = false;
+        curse_menu_fade_title();
+        Term_xtra(TERM_XTRA_DELAY, 1000);
+        for (int row = 0; row < count; row++) {
+            if (fast_forward) {
+                sdl_poetry_screen_set_choice_visible(row, true, curse_colors[row], TERM_L_WHITE);
+                sdl_poetry_screen_set_choice_alpha(row, 255);
+            } else if (!curse_menu_fade_choice(row, curse_colors[row])) {
+                fast_forward = true;
+            }
+            if (row + 1 < count) Term_xtra(TERM_XTRA_DELAY, 1000);
         }
-        SDL_strlcpy(curse_prompt, hint_buf, sizeof(curse_prompt));
-    }
-    else if (sdl_touch_only_device_active())
-    {
         char prompt[96];
-        const char* variants[] = {
-            "Tap a row to choose your curse",
-            "Tap a row to choose",
-            "Tap to choose"
-        };
-        terminal_prompt_pick_variant(prompt, sizeof(prompt),
-            metarun_term_width() - 2, false, variants, N_ELEMENTS(variants));
-        SDL_strlcpy(curse_prompt, prompt, sizeof(curse_prompt));
-    }
-    else if (menu_letters)
-    {
-        char prompt[96];
-        const char* variants[] = {
-            "Dir navigate  Enter accept  a/b/c select",
-            "Enter accept  a/b/c select"
-        };
-        terminal_prompt_pick_variant(prompt, sizeof(prompt),
-            metarun_term_width() - 2, false, variants, N_ELEMENTS(variants));
-        SDL_strlcpy(curse_prompt, prompt, sizeof(curse_prompt));
-    }
-    else
-    {
-        char prompt[96];
-        const char* variants[] = {
-            "Dir navigate  Enter accept",
-            "Enter accept"
-        };
-        terminal_prompt_pick_variant(prompt, sizeof(prompt),
-            metarun_term_width() - 2, false, variants, N_ELEMENTS(variants));
-        SDL_strlcpy(curse_prompt, prompt, sizeof(curse_prompt));
+        if (steamdeck) {
+            char accept[16], back[16];
+            metarun_prompt_label(steamdeck_confirm_key(), "A", accept, sizeof(accept));
+            metarun_prompt_label(steamdeck_back_key(), "B", back, sizeof(back));
+            strnfmt(prompt, sizeof(prompt), "D-pad navigate  [%s] accept  [%s] cancel", accept, back);
+        } else {
+            SDL_strlcpy(prompt, sdl_touch_only_device_active() ? "Tap the highlighted curse to accept"
+                : letters ? "Arrows navigate  Enter accept  a/b/c select" : "Arrows navigate  Enter accept",
+                sizeof(prompt));
+        }
+        sdl_poetry_screen_set_prompt(prompt, true);
     }
 
-    sdl_poetry_screen_set_prompt(curse_prompt, true);
-
-    /* Menu navigation variables */
-    int highlight = 0;  /* Currently highlighted option (0, 1, 2) */
-    bool menu_done = false;
-
-    while (!menu_done) {
+    for (;;) {
+        int clicked = -1, action = UI_MENU_CLICK_PRIMARY;
+        bool confirm_button = false;
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
-        sdl_poetry_screen_set_highlight(highlight);
+        if (blessings)
+            sdl_poetry_screen_set_selection(marked, marked_count, RUN_BLESSING_COUNT);
+        sdl_poetry_screen_set_highlight(focus, follow);
+        follow = false;
         Term_fresh();
-        char key = metarun_inkey_hidden();
+        int key = metarun_inkey_hidden();
 
-        {
-            int clicked_choice = 0;
-            int click_action = UI_MENU_CLICK_PRIMARY;
-
-            if (ui_menu_click_take_action(&clicked_choice, &click_action))
-            {
-                ui_menu_click_clear();
-                if (clicked_choice >= 0 && clicked_choice < CURSE_MENU_LINES)
-                {
-                    if (click_action == UI_MENU_CLICK_HOVER
-                        || clicked_choice != highlight)
-                    {
-                        highlight = clicked_choice;
-                        continue;
-                    }
-                    key = '\r';
-                }
-                else if (click_action == UI_MENU_CLICK_HOVER)
+        if (ui_menu_click_take_action(&clicked, &action)) {
+            ui_menu_click_clear();
+            if (clicked >= 0 && clicked < count) {
+                bool was_focused = focus == clicked;
+                focus = clicked;
+                if (action == UI_MENU_CLICK_HOVER
+                    || (blessings ? action != UI_MENU_CLICK_PRIMARY : !was_focused))
                     continue;
-                else if (clicked_choice == -1)
-                    key = ESCAPE;
-                else if (clicked_choice == -2)
-                    key = '\r';
+                key = ' ';
+            } else if (action != UI_MENU_CLICK_PRIMARY) {
+                continue;
+            } else if (clicked == -1) {
+                key = ESCAPE;
+            } else if (clicked == -2) {
+                confirm_button = true;
+                key = '\r';
+            } else {
+                continue;
             }
         }
+        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())) {
+            marked = blessings ? 0 : 1;
+            break;
+        }
+        if (blessings && (confirm_button || (steamdeck ? key == steamdeck_secondary_key()
+                                                       : key == '\r' || key == '\n'))) {
+            if (marked_count == RUN_BLESSING_COUNT) break;
+            continue;
+        }
 
-        /* Handle input */
-        if (menu_letters && key >= 'a' && key < 'a' + CURSE_MENU_LINES) {
-            /* Letter shortcuts */
-            sel = key - 'a';
-            menu_done = true;
+        int letter = tolower((unsigned char)key) - 'a';
+        if (letters && letter >= 0 && letter < count) {
+            focus = letter;
+            follow = true;
+            key = ' ';
         }
-        else if (menu_letters && key >= 'A' && key < 'A' + CURSE_MENU_LINES) {
-            /* Capital letter shortcuts */
-            sel = key - 'A';
-            menu_done = true;
-        }
-        else if (key == '\r' || key == '\n' || key == ' ' || key == '6'
+        if (key == '8' || key == 'k' || key == '2' || key == 'j') {
+            int direction = key == '8' || key == 'k' ? -1 : 1;
+            focus = (focus + count + direction) % count;
+            follow = true;
+        } else if (key == ' ' || key == '\r' || key == '\n' || key == '6'
             || (steamdeck && key == steamdeck_confirm_key())) {
-            /* Enter, Space, or numpad 6 - select current highlight */
-            sel = highlight;
-            menu_done = true;
-        }
-        else if (key == '8' || key == 'k') {
-            /* Up navigation */
-            highlight = (highlight + CURSE_MENU_LINES - 1) % CURSE_MENU_LINES;
-        }
-        else if (key == '2' || key == 'j') {
-            /* Down navigation */
-            highlight = (highlight + 1) % CURSE_MENU_LINES;
-        }
-        else if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())) {
-            /* Escape - default to first option */
-            sel = 0;
-            menu_done = true;
+            u16b bit = (u16b)(1U << focus);
+            if (!blessings) {
+                marked = bit;
+                break;
+            }
+            if (marked & bit) {
+                marked &= ~bit;
+                marked_count--;
+            } else if (marked_count < RUN_BLESSING_COUNT) {
+                marked |= bit;
+                marked_count++;
+            }
         }
     }
     ui_menu_click_clear();
     sdl_poetry_screen_hide();
     screen_pop_supporting_panes_hidden();
     screen_load();
-    return pick[sel];
+    return marked;
+}
+
+static int menu_choose_one_curse_aux(int n, bool force_menu)
+{
+    int pick[CURSE_MENU_LINES];
+    char title[96];
+    const char *ordinals[] = { "a", "the second", "the third", "the fourth" };
+
+    if (!force_menu && any_curse_flag_active(CUR_NOCHOICE))
+        return weighted_random_curse();
+
+    for (int i = 0; i < CURSE_MENU_LINES; i++) {
+        bool duplicate;
+        do {
+            pick[i] = weighted_random_curse();
+            duplicate = CURSE_CURSE_CAP(pick[i])
+                && CURSE_CURSE_STACK(pick[i]) >= CURSE_CURSE_CAP(pick[i]);
+            for (int j = 0; j < i; j++)
+                if (pick[j] == pick[i]) duplicate = true;
+        } while (duplicate);
+    }
+
+    strnfmt(title, sizeof(title), "Choose %s curse",
+        ordinals[(n >= 0 && n < (int)N_ELEMENTS(ordinals)) ? n : 0]);
+    u16b choice = menu_choose_effects(title, pick, CURSE_MENU_LINES, false);
+    for (int row = 0; row < CURSE_MENU_LINES; row++)
+        if (choice & (1U << row)) return pick[row];
+    return -1;
+}
+
+static bool run_blessing_offers(const metarun *tale, int offers[RUN_BLESSING_OFFER_COUNT])
+{
+    int eligible[METAR_CURSE_SLOTS];
+    int count = 0;
+    for (int id = 0; id < MIN(z_info->cu_max, METAR_CURSE_SLOTS); id++) {
+        if (cu_info[id].blessing_name && cu_info[id].blessing_power)
+            eligible[count++] = id;
+    }
+    if (count < RUN_BLESSING_OFFER_COUNT) {
+        log_warn("Too few blessing templates to offer %s", RUN_BLESSING_MODE_NAME);
+        return false;
+    }
+
+    u64b seed = ((u64b)tale->id << 32) | tale->next_blessing_seed;
+    u64b saved_rng = Rand_state_push(seed ? seed : 1);
+    for (int row = 0; row < RUN_BLESSING_OFFER_COUNT; row++) {
+        int index = rand_int(count);
+        offers[row] = eligible[index];
+        eligible[index] = eligible[--count];
+    }
+    Rand_state_pop(saved_rng);
+    return true;
+}
+
+u64b metarun_choose_run_blessings(void)
+{
+    int offers[RUN_BLESSING_OFFER_COUNT];
+    if (!run_blessing_offers(&metar, offers)) return 0;
+    u16b marked = menu_choose_effects(RUN_BLESSING_MODE_NAME " (Easy)",
+        offers, RUN_BLESSING_OFFER_COUNT, true);
+    u64b chosen = 0;
+    for (int row = 0; row < RUN_BLESSING_OFFER_COUNT; row++)
+        if (marked & (1U << row)) chosen |= 1ULL << offers[row];
+    return chosen;
 }
 
 int menu_choose_one_curse(int n)

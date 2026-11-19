@@ -112,6 +112,7 @@ PlayResult play_game(void)
 {
     bool new_game = false;
     bool startup_icky_active = false;
+    u64b run_blessings = 0;
 
     log_info("play_game: FUNCTION ENTERED");
 
@@ -242,15 +243,11 @@ PlayResult play_game(void)
             }
             if (autoload_result == STARTUP_AUTOLOAD_LOADED) {
                 new_game = false;
-            } else {
-                print_metarun_stats();
             }
         }
     }
     else
     {
-        bool startup_score_empty = highscore_is_empty();
-
         if (explicit_blitz_launch && run_mode_is_blitz())
         {
             log_info("Explicit Blitz launch requested; checking for an alive Blitz character");
@@ -269,20 +266,14 @@ PlayResult play_game(void)
         {
             new_game = false;
         }
-        else if (!run_mode_is_blitz()
-            && ((!metarun_created
-                    && (!startup_score_empty || metar.deaths > 0))
-                || metarun_entry_count() > 1))
-        {
-            int recorded_alive = score_count_alive_entries();
+    }
 
-            if (recorded_alive > 0) {
-                log_warn("Startup found %d recorded alive character%s, but "
-                    "none had a loadable save; showing Tale Statistics",
-                    recorded_alive, recorded_alive == 1 ? "" : "s");
-            }
-            print_metarun_stats();
-        }
+    if (!character_loaded && !run_mode_is_blitz()
+        && !print_metarun_startup(&run_blessings))
+    {
+        play_game_pop_startup_icky(&startup_icky_active,
+            "quitting from the Chronicle");
+        return PLAY_QUIT;
     }
 
     if (!run_mode_is_blitz() && metarun_tale_recovery_required())
@@ -332,6 +323,7 @@ PlayResult play_game(void)
                 current_character_profile = &c_info[p_ptr->pcharacter];
         }
 
+        p_ptr->run_blessings = run_blessings;
         log_info("Choosing character");
         NavResult cr = run_mode_is_blitz() ? blitz_character_creation()
             : (resume_character_selection ? character_creation_resume_character()
@@ -389,6 +381,9 @@ PlayResult play_game(void)
         if (new_game)
         {
             log_info("Starting new game - initializing character");
+        /* Manual save probes may overwrite or wipe the draft. A successful
+         * resume keeps the saved hero's own blessings. */
+        p_ptr->run_blessings = run_blessings;
         /* Init RNG */
         {
             u64b seed = (u64b)time(NULL);
@@ -558,6 +553,11 @@ PlayResult play_game(void)
     log_debug("play_game: character_generated set to true - character creation complete");
     ability_log_sync_missing();
     snapshot_run_history("character start");
+    if (new_game && !run_mode_is_blitz() && p_ptr->game_type == 0) {
+        ++metar.next_blessing_seed;
+        if (save_metaruns() != 0)
+            log_warn("Could not save the next Story hero's blessing seed");
+    }
 
     /* If Tulkas quest was auto-completed on load, spawn Tulkas and show messages */
     if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE && p_ptr->tulkas_quest_complete == 1)

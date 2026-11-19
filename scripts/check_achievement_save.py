@@ -30,6 +30,7 @@ void fixture_v34_monster(const monster_type*);
 void fixture_v37_extra(void);
 void fixture_v38_extra(void);
 void fixture_v39_extra(void);
+void fixture_v39_monster(const monster_type*);
 size_t fixture_write(int legacy, const monster_type* monster, byte* buffer,
     size_t capacity, size_t* player_end)
 {
@@ -45,7 +46,9 @@ size_t fixture_write(int legacy, const monster_type* monster, byte* buffer,
     save_wr_u32b(0xA1B2C3D4U);
     if (legacy == 1) fixture_legacy_monster(monster);
     else if (legacy == 2) fixture_previous_monster(monster);
-    else if (legacy == 3) fixture_v34_monster(monster); else save_wr_monster(monster);
+    else if (legacy == 3) fixture_v34_monster(monster);
+    else if (legacy) fixture_v39_monster(monster);
+    else save_wr_monster(monster);
     save_wr_u32b(0xB4C3D2E1U);
     save_wr_u32b(v_stamp); save_wr_u32b(x_stamp);
     size_t length = (size_t)SDL_TellIO(fff);
@@ -75,7 +78,7 @@ int fixture_read(const byte* buffer, size_t length, int extra,
     sf_major = extra < 0 ? VERSION_MAJOR : 0;
     sf_minor = extra < 0 ? VERSION_MINOR : 9;
     sf_patch = extra < 0 ? VERSION_PATCH : 8;
-    sf_extra = extra < 0 ? VERSION_EXTRA : extra;
+    sf_extra = extra == -2 ? 15 : extra < 0 ? VERSION_EXTRA : extra;
     /* FEATURE_FLAGS */
     int result = load_read_extra();
     if (!result) {
@@ -105,6 +108,10 @@ void fixture_read_object(const byte* buffer,size_t length,object_type* object)
 TESTS = r'''
 #include "achievements.h"
 #include "achievements-lore.h"
+#include "metarun.h"
+#include "score/score_entry.h"
+#include "score/score_runs.h"
+int curses_stat_adj(int stat);
 size_t fixture_write(int,const monster_type*,byte*,size_t,size_t*);
 int fixture_read(const byte*,size_t,int,monster_type*,size_t);
 size_t fixture_write_object(const object_type*,byte*,size_t);
@@ -193,6 +200,47 @@ static void assert_discovery_defaults(const monster_type* restored)
     assert(!restored->achievement_first_wolf);
     for(size_t i=0;i<sizeof(p_ptr->achievement_frozen_tiles);i++)assert(!p_ptr->achievement_frozen_tiles[i]);
 }
+static void test_run_blessings(void)
+{
+    monster_type monster = {0};
+    monster_type restored = {0};
+    high_score easy, standard;
+    size_t player_end;
+    u64b blessings = (1ULL << 0) | (1ULL << 4) | (1ULL << 24) | (1ULL << 43);
+    score_file_ctx ctx = { .version_minor = 9, .version_patch = 9, .version_extra = 16 };
+    score_file_ctx* previous = score_file_set_active_ctx(&ctx);
+
+    prepare_player();
+    p_ptr->max_depth = 10;
+    score_entry_set_death_time(time(NULL));
+    assert(create_score(&standard) == 0);
+    p_ptr->run_blessings = blessings;
+    assert(curses_stat_adj(A_STR) == 1);
+    assert(curse_flag_count_rhf(RHF_MEL_AFFINITY) == 1);
+    assert(curse_flag_delta_cur(CUR_LIGHTR) == -1);
+    assert(curse_flag_delta_cur(CUR_ABILITY_COST) == -1);
+    assert(metarun_net_curse_stacks() == -4 && CURSE_GET(0) == 0);
+    CURSE_SET(0, 1);
+    assert(curses_stat_adj(A_STR) == 0 && CURSE_CURSE_STACK(0) == 1);
+    assert(CURSE_BLESSING_STACK(0) == 1);
+    CURSE_SET(0, 0);
+    assert(create_score(&easy) == 0 && atoi(easy.pts) == -4);
+    assert(score_points(&easy) < score_points(&standard));
+    score_runs_set_legacy_link(&easy, 123);
+    u32b record_id;
+    assert(score_runs_get_legacy_link(&easy, &record_id) && record_id == 123);
+    assert(easy.unused[1] == SCORE_LEGACY_BLESSED_MARKER);
+    score_file_set_active_ctx(previous);
+
+    size_t size = fixture_write(0, &monster, current, sizeof(current), &player_end);
+    clear_for_load();
+    assert(fixture_read(current, size, -1, &restored, player_end) == 0);
+    assert(p_ptr->run_blessings == blessings);
+    assert(curses_stat_adj(A_STR) == 1 && metarun_net_curse_stacks() == -4);
+    assert(fixture_read(current, size, -2, &restored, player_end) == 0);
+    assert(!p_ptr->run_blessings && metarun_net_curse_stacks() == 0);
+    puts("Easy blessings, score multiplier, run link and versioned save roundtrip PASS");
+}
 static void test_save(void)
 {
     assert(VERSION_MAJOR*1000000 + VERSION_MINOR*10000 + VERSION_PATCH*100 + VERSION_EXTRA >= 90839);
@@ -211,10 +259,10 @@ static void test_save(void)
     size_t current_end,legacy_end;
     size_t size=fixture_write(false,&source,current,sizeof(current),&current_end);
     size_t oldsize=fixture_write(true,&source,legacy,sizeof(legacy),&legacy_end);
-    assert(current_end==legacy_end+78 && size==oldsize+91);
+    assert(current_end==legacy_end+78 && size==oldsize+97);
     size_t v39_end;
     size_t v39_size=fixture_write(6,&source,modified,sizeof(modified),&v39_end);
-    assert(current_end==v39_end+1 && size==v39_size+1);
+    assert(current_end==v39_end+1 && size==v39_size+7);
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(modified,v39_size,39,&restored,v39_end)==0);
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
@@ -256,7 +304,7 @@ static void test_save(void)
 
     size_t v37_end;
     size_t v37_size=fixture_write(4,&source,modified,sizeof(modified),&v37_end);
-    assert(current_end==v37_end+17 && size==v37_size+17);
+    assert(current_end==v37_end+17 && size==v37_size+23);
     // Previous writers have no lore block; older route provenance remains exact.
     for(int previous=35;previous<=37;previous++) {
         clear_for_load();memset(&restored,0,sizeof(restored));
@@ -274,7 +322,7 @@ static void test_save(void)
     size_t v38_end;
     prepare_player();
     size_t v38_size=fixture_write(5,&source,modified,sizeof(modified),&v38_end);
-    assert(current_end==v38_end+3 && size==v38_size+3);
+    assert(current_end==v38_end+3 && size==v38_size+9);
     clear_for_load();memset(&restored,0,sizeof(restored));
     assert(fixture_read(modified,v38_size,38,&restored,v38_end)==0);
     assert_player_tail();
@@ -304,7 +352,7 @@ static void test_save(void)
 
     size_t v34_end;
     size_t v34_size=fixture_write(3,&source,modified,sizeof(modified),&v34_end);
-    assert(current_end==v34_end+54 && size==v34_size+63);
+    assert(current_end==v34_end+54 && size==v34_size+69);
     clear_for_load();memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(modified,v34_size,34,&restored,v34_end)==0);
     assert_player_tail();assert_discovery_defaults(&restored);
@@ -313,7 +361,7 @@ static void test_save(void)
 
     size_t previous_end;
     size_t previous_size=fixture_write(2,&source,modified,sizeof(modified),&previous_end);
-    assert(current_end==previous_end+63 && size==previous_size+74);
+    assert(current_end==previous_end+63 && size==previous_size+80);
     clear_for_load(); memset(&restored,0x55,sizeof(restored));
     assert(fixture_read(modified,previous_size,33,&restored,previous_end)==0);
     assert_player_tail();
@@ -521,6 +569,11 @@ def main():
     end = v34_player.index('    log_info("SAVE: About to write quest marker', start)
     previous_player = v34_player[:start] + v34_player[end:]
     monster = function(save, "wr_monster")
+    squad = ("    wr_byte(m_ptr->squad.budget_plan);\n"
+             "    wr_byte(m_ptr->squad.plan_age);\n"
+             "    wr_u32b(m_ptr->squad.plan_turn);\n")
+    assert monster.count(squad) == 1
+    monster = monster.replace(squad, "")
     potion = "    wr_s16b(m_ptr->potion_poisoned);\n"
     assert monster.count(potion) == 1
     discovery_monster = ("    wr_u32b(m_ptr->achievement_doom_rage_epoch);\n"
@@ -530,6 +583,8 @@ def main():
     v34_monster = monster.replace(discovery_monster, "")
     previous_monster = v34_monster.replace(potion, "")
     flags = save[save.index("#define SAVE_MON_FLAGS"):save.index('/*\n * Write a "monster"')]
+    v39_writer += '\n#include "monster/monster-ai.h"\n' + flags + "\n"
+    v39_writer += monster.replace("void wr_monster(", "void fixture_v39_monster(")
     v34_writer = v34_player.replace("void wr_extra(void)", "void fixture_v34_extra(void)")
     v34_writer += '\n#include "monster/monster-ai.h"\n' + flags + "\n"
     v34_writer += v34_monster.replace("void wr_monster(", "void fixture_v34_monster(")
@@ -552,7 +607,7 @@ def main():
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
     harness = prefix + fixture_function("terminal_extra") + "\n" + fixture_function("reset_map")
-    harness += TESTS + init + "    ANGBAND_DIR_APEX=argv[2];\n    test_save(); test_crossing_resume(); SDL_Quit(); return 0;\n}\n"
+    harness += TESTS + init + "    ANGBAND_DIR_APEX=argv[2];\n    test_run_blessings(); test_save(); test_crossing_resume(); SDL_Quit(); return 0;\n}\n"
     sources = []
     for name, text in (("check.c", harness), ("writer.c", WRITER), ("reader.c", reader), ("legacy.c", old_writer), ("previous.c", previous_writer), ("v34.c", v34_writer), ("v37.c", v37_writer), ("v38.c", v38_writer), ("v39.c", v39_writer)):
         path = OUT / name

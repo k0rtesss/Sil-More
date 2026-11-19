@@ -1869,11 +1869,12 @@ extern int sdl_poetry_screen_add_block(cptr text, byte attr);
 extern void sdl_poetry_screen_set_block_visible(int block, bool visible);
 extern void sdl_poetry_screen_set_block_alpha(int block, byte alpha);
 extern void sdl_poetry_screen_set_block_attr(int block, byte attr);
-extern void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body);
+extern void sdl_poetry_screen_add_choice(int choice, cptr label, cptr effect, cptr body);
 extern void sdl_poetry_screen_set_choice_visible(int choice, bool visible,
     byte label_attr, byte body_attr);
 extern void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha);
-extern void sdl_poetry_screen_set_highlight(int choice);
+extern void sdl_poetry_screen_set_highlight(int choice, bool follow);
+extern void sdl_poetry_screen_set_selection(u16b marked, int count, int required);
 extern void sdl_poetry_screen_set_prompt(cptr prompt, bool visible);
 extern void sdl_poetry_screen_set_alpha(byte title_alpha, byte body_alpha,
     byte transition_alpha, byte prompt_alpha);
@@ -1967,6 +1968,7 @@ extern void sdl_character_sheet_screen_open_select_choice_page(void);
 #define SDL_SELECT_CLICK_CAROUSEL_NEXT (-23)
 /* Narrative book: an on-screen exit button for mouse/touch traversal. */
 #define SDL_SELECT_CLICK_CLOSE (-24)
+#define SDL_SELECT_CLICK_BOOK_QUIT (-25)
 extern bool sdl_character_sheet_screen_mobile_carousel_active(void);
 extern void sdl_character_sheet_screen_reset_select_page(void);
 extern int sdl_character_sheet_screen_select_page(void);
@@ -1986,6 +1988,7 @@ extern bool sdl_character_sheet_screen_commit_select(int selected_index);
 /* Narrative "book" (N pages with optional actions): quest text, stats, etc.  Reuses the page-turn
  * navigation accessors above (select_page / page_turning / begin_page_turn). */
 extern void sdl_character_sheet_screen_begin_book(cptr title);
+extern void sdl_character_sheet_screen_begin_book_update(cptr title, bool keep_view);
 extern void sdl_character_sheet_screen_set_book_full_width(bool enabled);
 extern void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 extern void sdl_character_sheet_screen_add_book_paragraph(cptr text);
@@ -1996,11 +1999,16 @@ extern void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,
 extern void sdl_character_sheet_screen_add_book_action(cptr text, int choice);
 extern void sdl_character_sheet_screen_add_book_action_colored(cptr text,
     int choice, int attr);
+extern void sdl_character_sheet_screen_add_book_action_described(cptr text,
+    int choice, int attr, cptr description);
 extern void sdl_character_sheet_screen_add_book_contents(cptr label,
     int choice, int page);
 extern void sdl_character_sheet_screen_set_book_lamp(u32b current,
     u32b maximum, int page);
+extern void sdl_character_sheet_screen_set_book_lamp_action(int choice,
+    bool active);
 extern void sdl_character_sheet_screen_set_book_close_button(bool enabled);
+extern void sdl_character_sheet_screen_set_book_quit_button(bool enabled);
 extern void sdl_character_sheet_screen_set_book_close_label(cptr label);
 extern void sdl_character_sheet_screen_set_book_target_page_count(
     int page_count);
@@ -2009,6 +2017,7 @@ extern void sdl_character_sheet_screen_break_book_page(void);
 extern void sdl_character_sheet_screen_highlight_book_paragraph(void);
 extern void sdl_character_sheet_screen_commit_book(void);
 extern void sdl_character_sheet_screen_set_book_page(int page);
+extern void sdl_character_sheet_screen_anchor_book_choice(int choice);
 extern bool screen_saved_fullscreen_active(void);
 extern void screen_push_supporting_panes_hidden(void);
 extern void screen_pop_supporting_panes_hidden(void);

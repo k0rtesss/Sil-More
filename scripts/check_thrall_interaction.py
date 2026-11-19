@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check thrall bump exchanges and fear through the production engine."""
+"""Check thrall interactions, mining and gem collection in the real engine."""
 import os
 import shlex
 import subprocess
@@ -10,6 +10,7 @@ from check_monster_scent_save import fixture_function
 
 
 CHECKS = r'''
+#include "cave/cave-environment.h"
 #include "player/player-song-internal.h"
 #include "spell/spell-projection-internal.h"
 #ifdef NDEBUG
@@ -199,6 +200,101 @@ static void check_thrall_fear(void)
     assert(m->stance == STANCE_FLEEING);
     puts("All four thralls stay calm under Majesty, Elbereth, low health, Wrath and Challenge; saved fear clears silently; overseer fear remains PASS.");
 }
+static int floor_gems(void)
+{
+    int count = 0;
+    for (int idx = 1; idx < o_max; idx++)
+        if (o_list[idx].k_idx && o_list[idx].tval == TV_GEM && !o_list[idx].held_m_idx)
+            count += o_list[idx].number;
+    return count;
+}
+
+static monster_type* work_fixture(int race)
+{
+    character_dungeon = false;
+    cave_environment_reset();
+    monster_type* m = combat_fixture(race, 0);
+    /* Ambient work cannot depend on seeing the player's position. */
+    p_ptr->py = p_ptr->px = 80;
+    cave_m_idx[80][80] = -1;
+    m->alertness = ALERTNESS_UNWARY;
+    m->stance = STANCE_CONFIDENT;
+    character_dungeon = true;
+    return m;
+}
+
+static void check_mining(void)
+{
+    bool dungeon_before = character_dungeon;
+    const int races[] = {R_IDX_HUMAN_THRALL, R_IDX_ELF_THRALL};
+    const int veins[] = {FEAT_QUARTZ, FEAT_CRACKED_QUARTZ};
+    for (int r = 0; r < 2; r++) for (int v = 0; v < 2; v++)
+    {
+        monster_type* m = work_fixture(races[r]);
+        character_dungeon = false;
+        for (int y = 7; y <= 13; y++) for (int x = 7; x <= 13; x++)
+            cave_set_feat(y, x, FEAT_WALL_EXTRA);
+        cave_set_feat(10, 10, FEAT_FLOOR);
+        cave_set_feat(10, 11, veins[v]);
+        cave_set_feat(10, 12, FEAT_FLOOR);
+        character_dungeon = true;
+        for (int i = 0; i < 3000 && cave_feat[10][11] != FEAT_RUBBLE; i++)
+            assert(monster_thrall_turn(m));
+        assert(cave_feat[10][11] == FEAT_RUBBLE && m->fx == 10);
+        assert(floor_gems() == 1);
+        for (int i = 0; i < 3000 && cave_feat[10][11] == FEAT_RUBBLE; i++)
+            assert(monster_thrall_turn(m));
+        assert(cave_feat[10][11] == FEAT_FLOOR && m->fx == 10);
+        for (int i = 0; i < 3000 && m->fx == 10; i++)
+            assert(monster_thrall_turn(m));
+        assert(m->fy == 10 && m->fx == 11 && floor_gems() == 1);
+        assert(p_ptr->kill_exp == 0 && p_ptr->encounter_exp == 0);
+    }
+    character_dungeon = dungeon_before;
+    puts("Human/elven miners: intact/cracked quartz yields one gem, rubble clearing costs its own action, then the cleared step is walkable PASS.");
+}
+
+static void check_gem_collection(void)
+{
+    bool dungeon_before = character_dungeon;
+    /* Preserve the territorial flag in the primary case, and exercise the
+     * ordinary carried-loot route as a control for the shared death helper. */
+    for (int territorial = 0; territorial <= 1; territorial++)
+    {
+        monster_type* m = work_fixture(R_IDX_ORC_THRALLMASTER);
+        monster_race* r = &r_info[m->r_idx];
+        u32b original_flags = r->flags2;
+        assert(original_flags & RF2_TERRITORIAL);
+        if (!territorial) r->flags2 &= ~RF2_TERRITORIAL;
+        int m_idx = cave_m_idx[m->fy][m->fx];
+        object_type gem, other;
+        object_prep(&gem, lookup_kind(TV_GEM, SV_GEM_LIGHT));
+        gem.number = 3; gem.pval = 7; gem.marked = true;
+        int first = floor_carry(10, 13, &gem); assert(first > 0);
+        object_prep(&gem, lookup_kind(TV_GEM, SV_GEM_FREEDOM));
+        gem.number = 2; gem.pval = 4;
+        int second = floor_carry(10, 12, &gem); assert(second > 0);
+        object_prep(&other, lookup_kind(TV_POTION, SV_POTION_HEALING));
+        int ignored = floor_carry(10, 11, &other); assert(ignored > 0);
+        int objects_before = o_cnt;
+        for (int i = 0; i < 8 && floor_gems(); i++)
+            assert(monster_thrall_turn(m));
+        assert(m->fy == 10 && m->fx == 13 && floor_gems() == 0);
+        assert(o_cnt == objects_before && m->hold_o_idx);
+        assert(o_list[first].held_m_idx == m_idx && o_list[first].number == 3
+            && o_list[first].pval == 7 && !o_list[first].marked);
+        assert(o_list[second].held_m_idx == m_idx && o_list[second].number == 2
+            && o_list[second].pval == 4);
+        assert(!o_list[ignored].held_m_idx && cave_o_idx[10][11] == ignored);
+        monster_death(m_idx);
+        assert(!m->hold_o_idx && floor_gems() == 5);
+        delete_monster_idx(m_idx);
+        assert(floor_gems() == 5 && !o_list[ignored].held_m_idx);
+        r->flags2 = original_flags;
+    }
+    character_dungeon = dungeon_before;
+    puts("Real movement/pickup/death: idle overseers collect gem stacks with the player far away, leave other items, and return all gems on territorial/ordinary death PASS.");
+}
 '''
 
 
@@ -216,11 +312,13 @@ def main():
             ("terminal_extra", "reset_map", "combat_fixture"))
         + CHECKS + "\nint main(int argc, char** argv)\n{"
         + initialization + "    check_exchanges(); check_thrall_fear();\n"
+        + "    assert(init_flavor_info() == 0); flavor_init();\n"
+        + "    check_mining(); check_gem_collection();\n"
         + '    puts("Thrall interaction integration: PASS.");\n'
         + "    SDL_Quit(); return 0;\n}\n", encoding="utf-8")
     changed = ("src/cmd/movement/cmd-run.c", "src/melee/melee-process.c",
         "src/monster/monster-thrall.c", "src/player/player-song-effects.c",
-        "src/spell/spell-projection-effects.c")
+        "src/spell/spell-projection-effects.c", "src/world/monster-death.c")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     excluded = tuple("/" + path + ".obj" for path in ("src/main.c", *changed))

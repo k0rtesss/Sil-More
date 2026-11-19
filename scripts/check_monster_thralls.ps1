@@ -10,6 +10,7 @@ try {
     & C:\msys64\mingw64\bin\gcc.exe -std=c17 -O1 -flto -fwhole-program -DUSE_SDL `
         -I src -I external/SDL/include `
         scripts/tests/monster-thrall-test.c src/monster/monster-thrall.c `
+        src/object/object-list.c src/cave/cave-geometry.c `
         src/variable.c src/tables.c src/rng.c src/ui/targeting/direction.c `
         build-standard/_deps/SDL/libSDL3.dll.a -o "$thrallTestDir/test.exe"
     if ($LASTEXITCODE -ne 0) { throw 'Thrall test compilation failed.' }

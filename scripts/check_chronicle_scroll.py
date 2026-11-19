@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/chronicle-scroll"
 PREFIX = WELCOME[:WELCOME.index("static void indicator(void)")]
+EXTRA_WRAPS = ()
+EXTRA_EXCLUDED = ()
 
 HARNESS = PREFIX + r'''
 enum { CONFIRM = 500, CANCEL, DIFFICULTY = 600 };
@@ -185,6 +187,7 @@ def main():
                 "/src/sdl/input/sdl-touch-tutorial.c.obj", "/src/sdl/render/sdl-fonts.c.obj",
                 "/src/sdl/ui/sdl-song-menu.c.obj", "/src/sdl/ui/sdl-question-menu.c.obj",
                 "/src/sdl/ui/sdl-screens.c.obj", "/src/sdl/input/sdl-screen-pointer.c.obj")
+    excluded += EXTRA_EXCLUDED
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects if not obj.endswith(excluded)))
     env = os.environ.copy()
@@ -197,6 +200,7 @@ def main():
              "sdl_touch_only_mobile_device_active", "sdl_get_layout_screen_rect", "sdl_overlay_pane_anchor_rect",
              "SDL_GetDisplayContentScale", "sdl_terminal_menu_font_px", "sdl_mobile_lifecycle_handle_event",
              "sdl_touch_tutorial_device_available", "SDL_RenderTexture", "sdl_touch_pane_point_to_slot"]
+    wraps.extend(EXTRA_WRAPS)
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),

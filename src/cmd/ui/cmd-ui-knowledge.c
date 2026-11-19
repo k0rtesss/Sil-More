@@ -10256,7 +10256,7 @@ static int knowledge_collect_curses(int curse_idx[])
 
     for (id = 0; id < (int)z_info->cu_max; id++)
     {
-        if (CURSE_SEEN(id))
+        if (cu_info[id].name && CURSE_SEEN(id))
             curse_idx[count++] = id;
     }
 

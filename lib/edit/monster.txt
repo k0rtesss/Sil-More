@@ -305,7 +305,7 @@
 
 # Version stamp (required)
 
-V:0.9.9
+V:1.0.0
 
 
 ##### Non-race (contains the player picture) #####
@@ -414,6 +414,7 @@ F:MALE | MAN | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
 D:A scarred and dirty man clad only in a loincloth. A metal collar
 D: is about his neck. He shuffles slowly through the mine, chipping
 D: quartz into rubble under the eyes of his overseers.
+D: He clears the rubble as he goes.
 
 # Can't move from idx 14 for dungeon generation reasons
 N:14:Dejected elven thrall
@@ -428,7 +429,7 @@ P:[+0]
 F:MALE | ELF | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN
 D:A shackled elf labours slowly at the quartz, filthy hair hanging
 D: to his shoulders and eyes vacant. His back and arms bear the
-D: marks of a whip.
+D: marks of a whip. He chips at the quartz and clears away the rubble.
 
 # Can't move from idx 15 for dungeon generation reasons
 N:15:Orc thrallmaster
@@ -450,6 +451,7 @@ F:HAS_WEAPON | HAS_ARMOUR
 D:A brutish orc set to oversee the wretched thralls who labour
 D: in Morgoth's mines. He wields a cudgel and a whip with equal
 D: cruelty, and takes pleasure in the suffering of his charges.
+D: He gathers the gems uncovered by their labour.
 
 # Can't move from idx 16 for dungeon generation reasons
 N:16:Alert human thrall

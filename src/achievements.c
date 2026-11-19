@@ -469,8 +469,30 @@ bool sil_achievements_kill_eligible(void)
             && !p_ptr->escaped);
 }
 
+bool sil_achievement_difficulty_allows(int id)
+{
+    if (!metarun_run_blessings(p_ptr)) return true;
+    switch (id) {
+        case SIL_ACH_THREE_LIGHTS_IN_EXILE:
+        case SIL_ACH_THE_SHADOW_FALLS:
+        case SIL_ACH_THE_QUIET_ROAD:
+        case SIL_ACH_NO_STEPS_REQUIRED:
+        case SIL_ACH_HIS_DEATH_AND_FINAL_END:
+        case SIL_ACH_SEVEN_TIMES_HE_CRIED:
+        case SIL_ACH_AT_MOST_SEVEN:
+        case SIL_ACH_THESE_THINGS_ARE_MINE:
+        case SIL_ACH_THEIR_WORK_HAD_NO_RIVAL:
+            return false;
+        default:
+            return true;
+    }
+}
+
 static void unlock_achievement(int id, bool announce)
 {
+    /* Platform imports carry credit from another run or device. */
+    if (announce && !sil_achievement_difficulty_allows(id))
+        return;
     sil_achievements_init();
     if (!initialized || !sil_achievement_get(id) || unlocked_at[id]) return;
     unlocked_at[id] = achievement_time();
@@ -823,6 +845,10 @@ bool sil_achievement_progress_text(int id, char* out, size_t size)
     out[0] = '\0';
     if (!p_ptr || !character_generated || !p_ptr->playing || p_ptr->is_dead)
         return false;
+    if (!sil_achievement_difficulty_allows(id)) {
+        strnfmt(out, size, "Unavailable during %s.", RUN_BLESSING_MODE_NAME);
+        return true;
+    }
     switch (id)
     {
         case SIL_ACH_AT_MOST_SEVEN:

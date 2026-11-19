@@ -66,6 +66,7 @@ void reset_defaults(metarun *m)
     metarun_clear_blessing_runtime_fields(m);
     m->id          = 1;
     m->last_played = (u32b)time(NULL);
+    m->next_blessing_seed = m->last_played;
     memset(m->curse_stacks, 0, sizeof(m->curse_stacks));
     m->curses_seen = 0;
     m->deaths      = 0;
@@ -635,6 +636,10 @@ errr load_metaruns(bool create_if_missing)
 
     if (metaruns) {
         for (s16b i = 0; i < metarun_max; i++) {
+            /* These bytes were reserved in earlier Tales. Their saved timestamp
+             * gives an old Tale the same first offer even before its next save. */
+            if (metarun_header_before(&header, 0, 9, 9, 17))
+                metaruns[i].next_blessing_seed = metaruns[i].last_played;
             metarun_migrate_tutorial_notice(&metaruns[i], &header);
             if (interface_settings_migrated)
                 metarun_clear_obsolete_interface_options_097(&metaruns[i]);

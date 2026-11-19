@@ -8,6 +8,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "fs/save-internal.h"
+#include "metarun.h"
 #include <stdio.h>
 
 static void wr_tutorial_character_state(void)
@@ -471,12 +472,15 @@ void wr_extra(void)
     wr_byte(0x55);
     wr_byte((byte)run_mode_current());
     {
-        int8_t *stacks = blitz_runtime_curse_stacks();
-        u64b seen = *blitz_runtime_curses_seen();
+        const bool blitz = run_mode_is_blitz();
+        const int8_t *stacks = blitz ? blitz_runtime_curse_stacks() : NULL;
+        /* The two flag words held only Blitz lore before 0.9.9.16.
+         * Story heroes now use those words for their run blessings. */
+        u64b flags = blitz ? *blitz_runtime_curses_seen() : metarun_run_blessings(p_ptr);
         for (i = 0; i < METAR_CURSE_SLOTS; ++i)
             wr_byte((byte)(stacks ? stacks[i] : 0));
-        wr_u32b((u32b)(seen & 0xFFFFFFFFULL));
-        wr_u32b((u32b)(seen >> 32));
+        wr_u32b((u32b)flags);
+        wr_u32b((u32b)(flags >> 32));
     }
 
     wr_s32b(min_depth_counter);

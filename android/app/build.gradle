@@ -3,28 +3,22 @@ plugins {
 }
 
 def repoRoot = rootProject.projectDir.parentFile
-def definesHeader = new File(repoRoot, 'src/defines.h')
-def versionMatcher = (definesHeader.text =~ /#define\s+VERSION_STRING\s+"([^"]+)"/)
-if (!versionMatcher.find()) {
-    throw new RuntimeException("Could not find VERSION_STRING in src/defines.h")
+def definesHeader = new File(repoRoot, 'src/defines.h').text
+def gameVersionParts = ['MAJOR', 'MINOR', 'PATCH', 'EXTRA'].collect { component ->
+    def macro = "VERSION_${component}"
+    def matcher = (definesHeader =~ /(?m)^#define[ \t]+${macro}[ \t]+([0-9]+)\b/)
+    if (!matcher.find()) {
+        throw new GradleException("Could not find $macro in src/defines.h")
+    }
+    matcher.group(1) as int
 }
-def versionExtraMatcher = (definesHeader.text =~ /#define\s+VERSION_EXTRA\s+(\d+)/)
-if (!versionExtraMatcher.find()) {
-    throw new RuntimeException("Could not find VERSION_EXTRA in src/defines.h")
-}
-
-def gameVersion = versionMatcher.group(1)
-def gameVersionParts = gameVersion.tokenize('.').collect { it as int }
-if (gameVersionParts.size() != 3) {
-    throw new RuntimeException("VERSION_STRING must contain major.minor.patch")
-}
-def gameVersionExtra = versionExtraMatcher.group(1) as int
+def gameVersion = gameVersionParts.join('.')
 
 def gameVersionCode =
         (gameVersionParts[0] * 1000000) +
         (gameVersionParts[1] * 10000) +
         (gameVersionParts[2] * 100) +
-        gameVersionExtra
+        gameVersionParts[3]
 
 def readOptionalBuildValue = { String name ->
     def propertyValue = project.findProperty(name)
@@ -169,7 +163,7 @@ android {
         minSdk 24
         targetSdk androidTargetSdk
         versionCode androidVersionCode
-        versionName "${gameVersion}.${gameVersionExtra}"
+        versionName gameVersion
         // Select a distinct launcher label for the APK2 installation while
         // retaining the existing labels for the primary app and debug builds.
         manifestPlaceholders = [

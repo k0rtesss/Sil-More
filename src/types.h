@@ -1240,6 +1240,7 @@ struct player_type
 
     s16b game_type; /* Whether this is a normal game (=0), tutorial (<0), puzzle
                        (>0) */
+    u64b run_blessings; /* One temporary stack for each selected blessing ID. */
 
     s16b age; /* Character's age */
     s16b ht; /* Height */
@@ -1669,7 +1670,7 @@ struct high_score
     char day[10];        /* Time stamp (string) */
     char who[16];        /* Player Name (string) */
     char uid[8];         /* Player UID, or linked runs.db record_id in score format 0.9.6.3+ */
-    char unused[2];      /* Link marker for score format 0.9.6.3+ rows */
+    char unused[2];      /* Run link marker and optional Easy difficulty marker */
     char p_r[3];         /* Player Race (number) */
     char p_h[3];         /* Player Character (number) */
     char cur_lev[4];     /* Unique monsters killed (number) */

@@ -75,6 +75,7 @@ GROUPS = {
         "save_flush", "save_notes", "message_history_save", "song_target_save",
         "disease_save", "legacy_quiver_load",
         "persistence_review_fixes", "remaining_review_paths", "run_history_timestamps",
+        "blessing_knowledge",
         "template_versions", "artefact_databases", "character_dump_layout",
     ),
     "tutorials": (

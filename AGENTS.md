@@ -68,6 +68,8 @@ Path resolution is centralized in `src/init2.c:init_file_paths()`.
   - Sound config reads from `lib/pref/sound.json` (see `src/main-sdl.c`).
 
 ## Data Workflow (`lib/edit/*.txt`)
+
+When bumping major, minor, or patch, update the numeric macros and `VERSION_STRING` in `src/defines.h` together with the `V:` header of every active game-versioned template. An extra-only bump keeps the three-component template headers. Run `python scripts/check_template_versions.py --self-test --runtime-check --cmake-check`; for an Android release, pass `--aab <finished-bundle>` to check the assets players receive. The checker discovers active files and validates independent schemas such as `dungeon-themes.txt` separately.
 These templates drive gameplay content (monsters, vaults, objects, terrain, quests, styles, etc.). They compile into `ANGBAND_DIR_DATA` (`<user-root>/data/` or `lib/data/` depending on build).
 
 - Common templates:
