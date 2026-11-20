@@ -649,10 +649,16 @@ available. Other runtime discovery follows whichever IDs are actually registered
 Apple point tiers are independent of Google's published points: Google
 5/10/15 map to Apple 5, 25 to 10, 50 to 20, and 100 to 40.
 
-Run `python scripts/export_achievement_stores.py` with the existing Node/sharp
-options. It writes `store-readiness.json`, Apple metadata in
-`apple-game-center/achievements.json`, and 1024px RGB PNGs at 72 ppi.
-The JSON is a review/registration manifest, **not** an Apple bulk-import format.
+The [Game Center artwork and manifest](../ios/game-center/) are checked in under
+`ios/game-center/`. The manifest pairs each achievement ID and localization with
+its 1024 × 1024 RGB PNG at 72 ppi. Use it as a registration reference in App
+Store Connect.
+
+After an Apple selection, description, or icon change, run
+`python scripts/export_achievement_stores.py --require-ready` with the existing
+Node/sharp options. Update `ios/game-center/` from the export's
+`apple-game-center/` folder, removing icons for entries dropped from the selection.
+The export also writes `store-readiness.json`.
 Steam CSVs and icons go into `steam-draft/` while its selection exceeds 100.
 `--require-ready` rejects unfinished selections before exporting. Once the
 catalogues meet their limits, output uses `steam/` and `apple-game-center/`.
