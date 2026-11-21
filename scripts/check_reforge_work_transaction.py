@@ -248,11 +248,21 @@ def main():
     source.write_text(prefix + checks + init + '    checks(); SDL_Quit(); return 0;\n}\n',encoding='utf-8')
     smith = OUT / 'smith.c';smith.write_text(smith_text,encoding='utf-8')
     writer = OUT / 'writer.c'
+    save_text = (ROOT / 'src/fs/save.c').read_text(encoding='utf-8')
+    item_start = save_text.index('void wr_item(')
+    item_end = save_text.index('\n}', item_start) + 2
+    old_item = save_text[item_start:item_end]
+    site_token = ('    wr_u32b((u32b)o_ptr->site_token);\n'
+                  '    wr_u32b((u32b)(o_ptr->site_token >> 32));\n')
+    assert old_item.count(site_token) == 1
+    old_item = old_item.replace(site_token, '').replace(
+        'void wr_item(', 'static void fixture_write_pre_stream_item(')
     writer.write_text('#include "fs/save.c"\n'
-        + '\nsize_t fixture_write_work(byte *buf,size_t capacity,int extra) {\n'
+        + old_item + '\nsize_t fixture_write_work(byte *buf,size_t capacity,int extra) {\n'
         'fff=SDL_IOFromMem(buf,capacity); xor_byte=0;v_stamp=x_stamp=save_byte_offset=0;write_error=false;\n'
         'wr_extra();\n'
-        'wr_item(smith_o_ptr);size_t n=SDL_TellIO(fff);SDL_CloseIO(fff);fff=NULL;return n;\n}\n',encoding='utf-8')
+        'if(extra<10)fixture_write_pre_stream_item(smith_o_ptr);else wr_item(smith_o_ptr);\n'
+        'size_t n=SDL_TellIO(fff);SDL_CloseIO(fff);fff=NULL;return n;\n}\n',encoding='utf-8')
     loader_text=(ROOT/'src/fs/load.c').read_text(encoding='utf-8')
     start=loader_text.index('    savefile_has_runtime_overrides =',loader_text.index('static errr rd_savefile_new_aux'))
     flags=loader_text[start:loader_text.index('    /* Reset load byte offset',start)]

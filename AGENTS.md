@@ -6,7 +6,8 @@ High-signal repo guidance for coding agents (Codex CLI, Copilot, etc.). This is 
 - Subagents are optional, not a default. Use one proactively only when there is a concrete expected net benefit: it should visibly improve the result (for example, through an independent review, genuinely separate investigation, or additional validation path) or reduce total token cost by parallelizing work or keeping large context out of the main task.
 - Do not delegate routine, narrow, or tightly coupled work when duplicated context, coordination, synthesis, or review would cancel the benefit. A single focused delegation is preferable to several overlapping ones. An explicit user request not to use subagents always wins.
 - Before dispatching, define a bounded, independent subtask and the quality or token-cost benefit it is expected to provide. The main agent remains responsible for combining the result, checking it against the repository, and making the final decision.
-- Choose the least expensive available model and reasoning level that can complete the subtask reliably. The supported choices are only `gpt-6.1-sol` with `low`, `medium`, `high`, `xhigh`, `max`, or `ultra` reasoning, selected according to difficulty and the expected benefit.
+- When a justified subtask primarily requires visual reasoning or operating software, prefer `gpt-6.1-terra` with `max` reasoning over `gpt-6.1-sol`. Examples include inspecting screenshots or rendered artifacts, visual UI/layout review, and using computer-use or other visual/software-use skills to interact with desktop apps, browser interfaces, or the game. This preference does not by itself justify delegation.
+- For other subtasks, choose `gpt-6.1-sol` with `low`, `medium`, `high`, `xhigh`, `max`, or `ultra` reasoning, selecting the least expensive level that can complete the work reliably. `gpt-6.1-terra` is supported only with `max` reasoning. If the preferred model is unavailable, use an available supported model suited to the task.
 - When you use a subagent, report the model, reasoning level, delegated subtask, and concrete reason delegation was worth its cost.
 
 ## Project Snapshot
@@ -67,6 +68,8 @@ Path resolution is centralized in `src/init2.c:init_file_paths()`.
   - Sound config reads from `lib/pref/sound.json` (see `src/main-sdl.c`).
 
 ## Data Workflow (`lib/edit/*.txt`)
+
+When bumping major, minor, or patch, update the numeric macros and `VERSION_STRING` in `src/defines.h` together with the `V:` header of every active game-versioned template. An extra-only bump keeps the three-component template headers. Run `python scripts/check_template_versions.py --self-test --runtime-check --cmake-check`; for an Android release, pass `--aab <finished-bundle>` to check the assets players receive. The checker discovers active files and validates independent schemas such as `dungeon-themes.txt` separately.
 These templates drive gameplay content (monsters, vaults, objects, terrain, quests, styles, etc.). They compile into `ANGBAND_DIR_DATA` (`<user-root>/data/` or `lib/data/` depending on build).
 
 - Common templates:
@@ -84,6 +87,7 @@ These templates drive gameplay content (monsters, vaults, objects, terrain, ques
 
 ## Key Subsystems (Fast Pointers)
 - Direct game automation: `src/sdl/control/sdl-control.c` + `tools/game_control.py`; see `docs/game-control.md`. Opt-in `-- --control-dir <absolute-path>` accepts SDL inputs and returns PNGs without desktop input; the Python launcher also supports `--headless`.
+- Monster sight versus stealth: `visual_recognition` only controls the light-dependent visual bonus in perception-versus-stealth checks. Alert monsters, including archers, can fight and shoot from darkness. Use `monster_has_visual_perception_bonus()` only for that roll/its stealth indicators; use `monster_ai_can_see_player()` for alerted combat targeting and `monster_has_sight()`/`monster_sight_range()` for physical LOS/range. Never use recognition or player light as a combat, pursuit, retreat, spell, or squad-post gate. Unwary monsters must still pass detection before acquiring the player's current position. See `src/monster/monster-senses.h` and `docs/monster-ai-plan.md`.
 - Key handling pipeline (SDL -> command): see `docs/key_handling_report.md` and `src/z-term.c`, `src/util.c:inkey()`/`request_command()`.
 - SDL UI configuration: `src/sdl-config.c` reads/writes `sil_sdl.json` (pane layout, scaling, fullscreen, etc.).
 - Sound system: `src/sdl-sound.c` + `src/sound-config.c` read `sound.json` and map events (see `angband_sound_name[]` in `src/variable.c`).

@@ -23,8 +23,10 @@ def function(path, name):
 PRELUDE = r'''
 #include "angband.h"
 #include "achievements.h"
+#include "log/log.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-tactics.h"
 #include <assert.h>
 #include <stdio.h>
 static player_type player;
@@ -36,6 +38,7 @@ _Thread_local monster_race *r_info=races;
 static monster_lore lore[3];
 _Thread_local monster_lore *l_list=lore;
 _Thread_local s16b mon_max=3;
+_Thread_local s32b playerturn;
 static int dealt, hits;
 static int player_damage, player_kills;
 void sil_achievements_on_event(sil_achievement_id id) {
@@ -45,6 +48,9 @@ void quest_followup_damage(monster_type* monster,int damage,int who) {
     assert(monster==&monsters[1] && who==-1);player_damage+=damage;
 }
 void quest_followup_kill(int race) {assert(race==1);player_kills++;}
+void log_log(int level, const char* file, int line, const char* fmt, ...) {
+    (void)level;(void)file;(void)line;(void)fmt;assert(false);
+}
 bool mon_take_hit(int idx,int damage,cptr note,int who) {
     (void)note;assert(who==0||who==-1);hits++;dealt+=damage;
     if(who<0)quest_followup_damage(&monsters[idx],damage,who);
@@ -131,7 +137,8 @@ int main(void){
     assert(monster_poison_tick(1)&&!player_damage&&!player_kills);
     puts("Player poison: quest damage excludes ambient doses; lethal player dose credits the normal kill path exactly once PASS");
     for(int version=2;version<=8;version++)for(int poison=0;poison<=100;poison++){
-        monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.player_poisoned=poison/2;src.thrall_quest_requested=1;
+        monster_type src={0},dst;src.r_idx=2;src.hp=123;src.energy=-50;src.poisoned=poison;src.player_poisoned=poison/2;src.potion_poisoned=poison/4;src.thrall_quest_requested=1;
+        src.achievement_doom_rage_epoch=123;src.achievement_elbereth_turn=87;src.achievement_first_wolf=true;
         src.song_will_penalty=7;src.blow_ds_reduction[0]=3;
         src.vengeance=1;src.smite_recovery=2;
         src.ai.observations[MON_AI_FIRE].value=2;
@@ -144,6 +151,20 @@ int main(void){
         src.ai.cast_reserve=2;src.ai.goal_age=3;
         wp=rp=0;extra_version=version;current_version=version==8;
         src.mflag=MFLAG_ACTV|MFLAG_PLAYER_POISON;wr_monster(&src);
+        /* .31/.34/.35 inserted poison ownership and achievement metadata
+         * between poison and abilities. Remove that lane for every old record
+         * before truncating abilities/AI or the four .7 observations. */
+        if(!current_version){
+            /* Historical records also lack the eight-byte streamed site ID. */
+            memmove(bytes,bytes+8,wp-8);wp-=8;
+            poison_offset-=8;player_poison_offset-=8;
+            abilities_offset-=8;ai_offset-=8;
+            wp -= 6; /* Command budget suffix first written in 1.1.0.11. */
+            int later_bytes=abilities_offset-player_poison_offset;
+            memmove(bytes+player_poison_offset,bytes+abilities_offset,
+                wp-abilities_offset);wp-=later_bytes;
+            abilities_offset-=later_bytes;ai_offset-=later_bytes;
+        }
         if(version<4)wp=poison_offset;
         else if(version<5)wp=abilities_offset;
         else if(version<6)wp=ai_offset;
@@ -151,14 +172,13 @@ int main(void){
             int start=ai_offset+29*7, count=(MON_AI_FEATURE_COUNT-29)*7;
             memmove(bytes+start,bytes+start+count,wp-start-count);wp-=count;
         }
-        /* Legacy records predate both poison words and discovery provenance. */
-        if(!current_version && version>=4){
-            memmove(bytes+player_poison_offset,bytes+player_poison_offset+13,
-                wp-player_poison_offset-13);wp-=13;
-        }
         wr_byte(0xA5);memset(&dst,0x55,sizeof(dst));rd_monster(&dst);
         assert(dst.poisoned==(version<4?0:poison));assert(dst.r_idx==2&&dst.hp==123&&dst.energy==-50);
         assert(dst.player_poisoned==(current_version?poison/2:0));
+        assert(dst.potion_poisoned==(current_version?poison/4:0));
+        assert(dst.achievement_doom_rage_epoch==(current_version?123U:0));
+        assert(dst.achievement_elbereth_turn==(current_version?87U:0));
+        assert(dst.achievement_first_wolf==current_version);
         assert(dst.thrall_quest_requested==1&&dst.song_will_penalty==7&&dst.blow_ds_reduction[0]==3);
         assert(dst.vengeance==(version<5?0:1));
         assert(dst.smite_recovery==(version<5?0:2));

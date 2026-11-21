@@ -1028,3 +1028,236 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
         text_out(format("%^s usually appears in groups.  ", wd_he[msex]));
     }
 }
+
+/* Compact recall uses the already-filtered lore supplied by describe_monster.
+ * Unknown traits stay unknown; this must not inspect unobserved race flags. */
+typedef struct compact_monster_flag {
+    u32b flag;
+    cptr label;
+} compact_monster_flag;
+
+static void compact_monster_flags(cptr heading, u32b flags,
+    const compact_monster_flag* entries, int count, byte color)
+{
+    bool found = false;
+    text_out_c(TERM_L_BLUE, heading);
+    for (int i = 0; i < count; i++)
+    {
+        if (!(flags & entries[i].flag)) continue;
+        if (found) text_out(", ");
+        text_out_c(color, entries[i].label);
+        found = true;
+    }
+    if (!found) text_out_c(TERM_SLATE, "unknown");
+    text_out("\n");
+}
+
+static cptr compact_blow_method(int method)
+{
+    switch (method)
+    {
+    case RBM_HIT: return "hit";
+    case RBM_TOUCH: return "touch (ignores armour)";
+    case RBM_CLAW: return "claw";
+    case RBM_BITE: return "bite";
+    case RBM_PECK: return "peck";
+    case RBM_STING: return "sting";
+    case RBM_WHIP: return "whip";
+    case RBM_CRUSH: return "crush";
+    case RBM_ENGULF: return "engulf";
+    case RBM_CRAWL: return "crawl";
+    case RBM_THORN: return "thorns";
+    case RBM_SPORE: return "spores (ignore evasion and armour)";
+    default: return "attack";
+    }
+}
+
+static cptr compact_blow_effect(int effect)
+{
+    switch (effect)
+    {
+    case RBE_HURT: return "damage";
+    case RBE_WOUND: return "wound";
+    case RBE_BATTER: return "stun";
+    case RBE_SHATTER: return "earthquakes";
+    case RBE_UN_BONUS: return "disenchant";
+    case RBE_UN_POWER: return "drain charges";
+    case RBE_LOSE_MANA: return "drain voice";
+    case RBE_SLOW: return "slow";
+    case RBE_EAT_ITEM: return "steal items";
+    case RBE_EAT_FOOD: return "eat food";
+    case RBE_DARK: return "darken";
+    case RBE_HUNGER: return "hunger";
+    case RBE_POISON: return "poison";
+    case RBE_ACID: return "corrode";
+    case RBE_ELEC: return "lightning";
+    case RBE_FIRE: return "fire";
+    case RBE_COLD: return "cold";
+    case RBE_BLIND: return "blind";
+    case RBE_CONFUSE: return "confuse";
+    case RBE_TERRIFY: return "fear";
+    case RBE_ENTRANCE: return "entrance";
+    case RBE_HALLU: return "hallucination";
+    case RBE_DISEASE: return "disease";
+    case RBE_LOSE_STR: return "drain Strength";
+    case RBE_LOSE_DEX: return "drain Dexterity";
+    case RBE_LOSE_CON: return "drain Constitution";
+    case RBE_LOSE_GRA: return "drain Grace";
+    case RBE_LOSE_STR_CON: return "drain Strength and Constitution";
+    case RBE_LOSE_ALL: return "drain attributes";
+    case RBE_DISARM: return "disarm";
+    default: return NULL;
+    }
+}
+
+void describe_monster_compact(int r_idx, const monster_lore* lore,
+    const monster_type* live)
+{
+    static const compact_monster_flag resistances[] = {
+        {RF3_RES_ELEC, "lightning"}, {RF3_RES_FIRE, "fire"},
+        {RF3_RES_COLD, "cold"}, {RF3_RES_POIS, "poison"}
+    };
+    static const compact_monster_flag weaknesses[] = {
+        {RF3_STONE, "shattering"}, {RF3_HURT_LITE, "bright light"},
+        {RF3_HURT_FIRE, "fire"}, {RF3_HURT_COLD, "cold"}
+    };
+    static const compact_monster_flag immunities[] = {
+        {RF3_NO_SLOW, "slow"}, {RF3_NO_STUN, "stun"},
+        {RF3_NO_FEAR, "fear"}, {RF3_NO_CONF, "confusion"},
+        {RF3_NO_SLEEP, "sleep"}
+    };
+    static const compact_monster_flag ranged[] = {
+        {RF4_ARROW1, "shortbow"}, {RF4_ARROW2, "longbow"},
+        {RF4_BOULDER, "boulders"}, {RF4_THROW_WEB, "webs"},
+        {RF4_BRTH_FIRE, "fire breath"}, {RF4_BRTH_COLD, "cold breath"},
+        {RF4_BRTH_POIS, "poison breath"}, {RF4_BRTH_DARK, "dark breath"},
+        {RF4_EARTHQUAKE, "earthquake"}, {RF4_SHRIEK, "calls for help"},
+        {RF4_SCREECH, "stunning screech"}, {RF4_DARKNESS, "darkness"},
+        {RF4_FORGET, "forgetfulness"}, {RF4_SCARE, "fear"},
+        {RF4_CONF, "confusion"}, {RF4_HOLD, "entrancement"},
+        {RF4_SLOW, "slowing"}, {RF4_DIM, "dims lights"},
+        {RF4_HATCH_SPIDER, "hatches spiders"}, {RF4_RALLY, "rallies foes"},
+        {RF4_SNG_BINDING, "Song of Binding"},
+        {RF4_SNG_PIERCING, "Song of Piercing"},
+        {RF4_SNG_OATHS, "Song of Oaths"}
+    };
+    static const compact_monster_flag abilities2[] = {
+        {RF2_CHARGE, "Charge"}, {RF2_KNOCK_BACK, "Knock Back"},
+        {RF2_CRIPPLING, "Crippling Shot"}, {RF2_CRUEL_BLOW, "Cruel Blow"},
+        {RF2_OPPORTUNIST, "Opportunist"}, {RF2_ZONE_OF_CONTROL, "Zone of Control"},
+        {RF2_EXCHANGE_PLACES, "Exchange Places"}, {RF2_RIPOSTE, "Riposte"},
+        {RF2_FLANKING, "Flanking"}, {RF2_INVISIBLE, "Invisible"},
+        {RF2_MULTIPLY, "Multiplies"}, {RF2_REGENERATE, "Regenerates"},
+        {RF2_CLOUD_SURROUND, "Damaging cloud"},
+        {RF2_TERRITORIAL, "Territorial"}, {RF2_FLYING, "Flies"},
+        {RF2_OPEN_DOOR, "Opens doors"}, {RF2_UNLOCK_DOOR, "Unlocks doors"},
+        {RF2_BASH_DOOR, "Bashes doors"}, {RF2_PASS_DOOR, "Passes doors"},
+        {RF2_PASS_WALL, "Passes walls"}, {RF2_KILL_WALL, "Destroys walls"},
+        {RF2_TUNNEL_WALL, "Tunnels"}
+    };
+    /* As in full recall, these bane marks are obvious by appearance. */
+    static const compact_monster_flag obvious_banes[] = {
+        {RF4_NOLDORBANE, "Noldor-bane"}, {RF4_SINDARBANE, "Sindar-bane"},
+        {RF4_DWARFBANE, "Dwarf-bane"}, {RF4_EDAINBANE, "Edain-bane"}
+    };
+    static const compact_monster_flag abilities5[] = {
+        {RF5_SMITE, "Smite"}, {RF5_SPRINTING, "Sprinting"},
+        {RF5_CONCENTRATION, "Concentration"}, {RF5_DODGING, "Dodging"},
+        {RF5_BLOCKING, "Blocking"}, {RF5_VENGEANCE, "Vengeance"},
+        {RF5_BRIDGE_BUILDER, "Bridge building"}
+    };
+    const monster_race* race = &r_info[r_idx];
+    bool found = false;
+    int speed = live && live->mspeed ? live->mspeed : race->speed;
+    int speed_index = MAX(0, MIN(speed, 7));
+
+    text_out_c(TERM_L_BLUE, "Speed: ");
+    if (lore->flags1 & RF1_NEVER_MOVE)
+        text_out("cannot move");
+    else if (lore->flags1 & RF1_HIDDEN_MOVE)
+        text_out("moves only when unseen");
+    else
+        text_out(format("%d (%d%% of normal)", speed,
+            (extract_energy[speed_index] * 100) / extract_energy[2]));
+    if (lore->flags1 & (RF1_RAND_25 | RF1_RAND_50))
+        text_out(", erratic");
+    if (live && live->hasted) text_out(", hasted");
+    if (live && live->slowed) text_out(", slowed");
+    text_out("\n");
+
+    compact_monster_flags("Resists: ", lore->flags3, resistances,
+        N_ELEMENTS(resistances), TERM_WHITE);
+    compact_monster_flags("Vulnerable: ", lore->flags3, weaknesses,
+        N_ELEMENTS(weaknesses), TERM_L_GREEN);
+    compact_monster_flags("Immune to: ", lore->flags3, immunities,
+        N_ELEMENTS(immunities), TERM_WHITE);
+    if (lore->flags1 & RF1_NO_CRIT)
+        text_out("Critical hits: immune\n");
+    else if (lore->flags1 & RF1_RES_CRIT)
+        text_out("Critical hits: resistant\n");
+
+    text_out_c(TERM_L_BLUE, "Melee: ");
+    for (int i = 0; i < MONSTER_BLOW_MAX; i++)
+    {
+        const monster_blow* blow = &race->blow[i];
+        cptr effect;
+        int attack, dice, sides;
+        if (!blow->method || (!lore->blows[i] && !lore_knows_lament_stats(lore)))
+            continue;
+        if (found) text_out("; ");
+        text_out_c(TERM_L_RED, compact_blow_method(blow->method));
+        effect = compact_blow_effect(blow->effect);
+        if (effect) text_out(format(": %s", effect));
+        attack = blow->att; dice = blow->dd; sides = blow->ds;
+        if (live)
+        {
+            attack = total_monster_attack((monster_type*)live, attack);
+            if (dice > 0 && live->blow_dd_reduction[i] > 0)
+                dice = MAX(1, dice - live->blow_dd_reduction[i]);
+            if (sides > 0 && live->blow_ds_reduction[i] > 0)
+                sides = MAX(1, sides - live->blow_ds_reduction[i]);
+        }
+        if (know_damage(lore, i) || lore_knows_lament_stats(lore))
+        {
+            if (dice > 0 && sides > 0)
+                text_out(format(" (%+d, %dd%d)", attack, dice, sides));
+            else
+                text_out(format(" (%+d)", attack));
+        }
+        found = true;
+    }
+    if (!found)
+        text_out_c(TERM_SLATE, (lore->flags1 & RF1_NEVER_BLOW)
+            ? "no physical attacks" : "unknown");
+    text_out("\n");
+
+    compact_monster_flags("Ranged and spells: ", lore->flags4, ranged,
+        N_ELEMENTS(ranged), TERM_L_RED);
+    text_out_c(TERM_L_BLUE, "Abilities: ");
+    found = false;
+    if (race->flags2 & RF2_ELFBANE)
+    {
+        text_out("Elf-bane");
+        found = true;
+    }
+    for (int i = 0; i < (int)N_ELEMENTS(obvious_banes); i++)
+        if (race->flags4 & obvious_banes[i].flag)
+        {
+            if (found) text_out(", ");
+            text_out(obvious_banes[i].label); found = true;
+        }
+    for (int i = 0; i < (int)N_ELEMENTS(abilities2); i++)
+        if (lore->flags2 & abilities2[i].flag)
+        {
+            if (found) text_out(", ");
+            text_out(abilities2[i].label); found = true;
+        }
+    for (int i = 0; i < (int)N_ELEMENTS(abilities5); i++)
+        if (lore->flags5 & abilities5[i].flag)
+        {
+            if (found) text_out(", ");
+            text_out(abilities5[i].label); found = true;
+        }
+    if (!found) text_out_c(TERM_SLATE, "unknown");
+    text_out("\n");
+}

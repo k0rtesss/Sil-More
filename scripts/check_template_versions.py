@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import tempfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECT_PARSERS = {
@@ -205,6 +206,8 @@ def cmake_check(names, expected):
         # This unreferenced draft must not be checked by either loader discovery.
         (fixture / "lib/edit/character - updates.txt").write_text("V:0.0.0\n", encoding="utf-8")
         guard = (ROOT / "cmake/ValidateTemplateVersions.cmake").as_posix()
+        header = fixture / "src/defines.h"
+        header.write_bytes((ROOT / "src/defines.h").read_bytes())
         (fixture / "CMakeLists.txt").write_text(
             'cmake_minimum_required(VERSION 3.16)\nproject(TemplateGuard NONE)\n'
             f'set(SIL_VERSION_STRING "{version_string(expected)}")\ninclude("{guard}")\n',
@@ -220,7 +223,14 @@ def cmake_check(names, expected):
         limits.write_text(f"V:{version_string(expected)}\n", encoding="utf-8")
         accepted = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
         assert accepted.returncode == 0, accepted.stdout + accepted.stderr
-    print("CMake configure guard: PASS (mismatched limits rejected, corrected assets accepted, unused draft ignored)")
+        # Model the 1.0 release failure: string and templates agree with each
+        # other, while the numeric version used by init_info_txt has changed.
+        header.write_text(re.sub(r"(?m)^#define VERSION_MAJOR \d+",
+                                 f"#define VERSION_MAJOR {expected[0] + 1}",
+                                 header.read_text(encoding="utf-8")), encoding="utf-8")
+        rejected = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+        assert rejected.returncode != 0 and "must match the runtime version" in rejected.stderr, rejected.stderr
+    print("CMake configure guard: PASS (stale template and numeric-only release bump rejected)")
 
 
 RUNTIME_HARNESS = r'''
@@ -283,16 +293,22 @@ def main():
     arguments.add_argument("--self-test", action="store_true")
     arguments.add_argument("--runtime-check", action="store_true")
     arguments.add_argument("--cmake-check", action="store_true")
+    arguments.add_argument("--aab", type=Path, help="verify assets inside the finished Android bundle")
     args = arguments.parse_args()
     try:
         expected = game_version((ROOT / "src/defines.h").read_text(encoding="utf-8"))
         names = active_templates()
         errors = []
-        for directory in [ROOT / "lib/edit"] + [p / "lib/edit" for p in args.deployed]:
+        def check_root(directory):
             for name in names:
                 errors.extend(check_template(directory / f"{name}.txt", expected))
             for name, schema_version in SCHEMA_TEMPLATES.items():
                 errors.extend(check_schema_template(directory / f"{name}.txt", schema_version))
+        for directory in [ROOT / "lib/edit"] + [p / "lib/edit" for p in args.deployed]:
+            check_root(directory)
+        if args.aab:
+            with zipfile.ZipFile(args.aab) as archive:
+                check_root(zipfile.Path(archive, "base/assets/lib/edit/"))
         if args.self_test:
             self_test()
         if args.runtime_check:
@@ -303,12 +319,12 @@ def main():
             print("\n".join(errors))
             return 1
         print(f"Template versions: PASS ({len(names)} active templates, "
-              f"{1 + len(args.deployed)} asset root(s), V:{version_string(expected)}; "
+              f"{1 + len(args.deployed) + bool(args.aab)} asset root(s), V:{version_string(expected)}; "
               "unused drafts ignored)")
         print(f"Independent schemas: PASS ({len(SCHEMA_TEMPLATES)} configuration file(s) "
               f"per asset root: {', '.join(f'{name} V:{v}' for name, v in SCHEMA_TEMPLATES.items())})")
         return 0
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, zipfile.BadZipFile, subprocess.CalledProcessError) as error:
         print(f"Template version check failed: {error}")
         return 1
 

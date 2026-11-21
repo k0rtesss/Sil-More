@@ -7,12 +7,19 @@ enum monster_sense_kind
     MON_SENSE_SCENT, MON_SENSE_SEARCH, MON_SENSE_SHARED_TRACE
 };
 
+/* Physical sight: LOS, MAX_SIGHT, short sight and wakefulness. No light or
+ * stealth-recognition gate. Alert shooters can fire from/in darkness. */
+int monster_sight_range(const monster_type* m_ptr);
 bool monster_has_sight(const monster_type* m_ptr);
+/* Stealth check only, also shown by stealth-vision indicators. Never use this
+ * for combat targeting, attack legality, pursuit, retreat or squad posts. */
+bool monster_has_visual_perception_bonus(const monster_type* m_ptr);
 int monster_scent_limit(const monster_race* r_ptr);
 void monster_senses_see(monster_type* m_ptr, int y, int x);
 void monster_senses_hear(monster_type* m_ptr, int y, int x);
 void monster_senses_share_trace(monster_type* m_ptr, int y, int x);
 void monster_senses_refresh(monster_type* m_ptr);
+bool monster_senses_tracking_scent(const monster_type* m_ptr);
 bool monster_senses_target(const monster_type* m_ptr, int* y, int* x);
 bool monster_senses_advance(monster_type* m_ptr, int* y, int* x);
 

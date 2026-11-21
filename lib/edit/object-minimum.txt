@@ -1,0 +1,223 @@
+# Minimum-text item information. IDs match object.txt, special.txt, and artefact.txt.
+# K entries preserve gameplay sentences from object.txt verbatim; edit those
+# rules in both places when mechanics change. Descriptive lore is omitted.
+# E entries shorten special-item lore; keep any gameplay rules verbatim.
+# A entries retain artefact-specific information and clarify set bonuses.
+K:21:You can equip it as a light source with a radius of 1 square. It will shine forever.
+K:70:Its edge can bite through armour that turns aside common steel.
+K:96:It can be equipped as a weapon and allows you to dig through rubble.
+K:98:It can be equipped as a weapon and (usually) allows you to dig through rubble, damaged walls or quartz.
+K:128:You can equip it as a light source with a radius of 1 square. It can hold up to 3,000 turns of light, but begins to sputter when only 100 turns remain.
+K:129:You can equip it as a light source with a radius of 2 squares. While you carry brass lanterns and oil flasks, their oil is pooled together. Oil containers use four supply slots: a brass lantern uses two slots and holds up to 5,000 turns, while a flask uses one slot and holds up to 2,500 turns.
+K:130:You can equip it as a light source with a radius of 4 squares. It will shine forever.
+K:131:Its holy light can break the Oath of Fëanor that binds cursed items. You can equip it as a light source with a radius of 7 squares. It will shine forever.
+K:191:It may shut and lock all doors in line of sight.
+K:192:It reveals doors and traps in line of sight and may open or destroy them.
+K:193:It lights up an area with a radius of 7 squares, plus the entire room if you are currently in one. This stuns any light-sensitive creatures within the area of effect.
+K:195:It can cleanse one chosen item from your equipment, pack, or the floor, lifting curses where it can.
+K:196:It identifies an item. (This may be aborted without using up a charge.)
+K:197:It reveals your surroundings.
+K:198:It shows you the whereabouts of all items on the level.
+K:199:It shows you the whereabouts of all monsters on the level.
+K:200:It causes a great weariness in all monsters in line of sight.
+K:201:It causes fear in all monsters in line of sight.
+K:202:It shows all of your status effects and character traits. While diseased, it identifies the disease name and cure herb if you have Alchemy. Without Alchemy, each use has a 50% chance to identify the disease name; once the name is known, each use has a 50% chance to identify the cure herb. Discoveries last for the current infection and are saved. A new infection gets a new name and cure and resets them. Each use also gives a chance to reveal one active curse. Also shows how many diseases you are immune to for this run.
+K:203:It can be used to create glyphs of warding, which your opponents have difficulty crossing.
+K:204:It confuses all monsters in line of sight.
+K:206:It allows you to partially recharge a staff.
+K:210:It summons monsters to the stairs on the current level.
+K:211:It darkens an area with a radius of 7 squares, plus the entire room if you are currently in one. For the stealth checks of that round, you add your Will to your stealth.
+K:240:Its sound brings terror to your enemies.
+K:241:Its sound stuns your enemies.
+K:242:Its sound blows your enemies back.
+K:243:Its sound can shatter stone. In addition to the compass directions, brave souls can aim it up (u, or c with hjkl movement) or down (d).
+K:250:A horn that draws the attention of all nearby, for good or ill. It rings out a challenge to your foes.
+K:313:It cures stunning, confusion, hallucination, poison, blindness, and fear. It halves any current bleeding, restores 20 health and 20% of your maximum health, and restores all your voice. It also cures disease and restores all attribute points lost to that disease. Curing disease grants immunity to that disease for this run.
+K:315:It banishes all fear, restores 6 health and 8% of your maximum health, and stuns you (for 2d4 turns).
+K:316:It grants a bonus of +10 to perception for 20d4 turns, and restores a quarter of your voice.
+K:317:It cures stunning, confusion, and hallucination; and ends your rage.
+K:318:It halves any current bleeding and restores 15 health and 16% of your maximum health. It also cures disease and restores all attribute points lost to that disease. Curing disease grants immunity to that disease for this run.
+K:319:It renews your voice.
+K:320:It restores your sight and enables you to resist blindness, resist hallucination, and see invisible creatures for 10d4 turns.
+K:321:It cures any current poisoning.
+K:322:It makes you move more quickly (+1 to speed) for 10d4 turns.
+K:323:It grants you temporary resistance to fire and cold for 20d4 turns.
+K:327:It grants a bonus of +3 to strength for 20d4 turns, restoring strength in the process.
+K:328:It grants a bonus of +3 to dexterity for 20d4 turns, restoring dexterity in the process.
+K:329:It grants a bonus of +3 to constitution for 20d4 turns, restoring constitution in the process.
+K:330:It grants a bonus of +3 to grace for 20d4 turns, restoring grace in the process.
+K:343:It slows you down (-1 to speed) for 10d4 turns.
+K:344:It causes 5d4 points of poison.
+K:345:It induces blindness for 10d4 turns.
+K:346:It induces confusion for 5d4 turns.
+K:348:It reduces your dexterity by one point.
+K:350:It reduces your grace by one point.
+K:372:Even so, the items within tend to be of good quality.
+K:373:The items within tend to be of great quality.
+K:374:The treasures within tend to be of superb quality.
+K:375:It holds more than a smaller chest, though its contents are still only of good quality.
+K:376:Larger than the smaller sort, it holds several items, and those within tend to be of great quality.
+K:377:Largest of its kind, it holds several treasures, and those within tend to be of superb quality.
+K:378:Whatever lies within is sure to be of superb quality.
+K:380:It sends you into a dark rage (+1 Str/Con, -1 Dex/Gra, special melee attack, resistance to fear) for 10d4 turns. Herbs provide nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:381:It provides nourishment for about 2,000 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:382:It induces fear that lasts for 10d4 turns and a burst of speed that lasts 5d4 turns. Herbs provide nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:383:It halves any current bleeding and restores 11 health and 12% of your maximum health. Herbs provide nourishment for about 250 turns under normal conditions. It cures every disease, including Angband Plague, even before diagnosis. When diseased, eating it restores the attribute points lost to disease instead of healing wounds, halving bleeding, or providing nourishment. Healing is the only herb that cures Angband Plague; potions of Healing or Miruvor also cure it. Curing disease grants immunity to that disease for this run.
+K:384:It restores all of your statistics by up to 3 drained points each. Herbs provide nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:385:It fills the belly with a gnawing hollowness, making you more hungry (by 1,000 turns under normal conditions).If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:386:It causes you to hallucinate for 80d4 turns, but cures blindness in the process. Herbs provide nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:387:It induces a trance that lasts for 10d4 turns. Herbs provide nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:388:It reduces your strength by one point. Herbs provide nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run.
+K:389:Its normal effect is to attempt to infect a healthy eater with disease: -1 Constitution immediately, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. Rest does not cure it. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Cures restore only the attribute points lost to disease. It provides nourishment for about 250 turns under normal conditions. If this is the cure for your current disease, eating it cures the disease and restores its disease penalties instead of applying this herb's normal effect or nourishment. Otherwise, its usual effect applies. Curing disease grants immunity to that disease for this run. Immunity blocks a previously cured disease; Hardiness halves infection chances.
+K:399:It provides nourishment for about 1,500 turns under normal conditions.
+K:400:Eating a strip provides nourishment for about 2,000 turns under normal conditions, with a 20% base chance of disease exposure. Disease causes -1 Constitution immediately, then -1 to a random attribute every 150 player turns (300 with Hardiness) until cured. A Herb of Healing or a potion of Healing or Miruvor cures every disease. Rest does not cure it. Immunity blocks a previously cured disease; Hardiness halves infection chances.
+K:401:It restores a point of grace if it has been drained. It provides nourishment for about 3,000 turns under normal conditions.
+K:402:It goes into your supplies as an oil container, using one of four oil slots and holding up to 2,500 turns of light.
+K:410:They can be used at a forge to create or alloy mithril items.
+K:411:You can equip it as a light source with a radius of 3 squares. It begins with 100 turns of light, can hold up to 200 turns, and only starts to sputter when 10 turns remain.
+K:491:They can be used at a forge to create or alloy star-iron items.
+E:1:Its careful construction gives extra protection against blows.
+E:2:Treated with herbs and salts against venom.
+E:3:Supple and unusually enduring.
+E:4:Made in Brethil's style for freedom of movement.
+E:5:Made to move quietly.
+E:6:Its precise Dwarven craft keeps the wearer steady and ready.
+E:7:Made for the steadfast warriors of the Iron Hills, who held their ground against fear.
+E:8:Made to defend against the cold of the uplands of Ladros.
+E:9:A sickly corruption has entered its substance.
+E:10:Darkened in the fashion of secretive prowlers.
+E:11:Rough mail from an orcish forge.
+E:12:Shaped to turn blows aside.
+E:13:Frost-like craft wards its bearer from heat and flame.
+E:14:Dwarven runes offer a ward against doom.
+E:15:It carries a cruel and wrathful temper.
+E:16:It recalls Hithlum's northern wardens and their long endurance.
+E:17:Timber and iron are joined with the patient craft of the Blue Mountains.
+E:20:A swift, graceful blade holding a memory of starlight.
+E:21:It recalls Gondolin's craft and defiance of Orcs and Raukar.
+E:22:It recalls Doriath's wardens and their watch against wolves and spiders.
+E:23:It recalls Nargothrond's craft against dragons and vampires.
+E:24:It carries the grave authority of Mandos against the undead.
+E:26:It carries the Firebeards' fiery patience and endurance.
+E:27:It bears the valour of Hador's House against trolls.
+E:28:A dangerous battle-hunger lives in it.
+E:31:Bright and swift, with the perilous fire of Fëanor's line.
+E:34:A cruel weapon made for sudden murder.
+E:35:A companion blade made for the off-hand.
+E:36:A spear marked by the clear light of the Vanyar.
+E:37:A weathered staff for enduring cold and want.
+E:38:It recalls the Grinding Ice and endurance against cold.
+E:39:A blunt weapon made for battering.
+E:40:Its heavy head is made for crushing blows.
+E:41:Its point is made to pierce armour.
+E:42:An overseer's cruel weapon, made to threaten and punish.
+E:43:Its heavy edge carries the black fire of Udun.
+E:44:A heavy weapon recalling the cruel forges of Thangorodrim.
+E:45:A black iron weapon made for slaughtering Men and Elves.
+E:46:Its edge is coated with venom.
+E:47:Its weight is carefully balanced.
+E:48:A weapon made for guarding as well as striking.
+E:49:It hungers for the life spilled by its wounds.
+E:51:A tool made for delving hard places.
+E:52:Made for the strength and endurance of Dwarven delvers.
+E:71:A clear brightness rests upon it.
+E:72:It steadies the mind against dread.
+E:73:It bears a clear virtue against deception.
+E:74:It steadies thought against confusion and shock.
+E:75:A gentle grace rests upon it.
+E:76:A dark visor gives it a threatening look.
+E:77:Savage iron spikes have been added to it.
+E:80:Made in the cringing, fearful temper of lesser Orcs.
+E:82:Its close weave makes little sound.
+E:83:Its folds hold a gentle warmth.
+E:84:Made for long roads, it wastes little of its strength.
+E:86:An unkind chill clings to it.
+E:87:It steadies the wearer's heart and helps keep life from spilling away.
+E:88:It brings courage and a grace that does not readily bow to fear.
+E:91:A yew bow blackened by smoke and fire.
+E:92:A bleak bow made for watchful scouts on dangerous shores.
+E:93:A pale radiance has been laid upon it.
+E:94:A watchful bow made for guards who stand against fear.
+E:95:A far-seeing bow tempered by cold sea winds.
+E:96:Its shots seem to follow a truer course.
+E:97:A quiet bow made for swift hunters and hidden guards.
+E:98:A bow made for long, patient watches and distant shots.
+E:99:A horn-backed bow made for strong, hard shots.
+E:100:A cruel Angband bow made to strike the Free Peoples.
+E:101:Their heads are smeared with venom.
+E:102:They have long, narrow bodkin heads.
+E:110:Moonlike radiance silvers the path and troubles its foes.
+E:111:Their leather makes little sound.
+E:112:Their bright plates are made to slip free of traps and snares.
+E:113:They are made for a swift stride.
+E:114:They are made for a sudden spring.
+E:115:Excess iron makes each step ring out.
+E:116:Their false craft tempts the wearer toward treacherous paths.
+E:117:They recall the cruel, exhausting marches of Angband.
+E:120:Made to protect an archer's fingers.
+E:121:They recall Lorellin's waters and a gentle craft against hurt.
+E:122:They are made for a swordsman's quick parry.
+E:123:Heavy gauntlets with a strong grip but less freedom for quick fingers.
+E:124:Light gloves with a powerful grip.
+E:125:Hooked iron claws cover fingers and knuckles.
+E:126:Made for the treacherous close-in stroke.
+E:127:Made to inflict lingering pain.
+E:130:Its light shines more brightly.
+E:135:Its flame gutters and throws uneasy shadows.
+E:140:Its edge has cruel, jagged teeth.
+E:141:Its careful craft makes it light and nimble.
+E:142:A pale, wholesome starlight rests upon it.
+E:143:An unwholesome shadow hangs about it.
+E:144:Its virtue is marred by a lurking taint.
+E:145:Its blessing steadies the spirit and lends itself to song.
+E:146:Extra weight has been worked into its head.
+E:147:The wood carries a note that joins hand, voice, and breath.
+E:148:An old forge's fire seems to wake when the hammer strikes.
+E:149:A practical weapon for wilderness hunting and sudden fights.
+E:150:A swift blade for the quiet hunters of Ossiriand.
+E:151:It recalls Tirion's tradition of measured thought and power.
+E:152:Made for dragon-fighters, to find gaps between scales.
+E:153:Made for the dark places beneath Nogrod, against webs and horrors.
+E:154:Aulë's ward is set against the undead and blood-drinking creatures.
+E:155:This robe recalls hymns beneath Varda's stars, helping its wearer face fear and darkness.
+E:156:It recalls Telperion's silver light and the quiet of fading sound.
+E:157:It recalls songs that reveal hidden ways through stone.
+E:158:Belegost's mail craft joins strength and flexibility.
+E:159:A quiet bow for a watchful archer who must move freely.
+E:160:It sharpens watchfulness, but brings cruel unrest.
+E:161:Made for crowded battles, at the cost of quiet and hope.
+E:162:Made for stealthy scouts, in a suspicious and fearful style.
+E:163:Heavy greaves for a noisy and brutal charge.
+E:164:A gaoler's boots, made to force others aside and spread dread.
+E:165:Heavy, merciless mail for those who stood beside Balrogs.
+E:166:A harsh leader's helm that hardens will and drives the throng to fury.
+E:167:Its song breeds mistrust and breaks quiet accord.
+E:168:A harsh shield for retreating under blows, bearing a bully's will.
+E:169:Cruel hunting shafts made for the Enemy's long and painful hunts.
+E:170:A golden light that answers song and troubles creatures of shadow.
+E:171:A helm worn thin by rust.
+E:172:Boots worn thin and loose.
+E:173:A cracked and splintered shield.
+E:174:A blade with a nicked and worn edge.
+E:175:A bent shortsword with spoiled balance.
+E:176:A spear with a cracked shaft and dulled head.
+E:177:A shortbow warped by damp and neglect.
+E:178:A torn and frayed cloak.
+E:179:Gauntlets with split leather and bent plates.
+E:180:Greaves with dented plates and strained straps.
+E:181:Its glass is cracked and its fittings bent awry, so that no steady light can be kept within it until a smith mends the hurt.
+E:182:A Dwarf-lord's war-mask, made to strike fear before battle.
+E:183:Its pale metal lets wrist and fingers move freely.
+E:184:Its folds are subtly cut to help the wearer evade blows.
+E:185:It is carefully made to be light. One who bears it can still weave and turn as freely as the unarmoured.
+E:186:A Haladin blade made for close fighting against Orcs, wolves, and spiders.
+E:187:A concealed blade used by Tevildo's thralls against cats and wolves.
+A:10:When worn with his hauberk, one feels the full measure of his endurance. Set bonus: +1 Constitution.
+A:36:When worn with his crown, one feels the full measure of his endurance. Set bonus: +1 Constitution.
+A:64:Set: wield with Glamdring without Two Weapon Fighting or off-hand penalties.
+A:65:Set: wield with Orcrist without Two Weapon Fighting or off-hand penalties.
+A:170:Light radius 2; lasts forever.
+A:171:Its radiance pierces shadow and frees the bearer from ensnaring bonds, and its holy light unravels even the darkest curses laid upon the works of the Enemy. Light radius 5; lasts forever.
+A:176:Stand over the crown and use it (u), or press k, to cut out a Silmaril.
+A:177:Stand over the crown and use it (u), or press k, to cut out a Silmaril.
+A:178:To cut a Silmaril from the crown, stand over it and use it (u), or press (k).

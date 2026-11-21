@@ -19,14 +19,13 @@ static int metarun_count_effect_lines(cptr text, int wrap_width, int indent)
     return count_wrapped_lines(text, wrap_width, indent);
 }
 
-static int metarun_active_effect_block_lines(int id, int term_width)
+static int metarun_active_effect_block_lines(int id, int stacks, int term_width)
 {
     const int text_col = 4;
     const int wrap_width = metarun_effect_wrap_width(term_width);
     const curse_type *cu = &cu_info[id];
-    int stacks = CURSE_GET(id);
     bool is_blessing = (stacks < 0);
-    bool seen = CURSE_SEEN(id);
+    bool seen = is_blessing || CURSE_SEEN(id);
     int lines = 1; /* Name */
 
     cptr desc = is_blessing
@@ -54,15 +53,14 @@ static int metarun_active_effect_block_lines(int id, int term_width)
     return lines;
 }
 
-static int metarun_render_active_effect_block(int id, int row, int term_width)
+static int metarun_render_active_effect_block(int id, int stacks, int row, int term_width)
 {
     const int name_col = 2;
     const int text_col = 4;
     const int wrap_width = metarun_effect_wrap_width(term_width);
-    int stacks = CURSE_GET(id);
     bool is_blessing = (stacks < 0);
     int magnitude = is_blessing ? -stacks : stacks;
-    bool seen = CURSE_SEEN(id);
+    bool seen = is_blessing || CURSE_SEEN(id);
 
     const curse_type *cu = &cu_info[id];
     cptr name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
@@ -122,11 +120,14 @@ void show_all_active_curses(void)
 
     /* Count active effects and build list */
     int active_count = 0;
-    int active_ids[64];
-    for (int id = 0; id < z_info->cu_max && active_count < 64; id++) {
-        if (CURSE_GET(id) != 0) {
-            active_ids[active_count++] = id;
-        }
+    struct active_effect { int id; int stacks; } active[METAR_CURSE_SLOTS * 2];
+    for (int id = 0; id < MIN(z_info->cu_max, METAR_CURSE_SLOTS); id++) {
+        int curse = CURSE_CURSE_STACK(id);
+        int blessing = CURSE_BLESSING_STACK(id);
+        if (curse > 0)
+            active[active_count++] = (struct active_effect){ id, curse };
+        if (blessing > 0)
+            active[active_count++] = (struct active_effect){ id, -blessing };
     }
 
     if (active_count == 0) {
@@ -153,13 +154,14 @@ void show_all_active_curses(void)
     int available_lines = term_height - 4;
     if (available_lines < 1) available_lines = 1;
 
-    int page_starts[64];
+    int page_starts[N_ELEMENTS(active)];
     int total_pages = 0;
     int lines_used = 0;
     page_starts[0] = 0;
 
     for (int i = 0; i < active_count; i++) {
-        int block_lines = metarun_active_effect_block_lines(active_ids[i], term_width);
+        int block_lines = metarun_active_effect_block_lines(active[i].id,
+            active[i].stacks, term_width);
 
         if (lines_used > 0 && lines_used + block_lines > available_lines) {
             total_pages++;
@@ -197,7 +199,8 @@ void show_all_active_curses(void)
 
         int row = 3;
         for (int i = start_idx; i < end_idx; i++) {
-            row = metarun_render_active_effect_block(active_ids[i], row, term_width);
+            row = metarun_render_active_effect_block(active[i].id,
+                active[i].stacks, row, term_width);
         }
 
         /* Footer with navigation instructions */

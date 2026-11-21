@@ -105,7 +105,8 @@ void warning_message(monster_type* m_ptr)
         }
     }
 
-    disturb(1, 0);
+    if (!ignore_monster_alarms)
+        disturb(1, 0);
 
     /* Hard not to notice */
     update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
@@ -821,7 +822,7 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
          * scent trail while out of LOS of the character, it will
          * communicate this to similar monsters.
          */
-        if ((!monster_has_sight(m_ptr)) && !singing(SNG_SILENCE)
+        if ((!monster_ai_can_see_player(m_ptr)) && !singing(SNG_SILENCE)
             && (r_ptr->flags1 & (RF1_FRIENDS))
             && (monster_can_smell(m_ptr)) && (get_scent(oy, ox) == -1)
             && (!m_ptr->target_y) && (!m_ptr->target_x))
@@ -897,17 +898,10 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 }
             }
 
-            /* Player will always be disturbed if monster moves adjacent */
-            if (m_ptr->cdis == 1)
-            {
+            /* Distant footsteps revealed only by Resonance are routine.
+             * Ordinary visibility and adjacent threats still interrupt. */
+            if (!(m_ptr->mflag & MFLAG_LISTEN) || m_ptr->cdis <= 1)
                 disturb(0, 0);
-            }
-
-            /* be disturbed by all other monster movement */
-            else
-            {
-                disturb(0, 0);
-            }
         }
 
         /* Take or kill objects on the floor */

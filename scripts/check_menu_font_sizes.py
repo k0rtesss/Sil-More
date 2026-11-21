@@ -28,7 +28,8 @@ bool __wrap_SDL_ShowMessageBox(const SDL_MessageBoxData *box,int *choice) {
         assert(box->buttons[0].flags&SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT);
         assert(box->buttons[0].flags&SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT);
         assert(strstr(box->message,"less beautiful") && strstr(box->message,"difficult"));
-        assert(strstr(box->message,"General Settings > Big Font"));
+        assert(strstr(box->message,"Options > Text Options > "));
+        assert(strstr(box->message,"Text Size and Fonts > Big Font"));
         assert(strstr(box->message,"one menu at a time"));
         assert(strstr(box->message,"B button") && strstr(box->message,"real time"));
         assert(strstr(box->message,"Normal font starts with B hidden"));

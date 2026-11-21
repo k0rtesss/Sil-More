@@ -143,7 +143,8 @@ def main():
     assert "interface_settings_migrated || tutorial_settings_migrated" in persistence
     old = re.search(r"typedef struct metarun\s*\{.*?\}\s*metarun;", header, re.S).group()
     old = re.sub(r"    byte tutorial_upgrade_pending;[^\n]*\n", "", old)
-    old = old.replace("reserved_runtime[30]", "reserved_runtime[31]")
+    old = re.sub(r"    u32b next_blessing_seed;[^\n]*\n", "", old)
+    old = old.replace("reserved_runtime[27]", "reserved_runtime[31]")
     old = old.replace("typedef struct metarun", "typedef struct metarun_pre098").replace("} metarun;", "} metarun_pre098;")
     bodies = [function(load, "static void rd_tutorial_character_state("),
               function(save, "static void wr_tutorial_character_state("),

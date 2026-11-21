@@ -267,7 +267,7 @@ cptr disease_name(void)
 {
     static const char* names[DISEASE_NAME_COUNT] = {
         "Ashen Ague", "Barrow Fever", "Blackroot Blight", "Cavern Chills",
-        "Ironlung", "Marsh Shivers", "Pale Wasting", "Shadow Pox"
+        "Ironlung", "Marsh Shivers", "Pale Wasting", "Angband Plague"
     };
     if (!p_ptr->diseased || p_ptr->disease_name == 0
         || p_ptr->disease_name > DISEASE_NAME_COUNT)
@@ -275,15 +275,21 @@ cptr disease_name(void)
     return names[p_ptr->disease_name - 1];
 }
 
+bool disease_is_angband_plague(void)
+{
+    return p_ptr->diseased && p_ptr->disease_name == DISEASE_ANGBAND_PLAGUE;
+}
+
 cptr disease_cure_name(void)
 {
     static const char* names[DISEASE_HERB_COUNT] = {
         "Rage", "Sustenance", "Terror", "Healing", "Restoration",
-        "Hunger", "Visions", "Entrancement", "Weakness", "Sickness"
+        "Emptiness", "Visions", "Entrancement", "Weakness", "Sickness"
     };
     if (!p_ptr->diseased || p_ptr->disease_cure >= DISEASE_HERB_COUNT)
         return "Unknown";
-    return names[p_ptr->disease_cure];
+    return names[disease_is_angband_plague()
+        ? SV_FOOD_HEALING : p_ptr->disease_cure];
 }
 
 /* Roll the full list once. An immune result prevents infection, rather than
@@ -295,7 +301,14 @@ bool disease_assign_identity(void)
         return false;
 
     p_ptr->disease_name = name;
-    p_ptr->disease_cure = rand_int(DISEASE_HERB_COUNT);
+    p_ptr->disease_cure = SV_FOOD_HEALING;
+    if (name != DISEASE_ANGBAND_PLAGUE)
+    {
+        /* Ordinary diseases have another cure in addition to Healing. */
+        p_ptr->disease_cure = rand_int(DISEASE_HERB_COUNT - 1);
+        if (p_ptr->disease_cure >= SV_FOOD_HEALING)
+            p_ptr->disease_cure++;
+    }
     p_ptr->disease_knowledge = 0;
     return true;
 }
@@ -321,8 +334,10 @@ void disease_identify(void)
 bool disease_herb_matches(const object_type* o_ptr)
 {
     return p_ptr->diseased && o_ptr && o_ptr->tval == TV_FOOD
-        && p_ptr->disease_cure < DISEASE_HERB_COUNT
-        && o_ptr->sval == p_ptr->disease_cure;
+        && (o_ptr->sval == SV_FOOD_HEALING
+            || (!disease_is_angband_plague()
+                && p_ptr->disease_cure < DISEASE_HERB_COUNT
+                && o_ptr->sval == p_ptr->disease_cure));
 }
 
 bool infect_disease(void)
@@ -1649,6 +1664,7 @@ bool set_food(int v)
     int old_aux, new_aux;
 
     bool notice = false;
+    bool should_disturb = true;
 
     /* Hack -- Force good values */
     v = (v > 20000) ? 20000 : (v < 0) ? 0 : v;
@@ -1802,6 +1818,7 @@ bool set_food(int v)
         case 3:
         {
             msg_print("You are no longer full.");
+            should_disturb = false;
             break;
         }
 
@@ -1827,8 +1844,9 @@ bool set_food(int v)
     if (!notice)
         return (false);
 
-    /* Disturb */
-    disturb(0, 0);
+    /* Losing fullness is informational; hunger warnings still interrupt. */
+    if (should_disturb)
+        disturb(0, 0);
 
     /* Recalculate bonuses */
     p_ptr->update |= (PU_BONUS);

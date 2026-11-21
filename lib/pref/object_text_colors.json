@@ -13,7 +13,7 @@
     { "name": "DIGGING", "tval": 20, "attr": 7 },
     { "name": "HAFTED", "tval": 21, "attr": 3 },
     { "name": "POLEARM", "tval": 22, "attr": 12 },
-    { "name": "SWORD", "tval": 23, "attr": 4 },
+    { "name": "SWORD", "tval": 23, "attr": 12 },
     { "name": "BOOTS", "tval": 30, "attr": 7 },
     { "name": "GLOVES", "tval": 31, "attr": 8 },
     { "name": "HELM", "tval": 32, "attr": 2 },

@@ -332,6 +332,47 @@ static void paint(int width, int height, bool mobile, int font, int inset, int p
     sdl_touch_tutorial_draw_page(0, true, pages, false);
     check(!g_touch_tutorial_suppress_runtime_top_panel, "failed snapshot leaked suppression");
     fixture_render_ok = true;
+    if (!mobile && profile == SDL_TOUCH_PROFILE_ROUND_WHEEL) {
+        /* Exercise the actual mouse guide, including Big Font continuation.
+         * The instruction must fit on screen and describe the clickable
+         * depth-pane controls, rather than implying bare keyboard shortcuts. */
+        for (int big = 0; big <= 1; big++) {
+            char words[16384] = "";
+            config.bigger_font = big != 0;
+            tutorial_panel_part = 0;
+            do {
+                card_count = 0; active_card = -1; drawn_words[0] = '\0';
+                footer = (SDL_FRect){0}; texture_count = 0;
+                sdl_touch_tutorial_draw_page(0, false, 1, true);
+                SDL_strlcat(words, drawn_words, sizeof(words));
+                check(tutorial_panel_parts < 64, "mouse guide did not paginate");
+                SDL_FRect screen = {fixture_screen.x, fixture_screen.y,
+                    fixture_screen.w, fixture_screen.h};
+                for (int i = 0; i < card_count; i++) {
+                    check(contains(screen, cards[i]), "mouse guide card outside screen");
+                    check(cards[i].y + cards[i].h <= footer.y,
+                        "mouse guide card overlaps footer");
+                }
+                char image_name[128];
+                snprintf(image_name, sizeof(image_name),
+                    "mouse-zoom-%dx%d-big%d-part%d.png", width, height, big,
+                    tutorial_panel_part + 1);
+                SDL_Surface *pixels = SDL_RenderReadPixels(g_state.renderer, NULL);
+                check(pixels && IMG_SavePNG(pixels, image_name), "mouse guide capture failed");
+                SDL_DestroySurface(pixels);
+                SDL_RenderPresent(g_state.renderer);
+                if (tutorial_panel_part + 1 >= tutorial_panel_parts) break;
+                tutorial_panel_part++;
+            } while (true);
+            /* At a short height this sentence can cross a continuation
+             * page, with other UI text painted between its two fragments. */
+            const char *buttons = strstr(words, "+/- buttons");
+            check(buttons && strstr(buttons, "below depth"),
+                "mouse zoom instruction is missing or ambiguous");
+        }
+        config.bigger_font = false;
+        tutorial_panel_part = 0; tutorial_panel_parts = 1;
+    }
     sdl_story_font_cache_clear();
     sdl_ui_text_cache_clear();
     SDL_DestroyTexture(view->canvas); view->canvas = NULL; view->term_ready = false;
@@ -446,6 +487,10 @@ int main(int argc, char **argv)
         paint(588, 1254, true, 48, 20, profile);
         paint(1080, 2400, true, 48, 32, profile);
         paint(1280, 720, false, 24, 0, profile);
+        if (profile == SDL_TOUCH_PROFILE_ROUND_WHEEL) {
+            paint(1024, 768, false, 24, 0, profile);
+            paint(1024, 576, false, 24, 0, profile);
+        }
     }
     wheel_gestures();
     large_coach(720,1280,2,false);

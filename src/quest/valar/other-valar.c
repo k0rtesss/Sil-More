@@ -155,7 +155,7 @@ void aule_quest_interaction(void)
         init_texts = prepend_repeat_context(QUEST_ID_AULE, init_texts, &text_count, false);
 
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Aulë the Smith", init_texts, text_count, TERM_YELLOW, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_AULE, false, "Aulë the Smith", init_texts, text_count, TERM_YELLOW, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -163,7 +163,7 @@ void aule_quest_interaction(void)
                 "Aulë speaks in a voice like hammer on anvil:",
                 "'Find my forge and create something worthy of my attention.'"
             };
-            quest_typewriter_menu("Aulë the Smith", fallback_texts, 2, TERM_YELLOW, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_AULE, false, "Aulë the Smith", fallback_texts, 2, TERM_YELLOW, TERM_WHITE);
         }
 
         /* Mark in the notes */
@@ -183,7 +183,7 @@ void aule_quest_interaction(void)
         completion_texts = prepend_repeat_context(QUEST_ID_AULE, completion_texts, &completion_count, true);
 
         if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Quest Complete!", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_AULE, true, "Quest Complete!", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts, completion_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -191,7 +191,7 @@ void aule_quest_interaction(void)
                 "Aulë nods with satisfaction:",
                 "'Well done! Your skill at the forge shows promise.'"
             };
-            quest_typewriter_menu("Quest Complete!", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_AULE, true, "Quest Complete!", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
         }
 
         /* Mark quest as completed in metarun */
@@ -304,7 +304,7 @@ void mandos_quest_interaction(void)
         init_texts = prepend_repeat_context(QUEST_ID_MANDOS, init_texts, &text_count, false);
 
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Mandos the Doomsman", init_texts, text_count, TERM_L_DARK, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_MANDOS, false, "Mandos the Doomsman", init_texts, text_count, TERM_L_DARK, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -312,7 +312,7 @@ void mandos_quest_interaction(void)
                 "Mandos speaks with the authority of the Valar:",
                 "'Slay Brodda the Easterling and prove your worth.'"
             };
-            quest_typewriter_menu("Mandos the Doomsman", fallback_texts, 2, TERM_L_DARK, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_MANDOS, false, "Mandos the Doomsman", fallback_texts, 2, TERM_L_DARK, TERM_WHITE);
         }
 
         log_trace("Mandos quest activated - player must slay Brodda");
@@ -331,7 +331,7 @@ void mandos_quest_interaction(void)
             completion_texts = prepend_repeat_context(QUEST_ID_MANDOS, completion_texts, &completion_count, true);
 
             if (completion_texts && completion_count > 0) {
-                quest_typewriter_menu("Justice Served", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_MANDOS, true, "Justice Served", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
                 free_quest_texts(completion_texts, completion_count);
             } else {
                 /* Fallback to simple message if text extraction fails */
@@ -339,7 +339,7 @@ void mandos_quest_interaction(void)
                     "Mandos nods with solemn approval:",
                     "'Justice has been served. The path forward opens.'"
                 };
-                quest_typewriter_menu("Justice Served", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_MANDOS, true, "Justice Served", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
             }
 
             log_trace("Mandos quest completed successfully");
@@ -364,7 +364,7 @@ void mandos_quest_interaction(void)
         completion_texts = prepend_repeat_context(QUEST_ID_MANDOS, completion_texts, &completion_count, true);
 
         if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Quest Reward", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_MANDOS, true, "Quest Reward", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts, completion_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -372,7 +372,7 @@ void mandos_quest_interaction(void)
                 "Mandos acknowledges you with respect:",
                 "'Accept the gift of my protection from mortal fears.'"
             };
-            quest_typewriter_menu("Quest Reward", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_MANDOS, true, "Quest Reward", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
         }
 
         /* Mark quest as completed in metarun */
@@ -582,7 +582,7 @@ void niena_quest_interaction(void)
         init_texts = prepend_repeat_context(QUEST_ID_NIENA, init_texts, &text_count, false);
 
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Nienna, Lady of Pity", init_texts, text_count, TERM_L_BLUE, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_NIENA, false, "Nienna, Lady of Pity", init_texts, text_count, TERM_L_BLUE, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -590,7 +590,7 @@ void niena_quest_interaction(void)
                 "Nienna, Lady of Pity, speaks with a voice full of sorrow and hope:",
                 "'Show mercy to the creatures here and find the downward path.'"
             };
-            quest_typewriter_menu("Nienna, Lady of Pity", fallback_texts, 2, TERM_L_BLUE, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_NIENA, false, "Nienna, Lady of Pity", fallback_texts, 2, TERM_L_BLUE, TERM_WHITE);
         }
 
         /* Accept the quest */
@@ -647,7 +647,7 @@ void niena_quest_interaction(void)
             completion_texts = prepend_repeat_context(QUEST_ID_NIENA, completion_texts, &completion_count, true);
 
             if (completion_texts && completion_count > 0) {
-                quest_typewriter_menu("Nienna, Lady of Pity", completion_texts, completion_count, TERM_L_BLUE, TERM_WHITE);
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_NIENA, true, "Nienna, Lady of Pity", completion_texts, completion_count, TERM_L_BLUE, TERM_WHITE);
                 free_quest_texts(completion_texts, completion_count);
             } else {
                 /* Fallback to simple message if text extraction fails */
@@ -655,7 +655,7 @@ void niena_quest_interaction(void)
                     "Nienna appears with tears of joy in her eyes!",
                     "'You have shown that true strength lies in restraint.'"
                 };
-                quest_typewriter_menu("Nienna, Lady of Pity", fallback_texts, 2, TERM_L_BLUE, TERM_WHITE);
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_NIENA, true, "Nienna, Lady of Pity", fallback_texts, 2, TERM_L_BLUE, TERM_WHITE);
             }
 
             /* Show the specific numbers and bonus after the main dialogue */
@@ -671,7 +671,8 @@ void niena_quest_interaction(void)
             if (completion_texts && completion_count > 0) {
                 /* W: entries are paragraphs, including blank separators,
                  * rather than alternate endings. Show the authored reward. */
-                quest_typewriter_menu("Nienna, Lady of Pity", completion_texts,
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_NIENA, true,
+                    "Nienna, Lady of Pity", completion_texts,
                     completion_count, TERM_L_BLUE, TERM_WHITE);
                 free_quest_texts(completion_texts, completion_count);
             } else {
@@ -680,7 +681,7 @@ void niena_quest_interaction(void)
                     "Nienna appears, her expression neutral.",
                     "'You have completed the task, though perhaps not as I hoped.'"
                 };
-                quest_typewriter_menu("Nienna, Lady of Pity", fallback_texts, 2, TERM_L_BLUE, TERM_WHITE);
+                QUEST_PRESENT_DIALOGUE(QUEST_ID_NIENA, true, "Nienna, Lady of Pity", fallback_texts, 2, TERM_L_BLUE, TERM_WHITE);
             }
 
             /* Show the specific numbers after the main dialogue */
@@ -814,7 +815,7 @@ void orome_quest_interaction(void)
         init_texts = prepend_repeat_context(QUEST_ID_OROME, init_texts, &text_count, false);
 
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Oromë the Huntsman", init_texts, text_count, TERM_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_OROME, false, "Oromë the Huntsman", init_texts, text_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -822,7 +823,7 @@ void orome_quest_interaction(void)
                 "Oromë the Huntsman regards you with keen eyes:",
                 "'Prove your skill as a hunter. The dark creatures multiply.'"
             };
-            quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_OROME, false, "Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
 
         /* The hunt accepts any one of the four kindred totals. These legacy
@@ -857,7 +858,7 @@ void orome_quest_interaction(void)
         completion_texts = prepend_repeat_context(QUEST_ID_OROME, completion_texts, &completion_count, true);
 
         if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Oromë the Huntsman", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_OROME, true, "Oromë the Huntsman", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts, completion_count);
         } else {
             /* Fallback to simple message if text extraction fails */
@@ -865,7 +866,7 @@ void orome_quest_interaction(void)
                 "Oromë appears with a proud smile!",
                 "'You have proven yourself a true hunter of the wild.'"
             };
-            quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+            QUEST_PRESENT_DIALOGUE(QUEST_ID_OROME, true, "Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
 
         msg_print("You have completed the great hunt as commanded.");

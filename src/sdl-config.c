@@ -1402,6 +1402,8 @@ static float normalize_touch_top_panel_size(float size)
 {
     int steps;
 
+    if (size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
+        return SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
     if (size <= SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
         return SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
     if (size < SDL_TOUCH_TOP_PANEL_SIZE_MIN)
@@ -1796,6 +1798,7 @@ static const byte app_other_options[] = {
 };
 
 static const byte app_gameplay_options[] = {
+    OPT_minimum_text_mode,
     OPT_active_weapon_switch_confirm,
     OPT_insight_beta,
     OPT_meta_artefact_memory, OPT_meta_forged_artefacts,
@@ -1806,6 +1809,7 @@ static const byte app_gameplay_options[] = {
     OPT_quest_13, OPT_quest_14, OPT_quest_15, OPT_quest_16,
     OPT_quest_rules_beta, OPT_quest_rewards_beta,
     OPT_quest_challenges_beta, OPT_quest_lineage_beta,
+    OPT_ignore_monster_alarms,
     OPT_load_blitz_by_default,
     OPT_lockpick_minigame,
     OPT_chest_trap_minigame,
@@ -3003,6 +3007,9 @@ static void sdl_config_load_pane_profile(cJSON* profile_obj,
     if (cJSON_IsNumber(item)) {
         profile->touch_top_panel_size =
             normalize_touch_top_panel_size((float)item->valuedouble);
+    } else if (cJSON_IsString(item) && item->valuestring
+        && strcmp(item->valuestring, "AUTO") == 0) {
+        profile->touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
     }
 
     item = cJSON_GetObjectItemCaseSensitive(profile_obj,
@@ -3364,7 +3371,13 @@ void sdl_pane_profile_apply_bigger_font_defaults(
     profile->touch_top_panel_default_open = true;
     profile->touch_top_panel_cell_count = N_ELEMENTS(bindings);
     profile->touch_top_panel_rows = 1;
+#if SIL_SDL_MOBILE_BUILD
     profile->touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_STRETCH;
+#else
+    /* Fit a readable compact toolbar to the actual display and layout.
+     * Loaded profiles retain their saved Stretch or fixed size. */
+    profile->touch_top_panel_size = SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
+#endif
     for (int i = 0; i < SDL_TOUCH_TOP_PANEL_BUTTON_COUNT; i++) {
         profile->touch_top_panel_bindings[i] = i < (int)N_ELEMENTS(bindings)
             ? bindings[i] : GAMEPAD_BIND_NONE;
@@ -3623,8 +3636,11 @@ static cJSON* sdl_config_create_pane_profile_object(
         profile->touch_top_panel_cell_count);
     cJSON_AddNumberToObject(profile_obj, "touchTopPanelRows",
         profile->touch_top_panel_rows);
-    cJSON_AddNumberToObject(profile_obj, "touchTopPanelSize",
-        profile->touch_top_panel_size);
+    if (profile->touch_top_panel_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
+        cJSON_AddStringToObject(profile_obj, "touchTopPanelSize", "AUTO");
+    else
+        cJSON_AddNumberToObject(profile_obj, "touchTopPanelSize",
+            profile->touch_top_panel_size);
     top_panel_bindings = sdl_config_create_int_array(
         profile->touch_top_panel_bindings,
         SDL_TOUCH_TOP_PANEL_BUTTON_COUNT);
@@ -5170,6 +5186,14 @@ enum sdl_config_load_status sdl_config_load(const char* filename,
 
                 if (cJSON_IsString(top_panel_size)
                     && top_panel_size->valuestring
+                    && strcmp(top_panel_size->valuestring, "AUTO") == 0)
+                {
+                    saw_touch_control_top_panel_size = true;
+                    config->touch_top_panel_size =
+                        SDL_TOUCH_TOP_PANEL_SIZE_AUTO;
+                    log_debug("Loaded touchControl.topPanelSize: AUTO");
+                } else if (cJSON_IsString(top_panel_size)
+                    && top_panel_size->valuestring
                     && strcmp(top_panel_size->valuestring, "STRETCH") == 0)
                 {
                     saw_touch_control_top_panel_size = true;
@@ -5944,7 +5968,11 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
                 config->touch_top_panel_arrows_visible);
             cJSON_AddBoolToObject(touch_control, "topPanelDefaultOpen",
                 config->touch_top_panel_default_open);
-            if (config->touch_top_panel_size
+            if (config->touch_top_panel_size == SDL_TOUCH_TOP_PANEL_SIZE_AUTO)
+            {
+                cJSON_AddStringToObject(touch_control, "topPanelSize",
+                    "AUTO");
+            } else if (config->touch_top_panel_size
                 == SDL_TOUCH_TOP_PANEL_SIZE_STRETCH)
             {
                 cJSON_AddStringToObject(touch_control, "topPanelSize",

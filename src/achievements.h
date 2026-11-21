@@ -121,6 +121,8 @@ typedef enum sil_achievement_id {
     SIL_ACH_FIND_ULMO_CLOAK,
     SIL_ACH_FIND_FINGOLFIN_SHIELD,
     SIL_ACH_FIND_TURGON_STAFF,
+    SIL_ACH_SWIFT_AS_THE_WIND,
+    SIL_ACH_TENFOLD_DOOM,
     SIL_ACH_COUNT
 } sil_achievement_id;
 
@@ -185,8 +187,14 @@ static inline uint64_t sil_achievement_word_mask(unsigned word)
  * These were unused bits in the existing saved u32b, so its layout is unchanged. */
 #define SIL_ACH_DISC_REGIONS_SHIFT 7u
 #define SIL_ACH_DISC_REGIONS 0xF80u
+/* Three distinct liquid tiles in the current water or poison crossing.
+ * The first two coordinates occupy the inactive crossing's saved fields. */
+#define SIL_ACH_DISC_LIQUID_FIRST 0x1000u
+#define SIL_ACH_DISC_LIQUID_SECOND 0x2000u
+#define SIL_ACH_DISC_LIQUID_THREE 0x4000u
+#define SIL_ACH_DISC_LIQUID_FLAGS 0x7000u
 #define SIL_ACH_DISC_RUN_FLAGS (SIL_ACH_DISC_TRACKED | SIL_ACH_DISC_WOLF_SEEN | SIL_ACH_DISC_REGIONS)
-#define SIL_ACH_DISC_FLAGS 0xFFFu
+#define SIL_ACH_DISC_FLAGS 0x7FFFu
 
 typedef struct sil_achievement_definition {
     const char *key;
@@ -198,6 +206,7 @@ typedef struct sil_achievement_definition {
 const sil_achievement_definition *sil_achievement_get(int id);
 bool sil_achievement_revealed(int id);
 bool sil_achievement_progress_text(int id, char* out, size_t size);
+bool sil_achievement_difficulty_allows(int id);
 uint64_t sil_achievement_unlocked_at(int id);
 uint64_t sil_achievements_mask(unsigned word);
 bool sil_achievements_eligible(void);

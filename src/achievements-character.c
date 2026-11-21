@@ -66,7 +66,7 @@ void sil_achievement_character_on_start(bool first_entry)
         const sil_achievement_definition* entry = sil_achievement_get(id);
         if (sil_achievement_unlocked_at(id))
             msg_format("Character achievement already unlocked: %s.", entry->title);
-        else
+        else if (sil_achievement_difficulty_allows(id))
             msg_format("Character achievement available: %s. %s",
                 entry->title, entry->description);
     }

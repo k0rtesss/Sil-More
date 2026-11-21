@@ -1,20 +1,33 @@
 #include "angband.h"
 #include "externs.h"
 #include "monster/monster-senses.h"
+#include "monster/monster-routine.h"
+#include "monster/monster-ai.h"
 #include "melee/melee-util.h"
 
-/* These are sensory rules, shared by perception and AI. Player UI visibility
- * and monster lore deliberately have no part in recognition. */
-bool monster_has_sight(const monster_type* m_ptr)
+/* Physical sight is independent of the recognition bonus in stealth checks.
+ * Darkness/Disguise can deny that bonus without blinding an alerted enemy. */
+int monster_sight_range(const monster_type* m_ptr)
 {
     if (!m_ptr || !m_ptr->r_idx || m_ptr->alertness < ALERTNESS_UNWARY)
-        return false;
+        return 0;
+    return (r_info[m_ptr->r_idx].flags2 & RF2_SHORT_SIGHTED) ? 2 : MAX_SIGHT;
+}
+
+bool monster_has_sight(const monster_type* m_ptr)
+{
+    int range = monster_sight_range(m_ptr);
+    return range > 0
+        && distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) <= range
+        && los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
+}
+
+/* Eligibility for the visual bonus to a perception-versus-stealth roll.
+ * This does not acquire a combat target or change an attack's legal range. */
+bool monster_has_visual_perception_bonus(const monster_type* m_ptr)
+{
+    if (!monster_has_sight(m_ptr)) return false;
     const monster_race* r_ptr = &r_info[m_ptr->r_idx];
-    int dist = distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
-    if (dist > MAX_SIGHT
-        || ((r_ptr->flags2 & RF2_SHORT_SIGHTED) && dist > 2)
-        || !los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px))
-        return false;
     if (!monster_race_is_vala(m_ptr->r_idx) && visual_recognition
         && (r_ptr->flags2 & RF2_SMART))
     {
@@ -22,7 +35,7 @@ bool monster_has_sight(const monster_type* m_ptr)
         int vision = monster_skill((monster_type*)m_ptr, S_PER) / divisor
             + p_ptr->cur_light
             + ((cave_info[p_ptr->py][p_ptr->px] & CAVE_GLOW) ? 2 : 0);
-        if (vision < dist)
+        if (distance(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px) > vision)
             return false;
     }
     return true;
@@ -82,7 +95,7 @@ void monster_senses_hear(monster_type* m_ptr, int y, int x)
 void monster_senses_share_trace(monster_type* m_ptr, int y, int x)
 {
     const monster_sense_state* s = &m_ptr->ai.sense;
-    if (monster_has_sight(m_ptr)
+    if (monster_ai_can_see_player(m_ptr)
         || ((s->kind == MON_SENSE_SIGHT || s->kind == MON_SENSE_SOUND)
             && s->observed_turn == (u32b)playerturn))
         return;
@@ -107,7 +120,7 @@ void monster_senses_refresh(monster_type* m_ptr)
     if (!m_ptr->r_idx || m_ptr->alertness < ALERTNESS_UNWARY
         || m_ptr->r_idx == R_IDX_MORGOTH)
         return;
-    if (monster_has_sight(m_ptr))
+    if (monster_ai_can_see_player(m_ptr))
     {
         monster_senses_see(m_ptr, p_ptr->py, p_ptr->px);
         return;
@@ -142,6 +155,16 @@ bool monster_senses_target(const monster_type* m_ptr, int* y, int* x)
     return true;
 }
 
+bool monster_senses_tracking_scent(const monster_type* m_ptr)
+{
+    if (!m_ptr || !m_ptr->r_idx)
+        return false;
+    const monster_sense_state* s = &m_ptr->ai.sense;
+    return monster_scent_limit(&r_info[m_ptr->r_idx])
+        && s->scent_age != 255
+        && (s->kind == MON_SENSE_SCENT || s->kind == MON_SENSE_SEARCH);
+}
+
 static bool recent_cell(const monster_sense_state* s, int y, int x)
 {
     for (int i = 0; i < s->recent_count && i < 4; i++)
@@ -168,6 +191,11 @@ bool monster_senses_advance(monster_type* m_ptr, int* ty, int* tx)
     *ty = my; *tx = mx;
     if (!s->kind)
         return false;
+    if ((r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL)
+        && (in_bounds_fully(m_ptr->routine.home_y, m_ptr->routine.home_x)
+            || monster_senses_tracking_scent(m_ptr))
+        && !monster_lair_contains(m_ptr, my, mx))
+        return false;
 
     if (s->kind == MON_SENSE_SCENT)
     {
@@ -178,7 +206,8 @@ bool monster_senses_advance(monster_type* m_ptr, int* ty, int* tx)
             for (int d = 0; d < 8; d++)
             {
                 int y = my + ddy_ddd[d], x = mx + ddx_ddd[d], age;
-                if (!in_bounds(y, x) || cave_m_idx[y][x] < 0
+                if (!in_bounds(y, x)
+                    || cave_m_idx[y][x] < 0
                     || !usable_scent(m_ptr, y, x, &age) || age > current_age
                     || (age == current_age && recent_cell(s, y, x)))
                     continue;
@@ -220,7 +249,8 @@ bool monster_senses_advance(monster_type* m_ptr, int* ty, int* tx)
     for (int d = 0; d < 8; d++)
     {
         int y = my + ddy_ddd[d], x = mx + ddx_ddd[d];
-        if (!in_bounds(y, x) || cave_m_idx[y][x] < 0
+        if (!in_bounds(y, x)
+            || cave_m_idx[y][x] < 0
             || distance(y, x, s->anchor_y, s->anchor_x) > 2
             || recent_cell(s, y, x))
             continue;

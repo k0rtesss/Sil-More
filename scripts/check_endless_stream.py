@@ -657,6 +657,11 @@ def main(case):
     save_source = re.sub(r"^(\s*)wr_u32b\(\(u32b\)\(([om]_ptr)->site_token >> 32\)\);$",
                          r"\1if (!fixture_legacy) wr_u32b((u32b)(\2->site_token >> 32));", save_source, flags=re.M)
     assert save_source.count("if (!fixture_legacy)") == 4
+    for write in ("wr_byte(m_ptr->squad.budget_plan);",
+                  "wr_byte(m_ptr->squad.plan_age);",
+                  "wr_u32b(m_ptr->squad.plan_turn);"):
+        assert save_source.count(write) == 1
+        save_source = save_source.replace(write, "if (!fixture_legacy) " + write)
     writer = OUT / "writer.c"
     writer.write_text('#include "angband.h"\n#include <assert.h>\nstatic bool fixture_legacy;\n'
                       'void fixture_legacy_mode(bool legacy) { fixture_legacy=legacy; }\n'

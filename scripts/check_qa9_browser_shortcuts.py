@@ -63,9 +63,9 @@ bool __wrap_get_check(cptr prompt)
     (void)prompt; confirmations++; return false;
 }
 bool __wrap_object_info_overlay_show_multi(const object_type** objects,
-    const char** headings,int n)
+    const char** headings,int n,bool compare)
 {
-    (void)headings; assert(n>0 && objects[0]);
+    (void)compare; (void)headings; assert(n>0 && objects[0]);
     previews++; preview_note=atoi(quark_str(objects[0]->obj_note));
     return true;
 }

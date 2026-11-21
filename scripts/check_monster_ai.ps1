@@ -7,11 +7,18 @@ Push-Location $aiRepo
 try {
     New-Item -ItemType Directory -Force $aiTestDir | Out-Null
     $env:PATH = "C:\msys64\mingw64\bin;C:\msys64\usr\bin;$aiBuild\_deps\SDL;$aiOldPath"
+    # Use the real attack classifier while retaining this map fixture's
+    # tripwire for accidental shrieks from unrelated retreat code.
+    & C:\msys64\mingw64\bin\gcc.exe -std=c17 -O1 -flto -DUSE_SDL `
+        -Dshriek=fixture_unused_shriek -I src -I external/SDL/include `
+        -c src/melee/melee-attack-ranged.c -o "$aiTestDir/ranged.o"
+    if ($LASTEXITCODE -ne 0) { throw 'Monster AI ranged classifier compilation failed.' }
     # Link real engine modules; LTO omits unrelated game and UI entry points.
     & C:\msys64\mingw64\bin\gcc.exe -std=c17 -O1 -flto -fwhole-program -DUSE_SDL `
         -I src -I external/SDL/include `
         scripts/tests/monster-ai-test.c src/variable.c src/tables.c src/rng.c `
         src/melee/melee-util.c src/melee/melee-movement-path.c `
+        "$aiTestDir/ranged.o" `
         src/monster/monster-senses.c src/monster/monster-ai.c src/monster/monster-social.c `
         src/monster/monster-routine.c `
         src/monster/monster-abilities.c src/monster/monster-tactics.c src/cave/cave-light.c `

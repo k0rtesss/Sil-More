@@ -220,8 +220,10 @@ void do_cmd_suicide(void)
 void do_cmd_save_game(void)
 {
     close_game_save_succeeded = false;
-    /* Disturb the player */
-    disturb(1, 0);
+    /* Saving interrupts automation without changing the chosen stance. A
+     * major disturbance would queue a stealth cancellation for the next
+     * turn, after the save had already recorded stealth as still active. */
+    disturb(0, 0);
 
     // in final deployment versions, you cannot save in the tutorial
     if (DEPLOYMENT && p_ptr->game_type != 0)

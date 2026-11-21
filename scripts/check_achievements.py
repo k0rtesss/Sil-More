@@ -35,6 +35,8 @@ cptr ANGBAND_DIR_APEX;
 bool character_generated = true;
 static int notifications, messages, syncs;
 static int carried_silmarils;
+static bool spectator;
+bool death_spectator_active(void) { return spectator; }
 int silmarils_possessed(void) { return carried_silmarils; }
 static uint64_t remote, submitted, remote_upper, submitted_upper;
 maxima *z_info;
@@ -48,6 +50,8 @@ static bool broken_oath, blitz;
 _Thread_local metarun metar;
 bool oath_invalid(int oath) { (void)oath; return broken_oath; }
 bool run_mode_is_blitz(void) { return blitz; }
+static int8_t curse_stacks[METAR_CURSE_SLOTS];
+int8_t* active_curse_stacks(void) { return curse_stacks; }
 
 Uint64 __wrap_SDL_GetTicks(void) { return ticks; }
 bool __real_SDL_FlushIO(SDL_IOStream *file);
@@ -97,6 +101,7 @@ static void clean_player(void)
     memset(&player, 0, sizeof(player));
     memset(&options, 0, sizeof(options));
     carried_silmarils = 0;
+    spectator = false;
     player.playing = true;
     player.chp = player.mhp = 20;
     player.energy_use = 100;
@@ -124,6 +129,7 @@ static void blocked_games(void)
     clean_player(); character_generated = false; try_all();
     clean_player(); player.playing = false; try_all();
     clean_player(); player.is_dead = true; try_all();
+    clean_player(); spectator = true; try_all();
     clean_player(); player.wizard = true; try_all();
     clean_player(); player.game_type = 1; try_all();
     for (int bit = 1; bit <= 8; bit <<= 1) {
@@ -202,17 +208,17 @@ static void expanded_conditions(const char *test)
     sil_achievements_begin_run();
     player.depth = 5;
     if (!strcmp(test, "new-events")) {
-        assert(SIL_ACH_COUNT == 110);
+        assert(SIL_ACH_COUNT == 112);
 #ifdef SIL_STEAMWORKS
         assert(SIL_ACH_ACTIVE_COUNT == 100);
 #else
-        assert(SIL_ACH_ACTIVE_COUNT == 110);
+        assert(SIL_ACH_ACTIVE_COUNT == 112);
 #endif
         int hidden = 0;
         for (int id = 0; id < SIL_ACH_COUNT; ++id)
             if (sil_achievement_get(id)) hidden += sil_achievement_get(id)->hidden;
 #ifdef SIL_STEAMWORKS
-        assert(hidden == 48);
+        assert(hidden == 47);
 #else
         assert(hidden == 50);
 #endif
@@ -225,7 +231,8 @@ static void expanded_conditions(const char *test)
         for (int id = SIL_ACH_NO_RINGS_ATTACHED; id < SIL_ACH_COUNT; ++id) {
             int before = notifications;
             sil_achievements_on_event((sil_achievement_id)id);
-            if (!sil_achievement_get(id)) {
+            if (!sil_achievement_get(id) || id == SIL_ACH_SWIFT_AS_THE_WIND
+                || id == SIL_ACH_TENFOLD_DOOM) {
                 assert(!earned(id) && notifications == before);
                 continue;
             }
@@ -359,6 +366,30 @@ static void craft_and_combat(void)
     sil_achievements_on_light_kill(); sil_achievements_on_morgoth_defeated();
     sil_achievements_on_smithing_completed(true); assert(notifications == before);
 }
+static void easy_difficulty(void)
+{
+    player.run_blessings = 0x0f;
+    sil_achievements_begin_run();
+    sil_achievements_on_depth(10);
+    sil_achievements_on_escape(3);
+    sil_achievements_on_morgoth_defeated();
+    sil_achievements_on_artefact_created(65);
+    assert(earned(SIL_ACH_INTO_THE_DEEP) && earned(SIL_ACH_BACK_TO_STARLIGHT));
+    assert(!earned(SIL_ACH_THREE_LIGHTS_IN_EXILE) && !earned(SIL_ACH_THE_QUIET_ROAD));
+    assert(!earned(SIL_ACH_THE_SHADOW_FALLS) && !earned(SIL_ACH_THEIR_WORK_HAD_NO_RIVAL));
+    assert(!earned(SIL_ACH_NO_STEPS_REQUIRED));
+    char text[100];
+    assert(sil_achievement_progress_text(SIL_ACH_THE_QUIET_ROAD, text, sizeof(text)));
+    assert(strstr(text, RUN_BLESSING_MODE_NAME));
+
+    player.run_blessings = 0;
+    sil_achievements_begin_run();
+    sil_achievements_on_escape(3);
+    sil_achievements_on_morgoth_defeated();
+    sil_achievements_on_artefact_created(65);
+    assert(earned(SIL_ACH_THREE_LIGHTS_IN_EXILE) && earned(SIL_ACH_THE_QUIET_ROAD));
+    assert(earned(SIL_ACH_THE_SHADOW_FALLS) && earned(SIL_ACH_THEIR_WORK_HAD_NO_RIVAL));
+}
 static void tale(const char *test)
 {
     metar.id = 17; player.is_dead = true; player.playing = false;
@@ -453,6 +484,7 @@ int main(int argc, char **argv)
         || !strcmp(argv[1], "fall-arrival")) expanded_conditions(argv[1]);
     else if (!strcmp(argv[1], "comeback")) comeback();
     else if (!strcmp(argv[1], "craft-combat")) craft_and_combat();
+    else if (!strcmp(argv[1], "easy-difficulty")) easy_difficulty();
     else if (!strncmp(argv[1], "tale-", 5)) tale(argv[1]);
     else if (!strcmp(argv[1], "all-import")) {
         remote = sil_achievement_word_mask(0); remote_upper = UINT64_MAX; sil_achievements_update();
@@ -501,6 +533,7 @@ def main():
         assert payload["version"] == 1 and len(payload["unlocked"]) == 4
         for case in ("failed-write", "import"):
             run(case, base / case)
+        run("easy-difficulty", base / "easy-difficulty")
         for case in ("triple", "pacifist", "killer", "legacy-run", "oath", "song", "gates", "taint", "comeback", "craft-combat", "tale-repeat", "tale-blitz", "tale-discard", "new-events", "door-history", "door-level", "fall-arrival"):
             run(case, base / case)
         run("tale-first", base / "long-tale")

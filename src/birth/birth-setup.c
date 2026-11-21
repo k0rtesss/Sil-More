@@ -53,21 +53,12 @@ int get_start_xp(void)
     }
 }
 
-/* -----------------------------------------------------------
- * new: delegate to the (i386-safe) 2-bit accessor in metarun.h
- * --------------------------------------------------------- */
-static int curse_count(int id)           /* 0-31 */
-{
-    return CURSE_GET(id);
-}
-
-
-/* Return net adjustment for a primary stat from EVERY active metarun curse */
+/* Return the net stat adjustment from Tale and temporary effects. */
 int curses_stat_adj(int s)   /* s = 0-3  (STR-DEX-CON-GRA) */
 {
     int delta = 0;
     for (int bit = 0; bit < z_info->cu_max; bit++) {
-        int cnt = curse_count(bit);
+        int cnt = CURSE_GET(bit) - run_blessing_stack(bit);
         if (cnt)
             delta += cnt * cu_info[bit].cu_adj[s];
     }
@@ -743,11 +734,17 @@ void player_outfit(void)
     log_debug("Player equipment setup completed");
 }
 
+/* Item and character previews can run before the effect templates are loaded. */
+static int loaded_curse_count(void)
+{
+    return z_info && cu_info ? MIN(z_info->cu_max, METAR_CURSE_SLOTS) : 0;
+}
+
 /* OR of every flag carried by the active metarun curses */
 u32b curse_flag_mask(void)
 {
     u32b m = 0;
-    for (int id = 0; id < z_info->cu_max; id++) {
+    for (int id = 0, n = loaded_curse_count(); id < n; id++) {
         if (CURSE_CURSE_STACK(id) > 0) m |= cu_info[id].flags;
     }
     return m;
@@ -758,15 +755,12 @@ int curse_flag_count_rhf(u32b rhf_flag)
 {
     int count = 0;
     /* Iterate over every defined curse */
-    for (int i = 0; i < z_info->cu_max; i++)
+    for (int i = 0, n = loaded_curse_count(); i < n; i++)
     {
-        /* Get the stack count for this curse */
-        int stacks = CURSE_GET(i);
-        if (stacks > 0) {
-            if (cu_info[i].flags & rhf_flag) count += stacks;
-        } else if (stacks < 0) {
-            if (cu_info[i].blessing_flags & rhf_flag) count += -stacks;
-        }
+        if (cu_info[i].flags & rhf_flag)
+            count += CURSE_CURSE_STACK(i);
+        if (cu_info[i].blessing_flags & rhf_flag)
+            count += CURSE_BLESSING_STACK(i);
     }
     return count;
 }
@@ -777,15 +771,12 @@ int curse_flag_count_cur(u32b cur_flag)
     int count = 0;
 
     /* Iterate over every defined curse */
-    for (int i = 0; i < z_info->cu_max; i++)
+    for (int i = 0, n = loaded_curse_count(); i < n; i++)
     {
-        /* Get the stack count for this curse */
-        int stacks = CURSE_GET(i);
-        if (stacks > 0) {
-            if (cu_info[i].flags_u & cur_flag) count += stacks;
-        } else if (stacks < 0) {
-            if (cu_info[i].blessing_flags_u & cur_flag) count += -stacks;
-        }
+        if (cu_info[i].flags_u & cur_flag)
+            count += CURSE_CURSE_STACK(i);
+        if (cu_info[i].blessing_flags_u & cur_flag)
+            count += CURSE_BLESSING_STACK(i);
     }
 
     return count;
@@ -796,14 +787,12 @@ int curse_flag_delta_cur(u32b cur_flag)
 {
     int delta = 0;
 
-    for (int i = 0; i < z_info->cu_max; i++)
+    for (int i = 0, n = loaded_curse_count(); i < n; i++)
     {
-        int stacks = CURSE_GET(i);
-        if (stacks > 0) {
-            if (cu_info[i].flags_u & cur_flag) delta += stacks;
-        } else if (stacks < 0) {
-            if (cu_info[i].blessing_flags_u & cur_flag) delta -= (-stacks);
-        }
+        if (cu_info[i].flags_u & cur_flag)
+            delta += CURSE_CURSE_STACK(i);
+        if (cu_info[i].blessing_flags_u & cur_flag)
+            delta -= CURSE_BLESSING_STACK(i);
     }
 
     return delta;

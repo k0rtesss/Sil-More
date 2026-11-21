@@ -8,9 +8,37 @@
 #define ROUTINE_SIDE (2 * ROUTINE_RADIUS + 1)
 #define ROUTINE_CELLS (ROUTINE_SIDE * ROUTINE_SIDE)
 
+/* Birth coordinates already persist in modern saves. A lair is local to that
+ * home, stays on its side of the vault boundary and respects its partition. */
+bool monster_lair_contains(const monster_type* m, int y, int x)
+{
+    int hy = m->routine.home_y, hx = m->routine.home_x;
+    return in_bounds_fully(hy, hx) && in_bounds_fully(y, x)
+        && distance(hy, hx, y, x) <= MONSTER_LAIR_RADIUS
+        && (cave_info[y][x] & CAVE_ICKY) == (cave_info[hy][hx] & CAVE_ICKY)
+        && (!m->routine.territory
+            || level_partition_index_for_point(y, x) == m->routine.territory - 1);
+}
+
+bool monster_routine_needs_return(const monster_type* m)
+{
+    if (m->routine.territory && level_partition_index_for_point(m->fy, m->fx)
+            != m->routine.territory - 1)
+        return true;
+    /* Older saves have no trustworthy birth location. Retain their existing
+     * behavior instead of inventing a home or pinning them to (0,0). */
+    return (r_info[m->r_idx].flags2 & RF2_TERRITORIAL)
+        && in_bounds_fully(m->routine.home_y, m->routine.home_x)
+        && !monster_lair_contains(m, m->fy, m->fx);
+}
+
 bool monster_routine_allows(const monster_type* m, int y, int x)
 {
     int home = m->routine.territory - 1;
+    if ((r_info[m->r_idx].flags2 & RF2_TERRITORIAL)
+        && monster_lair_contains(m, m->fy, m->fx)
+        && !monster_lair_contains(m, y, x))
+        return false;
     /* Forced displacement can put an actor outside; allow its return journey. */
     return home < 0 || level_partition_index_for_point(y, x) == home
         || level_partition_index_for_point(m->fy, m->fx) != home;
@@ -21,9 +49,13 @@ static bool routine_cell(monster_type* m, int y, int x)
     if (!in_bounds_fully(y, x) || !monster_routine_allows(m, y, x)
         || cave_trap_bold(y, x) || cave_glyph(y, x)
         || cave_environment_pending_hazard(y, x)
-        || monster_terrain_penalty(m, y, x)
-        || (cave_info[y][x] & CAVE_ICKY) !=
-            (cave_info[m->routine.home_y][m->routine.home_x] & CAVE_ICKY))
+        || monster_terrain_penalty(m, y, x))
+        return false;
+    if ((cave_info[y][x] & CAVE_ICKY) !=
+            (cave_info[m->routine.home_y][m->routine.home_x] & CAVE_ICKY)
+        && !((r_info[m->r_idx].flags2 & RF2_TERRITORIAL)
+            && monster_routine_needs_return(m)
+            && (cave_info[y][x] & CAVE_ICKY) == (cave_info[m->fy][m->fx] & CAVE_ICKY)))
         return false;
     /* Circuits use existing passages, never tunnelling or wall phasing. */
     if (cave_any_closed_door_bold(y, x))
@@ -178,10 +210,10 @@ bool monster_routine_move(monster_type* m, int* y, int* x)
     *y = m->fy; *x = m->fx;
     if (p_ptr->truce || p_ptr->depth == 0
         || (r_info[m->r_idx].flags1 & (RF1_NEVER_MOVE | RF1_HIDDEN_MOVE))) return false;
+    if (monster_routine_needs_return(m))
+        return return_step(m, r->home_y, r->home_x, y, x);
     if (r->territory)
     {
-        if (level_partition_index_for_point(m->fy, m->fx) != r->territory - 1)
-            return return_step(m, r->home_y, r->home_x, y, x);
         /* Lair-bound races retain their original hoard behavior. */
         if (r_info[m->r_idx].flags2 & RF2_TERRITORIAL) return false;
         if (!one_in_(4)) return false;

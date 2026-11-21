@@ -43,7 +43,7 @@ int main(void) {
     p_ptr->diseased=100;p_ptr->disease_name=1;p_ptr->disease_cure=SV_FOOD_HEALING;
     rolls[0]=1;assert(rows()==1 && calls==1);
     assert(!strcmp(s[0],"Disease: Unknown") && strstr(t[0],"Herb cure: Unknown"));
-    assert(!strstr(t[0],"herb of Healing") && !good[0]);
+    assert(strstr(t[0],"herb of Healing cures every disease") && !good[0]);
     calls=0;rolls[0]=0;rolls[1]=1;assert(rows()==1 && calls==2);
     assert(strstr(s[0],disease_name()) && strstr(t[0],"Herb cure: Unknown"));
     calls=0;rolls[0]=1;assert(rows()==1 && calls==1);
@@ -59,14 +59,23 @@ int main(void) {
     assert(describe_consumable_healing(&herb) && !healing_previews);
     assert(strstr(output,disease_name()) && strstr(output,"nourishment do not apply"));
     output[0]=0;p_ptr->disease_knowledge=0;p_ptr->mhp=50;p_ptr->chp=20;
+    assert(describe_consumable_healing(&herb) && !healing_previews);
+    assert(strstr(output,"cures your disease") && !strstr(output,disease_name()));
+    output[0]=0;p_ptr->diseased=0;
     assert(describe_consumable_healing(&herb) && healing_previews==1);
     assert(strstr(output,"20 health") && !strstr(output,disease_name()));
+    p_ptr->diseased=100;
     p_ptr->disease_knowledge=DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE;
     for(int name=1;name<=DISEASE_NAME_COUNT;name++)
         for(int cure=0;cure<DISEASE_HERB_COUNT;cure++) {
-            p_ptr->disease_name=name;p_ptr->disease_cure=cure;herb.sval=cure;
+            p_ptr->disease_name=name;p_ptr->disease_cure=cure;
+            herb.sval=name==DISEASE_ANGBAND_PLAGUE?SV_FOOD_HEALING:cure;
             assert(rows()==1 && !calls && strstr(s[0],disease_name()));
             assert(strstr(t[0],disease_cure_name()) && strlen(t[0])<sizeof(t[0])-1);
+            if(name==DISEASE_ANGBAND_PLAGUE)
+                assert(strstr(t[0],"Herb cure: Healing only") && strstr(t[0],"Miruvor"));
+            else
+                assert(strstr(t[0],"Healing") && strstr(t[0],"Miruvor"));
             output[0]=0;assert(describe_consumable_healing(&herb));
             assert(strstr(output,disease_name()) && healing_previews==1);
         }
@@ -93,7 +102,7 @@ def main():
     menu = function("src/spell/spell-utility.c", "self_knowledge")
     menu = menu[menu.index("    /* One diagnosis attempt"):menu.index("    // Get item flags")]
     helpers = "\n".join(function("src/player/effects.c", name) for name in
-                        ["disease_name", "disease_cure_name", "disease_identify", "disease_herb_matches"])
+                        ["disease_name", "disease_is_angband_plague", "disease_cure_name", "disease_identify", "disease_herb_matches"])
     rows = "static int rows(void) {int i=0,j;\n" + menu + "\nreturn i;\n}\n"
     source = OUT / "check.c"
     source.write_text(PRELUDE + helpers + rows

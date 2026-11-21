@@ -23,7 +23,10 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
-from export_achievement_stores import ROOT, catalogue, display_order, icon_tiles
+from export_achievement_stores import (
+    APPLE_POINTS, POINTS, ROOT, catalogue, display_order,
+    game_center_selection_exclusions, icon_tiles, steam_excluded_keys,
+)
 
 INK = colors.HexColor("#173C34")
 TEXT = colors.HexColor("#293A36")
@@ -80,6 +83,11 @@ def paragraph(text, width, size=10, leading=13, font="Body", color=TEXT):
 def load_rows(icon_dir):
     native = catalogue()
     order = display_order()
+    steam_excluded = steam_excluded_keys()
+    apple_excluded = game_center_selection_exclusions(steam_excluded)
+    properties = (ROOT / "android/play-games.properties").read_text(encoding="utf-8")
+    google_ids = {key: value.strip() for key, value in re.findall(
+        r"^SIL_MORE_PLAY_ACH_([A-Z_]+)=([^\r\n]*)$", properties, re.M)}
     mapping = dict(re.findall(r'^SIL_ACHIEVEMENT_ORDER\(([A-Z_]+), "([^"]+)"\)',
                              (ROOT / "src/achievement-order.h").read_text(encoding="utf-8"), re.M))
     if set(mapping) != set(order) or set(icon_tiles()) != set(order):
@@ -90,6 +98,10 @@ def load_rows(icon_dir):
     for row in rows:
         row["number"] = order[row["key"]]
         row["category"] = mapping[row["key"]]
+        row["google_points"] = POINTS[row["key"]]
+        row["google_id_pending"] = not google_ids.get(row["key"])
+        row["apple_points"] = None if row["key"] in apple_excluded else APPLE_POINTS[row["key"]]
+        row["steam_selected"] = row["key"] not in steam_excluded
         if row["category"] != previous:
             if row["category"] in seen_categories:
                 raise ValueError("Achievement categories must remain contiguous")
@@ -102,14 +114,29 @@ def load_rows(icon_dir):
             raise FileNotFoundError(f"Missing icon: {row['icon']}; refresh the store export first")
         row["title_para"] = paragraph(row["title"], WIDTH - 160, 11.5, 14, "Strong", INK)
         row["description_para"] = paragraph(row["description"], WIDTH - 90, 10, 13)
-        row["height"] = max(70, 12 + row["title_para"].height + 6 + row["description_para"].height + 12)
+        row["find_requirement"] = ("Requirement: Identify this artefact in your inventory or on a visible floor."
+                                   if row["key"].startswith("FIND_") else None)
+        row["find_para"] = (paragraph(row["find_requirement"], WIDTH - 90, 9, 12, "Body", MUTED)
+                            if row["find_requirement"] else None)
+        google = f"Google Play: {row['google_points']} pts"
+        if row["google_id_pending"]:
+            google += " (ID pending)"
+        apple = (f"Game Center: {row['apple_points']} pts" if row["apple_points"] is not None
+                 else "Game Center: not selected")
+        steam = "Steam: selected" if row["steam_selected"] else "Steam: not selected"
+        row["store_text"] = f"{google} | {apple} | {steam}"
+        row["store_para"] = paragraph(row["store_text"], WIDTH - 90, 8.5, 11, "Strong", MUTED)
+        find_height = 5 + row["find_para"].height if row["find_para"] else 0
+        row["height"] = max(80, 11 + row["title_para"].height + 6
+                            + row["description_para"].height + find_height
+                            + 6 + row["store_para"].height + 12)
     return rows
 
 
 def paginate(rows):
     pages = []
     current = []
-    top = PAGE_H - 171
+    top = PAGE_H - 190
     bottom = 56
     category = None
     for row in rows:
@@ -154,7 +181,13 @@ def draw_card(pdf, top, row):
     pdf.setFont("Strong", 8)
     pdf.drawCentredString(badge_x + badge_width / 2, top - 19.5, badge)
     description = row["description_para"]
-    description.drawOn(pdf, x, top - 11 - title.height - 6 - description.height)
+    y = top - 11 - title.height - 6 - description.height
+    description.drawOn(pdf, x, y)
+    if row["find_para"]:
+        y -= 5 + row["find_para"].height
+        row["find_para"].drawOn(pdf, x, y)
+    y -= 6 + row["store_para"].height
+    row["store_para"].drawOn(pdf, x, y)
 
 
 def normalize(value):
@@ -199,8 +232,12 @@ def verify(output, rows, pages):
     text = normalize("\n".join(texts))
     cursor = 0
     for row in rows:
-        for value in (f"#{row['number']:03d}", row["title"],
-                      "Hidden" if row["hidden"] else "Visible", row["description"]):
+        values = [f"#{row['number']:03d}", row["title"],
+                  "Hidden" if row["hidden"] else "Visible", row["description"]]
+        if row["find_requirement"]:
+            values.append(row["find_requirement"])
+        values.append(row["store_text"])
+        for value in values:
             needle = normalize(value)
             position = text.find(needle, cursor)
             if position < 0:
@@ -219,9 +256,14 @@ def verify(output, rows, pages):
             "catalogue_page_count": len(pages), "lore_source_links": len(links),
             "hidden_count": sum(row["hidden"] for row in rows),
             "visible_count": sum(not row["hidden"] for row in rows),
+            "google_point_total": sum(row["google_points"] for row in rows),
+            "google_ids_pending": [row["key"] for row in rows if row["google_id_pending"]],
+            "game_center_count": sum(row["apple_points"] is not None for row in rows),
+            "game_center_point_total": sum(row["apple_points"] or 0 for row in rows),
+            "steam_count": sum(row["steam_selected"] for row in rows),
             "categories": dict(Counter(row["category"] for row in rows)),
             "ordered_keys": [row["key"] for row in rows],
-            "verification": "All numbers, titles, full descriptions and visibility labels extracted in native display order",
+            "verification": "All titles, descriptions, find requirements, points and store selections extracted in native display order",
             "pdf_sha256": sha256(output.read_bytes()).hexdigest()}
 
 
@@ -255,10 +297,19 @@ def export(output, icon_dir, font_dir=None):
             pdf.setFillColor(MUTED)
             pdf.drawString(MARGIN, PAGE_H - 92,
                            f"{len(rows)} achievements  |  {len(set(row['category'] for row in rows))} categories  |  {hidden} hidden  |  {len(rows)-hidden} visible")
+            google_points = sum(row["google_points"] for row in rows)
+            apple_count = sum(row["apple_points"] is not None for row in rows)
+            apple_points = sum(row["apple_points"] or 0 for row in rows)
+            steam_count = sum(row["steam_selected"] for row in rows)
+            pdf.setFont("Strong", 9)
+            pdf.drawString(MARGIN, PAGE_H - 107,
+                f"Google Play: {len(rows)} / {google_points} pts  |  Game Center: {apple_count} / {apple_points} pts  |  Steam: {steam_count}")
             note = paragraph("Spoiler review edition. All hidden names and requirements are revealed. "
-                             "Hidden / Visible records the achievement's normal visibility before unlocking. "
-                             "Numbering and category order match the in-game achievement book.", WIDTH, 9, 12)
-            note.drawOn(pdf, MARGIN, PAGE_H - 105 - note.height)
+                             "Hidden / Visible refers to the in-game book; published Google visibility may differ. "
+                             "Points and store selections reflect project metadata; Apple is a proposal, "
+                             "and live store settings are not verified. ID pending means a Google ID is not configured.",
+                             WIDTH, 8.5, 11)
+            note.drawOn(pdf, MARGIN, PAGE_H - 115 - note.height)
         for element in elements or []:
             if element[0] == "heading":
                 _, top, category, continued = element

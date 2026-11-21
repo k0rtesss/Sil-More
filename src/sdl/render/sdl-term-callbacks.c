@@ -6,6 +6,7 @@
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 #include "log/perf.h"
+#include "monster/monster-senses.h"
 #include "steamworks.h"
 
 errr callback_sdl_xtra(int n, int v)
@@ -291,7 +292,19 @@ errr callback_sdl_xtra(int n, int v)
             }
         }
         sil_steamworks_run_callbacks();
-        sdl_present_if_needed(d);
+        /* A semantic selection click wakes the owning menu, which will update
+         * its highlight and description before waiting again.  Presenting here
+         * redraws the old selection first and can make the click feel stalled
+         * when laying out the screen is expensive.  Still present immediately
+         * for pointer-only changes and for other kinds of input. */
+        if (!(Term->key_head != Term->key_tail
+                && ui_menu_click_has_pending()
+                && sdl_character_sheet_screen_active()
+                && g_sdl_character_sheet_screen.context
+                    == SDL_CHARACTER_SHEET_BIRTH_SELECT))
+        {
+            sdl_present_if_needed(d);
+        }
         return 0;
     }
     case TERM_XTRA_FLUSH:
@@ -1696,24 +1709,8 @@ static bool sdl_monster_can_see_player_for_status_icon(monster_type* m_ptr)
     r_ptr = &r_info[m_ptr->r_idx];
     if (r_ptr->flags1 & (RF1_PEACEFUL))
         return false;
-    if ((r_ptr->flags2 & (RF2_SHORT_SIGHTED)) && (m_ptr->cdis > 2))
-        return false;
-    if (!los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px))
-        return false;
-
-    if (visual_recognition && (r_ptr->flags2 & (RF2_SMART)))
-    {
-        int per_divisor =
-            p_ptr->active_ability[S_STL][STL_DISGUISE] ? 4 : 2;
-        int vision_score = monster_skill(m_ptr, S_PER) / per_divisor
-            + p_ptr->cur_light
-            + ((cave_info[p_ptr->py][p_ptr->px] & (CAVE_GLOW)) ? 2 : 0);
-
-        if (vision_score < m_ptr->cdis)
-            return false;
-    }
-
-    return true;
+    /* Keep the stealth indicator on the same recognition rule as its roll. */
+    return monster_has_visual_perception_bonus(m_ptr);
 }
 
 static void sdl_map_monster_status_icons_from_live_state(int y, int x,

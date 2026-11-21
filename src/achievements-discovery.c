@@ -66,6 +66,77 @@ static bool crossed(int bank_y, int bank_x, int entry_y, int entry_x,
         && (ABS(exit_y - bank_y) > 1 || ABS(exit_x - bank_x) > 1);
 }
 
+/* A crossing can contain ice, but only actual water counts towards the water
+ * achievement. Record distinct cells, so pacing over two tiles cannot earn it.
+ * Water and poison crossings cannot be active together; the inactive crossing's
+ * existing saved coordinates hold the first two cells without a format change. */
+static void record_liquid_tile(bool water, int y, int x)
+{
+    u32b* flags = &p_ptr->achievement_discovery_flags;
+    s16b *first_y, *first_x, *second_y, *second_x;
+    if (water)
+    {
+        first_y = &p_ptr->achievement_poison_from_y;
+        first_x = &p_ptr->achievement_poison_from_x;
+        second_y = &p_ptr->achievement_poison_entry_y;
+        second_x = &p_ptr->achievement_poison_entry_x;
+    }
+    else
+    {
+        first_y = &p_ptr->achievement_water_from_y;
+        first_x = &p_ptr->achievement_water_from_x;
+        second_y = &p_ptr->achievement_water_entry_y;
+        second_x = &p_ptr->achievement_water_entry_x;
+    }
+    if (!(*flags & SIL_ACH_DISC_LIQUID_FIRST))
+    {
+        *first_y = y; *first_x = x;
+        *flags |= SIL_ACH_DISC_LIQUID_FIRST;
+    }
+    else if (y != *first_y || x != *first_x)
+    {
+        if (!(*flags & SIL_ACH_DISC_LIQUID_SECOND))
+        {
+            *second_y = y; *second_x = x;
+            *flags |= SIL_ACH_DISC_LIQUID_SECOND;
+        }
+        else if (y != *second_y || x != *second_x)
+            *flags |= SIL_ACH_DISC_LIQUID_THREE;
+    }
+}
+
+/* Check that the two banks are separated by this liquid, not merely two
+ * points along the same shore. The straight line between them must stay over
+ * the liquid (or ice for water); the travelled route itself may wind. */
+static bool opposite_liquid_banks(int bank_y, int bank_x, int entry_y, int entry_x,
+    int exit_y, int exit_x, bool poison)
+{
+    if (grid_index(bank_y, bank_x) < 0 || !in_bounds(bank_y, bank_x)
+        || !dry_bank(cave_feat[bank_y][bank_x])
+        || FEAT_IS_BRIDGE(cave_feat[bank_y][bank_x])
+        || FEAT_IS_BRIDGE(cave_feat[exit_y][exit_x])) return false;
+    int dy = entry_y - bank_y, dx = entry_x - bank_x;
+    if (dy * (exit_y - bank_y) + dx * (exit_x - bank_x) <= 0) return false;
+
+    int x = bank_x, y = bank_y;
+    int xdiff = ABS(exit_x - bank_x), ydiff = ABS(exit_y - bank_y);
+    int sx = bank_x < exit_x ? 1 : -1, sy = bank_y < exit_y ? 1 : -1;
+    int error = xdiff - ydiff;
+    bool liquid = false;
+    while (x != exit_x || y != exit_y)
+    {
+        int twice = 2 * error;
+        if (twice > -ydiff) { error -= ydiff; x += sx; }
+        if (twice < xdiff) { error += xdiff; y += sy; }
+        if (x == exit_x && y == exit_y) break;
+        if (!in_bounds(y, x)) return false;
+        int feat = cave_feat[y][x];
+        if (poison ? feat != FEAT_POISON : !water_or_ice(feat)) return false;
+        liquid = true;
+    }
+    return liquid;
+}
+
 void sil_achievements_on_partition_entry(int y, int x)
 {
     if (!sil_achievements_eligible() || !in_bounds(y, x)) return;
@@ -110,9 +181,10 @@ void sil_achievements_on_movement(int fy, int fx, int ty, int tx)
     {
         if (!water_or_ice(from) || !(*flags & SIL_ACH_DISC_CROSSING))
         {
-            *flags &= ~(SIL_ACH_DISC_OWN_ICE | SIL_ACH_DISC_WATER);
             if (dry_bank(from))
             {
+                *flags &= ~(SIL_ACH_DISC_OWN_ICE | SIL_ACH_DISC_WATER
+                    | SIL_ACH_DISC_LIQUID_FLAGS);
                 *flags |= SIL_ACH_DISC_CROSSING;
                 p_ptr->achievement_water_from_y = fy;
                 p_ptr->achievement_water_from_x = fx;
@@ -120,41 +192,56 @@ void sil_achievements_on_movement(int fy, int fx, int ty, int tx)
                 p_ptr->achievement_water_entry_x = tx;
             }
         }
-        if (to == FEAT_WATER || to == FEAT_DEEP_WATER) *flags |= SIL_ACH_DISC_WATER;
-        int index = grid_index(ty, tx);
-        if (p_ptr->achievement_frozen_tiles[index / 8] & (1u << (index % 8)))
-            *flags |= SIL_ACH_DISC_OWN_ICE;
-    }
-    else
-    {
-        if ((*flags & SIL_ACH_DISC_CROSSING) && dry_bank(to)
-            && crossed(p_ptr->achievement_water_from_y, p_ptr->achievement_water_from_x,
-                p_ptr->achievement_water_entry_y, p_ptr->achievement_water_entry_x,
-                fy, fx, ty, tx))
+        if (*flags & SIL_ACH_DISC_CROSSING)
         {
-            if (*flags & SIL_ACH_DISC_WATER)
+            if (to == FEAT_WATER || to == FEAT_DEEP_WATER)
+            {
+                *flags |= SIL_ACH_DISC_WATER;
+                record_liquid_tile(true, ty, tx);
+            }
+            int index = grid_index(ty, tx);
+            if (p_ptr->achievement_frozen_tiles[index / 8] & (1u << (index % 8)))
+                *flags |= SIL_ACH_DISC_OWN_ICE;
+        }
+    }
+    else if (*flags & SIL_ACH_DISC_CROSSING)
+    {
+        if (dry_bank(to))
+        {
+            if ((*flags & SIL_ACH_DISC_LIQUID_THREE)
+                && opposite_liquid_banks(p_ptr->achievement_water_from_y,
+                    p_ptr->achievement_water_from_x, p_ptr->achievement_water_entry_y,
+                    p_ptr->achievement_water_entry_x, ty, tx, false))
                 sil_achievements_on_event(SIL_ACH_THE_FORDS_OF_SIRION);
-            if (*flags & SIL_ACH_DISC_OWN_ICE)
+            if ((*flags & SIL_ACH_DISC_OWN_ICE)
+                && crossed(p_ptr->achievement_water_from_y, p_ptr->achievement_water_from_x,
+                    p_ptr->achievement_water_entry_y, p_ptr->achievement_water_entry_x,
+                    fy, fx, ty, tx))
                 sil_achievements_on_event(SIL_ACH_HELCARAXE);
         }
-        *flags &= ~(SIL_ACH_DISC_CROSSING | SIL_ACH_DISC_OWN_ICE | SIL_ACH_DISC_WATER);
+        *flags &= ~(SIL_ACH_DISC_CROSSING | SIL_ACH_DISC_OWN_ICE
+            | SIL_ACH_DISC_WATER | SIL_ACH_DISC_LIQUID_FLAGS);
     }
     if (to == FEAT_POISON && from != FEAT_POISON && dry_bank(from))
     {
+        *flags &= ~SIL_ACH_DISC_LIQUID_FLAGS;
         *flags |= SIL_ACH_DISC_POISON;
         p_ptr->achievement_poison_from_y = fy;
         p_ptr->achievement_poison_from_x = fx;
         p_ptr->achievement_poison_entry_y = ty;
         p_ptr->achievement_poison_entry_x = tx;
     }
-    else if (to != FEAT_POISON)
+    if (to == FEAT_POISON && (*flags & SIL_ACH_DISC_POISON))
+        record_liquid_tile(false, ty, tx);
+    else if (to != FEAT_POISON && (*flags & SIL_ACH_DISC_POISON))
     {
         if ((*flags & SIL_ACH_DISC_POISON) && from == FEAT_POISON && dry_bank(to)
-            && crossed(p_ptr->achievement_poison_from_y, p_ptr->achievement_poison_from_x,
+            && (*flags & SIL_ACH_DISC_LIQUID_THREE)
+            && opposite_liquid_banks(p_ptr->achievement_poison_from_y, p_ptr->achievement_poison_from_x,
                 p_ptr->achievement_poison_entry_y, p_ptr->achievement_poison_entry_x,
-                fy, fx, ty, tx))
+                ty, tx, true))
             sil_achievements_on_event(SIL_ACH_THROUGH_NAN_DUNGORTHEB);
-        *flags &= ~SIL_ACH_DISC_POISON;
+        *flags &= ~(SIL_ACH_DISC_POISON | SIL_ACH_DISC_LIQUID_FLAGS);
     }
     int from_partition = level_partition_index_for_point(fy, fx);
     int to_partition = level_partition_index_for_point(ty, tx);

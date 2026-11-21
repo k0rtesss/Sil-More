@@ -35,7 +35,10 @@ int get_player_choice(birth_menu* choices, int num, int def,
         steamdeck = steamdeck_controls_active();
 
         ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
+        /* Hover still shows pointer feedback, but only an actual click moves
+         * the selected hero or race.  Otherwise motion immediately before a
+         * click makes the first click confirm the newly hovered row. */
+        ui_menu_click_set_hover_enabled(false);
         /*
          * Pixel-semantic path: drive the SDL selection screen instead of the
          * terminal grid.  With select_intro set this is the book-mode race page
@@ -99,6 +102,17 @@ int get_player_choice(birth_menu* choices, int num, int def,
                 else
                     sdl_character_sheet_screen_add_select_welcome(
                         choices[i].text ? choices[i].text : "");
+            }
+            /* On phones, the list becomes a carousel whose focused name is
+             * the title.  Race selection needs that title just like heroes. */
+            if (minimum_text_mode && page && page->group_headings
+                && sdl_character_sheet_screen_mobile_carousel_active())
+            {
+                sdl_character_sheet_screen_set_select_title_detail(
+                    choices[cur].name, "", TERM_WHITE);
+                for (i = 0; i < num; i++)
+                    sdl_character_sheet_screen_add_select_title_candidate(
+                        choices[i].name, "");
             }
             /* Book mode has no detail panel.  Avoid building the selected
              * race's unused stat/trait rows on every highlight change. */
@@ -191,7 +205,7 @@ int get_player_choice(birth_menu* choices, int num, int def,
          * Shown on the hero list (which carries descriptions, traits and power
          * ratings) rather than the race "book" page.
          */
-        if (!book_mode)
+        if (!book_mode && !(minimum_text_mode && page && page->group_headings))
             birth_coach_show_once(BIRTH_COACH_SELECT);
 
         hide_cursor = true;

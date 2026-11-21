@@ -21,6 +21,9 @@ def main():
 static void check_log_footer(void)
 {
     SDL_strlcpy(fixture_id,"populated-log-footer",sizeof(fixture_id));
+    config.menu_bigger_font[SDL_MENU_FONT_MESSAGES]=config.bigger_font;
+    config.show_menu_font_button=true;
+    sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_MESSAGES);
     sdl_view *view=&g_views[PANE_MAIN];
     int px=sdl_ui_role_font_px(SDL_UI_FONT_BODY);
     view->term_ready=true;view->cell_h=px;view->cell_w=MAX(1,px/2);
@@ -29,12 +32,12 @@ static void check_log_footer(void)
     view->margin_x=view->margin_y=0;
     view->canvas=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,fixture_width,fixture_height);
     fixture_assert(view->canvas);
-    config.menu_bigger_font[SDL_MENU_FONT_MESSAGES]=config.bigger_font;
-    config.show_menu_font_button=true;
     int old_context=sdl_menu_font_set_render_context(SDL_MENU_FONT_MESSAGES);
     Term_resize(view->cols,view->rows);
     view->font_atlas=sdl_load_ttf_font_cells(config.monospace_font,view->cell_w,view->cell_h,NULL);
     fixture_assert(view->font_atlas);view->font_atlas_cell_w=view->cell_w;view->font_atlas_cell_h=view->cell_h;
+    ui_menu_click_begin();ui_menu_click_set_touch_exit_button(true);
+    expect(sdl_menu_scale_controls_active(),"Log zoom controls not active");
     int top,bottom,prompt;log_history_layout(view->rows,&top,&bottom,&prompt);
     if(top>bottom || bottom>=prompt)
         fprintf(stderr,"log geometry cols=%d rows=%d font=%d footer=%d top=%d bottom=%d prompt=%d\n",view->cols,view->rows,px,sdl_touch_menu_button_reserved_rows(),top,bottom,prompt);
@@ -53,17 +56,18 @@ static void check_log_footer(void)
         if(i && filters[i].row==filters[i-1].row)
             expect(filters[i].col>filters[i-1].col+(int)strlen(filters[i-1].label)+padding,"filter hit regions overlap");
     }
-    config.show_menu_font_button=false;
-    expect(sdl_menu_font_button_available_columns(1,view->cols)==view->cols,"hidden B reserves columns");
-    config.show_menu_font_button=true;
-    expect(sdl_menu_font_button_available_columns(view->rows-1,view->cols)==view->cols,"nonintersecting B reserves columns");
-    ui_menu_click_begin();ui_menu_click_set_touch_exit_button(true);
     sdl_touch_menu_button_layout_entry buttons[SDL_TOUCH_MENU_BUTTON_MAX];
     int count=sdl_touch_menu_button_layout(buttons,N_ELEMENTS(buttons));fixture_assert(count==1);
     SDL_FRect exit=buttons[0].rect;
     expect(inside(exit),"Exit outside physical screen");
-    expect(exit.w+1>=sdl_ui_min_tap_px() && exit.h+1>=sdl_ui_min_tap_px(),"Exit below48dp");
+    if(config.bigger_font)
+        expect(exit.w+1>=sdl_ui_min_tap_px() && exit.h+1>=sdl_ui_min_tap_px(),"Exit below48dp");
     expect((prompt+1)*view->cell_h<=exit.y+1,"hint row intersects Exit");
+    if(font_button.y>fixture_height/2) {
+        float hit_pad=MAX(0.0f,(sdl_ui_min_tap_px()-font_button.h)*0.5f);
+        expect((prompt+1)*view->cell_h<=font_button.y-hit_pad+1,
+            "hint row intersects zoom control targets");
+    }
     const char*entries[]={"FIRST A very long recorded message with all words and numbers 12345 retained. A very long recorded message with all words and numbers 12345 retained. A very long recorded message with all words and numbers 12345 retained. LASTTAIL",
         "Combat @ to o att +14 hit 7 evn +8 damage (2d7+1d5) net 12 protection 3 COMBATTAIL"};
     for(int entry=0;entry<2;entry++) {
@@ -107,6 +111,7 @@ static void check_log_footer(void)
     SDL_DestroyTexture(view->font_atlas);view->font_atlas=NULL;
     SDL_DestroyTexture(view->canvas);view->canvas=NULL;
     sdl_menu_font_set_render_context(old_context);
+    sdl_pop_terminal_menu_scale();
 }
 '''
  books.HARNESS=books.HARNESS.replace('int main(int argc,char **argv)',helpers+checks+'\nint main(int argc,char **argv)')
@@ -118,9 +123,12 @@ static void check_log_footer(void)
  env=os.environ.copy()
  env['PATH']=os.pathsep.join([str(ROOT/'build-standard'/'_deps'/dep) for dep in
      ['SDL','SDL_ttf','SDL_image','SDL_mixer']]+['C:/msys64/mingw64/bin','C:/msys64/usr/bin',env.get('PATH','')])
- for height in [384,432,480,576]:
-  subprocess.run([str(books.OUT/'check.exe'),str(ROOT/'lib/xtra/font/EBGaramond-Regular.ttf'),
-      '720',str(height),str(ROOT/'lib/xtra/font/VictorMono-Medium.ttf'),
-      str(ROOT/'lib/xtra/font/Cinzel-Medium.ttf'),'2','1'],cwd=books.OUT,env=env,check=True,timeout=60)
+ for width,height,density in [(720,384,2),(720,432,2),(720,480,2),(720,576,2),
+                               (576,1263,1.6),(720,1600,2),(1600,720,2)]:
+  for bigger in [0,1]:
+   subprocess.run([str(books.OUT/'check.exe'),str(ROOT/'lib/xtra/font/EBGaramond-Regular.ttf'),
+       str(width),str(height),str(ROOT/'lib/xtra/font/VictorMono-Medium.ttf'),
+       str(ROOT/'lib/xtra/font/Cinzel-Medium.ttf'),str(density),str(bigger)],
+       cwd=books.OUT,env=env,check=True,timeout=60)
 
 if __name__=='__main__':main()

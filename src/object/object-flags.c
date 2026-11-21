@@ -10,6 +10,15 @@
 #define OBJECT_FLAGS_FULL 1 /* Full info */
 #define OBJECT_FLAGS_KNOWN 2 /* Only flags known to the player */
 
+static bool known_preview;
+
+bool object_flags_known_preview(bool enabled)
+{
+    bool previous = known_preview;
+    known_preview = enabled;
+    return previous;
+}
+
 /*
  * Obtain the "flags" for an item (extended version with f4)
  */
@@ -29,6 +38,18 @@ static void object_flags_aux(
     }
 
     k_ptr = &k_info[o_ptr->k_idx];
+
+    if (known_preview && !object_known_p(o_ptr)
+        && !(o_ptr->ident & IDENT_SPOIL))
+    {
+        /* Shape and handling are visible; enchantments are not. This also
+         * covers flag queries over extra carried storage during bonus upkeep. */
+        *f1 = *f2 = 0;
+        *f3 = k_ptr->flags3 & (TR3_TWO_HANDED | TR3_HAND_AND_A_HALF
+            | TR3_AXE | TR3_POLEARM | TR3_THROWING);
+        *f4 = k_ptr->flags4 & TR4_LIGHT_ARMOR;
+        return;
+    }
 
     /* Base object */
     (*f1) = k_ptr->flags1;

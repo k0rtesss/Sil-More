@@ -116,6 +116,7 @@ bool get_move(
     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
 
     int i;
+    bool tactical_tried = false;
 
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -230,7 +231,11 @@ bool get_move(
          * confirmed anchor. This never selects an occupied attack square. */
         if (get_move_tactical(m_ptr, ty, tx))
             return true;
-        if (monster_squad_hold_position(m_ptr)) return false;
+        if (monster_squad_hold_position(m_ptr))
+        {
+            monster_ai_plan_feedback(m_ptr, MON_TACTIC_ORDER, m_ptr->fy, m_ptr->fx);
+            return false;
+        }
         get_move_advance(m_ptr, ty, tx);
         return *ty != m_ptr->fy || *tx != m_ptr->fx;
     }
@@ -352,9 +357,17 @@ bool get_move(
 
     /* A coordinated approach takes precedence over individually luring the
      * player in different directions. Fear and immediate escape still win. */
-    if (monster_squad_order_valid(m_ptr) && get_move_tactical(m_ptr, ty, tx))
-        return true;
-    if (monster_squad_hold_position(m_ptr)) return false;
+    if (monster_squad_order_valid(m_ptr))
+    {
+        tactical_tried = true;
+        if (get_move_tactical(m_ptr, ty, tx))
+            return true;
+    }
+    if (monster_squad_hold_position(m_ptr))
+    {
+        monster_ai_plan_feedback(m_ptr, MON_TACTIC_ORDER, m_ptr->fy, m_ptr->fx);
+        return false;
+    }
 
     // Smart monsters try to lure the character into the open.
     if ((!*fear) && (r_ptr->flags2 & (RF2_SMART))
@@ -425,7 +438,7 @@ bool get_move(
     }
 
     /* Choose a reachable attack position using terrain and allied coverage. */
-    if (!*fear && get_move_tactical(m_ptr, ty, tx))
+    if (!*fear && !tactical_tried && get_move_tactical(m_ptr, ty, tx))
         return true;
 
     /* No special moves made -- use standard movement */

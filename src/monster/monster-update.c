@@ -71,6 +71,7 @@ static bool detect_monster_noise_aux(monster_type* m_ptr, int skill, bool previe
     if (result > 10)
     {
         m_ptr->ml = true;
+        m_ptr->mflag |= MFLAG_LISTEN;
         if (!suppress_visuals)
             lite_spot(y, x);
         return true;
@@ -234,6 +235,10 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
     /* Seen at all */
     bool flag = false;
 
+    /* Recompute sound-only visibility; sight, detection and telepathy below
+     * take precedence over Resonance for movement interruptions. */
+    m_ptr->mflag &= ~MFLAG_LISTEN;
+
     /* Seen by vision */
     bool easy = false;
 
@@ -273,6 +278,23 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
     {
         /* Extract the distance */
         d = m_ptr->cdis;
+    }
+
+    /* Death revelation is inspection, not a new sighting. Final Look uses
+     * live UI flags, so is_dead alone cannot guard encounter XP, quest/lore
+     * counters, invisible-item identification or listening side effects.
+     * The final level's monsters remain visible even after a view rebuild. */
+    if (!preview && (p_ptr->is_dead || death_spectator_active()))
+    {
+        if (!m_ptr->ml)
+        {
+            m_ptr->ml = true;
+            lite_spot(fy, fx);
+            p_ptr->window |= PW_MONLIST;
+            if (p_ptr->health_who == m_idx)
+                p_ptr->redraw |= PR_HEALTHBAR;
+        }
+        return;
     }
 
     /* Detected */

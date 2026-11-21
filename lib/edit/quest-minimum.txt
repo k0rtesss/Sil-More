@@ -1,0 +1,8 @@
+# Compact objectives for Minimum text mode. IDs match Q: in quest.txt.
+# Rewards are assembled from the live quest data and selected artefacts.
+Q:1:Defeat [monster name] and return to Tulkas.
+Q:2:Forge an item of difficulty above 20, then return to Aulë.
+Q:3:Defeat Brodda and return to Mandos.
+Q:4:Reach a downward staircase before any creature dies.
+Q:5:Kill any one: 100 wolves, 80 spiders, 60 serpents, or 30 vampires; then return to Oromë.
+Q:6:Defeat Duruin on the first level reached after 500 ft; leaving that level first fails the quest.

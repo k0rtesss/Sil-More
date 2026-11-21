@@ -204,7 +204,8 @@ static bool wield_command_succeeded = false;
 bool do_cmd_can_wield_offhand(const object_type* o_ptr)
 {
     bool grants_two_weapon = false;
-    if (!o_ptr || !o_ptr->k_idx
+    if (player_ability_restriction(S_MEL, MEL_TWO_WEAPON)
+        || !o_ptr || !o_ptr->k_idx
         || (o_ptr->tval != TV_SWORD && o_ptr->tval != TV_POLEARM
             && o_ptr->tval != TV_HAFTED && o_ptr->tval != TV_DIGGING)
         || (k_info[o_ptr->k_idx].flags3
@@ -1571,8 +1572,8 @@ static bool open_inventory_replacement_menu_with_action(
     {
         for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
-            if (!replacement_choice_allowed(incoming, &inventory[i], true,
-                    include_equip))
+            if (!replacement_choice_allowed(incoming, &inventory[i],
+                    player_equipment_slot_counts_as_equipped(i), include_equip))
             {
                 continue;
             }
@@ -2215,7 +2216,8 @@ bool do_cmd_move_item_to_storage_exchange(int item, byte target_storage,
         || incoming_quantity <= 0 || incoming_quantity > incoming->number
         || !object_can_choose_pack_or_harness(incoming)
         || !object_can_choose_pack_or_harness(outgoing)
-        || (outgoing_equipped && cursed_p(outgoing)))
+        || (player_equipment_slot_counts_as_equipped(exchange_item)
+            && cursed_p(outgoing)))
     {
         return false;
     }
@@ -2452,7 +2454,8 @@ bool do_cmd_wield_floor_storage_exchange(int item, byte target_storage,
     if (!outgoing || !outgoing->k_idx
         || inventory_limit_group_for_object(incoming) != INV_LIMIT_HARNESS
         || inventory_limit_group_for_object(outgoing) != INV_LIMIT_HARNESS
-        || (outgoing_equipped && cursed_p(outgoing)))
+        || (player_equipment_slot_counts_as_equipped(exchange_item)
+            && cursed_p(outgoing)))
     {
         return false;
     }
@@ -2521,7 +2524,8 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
         object_type moving;
 
         o_ptr = player_inventory_object(item);
-        if (!o_ptr || !o_ptr->k_idx || cursed_p(o_ptr)
+        if (!o_ptr || !o_ptr->k_idx
+            || (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr))
             || !object_can_choose_pack_or_harness(o_ptr))
             return false;
         object_copy(&moving, o_ptr);
@@ -2649,7 +2653,8 @@ static bool drop_equipped_harness_replacement_item(int item, int amount)
         return false;
 
     source = player_inventory_object(item);
-    if (!source || !source->k_idx || cursed_p(source))
+    if (!source || !source->k_idx
+        || (player_equipment_slot_counts_as_equipped(item) && cursed_p(source)))
         return false;
 
     amount = MIN(amount, source->number);
@@ -2737,7 +2742,7 @@ static bool drop_harness_replacement_for_floor_wield(
         candidate = player_inventory_object(replacement_item);
         if (!candidate || !candidate->k_idx
             || inventory_limit_group_for_object(candidate) != group
-            || (player_inventory_handle_is_equipped(replacement_item)
+            || (player_equipment_slot_counts_as_equipped(replacement_item)
                 && cursed_p(candidate)))
         {
             msg_print("That item cannot be dropped.");
@@ -3329,6 +3334,18 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    /* Reject an impossible off-hand destination before a Pack action starts. */
+    if (forced_wield_slot == INVEN_ARM && o_ptr->tval != TV_SHIELD)
+    {
+        cptr restriction = player_ability_restriction(S_MEL, MEL_TWO_WEAPON);
+
+        if (restriction)
+        {
+            msg_print(restriction);
+            return;
+        }
+    }
+
     if (!confirm_known_cursed_wield(o_ptr, item))
         return;
 
@@ -3527,7 +3544,9 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 object_type* wield_ptr = &inventory[INVEN_WIELD];
                 bool allow_wield = true;
 
-                if (wield_ptr->k_idx && cursed_p(wield_ptr)
+                if (wield_ptr->k_idx
+                    && player_equipment_slot_counts_as_equipped(INVEN_WIELD)
+                    && cursed_p(wield_ptr)
                     && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
                 {
                     allow_wield = false;
@@ -3683,6 +3702,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     // Paired weapons can be wielded together without Two Weapon Fighting
     bool paired_weapon_prompt = false;
     if ((forced_wield_slot < 0) && o_ptr->name1
+        && !player_ability_restriction(S_MEL, MEL_TWO_WEAPON)
         && inventory[INVEN_WIELD].k_idx)
     {
         int paired_idx = get_paired_artefact(o_ptr->name1);
@@ -3711,7 +3731,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
     }
 
-    if ((item >= INVEN_WIELD) && (item < INVEN_TOTAL) && (item != slot)
+    if (player_equipment_slot_counts_as_equipped(item) && (item != slot)
         && cursed_p(o_ptr))
     {
         object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
@@ -3720,8 +3740,9 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    /* Prevent wielding into a cursed slot */
-    if (cursed_p(&inventory[slot]))
+    /* Only equipped curses bind; inactive reserved slots are Harness storage. */
+    if (player_equipment_slot_counts_as_equipped(slot)
+        && cursed_p(&inventory[slot]))
     {
         /* Describe it */
         object_desc(o_name, sizeof(o_name), &inventory[slot], false, 0);
@@ -3750,11 +3771,24 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    /* A permanent one-hand restriction also rules out paired artefacts. */
+    if (slot == INVEN_ARM && o_ptr->tval != TV_SHIELD)
+    {
+        cptr restriction = player_ability_restriction(S_MEL, MEL_TWO_WEAPON);
+
+        if (restriction)
+        {
+            msg_print(restriction);
+            return;
+        }
+    }
+
     /* Deal with wielding of two-handed weapons when already using a shield */
     if ((k_info[o_ptr->k_idx].flags3 & (TR3_TWO_HANDED))
         && (inventory[INVEN_ARM].k_idx))
     {
-        if (cursed_p(&inventory[INVEN_ARM]))
+        if (player_equipment_slot_counts_as_equipped(INVEN_ARM)
+            && cursed_p(&inventory[INVEN_ARM]))
         {
             if (inventory[INVEN_ARM].tval == TV_SHIELD)
             {
@@ -3807,7 +3841,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if ((slot == INVEN_ARM)
         && (k_info[inventory[INVEN_WIELD].k_idx].flags3 & (TR3_TWO_HANDED)))
     {
-        if (cursed_p(&inventory[INVEN_WIELD]))
+        if (player_equipment_slot_counts_as_equipped(INVEN_WIELD)
+            && cursed_p(&inventory[INVEN_WIELD]))
         {
             msg_print("You would need to put down your weapon, but cannot bear "
                       "to part "
@@ -4190,7 +4225,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             // activate all of its new abilities
             for (i = 0; i < o_ptr->abilities; i++)
             {
-                if (!p_ptr->have_ability[o_ptr->skilltype[i]][o_ptr->abilitynum[i]])
+                if (!player_ability_restriction(o_ptr->skilltype[i], o_ptr->abilitynum[i])
+                    && !p_ptr->have_ability[o_ptr->skilltype[i]][o_ptr->abilitynum[i]])
                 {
                     p_ptr->have_ability[o_ptr->skilltype[i]][o_ptr->abilitynum[i]]
                         = true;
@@ -4375,7 +4411,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
      * Smithing identification checks depend on the player's current effective
      * skills, so retry now that equipped bonuses have been applied.
      */
-    if (player_try_identify_smithing_object(o_ptr, true, 0))
+    if (player_try_identify_smithing_object(o_ptr,
+            player_equipment_slot_counts_as_equipped(slot), 0))
     {
         /* Ensure the newly-identified item (and any resulting bonuses) display immediately. */
         handle_stuff();
@@ -4852,6 +4889,7 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
     if (!tutorial_game_action_allowed("remove", default_o_ptr)) return;
     int item;
     bool can_break_curse;
+    bool bound_curse;
 
     object_type* o_ptr;
 
@@ -4891,10 +4929,12 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
     }
 
     can_break_curse = p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING];
+    bound_curse = cursed_p(o_ptr)
+        && (player_equipment_slot_counts_as_equipped(item) || item == INVEN_QUIVER1);
 
     /* Reject an impossible removal before charging for Pack access. Keep
      * curse breaking itself after the delay, so cancellation cannot uncurse. */
-    if (cursed_p(o_ptr) && (!can_break_curse
+    if (bound_curse && (!can_break_curse
             || item == INVEN_QUIVER1 || item == INVEN_BELT))
     {
         msg_print("You cannot bear to part with it.");
@@ -4905,7 +4945,7 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
             o_ptr))
         return;
 
-    if (cursed_p(o_ptr))
+    if (bound_curse)
     {
         {
             object_type carry_preview;
@@ -5086,7 +5126,7 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
         && confirm && !confirm_drop_item_amount(o_ptr, amt))
         return false;
 
-    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr)
+    if (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr)
         && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
     {
         msg_print("You cannot bear to part with it.");
@@ -5100,7 +5140,7 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     }
 
     /* Hack -- Cannot remove cursed items */
-    if (player_inventory_handle_is_equipped(item) && cursed_p(o_ptr))
+    if (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr))
     {
         if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
         {
@@ -6126,7 +6166,9 @@ static bool floor_context_equip_belt_weapon(object_type* o_ptr,
     enabled[INVEN_BELT] = true;
     destination_count = 2;
 
-    if (inventory[INVEN_WIELD].k_idx && cursed_p(&inventory[INVEN_WIELD])
+    if (inventory[INVEN_WIELD].k_idx
+        && player_equipment_slot_counts_as_equipped(INVEN_WIELD)
+        && cursed_p(&inventory[INVEN_WIELD])
         && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
     {
         enabled[INVEN_WIELD] = false;

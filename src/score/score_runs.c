@@ -102,7 +102,6 @@ void score_runs_set_legacy_link(struct high_score* legacy_score,
     }
 
     legacy_score->unused[0] = 'R';
-    legacy_score->unused[1] = '\0';
 }
 
 bool score_runs_get_legacy_link(const struct high_score* legacy_score,
@@ -395,6 +394,8 @@ static void score_runs_build_record_from_legacy(score_record_v1* rec,
         rec->run_flags |= SCORE_RUN_FLAG_MORGOTH_SLAIN;
     if (tolower((unsigned char)legacy->escaped[0]) == 't')
         rec->run_flags |= SCORE_RUN_FLAG_ANGBAND_ESCAPED;
+    if (legacy->unused[1] == SCORE_LEGACY_BLESSED_MARKER)
+        rec->run_flags |= SCORE_RUN_FLAG_BLESSED;
 
     int race_idx = score_runs_parse_int_field(legacy->p_r, sizeof(legacy->p_r));
     int char_idx = score_runs_parse_int_field(legacy->p_h, sizeof(legacy->p_h));
@@ -1399,19 +1400,6 @@ static u16b score_runs_abilities_learned(void)
     return (u16b)total;
 }
 
-static s16b score_runs_net_curses(void)
-{
-    s32b net = 0;
-    for (int id = 0; id < METAR_CURSE_SLOTS; ++id) {
-        net += CURSE_GET(id);
-    }
-    if (net > INT16_MAX)
-        return INT16_MAX;
-    if (net < INT16_MIN)
-        return INT16_MIN;
-    return (s16b)net;
-}
-
 static bool score_runs_should_record_artefact(const artefact_type* art)
 {
     if (!art)
@@ -1925,6 +1913,8 @@ static byte score_runs_run_flags(void)
         flags |= SCORE_RUN_FLAG_CHEAT;
     if (run_mode_is_blitz())
         flags |= SCORE_RUN_FLAG_BLITZ;
+    if (metarun_run_blessings(p_ptr))
+        flags |= SCORE_RUN_FLAG_BLESSED;
     return flags;
 }
 
@@ -1960,7 +1950,7 @@ static void score_runs_build_record(score_record_v1* rec,
     rec->skills_learned = score_runs_skills_learned();
     rec->abilities_learned = score_runs_abilities_learned();
     rec->artefacts_found = score_runs_artefacts_found();
-    rec->net_curses = score_runs_net_curses();
+    rec->net_curses = (s16b)metarun_net_curse_stacks();
     rec->character_power = score_runs_character_power();
     rec->turns_spent = (playerturn >= 0) ? (u32b)playerturn : 0;
     rec->xp_earned = (p_ptr->exp >= 0) ? (u32b)p_ptr->exp : 0;

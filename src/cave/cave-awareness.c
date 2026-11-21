@@ -105,6 +105,10 @@ void disturb(int stop_stealth, int unused_flag)
         /* Cancel */
         p_ptr->smithing = 0;
 
+        /* Restore the equipped light when the forge stops lighting the work.
+         * This must happen before another input or save, not a turn later. */
+        p_ptr->update |= PU_TORCH;
+
         // Display a message
         msg_print("Your work is interrupted!");
 

@@ -1342,20 +1342,29 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
         return true;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
+        return true;
     case SDL_EVENT_MOUSE_WHEEL:
+        (void)sdl_standalone_screen_drag(ev->wheel.mouse_x, ev->wheel.mouse_y,
+            -ev->wheel.y * sdl_ui_min_tap_px());
+        return true;
+    case SDL_EVENT_FINGER_CANCELED:
+        if (g_welcome_touch_press.finger_id == ev->tfinger.fingerID)
+            sdl_welcome_touch_cancel_press();
+        return true;
     case SDL_EVENT_FINGER_DOWN:
     case SDL_EVENT_FINGER_MOTION:
-    case SDL_EVENT_FINGER_CANCELED:
-        return true;
-
     case SDL_EVENT_FINGER_UP:
         if (ev->tfinger.windowID == SDL_GetWindowID(g_state.window))
         {
             sdl_note_touch_event_device(ev->tfinger.touchID);
             if (sdl_finger_event_to_render_coords(&ev->tfinger, &x, &y))
             {
-                (void)sdl_poetry_screen_handle_pointer(x, y,
-                    UI_MENU_CLICK_PRIMARY);
+                if (ev->type == SDL_EVENT_FINGER_DOWN)
+                    (void)sdl_welcome_touch_handle_pointer_down(x, y, ev->tfinger.fingerID);
+                else if (ev->type == SDL_EVENT_FINGER_MOTION)
+                    (void)sdl_welcome_touch_handle_pointer_motion(x, y, ev->tfinger.fingerID);
+                else
+                    (void)sdl_welcome_touch_handle_pointer_up(x, y, ev->tfinger.fingerID);
             }
         }
         return true;
@@ -1559,6 +1568,9 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
+        if (sdl_description_overlay_handle_view_hover((float)ev->motion.x,
+                (float)ev->motion.y))
+            return;
         if (sdl_description_overlay_handle_close_hover((float)ev->motion.x,
                 (float)ev->motion.y))
         {
@@ -1706,6 +1718,12 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             if (sdl_touch_top_panel_handle_description_pointer(
                     (float)ev->button.x, (float)ev->button.y))
             {
+                return;
+            }
+            if (sdl_description_overlay_handle_view_pointer(
+                    (float)ev->button.x, (float)ev->button.y))
+            {
+                sdl_description_overlay_claim_mouse_release();
                 return;
             }
             if (sdl_description_overlay_handle_close_pointer(
@@ -2142,6 +2160,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         (void)sdl_object_tooltip_dismiss_persistent_on_press();
         if (sdl_touch_exit_button_handle_pointer(x, y))
             return;
+        if (sdl_description_overlay_handle_view_pointer(x, y))
+        {
+            sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);
+            return;
+        }
         if (sdl_description_overlay_handle_close_pointer(x, y))
         {
             sdl_description_overlay_claim_finger_release(ev->tfinger.fingerID);

@@ -54,13 +54,13 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "1.1.0"
 /*
- * Version components (1.1.0.10).  All on-disk formats (saves, scores, metaruns)
+ * Version components (1.1.0.11).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 1
 #define VERSION_PATCH 0
-#define VERSION_EXTRA 10 /* Streamed world frames, permanent sites and ownership. */
+#define VERSION_EXTRA 11 /* Saved squad budgets and Story blessings. */
 #define SAVEFILE_LEGENDARY_AREA_MAGIC 0xC1F0
 #define SAVEFILE_LEGENDARY_AREA_VERSION 1
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
@@ -122,6 +122,12 @@
  */
 #define PANEL_WID_FIXED 33
 #define PANEL_WID (use_bigtile ? 16 : PANEL_WID_FIXED)
+
+/* Minimum main-terminal sizes shared by the frontend and game startup. */
+#define SIL_UI_NORMAL_MIN_COLS 80
+#define SIL_UI_NORMAL_MIN_ROWS 24
+#define SIL_UI_COMPACT_MIN_COLS 50
+#define SIL_UI_COMPACT_MIN_ROWS 16
 
 /*
  * SDL renders messages, status, and the depth/menu affordance through panes or
@@ -940,8 +946,8 @@
 /*
  * Maximum number of objects allowed in a single dungeon grid.
  *
- * The main-screen has a minimum size of 24 rows, so we can always
- * display 23 objects + 1 header line.
+ * A stack can exceed the visible terminal height; item selectors scroll to
+ * keep every object accessible on compact displays.
  */
 #define MAX_FLOOR_STACK 23
 
@@ -1827,6 +1833,7 @@
 #define DISEASE_INTERVAL 150
 #define DISEASE_COUNTDOWN_MAX (DISEASE_INTERVAL * 2)
 #define DISEASE_NAME_COUNT 8
+#define DISEASE_ANGBAND_PLAGUE 8 /* Saved name index, formerly Shadow Pox. */
 #define DISEASE_HERB_COUNT 10 /* Contiguous herb svals, Rage through Sickness. */
 #define DISEASE_KNOWN_NAME 0x01
 #define DISEASE_KNOWN_CURE 0x02
@@ -2675,6 +2682,7 @@
     0x00080000 /* Duruin may leave his inner bastion enclosure */
 #define MFLAG_PLAYER_POISON 0x00100000 /* Player contributed to pending poison. */
 #define MFLAG_PLAYER_PUSH 0x00200000 /* Transient: resolve player knockback terrain. */
+#define MFLAG_LISTEN 0x00400000 /* Runtime-only: visible solely through Resonance. */
 
 /*
  * New monster race bit flags
@@ -3034,7 +3042,8 @@
 // reserved legacy slot
 /* Prevent automatic attacks from hitting fleeing enemies under Oath of Valor */
 #define OPT_valorous_oath_auto_attack_safety (OPT_GAME_PLAY + 0)
-/* Visual recognition: intelligent monsters need light to see player */
+/* Stealth detection bonus only: light helps smart monsters recognize the
+ * player. This setting never limits an alerted monster's physical sight. */
 #define OPT_visual_recognition (OPT_GAME_PLAY + 1)
 /* Stealth vision mode: show whether monsters can see you */
 #define OPT_stealth_vision (OPT_GAME_PLAY + 2)
@@ -3146,6 +3155,7 @@
 #define OPT_environment_speed 89 /* Reuses the retired space_acts_as_comma slot. */
 #define OPT_space_acts_as_comma 89 /* Legacy migration only. */
 #define OPT_show_level_entry_banner 90
+#define OPT_minimum_text_mode 91
 // reserved legacy slot: ability_desc_mode
 #define OPT_vault_drop_frequency 92
 #define OPT_show_smithing_difficulty 93
@@ -3154,6 +3164,7 @@
 #define OPT_show_partition_narrative 96
 #define OPT_noble_item_spawn_mode 97
 #define OPT_styled_player_tile_health_bar 98 /* Reuses retired hide_left_panel. */
+#define OPT_ignore_monster_alarms 99
 // reserved legacy slot: banner_message_stairs
 #define OPT_show_level_generation_debug 100
 #define OPT_unlock_blitz_mode 101
@@ -3308,6 +3319,8 @@
 #define assassination_over_charge op_ptr->opt[OPT_assassination_over_charge]
 #define pacifist_attack_warning op_ptr->opt[OPT_pacifist_attack_warning]
 #define active_weapon_switch_confirm op_ptr->opt[OPT_active_weapon_switch_confirm]
+#define ignore_monster_alarms op_ptr->opt[OPT_ignore_monster_alarms]
+#define minimum_text_mode op_ptr->opt[OPT_minimum_text_mode]
 #define lockpick_minigame op_ptr->opt[OPT_lockpick_minigame]
 #define chest_trap_minigame op_ptr->opt[OPT_chest_trap_minigame]
 #define utumno_corridors op_ptr->opt[OPT_utumno_corridors]

@@ -1099,6 +1099,9 @@ bool prereqs(int skilltype, int abilitynum)
 {
     ability_type* b_ptr;
 
+    if (player_ability_restriction(skilltype, abilitynum))
+        return false;
+
     b_ptr = &b_info[ability_index(skilltype, abilitynum)];
 
     if (!ability_policy_available(b_ptr)) return false;
@@ -4163,6 +4166,12 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
     abilitynum = entry->abilitynum;
     skilltype = entry->b_ptr->skilltype;
 
+    if (player_ability_restriction(skilltype, abilitynum))
+    {
+        SDL_strlcpy(buf, "unavailable", buflen);
+        return;
+    }
+
     if (p_ptr->have_ability[skilltype][abilitynum])
     {
         if ((skilltype != S_SPC)
@@ -5175,7 +5184,12 @@ static int ability_browser_build_description(int skilltype,
     skilltype = b_ptr->skilltype;
     ability_desc_add_line(lines, &line_count, TERM_YELLOW, entry->name);
 
-    if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+    cptr restriction = player_ability_restriction(skilltype, b_ptr->abilitynum);
+    if (restriction)
+    {
+        SDL_strlcpy(status, restriction, sizeof(status));
+    }
+    else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
     {
         strnfmt(status, sizeof(status), "%s; %s.",
             p_ptr->innate_ability[skilltype][b_ptr->abilitynum]
@@ -5282,7 +5296,7 @@ static int ability_browser_build_description(int skilltype,
             ? ability_menu_controller_text(ability_effect_text(b_ptr),
                 effect_controller_text, sizeof(effect_controller_text))
             : NULL;
-        desc_text = b_ptr->text
+        desc_text = !minimum_text_mode && b_ptr->text
             ? ability_menu_controller_text(b_text + b_ptr->text,
                 desc_controller_text, sizeof(desc_controller_text))
             : NULL;
@@ -5902,6 +5916,13 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
     if (death_spectator_active())
     {
         msg_print("You can no longer take that action.");
+        return false;
+    }
+
+    cptr restriction = player_ability_restriction(skilltype, abilitynum);
+    if (restriction)
+    {
+        bell(restriction);
         return false;
     }
 
@@ -6720,7 +6741,7 @@ int abilities_menu2(int skilltype, int* highlight)
                     /* Display effect first, then prerequisites and lore. */
                     char desc_controller_text[2048];
                     char effect_controller_text[2048];
-                    const char *desc_text = (b_ptr->text)
+                    const char *desc_text = (!minimum_text_mode && b_ptr->text)
                         ? ability_menu_controller_text(b_text + b_ptr->text,
                               desc_controller_text, sizeof(desc_controller_text))
                         : NULL;

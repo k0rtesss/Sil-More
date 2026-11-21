@@ -12,6 +12,7 @@
 static byte features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte rewired[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte scents[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte pending_features[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u16b info[MAX_DUNGEON_HGT][256];
 static s16b occupants[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static monster_type monsters[8];
@@ -31,6 +32,8 @@ bool varda_quest_duruin_can_enter(const monster_type* m, int y, int x)
 /* These isolated combat maps do not have generated partition metadata. */
 int level_partition_index_for_point(int y, int x)
 { (void)y; (void)x; return -1; }
+int cave_environment_pending_hazard(int y, int x)
+{ return pending_features[y][x]; }
 int monster_skill(monster_type* m, int skill)
 { (void)m; (void)skill; return 10; }
 int success_chance(int sides, int skill, int difficulty)
@@ -52,7 +55,7 @@ void shriek(monster_type* m) { (void)m; CHECK(false); }
 void calc_morale(monster_type* m) { (void)m; CHECK(false); }
 void calc_stance(monster_type* m) { (void)m; CHECK(false); }
 byte projectable(int y1, int x1, int y2, int x2, u32b flags)
-{ (void)flags; return los(y1, x1, y2, x2); }
+{ (void)flags; return los(y1, x1, y2, x2) ? PROJECT_CLEAR : PROJECT_NO; }
 void monster_desc(char* out, size_t len, const monster_type* m, int mode)
 { (void)m; (void)mode; snprintf(out, len, "the test monster"); }
 void msg_format(cptr fmt, ...)
@@ -84,6 +87,7 @@ static monster_type* reset_map(int h, int w, int my, int mx, int py, int px)
     memset(occupants, 0, sizeof(occupants));
     memset(rewired, 0, sizeof(rewired));
     memset(scents, 0, sizeof(scents));
+    memset(pending_features, 0, sizeof(pending_features));
     visual_recognition = false;
     p_ptr->cur_map_hgt = h; p_ptr->cur_map_wid = w;
     p_ptr->py = py; p_ptr->px = px;
@@ -488,14 +492,81 @@ static void test_pursuit_flow(void)
 
 #include "monster-squad-tests.h"
 
+static void test_tactical_frontier(void)
+{
+    unsigned state = 0x16b0a9e3u;
+    /* The former full scan is an independent ordering oracle. Exercise ties,
+     * dominance, replaced/done slots and removal at both search sizes. */
+    for (int size = 0; size < 2; ++size)
+    {
+        int cells = size ? TACTICAL_MAX_CELLS : TACTICAL_CELLS;
+        tactical_label labels[TACTICAL_MAX_CELLS][TACTICAL_LABELS] = {0};
+        tactical_frontier frontier = {0};
+        for (int i = 0; i < cells; ++i) frontier.index[i] = -1;
+        for (int step = 0; step < 8000; ++step)
+        {
+            state = state * 1664525u + 1013904223u;
+            int cell = (state >> 8) % cells;
+            if (step < cells || (state & 3))
+            {
+                tactical_label next = { .cost = (state >> 16) % 32,
+                    .damage = (state >> 22) % 8, .pending = (state >> 25) % 8,
+                    .steps = (state >> 28) % 8, .first = cell, .used = true };
+                tactical_add_label(labels[cell], next);
+                tactical_frontier_update(&frontier, cell, labels[cell]);
+            }
+            else if (frontier.count)
+            {
+                cell = frontier.heap[0];
+                labels[cell][frontier.label[cell]].done = true;
+                tactical_frontier_update(&frontier, cell, labels[cell]);
+            }
+            int at = -1, which = -1, active = 0;
+            for (int i = 0; i < cells; ++i)
+            {
+                bool pending = false;
+                for (int n = 0; n < TACTICAL_LABELS; ++n)
+                    if (labels[i][n].used && !labels[i][n].done)
+                    {
+                        pending = true;
+                        if (at < 0 || labels[i][n].cost < labels[at][which].cost)
+                        { at = i; which = n; }
+                    }
+                if (pending) ++active;
+                CHECK(pending == (frontier.index[i] >= 0));
+                if (pending) CHECK(frontier.heap[frontier.index[i]] == i);
+            }
+            CHECK(frontier.count == active);
+            CHECK(at < 0 || (frontier.heap[0] == at && frontier.label[at] == which));
+        }
+        /* Drain the queue as well as replacing entries in a full frontier. */
+        while (frontier.count)
+        {
+            int cell = frontier.heap[0];
+            labels[cell][frontier.label[cell]].done = true;
+            tactical_frontier_update(&frontier, cell, labels[cell]);
+        }
+    }
+    puts("Tactical frontier: 16,000 mutations match original scan ordering PASS.");
+}
+
 int main(void)
 {
+    test_tactical_frontier();
     test_terrain(); test_flows(); test_tactics(); test_advance(); test_full_map();
     test_poison_ai();
     test_flow_fast_path();
     test_tactical_extension();
     test_squads();
-    test_squad_grades(); test_squad_jobs(); test_squad_group_plans();
+    test_squad_action_messages();
+    test_squad_hybrid_melee_roles();
+    test_squad_grades(); test_squad_jobs(); test_squad_challenge_melee();
+    test_squad_archer_sight_posts();
+    test_archer_retreat_from_melee_ring();
+    test_warned_squad_posts();
+    test_water_firing_posts();
+    test_squad_death_preserves_personal_budget();
+    test_squad_group_plans();
     test_pursuit_flow();
     printf("Monster AI regression checks passed: %d\n", checks);
     return 0;

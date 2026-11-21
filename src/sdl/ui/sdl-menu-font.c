@@ -163,7 +163,7 @@ static bool sdl_menu_native_surface_active(void)
         || g_touch_pane_reset_confirm_active;
 }
 
-static bool sdl_menu_scale_controls_active(void)
+bool sdl_menu_scale_controls_active(void)
 {
     /* A native screen can be opened inside a terminal-menu scope. Only the
      * visible terminal owner may expose or change that scope's scale. */
@@ -225,6 +225,10 @@ static SDL_FRect sdl_menu_control_rail_rect_avoiding(SDL_FRect blocked)
 
     if (count <= 0 || size <= 0.0f || screen.w <= 0 || screen.h <= 0)
         return (SDL_FRect){0};
+
+    if (sdl_menu_scale_controls_active()
+        && sdl_touch_menu_font_control_rail(count, size, gap, &rail))
+        return rail;
 
     width = count * size + (count - 1) * gap;
     rail = (SDL_FRect){screen.x + screen.w - width - pad,

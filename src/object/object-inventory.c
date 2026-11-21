@@ -122,6 +122,8 @@ bool player_inventory_handle_is_carried(int item)
 
 bool player_inventory_handle_is_equipped(int item)
 {
+    /* Physical save-slot membership also includes inactive Harness storage.
+     * Use player_equipment_slot_counts_as_equipped() for gameplay rules. */
     return item >= INVEN_WIELD && item < INVEN_TOTAL;
 }
 
@@ -1545,8 +1547,15 @@ int inven_takeoff(int item, int amt)
     const bool discard_spent_light = (item == INVEN_LITE)
         && player_light_destroyed_on_drop(i_ptr);
 
+    /* An inactive combat item was stored on the Harness, not wielded. */
+    if ((item == INVEN_WIELD || item == INVEN_BOW || item == INVEN_ARM)
+        && !player_equipment_slot_counts_as_equipped(item)
+        && i_ptr->storage == OBJECT_STORAGE_PACK)
+    {
+        act = "You stored";
+    }
     /* Took off weapon */
-    if ((item == INVEN_WIELD)
+    else if ((item == INVEN_WIELD)
         || ((item == INVEN_ARM) && (i_ptr->tval != TV_SHIELD)))
     {
         act = "You were wielding";

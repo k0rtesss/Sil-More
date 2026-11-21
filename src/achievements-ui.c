@@ -2,6 +2,7 @@
 #include "achievements.h"
 #include "achievements-character.h"
 #include "achievements-play-games.h"
+#include "achievements-game-center.h"
 #include "externs.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "sdl-config.h"
@@ -30,12 +31,12 @@ static bool show_hidden_requirements;
 
 static bool platform_achievements_available(void)
 {
-    return sil_steamworks_active() || sil_play_games_available();
+    return sil_steamworks_active() || sil_play_games_available() || sil_game_center_available();
 }
 
 static void show_platform_achievements(void)
 {
-    if (!sil_steamworks_show_achievements() && !sil_play_games_show())
+    if (!sil_steamworks_show_achievements() && !sil_play_games_show() && !sil_game_center_show())
         sdl_popup_notification_show("Platform achievements are currently unavailable.");
 }
 
@@ -106,13 +107,15 @@ static void build_achievement_book(int page, bool character_only)
             used = strlen(text);
             strnfmt(text + used, sizeof(text) - used, "\n%s", progress);
         }
+        byte attr = unlocked ? TERM_YELLOW : TERM_SLATE;
+        if (current_character && !sil_achievement_difficulty_allows(i))
+            attr = TERM_L_DARK;
         if (achievement_icons[i].source_size > 16)
             sdl_character_sheet_screen_add_book_atlas_icon_paragraph(text,
-                unlocked ? TERM_YELLOW : TERM_SLATE, row, col,
-                achievement_icons[i].source_size);
+                attr, row, col, achievement_icons[i].source_size);
         else
             sdl_character_sheet_screen_add_book_composite_icon_paragraph(text,
-                unlocked ? TERM_YELLOW : TERM_SLATE, row, col,
+                attr, row, col,
                 achievement_icons[i].row2, achievement_icons[i].col2,
                 achievement_icons[i].count);
     }
@@ -137,7 +140,8 @@ static void build_achievement_book(int page, bool character_only)
         else
             SDL_strlcpy(key, "P", sizeof(key));
         strnfmt(text, sizeof(text), "%s achievements [%s]",
-            sil_steamworks_active() ? "Steam" : "Google Play", key);
+            sil_steamworks_active() ? "Steam" : sil_play_games_available()
+                ? "Google Play" : "Game Center", key);
         sdl_character_sheet_screen_add_book_action(text, 1);
         sdl_character_sheet_screen_add_book_paragraph_colored(
             "Offline unlocks sync when platform services are available.", TERM_SLATE);

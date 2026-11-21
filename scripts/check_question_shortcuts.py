@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the production question loop's case-sensitive shortcut routing.
+"""Exercise production question shortcuts and disabled-choice explanations.
 
 Uses the existing Windows engine objects and a terminal input fixture; no
 player saves, windows, or preferences are opened or modified.
@@ -21,12 +21,20 @@ HARNESS = r'''
 
 static term fixture_term;
 static cptr inputs;
+/* No dungeon is loaded; keep the real question loop and message log without
+ * trying to repaint map features from uninitialised game templates. */
+void __wrap_handle_stuff(void) { p_ptr->redraw=p_ptr->update=0; }
 static errr terminal_extra(int action, int value)
 {
     (void)value;
     if (action == TERM_XTRA_EVENT) {
         assert(inputs && *inputs);
-        Term_keypress(*inputs++);
+        char key=*inputs++;
+        if(key=='@') {
+            bool wake=false;
+            assert(ui_menu_click_handle_choice_action(1,UI_MENU_CLICK_PRIMARY,&wake));
+            Term_keypress(UI_MENU_CLICK_WAKE_KEY);
+        } else Term_keypress(key);
     }
     return 0;
 }
@@ -42,6 +50,26 @@ static void ask(const ui_question_option* options, int count,
     assert(choice == expected);
     assert(!*inputs); inputs = NULL;
     assert(hide_cursor == previous_cursor);
+}
+static void ask_disabled(cptr keys, cptr reason, cptr expected)
+{
+    const ui_question_option options[]={
+        {'a',"Available gift",TERM_WHITE,false},
+        {'b',"Unavailable gift",TERM_WHITE,true}
+    };
+    const cptr reasons[]={NULL,reason};
+    inputs=keys; Term_flush();
+    assert(ui_question_ask_with_reasons("Reward",NULL,options,reasons,
+        2,-1,-1,0)==-1);
+    assert(!*inputs); inputs=NULL;
+    cptr actual=message_str(0);
+    size_t length=strlen(expected);
+    bool matches=!strncmp(actual,expected,length)
+        && (!actual[length] || !strncmp(actual+length," <",2));
+    if(!matches)
+        fprintf(stderr,"Disabled choice keys %s: expected '%s', got '%s'\n",
+            keys,expected,actual);
+    assert(matches);
 }
 int main(void)
 {
@@ -86,6 +114,17 @@ int main(void)
     button[0].key = 'g'; button[0].disabled = false;
     ask(option, 1, button, 1, "G", 50);
     puts("Question shortcuts: c/C, u/U, row/button priority, aliases, disabled exact keys, numeric navigation, Escape and cursor restoration PASS.");
+    assert(messages_init()==0);
+    character_generated=true;
+    cptr reason="You have no active disease to diagnose.";
+    ask_disabled("b\033",reason,reason); /* Direct shortcut. */
+    ask_disabled("B\033",reason,reason); /* Shortcut alias. */
+    ask_disabled("b \033",reason,reason); /* Confirm grey highlight. */
+    ask_disabled("@\033",reason,reason); /* Mouse/touch choice. */
+    ask_disabled("b\033",NULL,"That choice is not available.");
+    ask_disabled("@\033","","That choice is not available.");
+    character_generated=false;
+    puts("Question explanations: direct/alias shortcuts, highlighted confirmation and pointer attempts log the specific reason; empty/missing reasons retain the fallback; no disabled reward is selected PASS.");
     SDL_Quit(); return 0;
 }
 '''
@@ -108,7 +147,8 @@ def main():
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),
-        "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-o", str(exe)], cwd=BUILD, env=env, check=True)
+        "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=handle_stuff",
+        "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe)], cwd=OUT, env=env, check=True, timeout=30)
 
 

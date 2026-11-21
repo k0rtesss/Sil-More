@@ -32,6 +32,7 @@ void ui_menu_click_add_text_token(int choice, int col, int row, cptr text,
 int ui_menu_click_put_button(int choice, int row, int col, byte attr,
     cptr label);
 bool ui_menu_click_has_cell(int col, int row);
+bool ui_menu_click_get_cell_choice(int col, int row, int* choice);
 bool ui_menu_click_handle_hover_cell(int col, int row, bool* wake);
 bool ui_menu_click_clear_hover(bool* wake);
 bool ui_menu_click_handle_choice_action(int choice, int action, bool* wake);

@@ -797,6 +797,13 @@ void wr_monster(const monster_type* m_ptr)
     wr_byte(m_ptr->ai.attack_y); wr_byte(m_ptr->ai.attack_x);
     wr_byte(m_ptr->ai.attack_chain);
     wr_s32b(m_ptr->ai.player_action_turn); wr_s32b(m_ptr->ai.attack_turn);
+
+    /* 0.9.9.10 on master, 1.1.0.11 on 1.1. Preserve the command budget so
+     * replanning after loading cannot grant another assembly or regroup window.
+     * Positions, reservations and commander indices remain transient. */
+    wr_byte(m_ptr->squad.budget_plan);
+    wr_byte(m_ptr->squad.plan_age);
+    wr_u32b(m_ptr->squad.plan_turn);
 }
 
 /*

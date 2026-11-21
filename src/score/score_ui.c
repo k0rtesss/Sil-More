@@ -277,6 +277,8 @@ static void run_history_build_high_score(const score_record_v1* rec, high_score*
     strnfmt(out->silmarils, sizeof(out->silmarils), "%1d", sils);
     out->morgoth_slain[0] = (rec->run_flags & SCORE_RUN_FLAG_MORGOTH_SLAIN) ? 't' : 'f';
     out->escaped[0] = (rec->run_flags & SCORE_RUN_FLAG_ANGBAND_ESCAPED) ? 't' : 'f';
+    if (rec->run_flags & SCORE_RUN_FLAG_BLESSED)
+        out->unused[1] = SCORE_LEGACY_BLESSED_MARKER;
 }
 
 static int run_history_compute_rating(const score_record_v1* rec)
@@ -902,6 +904,8 @@ static void score_ui_build_halls_card(const high_score* entry, int place,
         strnfmt(details, details_len,
             "%s turns  |  deepest descent %s ft", turn_commas,
             deepest_commas);
+    if (entry && entry->unused[1] == SCORE_LEGACY_BLESSED_MARKER)
+        SDL_strlcat(details, "  |  " RUN_BLESSING_MODE_NAME, details_len);
 
     honors[0] = '\0';
     if (silmarils > 0)
@@ -2826,6 +2830,8 @@ static int run_history_draw_general_panel(const score_record_v1* rec,
 
     strnfmt(line, sizeof(line), "Rating:      %d points", entry->rating);
     run_detail_text_view_put(&view, TERM_SLATE, line);
+    if (rec->run_flags & SCORE_RUN_FLAG_BLESSED)
+        run_detail_text_view_put(&view, TERM_L_GREEN, "Difficulty:  " RUN_BLESSING_MODE_NAME " (Easy)");
     run_detail_text_view_blank(&view);
 
     if (!current_run) {

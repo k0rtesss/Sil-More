@@ -411,6 +411,17 @@
       ],
       "rgba_sha256": "a9e0d6280d948e13dcccf1fbe606a923d5f63b3708799d26d947ef581979df9f"
     },
+    "A_WILL_OF_YOUR_OWN": {
+      "row": 64,
+      "col": 16,
+      "size": 64,
+      "label": "Warding glyph",
+      "layout": "single",
+      "sprites": [
+        "ward"
+      ],
+      "rgba_sha256": "b682ed8562110e0898062f511518a00d79894f043d0eb5913d785af5e84ef36a"
+    },
     "THREE_LIGHTS_IN_EXILE": {
       "row": 64,
       "col": 20,
@@ -519,6 +530,18 @@
         "ward"
       ],
       "rgba_sha256": "3c1b77525fef33902950cd3827a7855f10628aacbfd01401882a7fe3fa6bc27c"
+    },
+    "RELEASE_FROM_BONDAGE": {
+      "row": 68,
+      "col": 24,
+      "size": 64,
+      "label": "Rubble and music",
+      "layout": "pair",
+      "sprites": [
+        "rubble",
+        "music"
+      ],
+      "rgba_sha256": "7737a8dfcca68e22e7914a0806440d8e6933e3a6446a411f9ee555f03d42e055"
     },
     "TWO_THEMES_ONE_VOICE": {
       "row": 68,
@@ -857,28 +880,29 @@
       ],
       "rgba_sha256": "43c34eca2fa3ce4b90e9852eb1b520e742b80ff6cf4950660f26b9e96c6bc23b"
     },
-    "A_WILL_OF_YOUR_OWN": {
-      "row": 64,
-      "col": 16,
+    "SWIFT_AS_THE_WIND": {
+      "row": 84,
+      "col": 12,
       "size": 64,
-      "label": "Warding glyph",
-      "layout": "single",
-      "sprites": [
-        "ward"
-      ],
-      "rgba_sha256": "b682ed8562110e0898062f511518a00d79894f043d0eb5913d785af5e84ef36a"
-    },
-    "RELEASE_FROM_BONDAGE": {
-      "row": 68,
-      "col": 24,
-      "size": 64,
-      "label": "Rubble and music",
+      "label": "Arrow and Silmaril",
       "layout": "pair",
       "sprites": [
-        "rubble",
-        "music"
+        "arrow",
+        "jewel"
       ],
-      "rgba_sha256": "7737a8dfcca68e22e7914a0806440d8e6933e3a6446a411f9ee555f03d42e055"
+      "rgba_sha256": "0a63d1b63eaf1c63391b5a6c1df04256cbb891788a63156bf9266ec10578a42a"
+    },
+    "TENFOLD_DOOM": {
+      "row": 84,
+      "col": 16,
+      "size": 64,
+      "label": "Morgoth and traveller",
+      "layout": "pair",
+      "sprites": [
+        "morgoth",
+        "traveller"
+      ],
+      "rgba_sha256": "b08f67009d0ce2fdc0fdf23ed56d86171c62e6c120f7d6ac70ead88b82f2cda9"
     }
   }
 }

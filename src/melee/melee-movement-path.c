@@ -24,7 +24,7 @@ bool get_move_escape_poison(monster_type* m_ptr, int* ty, int* tx)
     int head = 0, tail = 0, best = -1, best_depth = CELLS, best_dist = CELLS;
     int known_y = my, known_x = mx;
     bool known = monster_senses_target(m_ptr, &known_y, &known_x);
-    if (m_ptr->r_idx == R_IDX_MORGOTH || monster_has_sight(m_ptr))
+    if (m_ptr->r_idx == R_IDX_MORGOTH || monster_ai_can_see_player(m_ptr))
     {
         known_y = p_ptr->py; known_x = p_ptr->px; known = true;
     }
@@ -128,10 +128,9 @@ bool monster_can_smell(monster_type* m_ptr)
 bool get_move_wander(monster_type* m_ptr, int* ty, int* tx)
 {
     if (m_ptr->routine.style == MON_ROUTINE_PATROL
+        || monster_routine_needs_return(m_ptr)
         || (m_ptr->routine.territory
-            && (!(r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL)
-                || level_partition_index_for_point(m_ptr->fy, m_ptr->fx)
-                    != m_ptr->routine.territory - 1)))
+            && !(r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL)))
         return monster_routine_move(m_ptr, ty, tx);
 
     int d;
@@ -750,7 +749,7 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     int m_idx = cave_m_idx[m_ptr->fy][m_ptr->fx];
 
-    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_has_sight(m_ptr))
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_ai_can_see_player(m_ptr))
     {
         /* Fear does not confer knowledge of an unseen player's new position.
          * Retain a retreat order, otherwise withdraw from remembered evidence. */
@@ -844,6 +843,8 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
         int best_score = 0;
         int best_y = m_ptr->fy, best_x = m_ptr->fx;
         int dist;
+        bool current_footing = cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_DEEP_WATER
+            || (r_ptr->flags2 & RF2_FLYING);
 
         // Set up the 'score to beat' as the score for the monster's current
         // square
@@ -852,11 +853,11 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
             m_ptr, m_ptr->fy, m_ptr->fx);
         if (projectable(
                 m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px, PROJECT_STOP)
-            && (m_ptr->cdis > 1))
+            && (m_ptr->cdis > 1) && current_footing)
             best_score += 100;
 
         // the position is only acceptable if it is not adjacent to the player
-        if (m_ptr->cdis > 1)
+        if (m_ptr->cdis > 1 && current_footing)
             acceptable = true;
 
         // Set some hacky global variables so that the project_path()
@@ -886,6 +887,11 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
 
             /* Grid must be pretty easy to enter */
             if (cave_passable_mon(m_ptr, y, x, &dummy) < 50)
+                continue;
+
+            /* A retreating archer needs a usable shooting place. Entering
+             * attack-suppressing water only causes another escape action. */
+            if (cave_feat[y][x] == FEAT_DEEP_WATER && !(r_ptr->flags2 & RF2_FLYING))
                 continue;
 
             // skip adjacent squares
@@ -932,6 +938,13 @@ bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
             /* Success */
             return (true);
         }
+
+        /* A non-fleeing bow with no adjacent firing post can still use the
+         * tactical dry route or fight at contact. Do not send it through the
+         * generic fear search, which can lead straight back into deep water.
+         * This decision is independent of whether the player sees the bow. */
+        if (m_ptr->stance != STANCE_FLEEING && (r_ptr->flags4 & RF4_ARCHERY_MASK))
+            return false;
 
         // Sil-y:
         // This step is artificial stupidity for archers and other serious
@@ -1301,9 +1314,15 @@ void get_move_advance(monster_type* m_ptr, int* ty, int* tx)
         return;
     }
     monster_senses_refresh(m_ptr);
-    bool sight = monster_has_sight(m_ptr);
+    bool sight = monster_ai_can_see_player(m_ptr);
     if ((r_info[m_ptr->r_idx].flags2 & RF2_TERRITORIAL) && !sight)
-        return;
+    {
+        /* Defend a known lair using actual sound, last sighting, shared trace
+         * or scent. The sensory selector never substitutes the hidden player's
+         * current square; ordinary movement legality keeps every step inside. */
+        if (!monster_lair_contains(m_ptr, m_ptr->fy, m_ptr->fx))
+            return;
+    }
     if (!monster_senses_advance(m_ptr, ty, tx))
         return;
     /* Scent and bounded search already selected a legal adjacent move. */
@@ -1354,7 +1373,7 @@ static bool vulnerability_attack_grid(monster_type* m_ptr, int y, int x)
 
 int calc_vulnerability(monster_type* m_ptr)
 {
-    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_has_sight(m_ptr))
+    if (m_ptr->r_idx != R_IDX_MORGOTH && !monster_ai_can_see_player(m_ptr))
         return 0;
     int fy = m_ptr->fy;
     int fx = m_ptr->fx;

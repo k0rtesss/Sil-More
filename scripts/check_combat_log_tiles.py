@@ -44,7 +44,39 @@ static void icon_pixels(sdl_view *view,int x,int y)
     assert(ink>8);
 }
 
-static void check(int width,bool bigger,bool bigtile,bool ascii,bool automatic)
+/* Compare every visible glyph and color to the real overlay token stream.
+ * Ignore spacing because narrow screens wrap between words. */
+static void matches_overlay(const combat_roll *roll,int rows)
+{
+    combat_roll_token tokens[COMBAT_ROLL_MAX_TOKENS];
+    int count=combat_roll_emit_tokens(roll,tokens,N_ELEMENTS(tokens));
+    byte expected_attrs[256],actual_attrs[256];
+    char expected_chars[256],actual_chars[256];
+    int expected=0,actual=0;
+    for(int i=0;i<count;i++) {
+        const combat_roll_token *t=&tokens[i];
+        if(t->is_tile) {
+            expected_attrs[expected]=t->attr;
+            expected_chars[expected++]=t->tile_char;
+            if(use_bigtile && (t->attr&0x80) && ((byte)t->tile_char&0x80)) {
+                expected_attrs[expected]=255;expected_chars[expected++]=-1;
+            }
+        } else for(cptr p=t->text;*p;p++)if(*p!=' ') {
+            expected_attrs[expected]=t->attr;expected_chars[expected++]=*p;
+        }
+    }
+    for(int y=2;y<2+rows;y++)for(int x=0;x<Term->wid;x++)
+        if(Term->scr->c[y][x]!=' ') {
+            assert(actual<(int)sizeof(actual_chars));
+            actual_attrs[actual]=Term->scr->a[y][x];
+            actual_chars[actual++]=Term->scr->c[y][x];
+        }
+    assert(actual==expected);
+    assert(!memcmp(actual_chars,expected_chars,actual));
+    assert(!memcmp(actual_attrs,expected_attrs,actual));
+}
+
+static void check(int width,bool bigger,bool bigtile,bool ascii,int scenario)
 {
     sdl_view *view=&g_views[PANE_MAIN];
     config.bigger_font=bigger;g_state.use_tiles=!ascii;use_bigtile=bigtile;
@@ -61,14 +93,30 @@ static void check(int width,bool bigger,bool bigtile,bool ascii,bool automatic)
     assert(view->font_atlas);
     view->font_atlas_cell_w=view->cell_w;view->font_atlas_cell_h=view->cell_h;
     Term->higher_pict=!ascii;
-    combat_roll roll={.att_type=automatic?COMBAT_ROLL_AUTO:COMBAT_ROLL_ROLL,
+    combat_roll roll={.att_type=COMBAT_ROLL_ROLL,
         .att=14,.att_roll=17,.evn=8,.evn_roll=11,.dd=2,.ds=7,
-        .dd2=1,.ds2=5,.dam=15,.prot=3,.prt_percent=100,
+        .dd2=1,.ds2=5,.dam=15,.pd=1,.ps=6,.prot=3,.prt_percent=50,
+        .is_attacker_player=true,.melee=true,
         /* The current player and Orc scout tiles from monster.txt. */
         .attacker_attr=ascii?TERM_L_BLUE:(0x80|13),
         .attacker_char=ascii?'@':(char)0x80,
         .defender_attr=ascii?TERM_GREEN:(0x80|7),
         .defender_char=ascii?'o':(char)(0x80|25)};
+    p_ptr->resist_cold=scenario==6?0:3;
+    p_ptr->resist_pois=2;
+    if(scenario==1 || scenario>=6) {
+        roll.att_type=COMBAT_ROLL_AUTO;roll.is_attacker_player=false;
+        roll.is_defender_player=true;roll.melee=false;
+        roll.dam_type=scenario==7?GF_POIS:GF_COLD;
+        roll.dd=6;roll.ds=4;roll.dd2=roll.ds2=0;
+        roll.dam=24;roll.pd=1;roll.ps=8;roll.prt_percent=100;
+    } else if(scenario==2) {
+        roll.is_attacker_player=false;roll.is_defender_player=true;
+        roll.dd2=roll.ds2=0;roll.pd=2;roll.ps=9;
+    } else if(scenario==3 || scenario==5) {
+        roll.att_roll=1;roll.evn_roll=20;
+        roll.force_damage=scenario==5;
+    } else if(scenario==4)roll.no_damage=true;
     log_history_entry entry={.kind=LOG_HISTORY_ENTRY_COMBAT,.roll=&roll};
     log_history_entries[0]=entry;
     char text[256];log_history_entry_search_text(&entry,text,sizeof(text));
@@ -79,9 +127,10 @@ static void check(int width,bool bigger,bool bigtile,bool ascii,bool automatic)
     for(int first=0;first<rows;first++) {
         assert(Term_clear()==0);
         if(rows==1)log_history_draw_combat_entry(&entry,2,0);
-        else log_history_draw_wrapped_combat(&entry,2,width,"net",first,rows-first);
+        else log_history_draw_wrapped_combat(&entry,2,width,NULL,first,rows-first);
         int ax=0,ay=0,dx=0,dy=0;
         if(first==0) {
+            matches_overlay(&roll,rows);
             for(int y=0;y<Term->hgt;y++) {
                 memcpy(full_attrs[y],Term->scr->a[y],width);
                 memcpy(full_chars[y],Term->scr->c[y],width);
@@ -98,8 +147,8 @@ static void check(int width,bool bigger,bool bigtile,bool ascii,bool automatic)
         if(first==0) {
             icon_pixels(view,ax,ay);icon_pixels(view,dx,dy);
             char path[256];
-            strnfmt(path,sizeof(path),"%s/log-%d-big%d-double%d-ascii%d-auto%d.png",
-                "scripts/output/combat-log-tiles",width,bigger,bigtile,ascii,automatic);
+            strnfmt(path,sizeof(path),"%s/log-%d-big%d-double%d-ascii%d-case%d.png",
+                "scripts/output/combat-log-tiles",width,bigger,bigtile,ascii,scenario);
             SDL_Surface *pixels=SDL_RenderReadPixels(g_state.renderer,NULL);
             assert(pixels && IMG_SavePNG(pixels,path));SDL_DestroySurface(pixels);
         }
@@ -111,6 +160,16 @@ static void check(int width,bool bigger,bool bigtile,bool ascii,bool automatic)
         for(int row=2+rows-first;row<Term->hgt;row++)for(int col=0;col<width;col++)
             assert(Term->scr->c[row][col]==' ');
         if(rows==1)break;
+    }
+    if(scenario==0) {
+        Term_clear();
+        log_history_draw_wrapped_combat(&entry,2,width,"31",0,rows);
+        int found=0;
+        for(int y=2;y<2+rows;y++)for(int x=0;x<Term->wid;x++)
+            if(Term->scr->a[y][x]==TERM_YELLOW) {
+                assert(Term->scr->c[y][x]=='3' || Term->scr->c[y][x]=='1');found++;
+            }
+        assert(found==2);
     }
     SDL_SetRenderTarget(g_state.renderer,NULL);
     SDL_DestroyTexture(view->font_atlas);view->font_atlas=NULL;
@@ -139,9 +198,9 @@ int main(void)
     Term->pict_hook=callback_sdl_pict;
     const int widths[]={12,30,40,80,120};
     for(int big=0;big<2;big++)for(int ascii=0;ascii<2;ascii++)
-        for(int double_tile=0;double_tile<2;double_tile++)for(int automatic=0;automatic<2;automatic++)
-            for(size_t i=0;i<N_ELEMENTS(widths);i++)check(widths[i],big,double_tile,ascii,automatic);
-    puts("Combat full log: SDL icon pixels, wrapped/narrow rows, normal/bigger font, single/double tiles, ASCII, auto attacks and slices: PASS");
+        for(int double_tile=0;double_tile<2;double_tile++)for(int scenario=0;scenario<8;scenario++)
+            for(size_t i=0;i<N_ELEMENTS(widths);i++)check(widths[i],big,double_tile,ascii,scenario);
+    puts("Combat full log: overlay values/colors, SDL icons, narrow wrapping, font sizes, double tiles, misses, no-damage/combined attacks, resisted/vulnerable breath, poison, highlights and slices: PASS");
     return 0;
 }
 '''

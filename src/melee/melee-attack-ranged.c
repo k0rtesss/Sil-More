@@ -414,8 +414,9 @@ void shriek(monster_type* m_ptr)
         }
     }
 
-    // disturb the player
-    disturb(0, 0);
+    /* Calls for help can be ignored without changing their alarm effects. */
+    if (!ignore_monster_alarms)
+        disturb(0, 0);
 
     /* Make a lot of noise */
     update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
@@ -628,8 +629,6 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
     /* RF4_SHRIEK */
     case 96 + 8:
     {
-        disturb(0, 0);
-
         shriek(m_ptr);
         break;
     }

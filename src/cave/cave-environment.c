@@ -401,7 +401,9 @@ void cave_environment_observe(int y, int x)
 int cave_environment_known_feature(int y, int x)
 {
     if (!in_bounds(y,x)) return FEAT_NONE;
-    if (state.ready && !(cave_info[y][x] & CAVE_SEEN) && (cave_info[y][x] & CAVE_MARK))
+    /* Final revelation shows the settled terrain, including unseen changes. */
+    if (state.ready && !p_ptr->is_dead && !death_spectator_active()
+        && !(cave_info[y][x] & CAVE_SEEN) && (cave_info[y][x] & CAVE_MARK))
         return cells[y][x].known_feat;
     return cave_feat[y][x];
 }
@@ -424,7 +426,8 @@ int cave_environment_live_underlay(int y, int x)
 
 int cave_environment_display_underlay(int y, int x)
 {
-    if (state.ready && in_bounds(y,x) && !(cave_info[y][x]&CAVE_SEEN)
+    if (state.ready && in_bounds(y,x) && !p_ptr->is_dead && !death_spectator_active()
+        && !(cave_info[y][x]&CAVE_SEEN)
         && (cave_info[y][x]&CAVE_MARK)) return cells[y][x].known_underlay;
     return cave_environment_actual_underlay(y, x);
 }

@@ -484,6 +484,7 @@ typedef enum sdl_character_sheet_context {
 #define SDL_BOOK_PARA_LEN  1024 /* longest single paragraph (re-flowed text) */
 #define SDL_BOOK_MAX_PAGES 128  /* allow a full page for every semantic paragraph */
 #define SDL_BOOK_MAX_CONTENTS 8 /* persistent contents links beside the leaf */
+#define SDL_CHAR_SHEET_TOOLTIP_LEN 512
 
 typedef struct sdl_character_sheet_live_item {
     int choice;
@@ -498,7 +499,7 @@ typedef struct sdl_character_sheet_hit {
     SDL_FRect rect;
     int choice;
     byte attr;
-    char desc[256];
+    char desc[SDL_CHAR_SHEET_TOOLTIP_LEN];
 } sdl_character_sheet_hit;
 
 /* One row on the race/character selection screen: a selectable choice, or a
@@ -643,6 +644,7 @@ typedef struct sdl_character_sheet_screen_state {
     bool narrative_full_width; /* Let a semantic page frame fill the safe area. */
     bool narrative_terminal_style; /* Native layout with the terminal font/colours. */
     int narrative_para_choice[SDL_BOOK_MAX_PARAS]; /* >= 0: clickable action */
+    char narrative_para_desc[SDL_BOOK_MAX_PARAS][SDL_CHAR_SHEET_TOOLTIP_LEN];
     byte narrative_para_attr[SDL_BOOK_MAX_PARAS];
     byte narrative_para_char_attr[SDL_BOOK_MAX_PARAS][SDL_BOOK_PARA_LEN];
     bool narrative_para_break[SDL_BOOK_MAX_PARAS]; /* force a new page before this para */
@@ -673,6 +675,9 @@ typedef struct sdl_character_sheet_screen_state {
     u32b narrative_lamp_maximum;
     int narrative_lamp_page;
     bool narrative_lamp_side;     /* place lamp beside text when width permits */
+    int narrative_lamp_choice;
+    bool narrative_lamp_active;
+    bool narrative_quit_enabled;
     bool narrative_close_enabled;  /* show an on-screen exit button (mouse/touch) */
     char narrative_close_label[48]; /* context-specific exit button label */
     touch_swipe_state birth_swipe;
@@ -730,6 +735,7 @@ typedef struct menu_touch_press_state {
     SDL_FingerID finger_id;
     int col;
     int row;
+    int choice;
     float start_x;
     float start_y;
     Uint64 start_time;
@@ -937,6 +943,7 @@ typedef struct description_overlay_state {
     int height;
     int target_cols;
     int scroll;
+    int fixed_rows;
     int avoid_term_col;
     int avoid_term_row;
     int avoid_term_wid;
@@ -945,6 +952,10 @@ typedef struct description_overlay_state {
     bool footer_gap;
     int footer_hover_key;
     bool close_hover;
+    bool has_view_toggle;
+    bool comparison_view;
+    bool view_toggle_hover;
+    sdl_description_content alternate_view;
     int footer_action_count;
     char footer_text[SDL_DESCRIPTION_OVERLAY_FOOTER_LEN];
     description_overlay_action footer_actions[SDL_DESCRIPTION_OVERLAY_MAX_ACTIONS];
@@ -953,6 +964,7 @@ typedef struct description_overlay_state {
 typedef struct description_overlay_layout {
     SDL_FRect panel;
     SDL_FRect close_rect;
+    SDL_FRect view_toggle_rect;
     float text_x;
     float text_y;
     float footer_y;
@@ -960,10 +972,12 @@ typedef struct description_overlay_layout {
     int cell_h;
     int visible_cols;
     int visible_rows;
+    int fixed_rows;
     int max_scroll;
     int scroll;
     bool footer;
     bool close_button;
+    bool view_toggle;
 } description_overlay_layout;
 
 enum {
@@ -1045,7 +1059,7 @@ enum {
     SDL_QUESTION_MENU_MAX_ENTRIES = 320,
     SDL_QUESTION_MENU_MAX_BUTTONS = 4,
     SDL_QUESTION_MENU_LETTER_LEN = 4,
-    SDL_QUESTION_MENU_TEXT_LEN = 256,
+    SDL_QUESTION_MENU_TEXT_LEN = 400,
     SDL_QUESTION_MENU_TITLE_LEN = 80,
     SDL_QUESTION_MENU_DESC_LEN = 480
 };
@@ -1824,6 +1838,9 @@ bool sdl_android_has_controller_device(void);
 SDL_Rect sdl_get_android_display_cutout_rect(void);
 void sdl_refresh_safe_area(void);
 SDL_Rect sdl_get_layout_screen_rect(void);
+#if !SIL_SDL_MOBILE_BUILD
+SDL_Rect sdl_font_fit_drawable_rect(SDL_Rect screen);
+#endif
 bool sdl_mobile_prefer_safe_edge_alignment(void);
 void sdl_resize_for_current_layout(void);
 void sdl_sync_palette(void);
@@ -2121,11 +2138,12 @@ int sdl_poetry_screen_add_block(cptr text, byte attr);
 void sdl_poetry_screen_set_block_visible(int block, bool visible);
 void sdl_poetry_screen_set_block_alpha(int block, byte alpha);
 void sdl_poetry_screen_set_block_attr(int block, byte attr);
-void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body);
+void sdl_poetry_screen_add_choice(int choice, cptr label, cptr effect, cptr body);
 void sdl_poetry_screen_set_choice_visible(int choice, bool visible,
     byte label_attr, byte body_attr);
 void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha);
-void sdl_poetry_screen_set_highlight(int choice);
+void sdl_poetry_screen_set_highlight(int choice, bool follow);
+void sdl_poetry_screen_set_selection(u16b marked, int count, int required);
 void sdl_poetry_screen_set_prompt(cptr prompt, bool visible);
 void sdl_poetry_screen_set_alpha(byte title_alpha, byte body_alpha,
     byte transition_alpha, byte prompt_alpha);
@@ -2136,6 +2154,7 @@ void sdl_poetry_screen_hide(void);
 bool sdl_poetry_screen_active(void);
 bool sdl_poetry_screen_captures_pointer(void);
 bool sdl_poetry_screen_handle_pointer(float x, float y, int action);
+bool sdl_poetry_screen_handle_tap(float start_x, float start_y, float x, float y);
 bool sdl_poetry_screen_handle_hover_pointer(float x, float y);
 void sdl_poetry_screen_render(void);
 bool sdl_pause_text_screen_begin(void);
@@ -2250,6 +2269,7 @@ void sdl_character_sheet_screen_begin_select(int focus_choice, cptr title);
 void sdl_character_sheet_screen_set_select_menu_style(bool enabled);
 void sdl_character_sheet_screen_set_select_confirm_label(cptr label);
 void sdl_character_sheet_screen_begin_book(cptr title);
+void sdl_character_sheet_screen_begin_book_update(cptr title, bool keep_view);
 void sdl_character_sheet_screen_set_book_full_width(bool enabled);
 void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 void sdl_character_sheet_screen_add_book_paragraph(cptr text);
@@ -2261,6 +2281,7 @@ void sdl_character_sheet_screen_commit_book(void);
 void sdl_character_sheet_screen_set_book_target_page_count(int page_count);
 int sdl_character_sheet_screen_book_contents_page(int contents_index);
 void sdl_character_sheet_screen_set_book_focus(int choice);
+void sdl_character_sheet_screen_anchor_book_choice(int choice);
 int sdl_character_sheet_screen_book_action_page(int choice);
 void sdl_character_sheet_screen_add_select_row(int choice, cptr label, int attr, cptr desc);
 void sdl_character_sheet_screen_set_last_select_row_reset(int reset_choice);
@@ -2652,7 +2673,12 @@ void sdl_description_overlay_render(void);
 void sdl_touch_exit_button_render(void);
 bool sdl_touch_exit_button_handle_pointer(float x, float y);
 int sdl_touch_menu_button_reserved_rows(void);
+bool sdl_menu_scale_controls_active(void);
+bool sdl_touch_menu_font_control_rail(int count, float size, float gap,
+    SDL_FRect* out);
 bool sdl_description_overlay_handle_close_hover(float x, float y);
+bool sdl_description_overlay_handle_view_hover(float x, float y);
+bool sdl_description_overlay_handle_view_pointer(float x, float y);
 bool sdl_description_overlay_handle_close_pointer(float x, float y);
 int sdl_description_overlay_footer_action_at(float x, float y);
 bool sdl_description_overlay_handle_footer_hover(float x, float y);
@@ -3407,6 +3433,7 @@ bool sdl_store_mono_font_atlas_cells(const char* font_path, int cell_width, int 
 SDL_Texture* sdl_acquire_mono_font_atlas_cells_ex(const char* font_path, int cell_width, int cell_height, bool* out_cached, int* out_atlas_cell_w, int* out_atlas_cell_h, bool* out_exact, bool allow_fallback);
 void sdl_story_font_cache_clear(void);
 void sdl_char_sheet_fitted_wrap_cache_clear(void);
+void sdl_char_sheet_fitted_wrap_cache_clear_font(TTF_Font* font);
 bool sdl_story_font_cache_matches_config(void);
 void sdl_story_font_cache_mark_config(void);
 const char* sdl_story_font_path_for_slot(int slot);

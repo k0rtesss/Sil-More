@@ -67,6 +67,10 @@ typedef struct death_spectator_game_state
     bool playing;
     bool leaving;
     int character_icky;
+    s16b blind;
+    s16b rage;
+    s16b image;
+    bool labyrinth_view_active;
 } death_spectator_game_state;
 
 /*
@@ -87,13 +91,26 @@ static death_spectator_game_state death_spectator_enter_game_ui(void)
         p_ptr->is_dead,
         p_ptr->playing,
         p_ptr->leaving,
-        character_icky
+        character_icky,
+        p_ptr->blind,
+        p_ptr->rage,
+        p_ptr->image,
+        g_labyrinth_view_active
     };
 
     p_ptr->is_dead = false;
     p_ptr->playing = true;
     p_ptr->leaving = false;
     character_icky = 0;
+
+    /* The live UI flags must not reactivate gameplay visibility masks.
+     * Keep the override here so map drawing, overview/focus, look/recall and
+     * SDL terrain layers all see the same unobstructed postmortem view.
+     * Restore the actual death state when this presentation ends. */
+    p_ptr->blind = 0;
+    p_ptr->rage = 0;
+    p_ptr->image = 0;
+    g_labyrinth_view_active = false;
 
     return old_state;
 }
@@ -114,6 +131,10 @@ static void death_spectator_leave_game_ui(
     p_ptr->playing = old_state->playing;
     p_ptr->leaving = old_state->leaving;
     character_icky = old_state->character_icky;
+    p_ptr->blind = old_state->blind;
+    p_ptr->rage = old_state->rage;
+    p_ptr->image = old_state->image;
+    g_labyrinth_view_active = old_state->labyrinth_view_active;
 }
 
 static void death_spectator_prepare_display(void)

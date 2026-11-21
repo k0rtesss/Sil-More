@@ -256,12 +256,17 @@ function Read-OptionalSecretValue {
 
 function Get-GameVersion {
     $definesPath = Join-Path $PSScriptRoot 'src\defines.h'
-    $versionLine = Select-String -Path $definesPath -Pattern '#define\s+VERSION_STRING\s+"([^"]+)"' | Select-Object -First 1
-    if (-not $versionLine) {
-        throw "Could not find VERSION_STRING in $definesPath"
+    $defines = Get-Content -LiteralPath $definesPath -Raw
+    $versionParts = foreach ($component in 'MAJOR', 'MINOR', 'PATCH', 'EXTRA') {
+        $macro = "VERSION_$component"
+        $match = [regex]::Match($defines, "(?m)^#define[ \t]+$macro[ \t]+([0-9]+)\b")
+        if (-not $match.Success) {
+            throw "Could not find $macro in $definesPath"
+        }
+        [int]$match.Groups[1].Value
     }
 
-    return $versionLine.Matches[0].Groups[1].Value
+    return $versionParts -join '.'
 }
 
 function Set-ProcessEnvironmentValue {
@@ -406,6 +411,10 @@ try {
     $bundlePath = Join-Path $androidDir 'app\build\outputs\bundle\playRelease\app-play-release.aab'
     if (-not (Test-Path $bundlePath)) {
         throw "Expected app bundle not found: $bundlePath"
+    }
+    & python (Join-Path $PSScriptRoot 'scripts/check_template_versions.py') --aab $bundlePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Runtime template verification failed for: $bundlePath"
     }
 
     if (-not $SkipVerify) {

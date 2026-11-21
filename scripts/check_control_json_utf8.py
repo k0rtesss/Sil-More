@@ -133,8 +133,10 @@ def main():
     out = OUT / "baseline" if args.baseline else OUT
     out.mkdir(parents=True, exist_ok=True)
     production = (ROOT / "src/sdl/control/sdl-control.c").read_text(encoding="utf-8")
-    production = production[production.index("static size_t control_utf8_span("):
-                            production.index("typedef enum control_read_status")]
+    constants = production[production.index("enum { CONTROL_REQUEST_MAX"):
+                           production.index("static char control_dir")]
+    production = constants + production[production.index("static size_t control_utf8_span("):
+                                        production.index("typedef enum control_read_status")]
     if args.baseline:
         current = "control_replace_invalid_utf8(cJSON_PrintUnformatted(json))"
         assert current in production

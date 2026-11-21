@@ -142,7 +142,7 @@ void ui_reset_transient_state_for_new_session(void)
     /* A new session must start at the default (un-zoomed) grid.  Otherwise a
      * gameplay main-view zoom left over from the previous session keeps the
      * terminal short and trips play_game()'s minimum-size check -- this is what
-     * aborted the relaunch into Blitz (62x15 grid, needs >= 50x18). */
+     * aborted the relaunch into Blitz (62x15 grid, needs >= 50x16). */
     sdl_reset_main_view_zoom();
 }
 

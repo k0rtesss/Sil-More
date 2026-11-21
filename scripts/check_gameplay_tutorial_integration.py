@@ -217,46 +217,46 @@ static void check_description_routes(const object_type *item)
 
     activate_description("item.first_description");
     mock_description_capture=false;
-    assert(!object_info_overlay_show_multi(objects,NULL,1));
+    assert(!object_info_overlay_show_multi(objects,NULL,1,false));
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_IN_PROGRESS);
     mock_description_capture=true; mock_description_present=false;
-    assert(!object_info_overlay_show_multi(objects,NULL,1));
+    assert(!object_info_overlay_show_multi(objects,NULL,1,false));
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_IN_PROGRESS);
     mock_description_present=true;
-    assert(object_info_overlay_show_multi(objects,NULL,1));
+    assert(object_info_overlay_show_multi(objects,NULL,1,false));
     assert(mock_description_popup_clears > 0);
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_COMPLETED);
 
     activate_description("item.first_description");
     mock_description_capture=false;
-    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0);
+    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0,false);
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_IN_PROGRESS);
     mock_description_capture=true; mock_description_present=false;
-    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0);
+    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0,false);
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_IN_PROGRESS);
     mock_description_present=true;
-    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0);
+    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0,false);
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_COMPLETED);
     assert(character_icky==0);
 
     /* Redrawing the same inline description cannot credit an unseen action.
      * The next step needs a horn, so an already visible staff cannot satisfy it. */
     activate_description("description-two-actions");
-    assert(object_info_overlay_show_multi(objects,NULL,1));
-    assert(object_info_overlay_show_multi(objects,NULL,1));
+    assert(object_info_overlay_show_multi(objects,NULL,1,false));
+    assert(object_info_overlay_show_multi(objects,NULL,1,false));
     assert(tutorial_lesson_status("description-two-actions")==TUTORIAL_IN_PROGRESS);
     tutorial_game_wait();
     assert(tutorial_get_view(&view) && view.step==2 && !strcmp(view.action_subject,"horn"));
-    assert(object_info_overlay_show_multi(objects,NULL,1));
+    assert(object_info_overlay_show_multi(objects,NULL,1,false));
     assert(tutorial_lesson_status("description-two-actions")==TUTORIAL_IN_PROGRESS);
     object_type horn=*item; horn.tval=TV_HORN;
     const object_type *horns[]={&horn};
-    assert(object_info_overlay_show_multi(horns,NULL,1));
+    assert(object_info_overlay_show_multi(horns,NULL,1,false));
     assert(tutorial_lesson_status("description-two-actions")==TUTORIAL_COMPLETED);
 
     activate_description("description-two-actions");
     mock_description_keys=2; /* Scroll/repaint before closing the same modal. */
-    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0);
+    (void)object_info_screen_multi_with_actions(objects,NULL,1,NULL,NULL,0,false);
     assert(tutorial_lesson_status("description-two-actions")==TUTORIAL_IN_PROGRESS);
     tutorial_game_wait();
     assert(tutorial_get_view(&view) && view.step==2);
@@ -264,7 +264,7 @@ static void check_description_routes(const object_type *item)
     /* The player had already opened the matching preview while reading info. */
     object_info_overlay_clear();
     activate("item.first_description","staff");
-    assert(object_info_overlay_show_multi(objects,NULL,1));
+    assert(object_info_overlay_show_multi(objects,NULL,1,false));
     assert(tutorial_get_view(&view) && view.can_continue && view.step==1);
     tutorial_game_wait(); /* Mock frontend sends Continue; real wait resolves visible preview. */
     assert(tutorial_lesson_status("item.first_description")==TUTORIAL_COMPLETED);
@@ -273,7 +273,7 @@ static void check_description_routes(const object_type *item)
     /* Closing it before Continue must leave the examine step waiting. */
     object_info_overlay_clear();
     activate("item.first_description","staff");
-    assert(object_info_overlay_show_multi(objects,NULL,1));
+    assert(object_info_overlay_show_multi(objects,NULL,1,false));
     object_info_overlay_clear();
     tutorial_game_wait();
     assert(tutorial_get_view(&view) && !view.can_continue && view.step==2);
@@ -1059,7 +1059,7 @@ int main(void)
         assert(tutorial_game_action_allowed("use-item",&healing));
         assert(tutorial_game_action_allowed("use-item",&miruvor));
         assert(!tutorial_game_action_allowed("use-item",&potion));
-        assert(!tutorial_game_action_allowed("use-item",&herb));
+        assert(tutorial_game_action_allowed("use-item",&herb));
         herb.sval=SV_FOOD_RESTORATION;
         assert(!tutorial_game_action_allowed("use-item",&herb));
         p_ptr->disease_name=1;p_ptr->disease_cure=herb.sval;
@@ -1076,7 +1076,7 @@ int main(void)
         herb.sval=SV_FOOD_SUSTENANCE;p_ptr->disease_cure=herb.sval;
         assert(item_is_remedy(&herb,"diseased")&&!item_is_remedy(&herb,"hunger"));
         herb.sval=SV_FOOD_HEALING;
-        assert(!item_is_remedy(&herb,"diseased")&&item_is_remedy(&herb,"health"));
+        assert(item_is_remedy(&herb,"diseased")&&!item_is_remedy(&herb,"health"));
         supply_count=0;p_ptr->disease_knowledge=0;
         assert(!available_remedy("diseased"));
         test_supply=miruvor; supply_count=1;
@@ -1085,6 +1085,16 @@ int main(void)
         p_ptr->stun=101; assert(!available_remedy("diseased")); p_ptr->stun=0;
         supply_count=0; test_extra=healing; extra_count=1;
         assert(available_remedy("diseased")); extra_count=0;
+        p_ptr->disease_name=DISEASE_ANGBAND_PLAGUE;
+        assert(item_is_remedy(&healing,"diseased")&&item_is_remedy(&miruvor,"diseased"));
+        assert(item_is_remedy(&healing,"health")&&item_is_remedy(&miruvor,"health"));
+        test_supply=miruvor;supply_count=1;assert(available_remedy("diseased"));
+        test_extra=healing;extra_count=1;assert(available_remedy("diseased"));
+        test_supply=herb;assert(available_remedy("diseased"));
+        herb.sval=SV_FOOD_SUSTENANCE;
+        p_ptr->disease_knowledge=DISEASE_KNOWN_NAME|DISEASE_KNOWN_CURE;
+        assert(!item_is_remedy(&herb,"diseased")&&item_is_remedy(&herb,"hunger"));
+        supply_count=extra_count=0;p_ptr->disease_name=1;
         effect_calls=0; effect_commits=false;
         assert(!use_object(&healing,&identified) && effect_calls==1);
         assert(tutorial_lesson_status("status.diseased.remedy")==TUTORIAL_IN_PROGRESS);
@@ -1355,8 +1365,20 @@ DESCRIPTION_STUBS = r'''
 #define OBJECT_INFO_UNDERSTANDING_KEY 'i'
 __CAPTURE_TYPE__
 static object_info_screen_capture object_info_overlay_capture;
+static object_info_screen_capture object_info_overlay_comparison;
 static bool object_info_overlay_capture_active;
 static bool new_paragraph;
+bool object_compare_has_targets(const object_type **objects,int count)
+{ (void)objects;(void)count;return false; }
+bool sdl_description_overlay_comparison_view(void) { return false; }
+bool sdl_description_overlay_toggle_view(void) { return false; }
+bool sdl_description_overlay_present_views(const sdl_description_content *full,
+    const sdl_description_content *comparison,bool compare,int scroll,bool interactive,
+    int *visible_rows,int *max_scroll)
+{
+    (void)full;(void)comparison;(void)compare;(void)scroll;(void)interactive;
+    (void)visible_rows;(void)max_scroll;return false;
+}
 static bool mock_description_capture=true, mock_description_present=true;
 static bool mock_description_skip;
 static int mock_description_events, mock_description_keys;
@@ -1372,9 +1394,9 @@ static bool object_info_blocked_by_hallucination(void) { return p_ptr->image>0; 
 static int object_info_screen_preferred_capture_width(bool story) { (void)story; return 40; }
 static bool object_info_screen_capture_build(const object_type **objects,
     const char **headings,int count,object_info_screen_capture *capture,
-    int width,bool story,bool interactive)
+    int width,bool story,bool interactive,bool compare)
 {
-    (void)objects;(void)headings;(void)count;(void)width;(void)story;(void)interactive;
+    (void)objects;(void)headings;(void)count;(void)width;(void)story;(void)interactive;(void)compare;
     if (!mock_description_capture) return false;
     memset(capture,0,sizeof(*capture)); capture->width=40; capture->height=5; capture->target_cols=40;
     return true;
@@ -1525,7 +1547,9 @@ def main():
     # externs.h contains unguarded enum declarations. A unity fixture has
     # already read it through tutorial.c; omit only that repeated include.
     game = (ROOT / "src/tutorial/tutorial-game.c").read_text()
-    disease = c_function((ROOT / "src/player/effects.c").read_text(), 'disease_herb_matches')
+    disease_source = (ROOT / "src/player/effects.c").read_text()
+    disease = '\n'.join(c_function(disease_source, name) for name in
+                        ('disease_is_angband_plague', 'disease_herb_matches'))
     game = game.replace('#include "externs.h"', '')
     game = game.replace('#include "tutorial-game.h"', '#include "tutorial/tutorial-game.h"')
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')
@@ -1546,6 +1570,7 @@ def main():
     description = DESCRIPTION_STUBS.replace('__CAPTURE_TYPE__', capture_type) + '\n' + '\n'.join(
         c_function(description_source, name) for name in (
             'object_info_overlay_capture_release', 'object_info_overlay_clear',
+            'object_info_capture_present',
             'object_info_overlay_show_multi', 'object_info_screen_key_is_action',
             'object_info_screen_action_key_available', 'object_info_understanding_action_token',
             'object_info_controller_action_token',

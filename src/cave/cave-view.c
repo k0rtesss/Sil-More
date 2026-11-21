@@ -1129,6 +1129,17 @@ static void update_view_aux(bool generation_preview)
         }
     }
 
+    /* Clairvoyance's permanent light can still be cancelled by chasm areas,
+     * negative player light or dark monsters. Final Look reveals the level
+     * independently of those gameplay effects, including after view rebuilds.
+     * Keep the real LOS flags: inspection must not create new encounters. */
+    if (!generation_preview && death_spectator_active())
+    {
+        for (i = 0; i < p_ptr->cur_map_hgt; i++)
+            for (j = 0; j < p_ptr->cur_map_wid; j++)
+                cave_light[i][j] = MAX(1, cave_light[i][j]);
+    }
+
     // Sil: this removes the 'seen' flag from squares that have zero or less
     // light
     for (i = 0; i < fast_view_n; i++)
@@ -1377,7 +1388,8 @@ static void update_view_aux(bool generation_preview)
      *   every lit square is dimmed once per stack, down to a floor
      *   of -5 (same as full darkness elsewhere in the engine).
      * ------------------------------------------------------------ */
-    darken_view_grids(view_n, true);
+    if (!death_spectator_active())
+        darken_view_grids(view_n, true);
 
     /* Light strength can change while sight and the wall glyph stay the same.
      * Use the final light buffer, including any darkness curse. */

@@ -119,10 +119,8 @@ static world_snapshot snapshot(void)
     now.cave_type=level_partition_big_cave_type_for_point(p_ptr->py,p_ptr->px);
     now.depth=p_ptr->depth;
     for (int i=0;i<METAR_CURSE_SLOTS;++i) {
-        int stack=CURSE_GET(i);
-        if (!CURSE_SEEN(i)) continue;
-        if (stack>0) now.curse+=stack;
-        else now.blessing-=stack;
+        if (CURSE_SEEN(i)) now.curse+=CURSE_CURSE_STACK(i);
+        now.blessing+=CURSE_BLESSING_STACK(i);
     }
     {
         const metarun *tale=metarun_current();

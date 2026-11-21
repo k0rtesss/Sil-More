@@ -3,6 +3,7 @@
 import check_monster_scent_save as persistence
 
 TESTS = r'''
+size_t fixture_write_v20_dungeon(byte*, size_t, size_t*);
 #include "monster/monster-routine.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"

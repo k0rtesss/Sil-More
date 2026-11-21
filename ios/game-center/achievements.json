@@ -1,0 +1,1807 @@
+{
+  "format": "sil-more-game-center-catalogue-v1",
+  "readyForSubmission": true,
+  "note": "Review metadata for App Store Connect; this JSON is not an Apple bulk-import format.",
+  "achievements": [
+    {
+      "key": "THE_ROAD_GOES_EVER_ON",
+      "referenceName": "THE_ROAD_GOES_EVER_ON",
+      "achievementID": "com.silqh.silmore.achievement.THE_ROAD_GOES_EVER_ON",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 1,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Road Goes Ever On",
+          "beforeEarnedDescription": "Reach a depth of 150 feet.",
+          "afterEarnedDescription": "Reach a depth of 150 feet.",
+          "image": "THE_ROAD_GOES_EVER_ON.png"
+        }
+      ]
+    },
+    {
+      "key": "SOMETHING_TOOKISH",
+      "referenceName": "SOMETHING_TOOKISH",
+      "achievementID": "com.silqh.silmore.achievement.SOMETHING_TOOKISH",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 2,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Something Tookish",
+          "beforeEarnedDescription": "Purchase your first ability with experience.",
+          "afterEarnedDescription": "Purchase your first ability with experience.",
+          "image": "SOMETHING_TOOKISH.png"
+        }
+      ]
+    },
+    {
+      "key": "FLIES_AND_SPIDERS",
+      "referenceName": "FLIES_AND_SPIDERS",
+      "achievementID": "com.silqh.silmore.achievement.FLIES_AND_SPIDERS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 3,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Flies and Spiders",
+          "beforeEarnedDescription": "Break free of a web.",
+          "afterEarnedDescription": "Break free of a web.",
+          "image": "FLIES_AND_SPIDERS.png"
+        }
+      ]
+    },
+    {
+      "key": "FORGED_BY_YOUR_HAND",
+      "referenceName": "FORGED_BY_YOUR_HAND",
+      "achievementID": "com.silqh.silmore.achievement.FORGED_BY_YOUR_HAND",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 5,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "While Hammers Fell",
+          "beforeEarnedDescription": "Complete a smithing project.",
+          "afterEarnedDescription": "Complete a smithing project.",
+          "image": "FORGED_BY_YOUR_HAND.png"
+        }
+      ]
+    },
+    {
+      "key": "INTO_THE_DEEP",
+      "referenceName": "INTO_THE_DEEP",
+      "achievementID": "com.silqh.silmore.achievement.INTO_THE_DEEP",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 6,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "To Dungeons Deep",
+          "beforeEarnedDescription": "Reach a depth of 500 feet.",
+          "afterEarnedDescription": "Reach a depth of 500 feet.",
+          "image": "INTO_THE_DEEP.png"
+        }
+      ]
+    },
+    {
+      "key": "LIGHT_IN_DARKNESS",
+      "referenceName": "LIGHT_IN_DARKNESS",
+      "achievementID": "com.silqh.silmore.achievement.LIGHT_IN_DARKNESS",
+      "points": 10,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 7,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Fire of F\u00ebanor",
+          "beforeEarnedDescription": "Cut a Silmaril from Morgoth's Iron Crown.",
+          "afterEarnedDescription": "Cut a Silmaril from Morgoth's Iron Crown.",
+          "image": "LIGHT_IN_DARKNESS.png"
+        }
+      ]
+    },
+    {
+      "key": "BACK_TO_STARLIGHT",
+      "referenceName": "BACK_TO_STARLIGHT",
+      "achievementID": "com.silqh.silmore.achievement.BACK_TO_STARLIGHT",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 8,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Quest of the Silmaril",
+          "beforeEarnedDescription": "Escape Angband carrying at least one Silmaril.",
+          "afterEarnedDescription": "Escape Angband carrying at least one Silmaril.",
+          "image": "BACK_TO_STARLIGHT.png"
+        }
+      ]
+    },
+    {
+      "key": "THERE_AND_BACK_AGAIN",
+      "referenceName": "THERE_AND_BACK_AGAIN",
+      "achievementID": "com.silqh.silmore.achievement.THERE_AND_BACK_AGAIN",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 9,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "There and Back for Nothing",
+          "beforeEarnedDescription": "Enter Morgoth's throne room and return to the Gates alive without carrying any Silmarils.",
+          "afterEarnedDescription": "Enter Morgoth's throne room and return to the Gates alive without carrying any Silmarils.",
+          "image": "THERE_AND_BACK_AGAIN.png"
+        }
+      ]
+    },
+    {
+      "key": "THREE_LIGHTS_IN_EXILE",
+      "referenceName": "THREE_LIGHTS_IN_EXILE",
+      "achievementID": "com.silqh.silmore.achievement.THREE_LIGHTS_IN_EXILE",
+      "points": 40,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 10,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Three Lights in Exile",
+          "beforeEarnedDescription": "Escape carrying all three Silmarils.",
+          "afterEarnedDescription": "Escape carrying all three Silmarils.",
+          "image": "THREE_LIGHTS_IN_EXILE.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_QUIET_ROAD",
+      "referenceName": "THE_QUIET_ROAD",
+      "achievementID": "com.silqh.silmore.achievement.THE_QUIET_ROAD",
+      "points": 40,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 11,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Not to Strike Without Need",
+          "beforeEarnedDescription": "Escape with a Silmaril without killing a creature during the adventure. Your traps and poison count.",
+          "afterEarnedDescription": "Escape with a Silmaril without killing a creature during the adventure. Your traps and poison count.",
+          "image": "THE_QUIET_ROAD.png"
+        }
+      ]
+    },
+    {
+      "key": "WORD_UNBROKEN",
+      "referenceName": "WORD_UNBROKEN",
+      "achievementID": "com.silqh.silmore.achievement.WORD_UNBROKEN",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 12,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "When the Road Darkens",
+          "beforeEarnedDescription": "Escape with a Silmaril after choosing an oath and keeping it unbroken.",
+          "afterEarnedDescription": "Escape with a Silmaril after choosing an oath and keeping it unbroken.",
+          "image": "WORD_UNBROKEN.png"
+        }
+      ]
+    },
+    {
+      "key": "A_BURGLARS_BUSINESS",
+      "referenceName": "A_BURGLARS_BUSINESS",
+      "achievementID": "com.silqh.silmore.achievement.A_BURGLARS_BUSINESS",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 13,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Burglar's Business",
+          "beforeEarnedDescription": "Cut a Silmaril without waking Morgoth during the attempt.",
+          "afterEarnedDescription": "Cut a Silmaril without waking Morgoth during the attempt.",
+          "image": "A_BURGLARS_BUSINESS.png"
+        }
+      ]
+    },
+    {
+      "key": "HEAVY_IS_THE_STOLEN_CROWN",
+      "referenceName": "HEAVY_IS_THE_STOLEN_CROWN",
+      "achievementID": "com.silqh.silmore.achievement.HEAVY_IS_THE_STOLEN_CROWN",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 14,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Heavy Is the Stolen Crown",
+          "beforeEarnedDescription": "Escape with Morgoth's Iron Crown and at least one Silmaril, loose or still set in the Crown.",
+          "afterEarnedDescription": "Escape with Morgoth's Iron Crown and at least one Silmaril, loose or still set in the Crown.",
+          "image": "HEAVY_IS_THE_STOLEN_CROWN.png"
+        }
+      ]
+    },
+    {
+      "key": "NO_STEPS_REQUIRED",
+      "referenceName": "NO_STEPS_REQUIRED",
+      "achievementID": "com.silqh.silmore.achievement.NO_STEPS_REQUIRED",
+      "points": 10,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 15,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "No Steps Required",
+          "beforeEarnedDescription": "From the start of the adventure, reach Morgoth's level using only chasms and down shafts for descent. Upward stairs are allowed.",
+          "afterEarnedDescription": "From the start of the adventure, reach Morgoth's level using only chasms and down shafts for descent. Upward stairs are allowed.",
+          "image": "NO_STEPS_REQUIRED.png"
+        }
+      ]
+    },
+    {
+      "key": "THERE_AND_ALMOST_BACK_AGAIN",
+      "referenceName": "THERE_AND_ALMOST_BACK_AGAIN",
+      "achievementID": "com.silqh.silmore.achievement.THERE_AND_ALMOST_BACK_AGAIN",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 16,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "There and Almost Back Again",
+          "beforeEarnedDescription": "Die at the Gates of Angband, on the surface.",
+          "afterEarnedDescription": "Die at the Gates of Angband, on the surface.",
+          "image": "THERE_AND_ALMOST_BACK_AGAIN.png"
+        }
+      ]
+    },
+    {
+      "key": "SWIFT_AS_THE_WIND",
+      "referenceName": "SWIFT_AS_THE_WIND",
+      "achievementID": "com.silqh.silmore.achievement.SWIFT_AS_THE_WIND",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 17,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Swift as the Wind",
+          "beforeEarnedDescription": "Win a Blitz run by escaping with a Silmaril or defeating Morgoth.",
+          "afterEarnedDescription": "Win a Blitz run by escaping with a Silmaril or defeating Morgoth.",
+          "image": "SWIFT_AS_THE_WIND.png"
+        }
+      ]
+    },
+    {
+      "key": "TENFOLD_DOOM",
+      "referenceName": "TENFOLD_DOOM",
+      "achievementID": "com.silqh.silmore.achievement.TENFOLD_DOOM",
+      "points": 10,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 18,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Tenfold Doom",
+          "beforeEarnedDescription": "Win a Blitz run with at least 10 net curse stacks (curses minus blessings).",
+          "afterEarnedDescription": "Win a Blitz run with at least 10 net curse stacks (curses minus blessings).",
+          "image": "TENFOLD_DOOM.png"
+        }
+      ]
+    },
+    {
+      "key": "NOT_EVEN_CARCHAROTH",
+      "referenceName": "NOT_EVEN_CARCHAROTH",
+      "achievementID": "com.silqh.silmore.achievement.NOT_EVEN_CARCHAROTH",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 19,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Not Even Carcharoth",
+          "beforeEarnedDescription": "Be killed by the first ordinary wolf you encounter before making your first kill.",
+          "afterEarnedDescription": "Be killed by the first ordinary wolf you encounter before making your first kill.",
+          "image": "NOT_EVEN_CARCHAROTH.png"
+        }
+      ]
+    },
+    {
+      "key": "CABED_EN_ARAS",
+      "referenceName": "CABED_EN_ARAS",
+      "achievementID": "com.silqh.silmore.achievement.CABED_EN_ARAS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 20,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Cabed-en-Aras",
+          "beforeEarnedDescription": "Successfully leap over a chasm and land safely.",
+          "afterEarnedDescription": "Successfully leap over a chasm and land safely.",
+          "image": "CABED_EN_ARAS.png"
+        }
+      ]
+    },
+    {
+      "key": "HELCARAXE",
+      "referenceName": "HELCARAXE",
+      "achievementID": "com.silqh.silmore.achievement.HELCARAXE",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 22,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Helcarax\u00eb",
+          "beforeEarnedDescription": "Freeze water with a cold-branded attack, then cross your ice from one bank to the other.",
+          "afterEarnedDescription": "Freeze water with a cold-branded attack, then cross your ice from one bank to the other.",
+          "image": "HELCARAXE.png"
+        }
+      ]
+    },
+    {
+      "key": "FIRE_AND_WATER",
+      "referenceName": "FIRE_AND_WATER",
+      "achievementID": "com.silqh.silmore.achievement.FIRE_AND_WATER",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 23,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Fire and Water",
+          "beforeEarnedDescription": "Melt the ice beneath an enemy with fire.",
+          "afterEarnedDescription": "Melt the ice beneath an enemy with fire.",
+          "image": "FIRE_AND_WATER.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_FIRES_OF_THANGORODRIM",
+      "referenceName": "THE_FIRES_OF_THANGORODRIM",
+      "achievementID": "com.silqh.silmore.achievement.THE_FIRES_OF_THANGORODRIM",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 24,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Fires of Thangorodrim",
+          "beforeEarnedDescription": "Leap across lava and survive its heat.",
+          "afterEarnedDescription": "Leap across lava and survive its heat.",
+          "image": "THE_FIRES_OF_THANGORODRIM.png"
+        }
+      ]
+    },
+    {
+      "key": "THROUGH_NAN_DUNGORTHEB",
+      "referenceName": "THROUGH_NAN_DUNGORTHEB",
+      "achievementID": "com.silqh.silmore.achievement.THROUGH_NAN_DUNGORTHEB",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 25,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Through Nan Dungortheb",
+          "beforeEarnedDescription": "Cross at least three poison tiles from one dry bank to the other and survive.",
+          "afterEarnedDescription": "Cross at least three poison tiles from one dry bank to the other and survive.",
+          "image": "THROUGH_NAN_DUNGORTHEB.png"
+        }
+      ]
+    },
+    {
+      "key": "A_JOURNEY_IN_THE_DARK",
+      "referenceName": "A_JOURNEY_IN_THE_DARK",
+      "achievementID": "com.silqh.silmore.achievement.A_JOURNEY_IN_THE_DARK",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 26,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Journey in the Dark",
+          "beforeEarnedDescription": "Enter a labyrinth and leave through a different passage.",
+          "afterEarnedDescription": "Enter a labyrinth and leave through a different passage.",
+          "image": "A_JOURNEY_IN_THE_DARK.png"
+        }
+      ]
+    },
+    {
+      "key": "A_MAP_OF_THE_IRON_HELLS",
+      "referenceName": "A_MAP_OF_THE_IRON_HELLS",
+      "achievementID": "com.silqh.silmore.achievement.A_MAP_OF_THE_IRON_HELLS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 27,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Map of the Iron Hells",
+          "beforeEarnedDescription": "Enter labyrinth, chasm, ice, fire and poison regions within one run.",
+          "afterEarnedDescription": "Enter labyrinth, chasm, ice, fire and poison regions within one run.",
+          "image": "A_MAP_OF_THE_IRON_HELLS.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_HALLS_OF_UTUMNO",
+      "referenceName": "THE_HALLS_OF_UTUMNO",
+      "achievementID": "com.silqh.silmore.achievement.THE_HALLS_OF_UTUMNO",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 28,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Halls of Utumno",
+          "beforeEarnedDescription": "Reach the frozen ruins of Utumno.",
+          "afterEarnedDescription": "Reach the frozen ruins of Utumno.",
+          "image": "THE_HALLS_OF_UTUMNO.png"
+        }
+      ]
+    },
+    {
+      "key": "WHERE_GROND_WAS_WROUGHT",
+      "referenceName": "WHERE_GROND_WAS_WROUGHT",
+      "achievementID": "com.silqh.silmore.achievement.WHERE_GROND_WAS_WROUGHT",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 29,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Where Grond Was Wrought",
+          "beforeEarnedDescription": "Discover Orodruth, the Great Forge of Grond in Utumno.",
+          "afterEarnedDescription": "Discover Orodruth, the Great Forge of Grond in Utumno.",
+          "image": "WHERE_GROND_WAS_WROUGHT.png"
+        }
+      ]
+    },
+    {
+      "key": "A_DESPERATE_VICTORY",
+      "referenceName": "A_DESPERATE_VICTORY",
+      "achievementID": "com.silqh.silmore.achievement.A_DESPERATE_VICTORY",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 30,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Desperate Victory",
+          "beforeEarnedDescription": "Slay a hostile unique while at 25% HP or less.",
+          "afterEarnedDescription": "Slay a hostile unique while at 25% HP or less.",
+          "image": "A_DESPERATE_VICTORY.png"
+        }
+      ]
+    },
+    {
+      "key": "BY_A_THREAD",
+      "referenceName": "BY_A_THREAD",
+      "achievementID": "com.silqh.silmore.achievement.BY_A_THREAD",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 31,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Aur\u00eb Entuluva!",
+          "beforeEarnedDescription": "Kill an enemy while you have exactly 1 HP.",
+          "afterEarnedDescription": "Kill an enemy while you have exactly 1 HP.",
+          "image": "BY_A_THREAD.png"
+        }
+      ]
+    },
+    {
+      "key": "A_FEW_LEAVES",
+      "referenceName": "A_FEW_LEAVES",
+      "achievementID": "com.silqh.silmore.achievement.A_FEW_LEAVES",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 32,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Few Leaves in a Forest",
+          "beforeEarnedDescription": "Kill an enemy with a Deadly Hail empowered shot.",
+          "afterEarnedDescription": "Kill an enemy with a Deadly Hail empowered shot.",
+          "image": "A_FEW_LEAVES.png"
+        }
+      ]
+    },
+    {
+      "key": "TWO_WEAPONS",
+      "referenceName": "TWO_WEAPONS",
+      "achievementID": "com.silqh.silmore.achievement.TWO_WEAPONS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 33,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Two Blows, One Doom",
+          "beforeEarnedDescription": "Kill an enemy with a Power Throw in which both attacks hit.",
+          "afterEarnedDescription": "Kill an enemy with a Power Throw in which both attacks hit.",
+          "image": "TWO_WEAPONS.png"
+        }
+      ]
+    },
+    {
+      "key": "OFT_EVIL_WILL",
+      "referenceName": "OFT_EVIL_WILL",
+      "achievementID": "com.silqh.silmore.achievement.OFT_EVIL_WILL",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 34,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Oft Evil Will Shall Evil Mar",
+          "beforeEarnedDescription": "Kill an enemy with a trap you rewired.",
+          "afterEarnedDescription": "Kill an enemy with a trap you rewired.",
+          "image": "OFT_EVIL_WILL.png"
+        }
+      ]
+    },
+    {
+      "key": "FOR_EXTERNAL_USE_ONLY",
+      "referenceName": "FOR_EXTERNAL_USE_ONLY",
+      "achievementID": "com.silqh.silmore.achievement.FOR_EXTERNAL_USE_ONLY",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 36,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "For External Use Only",
+          "beforeEarnedDescription": "Kill an enemy with a thrown potion's effect, including its delayed poison.",
+          "afterEarnedDescription": "Kill an enemy with a thrown potion's effect, including its delayed poison.",
+          "image": "FOR_EXTERNAL_USE_ONLY.png"
+        }
+      ]
+    },
+    {
+      "key": "LIGHT_OF_THE_ELDAR",
+      "referenceName": "LIGHT_OF_THE_ELDAR",
+      "achievementID": "com.silqh.silmore.achievement.LIGHT_OF_THE_ELDAR",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 37,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Get Out, You Old Wight!",
+          "beforeEarnedDescription": "Defeat an undead enemy with a light-based attack.",
+          "afterEarnedDescription": "Defeat an undead enemy with a light-based attack.",
+          "image": "LIGHT_OF_THE_ELDAR.png"
+        }
+      ]
+    },
+    {
+      "key": "FLY_YOU_FOOL",
+      "referenceName": "FLY_YOU_FOOL",
+      "achievementID": "com.silqh.silmore.achievement.FLY_YOU_FOOL",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 38,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Fly, You Fool!",
+          "beforeEarnedDescription": "Knock a non-flying enemy into a chasm. It need not die.",
+          "afterEarnedDescription": "Knock a non-flying enemy into a chasm. It need not die.",
+          "image": "FLY_YOU_FOOL.png"
+        }
+      ]
+    },
+    {
+      "key": "KNOCK_WITH_YOUR_HEAD",
+      "referenceName": "KNOCK_WITH_YOUR_HEAD",
+      "achievementID": "com.silqh.silmore.achievement.KNOCK_WITH_YOUR_HEAD",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 39,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Knock on the Doors with Your Head",
+          "beforeEarnedDescription": "Jam a lock while picking it, then bash that same door open.",
+          "afterEarnedDescription": "Jam a lock while picking it, then bash that same door open.",
+          "image": "KNOCK_WITH_YOUR_HEAD.png"
+        }
+      ]
+    },
+    {
+      "key": "DOWN_TO_GOBLIN_TOWN",
+      "referenceName": "DOWN_TO_GOBLIN_TOWN",
+      "achievementID": "com.silqh.silmore.achievement.DOWN_TO_GOBLIN_TOWN",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 40,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Down, Down to Goblin-town",
+          "beforeEarnedDescription": "Survive a fall through a false floor or down a chasm.",
+          "afterEarnedDescription": "Survive a fall through a false floor or down a chasm.",
+          "image": "DOWN_TO_GOBLIN_TOWN.png"
+        }
+      ]
+    },
+    {
+      "key": "ATHELAS_OUT_OF_STOCK",
+      "referenceName": "ATHELAS_OUT_OF_STOCK",
+      "achievementID": "com.silqh.silmore.achievement.ATHELAS_OUT_OF_STOCK",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 41,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Bitter Cure",
+          "beforeEarnedDescription": "Cure a disease with an Herb of Sickness when it is the correct cure.",
+          "afterEarnedDescription": "Cure a disease with an Herb of Sickness when it is the correct cure.",
+          "image": "ATHELAS_OUT_OF_STOCK.png"
+        }
+      ]
+    },
+    {
+      "key": "NO_LONGER_BINDING",
+      "referenceName": "NO_LONGER_BINDING",
+      "achievementID": "com.silqh.silmore.achievement.NO_LONGER_BINDING",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 44,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "No Longer Binding",
+          "beforeEarnedDescription": "Break an equipment curse with Curse Breaking.",
+          "afterEarnedDescription": "Break an equipment curse with Curse Breaking.",
+          "image": "NO_LONGER_BINDING.png"
+        }
+      ]
+    },
+    {
+      "key": "A_ELBERETH_GILTHONIEL",
+      "referenceName": "A_ELBERETH_GILTHONIEL",
+      "achievementID": "com.silqh.silmore.achievement.A_ELBERETH_GILTHONIEL",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 45,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Elbereth Gilthoniel!",
+          "beforeEarnedDescription": "Make an enemy flee with the Song of Elbereth.",
+          "afterEarnedDescription": "Make an enemy flee with the Song of Elbereth.",
+          "image": "A_ELBERETH_GILTHONIEL.png"
+        }
+      ]
+    },
+    {
+      "key": "TWO_THEMES_ONE_VOICE",
+      "referenceName": "TWO_THEMES_ONE_VOICE",
+      "achievementID": "com.silqh.silmore.achievement.TWO_THEMES_ONE_VOICE",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 47,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Two Themes, One Voice",
+          "beforeEarnedDescription": "Have both woven themes affect enemies in the same turn.",
+          "afterEarnedDescription": "Have both woven themes affect enemies in the same turn.",
+          "image": "TWO_THEMES_ONE_VOICE.png"
+        }
+      ]
+    },
+    {
+      "key": "YOU_CANNOT_PASS",
+      "referenceName": "YOU_CANNOT_PASS",
+      "achievementID": "com.silqh.silmore.achievement.YOU_CANNOT_PASS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 48,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "You Cannot Pass",
+          "beforeEarnedDescription": "Hold a door against a pursuer with the Song of Thresholds.",
+          "afterEarnedDescription": "Hold a door against a pursuer with the Song of Thresholds.",
+          "image": "YOU_CANNOT_PASS.png"
+        }
+      ]
+    },
+    {
+      "key": "FELAGUNDS_ANSWER",
+      "referenceName": "FELAGUNDS_ANSWER",
+      "achievementID": "com.silqh.silmore.achievement.FELAGUNDS_ANSWER",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 49,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Felagund's Answer",
+          "beforeEarnedDescription": "Permanently weaken an opponent with the Song of Contest.",
+          "afterEarnedDescription": "Permanently weaken an opponent with the Song of Contest.",
+          "image": "FELAGUNDS_ANSWER.png"
+        }
+      ]
+    },
+    {
+      "key": "SONG_BENEATH_THE_MOUNTAIN",
+      "referenceName": "SONG_BENEATH_THE_MOUNTAIN",
+      "achievementID": "com.silqh.silmore.achievement.SONG_BENEATH_THE_MOUNTAIN",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 50,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Lay of Leithian",
+          "beforeEarnedDescription": "Escape with a Silmaril and at least 20 trained Song.",
+          "afterEarnedDescription": "Escape with a Silmaril and at least 20 trained Song.",
+          "image": "SONG_BENEATH_THE_MOUNTAIN.png"
+        }
+      ]
+    },
+    {
+      "key": "A_NAME_WORTH_REMEMBERING",
+      "referenceName": "A_NAME_WORTH_REMEMBERING",
+      "achievementID": "com.silqh.silmore.achievement.A_NAME_WORTH_REMEMBERING",
+      "points": 10,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 51,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "And Light They Caught",
+          "beforeEarnedDescription": "Create a custom artefact.",
+          "afterEarnedDescription": "Create a custom artefact.",
+          "image": "A_NAME_WORTH_REMEMBERING.png"
+        }
+      ]
+    },
+    {
+      "key": "THEIR_WORK_HAD_NO_RIVAL",
+      "referenceName": "THEIR_WORK_HAD_NO_RIVAL",
+      "achievementID": "com.silqh.silmore.achievement.THEIR_WORK_HAD_NO_RIVAL",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 52,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Their Work Had No Rival",
+          "beforeEarnedDescription": "Create a custom artefact of smithing difficulty 65 or higher.",
+          "afterEarnedDescription": "Create a custom artefact of smithing difficulty 65 or higher.",
+          "image": "THEIR_WORK_HAD_NO_RIVAL.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_ANGRIST",
+      "referenceName": "FIND_ANGRIST",
+      "achievementID": "com.silqh.silmore.achievement.FIND_ANGRIST",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 53,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Angrist, the Iron-Cleaver",
+          "beforeEarnedDescription": "Angrist, Telchar's knife that Beren took into Angband: 'iron it would cleave as if it were green wood'.",
+          "afterEarnedDescription": "Angrist, Telchar's knife that Beren took into Angband: 'iron it would cleave as if it were green wood'.",
+          "image": "FIND_ANGRIST.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_GURTHANG",
+      "referenceName": "FIND_GURTHANG",
+      "achievementID": "com.silqh.silmore.achievement.FIND_GURTHANG",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 54,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Black Sword of T\u00farin",
+          "beforeEarnedDescription": "Gurthang, the black sword that slew Glaurung and answered T\u00farin: 'I will drink thy blood gladly'.",
+          "afterEarnedDescription": "Gurthang, the black sword that slew Glaurung and answered T\u00farin: 'I will drink thy blood gladly'.",
+          "image": "FIND_GURTHANG.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_GOTHMOG_AXE",
+      "referenceName": "FIND_GOTHMOG_AXE",
+      "achievementID": "com.silqh.silmore.achievement.FIND_GOTHMOG_AXE",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 55,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Black Axe of Gothmog",
+          "beforeEarnedDescription": "Gothmog's black axe, which struck down Fingon in the Battle of Unnumbered Tears.",
+          "afterEarnedDescription": "Gothmog's black axe, which struck down Fingon in the Battle of Unnumbered Tears.",
+          "image": "FIND_GOTHMOG_AXE.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_MELKOR",
+      "referenceName": "FIND_MELKOR",
+      "achievementID": "com.silqh.silmore.achievement.FIND_MELKOR",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 56,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Spear of Melkor",
+          "beforeEarnedDescription": "The Great Spear of Melkor, the black weapon that pierced the Two Trees before Ungoliant drank their light.",
+          "afterEarnedDescription": "The Great Spear of Melkor, the black weapon that pierced the Two Trees before Ungoliant drank their light.",
+          "image": "FIND_MELKOR.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_TURGON_STAFF",
+      "referenceName": "FIND_TURGON_STAFF",
+      "achievementID": "com.silqh.silmore.achievement.FIND_TURGON_STAFF",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 57,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Staff of the Hidden King",
+          "beforeEarnedDescription": "The Quarterstaff of Turgon, the 'staff of doom' before which E\u00f6l faced judgment in Gondolin.",
+          "afterEarnedDescription": "The Quarterstaff of Turgon, the 'staff of doom' before which E\u00f6l faced judgment in Gondolin.",
+          "image": "FIND_TURGON_STAFF.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_BELTHRONDING",
+      "referenceName": "FIND_BELTHRONDING",
+      "achievementID": "com.silqh.silmore.achievement.FIND_BELTHRONDING",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 58,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Black Bow of Beleg",
+          "beforeEarnedDescription": "Belthronding, Beleg's bow of black yew, laid beside him after his death at T\u00farin's hand.",
+          "afterEarnedDescription": "Belthronding, Beleg's bow of black yew, laid beside him after his death at T\u00farin's hand.",
+          "image": "FIND_BELTHRONDING.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_IDRIL_ROBE",
+      "referenceName": "FIND_IDRIL_ROBE",
+      "achievementID": "com.silqh.silmore.achievement.FIND_IDRIL_ROBE",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 59,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Raiment of Silverfoot",
+          "beforeEarnedDescription": "The Robe of Idril Celebrindal, a remembrance of Silverfoot and the secret way that saved Gondolin's survivors.",
+          "afterEarnedDescription": "The Robe of Idril Celebrindal, a remembrance of Silverfoot and the secret way that saved Gondolin's survivors.",
+          "image": "FIND_IDRIL_ROBE.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_FINGOLFIN_SHIELD",
+      "referenceName": "FIND_FINGOLFIN_SHIELD",
+      "achievementID": "com.silqh.silmore.achievement.FIND_FINGOLFIN_SHIELD",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 60,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Shield of the High King",
+          "beforeEarnedDescription": "Fingolfin's blue, crystal-set shield, borne when he rode alone to challenge Morgoth.",
+          "afterEarnedDescription": "Fingolfin's blue, crystal-set shield, borne when he rode alone to challenge Morgoth.",
+          "image": "FIND_FINGOLFIN_SHIELD.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_ULMO_CLOAK",
+      "referenceName": "FIND_ULMO_CLOAK",
+      "achievementID": "com.silqh.silmore.achievement.FIND_ULMO_CLOAK",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 61,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Mantle of the Lord of Waters",
+          "beforeEarnedDescription": "The cloak Ulmo gave Tuor at Vinyamar, concealing the bearer of his warning on the road to Gondolin.",
+          "afterEarnedDescription": "The cloak Ulmo gave Tuor at Vinyamar, concealing the bearer of his warning on the road to Gondolin.",
+          "image": "FIND_ULMO_CLOAK.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_CELEBRIMBOR_GLOVES",
+      "referenceName": "FIND_CELEBRIMBOR_GLOVES",
+      "achievementID": "com.silqh.silmore.achievement.FIND_CELEBRIMBOR_GLOVES",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 62,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Hands of the Jewel-Smith",
+          "beforeEarnedDescription": "Celebrimbor's gloves, recalling F\u00ebanor's grandson, whose greatest works would be the Three Rings of the Elves.",
+          "afterEarnedDescription": "Celebrimbor's gloves, recalling F\u00ebanor's grandson, whose greatest works would be the Three Rings of the Elves.",
+          "image": "FIND_CELEBRIMBOR_GLOVES.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_MELIAN_RING",
+      "referenceName": "FIND_MELIAN_RING",
+      "achievementID": "com.silqh.silmore.achievement.FIND_MELIAN_RING",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 63,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Foresight of Melian",
+          "beforeEarnedDescription": "The Ring of Melian, a remembrance of the Maia whose Girdle sheltered Doriath from Morgoth.",
+          "afterEarnedDescription": "The Ring of Melian, a remembrance of the Maia whose Girdle sheltered Doriath from Morgoth.",
+          "image": "FIND_MELIAN_RING.png"
+        }
+      ]
+    },
+    {
+      "key": "FIND_NAUGLAMIR",
+      "referenceName": "FIND_NAUGLAMIR",
+      "achievementID": "com.silqh.silmore.achievement.FIND_NAUGLAMIR",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 64,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Necklace of the Dwarves",
+          "beforeEarnedDescription": "Nauglam\u00edr, the Dwarven masterpiece made for Finrod, resting on its wearer 'as a strand of flax'.",
+          "afterEarnedDescription": "Nauglam\u00edr, the Dwarven masterpiece made for Finrod, resting on its wearer 'as a strand of flax'.",
+          "image": "FIND_NAUGLAMIR.png"
+        }
+      ]
+    },
+    {
+      "key": "NOT_THE_DOOM_OF_THE_SILMARILS",
+      "referenceName": "NOT_THE_DOOM_OF_THE_SILMARILS",
+      "achievementID": "com.silqh.silmore.achievement.NOT_THE_DOOM_OF_THE_SILMARILS",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 65,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Not the Doom of the Silmarils",
+          "beforeEarnedDescription": "Have Angrist shatter while trying to cut the second Silmaril.",
+          "afterEarnedDescription": "Have Angrist shatter while trying to cut the second Silmaril.",
+          "image": "NOT_THE_DOOM_OF_THE_SILMARILS.png"
+        }
+      ]
+    },
+    {
+      "key": "EVER_FOUND_AGAIN",
+      "referenceName": "EVER_FOUND_AGAIN",
+      "achievementID": "com.silqh.silmore.achievement.EVER_FOUND_AGAIN",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 66,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Ever Found Again",
+          "beforeEarnedDescription": "Kill with Dailir, recover the arrow, and kill another enemy with it.",
+          "afterEarnedDescription": "Kill with Dailir, recover the arrow, and kill another enemy with it.",
+          "image": "EVER_FOUND_AGAIN.png"
+        }
+      ]
+    },
+    {
+      "key": "BITER_AND_BEATER",
+      "referenceName": "BITER_AND_BEATER",
+      "achievementID": "com.silqh.silmore.achievement.BITER_AND_BEATER",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 67,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Biter and Beater",
+          "beforeEarnedDescription": "Make an orc flee while wielding Orcrist and Glamdring together.",
+          "afterEarnedDescription": "Make an orc flee while wielding Orcrist and Glamdring together.",
+          "image": "BITER_AND_BEATER.png"
+        }
+      ]
+    },
+    {
+      "key": "NO_PHIAL_REQUIRED",
+      "referenceName": "NO_PHIAL_REQUIRED",
+      "achievementID": "com.silqh.silmore.achievement.NO_PHIAL_REQUIRED",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 68,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "When All Other Lights Go Out",
+          "beforeEarnedDescription": "Slay Shelob with Sting while wielding a Silmaril as your light.",
+          "afterEarnedDescription": "Slay Shelob with Sting while wielding a Silmaril as your light.",
+          "image": "NO_PHIAL_REQUIRED.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_HIGH_CAPTAIN_FALLS",
+      "referenceName": "THE_HIGH_CAPTAIN_FALLS",
+      "achievementID": "com.silqh.silmore.achievement.THE_HIGH_CAPTAIN_FALLS",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 69,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The High Captain Falls",
+          "beforeEarnedDescription": "Slay Gothmog, High Captain of Balrogs.",
+          "afterEarnedDescription": "Slay Gothmog, High Captain of Balrogs.",
+          "image": "THE_HIGH_CAPTAIN_FALLS.png"
+        }
+      ]
+    },
+    {
+      "key": "DAGNIR_GLAURUNGA",
+      "referenceName": "DAGNIR_GLAURUNGA",
+      "achievementID": "com.silqh.silmore.achievement.DAGNIR_GLAURUNGA",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 70,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Dagnir Glaurunga",
+          "beforeEarnedDescription": "Slay Glaurung, the Deceiver.",
+          "afterEarnedDescription": "Slay Glaurung, the Deceiver.",
+          "image": "DAGNIR_GLAURUNGA.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_ABHORRED",
+      "referenceName": "THE_ABHORRED",
+      "achievementID": "com.silqh.silmore.achievement.THE_ABHORRED",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 71,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Abhorred",
+          "beforeEarnedDescription": "Slay Gorthaur, Servant of Morgoth.",
+          "afterEarnedDescription": "Slay Gorthaur, Servant of Morgoth.",
+          "image": "THE_ABHORRED.png"
+        }
+      ]
+    },
+    {
+      "key": "UNLIGHT_UNWOVEN",
+      "referenceName": "UNLIGHT_UNWOVEN",
+      "achievementID": "com.silqh.silmore.achievement.UNLIGHT_UNWOVEN",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 72,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Unlight Unwoven",
+          "beforeEarnedDescription": "Slay Ungoliant, the Gloomweaver.",
+          "afterEarnedDescription": "Slay Ungoliant, the Gloomweaver.",
+          "image": "UNLIGHT_UNWOVEN.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_DRAGON_HOST_BROKEN",
+      "referenceName": "THE_DRAGON_HOST_BROKEN",
+      "achievementID": "com.silqh.silmore.achievement.THE_DRAGON_HOST_BROKEN",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 73,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Mightiest of the Dragon-host",
+          "beforeEarnedDescription": "Slay Ancalagon the Black.",
+          "afterEarnedDescription": "Slay Ancalagon the Black.",
+          "image": "THE_DRAGON_HOST_BROKEN.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_RED_MAW",
+      "referenceName": "THE_RED_MAW",
+      "achievementID": "com.silqh.silmore.achievement.THE_RED_MAW",
+      "points": 10,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 74,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Red Maw",
+          "beforeEarnedDescription": "Slay Carcharoth, the Jaws of Thirst.",
+          "afterEarnedDescription": "Slay Carcharoth, the Jaws of Thirst.",
+          "image": "THE_RED_MAW.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_CAT_AND_THE_NECROMANCER",
+      "referenceName": "THE_CAT_AND_THE_NECROMANCER",
+      "achievementID": "com.silqh.silmore.achievement.THE_CAT_AND_THE_NECROMANCER",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 75,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Cat and the Necromancer",
+          "beforeEarnedDescription": "Defeat Tevildo and Gorthaur in the same adventure.",
+          "afterEarnedDescription": "Defeat Tevildo and Gorthaur in the same adventure.",
+          "image": "THE_CAT_AND_THE_NECROMANCER.png"
+        }
+      ]
+    },
+    {
+      "key": "AT_MOST_SEVEN",
+      "referenceName": "AT_MOST_SEVEN",
+      "achievementID": "com.silqh.silmore.achievement.AT_MOST_SEVEN",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 76,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "At Most Seven",
+          "beforeEarnedDescription": "Slay all seven named Balrogs within one adventure.",
+          "afterEarnedDescription": "Slay all seven named Balrogs within one adventure.",
+          "image": "AT_MOST_SEVEN.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_SHADOW_FALLS",
+      "referenceName": "THE_SHADOW_FALLS",
+      "achievementID": "com.silqh.silmore.achievement.THE_SHADOW_FALLS",
+      "points": 40,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 77,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Dagor Dagorath",
+          "beforeEarnedDescription": "Defeat Morgoth's final form.",
+          "afterEarnedDescription": "Defeat Morgoth's final form.",
+          "image": "THE_SHADOW_FALLS.png"
+        }
+      ]
+    },
+    {
+      "key": "NO_RINGS_ATTACHED",
+      "referenceName": "NO_RINGS_ATTACHED",
+      "achievementID": "com.silqh.silmore.achievement.NO_RINGS_ATTACHED",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 78,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "No Rings Attached",
+          "beforeEarnedDescription": "Give a thrall the item they requested.",
+          "afterEarnedDescription": "Give a thrall the item they requested.",
+          "image": "NO_RINGS_ATTACHED.png"
+        }
+      ]
+    },
+    {
+      "key": "TULKAS_LAST_LAUGH",
+      "referenceName": "TULKAS_LAST_LAUGH",
+      "achievementID": "com.silqh.silmore.achievement.TULKAS_LAST_LAUGH",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 79,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Tulkas Has the Last Laugh",
+          "beforeEarnedDescription": "Slay the unique enemy named by Tulkas and collect his artefact reward.",
+          "afterEarnedDescription": "Slay the unique enemy named by Tulkas and collect his artefact reward.",
+          "image": "TULKAS_LAST_LAUGH.png"
+        }
+      ]
+    },
+    {
+      "key": "AULES_APPRENTICE",
+      "referenceName": "AULES_APPRENTICE",
+      "achievementID": "com.silqh.silmore.achievement.AULES_APPRENTICE",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 80,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Apprentice of the Maker",
+          "beforeEarnedDescription": "Forge an item of difficulty 21 or higher for Aul\u00eb and receive his blessing.",
+          "afterEarnedDescription": "Forge an item of difficulty 21 or higher for Aul\u00eb and receive his blessing.",
+          "image": "AULES_APPRENTICE.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_DOOMSMANS_DUE",
+      "referenceName": "THE_DOOMSMANS_DUE",
+      "achievementID": "com.silqh.silmore.achievement.THE_DOOMSMANS_DUE",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 81,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Doomsman's Due",
+          "beforeEarnedDescription": "Release Brodda's bound spirit for Mandos and receive his blessing.",
+          "afterEarnedDescription": "Release Brodda's bound spirit for Mandos and receive his blessing.",
+          "image": "THE_DOOMSMANS_DUE.png"
+        }
+      ]
+    },
+    {
+      "key": "PITY_FOR_THE_FORSAKEN",
+      "referenceName": "PITY_FOR_THE_FORSAKEN",
+      "achievementID": "com.silqh.silmore.achievement.PITY_FOR_THE_FORSAKEN",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 82,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Pity for the Forsaken",
+          "beforeEarnedDescription": "Reach a down stair or shaft without a creature dying during Nienna's trial and receive her blessing.",
+          "afterEarnedDescription": "Reach a down stair or shaft without a creature dying during Nienna's trial and receive her blessing.",
+          "image": "PITY_FOR_THE_FORSAKEN.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_GREAT_HUNT",
+      "referenceName": "THE_GREAT_HUNT",
+      "achievementID": "com.silqh.silmore.achievement.THE_GREAT_HUNT",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 83,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Great Hunt",
+          "beforeEarnedDescription": "Complete Orom\u00eb's hunt and receive his blessing.",
+          "afterEarnedDescription": "Complete Orom\u00eb's hunt and receive his blessing.",
+          "image": "THE_GREAT_HUNT.png"
+        }
+      ]
+    },
+    {
+      "key": "A_STAR_AGAINST_THE_BALROG",
+      "referenceName": "A_STAR_AGAINST_THE_BALROG",
+      "achievementID": "com.silqh.silmore.achievement.A_STAR_AGAINST_THE_BALROG",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 84,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Star Against the Balrog",
+          "beforeEarnedDescription": "Slay Duruin in his Bastion for Varda and choose a radiant gift.",
+          "afterEarnedDescription": "Slay Duruin in his Bastion for Varda and choose a radiant gift.",
+          "image": "A_STAR_AGAINST_THE_BALROG.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_LONG_TALE",
+      "referenceName": "THE_LONG_TALE",
+      "achievementID": "com.silqh.silmore.achievement.THE_LONG_TALE",
+      "points": 40,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 85,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Grew in the Telling",
+          "beforeEarnedDescription": "Win a Tale with at least two different characters having completed adventures in it.",
+          "afterEarnedDescription": "Win a Tale with at least two different characters having completed adventures in it.",
+          "image": "THE_LONG_TALE.png"
+        }
+      ]
+    },
+    {
+      "key": "STRONGBOW",
+      "referenceName": "STRONGBOW",
+      "achievementID": "com.silqh.silmore.achievement.STRONGBOW",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 87,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Strongbow",
+          "beforeEarnedDescription": "As Beleg, slay a hostile unique with an arrow.",
+          "afterEarnedDescription": "As Beleg, slay a hostile unique with an arrow.",
+          "image": "STRONGBOW.png"
+        }
+      ]
+    },
+    {
+      "key": "THREE_UNTOUCHED",
+      "referenceName": "THREE_UNTOUCHED",
+      "achievementID": "com.silqh.silmore.achievement.THREE_UNTOUCHED",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 88,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Three Untouched",
+          "beforeEarnedDescription": "As Celebrimbor, forge three separate custom artefact rings during one adventure, none evil or cursed.",
+          "afterEarnedDescription": "As Celebrimbor, forge three separate custom artefact rings during one adventure, none evil or cursed.",
+          "image": "THREE_UNTOUCHED.png"
+        }
+      ]
+    },
+    {
+      "key": "CLAD_IN_THE_NIGHT",
+      "referenceName": "CLAD_IN_THE_NIGHT",
+      "achievementID": "com.silqh.silmore.achievement.CLAD_IN_THE_NIGHT",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 90,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Clad in the Night",
+          "beforeEarnedDescription": "As E\u00f6l, forge and wear your own galvorn armour.",
+          "afterEarnedDescription": "As E\u00f6l, forge and wear your own galvorn armour.",
+          "image": "CLAD_IN_THE_NIGHT.png"
+        }
+      ]
+    },
+    {
+      "key": "LORD_OF_THE_FOUNTAIN",
+      "referenceName": "LORD_OF_THE_FOUNTAIN",
+      "achievementID": "com.silqh.silmore.achievement.LORD_OF_THE_FOUNTAIN",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 91,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Lord of the Fountain",
+          "beforeEarnedDescription": "As Ecthelion, slay Gothmog.",
+          "afterEarnedDescription": "As Ecthelion, slay Gothmog.",
+          "image": "LORD_OF_THE_FOUNTAIN.png"
+        }
+      ]
+    },
+    {
+      "key": "BEFORE_THE_RISING_OF_THE_SUN",
+      "referenceName": "BEFORE_THE_RISING_OF_THE_SUN",
+      "achievementID": "com.silqh.silmore.achievement.BEFORE_THE_RISING_OF_THE_SUN",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 92,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Before the Rising of the Sun",
+          "beforeEarnedDescription": "As E\u00e4rendil, slay Ancalagon the Black.",
+          "afterEarnedDescription": "As E\u00e4rendil, slay Ancalagon the Black.",
+          "image": "BEFORE_THE_RISING_OF_THE_SUN.png"
+        }
+      ]
+    },
+    {
+      "key": "A_SINGLE_SPARK",
+      "referenceName": "A_SINGLE_SPARK",
+      "achievementID": "com.silqh.silmore.achievement.A_SINGLE_SPARK",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 93,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Single Spark",
+          "beforeEarnedDescription": "As F\u00ebanor, create an artefact using a forge's last charge. \u201cHis spirit burned as a flame.\u201d",
+          "afterEarnedDescription": "As F\u00ebanor, create an artefact using a forge's last charge. \u201cHis spirit burned as a flame.\u201d",
+          "image": "A_SINGLE_SPARK.png"
+        }
+      ]
+    },
+    {
+      "key": "THESE_THINGS_ARE_MINE",
+      "referenceName": "THESE_THINGS_ARE_MINE",
+      "achievementID": "com.silqh.silmore.achievement.THESE_THINGS_ARE_MINE",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 94,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "These Things Are Mine",
+          "beforeEarnedDescription": "As F\u00ebanor, escape with all three Silmarils.",
+          "afterEarnedDescription": "As F\u00ebanor, escape with all three Silmarils.",
+          "image": "THESE_THINGS_ARE_MINE.png"
+        }
+      ]
+    },
+    {
+      "key": "HIS_FATHERS_LIGHT",
+      "referenceName": "HIS_FATHERS_LIGHT",
+      "achievementID": "com.silqh.silmore.achievement.HIS_FATHERS_LIGHT",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 96,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "His Father's Light",
+          "beforeEarnedDescription": "As F\u00ebanor, use Finw\u00eb's lamp to lift the curse on F\u00ebanor's crown.",
+          "afterEarnedDescription": "As F\u00ebanor, use Finw\u00eb's lamp to lift the curse on F\u00ebanor's crown.",
+          "image": "HIS_FATHERS_LIGHT.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_KING_WHO_KEPT_HIS_OATH",
+      "referenceName": "THE_KING_WHO_KEPT_HIS_OATH",
+      "achievementID": "com.silqh.silmore.achievement.THE_KING_WHO_KEPT_HIS_OATH",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 97,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The King Who Kept His Oath",
+          "beforeEarnedDescription": "As Finrod Felagund, kill a werewolf with an unarmed attack.",
+          "afterEarnedDescription": "As Finrod Felagund, kill a werewolf with an unarmed attack.",
+          "image": "THE_KING_WHO_KEPT_HIS_OATH.png"
+        }
+      ]
+    },
+    {
+      "key": "SEVEN_TIMES_HE_CRIED",
+      "referenceName": "SEVEN_TIMES_HE_CRIED",
+      "achievementID": "com.silqh.silmore.achievement.SEVEN_TIMES_HE_CRIED",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 98,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Seven Times He Cried",
+          "beforeEarnedDescription": "Land at least seven damaging blows on Morgoth with Ringil, then escape with a Silmaril while he lives.",
+          "afterEarnedDescription": "Land at least seven damaging blows on Morgoth with Ringil, then escape with a Silmaril while he lives.",
+          "image": "SEVEN_TIMES_HE_CRIED.png"
+        }
+      ]
+    },
+    {
+      "key": "THE_GOLDEN_FLOWER_STANDS",
+      "referenceName": "THE_GOLDEN_FLOWER_STANDS",
+      "achievementID": "com.silqh.silmore.achievement.THE_GOLDEN_FLOWER_STANDS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 99,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "The Golden Flower Stands",
+          "beforeEarnedDescription": "As Glorfindel, slay a Balrog in close quarters beside a chasm, then leave the level alive.",
+          "afterEarnedDescription": "As Glorfindel, slay a Balrog in close quarters beside a chasm, then leave the level alive.",
+          "image": "THE_GOLDEN_FLOWER_STANDS.png"
+        }
+      ]
+    },
+    {
+      "key": "HURINS_DEFIANCE",
+      "referenceName": "HURINS_DEFIANCE",
+      "achievementID": "com.silqh.silmore.achievement.HURINS_DEFIANCE",
+      "points": 5,
+      "hidden": true,
+      "repeatable": false,
+      "displayOrder": 101,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "H\u00farin's Defiance",
+          "beforeEarnedDescription": "Resist a hostile mental attack at 25% HP or less when Indomitable makes the difference.",
+          "afterEarnedDescription": "Resist a hostile mental attack at 25% HP or less when Indomitable makes the difference.",
+          "image": "HURINS_DEFIANCE.png"
+        }
+      ]
+    },
+    {
+      "key": "A_DREAM_UPON_THE_DARK_LORD",
+      "referenceName": "A_DREAM_UPON_THE_DARK_LORD",
+      "achievementID": "com.silqh.silmore.achievement.A_DREAM_UPON_THE_DARK_LORD",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 102,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "A Dream Upon the Dark Lord",
+          "beforeEarnedDescription": "As L\u00fathien, put Morgoth to sleep with the Song of L\u00f3rien.",
+          "afterEarnedDescription": "As L\u00fathien, put Morgoth to sleep with the Song of L\u00f3rien.",
+          "image": "A_DREAM_UPON_THE_DARK_LORD.png"
+        }
+      ]
+    },
+    {
+      "key": "THURINGWETHIL_I_AM",
+      "referenceName": "THURINGWETHIL_I_AM",
+      "achievementID": "com.silqh.silmore.achievement.THURINGWETHIL_I_AM",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 103,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Thuringwethil I Am",
+          "beforeEarnedDescription": "As L\u00fathien, enter Morgoth's throne room wearing Thuringwethil's Bat-Fell.",
+          "afterEarnedDescription": "As L\u00fathien, enter Morgoth's throne room wearing Thuringwethil's Bat-Fell.",
+          "image": "THURINGWETHIL_I_AM.png"
+        }
+      ]
+    },
+    {
+      "key": "ON_THE_OTHER_HAND",
+      "referenceName": "ON_THE_OTHER_HAND",
+      "achievementID": "com.silqh.silmore.achievement.ON_THE_OTHER_HAND",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 104,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "More Deadly Than His Right",
+          "beforeEarnedDescription": "As Maedhros, kill with a Subtlety critical using a hand-and-a-half weapon.",
+          "afterEarnedDescription": "As Maedhros, kill with a Subtlety critical using a hand-and-a-half weapon.",
+          "image": "ON_THE_OTHER_HAND.png"
+        }
+      ]
+    },
+    {
+      "key": "IRON_CLEAVER",
+      "referenceName": "IRON_CLEAVER",
+      "achievementID": "com.silqh.silmore.achievement.IRON_CLEAVER",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 105,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Iron-Cleaver",
+          "beforeEarnedDescription": "As Telchar, forge a blade that ignores all armour and cut a Silmaril with that same blade.",
+          "afterEarnedDescription": "As Telchar, forge a blade that ignores all armour and cut a Silmaril with that same blade.",
+          "image": "IRON_CLEAVER.png"
+        }
+      ]
+    },
+    {
+      "key": "MASTER_OF_DOOM",
+      "referenceName": "MASTER_OF_DOOM",
+      "achievementID": "com.silqh.silmore.achievement.MASTER_OF_DOOM",
+      "points": 20,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 107,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Master of Doom",
+          "beforeEarnedDescription": "As T\u00farin Turambar, slay Glaurung.",
+          "afterEarnedDescription": "As T\u00farin Turambar, slay Glaurung.",
+          "image": "MASTER_OF_DOOM.png"
+        }
+      ]
+    },
+    {
+      "key": "DOOM_CAN_WAIT",
+      "referenceName": "DOOM_CAN_WAIT",
+      "achievementID": "com.silqh.silmore.achievement.DOOM_CAN_WAIT",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 108,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Doom Can Wait",
+          "beforeEarnedDescription": "As T\u00farin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.",
+          "afterEarnedDescription": "As T\u00farin, resist entrancement through your unique power and kill the attacker before the resulting rage ends.",
+          "image": "DOOM_CAN_WAIT.png"
+        }
+      ]
+    },
+    {
+      "key": "HIS_DEATH_AND_FINAL_END",
+      "referenceName": "HIS_DEATH_AND_FINAL_END",
+      "achievementID": "com.silqh.silmore.achievement.HIS_DEATH_AND_FINAL_END",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 109,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "His Death and Final End",
+          "beforeEarnedDescription": "As T\u00farin, slay Morgoth's final form with Gurthang.",
+          "afterEarnedDescription": "As T\u00farin, slay Morgoth's final form with Gurthang.",
+          "image": "HIS_DEATH_AND_FINAL_END.png"
+        }
+      ]
+    },
+    {
+      "key": "BELEGOST_REMEMBERS",
+      "referenceName": "BELEGOST_REMEMBERS",
+      "achievementID": "com.silqh.silmore.achievement.BELEGOST_REMEMBERS",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 110,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Belegost Remembers",
+          "beforeEarnedDescription": "As a Dwarf, slay Glaurung with Azagh\u00e2l's dagger.",
+          "afterEarnedDescription": "As a Dwarf, slay Glaurung with Azagh\u00e2l's dagger.",
+          "image": "BELEGOST_REMEMBERS.png"
+        }
+      ]
+    },
+    {
+      "key": "HEIRLOOMS_OF_THE_HIDDEN_KING",
+      "referenceName": "HEIRLOOMS_OF_THE_HIDDEN_KING",
+      "achievementID": "com.silqh.silmore.achievement.HEIRLOOMS_OF_THE_HIDDEN_KING",
+      "points": 5,
+      "hidden": false,
+      "repeatable": false,
+      "displayOrder": 111,
+      "localizations": [
+        {
+          "locale": "en-US",
+          "name": "Heirlooms of the Hidden King",
+          "beforeEarnedDescription": "As a Man, escape with a Silmaril, Narsil and the Ring of Barahir.",
+          "afterEarnedDescription": "As a Man, escape with a Silmaril, Narsil and the Ring of Barahir.",
+          "image": "HEIRLOOMS_OF_THE_HIDDEN_KING.png"
+        }
+      ]
+    }
+  ]
+}

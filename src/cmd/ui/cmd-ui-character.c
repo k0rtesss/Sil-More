@@ -593,19 +593,12 @@ static void character_sheet_append_curse_hint(char* buf, size_t buflen,
 
     for (int id = 0; id < (int)z_info->cu_max; id++)
     {
-        int stacks = CURSE_GET(id);
-        bool blessing = (stacks < 0);
-        bool matches;
+        bool blessing = (cu_info[id].blessing_flags & flag) && CURSE_BLESSING_STACK(id) > 0;
+        bool curse = (cu_info[id].flags & flag) && CURSE_CURSE_STACK(id) > 0;
         cptr desc = NULL;
         cptr power = NULL;
 
-        if (!stacks)
-            continue;
-
-        matches = blessing
-            ? ((cu_info[id].blessing_flags & flag) != 0)
-            : ((cu_info[id].flags & flag) != 0);
-        if (!matches)
+        if (!blessing && !curse)
             continue;
 
         desc = blessing
@@ -615,7 +608,7 @@ static void character_sheet_append_curse_hint(char* buf, size_t buflen,
             ? (cu_info[id].blessing_power ? lore_text(cu_text + cu_info[id].blessing_power) : NULL)
             : (cu_info[id].power ? lore_text(cu_text + cu_info[id].power) : NULL);
 
-        if (CURSE_SEEN(id) && power && power[0])
+        if ((blessing || CURSE_SEEN(id)) && power && power[0])
         {
             character_sheet_append_effect_text(buf, buflen,
                 blessing ? "Known blessing" : "Known curse", power);

@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "achievements.h"
 #include "achievements-play-games.h"
+#include "achievements-game-center.h"
 #include "achievements-character.h"
 #include "achievements-lore.h"
 #include "blitz.h"
@@ -81,7 +82,7 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "NOT_EVEN_CARCHAROTH", "Not Even Carcharoth",
         "Be killed by the first ordinary wolf you encounter before making your first kill.", true },
     { "THE_FORDS_OF_SIRION", "The Fords of Sirion",
-        "Cross a stream from one dry bank to the other.", false },
+        "Cross at least three water tiles from one dry bank to the other.", false },
     { "HELCARAXE", "Helcaraxë",
         "Freeze water with a cold-branded attack, then cross your ice from one bank to the other.", true },
     { "FIRE_AND_WATER", "Fire and Water",
@@ -89,7 +90,7 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "THE_FIRES_OF_THANGORODRIM", "The Fires of Thangorodrim",
         "Leap across lava and survive its heat.", false },
     { "THROUGH_NAN_DUNGORTHEB", "Through Nan Dungortheb",
-        "Cross a poison pool and reach dry ground alive.", false },
+        "Cross at least three poison tiles from one dry bank to the other and survive.", false },
     { "A_JOURNEY_IN_THE_DARK", "A Journey in the Dark",
         "Enter a labyrinth and leave through a different passage.", false },
     { "A_MAP_OF_THE_IRON_HELLS", "A Map of the Iron Hells",
@@ -239,7 +240,11 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "FIND_FINGOLFIN_SHIELD", "The Shield of the High King",
         "Fingolfin's blue, crystal-set shield, borne when he rode alone to challenge Morgoth.", true },
     { "FIND_TURGON_STAFF", "The Staff of the Hidden King",
-        "The Quarterstaff of Turgon, the 'staff of doom' before which Eöl faced judgment in Gondolin.", true }
+        "The Quarterstaff of Turgon, the 'staff of doom' before which Eöl faced judgment in Gondolin.", true },
+    { "SWIFT_AS_THE_WIND", "Swift as the Wind",
+        "Win a Blitz run by escaping with a Silmaril or defeating Morgoth.", false },
+    { "TENFOLD_DOOM", "Tenfold Doom",
+        "Win a Blitz run with at least 10 net curse stacks (curses minus blessings).", false }
 };
 
 static uint64_t unlocked_at[SIL_ACH_COUNT];
@@ -447,7 +452,9 @@ static bool achievement_run_eligible(void)
 
 static bool achievements_eligible(void)
 {
-    return achievement_run_eligible() && p_ptr->playing && !p_ptr->is_dead;
+    /* Final Look borrows playing/alive flags for menus and map inspection. */
+    return achievement_run_eligible() && p_ptr->playing && !p_ptr->is_dead
+        && !death_spectator_active();
 }
 
 bool sil_achievements_eligible(void) { return achievements_eligible(); }
@@ -462,8 +469,30 @@ bool sil_achievements_kill_eligible(void)
             && !p_ptr->escaped);
 }
 
+bool sil_achievement_difficulty_allows(int id)
+{
+    if (!metarun_run_blessings(p_ptr)) return true;
+    switch (id) {
+        case SIL_ACH_THREE_LIGHTS_IN_EXILE:
+        case SIL_ACH_THE_SHADOW_FALLS:
+        case SIL_ACH_THE_QUIET_ROAD:
+        case SIL_ACH_NO_STEPS_REQUIRED:
+        case SIL_ACH_HIS_DEATH_AND_FINAL_END:
+        case SIL_ACH_SEVEN_TIMES_HE_CRIED:
+        case SIL_ACH_AT_MOST_SEVEN:
+        case SIL_ACH_THESE_THINGS_ARE_MINE:
+        case SIL_ACH_THEIR_WORK_HAD_NO_RIVAL:
+            return false;
+        default:
+            return true;
+    }
+}
+
 static void unlock_achievement(int id, bool announce)
 {
+    /* Platform imports carry credit from another run or device. */
+    if (announce && !sil_achievement_difficulty_allows(id))
+        return;
     sil_achievements_init();
     if (!initialized || !sil_achievement_get(id) || unlocked_at[id]) return;
     unlocked_at[id] = achievement_time();
@@ -493,6 +522,10 @@ void sil_achievements_on_event(sil_achievement_id id)
     if (id < SIL_ACH_NO_RINGS_ATTACHED || id >= SIL_ACH_COUNT) return;
     switch (id)
     {
+        case SIL_ACH_SWIFT_AS_THE_WIND:
+        case SIL_ACH_TENFOLD_DOOM:
+            /* Only a confirmed victorious Blitz completion can grant these. */
+            return;
         case SIL_ACH_OFT_EVIL_WILL:
         case SIL_ACH_THE_HASTY_STROKE:
         case SIL_ACH_A_FEW_LEAVES:
@@ -812,6 +845,10 @@ bool sil_achievement_progress_text(int id, char* out, size_t size)
     out[0] = '\0';
     if (!p_ptr || !character_generated || !p_ptr->playing || p_ptr->is_dead)
         return false;
+    if (!sil_achievement_difficulty_allows(id)) {
+        strnfmt(out, size, "Unavailable during %s.", RUN_BLESSING_MODE_NAME);
+        return true;
+    }
     switch (id)
     {
         case SIL_ACH_AT_MOST_SEVEN:
@@ -912,7 +949,26 @@ void sil_achievements_on_partition_discovered(unsigned mask)
 
 void sil_achievements_on_run_completed(void)
 {
-    if (!achievement_run_eligible() || !p_ptr->is_dead || run_mode_is_blitz()) return;
+    if (!achievement_run_eligible() || !p_ptr->is_dead) return;
+    if (run_mode_is_blitz())
+    {
+        /* Both victory routes close the living run before close_game_aux()
+         * reports completion. A death, abandoned run or empty-handed escape
+         * is not a Blitz win. Use the saved run history and actual signed
+         * stacks, never the setup sliders or a Tale's curse history. */
+        if (p_ptr->playing || !p_ptr->leaving || p_ptr->chp <= 0
+            || !(p_ptr->achievement_flags & SIL_ACH_RUN_STARTED)
+            || (!p_ptr->morgoth_slain
+                && !(p_ptr->escaped && p_ptr->depth == 0
+                    && silmarils_possessed() > 0))) return;
+        int net_curses = 0;
+        for (int id = 0; id < METAR_CURSE_SLOTS; ++id)
+            net_curses += CURSE_GET(id);
+        unlock_achievement(SIL_ACH_SWIFT_AS_THE_WIND, true);
+        if (net_curses >= 10) unlock_achievement(SIL_ACH_TENFOLD_DOOM, true);
+        sil_achievements_flush();
+        return;
+    }
     sil_achievements_init();
     if (unlocked_at[SIL_ACH_THE_LONG_TALE]) return;
     cJSON *characters = current_tale_characters(true);
@@ -963,10 +1019,11 @@ void sil_achievements_update(void)
         masks[word] = sil_achievements_mask(word);
     sil_steamworks_sync_achievements(masks);
     sil_play_games_sync(masks);
+    sil_game_center_sync(masks);
     for (unsigned word = 0; word < SIL_ACH_WORD_COUNT; ++word)
     {
         uint64_t remote = sil_steamworks_achievements_unlocked(word)
-            | sil_play_games_unlocked(word);
+            | sil_play_games_unlocked(word) | sil_game_center_unlocked(word);
         for (unsigned bit = 0; bit < 64 && word * 64 + bit < SIL_ACH_COUNT; ++bit)
             if (remote & (UINT64_C(1) << bit)) unlock_achievement(word * 64 + bit, false);
     }

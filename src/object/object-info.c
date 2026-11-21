@@ -4,6 +4,8 @@
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-info.h"
+#include "object/object-compare.h"
+#include "fs/path.h"
 #include "log/log.h"
 #include "meta_state.h"
 #include "sdl-config.h"
@@ -24,6 +26,7 @@ typedef struct object_info_screen_capture
     int width;
     int height;
     int target_cols;
+    int fixed_rows;
     int cursor_x;
     int cursor_y;
     bool cursor_useless;
@@ -36,12 +39,14 @@ typedef struct object_info_screen_capture
 } object_info_screen_capture;
 
 static object_info_screen_capture object_info_overlay_capture;
+static object_info_screen_capture object_info_overlay_comparison;
 static bool object_info_overlay_capture_active = false;
 
 static void object_info_screen_multi_body(const object_type** objects,
-    const char** headings, int count, bool clear_current_line);
+    const char** headings, int count, bool clear_current_line, bool compare);
 static char object_info_screen_capture_view(
-    const object_info_screen_capture* capture, const object_type* item, cptr footer,
+    const object_info_screen_capture* capture,
+    const object_info_screen_capture* comparison, const object_type* item, cptr footer,
     const object_info_screen_action* actions, int action_count);
 
 static int object_info_screen_preferred_capture_width(bool use_story_font)
@@ -113,11 +118,15 @@ static bool describe_consumable_healing(const object_type* o_ptr)
         return false;
     }
 
-    if ((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+    if (((p_ptr->disease_knowledge & DISEASE_KNOWN_CURE)
+            || (o_ptr->tval == TV_FOOD && o_ptr->sval == SV_FOOD_HEALING))
         && disease_herb_matches(o_ptr))
     {
-        p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
-            disease_name()));
+        if (p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
+            p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
+                disease_name()));
+        else
+            p_text_out("It cures your disease, restoring the attributes lost to it.  ");
         p_text_out("Its usual effects and nourishment do not apply while curing this disease.  ");
         return true;
     }
@@ -1437,128 +1446,18 @@ static bool describe_archery(const object_type* o_ptr)
  */
 static bool describe_weapon_damage(const object_type* o_ptr)
 {
-    byte base_dd, base_ds, actual_dd, actual_ds;
-    u32b f1, f2, f3;
-    bool is_melee = false;
-    bool is_bow = false;
-    bool is_hand_and_half = false;
-    
-    /* Check if this is a melee weapon */
-    if (o_ptr->tval == TV_SWORD || o_ptr->tval == TV_POLEARM 
-        || o_ptr->tval == TV_HAFTED || o_ptr->tval == TV_DIGGING)
-    {
-        is_melee = true;
-    }
-    /* Check if this is a bow */
-    else if (o_ptr->tval == TV_BOW)
-    {
-        is_bow = true;
-    }
+    int actual_dd, actual_ds;
+    if (!object_compare_weapon_damage(o_ptr, &actual_dd, &actual_ds))
+        return false;
+
+    cptr attack = o_ptr->tval == TV_BOW ? "It shoots arrows for" : "It does";
+    if (o_ptr->dd != actual_dd || o_ptr->ds != actual_ds)
+        p_text_out(format(
+            "%s %dd%d damage (%dd%d when equipped with your current strength and abilities).",
+            attack, o_ptr->dd, o_ptr->ds, actual_dd, actual_ds));
     else
-    {
-        return (false);
-    }
-
-    /* Get object flags to check for hand-and-a-half */
-    object_flags(o_ptr, &f1, &f2, &f3);
-    is_hand_and_half = (f3 & TR3_HAND_AND_A_HALF) ? true : false;
-
-    if (is_melee)
-    {
-        /* Calculate melee damage with current strength */
-        base_dd = o_ptr->dd;
-        base_ds = o_ptr->ds;
-        actual_dd = total_mdd(o_ptr);
-        actual_ds = total_mds(o_ptr, 0);
-
-        /* Special handling for hand-and-a-half weapons */
-        if (is_hand_and_half)
-        {
-            int hand_half_bonus_equipped = hand_and_a_half_bonus(o_ptr);
-            int hand_half_bonus_potential;
-            int one_handed_ds_int, two_handed_ds_int;
-            byte one_handed_ds, two_handed_ds;
-            bool is_currently_equipped = (&inventory[INVEN_WIELD] == o_ptr)
-                && player_equipment_slot_counts_as_equipped(INVEN_WIELD);
-            
-            /* Determine potential hand-and-a-half bonus (when wielded two-handed) */
-            if (c_info[p_ptr->pcharacter].flags_u & UNQ_MEL_MAEDHROS)
-            {
-                hand_half_bonus_potential = 3;
-            }
-            else
-            {
-                hand_half_bonus_potential = 2;
-            }
-            
-            if (is_currently_equipped)
-            {
-                /* For equipped weapons, use actual current damage */
-                one_handed_ds_int = (int)actual_ds - hand_half_bonus_equipped;
-                one_handed_ds = (one_handed_ds_int < 0) ? 0 : (byte)one_handed_ds_int;
-                two_handed_ds = actual_ds;
-            }
-            else
-            {
-                /* For unequipped weapons, calculate hypothetical damage */
-                /* One-handed: base + strength (capped by weight), no hand-and-half bonus */
-                one_handed_ds_int = (int)actual_ds;
-                one_handed_ds = (one_handed_ds_int < 0) ? 0 : (byte)one_handed_ds_int;
-                
-                /* Two-handed: base + strength (capped by weight) + hand-and-half bonus */
-                two_handed_ds_int = (int)actual_ds + hand_half_bonus_potential;
-                two_handed_ds = (two_handed_ds_int < 0) ? 0 : (byte)two_handed_ds_int;
-            }
-
-            /* Show distinction between one-handed and two-handed */
-            if (base_dd != actual_dd || base_ds != one_handed_ds || base_ds != two_handed_ds)
-            {
-                p_text_out(format(
-                    "It does %dd%d damage (%dd%d one-handed, %dd%d two-handed with your current strength and abilities).",
-                    base_dd, base_ds, actual_dd, one_handed_ds, actual_dd, two_handed_ds));
-            }
-            else
-            {
-                p_text_out(format("It does %dd%d damage.", base_dd, base_ds));
-            }
-        }
-        else
-        {
-            /* Regular melee weapons */
-            if (base_dd != actual_dd || base_ds != actual_ds)
-            {
-                p_text_out(format(
-                    "It does %dd%d damage (%dd%d with your current strength and abilities).",
-                    base_dd, base_ds, actual_dd, actual_ds));
-            }
-            else
-            {
-                p_text_out(format("It does %dd%d damage.", base_dd, base_ds));
-            }
-        }
-    }
-    else if (is_bow)
-    {
-        /* Calculate bow damage with current strength */
-        base_dd = o_ptr->dd;
-        base_ds = o_ptr->ds;
-        actual_dd = o_ptr->dd;  /* Bow dice don't change */
-        actual_ds = total_ads(o_ptr);
-
-        /* Show complete bow+arrow damage */
-        if (base_ds != actual_ds)
-        {
-            p_text_out(format(
-                "It shoots arrows for %dd%d damage (%dd%d with your current strength).",
-                base_dd, base_ds, actual_dd, actual_ds));
-        }
-        else
-        {
-            p_text_out(format("It shoots arrows for %dd%d damage.", base_dd, base_ds));
-        }
-    }
-
-    return (true);
+        p_text_out(format("%s %dd%d damage.", attack, actual_dd, actual_ds));
+    return true;
 }
 
 /*
@@ -2232,6 +2131,91 @@ static bool object_lore_select_segment(cptr raw,
     return (out[0] != '\0');
 }
 
+/* The short catalogue is independent of raw templates and save files.  If it
+ * is unavailable, retain the original descriptions rather than losing rules. */
+static const char* object_minimum_catalog(void)
+{
+    static bool attempted = false;
+    static char* catalog = NULL;
+    char path[1024];
+    size_t size = 0;
+
+    if (!attempted)
+    {
+        attempted = true;
+        if (ANGBAND_DIR_EDIT && path_build(path, sizeof(path), ANGBAND_DIR_EDIT,
+                "object-minimum.txt"))
+            catalog = SDL_LoadFile(path, &size);
+        if (!catalog)
+            log_warn("Minimum text item catalogue unavailable; using full descriptions");
+    }
+    return catalog;
+}
+
+/* Each line uses K:<kind>, E:<special>, or A:<artefact>, followed by :text. */
+static bool object_minimum_lookup(char type, int id, char* out, size_t out_sz)
+{
+    const char* line = object_minimum_catalog();
+
+    if (!out || out_sz == 0)
+        return false;
+    out[0] = '\0';
+    while (line && *line)
+    {
+        const char* end = strchr(line, '\n');
+        char* after_id;
+        long number;
+        if (!end)
+            end = line + strlen(line);
+        if (line[0] == type && line + 2 < end && line[1] == ':')
+        {
+            number = strtol(line + 2, &after_id, 10);
+            if (after_id > line + 2 && after_id < end && *after_id == ':'
+                && number == id)
+            {
+                object_lore_trim_copy(after_id + 1,
+                    (size_t)(end - after_id - 1), out, out_sz);
+                return out[0] != '\0';
+            }
+        }
+        line = *end ? end + 1 : end;
+    }
+    return false;
+}
+
+/* These kinds carry rules in their D: text, not just in object flags. */
+static bool object_minimum_needs_kind_text(const object_type* o_ptr)
+{
+    switch (o_ptr->tval)
+    {
+    case TV_LIGHT: case TV_METAL: case TV_CHEST: case TV_STAFF:
+    case TV_GEM: case TV_HORN: case TV_POTION: case TV_FLASK: case TV_FOOD:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static cptr object_minimum_appearance(const object_type* o_ptr)
+{
+    object_lore_alignment alignment = object_lore_actual_alignment(o_ptr);
+    cptr raw = k_info[o_ptr->k_idx].text
+        ? k_text + k_info[o_ptr->k_idx].text : NULL;
+    cptr tag = alignment == OBJECT_LORE_ALIGNMENT_NOBLE ? "[noble]"
+        : alignment == OBJECT_LORE_ALIGNMENT_EVIL ? "[evil]" : "[neutral]";
+
+    /* Before identification, show alignment only if the ordinary visible
+     * base description already has the corresponding appearance clause. */
+    if (!object_known_p(o_ptr)
+        && (!raw || !object_lore_text_is_structured(raw) || !strstr(raw, tag)))
+        return NULL;
+    if (alignment == OBJECT_LORE_ALIGNMENT_NOBLE)
+        return "Appearance: noble.";
+    if (alignment == OBJECT_LORE_ALIGNMENT_EVIL)
+        return "Appearance: evil.";
+    return NULL;
+}
+
 cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     size_t out_sz)
 {
@@ -2242,6 +2226,15 @@ cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
         return NULL;
 
     raw = lore_text(k_text + k_info[o_ptr->k_idx].text);
+    if (minimum_text_mode && object_minimum_catalog())
+    {
+        if (object_minimum_lookup('K', o_ptr->k_idx, out, out_sz))
+            return out;
+        if (!object_minimum_needs_kind_text(o_ptr))
+            return NULL;
+        /* A newly added functional kind without a short entry keeps its full
+         * description until one is authored. */
+    }
     if (!object_lore_text_is_structured(raw))
         return raw;
 
@@ -2341,18 +2334,9 @@ static bool screen_out_ego_lore(const object_type* o_ptr)
  *
  * Header for additional information when printing to screen.
  */
-static bool screen_out_head(const object_type* o_ptr)
+void object_info_item_header_out(const object_type* o_ptr)
 {
     char o_name[2048];
-    char base_desc_buf[2048];
-    cptr base_desc = NULL;
-    const char* meta_desc = NULL;
-
-    bool has_description = false;
-
-    log_trace("screen_out_head: Starting, Term->wid=%d, Term->hgt=%d", Term->wid, Term->hgt);
-    log_trace("screen_out_head: Current cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
-
     /* Description */
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
     object_info_capitalize_first(o_name);
@@ -2410,6 +2394,21 @@ static bool screen_out_head(const object_type* o_ptr)
         text_out_c(TERM_SLATE, format(" {%d,%d}", sd, wr));
     }
 
+}
+
+static bool screen_out_head(const object_type* o_ptr)
+{
+    char base_desc_buf[2048];
+    cptr base_desc = NULL;
+    cptr meta_desc = NULL;
+
+    bool has_description = false;
+
+    log_trace("screen_out_head: Starting, Term->wid=%d, Term->hgt=%d", Term->wid, Term->hgt);
+    log_trace("screen_out_head: Current cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
+
+    object_info_item_header_out(o_ptr);
+
     log_trace("screen_out_head: After printing object name, cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
 
     /* Compact names may abbreviate the note; Details retains the full text. */
@@ -2425,9 +2424,60 @@ static bool screen_out_head(const object_type* o_ptr)
     if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr))
         meta_desc = meta_artifact_runtime_description(o_ptr->name1);
 
-    if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)
-        && a_info[o_ptr->name1].text)
+    if (minimum_text_mode && object_minimum_catalog()
+        && (object_aware_p(o_ptr) || object_known_p(o_ptr)))
+    {
+        cptr appearance = object_minimum_appearance(o_ptr);
 
+        if (appearance)
+        {
+            p_text_out("\n\n   ");
+            p_text_out(appearance);
+            has_description = true;
+        }
+
+        if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr))
+        {
+            base_desc = object_minimum_lookup('A', o_ptr->name1,
+                base_desc_buf, sizeof(base_desc_buf)) ? base_desc_buf : NULL;
+        }
+        else
+        {
+            base_desc = object_lore_select_base_text(o_ptr, base_desc_buf,
+                sizeof(base_desc_buf));
+        }
+        if (base_desc && base_desc[0])
+        {
+            p_text_out("\n\n   ");
+            p_text_out(base_desc);
+            has_description = true;
+        }
+        if (object_known_p(o_ptr) && (adult_rand_artefacts || !o_ptr->name1))
+        {
+            byte prefix = object_ego_prefix(o_ptr);
+            byte suffix = object_ego_suffix(o_ptr);
+            if (prefix && object_minimum_lookup('E', prefix, base_desc_buf,
+                    sizeof(base_desc_buf)))
+            {
+                p_text_out("\n\n   ");
+                p_text_out(base_desc_buf);
+                has_description = true;
+            }
+            if (suffix && suffix != prefix
+                && object_minimum_lookup('E', suffix, base_desc_buf,
+                    sizeof(base_desc_buf)))
+            {
+                p_text_out("\n\n   ");
+                p_text_out(base_desc_buf);
+                has_description = true;
+            }
+        }
+    }
+    /* Full descriptions remain available when the mode is off or its
+     * catalogue is missing.  Mechanical properties are rendered below in
+     * either case, with the existing identification rules. */
+    else if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)
+        && a_info[o_ptr->name1].text)
     {
         p_text_out("\n\n   ");
         p_text_out(a_text + a_info[o_ptr->name1].text);
@@ -2510,12 +2560,21 @@ void object_info_screen(const object_type* o_ptr)
     const object_type* objects[1];
 
     objects[0] = o_ptr;
-    object_info_screen_multi(objects, NULL, 1);
+    object_info_screen_multi(objects, NULL, 1, false);
 }
 
 static void object_info_screen_multi_body(const object_type** objects,
-    const char** headings, int count, bool clear_current_line)
+    const char** headings, int count, bool clear_current_line, bool compare)
 {
+    if (compare)
+    {
+        text_out_c(TERM_L_BLUE, "Selected item\n");
+        object_info_item_header_out(objects[0]);
+        text_out("\n\n");
+        object_compare_summary_out(objects, headings, count);
+        return;
+    }
+
     for (int i = 0; i < count; i++)
     {
         if (i > 0)
@@ -2575,6 +2634,7 @@ static void object_info_screen_capture_free(
 
     capture->width = 0;
     capture->height = 0;
+    capture->fixed_rows = 0;
 }
 
 static void object_info_overlay_capture_release(void)
@@ -2583,6 +2643,7 @@ static void object_info_overlay_capture_release(void)
         return;
 
     object_info_screen_capture_free(&object_info_overlay_capture);
+    object_info_screen_capture_free(&object_info_overlay_comparison);
     object_info_overlay_capture_active = false;
 }
 
@@ -2645,7 +2706,7 @@ static int object_info_screen_capture_used_cols(term* t, int rows)
 static bool object_info_screen_capture_build(
     const object_type** objects, const char** headings, int count,
     object_info_screen_capture* capture, int preferred_width,
-    bool use_story_font, bool interactive)
+    bool use_story_font, bool interactive, bool has_view_toggle, bool compare)
 {
     term scratch;
     term* saved_term = Term;
@@ -2655,6 +2716,8 @@ static bool object_info_screen_capture_build(
     bool old_paragraph = new_paragraph;
     story_font_term_state story_state;
     bool story_pushed = false;
+    bool wrap_pushed = false;
+    text_out_wrap_region old_region;
     bool scratch_ready = false;
     bool success = false;
     int term_wid = 80;
@@ -2663,6 +2726,7 @@ static bool object_info_screen_capture_build(
     int capture_hgt;
     int used_rows;
     int used_cols;
+    int control_rows = 0, control_columns = 0, control_pixels = 0;
 
     if (!capture || !objects || count <= 0 || !saved_term)
         return false;
@@ -2704,9 +2768,16 @@ static bool object_info_screen_capture_build(
     text_out_indent = 0;
     new_paragraph = false;
 
+    if (has_view_toggle && !sdl_description_overlay_capture_flow(
+            use_story_font, interactive, compare, target_wid,
+            &control_rows, &control_columns, &control_pixels))
+        goto cleanup;
+    text_out_wrap_region_push(control_rows, control_columns, control_pixels, &old_region);
+    wrap_pushed = true;
+
     Term_clear();
     Term_gotoxy(0, 0);
-    object_info_screen_multi_body(objects, headings, count, true);
+    object_info_screen_multi_body(objects, headings, count, true, compare);
 
     used_rows = object_info_screen_capture_used_rows(Term);
     if (used_rows < 1)
@@ -2718,6 +2789,7 @@ static bool object_info_screen_capture_build(
     capture->width = used_cols;
     capture->height = used_rows;
     capture->target_cols = target_wid;
+    capture->fixed_rows = control_rows;
     capture->cursor_x = scratch.scr->cx;
     capture->cursor_y = scratch.scr->cy;
     capture->cursor_useless = scratch.scr->cu;
@@ -2749,6 +2821,9 @@ cleanup:
     text_out_indent = old_indent;
     new_paragraph = old_paragraph;
 
+    if (wrap_pushed)
+        text_out_wrap_region_pop(&old_region);
+
     if (story_pushed)
         story_font_term_pop(&story_state);
 
@@ -2764,12 +2839,37 @@ cleanup:
     return success;
 }
 
+static bool object_info_capture_present(const object_info_screen_capture* full,
+    const object_info_screen_capture* comparison, bool comparison_view,
+    int scroll, bool interactive, int* visible_rows, int* max_scroll)
+{
+    if (comparison && comparison->attrs)
+    {
+        sdl_description_content full_content = { full->attrs, full->chars,
+            full->tattrs, full->tchars, full->story, NULL,
+            full->width, full->height, full->target_cols, full->fixed_rows };
+        sdl_description_content comparison_content = { comparison->attrs,
+            comparison->chars, comparison->tattrs, comparison->tchars,
+            comparison->story, NULL, comparison->width, comparison->height,
+            comparison->target_cols, comparison->fixed_rows };
+        return sdl_description_overlay_present_views(&full_content,
+            &comparison_content, comparison_view, scroll, interactive,
+            visible_rows, max_scroll);
+    }
+    return sdl_description_overlay_present(full->attrs, full->chars,
+        full->tattrs, full->tchars, full->story, NULL, full->width,
+        full->height, full->target_cols, scroll, interactive,
+        visible_rows, max_scroll);
+}
+
 bool object_info_overlay_show_multi(const object_type** objects,
-    const char** headings, int count)
+    const char** headings, int count, bool compare)
 {
     object_info_screen_capture capture;
+    object_info_screen_capture comparison = { 0 };
     int overlay_width;
     bool use_story_font;
+    bool can_compare;
 
     if (count <= 0 || objects == NULL)
         return false;
@@ -2785,24 +2885,22 @@ bool object_info_overlay_show_multi(const object_type** objects,
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();
     overlay_width = object_info_screen_preferred_capture_width(use_story_font);
+    can_compare = compare && object_compare_has_targets(objects, count);
 
     if (!object_info_screen_capture_build(objects, headings, count, &capture,
-            overlay_width, use_story_font, false))
+            overlay_width, use_story_font, false, can_compare, false))
         return false;
+    if (can_compare)
+        (void)object_info_screen_capture_build(objects, headings, count,
+            &comparison, overlay_width, use_story_font, false, true, true);
 
     object_info_overlay_capture_release();
     object_info_overlay_capture = capture;
+    object_info_overlay_comparison = comparison;
     object_info_overlay_capture_active = true;
 
-    if (!sdl_description_overlay_present(object_info_overlay_capture.attrs,
-            object_info_overlay_capture.chars,
-            object_info_overlay_capture.tattrs,
-            object_info_overlay_capture.tchars,
-            object_info_overlay_capture.story,
-            NULL,
-            object_info_overlay_capture.width,
-            object_info_overlay_capture.height,
-            object_info_overlay_capture.target_cols, 0, false, NULL, NULL))
+    if (!object_info_capture_present(&object_info_overlay_capture,
+            &object_info_overlay_comparison, false, 0, false, NULL, NULL))
     {
         object_info_overlay_clear();
         return false;
@@ -2951,12 +3049,14 @@ static void object_info_configure_footer(cptr footer,
 }
 
 static char object_info_screen_capture_view(
-    const object_info_screen_capture* capture, const object_type* item, cptr footer,
+    const object_info_screen_capture* capture,
+    const object_info_screen_capture* comparison, const object_type* item, cptr footer,
     const object_info_screen_action* actions, int action_count)
 {
     int scroll = 0;
     char result = 0;
     bool described = false;
+    bool comparison_view = false;
 
     if (!capture)
         return 0;
@@ -2971,11 +3071,8 @@ static char object_info_screen_capture_view(
 
         Term_get_size(NULL, &term_hgt);
         object_info_configure_footer(footer, actions, action_count);
-        if (!sdl_description_overlay_present(capture->attrs, capture->chars,
-                capture->tattrs, capture->tchars, capture->story,
-                NULL,
-                capture->width, capture->height, capture->target_cols, scroll,
-                true, &visible_rows, &max_scroll))
+        if (!object_info_capture_present(capture, comparison, comparison_view,
+                scroll, true, &visible_rows, &max_scroll))
         {
             break;
         }
@@ -2993,6 +3090,11 @@ static char object_info_screen_capture_view(
         ui_scroll_area_set_tap_key(ESCAPE);
 
         ch = inkey();
+        if (comparison_view != sdl_description_overlay_comparison_view())
+        {
+            comparison_view = sdl_description_overlay_comparison_view();
+            scroll = 0;
+        }
         dir = target_dir(ch);
         if ((dir == 8) || (dir == 2))
             ch = I2D(dir);
@@ -3000,6 +3102,13 @@ static char object_info_screen_capture_view(
         if (ch == UI_MENU_CLICK_WAKE_KEY)
         {
             continue;
+        }
+        else if ((ch == 'v' || ch == 'V') && comparison && comparison->attrs
+            && !object_info_screen_key_is_action(ch, actions, action_count))
+        {
+            (void)sdl_description_overlay_toggle_view();
+            comparison_view = sdl_description_overlay_comparison_view();
+            scroll = 0;
         }
         else if (ch == ESCAPE)
         {
@@ -3046,17 +3155,19 @@ static char object_info_screen_capture_view(
     return result;
 }
 
-void object_info_screen_multi(const object_type** objects, const char** headings, int count)
+void object_info_screen_multi(const object_type** objects,
+    const char** headings, int count, bool compare)
 {
     (void)object_info_screen_multi_with_actions(objects, headings, count,
-        NULL, NULL, 0);
+        NULL, NULL, 0, compare);
 }
 
 char object_info_screen_multi_with_actions(const object_type** objects,
     const char** headings, int count, cptr footer,
-    const object_info_screen_action* actions, int action_count)
+    const object_info_screen_action* actions, int action_count, bool compare)
 {
     object_info_screen_capture capture;
+    object_info_screen_capture comparison = { 0 };
     object_info_screen_action effective_actions[OBJECT_INFO_MAX_ACTIONS];
     char effective_footer[160];
     char understanding_token[32];
@@ -3066,6 +3177,7 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     int effective_action_count = 0;
     int understanding_count = 0;
     bool use_story_font;
+    bool can_compare;
 
     if (count <= 0 || objects == NULL)
         return 0;
@@ -3080,6 +3192,7 @@ char object_info_screen_multi_with_actions(const object_type** objects,
 
     SDL_memset(&capture, 0, sizeof(capture));
     use_story_font = story_object_desc_enabled();
+    can_compare = compare && object_compare_has_targets(objects, count);
 
     if (actions && action_count > 0)
     {
@@ -3127,10 +3240,14 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     have_capture =
         object_info_screen_capture_build(objects, headings, count, &capture,
             object_info_screen_preferred_capture_width(use_story_font),
-            use_story_font, true);
+            use_story_font, true, can_compare, false);
+    if (have_capture && can_compare)
+        (void)object_info_screen_capture_build(objects, headings, count,
+            &comparison, object_info_screen_preferred_capture_width(use_story_font),
+            use_story_font, true, true, true);
     if (have_capture)
     {
-        result = object_info_screen_capture_view(&capture, objects[0], footer,
+        result = object_info_screen_capture_view(&capture, &comparison, objects[0], footer,
             effective_action_count ? effective_actions : NULL,
             effective_action_count);
     }
@@ -3151,6 +3268,7 @@ char object_info_screen_multi_with_actions(const object_type** objects,
     {
         sdl_description_overlay_clear();
         object_info_screen_capture_free(&capture);
+        object_info_screen_capture_free(&comparison);
     }
 
     text_out_hook = text_out_to_screen;

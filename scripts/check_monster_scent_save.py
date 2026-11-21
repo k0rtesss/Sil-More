@@ -99,7 +99,7 @@ int fixture_read_current_dungeon(const byte* buffer, size_t length,
     return fixture_read_dungeon_version(buffer, length, VERSION_MAJOR,
         VERSION_MINOR, VERSION_PATCH, VERSION_EXTRA, sentinel, consumed);
 }
-static int fixture_read_monster_version(const byte* buffer, size_t length,
+int fixture_read_monster_version(const byte* buffer, size_t length,
     int major, int minor, int patch, int extra,
     monster_type* monster, u32b* sentinel, size_t* consumed)
 {
@@ -130,7 +130,6 @@ int fixture_read_current_monster(const byte* buffer, size_t length,
     return fixture_read_monster_version(buffer, length, VERSION_MAJOR,
         VERSION_MINOR, VERSION_PATCH, VERSION_EXTRA, monster, sentinel, consumed);
 }
-
 '''
 
 LEGENDARY_MIGRATION = r'''
@@ -167,6 +166,8 @@ int fixture_read_current_dungeon(const byte*, size_t, u32b*, size_t*);
 size_t fixture_write_monster(const monster_type*, byte*, size_t);
 int fixture_read_monster(const byte*, size_t, int, monster_type*, u32b*, size_t*);
 int fixture_read_current_monster(const byte*, size_t, monster_type*, u32b*, size_t*);
+int fixture_read_monster_version(const byte*, size_t, int, int, int, int,
+    monster_type*, u32b*, size_t*);
 static byte encoded[65536], plain[65536], modified[65536];
 static byte expected[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 
@@ -234,6 +235,8 @@ static void test_current_roundtrip(void)
     m->alertness = ALERTNESS_ALERT;
     m->poisoned = 27; m->vengeance = 1; m->smite_recovery = 1;
     m->consecutive_attacks = 2;
+    m->squad.budget_plan = 2; m->squad.plan_age = 8;
+    m->squad.plan_turn = playerturn - 3;
     m->ai.observations[MON_AI_FIRE].value = 2;
     m->ai.observations[MON_AI_FIRE].ttl = 40;
     m->ai.observations[MON_AI_FIRE].turn = playerturn - 7;
@@ -313,6 +316,9 @@ static void test_current_roundtrip(void)
     assert(m->r_idx == 41 && mon_max == 2);
     assert(m->poisoned == 27 && m->vengeance == 1 && m->smite_recovery == 1);
     assert(m->skip_next_turn && m->consecutive_attacks == 2);
+    assert(m->squad.budget_plan == 2 && m->squad.plan_age == 8
+        && m->squad.plan_turn == (u32b)playerturn - 3);
+    assert(!m->squad.commander && !m->squad.role);
     assert(memcmp(&m->ai, &expected_ai, sizeof(expected_ai)) == 0);
     assert(monster_ai_confidence(m, MON_AI_FIRE) == 2);
     assert(monster_ai_confidence(m, MON_AI_FLANKING) == 3);
@@ -382,6 +388,9 @@ static void test_monster_record_legacy_compatibility(void)
     source.ai.player_action_turn = playerturn - 1;
     source.ai.attack_y = 5; source.ai.attack_x = 5; source.ai.attack_chain = 2;
     source.ai.attack_turn = playerturn - 2;
+    source.squad.commander = 1; source.squad.role = 1;
+    source.squad.budget_plan = 1; source.squad.plan_age = 1;
+    source.squad.plan_turn = playerturn - 1;
 
     size_t modern_length = fixture_write_monster(&source, encoded, sizeof(encoded));
     u32b sentinel; size_t consumed;
@@ -401,19 +410,62 @@ static void test_monster_record_legacy_compatibility(void)
         && restored.ai.player_action_turn == playerturn - 1);
     assert(restored.ai.attack_chain == 2
         && restored.ai.attack_turn == playerturn - 2);
+    assert(restored.squad.budget_plan == 1 && restored.squad.plan_age == 1
+        && restored.squad.plan_turn == (u32b)playerturn - 1);
+    assert(!restored.squad.commander && !restored.squad.role);
+
+    /* The six-byte budget suffix is absent in 1.1.0.10. The following
+     * sentinel proves the legacy reader consumes exactly the old record. */
+    decode(encoded, plain, modern_length);
+    size_t budget_start = modern_length - 4 - 6;
+    memmove(plain + budget_start, plain + budget_start + 6, 4);
+    size_t previous_length = modern_length - 6;
+    encode(plain, modified, previous_length);
+    memset(&restored, 0x55, sizeof(restored));
+    assert(fixture_read_monster_version(modified, previous_length, 1, 1, 0, 10, &restored,
+        &sentinel, &consumed) == 0);
+    assert(sentinel == 0xB4C3D2E1U && consumed == previous_length);
+    assert(!restored.squad.budget_plan && !restored.squad.plan_age
+        && !restored.squad.plan_turn && !restored.squad.commander);
+
+    /* Master predates the streamed site ID, but added its own budget suffix. */
+    decode(encoded, plain, modern_length);
+    encode(plain + 8, modified, modern_length - 8);
+    assert(fixture_read_monster_version(modified, modern_length - 8, 0, 9, 9, 10,
+        &restored, &sentinel, &consumed) == 0);
+    assert(sentinel == 0xB4C3D2E1U && consumed == modern_length - 8);
+    assert(!restored.site_token && restored.squad.plan_age == 1);
+
+    /* Malformed optional memory recovers without importing runtime orders
+     * or shifting the next record. */
+    decode(encoded, plain, modern_length);
+    plain[budget_start] = 255;
+    encode(plain, modified, modern_length);
+    memset(&restored, 0, sizeof(restored));
+    assert(fixture_read_current_monster(modified, modern_length, &restored,
+        &sentinel, &consumed) == 0);
+    assert(sentinel == 0xB4C3D2E1U && consumed == modern_length);
+    assert(!restored.squad.budget_plan && !restored.squad.plan_age
+        && !restored.squad.plan_turn);
+    puts("Command budget roundtrip: 1.1.0.10 defaults, master import, no transient orders and malformed memory recovery PASS.");
 
     /* Remove the four appended .7 observations and make the retired .6 slot
      * nonzero, as a historical save could have written its catch-all value. */
     decode(encoded, plain, modern_length);
+    memmove(plain + budget_start, plain + budget_start + 6, 4);
+    modern_length -= 6;
+    memmove(plain, plain + 8, modern_length - 8);
+    modern_length -= 8;
     size_t record_size = modern_length - 4;
     size_t ai_start = record_size - MON_AI_FEATURE_COUNT * 7 - (22 + 13 + 8);
-    /* .31/.34/.35 add two poison words and nine achievement bytes before
-     * vengeance/smite. Historical .6 records contain none of these fields. */
-    size_t achievement_start = ai_start - 15;
-    memmove(plain + achievement_start, plain + achievement_start + 13,
-        modern_length - achievement_start - 13);
-    modern_length -= 13;
-    ai_start -= 13;
+    /* .31/.34/.35 inserted poison ownership and achievement metadata
+     * immediately before vengeance/smite; historical .6 has none of it. */
+    const size_t later_bytes = 2 + 2 + 4 + 4 + 1;
+    size_t later_start = ai_start - 2 - later_bytes;
+    memmove(plain + later_start, plain + later_start + later_bytes,
+        modern_length - later_start - later_bytes);
+    modern_length -= later_bytes;
+    ai_start -= later_bytes;
     size_t appended = (MON_AI_FEATURE_COUNT - MON_AI_IMPALE) * 7;
     size_t removed_start = ai_start + MON_AI_IMPALE * 7;
     memmove(plain + removed_start, plain + removed_start + appended,
@@ -517,6 +569,27 @@ def main(extra_tests="", extra_calls="", legacy_dungeons=()):
                 line = f"        {write}(m->{field});"
                 assert historical.count(line) == 1
                 historical = historical.replace(line, "")
+        # Dungeon writers call a separate monster serializer. Keep that record
+        # historical too; pairing old dungeon lanes with today's monster fields
+        # produces a byte stream that never existed in the stated save version.
+        historical_save = subprocess.check_output(["git", "-c", "core.fsmonitor=false",
+            "show", f"{ref}:src/fs/save.c"], cwd=ROOT, text=True)
+        match = re.search(r"^(?:static )?void wr_monster\([^\n]*\)\n\{",
+                          historical_save, re.M)
+        assert match
+        monster_writer = historical_save[match.start():
+            historical_save.index("\n}", match.end()) + 2]
+        legacy_monster_name = f"fixture_legacy_v{extra}_wr_monster"
+        monster_writer = monster_writer.replace("void wr_monster(",
+                                                f"void {legacy_monster_name}(", 1)
+        flags_start = historical_save.index("#define SAVE_MON_FLAGS")
+        flags = historical_save[flags_start:historical_save.index("\n\n", flags_start)]
+        historical = historical.replace("        wr_monster(m_ptr);",
+            f"        {legacy_monster_name}(m_ptr);")
+        insertion = historical.index("static void ")
+        historical = (historical[:insertion] + '#include "monster/monster-ai.h"\n'
+                      + flags + "\n" + monster_writer
+                      + "\n" + historical[insertion:])
         old_source = OUT / f"legacy-v{extra}-writer.c"
         old_source.write_text(historical, encoding="utf-8")
         sources.append(str(old_source))

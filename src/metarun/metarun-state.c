@@ -7,6 +7,22 @@ s16b     metarun_max = 0;
 s16b     current_run = 0;
 bool            metarun_created = false;
 
+int run_blessing_stack(int id)
+{
+    if (id < 0 || id >= METAR_CURSE_SLOTS) return 0;
+    return (metarun_run_blessings(p_ptr) >> id) & 1ULL;
+}
+
+int metarun_net_curse_stacks(void)
+{
+    int total = 0;
+    u64b blessings = metarun_run_blessings(p_ptr);
+
+    for (int id = 0; id < METAR_CURSE_SLOTS; id++)
+        total += CURSE_GET(id) - (int)((blessings >> id) & 1ULL);
+    return total;
+}
+
 /* ----------------------- accessors --------------------------- */
 const metarun *metarun_current(void)
 {

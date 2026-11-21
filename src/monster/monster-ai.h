@@ -24,11 +24,12 @@ enum monster_tactic_reason
     MON_TACTIC_CONCENTRATION, MON_TACTIC_INTERCEPT, MON_TACTIC_GUARD,
     MON_TACTIC_WITHDRAWAL, MON_TACTIC_SONG_DISTANCE, MON_TACTIC_SONG_PRESSURE,
     MON_TACTIC_TERRAIN, MON_TACTIC_RETREAT_WAIT, MON_TACTIC_ORDER,
-    MON_TACTIC_PACK, MON_TACTIC_MAX
+    MON_TACTIC_PACK, MON_TACTIC_FIRING_POSITION, MON_TACTIC_MAX
 };
 
 void monster_ai_plan_feedback(monster_type* m_ptr, int reason, int y, int x);
 bool monster_ai_enabled(const monster_type* m_ptr);
+bool monster_ai_challenge_melee(const monster_type* m_ptr);
 bool monster_ai_can_see_player(const monster_type* m_ptr);
 int monster_ai_confidence(const monster_type* m_ptr, int feature);
 void monster_ai_observe(monster_type* m_ptr, int feature, int evidence);

@@ -16,8 +16,8 @@ sil_perf_stamp sil_perf_begin(void);
 void sil_perf_end(const char* label, sil_perf_stamp start);
 void sil_perf_wait_end(sil_perf_stamp start);
 void sil_perf_flush(void);
-/* Temporary targeted diagnostics: INFO-level wall-clock landing-to-popup
- * traces, independent of SIL_PERF. Main thread only; no gameplay changes. */
+/* Opt-in INFO-level landing-to-popup traces, enabled by SIL_PERF=1.
+ * Main thread only; no gameplay changes. */
 void sil_popup_trace_begin(int from_y, int from_x, int to_y, int to_x);
 void sil_popup_trace_stage(const char* stage);
 void sil_popup_trace_end(const char* reason);

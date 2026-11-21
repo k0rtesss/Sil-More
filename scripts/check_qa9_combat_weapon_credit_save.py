@@ -32,9 +32,9 @@ size_t fixture_write(byte* buffer,size_t capacity,int legacy)
 READER = r"""
 #include "fs/load.c"
 #include <assert.h>
-bool fixture_supported(int extra)
+bool fixture_supported(int patch, int extra)
 {
-    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=VERSION_PATCH;sf_extra=extra;
+    sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=patch;sf_extra=extra;
     return savefile_version_supported();
 }
 int fixture_read(const byte* buffer,size_t size,int extra)
@@ -57,13 +57,13 @@ int fixture_read(const byte* buffer,size_t size,int extra)
 CHECKS = r"""
 extern size_t fixture_write(byte*,size_t,int);
 extern int fixture_read(const byte*,size_t,int);
-extern bool fixture_supported(int);
+extern bool fixture_supported(int,int);
 static void checks(void)
 {
     byte buffer[262144];size_t canonical_size[2]={0};
-    assert(fixture_supported(2) && fixture_supported(3)
-        && fixture_supported(VERSION_EXTRA)
-        && !fixture_supported(VERSION_EXTRA + 1));
+    assert(fixture_supported(VERSION_PATCH, 2) && fixture_supported(VERSION_PATCH, 3)
+        && fixture_supported(VERSION_PATCH, VERSION_EXTRA)
+        && !fixture_supported(VERSION_PATCH, VERSION_EXTRA + 1));
     memset(inventory,0,INVEN_TOTAL*sizeof(*inventory));
     player_carried_extra_reset_store();player_quiver_reset_store();supplies_reset_store();
     for(int legacy=0;legacy<3;legacy++) for(int used=0;used<3;used++) {

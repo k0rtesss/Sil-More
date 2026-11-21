@@ -33,7 +33,9 @@ static player_race race;
 static character_profile profile;
 static const char* keys;
 static int key_index, frames, bells, advice_popups, popup_frame;
-static bool spectator, controller, pending_defaults_click;
+static bool spectator, controller, pending_defaults_click, hover_enabled;
+static bool pending_skill_click;
+static int pending_skill_action, selected_skill;
 static void (*inspect_input)(void);
 
 void tutorial_game_menu(const char* id, const char* description) {}
@@ -43,15 +45,25 @@ bool death_spectator_active(void) { return spectator; }
 bool steamdeck_controls_active(void) { return controller; }
 void update_stuff(void) {}
 void ui_menu_click_begin(void) {}
-void ui_menu_click_set_hover_enabled(bool enabled) {}
+void ui_menu_click_set_hover_enabled(bool enabled) { hover_enabled = enabled; }
 void ui_menu_click_clear(void) {}
 bool ui_menu_click_take_action(int* choice, int* action)
 {
-    if (!pending_defaults_click) return false;
-    pending_defaults_click = false;
-    *choice = -4;
-    *action = UI_MENU_CLICK_PRIMARY;
-    return true;
+    if (pending_defaults_click)
+    {
+        pending_defaults_click = false;
+        *choice = -4;
+        *action = UI_MENU_CLICK_PRIMARY;
+        return true;
+    }
+    if (pending_skill_click)
+    {
+        pending_skill_click = false;
+        *choice = S_ARC;
+        *action = pending_skill_action;
+        return true;
+    }
+    return false;
 }
 void birth_coach_show_once(int stage) {}
 void sdl_character_sheet_screen_hide(void) {}
@@ -87,6 +99,7 @@ void sdl_character_sheet_screen_show_birth_skills(const int* old_base,
     }
     assert(points_left == p_ptr->new_exp);
     assert(total >= 0);
+    selected_skill = selected;
     frames++;
 }
 char inkey(void)
@@ -96,7 +109,24 @@ char inkey(void)
     assert(keys[key_index]); /* An unexpected extra prompt must fail, not hang. */
     if (inspect_input) inspect_input();
     char key = keys[key_index++];
+    /* Pointer motion alone must not wake the allocation loop. */
+    if (key == 'h')
+    {
+        if (hover_enabled)
+        {
+            pending_skill_click = true;
+            pending_skill_action = UI_MENU_CLICK_HOVER;
+            return UI_MENU_CLICK_WAKE_KEY;
+        }
+        key = keys[key_index++];
+    }
     if (key == '@') pending_defaults_click = true;
+    if (key == 'c' || key == 'r')
+    {
+        pending_skill_click = true;
+        pending_skill_action = key == 'r' ? UI_MENU_CLICK_SECONDARY
+                                          : UI_MENU_CLICK_PRIMARY;
+    }
     return key;
 }
 int steamdeck_menu_key(int key, int prev, int next) { return key; }
@@ -120,7 +150,9 @@ static void setup(const char* input)
     player.skill_base[S_SPC] = 7; /* Special abilities never enter purchases. */
     keys = input;
     key_index = frames = bells = advice_popups = popup_frame = 0;
-    spectator = controller = pending_defaults_click = false;
+    spectator = controller = pending_defaults_click = hover_enabled = false;
+    pending_skill_click = false;
+    selected_skill = -1;
     inspect_input = NULL;
     gain_skills_set_initial_skill(-1);
 }
@@ -153,8 +185,37 @@ static void inspect_refund(void)
     }
 }
 
+static void inspect_pointer_purchase(void)
+{
+    assert(!hover_enabled);
+    if (key_index == 0)
+    {
+        assert(selected_skill == S_MEL);
+        assert(player.skill_base[S_ARC] == 0 && player.new_exp == 800);
+    }
+    else if (key_index == 2)
+    {
+        assert(selected_skill == S_ARC);
+        assert(player.skill_base[S_ARC] == 0 && player.new_exp == 800);
+    }
+    else if (key_index == 3)
+        assert(player.skill_base[S_ARC] == 1 && player.new_exp == 700);
+    else if (key_index == 4)
+        assert(player.skill_base[S_ARC] == 0 && player.new_exp == 800);
+    else
+        assert(false);
+}
+
 static void skills(void)
 {
+    /* Move over Archery, click once to select, click again to buy, then
+     * right-click to refund. Motion must never turn the first click into a
+     * purchase. */
+    setup("hccr\r");
+    inspect_input = inspect_pointer_purchase;
+    assert(gain_skills_birth() == NAV_OK);
+    expect_defaults();
+
     setup("\r");
     inspect_input = expect_defaults;
     assert(gain_skills_birth() == NAV_OK);

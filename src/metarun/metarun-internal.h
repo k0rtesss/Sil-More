@@ -84,6 +84,7 @@ cptr blessing_display_name(int idx);
 cptr metarun_display_pad(char *buf, size_t size, cptr name, int cols);
 void open_blessing_exchange(void);
 int metarun_inline_minor_blessing_choices(int out[3]);
+u64b metarun_choose_run_blessings(void);
 bool metarun_inline_choose_minor_blessing(int id);
 bool metarun_inline_choose_major_blessing(int idx);
 bool metarun_inline_remove_curse(int id);

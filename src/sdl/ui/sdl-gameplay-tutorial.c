@@ -96,6 +96,20 @@ static bool tutorial_menu_owns_input(void)
         || g_minimap.active || g_unified_look_active;
 }
 
+static bool tutorial_map_selection_active(const tutorial_view *view)
+{
+    return !view->can_continue && !tutorial_reading && g_pointer_aim.active;
+}
+
+static void tutorial_hide_card(void)
+{
+    tutorial_card = (SDL_FRect){0};
+    memset(tutorial_buttons, 0, sizeof(tutorial_buttons));
+    tutorial_max_scroll = 0;
+    tutorial_pressed_button = -1;
+    tutorial_scrolling = false;
+}
+
 void sdl_gameplay_tutorial_sync(void)
 {
     unsigned int revision = tutorial_revision();
@@ -670,6 +684,7 @@ void sdl_gameplay_tutorial_render(void)
     bool has_anchor;
     bool compact_action;
     bool action_step;
+    bool show_shortcuts;
     SDL_FRect card_space;
     float margin, width, height, pad, line_h, body_y, body_h, heading_h;
     float button_h=44, button_pad, gap, footer_h, footer_y, hint_h[2];
@@ -682,13 +697,19 @@ void sdl_gameplay_tutorial_render(void)
         ? large_lines : normal_lines;
     int line_capacity = config.bigger_font ? 512 : 48;
     char large_body[8192];
-    static const cptr large_buttons[3] = { ">", "X", "?" };
     TTF_Font *font;
     const SDL_Color white = {240,239,231,255}, gold = {244,202,111,255};
     const SDL_Color muted = {182,191,204,255};
     sdl_gameplay_tutorial_sync();
     if (tutorial_mode_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
+    /* Aiming needs the whole map: the target, other creatures and the path
+     * can all lie under the card or its shade. Keep the lesson pending and
+     * restore it when aiming ends; explicit reading still opens the card. */
+    if (tutorial_map_selection_active(&view)) {
+        tutorial_hide_card();
+        return;
+    }
     lore_copy(view.title, sizeof(view.title), view.title);
     lore_copy(view.body, sizeof(view.body), view.body);
     tutorial_build_controls(&view,&controls,false);
@@ -747,9 +768,7 @@ void sdl_gameplay_tutorial_render(void)
              * the selection use the whole menu; the tutorial remains active
              * and returns when the menu closes (or the controller opens the
              * card for reading). Never cover the rows needed to finish it. */
-            tutorial_card = (SDL_FRect){0};
-            memset(tutorial_buttons,0,sizeof(tutorial_buttons));
-            tutorial_max_scroll = 0;
+            tutorial_hide_card();
             return;
         }
         if (action_space.h >= minimum) card_space = action_space;
@@ -760,6 +779,9 @@ void sdl_gameplay_tutorial_render(void)
     }
     first_button=controls.primary?0:1;
     button_count=3-first_button;
+    /* Try to include shortcuts on desktop. Their actual wrapped height and
+     * the remaining card space decide whether they fit below the labels. */
+    show_shortcuts = !config.bigger_font || !sdl_handheld_ui_active();
     label_px=MAX(13,(int)(font_px*0.85f));
     shortcut_px=MAX(11,(int)(font_px*0.65f));
     if (tutorial_input_kind()==TUTORIAL_INPUT_CONTROLLER)
@@ -787,14 +809,14 @@ void sdl_gameplay_tutorial_render(void)
     tutorial_build_controls(&view,&scrolling_controls,true);
     SDL_strlcat(scrolling_controls.controls_hint," | 512-512/512",
         sizeof(scrolling_controls.controls_hint));
+    strnfmt(heading,sizeof(heading),"%s  %d/%d",view.title,view.step,view.step_count);
     for (;;) {
         button_h=minimum_button_h;
         for (int i=first_button;i<3;++i) {
             float text_w=(width-2*pad)/button_count-18;
-            label_h[i]=tutorial_text_height((config.bigger_font && !sdl_handheld_ui_active())
-                ? large_buttons[i] : controls.label[i],label_px,text_w);
-            shortcut_h[i]=config.bigger_font ? 0
-                : tutorial_text_height(controls.shortcut[i],shortcut_px,text_w);
+            label_h[i]=tutorial_text_height(controls.label[i],label_px,text_w);
+            shortcut_h[i]=show_shortcuts
+                ? tutorial_text_height(controls.shortcut[i],shortcut_px,text_w) : 0;
             button_h=MAX(button_h,2*button_pad+label_h[i]
                 +(shortcut_h[i]>0?gap+shortcut_h[i]:0));
         }
@@ -804,6 +826,15 @@ void sdl_gameplay_tutorial_render(void)
         float controls_h=button_h+gap;
         if (!compact_action && !config.bigger_font)
             controls_h+=action_h+reading_h+gap*(action_h>0?2:1);
+        if (config.bigger_font && show_shortcuts
+            && controls_h + 2*pad + line_h
+                + tutorial_text_height(heading,title_px,width-2*pad) + gap
+                > card_space.h) {
+            /* Preserve the named actions and prose before squeezing their
+             * font: shortcuts are supplementary and can be hidden. */
+            show_shortcuts=false;
+            continue;
+        }
         if (config.bigger_font || controls_h+2*pad+line_h<=card_space.h
             || (label_px<=13
                 && shortcut_px<=(tutorial_input_kind()==TUTORIAL_INPUT_CONTROLLER?13:11)
@@ -826,7 +857,6 @@ void sdl_gameplay_tutorial_render(void)
      * lesson-wide context here repeats it on every page, even unrelated ones. */
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
     if (!font) return;
-    strnfmt(heading,sizeof(heading),"%s  %d/%d",view.title,view.step,view.step_count);
     heading_h = tutorial_text_height(heading,title_px,
         width-2*pad-(!config.bigger_font && compact_action?100:0)) + gap;
     if (!config.bigger_font) heading_h=MAX(heading_h,line_h*1.5f);
@@ -939,9 +969,9 @@ void sdl_gameplay_tutorial_render(void)
         SDL_RenderRect(g_state.renderer,&tutorial_buttons[i]);
         float text_y=tutorial_buttons[i].y+(button_h-label_h[i]
             -(shortcut_h[i]>0?gap+shortcut_h[i]:0))/2;
-        sdl_touch_tutorial_draw_text_line((config.bigger_font && !sdl_handheld_ui_active()) ? large_buttons[i] : controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
+        sdl_touch_tutorial_draw_text_line(controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
             text_y,tutorial_buttons[i].w-12,label_px,white,true);
-        if (!config.bigger_font && controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
+        if (show_shortcuts && controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
             tutorial_buttons[i].x+tutorial_buttons[i].w/2,text_y+label_h[i]+gap,
             tutorial_buttons[i].w-12,shortcut_px,gold,true);
     }
@@ -957,6 +987,9 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     sdl_gameplay_tutorial_sync();
     if (tutorial_mode_selector_active) return false;
     active = tutorial_get_view(&view);
+    /* The selector can open before the next present. Discard stale card
+     * hitboxes immediately so the first tap on its former area can aim. */
+    if (active && tutorial_map_selection_active(&view)) tutorial_hide_card();
     tutorial_note_input(ev);
     switch (ev->type) {
     case SDL_EVENT_QUIT:

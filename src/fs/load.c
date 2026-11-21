@@ -12,6 +12,7 @@
 #include "level-generation/level-stream.h"
 #include "level-generation/level-cache.h"
 #include "meta_state.h"
+#include "monster/monster-tactics.h"
 #include "monster/monster-ai.h"
 #include "blitz.h"
 #include "externs.h"
@@ -1239,6 +1240,24 @@ void rd_monster(monster_type* m_ptr)
         rd_s32b(&m_ptr->ai.player_action_turn); rd_s32b(&m_ptr->ai.attack_turn);
         monster_ai_sanitize(m_ptr);
     }
+
+    memset(&m_ptr->squad, 0, sizeof(m_ptr->squad));
+    if (savefile_version_at_least(1, 1, 0, 11)
+        || (!savefile_version_at_least(1, 1, 0, 0)
+            && savefile_version_at_least(0, 9, 9, 10)))
+    {
+        rd_byte(&m_ptr->squad.budget_plan);
+        rd_byte(&m_ptr->squad.plan_age);
+        rd_u32b(&m_ptr->squad.plan_turn);
+        if (m_ptr->squad.budget_plan > MON_PLAN_REGROUP
+            || m_ptr->squad.plan_age > MON_SQUAD_BUDGET_MAX_AGE
+            || m_ptr->squad.plan_turn > (u32b)playerturn)
+        {
+            log_warn("Invalid saved monster command budget for race %d; resetting it",
+                m_ptr->r_idx);
+            memset(&m_ptr->squad, 0, sizeof(m_ptr->squad));
+        }
+    }
 }
 
 /*
@@ -1558,6 +1577,36 @@ static void rd_options(void)
     /* Read the option masks */
     for (n = 0; n < 8; n++)
         rd_u32b(&mask[n]);
+
+    if (!savefile_version_at_least(1, 1, 0, 11))
+    {
+        /* Master used slots 39 and 40, which 1.1 already uses for Insight
+         * and Tale artefact memory. The new slots were previously retired. */
+        const struct { int old_slot, new_slot, revision; } migrated[] = {
+            { 39, OPT_ignore_monster_alarms, 7 },
+            { 40, OPT_minimum_text_mode, 9 },
+        };
+        for (size_t j = 0; j < N_ELEMENTS(migrated); j++)
+        {
+            int old_slot = migrated[j].old_slot;
+            int new_slot = migrated[j].new_slot;
+            u32b old_bit = 1UL << (old_slot % 32);
+            u32b new_bit = 1UL << (new_slot % 32);
+            mask[new_slot / 32] &= ~new_bit;
+            if (!savefile_version_at_least(1, 1, 0, 0)
+                && savefile_version_at_least(0, 9, 9, migrated[j].revision))
+            {
+                if (mask[old_slot / 32] & old_bit)
+                {
+                    mask[new_slot / 32] |= new_bit;
+                    flag[new_slot / 32] &= ~new_bit;
+                    if (flag[old_slot / 32] & old_bit)
+                        flag[new_slot / 32] |= new_bit;
+                }
+                mask[old_slot / 32] &= ~old_bit;
+            }
+        }
+    }
 
     /* Analyze the options */
     for (i = 0; i < OPT_MAX; i++)
@@ -2714,7 +2763,9 @@ static void queue_oil_container_migration_messages(
 static void rd_messages(void)
 {
     int i;
-    char buf[128];
+    /* message_add() accepts strings shorter than a quarter of its ring
+     * buffer; preserve that same range when loading saved history. */
+    char buf[MESSAGE_BUF / 4];
     u16b tmp16u;
     u32b sequence;
 

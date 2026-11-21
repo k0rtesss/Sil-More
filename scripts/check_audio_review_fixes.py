@@ -383,7 +383,10 @@ int main(int argc, char** argv) {
     assert(argc == 4);
     log_set_quiet(true);
     ANGBAND_DIR_XTRA = argv[1]; ANGBAND_DIR_USER = argv[2]; ANGBAND_DIR_PREF = argv[3];
-    assert(SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy"));
+    (void)SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+    /* The matrix can already set this environment hint at higher priority. */
+    assert(SDL_GetHint(SDL_HINT_AUDIO_DRIVER)
+        && !strcmp(SDL_GetHint(SDL_HINT_AUDIO_DRIVER), "dummy"));
     assert(SDL_Init(SDL_INIT_AUDIO | SDL_INIT_EVENTS));
     test_default_config();
     sound_config_set_defaults(&g_sound_config); g_sound_config.enabled = true;

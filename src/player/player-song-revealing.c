@@ -260,3 +260,12 @@ void song_revealing_handle_monster_removed(int m_idx)
             song_revealing_has_data = false;
     }
 }
+
+void song_revealing_handle_monster_moved(int old_idx, int new_idx)
+{
+    if (old_idx <= 0 || old_idx >= MAX_MONSTERS
+        || new_idx <= 0 || new_idx >= MAX_MONSTERS || old_idx == new_idx)
+        return;
+    song_revealing_hint[new_idx] = song_revealing_hint[old_idx];
+    song_revealing_hint[old_idx] = 0;
+}

@@ -12,14 +12,16 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/phone-screens-check"
 
 HARNESS = BASE.replace(
-    '#include "sdl/ui/sdl-screens.c"',
-    'static float fixture_density;\n'
-    'float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID id) { return fixture_density; }\n'
-    '#include "sdl/ui/sdl-screens.c"', 1
+    'static float fixture_main_menu_density;',
+    'static float fixture_main_menu_density;\nstatic float fixture_density;', 1
 ).replace('fixture_assert(argc==6)', 'fixture_assert(argc==7)').replace(
-    'g_state.system_scale=1;', 'fixture_density=atof(argv[6]); g_state.system_scale=fixture_density; '
+    'g_state.system_scale=1;', 'fixture_density=atof(argv[6]); fixture_main_menu_density=fixture_density; g_state.system_scale=fixture_density; '
     'g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;'
-).replace('    check_actual_cell_metrics();', '').replace('    check_auto_font_metrics();', '').replace(
+).replace('check_main_menu();',
+    '{ float saved_scale=g_state.system_scale; g_state.system_scale=1.0f; '
+    'check_main_menu(); g_state.system_scale=saved_scale; '
+    'fixture_main_menu_density=fixture_density; }').replace(
+    '    check_actual_cell_metrics();', '').replace('    check_auto_font_metrics();', '').replace(
     'check_songs(); check_questions();', ''
 ).replace('check_halls();', '').replace('check_large_tutorial();', '').replace(
     '    fixture_assert(px>0);',

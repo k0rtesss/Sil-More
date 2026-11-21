@@ -36,6 +36,7 @@ parts += [function(knowledge,x) for x in ['static int equipment_entry_wrap_take(
     'static void knowledge_draw_status(']]
 parts += [function(knowledge,x) for x in ['static void knowledge_init_layout(',
     'static void knowledge_expand_active_column(', 'static void knowledge_expand_entry_view(',
+    'static void knowledge_inventory_reclaim_empty_body(',
     'static void knowledge_init_inventory_portrait_layout_normal(',
     'static void knowledge_init_inventory_portrait_layout(',
     'static void knowledge_touch_scroll_region(', 'static void knowledge_begin_split_touch_scroll_areas(',
@@ -75,6 +76,7 @@ typedef const char *cptr;typedef unsigned char byte;
 #define TERM_L_DARK 3
 #define TERM_L_WHITE 4
 #define TERM_SHADE 16
+#define SDL_AUX_VIEW_FONT_MIN 10
 #define S_MAX 8
 #define SMT_MENU_MAX 7
 #define SMITH_SCROLL_ROOT 10
@@ -99,6 +101,8 @@ enum sdl_menu_font sdl_terminal_menu_font(void);
 void sdl_push_terminal_menu_scale_for(enum sdl_menu_font menu);
 static bool get_sdl_menu_bigger_font(void) {return config.bigger_font;}
 static bool get_sdl_menu_bigger_font_for(enum sdl_menu_font menu) {return config.bigger_font;}
+static bool sdl_handheld_ui_active(void) {return SIL_SDL_MOBILE_BUILD;}
+static int get_sdl_terminal_menu_scale_offset_for(enum sdl_menu_font menu) {return config.terminal_menu_scale_offset;}
 static int g_terminal_menu_scale_override,g_terminal_menu_scale_depth;
 static int g_terminal_menu_scale_stack[16];
 static unsigned int g_terminal_menu_scale_overflow_depth;
@@ -217,7 +221,7 @@ int main(void) {
   config.bigger_font=true;assert(sdl_terminal_menu_font_px()==(int)ceilf(24*density));
   config.terminal_menu_scale_offset=-3;assert(sdl_terminal_menu_font_px()==(int)ceilf(15*density));
   config.terminal_menu_scale_offset=2;assert(sdl_terminal_menu_font_px()==(int)ceilf(30*density));
-  config.terminal_menu_scale_offset=-100;assert(sdl_terminal_menu_font_px()==(int)ceilf(12*density));
+  config.terminal_menu_scale_offset=-100;assert(sdl_terminal_menu_font_px()==(int)ceilf(15*density));
 #else
   assert(sdl_terminal_menu_font_px()==0);
 #endif
@@ -295,7 +299,7 @@ int main(void) {
  /* Confirmation is cancelled at the external action boundary: no state reset. */
  assert(inv_grp_cur==2&&inv_grp_top==1&&inv_entry_cur==2&&inv_entry_top==1);
  knowledge_expand_entry_view(&nav);assert(nav.group_rows==0&&nav.list_w==30);
- Term_clear();supply_draw_category_return(&nav,nav.tabs_row,false,"Quiver");
+ Term_clear();supply_draw_category_return(&nav,nav.tabs_row,false,"Quiver",TERM_SLATE);
  assert(clicks==2&&hit_rects[0].y+1==hit_rects[1].y);
  assert(!strcmp(screen[nav.tabs_row],"< Categories"));
  int choice=fixture_click_at(15,nav.tabs_row+1);
@@ -307,9 +311,9 @@ int main(void) {
  assert(!supply_take_category_return('x',UI_MENU_CLICK_PRIMARY,&inv_column));
  assert(!supply_take_category_return('-',UI_MENU_CLICK_PRIMARY,&inv_column));
  Term_clear();knowledge_expand_entry_view(&nav);
- supply_draw_category_return(&nav,nav.tabs_row,true,"All equipped");
+ supply_draw_category_return(&nav,nav.tabs_row,true,"All equipped",TERM_SLATE);
  assert(!strcmp(screen[nav.tabs_row],"< Slots")&&clicks==2);
- Term_clear();supply_draw_category_return(&nav,nav.header_row,false,"Potions");
+ Term_clear();supply_draw_category_return(&nav,nav.header_row,false,"Potions",TERM_SLATE);
  assert(!strcmp(screen[nav.header_row],"< Categories"));
  assert(!strcmp(screen[nav.divider_row],"Potions")&&clicks==2);
 

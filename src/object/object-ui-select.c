@@ -1083,6 +1083,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
     int highlight_row = -1; /* row within current visible list */
     bool highlight_active = false;
+    int floor_scroll_offset = 0;
     inventory_menu_scroll_offset = 0;
 
     /* Helper lambdas (C89 substitute: static inline style) defined as macros */
@@ -1223,6 +1224,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         if (show_weights && lim > (weight_col - 1)) lim = weight_col - 1;          \
         if (p_ptr->command_wrk == (USE_EQUIP)) { lim -= (14 + 2); }                 \
         if (lim < 0) lim = 0;                                                       \
+        if (lim >= (int)sizeof(tmp)) lim = sizeof(tmp) - 1;                         \
         /* Recompute layout length by scanning visible list */                     \
         if (p_ptr->command_wrk == (USE_INVEN)) {                                    \
             for (int r=0;r<vis_inven_cnt;r++){                                      \
@@ -1349,14 +1351,16 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
               }                                                                     \
             }                                                                       \
         } else if (p_ptr->command_wrk == (USE_FLOOR) && highlight_row < vis_floor_cnt){\
-            row = highlight_row; floor_slot = vis_floor[highlight_row];             \
+            row = highlight_row - floor_scroll_offset;                              \
+            if (row < 0 || row >= visible_rows) break;                              \
+            floor_slot = vis_floor[highlight_row];                                   \
             int obj_idx = floor_list[floor_slot];                                   \
             object_type* o_ptr=&o_list[obj_idx];                                    \
             object_desc_floor_display(tmp,sizeof(tmp),o_ptr,true,3); tmp[lim]='\0';         \
             prt("", row+1, col);                                                    \
             int label_col = label_col_base;                                         \
             DRAW_HIGHLIGHT_IF_STORY({                                               \
-                char lab[8]; sprintf(lab, "(%c)", index_to_label(floor_slot));      \
+                char lab[8]; sprintf(lab, "(%c)", I2A(floor_slot));                \
                 char wbuf[16]; cptr wptr = NULL;                                    \
                 if (show_weights){ int wgt=o_ptr->weight*o_ptr->number; strnfmt(wbuf, sizeof(wbuf), "%2d.%1d lb", wgt / 10, wgt % 10); wptr = wbuf; } \
                 story_render_inventory_entry(row + 1, col, label_col, tmp, attr,    \
@@ -1368,7 +1372,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 text_col = draw_item_tile_with_background(col, row+1, o_ptr, attr); \
                 c_put_str(attr,tmp,row+1,text_col);                                 \
                 if (show_weights){ int wgt=o_ptr->weight*o_ptr->number; char w[16]; strnfmt(w, sizeof(w), "%2d.%1d lb", wgt / 10, wgt % 10); c_put_str(attr,w,row+1,weight_col);} \
-                { char lab[8]; sprintf(lab, " (%c)", index_to_label(floor_slot)); c_put_str(attr,lab,row+1,label_col); }\
+                { char lab[8]; sprintf(lab, " (%c)", I2A(floor_slot)); c_put_str(attr,lab,row+1,label_col); }\
             }                                                                       \
         }                                                                           \
     } while (0)
@@ -1436,6 +1440,23 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 inventory_menu_scroll_offset, highlight_row, vis_inven_cnt,
                 display_rows, 0);
         }
+    }
+    else if (p_ptr->command_wrk == (USE_FLOOR))
+    {
+        int display_rows = inventory_menu_visible_rows_for_height(menu_term_height());
+        int max_scroll_offset = MAX(0, vis_floor_cnt - display_rows);
+
+        if (sdl_touch_only_device_active())
+        {
+            (void)ui_scroll_area_take_touch_scrolled();
+            floor_scroll_offset = MAX(0, MIN(floor_scroll_offset,
+                max_scroll_offset));
+        }
+        else
+            floor_scroll_offset = inventory_menu_scroll_to_selection(
+                floor_scroll_offset, highlight_row, vis_floor_cnt,
+                display_rows, 0);
+        inventory_menu_scroll_offset = 0;
     }
     else
     {
@@ -1524,7 +1545,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
     {
             /* Redraw if needed */
             if (p_ptr->command_see)
-                show_floor(floor_list, floor_num);
+                show_floor(floor_list, floor_num, floor_scroll_offset);
 
             /* Begin the prompt */
             sprintf(out_val, "Floor:");
@@ -1643,11 +1664,14 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
             else if (p_ptr->command_wrk == (USE_FLOOR))
             {
-                click_rows = vis_floor_cnt;
+                click_rows = vis_floor_cnt - floor_scroll_offset;
                 if (click_rows > display_rows)
                     click_rows = display_rows;
+                if (click_rows < 0)
+                    click_rows = 0;
                 for (int click_row = 0; click_row < click_rows; click_row++)
-                    ui_menu_click_add_full_row(click_row, click_row + 1);
+                    ui_menu_click_add_full_row(floor_scroll_offset + click_row,
+                        click_row + 1);
             }
 
             if (click_rows > 0)
@@ -1658,6 +1682,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 if (p_ptr->command_wrk == USE_INVEN)
                     ui_scroll_area_set_indicator(inventory_menu_scroll_offset,
                         MAX(0, vis_inven_cnt - display_rows));
+                else if (p_ptr->command_wrk == USE_FLOOR)
+                    ui_scroll_area_set_indicator(floor_scroll_offset,
+                        MAX(0, vis_floor_cnt - display_rows));
                 if (p_ptr->command_wrk == (USE_INVEN)
                     && sdl_touch_only_device_active())
                 {
@@ -1666,6 +1693,12 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     ui_scroll_area_set_offset_target(
                         &inventory_menu_scroll_offset,
                         MAX(0, vis_inven_cnt - display_rows));
+                }
+                else if (p_ptr->command_wrk == USE_FLOOR
+                    && sdl_touch_only_device_active())
+                {
+                    ui_scroll_area_set_offset_target(&floor_scroll_offset,
+                        MAX(0, vis_floor_cnt - display_rows));
                 }
             }
         }
@@ -2002,7 +2035,8 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Hack -- Validate the item */
-            if (inventory_item_uses_inven_channel(k) ? !allow_inven
+            if (k < 0 ? !allow_floor
+                : inventory_item_uses_inven_channel(k) ? !allow_inven
                 : !allow_equip)
             {
                 bell("Illegal object choice!");

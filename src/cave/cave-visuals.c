@@ -4,6 +4,7 @@
 #include "cave/cave-environment.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-flood.h"
+#include "monster/monster-senses.h"
 
 /*
  * Multi-hued monsters shimmer according to their base colour.
@@ -758,27 +759,8 @@ static bool monster_can_see_player_for_stealth_vision(monster_type* m_ptr)
     if (r_ptr->flags1 & (RF1_PEACEFUL))
         return false;
 
-    /* Shortsighted creatures can't see beyond 2 squares */
-    if ((r_ptr->flags2 & (RF2_SHORT_SIGHTED)) && (m_ptr->cdis > 2))
-        return false;
-
-    if (!los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px))
-        return false;
-
-    /* Visual recognition for intelligent monsters */
-    if (visual_recognition && (r_ptr->flags2 & (RF2_SMART)))
-    {
-        /* Disguise reduces monster's effective perception */
-        int per_divisor = p_ptr->active_ability[S_STL][STL_DISGUISE] ? 4 : 2;
-
-        int vision_score = monster_skill(m_ptr, S_PER) / per_divisor + p_ptr->cur_light
-            + ((cave_info[p_ptr->py][p_ptr->px] & (CAVE_GLOW)) ? 2 : 0);
-
-        if (vision_score < m_ptr->cdis)
-            return false;
-    }
-
-    return true;
+    /* Stealth vision depicts eligibility for the visual detection bonus. */
+    return monster_has_visual_perception_bonus(m_ptr);
 }
 
 /* Rewarded quest thralls no longer need the alert icon over their tile. */

@@ -523,11 +523,9 @@ static void blitz_add_effect_details(int id, bool blessing,
     power = blessing
         ? (cu->blessing_power ? lore_text(cu_text + cu->blessing_power) : "")
         : (cu->power ? lore_text(cu_text + cu->power) : "");
-    /* Birth Blitz selection is a deliberate pick, so "+ descriptions" reveals
-     * the effect outright -- the poetical description always shows, and the
-     * mechanical effect is added on top when descriptions are enabled (no
-     * CURSE_SEEN gate, which would otherwise hide every effect at birth). */
-    reveal_power = show_effects && power && power[0];
+    /* Blitz curse mechanics are always visible, even before a curse is picked.
+     * The optional description mode still controls blessing previews. */
+    reveal_power = (!blessing || show_effects) && power && power[0];
 
     blitz_add_effect_detail_line(name, TERM_WHITE);
     blitz_add_effect_detail_line(desc, TERM_SLATE);
@@ -655,7 +653,8 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects, int o
 static void blitz_apply_effect_pick(int id, bool blessing)
 {
     CURSE_ADD(id, blessing ? -1 : 1);
-    CURSE_SEEN_SET(id);
+    if (!blessing)
+        CURSE_SEEN_SET(id);
 }
 
 static void blitz_show_effect_summary(void)

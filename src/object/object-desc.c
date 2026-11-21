@@ -743,7 +743,10 @@ bool object_is_unidentified_for_display(const object_type* o_ptr)
     if (!object_aware_p(o_ptr))
         return true;
 
-    if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN)
+    /* Supply lights can still have unidentified affixes.  Their storage and
+     * smithing category does not make the individual light known. */
+    if (o_ptr->tval == TV_STAFF || o_ptr->tval == TV_HORN
+        || o_ptr->tval == TV_LIGHT)
         return !object_known_p(o_ptr);
 
     if (object_uses_smithing_difficulty(o_ptr))
@@ -1454,11 +1457,7 @@ void object_desc(
 
     default: /* not a weapon */
     {
-        /* don't display for unidentified rings */
-        if ((o_ptr->tval == TV_RING) && !object_known_p(o_ptr))
-        {
-            break;
-        }
+        /* Numeric combat values are observable before identification. */
         if (o_ptr->att)
         {
             object_desc_chr_macro(t, ' ');
@@ -1471,12 +1470,7 @@ void object_desc(
 
     /* show evasion/protection info */
 
-    /* but don't display for unidentified rings */
-    if ((o_ptr->tval == TV_RING) && !object_known_p(o_ptr))
-    {
-        // do nothing
-    }
-    else if (o_ptr->pd && o_ptr->ps)
+    if (o_ptr->pd && o_ptr->ps)
     {
         object_desc_chr_macro(t, ' ');
         object_desc_chr_macro(t, b1);

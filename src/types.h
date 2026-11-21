@@ -782,14 +782,17 @@ typedef struct monster_ai_state
     bool cast_checked, cast_available; /* Current action only; never saved. */
     /* Presentation only, never saved; losing a cooldown cannot change combat. */
     byte feedback_reason, feedback_y, feedback_x, feedback_cooldown;
+    byte reported_role, reported_plan;
 } monster_ai_state;
 
-/* Rebuilt before each monster processing pass; never serialized. */
+/* Orders are rebuilt before each monster pass. Only the personal budget
+ * (budget_plan, plan_age, plan_turn) survives saving/loading. */
 typedef struct monster_squad_order
 {
     s16b commander;
     byte role, y, x, target_y, target_x;
     byte job, plan, plan_age, anchor_y, anchor_x;
+    byte budget_plan; /* Personal command budget, retained while following. */
     u32b plan_turn;
 } monster_squad_order;
 
@@ -1290,6 +1293,7 @@ struct player_type
 
     s16b game_type; /* Whether this is a normal game (=0), tutorial (<0), puzzle
                        (>0) */
+    u64b run_blessings; /* One temporary stack for each selected blessing ID. */
 
     s16b age; /* Character's age */
     s16b ht; /* Height */
@@ -1324,6 +1328,8 @@ struct player_type
     byte achievement_jammed_doors[(MAX_DUNGEON_HGT * MAX_DUNGEON_WID + 7) / 8];
     u32b achievement_discovery_flags; /* Crossings, first wolf and this run's region visits. */
     u32b achievement_rage_epoch; /* Separates distinct bouts of rage. */
+    /* Water and poison crossings are mutually exclusive. While one is active,
+     * the other's four coordinates hold the first two distinct liquid tiles. */
     s16b achievement_water_from_y, achievement_water_from_x;
     s16b achievement_water_entry_y, achievement_water_entry_x;
     s16b achievement_poison_from_y, achievement_poison_from_x;
@@ -1739,7 +1745,7 @@ struct high_score
     char day[10];        /* Time stamp (string) */
     char who[16];        /* Player Name (string) */
     char uid[8];         /* Player UID, or linked runs.db record_id in score format 0.9.6.3+ */
-    char unused[2];      /* Link marker for score format 0.9.6.3+ rows */
+    char unused[2];      /* Run link marker and optional Easy difficulty marker */
     char p_r[3];         /* Player Race (number) */
     char p_h[3];         /* Player Character (number) */
     char cur_lev[4];     /* Unique monsters killed (number) */

@@ -4,6 +4,7 @@
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
 #include "monster/monster-social.h"
+#include "cave/cave-environment.h"
 
 int get_scent(int y, int x)
 {
@@ -461,6 +462,16 @@ int monster_terrain_penalty(monster_type* m_ptr, int y, int x)
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     if (!in_bounds(y, x))
         return FLOW_MAX_DIST;
+    /* World behavior already leaves these announced hazards before acting.
+     * Planning a firing post or a tactical step there would immediately undo
+     * that escape on the next action. Keep the same flight/immunity rules. */
+    int pending = cave_environment_pending_hazard(y, x);
+    if ((pending == FEAT_LAVA && !(r_ptr->flags3 & RF3_RES_FIRE))
+        || (!(r_ptr->flags2 & RF2_FLYING)
+            && (pending == FEAT_CHASM || pending == FEAT_DEEP_WATER
+                || pending == FEAT_RUBBLE
+                || (pending == FEAT_POISON && !(r_ptr->flags3 & RF3_RES_POIS)))))
+        return 100;
     if (cave_feat[y][x] == FEAT_LAVA && !(r_ptr->flags3 & RF3_RES_FIRE))
         return 100;
     if (monster_poison_step_damage(m_ptr, m_ptr->fy, m_ptr->fx, y, x))
@@ -501,6 +512,10 @@ int monster_step_cost(monster_type* m_ptr,
         return 0;
     if (cave_m_idx[to_y][to_x] < 0)
         return 1;
+    /* A route must not put the actor back into a hazard that world behavior
+     * will immediately flee. The player endpoint above is an attack only. */
+    if (monster_terrain_penalty(m_ptr, to_y, to_x) >= 100)
+        return 0;
     cost = (100 + chance - 1) / chance;
     if (cave_any_closed_door_bold(to_y, to_x) && !bash)
     {

@@ -256,6 +256,8 @@ int main(int argc,char **argv)
     fixture_assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS));
     fixture_assert(TTF_Init());
     sdl_config_set_defaults(&config);
+    /* The linked font helpers determine handheld behavior at runtime. */
+    g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
     SDL_strlcpy(config.story_font,argv[1],sizeof(config.story_font));
     SDL_strlcpy(config.story_font2,argv[1],sizeof(config.story_font2));
     config.input_ui_mode=SDL_INPUT_UI_MODE_PLATFORM; config.use_unsafe_area=true;

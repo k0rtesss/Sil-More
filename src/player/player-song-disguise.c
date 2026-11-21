@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "player/player-song-internal.h"
+#include "monster/monster-senses.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
@@ -55,7 +56,7 @@ static bool monster_currently_sees_player(const monster_type* m_ptr)
     if (m_ptr->alertness < ALERTNESS_ALERT)
         return false;
 
-    if (!los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px))
+    if (!monster_has_sight(m_ptr))
         return false;
 
     const monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -112,10 +113,10 @@ void song_disguise_new_player_turn(void)
 
 void song_disguise_handle_monster_removed(int m_idx)
 {
-    if (!song_disguise_seen || m_idx <= 0 || m_idx >= MAX_MONSTERS)
+    if (m_idx <= 0 || m_idx >= MAX_MONSTERS)
         return;
 
-    if (song_disguise_seen[m_idx])
+    if (song_disguise_seen && song_disguise_seen[m_idx])
     {
         song_disguise_seen[m_idx] = 0;
         if (song_disguise_seen_count > 0)
@@ -128,6 +129,31 @@ void song_disguise_handle_monster_removed(int m_idx)
         song_disguise_attacked[m_idx] = 0;
 
     song_revealing_handle_monster_removed(m_idx);
+}
+
+/* Compaction changes an index, not the creature or the song's history. The
+ * destination is an empty slot whose previous occupant has been removed. */
+void song_disguise_handle_monster_moved(int old_idx, int new_idx)
+{
+    if (old_idx <= 0 || old_idx >= MAX_MONSTERS
+        || new_idx <= 0 || new_idx >= MAX_MONSTERS || old_idx == new_idx)
+        return;
+    if (song_disguise_seen)
+    {
+        song_disguise_seen[new_idx] = song_disguise_seen[old_idx];
+        song_disguise_seen[old_idx] = 0;
+    }
+    if (song_disguise_pacified)
+    {
+        song_disguise_pacified[new_idx] = song_disguise_pacified[old_idx];
+        song_disguise_pacified[old_idx] = 0;
+    }
+    if (song_disguise_attacked)
+    {
+        song_disguise_attacked[new_idx] = song_disguise_attacked[old_idx];
+        song_disguise_attacked[old_idx] = 0;
+    }
+    song_revealing_handle_monster_moved(old_idx, new_idx);
 }
 
 void song_disguise_note_monster_attack(int m_idx)

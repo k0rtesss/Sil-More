@@ -13,6 +13,7 @@
 #include "object/object-ui-select.h"
 #include "supplies.h"
 #include "thrall_quest.h"
+#include "quest/quest-internal.h"
 #include "ui/question.h"
 
 static s16b get_upgrade_kind(const object_type* o_ptr);
@@ -73,7 +74,9 @@ enum
     THRALL_REWARD_IDENTIFY_ONE = 3,
     THRALL_REWARD_IDENTIFY_NATURE = 4,
     THRALL_REWARD_LATER = 5,
-    THRALL_REWARD_INSIGHT_POINT = 6
+    THRALL_REWARD_INSIGHT_POINT = 6,
+    THRALL_REWARD_DIAGNOSE_DISEASE = 7,
+    THRALL_REWARD_CURE_HERB = 8
 };
 
 typedef struct thrall_reward_option
@@ -501,7 +504,8 @@ static void thrall_print_collapsed_message(cptr text)
     msg_print(msg_buf);
 }
 
-static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
+static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text,
+    bool full_story)
 {
     char text_buf[2048];
     cptr texts[1];
@@ -525,19 +529,52 @@ static void show_thrall_dialog(monster_type* m_ptr, const char* fmt_text)
     /* This is one short conversation, not a multi-page quest chronicle.  Keep
      * its paragraph spacing, but fit the request onto one coherent book page
      * instead of distributing individual sentences across three pages. */
-    quest_typewriter_menu_pages(title, texts, 1, title_color, TERM_WHITE, 1);
+    if (minimum_text_mode && !full_story)
+    {
+        char summary[240];
+        strnfmt(summary, sizeof(summary),
+            "Objective: Give %s. Reward: %d XP and a choice of available services.",
+            get_thrall_quest_item_name(m_ptr->thrall_quest_item),
+            THRALL_QUEST_COMPLETION_EXP);
+        quest_minimum_custom_dialogue(title, summary, texts, 1,
+            title_color, TERM_WHITE, 1);
+    }
+    else
+        quest_typewriter_menu_pages(title, texts, 1, title_color, TERM_WHITE, 1);
 }
 
 #define THRALL_TEXT_VARIANTS 6
 
+/* These existing saved fields remain stable after a hand-in, so a minimum-text
+ * request can be replayed without adding a save field or consuming more RNG. */
+static int thrall_request_story_variant(const monster_type* m_ptr)
+{
+    return ((unsigned)m_ptr->r_idx * 31u + m_ptr->thrall_quest_item * 7u)
+        % THRALL_TEXT_VARIANTS;
+}
+
 static void thrall_request_dialog(monster_type* m_ptr)
 {
-    int variant = rand_int(THRALL_TEXT_VARIANTS);
+    int random_variant = rand_int(THRALL_TEXT_VARIANTS);
+    int variant = minimum_text_mode ? thrall_request_story_variant(m_ptr)
+                                    : random_variant;
 
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-        show_thrall_dialog(m_ptr, elf_request_texts[variant]);
+        show_thrall_dialog(m_ptr, elf_request_texts[variant], false);
     else
-        show_thrall_dialog(m_ptr, human_request_texts[variant]);
+        show_thrall_dialog(m_ptr, human_request_texts[variant], false);
+}
+
+void thrall_quest_show_request_story(monster_type* m_ptr)
+{
+    int variant;
+    if (!m_ptr || !is_alert_thrall(m_ptr) || !m_ptr->thrall_quest_requested)
+        return;
+    variant = thrall_request_story_variant(m_ptr);
+    show_thrall_dialog(m_ptr,
+        m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL ? elf_request_texts[variant]
+                                               : human_request_texts[variant],
+        true);
 }
 
 static void thrall_thanks_dialog(monster_type* m_ptr)
@@ -552,6 +589,11 @@ static void thrall_thanks_dialog(monster_type* m_ptr)
     else
         text = human_thanks_texts[variant];
 
+    if (minimum_text_mode)
+    {
+        msg_print("The thrall thanks you.");
+        return;
+    }
     format_thrall_quest_text(m_ptr, text, text_buf, sizeof(text_buf));
     thrall_text_to_prompt_desc(text_buf, msg_buf, sizeof(msg_buf));
     msg_print(msg_buf);
@@ -566,6 +608,13 @@ static void thrall_pre_give_desc(monster_type* m_ptr, char* desc,
 
     if (!desc || !desc_sz)
         return;
+    if (minimum_text_mode)
+    {
+        strnfmt(desc, desc_sz, "Give %s for %d XP and a choice of available services.",
+            get_thrall_quest_item_name(m_ptr->thrall_quest_item),
+            THRALL_QUEST_COMPLETION_EXP);
+        return;
+    }
 
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
         text = elf_pre_give_texts[variant];
@@ -1912,10 +1961,95 @@ bool reveal_random_artifact(void)
     return true;
 }
 
+static bool thrall_can_diagnose_disease(void)
+{
+    return p_ptr->diseased && p_ptr->disease_knowledge
+        != (DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE);
+}
+
+static bool thrall_diagnose_disease(void)
+{
+    if (!thrall_can_diagnose_disease())
+        return false;
+
+    p_ptr->disease_knowledge = DISEASE_KNOWN_NAME | DISEASE_KNOWN_CURE;
+    msg_format("The thrall recognises your illness as %s.", disease_name());
+    if (disease_is_angband_plague())
+        msg_print("\"Healing is the only herb that cures this plague. Potions of Healing or Miruvor also cure it.\"");
+    else
+        msg_format("\"A herb of %s%s, or a potion of Healing or Miruvor, will cure it.\"",
+            disease_cure_name(), p_ptr->disease_cure == SV_FOOD_HEALING
+                ? "" : " or Healing");
+    msg_print("\"A cure herb restores the attributes lost to disease; its usual effects and nourishment do not apply.\"");
+    return true;
+}
+
+static bool thrall_can_provide_cure_herb(void)
+{
+    return p_ptr->diseased && !disease_is_angband_plague()
+        && p_ptr->disease_cure < DISEASE_HERB_COUNT
+        && lookup_kind(TV_FOOD, p_ptr->disease_cure) > 0;
+}
+
+static bool thrall_provide_cure_herb(void)
+{
+    object_type herb, known_herb;
+    char name[160];
+
+    if (!thrall_can_provide_cure_herb())
+        return false;
+
+    object_prep(&herb, lookup_kind(TV_FOOD, p_ptr->disease_cure));
+    herb.number = 1;
+    object_known(&herb);
+    object_copy(&known_herb, &herb);
+    if (inven_carry(&herb, false) < 0)
+    {
+        msg_print("Make room in your supplies to receive the thrall's cure herb.");
+        return false;
+    }
+
+    object_aware(&known_herb);
+    object_desc(name, sizeof(name), &known_herb, true, 0);
+    (void)thrall_diagnose_disease();
+    msg_format("The thrall gives you %s to cure your illness.", name);
+    p_ptr->window |= PW_INVEN | PW_SUPPLY;
+    return true;
+}
+
+static cptr thrall_reward_unavailable_reason(int reward)
+{
+    switch (reward)
+    {
+    case THRALL_REWARD_ARTEFACT:
+        return "The thrall has no undiscovered artefact knowledge to share.";
+    case THRALL_REWARD_REPAIR:
+        return "You are not carrying a damaged item the thrall can repair.";
+    case THRALL_REWARD_SANCTIFY:
+        return "You are not carrying a cursed or jinxed item the thrall can sanctify.";
+    case THRALL_REWARD_IDENTIFY_ONE:
+        return "You are not carrying an unidentified item for the thrall to identify.";
+    case THRALL_REWARD_IDENTIFY_NATURE:
+        return "You are not carrying unidentified potions, gems, or herbs for the thrall to identify.";
+    case THRALL_REWARD_DIAGNOSE_DISEASE:
+        return !p_ptr->diseased ? "You have no active disease to diagnose."
+            : "You already know your disease's name and cure.";
+    case THRALL_REWARD_CURE_HERB:
+        if (!p_ptr->diseased)
+            return "You have no active disease that needs a cure herb.";
+        if (disease_is_angband_plague())
+            return "The thrall cannot provide a cure herb for Angband Plague. You need a herb or potion of Healing, or Miruvor.";
+        return "The thrall cannot provide the herb needed to cure your disease.";
+    default:
+        return NULL;
+    }
+}
+
 static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 {
-    thrall_reward_option options[7];
-    ui_question_option question_options[7];
+    thrall_reward_option options[8];
+    ui_question_option question_options[N_ELEMENTS(options)];
+    cptr disabled_reasons[N_ELEMENTS(options)];
     int option_count = 0;
     int default_index = -1;
     char title[80];
@@ -1957,6 +2091,20 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     }
 
     {
+        char diagnosis_hotkey = (char)('a' + option_count);
+        options[option_count++] = (thrall_reward_option){
+            THRALL_REWARD_DIAGNOSE_DISEASE, diagnosis_hotkey,
+            "Diagnose disease (name and cure)", thrall_can_diagnose_disease() };
+    }
+
+    {
+        char herb_hotkey = (char)('a' + option_count);
+        options[option_count++] = (thrall_reward_option){
+            THRALL_REWARD_CURE_HERB, herb_hotkey,
+            "Receive your disease's cure herb", thrall_can_provide_cure_herb() };
+    }
+
+    {
         char later_hotkey = (char)('a' + option_count);
         options[option_count++] = (thrall_reward_option){
             THRALL_REWARD_LATER, later_hotkey, "Come later", true };
@@ -1964,8 +2112,15 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
 
     for (int i = 0; i < option_count; i++)
     {
+        /* This unavailable gift remains grey, but trying it opens the
+         * thrall's explanation instead of granting a cure. */
+        bool explain_plague = options[i].reward == THRALL_REWARD_CURE_HERB
+            && p_ptr->diseased && disease_is_angband_plague();
         question_options[i] = (ui_question_option){ options[i].hotkey,
-            options[i].label, TERM_L_WHITE, !options[i].enabled };
+            options[i].label, options[i].enabled ? TERM_L_WHITE : TERM_L_DARK,
+            !options[i].enabled && !explain_plague };
+        disabled_reasons[i] = question_options[i].disabled
+            ? thrall_reward_unavailable_reason(options[i].reward) : NULL;
         if (default_index < 0 && options[i].enabled)
             default_index = i;
     }
@@ -1973,7 +2128,7 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
     {
         SDL_strlcpy(title, "The Elven Thrall's Reward", sizeof(title));
-        strnfmt(desc, sizeof(desc), "%s Gifts written in grey cannot yet be granted.",
+        strnfmt(desc, sizeof(desc), "%s Try a grey gift to learn why it is unavailable.",
             pending_reward
                 ? "The elven thrall still waits to grant the boon you earned."
                 : "Choose what gift the elven thrall will grant you.");
@@ -1981,15 +2136,16 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     else
     {
         SDL_strlcpy(title, "The Human Thrall's Reward", sizeof(title));
-        strnfmt(desc, sizeof(desc), "%s Gifts written in grey cannot yet be granted.",
+        strnfmt(desc, sizeof(desc), "%s Try a grey gift to learn why it is unavailable.",
             pending_reward
                 ? "The human thrall still waits to grant the boon you earned."
                 : "Choose what gift the human thrall will grant you.");
     }
 
     {
-        int selected = ui_question_ask(title, desc, question_options,
-            option_count, m_ptr->fy, m_ptr->fx, default_index);
+        int selected = ui_question_ask_with_reasons(title, desc,
+            question_options, disabled_reasons, option_count, m_ptr->fy,
+            m_ptr->fx, default_index);
 
         return (selected < 0) ? THRALL_REWARD_LATER
                               : options[selected].reward;
@@ -2059,6 +2215,23 @@ static bool offer_thrall_reward(monster_type* m_ptr, bool pending_reward)
         case THRALL_REWARD_INSIGHT_POINT:
             gain_insight_points(1, "You refuse the thrall's gift.");
             return true;
+        case THRALL_REWARD_DIAGNOSE_DISEASE:
+            if (thrall_diagnose_disease())
+                return true;
+            break;
+
+        case THRALL_REWARD_CURE_HERB:
+            if (p_ptr->diseased && disease_is_angband_plague())
+            {
+                show_thrall_dialog(m_ptr,
+                    "\"I cannot cure Angband Plague. I have no herb potent enough for it.\"\n\n"
+                    "\"You must find a herb of Healing, a potion of Healing, or Miruvor. "
+                    "I can still offer you another gift.\"", true);
+                break;
+            }
+            if (thrall_provide_cure_herb())
+                return true;
+            break;
 
         case THRALL_REWARD_LATER:
         default:

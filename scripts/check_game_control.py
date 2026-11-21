@@ -383,9 +383,25 @@ def run_checks(exe: Path, env: dict) -> None:
         for key in ("i", "e"):
             expect_ok(control.key(key, output=profile / f"{key}-overlay.png"))
             expect_ok(control.key("Escape"))
-        result = control.key("q", capture=False)
-        assert result["ok"] and result["input_applied"] and result["closed"], result
-        process.wait(timeout=5)
+        # A reader may still hold session.json when shutdown publishes its
+        # final running=false record. Release only after receiving the quit
+        # reply, so the game must retry publication rather than leave a stale
+        # running flag. No input is resent.
+        handle = kernel.CreateFileW(str(control.directory / "session.json"),
+                                    0x80000000, 1, None, 3, 0, None)
+        assert handle not in (None, ctypes.c_void_p(-1).value)
+        release = None
+        try:
+            result = control.key("q", capture=False)
+            assert result["ok"] and result["input_applied"] and result["closed"], result
+            release = threading.Timer(0.08, kernel.CloseHandle, args=[handle])
+            release.start()
+            process.wait(timeout=5)
+        finally:
+            if release is None:
+                kernel.CloseHandle(handle)
+            else:
+                release.join()
         assert process.returncode == 0
         assert not read_json(control.directory / "session.json")["running"]
         disabled_profile = profile / "disabled"

@@ -590,8 +590,8 @@ enum pane_placement sdl_default_status_pane_placement(
 int sdl_default_main_scale_for_screen_size(int screen_width,
     int screen_height, int mode)
 {
-    int min_cols = (mode == SDL_MIN_TERMINAL_COMPACT) ? 50 : 80;
-    int min_rows = (mode == SDL_MIN_TERMINAL_COMPACT) ? 16 : 24;
+    int min_cols = sdl_min_terminal_cols_for_mode(mode);
+    int min_rows = sdl_min_terminal_rows_for_mode(mode);
     int max_scale_w;
     int max_scale_h;
     int max_scale;
@@ -757,12 +757,14 @@ void sdl_reset_config_to_resolution_defaults(int screen_width,
 
 int sdl_min_terminal_cols_for_mode(int mode)
 {
-    return (mode == SDL_MIN_TERMINAL_COMPACT) ? 50 : 80;
+    return (mode == SDL_MIN_TERMINAL_COMPACT)
+        ? SIL_UI_COMPACT_MIN_COLS : SIL_UI_NORMAL_MIN_COLS;
 }
 
 int sdl_min_terminal_rows_for_mode(int mode)
 {
-    return (mode == SDL_MIN_TERMINAL_COMPACT) ? 16 : 24;
+    return (mode == SDL_MIN_TERMINAL_COMPACT)
+        ? SIL_UI_COMPACT_MIN_ROWS : SIL_UI_NORMAL_MIN_ROWS;
 }
 
 int sdl_current_min_terminal_cols(void)

@@ -212,7 +212,7 @@ void birth_format_ability_hint(int skill, int ability, char* buf,
     if (effect && effect[0])
         strnfmt(buf, buflen, "%s (%s, inherited): %s", name,
             skill_names_full[skill], effect);
-    else if (lore && lore[0])
+    else if (!minimum_text_mode && lore && lore[0])
         strnfmt(buf, buflen, "%s (%s, inherited): %s", name,
             skill_names_full[skill], lore);
     else

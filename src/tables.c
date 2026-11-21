@@ -238,7 +238,7 @@ cptr option_text[OPT_MAX] = {
     "unidentified_items_slate", /* OPT_unidentified_items_slate */
     "environment_speed", /* OPT_environment_speed */
     "level_entry_narrative_mode", /* OPT_show_level_entry_banner */
-    NULL, /* reserved legacy slot: ability_desc_mode */
+    "minimum_text_mode", /* OPT_minimum_text_mode */
     "vault_drop_frequency", /* OPT_vault_drop_frequency */
     "show_smithing_difficulty", /* OPT_show_smithing_difficulty */
     "show_smithing_difficulty_look", /* OPT_show_smithing_difficulty_look */
@@ -246,7 +246,7 @@ cptr option_text[OPT_MAX] = {
     "partition_narrative_mode", /* OPT_show_partition_narrative */
     "noble_item_spawn_mode", /* OPT_noble_item_spawn_mode */
     "styled_player_tile_health_bar", /* OPT_styled_player_tile_health_bar */
-    NULL, /* reserved legacy slot: banner_message_stairs */
+    "ignore_monster_alarms", /* OPT_ignore_monster_alarms */
     "show_level_generation_debug", /* OPT_show_level_generation_debug */
     "unlock_blitz_mode", /* OPT_unlock_blitz_mode */
     "look_objects_sort_by_difficulty", /* OPT_look_objects_sort_by_difficulty */
@@ -418,7 +418,7 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* reserved legacy slot: allow_quantity */
     NULL, /* reserved legacy slot */
     "Disable automatic attacks of fleeing enemies under Oath of Valor", /* OPT_valorous_oath_auto_attack_safety */
-    "Smart monsters need light to visually recognize you", /* OPT_visual_recognition */
+    "Light affects smart monsters' visual bonuses to spotting you", /* OPT_visual_recognition */
     "Stealth vision mode: show when monsters can see you", /* OPT_stealth_vision */
     "Show an overlay icon on sleeping monsters", /* OPT_sleep_icon */
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
@@ -476,7 +476,7 @@ cptr option_desc[OPT_MAX] = {
     "Show unidentified items in slate color", /* OPT_unidentified_items_slate */
     "Environmental effects speed (Slow, Normal, Fast)", /* OPT_environment_speed */
     "Level entry narrative (banner with animation/banner without animation/message/off)", /* OPT_show_level_entry_banner */
-    NULL, /* reserved legacy slot: ability_desc_mode */
+    "Skip introductions, shorten descriptive lore, and show compact quests and monster traits; gameplay details remain visible", /* OPT_minimum_text_mode */
     "Dungeon loot abundance, including floor objects and vault drops", /* OPT_vault_drop_frequency */
     "Debug: Show {sd,wr} in item descriptions", /* OPT_show_smithing_difficulty */
     "Debug: Show {sd,wr} in look (L) sidebar and message", /* OPT_show_smithing_difficulty_look */
@@ -484,7 +484,7 @@ cptr option_desc[OPT_MAX] = {
     "Partition transition narrative (banner with animation/banner without animation/message/off)", /* OPT_show_partition_narrative */
     "Allow noble items in good and great vault loot, as well as chests and human or elf skeletons", /* OPT_noble_item_spawn_mode */
     "Show a health bar above the player tile", /* OPT_styled_player_tile_health_bar */
-    NULL, /* reserved legacy slot: banner_message_stairs */
+    "Keep resting, running and working through monster warning calls and shrieks for help; their messages and effects remain", /* OPT_ignore_monster_alarms */
     "Debug: Show detailed level-generation screen info and pause before play", /* OPT_show_level_generation_debug */
     "Unlock Blitz Mode after winning a tale", /* OPT_unlock_blitz_mode */
     "Sort look (L) objects by difficulty only (off = category, then difficulty)", /* OPT_look_objects_sort_by_difficulty */
@@ -730,7 +730,7 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_unidentified_items_slate */
     false, /* OPT_environment_speed; default Normal in byte field */
     true, /* OPT_show_level_entry_banner */
-    false, /* reserved legacy slot: ability_desc_mode */
+    false, /* OPT_minimum_text_mode */
     false, /* OPT_vault_drop_frequency (default 0 via byte field) */
     false, /* OPT_show_smithing_difficulty */
     false, /* OPT_show_smithing_difficulty_look */
@@ -738,7 +738,7 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_show_partition_narrative */
     false, /* OPT_noble_item_spawn_mode (default 0 via byte field) */
     false, /* OPT_styled_player_tile_health_bar */
-    false, /* reserved legacy slot: banner_message_stairs */
+    false, /* OPT_ignore_monster_alarms */
     false, /* OPT_show_level_generation_debug */
     false, /* OPT_unlock_blitz_mode */
     false, /* OPT_look_objects_sort_by_difficulty */
@@ -916,13 +916,14 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     /*** Game-Play ***/
 
-    { OPT_valorous_oath_auto_attack_safety, OPT_pacifist_attack_warning, OPT_active_weapon_switch_confirm, OPT_forgo_attacking_unwary,
+    { OPT_minimum_text_mode, OPT_valorous_oath_auto_attack_safety, OPT_pacifist_attack_warning, OPT_active_weapon_switch_confirm, OPT_forgo_attacking_unwary,
       OPT_assassination_over_charge, OPT_lockpick_minigame, OPT_chest_trap_minigame, OPT_stop_singing_on_rest,
+      OPT_ignore_monster_alarms,
       OPT_visual_recognition, OPT_know_monster_info, OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size,
       OPT_more_stairs, OPT_utumno_corridors, OPT_illusory_walls, OPT_vault_drop_frequency,
       OPT_noble_item_spawn_mode, OPT_min_depth_timer_mode, OPT_environment_speed, OPT_load_blitz_by_default,
       OPT_insight_beta, OPT_meta_artefact_memory, OPT_meta_forged_artefacts, OPT_meta_revenge,
-      OPT_meta_legendary_places, OPT_NONE, OPT_NONE, OPT_NONE },
+      OPT_meta_legendary_places, OPT_NONE },
 
     /*** Display ***/
 

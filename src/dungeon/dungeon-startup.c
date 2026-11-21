@@ -115,6 +115,7 @@ PlayResult play_game(void)
     bool startup_icky_active = false;
     /* Loading a dead hero may restore its option; new births use this request. */
     bool new_birth_insight = op_ptr && op_ptr->opt[OPT_insight_beta];
+    u64b run_blessings = 0;
 
     log_info("play_game: FUNCTION ENTERED");
 
@@ -145,17 +146,19 @@ PlayResult play_game(void)
     {
         /* get_sdl_min_terminal_mode() returns 0=normal, 1=compact. */
         const bool compact_mode = (get_sdl_min_terminal_mode() != 0);
-        int min_hgt = compact_mode ? 18 : 24;
-        int min_wid = compact_mode ? 50 : 80;
+        int min_hgt = compact_mode ? SIL_UI_COMPACT_MIN_ROWS
+                                   : SIL_UI_NORMAL_MIN_ROWS;
+        int min_wid = compact_mode ? SIL_UI_COMPACT_MIN_COLS
+                                   : SIL_UI_NORMAL_MIN_COLS;
 #if defined(__ANDROID__) || defined(SIL_IOS)
         if (get_sdl_mobile_portrait_mode()) {
             /* Preserve the same cell/tile scale when the same physical
              * screen rotates.  Cell width is half the cell height, so the
-             * compact layout's 18-row physical width becomes 36 portrait
+             * compact layout's 16-row physical width becomes 32 portrait
              * columns.  Keep the compact gameplay row floor; the portrait
              * HUD consumes the rest of the rotated height. */
-            min_wid = 18 * 2;
-            min_hgt = 18;
+            min_wid = SIL_UI_COMPACT_MIN_ROWS * 2;
+            min_hgt = SIL_UI_COMPACT_MIN_ROWS;
         }
 #endif
         if ((Term->hgt < min_hgt) || (Term->wid < min_wid))
@@ -199,7 +202,7 @@ PlayResult play_game(void)
     }
 
     if (!run_mode_is_blitz() && !prefer_blitz_startup) {
-        if (metarun_created) /* show only the first time ever */
+        if (metarun_created && !minimum_text_mode) /* first-time story */
         {
             print_story_intro();
             screen_clear_all_terms_no_fresh();
@@ -243,15 +246,11 @@ PlayResult play_game(void)
             }
             if (autoload_result == STARTUP_AUTOLOAD_LOADED) {
                 new_game = false;
-            } else {
-                print_metarun_stats();
             }
         }
     }
     else
     {
-        bool startup_score_empty = highscore_is_empty();
-
         if (explicit_blitz_launch && run_mode_is_blitz())
         {
             log_info("Explicit Blitz launch requested; checking for an alive Blitz character");
@@ -270,20 +269,14 @@ PlayResult play_game(void)
         {
             new_game = false;
         }
-        else if (!run_mode_is_blitz()
-            && ((!metarun_created
-                    && (!startup_score_empty || metar.deaths > 0))
-                || metarun_entry_count() > 1))
-        {
-            int recorded_alive = score_count_alive_entries();
+    }
 
-            if (recorded_alive > 0) {
-                log_warn("Startup found %d recorded alive character%s, but "
-                    "none had a loadable save; showing Tale Statistics",
-                    recorded_alive, recorded_alive == 1 ? "" : "s");
-            }
-            print_metarun_stats();
-        }
+    if (!character_loaded && !run_mode_is_blitz()
+        && !print_metarun_startup(&run_blessings))
+    {
+        play_game_pop_startup_icky(&startup_icky_active,
+            "quitting from the Chronicle");
+        return PLAY_QUIT;
     }
 
     if (!run_mode_is_blitz() && metarun_tale_recovery_required())
@@ -334,6 +327,7 @@ PlayResult play_game(void)
                 current_character_profile = &c_info[p_ptr->pcharacter];
         }
 
+        p_ptr->run_blessings = run_blessings;
         log_info("Choosing character");
         NavResult cr = run_mode_is_blitz() ? blitz_character_creation()
             : (resume_character_selection ? character_creation_resume_character()
@@ -396,6 +390,9 @@ PlayResult play_game(void)
         if (new_game)
         {
             log_info("Starting new game - initializing character");
+        /* Manual save probes may overwrite or wipe the draft. A successful
+         * resume keeps the saved hero's own blessings. */
+        p_ptr->run_blessings = run_blessings;
         /* Init RNG */
         {
             u64b seed = (u64b)time(NULL);
@@ -496,7 +493,8 @@ PlayResult play_game(void)
     }
 
     /* Only show story when no alive character exists (fresh start or all characters dead) */
-    if (!run_mode_is_blitz() && score_count_alive_entries() == 0)
+    if (!run_mode_is_blitz() && !minimum_text_mode
+        && score_count_alive_entries() == 0)
     {
         sdl_music_play_main_full();
         print_story(15,1);
@@ -564,6 +562,11 @@ PlayResult play_game(void)
     log_debug("play_game: character_generated set to true - character creation complete");
     ability_log_sync_missing();
     snapshot_run_history("character start");
+    if (new_game && !run_mode_is_blitz() && p_ptr->game_type == 0) {
+        ++metar.next_blessing_seed;
+        if (save_metaruns() != 0)
+            log_warn("Could not save the next Story hero's blessing seed");
+    }
 
     /* If Tulkas quest was auto-completed on load, spawn Tulkas and show messages */
     if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE && p_ptr->tulkas_quest_complete == 1)

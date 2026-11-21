@@ -231,6 +231,7 @@ int main(int argc,char** argv)
     fixture_assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) && TTF_Init());
     sdl_config_set_defaults(&config); config.bigger_font=true;
     for(int i=0;i<SDL_MENU_FONT_COUNT;i++) config.menu_bigger_font[i]=true;
+    g_startup_device_class=SDL_STARTUP_DEVICE_MOBILE_TOUCH;
     config.show_menu_font_button=true; config.use_unsafe_area=true;
     SDL_strlcpy(config.story_font,argv[4],sizeof(config.story_font));
     SDL_strlcpy(config.story_font2,argv[5],sizeof(config.story_font2));
@@ -260,8 +261,10 @@ def main():
     screens = (ROOT / "src/sdl/ui/sdl-screens.c").read_text(encoding="utf-8")
     start = screens.index("static SDL_FRect sdl_char_sheet_draw_text_aligned(")
     end = screens.index("static SDL_FRect sdl_char_sheet_draw_text_alpha(", start)
-    draw = screens[start:end].replace("SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);",
-        "record_preview_text(font, text, dst);\n    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);")
+    call = "sdl_ui_render_text_texture(texture, &src, &dst);"
+    assert screens[start:end].count(call) == 1, "Title text trace missed the renderer"
+    draw = screens[start:end].replace(call,
+        "record_preview_text(font, text, dst);\n    " + call)
     screens = screens[:start] + draw + screens[end:]
     # The SDL harness already includes the unguarded externs.h declarations.
     birth_header = (ROOT / "src/birth/birth-internal.h").read_text(encoding="utf-8").replace(

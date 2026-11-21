@@ -850,6 +850,7 @@ extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
 extern bool do_cmd_can_wield_offhand(const object_type* o_ptr);
+extern cptr player_ability_restriction(int skilltype, int abilitynum);
 extern bool player_offhand_weapon_allowed(const object_type* weapon,
     const object_type* offhand);
 extern bool do_cmd_wield_to_slot(
@@ -1380,12 +1381,13 @@ extern cptr object_lore_select_base_text(const object_type* o_ptr, char* out,
     size_t out_sz);
 extern void note_info_screen(const object_type* o_ptr);
 extern void object_info_screen(const object_type* o_ptr);
-extern void object_info_screen_multi(const object_type** objects, const char** headings, int count);
+extern void object_info_screen_multi(const object_type** objects,
+    const char** headings, int count, bool compare);
 extern char object_info_screen_multi_with_actions(const object_type** objects,
     const char** headings, int count, cptr footer,
-    const object_info_screen_action* actions, int action_count);
+    const object_info_screen_action* actions, int action_count, bool compare);
 extern bool object_info_overlay_show_multi(const object_type** objects,
-    const char** headings, int count);
+    const char** headings, int count, bool compare);
 extern void object_info_overlay_clear(void);
 extern void describe_item_with_comparisons(int item_index, bool include_comparisons);
 extern void describe_object_with_comparisons(object_type* o_ptr,
@@ -1444,7 +1446,7 @@ extern void show_inven_enhanced(void);
 extern bool inventory_menu_set_include_equip(bool include);
 extern bool inventory_menu_set_expand_supplies(bool enabled);
 extern void show_equip_enhanced(void);
-extern void show_floor(const int* floor_list, int floor_num);
+extern void show_floor(const int* floor_list, int floor_num, int scroll_offset);
 extern void toggle_inven_equip(void);
 extern bool get_item(int* cp, cptr pmt, cptr str, int mode);
 extern bool player_can_treat_as_throwing(const object_type* o_ptr);
@@ -1879,11 +1881,12 @@ extern int sdl_poetry_screen_add_block(cptr text, byte attr);
 extern void sdl_poetry_screen_set_block_visible(int block, bool visible);
 extern void sdl_poetry_screen_set_block_alpha(int block, byte alpha);
 extern void sdl_poetry_screen_set_block_attr(int block, byte attr);
-extern void sdl_poetry_screen_add_choice(int choice, cptr label, cptr body);
+extern void sdl_poetry_screen_add_choice(int choice, cptr label, cptr effect, cptr body);
 extern void sdl_poetry_screen_set_choice_visible(int choice, bool visible,
     byte label_attr, byte body_attr);
 extern void sdl_poetry_screen_set_choice_alpha(int choice, byte alpha);
-extern void sdl_poetry_screen_set_highlight(int choice);
+extern void sdl_poetry_screen_set_highlight(int choice, bool follow);
+extern void sdl_poetry_screen_set_selection(u16b marked, int count, int required);
 extern void sdl_poetry_screen_set_prompt(cptr prompt, bool visible);
 extern void sdl_poetry_screen_set_alpha(byte title_alpha, byte body_alpha,
     byte transition_alpha, byte prompt_alpha);
@@ -1977,6 +1980,7 @@ extern void sdl_character_sheet_screen_open_select_choice_page(void);
 #define SDL_SELECT_CLICK_CAROUSEL_NEXT (-23)
 /* Narrative book: an on-screen exit button for mouse/touch traversal. */
 #define SDL_SELECT_CLICK_CLOSE (-24)
+#define SDL_SELECT_CLICK_BOOK_QUIT (-25)
 extern bool sdl_character_sheet_screen_mobile_carousel_active(void);
 extern void sdl_character_sheet_screen_reset_select_page(void);
 extern int sdl_character_sheet_screen_select_page(void);
@@ -1996,6 +2000,7 @@ extern bool sdl_character_sheet_screen_commit_select(int selected_index);
 /* Narrative "book" (N pages with optional actions): quest text, stats, etc.  Reuses the page-turn
  * navigation accessors above (select_page / page_turning / begin_page_turn). */
 extern void sdl_character_sheet_screen_begin_book(cptr title);
+extern void sdl_character_sheet_screen_begin_book_update(cptr title, bool keep_view);
 extern void sdl_character_sheet_screen_set_book_full_width(bool enabled);
 extern void sdl_character_sheet_screen_set_book_terminal_style(bool enabled);
 extern void sdl_character_sheet_screen_add_book_paragraph(cptr text);
@@ -2006,11 +2011,16 @@ extern void sdl_character_sheet_screen_add_book_paragraph_colored(cptr text,
 extern void sdl_character_sheet_screen_add_book_action(cptr text, int choice);
 extern void sdl_character_sheet_screen_add_book_action_colored(cptr text,
     int choice, int attr);
+extern void sdl_character_sheet_screen_add_book_action_described(cptr text,
+    int choice, int attr, cptr description);
 extern void sdl_character_sheet_screen_add_book_contents(cptr label,
     int choice, int page);
 extern void sdl_character_sheet_screen_set_book_lamp(u32b current,
     u32b maximum, int page);
+extern void sdl_character_sheet_screen_set_book_lamp_action(int choice,
+    bool active);
 extern void sdl_character_sheet_screen_set_book_close_button(bool enabled);
+extern void sdl_character_sheet_screen_set_book_quit_button(bool enabled);
 extern void sdl_character_sheet_screen_set_book_close_label(cptr label);
 extern void sdl_character_sheet_screen_set_book_target_page_count(
     int page_count);
@@ -2019,6 +2029,7 @@ extern void sdl_character_sheet_screen_break_book_page(void);
 extern void sdl_character_sheet_screen_highlight_book_paragraph(void);
 extern void sdl_character_sheet_screen_commit_book(void);
 extern void sdl_character_sheet_screen_set_book_page(int page);
+extern void sdl_character_sheet_screen_anchor_book_choice(int choice);
 extern bool screen_saved_fullscreen_active(void);
 extern void screen_push_supporting_panes_hidden(void);
 extern void screen_pop_supporting_panes_hidden(void);
@@ -2398,6 +2409,7 @@ extern bool infect_disease(void);
 extern bool disease_assign_identity(void);
 extern void disease_identify(void);
 extern cptr disease_name(void);
+extern bool disease_is_angband_plague(void);
 extern cptr disease_cure_name(void);
 extern bool disease_herb_matches(const object_type* o_ptr);
 extern bool cure_disease(void);
@@ -2692,6 +2704,7 @@ extern bool sdl_description_overlay_present(const byte* attrs,
     const byte* story, const byte* health, int width, int height,
     int target_cols, int scroll, bool interactive, int* out_visible_rows,
     int* out_max_scroll);
+#include "sdl/ui/sdl-description.h"
 extern void sdl_description_overlay_set_footer(cptr text, bool always);
 extern void sdl_description_overlay_set_footer_gap(bool enabled);
 extern void sdl_description_overlay_clear_footer_actions(void);
