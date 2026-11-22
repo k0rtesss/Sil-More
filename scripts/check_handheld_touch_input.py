@@ -19,8 +19,21 @@ OUT = ROOT / "scripts/output/handheld-touch-check"
 HARNESS = r'''
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
 #include "sdl/ui/sdl-question-menu.c"
 #include <assert.h>
+
+static bool tutorial_action_active;
+static unsigned int tutorial_action_revision;
+
+bool __wrap_tutorial_is_active(void) { return tutorial_action_active; }
+unsigned int __wrap_tutorial_revision(void) { return tutorial_action_revision; }
+bool __wrap_tutorial_get_view(tutorial_view* view)
+{
+    *view = (tutorial_view){ .active = tutorial_action_active,
+        .kind = TUTORIAL_STEP_ACTION, .can_continue = false, .action = "examine" };
+    return tutorial_action_active;
+}
 
 static errr extra(int action, int value) { return 0; }
 static errr text(int x, int y, int n, byte attr, const char* s) { return 0; }
@@ -66,24 +79,28 @@ static void check_choice(bool expected)
     assert(!g_touch_mouse_fallback_active);
 }
 
-static void pointer(SDL_FPoint point, SDL_MouseID id, bool expected)
+static void mouse_button(SDL_FPoint point, SDL_MouseID id, bool down)
 {
     float x, y;
     assert(SDL_RenderCoordinatesToWindow(g_state.renderer,
         point.x, point.y, &x, &y));
     SDL_Event event = {0};
-    event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    event.common.timestamp = SDL_GetTicksNS();
     event.button.which = id; event.button.button = SDL_BUTTON_LEFT;
     event.button.windowID = SDL_GetWindowID(g_state.window);
-    event.button.x = x; event.button.y = y; event.button.down = true;
+    event.button.x = x; event.button.y = y; event.button.down = down;
     sdl_handle_event(&g_state, &event);
-    event.type = SDL_EVENT_MOUSE_BUTTON_UP;
-    event.button.x = x; event.button.y = y; event.button.down = false;
-    sdl_handle_event(&g_state, &event);
+}
+
+static void pointer(SDL_FPoint point, SDL_MouseID id, bool expected)
+{
+    mouse_button(point, id, true);
+    mouse_button(point, id, false);
     check_choice(expected);
 }
 
-static void finger(SDL_FPoint point)
+static void finger_contact(SDL_FPoint point, Uint32 type, SDL_FingerID id)
 {
     float x, y;
     int w, h;
@@ -91,14 +108,54 @@ static void finger(SDL_FPoint point)
     assert(SDL_RenderCoordinatesToWindow(g_state.renderer,
         point.x, point.y, &x, &y));
     SDL_Event event = {0};
-    event.type = SDL_EVENT_FINGER_DOWN;
-    event.tfinger.touchID = 123; event.tfinger.fingerID = 456;
+    event.type = type;
+    event.common.timestamp = SDL_GetTicksNS();
+    event.tfinger.touchID = 123; event.tfinger.fingerID = id;
     event.tfinger.windowID = SDL_GetWindowID(g_state.window);
     event.tfinger.x = x / w; event.tfinger.y = y / h;
     sdl_handle_event(&g_state, &event);
-    event.type = SDL_EVENT_FINGER_UP;
-    sdl_handle_event(&g_state, &event);
+}
+
+static void finger_event(SDL_FPoint point, Uint32 type)
+{
+    finger_contact(point, type, 456);
+}
+
+static void finger(SDL_FPoint point)
+{
+    finger_event(point, SDL_EVENT_FINGER_DOWN);
+    finger_event(point, SDL_EVENT_FINGER_UP);
     check_choice(true);
+}
+
+static void check_tutorial_pointer_input(void)
+{
+    tutorial_action_active = true;
+    tutorial_action_revision++;
+    sdl_gameplay_tutorial_sync();
+    config.mouse_enabled = false;
+    g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
+    g_direct_touch_present = true;
+
+    /* Action steps yield outside their card to the underlying question. The
+     * tutorial must see one finger stream, including the matching release. */
+    for (int i = 0; i < 2; i++) {
+        SDL_FPoint point = open_menu();
+        mouse_button(point, 0, true);
+        assert(g_touch_mouse_fallback_active);
+        mouse_button(point, 0, false);
+        assert(!g_touch_mouse_fallback_active
+            && "tutorial must forward the handheld fallback release");
+        check_choice(true);
+    }
+    finger(open_menu());
+
+    g_direct_touch_present = false;
+    pointer(open_menu(), SDL_TOUCH_MOUSEID, true);
+    tutorial_action_active = false;
+    tutorial_action_revision++;
+    sdl_gameplay_tutorial_sync();
+    puts("Tutorial action: consecutive fallback taps, native tap and tagged fallback PASS");
 }
 
 static int legacy_offset;
@@ -130,6 +187,157 @@ static void check_legacy_choice(int expected, int expected_action)
     }
     char key;
     assert(Term_inkey(&key, false, true));
+}
+
+static void primary_pointer(SDL_FPoint point, bool mouse, bool down)
+{
+    if (mouse)
+        mouse_button(point, 1, down);
+    else
+        finger_event(point, down ? SDL_EVENT_FINGER_DOWN : SDL_EVENT_FINGER_UP);
+}
+
+static void check_description_release(bool mouse)
+{
+    const byte attrs[] = {TERM_WHITE, TERM_WHITE, TERM_WHITE, TERM_WHITE};
+    const SDL_FPoint row = {160, 176};
+    description_overlay_layout layout;
+    char key;
+
+    sdl_question_menu_clear(); ui_scroll_area_clear(); ui_menu_click_clear();
+    empty_keys();
+    sdl_set_present_suppressed(true);
+    assert(sdl_description_overlay_present(attrs, "Item", NULL, NULL, NULL,
+        NULL, 4, 1, 32, 0, true, NULL, NULL));
+    assert(sdl_description_overlay_layout(&layout) && layout.close_button);
+    SDL_FPoint close = {layout.close_rect.x + layout.close_rect.w / 2,
+        layout.close_rect.y + layout.close_rect.h / 2};
+    primary_pointer(close, mouse, true);
+    assert(!Term_inkey(&key, false, true) && key == ESCAPE);
+    sdl_description_overlay_clear();
+    sdl_set_present_suppressed(false);
+
+    /* A question can take over before the description press is released. */
+    (void)open_menu();
+    assert(sdl_question_menu_captures_pointer());
+    primary_pointer(close, mouse, false);
+    check_choice(false);
+    open_legacy_menu();
+
+    primary_pointer(row, mouse, true);
+    assert(g_menu_touch_press.active);
+    check_legacy_choice(0, 0);
+    primary_pointer(row, mouse, false);
+    assert(ui_menu_click_has_pending());
+    check_legacy_choice(111, UI_MENU_CLICK_PRIMARY);
+    assert(!g_menu_touch_press.active);
+}
+
+static void check_interrupted_map_touch(SDL_FPoint player)
+{
+    SDL_FRect cell;
+    char key;
+    int old_movement = config.touch_movement_mode;
+
+    config.touch_movement_mode = SDL_TOUCH_MOVEMENT_OFF;
+    g_direct_touch_present = true;
+    assert(sdl_main_cell_rect(COL_MAP + p_ptr->px + 1,
+        ROW_MAP + p_ptr->py, 1, 1, &cell));
+    SDL_FPoint held = {cell.x + cell.w / 2, cell.y + cell.h / 2};
+    for (int confirm = 0; confirm < 2; confirm++) {
+        inkey_flag = true;
+        finger_event(held, SDL_EVENT_FINGER_DOWN);
+        assert(g_main_map_drag.active && !g_main_map_drag.pinch_active);
+        assert(g_map_touch_press.active);
+        if (confirm) {
+            sdl_touch_pane_begin_yes_no_prompt("Interrupt the map gesture?");
+            assert(g_touch_pane_yes_no_prompt_active);
+        } else {
+            (void)open_menu();
+            assert(sdl_question_menu_captures_pointer());
+        }
+        finger_event(held, SDL_EVENT_FINGER_UP);
+        assert(!g_main_map_drag.active && !g_map_touch_press.active
+            && "a modal must retire the previous map contact");
+        if (confirm) {
+            sdl_touch_pane_end_yes_no_prompt();
+        } else {
+            sdl_question_menu_clear();
+            ui_menu_click_clear();
+        }
+
+        /* SDL may assign a fresh contact ID to the next tap. */
+        finger_contact(player, SDL_EVENT_FINGER_DOWN, 789);
+        assert(g_map_touch_press.active && !g_main_map_drag.pinch_active);
+        finger_contact(player, SDL_EVENT_FINGER_UP, 789);
+        assert(!g_map_touch_press.active);
+        assert(!Term_inkey(&key, false, true) && key == ' ');
+        assert(Term_inkey(&key, false, true));
+    }
+    config.touch_movement_mode = old_movement;
+    puts("Held map touch: question and yes/no gestures retire before the next tap PASS");
+}
+
+static void check_map_after_question(void)
+{
+    static u16b info[24][256];
+    static byte features[24][MAX_DUNGEON_WID];
+    static s16b monsters[24][MAX_DUNGEON_WID];
+    static s16b floor_objects[24][MAX_DUNGEON_WID];
+    static object_type items[INVEN_TOTAL];
+    SDL_FRect square;
+    char key;
+    bool saved_hide_left_panel = g_hide_left_panel;
+
+    character_generated = character_dungeon = true;
+    p_ptr->playing = true;
+    p_ptr->cur_map_hgt = p_ptr->cur_map_wid = 24;
+    p_ptr->py = 8;
+    p_ptr->px = 12;
+    cave_info = info;
+    cave_feat = features;
+    cave_m_idx = monsters;
+    cave_o_idx = floor_objects;
+    inventory = items;
+    g_hide_left_panel = true;
+    config.mouse_enabled = false;
+    config.touch_round_movement_enabled = false;
+    g_startup_device_class = SDL_STARTUP_DEVICE_DESKTOP_HANDHELD;
+    assert(!tutorial_is_active());
+    assert(sdl_player_map_rect(p_ptr->py, p_ptr->px, &square));
+    SDL_FPoint player = {square.x + square.w / 2, square.y + square.h / 2};
+
+    for (int transport = 0; transport < 3; transport++) {
+        int y, x;
+        g_direct_touch_present = transport != 2;
+        SDL_FPoint answer = open_menu();
+        if (transport == 0)
+            finger(answer);
+        else
+            pointer(answer, transport == 1 ? 0 : SDL_TOUCH_MOUSEID, true);
+        sdl_question_menu_clear();
+        ui_menu_click_clear();
+        inkey_flag = true;
+        assert(sdl_main_view_point_to_map(player.x, player.y, &y, &x));
+        assert(y == p_ptr->py && x == p_ptr->px);
+        if (transport == 0) {
+            finger_event(player, SDL_EVENT_FINGER_DOWN);
+            finger_event(player, SDL_EVENT_FINGER_UP);
+        } else {
+            SDL_MouseID id = transport == 1 ? 0 : SDL_TOUCH_MOUSEID;
+            mouse_button(player, id, true);
+            mouse_button(player, id, false);
+        }
+        assert(!g_touch_mouse_fallback_active && !g_map_touch_press.active);
+        assert(!Term_inkey(&key, false, true) && key == ' ');
+        assert(Term_inkey(&key, false, true));
+    }
+    check_interrupted_map_touch(player);
+
+    character_generated = character_dungeon = inkey_flag = false;
+    p_ptr->playing = false;
+    g_hide_left_panel = saved_hide_left_panel;
+    puts("Tutorial disabled: first map tap after a question PASS for all three touch transports");
 }
 
 static void legacy_tap(float x, float y, float end_x, float end_y,
@@ -180,6 +388,12 @@ static void check_wrapped_menu(void)
         SDL_TEXTUREACCESS_TARGET, 640, 768);
     assert(view->canvas);
     config.touch_menu_command_enabled[SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT] = true;
+
+    check_map_after_question();
+    config.mouse_enabled = true;
+    check_description_release(true);
+    check_description_release(false);
+    puts("Description popup: first mouse click and finger tap after a modal question PASS");
 
     /* Replay native finger packets at both renderer scales as well. */
     for (int scaled = 0; scaled < 2; ++scaled) {
@@ -291,6 +505,8 @@ int main(int argc, char** argv)
             finger(open_menu()); ++cases;
         }
     }
+    assert(SDL_SetRenderScale(g_state.renderer, 1.0f, 1.0f));
+    check_tutorial_pointer_input();
     check_wrapped_menu();
     sdl_question_menu_clear(); ui_menu_click_clear();
     sdl_ui_text_cache_clear(); sdl_story_font_cache_clear();
@@ -340,7 +556,10 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     exe = OUT / ("check.exe" if os.name == "nt" else "check")
-    subprocess.run([*compiler, "-UNDEBUG", str(source), "@" + str(response), *libraries,
+    wraps = [f"-Wl,--wrap,tutorial_{name}"
+             for name in ("is_active", "revision", "get_view")]
+    subprocess.run([*compiler, "-UNDEBUG", str(source),
+                    "@" + str(response), *libraries, *wraps,
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
                    cwd=BUILD, env=env, check=True, timeout=30)

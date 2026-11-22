@@ -26,22 +26,29 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-def read_log(game):
-    path = game / "log.txt"
-    return path.read_text(errors="replace") if path.exists() else ""
+def read_log(log_paths):
+    for path in log_paths:
+        if path.is_file():
+            return path.read_text(errors="replace")
+    return ""
 
 
 def check_startup(game, output, env, label):
     control = GameControl(output / f"control-{label}", timeout=30)
     control.directory.mkdir()
     run_env = dict(env, SIL_MORE_CONTROL_DIR=str(control.directory))
-    (game / "log.txt").unlink(missing_ok=True)
+    # Installed builds use SDL's per-user data directory. Older packages
+    # wrote the log beside the executable.
+    log_paths = (Path(env["XDG_DATA_HOME"]) / "Sil-QH" / "sil-more" / "log.txt",
+                 game / "log.txt")
+    for path in log_paths:
+        path.unlink(missing_ok=True)
     with (output / f"{label}.stdout").open("w") as stream:
         process = subprocess.Popen([str(game / "sil-more.sh"), "--", "--fullscreen"],
                                    cwd=game, env=run_env, stdout=stream, stderr=stream)
         try:
             deadline = time.monotonic() + 60
-            while "initial_menu: ENTERED" not in read_log(game):
+            while "initial_menu: ENTERED" not in read_log(log_paths):
                 require(process.poll() is None,
                         f"{label}: exited before welcome ({process.returncode})")
                 require(time.monotonic() < deadline, f"{label}: welcome timed out")
@@ -72,7 +79,7 @@ def check_startup(game, output, env, label):
             state = after["state"]
             require(state["waiting_for_input"] and (state["modal"] or state["dungeon"]),
                     f"{label}: Continue did not reach the next story/creation/game prompt")
-            log = read_log(game)
+            log = read_log(log_paths)
             require("play_game: FUNCTION ENTERED" in log, f"{label}: play_game not entered")
             require("main window too small" not in log and "main window is too small" not in log,
                     f"{label}: startup rejected the compact grid")
@@ -93,8 +100,10 @@ def check_startup(game, output, env, label):
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-            if (game / "log.txt").exists():
-                shutil.copy2(game / "log.txt", output / f"{label}.log")
+            for path in log_paths:
+                if path.is_file():
+                    shutil.copy2(path, output / f"{label}.log")
+                    break
 
 
 def main():

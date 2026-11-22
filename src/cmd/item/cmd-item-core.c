@@ -4,6 +4,7 @@
 #include "achievements-lore.h"
 #include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
+#include "object/object-place.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "cmd/world/cmd-interact-chest.h"
@@ -736,78 +737,91 @@ static int choose_arrow_move_quantity(const object_type* o_ptr,
     return get_quantity_action(prompt, "Move", maximum);
 }
 
-static bool choose_quiver_arrow_replacement(const object_type* incoming,
-    int needed, int* replacement_item)
+static bool replace_quiver_arrows(int requested, int item)
 {
     object_choice_entry entries[QUIVER_ARROW_CAPACITY + 1];
     int handles[QUIVER_ARROW_CAPACITY + 1];
-    int count;
-    int selected = -1;
-    char desc[320];
+    int amounts[QUIVER_ARROW_CAPACITY + 1] = { 0 };
+    int entry_slots[QUIVER_ARROW_CAPACITY + 1];
+    int slots = player_quiver_arrow_slots(handles, (int)N_ELEMENTS(handles));
+    int remaining = player_quiver_arrow_count();
+    int needed = requested + remaining - QUIVER_ARROW_CAPACITY;
 
-    if (replacement_item)
-        *replacement_item = -1;
-    if (!incoming || !incoming->k_idx || needed <= 0 || !replacement_item)
-        return false;
-
-    count = player_quiver_arrow_slots(handles, (int)N_ELEMENTS(handles));
-    for (int i = 0; i < count; i++)
+    /* Stage every choice so cancellation leaves both the quiver and floor intact. */
+    while (needed > 0)
     {
-        object_type* candidate = player_quiver_arrow_object(handles[i]);
-        char label[OBJECT_CHOICE_LABEL_LEN];
+        int count = 0;
+        int selected = -1;
+        char desc[320];
 
-        if (!candidate || !candidate->k_idx)
+        for (int i = 0; i < slots; i++)
+        {
+            object_type* candidate = player_quiver_arrow_object(handles[i]);
+            char label[OBJECT_CHOICE_LABEL_LEN];
+
+            if (amounts[i] || !candidate || !candidate->k_idx
+                || candidate->number <= 0)
+                continue;
+            strnfmt(label, sizeof(label), "%d)", count + 1);
+            entry_slots[count] = i;
+            object_choice_entry_make(&entries[count], handles[i], candidate,
+                label, handles[i] == player_quiver_selected_arrow_slot()
+                    ? "Active" : "Quiver");
+            count++;
+        }
+
+        strnfmt(desc, sizeof(desc),
+            "Your quiver would hold %d/%d arrows after the removals chosen "
+            "so far. Moving these arrows requires replacing %d quivered arrow%s.",
+            remaining, QUIVER_ARROW_CAPACITY, needed, needed == 1 ? "" : "s");
+        if (!object_choice_overlay("What to replace?", desc, entries, count, 0,
+                &selected)
+            || selected < 0 || selected >= count)
+        {
+            return false;
+        }
+
+        int i = entry_slots[selected];
+        amounts[i] = MIN(needed, entries[selected].o_ptr->number);
+        remaining -= amounts[i];
+        needed -= amounts[i];
+    }
+
+    object_type drops[QUIVER_ARROW_CAPACITY + 1];
+    int drop_count = 0;
+    for (int i = slots - 1; i >= 0; i--)
+    {
+        if (!amounts[i])
             continue;
-        strnfmt(label, sizeof(label), "%d)", i + 1);
-        object_choice_entry_make(&entries[i], handles[i], candidate, label,
-            handles[i] == player_quiver_selected_arrow_slot()
-                ? "Active" : "Quiver");
-    }
-    if (count <= 0)
-        return false;
+        object_type* drop = &drops[drop_count++];
 
-    strnfmt(desc, sizeof(desc),
-        "Your quiver has %d/%d arrows. Moving the selected arrows requires "
-        "replacing %d quivered arrow%s.",
-        player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY, needed,
-        needed == 1 ? "" : "s");
-    if (!object_choice_overlay("What to replace?", desc, entries, count, 0,
-            &selected)
-        || selected < 0 || selected >= count)
+        object_copy(drop, player_quiver_arrow_object(handles[i]));
+        drop->number = amounts[i];
+        drop->pickup = false;
+        drop->pickup_slot = -1;
+        drop->storage = OBJECT_STORAGE_NONE;
+    }
+
+    if (!drop_quiver_arrows_near(drops, drop_count, item < 0 ? -item : 0))
     {
+        msg_print("There is no room to drop all the arrows you would replace.");
         return false;
     }
 
-    *replacement_item = entries[selected].item;
-    return true;
-}
+    /* Removing higher slots first preserves the planned handles. */
+    int next_drop = 0;
+    for (int i = slots - 1; i >= 0; i--)
+    {
+        char name[120];
 
-static int drop_quiver_replacement_arrows(int item, int needed)
-{
-    object_type* o_ptr = player_quiver_arrow_object(item);
-    object_type dropped;
-    char o_name[120];
-    int amount;
-
-    if (!o_ptr || !o_ptr->k_idx || needed <= 0)
-        return 0;
-
-    amount = MIN(needed, o_ptr->number);
-    object_copy(&dropped, o_ptr);
-    dropped.number = amount;
-    dropped.pickup = false;
-    dropped.pickup_slot = -1;
-    dropped.storage = OBJECT_STORAGE_NONE;
-    dropped.next_o_idx = 0;
-    dropped.held_m_idx = 0;
-    dropped.iy = dropped.ix = 0;
-    object_desc(o_name, sizeof(o_name), &dropped, true, 3);
-
-    player_quiver_remove_arrows(item, amount);
-    drop_near(&dropped, 0, p_ptr->py, p_ptr->px);
-    msg_format("You replace %s from your quiver.", o_name);
+        if (!amounts[i])
+            continue;
+        object_desc(name, sizeof(name), &drops[next_drop++], true, 3);
+        player_quiver_remove_arrows(handles[i], amounts[i]);
+        msg_format("You replace %s from your quiver.", name);
+    }
     p_ptr->redraw |= PR_MAP | PR_QUIVER;
-    return amount;
+    return true;
 }
 
 static void do_cmd_quiver_arrows(object_type* o_ptr, int item)
@@ -838,19 +852,8 @@ static void do_cmd_quiver_arrows(object_type* o_ptr, int item)
     {
         requested = choose_arrow_move_quantity(o_ptr, "Quiver",
             MIN(o_ptr->number, QUIVER_ARROW_CAPACITY), false);
-        while (requested > player_quiver_arrow_space())
-        {
-            int replacement_item;
-            int needed = requested - player_quiver_arrow_space();
-
-            if (!choose_quiver_arrow_replacement(o_ptr, needed,
-                    &replacement_item))
-            {
-                return;
-            }
-            if (drop_quiver_replacement_arrows(replacement_item, needed) <= 0)
-                return;
-        }
+        if (requested > 0 && !replace_quiver_arrows(requested, item))
+            return;
     }
     if (requested <= 0)
         return;
@@ -4692,7 +4695,6 @@ bool do_cmd_jewelry_preset_apply(int preset)
         for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
         {
             int dest = jewelry_preset_inventory_slot(slot);
-            int source;
 
             if (dest < 0 || !target_present[slot]
                 || jewelry_preset_objects_match(&inventory[dest],
@@ -4701,12 +4703,13 @@ bool do_cmd_jewelry_preset_apply(int preset)
                 continue;
             }
 
-            source = jewelry_preset_find_source_for_target(slot,
+            int source = jewelry_preset_find_source_for_target(slot,
                 targets[slot], targets, target_present);
-            if (source >= 0
+            object_type* source_object = player_inventory_object(source);
+            if (source_object
                 && player_pack_action_start(
                     PLAYER_PACK_ACTION_JEWELRY_PRESET, source, preset, false,
-                    &inventory[source]))
+                    source_object))
             {
                 return true;
             }
@@ -4716,7 +4719,6 @@ bool do_cmd_jewelry_preset_apply(int preset)
     for (int slot = 0; slot < JEWELRY_PRESET_SLOT_MAX; slot++)
     {
         int dest = jewelry_preset_inventory_slot(slot);
-        int source;
 
         if (dest < 0 || !target_present[slot])
             continue;
@@ -4724,15 +4726,16 @@ bool do_cmd_jewelry_preset_apply(int preset)
         if (jewelry_preset_objects_match(&inventory[dest], targets[slot]))
             continue;
 
-        source = jewelry_preset_find_source_for_target(slot, targets[slot],
+        int source = jewelry_preset_find_source_for_target(slot, targets[slot],
             targets, target_present);
-        if (source < 0)
+        object_type* source_object = player_inventory_object(source);
+        if (!source_object)
         {
             msg_format("You no longer have all the items for %s.", preset_name);
             return changed;
         }
 
-        do_cmd_wield_to_slot(&inventory[source], source, dest);
+        do_cmd_wield_to_slot(source_object, source, dest);
 
         if (!jewelry_preset_objects_match(&inventory[dest], targets[slot]))
         {

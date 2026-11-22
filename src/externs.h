@@ -2077,6 +2077,7 @@ extern bool sdl_mouse_recall_process_pending(void);
 extern bool sdl_log_pane_display_process_pending(void);
 extern int sdl_log_pane_display_filter(int pane);
 extern void sdl_mouse_path_cancel(void);
+extern void sdl_main_map_cancel_drag(void);
 extern void sdl_player_exchange_begin_direction_prompt(void);
 extern void sdl_player_exchange_cancel_direction_prompt(void);
 extern void sdl_unified_look_set_active(bool active);

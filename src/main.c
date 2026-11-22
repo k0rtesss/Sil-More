@@ -309,12 +309,10 @@ int main(int argc, char* argv[])
     cptr mstr = NULL;
 
     bool args = true;
-    // Initialise logger in 'quiet' mode (don't write to stdout) on desktop.
-    // On Android, keep stdout enabled so diagnostics are visible in logcat.
 #if defined(__ANDROID__) || defined(SIL_IOS)
-    init_logger(false, argv[0]);
+    init_logger(false, NULL);
 #else
-    init_logger(true, argv[0]);
+    init_logger(true, NULL);
 #endif
     
     // Initialize dedicated generation log (generation.txt)

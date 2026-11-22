@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check jewelry identity and curse-blocked production preset application."""
+"""Check jewelry identity, curse-blocked swaps and expandable-inventory presets."""
 from pathlib import Path
 import os
 import shlex
@@ -85,6 +85,50 @@ static void check_presets(void)
     assert(!memcmp(before,inventory,sizeof(before)));
     puts("Jewelry presets: curse/modifier identity, plain notes interchangeable, worn curse preflight blocks all three changes, reverse curse-warning cancel free and atomic PASS.");
 }
+
+static void check_expandable_preset(void)
+{
+    object_type ring;
+
+    memset(inventory,0,INVEN_TOTAL*sizeof(*inventory));
+    player_carried_extra_reset_store();
+    player_pack_action_reset();
+    jewelry_presets_reset();
+    p_ptr->inven_cnt = 0;
+    p_ptr->equip_cnt = 3;
+
+    prep(&inventory[INVEN_LEFT],TV_RING,SV_RING_SECRETS);
+    prep(&inventory[INVEN_RIGHT],TV_RING,SV_RING_FROST);
+    prep(&inventory[INVEN_NECK],TV_AMULET,SV_AMULET_REGENERATION);
+    assert(jewelry_preset_store_current(0));
+    object_copy(&ring,&inventory[INVEN_LEFT]);
+    object_wipe(&inventory[INVEN_LEFT]);
+    p_ptr->equip_cnt--;
+
+    /* Ordinary carry creates expandable entries once physical slots fill. */
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        object_type arrow;
+        char note[24];
+
+        prep(&arrow,TV_ARROW,SV_NORMAL_ARROW);
+        strnfmt(note,sizeof(note),"Test arrow %d",i);
+        arrow.obj_note = quark_add(note);
+        assert(inven_carry(&arrow,false) >= 0);
+    }
+    assert(player_pack_entry_count() == INVEN_PACK);
+    int handle = inven_carry(&ring,false);
+    assert(handle >= CARRIED_EXTRA_INDEX);
+    assert(player_inventory_object(handle)->sval == SV_RING_SECRETS);
+
+    p_ptr->energy_use = 0;
+    assert(do_cmd_jewelry_preset_apply(0));
+    assert(jewelry_preset_is_equipped(0));
+    assert(!player_pack_action_pending() && p_ptr->energy_use == 100);
+    assert(player_pack_entry_count() == INVEN_PACK);
+    assert(!player_carried_extra_entry_count() && p_ptr->equip_cnt == 3);
+    puts("Jewelry preset equips its expandable-inventory ring exactly once PASS.");
+}
 '''
 
 
@@ -97,18 +141,24 @@ def main():
     source = OUT / 'check.c'
     source.write_text(prefix + CHECKS + init +
                       '    assert(init_flavor_info()==0); flavor_init();\n'
-                      '    check_presets(); SDL_Quit(); return 0;\n}\n', encoding='utf-8')
+                      '    check_presets(); check_expandable_preset(); SDL_Quit(); return 0;\n}\n',
+                      encoding='utf-8')
+    sources = ('src/cmd/item/cmd-item-core.c', 'src/object/object-place.c')
+    excluded = ('/src/main.c.obj', *(f'/{path}.obj' for path in sources))
     objects = shlex.split((BUILD / 'CMakeFiles/sil-more.dir/objects1.rsp').read_text())
     response = OUT / 'objects.rsp'
     response.write_text('\n'.join('"' + p + '"' for p in objects
-                                 if not p.endswith('/src/main.c.obj')), encoding='utf-8')
+                                 if not p.endswith(excluded)),
+                        encoding='utf-8')
     env = os.environ.copy()
     env['PATH'] = os.pathsep.join([
         *(str(BUILD / '_deps' / p) for p in ('SDL', 'SDL_ttf', 'SDL_image', 'SDL_mixer')),
         'C:/msys64/mingw64/bin', 'C:/msys64/usr/bin', env['PATH']])
     exe = OUT / 'check.exe'
     subprocess.run(['C:/msys64/mingw64/bin/cc.exe', '-DUSE_SDL', '-std=c17', '-O0',
-                    '@CMakeFiles/sil-more.dir/includes_C.rsp', str(source), '@' + str(response),
+                    '@CMakeFiles/sil-more.dir/includes_C.rsp', str(source),
+                    *(str(ROOT / path) for path in sources),
+                    '@' + str(response),
                     '@CMakeFiles/sil-more.dir/linkLibs.rsp',
                     '-Wl,--wrap=tutorial_game_action_allowed', '-Wl,--wrap=ui_question_ask',
                     '-o', str(exe)], cwd=BUILD, env=env, check=True)

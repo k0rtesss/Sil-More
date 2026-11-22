@@ -726,11 +726,7 @@ void set_sdl_fullscreen(bool value)
             // Restore saved window position and size
             if (config.window_width > 0 && config.window_height > 0) {
                 SDL_SetWindowSize(g_state.window, config.window_width, config.window_height);
-                if (config.window_x >= 0 && config.window_y >= 0) {
-                    SDL_SetWindowPosition(g_state.window, config.window_x, config.window_y);
-                }
-                log_debug("Restored windowed position (%d, %d) and size (%dx%d)",
-                         config.window_x, config.window_y, config.window_width, config.window_height);
+                sdl_window_set_position(config.window_x, config.window_y);
             }
             log_info("Exited fullscreen mode");
         }
@@ -3170,11 +3166,7 @@ void sdl_touch_pane_begin_yes_no_prompt_impl(cptr prompt,
         g_touch_pane_yes_no_prompt_text[--len] = '\0';
     }
 
-    sdl_touch_pane_cancel_press();
-    sdl_touch_swipe_cancel();
-    sdl_touch_zone_cancel_press();
-    sdl_touch_top_panel_cancel_press();
-    sdl_touch_round_cancel_press();
+    sdl_touch_cancel_all_inputs();
     sdl_menu_touch_cancel();
     g_touch_pane_yes_no_prompt_placement = placement;
     g_touch_pane_yes_no_prompt_hover = SDL_TOUCH_YES_NO_HOVER_NONE;

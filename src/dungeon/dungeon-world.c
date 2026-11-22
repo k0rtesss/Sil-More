@@ -205,18 +205,16 @@ static void regen_monsters(void)
 }
 
 
-/*
- * Scan for artifacts within 22 tiles of player and mark them as seen.
- * This allows players to skip full exploration while still tracking artifacts.
- * Only scans the area that changed (player moved or objects shifted).
- */
+/* Record artefacts the living player can see before leaving the level. */
 void scan_artifacts_near_player(void)
 {
+    if (p_ptr->is_dead || death_spectator_active())
+        return;
+
     int py = p_ptr->py;
     int px = p_ptr->px;
     int radius = 22;
     
-    /* Scan 44x44 area centered on player */
     for (int dy = -radius; dy <= radius; dy++)
     {
         for (int dx = -radius; dx <= radius; dx++)
@@ -241,7 +239,8 @@ void scan_artifacts_near_player(void)
                 
                 /* If this is an artifact that hasn't been marked seen yet */
                 if (o_ptr->name1
-                    && !(a_info[o_ptr->name1].seen & ART_SEEN_PHYSICAL))
+                    && !(a_info[o_ptr->name1].seen & ART_SEEN_PHYSICAL)
+                    && object_can_see_floor(y, x))
                 {
                     a_info[o_ptr->name1].seen |= ART_SEEN_PHYSICAL;
                     

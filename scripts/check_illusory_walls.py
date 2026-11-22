@@ -8,6 +8,9 @@ import check_water as water
 
 TESTS = r'''
 #include "cave/cave.h"
+#include "level-generation/level-generation-terrain.h"
+#include "level-generation/level-generation-terrain-access.h"
+#include "level-generation/level-generation-terrain-vaults.h"
 static bool same_illusion_cell(SDL_Surface* a,SDL_Surface* b,int big) {
     int x=(COL_MAP+11*(big?2:1))*16, y=(ROW_MAP+10)*16;
     for(int row=y;row<y+16;row++)
@@ -22,21 +25,93 @@ static int illusion_count(void) {
             if (cave_feat[y][x] == FEAT_ILLUSORY_WALL) count++;
     return count;
 }
-static void illusion_corridor(int y, int x) {
-    for (int dx=-1; dx<=1; dx++) {
-        cave_set_feat(y, x+dx, FEAT_FLOOR);
-        cave_corridor1[y][x+dx] = 0;
-        cave_corridor2[y][x+dx] = 1;
-    }
-    cave_set_feat(y-1, x, FEAT_WALL_EXTRA);
-    cave_set_feat(y+1, x, FEAT_WALL_EXTRA);
+static void illusion_map(int size) {
+    water_map(size, size, FEAT_WALL_EXTRA);
+    terrain_generation_reset();
+    terrain_vault_reset();
+    for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++) {
+            cave_info[y][x] = CAVE_WALL;
+            cave_corridor1[y][x] = cave_corridor2[y][x] = -1;
+        }
 }
-static void illusion_separator(int y, int x) {
-    cave_set_feat(y, x, FEAT_WALL_EXTRA);
-    cave_set_feat(y, x - 1, FEAT_WALL_EXTRA);
-    cave_set_feat(y, x + 1, FEAT_WALL_EXTRA);
-    cave_set_feat(y - 1, x, FEAT_FLOOR);
-    cave_set_feat(y + 1, x, FEAT_FLOOR);
+/* A strip of untouched granite separates two existing corridors. */
+static void illusion_site(int y, int x, int dir, int thickness) {
+    int dy = ddy[dir], dx = ddx[dir];
+    for (int side = -1; side <= 1; side++) {
+        int yy = y + side * dx, xx = x + side * dy;
+        cave_set_feat(yy, xx, FEAT_FLOOR);
+        cave_corridor1[yy][xx] = 0;
+        cave_corridor2[yy][xx] = 1;
+    }
+    for (int i = thickness + 1; i <= thickness + 2; i++) {
+        int yy = y + dy * i, xx = x + dx * i;
+        cave_set_feat(yy, xx, FEAT_FLOOR);
+        cave_corridor1[yy][xx] = 2;
+        cave_corridor2[yy][xx] = 3;
+    }
+    /* The two outer landings are reachable before the secret is generated. */
+    for (int i = 0; i <= thickness + 1; i++)
+        cave_set_feat(y + dy*i + dx*2, x + dx*i + dy*2, FEAT_FLOOR);
+    cave_set_feat(y + dy*(thickness+1) + dx, x + dx*(thickness+1) + dy, FEAT_FLOOR);
+}
+/* Exercise the game's eight-way movement graph with every illusion closed. */
+static void illusion_access(int sy, int sx, bool sealed,
+        byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID]) {
+    static byte shadow[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (int x = 0; x < p_ptr->cur_map_wid; x++)
+            shadow[y][x] = sealed && cave_feat[y][x] == FEAT_ILLUSORY_WALL
+                ? FEAT_WALL_EXTRA : cave_feat[y][x];
+    terrain_generation_flood(sy, sx, reached, shadow);
+}
+
+static void illusion_vault_tests(void) {
+    vault_type templates[2] = {0};
+    vault_type* old_templates = v_info;
+    int old_max = z_info->v_max;
+    v_info = templates;
+    z_info->v_max = 2;
+    static byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    for (int mode = 0; mode < 11; mode++) {
+        illusion_map(32);
+        templates[1].typ = mode == 2 ? 6 : mode == 3 ? 8 : 7;
+        templates[1].flags = mode == 4 ? VLT_QUEST : 0;
+        terrain_vault_begin();
+        for (int y = 7; y <= 13; y++) for (int x = 12; x <= 18; x++) {
+            bool edge = y == 7 || y == 13 || x == 12 || x == 18;
+            cave_set_feat(y, x, edge ? FEAT_WALL_OUTER : FEAT_FLOOR);
+            cave_info[y][x] |= CAVE_ROOM | CAVE_ICKY;
+            terrain_vault_record(y, x, &templates[1], edge ? '%' : '.');
+        }
+        for (int y = 6; y <= 14; y++) for (int x = 7; x <= 11; x++)
+            cave_set_feat(y, x, FEAT_FLOOR);
+        cave_set_feat(10, 12, FEAT_FLOOR);
+        cave_set_feat(10, 7, FEAT_LESS);
+        if (mode == 1) cave_set_feat(10, 12, FEAT_DOOR_HEAD);
+        if (mode == 5) cave_set_feat(7, 12, FEAT_FLOOR); /* Diagonal bypass. */
+        if (mode == 6) cave_set_feat(8, 12, FEAT_CHASM); /* Jumpable bypass. */
+        if (mode == 7) cave_set_feat(11, 15, FEAT_MORE);
+        if (mode == 8) cave_set_feat(11, 15, FEAT_FORGE_NORMAL_HEAD);
+        if (mode == 9) p_ptr->px = 15;
+        op_ptr->opt[OPT_illusory_walls] = mode != 10;
+        place_illusory_passages();
+        assert(illusion_count() == (mode <= 1 ? 1 : 0));
+        if (mode <= 1) {
+            assert(cave_feat[10][12] == FEAT_ILLUSORY_WALL);
+            illusion_access(10, 10, true, reached);
+            assert(reached[10][7]);
+            for (int y = 8; y <= 12; y++) for (int x = 13; x <= 17; x++)
+                assert(!reached[y][x]);
+            illusion_access(10, 10, false, reached);
+            assert(reached[10][17]);
+        }
+    }
+    terrain_vault_reset();
+    v_info = old_templates;
+    z_info->v_max = old_max;
+    op_ptr->opt[OPT_illusory_walls] = true;
+    puts("Illusion generation: optional vault accessible only through its single threshold: PASS");
 }
 static void illusion_tests(void) {
     messages_init();
@@ -44,59 +119,77 @@ static void illusion_tests(void) {
     assert(!strcmp(option_text[OPT_illusory_walls], "illusory_walls"));
     assert(OPT_illusory_walls < OPT_BIRTH);
     f_info[FEAT_ILLUSORY_WALL].mimic = FEAT_WALL_EXTRA;
+    op_ptr->opt[OPT_illusory_walls] = true;
 
-    /* A single thin planned corridor, so placement has one unambiguous wall
-     * pair. */
-    for (int mode=0; mode<8; mode++) {
-        water_map(24,24,FEAT_WALL_EXTRA);
-        for(int y=0;y<24;y++) for(int x=0;x<24;x++)
-            cave_info[y][x]=CAVE_WALL|CAVE_MARK|CAVE_SEEN;
-        illusion_corridor(10,10);
-        illusion_separator(16,16);
+    /* Reproduce the reported blind alcove and other invalid routes. No
+     * partial excavation may survive a failed search for the far landing. */
+    for (int mode = 0; mode < 20; mode++) {
+        illusion_map(24);
+        int thickness = mode == 13 ? 9 : (mode >= 16 && mode <= 18) ? mode - 15 : 4;
+        illusion_site(10, 10, 6, thickness);
         op_ptr->opt[OPT_illusory_walls] = mode != 1;
-        if(mode==2) cave_info[9][10] |= CAVE_ICKY;
-        if(mode==3) cave_set_feat(9,10,FEAT_WALL_PERM);
-        if(mode==4) p_ptr->depth=MORGOTH_DEPTH;
-        if(mode==5) cave_fixture_set(9,10,CAVE_FIXTURE_WALL_TORCH);
-        if(mode==6) cave_set_feat(10,10,FEAT_CHASM);
-        if(mode==7) cave_set_feat(10,8,FEAT_DOOR_HEAD);
+        if (mode == 0) {
+            cave_set_feat(10, 15, FEAT_WALL_EXTRA);
+            cave_set_feat(10, 16, FEAT_WALL_EXTRA);
+        }
+        if (mode == 2) cave_info[9][13] |= CAVE_ICKY;
+        if (mode == 3) cave_set_feat(10, 13, FEAT_WALL_PERM);
+        if (mode == 4) p_ptr->depth = MORGOTH_DEPTH;
+        if (mode == 5) cave_fixture_set(10, 14, CAVE_FIXTURE_WALL_TORCH);
+        if (mode == 6) cave_set_feat(10, 15, FEAT_CHASM);
+        if (mode == 7) cave_set_feat(8, 10, FEAT_DOOR_HEAD);
+        if (mode == 8) cave_set_feat(10, 16, FEAT_WALL_EXTRA);
+        if (mode == 9) cave_set_feat(9, 13, FEAT_FLOOR);
+        if (mode == 10) cave_o_idx[10][12] = 1;
+        if (mode == 11) cave_info[10][15] |= CAVE_ROOM;
+        if (mode == 12) terrain_generation_reserve(10, 13);
+        if (mode == 14) cave_natural[10][15] = 1;
+        if (mode == 15) cave_set_feat(9, 11, FEAT_FLOOR); /* Diagonal entry around the mouth. */
+        if (mode == 19) cave_set_feat(11, 15, FEAT_WALL_EXTRA); /* Cut the exterior route. */
         place_illusory_passages();
-        bool placed_pair = cave_feat[9][10]==FEAT_ILLUSORY_WALL
-            || cave_feat[11][10]==FEAT_ILLUSORY_WALL;
-        if (placed_pair != (mode==0))
-            fprintf(stderr,"illusion generation mode %d: north %d south %d\n",
-                mode, cave_feat[9][10], cave_feat[11][10]);
-        assert(placed_pair == (mode==0));
-        assert(cave_feat[10][9]==FEAT_FLOOR && cave_feat[10][11]==FEAT_FLOOR);
-        assert(cave_feat[10][10] == (mode==6 ? FEAT_CHASM : FEAT_FLOOR));
-        assert(cave_feat[16][16] != FEAT_ILLUSORY_WALL);
-        if(mode==0) {
-            assert(cave_floor_bold(9,10) || cave_floor_bold(11,10));
-            assert(cave_floor_bold(9,10) != cave_floor_bold(11,10));
-            assert(cave_feat[9][10]!=FEAT_ILLUSORY_WALL
-                || cave_feat[11][10]==FEAT_WALL_EXTRA);
-            assert(cave_feat[11][10]!=FEAT_ILLUSORY_WALL
-                || cave_feat[9][10]==FEAT_WALL_EXTRA);
+        assert(illusion_count() == 0);
+        for (int i = 11; i <= 10 + thickness; i++)
+            assert(cave_feat[10][i] ==
+                (mode == 3 && i == 13 ? FEAT_WALL_PERM : FEAT_WALL_EXTRA));
+    }
+    puts("Illusion generation: blind alcoves, side openings, hazards and protected routes rejected: PASS");
+
+    static byte reached[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    for (int d = 0; d < 4; d++) for (int thickness = 4; thickness <= 8; thickness++) {
+        int dir = ddd[d], dy = ddy[dir], dx = ddx[dir];
+        illusion_map(32);
+        illusion_site(14, 14, dir, thickness);
+        int far_y = 14 + dy*(thickness+1), far_x = 14 + dx*(thickness+1);
+        p_ptr->py = p_ptr->px = 14;
+        place_illusory_passages();
+        assert(illusion_count() == 2);
+        illusion_access(14, 14, true, reached);
+        assert(reached[far_y][far_x]);
+        for (int i = 1; i <= thickness; i++)
+            assert(!reached[14 + dy*i][14 + dx*i]);
+        cave_m_idx[14][14] = -1;
+        for (int i = 1; i <= thickness + 2; i++) {
+            int y = 14 + dy*i, x = 14 + dx*i;
+            bool entrance = i == 1 || i == thickness;
+            assert(cave_feat[y][x] == (entrance ? FEAT_ILLUSORY_WALL : FEAT_FLOOR));
+            move_player(dir);
+            assert(p_ptr->py == y && p_ptr->px == x && cave_feat[y][x] == FEAT_FLOOR);
         }
     }
-    puts("Illusion generation: default on, doorless corridors, option off, protected rooms, permanent walls, special depth, fixtures and hazards: PASS");
+    puts("Illusion generation: sealed corridors exclude eight-way access until entered: PASS");
 
-    /* The target count follows the map dimensions, like the stair count. */
-    water_map(66,66,FEAT_FLOOR);
-    illusion_corridor(10,10); illusion_corridor(20,20);
-    illusion_corridor(30,30); illusion_corridor(40,40);
-    op_ptr->opt[OPT_illusory_walls] = true;
-    place_illusory_passages();
-    int small_count = illusion_count();
-    water_map(165,165,FEAT_FLOOR);
-    illusion_corridor(10,10); illusion_corridor(30,30);
-    illusion_corridor(50,50); illusion_corridor(70,70);
-    illusion_corridor(90,90); illusion_corridor(110,110);
-    illusion_corridor(130,130); illusion_corridor(150,150);
-    place_illusory_passages();
-    int large_count = illusion_count();
-    assert(small_count == 2 && large_count == 8);
+    for (int size = 66; size <= 165; size += 99) {
+        illusion_map(size);
+        for (int y = 10; y < size - 7; y++) cave_set_feat(y, 8, FEAT_FLOOR);
+        for (int y = 10; y < size - 7; y += 8) {
+            illusion_site(y, 10, 6, 4);
+            cave_set_feat(y, 9, FEAT_FLOOR);
+        }
+        place_illusory_passages();
+        assert(illusion_count() == (size == 66 ? 2 : 8));
+    }
     puts("Illusion generation: map-size scaling: PASS");
+    illusion_vault_tests();
 
     water_map(24,24,FEAT_FLOOR);
     cave_set_feat(10,11,FEAT_ILLUSORY_WALL);

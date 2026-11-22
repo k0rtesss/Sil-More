@@ -446,6 +446,8 @@ errr load_metaruns(bool create_if_missing)
     if (!build_meta_path(fn, sizeof fn, NULL, META_RAW))
         return -1;
     fd = sdl_fopen(fn, "rb");
+    if (!fd && SDL_GetPathInfo(fn, NULL))
+        return -1;
 
 #ifdef SIL_USE_LOCAL_DATA
     if (!fd) {
@@ -485,7 +487,8 @@ errr load_metaruns(bool create_if_missing)
     if (!fd && create_if_missing) {
         log_info("Creating new versioned metarun file: %s", fn);
         FILE_TYPE(FILE_TYPE_DATA);
-        fd = sdl_fmake(fn, 0644);
+        /* A failed read does not prove no Tale data already exists. */
+        fd = sdl_fopen(fn, "wbx");
         if (!fd) return -1;
 
         /* Write versioned header */

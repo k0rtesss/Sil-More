@@ -32,6 +32,7 @@
 #define WATER_WALK_SOUND_PATH "sound/water_walking"
 #define ENVIRONMENT_LOOP_VOLUME_SCALE 0.5f
 #define SOUND_GAIN_RAMP_MS 160
+#define SOUND_DEVICE_RETRY_MS 5000
 #define ENVIRONMENT_LOOP_COUNT 6
 
 typedef struct {
@@ -79,6 +80,7 @@ static struct {
     sound_bank bank;
     bool bank_loaded;
     bool mixer_initialized;
+    Uint64 mixer_retry_after_ms;
     bool mixer_paused;
     bool enable_combat;
     bool enable_inventory;
@@ -959,6 +961,13 @@ static bool sdl_sound_ensure_mixer_locked(void)
         return true;
     }
 
+    /* Gameplay can request many sounds per frame. If the backend is absent,
+     * retry on a later cue or immediately when the user changes sound options. */
+    Uint64 now = SDL_GetTicks();
+    if (now < sound_state.mixer_retry_after_ms)
+        return false;
+    sound_state.mixer_retry_after_ms = now + SOUND_DEVICE_RETRY_MS;
+
     if (!MIX_Init()) {
         log_warn("Failed to initialize SDL_mixer: %s", SDL_GetError());
         return false;
@@ -988,6 +997,7 @@ static bool sdl_sound_ensure_mixer_locked(void)
         sdl_sound_destroy_mixer();
         return false;
     }
+    sound_state.mixer_retry_after_ms = 0;
 
     if (!MIX_SetMixerGain(sound_state.mixer, g_sound_config.volume_master)) {
         log_debug("Failed to set master mixer gain: %s", SDL_GetError());
@@ -1537,6 +1547,7 @@ void sdl_sound_reload(void)
         return;
 
     SDL_LockMutex(g_sound_mutex);
+    sound_state.mixer_retry_after_ms = 0;
     g_sound_generation++;
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
@@ -1685,6 +1696,7 @@ void sdl_sound_shutdown(void)
     if (g_sound_mutex)
         SDL_LockMutex(g_sound_mutex);
     g_sound_generation++;
+    sound_state.mixer_retry_after_ms = 0;
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
     g_sound_loaded_once = false;
@@ -2457,6 +2469,7 @@ void sdl_sound_save_config(void)
     if (!sdl_sound_ensure_mutex())
         return;
     SDL_LockMutex(g_sound_mutex);
+    sound_state.mixer_retry_after_ms = 0;
     sound_state.enable_combat = g_sound_config.enable_combat;
     sound_state.enable_inventory = g_sound_config.enable_inventory;
     sound_state.enable_walk = g_sound_config.enable_walk;

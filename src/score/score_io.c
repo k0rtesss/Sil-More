@@ -88,7 +88,7 @@ bool score_file_load_header(score_file_ctx* ctx, const char *filepath)
     if (!ctx || !filepath)
         return false;
 
-    FILE* file = fopen(filepath, "rb");
+    FILE* file = file_open_utf8(filepath, "rb");
     if (!file)
         return false;
 
@@ -155,7 +155,7 @@ static bool score_file_upgrade_to_curses(score_file_ctx* ctx, const char *filepa
              ctx->version_major, ctx->version_minor,
              ctx->version_patch, ctx->version_extra);
 
-    FILE* file = fopen(filepath, "r+b");
+    FILE* file = file_open_utf8(filepath, "r+b");
     if (!file) {
         log_error("Cannot open scores file for upgrade: %s", filepath);
         return false;
@@ -243,7 +243,7 @@ static bool score_file_upgrade_to_current(score_file_ctx* ctx,
         return true;
     }
 
-    FILE* file = fopen(filepath, "r+b");
+    FILE* file = file_open_utf8(filepath, "r+b");
     if (!file) {
         log_error("Cannot open scores file for version update: %s", filepath);
         return false;
@@ -316,7 +316,7 @@ SDL_IOStream* score_file_open(const char *filepath, int mode)
         header.entry_count  = 0;
 
         log_debug("score_file_open: file doesn't exist, creating with header at '%s'", filepath);
-        SDL_IOStream* new_file = SDL_IOFromFile(filepath, "w+b");
+        SDL_IOStream* new_file = SDL_IOFromFile(filepath, "w+bx");
         if (new_file) {
             bool initialized =
                 SDL_WriteIO(new_file, &header, sizeof(header)) == sizeof(header)

@@ -1151,9 +1151,11 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     if (!active) return false;
     if (mouse && ev->type==SDL_EVENT_MOUSE_MOTION) {
         tutorial_update_mouse_hover(x,y);
-        if (!view.can_continue && tutorial_menu_owns_input()
-            && !tutorial_card.w && !tutorial_reading) return false;
-        return !(tutorial_pointer_gameplay && !view.can_continue && !tutorial_reading);
+        if (view.can_continue || tutorial_reading) return true;
+        /* Keep a drag with its owner. Between presses, map and menu hover
+         * work anywhere the action card leaves uncovered. */
+        if (ev->motion.state & SDL_BUTTON_LMASK) return !tutorial_pointer_gameplay;
+        return tutorial_hit(x,y,&tutorial_card);
     }
     if (down) {
         tutorial_pointer_mouse=mouse; tutorial_pointer_finger=finger;

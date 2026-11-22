@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep duel-song targets through compaction and complete production save/load.
+"""Keep duel-song and Concentration targets through compaction and save/load.
 
 Run after build-incremental.ps1. All saves, data and configuration are temporary.
 """
@@ -17,6 +17,8 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/song-target-save"
 
 CHECKS = r'''
+#include "player/player-song-internal.h"
+
 static void setup_target(int song, bool hole)
 {
     player_wipe();
@@ -39,9 +41,11 @@ static void setup_target(int song, bool hole)
     current_build_vault_exact_token = false;
     int idx = cave_m_idx[10][hole ? 11 : 10];
     assert(idx == (hole ? 2 : 1));
+    assert(concentration_bonus(10, hole ? 11 : 10) == 0);
+    p_ptr->consecutive_attacks = 3;
     p_ptr->target_who = p_ptr->health_who = idx;
-    p_ptr->song_target_idx = song == SNG_NOTHING ? 0 : idx;
-    p_ptr->song_target_song = song;
+    p_ptr->song_target_idx = song_is_duel(song) ? idx : 0;
+    p_ptr->song_target_song = song_is_duel(song) ? song : SNG_NOTHING;
     mon_list[idx].song_contest_stacks = 2;
     mon_list[idx].song_lament_stacks = 1;
 }
@@ -50,6 +54,10 @@ static void check_target(int song, bool hole)
 {
     int idx = cave_m_idx[10][hole ? 11 : 10];
     assert(idx == 1 && mon_max == 2 && mon_list[idx].r_idx);
+    assert(p_ptr->last_attack_m_idx == idx);
+    p_ptr->active_ability[S_PER][PER_CONCENTRATION] = true;
+    p_ptr->skill_use[S_PER] = 10;
+    assert(concentration_bonus(10, hole ? 11 : 10) == 3);
     assert(p_ptr->song_target_idx == (song == SNG_NOTHING ? 0 : idx));
     assert(p_ptr->song_target_song == song && p_ptr->song1 == song);
     assert(mon_list[idx].song_contest_stacks == 2);
@@ -76,14 +84,47 @@ static void checks(void)
             assert(p_ptr->target_who == 1 && p_ptr->health_who == 1);
             p_ptr->song_target_idx = 0;
             p_ptr->song_target_song = SNG_NOTHING;
+            p_ptr->consecutive_attacks = p_ptr->last_attack_m_idx = 0;
             assert(load_player() && character_loaded && !p_ptr->is_dead);
             check_target(song, hole);
             delete_monster_idx(1);
             assert(p_ptr->song_target_idx == 0);
             assert(p_ptr->song_target_song == SNG_NOTHING);
+            assert(!p_ptr->last_attack_m_idx && !p_ptr->consecutive_attacks);
+            player_attacked = true;
+            monster_perception(true, true, 0);
+            assert(!player_attacked && !p_ptr->consecutive_attacks);
         }
     }
-    puts("PASS: Contest, Lament and untargeted songs; live compaction, 6 full save/reload roundtrips, duel stacks and removed-target cleanup.");
+    setup_target(SNG_DISGUISE, false);
+    mon_list[1].alertness = ALERTNESS_ALERT;
+    song_disguise_start();
+    sing_song_of_disguise(100);
+    assert(song_disguise_monster_is_fooled(&mon_list[1]));
+    wipe_mon_list();
+    current_build_vault_exact_token = true;
+    assert(place_monster_one(10, 11, R_IDX_GOTHMOG, false, true, NULL));
+    current_build_vault_exact_token = false;
+    mon_list[1].alertness = ALERTNESS_ALERT;
+    assert(!song_disguise_monster_is_fooled(&mon_list[1]));
+    song_disguise_stop();
+
+    setup_target(SNG_CONTEST, false);
+    p_ptr->song_contest_player_stacks = 2;
+    wipe_mon_list();
+    current_build_vault_exact_token = true;
+    assert(place_monster_one(10, 11, R_IDX_GOTHMOG, false, true, NULL));
+    current_build_vault_exact_token = false;
+    assert(cave_m_idx[10][11] == 1);
+    assert(!song_duel_get_target(SNG_CONTEST) && !p_ptr->song_contest_player_stacks);
+    assert(!p_ptr->last_attack_m_idx && !p_ptr->consecutive_attacks);
+
+    setup_target(SNG_NOTHING, false);
+    p_ptr->last_attack_m_idx = mon_max; /* Old save after slot compaction. */
+    SDL_strlcpy(savefile, "stale-concentration", sizeof(savefile));
+    assert(save_player() && load_player());
+    assert(!p_ptr->last_attack_m_idx && !p_ptr->consecutive_attacks);
+    puts("PASS: Duel songs and Concentration survive save/reload; removed enemies release their targets, Disguise effects and attack streaks.");
 }
 
 int main(int argc, char** argv)

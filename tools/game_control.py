@@ -196,11 +196,11 @@ def launch(control: GameControl, executable: Path, headless: bool, wizard: bool 
                                 "--control-dir", str(control.directory)],
                                cwd=executable.parent, env=env, creationflags=flags,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log_hint = "see log.txt in the SDL preferences folder or beside a portable executable"
     deadline = time.monotonic() + control.timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise ControlError(f"Game exited with code {process.returncode}; "
-                               f"check {executable.parent / 'log.txt'}")
+            raise ControlError(f"Game exited with code {process.returncode}, {log_hint}")
         try:
             session = control.session()
         except ControlError:
@@ -208,8 +208,7 @@ def launch(control: GameControl, executable: Path, headless: bool, wizard: bool 
             continue
         session.update(pid=process.pid, headless=headless)
         return session
-    raise ControlError(f"Game is still starting (PID {process.pid}); check "
-                       f"{executable.parent / 'log.txt'} and retry observe")
+    raise ControlError(f"Game is still starting (PID {process.pid}), {log_hint} and retry observe")
 
 
 def main() -> int:

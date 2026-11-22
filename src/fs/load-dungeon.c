@@ -999,6 +999,13 @@ errr rd_dungeon(void)
     }
     log_trace("[load:%06u] === END MONSTERS ===", (unsigned)load_byte_offset);
 
+    /* Older saves could retain an attack target's pre-compaction index. */
+    if (p_ptr->last_attack_m_idx <= 0 || p_ptr->last_attack_m_idx >= mon_max)
+    {
+        p_ptr->last_attack_m_idx = 0;
+        p_ptr->consecutive_attacks = 0;
+    }
+
     /*** Player (repair path) ***/
 
     if (defer_player_placement)

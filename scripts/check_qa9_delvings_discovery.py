@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise translated Delvings discovery using the production song effect.
+"""Exercise Delvings discovery and terrain magic at the limits of sight.
 
 Uses initialized engine objects and isolated template caches. The optional
 --index-baseline, --bounds-baseline and --map-baseline flags restore one defect
@@ -39,8 +39,45 @@ static void discover(int py,int px,int dy,int dx,int feature,int height,int widt
     if(cave_trap_bold(y,x))assert(!(cave_info[y][x]&CAVE_HIDDEN));
     assert(turn==1001&&playerturn==100);
 }
+static void check_detection_range(void)
+{
+    const int directions[][2] = {{-1,0}, {1,0}, {0,-1}, {0,1}};
+    for (int i = 0; i < 4; i++) {
+        setup(40, 40, 88, 88);
+        int dy = directions[i][0], dx = directions[i][1];
+        int y = 40 + dy * MAX_SIGHT, x = 40 + dx * MAX_SIGHT;
+        int far_y = y + dy, far_x = x + dx;
+
+        cave_feat[y][x] = cave_feat[far_y][far_x] = FEAT_MORE;
+        scenario = "stair detection at exactly 20 grids";
+        assert(detect_stairs() && (cave_info[y][x] & CAVE_MARK));
+        assert(!(cave_info[far_y][far_x] & CAVE_MARK));
+
+        cave_feat[y][x] = cave_feat[far_y][far_x] = FEAT_TRAP_PIT;
+        cave_info[y][x] = CAVE_HIDDEN | CAVE_GLOW;
+        cave_info[far_y][far_x] = CAVE_HIDDEN;
+        update_view();
+        assert(player_can_see_bold(y, x) && !player_has_los_bold(far_y, far_x));
+        scenario = "trap detection and magical disarming at the visible boundary";
+        assert(detect_traps() && !(cave_info[y][x] & CAVE_HIDDEN));
+        assert(destroy_traps(100) && cave_feat[y][x] == FEAT_FLOOR);
+        assert(cave_feat[far_y][far_x] == FEAT_TRAP_PIT);
+
+        cave_set_feat(y, x, FEAT_SECRET);
+        cave_info[y][x] |= CAVE_GLOW;
+        cave_info[y - dy][x - dx] |= CAVE_GLOW;
+        update_view();
+        assert(player_can_see_bold(y, x));
+        scenario = "secret door detection at the visible boundary";
+        assert(detect_doors() && cave_any_closed_door_bold(y, x));
+        assert(cave_feat[y][x] != FEAT_SECRET);
+        forget_view();
+    }
+    puts("Stairs, visible traps, secret doors and magical disarming reach all four sight boundaries: PASS");
+}
 static void checks(void)
 {
+    check_detection_range();
     const int directions[][2]={{-1,0},{1,0},{0,-1},{0,1}};
     const int features[]={FEAT_TRAP_HEAD+1,FEAT_LESS,FEAT_FORGE_NORMAL_HEAD+1};
     for(int f=0;f<3;f++)for(int d=0;d<4;d++){

@@ -1445,12 +1445,8 @@ static bool save_player_aux(cptr name)
         return (false);
     }
 
-    /* Successful save */
-    character_saved = true;
-    log_debug("Character saved successfully to: %s", name);
-
-    /* Success */
-    return (true);
+    log_debug("Savefile staged successfully: %s", name);
+    return true;
 }
 
 /*
@@ -1458,9 +1454,13 @@ static bool save_player_aux(cptr name)
  */
 bool save_player(void)
 {
-    int result = false;
-
-    char safe[1024];
+    char safe[sizeof(savefile)];
+#ifdef VM
+    /* Flat directory support on VM/ESA. */
+    const char* suffix = "n";
+#else
+    const char* suffix = ".new";
+#endif
 
     log_info("Starting game save...");
 
@@ -1471,15 +1471,14 @@ bool save_player(void)
         return (false);
     }
 
-    /* New savefile */
-    SDL_strlcpy(safe, savefile, sizeof(safe));
-    SDL_strlcat(safe, ".new", sizeof(safe));
+    character_saved = false;
 
-#ifdef VM
-    /* Hack -- support "flat directory" usage on VM/ESA */
     SDL_strlcpy(safe, savefile, sizeof(safe));
-    SDL_strlcat(safe, "n", sizeof(safe));
-#endif /* VM */
+    if (SDL_strlcat(safe, suffix, sizeof(safe)) >= sizeof(safe))
+    {
+        log_error("Savefile path is too long to stage: %s", savefile);
+        return false;
+    }
 
     /* Grab permissions */
     safe_setuid_grab();
@@ -1500,118 +1499,38 @@ bool save_player(void)
 
     /* Attempt to save the player */
     log_debug("save_player: calling save_player_aux(%s)", safe);
-    if (save_player_aux(safe))
-    {
-        char temp[1024];
-
-        log_info("Save successful - activating new savefile");
-
-        /* Old savefile */
-        SDL_strlcpy(temp, savefile, sizeof(temp));
-        SDL_strlcat(temp, ".old", sizeof(temp));
-
-#ifdef VM
-        /* Hack -- support "flat directory" usage on VM/ESA */
-        SDL_strlcpy(temp, savefile, sizeof(temp));
-        SDL_strlcat(temp, "o", sizeof(temp));
-#endif /* VM */
-
-        /* Grab permissions */
-        safe_setuid_grab();
-
-        /* Remove it */
-        fd_kill(temp);
-
-        /* Preserve old savefile if it exists */
-        /* Check if old savefile exists first (important for first-time saves) */
-        bool had_old_savefile = false;
-        SDL_IOStream* old_fd = sdl_fopen(savefile, "rb");
-        if (old_fd)
-        {
-            /* Old file exists, close it and preserve it */
-            had_old_savefile = true;
-            sdl_fclose(old_fd);
-            log_debug("Old savefile exists, preserving it as .old");
-            
-            if (!fd_move(savefile, temp))
-            {
-                log_error("Failed to preserve old savefile - aborting activation");
-                safe_setuid_drop();
-                return (false);
-            }
-        }
-        else
-        {
-            /* No old savefile - this is a first-time save, which is fine */
-            log_debug("No old savefile found (first-time save) - skipping preserve step");
-        }
-
-        /* Activate new savefile */
-        if (!fd_move(safe, savefile))
-        {
-            log_error("Failed to activate new savefile - attempting to restore old");
-            /* Try to restore the old file if it existed */
-            if (had_old_savefile)
-            {
-                fd_move(temp, savefile);
-            }
-            safe_setuid_drop();
-            return (false);
-        }
-
-        /* Remove preserved savefile */
-        fd_kill(temp);
-
-        /* Drop permissions */
-        safe_setuid_drop();
-
-        /* Hack -- Pretend the character was loaded */
-        character_loaded = true;
-
-#ifdef VERIFY_SAVEFILE
-
-        /* Lock on savefile */
-        SDL_strlcpy(temp, savefile, sizeof(temp));
-        SDL_strlcat(temp, ".lok", sizeof(temp));
-
-        /* Grab permissions */
-        safe_setuid_grab();
-
-        /* Remove lock file */
-        fd_kill(temp);
-
-        /* Drop permissions */
-        safe_setuid_drop();
-
-#endif /* VERIFY_SAVEFILE */
-
-        /* Success */
-        result = true;
-    }
-    else
+    if (!save_player_aux(safe))
     {
         log_error("Save failed - could not write savefile");
+        return false;
     }
 
-    char buf[1024];
-    /* Build the filename */
-    path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "meta.raw");
-
-    // /* Attempt to open the meta file */
-    // meta_fd = sdl_fopen(buf, O_RDWR);
-
-    // // Save Metarun
-    // strcpy(meta.name,"F");
-    // if (!meta_seek(atoi(meta.id))) meta_write(&meta);
-
-    // /* Close it */
-    // sdl_fclose(meta_fd);
-
-    /* Return the result */
-    if (result) {
-        log_info("Game save completed successfully");
+    /* Replace in place so the previous save remains available until commit. */
+    safe_setuid_grab();
+    bool activated = fd_move(safe, savefile);
+    safe_setuid_drop();
+    if (!activated)
+    {
+        log_error("Failed to activate new savefile: %s", savefile);
+        return false;
     }
-    return (result);
+
+    character_saved = true;
+    character_loaded = true;
+
+#ifdef VERIFY_SAVEFILE
+    char lock[sizeof(savefile)];
+    SDL_strlcpy(lock, savefile, sizeof(lock));
+    if (SDL_strlcat(lock, ".lok", sizeof(lock)) < sizeof(lock))
+    {
+        safe_setuid_grab();
+        fd_kill(lock);
+        safe_setuid_drop();
+    }
+#endif /* VERIFY_SAVEFILE */
+
+    log_info("Game save completed successfully");
+    return true;
 }
 
 

@@ -10,6 +10,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "score/score_guid.h"
+#include "score/score_paths.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
 #include "init2-internal.h"
@@ -36,15 +37,99 @@ static void note(cptr str)
     (void)Term_xtra(TERM_XTRA_EVENT, 0);
 }
 
-/*
- * Hack -- Explain a broken "lib" folder and quit (see below).
- */
-static void init_angband_aux(cptr why)
+void init_progress_error(const char* path, const char* reason)
 {
-    quit(format("%s\n\n%s", why,
-        "The 'lib' directory is probably missing or broken.\n"
-        "Perhaps the archive was not extracted correctly.\n"
-        "See the manual for more information."));
+    char message[2304];
+    strnfmt(message, sizeof(message), "%s\n\n%s\n\n"
+        "Check that your save location is available and that Sil-More can access it.",
+        reason, path);
+    log_error("%s", message);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Sil-More save data", message, NULL);
+    quit(message);
+}
+
+bool init_profile_entry_is_placeholder(const char* name)
+{
+    return streq(name, ".gitignore") || streq(name, ".gitkeep")
+        || streq(name, ".keepalive") || streq(name, ".DS_Store")
+        || SDL_strcasecmp(name, "desktop.ini") == 0
+        || SDL_strcasecmp(name, "Thumbs.db") == 0;
+}
+
+static bool no_saved_characters(void)
+{
+    int count = 0;
+    char** saves = SDL_GlobDirectory(ANGBAND_DIR_SAVE, NULL, 0, &count);
+    if (!saves)
+        return false;
+    bool empty = true;
+    for (int i = 0; i < count && empty; ++i)
+        empty = init_profile_entry_is_placeholder(saves[i]);
+    SDL_free(saves);
+    return empty;
+}
+
+static void init_scores(void)
+{
+    char path[1024];
+    if (!score_build_meta_path(path, sizeof(path), "scores.raw")) {
+        init_progress_error(ANGBAND_DIR_APEX, "Could not resolve the score file used to resume saved characters.");
+        return;
+    }
+
+    SDL_IOStream* fd = sdl_fopen(path, "rb");
+    if (fd)
+    {
+        Sint64 size = SDL_GetIOSize(fd);
+        sdl_fclose(fd);
+        if (size >= (Sint64)sizeof(score_file_header))
+            return;
+        if (size != 0) {
+            init_progress_error(path, "Could not read the score file used to resume saved characters.");
+            return;
+        }
+
+        /* Initialize an empty file in place without truncating it. */
+        fd = sdl_fopen(path, "r+b");
+        if (fd && SDL_GetIOSize(fd) != 0) {
+            sdl_fclose(fd);
+            init_progress_error(path, "The score file changed while Sil-More was starting.");
+            return;
+        }
+    }
+    else
+    {
+        /* A failed read does not prove there is no existing ledger. */
+        FILE_TYPE(FILE_TYPE_DATA);
+        safe_setuid_grab();
+        fd = sdl_fopen(path, "wbx");
+        safe_setuid_drop();
+    }
+
+    if (!fd) {
+        init_progress_error(path, "Could not open or create the score file used to resume saved characters.");
+        return;
+    }
+
+    const score_file_header header = {
+        .version_major = SCORE_FILE_VERSION_MAJOR,
+        .version_minor = SCORE_FILE_VERSION_MINOR,
+        .version_patch = SCORE_FILE_VERSION_PATCH,
+        .version_extra = SCORE_FILE_VERSION_EXTRA,
+    };
+    bool written = SDL_WriteIO(fd, &header, sizeof(header)) == sizeof(header);
+    if (sdl_fclose(fd) || !written) {
+        init_progress_error(path, "Could not write the initial score file used to resume saved characters.");
+        return;
+    }
+    if (!no_saved_characters())
+    {
+        const char* warning = "Sil-More created a score file because the previous file was missing or empty. "
+            "Existing character files are still in your save folder. To resume them automatically, "
+            "close the game and restore your previous scores.raw from a backup.";
+        log_warn("%s Path: %s", warning, path);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sil-More save data", warning, NULL);
+    }
 }
 
 extern void display_introduction(void)
@@ -105,11 +190,6 @@ extern void display_introduction(void)
  */
 void init_angband(void)
 {
-    SDL_IOStream* fd;
-
-    int mode = 0644;
-
-    char buf[1024];
     int i;
 
     /* Load app-wide settings before the first intro render so the welcome
@@ -126,76 +206,12 @@ void init_angband(void)
     display_introduction();
     sdl_story_font_reset();
 
-    /*** Verify (or create) the "high score" file ***/
-
-    /* Build the filename */
-#ifdef SIL_USE_LOCAL_DATA
-    path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "scores.raw");
-#else
-    /* Normal build: scores.raw in meta directory */
-    if (ANGBAND_DIR_METARUN && *ANGBAND_DIR_METARUN) {
-        char meta_dir[1024];
-        SDL_strlcpy(meta_dir, ANGBAND_DIR_METARUN, sizeof(meta_dir));
-        char* last_sep = strrchr(meta_dir, PATH_SEP[0]);
-        if (last_sep) *last_sep = '\0';
-        path_build(buf, sizeof(buf), meta_dir, "scores.raw");
-    } else {
-        path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "scores.raw");
-    }
-#endif
-
-    /* Attempt to open the high score file */
-    fd = sdl_fopen(buf, "rb");
-
-    /* Failure */
-    if (!fd)
-    {
-        /* File type is "DATA" */
-        FILE_TYPE(FILE_TYPE_DATA);
-
-        /* Grab permissions */
-        safe_setuid_grab();
-
-        /* Create a new high score file */
-        fd = sdl_fmake(buf, mode);
-
-        /* Drop permissions */
-        safe_setuid_drop();
-
-        /* Failure */
-        if (!fd)
-        {
-            char why[1024];
-
-            /* Message */
-            strnfmt(why, sizeof(why), "Cannot create the '%s' file!", buf);
-
-            /* Crash and burn */
-            init_angband_aux(why);
-        }
-        else
-        {
-            /* Write version header to new scores file */
-        score_file_header header;
-        header.version_major = SCORE_FILE_VERSION_MAJOR;
-        header.version_minor = SCORE_FILE_VERSION_MINOR;
-        header.version_patch = SCORE_FILE_VERSION_PATCH;
-        header.version_extra = SCORE_FILE_VERSION_EXTRA;
-            header.entry_count = 0;
-            header.reserved[0] = 0;
-            header.reserved[1] = 0;
-            
-            sdl_write(fd, (cptr)&header, sizeof(header));
-        }
-    }
-
-    /* Close it */
-    sdl_fclose(fd);
+    init_scores();
 
     log_info("Loading metarun...");
     // Load metarun
     if (load_metaruns(1) != 0) {
-        init_angband_aux("Cannot load or create metarun file!");
+        init_progress_error(ANGBAND_DIR_APEX, "Could not load or create the Tale data.");
     }
 
 

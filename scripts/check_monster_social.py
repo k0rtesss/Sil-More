@@ -450,11 +450,16 @@ static void test_social_attention(void)
     p_ptr->py = 12; p_ptr->px = 9; cave_m_idx[12][9] = -1;
     bool old_recognition = visual_recognition;
     visual_recognition = false;
-    assert(monster_has_sight(a) && !monster_social_turn(a));
+    /* Sight alone does not interrupt a dispute before the orc notices you. */
+    assert(monster_has_sight(a) && !monster_ai_can_see_player(a));
+    assert(monster_social_turn(a));
+    set_alertness(a, ALERTNESS_ALERT);
+    a->skip_next_turn = false; /* Check the action after the notice turn. */
+    assert(monster_ai_can_see_player(a) && !monster_social_turn(a));
     cave_m_idx[12][9] = 0; p_ptr->px = 18; cave_m_idx[12][18] = -1;
-    assert(monster_has_sight(a) && monster_social_turn(a));
+    assert(monster_ai_can_see_player(a) && monster_social_turn(a));
     visual_recognition = old_recognition;
-    puts("Stale/distant player tracking yields to nearby conflict; visible nearby player and real aggression take priority PASS.");
+    puts("Nearby conflict continues until recognition; a recognized nearby player and real aggression take priority over conflict PASS.");
 }
 
 static void test_social_witnesses(void)

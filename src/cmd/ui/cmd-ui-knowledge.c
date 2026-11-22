@@ -16012,14 +16012,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         case 'S':
             if (grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS)
             {
-                if (!column && entry_cnt)
-                {
-                    column = 1;
-                }
-                else if (column && entry_cnt)
+                /* Explicit preset actions apply to the highlighted row even
+                 * while the category column has focus. */
+                if (entry_cnt)
                 {
                     supply_list_entry* entry = &entries[entry_cur];
 
+                    column = 1;
                     if (entry->preset_idx >= 0
                         && do_cmd_jewelry_preset_store(entry->preset_idx))
                     {
@@ -16038,14 +16037,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         case 'C':
             if (grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS)
             {
-                if (!column && entry_cnt)
-                {
-                    column = 1;
-                }
-                else if (column && entry_cnt)
+                if (entry_cnt)
                 {
                     supply_list_entry* entry = &entries[entry_cur];
 
+                    column = 1;
                     if (entry->preset_idx >= 0
                         && do_cmd_jewelry_preset_clear(entry->preset_idx))
                     {
@@ -16064,14 +16060,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         case 'N':
             if (grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS)
             {
-                if (!column && entry_cnt)
-                {
-                    column = 1;
-                }
-                else if (column && entry_cnt)
+                if (entry_cnt)
                 {
                     supply_list_entry* entry = &entries[entry_cur];
 
+                    column = 1;
                     if (entry->preset_idx >= 0
                         && jewelry_preset_prompt_name(entry->preset_idx))
                     {

@@ -8,6 +8,8 @@ import check_water as water
 SUBMERGED_TESTS = r'''
 #include "cave/cave-flood.h"
 
+void scan_artifacts_near_player(void);
+
 static void submerged_map(void) {
     water_map(32,32,FEAT_FLOOR);
     mon_max=1;
@@ -26,7 +28,46 @@ static void submerged_map(void) {
 static object_type submerged_item(int tval) {
     object_type obj={0};obj.k_idx=1;obj.tval=tval;obj.number=1;return obj;
 }
+static void submerged_artefact_tests(void) {
+    submerged_map();
+    artefact_type artefacts[4] = {0};
+    artefact_type* previous_artefacts = a_info;
+    int previous_normal_max = z_info->art_norm_max;
+    a_info = artefacts;
+    z_info->art_norm_max = N_ELEMENTS(artefacts);
+
+    const int surfaces[] = { FEAT_WATER, FEAT_DEEP_WATER, FEAT_FLOOR };
+    for (int i = 0; i < 3; i++) {
+        int x = 13 + i;
+        cave_set_feat(10, x, surfaces[i]);
+        object_type item = submerged_item(TV_GEM);
+        item.name1 = i + 1;
+        artefacts[item.name1].cur_num = 1;
+        assert(floor_carry(10, x, &item) > 0);
+    }
+    scan_artifacts_near_player();
+    assert(!(artefacts[1].seen & ART_SEEN_PHYSICAL));
+    assert(!(artefacts[2].seen & ART_SEEN_PHYSICAL));
+    assert(artefacts[3].seen & ART_SEEN_PHYSICAL);
+
+    p_ptr->is_dead = true;
+    scan_artifacts_near_player();
+    assert(!(artefacts[1].seen & ART_SEEN_PHYSICAL));
+    p_ptr->is_dead = false;
+
+    p_ptr->skill_use[S_PER] = 15; /* See three squares into water. */
+    scan_artifacts_near_player();
+    assert(artefacts[1].seen & ART_SEEN_PHYSICAL);
+    assert(!(artefacts[2].seen & ART_SEEN_PHYSICAL));
+    wipe_o_list();
+    assert(artefacts[1].cur_num == 1 && artefacts[3].cur_num == 1);
+    assert(artefacts[2].cur_num == 0);
+    a_info = previous_artefacts;
+    z_info->art_norm_max = previous_normal_max;
+    puts("Unseen submerged artefacts remain eligible on subsequent levels: PASS");
+}
 static void submerged_items_tests(void) {
+    submerged_artefact_tests();
     submerged_map();cave_m_idx[10][10]=-1;
     cave_set_feat(10,11,FEAT_DEEP_WATER);cave_set_feat(10,12,FEAT_DEEP_WATER);
     p_ptr->energy_use=100;move_player(6);

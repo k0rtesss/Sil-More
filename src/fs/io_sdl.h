@@ -3,6 +3,10 @@
 
 #include "h-basic.h"
 #include <SDL3/SDL.h>
+#include <stdio.h>
+
+/* For code that needs a C stream and receives a UTF-8 filesystem path. */
+extern FILE* file_open_utf8(const char* path, const char* mode);
 
 /* SDL-backed file helpers */
 extern SDL_IOStream* sdl_fopen(cptr file, cptr mode);

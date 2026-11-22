@@ -98,6 +98,8 @@ void ui_menu_click_begin(void)
         && ui_menu_click_hover_current;
     int preserved_hover_choice = ui_menu_click_hover_choice;
 
+    /* The menu can receive the release of a press that began on the map. */
+    sdl_main_map_cancel_drag();
     sdl_mouse_path_cancel();
 
     ui_menu_click_active = true;

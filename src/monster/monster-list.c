@@ -143,6 +143,12 @@ void delete_monster_idx(int i)
     if (p_ptr->health_who == i)
         health_track(0);
 
+    if (p_ptr->last_attack_m_idx == i)
+    {
+        p_ptr->last_attack_m_idx = 0;
+        p_ptr->consecutive_attacks = 0;
+    }
+
     /* Monster is gone */
     cave_m_idx[y][x] = 0;
     song_disguise_handle_monster_removed(i);
@@ -274,6 +280,9 @@ static void compact_monsters_aux(int i1, int i2)
     /* Hack -- Update the health bar */
     if (p_ptr->health_who == i1)
         p_ptr->health_who = i2;
+
+    if (p_ptr->last_attack_m_idx == i1)
+        p_ptr->last_attack_m_idx = i2;
 
     /* Duel songs track the same monster across list compaction. */
     if (p_ptr->song_target_idx == i1)
@@ -458,6 +467,8 @@ void wipe_mon_list(void)
 
         /* Monster is gone */
         cave_m_idx[m_ptr->fy][m_ptr->fx] = 0;
+        song_disguise_handle_monster_removed(i);
+        song_duels_handle_monster_removed(i);
 
         /* Wipe the Monster */
         memset(m_ptr, 0, sizeof(monster_type));
@@ -477,6 +488,8 @@ void wipe_mon_list(void)
 
     /* Hack -- no more tracking */
     health_track(0);
+    p_ptr->last_attack_m_idx = 0;
+    p_ptr->consecutive_attacks = 0;
 
     /* Hack -- make sure there is no player ghost */
     bones_selector = 0;

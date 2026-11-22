@@ -6,6 +6,22 @@
 
 #define TAB_COLUMNS 8
 
+FILE* file_open_utf8(const char* path, const char* mode)
+{
+#ifdef WINDOWS
+    wchar_t* wide_path = (wchar_t*)SDL_iconv_string("WCHAR_T", "UTF-8",
+        path, SDL_strlen(path) + 1);
+    wchar_t* wide_mode = (wchar_t*)SDL_iconv_string("WCHAR_T", "UTF-8",
+        mode, SDL_strlen(mode) + 1);
+    FILE* file = wide_path && wide_mode ? _wfopen(wide_path, wide_mode) : NULL;
+    SDL_free(wide_mode);
+    SDL_free(wide_path);
+    return file;
+#else
+    return fopen(path, mode);
+#endif
+}
+
 static bool sanitize_path(char* out, size_t out_len, cptr file)
 {
     if (!path_parse(out, out_len, file))

@@ -522,8 +522,7 @@ def start(exe: Path, env: dict, name: str, spec: dict) -> tuple[Path, subprocess
     (profile / "scenario.json").write_text(json.dumps(spec, indent=2))
     control = GameControl(profile / "control", timeout=30)
     process = subprocess.Popen([str(exe), "--windowed", "--control-dir", str(control.directory)],
-        cwd=ROOT, env=dict(env, CONTROL_TEST_PROFILE=str(profile),
-                           CONTROL_TEST_LOG_BASE=str(profile / "game.exe")),
+        cwd=ROOT, env=dict(env, CONTROL_TEST_PROFILE=str(profile)),
         stdout=(profile / "stdout.txt").open("w"), stderr=(profile / "stderr.txt").open("w"),
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     deadline = time.monotonic() + 30

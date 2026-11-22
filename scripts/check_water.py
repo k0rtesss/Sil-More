@@ -440,12 +440,15 @@ void vault_water_tests(void) {
 SAVE_TEST = r'''
 #include "angband.h"
 #include "monster/monster-ai.h"
+#include "monster/monster-tactics.h"
+#include "externs.h"
+#include "log/log.h"
 #include <assert.h>
 #include <stdio.h>
 static byte bytes[2048];
 static int write_pos, read_pos, extra_version;
 static bool current_version;
-static int poison_offset, player_poison_offset, abilities_offset, ai_offset;
+static int poison_offset, player_poison_offset, abilities_offset, ai_offset, squad_offset;
 static const bool savefile_has_song_duels=true, savefile_has_monster_shatter=true;
 static const bool savefile_has_thrall_quest=true, savefile_has_thrall_quest_requested=true;
 static void wr_byte(byte x) { assert(write_pos < 2048); bytes[write_pos++]=x; }
@@ -494,6 +497,7 @@ void monster_save_tests(void) {
         /* Current poison-credit and achievement fields predate the ability
          * tail in the record, but were absent from these historical saves. */
         if(!current_version) {
+            write_pos=squad_offset; /* Command budgets were added in 0.9.9.10. */
             int later_bytes=abilities_offset-player_poison_offset;
             memmove(bytes+player_poison_offset,bytes+abilities_offset,
                 write_pos-abilities_offset);write_pos-=later_bytes;
@@ -602,6 +606,8 @@ def main():
     writer = writer.replace("wr_byte(m_ptr->vengeance);", "abilities_offset=write_pos;wr_byte(m_ptr->vengeance);")
     writer = writer.replace("for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)",
                             "ai_offset=write_pos;for (int f = 0; f < MON_AI_FEATURE_COUNT; ++f)", 1)
+    writer = writer.replace("wr_byte(m_ptr->squad.budget_plan);",
+                            "squad_offset=write_pos;wr_byte(m_ptr->squad.budget_plan);")
     save_check.write_text(SAVE_TEST.replace("@FUNCTIONS@", saved_flags + "\n" +
         writer + "\n" +
         c_function(ROOT / "src/fs/load.c", "rd_monster")), encoding="utf-8")

@@ -18,7 +18,9 @@ HARNESS = r'''
 static const char* private_home;
 static const char* profile_user_folder(SDL_Folder folder) { (void)folder; return private_home; }
 #define SDL_GetUserFolder profile_user_folder
+#define SDL_GetPrefPath(org, app) SDL_strdup(private_home)
 #include "init/init-paths.c"
+#undef SDL_GetPrefPath
 #undef SDL_GetUserFolder
 
 static bool same_path(const char* left, const char* right)

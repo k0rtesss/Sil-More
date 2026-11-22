@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check melee cancellation and reaction accounting with production combat code."""
+"""Check combat cancellation, reactions and attack effects with the production engine."""
 from pathlib import Path
 import os
 import shlex
@@ -226,6 +226,119 @@ static void check_disarm_liquids(void)
     character_dungeon = was_dungeon;
     puts("Disarmed weapons: shallow/deep water, poisonous acid and lava accept local landings; 32 real enemy disarms preserve exactly one weapon: PASS.");
 }
+
+static void check_scare_resistance(void)
+{
+    const int scare = 96 + 12;
+    for (int fear = 0; fear <= 9; fear += 9)
+    {
+        for (int guard = 0; guard < 3; guard++)
+        {
+            monster_type* m = combat_fixture(409, 0);
+            cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+            cave_info[m->fy][m->fx] |= CAVE_FIRE;
+            cave_info[p_ptr->py][p_ptr->px] |= CAVE_FIRE;
+            m->mana = MON_MANA_MAX;
+            p_ptr->afraid = fear;
+            p_ptr->skill_use[S_WIL] = guard == 1 ? 100 : -100;
+            p_ptr->rage = guard == 2 ? 10 : 0;
+            assert(make_attack_ranged(m, scare));
+            if (guard)
+                assert(p_ptr->afraid == fear);
+            else
+                assert(p_ptr->afraid >= fear + 3 && p_ptr->afraid <= fear + 12);
+        }
+    }
+    puts("Scare: Will saves and Rage prevent application and extension; failed saves add 3d4 turns: PASS.");
+}
+
+static void check_disarm_floor_capacity(void)
+{
+    monster_type* m = combat_fixture(105, -100);
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    p_ptr->stat_base[A_STR] = p_ptr->stat_use[A_STR] = -20;
+    p_ptr->skill_base[S_EVN] = -100;
+    object_type* wielded = &inventory[INVEN_WIELD];
+    object_prep(wielded, lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    wielded->att = 3;
+    p_ptr->equip_cnt = 1;
+
+    int old_limit = z_info->o_max;
+    z_info->o_max = 1; /* Only the sentinel remains, so no drop can allocate. */
+    assert(make_attack_normal(m));
+    assert(wielded->k_idx && wielded->number == 1 && wielded->att == 3);
+    assert(p_ptr->inven_cnt == 0 && p_ptr->equip_cnt == 1 && o_cnt == 0);
+    z_info->o_max = old_limit;
+
+    assert(make_attack_normal(m));
+    assert(!wielded->k_idx && p_ptr->inven_cnt == 0 && p_ptr->equip_cnt == 0);
+    assert(o_cnt == 1 && o_list[1].number == 1 && o_list[1].att == 3);
+    puts("Disarm with no object slots: weapon stays equipped; retry drops exactly one intact weapon: PASS.");
+}
+
+static void check_disarm_weapon_modes(void)
+{
+    for (int throwing = 0; throwing <= 1; throwing++)
+    {
+        monster_type* m = combat_fixture(105, -100);
+        cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+        object_type* spear = &inventory[INVEN_WIELD];
+        int spear_kind = lookup_kind(TV_POLEARM, SV_SPEAR);
+        object_prep(spear, spear_kind);
+        player_active_weapon_assign_harness_color(spear);
+        assert(object_runtime_harness_color_id(spear));
+        p_ptr->equip_cnt = 1;
+
+        if (throwing)
+        {
+            assert(player_ready_throwing_weapon(spear, INVEN_WIELD));
+            assert(player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_THROWING);
+            assert(spear->pickup_slot == PICKUP_SLOT_ACTIVE_THROWING);
+            spear->pickup = true;
+        }
+        else
+        {
+            object_prep(&inventory[INVEN_BOW], lookup_kind(TV_BOW, SV_SHORT_BOW));
+            p_ptr->equip_cnt++;
+            assert(player_ready_bow_with_arrow(-1));
+            assert(player_active_weapon_kind() == PLAYER_ACTIVE_WEAPON_KIND_BOW);
+        }
+        assert(player_equipment_slot_counts_as_equipped(INVEN_WIELD) == throwing);
+
+        p_ptr->stat_base[A_STR] = p_ptr->stat_use[A_STR] = -20;
+        p_ptr->skill_base[S_EVN] = p_ptr->skill_use[S_EVN] = -100;
+        int utility = monster_melee_utility(m, 0, true, false);
+        assert(make_attack_normal(m));
+        if (throwing)
+        {
+            assert(utility > 0 && !spear->k_idx && o_cnt == 1);
+            assert(o_list[1].k_idx == spear_kind && o_list[1].number == 1);
+            assert(!o_list[1].pickup && o_list[1].pickup_slot == -1);
+            assert(!object_runtime_harness_color_id(&o_list[1]));
+        }
+        else
+        {
+            assert(spear->k_idx == spear_kind && o_cnt == 0);
+            assert(inventory[INVEN_BOW].k_idx && utility == 0);
+        }
+    }
+    puts("Disarm: readying a bow protects the stored spear; an active throwing spear drops without auto-pickup or Harness colour: PASS.");
+}
+
+static void check_disarm(void)
+{
+    /* Use Othrod's real whip blow without letting the AI pick his sword. */
+    monster_race* race = &r_info[105];
+    monster_blow first = race->blow[0], second = race->blow[1];
+    assert(second.effect == RBE_DISARM);
+    race->blow[0] = second;
+    memset(&race->blow[1], 0, sizeof(race->blow[1]));
+    check_disarm_weapon_modes();
+    check_disarm_floor_capacity();
+    check_disarm_liquids();
+    race->blow[0] = first;
+    race->blow[1] = second;
+}
 '''
 
 
@@ -235,7 +348,13 @@ def main():
     source = out / "check.c"
     harness = engine.HARNESS.replace(
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
-    harness = harness.replace("    check_combat();", "    check_attack_energy();\n    check_interrupted_monster_move();\n    check_riposte_terrain();\n    check_disarm_liquids();")
+    harness = harness.replace("    check_combat();", "\n".join([
+        "    check_attack_energy();",
+        "    check_interrupted_monster_move();",
+        "    check_riposte_terrain();",
+        "    check_scare_resistance();",
+        "    check_disarm();",
+    ]))
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
@@ -243,7 +362,8 @@ def main():
     response.write_text("\n".join('"' + p + '"' for p in objects
         if not p.endswith(("/src/main.c.obj", "/src/cmd/combat/cmd-combat.c.obj",
             "/src/melee/melee-movement-resolution.c.obj",
-            "/src/melee/melee-attack.c.obj"))), encoding="utf-8")
+            "/src/melee/melee-attack.c.obj", "/src/melee/melee-attack-ranged.c.obj",
+            "/src/object/object-place.c.obj"))), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
         *(str(engine.BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
@@ -255,6 +375,8 @@ def main():
         str(engine.ROOT / "src/cmd/combat/cmd-combat.c"),
         str(engine.ROOT / "src/melee/melee-movement-resolution.c"), "@" + str(response),
         str(engine.ROOT / "src/melee/melee-attack.c"),
+        str(engine.ROOT / "src/melee/melee-attack-ranged.c"),
+        str(engine.ROOT / "src/object/object-place.c"),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=get_check_near",
         "-Wl,--wrap=msg_print", "-o", str(exe)],
         cwd=engine.BUILD, env=env, check=True)

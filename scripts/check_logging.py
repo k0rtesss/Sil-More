@@ -38,10 +38,9 @@ runtime.HARNESS = runtime.HARNESS.replace("    int last = 0;", r'''
     int last = 0;''')
 exe, env = runtime.build_harness()
 for level, perf in ((None, False), ("DEBUG", False), ("TRACE", False), (None, True)):
-    profile = OUT / ("profile-" + uuid.uuid4().hex[:8])
+    profile = OUT / ("profile-森-" + uuid.uuid4().hex[:8])
     profile.mkdir()
-    run_env = dict(env, CONTROL_TEST_PROFILE=str(profile),
-        CONTROL_TEST_LOG_BASE=str(profile / "game.exe"))
+    run_env = dict(env, CONTROL_TEST_PROFILE=str(profile))
     run_env.pop("SIL_LOG_LEVEL", None)
     run_env.pop("SIL_PERF", None)
     if level: run_env["SIL_LOG_LEVEL"] = level
@@ -54,3 +53,15 @@ for level, perf in ((None, False), ("DEBUG", False), ("TRACE", False), (None, Tr
     assert ("LOGGER_TRACE_SENTINEL" in log) == (level == "TRACE")
     assert ("[POPUP_DELAY]" in log) == perf
 print("Release INFO default, DEBUG/TRACE overrides and opt-in popup traces: PASS")
+
+# A directory occupying the log filename denies the open even for an
+# administrator. Keep the rest of this fresh profile writable.
+profile = OUT / ("blocked-log-" + uuid.uuid4().hex[:8])
+(profile / "log.txt").mkdir(parents=True)
+run_env = dict(env, CONTROL_TEST_PROFILE=str(profile), SIL_LOG_LEVEL="INFO")
+completed = subprocess.run([str(exe), "--windowed"], cwd=ROOT, env=run_env,
+    check=True, timeout=30, capture_output=True)
+assert b"File logging is unavailable" in completed.stderr
+assert b"LOGGER_INFO_SENTINEL" in completed.stderr
+assert (profile / "log.txt").is_dir()
+print("Unicode log paths and startup with stderr as the only sink: PASS")

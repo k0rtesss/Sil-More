@@ -296,7 +296,7 @@ def start(name: str, spec: dict, executable: Path, env: dict) -> Path:
         spec["load_path"] = str(target)
     (profile / "scenario.json").write_text(json.dumps(spec, indent=2))
     control = profile / "control"
-    env = dict(env, CONTROL_TEST_PROFILE=str(profile), CONTROL_TEST_LOG_BASE=str(profile / "fixture.exe"))
+    env = dict(env, CONTROL_TEST_PROFILE=str(profile))
     process = subprocess.Popen([str(executable), "--windowed", "--control-dir", str(control)],
         cwd=ROOT, env=env, stdout=(profile / "stdout.log").open("w"), stderr=subprocess.STDOUT,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)

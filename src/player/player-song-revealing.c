@@ -239,7 +239,7 @@ void song_revealing_clear(void)
 
 void song_revealing_handle_monster_removed(int m_idx)
 {
-    if (m_idx <= 0 || m_idx >= MAX_MONSTERS)
+    if (m_idx <= 0 || m_idx >= MAX_MONSTERS || !song_revealing_hint[m_idx])
         return;
 
     song_revealing_hint[m_idx] = 0;

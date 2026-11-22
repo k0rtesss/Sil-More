@@ -579,10 +579,16 @@ static int melee_effect_feature(int effect)
     }
 }
 
+static bool player_has_disarmable_weapon(void)
+{
+    return inventory[INVEN_WIELD].k_idx
+        && player_equipment_slot_counts_as_equipped(INVEN_WIELD);
+}
+
 static bool monster_disarm_has_target(const monster_type* m_ptr)
 {
     /* Weapon presence is visible; absence behind a wall is not evidence. */
-    return !monster_ai_can_see_player(m_ptr) || inventory[INVEN_WIELD].k_idx;
+    return !monster_ai_can_see_player(m_ptr) || player_has_disarmable_weapon();
 }
 
 int monster_melee_utility(const monster_type* m_ptr, int blow,
@@ -690,7 +696,7 @@ static int monster_choose_blow(const monster_type* m_ptr, bool ordinary)
     for (i = 0; i < MONSTER_BLOW_MAX; ++i)
     {
         /* Exclude a known no-op even when every damage estimate rounds to
-         * zero; a score tie must not reintroduce disarming an empty hand. */
+         * zero; a score tie must not reintroduce disarm without a target. */
         scores[i] = r_ptr->blow[i].method
             && (r_ptr->blow[i].effect != RBE_DISARM || monster_disarm_has_target(m_ptr))
             ? monster_melee_utility(m_ptr, i, ordinary, false) : -1;
@@ -807,7 +813,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
         "blow=%d method=%d effect=%d ordinary=%d smite=%d from=(%d,%d) player_armed=%d",
         (long)playerturn, m_idx, m_ptr->r_idx, b, r_ptr->blow[b].method,
         r_ptr->blow[b].effect, ordinary, smite, m_ptr->fy, m_ptr->fx,
-        inventory[INVEN_WIELD].k_idx != 0);
+        player_has_disarmable_weapon());
     if (smite)
         msg_format("%^s smites you with all its strength!", m_name);
 
@@ -1869,38 +1875,14 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             /* Hit to disarm */
             case RBE_DISARM:
             {
-                object_type* o_ptr;
-                char o_name[120];
-
-                object_type* i_ptr;
-                object_type object_type_body;
-
-                int near_y, near_x;
-
-                int item = INVEN_WIELD;
-
-                int difficulty;
-
-                /* Select the melee weapon */
-                o_ptr = &inventory[INVEN_WIELD];
-
-                /* Nothing to disamr */
-                if (!o_ptr->k_idx)
+                if (!player_has_disarmable_weapon())
                     break;
 
-                /* Describe */
+                object_type* o_ptr = &inventory[INVEN_WIELD];
+                char o_name[120];
                 object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
 
-                /* Base difficulty */
-                difficulty = 2;
-
-                /* Adjustment for two handed weapons */
-                if (two_handed_melee())
-                {
-                    difficulty -= 4;
-                }
-
-                /* Attempt a skill check against strength */
+                int difficulty = two_handed_melee() ? -2 : 2;
                 if (skill_check(
                         m_ptr, difficulty, p_ptr->stat_use[A_STR] * 2, PLAYER)
                     <= 0)
@@ -1909,73 +1891,38 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     msg_format("%^s tries to disarm you, but you keep a grip "
                                "on your weapon.",
                         m_name);
+                    break;
                 }
 
-                /* failed check... */
-                else
+                /* Drop one weapon directly, retaining it if placement fails. */
+                object_type dropped;
+                object_copy(&dropped, o_ptr);
+                dropped.number = 1;
+                dropped.pickup = false;
+                dropped.pickup_slot = -1;
+
+                int near_y, near_x;
+                for (i = 0; i < 1000; i++)
                 {
-                    /* Oops */
-                    msg_format(
-                        "%^s disarms you! Your %s falls nearby.",
-                        m_name, o_name);
-
-                    /* Get the original object */
-                    o_ptr = &inventory[item];
-
-                    /* Take off equipment */
-                    if (item >= INVEN_WIELD)
-                    {
-                        /* Take off first */
-                        item = inven_takeoff(item, 1);
-
-                        if (item == -1)
-                            break;
-
-                        /* Get the original object */
-                        if (player_inventory_handle_valid(item))
-                            o_ptr = player_inventory_object(item);
-                        else
-                            o_ptr = &o_list[0 - item];
-                    }
-
-                    /* Get local object */
-                    i_ptr = &object_type_body;
-
-                    /* Obtain local object */
-                    object_copy(i_ptr, o_ptr);
-
-                    /* Modify quantity */
-                    i_ptr->number = 1;
-
-                    for (i = 0; i < 1000; i++)
-                    {
-                        near_y = p_ptr->py + rand_range(-1, 1);
-                        near_x = p_ptr->px + rand_range(-1, 1);
-
-                        if (cave_floor_bold(near_y, near_x))
-                            break;
-                    }
-
-                    /* Drop it near the player */
-                    drop_disarmed_weapon(i_ptr, near_y, near_x);
-                    monster_ai_observe(m_ptr, MON_AI_DISARM, -1);
-
-                    /* Modify, Optimize */
-                    if (item >= 0)
-                    {
-                        inven_item_increase(item, -1);
-                        inven_item_optimize(item);
-                    }
-                    else
-                    {
-                        floor_item_increase(0 - item, -1);
-                        floor_item_optimize(0 - item);
-                    }
-
-                    handle_stuff();
-                    inven_update_current_pack_limits();
+                    near_y = p_ptr->py + rand_range(-1, 1);
+                    near_x = p_ptr->px + rand_range(-1, 1);
+                    if (cave_floor_bold(near_y, near_x))
+                        break;
                 }
 
+                if (!drop_disarmed_weapon(&dropped, near_y, near_x))
+                {
+                    msg_format("%^s tries to disarm you, but your %s stays in your grasp.",
+                        m_name, o_name);
+                    break;
+                }
+
+                msg_format("%^s disarms you! Your %s falls nearby.", m_name, o_name);
+                inven_item_increase(INVEN_WIELD, -1);
+                inven_item_optimize(INVEN_WIELD);
+                monster_ai_observe(m_ptr, MON_AI_DISARM, -1);
+                handle_stuff();
+                inven_update_current_pack_limits();
                 break;
             }
 

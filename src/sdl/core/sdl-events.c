@@ -1376,6 +1376,22 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
 
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
+    /* A description action runs on press. Its release can arrive inside the
+     * next modal, which has its own early return below. Retire the claim on
+     * arrival while preserving the active modal's usual event priority. */
+    bool description_release = false;
+    if (ev->type == SDL_EVENT_MOUSE_BUTTON_UP)
+        description_release =
+            sdl_description_overlay_consume_mouse_release(&ev->button);
+    else if (ev->type == SDL_EVENT_FINGER_UP
+        || ev->type == SDL_EVENT_FINGER_CANCELED)
+        description_release =
+            sdl_description_overlay_consume_finger_release(ev->tfinger.fingerID);
+    else if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+        (void)sdl_description_overlay_consume_mouse_release(&ev->button);
+    else if (ev->type == SDL_EVENT_FINGER_DOWN)
+        (void)sdl_description_overlay_consume_finger_release(ev->tfinger.fingerID);
+
     (void)st;
     if (ev->type == SDL_EVENT_SCREEN_KEYBOARD_SHOWN
         || ev->type == SDL_EVENT_SCREEN_KEYBOARD_HIDDEN) {
@@ -1398,9 +1414,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         return;
     }
 #endif
-    if (!sdl_controller_keyboard_active() && sdl_gameplay_tutorial_handle_event(ev))
-        return;
+    /* Tutorials track the device that started a press. Route touchscreen
+     * mouse packets first so they see one finger down/up pair. */
     if (sdl_try_handle_touch_mouse_fallback_event(st, ev))
+        return;
+    if (!sdl_controller_keyboard_active() && sdl_gameplay_tutorial_handle_event(ev))
         return;
     if (sdl_event_is_disabled_mouse_input(ev))
         return;
@@ -1532,6 +1550,11 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     } else if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         if (ev->motion.which == SDL_TOUCH_MOUSEID)
             return;
+        /* A popup can receive the button-up after a map press. Free motion
+         * must resume tile selection instead of continuing that old pan. */
+        if (g_main_map_drag.active && g_main_map_drag.mouse
+            && !(ev->motion.state & SDL_BUTTON_LMASK))
+            sdl_main_map_cancel_drag();
         if (sdl_welcome_touch_handle_pointer_motion(ev->motion.x,
                 ev->motion.y, -1))
             return;
@@ -2060,7 +2083,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             && sdl_welcome_touch_handle_pointer_up(ev->button.x,
                 ev->button.y, -1))
             return;
-        if (sdl_description_overlay_consume_mouse_release(&ev->button))
+        if (description_release)
             return;
         if (ev->button.which != SDL_TOUCH_MOUSEID
             && sdl_log_pane_menu_handle_pointer_up((float)ev->button.x,
@@ -2581,11 +2604,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        if (sdl_description_overlay_consume_finger_release(
-                ev->tfinger.fingerID))
-        {
+        if (description_release)
             return;
-        }
         if (sdl_main_menu_button_handle_long_press_up(x, y,
                 ev->tfinger.fingerID))
         {
@@ -2726,13 +2746,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        if (g_description_overlay_finger_release_claimed
-            && g_description_overlay_release_finger_id == ev->tfinger.fingerID)
-        {
-            g_description_overlay_finger_release_claimed = false;
-            g_description_overlay_release_finger_id = 0;
+        if (description_release)
             return;
-        }
         sdl_main_menu_button_cancel_long_press(ev->tfinger.fingerID);
         if (g_touch_swipe.active && g_touch_swipe.finger_id == ev->tfinger.fingerID)
             sdl_touch_swipe_cancel();

@@ -394,7 +394,7 @@ def loaded_branch(exe: Path, env: dict, checkpoint: Path, save_name: str,
         if source.exists():shutil.copytree(source,profile/folder)
     game=play.GameControl(profile/"control",timeout=30)
     process=subprocess.Popen([str(exe),"--windowed","--control-dir",str(game.directory)],cwd=ROOT,
-        env=dict(env,CONTROL_TEST_PROFILE=str(profile),CONTROL_TEST_LOG_BASE=str(profile/"game.exe"),
+        env=dict(env,CONTROL_TEST_PROFILE=str(profile),
                  AI_PLAYTEST_LOAD=str(profile/"save"/save_name)),
         stdout=(profile/"stdout.txt").open("w"),stderr=(profile/"stderr.txt").open("w"),
         creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)

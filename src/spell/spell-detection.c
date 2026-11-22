@@ -54,9 +54,9 @@ bool detect_traps(void)
     bool detect = false;
 
     /* Scan the visible area */
-    for (y = p_ptr->py - MAX_SIGHT; y < p_ptr->py + MAX_SIGHT; y++)
+    for (y = p_ptr->py - MAX_SIGHT; y <= p_ptr->py + MAX_SIGHT; y++)
     {
-        for (x = p_ptr->px - MAX_SIGHT; x < p_ptr->px + MAX_SIGHT; x++)
+        for (x = p_ptr->px - MAX_SIGHT; x <= p_ptr->px + MAX_SIGHT; x++)
         {
             if (!in_bounds_fully(y, x))
                 continue;
@@ -96,9 +96,9 @@ bool detect_doors(void)
     bool detect = false;
 
     /* Scan the visible area */
-    for (y = p_ptr->py - MAX_SIGHT; y < p_ptr->py + MAX_SIGHT; y++)
+    for (y = p_ptr->py - MAX_SIGHT; y <= p_ptr->py + MAX_SIGHT; y++)
     {
-        for (x = p_ptr->px - MAX_SIGHT; x < p_ptr->px + MAX_SIGHT; x++)
+        for (x = p_ptr->px - MAX_SIGHT; x <= p_ptr->px + MAX_SIGHT; x++)
         {
             if (!in_bounds_fully(y, x))
                 continue;
@@ -137,9 +137,9 @@ bool detect_stairs(void)
     bool detect = false;
 
     /* Scan the visible area */
-    for (y = p_ptr->py - 20; y < p_ptr->py + 20; y++)
+    for (y = p_ptr->py - 20; y <= p_ptr->py + 20; y++)
     {
-        for (x = p_ptr->px - 20; x < p_ptr->px + 20; x++)
+        for (x = p_ptr->px - 20; x <= p_ptr->px + 20; x++)
         {
             if (!in_bounds_fully(y, x))
                 continue;

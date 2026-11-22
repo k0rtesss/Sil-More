@@ -1014,12 +1014,9 @@ void sdl_mouse_path_handle_motion(float x, float y)
     if (g_mouse_path.follow_active)
         return;
 
-    /* Only refresh the hover path while idle, waiting for the player's command.
-     * During turn processing (movement, combat, animations) the event pump
-     * still delivers motion events, but recomputing the path and re-presenting
-     * then just churns the overlay and spins the loop -- leave the existing
-     * preview as-is until it is the player's turn again. */
-    if (!g_sdl_blocking_key_wait)
+    /* request_command() polls queued SDL input before it blocks. A motion
+     * delivered by either path belongs to the same gameplay command wait. */
+    if (!sdl_main_screen_click_shortcuts_active())
         return;
 
     if (!sdl_main_view_point_to_map(x, y, &map_y, &map_x)) {
@@ -1053,19 +1050,13 @@ void sdl_mouse_path_handle_motion(float x, float y)
         return;
     }
 
-    /* Rate-limit the recompute.  On a large level (this one is 187x187, ~1.1M
-     * search states) a single hover search is heavy, and sweeping the cursor
-     * toward a target crosses many cells; without this, each crossed cell
-     * re-runs the search and re-presents the frame, which is the residual
-     * "delay"/overlay churn while aiming.  Recompute at most ~10x/second.  The
-     * dedupe above leaves the target grid unchanged when we skip, so the next
-     * motion still refreshes once the cursor settles, and clicking always
-     * computes a fresh path via sdl_mouse_path_start_follow_grid(). */
+    /* Limit repeated searches while sweeping across a large map. Opening a
+     * menu clears the preview, so compute its first replacement immediately. */
     {
         static Uint64 last_hover_compute_ns = 0;
         Uint64 now_ns = SDL_GetTicksNS();
 
-        if (last_hover_compute_ns != 0
+        if (g_mouse_path.hover_visible && last_hover_compute_ns != 0
             && now_ns - last_hover_compute_ns < 100000000ULL)
         {
             return;
@@ -1162,6 +1153,9 @@ bool sdl_grid_question_queue(int map_y, int map_x)
     if (!sdl_mouse_feature_action_for_grid(map_y, map_x, NULL, NULL))
         return false;
 
+    /* The question takes over the map. It may consume the button-up from
+     * a drag that started before the right click. */
+    sdl_main_map_cancel_drag();
     sdl_mouse_path_cancel();
     g_mouse_path.grid_question_pending = true;
     g_mouse_path.grid_question_y = map_y;

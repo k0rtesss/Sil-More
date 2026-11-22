@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "sdl-config.h"
 #include "log/log.h"
@@ -1720,7 +1721,7 @@ static bool sdl_config_should_upgrade_legacy_gamepad_defaults(
 
 static char* read_file_contents(const char* filename)
 {
-    FILE* f = fopen(filename, "rb");
+    FILE* f = file_open_utf8(filename, "rb");
     if (!f) {
         log_debug("Could not open JSON file: %s", filename);
         return NULL;
@@ -6073,7 +6074,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
     else
         SDL_ClearError();
 
-    FILE* f = fopen(temporary, "wb");
+    FILE* f = file_open_utf8(temporary, "wb");
     if (!f) {
         log_error("Could not write temporary JSON file: %s", temporary);
         cJSON_free(json_string);

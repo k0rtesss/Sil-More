@@ -3,6 +3,9 @@
 #include "log/log.h"
 #include "cave/cave.h"
 #include "cave/cave-fixtures.h"
+#include "level-generation/level-generation-terrain.h"
+#include "level-generation/level-generation-terrain-access.h"
+#include "level-generation/level-generation-terrain-vaults.h"
 
 /* Session-only inspection overlay; never stored in saves or gameplay options. */
 static bool illusion_debug_enabled;
@@ -74,12 +77,9 @@ static bool illusion_stone(int feat)
 static bool illusion_corridor_floor(int y, int x)
 {
     return in_bounds_fully(y, x) && cave_feat[y][x] == FEAT_FLOOR
-        && (cave_corridor1[y][x] >= 0 || cave_corridor2[y][x] >= 0);
-}
-
-static bool illusion_corridor_id_valid(int id)
-{
-    return id >= 0 && id < DUN_ROOMS;
+        && !(cave_info[y][x] & CAVE_ROOM) && !cave_natural[y][x]
+        && cave_corridor1[y][x] >= 0 && cave_corridor1[y][x] < DUN_ROOMS
+        && cave_corridor2[y][x] >= 0 && cave_corridor2[y][x] < DUN_ROOMS;
 }
 
 /* Tunnel endpoints are not corridor cells themselves: they are converted to
@@ -100,9 +100,6 @@ static void illusion_find_door_corridors(
             if (!illusion_corridor_floor(y, x)) continue;
             r1 = cave_corridor1[y][x];
             r2 = cave_corridor2[y][x];
-            if (!illusion_corridor_id_valid(r1)
-                || !illusion_corridor_id_valid(r2))
-                continue;
             low = MIN(r1, r2);
             high = MAX(r1, r2);
             for (int i = 0; i < 4; i++)
@@ -114,80 +111,167 @@ static void illusion_find_door_corridors(
         }
 }
 
-/* A candidate is the near wall of a planned, doorless corridor. Walk through
- * the corridor width in the direction of its paired wall, so widened
- * corridors still contribute exactly one wall pair. */
-static bool illusion_corridor_side(
-    int y, int x, int side_dy, int side_dx,
-    bool corridor_has_door[DUN_ROOMS][DUN_ROOMS])
+/* Leave the footprint and perimeter of authored features intact. */
+static bool illusion_clearance(int y, int x, int partition)
 {
-    int source_y = y + side_dy;
-    int source_x = x + side_dx;
-    int axis_dy = side_dx;
-    int axis_dx = -side_dy;
-    int pair_y, pair_x;
-    int width = 0;
-    int partition = level_partition_index_for_point(y, x);
-    int r1, r2, low, high;
-
-    if (!illusion_corridor_floor(source_y, source_x)) return false;
-    r1 = cave_corridor1[source_y][source_x];
-    r2 = cave_corridor2[source_y][source_x];
-    if (!illusion_corridor_id_valid(r1)
-        || !illusion_corridor_id_valid(r2))
-        return false;
-    low = MIN(r1, r2);
-    high = MAX(r1, r2);
-    if (corridor_has_door[low][high]) return false;
-
-    /* Do not treat a room edge or a turn as a corridor side. */
-    if (!illusion_corridor_floor(source_y + axis_dy, source_x + axis_dx)
-        || !illusion_corridor_floor(source_y - axis_dy, source_x - axis_dx))
-        return false;
-
-    pair_y = source_y + side_dy;
-    pair_x = source_x + side_dx;
-    while (width < 3 && illusion_corridor_floor(pair_y, pair_x))
-    {
-        pair_y += side_dy;
-        pair_x += side_dx;
-        width++;
-    }
-
-    if (!in_bounds_fully(pair_y, pair_x)
-        || !illusion_stone(cave_feat[pair_y][pair_x])
-        || cave_fixture_at(pair_y, pair_x) != CAVE_FIXTURE_NONE
-        || (cave_info[pair_y][pair_x]
-            & (CAVE_ICKY | CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL))
-        || level_partition_index_for_point(pair_y, pair_x) != partition)
-        return false;
-
-    return true;
-}
-
-/* Only pierce the side of a doorless planned corridor, within one partition.
- * Protected rooms, their perimeter, fixtures, and permanent walls are
- * intact. */
-static bool illusion_candidate(
-    int y, int x, bool corridor_has_door[DUN_ROOMS][DUN_ROOMS])
-{
-    if (!illusion_stone(cave_feat[y][x])) return false;
-    int partition = level_partition_index_for_point(y, x);
     for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)
         {
             int yy = y + dy, xx = x + dx;
             if ((cave_info[yy][xx] & (CAVE_ICKY | CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL))
+                || terrain_vault_instance_at(yy, xx) >= 0
+                || terrain_generation_reserved(yy, xx)
                 || cave_fixture_at(yy, xx) || cave_m_idx[yy][xx]
                 || cave_o_idx[yy][xx]
                 || cave_feat[yy][xx] == FEAT_ILLUSORY_WALL
                 || level_partition_index_for_point(yy, xx) != partition)
                 return false;
         }
-    return illusion_corridor_side(y, x, -1, 0, corridor_has_door)
-        || illusion_corridor_side(y, x, 1, 0, corridor_has_door)
-        || illusion_corridor_side(y, x, 0, -1, corridor_has_door)
-        || illusion_corridor_side(y, x, 0, 1, corridor_has_door);
+    return true;
+}
+
+#define ILLUSION_MIN_LENGTH 4 /* Two mouths with at least two hidden floor tiles. */
+#define ILLUSION_MAX_LENGTH 8
+
+/* Trace out from the side of a corridor. Every rock tile needs solid flanks
+ * so the new passage can only be entered through its disguised ends. */
+static int illusion_passage_length(int y, int x, int dy, int dx,
+    const byte exterior[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
+{
+    if (!illusion_corridor_floor(y + dx, x + dy)
+        || !illusion_corridor_floor(y - dx, x - dy))
+        return 0;
+
+    int partition = level_partition_index_for_point(y, x);
+    for (int length = 1; length <= ILLUSION_MAX_LENGTH; length++)
+    {
+        y += dy;
+        x += dx;
+        if (!in_bounds_fully(y, x) || (cave_info[y][x] & CAVE_ROOM)
+            || !illusion_stone(cave_feat[y][x])
+            || !illusion_stone(cave_feat[y + dx][x + dy])
+            || !illusion_stone(cave_feat[y - dx][x - dy])
+            || !illusion_clearance(y, x, partition))
+            return 0;
+
+        int far_y = y + dy, far_x = x + dx;
+        if (cave_feat[far_y][far_x] == FEAT_FLOOR)
+        {
+            if (length < ILLUSION_MIN_LENGTH || !exterior[far_y][far_x]
+                || !illusion_corridor_floor(far_y, far_x))
+                return 0;
+            for (int i = 0; i < 4; i++)
+                if (illusion_corridor_floor(far_y + ddy_ddd[i], far_x + ddx_ddd[i]))
+                    return length;
+            return 0;
+        }
+    }
+    return 0;
+}
+
+static bool vault_entrance_candidate(int y, int x, int instance)
+{
+    int feat = cave_feat[y][x];
+    if ((feat != FEAT_FLOOR && !feature_is_any_door(feat))
+        || cave_m_idx[y][x] || cave_o_idx[y][x] || cave_fixture_at(y, x)
+        || terrain_generation_reserved(y, x))
+        return false;
+
+    /* Use a threshold with solid sides and a plain floor on each side of the
+     * entrance. The outside landing must be separate from any authored vault. */
+    static const int dy[] = { -1, 1, 0, 0 };
+    static const int dx[] = { 0, 0, -1, 1 };
+    for (size_t d = 0; d < N_ELEMENTS(dy); d++)
+    {
+        int in_y = y + dy[d], in_x = x + dx[d];
+        int out_y = y - dy[d], out_x = x - dx[d];
+        if (terrain_vault_instance_at(in_y, in_x) == instance
+            && terrain_vault_instance_at(out_y, out_x) < 0
+            && cave_feat[in_y][in_x] == FEAT_FLOOR
+            && cave_feat[out_y][out_x] == FEAT_FLOOR
+            && !(cave_info[out_y][out_x] & (CAVE_ICKY | CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL))
+            && FEAT_IS_ROCK(cave_feat[y + dx[d]][x + dy[d]])
+            && FEAT_IS_ROCK(cave_feat[y - dx[d]][x - dy[d]]))
+            return true;
+    }
+    return false;
+}
+
+static bool vault_barrier(int y, int x)
+{
+    int feat = cave_feat[y][x];
+    return FEAT_IS_GRANITE(feat) || feat == FEAT_WALL_PERM;
+}
+
+static bool vault_has_only_entrance(int entrance_y, int entrance_x, int instance)
+{
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+        {
+            if (terrain_vault_instance_at(y, x) != instance) continue;
+            if ((y == p_ptr->py && x == p_ptr->px) || cave_stair_bold(y, x)
+                || cave_forge_bold(y, x)
+                || (cave_info[y][x] & (CAVE_G_VAULT | CAVE_MORGOTH_TUNNEL)))
+                return false;
+            if ((y == entrance_y && x == entrance_x) || vault_barrier(y, x))
+                continue;
+
+            /* Every other crossing of the footprint must have solid stone
+             * on one side. Treat hazards and breakable terrain as open so
+             * they cannot act as a second entrance. */
+            for (int d = 0; d < 8; d++)
+            {
+                int ny = y + ddy_ddd[d], nx = x + ddx_ddd[d];
+                if (terrain_vault_instance_at(ny, nx) != instance
+                    && !vault_barrier(ny, nx))
+                    return false;
+            }
+        }
+    return true;
+}
+
+static bool place_illusory_vault_entrance(
+    const byte exterior[MAX_DUNGEON_HGT][MAX_DUNGEON_WID])
+{
+    static byte after[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    static byte blocked[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    int candidates = 0, chosen_y = 0, chosen_x = 0;
+
+    for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
+        for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
+        {
+            int id = terrain_vault_id_at(y, x);
+            if (!exterior[y][x] || id < 0 || v_info[id].typ != 7
+                || (v_info[id].flags & (VLT_QUEST | VLT_SURFACE)))
+                continue;
+            int instance = terrain_vault_instance_at(y, x);
+            if (!vault_entrance_candidate(y, x, instance)
+                || !vault_has_only_entrance(y, x, instance))
+                continue;
+
+            /* The entrance can touch multiple exterior routes. Block it in
+             * a shadow map and make sure those routes still reach each other. */
+            memcpy(blocked, cave_feat, sizeof(blocked));
+            blocked[y][x] = FEAT_WALL_EXTRA;
+            terrain_generation_flood(p_ptr->py, p_ptr->px, after, blocked);
+            bool preserves_access = true;
+            for (int yy = 1; preserves_access && yy < p_ptr->cur_map_hgt - 1; yy++)
+                for (int xx = 1; xx < p_ptr->cur_map_wid - 1; xx++)
+                    if (exterior[yy][xx] && !after[yy][xx]
+                        && terrain_vault_instance_at(yy, xx) != instance)
+                    {
+                        preserves_access = false;
+                        break;
+                    }
+            if (preserves_access && rand_int(++candidates) == 0)
+            {
+                chosen_y = y;
+                chosen_x = x;
+            }
+        }
+    if (!candidates) return false;
+    cave_set_feat(chosen_y, chosen_x, FEAT_ILLUSORY_WALL);
+    return true;
 }
 
 void place_illusory_passages(void)
@@ -195,7 +279,9 @@ void place_illusory_passages(void)
     /* Keep the surface, throne-room, and Utumno layouts authored. */
     if (!illusory_walls || p_ptr->depth <= 0 || p_ptr->depth >= MORGOTH_DEPTH)
         return;
-    int placed = 0;
+    static byte exterior[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    terrain_generation_flood(p_ptr->py, p_ptr->px, exterior, NULL);
+    int placed = place_illusory_vault_entrance(exterior) ? 1 : 0;
     int map_size = (p_ptr->cur_map_hgt + p_ptr->cur_map_wid) / 2;
     /* Scale the count with the generated level, like other per-level terrain
      * populations: two walls on a 66x66 level, eight on a 165x165 level. */
@@ -203,20 +289,40 @@ void place_illusory_passages(void)
     target = MAX(2, target);
     bool corridor_has_door[DUN_ROOMS][DUN_ROOMS];
     illusion_find_door_corridors(corridor_has_door);
-    for (int n = 0; n < target; n++)
+    while (placed + 2 <= target)
     {
         int candidates = 0, chosen_y = 0, chosen_x = 0;
-        for (int y = 2; y < p_ptr->cur_map_hgt - 2; y++)
-            for (int x = 2; x < p_ptr->cur_map_wid - 2; x++)
-                if (illusion_candidate(y, x, corridor_has_door)
-                    && rand_int(++candidates) == 0)
+        int chosen_dir = 0, chosen_length = 0;
+        for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+            for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            {
+                if (!exterior[y][x] || !illusion_corridor_floor(y, x)) continue;
+                int r1 = cave_corridor1[y][x], r2 = cave_corridor2[y][x];
+                if (corridor_has_door[MIN(r1, r2)][MAX(r1, r2)]) continue;
+
+                for (int i = 0; i < 4; i++)
                 {
-                    chosen_y = y;
-                    chosen_x = x;
+                    int length = illusion_passage_length(y, x, ddy_ddd[i], ddx_ddd[i], exterior);
+                    if (!length) continue;
+                    if (rand_int(++candidates) == 0)
+                    {
+                        chosen_y = y;
+                        chosen_x = x;
+                        chosen_dir = i;
+                        chosen_length = length;
+                    }
                 }
+            }
         if (!candidates) break;
-        cave_set_feat(chosen_y, chosen_x, FEAT_ILLUSORY_WALL);
-        placed++;
+        for (int i = 1; i <= chosen_length; i++)
+        {
+            chosen_y += ddy_ddd[chosen_dir];
+            chosen_x += ddx_ddd[chosen_dir];
+            bool entrance = i == 1 || i == chosen_length;
+            cave_set_feat(chosen_y, chosen_x, entrance ? FEAT_ILLUSORY_WALL : FEAT_FLOOR);
+            terrain_generation_reserve(chosen_y, chosen_x);
+            if (entrance) placed++;
+        }
     }
-    log_debug("Placed %d illusory passages at depth %d", placed, p_ptr->depth);
+    log_debug("Placed %d illusory walls at depth %d", placed, p_ptr->depth);
 }

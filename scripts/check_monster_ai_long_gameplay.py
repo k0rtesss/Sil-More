@@ -460,7 +460,7 @@ def persistence(exe, env, spec, name, checkpoint_turns=400, suffix_turns=450):
         game = play.GameControl(profile/'control', timeout=30)
         process = play.subprocess.Popen([str(executable),'--windowed','--control-dir',str(game.directory)],
             cwd=ROOT, env=dict(environment, CONTROL_TEST_PROFILE=str(profile),
-                CONTROL_TEST_LOG_BASE=str(profile/'game.exe'), AI_PLAYTEST_LOAD=str(profile/'save'/source_save.name)),
+                AI_PLAYTEST_LOAD=str(profile/'save'/source_save.name)),
             stdout=(profile/'stdout.txt').open('w'), stderr=(profile/'stderr.txt').open('w'),
             creationflags=play.subprocess.CREATE_NO_WINDOW if play.os.name=='nt' else 0)
         try:

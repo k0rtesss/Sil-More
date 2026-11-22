@@ -105,7 +105,9 @@ errr init_sdl(int argc, char **argv)
 #endif
     
     // Initialize SDL first to get display information
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
+    /* SDL_mixer initializes audio when opening its playback device. A missing
+     * audio backend must not keep the display from starting. */
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD)) {
         log_error("SDL_Init failed: %s", SDL_GetError());
         quit("could not init SDL");
     }
@@ -585,7 +587,7 @@ errr init_sdl(int argc, char **argv)
     }
     
     // Set window position for windowed mode
-    if (!config.fullscreen && config.window_x >= 0 && config.window_y >= 0) {
+    if (!config.fullscreen) {
         sdl_window_set_position(config.window_x, config.window_y);
     }
 

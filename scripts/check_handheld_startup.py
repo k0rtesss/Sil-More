@@ -320,13 +320,13 @@ def main():
             log_dir.mkdir(exist_ok=True)
             run_env = dict(env, SIL_HANDHELD=override, TEST_EXPECTED_KIND=expected,
                            CONTROL_TEST_PROFILE=profile, TEST_PROFILE_MODE="fresh",
-                           CONTROL_TEST_LOG_BASE=str(log_dir / "check.exe"))
+                           CONTROL_TEST_LOG_DIR=str(log_dir))
             subprocess.run([str(exe), "--windowed"], cwd=ROOT, env=run_env, check=True, timeout=40)
             if override != "desktop":
                 run_env["TEST_PROFILE_MODE"] = "reload"
                 log_dir = OUT / (override + "-reload")
                 log_dir.mkdir(exist_ok=True)
-                run_env["CONTROL_TEST_LOG_BASE"] = str(log_dir / "check.exe")
+                run_env["CONTROL_TEST_LOG_DIR"] = str(log_dir)
                 subprocess.run([str(exe), "--windowed"], cwd=ROOT, env=run_env, check=True, timeout=40)
     print("Handheld detection, first-launch defaults and saved settings: PASS")
 

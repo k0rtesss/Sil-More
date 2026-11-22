@@ -98,6 +98,108 @@ static void expect_command(int command, bool direction)
     assert(!sdl_question_menu_context_hint_active());
 }
 
+static int main_menu_prompt_waits;
+
+static SDL_Event button_at(int button, SDL_FRect rect)
+{
+    SDL_Event event = {0};
+    event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    event.button.windowID = SDL_GetWindowID(g_state.window);
+    event.button.which = 1;
+    event.button.button = button;
+    event.button.down = true;
+    event.button.x = rect.x + rect.w / 2;
+    event.button.y = rect.y + rect.h / 2;
+    return event;
+}
+
+static errr main_menu_prompt_input(int action, int wait)
+{
+    if (action == TERM_XTRA_EVENT && wait) {
+        sdl_question_menu_layout_info layout;
+        assert(++main_menu_prompt_waits == 1);
+        assert(streq(g_question_menu.title, "Turn off Main Menu button"));
+        assert(sdl_question_menu_layout(&layout));
+        assert(layout.rows[1].w > 0);
+        SDL_Event event = button_at(SDL_BUTTON_LEFT, layout.rows[1]);
+        sdl_handle_event(&g_state, &event);
+    }
+    return 0;
+}
+
+static void cancel_main_menu_button_prompt(void)
+{
+    char key;
+
+    main_menu_prompt_waits = 0;
+    request_command();
+    assert(p_ptr->command_cmd == 'm');
+    do_cmd_main_menu();
+    assert(main_menu_prompt_waits == 1);
+    assert(!sdl_question_menu_is_active() && !g_main_menu_overlay_active);
+    assert(get_sdl_show_main_menu_button());
+    assert(Term_inkey(&key, false, true) != 0);
+}
+
+static void check_main_menu_button_handoff(void)
+{
+    static feature_type blank_terrain[FEAT_NONE + 1];
+    SDL_FRect menu_button;
+    SDL_Event event;
+    cptr saved_keymap = keymap_act[KEYMAP_MODE_SIL]['m'];
+
+    character_generated = true;
+    f_info = blank_terrain;
+    g_views[PANE_MAIN].term_ready = true;
+    term_screen = &test_term;
+    test_term.xtra_hook = main_menu_prompt_input;
+    set_sdl_show_main_menu_button(true);
+    assert(sdl_main_menu_pane_button_rect(&menu_button));
+    assert(menu_button.w > 0 && menu_button.h > 0);
+    keymap_act[KEYMAP_MODE_SIL]['m'] = "Q";
+
+    /* The SDL nonblocking event pump can dispatch both presses before the
+     * game loop reads the command queued by the right click. */
+    inkey_flag = true;
+    const int buttons[] = { SDL_BUTTON_RIGHT, SDL_BUTTON_LEFT };
+    for (size_t i = 0; i < N_ELEMENTS(buttons); i++) {
+        event = button_at(buttons[i], menu_button);
+        assert(SDL_PushEvent(&event));
+        event.type = SDL_EVENT_MOUSE_BUTTON_UP;
+        event.button.down = false;
+        assert(SDL_PushEvent(&event));
+    }
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+            || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+            sdl_handle_event(&g_state, &event);
+    }
+    assert(inkey_flag && "queued clicks must preserve the outer command wait");
+    assert(main_menu_prompt_waits == 0);
+    cancel_main_menu_button_prompt();
+
+    /* A later click can recover a pending request whose command was flushed. */
+    inkey_flag = true;
+    event = button_at(SDL_BUTTON_RIGHT, menu_button);
+    sdl_handle_event(&g_state, &event);
+    Term_flush();
+    event = button_at(SDL_BUTTON_LEFT, menu_button);
+    sdl_handle_event(&g_state, &event);
+    assert(inkey_flag);
+    cancel_main_menu_button_prompt();
+
+    /* Cancel leaves the fixed button available to the next mouse click. */
+    inkey_flag = true;
+    assert(sdl_main_menu_pane_hit(menu_button.x + menu_button.w / 2,
+        menu_button.y + menu_button.h / 2, NULL));
+    inkey_flag = false;
+    keymap_act[KEYMAP_MODE_SIL]['m'] = saved_keymap;
+    test_term.xtra_hook = NULL;
+    g_views[PANE_MAIN].term_ready = false;
+    character_generated = false;
+    puts("PASS: batched right/left Main Menu clicks defer the confirmation and preserve mouse input.");
+}
+
 int main(void)
 {
     const char* labels[] = {"Go Down", "Go Up", "Smith", "Harness"};
@@ -115,6 +217,7 @@ int main(void)
     assert(g_state.renderer);
     g_pane_rects[PANE_DESCRIPTION] = (SDL_Rect){0, 0, 800, 600};
     assert(term_init(&test_term, 80, 24, 256) == 0);
+    assert(messages_init() == 0);
     Term_activate(&test_term);
     angband_term[0] = &test_term;
     character_dungeon = true;
@@ -249,6 +352,7 @@ int main(void)
     Term_keypress(UI_MENU_CLICK_WAKE_KEY);
     Term_keypress('Q');
     expect_command('Q', false);
+    check_main_menu_button_handoff();
     puts("PASS: smithing wake returns without extra input; ordinary wake still waits for a command.");
     puts("PASS: Escape dismisses a gameplay hint once and preserves modal/ordinary Escape input.");
     puts("PASS: early hint rejects action/suppression input until command wait;");

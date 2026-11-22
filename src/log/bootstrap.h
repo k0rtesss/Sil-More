@@ -6,11 +6,9 @@
 #include "../h-basic.h"
 
 /*
- * Initialises logger. Opens `log.txt` file and sets log level for stdout and
- * file from `SIL_LOG_LEVEL` environment variable. The `quiet` argument disables
- * stdout when set to true (essential for terminal modes like ncurses where
- * screen output would be garbled otherwise).
+ * Use the platform's writable log location, or an explicit UTF-8 directory.
+ * Quiet suppresses stderr while a log file is available.
  */
-extern void init_logger(bool quiet, const char* exe_path);
+extern void init_logger(bool quiet, const char* directory);
 
 #endif /* INCLUDED_LOG_BOOTSTRAP_H */

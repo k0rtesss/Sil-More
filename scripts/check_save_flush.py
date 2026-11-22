@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check complete save writes and failed-flush recovery in temporary profiles."""
+"""Check complete save writes and failed-save recovery in temporary profiles."""
 from pathlib import Path
 import os
 import shlex
@@ -16,6 +16,22 @@ OUT = ROOT / "scripts/output/save-flush-check"
 TESTS = r'''
 static bool fail_flush;
 static int flush_diagnostics;
+static bool fail_activation;
+static bool active_save_at_commit;
+static unsigned activation_attempts;
+
+bool __real_fd_move(cptr from, cptr to);
+bool __wrap_fd_move(cptr from, cptr to)
+{
+    if (!strcmp(from, "flush-save.new") && !strcmp(to, "flush-save")) {
+        activation_attempts++;
+        active_save_at_commit = SDL_GetPathInfo(to, NULL);
+        if (fail_activation)
+            return false;
+    }
+    return __real_fd_move(from, to);
+}
+
 bool __real_SDL_FlushIO(SDL_IOStream* stream);
 bool __wrap_SDL_FlushIO(SDL_IOStream* stream)
 {
@@ -47,13 +63,34 @@ static void check_save_flush(void)
     size_t kept_size=0;
     void* kept_save=SDL_LoadFile(savefile,&kept_size);
     assert(kept_save && kept_size==old_size && !memcmp(kept_save,old_save,old_size));
-    SDL_free(kept_save); SDL_free(old_save);
+    SDL_free(kept_save);
     SDL_PathInfo info;
     assert(!SDL_GetPathInfo("flush-save.new",&info));
 
     fail_flush=false; SDL_ClearError();
-    assert(save_player() && flush_diagnostics==1);
-    puts("Save flush: successful complete write, failed flush rejected, previous save preserved, broken candidate removed, retry succeeds: PASS");
+    character_saved = false;
+    fail_activation = true;
+    assert(!save_player());
+    assert(activation_attempts == 2);
+    assert(active_save_at_commit);
+    assert(!character_saved);
+    kept_save = SDL_LoadFile(savefile, &kept_size);
+    assert(kept_save && kept_size == old_size && !memcmp(kept_save, old_save, old_size));
+    SDL_free(kept_save);
+
+    ++turn;
+    fail_activation = false;
+    assert(save_player() && flush_diagnostics == 1);
+    assert(activation_attempts == 3 && active_save_at_commit && character_saved);
+    size_t new_size = 0;
+    void* new_save = SDL_LoadFile(savefile, &new_size);
+    assert(new_save && (new_size != old_size || memcmp(new_save, old_save, old_size)));
+    assert(!SDL_GetPathInfo("flush-save.new", &info));
+    assert(!SDL_GetPathInfo("flush-save.old", &info));
+    SDL_free(new_save);
+    SDL_free(old_save);
+
+    puts("Save recovery: complete first save, failed flush and activation preserve the live save, and retry replaces it: PASS");
 }
 '''
 
@@ -79,7 +116,7 @@ def main():
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
                     str(ROOT / "src/fs/save.c"), "@" + str(response),
-                    "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=SDL_FlushIO",
+                    "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=SDL_FlushIO,--wrap=fd_move",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="profile-", dir=OUT) as profile:
         subprocess.run([str(exe), str(ROOT / "lib/edit"), profile],

@@ -27,6 +27,13 @@ between Windows (`%USERPROFILE%/Saved Games/sil-more/`) and Linux
 (`~/sil-more/`). Device-specific preferences remain local. Dynamic Cloud Sync
 is off; the game does not implement its suspend/resume protocol.
 
+If a fresh Windows or Linux installation cannot use its normal save folder,
+the game reports the alternate folder it will use for both characters and
+Tales. It lives in `alternate-profile` under the game's SDL preferences
+directory. Progress in that folder stays on the device. The startup message
+and `log.txt` identify its full path. Later launches continue using that
+profile even if Steam downloads a separate character into the usual folder.
+
 The configured per-user quota is **100,000,000 bytes and 500 files**. The checked
 profile on October 17, 2026 contained 27 files totaling 1,371,105 bytes. This is
 a measurement of that profile, not an unlimited-history guarantee.

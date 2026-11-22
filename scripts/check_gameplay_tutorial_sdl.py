@@ -368,11 +368,16 @@ int main(void)
         tutorial_buttons[2]=(SDL_FRect){200,150,80,44};
         key_count=0;
         tutorial_focus=0;
-        e=(SDL_Event){0}; e.motion.type=SDL_EVENT_MOUSE_MOTION;
+        SDL_zero(e); e.motion.type=SDL_EVENT_MOUSE_MOTION;
         e.motion.timestamp=tutorial_input_barrier+1000000;
         e.motion.which=1; e.motion.x=120; e.motion.y=170; e.motion.xrel=1;
         assert(sdl_gameplay_tutorial_handle_event(&e));
         assert(tutorial_focus==1); /* Mouse hover follows the highlighted button. */
+        e.motion.x=420; e.motion.y=300;
+        assert(!sdl_gameplay_tutorial_handle_event(&e)); /* Hover the menu behind the action card. */
+        character_icky=0;
+        assert(!sdl_gameplay_tutorial_handle_event(&e)); /* Preview a map path without pressing. */
+        character_icky=1;
         e=(SDL_Event){0}; e.button.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
         e.button.timestamp=tutorial_input_barrier+1000000;
         e.button.button=SDL_BUTTON_LEFT; e.button.x=40; e.button.y=170;

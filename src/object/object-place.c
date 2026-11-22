@@ -6,6 +6,7 @@
 #include "object/object-place.h"
 #include "object/object-knowledge.h"
 #include "log/log.h"
+#include <limits.h>
 
 #define FLOOD_TRAP_ACID_CHANCE 20 /* One in twenty on acid-enabled depths. */
 
@@ -27,6 +28,90 @@ static bool object_drop_grid(int feat, int tval, bool allow_liquids)
         || ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER)
             && (allow_liquids || tval == TV_GEM))
         || (allow_liquids && (feat == FEAT_LAVA || feat == FEAT_POISON));
+}
+
+typedef struct drop_grid
+{
+    int y;
+    int x;
+} drop_grid;
+
+typedef struct arrow_drop_plan
+{
+    drop_grid grids[QUIVER_ARROW_CAPACITY + 1];
+    int count;
+    int free_slots;
+    int excluded_floor_item;
+} arrow_drop_plan;
+
+static bool drop_grid_reserved(const arrow_drop_plan* plan, int y, int x)
+{
+    for (int i = 0; i < plan->count; i++)
+    {
+        if (plan->grids[i].y == y && plan->grids[i].x == x)
+            return true;
+    }
+    return false;
+}
+
+static bool find_drop_grid(const object_type* drop, int y, int x, int radius,
+    bool disarmed, const arrow_drop_plan* plan, drop_grid* result)
+{
+    /* A zero radius searches the whole level for a scatter destination. */
+    int extent = radius ? radius : MAX(p_ptr->cur_map_wid, p_ptr->cur_map_hgt);
+    int best_cost = INT_MAX;
+    int ties = 0;
+
+    int y_min = MAX(1, y - extent), y_max = MIN(p_ptr->cur_map_hgt - 2, y + extent);
+    int x_min = MAX(1, x - extent), x_max = MIN(p_ptr->cur_map_wid - 2, x + extent);
+    for (int ty = y_min; ty <= y_max; ty++)
+    {
+        for (int tx = x_min; tx <= x_max; tx++)
+        {
+            int dy = ty - y, dx = tx - x;
+            int distance_squared = dy * dy + dx * dx;
+
+            if ((radius && (distance_squared > radius * radius + 1 || !los(y, x, ty, tx)))
+                || !object_drop_grid(cave_feat[ty][tx], drop->tval, disarmed)
+                || (cave_m_idx[ty][tx] > 0 && !attacker_at(ty, tx)))
+            {
+                continue;
+            }
+
+            int head = cave_o_idx[ty][tx];
+            if (plan && ((head && head == plan->excluded_floor_item)
+                    || (!head && plan->free_slots <= 0)
+                    || drop_grid_reserved(plan, ty, tx)))
+            {
+                continue;
+            }
+
+            /* A grid holds one stack. A partial merge would leave the rest
+             * of the drop without a landing even if the next tile is empty. */
+            if (head)
+            {
+                object_type* floor = &o_list[head];
+                if (floor->next_o_idx || !object_similar(floor, drop)
+                    || floor->number + drop->number
+                        > MIN(object_stack_limit(floor), object_stack_limit(drop)))
+                    continue;
+            }
+
+            int cost = distance_squared;
+            if (plan && !head)
+                cost += 2 * extent * extent + 1; /* Prefer a full merge over using an object slot. */
+            if (cost > best_cost)
+                continue;
+            if (cost < best_cost)
+                ties = 0;
+            if (++ties >= 2 && (plan || rand_int(ties) != 0))
+                continue;
+            best_cost = cost;
+            result->y = ty;
+            result->x = tx;
+        }
+    }
+    return best_cost != INT_MAX;
 }
 
 s16b floor_carry(int y, int x, object_type* j_ptr)
@@ -150,20 +235,11 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
  * "teleporting" to a useful grid if needed.
  */
 static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
-    bool allow_liquids)
+    bool disarmed)
 {
-    int i, k, d, s;
-
-    int bs, bn;
     int by, bx;
-    int dy, dx;
     int ty, tx;
-
-    object_type* o_ptr;
-
     char o_name[80];
-
-    bool flag = false;
 
     bool plural = false;
     const bool is_silmaril = (j_ptr->tval == TV_LIGHT) && (j_ptr->sval == SV_LIGHT_SILMARIL);
@@ -171,7 +247,7 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT)
         || (cave_feat[y][x] == FEAT_WATER)
         || (cave_feat[y][x] == FEAT_DEEP_WATER)
-        || (allow_liquids
+        || (disarmed
             && (cave_feat[y][x] == FEAT_LAVA || cave_feat[y][x] == FEAT_POISON))
         || (FEAT_IS_ICE(cave_feat[y][x]))
         || FEAT_IS_BRIDGE(cave_feat[y][x]);
@@ -179,7 +255,6 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
     const bool try_hard_place = force_place || impact_is_floor;
     const bool can_clobber = force_place;
     const int scan_radius = try_hard_place ? 10 : 4;
-    const int scan_dist2_max = (scan_radius * scan_radius) + 1;
 
     /* Extract plural */
     if (j_ptr->number != 1)
@@ -205,133 +280,14 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
         return (0);
     }
 
-    /* Score */
-    bs = -1;
-
-    /* Picker */
-    bn = 0;
-
-    /* Default */
-    by = y;
-    bx = x;
-
-    /* Scan local grids */
-    for (dy = -scan_radius; dy <= scan_radius; dy++)
-    {
-        /* Scan local grids */
-        for (dx = -scan_radius; dx <= scan_radius; dx++)
-        {
-            bool comb = false;
-            ////int path_n;
-            ////u16b path_g[256];
-            ////int ty2, tx2; // store a copy of the target grid that can get
-            /// changed by project_path()
-
-            /* Calculate actual distance */
-            d = (dy * dy) + (dx * dx);
-
-            /* Ignore distant grids */
-            if (d > scan_dist2_max)
-                continue;
-
-            /* Location */
-            ty = y + dy;
-            tx = x + dx;
-
-            // copy of the variables
-            ////ty2 = ty;
-            ////tx2 = tx;
-
-            /* Skip illegal grids */
-            if (!in_bounds_fully(ty, tx))
-                continue;
-
-            /* Require line of sight */
-            if (!los(y, x, ty, tx))
-                continue;
-
-            /* Calculate the path */
-            ////path_n = project_path(path_g, 10, p_ptr->py, p_ptr->px, &ty2,
-            ///&tx2, PROJECT_NO_CHASM);
-
-            // if there was a chasm in the way, skip this spot
-            ////if ((ty != ty2) || (tx != tx2)) continue;
-
-            /* Require floor space */
-            if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval, allow_liquids))
-                continue;
-
-            /* Don't put things under peaceful monsters */
-            if (cave_m_idx[ty][tx] > 0 && !attacker_at(ty, tx))
-                continue;
-
-            /* No objects */
-            k = 0;
-
-            /* Scan objects in that grid */
-            for (o_ptr = get_first_object(ty, tx); o_ptr;
-                 o_ptr = get_next_object(o_ptr))
-            {
-                /* Check for possible combination */
-                if (object_similar(o_ptr, j_ptr))
-                    comb = true;
-
-                /* Count objects */
-                k++;
-            }
-
-            /* Add new object */
-            if (!comb)
-                k++;
-
-            // Sil: force no stacking
-            if (k > 1)
-                continue;
-
-            /* Paranoia */
-            if (k > MAX_FLOOR_STACK)
-                continue;
-
-            /* Calculate score */
-            s = 1000 - (d + k * 5);
-
-            /* Skip bad values */
-            if (s < bs)
-                continue;
-
-            /* New best value */
-            if (s > bs)
-                bn = 0;
-
-            /* Apply the randomizer to equivalent values */
-            if ((++bn >= 2) && (rand_int(bn) != 0))
-                continue;
-
-            /* Keep score */
-            bs = s;
-
-            /* Track it */
-            by = ty;
-            bx = tx;
-
-            /* Okay */
-            flag = true;
-        }
-    }
-
-    /* Handle lack of space */
-    if (!flag && !try_hard_place)
-    {
-        /* Debug */
-        if (p_ptr->wizard)
-            msg_print("Breakage (no floor space).");
-
-        /* Failure */
-        return (0);
-    }
+    /* Find the nearest suitable local grid first. */
+    drop_grid grid = { y, x };
+    bool flag = find_drop_grid(j_ptr, y, x, scan_radius, disarmed, NULL, &grid);
+    by = grid.y;
+    bx = grid.x;
 
     /* Don't silently lose items just because there is no nearby empty floor. */
-    for (i = 0; try_hard_place && !flag && (i < 20000); i++)
+    for (int i = 0; try_hard_place && !flag && (i < 20000); i++)
     {
         /* First try */
         if (i == 0)
@@ -359,7 +315,7 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
             continue;
 
         /* Require floor space */
-        if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval, allow_liquids))
+        if (!object_drop_grid(cave_feat[ty][tx], j_ptr->tval, disarmed))
             continue;
 
         /* Don't put things under peaceful monsters */
@@ -388,19 +344,26 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
             continue;
 
         /* Require floor space */
-        if (!object_drop_grid(cave_feat[by][bx], j_ptr->tval, allow_liquids))
+        if (!object_drop_grid(cave_feat[by][bx], j_ptr->tval, disarmed))
             continue;
 
         /* Okay */
         flag = true;
     }
 
+    if (!flag)
+    {
+        if (p_ptr->wizard)
+            msg_print("Breakage (no floor space).");
+        return 0;
+    }
+
     /* Give it to the floor */
     s16b o_idx = floor_carry(by, bx, j_ptr);
     if (!o_idx)
     {
-        /* Message */
-        if (player_has_los_bold(y, x))
+        /* A failed disarm leaves the original weapon equipped. */
+        if (!disarmed && player_has_los_bold(y, x))
         {
             msg_format("The %s disappear%s.", o_name, (plural ? "" : "s"));
         }
@@ -482,6 +445,57 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
 s16b drop_near(object_type* j_ptr, int chance, int y, int x)
 {
     return drop_near_aux(j_ptr, chance, y, x, false);
+}
+
+bool drop_quiver_arrows_near(const object_type* arrows, int count,
+    int excluded_floor_item)
+{
+    int y = p_ptr->py;
+    int x = p_ptr->px;
+    int feat = cave_feat[y][x];
+    bool floor_impact = object_drop_grid(feat, TV_ARROW, false)
+        || feat == FEAT_WATER || feat == FEAT_DEEP_WATER;
+    arrow_drop_plan plan = { .free_slots = z_info->o_max - o_max,
+        .excluded_floor_item = excluded_floor_item };
+
+    if (count <= 0 || count > (int)N_ELEMENTS(plan.grids))
+        return false;
+    for (int i = 1; i < o_max; i++)
+    {
+        if (!o_list[i].k_idx)
+            plan.free_slots++;
+    }
+
+    /* Reserve distinct grids with a full merge or an available object slot.
+     * A partial merge can change the floor even when floor_carry() fails.
+     * Accounting for empty slots avoids compacting live objects. */
+    for (int i = 0; i < count; i++)
+    {
+        drop_grid* grid = &plan.grids[i];
+        bool can_scatter = floor_impact || artefact_p(&arrows[i]);
+
+        if (!find_drop_grid(&arrows[i], y, x, can_scatter ? 10 : 4, false, &plan, grid))
+        {
+            if (!can_scatter || !find_drop_grid(&arrows[i], y, x, 0, false, &plan, grid))
+                return false;
+        }
+        if (!cave_o_idx[grid->y][grid->x])
+            plan.free_slots--;
+        plan.count++;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        drop_grid grid = plan.grids[i];
+        object_type drop;
+
+        object_copy(&drop, &arrows[i]);
+        /* Distinct destinations keep every placement valid during commit. */
+        (void)floor_carry(grid.y, grid.x, &drop);
+        if (character_dungeon)
+            sound_at(MSG_DROP_WOOD, grid.y, grid.x);
+    }
+    return true;
 }
 
 s16b drop_disarmed_weapon(object_type* j_ptr, int y, int x)

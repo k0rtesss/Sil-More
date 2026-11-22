@@ -737,13 +737,13 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         {
             msg_format("%^s looks into your eyes.", m_name);
         }
-        if (!observe_status(m_ptr, MON_AI_FEAR, allow_player_fear(m_ptr)) && !(p_ptr->afraid))
-        {
-            msg_print("You are unafraid.");
-        }
-        else
+        if (observe_status(m_ptr, MON_AI_FEAR, allow_player_fear(m_ptr)))
         {
             (void)set_afraid(p_ptr->afraid + damroll(3, 4));
+        }
+        else if (!p_ptr->afraid)
+        {
+            msg_print("You are unafraid.");
         }
         break;
     }

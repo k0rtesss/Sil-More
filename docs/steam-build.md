@@ -6,6 +6,11 @@ a separate Steamworks deployment. Enabling `SIL_STEAMWORKS=ON` adds the small
 C++ adapter around the C engine and links the Steam API runtime for the target
 operating system.
 
+Installed desktop builds write their startup log to `%APPDATA%\Sil-QH\sil-more\log.txt`
+on Windows and `$XDG_DATA_HOME/Sil-QH/sil-more/log.txt` on Linux (normally
+`~/.local/share/Sil-QH/sil-more/log.txt`). If the log cannot be opened, the game
+continues and writes diagnostics to stderr.
+
 The adapter initializes Steam before renderer creation, pumps callbacks during
 input waits and animation delays, and shuts down at process exit. If Steam
 initialization fails, the game continues without Steam features. Achievements

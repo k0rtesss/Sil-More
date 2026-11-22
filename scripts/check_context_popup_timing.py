@@ -176,15 +176,220 @@ static void check_popup_timing(void)
     assert(hint_refreshes > 0);
     puts("PASS: empty/blocked squares, disabled/suppressed hints, and stairs.");
 }
+
+static SDL_Event map_pointer_event(int type, int y, int x, int button)
+{
+    SDL_Event event = {0};
+    SDL_FRect tile;
+    float window_x, window_y;
+
+    assert(sdl_player_map_rect(y, x, &tile));
+    assert(SDL_RenderCoordinatesToWindow(g_state.renderer,
+        tile.x + tile.w / 2, tile.y + tile.h / 2, &window_x, &window_y));
+    event.type = type;
+    if (type == SDL_EVENT_MOUSE_MOTION) {
+        event.motion.windowID = SDL_GetWindowID(g_state.window);
+        event.motion.which = 1;
+        event.motion.x = window_x;
+        event.motion.y = window_y;
+        event.motion.xrel = tile.w;
+    } else {
+        event.button.windowID = SDL_GetWindowID(g_state.window);
+        event.button.which = 1;
+        event.button.button = button;
+        event.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+        event.button.x = window_x;
+        event.button.y = window_y;
+    }
+    return event;
+}
+
+static bool release_in_question;
+
+static errr dismiss_grid_question(int action, int value)
+{
+    (void)value;
+    if (action == TERM_XTRA_EVENT) {
+        SDL_Event esc = {0};
+        assert(sdl_question_menu_captures_pointer());
+        SDL_Event right_up = map_pointer_event(SDL_EVENT_MOUSE_BUTTON_UP,
+            10, 12, SDL_BUTTON_RIGHT);
+        sdl_handle_event(&g_state, &right_up);
+        if (release_in_question) {
+            SDL_FRect question;
+            SDL_Event release = map_pointer_event(SDL_EVENT_MOUSE_BUTTON_UP,
+                10, 12, SDL_BUTTON_LEFT);
+            assert(sdl_question_menu_current_rect(&question));
+            assert(SDL_RenderCoordinatesToWindow(g_state.renderer,
+                question.x + question.w / 2, question.y + question.h / 2,
+                &release.button.x, &release.button.y));
+            sdl_handle_event(&g_state, &release);
+        }
+        esc.type = SDL_EVENT_KEY_DOWN;
+        esc.key.windowID = SDL_GetWindowID(g_state.window);
+        esc.key.key = SDLK_ESCAPE;
+        esc.key.scancode = SDL_SCANCODE_ESCAPE;
+        sdl_handle_event(&g_state, &esc);
+    }
+    return 0;
+}
+
+static void check_hover_and_click(void)
+{
+    assert(g_mouse_path.hover_visible && g_mouse_path.path_valid
+        && g_mouse_path.path_len > 0);
+    assert(g_mouse_path.target_y == 10 && g_mouse_path.target_x == 15);
+    assert(!g_main_map_drag.active && !g_mouse_path.follow_active);
+    assert(p_ptr->wy == 0 && p_ptr->wx == 0);
+
+    /* Confirm the renderer actually highlights the tile about to be clicked. */
+    SDL_FRect tile;
+    assert(sdl_player_map_rect(10, 15, &tile));
+    assert(SDL_SetRenderTarget(g_state.renderer, NULL));
+    assert(SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255));
+    assert(SDL_RenderClear(g_state.renderer));
+    sdl_mouse_path_render();
+    SDL_Rect center = {(int)(tile.x + tile.w / 2), (int)(tile.y + tile.h / 2), 1, 1};
+    SDL_Surface* pixel = SDL_RenderReadPixels(g_state.renderer, &center);
+    Uint8 r, g, b;
+    assert(pixel && SDL_ReadSurfacePixel(pixel, 0, 0, &r, &g, &b, NULL));
+    assert(r || g || b);
+    SDL_DestroySurface(pixel);
+
+    SDL_Event press = map_pointer_event(SDL_EVENT_MOUSE_BUTTON_DOWN,
+        10, 15, SDL_BUTTON_LEFT);
+    SDL_Event release = map_pointer_event(SDL_EVENT_MOUSE_BUTTON_UP,
+        10, 15, SDL_BUTTON_LEFT);
+    sdl_handle_event(&g_state, &press);
+    sdl_handle_event(&g_state, &release);
+    assert(g_mouse_path.follow_active);
+    test_term.xtra_hook = callback_sdl_xtra;
+}
+
+static errr scan_command_motion(int action, int value)
+{
+    if (action == TERM_XTRA_EVENT) {
+        assert(!value && inkey_flag && !g_sdl_blocking_key_wait);
+        SDL_Event motion = map_pointer_event(SDL_EVENT_MOUSE_MOTION, 10, 15, 0);
+        assert(SDL_PushEvent(&motion));
+        assert(!callback_sdl_xtra(action, value));
+        check_hover_and_click();
+    }
+    return 0;
+}
+
+static void check_hover_after_question(bool held_left)
+{
+    int command, dir;
+    popup_move_fixture(false);
+    for (int x = 11; x <= 15; ++x)
+        cave_info[10][x] |= CAVE_MARK | CAVE_SEEN;
+    character_generated = true;
+    term_screen = &test_term;
+    inkey_flag = true;
+    g_sdl_blocking_key_wait = true;
+
+    SDL_Event initial_motion = map_pointer_event(SDL_EVENT_MOUSE_MOTION,
+        10, 14, 0);
+    sdl_handle_event(&g_state, &initial_motion);
+    assert(g_mouse_path.hover_visible && g_mouse_path.path_valid);
+    assert(g_mouse_path.target_y == 10 && g_mouse_path.target_x == 14);
+
+    if (held_left) {
+        SDL_Event left_down = map_pointer_event(SDL_EVENT_MOUSE_BUTTON_DOWN,
+            10, 12, SDL_BUTTON_LEFT);
+        sdl_handle_event(&g_state, &left_down);
+        assert(g_main_map_drag.active && g_main_map_drag.mouse);
+    }
+    SDL_Event right_down = map_pointer_event(SDL_EVENT_MOUSE_BUTTON_DOWN,
+        10, 12, SDL_BUTTON_RIGHT);
+    sdl_handle_event(&g_state, &right_down);
+    assert(g_mouse_path.grid_question_pending);
+
+    release_in_question = held_left;
+    test_term.xtra_hook = dismiss_grid_question;
+    assert(sdl_grid_question_take_command(&command, &dir));
+    assert(command == ' ' && dir == 0 && !sdl_question_menu_is_active());
+    assert(!g_mouse_path.hover_visible && !g_mouse_path.follow_active);
+
+    if (held_left) {
+        SDL_Event motion = map_pointer_event(SDL_EVENT_MOUSE_MOTION, 10, 15, 0);
+        inkey_flag = true;
+        sdl_handle_event(&g_state, &motion);
+        sdl_main_map_flush_pending_pan();
+        check_hover_and_click();
+    } else {
+        g_sdl_blocking_key_wait = false;
+        test_term.xtra_hook = scan_command_motion;
+    }
+
+    request_command();
+    assert(p_ptr->command_cmd == ';' && p_ptr->command_dir == 6);
+    puts(held_left ? "PASS: releasing during a grid question restores preview and movement without panning."
+        : "PASS: the first command scan after a grid question restores preview and movement.");
+    sdl_mouse_path_cancel();
+    g_sdl_blocking_key_wait = false;
+}
+
+static void check_popup_map_hover(const char* edit_dir)
+{
+    assert(SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy"));
+    assert(SDL_InitSubSystem(SDL_INIT_VIDEO));
+    assert(TTF_Init());
+    sdl_config_set_defaults(&config);
+    sdl_config_mark_character_wheel_tutorial_seen();
+    path_build(config.story_font, sizeof(config.story_font), edit_dir,
+        "../xtra/font/EBGaramond-Regular.ttf");
+    SDL_strlcpy(config.story_font2, config.story_font,
+        sizeof(config.story_font2));
+    path_build(config.monospace_font, sizeof(config.monospace_font), edit_dir,
+        "../xtra/font/VictorMono-Medium.ttf");
+    config.mouse_enabled = true;
+    config.mouse_movement_mode = SDL_MOUSE_MOVEMENT_ON;
+    g_state.system_scale = 1;
+    g_state.window = SDL_CreateWindow("Map hover fixture", 960, 576,
+        SDL_WINDOW_FULLSCREEN);
+    assert(g_state.window);
+    g_state.renderer = SDL_CreateRenderer(g_state.window, "software");
+    assert(g_state.renderer);
+    sdl_sync_palette();
+    sdl_view* view = &g_views[PANE_MAIN];
+    view->term_ready = true;
+    view->cols = 80;
+    view->rows = 24;
+    view->cell_w = 12;
+    view->cell_h = 24;
+    view->rect = (SDL_Rect){0, 0, 960, 576};
+    view->canvas = SDL_CreateTexture(g_state.renderer, SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET, 960, 576);
+    assert(view->canvas);
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+    sdl_set_present_suppressed(true);
+    check_hover_after_question(true);
+    check_hover_after_question(false);
+    sdl_ui_text_cache_clear();
+    sdl_story_font_cache_clear();
+    SDL_DestroyRenderer(g_state.renderer);
+    SDL_DestroyWindow(g_state.window);
+    TTF_Quit();
+}
 '''
 
 
 def main():
     engine.OUT = engine.ROOT / "scripts/output/context-popup-timing"
     prefix, main_body = engine.HARNESS.split("int main(int argc,char** argv)", 1)
+    prefix = prefix.split("static void check_templates(void)", 1)[0]
+    prefix = prefix.replace('#include "level-generation/level-generation-internal.h"',
+                            '#include "sdl/main-sdl-private.h"')
+    prefix = prefix.replace("    memset(dun, 0, sizeof(*dun));\n", "")
+    prefix = prefix.replace("    current_build_vault_exact_token=false;\n"
+                            "    current_build_vault_type=0;\n", "")
     initialization = main_body.split("    check_templates();", 1)[0]
     engine.HARNESS = (prefix + CHECKS + "\nint main(int argc,char** argv)"
                       + initialization + "    check_popup_timing();\n"
+                      + "    check_popup_map_hover(argv[1]);\n"
                       + "    SDL_Quit();\n    return 0;\n}\n")
     engine.check_layouts = lambda: None
     engine.main()

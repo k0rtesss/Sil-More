@@ -1194,9 +1194,9 @@ bool project_los_grids(int typ, int dd, int ds, int dif)
 
     bool obvious = false;
 
-    for (y = p_ptr->py - MAX_SIGHT; y < p_ptr->py + MAX_SIGHT; y++)
+    for (y = p_ptr->py - MAX_SIGHT; y <= p_ptr->py + MAX_SIGHT; y++)
     {
-        for (x = p_ptr->px - MAX_SIGHT; x < p_ptr->px + MAX_SIGHT; x++)
+        for (x = p_ptr->px - MAX_SIGHT; x <= p_ptr->px + MAX_SIGHT; x++)
         {
             if (!in_bounds_fully(y, x))
                 continue;

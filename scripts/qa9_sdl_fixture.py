@@ -29,8 +29,9 @@ int main(int argc, char** argv)
     const char* assets = SDL_getenv("CONTROL_TEST_ASSETS");
     const char* profile = SDL_getenv("CONTROL_TEST_PROFILE");
     assert(assets && profile);
-    const char* log_base = SDL_getenv("CONTROL_TEST_LOG_BASE");
-    init_logger(true, log_base ? log_base : argv[0]);
+    assert(SDL_CreateDirectory(profile));
+    const char* log_dir = SDL_getenv("CONTROL_TEST_LOG_DIR");
+    init_logger(true, log_dir ? log_dir : profile);
     ANGBAND_DIR = make_path(assets, "", false);
     ANGBAND_DIR_EDIT = make_path(assets, "edit", false);
     ANGBAND_DIR_FILE = make_path(assets, "file", false);

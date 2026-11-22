@@ -1146,10 +1146,38 @@ SDL_Texture* sdl_load_ttf_font_cells(const char* font_path,
 
 void sdl_window_set_position(int x, int y)
 {
-    if (g_state.window && x >= 0 && y >= 0) {
-        SDL_SetWindowPosition(g_state.window, x, y);
-        log_debug("Window position set to (%d, %d)", x, y);
+    SDL_Rect window = { x, y, 0, 0 };
+    const int min_visible = 32; /* Leave enough of the window to grab it. */
+    int count = 0;
+    bool visible = false;
+
+    /* (-1, -1) is the config default. A display left of or above the primary
+     * can legitimately give a saved window negative coordinates. */
+    if (!g_state.window || (x == -1 && y == -1)
+        || !SDL_GetWindowSize(g_state.window, &window.w, &window.h))
+        return;
+
+    SDL_DisplayID* displays = SDL_GetDisplays(&count);
+    for (int i = 0; i < count; i++) {
+        SDL_Rect bounds, overlap;
+        if ((SDL_GetDisplayUsableBounds(displays[i], &bounds)
+                || SDL_GetDisplayBounds(displays[i], &bounds))
+            && SDL_GetRectIntersection(&window, &bounds, &overlap)
+            && overlap.w >= MIN(min_visible, window.w)
+            && overlap.h >= MIN(min_visible, window.h)) {
+            visible = true;
+            break;
+        }
     }
+    SDL_free(displays);
+    if (!visible) {
+        log_info("Saved window position (%d, %d) is offscreen; centering the window", x, y);
+        x = SDL_WINDOWPOS_CENTERED;
+        y = SDL_WINDOWPOS_CENTERED;
+    }
+
+    if (!SDL_SetWindowPosition(g_state.window, x, y))
+        log_warn("Could not restore window position: %s", SDL_GetError());
 }
 
 bool sdl_window_reassert_fullscreen(cptr reason)

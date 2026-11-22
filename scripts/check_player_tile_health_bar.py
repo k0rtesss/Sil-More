@@ -101,7 +101,7 @@ def main():
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     env.update(SDL_VIDEO_DRIVER="dummy", SDL_RENDER_DRIVER="software", SDL_AUDIO_DRIVER="dummy",
                CONTROL_TEST_ASSETS=str(ROOT / "lib"), HEALTH_TEST_OUTPUT=str(OUT),
-               CONTROL_TEST_LOG_BASE=str(OUT / "check.exe"))
+               CONTROL_TEST_LOG_DIR=str(OUT))
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),

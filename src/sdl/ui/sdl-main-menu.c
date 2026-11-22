@@ -1345,7 +1345,7 @@ static void sdl_main_menu_button_queue_disable_prompt(void)
         return;
 
     g_main_menu_button_disable_prompt_pending = true;
-    Term_keypress('m');
+    sdl_enqueue_bypassed_command('m');
 }
 
 void sdl_main_menu_button_cancel_input(void)
@@ -1705,6 +1705,13 @@ static bool sdl_main_menu_button_run_pending_disable_prompt(void)
 
     if (!g_main_menu_button_disable_prompt_pending)
         return false;
+    /* A right click queues this question for the game loop. A left click
+     * in the same batch must not open it inside the outer command wait. */
+    if (inkey_flag) {
+        if (Term->key_head == Term->key_tail)
+            sdl_enqueue_bypassed_command('m');
+        return true;
+    }
     g_main_menu_button_disable_prompt_pending = false;
 
     options[0]

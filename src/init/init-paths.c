@@ -1,3 +1,7 @@
+#if defined(__linux__) && !defined(__ANDROID__) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "angband.h"
 #include "cloud-saves.h"
 #include "blitz.h"
@@ -24,6 +28,19 @@
 #define SIL_USER_META_DIR "meta"
 #define SIL_USER_META_RUNS "metaruns"
 
+#if !defined(SIL_USE_LOCAL_DATA) && (defined(WINDOWS) || (defined(__linux__) && !defined(__ANDROID__)))
+#define SIL_DESKTOP_PROFILE_FALLBACK
+#ifdef WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+#endif
+
 #ifdef __ANDROID__
 static bool g_android_skip_install_raw_seed = false;
 #endif
@@ -45,6 +62,19 @@ static void strip_trailing_separators(char* path)
     {
         path[--len] = '\0';
     }
+}
+
+static bool build_pref_user_root_path(char* buf, size_t len)
+{
+    char* pref = SDL_GetPrefPath("Sil-QH", SIL_USER_ROOT);
+    if (!pref)
+        return false;
+
+    bool ok = SDL_strlcpy(buf, pref, len) < len;
+    if (ok)
+        strip_trailing_separators(buf);
+    SDL_free(pref);
+    return ok;
 }
 
 static bool build_user_root_path(char* buf, size_t len)
@@ -69,19 +99,248 @@ static bool build_user_root_path(char* buf, size_t len)
     }
 #endif
 
-    char* pref = SDL_GetPrefPath("Sil-QH", SIL_USER_ROOT);
-    if (!pref)
+    return build_pref_user_root_path(buf, len);
+}
+
+#ifdef SIL_DESKTOP_PROFILE_FALLBACK
+/* Check absence separately from access errors. An unreadable directory could
+ * contain a profile and must never be treated as a fresh installation. */
+static bool profile_path_missing(const char* path)
+{
+#ifdef WINDOWS
+    wchar_t* wide = (wchar_t*)SDL_iconv_string("WCHAR_T", "UTF-8",
+        path, SDL_strlen(path) + 1);
+    if (!wide)
+        return false;
+    DWORD attrs = GetFileAttributesW(wide);
+    DWORD error = GetLastError();
+    SDL_free(wide);
+    return attrs == INVALID_FILE_ATTRIBUTES
+        && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND);
+#else
+    struct stat info;
+    return lstat(path, &info) != 0 && errno == ENOENT;
+#endif
+}
+
+typedef enum
+{
+    PROFILE_EMPTY,
+    PROFILE_HAS_PROGRESS,
+    PROFILE_UNKNOWN
+} profile_state;
+
+static profile_state profile_directory_state(const char* path, bool is_meta)
+{
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(path, &info))
+        return profile_path_missing(path) ? PROFILE_EMPTY : PROFILE_UNKNOWN;
+    if (info.type != SDL_PATHTYPE_DIRECTORY)
+        return info.type == SDL_PATHTYPE_FILE ? PROFILE_EMPTY : PROFILE_UNKNOWN;
+
+    int count = 0;
+    char** entries = SDL_GlobDirectory(path, NULL, 0, &count);
+    if (!entries)
+        return PROFILE_UNKNOWN;
+
+    profile_state state = PROFILE_EMPTY;
+    for (int i = 0; i < count; ++i)
+    {
+        char child[1024];
+        if (init_profile_entry_is_placeholder(entries[i]))
+            continue;
+        if (is_meta && streq(entries[i], SIL_USER_META_RUNS)
+            && path_build(child, sizeof(child), path, entries[i])
+            && SDL_GetPathInfo(child, &info)
+            && info.type == SDL_PATHTYPE_DIRECTORY
+            && profile_directory_state(child, false) == PROFILE_EMPTY)
+            continue;
+        if (is_meta && streq(entries[i], "scores.raw")
+            && path_build(child, sizeof(child), path, entries[i])
+            && SDL_GetPathInfo(child, &info)
+            && ((info.type == SDL_PATHTYPE_FILE && !info.size)
+                || (info.type == SDL_PATHTYPE_DIRECTORY
+                    && profile_directory_state(child, false) == PROFILE_EMPTY)))
+            continue;
+        state = PROFILE_HAS_PROGRESS;
+        break;
+    }
+    SDL_free(entries);
+    return state;
+}
+
+static profile_state desktop_profile_state(const char* root)
+{
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(root, &info))
+        return profile_path_missing(root) ? PROFILE_EMPTY : PROFILE_UNKNOWN;
+    if (info.type != SDL_PATHTYPE_DIRECTORY)
+        return info.type == SDL_PATHTYPE_FILE ? PROFILE_EMPTY : PROFILE_UNKNOWN;
+
+    char path[1024];
+    if (!path_build(path, sizeof(path), root, ".sil-more-progress-reset"))
+        return PROFILE_UNKNOWN;
+    if (!profile_path_missing(path))
+        return SDL_GetPathInfo(path, NULL) ? PROFILE_HAS_PROGRESS : PROFILE_UNKNOWN;
+    if (!path_build(path, sizeof(path), root, SIL_USER_SAVE_DIR))
+        return PROFILE_UNKNOWN;
+    profile_state saves = profile_directory_state(path, false);
+    if (saves == PROFILE_HAS_PROGRESS)
+        return saves;
+    if (!path_build(path, sizeof(path), root, SIL_USER_META_DIR))
+        return PROFILE_UNKNOWN;
+    profile_state meta = profile_directory_state(path, true);
+    return meta == PROFILE_EMPTY ? saves : meta;
+}
+
+static bool profile_can_create_file(const char* path)
+{
+    /* Check the operation a fresh profile needs. Directory permission bits
+     * alone do not account for filesystem quotas or application-specific
+     * write filters. Leave no probe behind on ordinary process termination. */
+    char probe[1024];
+#ifdef WINDOWS
+    char leaf[80];
+    strnfmt(leaf, sizeof(leaf), ".sil-more-write-%lu-%llu.tmp",
+        (unsigned long)GetCurrentProcessId(), (unsigned long long)SDL_GetPerformanceCounter());
+    if (!path_build(probe, sizeof(probe), path, leaf))
+        return false;
+    wchar_t* wide = (wchar_t*)SDL_iconv_string("WCHAR_T", "UTF-8",
+        probe, SDL_strlen(probe) + 1);
+    if (!wide)
+        return false;
+    HANDLE file = CreateFileW(wide, GENERIC_WRITE, 0, NULL, CREATE_NEW,
+        FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    SDL_free(wide);
+    if (file == INVALID_HANDLE_VALUE)
+        return false;
+    DWORD written = 0;
+    bool ok = WriteFile(file, "x", 1, &written, NULL) && written == 1 && FlushFileBuffers(file);
+    return CloseHandle(file) && ok;
+#else
+    if (!path_build(probe, sizeof(probe), path, ".sil-more-write-XXXXXX"))
+        return false;
+    int fd = mkstemp(probe);
+    if (fd < 0)
+        return false;
+    bool ok = unlink(probe) == 0 && write(fd, "x", 1) == 1 && fsync(fd) == 0;
+    return close(fd) == 0 && ok;
+#endif
+}
+
+static bool desktop_profile_available(const char* root, char* blocked, size_t len)
+{
+    char save[1024], meta[1024];
+    SDL_strlcpy(blocked, root, len);
+    if (!SDL_CreateDirectory(blocked)
+        || !path_build(save, sizeof(save), root, SIL_USER_SAVE_DIR)
+        || !path_build(meta, sizeof(meta), root, SIL_USER_META_DIR))
+        return false;
+    SDL_strlcpy(blocked, save, len);
+    if (!SDL_CreateDirectory(blocked))
+        return false;
+    SDL_strlcpy(blocked, meta, len);
+    if (!SDL_CreateDirectory(blocked)
+        || !path_build(blocked, len, meta, "scores.raw"))
         return false;
 
-    bool ok = false;
-    if (SDL_strlcpy(buf, pref, len) < len)
+    SDL_PathInfo info;
+    bool fresh_scores = false;
+    if (SDL_GetPathInfo(blocked, &info))
     {
-        strip_trailing_separators(buf);
-        ok = true;
+        if (info.type != SDL_PATHTYPE_FILE)
+            return false;
+        /* Only an empty ledger needs write access to initialize its header. */
+        SDL_IOStream* scores = sdl_fopen(blocked, info.size ? "rb" : "r+b");
+        if (!scores || !SDL_CloseIO(scores))
+            return false;
     }
-    SDL_free(pref);
-    return ok;
+    else
+    {
+        if (!profile_path_missing(blocked) || !profile_can_create_file(meta))
+            return false;
+        fresh_scores = true;
+    }
+
+    if (fresh_scores && !profile_can_create_file(save))
+    {
+        SDL_strlcpy(blocked, save, len);
+        return false;
+    }
+    if (!path_build(blocked, len, meta, META_RAW))
+        return false;
+    if (profile_path_missing(blocked))
+        return fresh_scores || profile_can_create_file(meta);
+    if (!SDL_GetPathInfo(blocked, &info) || info.type != SDL_PATHTYPE_FILE)
+        return false;
+    SDL_IOStream* tales = sdl_fopen(blocked, "rb");
+    return tales && SDL_CloseIO(tales);
 }
+
+static void select_desktop_profile(char* root, size_t len)
+{
+    static char active[1024];
+    if (*active)
+    {
+        SDL_strlcpy(root, active, len);
+        return;
+    }
+    if (!build_user_root_path(root, len)) {
+        init_progress_error("Saved Games / home", "Could not find a location for saved progress.");
+        return;
+    }
+
+    char pref[1024], fallback[1024], blocked[1024];
+    bool has_fallback = build_pref_user_root_path(pref, sizeof(pref))
+        && !streq(root, pref)
+        && path_build(fallback, sizeof(fallback), pref, "alternate-profile");
+    SDL_PathInfo fallback_info;
+    bool resume_alternate = has_fallback && SDL_GetPathInfo(fallback, &fallback_info)
+        && fallback_info.type == SDL_PATHTYPE_DIRECTORY
+        && desktop_profile_state(fallback) != PROFILE_EMPTY;
+    if (!resume_alternate)
+    {
+        if (desktop_profile_available(root, blocked, sizeof(blocked)))
+        {
+            SDL_strlcpy(active, root, sizeof(active));
+            return;
+        }
+        if (!has_fallback || desktop_profile_state(root) != PROFILE_EMPTY)
+        {
+            init_progress_error(blocked, "Could not open the existing save location.");
+            return;
+        }
+        log_warn("Default save location is unavailable: %s", blocked);
+    }
+    if (!desktop_profile_available(fallback, blocked, sizeof(blocked))) {
+        init_progress_error(blocked, "Could not open a writable save location.");
+        return;
+    }
+    if (!resume_alternate && desktop_profile_state(root) != PROFILE_EMPTY) {
+        init_progress_error(root, "The default save location changed while Sil-More was starting.");
+        return;
+    }
+    /* A later cloud download may populate the usual folder. Continue the
+     * active alternate profile without merging or replacing either copy. */
+    if (resume_alternate && desktop_profile_state(root) == PROFILE_HAS_PROGRESS)
+        log_warn("Continuing the local profile at '%s'. The usual save folder '%s' also contains progress.",
+            fallback, root);
+    SDL_strlcpy(root, fallback, len);
+    SDL_strlcpy(active, fallback, sizeof(active));
+    log_info("Using alternate save location: %s", root);
+    if (!resume_alternate)
+    {
+        char message[1280];
+        strnfmt(message, sizeof(message), "Your usual save location is unavailable. "
+            "This game will save your progress here instead:\n\n%s"
+#ifdef SIL_STEAMWORKS
+            "\n\nSteam Cloud synchronizes only your usual save location."
+#endif
+            , root);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sil-More save location", message, NULL);
+    }
+}
+#endif /* SIL_DESKTOP_PROFILE_FALLBACK */
 
 static void ensure_directory_exists(const char* path, const char* label)
 {
@@ -1004,12 +1263,16 @@ void init_file_paths(char* path)
     ANGBAND_DIR_METARUN = str_dup(ANGBAND_DIR_APEX);
 #else
     char user_root[1024];
+#ifdef SIL_DESKTOP_PROFILE_FALLBACK
+    select_desktop_profile(user_root, sizeof(user_root));
+#else
     if (!build_user_root_path(user_root, sizeof(user_root)))
     {
         SDL_strlcpy(user_root, SIL_USER_ROOT, sizeof(user_root));
         log_warn("init_file_paths: defaulting user path to '%s' relative to the working directory",
             user_root);
     }
+#endif
 
     apply_requested_progress_reset(user_root);
     ensure_directory_exists(user_root, "user root");
