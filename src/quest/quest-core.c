@@ -6,6 +6,13 @@
 #include "sdl-config.h"
 #include "quest/quest-internal.h"
 
+/* Resolve trials tied to the departing level before its depth changes. */
+void quests_on_level_departure(void)
+{
+    varda_quest_fail_if_bastion_missed();
+    niena_quest_leave_level();
+}
+
 /*
  * Select a suitable unique monster for the Tulkas quest
  */
@@ -94,6 +101,20 @@ int select_tulkas_quest_target(void)
     return select_tulkas_quest_target_for_depth(p_ptr->depth);
 }
 
+bool quest_artefact_reserved(int a_idx)
+{
+    if (!z_info || a_idx <= 0 || a_idx >= z_info->art_max)
+        return false;
+    if (valar_reserved_artifacts && valar_reserved_artifacts[a_idx])
+        return true;
+
+    /* The assignment is saved with the character. Derive the reservation
+     * from it until the reward is claimed. */
+    return p_ptr && p_ptr->tulkas_prize_a_idx == a_idx
+        && (p_ptr->tulkas_quest == TULKAS_QUEST_ACTIVE
+            || p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE);
+}
+
 /*
  * Select a suitable artifact prize for the Tulkas quest
  */
@@ -113,24 +134,6 @@ int select_tulkas_quest_prize(int target_level)
         return 0;
     }
 
-    if (!valar_reserved_artifacts)
-    {
-        log_trace("valar_reserved_artifacts is NULL! Initializing...");
-
-        /* Initialize the array if it doesn't exist */
-        if (z_info && z_info->art_max > 0) {
-            valar_reserved_artifacts = mem_alloc_array(z_info->art_max, bool);
-            for (int j = 0; j < z_info->art_max; j++) {
-                valar_reserved_artifacts[j] = false;
-            }
-            log_trace("Initialized valar_reserved_artifacts with %d entries", z_info->art_max);
-        } else {
-            log_error("Cannot initialize valar_reserved_artifacts: z_info=%p, art_max=%d",
-                     z_info, z_info ? z_info->art_max : -1);
-            return 0;
-        }
-    }
-
     /* First pass: Look for artifacts with rarity >= 10 within depth constraint */
     for (i = 1; i < z_info->art_max; i++)
     {
@@ -147,7 +150,7 @@ int select_tulkas_quest_prize(int target_level)
             (a_ptr->level >= target_level) &&
             (a_ptr->level <= max_artifact_level) &&
             (a_ptr->cur_num == 0) &&
-            !valar_reserved_artifacts[i])
+            !quest_artefact_reserved(i))
         {
             valid_prizes[count] = i;
             count++;
@@ -172,7 +175,7 @@ int select_tulkas_quest_prize(int target_level)
             if ((a_ptr->rarity >= 10) &&
                 (a_ptr->level >= target_level) &&
                 (a_ptr->cur_num == 0) &&
-                !valar_reserved_artifacts[i])
+                !quest_artefact_reserved(i))
             {
                 valid_prizes[count] = i;
                 count++;
@@ -196,7 +199,7 @@ int select_tulkas_quest_prize(int target_level)
                 /* Must be high rarity and not yet created, ignore level constraint */
                 if ((a_ptr->rarity >= 10) &&
                     (a_ptr->cur_num == 0) &&
-                    !valar_reserved_artifacts[i] &&
+                    !quest_artefact_reserved(i) &&
                     (a_ptr->level > best_level))
                 {
                     best_artifact = i;

@@ -336,7 +336,9 @@
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
 #define R_IDX_ORC_CHAMPION 81
+#define R_IDX_LUG 85
 #define R_IDX_ORC_CAPTAIN 91
+#define R_IDX_OTHROD 105
 #define R_IDX_BARROW_WIGHT 112
 #define R_IDX_ALDOR 117
 #define R_IDX_EASTERLING_SPY 121
@@ -4274,9 +4276,9 @@
 #define NIENA_QUEST_NOT_STARTED 0
 #define NIENA_QUEST_GIVER_PRESENT 1  /* Nienna spawned on maximum-size level */
 #define NIENA_QUEST_ACTIVE 2         /* Accepted quest: must reach stairs down without killing */
-#define NIENA_QUEST_SUCCESS 3        /* Reached stairs without killing (reward granted) */
+#define NIENA_QUEST_SUCCESS 3        /* Reached the downward stair, reward pending */
 #define NIENA_QUEST_REWARDED 4       /* Reward given, quest fully complete */
-#define NIENA_QUEST_FAILED 5         /* Failed by taking a life during the quest */
+#define NIENA_QUEST_FAILED 5         /* Took a life or left the trial level unfinished */
 
 /* Oromë quest states */
 #define OROME_QUEST_NOT_STARTED 0

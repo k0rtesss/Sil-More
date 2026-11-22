@@ -149,11 +149,62 @@ RESOURCE_FEES = {
 SMITH_HELPERS = r'''
 #include <assert.h>
 #include "object/object-difficulty.h"
+#include "player/player-upkeep-internal.h"
+void fixture_smithing_attributes(void)
+{
+    object_type heavy, light, mail, jewellery;
+    int drain;
+    object_prep(&heavy, lookup_kind(TV_SWORD, SV_SHORT_SWORD));
+    object_prep(&light, lookup_kind(TV_BOW, SV_LONG_BOW));
+    object_prep(&mail, lookup_kind(TV_MAIL, SV_MAIL_CORSLET));
+    object_prep(&jewellery, lookup_kind(TV_RING, SV_RING_ACCURACY));
+    p_ptr->stat_base[A_STR] = 5;
+    p_ptr->stat_base[A_DEX] = 2;
+    p_ptr->stat_base[A_GRA] = 4;
+    p_ptr->tmp_dex = 5;
+    p_ptr->stat_drain[A_GRA] = -2;
+    calc_bonuses();
+    assert(p_ptr->stat_use[A_DEX] != 2 && p_ptr->stat_use[A_GRA] != 4);
+    assert(p_ptr->skill_stat_mod[S_SMT] == 6);
+    int shared = p_ptr->skill_use[S_SMT];
+    assert(smithing_item_skill(&heavy) == shared + 3);
+    assert(smithing_item_skill(&light) == shared + 2);
+    assert(smithing_item_skill(&mail) == shared + 2);
+    assert(smithing_item_skill(&jewellery) == shared + 4);
+    p_ptr->stat_base[A_STR] = -5;
+    assert(smithing_item_skill(&heavy) == shared - 2);
+    assert(smithing_item_skill(&light) == shared + 2);
+    p_ptr->stat_base[A_STR] = 5;
+
+    int difficulty = object_difficulty(&heavy);
+    cave_feat[p_ptr->py][p_ptr->px] = FEAT_FORGE_GOOD_HEAD + 3;
+    p_ptr->skill_use[S_SMT] = difficulty - 6;
+    assert(!too_difficult(&heavy));
+    assert(smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
+    assert(drain == 0);
+    p_ptr->stat_base[A_STR] -= 2;
+    assert(too_difficult(&heavy));
+    assert(!smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
+    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = true;
+    assert(!too_difficult(&heavy) && smithing_cost.drain == 1);
+    assert(smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
+    assert(drain == 1);
+    p_ptr->have_ability[S_SPC][SPC_AULE] = true;
+    p_ptr->skill_use[S_SMT] -= 2;
+    assert(!too_difficult(&heavy) && smithing_cost.drain == 2);
+    assert(smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
+    assert(drain == 2);
+
+    p_ptr->innate_ability[S_ARC][ARC_DEX] = true;
+    p_ptr->active_ability[S_ARC][ARC_DEX] = true;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 7);
+    puts("PASS permanent Smithing attributes, craft categories, negative rounding, forge and Reforge thresholds");
+}
 static int draft_stat, draft_before, draft_after;
 void fixture_build_negative_draft(void)
 {
     static const u32b neg[A_MAX]={TR1_NEG_STR,TR1_NEG_DEX,TR1_NEG_CON,TR1_NEG_GRA};
-    static const u32b pos[A_MAX]={TR1_STR,TR1_DEX,TR1_CON,TR1_GRA};
     memset(smith_a_ptr,0,sizeof(*smith_a_ptr));
     SDL_strlcpy(smith_a_ptr->name,"A real negative-stat project",sizeof(smith_a_ptr->name));
     object_prep(smith_o_ptr,lookup_kind(TV_SWORD,SV_SHORT_SWORD));
@@ -164,12 +215,10 @@ void fixture_build_negative_draft(void)
     assert(draft_before==55);
     assert(too_difficult(smith_o_ptr));
     smith_a_ptr->flags1|=neg[draft_stat];
-    smith_bonus_entry entry={0};
-    entry.kind=SMT_BONUS_ENTRY_STAT;entry.index=draft_stat;
-    entry.flag_pos=pos[draft_stat];entry.flag_neg=neg[draft_stat];
-    assert(smith_adjust_bonus_entry(&entry,-1));
+    smith_number_card card={.kind=SMITH_NUMBER_STAT,.index=draft_stat};
+    smith_apply_number(&card,-1);
     assert(object_difficulty(smith_o_ptr)==draft_before-10);
-    assert(smith_adjust_bonus_entry(&entry,-1));
+    smith_apply_number(&card,-2);
     add_artefact_details();
     draft_after=object_difficulty(smith_o_ptr);
     assert(draft_after==33&&object_smithing_difficulty(smith_o_ptr)==33);
@@ -368,12 +417,13 @@ static void real_craft(int stat)
 {
     prepare(3);player_carried_extra_reset_store();
     p_ptr->pcharacter=0;current_character_profile=&c_info[0];
-    p_ptr->skill_base[S_SMT]=200;p_ptr->skill_use[S_SMT]=33;
+    /* The sword gets 20 additional capacity from 20 STR and 20 DEX. */
+    p_ptr->skill_base[S_SMT]=200;p_ptr->skill_use[S_SMT]=13;
     p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]=false;
     for(int a=0;a<ABILITIES_MAX;++a)
         p_ptr->innate_ability[S_SMT][a]=p_ptr->have_ability[S_SMT][a]=true;
     fixture_set_draft_stat(stat);inject_draft=true;
-    long exp=p_ptr->new_exp;keys="222222\r";do_cmd_smithing_screen();
+    long exp=p_ptr->new_exp;keys="bQF";do_cmd_smithing_screen();
     assert(!*keys&&!inject_draft&&fixture_draft_rating()==33);
     assert(p_ptr->smithing==330&&p_ptr->smithing_leftover==330);
     assert(p_ptr->new_exp==exp&&forge_uses(5,5)==3);
@@ -393,6 +443,9 @@ static void real_craft(int stat)
 }
 static void difficulty_checks(void)
 {
+    scenario="Smithing attributes";prepare(3);
+    p_ptr->pcharacter=0;current_character_profile=&c_info[0];
+    fixture_smithing_attributes();
     scenario="unified difficulty";prepare(30);
     p_ptr->pcharacter=0;current_character_profile=&c_info[0];
     p_ptr->skill_use[S_SMT]=p_ptr->skill_base[S_SMT]=1000;
@@ -439,8 +492,16 @@ def main():
     init = init[:init.index("    check_templates();")]
     work = CHECKS[:CHECKS.index("static void checks(void)")]
     work = work.replace('char __wrap_inkey(void)\n{',
-        'char __wrap_inkey(void)\n{\n    if(inject_draft){inject_draft=false;fixture_build_negative_draft();}')
-    declarations = "static bool inject_draft;\nvoid fixture_build_negative_draft(void);\n"
+        'char __wrap_inkey(void)\n{\n'
+        # Inject on a no-op at the first editor frame so the actual next
+        # render measures the modified draft before accepting the craft.
+        "    if(inject_draft && !inkey_scan && keys && *keys=='Q')"
+        '{inject_draft=false;fixture_build_negative_draft();}')
+    declarations = (
+        "static bool inject_draft;\n"
+        "void fixture_build_negative_draft(void);\n"
+        "void fixture_smithing_attributes(void);\n"
+    )
     tests = TESTS.replace("static bool inject_draft;\n", "")
     source = OUT / "check.c"
     source.write_text(prefix + declarations + work + tests + init

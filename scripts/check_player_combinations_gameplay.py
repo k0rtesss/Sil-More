@@ -390,7 +390,7 @@ def crafting_expeditions(c):
                     s.press("Escape")
                     before_work_light = s.p["light"]
                     before_work_fuel = next(o["timeout"] for o in s.p["items"] if o["kind"] == 128)
-                    if craft == "smith": s.press("0", "a", "a", "a", "g")
+                    if craft == "smith": s.press("0", "a", "F")
                     else: s.press("-", "a")
                     if s.p["fixture_work_pause"]:
                         if craft == "smith" and not low_voice:

@@ -15,8 +15,8 @@ CHECKS = r'''
 #include "achievements.h"
 #include "metarun.h"
 static int created, rewarded, stories, marks, unlocks, removed;
-void __wrap_create_chosen_artefact(byte id, int y, int x, bool identified)
-{ assert(id == 1 && y == p_ptr->py && x == p_ptr->px && identified); ++created; }
+bool __wrap_create_quest_reward_artefact(byte id, int y, int x, bool tulkas_prize)
+{ assert(id == 1 && y == p_ptr->py && x == p_ptr->px && tulkas_prize); ++created; return true; }
 void __wrap_apply_quest_rewards(int id) { assert(id == QUEST_ID_TULKAS); ++rewarded; }
 void __wrap_metarun_mark_quest_completed(u32b flag)
 { assert(flag == METARUN_QUEST_TULKAS); ++marks; }
@@ -38,14 +38,11 @@ static void tests(void)
     p_ptr->tulkas_quest = TULKAS_QUEST_COMPLETE;
     p_ptr->tulkas_target_r_idx = 51; p_ptr->tulkas_prize_a_idx = 1;
     p_ptr->tulkas_quest_complete = 1; turn = 1234;
-    if (!valar_reserved_artifacts)
-        valar_reserved_artifacts = mem_alloc_array(z_info->art_max, bool);
-    assert(valar_reserved_artifacts);
-    valar_reserved_artifacts[1] = true;
+    assert(quest_artefact_reserved(1));
     tulkas_quest_interaction();
     assert(p_ptr->tulkas_quest == TULKAS_QUEST_REWARDED);
     assert(p_ptr->tulkas_target_r_idx == 51 && p_ptr->tulkas_prize_a_idx == 1);
-    assert(!p_ptr->tulkas_quest_complete && !valar_reserved_artifacts[1]);
+    assert(!p_ptr->tulkas_quest_complete && !quest_artefact_reserved(1));
     assert(created == 1 && rewarded == 1 && stories == 1 && marks == 1 && unlocks == 1 && removed == 1);
     ++turn; tulkas_quest_interaction();
     assert(created == 1 && rewarded == 1 && stories == 1 && marks == 1 && unlocks == 1 && removed == 1);
@@ -64,7 +61,8 @@ def main():
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith(
-        ("/src/main.c.obj", "/src/quest/valar/tulkas-varda.c.obj"))), encoding="utf-8")
+        ("/src/main.c.obj", "/src/quest/quest-core.c.obj",
+         "/src/quest/valar/tulkas-varda.c.obj"))), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / p) for p in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
@@ -72,10 +70,11 @@ def main():
     env.update(SDL_VIDEO_DRIVER="dummy", SDL_RENDER_DRIVER="software",
                SDL_AUDIO_DRIVER="dummy", CONTROL_TEST_ASSETS=str(ROOT / "lib"))
     exe = OUT / "check.exe"
-    wraps = ("create_chosen_artefact", "apply_quest_rewards", "metarun_mark_quest_completed",
+    wraps = ("create_quest_reward_artefact", "apply_quest_rewards", "metarun_mark_quest_completed",
              "metarun_unlock_oath", "remove_quest_giver", "sil_achievements_on_event", "quest_minimum_dialogue")
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
+        str(ROOT / "src/quest/quest-core.c"),
         str(ROOT / "src/quest/valar/tulkas-varda.c"), "@" + str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap=" + name for name in wraps),
         "-o", str(exe)], cwd=BUILD, env=env, check=True)

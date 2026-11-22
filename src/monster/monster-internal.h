@@ -55,4 +55,8 @@ void monster_recall_show_hallucination_block(void);
  */
 int random_r_idx(void);
 
+/* Place a monster only if its initial possession can also be allocated. */
+s16b monster_place_carrying(int y, int x, monster_type* n_ptr,
+    const object_type* possession);
+
 #endif /* INCLUDED_MONSTER_INTERNAL_H */

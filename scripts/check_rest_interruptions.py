@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise rest interruptions through production food, alarm and movement code.
+"""Exercise running, resting and interruptions through production gameplay code.
 
 Build Windows first. Uses isolated template data and the real engine objects;
 no player save, personal configuration or interactive window is opened.
@@ -17,10 +17,17 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/rest-interruptions"
 
 CHECKS = r'''
+#include "cave/cave.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
 
 static int notices;
+void __real_run_step(int dir);
+void __wrap_run_step(int dir)
+{
+    assert(dir != 5); /* Running in place is the rest shortcut. */
+    __real_run_step(dir);
+}
 void __wrap_msg_print(cptr text) { if (text) ++notices; }
 void __wrap_msg_format(cptr format, ...) { if (format) ++notices; }
 void __wrap_message_flush(void) {}
@@ -183,6 +190,81 @@ static void check_danger(void)
     r_info[m->r_idx].flags4 = saved_spells;
     puts("Immediate danger: damage, adjacent melee and harmful screech still interrupt with alarm ignoring enabled: PASS");
 }
+
+static void run_map(int y, int x)
+{
+    memset(p_ptr, 0, sizeof(*p_ptr));
+    reset_map(5);
+    p_ptr->cur_map_hgt = 12;
+    p_ptr->cur_map_wid = 16;
+    for (int row = 0; row < 12; row++) {
+        for (int col = 0; col < 16; col++) {
+            cave_feat[row][col] = FEAT_WALL_EXTRA;
+            cave_info[row][col] = CAVE_WALL | CAVE_MARK;
+        }
+    }
+    p_ptr->py = y; p_ptr->px = x;
+    p_ptr->playing = true;
+    p_ptr->chp = p_ptr->mhp = 100;
+    p_ptr->food = PY_FOOD_FULL;
+    cave_m_idx[y][x] = -1;
+    cave_set_feat(y, x, FEAT_FLOOR);
+    cave_info[y][x] |= CAVE_MARK;
+}
+
+static void check_edge_run(void)
+{
+    /* The southeast corridor turns east at the southern perimeter. */
+    run_map(9, 6);
+    cave_set_feat(10, 7, FEAT_FLOOR);
+    cave_set_feat(10, 8, FEAT_FLOOR);
+    cave_set_feat(10, 9, FEAT_FLOOR);
+    p_ptr->command_dir = 3;
+    do_cmd_run();
+    assert(p_ptr->py == 10 && p_ptr->px == 7 && p_ptr->running);
+
+    /* Padding beyond a small level must not affect the route. */
+    cave_m_idx[12][8] = 1;
+    mon_list[1].r_idx = 1;
+    mon_list[1].ml = true;
+    u32b old_flags = r_info[1].flags1;
+    r_info[1].flags1 |= RF1_NEVER_MOVE;
+    run_step(0);
+    assert(p_ptr->py == 10 && p_ptr->px == 8 && p_ptr->running);
+    r_info[1].flags1 = old_flags;
+    puts("Run follows a corridor bend at the map perimeter: PASS");
+}
+
+static void check_run_in_place(void)
+{
+    run_map(6, 6);
+    p_ptr->command_dir = 5;
+    p_ptr->command_arg = 7;
+    do_cmd_run();
+    assert(p_ptr->resting == 7 && p_ptr->running == 0 && p_ptr->focused);
+    assert(p_ptr->energy_use == 100 && p_ptr->py == 6 && p_ptr->px == 6);
+    puts("Choosing the current square with Run starts a timed rest: PASS");
+}
+
+static void check_run_past_illusion(void)
+{
+    for (int light = 0; light <= 3; light += 3) {
+        run_map(6, 5);
+        for (int x = 4; x <= 10; x++) cave_set_feat(6, x, FEAT_FLOOR);
+        cave_set_feat(5, 7, FEAT_ILLUSORY_WALL);
+        cave_info[5][7] |= CAVE_MARK | CAVE_SEEN;
+        cave_light[5][7] = light;
+        assert((cave_illusion_opacity(5, 7) == 255) == !light);
+        p_ptr->command_dir = 6;
+        do_cmd_run();
+        assert(p_ptr->px == 6 && p_ptr->running);
+        run_step(0);
+        assert(p_ptr->px == (light ? 6 : 7));
+        assert((p_ptr->running > 0) == !light);
+        assert(cave_feat[5][7] == FEAT_ILLUSORY_WALL);
+    }
+    puts("Running passes an opaque illusory wall and notices one revealed by light: PASS");
+}
 '''
 
 
@@ -195,6 +277,7 @@ def main():
     init = init[:init.index("    check_templates();")]
     source = OUT / "check.c"
     source.write_text(prefix + CHECKS + init + """
+    check_edge_run(); check_run_in_place(); check_run_past_illusion();
     check_food(); check_alarms(); check_resonance(); check_danger();
     SDL_Quit(); return 0;
 }
@@ -208,7 +291,7 @@ def main():
         *(str(BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
         "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
-    wrappers = ("msg_print", "msg_format", "message_flush", "handle_stuff")
+    wrappers = ("msg_print", "msg_format", "message_flush", "handle_stuff", "run_step")
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
                     "@" + str(response), "@CMakeFiles/sil-more.dir/linkLibs.rsp",

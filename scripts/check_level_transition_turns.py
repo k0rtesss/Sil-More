@@ -20,9 +20,12 @@ CHECKS = r'''
 #define assert(expr) do { if (!(expr)) { fprintf(stderr, "%s: assertion failed: %s (%d)\n", scenario, #expr, __LINE__); exit(1); } } while (0)
 static const char *scenario = "initialization";
 static int requests, commands, action;
-static bool allow_confirmation;
+static int oath_curses;
+static bool allow_confirmation, accept_oath;
 extern void process_player(void);
 bool __wrap_varda_quest_confirm_leave_bastion(void) { return allow_confirmation; }
+bool __wrap_get_check_oath_multiline(cptr prompt) { (void)prompt; return accept_oath; }
+void __wrap_apply_oath_breaking_curse(int oath) { assert(oath == OATH_IRON); oath_curses++; }
 void __wrap_request_command(void)
 {
     requests++;
@@ -68,7 +71,8 @@ static void prepare(const char *name, int feature, int chosen_action)
     cave_feat[5][5] = feature;
     playerturn = 50; min_depth_counter = 0;
     character_dungeon = character_generated = true;
-    requests = commands = 0; action = chosen_action; allow_confirmation = true;
+    requests = commands = oath_curses = 0; action = chosen_action;
+    allow_confirmation = accept_oath = true;
 }
 static void run(bool paid, int expected_depth)
 {
@@ -89,6 +93,20 @@ static void checks(void)
     prepare("Refused ascent without stairs is free", FEAT_FLOOR, 1); run(false, 10);
     prepare("Refused descent without stairs is free", FEAT_FLOOR, 2); run(false, 10);
     prepare("Cancelled stair confirmation is free", FEAT_MORE, 2); allow_confirmation = false; run(false, 10);
+    prepare("Cancelling the final ascent prompt preserves the Iron oath", FEAT_LESS, 1);
+    p_ptr->oath_type = OATH_IRON; allow_confirmation = false; run(false, 10);
+    assert(!oath_invalid(OATH_IRON) && !oath_curses);
+    prepare("Declining to break the Iron oath is free", FEAT_LESS, 1);
+    p_ptr->oath_type = OATH_IRON; accept_oath = false; run(false, 10);
+    assert(!oath_invalid(OATH_IRON) && !oath_curses);
+    prepare("Confirmed ascent breaks the Iron oath once", FEAT_LESS, 1);
+    p_ptr->oath_type = OATH_IRON; run(true, 9);
+    assert(oath_invalid(OATH_IRON) && oath_curses == 1);
+    prepare("A blocked throne-room exit preserves the Iron oath", FEAT_LESS, 1);
+    p_ptr->depth = MORGOTH_DEPTH; p_ptr->morgoth_hall_entered = true;
+    p_ptr->oath_type = OATH_IRON; do_cmd_go_up();
+    assert(p_ptr->depth == MORGOTH_DEPTH && !p_ptr->leaving && p_ptr->energy_use == 100);
+    assert(!oath_invalid(OATH_IRON) && !oath_curses);
     prepare("Quit exit is free", FEAT_FLOOR, 3); run(false, 10);
     prepare("Save then quit remains free", FEAT_FLOOR, 4); run(false, 10);
     prepare("Wizard jump exit is free", FEAT_FLOOR, 5); run(false, 12);
@@ -117,7 +135,8 @@ def main():
         '@CMakeFiles/sil-more.dir/includes_C.rsp', str(source), '@' + str(response),
         '@CMakeFiles/sil-more.dir/linkLibs.rsp',
         *(f'-Wl,--wrap={name}' for name in ('request_command', 'process_command',
-            'varda_quest_confirm_leave_bastion', 'get_sdl_config_path')),
+            'varda_quest_confirm_leave_bastion', 'get_sdl_config_path',
+            'get_check_oath_multiline', 'apply_oath_breaking_curse')),
         '-o', str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix='fixture-', dir=OUT) as state:
         subprocess.run([str(exe), str(ROOT / 'lib/edit'), state], cwd=state, env=env, check=True, timeout=15)

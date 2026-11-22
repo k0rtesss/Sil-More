@@ -39,6 +39,28 @@ static void check_blocked_descent(int depth, int feat)
     assert(!p_ptr->create_stair);
 }
 
+static void check_collapsing_stairs(void)
+{
+    const int stairs[] = { FEAT_LESS, FEAT_LESS_SHAFT, FEAT_MORE, FEAT_MORE_SHAFT };
+    for (int i = 0; i < 4; i++) {
+        for (int minimum = 1; minimum <= 12; minimum += 11) {
+            travel_fixture(10, stairs[i]);
+            min_depth_counter = (minimum - 1) * 150000;
+            assert(min_depth() == minimum);
+            p_ptr->staircasiness = 10000;
+            if (i < 2) do_cmd_go_up(); else do_cmd_go_down();
+            assert(p_ptr->chp < 100 && !p_ptr->is_dead);
+            assert(p_ptr->depth == MAX(i == 3 ? 12 : 11, minimum));
+            assert(!p_ptr->create_stair && p_ptr->stairs_taken == 1 && p_ptr->energy_use == 100);
+        }
+    }
+    travel_fixture(MORGOTH_DEPTH, FEAT_LESS_SHAFT);
+    p_ptr->staircasiness = 10000;
+    do_cmd_go_up();
+    assert(p_ptr->depth == MORGOTH_DEPTH && p_ptr->chp < 100 && !p_ptr->create_stair);
+    puts("Collapsing stairs descend from their starting floor, respect minimum depth and stop at the throne: PASS");
+}
+
 static void check_utumno_travel(void)
 {
     /* Shafts never follow ordinary +1/+2 routing at the throne depth. */
@@ -188,7 +210,7 @@ def main():
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
     begin = harness.index("    check_templates();", harness.index("int main("))
     end = harness.index("    SDL_Quit();", begin)
-    harness = harness[:begin] + "    check_utumno_travel();\n    check_utumno_earthquakes();\n" + harness[end:]
+    harness = harness[:begin] + "    check_collapsing_stairs();\n    check_utumno_travel();\n    check_utumno_earthquakes();\n" + harness[end:]
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())

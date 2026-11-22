@@ -224,4 +224,4 @@ W:"It is done," she said. "The stolen light is free, and the bastion of Duruin i
 W:
 W:"You went down into the deepest dark to set a light free, and asked nothing first. That is a deed after my own heart, and it shall not go unrewarded, nor unremembered."
 W:
-W:"Choose now one lamp of my blessing, and bear it with you through the long night that yet lies ahead. But if you would keep its radiance undimmed, then swear the Oath of Light, and shun thereafter all shadowed and unhallowed gear; for my gifts endure only in the hearts that remain true to them."
+W:"If a lamp of my blessing remains, choose one now, and bear it with you through the long night that yet lies ahead. If you would keep the freed light undimmed, then swear the Oath of Light, and shun thereafter all shadowed and unhallowed gear; for my gifts endure only in the hearts that remain true to them."

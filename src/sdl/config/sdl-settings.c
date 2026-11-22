@@ -3873,10 +3873,15 @@ int sdl_terminal_menu_font_px(void)
         if (!sdl_rect_has_area(&screen))
             return 0;
         fit_px = MIN(2 * (screen.w / cols) + 1, screen.h / rows);
+        /* A work order is a reading surface. Give its two columns a
+         * comfortable measure on a large display, keeping the menu zoom. */
+        int reading_px = title_px;
+        if (menu == SDL_MENU_FONT_SMITHING)
+            reading_px = MAX(reading_px, MIN(2 * (screen.w / 104), screen.h / 31));
         /* Between integer map scales, use the semantic reading size while
          * retaining the established desktop minimum grid. Each negative
          * per-menu offset remains an actual smaller text choice. */
-        return MAX(min_px, MIN(title_px, fit_px)
+        return MAX(min_px, MIN(reading_px, fit_px)
             + offset * MAX(1, title_px - body_px));
     }
 #endif

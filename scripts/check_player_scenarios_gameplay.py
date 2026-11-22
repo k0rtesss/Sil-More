@@ -619,7 +619,7 @@ def inventory(c: Campaign):
 def work(c: Campaign):
     for pause in (1,3,8):
         def smith(s,pause=pause):
-            s.press('0','a','a','a','g')
+            s.press('0','a','F')
             assert s.p['fixture_work_pause'] and s.p['smithing_leftover']==10-pause,s.brief()
             s.press('Escape')
             assert not s.p['smithing'] and s.p['smithing_leftover']==10-pause
@@ -657,7 +657,7 @@ def ui_rng(c: Campaign):
         ('settings',('O',)),('quests',('m','t')),('achievements',('m','v')),
         ('tale',('m','y')),('statistics',('m','g')),('tutorials',('m','u')),
         ('halls',('m','d')),('about',('m','b')),
-        ('smith-root',('0',)),('smith-draft',('0','a','a','a')),
+        ('smith-root',('0',)),('smith-draft',('0','a')),
         ('redraw',('Ctrl+r',)),('hallucination-redraw',('Ctrl+r',)),
         ('hallucination-ascii',('Ctrl+r',))]
     for name,keys in views:

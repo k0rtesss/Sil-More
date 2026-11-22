@@ -1176,6 +1176,11 @@ typedef struct main_map_drag_state {
     float pinch_y;
     float pinch_start_distance;
     int pinch_start_scale;
+    int run_dir;
+    int run_y;
+    int run_x;
+    Uint64 run_deadline_ns;
+    bool run_ready;
 } main_map_drag_state;
 
 enum {
@@ -2460,6 +2465,10 @@ bool sdl_main_map_point_to_drag_map(float x, float y);
 bool sdl_main_map_apply_pan(int pan_dy, int pan_dx);
 void sdl_main_map_cancel_drag(void);
 void sdl_main_map_mark_dragged(void);
+bool sdl_main_map_handle_run_cancel_event(const SDL_Event* ev);
+void sdl_main_map_cancel_run_press(void);
+int sdl_main_map_run_pending_timeout_ms(Uint64 now_ns);
+void sdl_main_map_flush_pending_run(Uint64 now_ns);
 float sdl_main_map_pinch_distance(void);
 int sdl_main_map_zoom_delta_for_pinch_ratio(float ratio);
 void sdl_main_map_update_pinch(void);
@@ -3134,6 +3143,7 @@ char sdl_direction_char_for_key(int key);
 int sdl_direction_for_key_char(char ch);
 bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift, bool ctrl, bool alt, bool gui);
 bool sdl_try_send_modified_direction_key(int key, bool shift, bool ctrl, bool alt, bool gui);
+bool sdl_submit_legacy_keypad_movement(u16b action, int dir);
 bool sdl_try_send_movement_event(const SDL_KeyboardEvent* key_event);
 bool sdl_try_send_shadowed_command_event(const SDL_KeyboardEvent* key_event);
 bool sdl_try_send_preset_command_alias(const SDL_KeyboardEvent* key_event);

@@ -65,14 +65,43 @@ static void checks(void)
     const char* scenario=getenv("JOURNEY_SCENARIO");assert(scenario);
     bool positive=false;
     int target=SIL_ACH_NO_STEPS_REQUIRED;
-    if(!strncmp(scenario,"route-",6)) {
+    if(!strncmp(scenario,"fall-",5)) {
+        const char* mode = scenario + 5;
+        const int depth = 5;
+        p_ptr->depth = depth;
+        p_ptr->chp = 1;
+        p_ptr->staircasiness = 10000;
+        bool rescued = !strcmp(mode, "amulet");
+        if (rescued) {
+            item(&inventory[INVEN_NECK], TV_AMULET, SV_AMULET_LAST_CHANCES, 1);
+            p_ptr->equip_cnt = 1;
+        }
+        if (!strcmp(mode, "up") || !strcmp(mode, "blocked-up")) {
+            if (!strcmp(mode, "blocked-up")) min_depth_counter = 4 * 150000;
+            cave_feat[p_ptr->py][p_ptr->px] = FEAT_LESS;
+            do_cmd_go_up();
+        } else if (!strcmp(mode, "down")) {
+            cave_feat[p_ptr->py][p_ptr->px] = FEAT_MORE;
+            do_cmd_go_down();
+        } else if (!strcmp(mode, "horn")) {
+            object_type horn; item(&horn, TV_HORN, SV_HORN_BLASTING, 1);
+            assert(fixture_horn(&horn));
+        } else {
+            cave_feat[p_ptr->py][p_ptr->px] = !strcmp(mode, "chasm") ? FEAT_CHASM : FEAT_TRAP_false_FLOOR;
+            hit_trap(p_ptr->py, p_ptr->px);
+        }
+        assert(p_ptr->leaving && p_ptr->is_dead == !rescued);
+        assert(p_ptr->depth == (rescued ? depth + 1 : depth));
+        if (!rescued) assert(!p_ptr->stairs_taken && !p_ptr->create_rubble && route());
+    }
+    else if(!strncmp(scenario,"route-",6)) {
         const char* mode=scenario+6;
         assert(route());
         if(!strcmp(mode,"stairs")) { down(FEAT_MORE);assert(p_ptr->depth==2&&!route()); }
         else if(!strcmp(mode,"cancel")) {
-            p_ptr->niena_quest=NIENA_QUEST_ACTIVE;confirm_travel=false;
+            p_ptr->aule_quest=AULE_QUEST_ACTIVE;confirm_travel=false;
             down(FEAT_MORE);assert(p_ptr->depth==1&&route());
-            p_ptr->niena_quest=NIENA_QUEST_NOT_STARTED;confirm_travel=true;positive=true;
+            p_ptr->aule_quest=AULE_QUEST_NOT_STARTED;confirm_travel=true;positive=true;
         }
         else if(!strcmp(mode,"up")) {
             down(FEAT_MORE_SHAFT);assert(p_ptr->depth==3);
@@ -223,11 +252,15 @@ static void checks(void)
     }
     else assert(false);
     sil_achievements_flush();assert(sil_achievements_saved());
-    printf("PASS %s: %s\n",scenario,positive?"unlocked":"excluded");
+    if (!strncmp(scenario, "fall-", 5))
+        printf("PASS %s: %s\n", scenario, p_ptr->is_dead ? "death at the recorded depth" : "rescued and descended");
+    else
+        printf("PASS %s: %s\n",scenario,positive?"unlocked":"excluded");
 }
 '''
 
 SCENARIOS = (
+    *("fall-" + x for x in ("chasm", "false-floor", "horn", "up", "blocked-up", "down", "amulet")),
     *("route-" + x for x in ("stairs", "false-floor", "teleport", "horn", "legacy",
                               "wizard", "practice", "tainted", "cheat", "score", "dead",
                               "shaft", "cancel", "up", "chasm")),

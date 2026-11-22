@@ -7,6 +7,11 @@
 #include "metarun.h"
 #include "sdl-config.h"
 
+static bool player_has_mandos_doom(void)
+{
+    return p_ptr->have_ability[S_SPC][SPC_MANDOS];
+}
+
 /*
  * The saving throw is a will skill check.
  *
@@ -188,6 +193,9 @@ bool set_blind(int v)
  * confused */
 bool allow_player_confusion(monster_type* m_ptr)
 {
+    if (player_has_mandos_doom())
+        return false;
+
     /* Túrin character resistance check first */
     if (turin_resist_bad_effect())
     {
@@ -207,6 +215,9 @@ bool allow_player_confusion(monster_type* m_ptr)
 bool set_confused(int v)
 {
     bool notice = false;
+
+    if (v > 0 && player_has_mandos_doom())
+        v = 0;
 
     /* Hack -- Force good values */
     v = (v > 10000) ? 10000 : (v < 0) ? 0 : v;
@@ -499,7 +510,7 @@ bool set_poisoned(int v)
 bool allow_player_fear(monster_type* m_ptr)
 {
     // rage is incompatible with fear -- more than just a resistance
-    if (p_ptr->rage)
+    if (p_ptr->rage || player_has_mandos_doom())
         return (false);
 
     /* Túrin character resistance check first */
@@ -515,6 +526,9 @@ bool allow_player_fear(monster_type* m_ptr)
 bool set_afraid(int v)
 {
     bool notice = false;
+
+    if (v > 0 && player_has_mandos_doom())
+        v = 0;
 
     /* Hack -- Force good values */
     v = (v > 10000) ? 10000 : (v < 0) ? 0 : v;
@@ -568,6 +582,9 @@ bool set_afraid(int v)
  */
 bool allow_player_entrancement(monster_type* m_ptr)
 {
+    if (player_has_mandos_doom())
+        return false;
+
     /* Túrin character resistance check first */
     if (turin_resist_bad_effect())
     {
@@ -584,6 +601,9 @@ bool allow_player_entrancement(monster_type* m_ptr)
 bool set_entranced(int v)
 {
     bool notice = false;
+
+    if (v > 0 && player_has_mandos_doom())
+        v = 0;
 
     /* Hack -- Force good values */
     v = (v > 10000) ? 10000 : (v < 0) ? 0 : v;
@@ -636,7 +656,8 @@ bool set_entranced(int v)
  * hallucinate */
 bool allow_player_image(monster_type* m_ptr)
 {
-    return (allow_player_aux(m_ptr, p_ptr->resist_hallu, TR2_RES_HALLU));
+    return !player_has_mandos_doom()
+        && allow_player_aux(m_ptr, p_ptr->resist_hallu, TR2_RES_HALLU);
 }
 
 /*
@@ -648,6 +669,9 @@ bool allow_player_image(monster_type* m_ptr)
 bool set_image(int v)
 {
     bool notice = false;
+
+    if (v > 0 && player_has_mandos_doom())
+        v = 0;
 
     /* Hack -- Force good values */
     v = (v > 10000) ? 10000 : (v < 0) ? 0 : v;
@@ -813,6 +837,9 @@ bool set_slow(int v)
 bool set_rage(int v)
 {
     bool notice = false;
+
+    if (v > 0 && player_has_mandos_doom())
+        v = 0;
 
     /* Hack -- Force good values */
     v = (v > 10000) ? 10000 : (v < 0) ? 0 : v;
@@ -1428,7 +1455,8 @@ bool set_oppose_pois(int v)
  */
 bool allow_player_stun(monster_type* m_ptr)
 {
-    return (allow_player_aux(m_ptr, p_ptr->resist_stun, TR2_RES_STUN));
+    return !player_has_mandos_doom()
+        && allow_player_aux(m_ptr, p_ptr->resist_stun, TR2_RES_STUN);
 }
 
 /*
@@ -1441,6 +1469,9 @@ bool set_stun(int v)
     int old_aux, new_aux;
 
     bool notice = false;
+
+    if (v > 0 && player_has_mandos_doom())
+        v = 0;
 
     /*  Don't increase stunning if stunning value is greater than 100.
      *  this is an effort to eliminate the "knocked out" instadeath.

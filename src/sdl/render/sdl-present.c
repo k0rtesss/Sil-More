@@ -13,6 +13,304 @@ typedef struct {
 
 static left_panel_render_cache g_left_panel_render_cache;
 
+static struct {
+    bool active;
+    int modal_depth;
+    int tabs_row;
+    int body_row;
+    int divider_col;
+    int summary_row;
+    int footer_row;
+} smithing_sheet;
+
+static struct {
+    SDL_Rect cells;
+    int modal_depth;
+    byte attr;
+    char glyph;
+} smithing_artwork;
+
+void sdl_smithing_artwork_clear(void)
+{
+    if (smithing_artwork.cells.w == 0)
+        return;
+
+    smithing_artwork.cells = (SDL_Rect){ 0 };
+    g_state.need_present = true;
+}
+
+void sdl_smithing_sheet_set(int tabs_row, int body_row, int divider_col,
+    int summary_row, int footer_row)
+{
+    const sdl_view* view = &g_views[PANE_MAIN];
+
+    if (!view->term_ready || Term != &view->t)
+        return;
+
+    smithing_sheet.active = true;
+    smithing_sheet.modal_depth = character_icky;
+    smithing_sheet.tabs_row = tabs_row;
+    smithing_sheet.body_row = body_row;
+    smithing_sheet.divider_col = divider_col;
+    smithing_sheet.summary_row = summary_row;
+    smithing_sheet.footer_row = footer_row;
+    g_state.need_present = true;
+}
+
+void sdl_smithing_sheet_clear(void)
+{
+    sdl_smithing_artwork_clear();
+    if (smithing_sheet.active) {
+        smithing_sheet.active = false;
+        g_state.need_present = true;
+    }
+}
+
+static void sdl_smithing_rule(float x, float y, float w, float h, Uint8 alpha)
+{
+    SDL_Color color = sdl_color_from_attr(TERM_SLATE);
+    SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g, color.b, alpha);
+    SDL_RenderFillRect(g_state.renderer, &(SDL_FRect){ x, y, w, h });
+}
+
+static TTF_Font* sdl_smithing_face(int px, int height)
+{
+    TTF_Font* font = sdl_story_font_for_height_slot(px, SDL_STORY_FONT_SLOT_DEFAULT);
+    if (font && TTF_GetFontHeight(font) > height) {
+        px = MAX(1, px * height / TTF_GetFontHeight(font));
+        font = sdl_story_font_for_height_slot(px, SDL_STORY_FONT_SLOT_DEFAULT);
+    }
+    return font;
+}
+
+static bool sdl_smithing_blank(const term_win* scr, int col, int row)
+{
+    const SDL_Rect* art = &smithing_artwork.cells;
+    if (smithing_artwork.modal_depth == character_icky &&
+        col >= art->x && col < art->x + art->w &&
+        row >= art->y && row < art->y + art->h)
+        return false;
+    return scr->c[row][col] == ' ' && scr->a[row][col] < TERM_UI_SELECTED;
+}
+
+/* Reuse a blank cell from the same canvas to match the user's background.
+ * The caller checks all neighboring content before clearing the original. */
+static void sdl_smithing_replace_ink(const sdl_view* view, int row,
+    int length, SDL_Texture* texture, SDL_FRect dst)
+{
+    const int cw = view->cell_w, ch = view->cell_h;
+    SDL_FRect sample = { 0, (float)(row * ch), (float)cw, (float)ch };
+    SDL_FRect erase = { dst.x, (float)(view->rect.y + view->margin_y + row * ch),
+        (float)(length * cw), (float)ch };
+    SDL_RenderTexture(g_state.renderer, view->canvas, &sample, &erase);
+    sdl_ui_render_text_texture(texture, NULL, &dst);
+}
+
+/* The term still owns the title. Replace the ink only when its displayed
+ * cells and adjacent whitespace can accommodate the configured story face. */
+static void sdl_render_smithing_title(const sdl_view* view, int cols, int rows,
+    float x, float y)
+{
+    const char title[] = "Smithing";
+    const int length = sizeof(title) - 1;
+    const int col = cols >= 72 ? 3 : 2;
+    const int row = rows >= 19 ? 1 : 0;
+    const term_win* scr = view->t.old;
+    const int cw = view->cell_w, ch = view->cell_h;
+    int w, h;
+
+    if (!scr || row >= smithing_sheet.tabs_row || col + length > cols
+        || memcmp(scr->c[row] + col, title, length) != 0)
+        return;
+
+    /* Larger grids leave the row above the heading free for its ascenders. */
+    int height = (row + 1) * ch;
+    int px = row ? ch * 4 / 3 : ch;
+    TTF_Font* font = sdl_smithing_face(px, height);
+    SDL_Color ink = sdl_color_from_attr(TERM_WHITE);
+    SDL_Texture* texture = font ? sdl_ui_text_texture(font, title, ink, &w, &h) : NULL;
+    if (!texture || h > height || w > (cols - col) * cw)
+        return;
+
+    int last = col + (w + cw - 1) / cw;
+    for (int r = 0; r <= row; ++r) {
+        for (int c = (r == row ? col + length : col); c < last; ++c) {
+            if (!sdl_smithing_blank(scr, c, r))
+                return;
+        }
+    }
+
+    if (!sdl_smithing_blank(scr, 0, row))
+        return;
+    SDL_FRect dst = { x + col * cw, y + (row + 1) * ch - h, (float)w, (float)h };
+    sdl_smithing_replace_ink(view, row, length, texture, dst);
+}
+
+/* Only the labeled cells at the leading margin of either pane are section
+ * headings. A range, draft indicator or cost column on the same row owns its
+ * original pixels. Leave a full cell of air before such neighboring text. */
+static void sdl_render_smithing_section(const sdl_view* view, int row, int col,
+    int end, float x, float y)
+{
+    const byte attr = TERM_WHITE + TERM_SHADE;
+    const term_win* scr = view->t.old;
+    if (!scr || col >= end || scr->a[row][col] != attr ||
+        scr->c[row][col] == ' ' || !sdl_smithing_blank(scr, 0, row))
+        return;
+
+    int text_end = col;
+    while (text_end < end && scr->a[row][text_end] == attr)
+        ++text_end;
+    int length = text_end - col;
+    char label[96];
+    if ((size_t)length >= sizeof(label))
+        return;
+    memcpy(label, scr->c[row] + col, length);
+    label[length] = '\0';
+
+    int free_end = text_end;
+    while (free_end < end && sdl_smithing_blank(scr, free_end, row))
+        ++free_end;
+    if (free_end < end && free_end > text_end)
+        --free_end;
+
+    const int cw = view->cell_w, ch = view->cell_h;
+    /* Borrow a little leading only from blank rows. Dense compact headings
+     * stay entirely inside the registered text row. */
+    bool above = row > smithing_sheet.body_row && row != smithing_sheet.summary_row;
+    bool below = row + 1 < smithing_sheet.footer_row &&
+        row + 1 != smithing_sheet.summary_row;
+    for (int i = col; i < free_end && (above || below); ++i) {
+        above = above && sdl_smithing_blank(scr, i, row - 1);
+        below = below && sdl_smithing_blank(scr, i, row + 1);
+    }
+    int extra = ch / 4;
+    int height = ch + (above || below ? extra : 0);
+    TTF_Font* font = sdl_smithing_face(ch, height);
+    if (!font)
+        return;
+    SDL_Color ink = sdl_color_from_attr(TERM_WHITE);
+    int w, h;
+    SDL_Texture* texture = sdl_ui_text_texture(font, label, ink, &w, &h);
+    if (!texture || h > height || w > (free_end - col) * cw)
+        return;
+
+    int leading = above ? (below ? extra / 2 : extra) : 0;
+    SDL_FRect dst = { x + col * cw, y + row * ch - leading + (height - h) / 2,
+        (float)w, (float)h };
+    sdl_smithing_replace_ink(view, row, length, texture, dst);
+    float rule_x = dst.x + dst.w + cw;
+    float rule_w = MIN(6 * cw, x + free_end * cw - rule_x);
+    if (rule_w >= 2 * cw)
+        sdl_smithing_rule(rule_x, y + row * ch + ch / 2, rule_w, 1, 110);
+}
+
+static bool sdl_render_smithing_sheet(const sdl_view* view, int cols, int rows)
+{
+    const int cw = view->cell_w, ch = view->cell_h;
+    const float x = (float)(view->rect.x + view->margin_x);
+    const float y = (float)(view->rect.y + view->margin_y);
+    const float width = (float)(cols * cw);
+    const int margin = cols >= 72 ? 3 : cols >= 40 ? 2 : 1;
+    const float inset = (float)(margin * cw);
+    int tabs = smithing_sheet.tabs_row, body = smithing_sheet.body_row;
+    int footer = smithing_sheet.footer_row;
+    SDL_BlendMode previous_blend;
+
+    if (!smithing_sheet.active || smithing_sheet.modal_depth != character_icky
+        || tabs < 0 || tabs >= body || body > footer || footer >= rows)
+        return false;
+
+    SDL_GetRenderDrawBlendMode(g_state.renderer, &previous_blend);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    sdl_render_smithing_title(view, cols, rows, x, y);
+    int divider = smithing_sheet.divider_col;
+    bool split_body = divider > 0 && divider < cols;
+    int left_end = (split_body ? divider : cols) - margin;
+    for (int row = body; row < footer; ++row) {
+        sdl_render_smithing_section(view, row, margin, left_end, x, y);
+        if (split_body)
+            sdl_render_smithing_section(view, row, divider + margin, cols - margin, x, y);
+    }
+
+    float tabs_y = y + tabs * ch, body_y = y + body * ch;
+    float footer_y = y + footer * ch;
+
+    /* Use the shared page margins for the rules and the work-order gutter.
+     * The divider lives in the empty gap between the two column groups. */
+    float rule_width = width - 2 * inset;
+    sdl_smithing_rule(x + inset, tabs_y + ch - 1, rule_width, 1, 130);
+    sdl_smithing_rule(x + inset, footer_y, rule_width, 1, 106);
+    if (split_body) {
+        float split = x + divider * cw + cw / 2;
+        sdl_smithing_rule(split, body_y, 1, footer_y - body_y, 92);
+    } else if (smithing_sheet.summary_row > body && smithing_sheet.summary_row < footer) {
+        float split = y + smithing_sheet.summary_row * ch;
+        sdl_smithing_rule(x + inset, split, rule_width, 1, 92);
+    }
+    SDL_SetRenderDrawBlendMode(g_state.renderer, previous_blend);
+    return true;
+}
+
+bool sdl_smithing_artwork_set(const object_type* object, int col, int row,
+    int cols, int rows)
+{
+    const sdl_view* view = &g_views[PANE_MAIN];
+    byte attr;
+    char glyph;
+
+    sdl_smithing_artwork_clear();
+    if (!object || !object->k_idx || graphics_are_ascii() || !g_state.tileset
+        || !view->term_ready || Term != &view->t || col < 0 || row < 0
+        || cols <= 0 || rows <= 0
+        || col > sdl_main_view_visual_cols(view) - cols
+        || row > sdl_main_view_visual_rows(view) - rows)
+    {
+        return false;
+    }
+
+    attr = object_attr(object);
+    glyph = object_char(object);
+    if (!(attr & TILE_FLAG) || !((byte)glyph & TILE_FLAG))
+        return false;
+
+    smithing_artwork.cells = (SDL_Rect){ col, row, cols, rows };
+    smithing_artwork.modal_depth = character_icky;
+    smithing_artwork.attr = attr;
+    smithing_artwork.glyph = glyph;
+    g_state.need_present = true;
+    return true;
+}
+
+static void sdl_render_smithing_artwork(const sdl_view* view, int cols, int rows)
+{
+    const SDL_Rect* cells = &smithing_artwork.cells;
+    int width = cells->w * view->cell_w;
+    int height = cells->h * view->cell_h;
+    int side = MIN(width, height);
+    SDL_FRect dst;
+
+    /* A nested terminal popup owns its screen while the editor waits for input. */
+    if (side <= 0 || character_icky != smithing_artwork.modal_depth
+        || graphics_are_ascii() || cells->x + cells->w > cols
+        || cells->y + cells->h > rows)
+    {
+        return;
+    }
+
+    dst = (SDL_FRect){
+        .x = (float)(view->rect.x + view->margin_x
+            + cells->x * view->cell_w + (width - side) / 2),
+        .y = (float)(view->rect.y + view->margin_y
+            + cells->y * view->cell_h + (height - side) / 2),
+        .w = (float)side,
+        .h = (float)side,
+    };
+    sdl_restore_tileset_mod();
+    sdl_draw_tileset_sprite(smithing_artwork.attr, smithing_artwork.glyph,
+        &dst, false);
+}
+
 void sdl_touch_pane_render(void)
 {
     SDL_FRect slot_rects[SDL_TOUCH_PANE_BUTTON_COUNT];
@@ -1846,7 +2144,14 @@ static bool sdl_render_current_window_contents(void)
         });
 
         if (i == PANE_MAIN)
-            (void)sdl_render_saved_screen_left_panel_backdrop(view);
+        {
+            bool sheet_visible = !hide_main_menu_overlays &&
+                sdl_render_smithing_sheet(view, visual_cols, visual_rows);
+            if (!hide_main_menu_overlays)
+                sdl_render_smithing_artwork(view, visual_cols, visual_rows);
+            if (!sheet_visible)
+                (void)sdl_render_saved_screen_left_panel_backdrop(view);
+        }
     }
 
     if (!hide_main_menu_overlays)

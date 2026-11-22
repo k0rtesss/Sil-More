@@ -1402,6 +1402,8 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
     if (sdl_control_handle_event(ev))
         return;
     sdl_normalize_event_to_render_coords(ev);
+    if (sdl_main_map_handle_run_cancel_event(ev))
+        return;
     if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_UP)
         sdl_gamepad_release_button_modifier(ev->gbutton.button);
     else if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
@@ -1583,8 +1585,9 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         {
             return;
         }
-        sdl_object_tooltip_handle_mouse_motion((float)ev->motion.x,
-            (float)ev->motion.y);
+        if (!g_main_map_drag.run_ready)
+            sdl_object_tooltip_handle_mouse_motion((float)ev->motion.x,
+                (float)ev->motion.y);
         if (g_touch_pane_yes_no_prompt_active
             && sdl_touch_pane_handle_yes_no_prompt_hover(
                 (float)ev->motion.x, (float)ev->motion.y))

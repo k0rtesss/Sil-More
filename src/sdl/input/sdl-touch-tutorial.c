@@ -2156,7 +2156,10 @@ void sdl_touch_tutorial_draw_main_screen_zones(
         sdl_touch_tutorial_queue_zone_callout(callouts, &callout_count, &rect,
             "Map / player",
             mouse
-                ? "<a>Left-click:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Right-click:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Mouse Movement:</t> choose On, Off, or Right click only in <t>Mouse Input</t>."
+                ? "<a>Left-click:</a> path to an explored or open square, or select a <t>target</t>.\n"
+                  "<a>Hold</a> on an adjacent floor square. Release when the arrow appears to <t>run</t>. Move off the square or press Esc to cancel.\n"
+                  "<a>Right-click:</a> open <t>contextual actions</t>, look, or special movement choices.\n"
+                  "<t>Mouse Movement:</t> choose On, Off, or Right click only in <t>Mouse Input</t>."
                 : "<a>Tap:</a> path to an explored or open square, or select a <t>target</t>.\n<a>Hold:</a> open <t>contextual actions</t>, look, or special movement choices.\n<t>Player square:</t> <a>hold</a> for the action wheel; <a>tap</a> to use the square. <a>Use/Desc</a> act on the floor item, <a>hold</a> them for full item menus.");
     }
 

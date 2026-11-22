@@ -424,44 +424,24 @@ int weight_limit(void)
 
 bool sprinting(void)
 {
-    int i;
-    int turns = 1;
+    if (!p_ptr->active_ability[S_EVN][EVN_SPRINTING])
+        return false;
 
-    if (p_ptr->active_ability[S_EVN][EVN_SPRINTING])
+    int direction = p_ptr->previous_action[1];
+    if (direction < 1 || direction > 9 || direction == 5)
+        return false;
+
+    /* Each completed step must continue the run or turn by at most 45 degrees. */
+    int required = wearing_only_light_armour() ? 3 : 4;
+    for (int i = 2; i <= required; i++)
     {
-        /* Count recent compatible movement toward the armour threshold */
-        for (i = 1; i < 5; i++)
-        {
-            if ((p_ptr->previous_action[i] >= 1)
-                && (p_ptr->previous_action[i] <= 9)
-                && (p_ptr->previous_action[i] != 5))
-            {
-                if ((p_ptr->previous_action[i + 1] >= 1)
-                    && (p_ptr->previous_action[i + 1] <= 9)
-                    && (p_ptr->previous_action[i + 1] != 5))
-                {
-                    if (p_ptr->previous_action[i]
-                        == p_ptr->previous_action[i + 1])
-                    {
-                        turns++;
-                    }
-                    else if (p_ptr->previous_action[i]
-                        == cycle[chome[p_ptr->previous_action[i + 1]] - 1])
-                    {
-                        turns++;
-                    }
-                    else if (p_ptr->previous_action[i]
-                        == cycle[chome[p_ptr->previous_action[i + 1]] + 1])
-                    {
-                        turns++;
-                    }
-                }
-            }
-        }
+        int older = p_ptr->previous_action[i];
+        if (older != direction && older != cycle[chome[direction] - 1]
+            && older != cycle[chome[direction] + 1])
+            return false;
+        direction = older;
     }
-
-    /* Light armour lets you reach top speed a square sooner */
-    return (turns >= (wearing_only_light_armour() ? 3 : 4));
+    return true;
 }
 
 /* Calculate stats */

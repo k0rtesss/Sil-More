@@ -2114,7 +2114,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Choose an item or improvement, then review its difficulty, forge uses, materials, time and any attribute or XP costs. The preview lets you compare options before committing. Your abilities can change both what you may forge and its costs.
+Choose an item or improvement to see its difficulty, your capacity, and the costs. Permanent Dexterity and Grace boost all Smithing. Heavy metal adds half Strength plus half Dexterity, mail and light crafts add Dexterity, and jewellery adds Grace. Round the total down. Smithing skill bonuses from equipment still apply.
 
 Trigger: The named menu is actually opened: smithing.
 

@@ -24,6 +24,25 @@ static void tulkas_quest_decline(cptr message)
     remove_quest_giver_silent(R_IDX_TULKAS);
 }
 
+static int tulkas_reward_artefact(int promised_prize)
+{
+    if (birth_no_artefacts || adult_no_artefacts)
+        return 0;
+    if (!a_info[promised_prize].cur_num)
+        return promised_prize;
+
+    /* Older games could generate the reserved artefact through normal loot. */
+    int target = p_ptr->tulkas_target_r_idx;
+    int depth = (target > 0 && target < z_info->r_max)
+        ? r_info[target].level : p_ptr->depth;
+    int replacement = select_tulkas_quest_prize(depth);
+    if (replacement > 0)
+        msg_print("The promised artefact has already been found. Tulkas offers another.");
+    else
+        msg_print("The promised artefact has already been found, and Tulkas has no replacement.");
+    return replacement;
+}
+
 /*
  * Handle Tulkas interaction
  */
@@ -110,9 +129,6 @@ void tulkas_quest_interaction(void)
          * showing the generic reward/departure message before the quest text.
          */
         remove_quest_giver_silent(R_IDX_TULKAS);
-
-        /* Reserve the artifact */
-        valar_reserved_artifacts[prize_a_idx] = true;
 
         log_trace("Quest assigned: target=%d (%s), prize=%d (%s)",
                  target_r_idx, r_name + r_ptr->name, prize_a_idx, a_ptr->name);
@@ -208,21 +224,15 @@ void tulkas_quest_interaction(void)
             return;
         }
 
-        log_trace("About to create artifact %d at position (%d,%d)", p_ptr->tulkas_prize_a_idx, p_ptr->py, p_ptr->px);
-
-        /* Give the artifact reward */
-        create_chosen_artefact(p_ptr->tulkas_prize_a_idx, p_ptr->py, p_ptr->px, true);
-
-        log_trace("Successfully created artifact %d", p_ptr->tulkas_prize_a_idx);
-
-        /* Clear quest state */
-        if (valar_reserved_artifacts && p_ptr->tulkas_prize_a_idx > 0 && p_ptr->tulkas_prize_a_idx < z_info->art_max) {
-            valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
-            log_trace("Cleared reservation for artifact %d", p_ptr->tulkas_prize_a_idx);
-        } else {
-            log_trace("Skipping reservation clear: valar_reserved_artifacts=%p, artifact_idx=%d, art_max=%d",
-                     valar_reserved_artifacts, p_ptr->tulkas_prize_a_idx, z_info->art_max);
+        int prize = tulkas_reward_artefact(p_ptr->tulkas_prize_a_idx);
+        p_ptr->tulkas_prize_a_idx = prize;
+        if (prize > 0
+            && !create_quest_reward_artefact(prize, p_ptr->py, p_ptr->px, true))
+        {
+            msg_print("Tulkas holds your prize until there is room to set it down.");
+            return;
         }
+
         p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
         /* These existing saved fields are no longer active after the reward,
          * but retaining them lets the journal replay the actual assignment. */
@@ -240,8 +250,11 @@ void tulkas_quest_interaction(void)
 
         /* Extract completion texts from quest data */
         int completion_count = 0;
-        cptr* completion_texts = extract_quest_completion_texts(1, &completion_count); /* Tulkas is quest index 1 */
-        completion_texts = prepend_repeat_context(QUEST_ID_TULKAS, completion_texts, &completion_count, true);
+        cptr* completion_texts = NULL;
+        if (prize > 0) {
+            completion_texts = extract_quest_completion_texts(QUEST_ID_TULKAS, &completion_count);
+            completion_texts = prepend_repeat_context(QUEST_ID_TULKAS, completion_texts, &completion_count, true);
+        }
 
         if (completion_texts && completion_count > 0) {
             /* Display typewriter completion dialog */
@@ -372,11 +385,6 @@ void validate_tulkas_quest_on_load(void)
          * initiation slot rather than leaving the character permanently
          * blocked at the per-run cap.
          */
-        if (valar_reserved_artifacts && p_ptr->tulkas_prize_a_idx > 0
-            && p_ptr->tulkas_prize_a_idx < z_info->art_max)
-        {
-            valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
-        }
         if (p_ptr->quest_reserved[0] > 0)
             p_ptr->quest_reserved[0]--;
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
@@ -477,15 +485,6 @@ static int build_varda_reward_options(int* choices, int max_choices)
 {
     if (!choices || max_choices <= 0 || !z_info) return 0;
 
-    /* Ensure reservation table exists so we can filter reserved artefacts */
-    if (!valar_reserved_artifacts && z_info && z_info->art_max > 0) {
-        valar_reserved_artifacts = mem_alloc_array(z_info->art_max, bool);
-        for (int j = 0; j < z_info->art_max; j++) {
-            valar_reserved_artifacts[j] = false;
-        }
-        log_trace("Varda reward: initialized valar_reserved_artifacts for %d artefacts", z_info->art_max);
-    }
-
     int candidates[256];
     int candidate_count = 0;
 
@@ -503,13 +502,14 @@ static int build_varda_reward_options(int* choices, int max_choices)
         if (a_ptr->name[0] == '\0') continue;
         if (!artefact_is_radiant_candidate(a_ptr)) continue;
         if (a_ptr->cur_num != 0) continue; /* already created */
-        if (valar_reserved_artifacts && valar_reserved_artifacts[i]) continue;
+        if (quest_artefact_reserved(i)) continue;
         if (a_ptr->level > depth_cap) continue;
 
         candidates[candidate_count++] = i;
     }
 
-    /* Relax depth cap if we still need more options */
+    /* Fill out a short list with deeper gifts only. Shallow candidates
+     * already have their own entries in the weighted pool. */
     if (candidate_count < max_choices) {
         for (int i = 1; i < z_info->art_max && candidate_count < (int)N_ELEMENTS(candidates); i++) {
             artefact_type* a_ptr = &a_info[i];
@@ -518,7 +518,8 @@ static int build_varda_reward_options(int* choices, int max_choices)
             if (a_ptr->name[0] == '\0') continue;
             if (!artefact_is_radiant_candidate(a_ptr)) continue;
             if (a_ptr->cur_num != 0) continue;
-            if (valar_reserved_artifacts && valar_reserved_artifacts[i]) continue;
+            if (quest_artefact_reserved(i)) continue;
+            if (a_ptr->level <= depth_cap) continue;
 
             candidates[candidate_count++] = i;
         }
@@ -587,31 +588,46 @@ static int prompt_varda_reward_choice_menu(const int* choices,
 static bool grant_varda_reward(cptr* completion_texts, int completion_count)
 {
     int choices[3] = {0};
-    int available = build_varda_reward_options(choices, (int)N_ELEMENTS(choices));
-    if (available <= 0) {
-        msg_print("Varda has no radiant artefacts left to offer.");
-        log_trace("Varda reward: no available radiant artefacts");
-        return false;
+    bool no_artefacts = birth_no_artefacts || adult_no_artefacts;
+    int available = no_artefacts ? 0
+        : build_varda_reward_options(choices, (int)N_ELEMENTS(choices));
+    int selected = 0;
+    if (available > 0) {
+        selected = prompt_varda_reward_choice_menu(choices, available,
+            completion_texts, completion_count);
+        if (selected <= 0) {
+            msg_print("The starlight gifts wait until you are ready to choose.");
+            return false;
+        }
+        if (!create_quest_reward_artefact(selected, p_ptr->py, p_ptr->px, false)) {
+            msg_print("Varda holds your gift until there is room to set it down.");
+            return false;
+        }
     }
 
-    /* Use the integrated scrollable menu with completion text */
-    int selected = prompt_varda_reward_choice_menu(choices, available, completion_texts, completion_count);
-    if (selected <= 0) {
-        msg_print("The starlight gifts wait until you are ready to choose.");
-        return false;
-    }
-
-    create_chosen_artefact(selected, p_ptr->py, p_ptr->px, true);
-    msg_print("Starlight gathers at your feet, coalescing into a shining relic.");
     p_ptr->varda_quest = VARDA_QUEST_REWARDED;
     p_ptr->varda_vault_ready = 0;
     p_ptr->varda_vault_placed = 1;
 
     metarun_mark_quest_completed(METARUN_QUEST_VARDA);
-    sil_achievements_on_event(SIL_ACH_A_STAR_AGAINST_THE_BALROG);
     metarun_unlock_oath(OATH_LIGHT);
     award_quest_completion_exp();
-    do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
+
+    if (selected > 0) {
+        char note[256];
+        msg_print("Starlight gathers at your feet, coalescing into a shining relic.");
+        sil_achievements_on_event(SIL_ACH_A_STAR_AGAINST_THE_BALROG);
+        strnfmt(note, sizeof(note),
+            "Varda blessed me with the radiant artefact %s and unlocked the Oath of Light.",
+            a_info[selected].name);
+        do_cmd_note(note, p_ptr->depth);
+    } else {
+        if (!no_artefacts)
+            msg_print("Varda has no radiant artefacts left to offer.");
+        do_cmd_note("Varda unlocked the Oath of Light.", p_ptr->depth);
+        QUEST_PRESENT_DIALOGUE(QUEST_ID_VARDA, true, "Starlight Triumph",
+            completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+    }
 
     return true;
 }
@@ -811,7 +827,7 @@ void varda_quest_interaction(void)
         /* Fallback texts if quest data not available */
         cptr fallback[] = {
             "Varda inclines her head in silent approval:",
-            "\"The stolen light is free. Choose your blessing.\""
+            "\"The stolen light is free. Its blessing will follow you.\""
         };
         cptr* texts_to_use = (completion_texts && completion_count > 0) ? completion_texts : fallback;
         int text_count = (completion_texts && completion_count > 0) ? completion_count : 2;

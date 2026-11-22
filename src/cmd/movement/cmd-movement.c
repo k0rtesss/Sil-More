@@ -27,6 +27,27 @@ bool trapped_stairs(void)
         return (false);
 }
 
+static bool fall_through_stairs(int* destination, int minimum_depth)
+{
+    int lower_floor = MAX(p_ptr->depth + 1, minimum_depth);
+    *destination = MIN(MORGOTH_DEPTH, MAX(*destination, lower_floor));
+
+    msg_print("The stairs crumble beneath you!");
+    message_flush();
+    msg_print("You fall through...");
+    message_flush();
+    do_cmd_note("Fell through a crumbling stair", p_ptr->depth);
+    p_ptr->create_stair = false;
+    falling_damage(false);
+    if (p_ptr->is_dead) return false;
+
+    msg_print(*destination > p_ptr->depth
+        ? "...and land somewhere deeper in the Iron Hells."
+        : "...and land elsewhere on this level.");
+    message_flush();
+    return true;
+}
+
 /* The lost halls form a directed detour, not ordinary depth arithmetic.
  * Return zero for an ordinary stair, or -1 when the passage cannot be used. */
 static int utumno_stair_destination(bool ascending)
@@ -90,26 +111,16 @@ void do_cmd_go_up(void)
         return;
     }
 
-    if (!utumno_destination && chosen_oath(OATH_IRON) && !oath_invalid(OATH_IRON) &&
-       (silmarils_possessed() == 0))
+    bool break_iron_oath = !utumno_destination && chosen_oath(OATH_IRON)
+        && !oath_invalid(OATH_IRON) && silmarils_possessed() == 0;
+    if (break_iron_oath)
     {
         /* Use oath-specific confirmation prompt */
         char* prompt = oath_confirmation_prompt(OATH_IRON);
         if (!prompt || !prompt[0]) prompt = "Are you certain you wish to break your Oath of Iron?";
         
-        if (get_check_oath_multiline(prompt))
-        {
-            /* Curse message and selection handled by apply_oath_breaking_curse */
-            do_cmd_note("Broke your oath", p_ptr->depth);
-            apply_oath_breaking_curse(OATH_IRON);
-            
-            /* Only mark oath as broken if player actually has it */
-            p_ptr->oaths_broken |= OATH_IRON_FLAG;
-        }
-        else
-        {
+        if (!get_check_oath_multiline(prompt))
             return;
-        }
     }
 
     // warn player if they have an active Nienna quest and are trying to leave
@@ -182,6 +193,14 @@ void do_cmd_go_up(void)
         return;
     }
 
+    /* Apply the penalty only after the player confirms departure and the way is open. */
+    if (break_iron_oath)
+    {
+        do_cmd_note("Broke your oath", p_ptr->depth);
+        apply_oath_breaking_curse(OATH_IRON);
+        p_ptr->oaths_broken |= OATH_IRON_FLAG;
+    }
+
     // Store information for the combat rolls window
     combat_roll_special_char
         = (&f_info[cave_feat[p_ptr->py][p_ptr->px]])->d_char;
@@ -215,21 +234,7 @@ void do_cmd_go_up(void)
         // deal with trapped stairs when trying and failing to go upwards
         if (trapped_stairs())
         {
-            msg_print("The stairs crumble beneath you!");
-            message_flush();
-            msg_print("You fall through...");
-            message_flush();
-            msg_print("...and land somewhere deeper in the Iron Hells.");
-            message_flush();
-
-            // add to the notes file
-            do_cmd_note("Fell through a crumbling stair", p_ptr->depth);
-
-            // take some damage
-            falling_damage(false);
-
-            // no stairs back
-            p_ptr->create_stair = false;
+            if (!fall_through_stairs(&new, min)) return;
         }
 
         else
@@ -254,9 +259,8 @@ void do_cmd_go_up(void)
                 /* Change the way back */
                 p_ptr->create_stair = FEAT_LESS_SHAFT;
             }
+            new = min;
         }
-
-        new = min;
     }
 
     // deal with cases where you can find your way
@@ -357,29 +361,12 @@ void do_cmd_go_up(void)
         // deal with trapped stairs when going upwards
         else if (trapped_stairs())
         {
-            msg_print("The stairs crumble beneath you!");
-            message_flush();
-            msg_print("You fall through...");
-            message_flush();
-            msg_print("...and land somewhere deeper in the Iron Hells.");
-            message_flush();
-
-            // add to the notes file
-            do_cmd_note("Fell through a crumbling stair", p_ptr->depth);
-
-            // take some damage
-            falling_damage(false);
-
-            // no stairs back
-            p_ptr->create_stair = false;
-
-            // go to a lower floor
-            new ++;
+            if (!fall_through_stairs(&new, min)) return;
         }
     }
 
 finish_ascent:
-    varda_quest_fail_if_bastion_missed();
+    quests_on_level_departure();
 
     // make a note if the player loses a greater vault
     note_lost_greater_vault();
@@ -392,13 +379,6 @@ finish_ascent:
     if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
-    }
-
-    /* Reset niena quest */
-    if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
-        msg_print("You have failed Nienna's mercy quest by leaving the level.");
     }
 
     /* Reset aule quest if active */
@@ -464,17 +444,8 @@ void do_cmd_go_down(void)
     if (utumno_destination < 0)
         return;
 
-    // warn player if they have an active Nienna quest and are trying to leave
-    if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE)
-    {
-        msg_print("Nienna's voice echoes in your mind:");
-        msg_print("'If you leave now, you will have failed the mercy quest.'");
-        msg_print("'All the compassion you have shown will be for naught.'");
-        if (!get_check_near(p_ptr->py, p_ptr->px, "Are you sure you wish to abandon the quest and descend? "))
-        {
-            return;
-        }
-    }
+    /* Reaching these stairs completes Nienna's trial even before the next world tick. */
+    check_niena_quest_completion();
 
     // warn player if they have an active Aulë quest and are trying to leave
     if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
@@ -572,21 +543,7 @@ void do_cmd_go_down(void)
     // deal with trapped stairs
     else if (trapped_stairs())
     {
-        msg_print("The stairs crumble beneath you!");
-        message_flush();
-        msg_print("You fall through...");
-        message_flush();
-        msg_print("...and land somewhere deeper in the Iron Hells.");
-        message_flush();
-
-        // add to the notes file
-        do_cmd_note("Fell through a crumbling stair", p_ptr->depth);
-
-        // take some damage
-        falling_damage(false);
-
-        // no stairs back
-        p_ptr->create_stair = false;
+        if (!fall_through_stairs(&new, min)) return;
     }
 
     else if (new < min)
@@ -596,7 +553,7 @@ void do_cmd_go_down(void)
     }
 
 finish_descent:
-    varda_quest_fail_if_bastion_missed();
+    quests_on_level_departure();
 
     // make a note if the player loses a greater vault
     note_lost_greater_vault();
@@ -639,17 +596,6 @@ finish_descent:
     else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
     {
         p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-    }
-
-    /* Reset niena quest if active */
-    if (p_ptr->niena_quest >= NIENA_QUEST_ACTIVE && p_ptr->niena_quest < NIENA_QUEST_REWARDED)
-    {
-        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Nienna's mercy quest. The quest is lost.");
-    }
-    else if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
     }
 
     // another staircase has been used...
@@ -905,6 +851,7 @@ void do_cmd_run(void)
     if (dir == 5)
     {
         do_cmd_rest();
+        return;
     }
 
     /* Get location */

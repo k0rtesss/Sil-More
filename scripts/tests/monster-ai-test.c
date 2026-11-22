@@ -46,6 +46,11 @@ bool singing(int song)
 { return p_ptr->song1 == song || p_ptr->song2 == song; }
 bool song_disguise_monster_is_fooled(const monster_type* m)
 { return m == squad_fooled; }
+/* These positional fixtures have no object inventory. */
+int monster_orcish_liquor(const monster_type* m)
+{ assert(!m->hold_o_idx); return 0; }
+bool monster_orcish_liquor_throw_has_clear_path(const monster_type* m)
+{ (void)m; CHECK(false); return false; }
 
 /* These effects belong to retreat/territorial behavior. Advancing along a
  * reachable flow must never call them in the fixtures below. */

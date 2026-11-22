@@ -4038,6 +4038,22 @@ void sdl_mouse_path_render(void)
 
     if (!sdl_mouse_gameplay_context_active())
         return;
+    if (g_main_map_drag.run_ready) {
+        SDL_FRect rect;
+        SDL_Color color = g_state.palette[TERM_L_GREEN];
+
+        if (!sdl_player_map_rect(g_main_map_drag.run_y, g_main_map_drag.run_x,
+                &rect))
+            return;
+
+        SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g, color.b, 92);
+        SDL_RenderFillRect(g_state.renderer, &rect);
+        SDL_SetRenderDrawColor(g_state.renderer, color.r, color.g, color.b, 230);
+        SDL_RenderRect(g_state.renderer, &rect);
+        sdl_touch_pane_draw_arrow(&rect, '0' + g_main_map_drag.run_dir, color);
+        return;
+    }
     if (!g_mouse_path.follow_active && !g_mouse_path.hover_visible)
         return;
 

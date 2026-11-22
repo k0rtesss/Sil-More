@@ -52,11 +52,12 @@ parts += [function(abilities,x) for x in ['static void ability_browser_init_layo
     'static void ability_browser_init_layout(',
     'static int ability_browser_skill_tab_split(', 'static int ability_browser_skill_tab_width(',
     'static void ability_browser_draw_skill_summary(']]
-parts += [function(smithing,x) for x in ['static int smith_ui_configure_list_view(',
-    'static int smith_root_draw(']]
+parts += [function(smithing,x) for x in ['static int smith_ui_content_bottom_row(',
+    'static smith_sheet_layout smith_sheet_geometry(']]
 types=declaration('src/cmd/ui/cmd-ui-internal.h',r'struct knowledge_browser_layout\s*\{.*?\};')
 types+='\ntypedef struct knowledge_browser_layout knowledge_browser_layout;\n'
 types+=declaration(abilities,r'typedef struct ability_browser_layout\s*\{.*?\} ability_browser_layout;')
+types+='\n'+declaration(smithing,r'typedef struct \{\s*int width, margin, tabs, body, footer;.*?\} smith_sheet_layout;')
 harness=r"""
 #include <assert.h>
 #include <stdbool.h>
@@ -78,10 +79,6 @@ typedef const char *cptr;typedef unsigned char byte;
 #define TERM_SHADE 16
 #define SDL_AUX_VIEW_FONT_MIN 10
 #define S_MAX 8
-#define SMT_MENU_MAX 7
-#define SMITH_SCROLL_ROOT 10
-typedef int smith_ui_scroll_id;
-#define SMITH_SCROLL_MAX 11
 #define ABILITY_MENU_CLICK_SKILL_BASE 200
 #define SUPPLY_CLICK_CATEGORY_RETURN (-16)
 #define SUPPLY_CLICK_ENTRY_BASE 10000
@@ -95,7 +92,7 @@ typedef int smith_ui_scroll_id;
 typedef enum {SUPPLY_MENU_PAGE_EQUIPPED,SUPPLY_MENU_PAGE_INVENTORY,
  SUPPLY_MENU_PAGE_JEWELRY,SUPPLY_MENU_PAGE_SUPPLIES} supply_menu_page;
 struct {bool bigger_font;int terminal_menu_scale_offset;} config;
-enum sdl_menu_font {SDL_MENU_FONT_NONE=-1,SDL_MENU_FONT_SETTINGS,SDL_MENU_FONT_COUNT};
+enum sdl_menu_font {SDL_MENU_FONT_NONE=-1,SDL_MENU_FONT_SETTINGS,SDL_MENU_FONT_SMITHING,SDL_MENU_FONT_COUNT};
 static enum sdl_menu_font g_terminal_menu_fonts[16];
 enum sdl_menu_font sdl_terminal_menu_font(void);
 void sdl_push_terminal_menu_scale_for(enum sdl_menu_font menu);
@@ -109,6 +106,28 @@ static unsigned int g_terminal_menu_scale_overflow_depth;
 static float density=2.0f;
 static int redraws;
 static float sdl_ui_density_scale(void) {return density;}
+#if !SIL_SDL_MOBILE_BUILD
+/* The desktop variant supplies a fake window and drawable for font fitting. */
+typedef struct {int x,y,w,h;} SDL_Rect;
+enum {PANE_MAIN,PANE_MAX};
+enum {SDL_UI_FONT_TITLE,SDL_UI_FONT_BODY};
+enum {SDL_MAIN_VIEW_MIN_SCALE=1,SDL_MIN_TERMINAL_NORMAL=0};
+static struct {void *window;} g_state;
+static SDL_Rect smithing_drawable;
+static int g_active_side_panes,g_active_bottom_panes;
+static int sdl_current_main_view_scale(void) {return SDL_MAIN_VIEW_MIN_SCALE;}
+static SDL_Rect sdl_get_layout_screen_rect(void) {return smithing_drawable;}
+static SDL_Rect sdl_font_fit_drawable_rect(SDL_Rect rect) {return rect;}
+static SDL_Rect sdl_menu_content_rect(SDL_Rect rect) {return rect;}
+static int sdl_menu_font_set_render_context(int menu) {return menu;}
+static int sdl_menu_role_font_px(int role) {return 16;}
+static int sdl_min_terminal_cols_for_mode(int mode) {return 80;}
+static int sdl_min_terminal_rows_for_mode(int mode) {return 24;}
+static bool sdl_should_show_supporting_panes(void) {return false;}
+static bool sdl_rect_has_area(const SDL_Rect *rect) {return rect->w>0&&rect->h>0;}
+static void sdl_place_active_panes(const SDL_Rect *screen,SDL_Rect *panes,
+ int side,int bottom,bool hidden) {}
+#endif
 static void sdl_apply_config_no_redraw(void) {++redraws;}
 static int get_sdl_terminal_menu_scale(void) {return 2;}
 static struct {int wid,hgt;} fixture={30,12},*Term=&fixture;
@@ -118,7 +137,6 @@ static char screen[80][256];
 static int ids[80],clicks;
 static struct {int x,y,w;} hit_rects[80];
 static int inv_entry_cur,inv_entry_top,inv_grp_cur,inv_grp_top,inv_column;
-static int smith_ui_scroll_top[SMITH_SCROLL_MAX];
 static int *drag_offset,drag_max;
 static int strnfmt(char *s,size_t n,cptr f,...) {va_list a;va_start(a,f);int r=vsnprintf(s,n,f,a);va_end(a);return r;}
 static void strnfcat(char *s,size_t n,size_t *used,cptr f,...) {va_list a;va_start(a,f);vsnprintf(s+*used,n-*used,f,a);va_end(a);*used=strlen(s);}
@@ -181,16 +199,8 @@ static int player_quiver_arrow_space(void) {return 25;}
 static void inventory_browser_weight_status(char *s,size_t n) {strnfmt(s,n,"8.3/172.8 lb");}
 static void inventory_browser_group_limit_status(int group,char *s,size_t n) {strnfmt(s,n,"0.0/26.0 qt");}
 static cptr inventory_browser_group_text(int group) {return "Pack";}
-static int smith_ui_content_bottom_row(void) {return Term->hgt-1-reserved_rows;}
-static int smith_root_detail_col(void) {return 0;}
-static int smith_root_list_width(int col) {return Term->wid;}
-static void smith_ui_reset_description_state(void) {}
-/* Root's compact chrome is two summary rows plus heading/divider. */
-static int smith_root_draw_header(void) {return 2;}
-static int smith_root_draw_chrome(int col,int w,int row) {return row+2;}
-static void smith_root_draw_action(int choice,int row,int w,bool selected,byte a,cptr label) {ui_menu_click_add(choice,0,row,w);}
-static void smith_root_draw_detail(int choice,int col,int w,int row,bool valid,cptr label) {}
-static void smith_ui_draw_navigation_prompt(bool root) {}
+static int smith_ui_term_wid(void) {return Term->wid;}
+static int smith_ui_term_hgt(void) {return Term->hgt;}
 """
 source=(ROOT/knowledge).read_text()
 start=source.index('else if (clicked_choice >= SUPPLY_CLICK_ENTRY_BASE)',source.index('bool inventory_one_page ='))
@@ -241,6 +251,26 @@ int main(void) {
  for(int i=0;i<24;i++)sdl_pop_terminal_menu_scale();
  assert(!g_terminal_menu_scale_depth&&!g_terminal_menu_scale_overflow_depth);
  sdl_pop_terminal_menu_scale();assert(g_terminal_menu_scale_override==2);
+
+#if !SIL_SDL_MOBILE_BUILD
+ g_state.window=&g_state;density=1.0f;
+ smithing_drawable=(SDL_Rect){0,0,1920,1080};
+ config.bigger_font=false;config.terminal_menu_scale_offset=0;
+ sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SETTINGS);
+ assert(sdl_terminal_menu_font_px()==16);
+ sdl_pop_terminal_menu_scale();
+ sdl_push_terminal_menu_scale_for(SDL_MENU_FONT_SMITHING);
+ assert(sdl_terminal_menu_font_px()==34);
+ config.terminal_menu_scale_offset=-2;
+ assert(sdl_terminal_menu_font_px()==32);
+ config.terminal_menu_scale_offset=0;
+ smithing_drawable=(SDL_Rect){0,0,1280,720};
+ assert(sdl_terminal_menu_font_px()==23);
+ config.bigger_font=true;
+ assert(sdl_terminal_menu_font_px()==0);
+ sdl_pop_terminal_menu_scale();
+ g_state.window=NULL;
+#endif
 
  int widths[]={30,30,34,70,74,94},heights[]={12,26,33,12,17,22};
  for(int c=0;c<6;c++){
@@ -317,12 +347,27 @@ int main(void) {
  assert(!strcmp(screen[nav.header_row],"< Categories"));
  assert(!strcmp(screen[nav.divider_row],"Potions")&&clicks==2);
 
- /* The last Smithing action remains reachable in a 30x12 phone viewport. */
- Term->wid=30;Term->hgt=12;portrait=true;Term_clear();
- bool valid[7]={true,true,true,true,true,true,true};byte attrs[7]={0};char labels[7][32]={{0}};
- smith_root_draw(1,valid,attrs,labels);assert(clicks==6&&ids[5]==6&&drag_max==1);
- *drag_offset=drag_max;smith_root_draw(7,valid,attrs,labels);
- assert(clicks==6&&ids[0]==2&&ids[5]==7);
+ /* The shared Smithing sheet leaves enough rows for choices, the work order,
+  * and the footer above the reserved touch buttons and desktop prompt. */
+ const struct {int width,height;bool touch,split;} smithing_sizes[]={
+  {30,12,true,false},{30,26,true,false},{42,32,true,false},
+  {80,10,true,false},{80,12,false,false},{80,24,false,true},{94,22,true,true},
+  {80,70,true,false},{110,70,true,true}
+ };
+ for(int i=0;i<(int)N_ELEMENTS(smithing_sizes);i++){
+  Term->wid=smithing_sizes[i].width;Term->hgt=smithing_sizes[i].height;
+  touch=smithing_sizes[i].touch;
+  smith_sheet_layout sheet=smith_sheet_geometry();
+  assert((sheet.divider>=0)==smithing_sizes[i].split);
+  assert(sheet.tabs<sheet.body&&sheet.list_end-sheet.body>=3);
+  assert(sheet.body<=sheet.summary&&sheet.summary<sheet.footer);
+  assert(sheet.footer<Term->hgt-reserved_rows-(touch?0:1));
+  assert(sheet.margin>=0&&sheet.margin+sheet.list_width<=Term->wid);
+  if(sheet.divider>=0){
+   assert(sheet.margin+sheet.list_width<sheet.divider&&sheet.divider<sheet.width);
+   assert(sheet.summary==sheet.body&&sheet.list_end==sheet.footer);
+  }else assert(sheet.list_end==sheet.summary);
+ }
  puts("Mobile legacy menu font/layout checks passed");
 }
 """

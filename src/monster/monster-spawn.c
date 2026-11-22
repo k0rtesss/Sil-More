@@ -3,6 +3,19 @@
 #include "monster-internal.h"
 #include "monster/monster-routine.h"
 
+static bool prepare_orcish_liquor(object_type* liquor)
+{
+    int k_idx = lookup_kind(TV_POTION, SV_POTION_ORCISH_LIQUOR);
+    if (!k_idx)
+    {
+        log_warn("prepare_orcish_liquor: missing Orcish Liquor kind");
+        return false;
+    }
+
+    object_prep(liquor, k_idx);
+    return true;
+}
+
 /*
  * Attempt to place a monster of the given race at the given location.
  *
@@ -235,12 +248,18 @@ bool place_monster_one(
     /* Initialize stance to STANCE_CONFIDENT as default */
     n_ptr->stance = STANCE_CONFIDENT;
 
-    /* Place the monster in the dungeon */
-    if (!monster_place(y, x, n_ptr))
+    /* Place the two guaranteed bottles together with their carriers. */
+    bool guaranteed_liquor = r_idx == R_IDX_LUG || r_idx == R_IDX_OTHROD;
+    object_type liquor;
+    if (guaranteed_liquor && !prepare_orcish_liquor(&liquor))
+        return false;
+    int m_idx = monster_place_carrying(y, x, n_ptr,
+        guaranteed_liquor ? &liquor : NULL);
+    if (!m_idx)
         return (false);
 
     // reacquire monster pointer
-    n_ptr = &mon_list[cave_m_idx[y][x]];
+    n_ptr = &mon_list[m_idx];
 
     if (r_ptr->flags3 & (RF3_SPECIAL_VAULT_ONLY))
     {
@@ -288,6 +307,11 @@ bool place_monster_one(
     {
         drop_loot(n_ptr);
     }
+
+    /* Stock other orcs after any stationary hoard is placed on the floor. */
+    if (!guaranteed_liquor && (r_ptr->flags3 & RF3_ORC)
+        && percent_chance(10) && prepare_orcish_liquor(&liquor))
+        monster_carry(m_idx, &liquor);
 
     /* Success */
     return (true);

@@ -432,7 +432,7 @@ static bool sdl_submit_movement_command(
     return true;
 }
 
-static bool sdl_submit_legacy_keypad_movement(u16b action, int dir)
+bool sdl_submit_legacy_keypad_movement(u16b action, int dir)
 {
     movement_input_command command;
     u16b direction = MOVEMENT_INPUT_DIRECTION_NONE;

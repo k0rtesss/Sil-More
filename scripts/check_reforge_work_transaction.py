@@ -148,7 +148,7 @@ static void checks(void)
     assert(source_count()==1 && !p_ptr->energy_use && playerturn==100);
     assert(forge_uses(5,5)==1 && p_ptr->stat_drain[A_DEX]==0);
     scenario="accept exact advertised work";
-    char input[64];int n=0;input[n++]='f';for(int i=0;i<choice;i++)input[n++]='2';input[n++]='\r';input[n]=0;
+    char input[64];int n=0;input[n++]='R';for(int i=0;i<choice;i++)input[n++]='2';input[n++]='\r';input[n]=0;
     keys=input;do_cmd_smithing_screen();assert(!*keys);
     assert(p_ptr->smithing==turns);
     assert(p_ptr->smithing_leftover==turns && turns>=10);
@@ -268,7 +268,8 @@ def main():
     reader=OUT/'reader.c'
     reader.write_text('#include "fs/load.c"\nint fixture_read_work(const byte *buf,size_t length,int extra) {\n'
         'fff=SDL_IOFromConstMem(buf,length);xor_byte=0;v_check=x_check=load_byte_offset=0;\n'
-        'sf_major=VERSION_MAJOR;sf_minor=VERSION_MINOR;sf_patch=extra==25?8:VERSION_PATCH;sf_extra=extra;\n'
+        'sf_major=extra==25?0:VERSION_MAJOR;sf_minor=extra==25?9:VERSION_MINOR;\n'
+        'sf_patch=extra==25?8:VERSION_PATCH;sf_extra=extra;\n'
         +flags+'savefile_has_varda_quest=true;\nint result=rd_extra();if(!result)result=rd_item(smith_o_ptr);\n'
         'if(!result && SDL_TellIO(fff)!=(Sint64)length)result=-1;SDL_CloseIO(fff);fff=NULL;return result;\n}\n',encoding='utf-8')
     objects=shlex.split((BUILD/'CMakeFiles/sil-more.dir/objects1.rsp').read_text())

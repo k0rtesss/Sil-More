@@ -26,7 +26,7 @@ void __wrap_quest_minimum_dialogue(int quest, bool complete, cptr title,
     checks = checks.replace('(void)words; (void)text_count; (void)prompt; (void)labels;',
         'assert(!words && text_count == 0); (void)prompt; (void)labels;')
     checks = checks.replace('    puts("Varda:',
-        '    assert(brief_calls == book_calls);\n    puts("Minimum text Varda:')
+        '    assert(brief_calls == book_calls + oath_only_notes);\n    puts("Minimum text Varda:')
     fixture = base.HARNESS
     prefix = fixture[:fixture.index("static cptr make_path")]
     init = fixture[fixture.index("static cptr make_path"):fixture.index("    int last = ")]
@@ -37,8 +37,10 @@ void __wrap_quest_minimum_dialogue(int quest, bool complete, cptr title,
     cmake = BUILD / "CMakeFiles/sil-more.dir"
     objects = shlex.split((cmake / "objects1.rsp").read_text())
     response = OUT / "objects.rsp"
+    excluded = ("/src/main.c.obj", "/src/quest/valar/tulkas-varda.c.obj",
+        *("/" + path + ".obj" for path in base.SUPPORT_SOURCES))
     response.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith(
-        ("/src/main.c.obj", "/src/quest/valar/tulkas-varda.c.obj"))), encoding="utf-8")
+        excluded)), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / p) for p in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
@@ -47,10 +49,11 @@ void __wrap_quest_minimum_dialogue(int quest, bool complete, cptr title,
                SDL_AUDIO_DRIVER="dummy", CONTROL_TEST_ASSETS=str(ROOT / "lib"))
     exe = OUT / "check.exe"
     wraps = ("quest_reward_book_choice", "quest_minimum_dialogue", "metarun_mark_quest_completed",
-             "metarun_unlock_oath", "do_cmd_note", "quest_typewriter_menu")
+             "metarun_unlock_oath", "do_cmd_note", "quest_typewriter_menu", "drop_near")
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
-        str(ROOT / "src/quest/valar/tulkas-varda.c"), "@" + str(response),
+        str(ROOT / "src/quest/valar/tulkas-varda.c"),
+        *(str(ROOT / path) for path in base.SUPPORT_SOURCES), "@" + str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", *("-Wl,--wrap=" + name for name in wraps),
         "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="profile-", dir=OUT) as profile:

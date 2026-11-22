@@ -18,6 +18,8 @@ static bool reject_submerged_attack_item(const object_type* o_ptr)
             || o_ptr->sval == SV_STAFF_SLUMBER
             || o_ptr->sval == SV_STAFF_MAJESTY
             || o_ptr->sval == SV_STAFF_DISMAY;
+    else if (o_ptr->tval == TV_GEM)
+        attack = o_ptr->sval == SV_GEM_LIGHT;
     else if (artefact_p(o_ptr))
     {
         switch (a_info[o_ptr->name1].activation)
@@ -1179,6 +1181,9 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     }
 
     if (!o_ptr)
+        return;
+
+    if (reject_submerged_attack_item(o_ptr))
         return;
 
     if (!tutorial_game_action_allowed("use-item", o_ptr)) return;

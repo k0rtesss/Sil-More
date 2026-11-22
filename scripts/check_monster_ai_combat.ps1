@@ -16,7 +16,9 @@ try {
         -I src -I external/SDL/include scripts/tests/monster-ai-combat-test.c `
         src/monster/monster-ai.c src/monster/monster-social.c `
         src/monster/monster-abilities.c src/monster/monster-tactics.c `
-        src/player/player-song-monster.c src/support/geometry.c src/cave/cave-geometry.c `
+        src/player/player-song-monster.c src/player/player-active-weapon.c `
+        src/object/object-use.c src/object/object-flags.c `
+        src/support/geometry.c src/cave/cave-geometry.c `
         src/melee/melee-attack-ranged.c "$combatDir/PROCESS.o" "$combatDir/MELEE.o" `
         src/variable.c src/tables.c build-standard/_deps/SDL/libSDL3.dll.a -o "$combatDir/test.exe"
     if ($LASTEXITCODE -ne 0) { throw 'Monster AI combat fixture compilation failed.' }

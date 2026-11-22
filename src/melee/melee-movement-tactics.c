@@ -708,6 +708,49 @@ bool monster_squad_order_valid(const monster_type* m)
     return m->squad.target_y == p_ptr->py && m->squad.target_x == p_ptr->px;
 }
 
+static bool orc_liquor_officer(int race)
+{
+    return race == R_IDX_ORC_CAPTAIN || race == R_IDX_ORC_CHAMPION;
+}
+
+/* Evaluate a real bottle from the shooter's own position and sight. A squad
+ * sighting alone is insufficient, and allies may move before the order runs. */
+static bool has_safe_liquor_shot(const monster_type* m)
+{
+    const monster_race* race = &r_info[m->r_idx];
+    if (!(race->flags3 & RF3_ORC) || !monster_orcish_liquor(m)
+        || !squad_available(m) || monster_ai_challenge_melee(m)
+        || (cave_feat[m->fy][m->fx] == FEAT_DEEP_WATER && !(race->flags2 & RF2_FLYING))
+        || !monster_ai_can_see_player(m) || !monster_orcish_liquor_throw_has_clear_path(m)
+        || !monster_ai_poison_safe(m, m->fy, m->fx, 1))
+        return false;
+
+    for (int i = 0; i < 8; ++i)
+    {
+        int y = p_ptr->py + ddy_ddd[i], x = p_ptr->px + ddx_ddd[i];
+        if (!in_bounds(y, x)) continue;
+        int idx = cave_m_idx[y][x];
+        if (idx > 0 && monster_social_allies(m, &mon_list[idx])
+            && !(r_info[mon_list[idx].r_idx].flags3 & RF3_RES_FIRE)
+            && los(p_ptr->py, p_ptr->px, y, x))
+            return false;
+    }
+    return true;
+}
+
+int monster_liquor_throw_utility(const monster_type* m)
+{
+    bool independent = orc_liquor_officer(m->r_idx)
+        || m->r_idx == R_IDX_LUG || m->r_idx == R_IDX_OTHROD;
+    if (!independent && (m->squad.job != MON_JOB_THROW_LIQUOR
+            || !monster_squad_order_valid(m)))
+        return 0;
+    if (!has_safe_liquor_shot(m)) return 0;
+
+    /* Value the 3d4 burst on the same scale as a thrown missile. */
+    return 45 * MAX(25, 100 - 20 * monster_ai_confidence(m, MON_AI_FIRE)) / 100;
+}
+
 static bool squad_ranged(const monster_type* m)
 {
     const monster_race* r = &r_info[m->r_idx];
@@ -1039,12 +1082,25 @@ void monster_squad_prepare(void)
             monster_senses_share_trace(m, p_ptr->py, p_ptr->px);
         }
         squad_assign_jobs(leader, members, count, &previous[leader_idx]);
+        /* A bottle carrier with a clear shot can be ordered to throw from
+         * this square. Reserve it before assigning the rest of the formation. */
+        const monster_race* race = &r_info[leader->r_idx];
+        if ((race->flags3 & RF3_ORC)
+            && ((race->flags1 & RF1_UNIQUE) || orc_liquor_officer(leader->r_idx)))
+        {
+            for (int i = 1; i < count; ++i)
+                if (has_safe_liquor_shot(members[i]))
+                {
+                    members[i]->squad.job = MON_JOB_THROW_LIQUOR;
+                    assigned[i] = true;
+                }
+        }
         /* Reserve useful firing positions first, then arrange the melee line. */
         for (int ranged = 1; ranged >= 0; --ranged)
             for (int i = 0; i < count; ++i)
             {
                 monster_type* m = members[i];
-                if (squad_ranged(m) != (bool)ranged) continue;
+                if (assigned[i] || squad_ranged(m) != (bool)ranged) continue;
                 int idx = (int)(m - mon_list);
                 assigned[i] = squad_assign_position(m, leader, members, assigned,
                     count, &previous[idx]);

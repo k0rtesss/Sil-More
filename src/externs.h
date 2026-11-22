@@ -739,6 +739,8 @@ extern int concentration_bonus(int y, int x);
 extern int focused_attack_bonus(void);
 extern int master_hunter_bonus(monster_type* m_ptr);
 extern bool knock_back(int y1, int x1, int y2, int x2);
+extern bool knock_back_observing_fall(int y1, int x1, int y2, int x2,
+    bool* saw_fall);
 extern bool abort_for_mercy(monster_type* m_ptr);
 extern bool abort_for_valorous(monster_type* m_ptr);
 extern bool merciless_attack(monster_type* m_ptr);
@@ -824,6 +826,8 @@ extern void do_cmd_fire(int quiver);
 extern bool do_cmd_fire_at_adjacent(int y, int x);
 extern void do_cmd_throw(bool automatic);
 extern void do_cmd_throw_from_slot(int slot);
+extern bool monster_orcish_liquor_throw_has_clear_path(const monster_type* m_ptr);
+extern bool monster_throw_orcish_liquor(int m_idx);
 extern bool throw_slot_menu_active;
 extern bool throw_slot_enabled[INVEN_TOTAL];
 
@@ -991,6 +995,8 @@ extern char* oath_forbidden(int oath_id);
 extern char* oath_reward_text(int oath_id);
 extern void do_cmd_ability_screen(void);
 extern int object_difficulty(object_type* o_ptr);
+extern int smithing_common_stat_bonus(void);
+extern int smithing_item_skill(const object_type* object);
 extern int smithing_work_difficulty(void);
 extern void smithing_alloy_save_state(
     byte state[SMITHING_ALLOY_STATE_BYTES]);
@@ -1324,10 +1330,14 @@ extern void update_mon_for_generation(int m_idx);
 extern void update_monsters(bool full);
 extern bool detect_monster_noise(monster_type* m_ptr, int skill);
 extern s16b monster_carry(int m_idx, object_type* j_ptr);
+extern int monster_orcish_liquor(const monster_type* m_ptr);
+extern bool monster_pickup_orcish_liquor(monster_type* m_ptr);
 extern int monster_base_armour_sides(const monster_type* m_ptr);
 extern int monster_song_hp_loss(const monster_type* m_ptr);
 extern void monster_add_song_hp_loss(monster_type* m_ptr, int amount);
 extern void monster_swap(int y1, int x1, int y2, int x2);
+extern void monster_swap_observing_falls(int y1, int x1, int y2, int x2,
+    bool* saw_fall);
 extern bool monster_race_is_vala(int r_idx);
 extern bool monster_clear_vala_state(monster_type* m_ptr);
 extern s16b player_place(int y, int x);
@@ -2454,6 +2464,7 @@ extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
 extern void check_tulkas_quest_completion(int r_idx);
 extern void validate_tulkas_quest_on_load(void);
+extern bool quest_artefact_reserved(int a_idx);
 extern void remove_quest_giver(int quest_giver_r_idx);
 extern bool is_quest_giver_present(int quest_giver_r_idx);
 extern bool spawn_quest_giver_near_player(int quest_giver_r_idx);
@@ -2470,6 +2481,7 @@ extern bool varda_quest_duruin_can_enter(
 extern void varda_quest_notice_bastion_level_entry(void);
 extern bool varda_quest_confirm_leave_bastion(void);
 extern void varda_quest_fail_if_bastion_missed(void);
+extern void quests_on_level_departure(void);
 extern void mandos_quest_interaction(void);
 extern void check_mandos_quest_interaction(void);
 extern void check_mandos_quest_completion(int r_idx);
@@ -2695,6 +2707,12 @@ extern void sdl_hint_quest_menu_prepare_leaf_turn(
 extern void sdl_hint_quest_menu_hide(void);
 extern bool sdl_hint_quest_menu_active(void);
 extern bool sdl_hint_quest_menu_scroll(int direction, bool page);
+extern void sdl_smithing_sheet_set(int tabs_row, int body_row, int divider_col,
+    int summary_row, int footer_row);
+extern void sdl_smithing_sheet_clear(void);
+extern bool sdl_smithing_artwork_set(const object_type* object, int col,
+    int row, int cols, int rows);
+extern void sdl_smithing_artwork_clear(void);
 extern void sdl_suspend_main_view_zoom_for_saved_screen(void);
 extern bool sdl_resume_main_view_zoom_for_saved_screen(void);
 extern void sdl_reset_main_view_zoom(void);

@@ -50,7 +50,7 @@ void __wrap_handle_stuff(void)
 { p_ptr->update=0;p_ptr->redraw=0;p_ptr->window=0; }
 bool __wrap_tutorial_game_action_allowed(const char* action,const object_type* item)
 { (void)action;(void)item;return true; }
-static void prepare(bool metal)
+static void prepare(bool metal, bool pending)
 {
     memset(p_ptr,0,sizeof(*p_ptr));reset_map(1);
     memset(inventory,0,INVEN_TOTAL*sizeof(*inventory));
@@ -71,12 +71,13 @@ static void prepare(bool metal)
         inventory[2].weight=60;inventory[2].number=1;
         inventory[2].obj_note=quark_add("melt fixture source");
     }
-    fixture_pending_alloy();
+    object_wipe(smith_o_ptr);
+    if (pending) fixture_pending_alloy();
     turn=1001;playerturn=100;p_ptr->energy_use=0;
 }
-static void run(cptr name,cptr input,bool metal,bool confirmed)
+static void run(cptr name,cptr input,bool metal,bool confirmed,bool pending)
 {
-    scenario=name;prepare(metal);keys=input;
+    scenario=name;prepare(metal,pending);keys=input;
     object_type work=*smith_o_ptr;
     object_type source=inventory[2];
     int alloy=fixture_alloy();
@@ -92,8 +93,9 @@ static void run(cptr name,cptr input,bool metal,bool confirmed)
         for(int i=0;i<player_pack_entry_count();i++)
             assert(player_pack_entry_at(i)->tval!=TV_SWORD);
     } else {
-        assert(p_ptr->smithing_leftover==19);
-        assert(!memcmp(smith_o_ptr,&work,sizeof(work)) && fixture_alloy()==alloy);
+        assert(p_ptr->smithing_leftover==(pending ? 19 : 0));
+        assert(!memcmp(smith_o_ptr,&work,sizeof(work)));
+        if (pending) assert(fixture_alloy()==alloy);
         assert(!star_iron_carried());
         assert(!memcmp(&inventory[2],&source,sizeof(source)));
     }
@@ -101,12 +103,14 @@ static void run(cptr name,cptr input,bool metal,bool confirmed)
 static void checks(void)
 {
     set_sdl_input_ui_mode(SDL_INPUT_UI_MODE_PLATFORM);
-    run("picker Escape","e\033\033",true,false);
-    run("picker Back","e4\033",true,false);
-    run("confirmation No","ean\033\033",true,false);
-    run("confirmation Escape","ea\033\033\033",true,false);
-    run("no suitable items","e\033",false,false);
-    run("confirmed conversion","eay\033",true,true);
+    run("picker Escape","e\033\033",true,false,true);
+    run("picker Back","e4\033",true,false,true);
+    run("confirmation No","ean\033\033",true,false,true);
+    run("confirmation Escape","ea\033\033\033",true,false,true);
+    run("no suitable items","e\033",false,false,true);
+    run("confirmed conversion","eay\033",true,true,true);
+    run("fresh browser Melt cancel","M\033\033",true,false,false);
+    run("fresh browser Melt conversion","May\033",true,true,false);
     puts("Melt menus: Escape/Back/No/no-source retain pending alloy work; confirmed conversion preserves metal totals, stat/forge/clock rules PASS.");
 }
 """

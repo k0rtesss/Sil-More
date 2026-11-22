@@ -23,7 +23,7 @@ enum monster_command_kin
 enum monster_squad_job
 {
     MON_JOB_NONE, MON_JOB_ADVANCE, MON_JOB_FLANK, MON_JOB_GUARD, MON_JOB_COVER,
-    MON_JOB_HOLD, MON_JOB_REGROUP
+    MON_JOB_HOLD, MON_JOB_REGROUP, MON_JOB_THROW_LIQUOR
 };
 enum monster_squad_plan { MON_PLAN_ADVANCE, MON_PLAN_HOLD, MON_PLAN_REGROUP };
 #define MON_SQUAD_BUDGET_MAX_AGE 8
@@ -31,6 +31,7 @@ enum monster_squad_plan { MON_PLAN_ADVANCE, MON_PLAN_HOLD, MON_PLAN_REGROUP };
 void monster_squad_prepare(void);
 bool monster_squad_order_valid(const monster_type* m_ptr);
 bool monster_squad_hold_position(const monster_type* m_ptr);
+int monster_liquor_throw_utility(const monster_type* m_ptr);
 
 /* All previews start after the actor's current action-start poison tick.
  * A move applies entry contact, then each future action starts with contact

@@ -544,9 +544,9 @@ def suite(only=None) -> int:
         run(name,dict(stats=12,tiles=[dict(y=12,x=13,feat=feature)]),terrain)
 
     def smith(press, player, close, profile, initial):
-        press("0","a","a","a")
+        press("0","a")
         assert player()["player_turn"]==initial["player_turn"]
-        press("g")
+        press("F")
         assert player()["smithing"]==0
         assert player()["player_turn"]==initial["player_turn"]+10
         assert player()["feat"]==66 and count_items(player(),56,"pack")==5

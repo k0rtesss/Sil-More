@@ -5,6 +5,7 @@
 #include "log/perf.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "cave/cave.h"
 #include "cave/cave-environment.h"
 #include "melee/melee-util.h"
 #include "ui/question.h"
@@ -971,42 +972,24 @@ void move_player(int dir)
     }
 }
 
-/*
- * Hack -- Check for a "known wall" (see below)
- */
-static int see_wall(int dir, int y, int x)
+static bool run_grid_looks_like_wall(int y, int x)
 {
-    /* Get the new location */
-    y += ddy[dir];
-    x += ddx[dir];
-
-    /* Illegal grids are not known walls XXX XXX XXX */
-    if (!in_bounds(y, x))
-        return (false);
-
-    /* Non-wall grids are not known walls */
-    if (!cave_wall_bold(y, x))
-        return (false);
-
-    /* Unknown walls are not known walls */
-    if (!(cave_info[y][x] & (CAVE_MARK)))
-        return (false);
-
-    /* Default */
-    return (true);
+    return cave_wall_bold(y, x) || (cave_feat[y][x] == FEAT_ILLUSORY_WALL
+        && cave_illusion_opacity(y, x) == 255);
 }
 
-/*
- * Running treats an unknown grid like open floor.  A two-grid probe can
- * therefore confirm a tight corner only when the wall is both known and
- * actually a wall.
- */
+/* Running follows known wall outlines. Unknown squares remain possible routes. */
 static bool run_known_wall_at(int y, int x)
 {
     if (!in_bounds(y, x))
         return false;
 
-    return (cave_info[y][x] & CAVE_MARK) && cave_wall_bold(y, x);
+    return (cave_info[y][x] & CAVE_MARK) && run_grid_looks_like_wall(y, x);
+}
+
+static bool see_wall(int dir, int y, int x)
+{
+    return run_known_wall_at(y + ddy[dir], x + ddx[dir]);
 }
 
 /*
@@ -1308,7 +1291,7 @@ static bool run_test(void)
     int new_dir;
 
     int row, col;
-    int i, max, inv;
+    int i, max;
     int option, option2;
 
     /* No options yet */
@@ -1332,6 +1315,8 @@ static bool run_test(void)
         /* New location */
         row = py + ddy[new_dir];
         col = px + ddx[new_dir];
+        if (!in_bounds(row, col))
+            continue;
 
         /* Visible monsters abort running */
         if (cave_m_idx[row][col] > 0)
@@ -1352,17 +1337,23 @@ static bool run_test(void)
                 return (true);
         }
 
-        /* Assume unknown */
-        inv = true;
+        /* Unknown squares remain possible routes. */
+        bool open = true;
 
         /* Check memorized grids */
         if (cave_info[row][col] & (CAVE_MARK))
         {
             bool notice = true;
+            open = cave_floor_bold(row, col);
 
             /* Examine the terrain */
             switch (cave_feat[row][col])
             {
+            case FEAT_ILLUSORY_WALL:
+                open = false;
+                notice = !run_grid_looks_like_wall(row, col);
+                break;
+
             /* Floors */
             case FEAT_FLOOR:
             case FEAT_BRIDGE_WATER_H: case FEAT_BRIDGE_WATER_V:
@@ -1431,13 +1422,10 @@ static bool run_test(void)
             /* Interesting feature */
             if (notice)
                 return (true);
-
-            /* The grid is "visible" */
-            inv = false;
         }
 
         /* Analyze unknown grids and floors */
-        if (inv || cave_floor_bold(row, col))
+        if (open)
         {
             /* Looking for open area */
             if (p_ptr->run_open_area)
@@ -1508,6 +1496,8 @@ static bool run_test(void)
         /* New location */
         row = py + ddy[prev_dir] + ddy[new_dir];
         col = px + ddx[prev_dir] + ddx[new_dir];
+        if (!in_bounds(row, col))
+            continue;
 
         /* Visible immovable monsters abort running */
         if (cave_m_idx[row][col] > 0)
@@ -1533,9 +1523,7 @@ static bool run_test(void)
             col = px + ddx[new_dir];
 
             /* Unknown grid or non-wall */
-            /* Was: cave_floor_bold(row, col) */
-            if (!(cave_info[row][col] & (CAVE_MARK))
-                || (!cave_wall_bold(row, col)))
+            if (!run_known_wall_at(row, col))
             {
                 /* Looking to break right */
                 if (p_ptr->run_break_right)
@@ -1564,9 +1552,7 @@ static bool run_test(void)
             col = px + ddx[new_dir];
 
             /* Unknown grid or non-wall */
-            /* Was: cave_floor_bold(row, col) */
-            if (!(cave_info[row][col] & (CAVE_MARK))
-                || (!cave_wall_bold(row, col)))
+            if (!run_known_wall_at(row, col))
             {
                 /* Looking to break left */
                 if (p_ptr->run_break_left)
@@ -1619,7 +1605,8 @@ static bool run_test(void)
             /* Stop in the doorway of a room. */
             row = py + 2 * ddy[option];
             col = px + 2 * ddx[option];
-            if ((cave_info[row][col] & CAVE_MARK) && !cave_wall_bold(row, col))
+            if (in_bounds(row, col) && (cave_info[row][col] & CAVE_MARK)
+                && !run_grid_looks_like_wall(row, col))
             {
                 return (true);
             }

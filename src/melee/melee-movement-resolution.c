@@ -875,6 +875,10 @@ void process_move(monster_type* m_ptr, int ty, int tx, bool bash)
                 disturb(0, 0);
         }
 
+        /* Lug and orc captains replenish their bottles on arrival. */
+        if (cave_o_idx[ny][nx])
+            monster_pickup_orcish_liquor(m_ptr);
+
         /* Take or kill objects on the floor */
         if ((r_ptr->flags2 & (RF2_TAKE_ITEM))
             || (r_ptr->flags2 & (RF2_KILL_ITEM)))

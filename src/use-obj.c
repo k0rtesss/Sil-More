@@ -850,6 +850,17 @@ static bool quaff_potion(object_type* o_ptr, bool* ident)
     /* Potions can feed the player */
     (void)set_food(p_ptr->food + o_ptr->pval);
 
+    /* Draught of Delirium can trigger after any quaff. Hallucination from
+     * the curse reveals nothing about the potion's own effect. */
+    int curse_chance = MIN(100, 20 * curse_flag_count_cur(CUR_HALLU));
+    if (curse_chance > 0 && rand_int(100) < curse_chance)
+    {
+        int image_before = p_ptr->image;
+        (void)set_image(image_before + 11 + rand_int(10));
+        if (p_ptr->image > image_before)
+            msg_print("You suddenly see impossible colors!");
+    }
+
     return (true);
 }
 
@@ -1074,29 +1085,6 @@ static bool use_staff_effects(object_type* o_ptr, bool* ident, bool is_gem)
     }
     }
 
-    /* --------------------------------------------------
-     * Meta-run curse: CUR_HALLU
-     *   Each stack gives +20% chance on any quaff
-     *   to trigger hallucination (set_image).
-     * -------------------------------------------------- */
-    {
-        int stacks = curse_flag_count_cur(CUR_HALLU);
-        if (stacks && use_charge)  /* only when a potion actually took effect */
-        {
-            int chance = stacks * 20;
-            if (chance > 100) chance = 100;
-            /* chance%: rand_int(100) gives 0-99, so < chance is true chance times */
-            if (rand_int(100) < chance)
-            {
-                /* give a short hallucination burst */
-                int dur = rand_int(10) + 1 + 10; /* 1-10, then +10 */
-                (void)set_image(p_ptr->image + dur);
-                *ident = true;
-                msg_print("You suddenly see impossible colors!");
-            }
-        }
-    }
-
     return (use_charge);
 }
 
@@ -1260,7 +1248,8 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
                 int y = p_ptr->py + j * ddy[knock_back_dir];
                 int x = p_ptr->px + j * ddx[knock_back_dir];
 
-                if (cave_m_idx[y][x] <= 0)
+                if (!in_bounds_fully(y, x) || cave_m_idx[y][x] <= 0
+                    || !los(p_ptr->py, p_ptr->px, y, x))
                     continue;
 
                 monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
@@ -1275,14 +1264,26 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
                     > 0)
                 {
                     bool knocked_monster_back = false;
+                    bool visible_push = false;
 
-                    for (k = 3; k > j; --k)
+                    /* A chasm or trap can remove the monster mid-push. */
+                    for (k = 3; k > j && m_ptr->r_idx; --k)
                     {
-                        if (knock_back(
-                                p_ptr->py, p_ptr->px, m_ptr->fy, m_ptr->fx))
+                        bool visible_before_push = m_ptr->ml;
+                        bool saw_fall;
+                        if (knock_back_observing_fall(p_ptr->py, p_ptr->px,
+                                m_ptr->fy, m_ptr->fx, &saw_fall))
                         {
                             knocked_monster_back = true;
+                            visible_push |= visible_before_push || saw_fall;
                         }
+                    }
+
+                    if (!m_ptr->r_idx)
+                    {
+                        if (visible_push)
+                            *ident = true;
+                        continue;
                     }
 
                     if (knocked_monster_back)
@@ -1409,20 +1410,19 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
                     message_flush();
                     msg_print("You fall through...");
                     message_flush();
-                    msg_print(
-                        "...and land somewhere deeper in the Iron Hells.");
-                    message_flush();
-
                     // add to the notes file
                     do_cmd_note("Fell through the floor with a horn blast.",
                         p_ptr->depth);
 
                     // take some damage
                     falling_damage(true);
+                    *ident = true;
+                    if (p_ptr->is_dead) return true;
 
+                    msg_print("...and land somewhere deeper in the Iron Hells.");
                     message_flush();
 
-                    varda_quest_fail_if_bastion_missed();
+                    quests_on_level_departure();
 
                     // make a note if the player loses a greater vault
                     note_lost_greater_vault();
@@ -1437,8 +1437,6 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
 
                     /* Generate rubble on arrival */
                     p_ptr->create_rubble = true;
-
-                    *ident = true;
                 }
                 else
                 {

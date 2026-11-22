@@ -248,7 +248,7 @@ static bool make_artefact_special(object_type* o_ptr)
             continue;
 
         /* Cannot make an artefact reserved for Valar quest */
-        if (valar_reserved_artifacts && valar_reserved_artifacts[i])
+        if (quest_artefact_reserved(i))
             continue;
 
         /* Enforce minimum "depth" (loosely) */
@@ -330,7 +330,7 @@ static bool make_artefact(object_type* o_ptr, bool allow_insta)
             continue;
 
         /* Cannot make an artefact reserved for Valar quest */
-        if (valar_reserved_artifacts && valar_reserved_artifacts[i])
+        if (quest_artefact_reserved(i))
             continue;
 
         /* Must have the correct fields */

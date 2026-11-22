@@ -4566,10 +4566,10 @@ int sdl_char_sheet_collect_stats(sdl_char_sheet_line* lines,
             switch (stat)
             {
             case A_STR:
-                desc = "Strength: weapon damage die sides and carried-weight limit.";
+                desc = "Strength: weapon damage die sides, carried-weight limit, and heavy smithing.";
                 break;
             case A_DEX:
-                desc = "Dexterity: melee, evasion, archery, and stealth.";
+                desc = "Dexterity: melee, evasion, archery, stealth, and smithing.";
                 break;
             case A_CON:
                 desc = "Constitution: maximum health.";

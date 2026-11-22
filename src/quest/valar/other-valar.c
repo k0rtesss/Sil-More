@@ -713,6 +713,12 @@ void niena_quest_interaction(void)
  */
 void check_niena_quest_interaction(void)
 {
+    /* A leap or forced movement can also land the player on the stairs. */
+    if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE) {
+        check_niena_quest_completion();
+        return;
+    }
+
     /* Only check if quest is in appropriate state */
     if (p_ptr->niena_quest != NIENA_QUEST_GIVER_PRESENT &&
         p_ptr->niena_quest != NIENA_QUEST_SUCCESS)
@@ -733,19 +739,35 @@ void check_niena_quest_interaction(void)
             R_IDX_NIENA, 3, "Nienna", NULL, NULL, NULL);
 }
 
-/*
- * Check if the player has completed the Nienna mercy quest by reaching down stairs
- */
+void niena_quest_leave_level(void)
+{
+    if (p_ptr->niena_quest == NIENA_QUEST_ACTIVE) {
+        p_ptr->niena_quest = NIENA_QUEST_FAILED;
+        p_ptr->niena_level = 0;
+        msg_print("You have left Nienna's trial unfinished. The quest is lost.");
+    } else if (p_ptr->niena_quest == NIENA_QUEST_GIVER_PRESENT) {
+        p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
+        p_ptr->niena_level = 0;
+    }
+}
+
+/* Check whether the player reached the downward stair of Nienna's level. */
 void check_niena_quest_completion(void)
 {
     /* Only check if quest is active */
-    if (p_ptr->niena_quest != NIENA_QUEST_ACTIVE) {
+    if (p_ptr->niena_quest != NIENA_QUEST_ACTIVE || p_ptr->is_dead
+        || p_ptr->leaving || p_ptr->leaping) {
+        return;
+    }
+
+    /* An older save may hold an active trial from a different floor. */
+    if (p_ptr->niena_level > 0 && p_ptr->depth != p_ptr->niena_level) {
+        niena_quest_leave_level();
         return;
     }
 
     /* Check if player is on down stairs */
-    if (cave_feat[p_ptr->py][p_ptr->px] == FEAT_MORE ||
-        cave_feat[p_ptr->py][p_ptr->px] == FEAT_MORE_SHAFT) {
+    if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
 
         log_trace("Player reached down stairs during Nienna quest - quest completed!");
         log_trace("Final counts: seen=%d, killed=%d", p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);

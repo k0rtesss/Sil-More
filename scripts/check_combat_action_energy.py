@@ -12,6 +12,7 @@ CHECKS = r'''
 #include "melee/melee-movement.h"
 #include "melee/melee-attack.h"
 #include "object/object-place.h"
+#include "player/player-upkeep-internal.h"
 static int riposte_messages;
 void __real_msg_print(cptr msg);
 void __wrap_msg_print(cptr msg)
@@ -255,6 +256,8 @@ static void check_scare_resistance(void)
 static void check_disarm_floor_capacity(void)
 {
     monster_type* m = combat_fixture(105, -100);
+    /* Start with an empty object pool before limiting it to the sentinel. */
+    wipe_o_list();
     cave_m_idx[p_ptr->py][p_ptr->px] = -1;
     p_ptr->stat_base[A_STR] = p_ptr->stat_use[A_STR] = -20;
     p_ptr->skill_base[S_EVN] = -100;
@@ -281,6 +284,8 @@ static void check_disarm_weapon_modes(void)
     for (int throwing = 0; throwing <= 1; throwing++)
     {
         monster_type* m = combat_fixture(105, -100);
+        int initial_objects = o_cnt;
+        int next_object = o_max;
         cave_m_idx[p_ptr->py][p_ptr->px] = -1;
         object_type* spear = &inventory[INVEN_WIELD];
         int spear_kind = lookup_kind(TV_POLEARM, SV_SPEAR);
@@ -311,14 +316,15 @@ static void check_disarm_weapon_modes(void)
         assert(make_attack_normal(m));
         if (throwing)
         {
-            assert(utility > 0 && !spear->k_idx && o_cnt == 1);
-            assert(o_list[1].k_idx == spear_kind && o_list[1].number == 1);
-            assert(!o_list[1].pickup && o_list[1].pickup_slot == -1);
-            assert(!object_runtime_harness_color_id(&o_list[1]));
+            assert(utility > 0 && !spear->k_idx && o_cnt == initial_objects + 1);
+            object_type* dropped = &o_list[next_object];
+            assert(dropped->k_idx == spear_kind && dropped->number == 1);
+            assert(!dropped->held_m_idx && !dropped->pickup && dropped->pickup_slot == -1);
+            assert(!object_runtime_harness_color_id(dropped));
         }
         else
         {
-            assert(spear->k_idx == spear_kind && o_cnt == 0);
+            assert(spear->k_idx == spear_kind && o_cnt == initial_objects);
             assert(inventory[INVEN_BOW].k_idx && utility == 0);
         }
     }
@@ -339,6 +345,46 @@ static void check_disarm(void)
     race->blow[0] = first;
     race->blow[1] = second;
 }
+
+static void check_sprinting_history(void)
+{
+    /* The scheduler records completed actions starting at index 1, newest first. */
+    static const struct {
+        byte history[ACTION_MAX - 1];
+        bool light, heavy;
+    } cases[] = {
+        {{6, 6, 6, 6, ACTION_MISC}, true, true},
+        {{6, 6, 6, ACTION_MISC, 6}, true, false},
+        {{6, 9, 6, 9, ACTION_MISC}, true, true},
+        {{8, 9, 8, 9, ACTION_MISC}, true, true},
+        {{6, 6, ACTION_MISC, 6, 6}, false, false},
+        {{5, 6, 6, 6, 6}, false, false},
+        {{2, 1, 1, 2, ACTION_MISC}, true, true},
+        {{1, 9, 9, 9, 9}, false, false},
+        {{3, 2, 4, 4, 4}, false, false},
+    };
+    for (int heavy = 0; heavy <= 1; heavy++)
+    {
+        combat_fixture(403, 0);
+        if (heavy)
+            object_prep(&inventory[INVEN_BODY], lookup_kind(TV_MAIL, SV_MAIL_CORSLET));
+        assert(wearing_only_light_armour() == !heavy);
+        p_ptr->innate_ability[S_EVN][EVN_SPRINTING] = true;
+        calc_bonuses();
+        int normal_speed = p_ptr->pspeed;
+        assert(normal_speed < 3);
+        p_ptr->active_ability[S_EVN][EVN_SPRINTING] = true;
+        for (size_t i = 0; i < N_ELEMENTS(cases); ++i)
+        {
+            memcpy(&p_ptr->previous_action[1], cases[i].history, sizeof(cases[i].history));
+            bool expected = heavy ? cases[i].heavy : cases[i].light;
+            calc_bonuses();
+            assert(sprinting() == expected);
+            assert(p_ptr->pspeed == normal_speed + expected);
+        }
+    }
+    puts("Sprinting: only continuous movement counts, compass bends work, stops and sharp turns reset, both armour thresholds set speed: PASS.");
+}
 '''
 
 
@@ -354,6 +400,7 @@ def main():
         "    check_riposte_terrain();",
         "    check_scare_resistance();",
         "    check_disarm();",
+        "    check_sprinting_history();",
     ]))
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"
@@ -363,7 +410,7 @@ def main():
         if not p.endswith(("/src/main.c.obj", "/src/cmd/combat/cmd-combat.c.obj",
             "/src/melee/melee-movement-resolution.c.obj",
             "/src/melee/melee-attack.c.obj", "/src/melee/melee-attack-ranged.c.obj",
-            "/src/object/object-place.c.obj"))), encoding="utf-8")
+            "/src/object/object-place.c.obj", "/src/player/player-skills.c.obj"))), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([
         *(str(engine.BUILD / "_deps" / name) for name in ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")),
@@ -377,6 +424,7 @@ def main():
         str(engine.ROOT / "src/melee/melee-attack.c"),
         str(engine.ROOT / "src/melee/melee-attack-ranged.c"),
         str(engine.ROOT / "src/object/object-place.c"),
+        str(engine.ROOT / "src/player/player-skills.c"),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=get_check_near",
         "-Wl,--wrap=msg_print", "-o", str(exe)],
         cwd=engine.BUILD, env=env, check=True)

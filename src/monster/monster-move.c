@@ -5,6 +5,18 @@
 #include "log/perf.h"
 #include "cave/cave.h"
 
+static void monster_link_carried_object(int m_idx, int o_idx)
+{
+    monster_type* m_ptr = &mon_list[m_idx];
+    object_type* o_ptr = &o_list[o_idx];
+
+    o_ptr->marked = false;
+    o_ptr->iy = o_ptr->ix = 0;
+    o_ptr->held_m_idx = m_idx;
+    o_ptr->next_o_idx = m_ptr->hold_o_idx;
+    m_ptr->hold_o_idx = o_idx;
+}
+
 /*
  * Make a monster carry an object
  */
@@ -47,38 +59,67 @@ s16b monster_carry(int m_idx, object_type* j_ptr)
     /* Success */
     if (o_idx)
     {
-        object_type* o_ptr;
-
-        /* Get new object */
-        o_ptr = &o_list[o_idx];
-
-        /* Copy object */
-        object_copy(o_ptr, j_ptr);
-
-        /* Forget mark */
-        o_ptr->marked = false;
-
-        /* Forget location */
-        o_ptr->iy = o_ptr->ix = 0;
-
-        /* Link the object to the monster */
-        o_ptr->held_m_idx = m_idx;
-
-        /* Link the object to the pile */
-        o_ptr->next_o_idx = m_ptr->hold_o_idx;
-
-        /* Link the monster to the object */
-        m_ptr->hold_o_idx = o_idx;
+        object_copy(&o_list[o_idx], j_ptr);
+        monster_link_carried_object(m_idx, o_idx);
     }
 
     /* Result */
     return (o_idx);
 }
 
+static bool is_orcish_liquor(const object_type* o_ptr)
+{
+    return o_ptr->k_idx && o_ptr->number && o_ptr->tval == TV_POTION
+        && o_ptr->sval == SV_POTION_ORCISH_LIQUOR;
+}
+
+int monster_orcish_liquor(const monster_type* m_ptr)
+{
+    for (int idx = m_ptr->hold_o_idx; idx; idx = o_list[idx].next_o_idx)
+    {
+        if (is_orcish_liquor(&o_list[idx]))
+            return idx;
+    }
+    return 0;
+}
+
+bool monster_pickup_orcish_liquor(monster_type* m_ptr)
+{
+    if ((m_ptr->r_idx != R_IDX_ORC_CAPTAIN && m_ptr->r_idx != R_IDX_LUG)
+        || m_ptr->confused || m_ptr->alertness < ALERTNESS_UNWARY
+        || monster_orcish_liquor(m_ptr))
+        return false;
+
+    int y = m_ptr->fy, x = m_ptr->fx;
+    if (cave_feat[y][x] == FEAT_DEEP_WATER)
+        return false;
+
+    for (int idx = cave_o_idx[y][x]; idx; idx = o_list[idx].next_o_idx)
+    {
+        object_type* o_ptr = &o_list[idx];
+        if (!is_orcish_liquor(o_ptr) || cursed_p(o_ptr) || broken_p(o_ptr))
+            continue;
+        if (m_ptr->ml && player_can_see_bold(y, x))
+        {
+            char name[80], item[120];
+            monster_desc(name, sizeof(name), m_ptr, 0);
+            object_desc(item, sizeof(item), o_ptr, true, 3);
+            msg_format("%^s picks up %s.", name, item);
+        }
+        /* Keep the existing stack and its metadata, even at the object cap. */
+        excise_object_idx(idx);
+        monster_link_carried_object(cave_m_idx[y][x], idx);
+        lite_spot(y, x);
+        p_ptr->window |= PW_MONSTER;
+        return true;
+    }
+    return false;
+}
+
 /*
- * Check if the monster in the given location needs to fall down a chasm
+ * Resolve a monster's chasm fall and return whether the player saw it.
  */
-void m_fall_in_chasm(int fy, int fx)
+static bool m_fall_in_chasm(int fy, int fx)
 {
     monster_type* m_ptr;
     monster_race* r_ptr;
@@ -89,18 +130,20 @@ void m_fall_in_chasm(int fy, int fx)
 
     // paranoia
     if (cave_m_idx[fy][fx] <= 0)
-        return;
+        return false;
 
     m_ptr = &mon_list[cave_m_idx[fy][fx]];
     r_ptr = &r_info[m_ptr->r_idx];
 
     if ((cave_feat[fy][fx] == FEAT_CHASM) && !(r_ptr->flags2 & (RF2_FLYING)))
     {
+        bool visible = m_ptr->ml;
+
         // Get the monster name
         monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
         // message for visible monsters
-        if (m_ptr->ml)
+        if (visible)
         {
             // Dump a message
             if (m_ptr->morale < -200)
@@ -151,7 +194,9 @@ void m_fall_in_chasm(int fy, int fx)
             // just delete the monster
             delete_monster(m_ptr->fy, m_ptr->fx);
         }
+        return visible;
     }
+    return false;
 }
 
 /*
@@ -455,7 +500,8 @@ static bool player_environment_bonus_state_changed(int old_y, int old_x,
         || FEAT_IS_ICE(cave_feat[new_y][new_x]);
 }
 
-void monster_swap(int y1, int x1, int y2, int x2)
+void monster_swap_observing_falls(int y1, int x1, int y2, int x2,
+    bool* saw_fall)
 {
     int m1 = cave_m_idx[y1][x1];
     int m2 = cave_m_idx[y2][x2];
@@ -469,6 +515,9 @@ void monster_swap(int y1, int x1, int y2, int x2)
     char m_name[80];
 
     bool monster1 = false;
+
+    if (saw_fall)
+        *saw_fall = false;
 
     /* Monster 1 */
     if (m1 > 0)
@@ -801,11 +850,11 @@ void monster_swap(int y1, int x1, int y2, int x2)
         || cave_feat[p_ptr->py][p_ptr->px] == FEAT_DEEP_WATER))
         cave_when[p_ptr->py][p_ptr->px] = 0;
 
-    // deal with falling down chasms
-    if (m1 > 0)
-        m_fall_in_chasm(y2, x2);
-    if (m2 > 0)
-        m_fall_in_chasm(y1, x1);
+    /* A monster may only become visible after moving onto the chasm. */
+    bool saw_first_fall = m1 > 0 && m_fall_in_chasm(y2, x2);
+    bool saw_second_fall = m2 > 0 && m_fall_in_chasm(y1, x1);
+    if (saw_fall)
+        *saw_fall = saw_first_fall || saw_second_fall;
 
     // a monster that moved onto a rewired trap may set it off
     if (m1 > 0)
@@ -822,6 +871,11 @@ void monster_swap(int y1, int x1, int y2, int x2)
         else if (m2 < 0) sil_achievements_on_movement(y2, x2, y1, x1);
         describe_floor_object();
     }
+}
+
+void monster_swap(int y1, int x1, int y2, int x2)
+{
+    monster_swap_observing_falls(y1, x1, y2, x2, NULL);
 }
 
 /*
@@ -866,7 +920,8 @@ static byte monster_initial_random_tile_facing(int m_idx, int r_idx)
                        : MONSTER_TILE_FACING_RIGHT;
 }
 
-s16b monster_place(int y, int x, monster_type* n_ptr)
+s16b monster_place_carrying(int y, int x, monster_type* n_ptr,
+    const object_type* possession)
 {
     s16b m_idx;
 
@@ -878,11 +933,21 @@ s16b monster_place(int y, int x, monster_type* n_ptr)
         return (0);
 
     /* Get a new record */
+    int previous_mon_max = mon_max;
     m_idx = mon_pop();
 
     /* Oops */
     if (m_idx)
     {
+        int o_idx = possession ? o_pop() : 0;
+        if (possession && !o_idx)
+        {
+            /* Release the unplaced record before changing map or lore. */
+            mon_cnt--;
+            mon_max = previous_mon_max;
+            return 0;
+        }
+
         /* Make a new monster */
         cave_m_idx[y][x] = m_idx;
 
@@ -895,6 +960,12 @@ s16b monster_place(int y, int x, monster_type* n_ptr)
         /* Location */
         m_ptr->fy = y;
         m_ptr->fx = x;
+
+        if (o_idx)
+        {
+            object_copy(&o_list[o_idx], possession);
+            monster_link_carried_object(m_idx, o_idx);
+        }
 
         /* Set once at placement so random-facing races never flicker. */
         m_ptr->visual_random_facing = monster_initial_random_tile_facing(
@@ -920,6 +991,11 @@ s16b monster_place(int y, int x, monster_type* n_ptr)
 
     /* Result */
     return (m_idx);
+}
+
+s16b monster_place(int y, int x, monster_type* n_ptr)
+{
+    return monster_place_carrying(y, x, n_ptr, NULL);
 }
 
 /*calculate the monster_speed of a monster at a given location*/

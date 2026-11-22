@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check move-to-popup ordering through the real player turn, using temporary data.
+"""Check map pointer actions and popup timing with temporary player data.
 
 Run after build-incremental.ps1. Reuses the isolated engine/template fixture;
 never opens a player save or configuration.
@@ -7,6 +7,7 @@ never opens a player save or configuration.
 import check_new_monsters as engine
 
 CHECKS = r'''
+#include "support/movement-input.h"
 #include "tutorial/tutorial.h"
 void process_player(void);
 
@@ -331,6 +332,106 @@ static void check_hover_after_question(bool held_left)
     g_sdl_blocking_key_wait = false;
 }
 
+static void send_map_mouse_event(Uint32 type, int x)
+{
+    SDL_Event event = map_pointer_event(type, 10, x, SDL_BUTTON_LEFT);
+
+    if (type == SDL_EVENT_MOUSE_MOTION)
+        event.motion.state = SDL_BUTTON_LMASK;
+    sdl_handle_event(&g_state, &event);
+}
+
+static void begin_mouse_run_hold(void)
+{
+    inkey_flag = true;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_DUNGEON);
+    send_map_mouse_event(SDL_EVENT_MOUSE_BUTTON_DOWN, 12);
+    assert(g_main_map_drag.active && g_main_map_drag.run_dir == 6);
+    assert(!g_main_map_drag.run_ready && Term->key_head == Term->key_tail);
+}
+
+static void check_mouse_run_hold(void)
+{
+    popup_move_fixture(false);
+    character_generated = true;
+    term_screen = &test_term;
+    test_term.xtra_hook = callback_sdl_xtra;
+    for (int x = 11; x <= 15; ++x)
+        cave_info[10][x] |= CAVE_MARK | CAVE_SEEN;
+
+    begin_mouse_run_hold();
+    send_map_mouse_event(SDL_EVENT_MOUSE_BUTTON_UP, 12);
+    assert(!g_main_map_drag.active && g_mouse_path.follow_active);
+    request_command();
+    assert(p_ptr->command_cmd == ';' && p_ptr->command_dir == 6);
+    sdl_mouse_path_cancel();
+
+    begin_mouse_run_hold();
+    Uint64 deadline = g_main_map_drag.run_deadline_ns;
+    sdl_main_map_flush_pending_run(deadline - 1);
+    assert(!g_main_map_drag.run_ready);
+    assert(sdl_main_map_run_pending_timeout_ms(deadline - 1) == 1);
+    while (!g_main_map_drag.run_ready
+        && SDL_GetTicksNS() < deadline + SDL_MS_TO_NS(1500))
+    {
+        assert(!callback_sdl_xtra(TERM_XTRA_EVENT, 1));
+    }
+    assert(g_main_map_drag.run_ready && Term->key_head == Term->key_tail);
+    assert(p_ptr->py == 10 && p_ptr->px == 11);
+
+    SDL_FRect tile;
+    assert(sdl_player_map_rect(10, 12, &tile));
+    assert(SDL_SetRenderTarget(g_state.renderer, NULL));
+    assert(SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255));
+    assert(SDL_RenderClear(g_state.renderer));
+    sdl_mouse_path_render();
+    SDL_Rect center = {(int)(tile.x + tile.w / 2), (int)(tile.y + tile.h / 2), 1, 1};
+    SDL_Surface* pixel = SDL_RenderReadPixels(g_state.renderer, &center);
+    Uint8 r, g, b;
+    assert(pixel && SDL_ReadSurfacePixel(pixel, 0, 0, &r, &g, &b, NULL));
+    assert(g > r && g > b);
+    SDL_DestroySurface(pixel);
+
+    send_map_mouse_event(SDL_EVENT_MOUSE_BUTTON_UP, 12);
+    assert(!g_main_map_drag.active && !g_mouse_path.follow_active);
+    request_command();
+    assert(p_ptr->command_cmd == '.' && p_ptr->command_dir == 6);
+    assert(Term->key_head == Term->key_tail);
+
+    SDL_Event cancellation[] = {
+        { .type = SDL_EVENT_MOUSE_MOTION },
+        { .key = { .type = SDL_EVENT_KEY_DOWN, .key = SDLK_ESCAPE } },
+        { .type = SDL_EVENT_WINDOW_FOCUS_LOST },
+    };
+    for (int i = 0; i < (int)N_ELEMENTS(cancellation); ++i) {
+        begin_mouse_run_hold();
+        sdl_main_map_flush_pending_run(g_main_map_drag.run_deadline_ns);
+        assert(g_main_map_drag.run_ready);
+        if (cancellation[i].type == SDL_EVENT_MOUSE_MOTION) {
+            send_map_mouse_event(SDL_EVENT_MOUSE_MOTION, 13);
+            send_map_mouse_event(SDL_EVENT_MOUSE_MOTION, 12);
+        } else {
+            sdl_handle_event(&g_state, &cancellation[i]);
+        }
+        assert(!g_main_map_drag.run_ready);
+        send_map_mouse_event(SDL_EVENT_MOUSE_BUTTON_UP, 12);
+        assert(!g_main_map_drag.active && !g_mouse_path.follow_active);
+        assert(Term->key_head == Term->key_tail);
+        sdl_main_map_flush_pending_pan();
+        assert(p_ptr->wy == 0 && p_ptr->wx == 0);
+    }
+
+    config.mouse_movement_mode = SDL_MOUSE_MOVEMENT_RIGHT_ONLY;
+    send_map_mouse_event(SDL_EVENT_MOUSE_BUTTON_DOWN, 12);
+    assert(!g_main_map_drag.run_dir);
+    send_map_mouse_event(SDL_EVENT_MOUSE_BUTTON_UP, 12);
+    assert(!g_mouse_path.follow_active && Term->key_head == Term->key_tail);
+    config.mouse_movement_mode = SDL_MOUSE_MOVEMENT_ON;
+    movement_input_set_active_context(MOVEMENT_INPUT_CONTEXT_NONE);
+    inkey_flag = false;
+    puts("PASS: mouse hold preview, directional Run, quick click, drag-off, Escape, focus loss, and right-click-only mode.");
+}
+
 static void check_popup_map_hover(const char* edit_dir)
 {
     assert(SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy"));
@@ -368,6 +469,7 @@ static void check_popup_map_hover(const char* edit_dir)
     sdl_set_present_suppressed(true);
     check_hover_after_question(true);
     check_hover_after_question(false);
+    check_mouse_run_hold();
     sdl_ui_text_cache_clear();
     sdl_story_font_cache_clear();
     SDL_DestroyRenderer(g_state.renderer);

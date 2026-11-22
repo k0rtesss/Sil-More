@@ -546,6 +546,9 @@ static void process_monster(monster_type* m_ptr)
         return;
     }
 
+    if (monster_pickup_orcish_liquor(m_ptr))
+        return;
+
     monster_senses_refresh(m_ptr);
 
     /* Displacement does not replace the home territory with the new location. */
@@ -803,20 +806,30 @@ static void process_monster(monster_type* m_ptr)
         chance = get_chance_of_ranged_attack(m_ptr);
         if (monster_ai_casting_opportunity(m_ptr, chance))
             choice = choose_ranged_attack(m_idx);
-        if (choice)
+    }
+    int liquor = monster_liquor_throw_utility(m_ptr);
+    if (choice || liquor)
+    {
+        int melee = monster_best_melee_utility(m_ptr);
+        int move = monster_tactical_move_utility(m_ptr);
+        int alternative = MAX(melee, move);
+        int ranged = choice ? monster_ranged_utility(m_ptr, choice) : 0;
+
+        /* A carried bottle is a single-use item. It competes with the
+         * available spell and movement without using a casting opportunity. */
+        if (liquor > 0 && liquor >= ranged && liquor * 10 >= alternative * 9
+            && monster_throw_orcish_liquor(m_idx))
         {
-            int alternative = MAX(monster_best_melee_utility(m_ptr),
-                monster_tactical_move_utility(m_ptr));
-            if (!monster_ai_enabled(m_ptr)
-                || monster_ranged_utility(m_ptr, choice) * 10 >= alternative * 9)
-            {
-                if (make_attack_ranged(m_ptr, choice))
-                {
-                    log_monster_ranged(m_ptr, choice);
-                    monster_ai_spend_casting_opportunity(m_ptr);
-                    return;
-                }
-            }
+            log_debug("[monster-ai] player_turn=%ld actor=%d race=%d completed=liquor",
+                (long)playerturn, m_idx, m_ptr->r_idx);
+            return;
+        }
+        if (choice && (!monster_ai_enabled(m_ptr) || ranged * 10 >= alternative * 9)
+            && make_attack_ranged(m_ptr, choice))
+        {
+            log_monster_ranged(m_ptr, choice);
+            monster_ai_spend_casting_opportunity(m_ptr);
+            return;
         }
     }
 
@@ -1265,7 +1278,10 @@ void calc_morale(monster_type* m_ptr)
             /* Get the next object */
             next_o_idx = o_ptr->next_o_idx;
 
-            // Lower morale
+            /* An orc's ammunition gives it no reason to flee with loot. */
+            if ((r_ptr->flags3 & RF3_ORC) && o_ptr->tval == TV_POTION
+                && o_ptr->sval == SV_POTION_ORCISH_LIQUOR)
+                continue;
             morale -= 20;
         }
     }

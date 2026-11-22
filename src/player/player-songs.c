@@ -75,6 +75,12 @@ void change_song(int song)
         return;
     }
 
+    if (song == SNG_DISGUISE && song_disguise_any_monster_observes_player())
+    {
+        msg_print("You cannot begin the Song of Disguise while observed.");
+        return;
+    }
+
     if ((song_to_change == 1) && new_song_is_duel)
     {
         if (p_ptr->song_lockout_timer > 0)
@@ -124,9 +130,6 @@ void change_song(int song)
     {
     case SNG_NOTHING:
     {
-        if (song_disguise_is_active())
-            song_disguise_stop();
-
         if ((song_to_change == 1) && (p_ptr->song1 != SNG_NOTHING))
         {
             msg_print("You end your song.");
@@ -294,15 +297,6 @@ void change_song(int song)
     }
     case SNG_DISGUISE:
     {
-        if (old_song != SNG_DISGUISE)
-        {
-            if (song_disguise_any_monster_observes_player())
-            {
-                msg_print("You cannot begin the Song of Disguise while observed.");
-                return;
-            }
-        }
-
         if (song_to_change == 1)
         {
             msg_print("You begin a soft song of misdirection and guile.");

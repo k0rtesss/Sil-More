@@ -1616,8 +1616,6 @@ void hit_trap(int y, int x)
         }
         else
         {
-            msg_print("...and land somewhere deeper in the Iron Hells.");
-            message_flush();
             sound(MSG_LANDING);
 
             // add to the notes file
@@ -1625,9 +1623,12 @@ void hit_trap(int y, int x)
 
             // take some damage
             falling_damage(false);
+            if (p_ptr->is_dead) return;
+            msg_print("...and land somewhere deeper in the Iron Hells.");
+            message_flush();
             sil_achievements_on_fall();
 
-            varda_quest_fail_if_bastion_missed();
+            quests_on_level_departure();
 
             // make a note if the player loses a greater vault
             note_lost_greater_vault();
@@ -1658,8 +1659,6 @@ void hit_trap(int y, int x)
         message_flush();
         msg_print("You fall through...");
         message_flush();
-        msg_print("...and land somewhere deeper in the Iron Hells.");
-        message_flush();
         sound(MSG_LANDING);
 
         // add to the notes file
@@ -1667,9 +1666,12 @@ void hit_trap(int y, int x)
 
         // take some damage
         falling_damage(false);
+        if (p_ptr->is_dead) return;
+        msg_print("...and land somewhere deeper in the Iron Hells.");
+        message_flush();
         sil_achievements_on_fall();
 
-        varda_quest_fail_if_bastion_missed();
+        quests_on_level_departure();
 
         // make a note if the player loses a greater vault
         note_lost_greater_vault();
@@ -2453,7 +2455,7 @@ static int knock_back_path(int y, int x, int dy, int dx, int max_distance,
     return distance;
 }
 
-bool knock_back(int y1, int x1, int y2, int x2)
+bool knock_back_observing_fall(int y1, int x1, int y2, int x2, bool* saw_fall)
 {
     bool knocked = false;
 
@@ -2467,6 +2469,9 @@ bool knock_back(int y1, int x1, int y2, int x2)
 
     // default to there being no monster
     monster_type* m_ptr = NULL;
+
+    if (saw_fall)
+        *saw_fall = false;
 
     // determine the main direction from the source to the target
     dir = rough_direction(y1, x1, y2, x2);
@@ -2537,7 +2542,7 @@ bool knock_back(int y1, int x1, int y2, int x2)
                 && !(r_info[m_ptr->r_idx].flags2 & RF2_FLYING);
             if (player_chasm_knock)
                 m_ptr->mflag |= MFLAG_PLAYER_KNOCKBACK;
-            monster_swap(y2, x2, y3, x3);
+            monster_swap_observing_falls(y2, x2, y3, x3, saw_fall);
             /* The chasm handler removes both killed and surviving fallers. */
             if (player_chasm_knock && !mon_list[knocked_idx].r_idx)
                 sil_achievements_on_event(SIL_ACH_FLY_YOU_FOOL);
@@ -2585,6 +2590,11 @@ bool knock_back(int y1, int x1, int y2, int x2)
     }
 
     return (knocked);
+}
+
+bool knock_back(int y1, int x1, int y2, int x2)
+{
+    return knock_back_observing_fall(y1, x1, y2, x2, NULL);
 }
 
 bool merciless_attack(monster_type* m_ptr)

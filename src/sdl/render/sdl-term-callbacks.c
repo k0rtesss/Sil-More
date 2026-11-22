@@ -65,6 +65,7 @@ errr callback_sdl_xtra(int n, int v)
             int pointer_attack_touch_timeout_ms =
                 sdl_pointer_attack_pending_timeout_ms(now_ns);
             int map_touch_timeout_ms = sdl_map_touch_pending_timeout_ms(now_ns);
+            int map_run_timeout_ms = sdl_main_map_run_pending_timeout_ms(now_ns);
             int object_tooltip_timeout_ms =
                 sdl_object_tooltip_pending_timeout_ms(now_ns);
             int zone_touch_timeout_ms = sdl_touch_zone_pending_timeout_ms(now_ns);
@@ -119,6 +120,8 @@ errr callback_sdl_xtra(int n, int v)
             }
             if (timeout_ms < 0 || (map_touch_timeout_ms >= 0 && map_touch_timeout_ms < timeout_ms))
                 timeout_ms = map_touch_timeout_ms;
+            if (timeout_ms < 0 || (map_run_timeout_ms >= 0 && map_run_timeout_ms < timeout_ms))
+                timeout_ms = map_run_timeout_ms;
             if (timeout_ms < 0 || (object_tooltip_timeout_ms >= 0
                     && object_tooltip_timeout_ms < timeout_ms))
             {
@@ -232,6 +235,7 @@ errr callback_sdl_xtra(int n, int v)
             sdl_player_action_menu_flush_pending_press(flush_ns);
             sdl_pointer_attack_flush_pending_press(flush_ns);
             sdl_map_touch_flush_pending_press(flush_ns);
+            sdl_main_map_flush_pending_run(flush_ns);
             sdl_object_tooltip_flush_expired(flush_ns);
             sdl_question_menu_flush_expired(flush_ns);
             sdl_popup_notification_flush_expired(flush_ns);
@@ -267,6 +271,7 @@ errr callback_sdl_xtra(int n, int v)
             sdl_player_action_menu_flush_pending_press(flush_ns);
             sdl_pointer_attack_flush_pending_press(flush_ns);
             sdl_map_touch_flush_pending_press(flush_ns);
+            sdl_main_map_flush_pending_run(flush_ns);
             sdl_object_tooltip_flush_expired(flush_ns);
             sdl_question_menu_flush_expired(flush_ns);
             sdl_popup_notification_flush_expired(flush_ns);
@@ -312,6 +317,7 @@ errr callback_sdl_xtra(int n, int v)
         }
         sdl_main_map_flush_pending_pan();
         sdl_minimap_flush_pending_redraw();
+        sdl_main_map_cancel_run_press();
         {
             Uint64 flush_ns = SDL_GetTicksNS();
             sdl_gamepad_flush_pending_confirm(flush_ns);
@@ -392,6 +398,7 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_player_action_menu_flush_pending_press(flush_ns);
                 sdl_pointer_attack_flush_pending_press(flush_ns);
                 sdl_map_touch_flush_pending_press(flush_ns);
+                sdl_main_map_flush_pending_run(flush_ns);
                 sdl_object_tooltip_flush_expired(flush_ns);
                 sdl_question_menu_flush_expired(flush_ns);
                 sdl_popup_notification_flush_expired(flush_ns);

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "quest/quest-internal.h"
 #include "achievements.h"
 #include "achievements-lore.h"
 #include "monster/monster-ai.h"
@@ -221,32 +222,38 @@ static u32b monster_drop_source_ident(const monster_race* r_ptr)
     return source_ident;
 }
 
-static void create_chosen_artefact_marked(
-    byte name1, int y, int x, bool identify, u32b source_ident)
+typedef enum {
+    ARTEFACT_FIXED_DROP,
+    ARTEFACT_QUEST_REWARD,
+    ARTEFACT_TULKAS_PRIZE
+} artefact_creation;
+
+static bool create_chosen_artefact_marked(
+    byte name1, int y, int x, bool identify, u32b source_ident,
+    artefact_creation creation)
 {
     object_type* i_ptr;
     object_type object_type_body;
     artefact_type* a_ptr = &a_info[name1];
+    bool quest_reward = creation != ARTEFACT_FIXED_DROP;
 
     log_trace("create_chosen_artefact: Creating artifact %d at (%d,%d), identify=%s", name1, y, x, identify ? "true" : "false");
 
     // Don't generate it if one has already been generated
     if (a_ptr->cur_num > 0) {
         log_trace("create_chosen_artefact: Artifact %d already exists (cur_num=%d)", name1, a_ptr->cur_num);
-        return;
+        return false;
     }
 
-    // Don't generate it if it's reserved for Tulkas quest (unless this IS the quest reward)
-    if (valar_reserved_artifacts && valar_reserved_artifacts[name1] &&
-        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE) {
-        log_trace("create_chosen_artefact: Artifact %d is reserved for Tulkas quest", name1);
-        return;
+    if (creation != ARTEFACT_TULKAS_PRIZE && quest_artefact_reserved(name1)) {
+        log_trace("create_chosen_artefact: Artifact %d is reserved", name1);
+        return false;
     }
 
     // Don't generate it in no-artefact games, with one obvious exception
     if (birth_no_artefacts && (name1 != ART_MORGOTH_3)) {
         log_trace("create_chosen_artefact: Skipping artifact %d due to no-artifacts birth option", name1);
-        return;
+        return false;
     }
 
     log_trace("create_chosen_artefact: All checks passed, creating artifact %d", name1);
@@ -278,7 +285,8 @@ static void create_chosen_artefact_marked(
     if (identify)
     {
         log_trace("create_chosen_artefact: Identifying artifact %d", name1);
-        object_aware(i_ptr);
+        if (!quest_reward)
+            object_aware(i_ptr);
         object_known(i_ptr);
         log_trace("create_chosen_artefact: Artifact identified");
     }
@@ -286,18 +294,36 @@ static void create_chosen_artefact_marked(
     log_trace("create_chosen_artefact: About to drop artifact %d at (%d,%d)", name1, y, x);
 
     /* Drop it in the dungeon */
-    drop_near(i_ptr, -1, y, x);
+    s16b placed = drop_near(i_ptr, -1, y, x);
+    if (!placed)
+    {
+        if (quest_reward)
+            a_ptr->cur_num = 0;
+        return false;
+    }
+
+    /* Identification can award XP. Wait until the promised item exists. */
+    if (quest_reward)
+        object_aware(&o_list[placed]);
 
     log_trace("create_chosen_artefact: Successfully created and dropped artifact %d", name1);
+    return true;
 }
 
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
 {
-    create_chosen_artefact_marked(name1, y, x, identify, 0);
+    create_chosen_artefact_marked(name1, y, x, identify, 0, ARTEFACT_FIXED_DROP);
 }
 
-static void drop_carried_objects(monster_type* m_ptr, u32b source_ident)
+bool create_quest_reward_artefact(byte name1, int y, int x, bool tulkas_prize)
 {
+    return create_chosen_artefact_marked(name1, y, x, true, 0,
+        tulkas_prize ? ARTEFACT_TULKAS_PRIZE : ARTEFACT_QUEST_REWARD);
+}
+
+static int drop_carried_objects(monster_type* m_ptr, u32b source_ident)
+{
+    int liquor_stacks = 0;
     while (m_ptr->hold_o_idx)
     {
         int idx = m_ptr->hold_o_idx;
@@ -308,8 +334,11 @@ static void drop_carried_objects(monster_type* m_ptr, u32b source_ident)
         loot.held_m_idx = loot.next_o_idx = 0;
         loot.ident &= ~IDENT_HIDE_CARRY;
         loot.ident |= source_ident;
-        drop_near(&loot, -1, m_ptr->fy, m_ptr->fx);
+        if (drop_near(&loot, -1, m_ptr->fy, m_ptr->fx)
+            && loot.tval == TV_POTION && loot.sval == SV_POTION_ORCISH_LIQUOR)
+            liquor_stacks++;
     }
+    return liquor_stacks;
 }
 
 /*
@@ -366,7 +395,9 @@ int drop_loot(monster_type* m_ptr)
         cave_set_feat(y, x, FEAT_RUBBLE);
     }
 
-    drop_carried_objects(m_ptr, source_ident);
+    int liquor_stacks = drop_carried_objects(m_ptr, source_ident);
+    if (r_ptr->flags3 & RF3_ORC)
+        dump_item += liquor_stacks;
 
     /* Mega-Hack -- drop special treasures */
     if (r_ptr->flags1 & (RF1_DROP_CHOSEN))
@@ -375,53 +406,54 @@ int drop_loot(monster_type* m_ptr)
         if (m_ptr->r_idx == R_IDX_MORGOTH)
         {
             // create the Massive Hammer 'Grond'
-            create_chosen_artefact_marked(ART_GROND, y, x, true, source_ident);
+            create_chosen_artefact_marked(
+                ART_GROND, y, x, true, source_ident, ARTEFACT_FIXED_DROP);
 
             // create the Iron Crown of Morgoth
             create_chosen_artefact_marked(
-                ART_MORGOTH_3, y, x, true, source_ident);
+                ART_MORGOTH_3, y, x, true, source_ident, ARTEFACT_FIXED_DROP);
         }
         // Drop Calris from Gothmog
         else if (m_ptr->r_idx == R_IDX_GOTHMOG)
         {
             // create the Greatsword 'Calris'
             create_chosen_artefact_marked(
-                ART_CALRIS, y, x, false, source_ident);
+                ART_CALRIS, y, x, false, source_ident, ARTEFACT_FIXED_DROP);
         }
         // Drop Galvorn Armour of Maeglin
         else if (r_ptr->d_char == '@')
         {
             // create the Armour of Maeglin
             create_chosen_artefact_marked(
-                ART_MAEGLIN, y, x, false, source_ident);
+                ART_MAEGLIN, y, x, false, source_ident, ARTEFACT_FIXED_DROP);
         }
         // Drop Iron Spear of Boldog
         else if (r_ptr->d_char == 'o')
         {
             // create the Armour of Maeglin
             create_chosen_artefact_marked(
-                ART_BOLDOG, y, x, false, source_ident);
+                ART_BOLDOG, y, x, false, source_ident, ARTEFACT_FIXED_DROP);
         }
         // Drop Glend
         else if (r_ptr->d_char == 'G')
         {
             // create the Greatsword 'Glend'
             create_chosen_artefact_marked(
-                ART_GLEND, y, x, false, source_ident);
+                ART_GLEND, y, x, false, source_ident, ARTEFACT_FIXED_DROP);
         }
         // Drop Wolf-Hame of Drauglin
         else if (r_ptr->d_char == 'C')
         {
             // create the Wolf-Hame of Draugluin
             create_chosen_artefact_marked(
-                ART_DRAUGLUIN, y, x, false, source_ident);
+                ART_DRAUGLUIN, y, x, false, source_ident, ARTEFACT_FIXED_DROP);
         }
         // Drop Bat-Fell of Thuringwethil
         else if (r_ptr->d_char == 'v')
         {
             // create the Bet-Fell of Thuringwethil
             create_chosen_artefact_marked(
-                ART_THURINGWETHIL, y, x, false, source_ident);
+                ART_THURINGWETHIL, y, x, false, source_ident, ARTEFACT_FIXED_DROP);
         }
     }
 
@@ -641,29 +673,6 @@ int drop_loot(monster_type* m_ptr)
     }
 
     return dump_item;
-}
-
-static int drop_orcish_liquor(monster_type* m_ptr)
-{
-    monster_race* r_ptr = &r_info[m_ptr->r_idx];
-    object_type object_type_body;
-    object_type* i_ptr = &object_type_body;
-    s16b k_idx;
-
-    if (!(r_ptr->flags3 & (RF3_ORC)) || !percent_chance(10))
-        return 0;
-
-    k_idx = lookup_kind(TV_POTION, SV_POTION_ORCISH_LIQUOR);
-    if (!k_idx)
-    {
-        log_warn("drop_orcish_liquor: missing Orcish Liquor kind");
-        return 0;
-    }
-
-    object_wipe(i_ptr);
-    object_prep(i_ptr, k_idx);
-    drop_near(i_ptr, -1, m_ptr->fy, m_ptr->fx);
-    return 1;
 }
 
 static const char morgoth_second_wind_text[][100]
@@ -1115,28 +1124,19 @@ void monster_death(int m_idx)
     if (!((cave_feat[m_ptr->fy][m_ptr->fx] == FEAT_CHASM)
             && !(r_ptr->flags2 & (RF2_FLYING))))
     {
-        int normal_loot_count = 0;
-        int bonus_loot_count = 0;
-
         // drop the normal loot for non-territorial monsters
         if (!(r_ptr->flags2 & (RF2_TERRITORIAL)))
         {
-            normal_loot_count = drop_loot(m_ptr);
+            drop_loot(m_ptr);
         }
         else
         {
-            /* Hoards were generated at spawn, but acquired possessions (such
-             * as a thrallmaster's gathered gems) still drop on death. */
-            drop_carried_objects(m_ptr, monster_drop_source_ident(r_ptr));
-        }
-
-        // Every orc has an additional independent 10% chance to drop Orcish Liquor.
-        bonus_loot_count = drop_orcish_liquor(m_ptr);
-
-        if (bonus_loot_count && (m_ptr->ml || (r_ptr->flags1 & (RF1_UNIQUE))))
-        {
-            lore_treasure(cave_m_idx[m_ptr->fy][m_ptr->fx],
-                normal_loot_count + bonus_loot_count);
+            /* Hoards were generated at spawn. Drop the monster's possessions. */
+            int liquor_stacks
+                = drop_carried_objects(m_ptr, monster_drop_source_ident(r_ptr));
+            if ((r_ptr->flags3 & RF3_ORC) && liquor_stacks
+                && (m_ptr->ml || (r_ptr->flags1 & RF1_UNIQUE)))
+                lore_treasure(cave_m_idx[m_ptr->fy][m_ptr->fx], liquor_stacks);
         }
     }
 

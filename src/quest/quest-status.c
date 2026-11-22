@@ -551,6 +551,8 @@ static cptr get_quest_reward_text(int quest_idx)
 
     /* Varda reward description */
     if (quest_idx == QUEST_ID_VARDA) {
+        if (p_ptr->varda_quest == VARDA_QUEST_REWARDED)
+            return "Quest experience and the Oath of Light";
         SDL_strlcpy(reward_buf, "Choose one radiant artefact and unlock the Oath of Light (+1 light radius)", sizeof(reward_buf));
         return reward_buf;
     }
@@ -723,14 +725,17 @@ static void quest_minimum_reward(int quest_idx, char* out, size_t size)
         return;
     }
     quest = &quest_info[quest_idx];
-    if (quest_idx == QUEST_ID_TULKAS)
+    if (quest_idx == QUEST_ID_TULKAS && (!p_ptr
+        || p_ptr->tulkas_quest != TULKAS_QUEST_REWARDED
+        || p_ptr->tulkas_prize_a_idx > 0))
     {
         cptr prize = (p_ptr && p_ptr->tulkas_prize_a_idx > 0
             && p_ptr->tulkas_prize_a_idx < z_info->art_max)
             ? get_quest_reward_text(quest_idx) : "an artefact";
         quest_minimum_reward_add(out, size, prize);
     }
-    if (quest_idx == QUEST_ID_VARDA)
+    if (quest_idx == QUEST_ID_VARDA && (!p_ptr
+        || p_ptr->varda_quest != VARDA_QUEST_REWARDED))
         quest_minimum_reward_add(out, size, "choose a radiant artefact");
     for (int i = 0; i < A_MAX; i++)
         if (quest->stat_bonuses[i])
@@ -1293,7 +1298,9 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_RED;
                 quest_status_put_line(col + 2, hgt, &row, color, buf);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE,
-                    "You took a life and lost Nienna's mercy.");
+                    p_ptr->niena_monsters_killed
+                        ? "You took a life and lost Nienna's mercy."
+                        : "You left the level before completing Nienna's trial.");
                 break;
             default:
                 niena_status = "Unknown status";

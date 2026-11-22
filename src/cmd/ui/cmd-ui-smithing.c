@@ -18,7 +18,6 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "pane.h"
-#include "ui/file-viewer.h"
 #include "cmd/ui/cmd-ui-internal.h"
 
 bool enchant_then_numbers;
@@ -27,7 +26,6 @@ typedef struct smithing_tval_desc
 {
     int category;
     int tval;
-    cptr desc;
 } smithing_tval_desc;
 
 // object being created
@@ -38,7 +36,7 @@ object_type* smith_o_ptr = &smith_o_body;
 object_type smith2_o_body;
 object_type* smith2_o_ptr = &smith2_o_body;
 
-// super backup object
+// backup while previewing numbers
 object_type smith3_o_body;
 object_type* smith3_o_ptr = &smith3_o_body;
 
@@ -111,6 +109,7 @@ static int smith_ui_detail_turns;
 static bool smith_ui_detail_valid;
 static bool smith_ui_detail_reforge;
 static bool smith_ui_detail_paid;
+static char smith_ui_detail_name[160];
 static void smith_show_cost_details(void);
 
 #define CAT_WEAPON 0
@@ -129,61 +128,23 @@ static void smith_show_cost_details(void);
 
 #define SMT_MENU_MAX 7
 
-#define SMT_NUM_MENU_I_ATT 1
-#define SMT_NUM_MENU_D_ATT 2
-#define SMT_NUM_MENU_I_DS 3
-#define SMT_NUM_MENU_D_DS 4
-#define SMT_NUM_MENU_I_EVN 5
-#define SMT_NUM_MENU_D_EVN 6
-#define SMT_NUM_MENU_I_PS 7
-#define SMT_NUM_MENU_D_PS 8
-#define SMT_NUM_MENU_I_WGT 9
-#define SMT_NUM_MENU_D_WGT 10
-#define SMT_NUM_MENU_ALLOY_CYCLE 11
-#define SMT_NUM_MENU_ALLOY_CLEAR 12
-#define SMT_NUM_MENU_EDIT_BONUSES 13
-
-#define SMT_NUM_MENU_MAX 13
-
-#define COL_SMT1 2
-#define COL_SMT2_LANDSCAPE 16
-static int smith_ui_primary_submenu_col(void);
-#define COL_SMT2 (smith_ui_primary_submenu_col())
-static int smith_ui_last_desc_row = -1;
-static int smith_ui_cost_title_row_override = -1;
-
 typedef enum smith_ui_scroll_id
 {
     SMITH_SCROLL_SVAL = 0,
-    SMITH_SCROLL_TVAL,
-    SMITH_SCROLL_NUMBERS,
-    SMITH_SCROLL_BONUSES,
+    SMITH_SCROLL_VALUES,
     SMITH_SCROLL_REFORGE,
     SMITH_SCROLL_ENCHANT,
     SMITH_SCROLL_FLAG,
     SMITH_SCROLL_ABILITY,
-    SMITH_SCROLL_ARTEFACT,
     SMITH_SCROLL_MELT,
-    SMITH_SCROLL_ROOT,
+    SMITH_SCROLL_EDITOR,
     SMITH_SCROLL_MAX
 } smith_ui_scroll_id;
 
 static int smith_ui_scroll_top[SMITH_SCROLL_MAX];
-static int smith_ui_touch_drag_sink;
 
 #define SMITH_CLICK_BACK 33000
 #define SMITH_CLICK_CALC 33001
-
-/* Controller B uses a gameplay binding, so normalize it to menu Back here. */
-static char smithing_menu_key(char ch)
-{
-    if (get_sdl_menu_bigger_font() && ch == '?')
-    {
-        smith_show_cost_details();
-        return 0;
-    }
-    return (char)steamdeck_menu_key(ch, 0, 0);
-}
 
 static int smith_ui_term_wid(void)
 {
@@ -205,12 +166,6 @@ static int smith_ui_term_hgt(void)
     return (Term && (Term->hgt > 0)) ? Term->hgt : 24;
 }
 
-static bool smith_ui_portrait_layout(void)
-{
-    return sdl_mobile_portrait_layout_active()
-        || (get_sdl_menu_bigger_font() && smith_ui_term_wid() < 60);
-}
-
 static int smith_ui_content_bottom_row(void)
 {
     int bottom = smith_ui_term_hgt() - 1
@@ -229,296 +184,6 @@ static int smith_ui_prompt_row(void)
 {
     return MAX(0, smith_ui_term_hgt() - 1
         - sdl_touch_menu_button_reserved_rows());
-}
-
-static int smith_ui_primary_submenu_col(void)
-{
-    return smith_ui_portrait_layout() ? COL_SMT1 : COL_SMT2_LANDSCAPE;
-}
-
-static bool smith_ui_compact_width(void)
-{
-    return (smith_ui_term_wid() < 72);
-}
-
-static bool smith_ui_compact_height(void)
-{
-    return (smith_ui_term_hgt() <= 18);
-}
-
-static int smith_text_count_x;
-static int smith_text_count_lines;
-static int smith_text_count_indent;
-static int smith_text_count_wrap;
-static bool smith_text_count_has_output;
-static bool smith_text_count_have_space;
-static int smith_text_count_chars_since_space;
-
-static void smith_text_count_begin(int indent, int wrap)
-{
-    smith_text_count_x = indent;
-    smith_text_count_lines = 0;
-    smith_text_count_indent = indent;
-    smith_text_count_wrap = wrap;
-    smith_text_count_has_output = false;
-    smith_text_count_have_space = false;
-    smith_text_count_chars_since_space = 0;
-}
-
-static void smith_text_count_out(byte attr, cptr str)
-{
-    cptr s;
-
-    (void)attr;
-
-    if (!str)
-        return;
-
-    for (s = str; *s; s++)
-    {
-        char ch;
-
-        if (!smith_text_count_has_output)
-        {
-            smith_text_count_has_output = true;
-            smith_text_count_lines = 1;
-        }
-
-        if (*s == '\n')
-        {
-            smith_text_count_x = smith_text_count_indent;
-            smith_text_count_lines++;
-            smith_text_count_have_space = false;
-            smith_text_count_chars_since_space = 0;
-            continue;
-        }
-
-        ch = isprint((unsigned char)*s) ? *s : ' ';
-
-        if ((smith_text_count_x >= smith_text_count_wrap - 1) && (ch != ' '))
-        {
-            int moved_chars = 0;
-
-            if (smith_text_count_have_space
-                && (smith_text_count_chars_since_space > 0))
-            {
-                moved_chars = smith_text_count_chars_since_space;
-            }
-
-            smith_text_count_x = smith_text_count_indent + moved_chars;
-            smith_text_count_lines++;
-            smith_text_count_have_space = false;
-            smith_text_count_chars_since_space = moved_chars;
-        }
-
-        smith_text_count_x++;
-        if (smith_text_count_x > smith_text_count_wrap)
-            smith_text_count_x = smith_text_count_wrap;
-
-        if (ch == ' ')
-        {
-            smith_text_count_have_space = true;
-            smith_text_count_chars_since_space = 0;
-        }
-        else
-        {
-            smith_text_count_chars_since_space++;
-        }
-    }
-}
-
-static int smith_count_object_preview_lines(
-    const object_type* o_ptr, cptr lore, bool include_info, int indent, int wrap)
-{
-    void (*old_hook)(byte, cptr) = text_out_hook;
-    void (*old_info_out_flags)(
-        const object_type*, u32b*, u32b*, u32b*) = object_info_out_flags;
-    int old_wrap = text_out_wrap;
-    int old_indent = text_out_indent;
-    int lines;
-
-    smith_text_count_begin(indent, wrap);
-    text_out_hook = smith_text_count_out;
-    text_out_wrap = wrap;
-    text_out_indent = indent;
-    object_info_out_flags = object_flags;
-
-    if (lore && lore[0])
-    {
-        text_out_c(TERM_WHITE, lore);
-        if (include_info)
-            text_out(" ");
-    }
-
-    if (include_info)
-        (void)object_info_out(o_ptr);
-
-    lines = smith_text_count_has_output ? smith_text_count_lines : 0;
-
-    text_out_hook = old_hook;
-    object_info_out_flags = old_info_out_flags;
-    text_out_wrap = old_wrap;
-    text_out_indent = old_indent;
-
-    return lines;
-}
-
-static int smith_ui_secondary_col(void)
-{
-    if (smith_ui_compact_width())
-        return COL_SMT2;
-
-    /* Width budget for the first detail column (e.g. the base-item "Type" list).
-     * Size it for its longest label ("Axe or Polearm") plus the letter prefix,
-     * icon gap, and a comfortable margin, so names are not truncated. The sval
-     * column to the right takes the remaining (ample) width. */
-    return COL_SMT2 + 26;
-}
-
-static int smith_ui_cost_col(void)
-{
-    int wid = smith_ui_term_wid();
-    int col = wid - (smith_ui_compact_width() ? 15 : 18);
-    int min_col = smith_ui_secondary_col() + 14;
-
-    if (col < min_col)
-        col = min_col;
-    if (col < 32)
-        col = 32;
-    if (col > wid - 1)
-        col = wid - 1;
-
-    return col;
-}
-
-#define COL_SMT3 (smith_ui_secondary_col())
-#define COL_SMT4 (smith_ui_cost_col())
-
-static int smith_ui_dense_row0(void)
-{
-    return smith_ui_compact_height() ? 1 : 2;
-}
-
-static int smith_ui_cost_title_row(void)
-{
-    if (smith_ui_portrait_layout()
-        && smith_ui_cost_title_row_override >= 0)
-    {
-        return smith_ui_cost_title_row_override;
-    }
-
-    return smith_ui_compact_height() ? 6 : 8;
-}
-
-static int smith_ui_cost_item_row(int index0)
-{
-    return smith_ui_cost_title_row() + 2 + index0;
-}
-
-static int smith_ui_desc_col(void)
-{
-    return COL_SMT1;
-}
-
-static void smith_ui_reset_description_state(void)
-{
-    smith_ui_last_desc_row = -1;
-    smith_ui_cost_title_row_override = -1;
-}
-
-static void smith_ui_wipe_active_panel(int col)
-{
-    if (smith_ui_portrait_layout())
-    {
-        Term_clear();
-        smith_ui_reset_description_state();
-        return;
-    }
-
-    wipe_screen_from(col);
-}
-
-static void smith_ui_clear_from_row(int row)
-{
-    int wid = smith_ui_term_wid();
-    int hgt = smith_ui_content_bottom_row() + 1;
-
-    if (row < 0)
-        row = 0;
-    if (row >= hgt)
-        return;
-
-    for (int y = row; y < hgt; y++)
-        Term_erase(0, y, wid);
-}
-
-static void smith_ui_draw_horizontal_divider(int row)
-{
-    int wid = smith_ui_term_wid();
-
-    if (row < 0 || row > smith_ui_content_bottom_row())
-        return;
-
-    for (int x = 0; x < wid; x++)
-        Term_putch(x, row, TERM_L_DARK, '-');
-}
-
-static int smith_ui_used_bottom_row(void)
-{
-    if (!Term || !Term->scr)
-        return 0;
-
-    for (int y = smith_ui_content_bottom_row(); y >= 0; y--)
-    {
-        for (int x = 0; x < smith_ui_term_wid(); x++)
-        {
-            if ((Term->scr->c[y][x] != ' ')
-                || (Term->scr->a[y][x] != Term->attr_blank)
-                || (Term->scr->story[y][x] != 0))
-            {
-                return y;
-            }
-        }
-    }
-
-    return 0;
-}
-
-static int smith_ui_min_description_row(void)
-{
-    return smith_ui_used_bottom_row() + 1;
-}
-
-static int smith_ui_description_row_for_lines(int lines)
-{
-    int hgt = smith_ui_content_bottom_row() + 1;
-    int min_row = smith_ui_min_description_row();
-    int row;
-
-    if (lines < 1)
-        lines = 1;
-
-    if (min_row >= hgt)
-        return -1;
-
-    row = hgt - lines;
-    if (row < min_row)
-        row = min_row;
-
-    return row;
-}
-
-static int smith_ui_weight_col(void)
-{
-    int col = smith_ui_cost_col() - 10;
-
-    if (smith_ui_portrait_layout())
-        return -1;
-
-    if (col <= COL_SMT2 + 16)
-        return -1;
-
-    return col;
 }
 
 static int smith_ui_safe_width(int col, int width)
@@ -545,11 +210,6 @@ static int smith_ui_safe_width(int col, int width)
         width = max_width;
 
     return (width > 0) ? width : 0;
-}
-
-static int smith_ui_line_width(int col)
-{
-    return smith_ui_safe_width(col, smith_ui_term_wid() - col);
 }
 
 static int smith_ui_utf8_prefix_len(cptr text, int max_cols)
@@ -646,9 +306,6 @@ static void smith_ui_put_fitted(int col, int row, int width, byte attr, cptr tex
     smith_ui_draw_fitted(col, row, width, attr, text, true);
 }
 
-static int smith_ui_put_wrapped(int col, int row, int width, int max_lines,
-    byte attr, cptr text);
-
 static void smith_ui_split_object_title(cptr description,
     char* name, size_t name_size, char* suffix, size_t suffix_size)
 {
@@ -710,214 +367,6 @@ static void smith_ui_build_object_stats(char* stats, size_t stats_size,
     }
 }
 
-static int smith_ui_wrapped_line_count(cptr text, int width)
-{
-    cptr s = text;
-    int lines = 0;
-    int line_width = 0;
-
-    if (!s || width <= 0)
-        return 0;
-
-    while (*s)
-    {
-        cptr word;
-        int word_len = 0;
-        int word_width;
-
-        while (*s == ' ')
-            s++;
-        if (!*s)
-            break;
-
-        word = s;
-        while (word[word_len] && word[word_len] != ' ')
-        {
-            int char_len = utf8_sequence_len(word + word_len);
-
-            if (char_len <= 0)
-                char_len = 1;
-            word_len += char_len;
-        }
-        word_width = utf8_display_width_n(word, word_len);
-
-        if (line_width > 0
-            && line_width + 1 + word_width <= width)
-        {
-            line_width += 1 + word_width;
-            s += word_len;
-            continue;
-        }
-
-        if (line_width > 0)
-        {
-            lines++;
-            line_width = 0;
-            continue;
-        }
-
-        if (word_width <= width)
-        {
-            line_width = word_width;
-            s += word_len;
-            continue;
-        }
-
-        /* A single very long word still needs to make progress. */
-        while (word_len > 0)
-        {
-            int copy_len = smith_ui_utf8_prefix_len(word, width);
-
-            if (copy_len <= 0)
-            {
-                copy_len = utf8_sequence_len(word);
-                if (copy_len <= 0)
-                    copy_len = 1;
-            }
-
-            if (copy_len > word_len)
-                copy_len = word_len;
-            word += copy_len;
-            word_len -= copy_len;
-            lines++;
-        }
-        s += (int)(word - s);
-    }
-
-    if (line_width > 0)
-        lines++;
-
-    return lines;
-}
-
-static int smith_ui_object_title_lines(cptr description, cptr weight,
-    int width)
-{
-    char name[160];
-    char suffix[160];
-    char stats[224];
-    int suffix_width;
-    int weight_width;
-    int name_width;
-    int name_gap = 1;
-    int suffix_weight_gap = 3;
-
-    width = smith_ui_safe_width(smith_ui_desc_col(), width);
-    if (width <= 0)
-        return 0;
-
-    smith_ui_split_object_title(description, name, sizeof(name), suffix,
-        sizeof(suffix));
-    smith_ui_build_object_stats(stats, sizeof(stats), suffix, weight);
-
-    suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
-    weight_width = utf8_display_width_n(weight ? weight : "",
-        weight ? (int)strlen(weight) : 0);
-    if (suffix_width <= 0)
-        name_gap = 0;
-    if (weight_width <= 0)
-        suffix_weight_gap = 0;
-
-    name_width = width - suffix_width - weight_width
-        - name_gap - suffix_weight_gap;
-    if (name_width >= 1
-        && utf8_display_width_n(name, (int)strlen(name)) <= name_width)
-    {
-        return 1;
-    }
-
-    name_width = smith_ui_wrapped_line_count(name, width);
-    if (name_width < 1)
-        name_width = 1;
-
-    return name_width + (stats[0] ? 1 : 0);
-}
-
-/*
- * Draw an object's title without letting a long quantity/name run into its
- * combat statistics.  If the name cannot fit beside those fields, give it
- * the full line and put the stats on the following line instead of hiding
- * part of the item name behind an ellipsis.
- */
-static int smith_ui_put_object_title(int col, int row, int width, byte attr,
-    cptr description, cptr weight)
-{
-    char name[160];
-    char suffix[160];
-    char fitted_name[160];
-    char fitted_suffix[160];
-    char fitted_weight[64];
-    char stats[224];
-    int suffix_width;
-    int weight_width;
-    int name_width;
-    int name_gap = 1;
-    int suffix_weight_gap = 3;
-    int name_display_width;
-
-    if (!description)
-        description = "";
-    if (!weight)
-        weight = "";
-
-    smith_ui_split_object_title(description, name, sizeof(name), suffix,
-        sizeof(suffix));
-    smith_ui_build_object_stats(stats, sizeof(stats), suffix, weight);
-
-    width = smith_ui_safe_width(col, width);
-    if (width <= 0)
-        return 0;
-
-    suffix_width = utf8_display_width_n(suffix, (int)strlen(suffix));
-    weight_width = utf8_display_width_n(weight, (int)strlen(weight));
-
-    if (suffix_width <= 0)
-        name_gap = 0;
-    if (weight_width <= 0)
-        suffix_weight_gap = 0;
-
-    /* Keep the stats and weight in the same inline sequence as the original
-     * object description.  Only the name is shortened when the fields
-     * compete for space, so the shield's combat/protection values remain
-     * visible. */
-    name_width = width - suffix_width - weight_width
-        - name_gap - suffix_weight_gap;
-    if (name_width < 1
-        || utf8_display_width_n(name, (int)strlen(name)) > name_width)
-    {
-        int name_lines = smith_ui_wrapped_line_count(name, width);
-
-        if (name_lines < 1)
-            name_lines = 1;
-        smith_ui_put_wrapped(col, row, width, name_lines, attr, name);
-        if (stats[0])
-            smith_ui_put_fitted(col, row + name_lines, width, attr, stats);
-        return name_lines + (stats[0] ? 1 : 0);
-    }
-
-    smith_ui_fit_text(fitted_name, sizeof(fitted_name), name, name_width);
-    smith_ui_fit_text(fitted_suffix, sizeof(fitted_suffix), suffix,
-        suffix_width);
-    smith_ui_fit_text(fitted_weight, sizeof(fitted_weight), weight,
-        weight_width);
-
-    name_display_width = utf8_display_width_n(fitted_name,
-        (int)strlen(fitted_name));
-    smith_ui_put_fitted(col, row, name_display_width, attr, fitted_name);
-    if (name_gap > 0)
-        Term_erase(col + name_display_width, row, name_gap);
-    if (suffix_width > 0)
-        smith_ui_put_fitted(col + name_display_width + name_gap, row,
-            suffix_width, attr,
-            fitted_suffix);
-    if (weight_width > 0)
-        smith_ui_put_fitted(col + name_display_width + name_gap
-                + suffix_width + suffix_weight_gap,
-            row, weight_width, attr, fitted_weight);
-
-    return 1;
-}
-
 static void smith_ui_fill_row(int col, int row, int width, byte attr)
 {
     char fill[180];
@@ -936,30 +385,6 @@ static void smith_ui_fill_row(int col, int row, int width, byte attr)
     Term_putstr(col, row, width, attr, fill);
 }
 
-static byte smith_ui_selected_attr(byte source_attr)
-{
-    (void)source_attr;
-    return (byte)(TERM_UI_SELECTED + TERM_L_BLUE);
-}
-
-static int smith_ui_lookup_kind_quiet(int tval, int sval)
-{
-    int k;
-
-    if (!z_info || !k_info)
-        return 0;
-
-    for (k = 1; k < z_info->k_max; k++)
-    {
-        object_kind* k_ptr = &k_info[k];
-
-        if ((k_ptr->tval == tval) && (k_ptr->sval == sval))
-            return k;
-    }
-
-    return 0;
-}
-
 static void smith_prepare_display_object(object_type* object, int kind)
 {
     u64b saved_state = Rand_state_export();
@@ -967,351 +392,89 @@ static void smith_prepare_display_object(object_type* object, int kind)
     Rand_state_pop(saved_state);
 }
 
-static bool smith_ui_prepare_icon(object_type* icon, int tval, int sval)
-{
-    int k_idx;
-
-    if (!icon)
-        return false;
-
-    object_wipe(icon);
-    k_idx = smith_ui_lookup_kind_quiet(tval, sval);
-    if (!k_idx)
-        return false;
-
-    smith_prepare_display_object(icon, k_idx);
-    icon->ident |= (IDENT_KNOWN | IDENT_SPOIL);
-    if (icon->number < 1)
-        icon->number = 1;
-
-    return true;
-}
-
-static void smith_ui_draw_icon(int col, int row, const object_type* icon,
-    bool selected)
-{
-    if (!icon || !icon->k_idx)
-        return;
-
-    (void)selected;
-    draw_supply_icon(col, row, icon);
-}
-
-static int smith_ui_icon_gap_width(void)
-{
-    return use_bigtile ? 3 : 2;
-}
-
-/*
- * When set, a single-list submenu (no sval/property column at COL_SMT3) lets its
- * COL_SMT2 list run all the way to the cost column instead of stopping short at
- * COL_SMT3. Menus that show a real third column leave this false so the columns
- * do not overlap.
- */
-static bool smith_ui_secondary_full_width = false;
-
-static int smith_ui_secondary_next_col(void)
-{
-    return smith_ui_secondary_full_width ? COL_SMT4 : COL_SMT3;
-}
-
-static int smith_ui_next_column_after(int col)
-{
-    int next_col = smith_ui_term_wid();
-
-    if (smith_ui_portrait_layout())
-        return next_col;
-
-    if (col < COL_SMT2)
-        next_col = COL_SMT2;
-    else if (col < COL_SMT3)
-        next_col = smith_ui_secondary_next_col();
-    else if (col < COL_SMT4)
-        next_col = COL_SMT4;
-
-    if (next_col <= col)
-        next_col = smith_ui_term_wid();
-
-    return next_col;
-}
-
-static int smith_ui_menu_row_width(int col)
-{
-    int prefix_col = indexed_menu_prefix_col(col);
-    int next_col = smith_ui_next_column_after(col);
-    int width = next_col - prefix_col - 1;
-
-    if (width < 1)
-        width = smith_ui_line_width(prefix_col);
-
-    return smith_ui_safe_width(prefix_col, width);
-}
-
-static void smith_ui_put_icon_menu_row(int choice, int col, int row,
-    byte base_attr, cptr label, const object_type* icon, bool selected)
-{
-    char prefix[8];
-    int prefix_col = indexed_menu_prefix_col(col);
-    int prefix_w = indexed_menu_letters_enabled() ? 3 : 2;
-    int icon_col = prefix_col + prefix_w;
-    bool has_icon = icon && icon->k_idx;
-    int label_col = has_icon ? (icon_col + smith_ui_icon_gap_width())
-                             : (prefix_col + prefix_w);
-    int row_w = smith_ui_menu_row_width(col);
-    int label_w = row_w - (label_col - prefix_col);
-    byte attr = selected ? smith_ui_selected_attr(base_attr) : base_attr;
-
-    if (row < 0 || row > smith_ui_content_bottom_row())
-        return;
-
-    if (selected)
-        indexed_menu_focus_prefix(prefix, sizeof(prefix), choice - 1);
-    else
-        indexed_menu_normal_prefix(prefix, sizeof(prefix), choice - 1);
-
-    Term_erase(prefix_col, row, row_w);
-    if (selected)
-        smith_ui_fill_row(prefix_col, row, row_w, attr);
-
-    /* When selected, the whole row is filled with the highlight above; draw the
-     * prefix and label without erasing so the highlight survives in the gaps and
-     * trailing spaces. */
-    smith_ui_draw_fitted(prefix_col, row, prefix_w, attr, prefix, !selected);
-    if (has_icon)
-        smith_ui_draw_icon(icon_col, row, icon, selected);
-    smith_ui_draw_fitted(label_col, row, label_w, attr, label, !selected);
-
-    ui_menu_click_add(choice, prefix_col, row, row_w);
-}
-
 static int smith_ui_put_wrapped(int col, int row, int width, int max_lines,
     byte attr, cptr text)
 {
-    cptr s = text;
     int used = 0;
-
     width = smith_ui_safe_width(col, width);
-    if (!s || width <= 0 || max_lines <= 0)
-        return 0;
-
-    while (*s && used < max_lines)
+    while (text && width > 0 && used < max_lines)
     {
+        while (isspace((unsigned char)*text)) text++;
+        if (!*text) break;
+
         char line[180];
-        int line_len = 0;
-
-        while (*s == ' ')
-            s++;
-
-        while (*s)
+        int take = smith_ui_utf8_prefix_len(text, width);
+        take = MIN(take, utf8_safe_prefix_len(text, (int)sizeof(line) - 1));
+        if (!take) break;
+        if (used + 1 == max_lines && text[take])
         {
-            cptr word = s;
-            int word_len = 0;
-
-            while (s[word_len] && s[word_len] != ' ')
-                word_len++;
-
-            if (word_len <= 0)
-                break;
-
-            if (line_len == 0)
-            {
-                int copy_len = smith_ui_utf8_prefix_len(word, width);
-
-                if (copy_len <= 0 || copy_len > word_len)
-                    copy_len = word_len;
-                if (copy_len >= (int)sizeof(line))
-                    copy_len = utf8_safe_prefix_len(
-                        word, (int)sizeof(line) - 1);
-                SDL_memcpy(line, word, (size_t)copy_len);
-                line[copy_len] = '\0';
-                line_len = (int)strlen(line);
-                s += copy_len;
-            }
-            else if (line_len + 1 + word_len <= width
-                && line_len + 1 + word_len < (int)sizeof(line))
-            {
-                line[line_len++] = ' ';
-                SDL_memcpy(line + line_len, word, (size_t)word_len);
-                line_len += word_len;
-                line[line_len] = '\0';
-                s += word_len;
-            }
-            else
-            {
-                break;
-            }
-
-            while (*s == ' ')
-                s++;
-
-            if (line_len >= width)
-                break;
+            smith_ui_fit_text(line, sizeof(line), text, width);
+            smith_ui_put_fitted(col, row + used, width, attr, line);
+            return used + 1;
         }
-
-        if (line_len == 0)
-            break;
-
-        smith_ui_put_fitted(col, row + used, width, attr, line);
-        used++;
+        if (text[take] && !isspace((unsigned char)text[take]))
+        {
+            int space = take;
+            while (space > 0 && !isspace((unsigned char)text[space])) space--;
+            if (space > 0) take = space;
+        }
+        int newline = (int)strcspn(text, "\r\n");
+        take = MIN(take, newline);
+        memcpy(line, text, take);
+        line[take] = 0;
+        smith_ui_put_fitted(col, row + used++, width, attr, line);
+        text += take;
     }
-
     return used;
 }
 
-static void smith_ui_put_cost_line(int index0, byte attr, cptr text)
+typedef struct smith_bill_line {
+    cptr label;
+    char value[32];
+    bool requirement;
+} smith_bill_line;
+
+#define SMITH_BILL_EXTRAS_MAX 15
+
+/* The full cost report and the work order itemize the very same bill. */
+static int smith_bill_extras(const smithing_cost_type* cost, bool reforge,
+    smith_bill_line lines[SMITH_BILL_EXTRAS_MAX])
 {
-    int col = smith_ui_portrait_layout() ? COL_SMT1
-                                         : smith_ui_cost_col() + 2;
-
-    smith_ui_put_fitted(col, smith_ui_cost_item_row(index0),
-        smith_ui_line_width(col), attr, text);
-}
-
-#define SMITH_REPORT_MAX_LINES 256
-typedef struct smith_calculation_report {
-    int count;
-    char text[SMITH_REPORT_MAX_LINES][180];
-    byte attr[SMITH_REPORT_MAX_LINES];
-} smith_calculation_report;
-
-static void smith_report_add(smith_calculation_report* report, int width,
-    byte attr, cptr text)
-{
-    if (!text) return;
-    if (!*text && report->count < SMITH_REPORT_MAX_LINES)
+    int n = 0;
+    const struct { cptr name; bool missing; } abilities[] = {
+        { "Reforging", reforge }, { "Weaponsmith", cost->weaponsmith },
+        { "Armoursmith", cost->armoursmith }, { "Jeweller", cost->jeweller },
+        { "Enchantment", cost->enchantment }, { "Artifice", cost->artifice },
+        { "Alloy Mastery", cost->alloy_mastery }
+    };
+    for (size_t i = 0; i < N_ELEMENTS(abilities); i++)
     {
-        report->attr[report->count] = attr;
-        report->text[report->count++][0] = '\0';
+        if (!abilities[i].missing) continue;
+        lines[n].label = "Requires";
+        lines[n].requirement = true;
+        SDL_strlcpy(lines[n++].value, abilities[i].name, sizeof(lines[0].value));
     }
-    while (*text && report->count < SMITH_REPORT_MAX_LINES)
+    const struct { cptr name; int amount; bool weight; } charges[] = {
+        { "Smithing ranks", cost->drain, false },
+        { "Mithril", cost->mithril, true }, { "Star iron", cost->star_iron, true },
+        { "Strength", cost->str, false }, { "Dexterity", cost->dex, false },
+        { "Constitution", cost->con, false }, { "Grace", cost->gra, false },
+        { "Experience", cost->exp, false }
+    };
+    for (size_t i = 0; i < N_ELEMENTS(charges); i++)
     {
-        int take = smith_ui_utf8_prefix_len(text, MAX(1, width));
-        int length = (int)strlen(text);
-        if (take > 178) take = utf8_safe_prefix_len(text, 178);
-        if (take <= 0) take = utf8_sequence_len_n(text, length);
-        if (take < length)
-        {
-            int space = take;
-            while (space > 0 && text[space] != ' ') --space;
-            if (space > 0) take = space;
-        }
-        SDL_memcpy(report->text[report->count], text, take);
-        report->text[report->count][take] = '\0';
-        report->attr[report->count++] = attr;
-        text += take;
-        while (*text == ' ') ++text;
+        int amount = charges[i].amount;
+        if (!amount) continue;
+        lines[n].label = charges[i].name;
+        lines[n].requirement = false;
+        if (charges[i].weight)
+            strnfmt(lines[n].value, sizeof(lines[n].value), "%d.%d lb",
+                amount / 10, ABS(amount % 10));
+        else
+            strnfmt(lines[n].value, sizeof(lines[n].value), "%d", amount);
+        n++;
     }
-}
-
-static void smith_report_costs(smith_calculation_report* report, int width,
-    const smithing_cost_type* cost, int turns, bool reforge)
-{
-    smith_report_add(report, width, TERM_WHITE, "");
-    smith_report_add(report, width, TERM_YELLOW, "COMPLETE COSTS");
-    if (reforge)
-        smith_report_add(report, width, TERM_WHITE, "Requires Reforging");
-    const int required[] = { cost->weaponsmith, cost->armoursmith,
-        cost->jeweller, cost->enchantment, cost->artifice, cost->alloy_mastery };
-    const char* names[] = { "Weaponsmith", "Armoursmith", "Jeweller",
-        "Enchantment", "Artifice", "Alloy Mastery" };
-    for (size_t i = 0; i < N_ELEMENTS(required); ++i)
-        if (required[i])
-            smith_report_add(report, width, TERM_RED,
-                format("Requires %s", names[i]));
-    smith_report_add(report, width, TERM_WHITE,
-        format("Forge uses: %d", cost->uses));
-    if (cost->drain)
-        smith_report_add(report, width, TERM_WHITE,
-            format("Smithing ranks: %d", cost->drain));
-    if (cost->mithril)
-        smith_report_add(report, width, TERM_WHITE,
-            format("Mithril: %d.%d lb", cost->mithril / 10,
-                ABS(cost->mithril % 10)));
-    if (cost->star_iron)
-        smith_report_add(report, width, TERM_WHITE,
-            format("Star iron: %d.%d lb", cost->star_iron / 10,
-                ABS(cost->star_iron % 10)));
-    const int stats[] = { cost->str, cost->dex, cost->con, cost->gra };
-    const char* stat_names[] = { "Strength", "Dexterity", "Constitution", "Grace" };
-    for (size_t i = 0; i < N_ELEMENTS(stats); ++i)
-        if (stats[i])
-            smith_report_add(report, width, TERM_WHITE,
-                format("%s: %d", stat_names[i], stats[i]));
-    if (cost->exp)
-        smith_report_add(report, width, TERM_WHITE,
-            format("Experience: %d", cost->exp));
-    smith_report_add(report, width, TERM_WHITE, format("Turns: %d", turns));
-}
-
-static void smith_show_cost_details(void)
-{
-    smith_calculation_report report = { 0 };
-    int width = MAX(1, smith_ui_term_wid() - 4);
-    if (!smith_ui_detail_valid)
-        smith_report_add(&report, width, TERM_WHITE,
-            "Choose an item to see its complete costs.");
-    else
-    {
-        if (smith_ui_detail_paid)
-            smith_report_add(&report, width, TERM_L_BLUE,
-                "Costs already paid. Only the remaining work is required.");
-        smith_report_costs(&report, width, &smith_ui_detail_cost,
-            smith_ui_detail_turns,
-            smith_ui_detail_reforge && !smith_ui_detail_paid);
-    }
-
-    screen_save();
-    ui_menu_click_clear();
-    ui_scroll_area_clear();
-    if (sdl_touch_only_device_active())
-    {
-        sdl_character_sheet_screen_begin_book("Smithing costs");
-        sdl_character_sheet_screen_set_book_close_button(true);
-        sdl_character_sheet_screen_set_book_close_label("Back");
-        for (int i = 0; i < report.count; ++i)
-            sdl_character_sheet_screen_add_book_paragraph_colored(
-                report.text[i], report.attr[i]);
-        sdl_character_sheet_screen_commit_book();
-        while (1)
-        {
-            ui_menu_click_begin();
-            int key = inkey();
-            int choice = 0, action = UI_MENU_CLICK_PRIMARY;
-            if (ui_menu_click_take_action(&choice, &action))
-            {
-                if (action == UI_MENU_CLICK_HOVER) continue;
-                if (choice == SDL_SELECT_CLICK_CLOSE) break;
-                if (choice == SDL_SELECT_CLICK_PAGE_PREV) key = '4';
-                else if (choice == SDL_SELECT_CLICK_PAGE_NEXT) key = '6';
-            }
-            key = steamdeck_menu_key(key, '4', '6');
-            if (key == ESCAPE || key == 'q') break;
-            if (sdl_character_sheet_screen_page_turning()) continue;
-            if (key == '8') (void)sdl_character_sheet_screen_scroll_book(-1);
-            else if (key == '2') (void)sdl_character_sheet_screen_scroll_book(1);
-            else if (key == '4' || key == '6' || key == ' '
-                || key == '\r' || key == '\n')
-            {
-                int page = sdl_character_sheet_screen_select_page();
-                int count = sdl_character_sheet_screen_select_page_count();
-                int direction = key == '4' ? -1 : 1;
-                if (page + direction >= 0 && page + direction < count)
-                    sdl_character_sheet_screen_begin_page_turn(direction);
-            }
-        }
-        sdl_character_sheet_screen_hide();
-    }
-    else
-    {
-        char text[SMITH_REPORT_MAX_LINES * 181] = "";
-        size_t used = 0;
-        for (int i = 0; i < report.count; ++i)
-            strnfcat(text, sizeof(text), &used, "%s\n", report.text[i]);
-        (void)show_buffer(text, 0);
-    }
-    ui_menu_click_clear();
-    ui_scroll_area_clear();
-    screen_load();
+    return n;
 }
 
 static bool smith_ui_take_click_action(int* choice, int* action)
@@ -1326,53 +489,6 @@ static bool smith_ui_take_click_action(int* choice, int* action)
         *action = UI_MENU_CLICK_HOVER;
     }
     return true;
-}
-
-static void smith_ui_draw_cost_heading(int col, int row, int count, byte attr)
-{
-    bool overflow = get_sdl_menu_bigger_font()
-        && row + 1 + count > smith_ui_content_bottom_row();
-    cptr label = overflow ? "Cost: more in Details" : "Cost:";
-    smith_ui_put_fitted(col, row, smith_ui_line_width(col),
-        overflow ? TERM_L_BLUE : attr, label);
-    if (overflow && row <= smith_ui_content_bottom_row())
-        ui_menu_click_add_text_token(SMITH_CLICK_CALC, col, row, label, label);
-}
-
-static int smith_ui_column_width(int col);
-
-static void smith_ui_put_menu_row(int choice, int col, int row,
-    byte base_attr, cptr label, bool selected)
-{
-    char prefix[8];
-    int start_col = indexed_menu_prefix_col(col);
-    int width = smith_ui_menu_row_width(col);
-    int label_width = width - (col - start_col);
-    byte attr = selected ? smith_ui_selected_attr(base_attr) : base_attr;
-
-    if (row < 0 || row > smith_ui_content_bottom_row())
-        return;
-
-    if (width < 1)
-        width = 1;
-    if (label_width < 1)
-        label_width = 1;
-
-    Term_erase(start_col, row, width);
-    if (selected)
-        smith_ui_fill_row(start_col, row, width, attr);
-
-    if (!indexed_menu_letters_enabled())
-    {
-        if (selected)
-            indexed_menu_focus_prefix(prefix, sizeof(prefix), choice - 1);
-        else
-            indexed_menu_normal_prefix(prefix, sizeof(prefix), choice - 1);
-        smith_ui_draw_fitted(start_col, row, 2, attr, prefix, false);
-    }
-
-    smith_ui_draw_fitted(col, row, label_width, attr, label, false);
-    ui_menu_click_add(choice, start_col, row, width);
 }
 
 /*
@@ -1392,86 +508,6 @@ static bool smith_ui_pointer_choice_confirms(
     *highlight = choice;
 
     return action != UI_MENU_CLICK_HOVER && same_choice;
-}
-
-static void smith_ui_add_back_click_target(int col, int row, cptr text)
-{
-    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "Esc");
-    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "ESC");
-    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "back");
-    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "return");
-    ui_menu_click_add_text_token(SMITH_CLICK_BACK, col, row, text, "exit");
-}
-
-static void smith_ui_draw_navigation_prompt(bool root_menu)
-{
-    char prompt[48];
-    int row;
-
-    if (sdl_touch_only_device_active())
-        return;
-
-    row = smith_ui_prompt_row();
-    if (steamdeck_controls_active())
-    {
-        char back_label[16];
-
-        controller_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        strnfmt(prompt, sizeof(prompt), "[%s] %s", back_label,
-            root_menu ? "Exit" : "Back");
-    }
-    else
-    {
-        strnfmt(prompt, sizeof(prompt), "Esc %s",
-            root_menu ? "Exit" : "Back");
-    }
-
-    Term_erase(0, row, smith_ui_term_wid());
-    Term_putstr(0, row, smith_ui_term_wid(), TERM_SLATE, prompt);
-    smith_ui_add_back_click_target(0, row, prompt);
-}
-
-static void smith_ui_begin_touch_scroll_area(bool root_menu)
-{
-    if (get_sdl_menu_bigger_font())
-        ui_menu_click_add_touch_button(SMITH_CLICK_CALC, "Details", TERM_DARK);
-    int bottom_row = smith_ui_content_bottom_row();
-
-    if (bottom_row < 1)
-        bottom_row = 1;
-
-    /* Keep the floating navigation control contextual: the root leaves
-     * Smithing, while every nested screen returns by its normal Back action. */
-    if (root_menu)
-        ui_menu_click_set_touch_exit_button(true);
-    else
-        ui_menu_click_add_touch_button(
-            SMITH_CLICK_BACK, "Back", TERM_DARK);
-
-    ui_scroll_area_begin(1, bottom_row, SDL_TOUCH_MENU_CATEGORY_OTHER);
-    ui_scroll_area_set_keys('8', '2', '6', '4');
-
-    /* Register a valid zero-range target immediately.  Long lists replace this
-     * with their own persistent viewport below.  Short Smithing screens still
-     * consume touch drags without translating them into cursor movement. */
-    if (sdl_touch_only_device_active())
-        ui_scroll_area_set_offset_target(&smith_ui_touch_drag_sink, 0);
-}
-
-static int smith_ui_list_bottom_row(int first_row, bool reserve_detail)
-{
-    int bottom = smith_ui_content_bottom_row();
-    int legacy_bottom = MAX_SMITHING_TVALS + 2;
-
-    if (reserve_detail)
-        bottom -= smith_ui_portrait_layout() ? 8 : 5;
-    if (bottom > legacy_bottom)
-        bottom = legacy_bottom;
-    if (bottom < first_row)
-        bottom = first_row;
-
-    return bottom;
 }
 
 static int smith_ui_configure_list_view(smith_ui_scroll_id id, int count,
@@ -1517,127 +553,28 @@ static int smith_ui_configure_list_view(smith_ui_scroll_id id, int count,
     return *top;
 }
 
-static int smith_ui_visible_highlight_row(int highlight, int top,
-    int first_row, int last_row)
-{
-    int selected = highlight - 1;
-    int visible = MAX(1, last_row - first_row + 1);
-
-    if (selected < top || selected >= top + visible)
-        return -1;
-
-    return first_row + selected - top;
-}
-
-static int smith_ui_column_width(int col)
-{
-    int next_col = smith_ui_term_wid();
-
-    if (smith_ui_portrait_layout())
-        return smith_ui_line_width(col);
-
-    if (col < COL_SMT2)
-        next_col = COL_SMT2;
-    else if (col < COL_SMT3)
-        next_col = smith_ui_secondary_next_col();
-    else if (col < COL_SMT4)
-        next_col = COL_SMT4;
-
-    if (next_col <= col)
-        next_col = smith_ui_term_wid();
-
-    return MAX(1, next_col - col - 1);
-}
-
-static void smith_ui_put_header(int col, int row, cptr label)
-{
-    char buf[80];
-    int width = smith_ui_column_width(col);
-
-    if (!label)
-        label = "";
-
-    if ((int)strlen(label) <= width)
-        SDL_strlcpy(buf, label, sizeof(buf));
-    else if (width > 3)
-        strnfmt(buf, sizeof(buf), "%.*s...", width - 3, label);
-    else
-        strnfmt(buf, sizeof(buf), "%.*s", width, label);
-
-    smith_ui_put_fitted(col, row, width, TERM_WHITE, buf);
-}
-
-static void smith_ui_put_section_header(int col, int row, cptr label)
-{
-    smith_ui_put_header(col, row, label);
-    smith_ui_draw_navigation_prompt(false);
-}
-
 /*
- * A list of tvals and their textual names
+ * Item types in display order within each smithing craft.
  */
 static const smithing_tval_desc smithing_tvals[MAX_SMITHING_TVALS] = {
-    { CAT_WEAPON, TV_SWORD, "Sword" },
-    { CAT_WEAPON, TV_POLEARM, "Axe or Polearm" },
-    { CAT_WEAPON, TV_HAFTED, "Blunt Weapon" },
-    { CAT_WEAPON, TV_DIGGING, "Digger" },
-    { CAT_WEAPON, TV_BOW, "Bow" },
-    { CAT_WEAPON, TV_ARROW, "Arrows" },
-    { CAT_JEWELRY, TV_RING, "Ring" },
-    { CAT_JEWELRY, TV_AMULET, "Amulet" },
-    { CAT_JEWELRY, TV_LIGHT, "Light" },
-    { CAT_JEWELRY, TV_HORN, "Horn" },
-    { CAT_ARMOUR, TV_SOFT_ARMOR, "Soft Armour" },
-    { CAT_ARMOUR, TV_MAIL, "Mail" },
-    { CAT_ARMOUR, TV_CLOAK, "Cloak" },
-    { CAT_ARMOUR, TV_SHIELD, "Shield" },
-    { CAT_ARMOUR, TV_HELM, "Helm" },
-    { CAT_ARMOUR, TV_GLOVES, "Gloves" },
-    { CAT_ARMOUR, TV_BOOTS, "Boots" },
+    { CAT_WEAPON, TV_SWORD },
+    { CAT_WEAPON, TV_POLEARM },
+    { CAT_WEAPON, TV_HAFTED },
+    { CAT_WEAPON, TV_DIGGING },
+    { CAT_WEAPON, TV_BOW },
+    { CAT_WEAPON, TV_ARROW },
+    { CAT_JEWELRY, TV_RING },
+    { CAT_JEWELRY, TV_AMULET },
+    { CAT_JEWELRY, TV_LIGHT },
+    { CAT_JEWELRY, TV_HORN },
+    { CAT_ARMOUR, TV_SOFT_ARMOR },
+    { CAT_ARMOUR, TV_MAIL },
+    { CAT_ARMOUR, TV_CLOAK },
+    { CAT_ARMOUR, TV_SHIELD },
+    { CAT_ARMOUR, TV_HELM },
+    { CAT_ARMOUR, TV_GLOVES },
+    { CAT_ARMOUR, TV_BOOTS },
 };
-
-static bool smith_tval_icon(int tval, object_type* icon)
-{
-    switch (tval)
-    {
-    case TV_SWORD:
-        return smith_ui_prepare_icon(icon, TV_SWORD, SV_LONG_SWORD);
-    case TV_POLEARM:
-        return smith_ui_prepare_icon(icon, TV_POLEARM, SV_HAND_AXE);
-    case TV_HAFTED:
-        return smith_ui_prepare_icon(icon, TV_HAFTED, SV_WAR_HAMMER);
-    case TV_DIGGING:
-        return smith_ui_prepare_icon(icon, TV_DIGGING, SV_MATTOCK);
-    case TV_BOW:
-        return smith_ui_prepare_icon(icon, TV_BOW, SV_LONG_BOW);
-    case TV_ARROW:
-        return smith_ui_prepare_icon(icon, TV_ARROW, SV_NORMAL_ARROW);
-    case TV_RING:
-        return smith_ui_prepare_icon(icon, TV_RING, SV_RING_ACCURACY);
-    case TV_AMULET:
-        return smith_ui_prepare_icon(icon, TV_AMULET, SV_AMULET_CON);
-    case TV_LIGHT:
-        return smith_ui_prepare_icon(icon, TV_LIGHT, SV_LIGHT_LANTERN);
-    case TV_HORN:
-        return smith_ui_prepare_icon(icon, TV_HORN, SV_HORN_WARNING);
-    case TV_SOFT_ARMOR:
-        return smith_ui_prepare_icon(icon, TV_SOFT_ARMOR, SV_LEATHER_ARMOR);
-    case TV_MAIL:
-        return smith_ui_prepare_icon(icon, TV_MAIL, SV_MAIL_CORSLET);
-    case TV_CLOAK:
-        return smith_ui_prepare_icon(icon, TV_CLOAK, SV_CLOAK);
-    case TV_SHIELD:
-        return smith_ui_prepare_icon(icon, TV_SHIELD, SV_ROUND_SHIELD);
-    case TV_HELM:
-        return smith_ui_prepare_icon(icon, TV_HELM, SV_HELM);
-    case TV_GLOVES:
-        return smith_ui_prepare_icon(icon, TV_GLOVES, SV_SET_OF_LEATHER_GLOVES);
-    case TV_BOOTS:
-        return smith_ui_prepare_icon(icon, TV_BOOTS, SV_PAIR_OF_LEATHER_BOOTS);
-    default:
-        return false;
-    }
-}
 
 static bool object_has_evil_alignment(const object_type* o_ptr);
 
@@ -2053,14 +990,6 @@ static const artifice_limits_t* artifice_bonus_for(const object_type* o_ptr)
 }
 
 /*
- * Determines whether the attack bonus of an item is eligible for modification.
- */
-int att_valid(void)
-{
-    return att_max() > att_min();
-}
-
-/*
  * Determines the maximum legal attack bonus for an item.
  * Uses data-driven max_att from object.txt R: lines, ego sums,
  * and the artifice table for custom artefacts.
@@ -2099,14 +1028,6 @@ int att_min(void)
     int att = k_ptr->att;
     att += max_att_min_inc;
     return (att);
-}
-
-/*
- * Determines whether the damage sides of an item is eligible for modification.
- */
-int ds_valid(void)
-{
-    return ds_max() > ds_min();
 }
 
 /*
@@ -2152,14 +1073,6 @@ int ds_min(void)
 }
 
 /*
- * Determines whether the evasion bonus of an item is eligible for modification.
- */
-int evn_valid(void)
-{
-    return evn_max() > evn_min();
-}
-
-/*
  * Determines the maximum legal evasion bonus for an item.
  */
 int evn_max()
@@ -2196,15 +1109,6 @@ int evn_min(void)
     int evn = k_ptr->evn;
     evn += max_evn_min_inc;
     return (evn);
-}
-
-/*
- * Determines whether the protection sides of an item is eligible for
- * modification.
- */
-int ps_valid(void)
-{
-    return ps_max() > ps_min();
 }
 
 /*
@@ -2297,112 +1201,6 @@ static void smithing_set_protection_combo(object_type* o_ptr, int combo_idx)
 
     o_ptr->pd = smithing_amulet_protection_combos[combo_idx].pd;
     o_ptr->ps = smithing_amulet_protection_combos[combo_idx].ps;
-}
-
-static bool smithing_can_increase_protection(const object_type* o_ptr)
-{
-    int combo_idx;
-
-    if (!o_ptr)
-        return false;
-
-    if (!smithing_variable_protection_dice(o_ptr))
-    {
-        if (o_ptr->ps < ps_max())
-            return true;
-
-        return false;
-    }
-
-    combo_idx = smithing_protection_combo_index(o_ptr);
-    if (combo_idx >= 0)
-        return combo_idx < (int)N_ELEMENTS(smithing_amulet_protection_combos) - 1;
-
-    return (o_ptr->pd <= 1) && (o_ptr->ps < 1);
-}
-
-static bool smithing_can_decrease_protection(const object_type* o_ptr)
-{
-    int combo_idx;
-
-    if (!o_ptr)
-        return false;
-
-    if (!smithing_variable_protection_dice(o_ptr))
-    {
-        if (o_ptr->ps > ps_min())
-            return true;
-
-        return false;
-    }
-
-    combo_idx = smithing_protection_combo_index(o_ptr);
-    if (combo_idx > 0)
-        return true;
-
-    return combo_idx == 0 && ps_min() < 1;
-}
-
-static void smithing_increase_protection(object_type* o_ptr)
-{
-    int combo_idx;
-
-    if (!o_ptr)
-        return;
-
-    if (!smithing_variable_protection_dice(o_ptr))
-    {
-        o_ptr->ps++;
-        return;
-    }
-
-    combo_idx = smithing_protection_combo_index(o_ptr);
-    if (combo_idx >= 0)
-    {
-        smithing_set_protection_combo(o_ptr, combo_idx + 1);
-        return;
-    }
-
-    smithing_set_protection_combo(o_ptr, 0);
-}
-
-static void smithing_decrease_protection(object_type* o_ptr)
-{
-    int combo_idx;
-
-    if (!o_ptr)
-        return;
-
-    if (!smithing_variable_protection_dice(o_ptr))
-    {
-        o_ptr->ps--;
-        return;
-    }
-
-    combo_idx = smithing_protection_combo_index(o_ptr);
-    if (combo_idx > 0)
-    {
-        smithing_set_protection_combo(o_ptr, combo_idx - 1);
-        return;
-    }
-
-    if (combo_idx == 0 && ps_min() < 1)
-    {
-        o_ptr->pd = 1;
-        o_ptr->ps = 0;
-    }
-}
-
-/*
- * Determines whether the pval of an item is eligible for modification.
- */
-int pval_valid(void)
-{
-    u32b f1, f2, f3;
-
-    object_flags(smith_o_ptr, &f1, &f2, &f3);
-
-    return (f1 & (TR1_PVAL_MASK));
 }
 
 /*
@@ -2583,25 +1381,6 @@ int wgt_min(void)
     object_kind* k_ptr = &k_info[smith_o_ptr->k_idx];
     int weight = div_round(k_ptr->weight, 3) * 2;
     return (weight);
-}
-
-/*
- * Moves the light blue highlighted letter.
- */
-void move_displayed_highlight(
-    int old_highlight, byte old_attr, int new_highlight, int col)
-{
-    char buf[80];
-
-    // remove highlight from the old label
-    indexed_menu_normal_prefix(buf, sizeof(buf), old_highlight - 1);
-    Term_putstr(indexed_menu_prefix_col(col), old_highlight + 1, -1, old_attr,
-        buf);
-
-    // highlight the new label
-    indexed_menu_focus_prefix(buf, sizeof(buf), new_highlight - 1);
-    Term_putstr(indexed_menu_prefix_col(col), new_highlight + 1, -1,
-        TERM_L_BLUE, buf);
 }
 
 bool melt_metal_item(int item_num)
@@ -2899,6 +1678,11 @@ int forge_bonus(int y, int x)
         return (7);
 }
 
+static int smithing_capacity(const object_type* object)
+{
+    return smithing_item_skill(object) + forge_bonus(p_ptr->py, p_ptr->px);
+}
+
 /* Difficulty comes exclusively from the shared item evaluator. This layer
  * collects the existing resource fees and explicit smith-specific benefits. */
 int object_difficulty(object_type* o_ptr)
@@ -3003,7 +1787,7 @@ int object_difficulty(object_type* o_ptr)
         o_ptr->ident |= IDENT_CANT_MELT;
     }
 
-    int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    int effective_skill = smithing_capacity(o_ptr);
     if (p_ptr->have_ability[S_SPC][SPC_AULE] && dif > effective_skill)
     {
         int maximum = effective_skill + p_ptr->skill_base[S_SMT] * 2;
@@ -3035,169 +1819,15 @@ int object_difficulty(object_type* o_ptr)
 }
 
 /*
- * Clears the object's name and description at the bottom of the screen.
- */
-void wipe_object_description(void)
-{
-    if (smith_ui_last_desc_row >= 0)
-        smith_ui_clear_from_row(smith_ui_last_desc_row);
-
-    smith_ui_reset_description_state();
-}
-
-/*
- * Displays the object's name and description at the bottom of the screen.
- */
-void prt_object_description(void)
-{
-    char o_desc[160];
-    char weight_desc[32];
-    char buf[80];
-    char base_desc_buf[2048];
-    cptr base_desc;
-    int display_flag;
-    int desc_row;
-    int desc_col;
-    int desc_width;
-    int wrap_col;
-    int min_desc_row;
-    int max_lines;
-    int progress_lines;
-    int header_lines;
-    int info_lines;
-    int lore_lines;
-    int lore_info_lines;
-    int body_lines;
-    int total_lines;
-    bool show_lore = false;
-    bool show_info = false;
-    void (*old_hook)(byte, cptr);
-    void (*old_info_out_flags)(const object_type*, u32b*, u32b*, u32b*);
-    int old_wrap;
-    int old_indent;
-
-    wipe_object_description();
-
-    // abort if there is no object to display
-    if (smith_o_ptr->tval == 0)
-        return;
-
-    desc_col = smith_ui_desc_col();
-    desc_width = smith_ui_line_width(desc_col);
-    wrap_col = smith_ui_term_wid() - 2;
-    if (desc_width <= 0)
-        return;
-    if (wrap_col <= desc_col + 1)
-        wrap_col = desc_col + 2;
-    min_desc_row = smith_ui_min_description_row();
-    max_lines = smith_ui_content_bottom_row() - min_desc_row + 1;
-
-    if (smith_o_ptr->number > 1)
-        display_flag = true;
-    else
-        display_flag = false;
-
-    object_desc(o_desc, sizeof(o_desc), smith_o_ptr, display_flag, 2);
-    strnfmt(weight_desc, sizeof(weight_desc), "%d.%d lb",
-        smith_o_ptr->weight * smith_o_ptr->number / 10,
-        (smith_o_ptr->weight * smith_o_ptr->number) % 10);
-
-    header_lines = smith_ui_object_title_lines(o_desc, weight_desc,
-        desc_width);
-
-    base_desc = object_lore_select_base_text(smith_o_ptr, base_desc_buf,
-        sizeof(base_desc_buf));
-
-    progress_lines = p_ptr->smithing_leftover ? 1 : 0;
-    info_lines = smith_count_object_preview_lines(
-        smith_o_ptr, NULL, true, desc_col, wrap_col);
-    lore_lines = smith_count_object_preview_lines(
-        smith_o_ptr, base_desc, false, desc_col, wrap_col);
-    lore_info_lines = smith_count_object_preview_lines(
-        smith_o_ptr, base_desc, true, desc_col, wrap_col);
-
-    show_info = (info_lines > 0);
-    if (progress_lines + header_lines + info_lines > max_lines)
-        show_info = false;
-    if (base_desc && base_desc[0])
-    {
-        int full_body_lines = show_info ? lore_info_lines : lore_lines;
-
-        if ((full_body_lines > 0)
-            && (progress_lines + header_lines + full_body_lines <= max_lines))
-        {
-            show_lore = true;
-        }
-    }
-
-    body_lines = show_lore ? (show_info ? lore_info_lines : lore_lines)
-                           : (show_info ? info_lines : 0);
-    total_lines = progress_lines + header_lines + body_lines;
-
-    desc_row = smith_ui_description_row_for_lines(total_lines);
-    if (desc_row < 0)
-        return;
-
-    smith_ui_last_desc_row = desc_row;
-    smith_ui_clear_from_row(desc_row);
-
-    if (p_ptr->smithing_leftover)
-    {
-        strnfmt(buf, sizeof(buf), "In progress: %d turns left",
-            p_ptr->smithing_leftover);
-        smith_ui_put_fitted(desc_col, desc_row, desc_width, TERM_L_BLUE, buf);
-        desc_row++;
-        if (desc_row > smith_ui_content_bottom_row())
-            return;
-    }
-
-    desc_row += smith_ui_put_object_title(desc_col, desc_row, desc_width,
-        TERM_L_WHITE, o_desc, weight_desc);
-    if (desc_row > smith_ui_content_bottom_row())
-        return;
-
-    Term_gotoxy(desc_col, desc_row);
-
-    /* Set hooks for character dump */
-    old_info_out_flags = object_info_out_flags;
-    object_info_out_flags = object_flags;
-
-    /* Set the indent/wrap */
-    old_hook = text_out_hook;
-    old_wrap = text_out_wrap;
-    old_indent = text_out_indent;
-    text_out_indent = desc_col;
-    text_out_wrap = wrap_col;
-
-    text_out_hook = text_out_to_screen;
-
-    if (show_lore && base_desc && base_desc[0])
-    {
-        text_out_c(TERM_WHITE, base_desc);
-        if (show_info)
-            text_out(" ");
-    }
-
-    if (show_info)
-        (void)object_info_out(smith_o_ptr);
-
-    /* Reset indent/wrap */
-    text_out_hook = old_hook;
-    object_info_out_flags = old_info_out_flags;
-    text_out_indent = old_indent;
-    text_out_wrap = old_wrap;
-}
-
-/*
  * Determines whether an item is too difficult to make.
  */
 int too_difficult(object_type* o_ptr)
 {
-    int ability = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    int ability = smithing_capacity(o_ptr);
     int dif = object_difficulty(o_ptr);
 
     if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
-        // AulÃ«'s Forge: can craft up to skill_use + (skill_base * 2)
+        // Aule's Forge adds twice the invested ranks to item capacity.
         int max_aule_difficulty = ability + (p_ptr->skill_base[S_SMT] * 2);
         log_trace("ABILITY DEBUG: AulÃ«'s Forge too_difficult check - max possible: %d, difficulty: %d", max_aule_difficulty, dif);
         if (max_aule_difficulty >= dif)
@@ -3205,7 +1835,7 @@ int too_difficult(object_type* o_ptr)
         else
             return (true);
     } else if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]) {
-        // Masterpiece: can craft up to skill_use + skill_base
+        // Masterpiece adds the invested ranks to item capacity.
         ability += p_ptr->skill_base[S_SMT];
     }
 
@@ -3215,59 +1845,15 @@ int too_difficult(object_type* o_ptr)
         return (false);
 }
 
-/*
- * Displays the object's difficulty and costs in the right hand side of the
- * screen.
- */
-void prt_object_difficulty(void)
+/* Snapshot the bill before returning a previewed object to its baseline. */
+static int smith_measure_design(void)
 {
-    int dif;
-    char buf[80];
-    int turn_multiplier = 10;
-    int costs = 0;
-    byte attr;
-    bool affordable = true;
-    bool compact = smith_ui_compact_width();
-    bool portrait = smith_ui_portrait_layout();
-    int cost_title_row;
-    int measure_row = -1;
-
-    // abort if there is no object to display
-    if (smith_o_ptr->tval == 0)
+    if (!smith_o_ptr->k_idx)
     {
         smith_ui_detail_valid = false;
-        return;
+        return 0;
     }
-
-    if (portrait)
-    {
-        int divider_row = smith_ui_used_bottom_row() + 1;
-
-        smith_ui_draw_horizontal_divider(divider_row);
-        measure_row = divider_row + 1;
-    }
-
-    // display difficulty information
-    if (too_difficult(smith_o_ptr))
-        attr = TERM_L_DARK;
-    else
-        attr = TERM_SLATE;
-
-    if (!portrait)
-    {
-        smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
-            "Difficulty:");
-    }
-
-    // change colour if smithing drain is required
-    if ((smithing_cost.drain > 0)
-        && (smithing_cost.drain <= p_ptr->skill_base[S_SMT]))
-    {
-        attr = TERM_BLUE;
-    }
-
-    // calculate difficulty (and costs)
-    dif = object_difficulty(smith_o_ptr);
+    int dif = object_difficulty(smith_o_ptr);
     smith_ui_detail_valid = true;
     smith_ui_detail_reforge = smith_pending_reforge();
     smith_ui_detail_paid = smith_ui_detail_reforge;
@@ -3280,271 +1866,7 @@ void prt_object_difficulty(void)
         smith_ui_detail_turns = p_ptr->smithing_leftover;
     }
 
-    if (smith_pending_reforge())
-    {
-        int col = portrait ? COL_SMT1 : COL_SMT4;
-        int row = 2;
-        if (portrait)
-        {
-            row = smith_ui_used_bottom_row() + 1;
-            smith_ui_draw_horizontal_divider(row++);
-        }
-        smith_ui_put_fitted(col, row++, smith_ui_line_width(col),
-            TERM_L_BLUE, "Reforging");
-        smith_ui_put_fitted(col, row, smith_ui_line_width(col),
-            TERM_SLATE, "Costs paid");
-        return;
-    }
-
-    if (portrait)
-    {
-        int used;
-
-        strnfmt(buf, sizeof(buf), "Measure   Difficulty: %d / %d", dif,
-            p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-        used = smith_ui_put_wrapped(COL_SMT1, measure_row,
-            smith_ui_line_width(COL_SMT1),
-            MAX(1, smith_ui_content_bottom_row() - measure_row + 1), attr,
-            buf);
-        smith_ui_cost_title_row_override = measure_row + MAX(1, used);
-    }
-    else
-    {
-        sprintf(buf, "%d", dif);
-        smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
-
-        if (compact)
-            strnfmt(buf, sizeof(buf), "/%d",
-                p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-        else
-            strnfmt(buf, sizeof(buf), "(max %d)",
-                p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-        smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
-            smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK,
-            buf);
-    }
-
-    cost_title_row = smith_ui_cost_title_row();
-
-    // display cost information
-    if (smithing_cost.weaponsmith)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Weaponsmith");
-        costs++;
-    }
-    if (smithing_cost.armoursmith)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Armoursmith");
-        costs++;
-    }
-    if (smithing_cost.jeweller)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Jeweller");
-        costs++;
-    }
-    if (smithing_cost.enchantment)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Enchantment");
-        costs++;
-    }
-    if (smithing_cost.artifice)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Artifice");
-        costs++;
-    }
-    if (smithing_cost.alloy_mastery)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Alloy Mastery");
-        costs++;
-    }
-    if (smithing_cost.uses > 0)
-    {
-        if (forge_uses(p_ptr->py, p_ptr->px) >= smithing_cost.uses)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        if (smithing_cost.uses == 1)
-        {
-            sprintf(buf, "%d Use", smithing_cost.uses);
-        }
-        else
-        {
-            sprintf(buf, "%d Uses", smithing_cost.uses);
-        }
-        if (compact || portrait)
-        {
-            strnfmt(buf, sizeof(buf), "%d/%d uses", smithing_cost.uses,
-                forge_uses(p_ptr->py, p_ptr->px));
-            smith_ui_put_cost_line(costs, attr, buf);
-        }
-        else
-        {
-            smith_ui_put_cost_line(costs, attr, buf);
-            strnfmt(buf, sizeof(buf), "(of %d)", forge_uses(p_ptr->py, p_ptr->px));
-            smith_ui_put_fitted(COL_SMT4 + 9, smith_ui_cost_item_row(costs),
-                smith_ui_line_width(COL_SMT4 + 9), TERM_L_DARK, buf);
-        }
-        costs++;
-    }
-    if (smithing_cost.drain > 0)
-    {
-        if (smithing_cost.drain <= p_ptr->skill_base[S_SMT])
-        {
-            attr = TERM_BLUE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Smithing", smithing_cost.drain);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.mithril > 0)
-    {
-        if (smithing_cost.mithril <= mithril_carried())
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, compact ? "%d.%d lb Mith" : "%d.%d lb Mithril",
-            smithing_cost.mithril / 10,
-            smithing_cost.mithril % 10);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.star_iron > 0)
-    {
-        if (smithing_cost.star_iron <= star_iron_carried())
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, compact ? "%d.%d lb StIron" : "%d.%d lb Star Iron",
-            smithing_cost.star_iron / 10,
-            smithing_cost.star_iron % 10);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.str > 0)
-    {
-        if (p_ptr->stat_base[A_STR] + p_ptr->stat_drain[A_STR]
-                - smithing_cost.str
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Str", smithing_cost.str);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.dex > 0)
-    {
-        if (p_ptr->stat_base[A_DEX] + p_ptr->stat_drain[A_DEX]
-                - smithing_cost.dex
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Dex", smithing_cost.dex);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.con > 0)
-    {
-        if (p_ptr->stat_base[A_CON] + p_ptr->stat_drain[A_CON]
-                - smithing_cost.con
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Con", smithing_cost.con);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.gra > 0)
-    {
-        if (p_ptr->stat_base[A_GRA] + p_ptr->stat_drain[A_GRA]
-                - smithing_cost.gra
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Gra", smithing_cost.gra);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.exp > 0)
-    {
-        if (p_ptr->new_exp >= smithing_cost.exp)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Exp", smithing_cost.exp);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (p_ptr->active_ability[S_SMT][SMT_EXPERTISE])
-    {
-        turn_multiplier /= 2;
-    }
-
-    attr = TERM_SLATE;
-    sprintf(buf, "%d Turns", MAX(10, dif * turn_multiplier));
-    smith_ui_put_cost_line(costs, attr, buf);
-    costs++;
-
-    // if (costs == 0)
-    //{
-    //	Term_putstr(COL_SMT4 + 2, 10 + costs, -1, TERM_SLATE, "-");
-    //}
-
-    // display cost title
-    if (affordable)
-        attr = TERM_SLATE;
-    else
-        attr = TERM_L_DARK;
-    smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
-        cost_title_row, costs, attr);
+    return dif;
 }
 
 /*
@@ -3919,9 +2241,10 @@ int smithing_work_difficulty(void)
     return difficulty;
 }
 
-static bool smith_reforge_difficulty_affordable(int difficulty, int* drain_out)
+static bool smith_reforge_difficulty_affordable(const object_type* object,
+    int difficulty, int* drain_out)
 {
-    int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    int effective_skill = smithing_capacity(object);
 
     if (drain_out)
         *drain_out = 0;
@@ -4017,7 +2340,7 @@ static bool reforge_preview_build(const object_type* source, int prefix_idx,
 
     preview->affordable
         = smith_reforge_difficulty_affordable(
-            preview->scaled_difficulty, &preview->cost.drain);
+            source, preview->scaled_difficulty, &preview->cost.drain);
 
     if (!p_ptr->active_ability[S_SMT][SMT_REPAIR])
     {
@@ -4171,491 +2494,792 @@ static byte smith_default_stack_size(const object_type* o_ptr)
 /*
  * Creates the base object (not in the dungeon, but just as a work in progress).
  */
+static void smith_prepare_base_object(object_type* object, int kind)
+{
+    object_wipe(object);
+    smith_prepare_display_object(object, kind);
+    apply_magic_fake(object);
+    object->weight = k_info[kind].weight;
+    object->ident |= (IDENT_KNOWN | IDENT_SPOIL);
+    object->number = smith_default_stack_size(object);
+}
+
 void create_base_object(int tval, int sval)
 {
-    /* Wipe the object */
-    object_wipe(smith_o_ptr);
     smith_clear_alloy_state(&smith_alloy);
-
-    /* Prepare the item */
-    smith_prepare_display_object(smith_o_ptr, lookup_kind(tval, sval));
-
-    // set the pval to 1 if needed (and evasion/accuracy for rings)
-    apply_magic_fake(smith_o_ptr);
-
-    // use a default weight
-    smith_o_ptr->weight = (&k_info[smith_o_ptr->k_idx])->weight;
-
-    // display all attributes
-    smith_o_ptr->ident |= (IDENT_KNOWN | IDENT_SPOIL);
-
-    // Apply default stack sizes for smithing output
-    smith_o_ptr->number = smith_default_stack_size(smith_o_ptr);
+    smith_prepare_base_object(smith_o_ptr, lookup_kind(tval, sval));
 }
 
-/*
- * Performs the interface and selection work for the sval part of the base item
- * menu.
- */
-int create_sval_menu_aux(int tval, int* highlight)
-{
-    char ch;
-    int i, num;
-    bool valid[20];
-    int sval[20];
-    char names[20][80];
-    object_type icons[20];
-    int list_col = COL_SMT3;
-    int title_row = MAX(0, smith_ui_dense_row0() - 1);
-    int first_row = smith_ui_dense_row0();
-    int last_row = smith_ui_list_bottom_row(first_row, true);
-    int top;
+enum {
+    SMITH_BROWSER_GROUP_COUNT = 3,
+    SMITH_BROWSER_GROUP_CLICK = SMITH_CLICK_CALC + 1,
+    SMITH_BROWSER_MELT_CLICK = SMITH_BROWSER_GROUP_CLICK + SMITH_BROWSER_GROUP_COUNT,
+    SMITH_BROWSER_REFORGE_CLICK,
+    SMITH_BROWSER_INSPECT_CLICK,
+    SMITH_BROWSER_DESIGN_CLICK,
+};
 
+typedef struct smith_picker_entry {
+    int kind;
+    char name[80];
+} smith_picker_entry;
+
+/* All views use the same piece of the terminal for the editable list,
+ * the work order, and the action strip. Bounds are half-open. */
+typedef struct {
+    int width, margin, tabs, body, footer;
+    int divider, summary;
+    int list_width, list_end;
+} smith_sheet_layout;
+
+typedef struct {
+    int columns, step, first, stride, visible, top;
+} smith_picker_grid;
+
+typedef struct {
+    int id;
+    cptr label;
+    byte attr;
+} smith_sheet_action;
+
+static smith_sheet_layout smith_sheet_geometry(void)
+{
+    int width = smith_ui_term_wid();
+    int footer = smith_ui_content_bottom_row();
+    int margin = width >= 72 ? 3 : width >= 40 ? 2 : 1;
+    int tabs = smith_ui_term_hgt() >= 19 ? 3 : 1;
+    int body = tabs + (footer >= 19 ? 2 : 1);
+    int space = MAX(1, footer - body);
+    bool landscape = 2 * width >= 3 * smith_ui_term_hgt();
+    int divider = landscape && width >= 68 && space >= 7 ? width * 56 / 100 : -1;
+    /* Keep at least a heading and two choices above the compact work order. */
+    int summary = divider >= 0 ? body
+        : footer - MIN(MAX(1, space - 3), MAX(3, (space * 2) / 5));
+    return (smith_sheet_layout){
+        .width = width, .margin = margin, .tabs = tabs, .body = body,
+        .footer = footer, .divider = divider, .summary = summary,
+        .list_width = MAX(1, (divider >= 0 ? divider : width) - 2 * margin),
+        .list_end = divider >= 0 ? footer : summary,
+    };
+}
+
+static void smith_sheet_begin(const smith_sheet_layout* sheet, bool root)
+{
+    int x = sheet->width >= 72 ? 3 : 2;
+    int y = sheet->tabs == 1 ? 0 : 1;
+    bool forge = cave_forge_bold(p_ptr->py, p_ptr->px);
+    cptr location = forge ? "At the forge" : "Away from forge";
+    int status_x = sheet->divider >= 0 ? sheet->divider + sheet->margin : x + 19;
+
+    sdl_smithing_artwork_clear();
+    Term_clear();
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
+    ui_scroll_area_clear();
+    if (root)
+        ui_menu_click_set_touch_exit_button(true);
+    else
+        ui_menu_click_add_touch_button(SMITH_CLICK_BACK, "Back", TERM_DARK);
+    sdl_smithing_sheet_set(sheet->tabs, sheet->body, sheet->divider,
+        sheet->divider >= 0 ? -1 : sheet->summary, sheet->footer);
+    smith_ui_put_fitted(x, y, 8, TERM_L_WHITE, "Smithing");
+    if (status_x + (int)strlen(location) + 17 <= sheet->width)
+        smith_ui_put_fitted(status_x, y, (int)strlen(location), TERM_L_WHITE, location);
+}
 
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(list_col));
-    smith_ui_put_section_header(list_col, title_row, "Subtype");
-
-    /* We have to search the whole itemlist. */
-    for (num = 0, i = 1; i < z_info->k_max; i++)
+static void smith_sheet_tabs(const smith_sheet_layout* sheet, const cptr* names,
+    int count, int selected, int first_id)
+{
+    int letters = 0;
+    for (int i = 0; i < count; i++) letters += (int)strlen(names[i]);
+    int available = sheet->width - 2 * sheet->margin;
+    bool brackets = available >= letters + count + 1;
+    int pad = MAX(0, MIN(2, (available - letters - count - 1) / (2 * count)));
+    int x = sheet->margin;
+    for (int i = 0; i < count; i++)
     {
-        object_kind* k_ptr = &k_info[i];
+        char label[32];
+        if (i == selected && brackets)
+            strnfmt(label, sizeof(label), "[%s]", names[i]);
+        else
+            SDL_strlcpy(label, names[i], sizeof(label));
+        int w = (int)strlen(label) + 2 * pad;
+        smith_ui_draw_fitted(x + pad, sheet->tabs, w - pad,
+            i == selected ? TERM_L_BLUE : TERM_SLATE, label, false);
+        if (first_id > 0) ui_menu_click_add(first_id + i, x, sheet->tabs, w);
+        x += w + 1;
+    }
+}
 
-        /* Analyze matching items */
-        if (k_ptr->tval == tval)
+static void smith_sheet_actions(const smith_sheet_layout* sheet,
+    const smith_sheet_action* actions, int count, int focus)
+{
+    int x = sheet->margin;
+    int end = sheet->width - sheet->margin;
+    int letters = 0;
+    for (int i = 0; i < count; i++) letters += (int)strlen(actions[i].label);
+    int pad = MAX(0, MIN(2, (end - x - letters - count + 1) / (2 * count)));
+    for (int i = 0; i < count; i++)
+    {
+        int w = (int)strlen(actions[i].label) + 2 * pad;
+        if (i == count - 1) x = MAX(x, end - w);
+        byte attr = actions[i].id == focus ? TERM_UI_SELECTED + TERM_L_BLUE
+            : actions[i].attr;
+        if (attr >= TERM_UI_SELECTED) smith_ui_fill_row(x, sheet->footer, w, attr);
+        smith_ui_draw_fitted(x + pad, sheet->footer, w - pad, attr,
+            actions[i].label, false);
+        ui_menu_click_add(actions[i].id, x, sheet->footer, w);
+        x += w + 1;
+    }
+}
+
+static void smith_sheet_navigation(const smith_sheet_layout* sheet, bool root,
+    cptr confirm, bool pages)
+{
+    if (sdl_touch_only_device_active()) return;
+    char text[128], back[16] = "Esc", accept[16] = "Enter", page_keys[40] = "[ ]";
+    if (steamdeck_controls_active())
+    {
+        char prev[16], next[16];
+        controller_prompt_label(steamdeck_back_key(), "B", back, sizeof(back));
+        controller_prompt_label(steamdeck_confirm_key(), "A", accept, sizeof(accept));
+        controller_prompt_label(steamdeck_prev_page_key(), "LB", prev, sizeof(prev));
+        controller_prompt_label(steamdeck_next_page_key(), "RB", next, sizeof(next));
+        strnfmt(page_keys, sizeof(page_keys), "%s/%s", prev, next);
+    }
+    strnfmt(text, sizeof(text), "%s %s", back, root ? "Exit" : "Back");
+    if (confirm)
+    {
+        size_t len = strlen(text);
+        strnfcat(text, sizeof(text), &len, "   %s %s", accept, confirm);
+    }
+    if (pages && sheet->width >= 40)
+    {
+        size_t len = strlen(text);
+        strnfcat(text, sizeof(text), &len, "   %s Tabs", page_keys);
+    }
+    int row = smith_ui_prompt_row();
+    Term_putstr(sheet->margin, row, sheet->width - sheet->margin, TERM_SLATE, text);
+    ui_menu_click_add(SMITH_CLICK_BACK, sheet->margin, row,
+        (int)strlen(back) + 5);
+}
+
+static void smith_sheet_list_scroll(const smith_sheet_layout* sheet,
+    int first, int end)
+{
+    ui_scroll_area_begin_cols(sheet->margin, sheet->margin + sheet->list_width - 1,
+        first, MAX(first, end - 1), SDL_TOUCH_MENU_CATEGORY_OTHER);
+    ui_scroll_area_set_keys('8', '2', '6', '4');
+}
+
+/* One ruled entry, with the value aligned to the end of the same row. */
+static void smith_sheet_field(int x, int row, int width, cptr label, cptr value,
+    byte label_attr, byte value_attr)
+{
+    int label_min = MIN(menu_text_display_width(label), MAX(3, width / 2));
+    int value_width = MIN(MAX(0, width - label_min - 1), menu_text_display_width(value));
+    int label_width = MAX(0, width - value_width - (value_width != 0));
+    smith_ui_draw_fitted(x, row, label_width, label_attr, label, false);
+    smith_ui_draw_fitted(x + width - value_width, row, value_width, value_attr,
+        value, false);
+}
+
+static bool smith_kind_is_browsable(const object_kind* kind)
+{
+    if ((kind->flags3 & TR3_INSTA_ART) || (kind->flags4 & TR4_EVIL_ITEM))
+        return false;
+    if (!(kind->flags3 & TR3_NO_SMITHING))
+        return true;
+    return (c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_EOL)
+        && kind->tval == TV_SOFT_ARMOR && kind->sval == SV_ARMOUR_OF_GALVORN;
+}
+
+static int smith_browser_entries(int group, smith_picker_entry* entries)
+{
+    int count = 0;
+    /* Keep the established item type order, then the template order within it. */
+    for (int i = 0; i < MAX_SMITHING_TVALS; i++)
+    {
+        if (smithing_tvals[i].category != group)
+            continue;
+
+        for (int kind = 1; kind < z_info->k_max; kind++)
         {
-            if (num >= (int)N_ELEMENTS(sval))
-                break;
-
-            /* Skip instant artefact item types */
-            if (k_ptr->flags3 & (TR3_INSTA_ART))
-                continue;
-            if (k_ptr->flags4 & TR4_EVIL_ITEM)
-                continue;
-
-            /* Skip certain item types that cannot be made */
-            if (k_ptr->flags3 & (TR3_NO_SMITHING))
+            const object_kind* candidate = &k_info[kind];
+            if (candidate->tval != smithing_tvals[i].tval
+                || !smith_kind_is_browsable(candidate))
             {
-                bool allow_override = false;
-
-                /* Check for specific character unique flag and sval overrides */
-                if ((c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_EOL) &&
-                    (k_ptr->tval == TV_SOFT_ARMOR) && (k_ptr->sval == SV_ARMOUR_OF_GALVORN))
-                {
-                    allow_override = true;
-                }
-
-                if (!allow_override)
-                    continue;
+                continue;
             }
-
-            /* Get the "name" of object "i" */
-            strip_name(names[num], i);
-
-            // make a simple version of the object
-            create_base_object(tval, k_ptr->sval);
-            object_copy(&icons[num], smith_o_ptr);
-
-            // Check whether it is a valid choice for creating
-            if (affordable(smith_o_ptr))
-                valid[num] = true;
+            entries[count].kind = kind;
+            if (candidate->tval == TV_RING || candidate->tval == TV_AMULET)
+            {
+                char name[80];
+                strip_name(name, kind);
+                strnfmt(entries[count].name, sizeof(entries[count].name),
+                    "%s of %s", candidate->tval == TV_RING ? "Ring" : "Amulet",
+                    name);
+            }
             else
-                valid[num] = false;
-
-            /* Remember the object sval */
-            sval[num] = k_ptr->sval;
-
-            // count the applicable items
-            num++;
+                strip_name(entries[count].name, kind);
+            count++;
         }
     }
-
-    if (num <= 0)
-        return -1;
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > num)
-        *highlight = num;
-
-    top = smith_ui_configure_list_view(SMITH_SCROLL_SVAL, num, *highlight,
-        first_row, last_row);
-    for (i = top; i < num && i < top + (last_row - first_row + 1); i++)
-    {
-        int row = first_row + i - top;
-
-        smith_ui_put_icon_menu_row(i + 1, list_col, row,
-            valid[i] ? TERM_WHITE : TERM_SLATE, names[i], &icons[i],
-            *highlight == i + 1);
-    }
-
-    // make a simple version of the object
-    create_base_object(tval, sval[*highlight - 1]);
-
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(indexed_menu_prefix_col(list_col),
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if (clicked_choice == SMITH_CLICK_BACK)
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= num)
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-
-                if (click_action == UI_MENU_CLICK_SECONDARY)
-                {
-                    *highlight = clicked_choice;
-                    create_base_object(tval, sval[clicked_choice - 1]);
-                    describe_object_with_comparisons(smith_o_ptr, true);
-                    return 0;
-                }
-
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
-            }
-        }
-    }
-
-    if (sdl_menu_letters_enabled()
-        && (ch >= 'a') && (ch <= (char)'a' + num - 1))
-    {
-        *highlight = (int)ch - 'a' + 1;
-        ch = '\r';
-    }
-
-    /* Materialize the selected row on every confirmation path.  A direct
-     * pointer activation can change the highlight after the preview above was
-     * built, while keyboard/controller navigation redraws before confirming. */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        create_base_object(tval, sval[*highlight - 1]);
-        return (*highlight);
-    }
-
-    if ((ch == '4') || (ch == ESCAPE))
-    {
-        *highlight = -1;
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else if (*highlight == 1)
-            *highlight = num;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        if (*highlight < num)
-            (*highlight)++;
-        else if (*highlight == num)
-            *highlight = 1;
-    }
-
-    return (0);
+    return count;
 }
 
-/*
- * Displays a menu for choosing a base item's sval.
- */
-bool create_sval_menu(int tval)
+static smith_picker_grid smith_sheet_grid(const smith_sheet_layout* sheet,
+    int count, int columns, int first, int end)
 {
-    int choice = -1;
-    int highlight = 1;
+    int rows = MAX(1, (count + columns - 1) / columns);
+    int space = MAX(1, end - first);
+    /* Spread a short list vertically, with one logical record per line.
+     * Adjacent padding belongs to that record for mouse and touch. */
+    int stride = MIN(3, MAX(1, space / rows));
+    if (sdl_touch_only_device_active() && space >= 6) stride = MAX(2, stride);
+    return (smith_picker_grid){
+        .columns = columns, .step = sheet->list_width / columns,
+        .first = first, .stride = stride, .visible = MAX(1, space / stride)
+    };
+}
 
-    bool leave_menu = false;
-    bool completed = false;
+static void smith_sheet_open_list(const smith_sheet_layout* sheet,
+    smith_picker_grid* grid, smith_ui_scroll_id id, int count, int focus)
+{
+    smith_sheet_list_scroll(sheet, grid->first,
+        grid->first + grid->stride * grid->visible);
+    grid->top = smith_ui_configure_list_view(id,
+        (count + grid->columns - 1) / grid->columns,
+        focus / grid->columns + 1, 0, grid->visible - 1);
+}
 
-    /* Save screen */
+static int smith_sheet_list_first(const smith_sheet_layout* sheet)
+{
+    return sheet->body + (sheet->list_end - sheet->body >= 11 ? 2 : 1);
+}
+
+static void smith_sheet_heading(const smith_sheet_layout* sheet, cptr title,
+    const smith_picker_grid* grid, int count)
+{
+    char range[32] = "";
+    if (grid && grid->visible * grid->columns < count)
+        strnfmt(range, sizeof(range), "%d-%d/%d", grid->top * grid->columns + 1,
+            MIN(count, (grid->top + grid->visible) * grid->columns), count);
+    smith_sheet_field(sheet->margin, sheet->body, sheet->list_width, title,
+        range, TERM_WHITE + TERM_SHADE, TERM_SLATE);
+}
+
+static void smith_sheet_choice(const smith_sheet_layout* sheet,
+    const smith_picker_grid* grid, int index, int id, int shortcut, cptr label,
+    cptr value, const object_type* icon, bool selected, byte normal)
+{
+    int x = sheet->margin + (index % grid->columns) * grid->step;
+    int row = grid->first + (index / grid->columns - grid->top) * grid->stride;
+    int w = grid->step - (grid->columns > 1);
+    byte attr = selected ? TERM_UI_SELECTED + TERM_L_BLUE
+        : normal == TERM_L_DARK ? TERM_SLATE : normal;
+    int inset = w >= 16 ? 1 : 0;
+    int col = x + inset;
+
+    /* A single uninterrupted hit area includes the sprite, label and value. */
+    for (int dy = 0; dy < grid->stride; dy++)
+        ui_menu_click_add(id, x, row + dy, w);
+    if (grid->stride >= 3) row++;
+    if (selected) smith_ui_fill_row(x, row, w, attr);
+    if (sdl_menu_letters_enabled() && shortcut >= 0 && shortcut < 26)
+    {
+        char key[4] = { (char)('a' + shortcut), ')', 0 };
+        smith_ui_draw_fitted(col, row, 2, selected ? attr : TERM_SLATE, key, false);
+        col += 3;
+    }
+    if (icon)
+    {
+        draw_supply_icon(col, row, icon);
+        col += use_bigtile ? 3 : 2;
+    }
+    smith_sheet_field(col, row, MAX(1, x + w - inset - col), label, value,
+        attr, selected ? attr : (normal == TERM_L_DARK ? TERM_SLATE + TERM_SHADE : TERM_WHITE));
+}
+
+static void smith_sheet_order(const smith_sheet_layout* sheet,
+    const object_type* item, int difficulty, bool continuing, bool draft)
+{
+    const int x = (sheet->divider >= 0 ? sheet->divider : 0) + sheet->margin;
+    int w = sheet->width - sheet->margin - x;
+    int y = sheet->summary;
+    int space = sheet->footer - y;
+    int weight = item->weight * item->number;
+    char desc[160], name[160], suffix[100], weight_text[32], stats[150];
+    int skill = smithing_capacity(item);
+    int uses = forge_uses(p_ptr->py, p_ptr->px);
+    if (continuing) smith_ui_detail_turns = p_ptr->smithing_leftover;
+    int turns = smith_ui_detail_turns;
+    const smithing_cost_type* cost = &smith_ui_detail_cost;
+
+    object_desc(desc, sizeof(desc), item, item->number > 1, 2);
+    smith_ui_split_object_title(desc, name, sizeof(name), suffix, sizeof(suffix));
+    SDL_strlcpy(smith_ui_detail_name, name, sizeof(smith_ui_detail_name));
+    strnfmt(weight_text, sizeof(weight_text), "%d.%d lb", weight / 10, weight % 10);
+    smith_ui_build_object_stats(stats, sizeof(stats), suffix, weight_text);
+    if (space >= 6)
+        smith_sheet_field(x, y++, w, "Work order", draft ? "Draft" : "",
+            TERM_WHITE + TERM_SHADE, TERM_L_BLUE);
+    int art_rows = space >= 10 ? 2 : 1;
+    int art_cols = art_rows * 2;
+    if (space >= 14) y++;
+    if (!sdl_smithing_artwork_set(item, x, y, art_cols, art_rows))
+        draw_supply_icon(x, y, item);
+    int text_x = x + art_cols + 1;
+    int text_w = w - art_cols - 1;
+    if (space < 6 && draft)
+        smith_sheet_field(text_x, y++, text_w, name, "Draft", TERM_L_WHITE, TERM_L_BLUE);
+    else
+    {
+        int name_rows = smith_ui_put_wrapped(text_x, y, text_w,
+            space >= 9 ? 2 : 1, TERM_WHITE, name);
+        y += MAX(1, name_rows);
+    }
+    if (space >= 6)
+        smith_ui_put_fitted(text_x, y++, text_w, TERM_L_WHITE, stats);
+    if (space >= 12) y++;
+
+    if (space <= 5)
+    {
+        /* The smallest sheets still expose all three forge figures. */
+        if (y < sheet->footer)
+            smith_sheet_field(x, y++, w, "Difficulty", format("%d / %d", difficulty, skill),
+                TERM_SLATE, TERM_L_WHITE);
+        if (y < sheet->footer)
+        {
+            int left = w / 2;
+            smith_sheet_field(x, y, left - 1, "Uses", smith_ui_detail_paid ? "Paid" : format("%d/%d", cost->uses, uses),
+                TERM_SLATE, TERM_L_WHITE);
+            smith_sheet_field(x + left, y, w - left, "Turns", format("%d", turns),
+                TERM_SLATE, TERM_L_WHITE);
+        }
+        return;
+    }
+
+    bool roomy = space >= 14;
+    /* Keep a pair inside a comfortable reading width even on ultrawide grids. */
+    int measure = MIN(w, 43);
+    if (space >= 16)
+        smith_sheet_field(x, y++, measure, "Forge requirements", "Need / have",
+            TERM_WHITE + TERM_SHADE, TERM_L_WHITE);
+    int stride = space >= 21 ? 2 : 1;
+    smith_sheet_field(x, y, measure, "Difficulty", format("%d / %d", difficulty, skill),
+        TERM_WHITE, difficulty > skill ? TERM_L_RED : TERM_L_WHITE);
+    y += stride;
+    if (y < sheet->footer)
+        smith_sheet_field(x, y, measure, "Forge uses", smith_ui_detail_paid ? "Paid"
+            : format("%d / %d", cost->uses, uses), TERM_WHITE,
+            cost->uses > uses ? TERM_L_RED : TERM_L_WHITE);
+    y += stride;
+    if (y < sheet->footer)
+        smith_sheet_field(x, y, measure, "Turns", format("%d", turns), TERM_WHITE, TERM_L_WHITE);
+    y += stride;
+    smith_bill_line extra[SMITH_BILL_EXTRAS_MAX];
+    int n = smith_bill_extras(cost, smith_ui_detail_reforge && !smith_ui_detail_paid
+        && !p_ptr->active_ability[S_SMT][SMT_REPAIR], extra);
+    for (int i = 0; i < n && y < sheet->footer; i++, y++)
+    {
+        if (y == sheet->footer - 1 && i + 1 < n)
+        {
+            smith_ui_put_fitted(x, y, w, TERM_L_BLUE, "More in Costs");
+            ui_menu_click_add(SMITH_CLICK_CALC, x, y, w);
+            break;
+        }
+        smith_sheet_field(x, y, measure, extra[i].label, extra[i].value,
+            TERM_WHITE, extra[i].requirement ? TERM_L_RED : TERM_L_WHITE);
+    }
+    if (roomy && y + 3 < sheet->footer)
+    {
+        char lore_buf[2048];
+        cptr lore = object_lore_select_base_text(item, lore_buf, sizeof(lore_buf));
+        if (lore && *lore)
+        {
+            y += space >= 24 ? 2 : 1;
+            smith_ui_put_fitted(x, y++, w, TERM_WHITE + TERM_SHADE, "Description");
+            if (space >= 24) y++;
+            smith_ui_put_wrapped(x, y, MIN(w, 60), sheet->footer - y, TERM_WHITE, lore);
+        }
+    }
+}
+
+static void smith_sheet_stock(int x, int row, int width, int end)
+{
+    if (row + 3 >= end) return;
+    smith_ui_put_fitted(x, row++, width, TERM_WHITE + TERM_SHADE, "On hand");
+    if (row + 4 < end) row++;
+    int mithril = mithril_carried(), iron = star_iron_carried();
+    smith_sheet_field(x, row++, width, "Mithril", format("%d.%d lb", mithril / 10,
+        mithril % 10), TERM_WHITE, TERM_WHITE);
+    smith_sheet_field(x, row++, width, "Star iron", format("%d.%d lb", iron / 10,
+        iron % 10), TERM_WHITE, TERM_WHITE);
+    smith_sheet_field(x, row, width, "Experience", format("%ld", (long)p_ptr->new_exp),
+        TERM_WHITE, TERM_WHITE);
+}
+
+static int smith_complete_bill(const smithing_cost_type* cost, bool reforge,
+    int turns, smith_bill_line* bill)
+{
+    bill[0] = (smith_bill_line){ .label = "Forge uses" };
+    strnfmt(bill[0].value, sizeof(bill[0].value), "%d", cost->uses);
+    int n = 1 + smith_bill_extras(cost, reforge, bill + 1);
+    bill[n] = (smith_bill_line){ .label = "Turns" };
+    strnfmt(bill[n].value, sizeof(bill[n].value), "%d", turns);
+    return n + 1;
+}
+
+/* Browsing a base or a provisional value may already have restored the live
+ * object. This read-only sheet uses the item name and bill of that preview. */
+static void smith_show_cost_details(void)
+{
+    enum { BILL_PREVIOUS = 33400, BILL_NEXT };
+    smith_bill_line bill[SMITH_BILL_EXTRAS_MAX + 2];
+    int count = smith_ui_detail_valid ? smith_complete_bill(&smith_ui_detail_cost,
+        smith_ui_detail_reforge && !smith_ui_detail_paid, smith_ui_detail_turns, bill) : 0;
+    int top = 0;
     screen_save();
-
-    /* Process Events until "Return to Game" is selected */
-    while (!leave_menu)
+    for (;;)
     {
-        choice = create_sval_menu_aux(tval, &highlight);
-
-        if (choice >= 1)
+        smith_sheet_layout sheet = smith_sheet_geometry();
+        if (sheet.divider < 0) sheet.summary = sheet.list_end = sheet.footer;
+        smith_sheet_begin(&sheet, false);
+        cptr name = count && smith_ui_detail_name[0] ? smith_ui_detail_name : "Work order";
+        smith_ui_put_fitted(sheet.margin, sheet.tabs, sheet.width - 2 * sheet.margin,
+            TERM_L_BLUE, name);
+        int first = smith_sheet_list_first(&sheet);
+        if (count && smith_ui_detail_paid && first + 1 < sheet.list_end)
+            smith_ui_put_fitted(sheet.margin, first++, sheet.list_width, TERM_L_BLUE,
+                "Costs already paid.");
+        smith_picker_grid grid = smith_sheet_grid(&sheet, count, 1, first, sheet.list_end);
+        int max_top = MAX(0, count - grid.visible);
+        top = MAX(0, MIN(top, max_top));
+        grid.top = top;
+        smith_sheet_list_scroll(&sheet, first, sheet.list_end);
+        ui_scroll_area_set_offset_target(&top, max_top);
+        ui_scroll_area_set_indicator(top, max_top);
+        smith_sheet_heading(&sheet, "COMPLETE COSTS", &grid, count);
+        if (!count)
+            smith_ui_put_wrapped(sheet.margin, first, sheet.list_width,
+                sheet.list_end - first, TERM_WHITE, "Choose an item to see its complete costs.");
+        for (int i = top; i < count && i < top + grid.visible; i++)
         {
-            leave_menu = true;
-            completed = true;
+            int row = first + (i - top) * grid.stride + (grid.stride >= 3);
+            smith_sheet_field(sheet.margin, row, MIN(sheet.list_width, 48),
+                bill[i].label, bill[i].value, TERM_WHITE,
+                bill[i].requirement ? TERM_L_BLUE : TERM_WHITE);
         }
-        else if (choice == -1)
+        if (sheet.divider >= 0)
         {
-            /* Wipe the object */
-            object_wipe(smith_o_ptr);
-            smith_clear_alloy_state(&smith_alloy);
-
-            leave_menu = true;
+            int x = sheet.divider + sheet.margin;
+            smith_sheet_stock(x, sheet.body, MIN(sheet.width - x - sheet.margin, 43),
+                sheet.footer);
         }
+        smith_sheet_action actions[3];
+        int n = 0;
+        if (max_top)
+        {
+            actions[n++] = (smith_sheet_action){ BILL_PREVIOUS, "Previous", top ? TERM_WHITE : TERM_SLATE };
+            actions[n++] = (smith_sheet_action){ BILL_NEXT, "Next", top < max_top ? TERM_WHITE : TERM_SLATE };
+        }
+        actions[n++] = (smith_sheet_action){SMITH_CLICK_BACK, "Back", TERM_L_BLUE};
+        smith_sheet_actions(&sheet, actions, n, 0);
+        smith_sheet_navigation(&sheet, false, NULL, false);
+        Term_fresh();
+        hide_cursor = true;
+        int key = steamdeck_menu_key(inkey(), '[', ']');
+        hide_cursor = false;
+        int id, action;
+        if (ui_menu_click_take_action(&id, &action))
+        {
+            if (action == UI_MENU_CLICK_HOVER) continue;
+            if (id == SMITH_CLICK_BACK || action == UI_MENU_CLICK_SECONDARY) break;
+            if (id == BILL_PREVIOUS) key = '[';
+            if (id == BILL_NEXT) key = ']';
+        }
+        if (key == ESCAPE || key == 'q' || key == '\r' || key == '\n' || key == ' ') break;
+        if (key == '8') top--;
+        if (key == '2') top++;
+        if (key == '[' || key == '4') top -= grid.visible;
+        if (key == ']' || key == '6') top += grid.visible;
     }
-
-    /* Load screen */
+    sdl_smithing_sheet_clear();
     ui_menu_click_clear();
+    ui_scroll_area_clear();
     screen_load();
-
-    return (completed);
 }
 
-/*
- * Performs the interface and selection work for the tval part of the base item
- * menu.
- */
-int create_tval_menu_aux(int* highlight)
+static void smith_picker_draw(const smith_sheet_layout* sheet,
+    const smith_picker_grid* grid, const smith_picker_entry* entries,
+    int count, int highlight, int draft_kind)
 {
-    char ch;
-    int i;
-    bool valid[MAX_SMITHING_TVALS];
-    bool has_icon[MAX_SMITHING_TVALS];
-    byte row_attr[MAX_SMITHING_TVALS];
-    object_type icons[MAX_SMITHING_TVALS];
-    int title_row = MAX(0, smith_ui_dense_row0() - 1);
-    int first_row = smith_ui_dense_row0();
-    int last_row = smith_ui_list_bottom_row(first_row, false);
-    int top;
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-    smith_ui_put_section_header(COL_SMT2, title_row, "Type");
-
-    // clear bottom of the screen
-    wipe_object_description();
-
-    /* Wipe the smithing object */
-    object_wipe(smith_o_ptr);
+    smithing_cost_type saved_cost = smithing_cost;
+    smith_alloy_state saved_alloy = smith_alloy;
     smith_clear_alloy_state(&smith_alloy);
-
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > MAX_SMITHING_TVALS)
-        *highlight = MAX_SMITHING_TVALS;
-    top = smith_ui_configure_list_view(SMITH_SCROLL_TVAL,
-        MAX_SMITHING_TVALS, *highlight, first_row, last_row);
-
-    for (i = 0; i < MAX_SMITHING_TVALS; i++)
+    int first = grid->top * grid->columns;
+    int end = MIN(count, first + grid->visible * grid->columns);
+    for (int i = first; i < end; i++)
     {
-        byte valid_attr = TERM_WHITE;
-
-        has_icon[i] = smith_tval_icon(smithing_tvals[i].tval, &icons[i]);
-        valid[i] = false;
-
-        if (smithing_tvals[i].category == CAT_WEAPON)
-        {
-            valid[i] = true;
-            valid_attr = p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH]
-                ? TERM_WHITE
-                : TERM_RED;
-        }
-        if (smithing_tvals[i].category == CAT_ARMOUR)
-        {
-            valid[i] = true;
-            valid_attr = p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
-                ? TERM_WHITE
-                : TERM_RED;
-        }
-        if (smithing_tvals[i].category == CAT_JEWELRY)
-        {
-            valid[i] = true;
-            valid_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
-                                                                    : TERM_RED;
-        }
-        row_attr[i] = valid[i] ? valid_attr : TERM_L_DARK;
-
-        if (i >= top && i < top + (last_row - first_row + 1))
-        {
-            int row = first_row + i - top;
-
-            smith_ui_put_icon_menu_row(i + 1, COL_SMT2, row,
-                row_attr[i], smithing_tvals[i].desc,
-                has_icon[i] ? &icons[i] : NULL, *highlight == i + 1);
-        }
+        object_type icon;
+        smith_prepare_base_object(&icon, entries[i].kind);
+        byte attr = affordable(&icon) ? TERM_WHITE : TERM_SLATE;
+        smith_sheet_choice(sheet, grid, i, i + 1, i - first, entries[i].name,
+            entries[i].kind == draft_kind && grid->step >= 25 ? "Draft" : "",
+            &icon, i + 1 == highlight, attr);
     }
+    smith_alloy = saved_alloy;
+    smithing_cost = saved_cost;
+}
 
-    /* Flush the prompt */
+static void smith_picker_move(int key, int count, int columns, int* highlight)
+{
+    int index = *highlight - 1;
+
+    if (key == '4' || key == '6')
+        index = (index + (key == '4' ? -1 : 1) + count) % count;
+    else if (key == '8' || key == '2')
+    {
+        int rows = (count + columns - 1) / columns;
+        int row = (index / columns + (key == '8' ? -1 : 1) + rows) % rows;
+        index = MIN(count - 1, row * columns + index % columns);
+    }
+    *highlight = index + 1;
+}
+
+static void smith_browser_preview(const smith_sheet_layout* sheet, int kind,
+    int draft_kind)
+{
+    object_type* saved_object = smith_o_ptr;
+    smith_alloy_state saved_alloy = smith_alloy;
+    smithing_cost_type saved_cost = smithing_cost;
+    bool draft = kind == draft_kind && saved_object->k_idx;
+    object_type candidate;
+
+    if (!draft)
+    {
+        smith_prepare_base_object(&candidate, kind);
+        smith_clear_alloy_state(&smith_alloy);
+        smith_o_ptr = &candidate;
+    }
+    int difficulty = smith_measure_design();
+    smith_sheet_order(sheet, smith_o_ptr, difficulty,
+        draft && p_ptr->smithing_leftover > 0, draft);
+    smith_o_ptr = saved_object;
+    smith_alloy = saved_alloy;
+    smithing_cost = saved_cost;
+}
+
+static void smith_browser_inspect(int kind, int draft_kind)
+{
+    object_type preview;
+    if (kind == draft_kind && smith_o_ptr->k_idx)
+        preview = *smith_o_ptr;
+    else
+        smith_prepare_base_object(&preview, kind);
+    describe_object_with_comparisons(&preview, true);
+}
+
+static int smith_item_browser(int* group, int* highlight, bool replace, int* kind)
+{
+    smith_picker_entry* entries = mem_alloc_array(z_info->k_max, smith_picker_entry);
+    int draft_kind = *kind;
+    smith_sheet_layout sheet = smith_sheet_geometry();
+    int action = 0;
+    int clicked = 0;
+    int click_action = UI_MENU_CLICK_PRIMARY;
+    bool controller = steamdeck_controls_active();
+    /* A negative highlight retains the item whose Costs button has focus. */
+    bool cost_focus = controller && *highlight < 0;
+    bool allow_melt = !replace && cave_forge_bold(p_ptr->py, p_ptr->px)
+        && meltable_metal_items_carried() > 0;
+    bool allow_reforge = !replace && find_reforge_target_item() >= 0;
+
+    *group = MAX(0, MIN(*group, SMITH_BROWSER_GROUP_COUNT - 1));
+    int next_group = *group;
+    int count = smith_browser_entries(*group, entries);
+    int columns = sheet.list_width >= (*group == CAT_JEWELRY ? 56 : 40) ? 2 : 1;
+    smith_picker_grid grid = smith_sheet_grid(&sheet, count, columns,
+        smith_sheet_list_first(&sheet), sheet.list_end);
+    if (*highlight == 0)
+    {
+        *highlight = 1;
+        for (int i = 0; i < count; i++)
+            if (entries[i].kind == draft_kind)
+            {
+                *highlight = i + 1;
+                break;
+            }
+        smith_ui_scroll_top[SMITH_SCROLL_SVAL] = (*highlight - 1) / grid.columns;
+    }
+    int item = MAX(1, MIN(ABS(*highlight), count));
+    *highlight = cost_focus ? -item : item;
+
+    smith_sheet_begin(&sheet, !replace);
+    static const cptr groups[] = { "Weapons", "Armour", "Jewellery" };
+    smith_sheet_tabs(&sheet, groups, SMITH_BROWSER_GROUP_COUNT, *group,
+        SMITH_BROWSER_GROUP_CLICK);
+    smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_SVAL, count, item - 1);
+    smith_sheet_heading(&sheet, replace ? "Change base item" : "Choose base item",
+        &grid, count);
+    if (count)
+    {
+        smith_picker_draw(&sheet, &grid, entries, count, item, draft_kind);
+        smith_browser_preview(&sheet, entries[item - 1].kind, draft_kind);
+    }
+    else
+    {
+        smith_ui_detail_valid = false;
+        sdl_smithing_artwork_clear();
+        smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width,
+            TERM_SLATE, "No items in this category.");
+    }
+    smith_sheet_action actions[5];
+    int num_actions = 0;
+    bool keys = sheet.width >= 76 && !sdl_touch_only_device_active() && !controller;
+    char melt[32] = "Melt", reforge[32] = "Reforge";
+    if (!replace)
+    {
+        if (controller && sheet.width >= 40)
+        {
+            char button[16];
+            controller_prompt_label(steamdeck_alt_action_key(), "X", button, sizeof(button));
+            strnfmt(melt, sizeof(melt), "[%s] Melt", button);
+            controller_prompt_label(steamdeck_secondary_key(), "Y", button, sizeof(button));
+            strnfmt(reforge, sizeof(reforge), "[%s] Reforge", button);
+        }
+        actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_MELT_CLICK,
+            keys ? "[M] Melt" : melt, allow_melt ? TERM_WHITE : TERM_SLATE};
+        actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_REFORGE_CLICK,
+            keys ? "[R] Reforge" : reforge, allow_reforge ? TERM_WHITE : TERM_SLATE};
+    }
+    if (sheet.width >= 48 || replace)
+        actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_INSPECT_CLICK,
+            keys ? "[I] Inspect" : "Inspect", TERM_WHITE};
+    actions[num_actions++] = (smith_sheet_action){SMITH_CLICK_CALC,
+        keys ? "[?] Costs" : "Costs", TERM_WHITE};
+    actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_DESIGN_CLICK, "Design",
+        count ? TERM_L_BLUE : TERM_SLATE};
+    smith_sheet_actions(&sheet, actions, num_actions, cost_focus ? SMITH_CLICK_CALC : 0);
+    smith_sheet_navigation(&sheet, !replace, "Design", true);
     Term_fresh();
 
-    /* Place cursor at current choice */
-    Term_gotoxy(indexed_menu_prefix_col(COL_SMT2),
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    int key = inkey();
+    int ch = steamdeck_menu_key(key, '[', ']');
     hide_cursor = false;
 
+    if (ch == '?')
     {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
+        smith_show_cost_details();
+        goto done;
+    }
+    if (!replace && controller)
+    {
+        if (ch == steamdeck_alt_action_key())
+            ch = 'M';
+        if (ch == steamdeck_secondary_key())
+            ch = 'R';
+    }
 
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
+    if (smith_ui_take_click_action(&clicked, &click_action))
+    {
+        if (clicked >= 1 && clicked <= count)
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
+            *highlight = clicked;
+            cost_focus = false;
+            if (click_action == UI_MENU_CLICK_SECONDARY)
+                smith_browser_inspect(entries[*highlight - 1].kind, draft_kind);
+            if (click_action != UI_MENU_CLICK_PRIMARY)
+                goto done;
+            ch = '\r';
+        }
+        else if (click_action == UI_MENU_CLICK_PRIMARY)
+        {
+            if (clicked == SMITH_CLICK_BACK)
                 ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= MAX_SMITHING_TVALS)
+            else if (clicked >= SMITH_BROWSER_GROUP_CLICK
+                && clicked < SMITH_BROWSER_MELT_CLICK)
             {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
+                next_group = clicked - SMITH_BROWSER_GROUP_CLICK;
+            }
+            else if (clicked == SMITH_BROWSER_MELT_CLICK)
+                ch = 'M';
+            else if (clicked == SMITH_BROWSER_REFORGE_CLICK)
+                ch = 'R';
+            else if (clicked == SMITH_BROWSER_INSPECT_CLICK)
+                ch = 'I';
+            else if (clicked == SMITH_BROWSER_DESIGN_CLICK)
+            {
+                cost_focus = false;
+                *highlight = item;
                 ch = '\r';
             }
         }
     }
 
-    // choose an option by letter
-    if (sdl_menu_letters_enabled()
-        && (ch >= 'a') && (ch <= (char)'a' + MAX_SMITHING_TVALS - 1))
+    if (ch == '[')
+        next_group = (*group + SMITH_BROWSER_GROUP_COUNT - 1) % SMITH_BROWSER_GROUP_COUNT;
+    if (ch == ']' || ch == '\t')
+        next_group = (*group + 1) % SMITH_BROWSER_GROUP_COUNT;
+    if (next_group != *group)
     {
-        *highlight = (int)ch - 'a' + 1;
-
-        if (valid[*highlight - 1])
-            ch = '\r';
-        else
-            bell("Invalid choice.");
+        *group = next_group;
+        *highlight = 1;
+        smith_ui_scroll_top[SMITH_SCROLL_SVAL] = 0;
+        goto done;
     }
 
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+    if (ch == ESCAPE)
+        action = -1;
+    else if (!replace && (ch == 'M' || ch == 'R'))
     {
-        if (valid[*highlight - 1])
+        if (ch == 'M' ? allow_melt : allow_reforge)
+            action = (ch == 'M') ? SMT_MENU_MELT : SMT_MENU_REPAIR;
+        else
+            bell(ch == 'M' ? "You cannot melt anything here."
+                           : "You have nothing to repair or reforge.");
+    }
+    else if (count)
+    {
+        int first = grid.top * grid.columns;
+        int visible = MIN(count - first, grid.visible * grid.columns);
+        if (ch == '\r' || ch == '\n' || ch == ' ')
         {
-            /* The Type panel remains visible behind Subtype. Keep shortcut
-             * and pointer activation on the same repaint path, including
-             * bringing an offscreen letter choice into view. */
-            top = smith_ui_configure_list_view(SMITH_SCROLL_TVAL,
-                MAX_SMITHING_TVALS, *highlight, first_row, last_row);
-            for (i = top;
-                 i < MAX_SMITHING_TVALS
-                     && i < top + (last_row - first_row + 1);
-                 i++)
-            {
-                int row = first_row + i - top;
-
-                smith_ui_put_icon_menu_row(i + 1, COL_SMT2, row,
-                    row_attr[i], smithing_tvals[i].desc,
-                    has_icon[i] ? &icons[i] : NULL, *highlight == i + 1);
-            }
-            Term_fresh();
-            return (*highlight);
+            if (cost_focus)
+                smith_show_cost_details();
+            else
+                action = SMT_MENU_CREATE;
         }
-        else
-            bell("Invalid choice.");
+        else if (sdl_menu_letters_enabled() && ch >= 'a' && ch < 'a' + visible)
+        {
+            *highlight = first + ch - 'a' + 1;
+            action = SMT_MENU_CREATE;
+        }
+        else if (ch == 'I' || (controller && ch == steamdeck_info_key()))
+            smith_browser_inspect(entries[item - 1].kind, draft_kind);
+        else if (cost_focus && (ch == '8' || ch == '2'))
+        {
+            *highlight = item;
+            if (ch == '2')
+                smith_picker_move(ch, count, grid.columns, highlight);
+        }
+        else if (controller && ch == '2'
+            && (item - 1) / grid.columns == (count - 1) / grid.columns)
+            *highlight = -item;
+        else if (!cost_focus)
+            smith_picker_move(ch, count, grid.columns, highlight);
     }
 
-    /* Prev item */
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else if (*highlight == 1)
-            *highlight = MAX_SMITHING_TVALS;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        if (*highlight < MAX_SMITHING_TVALS)
-            (*highlight)++;
-        else if (*highlight == MAX_SMITHING_TVALS)
-            *highlight = 1;
-    }
-
-    /* Exit */
-    if ((ch == '4') || (ch == ESCAPE))
-    {
-        return (-1);
-    }
-
-    return (0);
+    if (action == SMT_MENU_CREATE)
+        *kind = entries[*highlight - 1].kind;
+done:
+    if (action) sdl_smithing_sheet_clear();
+    mem_free(entries);
+    return action;
 }
 
-/*
- * Displays a menu for choosing a base item's tval.
- */
-void create_tval_menu(void)
-{
-    int choice = -1;
-    int highlight = 1;
-
-    bool leave_menu = false;
-
-    /* Save screen */
-    screen_save();
-
-    /* Process Events until menu is abandoned */
-    while (!leave_menu)
-    {
-        choice = create_tval_menu_aux(&highlight);
-
-        if (choice >= 1)
-        {
-            if (create_sval_menu(smithing_tvals[choice - 1].tval))
-            {
-                leave_menu = true;
-            }
-        }
-        else if (choice == -1)
-        {
-            leave_menu = true;
-        }
-    }
-
-    enchant_then_numbers = false;
-
-    /* Load screen */
-    ui_menu_click_clear();
-    screen_load();
-}
-
-/*
- * Actually modifies the numbers on an item.
- */
 static void smith_apply_stat_skill_flag_delta(object_type* o_ptr, u32b f1_before, u32b f1_after)
 {
     if (!o_ptr)
@@ -4774,850 +3398,399 @@ static void smith_apply_stat_skill_flag_delta(object_type* o_ptr, u32b f1_before
         o_ptr->skill_bonus[S_SNG] = pval;
 }
 
-void modify_numbers(int choice)
-{
-    switch (choice)
-    {
-    case SMT_NUM_MENU_I_ATT:
-    {
-        if ((smith_o_ptr->tval == TV_ARROW) && !smith_o_ptr->name1)
-            smith_o_ptr->att += 3;
-        else
-            smith_o_ptr->att++;
-        break;
-    }
-    case SMT_NUM_MENU_D_ATT:
-    {
-        if ((smith_o_ptr->tval == TV_ARROW) && !smith_o_ptr->name1)
-            smith_o_ptr->att -= 3;
-        else
-            smith_o_ptr->att--;
-        break;
-    }
-    case SMT_NUM_MENU_I_DS:
-        smith_o_ptr->ds++;
-        break;
-    case SMT_NUM_MENU_D_DS:
-        smith_o_ptr->ds--;
-        break;
-    case SMT_NUM_MENU_I_EVN:
-        smith_o_ptr->evn++;
-        break;
-    case SMT_NUM_MENU_D_EVN:
-        smith_o_ptr->evn--;
-        break;
-    case SMT_NUM_MENU_I_PS:
-        smithing_increase_protection(smith_o_ptr);
-        break;
-    case SMT_NUM_MENU_D_PS:
-        smithing_decrease_protection(smith_o_ptr);
-        break;
-    case SMT_NUM_MENU_I_WGT:
-        smith_o_ptr->weight += 5;
-        break;
-    case SMT_NUM_MENU_D_WGT:
-        smith_o_ptr->weight -= 5;
-        break;
-    case SMT_NUM_MENU_ALLOY_CYCLE:
-    {
-        if (!p_ptr->active_ability[S_SMT][SMT_ALLOY_MASTERY])
-        {
-            bell("You need Alloy mastery to do that.");
-            break;
-        }
-        if (!smith_alloy_applicable(smith_o_ptr))
-        {
-            bell("Alloying doesn't apply to this item.");
-            smith_remove_alloy_bonus(smith_o_ptr, &smith_alloy);
-            break;
-        }
-
-        smith_alloy_type next = SMITH_ALLOY_NONE;
-        if (smith_alloy.type == SMITH_ALLOY_NONE)
-            next = SMITH_ALLOY_MITHRIL;
-        else if (smith_alloy.type == SMITH_ALLOY_MITHRIL)
-            next = SMITH_ALLOY_STAR_IRON;
-        else
-            next = SMITH_ALLOY_NONE;
-
-        smith_apply_alloy(smith_o_ptr, &smith_alloy, next);
-        break;
-    }
-    case SMT_NUM_MENU_ALLOY_CLEAR:
-        smith_remove_alloy_bonus(smith_o_ptr, &smith_alloy);
-        break;
-    }
-
-    return;
-}
-
-/*
- * Performs the interface and selection work for the numbers menu.
- */
-int numbers_menu_aux(int* highlight)
-{
-    int i;
-    char ch;
-    char buf[80];
-    byte attr[SMT_NUM_MENU_MAX];
-    bool valid[SMT_NUM_MENU_MAX];
-    bool can_afford[SMT_NUM_MENU_MAX] = { false };
-    const int first_row = 2;
-    const int last_row = smith_ui_list_bottom_row(first_row, true);
-    int top;
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-    smith_ui_put_section_header(COL_SMT2, 1, "Adjust");
-
-    memset(valid, 0, sizeof(valid));
-
-    valid[SMT_NUM_MENU_I_ATT - 1]
-        = att_valid() && (smith_o_ptr->att < att_max());
-    valid[SMT_NUM_MENU_D_ATT - 1]
-        = att_valid() && (smith_o_ptr->att > att_min());
-    valid[SMT_NUM_MENU_I_DS - 1] = ds_valid() && (smith_o_ptr->ds < ds_max());
-    valid[SMT_NUM_MENU_D_DS - 1] = ds_valid() && (smith_o_ptr->ds > ds_min());
-    valid[SMT_NUM_MENU_I_EVN - 1]
-        = evn_valid() && (smith_o_ptr->evn < evn_max());
-    valid[SMT_NUM_MENU_D_EVN - 1]
-        = evn_valid() && (smith_o_ptr->evn > evn_min());
-    valid[SMT_NUM_MENU_I_PS - 1] = ps_valid() && smithing_can_increase_protection(smith_o_ptr);
-    valid[SMT_NUM_MENU_D_PS - 1] = ps_valid() && smithing_can_decrease_protection(smith_o_ptr);
-    valid[SMT_NUM_MENU_I_WGT - 1]
-        = wgt_valid() && ((smith_o_ptr->weight + 5) <= wgt_max());
-    valid[SMT_NUM_MENU_D_WGT - 1]
-        = wgt_valid() && ((smith_o_ptr->weight - 5) >= wgt_min());
-    {
-        u32b f1, f2, f3;
-        object_flags(smith_o_ptr, &f1, &f2, &f3);
-        valid[SMT_NUM_MENU_EDIT_BONUSES - 1] = (f1 & (TR1_STR | TR1_NEG_STR | TR1_DEX
-                                                     | TR1_NEG_DEX | TR1_CON
-                                                     | TR1_NEG_CON | TR1_GRA
-                                                     | TR1_NEG_GRA | TR1_MEL
-                                                     | TR1_ARC | TR1_STL
-                                                     | TR1_PER | TR1_WIL
-                                                     | TR1_SMT | TR1_SNG
-                                                     | TR1_DAMAGE_SIDES
-                                                     | TR1_TUNNEL))
-            != 0;
-    }
-    bool alloy_applicable = smith_alloy_applicable(smith_o_ptr);
-    bool has_alloy_mastery = p_ptr->active_ability[S_SMT][SMT_ALLOY_MASTERY];
-    int alloy_weight = alloy_applicable ? smith_alloy_weight_required(smith_o_ptr) : 0;
-    int mithril_have = mithril_carried();
-    int star_iron_have = star_iron_carried();
-    valid[SMT_NUM_MENU_ALLOY_CYCLE - 1] = alloy_applicable && has_alloy_mastery;
-    valid[SMT_NUM_MENU_ALLOY_CLEAR - 1] = (smith_alloy.type != SMITH_ALLOY_NONE);
-
-    // retrieve a super backup of the object
-    object_copy(smith3_o_ptr, smith_o_ptr);
-    smith3_alloy = smith_alloy;
-    for (i = 0; i < SMT_NUM_MENU_MAX; i++)
-    {
-        if ((i == SMT_NUM_MENU_ALLOY_CYCLE - 1)
-            || (i == SMT_NUM_MENU_ALLOY_CLEAR - 1)
-            || (i == SMT_NUM_MENU_EDIT_BONUSES - 1))
-        {
-            can_afford[i] = valid[i];
-            if (i == SMT_NUM_MENU_ALLOY_CYCLE - 1 && valid[i])
-            {
-                bool has_any_metal = (mithril_have >= alloy_weight)
-                    || (star_iron_have >= alloy_weight);
-                attr[i] = has_any_metal ? TERM_WHITE : TERM_SLATE;
-            }
-            else
-            {
-                attr[i] = valid[i] ? TERM_WHITE : TERM_L_DARK;
-            }
-            continue;
-        }
-        if (valid[i])
-        {
-            modify_numbers(i + 1);
-            can_afford[i] = affordable(smith_o_ptr);
-
-            // retrieve a super backup of the object
-            object_copy(smith_o_ptr, smith3_o_ptr);
-            smith_alloy = smith3_alloy;
-        }
-
-        attr[i] = valid[i] ? (can_afford[i] ? TERM_WHITE : TERM_SLATE)
-                           : TERM_L_DARK;
-    }
-
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > SMT_NUM_MENU_MAX)
-        *highlight = SMT_NUM_MENU_MAX;
-    top = smith_ui_configure_list_view(SMITH_SCROLL_NUMBERS,
-        SMT_NUM_MENU_MAX, *highlight, first_row, last_row);
-
-    {
-        const cptr number_menu_labels[SMT_NUM_MENU_MAX] = {
-            "increase attack bonus",
-            "decrease attack bonus",
-            "increase damage sides",
-            "decrease damage sides",
-            "increase evasion bonus",
-            "decrease evasion bonus",
-            "increase protection",
-            "decrease protection",
-            "increase weight",
-            "decrease weight",
-            get_sdl_menu_bigger_font() ? "Cycle alloy metal"
-                : "cycle alloy (none/mithril/star iron)",
-            "remove alloy bonus",
-            "adjust special bonuses",
-        };
-
-        for (i = 0; i < SMT_NUM_MENU_MAX; i++)
-        {
-            int row;
-
-            if (i < top || i >= top + (last_row - first_row + 1))
-                continue;
-            row = first_row + i - top;
-            indexed_menu_entry_label(buf, sizeof(buf), i, number_menu_labels[i]);
-            smith_ui_put_menu_row(i + 1, COL_SMT2, row, attr[i], buf,
-                *highlight == i + 1);
-        }
-    }
-    if (smith_alloy.type != SMITH_ALLOY_NONE)
-    {
-        byte info_attr = has_alloy_mastery ? TERM_SLATE : TERM_L_DARK;
-        if (!has_alloy_mastery)
-        {
-            strnfmt(buf, 80, "Alloy needs %d.%d lb metal (requires Alloy mastery)",
-                alloy_weight / 10, alloy_weight % 10);
-        }
-        else
-        {
-            if (smith_alloy.type == SMITH_ALLOY_MITHRIL)
-                info_attr = (mithril_have >= alloy_weight) ? TERM_SLATE : TERM_RED;
-            else if (smith_alloy.type == SMITH_ALLOY_STAR_IRON)
-                info_attr = (star_iron_have >= alloy_weight) ? TERM_SLATE : TERM_RED;
-            strnfmt(buf, 80,
-                "Alloy needs %d.%d lb (mithril %d.%d, star iron %d.%d)",
-                alloy_weight / 10, alloy_weight % 10, mithril_have / 10,
-                mithril_have % 10, star_iron_have / 10, star_iron_have % 10);
-        }
-        smith_ui_put_wrapped(COL_SMT2, last_row + 1,
-            smith_ui_column_width(COL_SMT2), 2, info_attr, buf);
-    }
-    else if ((k_info[smith_o_ptr->k_idx].flags3 & (TR3_MITHRIL | TR3_STAR_IRON))
-        && !has_alloy_mastery)
-    {
-        smith_ui_put_wrapped(COL_SMT2, last_row + 1,
-            smith_ui_column_width(COL_SMT2), 2, TERM_L_DARK,
-            "Alloy requires Alloy mastery.");
-    }
-
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(2,
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= SMT_NUM_MENU_MAX)
-            {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
-            }
-        }
-    }
-
-    // choose an option by letter
-    if (sdl_menu_letters_enabled()
-        && (ch >= 'a') && (ch <= (char)'a' + SMT_NUM_MENU_MAX - 1))
-    {
-        int old_highlight = *highlight;
-
-        *highlight = (int)ch - 'a' + 1;
-
-        // move the light blue highlight
-        move_displayed_highlight(
-            old_highlight, attr[old_highlight - 1], *highlight, COL_SMT2);
-
-        if (valid[*highlight - 1])
-            return (*highlight);
-        else
-            bell("Invalid choice.");
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        if (valid[*highlight - 1])
-            return (*highlight);
-        else
-            bell("Invalid choice.");
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else if (*highlight == 1)
-            *highlight = SMT_NUM_MENU_MAX;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        if (*highlight < SMT_NUM_MENU_MAX)
-            (*highlight)++;
-        else if (*highlight == SMT_NUM_MENU_MAX)
-            *highlight = 1;
-    }
-
-    /* Exit */
-    if ((ch == '4') || (ch == ESCAPE))
-    {
-        *highlight = -1;
-        return (*highlight);
-    }
-
-    return (0);
-}
-
 typedef enum
 {
-    SMT_BONUS_ENTRY_STAT = 0,
-    SMT_BONUS_ENTRY_SKILL = 1,
-    SMT_BONUS_ENTRY_SPECIAL = 2,
-} smith_bonus_entry_kind;
+    SMITH_NUMBER_ATTACK,
+    SMITH_NUMBER_DAMAGE,
+    SMITH_NUMBER_EVASION,
+    SMITH_NUMBER_PROTECTION,
+    SMITH_NUMBER_PROTECTION_DICE,
+    SMITH_NUMBER_WEIGHT,
+    SMITH_NUMBER_ALLOY,
+    SMITH_NUMBER_STAT,
+    SMITH_NUMBER_SKILL,
+    SMITH_NUMBER_PVAL,
+} smith_number_kind;
 
-typedef enum
-{
-    SMT_BONUS_SPECIAL_DAMAGE_SIDES = 0,
-    SMT_BONUS_SPECIAL_TUNNEL = 1,
-} smith_bonus_special_kind;
+/* Five equipment values, optional alloy, four stats, seven skills, two
+ * possible labels for the item powers that share pval. */
+#define SMITH_NUMBER_CARD_MAX (6 + A_MAX + 7 + 2)
 
 typedef struct
 {
-    smith_bonus_entry_kind kind;
+    cptr label;
+    char value[32];
+    bool editable;
+    smith_number_kind kind;
     int index;
-    u32b flag_pos;
-    u32b flag_neg;
-    u32b flag;
-} smith_bonus_entry;
+    int current;
+    int first;
+    int step;
+    int count;
+} smith_number_card;
 
-typedef struct
+static void smith_format_number(const smith_number_card* card, int value,
+    char* text, size_t size)
 {
-    smith_bonus_entry entry;
-    int delta;
-} smith_bonus_action;
-
-static const char* smith_bonus_stat_name(int stat)
-{
-    switch (stat)
+    switch (card->kind)
     {
-    case A_STR:
-        return "Strength";
-    case A_DEX:
-        return "Dexterity";
-    case A_CON:
-        return "Constitution";
-    case A_GRA:
-        return "Grace";
+    case SMITH_NUMBER_DAMAGE:
+        strnfmt(text, size, "%dd%d", smith_o_ptr->dd, value);
+        break;
+    case SMITH_NUMBER_PROTECTION:
+        strnfmt(text, size, "%dd%d", smith_o_ptr->pd, value);
+        break;
+    case SMITH_NUMBER_PROTECTION_DICE:
+        if (value == -1)
+            SDL_strlcpy(text, "1d0", size);
+        else if (value >= 0)
+            strnfmt(text, size, "%dd%d", smithing_amulet_protection_combos[value].pd,
+                smithing_amulet_protection_combos[value].ps);
+        else
+            strnfmt(text, size, "%dd%d", smith_o_ptr->pd, smith_o_ptr->ps);
+        break;
+    case SMITH_NUMBER_WEIGHT:
+        strnfmt(text, size, "%d.%d lb", value / 10, ABS(value % 10));
+        break;
+    case SMITH_NUMBER_ALLOY:
+    {
+        static const cptr names[] = { "None", "Mithril", "Star iron" };
+        SDL_strlcpy(text, names[value], size);
+        break;
+    }
     default:
-        return "Unknown";
+        strnfmt(text, size, "%+d", value);
+        break;
     }
 }
 
-static const char* smith_bonus_special_name(int special)
+static void smith_set_number_card(smith_number_card* card, cptr label,
+    smith_number_kind kind, int index, int current, int min, int max,
+    int step)
 {
-    switch (special)
-    {
-    case SMT_BONUS_SPECIAL_DAMAGE_SIDES:
-        return "Damage bonus";
-    case SMT_BONUS_SPECIAL_TUNNEL:
-        return "Tunneling";
-    default:
-        return "Unknown";
-    }
+    /* Preserve the blueprint's step alignment. A carried-over value
+     * outside its current limits can still be displayed and left alone. */
+    int remainder = (current - min) % step;
+    int first = min + (remainder + step) % step;
+
+    *card = (smith_number_card){
+        .label = label, .kind = kind, .index = index, .current = current,
+        .first = first, .step = step,
+        .count = (max >= first) ? (max - first) / step + 1 : 0,
+    };
+    card->editable = (card->count > 1
+        || (card->count == 1 && card->first != current))
+        && !smith_pending_reforge();
+    smith_format_number(card, current, card->value, sizeof(card->value));
 }
 
-static int smith_collect_bonus_entries(smith_bonus_entry* entries, int max_entries)
+static int smith_collect_number_cards(smith_number_card* cards)
 {
+    object_type* item = smith_o_ptr;
+    int count = 0;
     u32b f1, f2, f3;
-    int n = 0;
 
-    if (!entries || max_entries <= 0)
+    if (!item->k_idx)
         return 0;
 
-    object_flags(smith_o_ptr, &f1, &f2, &f3);
+    int att_lo = att_min(), att_hi = att_max();
+    int ds_lo = ds_min(), ds_hi = ds_max();
+    int evn_lo = evn_min(), evn_hi = evn_max();
+    int ps_lo = ps_min(), ps_hi = ps_max();
 
-    struct stat_flag_map
+    if (item->att || att_hi > att_lo)
+        smith_set_number_card(&cards[count++], "Attack", SMITH_NUMBER_ATTACK,
+            0, item->att, att_lo, (att_hi > att_lo) ? att_hi : att_lo - 1,
+            (item->tval == TV_ARROW && !item->name1) ? 3 : 1);
+    if (item->dd || ds_hi > ds_lo)
+        smith_set_number_card(&cards[count++], "Damage", SMITH_NUMBER_DAMAGE,
+            0, item->ds, ds_lo, (ds_hi > ds_lo) ? ds_hi : ds_lo - 1, 1);
+    if (item->evn || evn_hi > evn_lo)
+        smith_set_number_card(&cards[count++], "Evasion", SMITH_NUMBER_EVASION,
+            0, item->evn, evn_lo, (evn_hi > evn_lo) ? evn_hi : evn_lo - 1, 1);
+
+    if (smithing_variable_protection_dice(item))
     {
-        int stat;
-        u32b flag_pos;
-        u32b flag_neg;
-    };
+        int current = smithing_protection_combo_index(item);
+        bool empty = item->pd <= 1 && item->ps == 0;
+        if (current < 0)
+            current = (item->pd == 1 && empty) ? -1 : -2;
+        bool can_edit = ps_hi > ps_lo && (current >= 0 || empty);
+        smith_set_number_card(&cards[count++], "Protection",
+            SMITH_NUMBER_PROTECTION_DICE, 0, current, (ps_lo < 1) ? -1 : 0,
+            can_edit ? (int)N_ELEMENTS(smithing_amulet_protection_combos) - 1 : -2,
+            1);
+    }
+    else if (item->pd || ps_hi > ps_lo)
+        smith_set_number_card(&cards[count++], "Protection",
+            SMITH_NUMBER_PROTECTION, 0, item->ps, ps_lo,
+            (ps_hi > ps_lo) ? ps_hi : ps_lo - 1, 1);
 
-    static const struct stat_flag_map stat_flags[A_MAX] = {
-        { A_STR, TR1_STR, TR1_NEG_STR },
-        { A_DEX, TR1_DEX, TR1_NEG_DEX },
-        { A_CON, TR1_CON, TR1_NEG_CON },
-        { A_GRA, TR1_GRA, TR1_NEG_GRA },
-    };
+    bool can_weigh = wgt_valid();
+    smith_set_number_card(&cards[count++], "Weight", SMITH_NUMBER_WEIGHT, 0,
+        item->weight, can_weigh ? wgt_min() : item->weight,
+        can_weigh ? wgt_max() : item->weight, 5);
 
-    for (int i = 0; i < A_MAX && n < max_entries; i++)
+    bool can_alloy = smith_alloy_applicable(item);
+    if (can_alloy || smith_alloy.type != SMITH_ALLOY_NONE)
     {
-        if ((f1 & (stat_flags[i].flag_pos | stat_flags[i].flag_neg)) == 0)
-            continue;
-
-        entries[n].kind = SMT_BONUS_ENTRY_STAT;
-        entries[n].index = stat_flags[i].stat;
-        entries[n].flag_pos = stat_flags[i].flag_pos;
-        entries[n].flag_neg = stat_flags[i].flag_neg;
-        entries[n].flag = 0;
-        n++;
+        const bool mastery = p_ptr->active_ability[S_SMT][SMT_ALLOY_MASTERY];
+        smith_set_number_card(&cards[count++], "Alloy", SMITH_NUMBER_ALLOY, 0,
+            smith_alloy.type, SMITH_ALLOY_NONE,
+            can_alloy && mastery ? SMITH_ALLOY_STAR_IRON : SMITH_ALLOY_NONE, 1);
     }
 
-    struct skill_flag_map
+    int floor_bonus = pval_min();
+    int max_bonus = pval_max();
+    object_flags(item, &f1, &f2, &f3);
+    static const struct
+    {
+        cptr label;
+        u32b positive;
+        u32b negative;
+    } stats[A_MAX] = {
+        [A_STR] = { "Strength", TR1_STR, TR1_NEG_STR },
+        [A_DEX] = { "Dexterity", TR1_DEX, TR1_NEG_DEX },
+        [A_CON] = { "Constitution", TR1_CON, TR1_NEG_CON },
+        [A_GRA] = { "Grace", TR1_GRA, TR1_NEG_GRA },
+    };
+    for (int i = 0; i < A_MAX; i++)
+    {
+        bool positive = (f1 & stats[i].positive) != 0;
+        bool negative = (f1 & stats[i].negative) != 0;
+        if (positive || negative)
+            smith_set_number_card(&cards[count++], stats[i].label,
+                SMITH_NUMBER_STAT, i, item->stat_bonus[i],
+                negative ? -max_bonus : floor_bonus, positive ? max_bonus : 0, 1);
+    }
+
+    static const struct
     {
         int skill;
         u32b flag;
-    };
-
-    static const struct skill_flag_map skill_flags[] = {
-        { S_MEL, TR1_MEL },
-        { S_ARC, TR1_ARC },
-        { S_STL, TR1_STL },
-        { S_PER, TR1_PER },
-        { S_WIL, TR1_WIL },
-        { S_SMT, TR1_SMT },
+    } skills[] = {
+        { S_MEL, TR1_MEL }, { S_ARC, TR1_ARC }, { S_STL, TR1_STL },
+        { S_PER, TR1_PER }, { S_WIL, TR1_WIL }, { S_SMT, TR1_SMT },
         { S_SNG, TR1_SNG },
     };
-
-    for (int i = 0; i < (int)N_ELEMENTS(skill_flags) && n < max_entries; i++)
+    for (size_t i = 0; i < N_ELEMENTS(skills); i++)
     {
-        if ((f1 & skill_flags[i].flag) == 0)
-            continue;
-
-        entries[n].kind = SMT_BONUS_ENTRY_SKILL;
-        entries[n].index = skill_flags[i].skill;
-        entries[n].flag_pos = 0;
-        entries[n].flag_neg = 0;
-        entries[n].flag = skill_flags[i].flag;
-        n++;
+        int skill = skills[i].skill;
+        if (f1 & skills[i].flag)
+            smith_set_number_card(&cards[count++], skill_names_full[skill],
+                SMITH_NUMBER_SKILL, skill, item->skill_bonus[skill],
+                floor_bonus, max_bonus, 1);
     }
 
-    struct special_flag_map
-    {
-        int special;
-        u32b flag;
-    };
+    if (f1 & TR1_DAMAGE_SIDES)
+        smith_set_number_card(&cards[count++], "Damage bonus", SMITH_NUMBER_PVAL,
+            0, item->pval, floor_bonus, max_bonus, 1);
+    if (f1 & TR1_TUNNEL)
+        smith_set_number_card(&cards[count++], "Tunneling", SMITH_NUMBER_PVAL,
+            0, item->pval, floor_bonus, max_bonus, 1);
 
-    static const struct special_flag_map special_flags[] = {
-        { SMT_BONUS_SPECIAL_DAMAGE_SIDES, TR1_DAMAGE_SIDES },
-        { SMT_BONUS_SPECIAL_TUNNEL, TR1_TUNNEL },
-    };
-
-    for (int i = 0; i < (int)N_ELEMENTS(special_flags) && n < max_entries; i++)
-    {
-        if ((f1 & special_flags[i].flag) == 0)
-            continue;
-
-        entries[n].kind = SMT_BONUS_ENTRY_SPECIAL;
-        entries[n].index = special_flags[i].special;
-        entries[n].flag_pos = 0;
-        entries[n].flag_neg = 0;
-        entries[n].flag = special_flags[i].flag;
-        n++;
-    }
-
-    return n;
+    return count;
 }
 
-static int smith_collect_bonus_actions(smith_bonus_action* actions, int max_actions)
+static void smith_apply_number(const smith_number_card* card, int value)
 {
-    smith_bonus_entry entries[16];
-    int entry_count = smith_collect_bonus_entries(entries, (int)N_ELEMENTS(entries));
-    int action_count = 0;
+    if (value == card->current)
+        return;
 
-    if (!actions || max_actions <= 0)
-        return 0;
-
-    for (int i = 0; i < entry_count && action_count < max_actions; i++)
+    switch (card->kind)
     {
-        actions[action_count].entry = entries[i];
-        actions[action_count].delta = 1;
-        action_count++;
-
-        if (action_count >= max_actions)
-            break;
-        actions[action_count].entry = entries[i];
-        actions[action_count].delta = -1;
-        action_count++;
-    }
-
-    return action_count;
-}
-
-static bool smith_adjust_bonus_entry(const smith_bonus_entry* entry, int delta)
-{
-    int max_bonus = pval_max();
-    int floor_bonus = pval_min(); /* respect ego min_pval */
-    int min_bonus = 0;
-    int value = 0;
-
-    if (!entry || !smith_o_ptr || delta == 0)
-        return false;
-
-    if (entry->kind == SMT_BONUS_ENTRY_STAT)
-    {
-        u32b f1, f2, f3;
-        object_flags(smith_o_ptr, &f1, &f2, &f3);
-
-        bool has_pos = (f1 & entry->flag_pos) != 0;
-        bool has_neg = (f1 & entry->flag_neg) != 0;
-
-        if (has_pos && has_neg)
+    case SMITH_NUMBER_ATTACK:
+        smith_o_ptr->att = value;
+        break;
+    case SMITH_NUMBER_DAMAGE:
+        smith_o_ptr->ds = value;
+        break;
+    case SMITH_NUMBER_EVASION:
+        smith_o_ptr->evn = value;
+        break;
+    case SMITH_NUMBER_PROTECTION:
+        smith_o_ptr->ps = value;
+        break;
+    case SMITH_NUMBER_PROTECTION_DICE:
+        if (value == -1)
         {
-            min_bonus = -max_bonus;
-        }
-        else if (has_neg)
-        {
-            min_bonus = -max_bonus;
-            max_bonus = 0;
+            smith_o_ptr->pd = 1;
+            smith_o_ptr->ps = 0;
         }
         else
-        {
-            /* Positive stat: honour ego min_pval as the lower bound */
-            min_bonus = floor_bonus;
-        }
-
-        value = smith_o_ptr->stat_bonus[entry->index];
-        int new_value = value + delta;
-        if (new_value < min_bonus || new_value > max_bonus)
-            return false;
-
-        smith_o_ptr->stat_bonus[entry->index] = new_value;
-        return true;
+            smithing_set_protection_combo(smith_o_ptr, value);
+        break;
+    case SMITH_NUMBER_WEIGHT:
+        smith_o_ptr->weight = value;
+        break;
+    case SMITH_NUMBER_ALLOY:
+        (void)smith_apply_alloy(smith_o_ptr, &smith_alloy, (smith_alloy_type)value);
+        break;
+    case SMITH_NUMBER_STAT:
+        smith_o_ptr->stat_bonus[card->index] = value;
+        break;
+    case SMITH_NUMBER_SKILL:
+        smith_o_ptr->skill_bonus[card->index] = value;
+        break;
+    case SMITH_NUMBER_PVAL:
+        smith_o_ptr->pval = value;
+        break;
     }
-
-    if (entry->kind == SMT_BONUS_ENTRY_SKILL)
-    {
-        /* Skill bonus: honour ego min_pval as the lower bound */
-        value = smith_o_ptr->skill_bonus[entry->index];
-        int new_value = value + delta;
-        if (new_value < floor_bonus || new_value > max_bonus)
-            return false;
-        smith_o_ptr->skill_bonus[entry->index] = new_value;
-        return true;
-    }
-
-    value = smith_o_ptr->pval;
-    int new_value = value + delta;
-    if (new_value < floor_bonus || new_value > max_bonus)
-        return false;
-    smith_o_ptr->pval = (s16b)new_value;
-    return true;
 }
 
-static int smith_bonus_menu_aux(int* highlight)
+typedef enum {
+    SMITH_SIMPLE, SMITH_ENHANCEMENTS, SMITH_ARTIFICE, SMITH_PAGE_COUNT
+} smith_page;
+
+enum {
+    SMITH_EDITOR_TAB = 33100,
+    SMITH_EDITOR_INSPECT = 33110,
+    SMITH_EDITOR_COSTS,
+    SMITH_EDITOR_CRAFT,
+    SMITH_EDITOR_APPLY
+};
+
+static void smith_editor_tabs(const smith_sheet_layout* sheet, smith_page page,
+    bool interactive)
 {
-    char ch;
-    char buf[80];
-    smith_bonus_action actions[26];
-    bool valid[26] = { false };
-    bool can_afford[26] = { false };
-    byte attr[26];
-    int num = smith_collect_bonus_actions(actions, (int)N_ELEMENTS(actions));
-    const int first_row = 2;
-    const int max_row = smith_ui_list_bottom_row(first_row, true);
-    const int max_visible = max_row - first_row + 1;
-    int top;
+    static const cptr names[] = { "Simple", "Enhancements", "Artifice" };
+    smith_sheet_tabs(sheet, names, SMITH_PAGE_COUNT, page,
+        interactive ? SMITH_EDITOR_TAB : 0);
+}
 
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
+static bool smith_number_card_menu(const smith_number_card* card, int* page_out)
+{
+    *page_out = -1;
+    if (!card->editable || smith_pending_reforge()) return false;
 
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
+    object_copy(smith3_o_ptr, smith_o_ptr);
+    smith3_alloy = smith_alloy;
+    const smithing_cost_type original_cost = smithing_cost;
+    const int offset = (card->current - card->first) / card->step;
+    const bool current_in_range = offset >= 0 && offset < card->count
+        && card->first + offset * card->step == card->current;
+    const int count = card->count + !current_in_range;
+    const int current = current_in_range ? offset : count - 1;
+    int focus = current, choice = -1;
 
-    smith_ui_put_section_header(COL_SMT2, 1, "Bonuses");
-
-    if (num <= 0)
+    bool initial = true;
+    for (;;)
     {
-        smith_ui_put_fitted(COL_SMT2, 3,
-            smith_ui_column_width(COL_SMT2), TERM_L_DARK,
-            "(No editable special bonuses on this item.)");
-        ui_menu_click_add_full_row(SMITH_CLICK_BACK, 3);
+        smith_sheet_layout sheet = smith_sheet_geometry();
+        smith_sheet_begin(&sheet, false);
+        smith_editor_tabs(&sheet, SMITH_SIMPLE, true);
+        int cols = MAX(1, MIN(count, MIN(4, sheet.list_width / 15)));
+        smith_picker_grid grid = smith_sheet_grid(&sheet, count, cols,
+            smith_sheet_list_first(&sheet), sheet.list_end);
+        if (initial)
+        {
+            smith_ui_scroll_top[SMITH_SCROLL_VALUES] = MAX(0, focus / cols - grid.visible / 2);
+            initial = false;
+        }
+        smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_VALUES, count, focus);
+        smith_sheet_heading(&sheet, format("Choose %s", card->label), &grid, count);
+        int start = grid.top * cols;
+        int limit = MIN(count, start + grid.visible * cols);
+        for (int i = start; i < limit; i++)
+        {
+            int value = i == current ? card->current : card->first + i * card->step;
+            char label[32];
+            smith_format_number(card, value, label, sizeof(label));
+            smith_apply_number(card, value);
+            byte attr = affordable(smith_o_ptr) ? TERM_WHITE : TERM_SLATE;
+            *smith_o_ptr = *smith3_o_ptr;
+            smith_alloy = smith3_alloy;
+            smith_sheet_choice(&sheet, &grid, i, i - start + 1, i - start,
+                label, i == current ? (grid.step >= 22 ? "Current" : "*") : "",
+                NULL, i == focus, attr);
+        }
+        int value = focus == current ? card->current : card->first + focus * card->step;
+        smith_apply_number(card, value);
+        int difficulty = smith_measure_design();
+        smith_sheet_order(&sheet, smith_o_ptr, difficulty,
+            focus == current && p_ptr->smithing_leftover > 0, false);
+        *smith_o_ptr = *smith3_o_ptr;
+        smith_alloy = smith3_alloy;
+        smithing_cost = original_cost;
+
+        int detail = MAX(grid.first + grid.stride * ((count + cols - 1) / cols) + 1,
+            sheet.body + (sheet.list_end - sheet.body) / 2);
+        if (detail + 3 < sheet.list_end)
+        {
+            char preview[32];
+            smith_format_number(card, value, preview, sizeof(preview));
+            smith_ui_put_fitted(sheet.margin, detail, sheet.list_width, TERM_WHITE + TERM_SHADE, card->label);
+            smith_sheet_field(sheet.margin, detail + 2, sheet.list_width, "Current",
+                card->value, TERM_WHITE, TERM_L_WHITE);
+            smith_sheet_field(sheet.margin, detail + 3, sheet.list_width, "Selected",
+                preview, TERM_WHITE, TERM_L_WHITE);
+        }
+        const smith_sheet_action actions[] = {
+            { SMITH_CLICK_BACK, "Back", TERM_WHITE }, { SMITH_EDITOR_COSTS, "Costs", TERM_WHITE },
+            { SMITH_EDITOR_APPLY, "Apply", TERM_L_BLUE }
+        };
+        smith_sheet_actions(&sheet, actions, N_ELEMENTS(actions), 0);
+        smith_sheet_navigation(&sheet, false, "Apply", true);
         Term_fresh();
         hide_cursor = true;
-        (void)inkey();
+        int key = steamdeck_menu_key(inkey(), '[', ']');
         hide_cursor = false;
-        return -1;
-    }
 
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > num)
-        *highlight = num;
-
-    top = smith_ui_configure_list_view(SMITH_SCROLL_BONUSES, num, *highlight,
-        first_row, max_row) + 1;
-    if (num > max_visible)
-    {
-        int end = top + max_visible - 1;
-        if (end > num)
-            end = num;
-        strnfmt(buf, sizeof(buf),
-            "Adjust special bonuses [%d-%d/%d]", top, end,
-            num);
-        smith_ui_put_section_header(COL_SMT2, 1, buf);
-    }
-
-    object_type snapshot;
-    smith_alloy_state alloy_snapshot = smith_alloy;
-
-    for (int i = 0; i < num; i++)
-    {
-        object_copy(&snapshot, smith_o_ptr);
-
-        if (smith_adjust_bonus_entry(&actions[i].entry, actions[i].delta))
+        int clicked, action;
+        if (ui_menu_click_take_action(&clicked, &action))
         {
-            valid[i] = true;
-            can_afford[i] = affordable(smith_o_ptr);
-        }
-
-        object_copy(smith_o_ptr, &snapshot);
-        smith_alloy = alloy_snapshot;
-
-        attr[i] = valid[i] ? (can_afford[i] ? TERM_WHITE : TERM_SLATE)
-                           : TERM_L_DARK;
-
-        const char* name = NULL;
-        int value = 0;
-        if (actions[i].entry.kind == SMT_BONUS_ENTRY_STAT)
-        {
-            name = smith_bonus_stat_name(actions[i].entry.index);
-            value = smith_o_ptr->stat_bonus[actions[i].entry.index];
-        }
-        else if (actions[i].entry.kind == SMT_BONUS_ENTRY_SKILL)
-        {
-            name = skill_names_full[actions[i].entry.index];
-            value = smith_o_ptr->skill_bonus[actions[i].entry.index];
-        }
-        else
-        {
-            name = smith_bonus_special_name(actions[i].entry.index);
-            value = smith_o_ptr->pval;
-        }
-        const char* verb = (actions[i].delta > 0) ? "increase" : "decrease";
-
-        int entry_idx = i + 1;
-        int row = first_row + (entry_idx - top);
-        if (row >= first_row && row <= max_row)
-        {
-            char action_label[80];
-            strnfmt(action_label, sizeof(action_label), "%s %-12s (%+d)",
-                verb, name, value);
-            indexed_menu_entry_label(buf, sizeof(buf), i, action_label);
-            smith_ui_put_menu_row(entry_idx, COL_SMT2, row, attr[i], buf,
-                *highlight == entry_idx);
-        }
-    }
-
-    int hl_row = smith_ui_visible_highlight_row(
-        *highlight, top - 1, first_row, max_row);
-
-    prt_object_difficulty();
-    prt_object_description();
-
-    Term_fresh();
-    Term_gotoxy(2, (hl_row >= first_row) ? hl_row : first_row);
-
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
+            key = 0;
+            if (clicked == SMITH_CLICK_BACK || action == UI_MENU_CLICK_SECONDARY)
             {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
+                if (action != UI_MENU_CLICK_HOVER) break;
             }
-            else if (clicked_choice >= 1 && clicked_choice <= num)
+            else if (clicked >= 1 && clicked <= limit - start)
             {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
+                focus = start + clicked - 1;
+                if (action == UI_MENU_CLICK_PRIMARY) key = '\r';
+            }
+            else if (action == UI_MENU_CLICK_PRIMARY)
+            {
+                if (clicked >= SMITH_EDITOR_TAB && clicked < SMITH_EDITOR_TAB + SMITH_PAGE_COUNT)
+                    *page_out = clicked - SMITH_EDITOR_TAB;
+                else if (clicked == SMITH_EDITOR_COSTS || clicked == SMITH_CLICK_CALC) key = '?';
+                else if (clicked == SMITH_EDITOR_APPLY) key = '\r';
             }
         }
-    }
-
-    if ((ch == '4') || (ch == ESCAPE))
-        return -1;
-
-    if (sdl_menu_letters_enabled()
-        && (ch >= 'a') && (ch <= (char)'a' + num - 1))
-    {
-        int old_highlight = *highlight;
-
-        *highlight = (int)ch - 'a' + 1;
-
-        if (valid[*highlight - 1])
-            return (*highlight);
-
-        *highlight = old_highlight;
-        bell("Invalid choice.");
-    }
-
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else
-            *highlight = num;
-        return 0;
-    }
-
-    if (ch == '2')
-    {
-        if (*highlight < num)
-            (*highlight)++;
-        else
-            *highlight = 1;
-        return 0;
-    }
-
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        if (valid[*highlight - 1])
-            return *highlight;
-        bell("Invalid choice.");
-        return 0;
-    }
-
-    return 0;
-}
-
-static void smith_bonus_menu(void)
-{
-    int highlight = 1;
-    bool leave_menu = false;
-
-    screen_save();
-
-    while (!leave_menu)
-    {
-        int choice = smith_bonus_menu_aux(&highlight);
-        if (choice == -1)
-            leave_menu = true;
-        else if (choice >= 1)
+        if (key == '[') *page_out = SMITH_ARTIFICE;
+        if (key == ']' || key == '\t') *page_out = SMITH_ENHANCEMENTS;
+        if (key == ESCAPE || *page_out >= 0) break;
+        if (key == '?')
         {
-            smith_bonus_action actions[26];
-            int num = smith_collect_bonus_actions(actions, (int)N_ELEMENTS(actions));
-            if (choice <= num)
-                (void)smith_adjust_bonus_entry(&actions[choice - 1].entry, actions[choice - 1].delta);
+            smith_show_cost_details();
+        }
+        else if (key == '\r' || key == '\n' || key == ' ')
+        {
+            choice = focus;
+            break;
+        }
+        else if (sdl_menu_letters_enabled() && key >= 'a' && key <= 'z'
+            && start + key - 'a' < limit)
+        {
+            choice = start + key - 'a';
+            break;
+        }
+        else if (key == '4' || key == '6')
+            focus = (focus + count + (key == '4' ? -1 : 1)) % count;
+        else if (key == '8' || key == '2')
+        {
+            int step = count > cols ? cols : 1;
+            if (key == '8') focus = focus >= step ? focus - step : count - 1;
+            else focus = focus + step < count ? focus + step : 0;
         }
     }
 
     ui_menu_click_clear();
-    screen_load();
-}
-
-/*
- * Displays a menu for modifying numerical bonuses and weight of an item.
- */
-void numbers_menu(void)
-{
-    int choice = -1;
-    int highlight = 1;
-
-    bool leave_menu = false;
-
-    if (object_has_ego(smith_o_ptr))
-        enchant_then_numbers = true;
-
-    /* This submenu has no third column, so let its list use the full width. */
-    bool saved_full_width = smith_ui_secondary_full_width;
-    smith_ui_secondary_full_width = true;
-
-    /* Save screen */
-    screen_save();
-
-    /* Process Events until menu is abandoned */
-    while (!leave_menu)
-    {
-        choice = numbers_menu_aux(&highlight);
-
-        switch (choice)
-        {
-        case -1:
-        {
-            leave_menu = true;
-            break;
-        }
-
-        default:
-        {
-            if (choice == SMT_NUM_MENU_EDIT_BONUSES)
-                smith_bonus_menu();
-            else
-                modify_numbers(choice);
-            break;
-        }
-        }
-    }
-
-    /* Load screen */
-    ui_menu_click_clear();
-    screen_load();
-
-    smith_ui_secondary_full_width = saved_full_width;
-
-    return;
+    ui_scroll_area_clear();
+    if (choice < 0 || choice == current) return false;
+    smith_apply_number(card, card->first + choice * card->step);
+    if (object_has_ego(smith_o_ptr)) enchant_then_numbers = true;
+    return true;
 }
 
 static void ego_name_for_enchant_menu(int e_idx, char* buf, size_t buflen)
@@ -5650,176 +3823,63 @@ static void ego_name_for_enchant_menu(int e_idx, char* buf, size_t buflen)
     SDL_strlcpy(buf, raw, buflen);
 }
 
+static smith_picker_grid smith_sheet_sublist(const smith_sheet_layout* sheet,
+    smith_ui_scroll_id id, int count, int focus, cptr section, cptr heading,
+    cptr verb)
+{
+    smith_sheet_begin(sheet, false);
+    smith_ui_put_fitted(sheet->margin, sheet->tabs, sheet->width - 2 * sheet->margin,
+        TERM_L_BLUE, section);
+    smith_picker_grid grid = smith_sheet_grid(sheet, count, 1,
+        smith_sheet_list_first(sheet), sheet->list_end);
+    smith_sheet_open_list(sheet, &grid, id, count, focus);
+    smith_sheet_heading(sheet, heading, &grid, count);
+    smith_sheet_action actions[3];
+    int n = 0;
+    actions[n++] = (smith_sheet_action){ SMITH_CLICK_BACK, "Back", TERM_WHITE };
+    if (id != SMITH_SCROLL_MELT)
+        actions[n++] = (smith_sheet_action){ SMITH_CLICK_CALC, "Costs", TERM_WHITE };
+    actions[n++] = (smith_sheet_action){ SMITH_EDITOR_APPLY, verb,
+        count ? TERM_L_BLUE : TERM_SLATE };
+    smith_sheet_actions(sheet, actions, n, 0);
+    smith_sheet_navigation(sheet, false, verb, false);
+    return grid;
+}
+
+static int smith_sheet_read_choice(int* highlight, int count)
+{
+    Term_fresh();
+    hide_cursor = true;
+    int key = steamdeck_menu_key(inkey(), 0, 0);
+    hide_cursor = false;
+    int id, action;
+    if (smith_ui_take_click_action(&id, &action))
+    {
+        if (id == SMITH_CLICK_BACK || action == UI_MENU_CLICK_SECONDARY)
+            return action == UI_MENU_CLICK_HOVER ? 0 : ESCAPE;
+        if (id == SMITH_EDITOR_APPLY) return action == UI_MENU_CLICK_PRIMARY ? '\r' : 0;
+        if (id > 0 && id <= count)
+            return smith_ui_pointer_choice_confirms(id, action, highlight) ? '\r' : 0;
+        return 0;
+    }
+    if (key == '?' && smith_ui_detail_valid)
+    {
+        smith_show_cost_details();
+        return 0;
+    }
+    return key;
+}
+
 static void prt_reforge_preview(const reforge_preview_type* preview)
 {
-    char buf[80];
-    int costs = 0;
-    byte attr = TERM_SLATE;
-    bool compact = smith_ui_compact_width();
-    bool portrait = smith_ui_portrait_layout();
-    int measure_row = -1;
-
-    if (!portrait)
-        wipe_screen_from(COL_SMT4);
-
-    if (!preview)
-    {
-        smith_ui_detail_valid = false;
-        return;
-    }
-    smith_ui_detail_valid = true;
+    smith_ui_detail_valid = preview != NULL;
+    if (!preview) return;
     smith_ui_detail_reforge = true;
     smith_ui_detail_paid = false;
     smith_ui_detail_cost = preview->cost;
     smith_ui_detail_turns = preview->turns;
-
-    if (!preview->affordable)
-        attr = TERM_L_DARK;
-
-    if (portrait)
-    {
-        int divider_row = smith_ui_used_bottom_row() + 1;
-
-        smith_ui_draw_horizontal_divider(divider_row);
-        measure_row = divider_row + 1;
-        strnfmt(buf, sizeof(buf), "Measure   Reforge: %d (+%d raw)",
-            preview->scaled_difficulty, preview->raw_delta_difficulty);
-        smith_ui_cost_title_row_override = measure_row
-            + MAX(1, smith_ui_put_wrapped(COL_SMT1, measure_row,
-                         smith_ui_line_width(COL_SMT1),
-                         MAX(1, smith_ui_content_bottom_row() - measure_row + 1),
-                         attr, buf));
-    }
-    else
-    {
-        smith_ui_put_fitted(COL_SMT4, 2, smith_ui_line_width(COL_SMT4), attr,
-            "Reforge Diff:");
-        strnfmt(buf, sizeof(buf), "%d", preview->scaled_difficulty);
-        smith_ui_put_fitted(COL_SMT4 + 2, 4, 4, attr, buf);
-
-        if (compact)
-            strnfmt(buf, sizeof(buf), "+%d raw", preview->raw_delta_difficulty);
-        else
-            strnfmt(buf, sizeof(buf), "(+%d raw)",
-                preview->raw_delta_difficulty);
-        smith_ui_put_fitted(COL_SMT4 + (compact ? 4 : 5), 4,
-            smith_ui_line_width(COL_SMT4 + (compact ? 4 : 5)), TERM_L_DARK,
-            buf);
-    }
-
-    smith_ui_put_fitted(portrait ? COL_SMT1 : COL_SMT4,
-        smith_ui_cost_title_row(),
-        smith_ui_line_width(portrait ? COL_SMT1 : COL_SMT4),
-        preview->affordable ? TERM_SLATE : TERM_L_DARK, "Cost:");
-
-    if (preview->needs_reforging)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Reforging");
-        costs++;
-    }
-    if (preview->cost.weaponsmith)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Weaponsmith");
-        costs++;
-    }
-    if (preview->cost.armoursmith)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Armoursmith");
-        costs++;
-    }
-    if (preview->cost.jeweller)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Jeweller");
-        costs++;
-    }
-    if (preview->needs_forge)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Forge");
-        costs++;
-    }
-    if (preview->cost.uses > 0)
-    {
-        attr = (preview->needs_forge || preview->needs_forge_resources)
-            ? TERM_RED
-            : TERM_SLATE;
-        if (compact)
-            strnfmt(buf, sizeof(buf), "%d/%d uses", preview->cost.uses,
-                forge_uses(p_ptr->py, p_ptr->px));
-        else
-            strnfmt(buf, sizeof(buf), "%d Use%s", preview->cost.uses,
-                (preview->cost.uses == 1) ? "" : "s");
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.drain > 0)
-    {
-        attr = (preview->cost.drain <= p_ptr->skill_base[S_SMT])
-            ? TERM_BLUE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), "%d Smithing", preview->cost.drain);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.mithril > 0)
-    {
-        attr = (preview->cost.mithril <= mithril_carried()) ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), compact ? "%d.%d lb Mith" : "%d.%d lb Mithril",
-            preview->cost.mithril / 10, preview->cost.mithril % 10);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.star_iron > 0)
-    {
-        attr = (preview->cost.star_iron <= star_iron_carried()) ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), compact ? "%d.%d lb StIron" : "%d.%d lb Star Iron",
-            preview->cost.star_iron / 10, preview->cost.star_iron % 10);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.str > 0)
-    {
-        attr = (p_ptr->stat_base[A_STR] + p_ptr->stat_drain[A_STR] - preview->cost.str >= -5)
-            ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), "%d Str", preview->cost.str);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.dex > 0)
-    {
-        attr = (p_ptr->stat_base[A_DEX] + p_ptr->stat_drain[A_DEX] - preview->cost.dex >= -5)
-            ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), "%d Dex", preview->cost.dex);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.con > 0)
-    {
-        attr = (p_ptr->stat_base[A_CON] + p_ptr->stat_drain[A_CON] - preview->cost.con >= -5)
-            ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), "%d Con", preview->cost.con);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.gra > 0)
-    {
-        attr = (p_ptr->stat_base[A_GRA] + p_ptr->stat_drain[A_GRA] - preview->cost.gra >= -5)
-            ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), "%d Gra", preview->cost.gra);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (preview->cost.exp > 0)
-    {
-        attr = (p_ptr->new_exp >= preview->cost.exp) ? TERM_SLATE : TERM_L_DARK;
-        strnfmt(buf, sizeof(buf), "%d Exp", preview->cost.exp);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-
-    strnfmt(buf, sizeof(buf), "%d Turns", preview->turns);
-    smith_ui_put_cost_line(costs, TERM_SLATE, buf);
-    if (get_sdl_menu_bigger_font())
-        smith_ui_draw_cost_heading(portrait ? COL_SMT1 : COL_SMT4,
-            smith_ui_cost_title_row(), costs + 1, attr);
+    smith_sheet_layout sheet = smith_sheet_geometry();
+    smith_sheet_order(&sheet, smith_o_ptr, preview->scaled_difficulty, false, false);
 }
 
 static bool reforge_preview_missing_ability(const reforge_preview_type* preview)
@@ -5848,16 +3908,13 @@ static bool reforge_preview_primary_blocker(const reforge_preview_type* preview)
 static int reforge_prefix_menu(const object_type* source)
 {
     char ch;
-    char buf[80];
+
     int i;
     int highlight = 1;
     int entry_count = 0;
     int choice[26];
     bool valid[26];
     reforge_preview_type previews[26];
-    const int first_row = 2;
-    const int last_row = smith_ui_list_bottom_row(first_row, true);
-
     if (!source || !source->k_idx)
         return 0;
 
@@ -5865,14 +3922,7 @@ static int reforge_prefix_menu(const object_type* source)
 
     while (true)
     {
-        ui_menu_click_begin();
-        ui_menu_click_set_hover_enabled(true);
-        ui_menu_click_set_outside_cancel_enabled(true);
-        smith_ui_begin_touch_scroll_area(false);
-
-        smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-        smith_ui_put_section_header(COL_SMT2, 1, "Prefix");
-
+        smith_sheet_layout sheet = smith_sheet_geometry();
         entry_count = 0;
         memset(choice, 0, sizeof(choice));
         memset(valid, 0, sizeof(valid));
@@ -5891,103 +3941,45 @@ static int reforge_prefix_menu(const object_type* source)
             entry_count++;
         }
 
-        if (entry_count == 0)
+        highlight = MAX(1, MIN(highlight, entry_count));
+        smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_REFORGE,
+            entry_count, highlight - 1, "Reforging", "Prefix", "Reforge");
+        if (!entry_count)
         {
-            smith_ui_put_fitted(COL_SMT2, 3,
-                smith_ui_column_width(COL_SMT2), TERM_L_DARK,
-                "(No legal prefixes available.)");
-            ui_menu_click_add_full_row(SMITH_CLICK_BACK, 3);
-            Term_fresh();
-            hide_cursor = true;
-            (void)inkey();
-            hide_cursor = false;
+            smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width,
+                TERM_SLATE, "No legal prefixes available.");
+            (void)smith_sheet_read_choice(&highlight, 0);
+            sdl_smithing_sheet_clear();
             ui_menu_click_clear();
             screen_load();
             return 0;
         }
 
-        if (highlight < 1) highlight = 1;
-        if (highlight > entry_count) highlight = entry_count;
-
+        for (i = grid.top; i < entry_count && i < grid.top + grid.visible; i++)
         {
-            int top = smith_ui_configure_list_view(SMITH_SCROLL_REFORGE,
-                entry_count, highlight, first_row, last_row);
-
-            for (i = top;
-                 i < entry_count && i < top + (last_row - first_row + 1); i++)
-            {
-                char ego_label[64];
-                int row = first_row + i - top;
-
-                ego_name_for_enchant_menu(choice[i], ego_label,
-                    sizeof(ego_label));
-                indexed_menu_entry_label(buf, sizeof(buf), i, ego_label);
-                smith_ui_put_menu_row(i + 1, COL_SMT2, row,
-                    valid[i] ? TERM_WHITE
-                             : (reforge_preview_primary_blocker(&previews[i])
-                                    ? TERM_RED
-                                    : TERM_L_DARK),
-                    buf, highlight == i + 1);
-            }
-
-            Term_gotoxy(14,
-                first_row + MAX(0,
-                    MIN(last_row - first_row, highlight - 1 - top)));
+            char label[64];
+            ego_name_for_enchant_menu(choice[i], label, sizeof(label));
+            byte attr = valid[i] ? TERM_WHITE :
+                (reforge_preview_primary_blocker(&previews[i]) ? TERM_L_RED : TERM_SLATE);
+            smith_sheet_choice(&sheet, &grid, i, i + 1, i, label, "",
+                NULL, highlight == i + 1, attr);
         }
-
         (void)reforge_preview_build(source, choice[highlight - 1],
             &previews[highlight - 1]);
         prt_reforge_preview(&previews[highlight - 1]);
-        prt_object_description();
-
-        Term_fresh();
-        hide_cursor = true;
-        ch = smithing_menu_key(inkey());
-        hide_cursor = false;
-
-        {
-            int clicked_choice = 0;
-            int click_action = UI_MENU_CLICK_PRIMARY;
-
-            if (smith_ui_take_click_action(&clicked_choice, &click_action))
-            {
-                if ((clicked_choice == SMITH_CLICK_BACK)
-                    || (click_action == UI_MENU_CLICK_SECONDARY))
-                {
-                    if (click_action == UI_MENU_CLICK_HOVER)
-                        continue;
-                    ch = ESCAPE;
-                }
-                else if (clicked_choice >= 1 && clicked_choice <= entry_count)
-                {
-                    if (!smith_ui_pointer_choice_confirms(
-                            clicked_choice, click_action, &highlight))
-                    {
-                        continue;
-                    }
-                    ch = '\r';
-                }
-            }
-        }
+        int detail = grid.first + entry_count * grid.stride + 1;
+        if (detail < sheet.list_end)
+            smith_sheet_field(sheet.margin, detail, sheet.list_width, "Raw difficulty increase",
+                format("+%d", previews[highlight - 1].raw_delta_difficulty), TERM_WHITE, TERM_L_WHITE);
+        ch = smith_sheet_read_choice(&highlight, entry_count);
 
         if (sdl_menu_letters_enabled()
             && (ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
         {
             highlight = (int)ch - 'a' + 1;
-            if (reforge_preview_missing_ability(&previews[highlight - 1]))
-                bell("You lack the ability for that reforge.");
-            else if (reforge_preview_missing_forge(&previews[highlight - 1]))
-                bell("You need a forge with resources for that reforge.");
-            else if (!valid[highlight - 1])
-                bell("You cannot afford that reforge.");
-            else
-            {
-                ui_menu_click_clear();
-                screen_load();
-                return choice[highlight - 1];
-            }
+            ch = '\r';
         }
-        else if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6')
+        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6')
 #ifdef ARROW_RIGHT
             || (ch == ARROW_RIGHT)
 #endif
@@ -6001,6 +3993,7 @@ static int reforge_prefix_menu(const object_type* source)
                 bell("You cannot afford that reforge.");
             else
             {
+                sdl_smithing_sheet_clear();
                 ui_menu_click_clear();
                 screen_load();
                 return choice[highlight - 1];
@@ -6012,6 +4005,7 @@ static int reforge_prefix_menu(const object_type* source)
 #endif
             )
         {
+            sdl_smithing_sheet_clear();
             ui_menu_click_clear();
             screen_load();
             return 0;
@@ -6057,7 +4051,7 @@ static void create_special(int ego_prefix, int ego_suffix)
 
     /* Apply ego bonuses */
     if (object_has_ego(smith_o_ptr))
-        object_into_special(smith_o_ptr, p_ptr->skill_use[S_SMT], true);
+        object_into_special(smith_o_ptr, smithing_item_skill(smith_o_ptr), true);
 
     /* Re-evaluate stack size now that an enchantment is applied */
     smith_o_ptr->number = smith_default_stack_size(smith_o_ptr);
@@ -6092,28 +4086,15 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     char ch;
     int i;
     int entry_count = 0;
-    char buf[80];
+
     bool valid[26];
     int choice[26];
-    char title[80];
-    const int first_row = 2;
-    const int last_row = smith_ui_list_bottom_row(first_row, true);
-    int top;
+    smith_sheet_layout sheet = smith_sheet_geometry();
     bool no_prefix_allowed = selecting_prefix
         && ego_forbids_prefix_combo(fixed_suffix);
 
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-
-    /* Header */
-    strnfmt(title, sizeof(title), "%s", selecting_prefix ? "prefix" : "suffix");
-    title[0] = (char)toupper((unsigned char)title[0]);
-    smith_ui_put_section_header(COL_SMT2, 1, title);
+    int selected_affix = selecting_prefix ? object_ego_prefix(smith_o_ptr)
+        : object_ego_suffix(smith_o_ptr);
 
     /* Always allow selecting no affix */
     valid[entry_count] = true;
@@ -6150,32 +4131,29 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
         }
     }
 
+    if (*highlight == 0)
+    {
+        for (int row = 0; row < entry_count; ++row)
+            if (choice[row] == selected_affix)
+                *highlight = row + 1;
+    }
     if (*highlight < 1) *highlight = 1;
     if (*highlight > entry_count) *highlight = entry_count;
 
-    top = smith_ui_configure_list_view(SMITH_SCROLL_ENCHANT, entry_count,
-        *highlight, first_row, last_row);
-    for (i = top;
-         i < entry_count && i < top + (last_row - first_row + 1); i++)
+    smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_ENCHANT,
+        entry_count, *highlight - 1, "Enhancements", selecting_prefix ? "Prefix" : "Suffix", "Apply");
+    for (i = grid.top; i < entry_count && i < grid.top + grid.visible; i++)
     {
-        char ego_label[64];
-        int row = first_row + i - top;
-
-        if (choice[i] == 0)
-            SDL_strlcpy(ego_label, "(none)", sizeof(ego_label));
-        else
-            ego_name_for_enchant_menu(choice[i], ego_label, sizeof(ego_label));
-        indexed_menu_entry_label(buf, sizeof(buf), i, ego_label);
-        smith_ui_put_menu_row(i + 1, COL_SMT2, row,
-            valid[i] ? TERM_WHITE : TERM_SLATE, buf,
-            *highlight == i + 1);
+        char label[64];
+        if (choice[i] == 0) SDL_strlcpy(label, "(none)", sizeof(label));
+        else ego_name_for_enchant_menu(choice[i], label, sizeof(label));
+        smith_sheet_choice(&sheet, &grid, i, i + 1, i, label,
+            choice[i] && choice[i] == selected_affix ? "Current" : "",
+            NULL, i + 1 == *highlight, valid[i] ? TERM_WHITE : TERM_SLATE);
     }
-    if (no_prefix_allowed)
-    {
-        smith_ui_put_wrapped(COL_SMT2, last_row + 1,
-            smith_ui_column_width(COL_SMT2), 2, TERM_SLATE,
-            "No prefix is allowed with this suffix.");
-    }
+    if (no_prefix_allowed && grid.first + grid.stride < sheet.list_end)
+        smith_ui_put_fitted(sheet.margin, grid.first + grid.stride, sheet.list_width,
+            TERM_L_WHITE, "This suffix excludes prefixes.");
 
     /* Make a preview 'special' version of the object */
     if (selecting_prefix)
@@ -6183,48 +4161,8 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     else
         create_special(fixed_prefix, choice[*highlight - 1]);
 
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(14,
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= entry_count)
-            {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
-            }
-        }
-    }
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    ch = smith_sheet_read_choice(highlight, entry_count);
 
     /* Choose by letter */
     if (sdl_menu_letters_enabled()
@@ -6293,114 +4231,31 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
 /*
  * Brings up a menu for making an item into a {special} item.
  */
-bool enchant_menu(void)
+static bool smith_choose_affix(bool prefix)
 {
-    int prefix_highlight = 1;
-    int suffix_highlight = 1;
+    object_type original = *smith_o_ptr;
+    int old_prefix = object_ego_prefix(&original);
+    int old_suffix = object_ego_suffix(&original);
 
-    bool completed = false;
-    bool leave_menu = false;
+    int highlight = 0, choice;
 
-    /* Save screen */
     screen_save();
-
-    // stop the item being an artefact, if it was
-    smith_o_ptr->name1 = 0;
-    smith2_o_ptr->name1 = 0;
-
-    int selected_prefix = (int)object_ego_prefix(smith_o_ptr);
-    int selected_suffix = (int)object_ego_suffix(smith_o_ptr);
-
-    bool show_prefix_step =
-        enchant_menu_has_applicable_affix(
-            smith2_o_ptr, 0, selected_suffix, true) || (selected_prefix != 0);
-    bool show_suffix_step =
-        enchant_menu_has_applicable_affix(
-            smith2_o_ptr, selected_prefix, 0, false) || (selected_suffix != 0);
-
-    if (!show_prefix_step && !show_suffix_step)
-    {
-        /* Nothing to select; bail out without changing the item. */
-        ui_menu_click_clear();
-        screen_load();
-        return false;
-    }
-
-    bool selecting_prefix = show_prefix_step;
-
-    /* This submenu has no third column, so let its list use the full width. */
-    bool saved_full_width = smith_ui_secondary_full_width;
-    smith_ui_secondary_full_width = true;
-
-    /* Process events until menu is abandoned */
-    while (!leave_menu)
-    {
-        if (selecting_prefix)
-        {
-            int choice_idx = enchant_menu_aux(
-                &prefix_highlight, 0, selected_suffix, true, smith2_o_ptr);
-
-            if (choice_idx == -1)
-            {
-                completed = false;
-                leave_menu = true;
-                continue;
-            }
-
-            if (choice_idx >= 1)
-            {
-                selected_prefix = (int)object_ego_prefix(smith_o_ptr);
-                create_special(selected_prefix, selected_suffix);
-
-                if (show_suffix_step)
-                {
-                    selecting_prefix = false;
-                    continue;
-                }
-
-                completed = true;
-                leave_menu = true;
-                continue;
-            }
-        }
-        else
-        {
-            int choice_idx = enchant_menu_aux(
-                &suffix_highlight, selected_prefix, 0, false, smith2_o_ptr);
-
-            if (choice_idx == -1)
-            {
-                if (show_prefix_step)
-                {
-                    /* Back to prefix selection */
-                    create_special(selected_prefix, selected_suffix);
-                    selecting_prefix = true;
-                    continue;
-                }
-
-                completed = false;
-                leave_menu = true;
-                continue;
-            }
-
-            if (choice_idx >= 1)
-            {
-                selected_suffix = (int)object_ego_suffix(smith_o_ptr);
-                create_special(selected_prefix, selected_suffix);
-                completed = true;
-                leave_menu = true;
-                continue;
-            }
-        }
-    }
-
-    /* Load screen */
+    Term_clear();
+    do {
+        choice = enchant_menu_aux(&highlight, prefix ? 0 : old_prefix,
+            prefix ? old_suffix : 0, prefix, smith2_o_ptr);
+    } while (!choice);
     ui_menu_click_clear();
     screen_load();
+    sdl_smithing_sheet_clear();
 
-    smith_ui_secondary_full_width = saved_full_width;
-
-    return (completed);
+    if (choice < 0 || (object_ego_prefix(smith_o_ptr) == old_prefix
+        && object_ego_suffix(smith_o_ptr) == old_suffix))
+    {
+        *smith_o_ptr = original;
+        return false;
+    }
+    return true;
 }
 
 /*
@@ -6624,7 +4479,7 @@ int artefact_flag_menu_aux(int category, int* highlight)
 {
     char ch;
     int i, num = 0;
-    char buf[80];
+
     bool flag_present[MAX_SMITHING_FLAGS] = { false };
     bool flag_valid[MAX_SMITHING_FLAGS] = { false };
     bool flag_affordable[MAX_SMITHING_FLAGS] = { false };
@@ -6632,18 +4487,7 @@ int artefact_flag_menu_aux(int category, int* highlight)
     int flagset[MAX_SMITHING_FLAGS];
     byte flag_attr[MAX_SMITHING_FLAGS];
     cptr flag_desc[MAX_SMITHING_FLAGS];
-    const int first_row = 2;
-    const int last_row = smith_ui_list_bottom_row(first_row, true);
-    int top;
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT3));
-    smith_ui_put_section_header(COL_SMT3, 1, "Property");
+    smith_sheet_layout sheet = smith_sheet_geometry();
 
     // display the categories
     for (i = 0; smithing_flag_types[i].flag != 0; i++)
@@ -6705,80 +4549,28 @@ int artefact_flag_menu_aux(int category, int* highlight)
         }
     }
 
-    /* Abort if there are no choices */
+    *highlight = MAX(1, MIN(*highlight, num));
+    char section[80];
+    strnfmt(section, sizeof(section), "Artifice  /  %s", smithing_flag_cats[category - 1].desc);
+    smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_FLAG,
+        num, *highlight - 1, section, "Property", "Toggle");
     if (num == 0)
     {
-        smith_ui_put_fitted(COL_SMT3, 3,
-            smith_ui_column_width(COL_SMT3), TERM_L_DARK,
-            "(No properties can be added to this item.)");
-        ui_menu_click_add_full_row(SMITH_CLICK_BACK, 3);
-        Term_fresh();
-        hide_cursor = true;
-        (void)inkey();
-        hide_cursor = false;
-        return (-1);
+        smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width, TERM_SLATE,
+            "No properties can be added.");
+        (void)smith_sheet_read_choice(highlight, 0);
+        return -1;
     }
-
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > num)
-        *highlight = num;
-    top = smith_ui_configure_list_view(SMITH_SCROLL_FLAG, num, *highlight,
-        first_row, last_row);
-    for (i = top; i < num && i < top + (last_row - first_row + 1); i++)
-    {
-        int row = first_row + i - top;
-
-        indexed_menu_entry_label(buf, sizeof(buf), i, flag_desc[i]);
-        smith_ui_put_menu_row(i + 1, COL_SMT3, row, flag_attr[i], buf,
-            *highlight == i + 1);
-    }
+    for (i = grid.top; i < num && i < grid.top + grid.visible; i++)
+        smith_sheet_choice(&sheet, &grid, i, i + 1, i, flag_desc[i],
+            flag_present[i] ? "Added" : "", NULL, *highlight == i + 1,
+            flag_present[i] ? TERM_L_BLUE : flag_attr[i]);
 
     // add this flag to the dummy artefact under construction
     add_artefact_flag(flag[*highlight - 1], flagset[*highlight - 1]);
 
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(14,
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= num)
-            {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
-            }
-        }
-    }
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    ch = smith_sheet_read_choice(highlight, num);
 
     /* Choose by letter */
     if (sdl_menu_letters_enabled()
@@ -7060,11 +4852,9 @@ int artefact_ability_menu_aux(int skill, int* highlight)
 {
     char ch;
     int i, num = 0;
-    char buf[80];
+
     ability_type* b_ptr;
-    const int first_row = 2;
-    const int last_row = smith_ui_list_bottom_row(first_row, true);
-    int top;
+    smith_sheet_layout sheet = smith_sheet_geometry();
 
     /* Allocate arrays dynamically based on actual max abilities */
     bool* ability_present = mem_alloc_array(z_info->b_max, bool);
@@ -7076,15 +4866,6 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     memset(ability_present, 0, z_info->b_max * sizeof(bool));
     memset(ability_valid, 0, z_info->b_max * sizeof(bool));
     memset(ability_affordable, 0, z_info->b_max * sizeof(bool));
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT3));
-    smith_ui_put_section_header(COL_SMT3, 1, "Ability");
 
     // list the abilities
     for (i = 0; i < z_info->b_max; i++)
@@ -7145,16 +4926,16 @@ int artefact_ability_menu_aux(int skill, int* highlight)
         num++;
     }
 
-    if (num == 0)
+    *highlight = MAX(1, MIN(*highlight, num));
+    char section[80];
+    strnfmt(section, sizeof(section), "Artifice  /  %s", skill_names_full[skill]);
+    smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_ABILITY,
+        num, *highlight - 1, section, "Ability", "Toggle");
+    if (!num)
     {
-        smith_ui_put_fitted(COL_SMT3, 3,
-            smith_ui_column_width(COL_SMT3), TERM_L_DARK,
-            "(No abilities can be added to this item.)");
-        ui_menu_click_add_full_row(SMITH_CLICK_BACK, 3);
-        Term_fresh();
-        hide_cursor = true;
-        (void)inkey();
-        hide_cursor = false;
+        smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width, TERM_SLATE,
+            "No abilities can be added.");
+        (void)smith_sheet_read_choice(highlight, 0);
         mem_free(ability_present);
         mem_free(ability_valid);
         mem_free(ability_affordable);
@@ -7162,13 +4943,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
         return (-1);
     }
 
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > num)
-        *highlight = num;
-    top = smith_ui_configure_list_view(SMITH_SCROLL_ABILITY, num, *highlight,
-        first_row, last_row);
-    for (i = top; i < num && i < top + (last_row - first_row + 1); i++)
+    for (i = grid.top; i < num && i < grid.top + grid.visible; i++)
     {
         byte attr = ability_present[i]
             ? TERM_BLUE
@@ -7176,7 +4951,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
                     ? (ability_affordable[i] ? TERM_WHITE : TERM_SLATE)
                     : TERM_L_DARK);
         cptr name = "Ability";
-        int row = first_row + i - top;
+
 
         for (int j = 0; j < z_info->b_max; j++)
         {
@@ -7188,66 +4963,16 @@ int artefact_ability_menu_aux(int skill, int* highlight)
                 break;
             }
         }
-        indexed_menu_entry_label(buf, sizeof(buf), i, name);
-        smith_ui_put_menu_row(i + 1, COL_SMT3, row, attr, buf,
-            *highlight == i + 1);
+        smith_sheet_choice(&sheet, &grid, i, i + 1, i, name,
+            ability_present[i] ? "Added" : "", NULL, *highlight == i + 1,
+            ability_present[i] ? TERM_L_BLUE : attr);
     }
 
     // add this ability to the dummy artefact under construction (use actual ability number)
     add_artefact_ability(skill, ability_nums[*highlight - 1]);
 
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(14,
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                {
-                    mem_free(ability_present);
-                    mem_free(ability_valid);
-                    mem_free(ability_affordable);
-                    mem_free(ability_nums);
-                    return 0;
-                }
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= num)
-            {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    mem_free(ability_present);
-                    mem_free(ability_valid);
-                    mem_free(ability_affordable);
-                    mem_free(ability_nums);
-                    return 0;
-                }
-                ch = '\r';
-            }
-        }
-    }
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    ch = smith_sheet_read_choice(highlight, num);
 
     /* Choose by letter */
     if (sdl_menu_letters_enabled()
@@ -7364,234 +5089,23 @@ void artefact_ability_menu(int skill)
 /*
  * Allows the player to choose a new name for an artefact.
  */
-void rename_artefact(void)
+static bool rename_artefact(void)
 {
-    char tmp[MAX_LEN_ART_NAME];
-    char o_desc[30];
-    bool name_selected = false;
-    int row = (smith_ui_last_desc_row >= 0) ? smith_ui_last_desc_row
-                                            : smith_ui_content_bottom_row();
-    int col = smith_ui_desc_col();
-
-    // Clear the names
-    tmp[0] = '\0';
-
-    // Clear object name
-    Term_erase(0, row, smith_ui_term_wid());
-
-    // Determine object name
-    object_desc(o_desc, sizeof(o_desc), smith_o_ptr, false, -1);
-
-    // Display shortened object name
-    smith_ui_put_fitted(col, row, smith_ui_line_width(col), TERM_L_WHITE,
-        o_desc);
-
-    // use old name as a default
-    SDL_strlcpy(tmp, smith2_a_ptr->name, sizeof(tmp));
-
-    /* Prompt for a new name */
-    Term_gotoxy(col + strlen(o_desc) + 1, row);
-
-    while (!name_selected)
+    char name[MAX_LEN_ART_NAME];
+    SDL_strlcpy(name, smith2_a_ptr->name, sizeof(name));
+    do
     {
-        if (!askfor_name(tmp, sizeof(tmp)))
-            return;
+        if (!askfor_name(name, sizeof(name))) return false;
+    } while (!name[0]);
 
-        /* The editor owns a local draft. Empty retries and cancellation must
-         * leave both the design and its backup exactly as they were. */
-        if (tmp[0] != '\0')
-        {
-            SDL_strlcpy(smith2_a_ptr->name, tmp, MAX_LEN_ART_NAME);
-            p_ptr->redraw |= (PR_MISC);
-            name_selected = true;
-        }
-    }
-
-    // retrieve a backup of the artefact (all the modifications were done to
-    // this backup copy)
+    SDL_strlcpy(smith2_a_ptr->name, name, sizeof(smith2_a_ptr->name));
     artefact_copy(smith_a_ptr, smith2_a_ptr);
+    p_ptr->redraw |= PR_MISC;
+    return true;
 }
 
-/*
- * Performs the interface and selection work for the 1st level artefact menu.
- */
-int artefact_menu_aux(int* highlight)
+static void smith_prepare_artifice_design(void)
 {
-    char ch;
-    int i, num;
-    char buf[80];
-    int display_idx = 0;
-    const int first_row = smith_ui_dense_row0();
-    const int last_row = smith_ui_list_bottom_row(first_row, true);
-    int top;
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-    smith_ui_put_section_header(COL_SMT2, MAX(0, smith_ui_dense_row0() - 1),
-        "Artifice");
-
-    num = MAX_CATS + S_MAX;
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > num)
-        *highlight = num;
-    top = smith_ui_configure_list_view(SMITH_SCROLL_ARTEFACT, num, *highlight,
-        first_row, last_row);
-
-    // display the categories for flags
-    for (i = 0; i < MAX_CATS; i++)
-    {
-        int row;
-
-        if (i < top || i >= top + (last_row - first_row + 1))
-            continue;
-        row = first_row + i - top;
-        indexed_menu_entry_label(buf, sizeof(buf), i, smithing_flag_cats[i].desc);
-        smith_ui_put_menu_row(i + 1, COL_SMT2, row, TERM_WHITE, buf,
-            *highlight == i + 1);
-    }
-
-    // display the categories for abilities (skip Special abilities - S_SPC)
-    for (i = 0; i < S_MAX; i++)
-    {
-        int logical_idx;
-        int row;
-
-        /* Skip Special abilities - they cannot be smithed onto items */
-        if (i == S_SPC) continue;
-
-        logical_idx = MAX_CATS + display_idx;
-        if (logical_idx >= top
-            && logical_idx < top + (last_row - first_row + 1))
-        {
-            row = first_row + logical_idx - top;
-            indexed_menu_entry_label(buf, sizeof(buf), logical_idx,
-                skill_names_full[i]);
-            smith_ui_put_menu_row(logical_idx + 1, COL_SMT2, row, TERM_WHITE,
-                buf, *highlight == logical_idx + 1);
-        }
-        display_idx++;
-    }
-
-    // Menu item for naming artefacts
-    if (num - 1 >= top
-        && num - 1 < top + (last_row - first_row + 1))
-    {
-        int row = first_row + num - 1 - top;
-
-        indexed_menu_entry_label(buf, sizeof(buf), num - 1, "Name Artefact");
-        smith_ui_put_menu_row(num, COL_SMT2, row, TERM_WHITE, buf,
-            *highlight == num);
-    }
-
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(14,
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
-    hide_cursor = true;
-    ch = smithing_menu_key(inkey());
-    hide_cursor = false;
-
-    {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
-        {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= num)
-            {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
-            }
-        }
-    }
-
-    /* Choose by letter */
-    if (sdl_menu_letters_enabled()
-        && (ch >= 'a') && (ch <= (char)'a' + num - 1))
-    {
-        *highlight = (int)ch - 'a' + 1;
-
-        return (*highlight);
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        return (*highlight);
-    }
-
-    /* Exit */
-    if ((ch == '4') || (ch == ESCAPE))
-    {
-        *highlight = -1;
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else if (*highlight == 1)
-            *highlight = num;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        if (*highlight < num)
-            (*highlight)++;
-        else if (*highlight == num)
-            *highlight = 1;
-    }
-
-    return (0);
-}
-
-/*
- * Brings up a menu for making a base item into an artefact,
- * by adding flags of various types.
- */
-void artefact_menu(void)
-{
-    int choice = -1;
-    int highlight = 1;
-
-    char buf[36];
-    bool leave_menu = false;
-
-    log_info("Player opened artifact creation menu");
-
-    /* Save screen */
-    screen_save();
-
     if (!smith_o_ptr->name1)
     {
         log_debug("Initializing new artifact creation");
@@ -7622,44 +5136,12 @@ void artefact_menu(void)
     // set the backup artefact name to the player character's name
     if (strlen(smith2_a_ptr->name) == 0)
     {
-        sprintf(buf, "of %s", op_ptr->full_name);
-        SDL_strlcpy(smith2_a_ptr->name, buf, MAX_LEN_ART_NAME);
+        strnfmt(smith2_a_ptr->name, MAX_LEN_ART_NAME, "of %s", op_ptr->full_name);
     }
 
     // prepare the artefact and object for modification
     prepare_artefact();
 
-    /* Number of skill categories displayed (S_MAX minus Special abilities) */
-    int num_skills = S_MAX - 1;
-
-    /* Process Events until menu is abandoned */
-    while (!leave_menu)
-    {
-        choice = artefact_menu_aux(&highlight);
-
-        if (choice == MAX_CATS + num_skills + 1)
-        {
-            rename_artefact();
-        }
-        else if (choice >= MAX_CATS + 1)
-        {
-            artefact_ability_menu(choice - MAX_CATS - 1);
-        }
-        else if (choice >= 1)
-        {
-            artefact_flag_menu(choice);
-        }
-        else if (choice == -1)
-        {
-            leave_menu = true;
-        }
-    }
-
-    /* Load screen */
-    ui_menu_click_clear();
-    screen_load();
-
-    return;
 }
 
 /*
@@ -7672,90 +5154,55 @@ int melt_menu_aux(int* highlight)
     int num = 0;
     object_type* o_ptr;
     char desc[80];
-    char buf[80];
-    const int first_row = smith_ui_dense_row0();
-    const int last_row = smith_ui_list_bottom_row(first_row, false);
-    int top;
-
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(false);
-
-    // clear the right of the screen
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-    smith_ui_put_section_header(COL_SMT2, MAX(0, smith_ui_dense_row0() - 1),
-        "Melt");
-
-    // clear bottom of the screen
-    wipe_object_description();
-
+    smith_sheet_layout sheet = smith_sheet_geometry();
+    smith_ui_detail_valid = false;
     while (smith_melt_item_handle_for_choice(num + 1) >= 0)
         num++;
 
-    if (num == 0)
+    *highlight = MAX(1, MIN(*highlight, num));
+    smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_MELT, num,
+        *highlight - 1, "Melting", "Carried metalwork", "Melt");
+    if (!num)
     {
-        smith_ui_put_fitted(COL_SMT2, 3,
-            smith_ui_column_width(COL_SMT2), TERM_L_DARK,
-            "(No carried metal items can be melted.)");
-        ui_menu_click_add_full_row(SMITH_CLICK_BACK, 3);
-        Term_fresh();
-        hide_cursor = true;
-        (void)inkey();
-        hide_cursor = false;
-        return (-1);
+        smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width, TERM_SLATE,
+            "No carried metal items can be melted.");
+        (void)smith_sheet_read_choice(highlight, 0);
+        return -1;
     }
-
-    if (*highlight < 1)
-        *highlight = 1;
-    if (*highlight > num)
-        *highlight = num;
-    top = smith_ui_configure_list_view(SMITH_SCROLL_MELT, num, *highlight,
-        first_row, last_row);
-
-    num = 0;
-    for (i = 1; ; i++)
+    for (i = grid.top; i < num && i < grid.top + grid.visible; i++)
     {
-        int row;
-        int item = smith_melt_item_handle_for_choice(i);
-
-        if (item < 0)
-            break;
-        o_ptr = player_inventory_object(item);
-
-        if (num >= top && num < top + (last_row - first_row + 1))
-        {
-            row = first_row + num - top;
-            object_desc(desc, 80, o_ptr, false, 2);
-            indexed_menu_entry_label(buf, sizeof(buf), num, desc);
-            smith_ui_put_menu_row(num + 1, COL_SMT2, row, TERM_WHITE, buf,
-                *highlight == num + 1);
-
-            if (smith_ui_weight_col() > 0)
-            {
-                strnfmt(buf, 80, "%2d.%d lb", o_ptr->weight / 10,
-                    o_ptr->weight % 10);
-                smith_ui_put_fitted(smith_ui_weight_col(), row,
-                    smith_ui_line_width(smith_ui_weight_col()),
-                    (*highlight == num + 1)
-                        ? smith_ui_selected_attr(TERM_WHITE)
-                        : TERM_WHITE,
-                    buf);
-            }
-        }
-        num++;
+        int handle = smith_melt_item_handle_for_choice(i + 1);
+        o_ptr = player_inventory_object(handle);
+        object_desc(desc, sizeof(desc), o_ptr, false, 0);
+        smith_sheet_choice(&sheet, &grid, i, i + 1, i, desc,
+            format("%d.%d lb", o_ptr->weight / 10, o_ptr->weight % 10), o_ptr,
+            i + 1 == *highlight, TERM_WHITE);
     }
-
-    /* Flush the prompt */
+    o_ptr = player_inventory_object(smith_melt_item_handle_for_choice(*highlight));
+    int x = (sheet.divider >= 0 ? sheet.divider : 0) + sheet.margin;
+    int w = sheet.width - sheet.margin - x, y = sheet.summary;
+    u32b f1, f2, f3;
+    object_flags(o_ptr, &f1, &f2, &f3);
+    bool iron = (f3 & TR3_STAR_IRON) != 0;
+    smith_ui_put_fitted(x, y++, w, TERM_WHITE + TERM_SHADE, "Metal recovery");
+    if (sheet.footer - y >= 4)
+    {
+        object_desc(desc, sizeof(desc), o_ptr, false, 0);
+        if (!sdl_smithing_artwork_set(o_ptr, x, y, 2, 1)) draw_supply_icon(x, y, o_ptr);
+        smith_ui_put_fitted(x + 3, y++, w - 3, TERM_L_WHITE, desc);
+        y++;
+    }
+    smith_sheet_field(x, y++, w, iron ? "Star iron" : "Mithril",
+        format("%d.%d lb", o_ptr->weight / 10, o_ptr->weight % 10), TERM_WHITE, TERM_L_WHITE);
+    if (y < sheet.footer)
+    {
+        int carried = iron ? star_iron_carried() : mithril_carried();
+        smith_sheet_field(x, y, w, "Already carried", format("%d.%d lb", carried / 10,
+            carried % 10), TERM_WHITE, TERM_L_WHITE);
+    }
     Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(14,
-        first_row + MAX(0, MIN(last_row - first_row, *highlight - 1 - top)));
-
-    /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    ch = steamdeck_menu_key(inkey(), 0, 0);
     hide_cursor = false;
 
     {
@@ -7770,6 +5217,8 @@ int melt_menu_aux(int* highlight)
                     return 0;
                 ch = ESCAPE;
             }
+            else if (clicked_choice == SMITH_EDITOR_APPLY)
+                ch = click_action == UI_MENU_CLICK_PRIMARY ? '\r' : 0;
             else if (clicked_choice >= 1 && clicked_choice <= num)
             {
                 if (click_action == UI_MENU_CLICK_HOVER)
@@ -7802,14 +5251,7 @@ int melt_menu_aux(int* highlight)
     if (sdl_menu_letters_enabled()
         && (ch >= 'a') && (ch <= (char)'a' + num - 1))
     {
-        int old_highlight = *highlight;
-
         *highlight = (int)ch - 'a' + 1;
-
-        // move the light blue highlight
-        move_displayed_highlight(
-            old_highlight, TERM_WHITE, *highlight, COL_SMT2);
-
         return (*highlight);
     }
 
@@ -7856,10 +5298,6 @@ void melt_menu(void)
 
     bool leave_menu = false;
 
-    /* This submenu has no third column, so let its list use the full width. */
-    bool saved_full_width = smith_ui_secondary_full_width;
-    smith_ui_secondary_full_width = true;
-
     /* Save screen */
     screen_save();
 
@@ -7885,13 +5323,35 @@ void melt_menu(void)
     ui_menu_click_clear();
     screen_load();
 
-    smith_ui_secondary_full_width = saved_full_width;
+    sdl_smithing_sheet_clear();
 }
 
 static bool smith_item_tester_hook_reforge_target(const object_type* o_ptr)
 {
     return object_can_repair_damage(o_ptr)
         || object_can_preview_reforge_prefix(o_ptr);
+}
+
+static bool smith_design_allows(int action)
+{
+    if (!smith_o_ptr->tval) return false;
+    switch (action)
+    {
+    case SMT_MENU_ENCHANT:
+        return !smith_o_ptr->name1 && !enchant_then_numbers
+            && smith_o_ptr->tval != TV_HORN
+            && !(smith_o_ptr->tval == TV_DIGGING && smith_o_ptr->sval == SV_SHOVEL);
+    case SMT_MENU_ARTEFACT:
+        return !object_has_ego(smith_o_ptr) && smith_o_ptr->tval != TV_HORN
+            && p_ptr->self_made_arts < z_info->art_self_made_max - z_info->art_rand_max - 2;
+    case SMT_MENU_ACCEPT:
+        return cave_forge_bold(p_ptr->py, p_ptr->px)
+            && forge_uses(p_ptr->py, p_ptr->px) > 0 && affordable(smith_o_ptr);
+    case SMT_MENU_NUMBERS:
+        return true;
+    default:
+        return false;
+    }
 }
 
 static void smith_root_build_entries(bool valid[SMT_MENU_MAX],
@@ -7903,30 +5363,22 @@ static void smith_root_build_entries(bool valid[SMT_MENU_MAX],
     int reforge_target = find_reforge_target_item();
     byte valid_attr;
 
-    SDL_strlcpy(labels[SMT_MENU_CREATE - 1], "Base Item", 32);
-    SDL_strlcpy(labels[SMT_MENU_ENCHANT - 1], "Enchant", 32);
+    SDL_strlcpy(labels[SMT_MENU_CREATE - 1], "Change base item", 32);
+    SDL_strlcpy(labels[SMT_MENU_ENCHANT - 1], "Enhancements", 32);
     SDL_strlcpy(labels[SMT_MENU_ARTEFACT - 1], "Artifice", 32);
-    SDL_strlcpy(labels[SMT_MENU_NUMBERS - 1], "Numbers", 32);
+    SDL_strlcpy(labels[SMT_MENU_NUMBERS - 1], "Edit item", 32);
     SDL_strlcpy(labels[SMT_MENU_MELT - 1], "Melt", 32);
     SDL_strlcpy(labels[SMT_MENU_REPAIR - 1], "Reforge", 32);
     SDL_strlcpy(labels[SMT_MENU_ACCEPT - 1],
-        (p_ptr->smithing_leftover == 0) ? "Accept" : "Resume", 32);
+        (p_ptr->smithing_leftover == 0) ? "Craft" : "Resume", 32);
 
     valid[SMT_MENU_CREATE - 1] = true;
-    valid[SMT_MENU_ENCHANT - 1] = (!smith_o_ptr->name1)
-        && (!enchant_then_numbers) && has_item
-        && (smith_o_ptr->tval != TV_HORN)
-        && !((smith_o_ptr->tval == TV_DIGGING)
-            && (smith_o_ptr->sval == SV_SHOVEL));
-    valid[SMT_MENU_ARTEFACT - 1] = (!object_has_ego(smith_o_ptr)) && has_item
-        && (smith_o_ptr->tval != TV_HORN)
-        && (p_ptr->self_made_arts
-            < z_info->art_self_made_max - z_info->art_rand_max - 2);
+    valid[SMT_MENU_ENCHANT - 1] = smith_design_allows(SMT_MENU_ENCHANT);
+    valid[SMT_MENU_ARTEFACT - 1] = smith_design_allows(SMT_MENU_ARTEFACT);
     valid[SMT_MENU_NUMBERS - 1] = has_item;
     valid[SMT_MENU_MELT - 1] = meltable_metal_items_carried() && at_forge;
     valid[SMT_MENU_REPAIR - 1] = (reforge_target >= 0);
-    valid[SMT_MENU_ACCEPT - 1] = affordable(smith_o_ptr) && at_forge
-        && (uses > 0);
+    valid[SMT_MENU_ACCEPT - 1] = smith_design_allows(SMT_MENU_ACCEPT);
 
     if (smith_pending_reforge())
     {
@@ -7970,69 +5422,6 @@ static void smith_root_build_entries(bool valid[SMT_MENU_MAX],
         = valid[SMT_MENU_ACCEPT - 1] ? TERM_WHITE : TERM_L_DARK;
 }
 
-static int smith_root_detail_col(void)
-{
-    int term_wid = smith_ui_term_wid();
-    int cost_col = smith_ui_cost_col();
-    int detail_col;
-
-    if (smith_ui_portrait_layout())
-        return -1;
-
-    if (term_wid >= 76)
-        detail_col = 34;
-    else if (term_wid >= 64)
-        detail_col = 30;
-    else
-        return -1;
-
-    if (detail_col + 16 >= cost_col)
-        return -1;
-
-    return detail_col;
-}
-
-static int smith_root_list_width(int detail_col)
-{
-    int prefix_col = indexed_menu_prefix_col(COL_SMT1);
-    int width = COL_SMT2 - prefix_col - 1;
-
-    (void)detail_col;
-
-    if (smith_ui_portrait_layout())
-        width = smith_ui_line_width(prefix_col);
-
-    if (width < 1)
-        width = smith_ui_line_width(prefix_col);
-
-    return smith_ui_safe_width(prefix_col, width);
-}
-
-static cptr smith_root_detail_text(int choice)
-{
-    switch (choice)
-    {
-    case SMT_MENU_CREATE:
-        return "Choose the first shape of the work: blade, mail, light, jewel, horn, bow, or tool.";
-    case SMT_MENU_ENCHANT:
-        return "Lay a named craft upon the base item. Enchantments and Artifice claim the same place in the design.";
-    case SMT_MENU_ARTEFACT:
-        return "Name a work of your own making and bind its powers directly into the finished piece.";
-    case SMT_MENU_NUMBERS:
-        return "Tune weight, accuracy, evasion, protection, damage, and alloyed metal before the final hammer-fall.";
-    case SMT_MENU_MELT:
-        return "Break mithril or star-iron gear back into raw pieces for the next work of the forge.";
-    case SMT_MENU_REPAIR:
-        return "Repair damaged gear or hammer a prefix onto a found item. Prefix reforging uses one and a half times the difficulty gained.";
-    case SMT_MENU_ACCEPT:
-        if (smith_pending_reforge())
-            return "Resume the remaining reforging work; all costs are already paid.";
-        return "Commit the design to the forge and spend the listed resources to finish the work.";
-    default:
-        return "";
-    }
-}
-
 static void smith_root_note_for_choice(int choice, bool valid, char* buf,
     size_t buflen)
 {
@@ -8069,7 +5458,7 @@ static void smith_root_note_for_choice(int choice, bool valid, char* buf,
         else if (smith_o_ptr->name1)
             SDL_strlcpy(buf, "Artifice already claims this work.", buflen);
         else if (enchant_then_numbers)
-            SDL_strlcpy(buf, "The Numbers menu locked this enchantment pass.", buflen);
+            SDL_strlcpy(buf, "This enchanted item has custom stats.", buflen);
         else if (smith_o_ptr->tval == TV_HORN)
             SDL_strlcpy(buf, "Horns cannot take this enchantment path.", buflen);
         else if ((smith_o_ptr->tval == TV_DIGGING)
@@ -8127,247 +5516,23 @@ static void smith_root_note_for_choice(int choice, bool valid, char* buf,
     }
 }
 
-static int smith_root_draw_header(void)
+static int smith_work_actions(int actions[5])
 {
-    char title[80];
-    char status[160];
-    int skill = p_ptr->skill_use[S_SMT];
-    int bonus = forge_bonus(p_ptr->py, p_ptr->px);
-    bool at_forge = cave_forge_bold(p_ptr->py, p_ptr->px);
-    int uses = at_forge ? forge_uses(p_ptr->py, p_ptr->px) : 0;
-    int col = indexed_menu_prefix_col(COL_SMT1);
-    int width = smith_ui_line_width(col);
-    int row = 0;
-    int used;
-
-    if (get_sdl_menu_bigger_font()
-        && (smith_ui_term_hgt() <= 18 || smith_ui_term_wid() < 55))
+    if (smith_pending_reforge())
     {
-        smith_ui_put_fitted(col, 0, width, TERM_L_WHITE + TERM_SHADE,
-            "Smithing");
-        strnfmt(status, sizeof(status), at_forge
-                ? "Smithing %d | Forge %d uses" : "Smithing %d | Preview",
-            skill + bonus, uses);
-        smith_ui_put_fitted(col, 1, width, TERM_SLATE, status);
-        ui_menu_click_add_full_row(SMITH_CLICK_BACK, 0);
-        return 2;
+        actions[0] = SMT_MENU_ACCEPT;
+        return 1;
     }
-
-    SDL_strlcpy(title, "Smithing - Work of the Forge", sizeof(title));
-    if (smith_ui_portrait_layout())
-        used = smith_ui_put_wrapped(col, row, width,
-            MAX(1, smith_ui_content_bottom_row() - row + 1),
-            TERM_L_WHITE + TERM_SHADE, title);
-    else
+    int count = 0;
+    if (smith_o_ptr->k_idx)
     {
-        smith_ui_put_fitted(col, row, width, TERM_L_WHITE + TERM_SHADE, title);
-        used = 1;
+        actions[count++] = SMT_MENU_NUMBERS;
+        actions[count++] = SMT_MENU_ACCEPT;
     }
-    if (used < 1)
-        used = 1;
-    for (int y = row; y < row + used; y++)
-        ui_menu_click_add_full_row(SMITH_CLICK_BACK, y);
-    smith_ui_add_back_click_target(col, row, title);
-    row += used;
-
-    if (at_forge)
-    {
-        strnfmt(status, sizeof(status),
-            "Forge: %d use%s   Smithing: %d%s%d   Metal: %d.%d mithril, %d.%d star-iron",
-            uses, (uses == 1) ? "" : "s", skill, (bonus >= 0) ? "+" : "",
-            bonus, mithril_carried() / 10, mithril_carried() % 10,
-            star_iron_carried() / 10, star_iron_carried() % 10);
-    }
-    else
-    {
-        strnfmt(status, sizeof(status),
-            "Exploration preview   Smithing: %d   Metal: %d.%d mithril, %d.%d star-iron",
-            skill, mithril_carried() / 10, mithril_carried() % 10,
-            star_iron_carried() / 10, star_iron_carried() % 10);
-    }
-
-    if (smith_ui_portrait_layout())
-    {
-        used = smith_ui_put_wrapped(col, row, width,
-            MAX(1, smith_ui_content_bottom_row() - row + 1), TERM_SLATE,
-            status);
-        row += MAX(1, used);
-    }
-    else
-    {
-        smith_ui_put_fitted(col, row, width, TERM_SLATE, status);
-        row++;
-    }
-
-    return row;
-}
-
-static int smith_root_draw_chrome(int detail_col, int list_w, int header_row)
-{
-    int term_wid = smith_ui_term_wid();
-    int prefix_col = indexed_menu_prefix_col(COL_SMT1);
-    int divider_row = header_row + 1;
-
-    smith_ui_put_fitted(prefix_col, header_row, list_w, TERM_SLATE, "Work");
-    if (!smith_ui_portrait_layout() && detail_col > 0)
-    {
-        int width = smith_ui_cost_col() - detail_col - 2;
-        smith_ui_put_fitted(detail_col, header_row, width, TERM_SLATE, "Lore");
-    }
-    if (!smith_ui_portrait_layout())
-    {
-        smith_ui_put_fitted(smith_ui_cost_col(), header_row,
-            smith_ui_line_width(smith_ui_cost_col()), TERM_SLATE, "Measure");
-    }
-
-    if (divider_row <= smith_ui_content_bottom_row())
-    {
-        for (int x = 0; x < term_wid; x++)
-            Term_putch(x, divider_row, TERM_L_DARK, '=');
-    }
-
-    return divider_row + 1;
-}
-
-static void smith_root_draw_action(int choice, int row, int list_w,
-    bool selected, byte base_attr, cptr label)
-{
-    char prefix[8];
-    int prefix_col = indexed_menu_prefix_col(COL_SMT1);
-    int prefix_w = indexed_menu_letters_enabled() ? 3 : 2;
-    int label_col = prefix_col + prefix_w;
-    int label_w = list_w - (label_col - prefix_col);
-    byte attr = selected ? smith_ui_selected_attr(base_attr) : base_attr;
-
-    if (row < 0 || row > smith_ui_content_bottom_row())
-        return;
-
-    if (selected)
-        indexed_menu_focus_prefix(prefix, sizeof(prefix), choice - 1);
-    else
-        indexed_menu_normal_prefix(prefix, sizeof(prefix), choice - 1);
-
-    Term_erase(prefix_col, row, list_w);
-    if (selected)
-        smith_ui_fill_row(prefix_col, row, list_w, attr);
-
-    /* Preserve the highlight fill across the gaps and trailing spaces by drawing
-     * the prefix and label without erasing when the row is selected. */
-    smith_ui_draw_fitted(prefix_col, row, prefix_w, attr, prefix, !selected);
-    smith_ui_draw_fitted(label_col, row, label_w, attr, label, !selected);
-
-    ui_menu_click_add(choice, prefix_col, row, list_w);
-}
-
-static void smith_root_draw_detail(int choice, int detail_col, int list_w,
-    int action_row, bool valid, cptr label)
-{
-    char note[120];
-    int col = detail_col;
-    int width;
-    int row = action_row;
-    int max_lines;
-
-    if (detail_col <= 0)
-    {
-        col = indexed_menu_prefix_col(COL_SMT1);
-        if (smith_ui_portrait_layout())
-        {
-            int divider_row = action_row + SMT_MENU_MAX;
-
-            smith_ui_draw_horizontal_divider(divider_row);
-            smith_ui_put_fitted(col, divider_row + 1,
-                smith_ui_line_width(col), TERM_SLATE, "Lore");
-            row = divider_row + 2;
-            width = smith_ui_line_width(col);
-        }
-        else
-        {
-            row = 12;
-            width = smith_ui_cost_col() - col - 2;
-            if (width < 20)
-                width = list_w;
-        }
-    }
-    else
-    {
-        width = smith_ui_cost_col() - detail_col - 2;
-    }
-
-    width = smith_ui_safe_width(col, width);
-    if (width <= 0)
-        return;
-
-    max_lines = (detail_col > 0) ? 5 : 4;
-
-    smith_ui_put_fitted(col, row, width, TERM_L_WHITE, label);
-    row += 2;
-    row += smith_ui_put_wrapped(col, row, width, max_lines, TERM_SLATE,
-        smith_root_detail_text(choice));
-
-    smith_root_note_for_choice(choice, valid, note, sizeof(note));
-    if (note[0] && row < smith_ui_content_bottom_row())
-    {
-        byte note_attr = valid ? TERM_L_DARK : TERM_RED;
-
-        row++;
-        smith_ui_put_wrapped(col, row, width, 2, note_attr, note);
-    }
-}
-
-static int smith_root_draw(int highlight, const bool valid[SMT_MENU_MAX],
-    const byte menu_attr[SMT_MENU_MAX], char labels[SMT_MENU_MAX][32])
-{
-    int detail_col = smith_root_detail_col();
-    int list_w = smith_root_list_width(detail_col);
-    int header_row;
-    int action_row;
-
-    Term_clear();
-    smith_ui_reset_description_state();
-
-    header_row = smith_root_draw_header();
-    action_row = smith_root_draw_chrome(detail_col, list_w, header_row);
-    int last_row = smith_ui_content_bottom_row();
-    int top = get_sdl_menu_bigger_font()
-        ? smith_ui_configure_list_view(SMITH_SCROLL_ROOT, SMT_MENU_MAX,
-            highlight, action_row, last_row) : 0;
-    if (!get_sdl_menu_bigger_font())
-        last_row = action_row + SMT_MENU_MAX;
-
-    for (int i = top; i < SMT_MENU_MAX && action_row + i - top <= last_row; i++)
-    {
-        smith_root_draw_action(i + 1, action_row + i - top, list_w,
-            highlight == i + 1, menu_attr[i], labels[i]);
-    }
-
-    if (highlight >= 1 && highlight <= SMT_MENU_MAX)
-        smith_root_draw_detail(highlight, detail_col, list_w, action_row,
-            valid[highlight - 1], labels[highlight - 1]);
-
-    smith_ui_draw_navigation_prompt(true);
-
-    return action_row;
-}
-
-static void smithing_redraw_root_after_item_picker(void)
-{
-    bool valid[SMT_MENU_MAX];
-    byte menu_attr[SMT_MENU_MAX];
-    char labels[SMT_MENU_MAX][32];
-    int highlight = SMT_MENU_REPAIR;
-
-    ui_menu_click_clear();
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(true);
-
-    smith_root_build_entries(valid, menu_attr, labels);
-    smith_root_draw(highlight, valid, menu_attr, labels);
-    prt_object_difficulty();
-    prt_object_description();
-    Term_fresh();
+    actions[count++] = SMT_MENU_CREATE;
+    actions[count++] = SMT_MENU_MELT;
+    actions[count++] = SMT_MENU_REPAIR;
+    return count;
 }
 
 static bool smith_begin_reforge(int slot, int prefix_idx)
@@ -8426,21 +5591,15 @@ static bool smith_reforge_item(void)
     smith_alloy_state alloy_backup = smith_alloy;
     smith_alloy_state alloy2_backup = smith2_alloy;
 
-    smith_ui_wipe_active_panel(indexed_menu_prefix_col(COL_SMT2));
-    wipe_object_description();
-    Term_fresh();
-
+    screen_save();
     item_tester_hook = smith_item_tester_hook_reforge_target;
-    if (!open_inventory_item_select_menu(USE_EQUIP | USE_INVEN,
-            "Reforge which item? ",
-            "You have nothing to repair or reforge.", &slot))
-    {
-        item_tester_hook = NULL;
-        smithing_redraw_root_after_item_picker();
-        return false;
-    }
+    bool selected = open_inventory_item_select_menu(USE_EQUIP | USE_INVEN,
+        "Reforge which item? ", "You have nothing to repair or reforge.", &slot);
     item_tester_hook = NULL;
-    smithing_redraw_root_after_item_picker();
+    screen_load();
+    ui_menu_click_clear();
+    ui_scroll_area_clear();
+    if (!selected) return false;
 
     object_type* target = player_inventory_object(slot);
     if (!target || !target->k_idx)
@@ -8559,117 +5718,424 @@ static bool smith_reforge_item(void)
     return true;
 }
 
+typedef struct {
+    cptr label;
+    char value[64];
+    bool enabled;
+} smith_editor_card;
+
+#define SMITH_EDITOR_MAX MAX(SMITH_NUMBER_CARD_MAX, MAX_CATS + S_MAX)
+
+static bool smith_edit_artifice(int index)
+{
+    object_type original = *smith_o_ptr, original_base = *smith2_o_ptr;
+    smith_alloy_state original_alloy = smith_alloy, base_alloy = smith2_alloy;
+    artefact_type original_art = *smith_a_ptr, original_art_base = *smith2_a_ptr;
+
+    smith_prepare_artifice_design();
+    artefact_type before = *smith2_a_ptr;
+    bool named_new_design = false;
+    if (index < MAX_CATS)
+        artefact_flag_menu(smithing_flag_cats[index].category);
+    else if (index < MAX_CATS + S_SPC)
+        artefact_ability_menu(index - MAX_CATS);
+    else
+        named_new_design = rename_artefact() && !original.name1;
+
+    /* Previewing a property can temporarily change the object's kind (jewellery),
+     * flags and abilities. Back without an edit preserves the exact draft. */
+    if (!named_new_design && !memcmp(&before, smith2_a_ptr, sizeof(before)))
+    {
+        *smith_o_ptr = original;
+        *smith2_o_ptr = original_base;
+        smith_alloy = original_alloy;
+        smith2_alloy = base_alloy;
+        *smith_a_ptr = original_art;
+        *smith2_a_ptr = original_art_base;
+        return false;
+    }
+    prepare_artefact();
+    return true;
+}
+
+static int smith_editor_cards(smith_page page, bool allowed, bool compact,
+    smith_number_card *numbers, smith_editor_card *cards)
+{
+    if (page == SMITH_SIMPLE)
+    {
+        int count = smith_collect_number_cards(numbers);
+        for (int i = 0; i < count; i++)
+        {
+            cards[i].label = numbers[i].label;
+            SDL_strlcpy(cards[i].value, numbers[i].value, sizeof(cards[i].value));
+            cards[i].enabled = numbers[i].editable;
+        }
+        return count;
+    }
+    if (page == SMITH_ENHANCEMENTS)
+    {
+        int prefix = object_ego_prefix(smith_o_ptr);
+        int suffix = object_ego_suffix(smith_o_ptr);
+        for (int i = 0; i < 2; ++i)
+        {
+            int affix = i == 0 ? prefix : suffix;
+            cards[i].label = i == 0 ? "Prefix" : "Suffix";
+            SDL_strlcpy(cards[i].value, "None", sizeof(cards[i].value));
+            if (affix)
+                ego_name_for_enchant_menu(affix, cards[i].value, sizeof(cards[i].value));
+            cards[i].enabled = allowed && (affix ||
+                enchant_menu_has_applicable_affix(smith2_o_ptr,
+                    i == 0 ? 0 : prefix, i == 0 ? suffix : 0, i == 0));
+        }
+        return 2;
+    }
+
+    const u32b selected_flags[] = { 0, smith_a_ptr->flags1, smith_a_ptr->flags2,
+        smith_a_ptr->flags3, smith_a_ptr->flags4 };
+    int property_count[MAX_CATS] = { 0 };
+    if (smith_o_ptr->name1)
+    {
+        for (int i = 0; smithing_flag_types[i].flag; ++i)
+        {
+            const smithing_flag_desc *property = &smithing_flag_types[i];
+            if (selected_flags[property->flagset] & property->flag)
+                property_count[property->category - 1]++;
+        }
+    }
+    for (int i = 0; i < MAX_CATS; i++)
+    {
+        cards[i].label = smithing_flag_cats[i].desc;
+        strnfmt(cards[i].value, sizeof(cards[i].value), "%d%s", property_count[i],
+            compact ? "" : property_count[i] == 1 ? " property" : " properties");
+        cards[i].enabled = allowed;
+    }
+    for (int skill = 0; skill < S_SPC; skill++)
+    {
+        smith_editor_card *card = &cards[MAX_CATS + skill];
+        card->label = skill_names_full[skill];
+        int selected = 0;
+        for (int i = 0; i < smith_o_ptr->abilities; ++i)
+            if (smith_o_ptr->skilltype[i] == skill) selected++;
+        strnfmt(card->value, sizeof(card->value), "%d%s", selected,
+            compact ? "" : selected == 1 ? " ability" : " abilities");
+        card->enabled = allowed;
+    }
+    smith_editor_card *name = &cards[MAX_CATS + S_SPC];
+    name->label = "Name artefact";
+    SDL_strlcpy(name->value, smith_o_ptr->name1 ? smith_a_ptr->name : "",
+        sizeof(name->value));
+    name->enabled = allowed;
+    return MAX_CATS + S_SPC + 1;
+}
+
+/* Show the resources on hand below the editable fields when there is room. */
+static void smith_editor_context(const smith_sheet_layout* sheet, int row,
+    smith_page page, int focus, int count, const smith_number_card* numbers,
+    const smith_editor_card* cards, cptr note)
+{
+    int x = sheet->margin, w = sheet->list_width, end = sheet->list_end;
+    if (row + 1 >= end) return;
+    if (note[0])
+        row += smith_ui_put_wrapped(x, row, w, MIN(2, end - row), TERM_L_WHITE, note) + 1;
+    if (focus < count && row + 1 < end && page == SMITH_SIMPLE)
+    {
+        const smith_number_card* field = &numbers[focus];
+        if (field->editable && field->count > 0)
+        {
+            char lo[32], hi[32];
+            smith_format_number(field, field->first, lo, sizeof(lo));
+            smith_format_number(field, field->first + field->step * (field->count - 1),
+                hi, sizeof(hi));
+            smith_ui_put_fitted(x, row++, w, TERM_WHITE + TERM_SHADE, field->label);
+            if (field->kind == SMITH_NUMBER_ALLOY)
+                smith_ui_put_wrapped(x, row++, w, 1, TERM_WHITE, "None, Mithril, Star iron");
+            else
+                smith_sheet_field(x, row++, w, "Available range", format("%s to %s", lo, hi),
+                    TERM_WHITE, TERM_L_WHITE);
+            row++;
+        }
+    }
+    else if (focus < count && row + 2 < end && page == SMITH_ENHANCEMENTS
+        && cards[focus].enabled)
+    {
+        bool prefix = focus == 0;
+        int fixed_prefix = prefix ? 0 : object_ego_prefix(smith_o_ptr);
+        int fixed_suffix = prefix ? object_ego_suffix(smith_o_ptr) : 0;
+        char names[1024] = "";
+        size_t used = 0;
+        for (int i = 1; i < z_info->e_max; i++)
+        {
+            if (!smith_ego_can_apply_to_object(smith2_o_ptr, i, fixed_prefix, fixed_suffix, prefix))
+                continue;
+            char name[64];
+            ego_name_for_enchant_menu(i, name, sizeof(name));
+            strnfcat(names, sizeof(names), &used, "%s%s", used ? ", " : "", name);
+        }
+        if (*names)
+        {
+            smith_ui_put_fitted(x, row++, w, TERM_WHITE + TERM_SHADE,
+                prefix ? "Available prefixes" : "Available suffixes");
+            row += smith_ui_put_wrapped(x, row, MIN(64, w), MIN(5, end - row),
+                TERM_WHITE, names) + 1;
+        }
+    }
+    smith_sheet_stock(x, row, w, end);
+}
+
+static bool smith_editor(smith_page page, bool death_view)
+{
+    int focus = 0;
+    int next_page = -1;
+    bool craft = false;
+    smith_ui_scroll_top[SMITH_SCROLL_EDITOR] = 0;
+    screen_save();
+    for (;;)
+    {
+        if (next_page >= 0)
+        {
+            page = (smith_page)next_page;
+            focus = 0;
+            smith_ui_scroll_top[SMITH_SCROLL_EDITOR] = 0;
+            next_page = -1;
+        }
+        bool craftable = !death_view && smith_design_allows(SMT_MENU_ACCEPT);
+        int action = page == SMITH_ARTIFICE ? SMT_MENU_ARTEFACT
+            : page == SMITH_ENHANCEMENTS ? SMT_MENU_ENCHANT : SMT_MENU_NUMBERS;
+        char note[120];
+        bool allowed = smith_design_allows(action);
+        smith_root_note_for_choice(action, allowed, note, sizeof(note));
+        smith_number_card numbers[SMITH_NUMBER_CARD_MAX];
+        smith_editor_card cards[SMITH_EDITOR_MAX] = { 0 };
+        smith_sheet_layout sheet = smith_sheet_geometry();
+        int cols = page == SMITH_ARTIFICE && sheet.list_width >= 62 ? 2 : 1;
+        int count = smith_editor_cards(page, allowed, sheet.list_width / cols < 32, numbers, cards);
+        int last = count + 2;
+        focus = MIN(focus, last);
+
+        smith_sheet_begin(&sheet, false);
+        smith_editor_tabs(&sheet, page, true);
+        int first = smith_sheet_list_first(&sheet);
+        int list_end = sheet.list_end;
+        if (note[0] && list_end - first >= 4) list_end--;
+        smith_picker_grid grid = smith_sheet_grid(&sheet, count, cols, first, list_end);
+        int current = focus < count ? focus : smith_ui_scroll_top[SMITH_SCROLL_EDITOR] * cols;
+        smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_EDITOR, count, current);
+        static const cptr headings[] = { "Item attributes", "Affix slots", "Artefact design" };
+        smith_sheet_heading(&sheet, headings[page], &grid, count);
+        for (int i = grid.top * cols; i < count && i < (grid.top + grid.visible) * cols; i++)
+        {
+            smith_sheet_choice(&sheet, &grid, i, i + 1, i, cards[i].label,
+                cards[i].value, NULL, i == focus, cards[i].enabled ? TERM_WHITE : TERM_L_DARK);
+        }
+
+        int used = ((count + cols - 1) / cols) * grid.stride;
+        int context = MAX(first + used + 1, sheet.body + (sheet.list_end - sheet.body) / 2);
+        if (context + 1 < sheet.list_end)
+            smith_editor_context(&sheet, context, page, focus, count, numbers, cards, note);
+        else if (note[0] && list_end < sheet.list_end)
+            smith_ui_put_fitted(sheet.margin, list_end, sheet.list_width, TERM_L_WHITE, note);
+
+        int difficulty = smith_measure_design();
+        smith_sheet_order(&sheet, smith_o_ptr, difficulty, p_ptr->smithing_leftover > 0, false);
+        bool keys = sheet.width >= 68 && !sdl_touch_only_device_active() && !steamdeck_controls_active();
+        cptr accept = p_ptr->smithing_leftover ? "Resume" : "Craft";
+        const smith_sheet_action actions[] = {
+            { SMITH_EDITOR_INSPECT, keys ? "[I] Inspect" : "Inspect", TERM_WHITE },
+            { SMITH_EDITOR_COSTS, keys ? "[?] Costs" : "Costs", TERM_WHITE },
+            { SMITH_EDITOR_CRAFT, keys ? format("[F] %s", accept) : accept,
+                craftable ? TERM_L_BLUE : TERM_SLATE },
+        };
+        smith_sheet_actions(&sheet, actions, N_ELEMENTS(actions),
+            focus >= count ? actions[focus - count].id : 0);
+        smith_sheet_navigation(&sheet, false, "Edit", true);
+        Term_fresh();
+        hide_cursor = true;
+        int key = steamdeck_menu_key(inkey(), '[', ']');
+        hide_cursor = false;
+
+        int choice, click;
+        bool activate = false;
+        if (ui_menu_click_take_action(&choice, &click))
+        {
+            key = 0;
+            if (choice == SMITH_CLICK_BACK || click == UI_MENU_CLICK_SECONDARY)
+                key = click == UI_MENU_CLICK_HOVER ? 0 : ESCAPE;
+            else if (choice >= SMITH_EDITOR_TAB && choice < SMITH_EDITOR_TAB + SMITH_PAGE_COUNT)
+            {
+                if (click != UI_MENU_CLICK_HOVER) next_page = choice - SMITH_EDITOR_TAB;
+            }
+            else if (choice == SMITH_CLICK_CALC)
+            {
+                if (click != UI_MENU_CLICK_HOVER) key = '?';
+            }
+            else if (choice >= SMITH_EDITOR_INSPECT && choice <= SMITH_EDITOR_CRAFT)
+            {
+                focus = count + choice - SMITH_EDITOR_INSPECT;
+                activate = click != UI_MENU_CLICK_HOVER;
+            }
+            else if (choice >= 1 && choice <= count)
+            {
+                focus = choice - 1;
+                activate = click != UI_MENU_CLICK_HOVER;
+            }
+        }
+        if (key == ESCAPE) break;
+        if (key == '[') next_page = (page + SMITH_PAGE_COUNT - 1) % SMITH_PAGE_COUNT;
+        if (key == ']' || key == '\t') next_page = (page + 1) % SMITH_PAGE_COUNT;
+        if (next_page >= 0) continue;
+        if (key == '4' || key == '6')
+            focus = (focus + (key == '4' ? last : 1)) % (last + 1);
+        if (key == '2')
+            focus = focus >= count ? MIN(count - 1, (focus - count) % cols)
+                : focus + cols < count ? focus + cols : count + MIN(2, focus % cols);
+        if (key == '8')
+            focus = focus >= count ? MIN(count - 1,
+                ((count - 1) / cols) * cols + MIN(cols - 1, focus - count))
+                : focus >= cols ? focus - cols : count + MIN(2, focus);
+        if (sdl_menu_letters_enabled() && key >= 'a' && key <= 'z' && key - 'a' < count)
+        {
+            focus = key - 'a';
+            activate = true;
+        }
+        if (key == 'I' || key == 'F' || key == '?'
+            || (steamdeck_controls_active() && key == steamdeck_info_key()))
+        {
+            focus = key == 'F' ? last : key == '?' ? count + 1 : count;
+            activate = true;
+        }
+        if (!activate && key != '\r' && key != '\n' && key != ' ') continue;
+        bool inline_stat = focus < count && page == SMITH_SIMPLE && cards[focus].enabled;
+        if (!inline_stat) sdl_smithing_sheet_clear();
+        if (focus == count)
+            describe_object_with_comparisons(smith_o_ptr, true);
+        else if (focus == count + 1)
+            smith_show_cost_details();
+        else if (focus == last)
+        {
+            if (craftable)
+            {
+                craft = true;
+                break;
+            }
+            smith_root_note_for_choice(SMT_MENU_ACCEPT, false, note, sizeof(note));
+            bell(death_view ? "You cannot craft during this final look." : note);
+        }
+        else if (!cards[focus].enabled)
+            bell(note[0] ? note : "This choice is unavailable for this item.");
+        else
+        {
+            bool changed;
+            if (page == SMITH_SIMPLE)
+            {
+                changed = smith_number_card_menu(&numbers[focus], &next_page);
+                if (changed)
+                {
+                    *smith2_o_ptr = *smith_o_ptr;
+                    smith2_alloy = smith_alloy;
+                }
+            }
+            else if (page == SMITH_ENHANCEMENTS)
+                changed = smith_choose_affix(focus == 0);
+            else
+                changed = smith_edit_artifice(focus);
+            if (changed && !death_view) p_ptr->smithing_leftover = 0;
+        }
+    }
+    sdl_smithing_sheet_clear();
+    ui_menu_click_clear();
+    ui_scroll_area_clear();
+    screen_load();
+    return craft;
+}
+
 /*
  * Performs the interface and selection work for the smithing screen.
  */
 int smithing_menu_aux(int* highlight)
 {
-    char ch;
     bool valid[SMT_MENU_MAX];
     byte menu_attr[SMT_MENU_MAX];
     char labels[SMT_MENU_MAX][32];
-    int action_row;
 
-    ui_menu_click_begin();
-    ui_menu_click_set_hover_enabled(true);
-    ui_menu_click_set_outside_cancel_enabled(true);
-    smith_ui_begin_touch_scroll_area(true);
-
+    smith_sheet_layout sheet = smith_sheet_geometry();
+    smith_sheet_begin(&sheet, true);
     smith_root_build_entries(valid, menu_attr, labels);
-    action_row = smith_root_draw(*highlight, valid, menu_attr, labels);
-
-    // display the object difficulty
-    prt_object_difficulty();
-
-    // display the object description
-    prt_object_description();
-
-    /* Flush the prompt */
+    int actions[5];
+    int count = smith_work_actions(actions);
+    int index = 0;
+    for (int i = 0; i < count; i++)
+        if (actions[i] == *highlight) index = i;
+    *highlight = actions[index];
+    smith_ui_put_fitted(sheet.margin, sheet.tabs, sheet.list_width, TERM_L_BLUE,
+        smith_pending_reforge() ? "Reforging" : "Smithing in progress");
+    smith_picker_grid grid = smith_sheet_grid(&sheet, count, 1,
+        smith_sheet_list_first(&sheet), sheet.list_end);
+    smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_EDITOR, count, index);
+    smith_sheet_heading(&sheet, "Work in progress", &grid, count);
+    for (int i = grid.top; i < count && i < grid.top + grid.visible; i++)
+    {
+        int id = actions[i];
+        smith_sheet_choice(&sheet, &grid, i, id, id - 1, labels[id - 1],
+            "", NULL, id == *highlight, menu_attr[id - 1]);
+    }
+    int detail = MAX(grid.first + count * grid.stride + 1,
+        sheet.body + (sheet.list_end - sheet.body) / 2);
+    char note[120];
+    smith_root_note_for_choice(*highlight, valid[*highlight - 1], note, sizeof(note));
+    if (detail < sheet.list_end && *note)
+        detail += smith_ui_put_wrapped(sheet.margin, detail, sheet.list_width,
+            sheet.list_end - detail, TERM_L_WHITE, note) + 1;
+    smith_sheet_stock(sheet.margin, detail, sheet.list_width, sheet.list_end);
+    if (smith_o_ptr->k_idx)
+    {
+        int difficulty = smith_measure_design();
+        smith_sheet_order(&sheet, smith_o_ptr, difficulty, true, false);
+    }
+    const smith_sheet_action footer[] = {
+        { SMITH_CLICK_BACK, "Exit", TERM_WHITE }, { SMITH_CLICK_CALC, "Costs", TERM_WHITE }
+    };
+    smith_sheet_actions(&sheet, footer, N_ELEMENTS(footer), 0);
+    smith_sheet_navigation(&sheet, true, "Select", false);
     Term_fresh();
 
-    /* Place cursor at current choice */
-    Term_gotoxy(indexed_menu_prefix_col(COL_SMT1),
-        get_sdl_menu_bigger_font()
-            ? MAX(action_row, MIN(smith_ui_content_bottom_row(),
-                action_row + *highlight - 1 - smith_ui_scroll_top[SMITH_SCROLL_ROOT]))
-            : action_row + *highlight - 1);
-
-    /* Get key (while allowing menu commands) */
     hide_cursor = true;
-    ch = smithing_menu_key(inkey());
+    int ch = steamdeck_menu_key(inkey(), 0, 0);
     hide_cursor = false;
 
+    int clicked, how;
+    if (smith_ui_take_click_action(&clicked, &how))
     {
-        int clicked_choice = 0;
-        int click_action = UI_MENU_CLICK_PRIMARY;
-
-        if (smith_ui_take_click_action(&clicked_choice, &click_action))
+        if (clicked == SMITH_CLICK_BACK || how == UI_MENU_CLICK_SECONDARY)
+            return how == UI_MENU_CLICK_HOVER ? 0 : -1;
+        for (int i = 0; i < count; i++)
         {
-            if ((clicked_choice == SMITH_CLICK_BACK)
-                || (click_action == UI_MENU_CLICK_SECONDARY))
-            {
-                if (click_action == UI_MENU_CLICK_HOVER)
-                    return 0;
-                ch = ESCAPE;
-            }
-            else if (clicked_choice >= 1 && clicked_choice <= SMT_MENU_MAX)
-            {
-                if (!smith_ui_pointer_choice_confirms(
-                        clicked_choice, click_action, highlight))
-                {
-                    return 0;
-                }
-                ch = '\r';
-            }
+            if (actions[i] != clicked) continue;
+            if (!smith_ui_pointer_choice_confirms(clicked, how, highlight)) return 0;
+            ch = '\r';
         }
     }
-
-    // choose an option by letter
-    if (sdl_menu_letters_enabled()
-        && (ch >= 'a') && (ch <= (char)'a' + SMT_MENU_MAX - 1))
+    if (sdl_menu_letters_enabled() && ch >= 'a' && ch <= 'g')
     {
-        *highlight = (int)ch - 'a' + 1;
-
-        if (valid[*highlight - 1])
-            return (*highlight);
-        else
-            bell("Invalid choice.");
+        int id = ch - 'a' + 1;
+        for (int i = 0; i < count; i++)
+            if (actions[i] == id)
+            {
+                *highlight = id;
+                ch = '\r';
+                break;
+            }
     }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+    if (ch == '?' && smith_o_ptr->k_idx) smith_show_cost_details();
+    if (ch == ESCAPE || ch == '4') return -1;
+    if (ch == '\r' || ch == '\n' || ch == ' ' || ch == '6')
     {
-        if (valid[*highlight - 1])
-            return (*highlight);
-        else
-            bell("Invalid choice.");
+        if (valid[*highlight - 1]) return *highlight;
+        bell("Invalid choice.");
+        return 0;
     }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        if (*highlight > 1)
-            (*highlight)--;
-        else if (*highlight == 1)
-            *highlight = SMT_MENU_MAX;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        if (*highlight < SMT_MENU_MAX)
-            (*highlight)++;
-        else if (*highlight == SMT_MENU_MAX)
-            *highlight = 1;
-    }
-
-    /* Leave menu */
-    if ((ch == ESCAPE) || (ch == '4'))
-    {
-        return (-1);
-    }
-
-    return (0);
+    if (ch == '8') *highlight = actions[(index + count - 1) % count];
+    if (ch == '2') *highlight = actions[(index + 1) % count];
+    return 0;
 }
 
 /*
@@ -8708,7 +6174,6 @@ void do_cmd_smithing_screen(void)
 
     /* Clear screen */
     Term_clear();
-    smith_ui_reset_description_state();
 
     // Hack: flag that we are in the middle of smithing
     p_ptr->smithing = 1;
@@ -8722,6 +6187,10 @@ void do_cmd_smithing_screen(void)
         // and backup the smithing item
         object_copy(smith2_o_ptr, smith_o_ptr);
         smith2_alloy = smith_alloy;
+        /* A resumed enchanted object already includes its affix bonuses. */
+        enchant_then_numbers = object_has_ego(smith_o_ptr);
+        if (smith_o_ptr->name1 == smith_a_name)
+            *smith2_a_ptr = *smith_a_ptr;
     }
 
     // otherwise wipe the smithing item
@@ -8731,95 +6200,80 @@ void do_cmd_smithing_screen(void)
         smith_clear_alloy_state(&smith_alloy);
     }
 
-    /* Process Events until "Return to Game" is selected */
+    /* New projects start at the item grid. Interrupted work retains a direct
+     * Resume action, including prepaid reforging at an exhausted forge. */
+    enum forge_view { FORGE_ITEMS, FORGE_REPLACE, FORGE_WORK, FORGE_EDITOR };
+    enum forge_view view = p_ptr->smithing_leftover ? FORGE_WORK : FORGE_ITEMS;
+    enum forge_view editor_back = view;
+    int group = smith_o_ptr->k_idx ? smith_item_category(smith_o_ptr) : CAT_WEAPON;
+    int item_highlight = 0;
+    int design_kind = smith_o_ptr->k_idx;
     while (!leave_menu)
     {
-        actiontype = smithing_menu_aux(&highlight);
+        if (view == FORGE_EDITOR)
+        {
+            if (!smith_editor(SMITH_SIMPLE, death_view))
+            {
+                view = p_ptr->smithing_leftover ? editor_back : FORGE_ITEMS;
+                continue;
+            }
+            actiontype = SMT_MENU_ACCEPT;
+        }
+        else if (view == FORGE_WORK)
+        {
+            actiontype = smithing_menu_aux(&highlight);
+            if (actiontype == SMT_MENU_NUMBERS)
+            {
+                editor_back = FORGE_WORK;
+                view = FORGE_EDITOR;
+                continue;
+            }
+            if (actiontype == SMT_MENU_CREATE)
+            {
+                group = smith_item_category(smith_o_ptr);
+                item_highlight = 0;
+                view = FORGE_REPLACE;
+                continue;
+            }
+        }
+        else
+        {
+            int kind = design_kind;
+            actiontype = smith_item_browser(&group, &item_highlight,
+                view == FORGE_REPLACE, &kind);
+            if (actiontype == SMT_MENU_CREATE)
+            {
+                /* Keep edits when returning to the same base, even after
+                 * Artifice has converted jewellery to its custom kind. */
+                if (kind != design_kind || !smith_o_ptr->k_idx)
+                {
+                    create_base_object(k_info[kind].tval, k_info[kind].sval);
+                    if (!death_view) p_ptr->smithing_leftover = 0;
+                    enchant_then_numbers = false;
+                    *smith2_o_ptr = *smith_o_ptr;
+                    smith2_alloy = smith_alloy;
+                    design_kind = kind;
+                }
+                editor_back = view;
+                view = FORGE_EDITOR;
+                continue;
+            }
+            if (actiontype == -1 && view == FORGE_REPLACE)
+            {
+                view = p_ptr->smithing_leftover ? FORGE_WORK : FORGE_ITEMS;
+                continue;
+            }
+        }
 
-        if (smith_pending_reforge() && actiontype > 0
-            && actiontype != SMT_MENU_ACCEPT)
+        if (actiontype) sdl_smithing_sheet_clear();
+        if (smith_pending_reforge() && actiontype > 0 && actiontype != SMT_MENU_ACCEPT)
         {
             msg_print("Finish your current reforging work first.");
             continue;
         }
 
-        // if an action has been selected...
         switch (actiontype)
         {
-        case SMT_MENU_CREATE:
-        {
-            // this is not a resumption of smithing an item
-            if (!death_view)
-                p_ptr->smithing_leftover = 0;
-
-            create_tval_menu();
-
-            // backup the smithing object
-            object_copy(smith2_o_ptr, smith_o_ptr);
-            smith2_alloy = smith_alloy;
-
-            break;
-        }
-        case SMT_MENU_ENCHANT:
-        {
-            if (smith_o_ptr->tval)
-            {
-                // this is not a resumption of smithing an item
-                if (!death_view)
-                    p_ptr->smithing_leftover = 0;
-
-                if (!enchant_menu())
-                {
-                    // restore the smithing object
-                    object_copy(smith_o_ptr, smith2_o_ptr);
-                    smith_alloy = smith2_alloy;
-                }
-            }
-            else
-            {
-                bell("You must first select a base item.");
-            }
-
-            break;
-        }
-        case SMT_MENU_ARTEFACT:
-        {
-            if (smith_o_ptr->tval)
-            {
-                // this is not a resumption of smithing an item
-                if (!death_view)
-                    p_ptr->smithing_leftover = 0;
-
-                artefact_menu();
-            }
-            else
-            {
-                bell("You must first select a base item.");
-            }
-
-            break;
-        }
-        case SMT_MENU_NUMBERS:
-        {
-            if (smith_o_ptr->tval)
-            {
-                // this is not a resumption of smithing an item
-                if (!death_view)
-                    p_ptr->smithing_leftover = 0;
-
-                numbers_menu();
-
-                // backup the smithing object
-                object_copy(smith2_o_ptr, smith_o_ptr);
-                smith2_alloy = smith_alloy;
-            }
-            else
-            {
-                bell("You must first select a base item.");
-            }
-
-            break;
-        }
         case SMT_MENU_MELT:
         {
             if (death_view)
@@ -8831,6 +6285,11 @@ void do_cmd_smithing_screen(void)
             if (meltable_metal_items_carried())
             {
                 melt_menu();
+                if (!smith_o_ptr->k_idx)
+                {
+                    design_kind = 0;
+                    view = FORGE_ITEMS;
+                }
             }
             else
             {
@@ -8966,7 +6425,7 @@ void do_cmd_smithing_screen(void)
     }
 
     /* Load screen */
-    smith_ui_reset_description_state();
+    sdl_smithing_sheet_clear();
     ui_menu_click_clear();
     ui_scroll_area_clear();
     sdl_pop_terminal_menu_scale();

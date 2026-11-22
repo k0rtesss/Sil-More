@@ -2272,7 +2272,8 @@ static bool collect_candidate_entries(
             artefact_type* a_ptr = &a_info[e.group_id];
             /* Skip if the artefact is already present this run, or if the
              * player has already physically seen it and preserved it. */
-            if (a_ptr->cur_num || (a_ptr->seen & ART_SEEN_PHYSICAL)) {
+            if (a_ptr->cur_num || (a_ptr->seen & ART_SEEN_PHYSICAL)
+                || quest_artefact_reserved(e.group_id)) {
                 filter_artifact++;
                 continue;
             }

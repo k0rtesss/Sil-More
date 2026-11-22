@@ -5,11 +5,14 @@
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
+#include "monster/monster-tactics.h"
+#include "object/object-list.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "ui/question.h"
 
 #define THROW_PENDING_NONE -9999
+#define ORCISH_LIQUOR_THROW_RANGE 5
 static int throw_pending_slot = THROW_PENDING_NONE;
 
 /* A guided ranged shot needs a legal, already-visible subject. Ordinary
@@ -1366,8 +1369,6 @@ static cptr thrown_potion_effect_log_message(const object_type* o_ptr)
         return "A clarifying mist bursts from the bottle.";
     case SV_POTION_POISON:
         return "A poisonous cloud bursts from the bottle.";
-    case SV_POTION_ORCISH_LIQUOR:
-        return "The liquor bursts into flame.";
     case SV_POTION_BLINDNESS:
         return "A blinding spray bursts from the bottle.";
     case SV_POTION_DEC_DEX:
@@ -1380,11 +1381,59 @@ static cptr thrown_potion_effect_log_message(const object_type* o_ptr)
 }
 
 /* Keep the ordinary explosion geometry, carrying only extra source metadata. */
-static bool thrown_potion_burst(int y, int x, int dd, int ds, int dif, int typ)
+static bool thrown_potion_burst(
+    int who, int y, int x, int dd, int ds, int dif, int typ)
 {
     u32b flags = PROJECT_BOOM | PROJECT_GRID | PROJECT_JUMP | PROJECT_ITEM
-        | PROJECT_KILL | PROJECT_PLAY | PROJECT_POTION;
-    return project_ball(-1, 1, y, x, y, x, dd, ds, dif, typ, flags, false);
+        | PROJECT_KILL | PROJECT_PLAY;
+    if (who < 0)
+        flags |= PROJECT_POTION;
+    return project_ball(who, 1, y, x, y, x, dd, ds, dif, typ, flags, false);
+}
+
+static bool thrown_orcish_liquor_effect(int who, int y, int x)
+{
+    msg_print("The liquor bursts into flame.");
+    return thrown_potion_burst(who, y, x, 3, 4, 0, GF_FIRE);
+}
+
+/* Monster-specific effects have no projection to draw their splash. */
+static void animate_potion_splash(int center_y, int center_x)
+{
+    int delay = op_ptr->delay_factor;
+    u16b grids[9];
+    int count = 0;
+    u16b pict;
+
+    if (!delay || p_ptr->blind)
+        return;
+
+    pict = bolt_pict(center_y, center_x, center_y, center_x, GF_HURT);
+    for (int y = center_y - 1; y <= center_y + 1; y++)
+    {
+        for (int x = center_x - 1; x <= center_x + 1; x++)
+        {
+            if (!in_bounds(y, x) || !panel_contains(y, x)
+                || !player_can_see_bold(y, x)
+                || !los(center_y, center_x, y, x))
+            {
+                continue;
+            }
+
+            print_rel(PICT_C(pict), PICT_A(pict), y, x);
+            grids[count++] = GRID(y, x);
+        }
+    }
+
+    if (!count)
+        return;
+
+    move_cursor_relative(center_y, center_x);
+    Term_fresh();
+    Term_xtra(TERM_XTRA_DELAY, 50 + delay * delay);
+    for (int i = 0; i < count; i++)
+        lite_spot(GRID_Y(grids[i]), GRID_X(grids[i]));
+    Term_fresh();
 }
 
 /* Apply a supported potion to the impact tile and every adjacent tile. */
@@ -1407,19 +1456,19 @@ static bool thrown_potion_effects(object_type* o_ptr, int center_y, int center_x
     switch (o_ptr->sval)
     {
     case SV_POTION_SLOWNESS:
-        ident = thrown_potion_burst(center_y, center_x, 0, 0, 10, GF_SLOW);
+        ident = thrown_potion_burst(-1, center_y, center_x, 0, 0, 10, GF_SLOW);
         break;
     case SV_POTION_CONFUSION:
-        ident = thrown_potion_burst(center_y, center_x, 0, 0, 10, GF_CONFUSION);
+        ident = thrown_potion_burst(
+            -1, center_y, center_x, 0, 0, 10, GF_CONFUSION);
         break;
     case SV_POTION_POISON:
-        ident = thrown_potion_burst(center_y, center_x, 5, 4, 0, GF_POIS);
+        ident = thrown_potion_burst(-1, center_y, center_x, 5, 4, 0, GF_POIS);
         break;
     case SV_POTION_ORCISH_LIQUOR:
-        ident = thrown_potion_burst(center_y, center_x, 3, 4, 0, GF_FIRE);
-        break;
+        return thrown_orcish_liquor_effect(-1, center_y, center_x);
     default:
-        /* The remaining effects are monster-specific and are applied below. */
+        animate_potion_splash(center_y, center_x);
         break;
     }
 
@@ -1764,6 +1813,124 @@ static bool select_throw_slot(int* item)
     }
 }
 
+static u16b thrown_item_pict(const object_type* o_ptr)
+{
+    byte attr = object_attr(o_ptr);
+    char glyph = object_char(o_ptr);
+
+    /* Kind and flavor records keep their tileset coordinates in ASCII mode. */
+    if (graphics_are_ascii() && ((byte)glyph & TILE_FLAG))
+    {
+        object_type image = { .k_idx = o_ptr->image_k_idx };
+        const object_type* appearance = p_ptr->image ? &image : o_ptr;
+
+        if (attr & TILE_FLAG)
+            attr = object_attr_default(appearance);
+        glyph = object_char_default(appearance);
+    }
+
+    return PICT(attr, glyph);
+}
+
+static void animate_thrown_item(int y, int x, u16b missile, int delay)
+{
+    if (panel_contains(y, x) && player_can_see_bold(y, x))
+    {
+        print_rel(PICT_C(missile), PICT_A(missile), y, x);
+        move_cursor_relative(y, x);
+        Term_fresh();
+        Term_xtra(TERM_XTRA_DELAY, delay);
+        lite_spot(y, x);
+        Term_fresh();
+    }
+    else
+    {
+        Term_xtra(TERM_XTRA_DELAY, delay);
+    }
+}
+
+/* Both the AI and the throw require a clear trajectory to the impact grid. */
+static int monster_orcish_liquor_throw_path(
+    const monster_type* m_ptr, u16b* path)
+{
+    int y = p_ptr->py;
+    int x = p_ptr->px;
+    int range = distance(m_ptr->fy, m_ptr->fx, y, x);
+    int count;
+
+    if (range < 2 || range > ORCISH_LIQUOR_THROW_RANGE
+        || !(cave_info[m_ptr->fy][m_ptr->fx] & CAVE_FIRE)
+        || !cave_floor_bold(y, x))
+        return 0;
+
+    count = project_path(path, ORCISH_LIQUOR_THROW_RANGE, m_ptr->fy,
+        m_ptr->fx, &y, &x, PROJECT_STOP);
+    return (y == p_ptr->py && x == p_ptr->px) ? count : 0;
+}
+
+bool monster_orcish_liquor_throw_has_clear_path(const monster_type* m_ptr)
+{
+    u16b path[ORCISH_LIQUOR_THROW_RANGE];
+
+    return monster_orcish_liquor_throw_path(m_ptr, path) > 0;
+}
+
+bool monster_throw_orcish_liquor(int m_idx)
+{
+    monster_type* m_ptr = &mon_list[m_idx];
+    int o_idx = monster_orcish_liquor(m_ptr);
+    u16b path[ORCISH_LIQUOR_THROW_RANGE];
+    u16b pict;
+    int count;
+    int delay = op_ptr->delay_factor * op_ptr->delay_factor;
+
+    if (!o_idx)
+        return false;
+    count = monster_orcish_liquor_throw_path(m_ptr, path);
+    if (count <= 0)
+        return false;
+
+    pict = thrown_item_pict(&o_list[o_idx]);
+    if (o_list[o_idx].number > 1)
+        o_list[o_idx].number--;
+    else
+        delete_object_idx(o_idx);
+
+    m_ptr->previous_action[0] = ACTION_ARCHERY;
+    player_pack_action_interrupt();
+    monster_set_visual_facing_target_immediate(m_ptr, p_ptr->py, p_ptr->px);
+
+    if (!p_ptr->blind && m_ptr->ml)
+    {
+        char name[80];
+        int leader_idx = m_ptr->squad.commander;
+        monster_desc(name, sizeof(name), m_ptr, 0);
+
+        if (!p_ptr->image && m_ptr->squad.job == MON_JOB_THROW_LIQUOR
+            && m_ptr->squad.role == MON_SQUAD_SOLDIER && leader_idx != m_idx
+            && monster_squad_order_valid(m_ptr) && mon_list[leader_idx].ml)
+        {
+            char leader[80];
+            monster_desc(leader, sizeof(leader), &mon_list[leader_idx], 0);
+            msg_format("%^s signals for the throw.", leader);
+        }
+
+        msg_format("%^s hurls a bottle at you!", name);
+    }
+    else
+    {
+        msg_print("Something hurls a bottle at you!");
+    }
+
+    for (int i = 0; i < count; i++)
+        animate_thrown_item(GRID_Y(path[i]), GRID_X(path[i]), pict, delay);
+
+    msg_print("The bottle breaks.");
+    (void)thrown_orcish_liquor_effect(
+        m_idx, GRID_Y(path[count - 1]), GRID_X(path[count - 1]));
+    return true;
+}
+
 /*
  * Throw an active weapon, or use Quick Throw/Power Throw from the Harness.
  *
@@ -1824,9 +1991,6 @@ void do_cmd_throw(bool automatic)
     int missed_monsters = 0;
 
     bool spatial_target = false;
-
-    byte missile_attr;
-    char missile_char;
 
     char o_name[80];
     char punctuation[20];
@@ -2188,8 +2352,7 @@ void do_cmd_throw(bool automatic)
     object_desc(o_name, sizeof(o_name), i_ptr, false, 3);
 
     /* Find the color and symbol for the object for throwing */
-    missile_attr = object_attr(i_ptr);
-    missile_char = object_char(i_ptr);
+    u16b missile = thrown_item_pict(i_ptr);
     treat_as_throwing = player_can_treat_as_throwing_flags(i_ptr, f3);
     has_throwing_ability = p_ptr->active_ability[S_MEL][MEL_THROWING]
         || object_grants_ability(i_ptr, S_MEL, MEL_THROWING);
@@ -2276,24 +2439,7 @@ void do_cmd_throw(bool automatic)
         x = nx;
         y = ny;
 
-        /* Only do visuals if the player can "see" the missile */
-        if (panel_contains(y, x) && player_can_see_bold(y, x))
-        {
-            /* Visual effects */
-            print_rel(missile_char, missile_attr, y, x);
-            move_cursor_relative(y, x);
-            Term_fresh();
-            Term_xtra(TERM_XTRA_DELAY, msec);
-            lite_spot(y, x);
-            Term_fresh();
-        }
-
-        /* Delay anyway for consistency */
-        else
-        {
-            /* Pause anyway, for consistancy */
-            Term_xtra(TERM_XTRA_DELAY, msec);
-        }
+        animate_thrown_item(y, x, missile, msec);
 
         /* Handle monster */
         if (cave_m_idx[y][x] > 0)

@@ -48,7 +48,7 @@ void falling_damage(bool stun)
         take_hit(dam, message);
     }
 
-    if (stun && allow_player_stun(NULL))
+    if (stun && !p_ptr->is_dead && allow_player_stun(NULL))
     {
         set_stun(p_ptr->stun + dam * 5);
     }
