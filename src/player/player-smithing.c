@@ -1,36 +1,6 @@
 #include "angband.h"
 #include "externs.h"
 
-/* Crafts use base attributes and learned attribute abilities. Equipment,
- * stat drain, potions, songs, and conditional bonuses do not enter here. */
-static int smithing_permanent_stat(int stat)
-{
-    static const struct {
-        int stat;
-        int skill;
-        int ability;
-    } bonuses[] = {
-        { A_STR, S_MEL, MEL_STR },
-        { A_DEX, S_ARC, ARC_DEX },
-        { A_DEX, S_EVN, EVN_DEX },
-        { A_DEX, S_STL, STL_DEX },
-        { A_GRA, S_PER, PER_GRA },
-        { A_GRA, S_SMT, SMT_GRA },
-        { A_GRA, S_SNG, SNG_GRA },
-    };
-    int value = p_ptr->stat_base[stat];
-
-    for (size_t i = 0; i < N_ELEMENTS(bonuses); i++)
-    {
-        int skill = bonuses[i].skill;
-        int ability = bonuses[i].ability;
-        if (bonuses[i].stat == stat && p_ptr->innate_ability[skill][ability]
-            && p_ptr->active_ability[skill][ability])
-            value++;
-    }
-    return MAX(BASE_STAT_MIN, MIN(BASE_STAT_MAX, value));
-}
-
 static int smithing_affinity_stat_bonus(void)
 {
     if (!rp_ptr || !current_character_profile
@@ -41,19 +11,19 @@ static int smithing_affinity_stat_bonus(void)
     return MAX(0, affinity);
 }
 
-/* Capacity is shared by all recipes. Keep half-points until the full
- * attribute and ability contribution can be rounded down together. */
+/* All recipes use current attributes. Add the ability contributions before
+ * rounding the total down so half-points can combine. */
 int smithing_stat_bonus(void)
 {
     const byte* learned = p_ptr->innate_ability[S_SMT];
     const byte* active = p_ptr->active_ability[S_SMT];
     int dwarven_bonus = smithing_affinity_stat_bonus();
-    int dex = smithing_permanent_stat(A_DEX) + dwarven_bonus;
-    int gra = smithing_permanent_stat(A_GRA) + dwarven_bonus;
+    int dex = p_ptr->stat_use[A_DEX] + dwarven_bonus;
+    int gra = p_ptr->stat_use[A_GRA] + dwarven_bonus;
     int doubled = dex + gra;
 
     if (learned[SMT_ARMOURSMITH] && active[SMT_ARMOURSMITH])
-        doubled += smithing_permanent_stat(A_STR) + dwarven_bonus;
+        doubled += p_ptr->stat_use[A_STR] + dwarven_bonus;
     if (learned[SMT_WEAPONSMITH] && active[SMT_WEAPONSMITH])
         doubled += dex;
     if (learned[SMT_JEWELLER] && active[SMT_JEWELLER])

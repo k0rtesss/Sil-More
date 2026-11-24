@@ -157,14 +157,22 @@ enum {
     SDL_STORY_FONT_SLOT_CHAR_DESC = 1, /* character sheet description / history */
     SDL_STORY_FONT_SLOT_CHAR_NUM  = 1, /* character sheet numeric values */
     SDL_STORY_FONT_SLOT_CHAR_SELECT = 1, /* character selection (race/house) book body */
-    SDL_STORY_FONT_SLOT_TUTORIAL = 1 /* touch/mouse/zones and birth coach tutorials */
+    SDL_STORY_FONT_SLOT_TUTORIAL = 1,
+    SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE = STORY_FONT_SLOTS,
+    SDL_STORY_FONT_SLOT_TUTORIAL_MENU,
+    SDL_STORY_FONT_SLOT_TUTORIAL_JA,
+    SDL_STORY_FONT_SLOT_TUTORIAL_KO,
+    SDL_STORY_FONT_SLOT_TUTORIAL_ZH
 };
+
+int sdl_tutorial_font_slot(int normal_slot);
 
 typedef struct story_font_entry {
     int pixel_height;
     int slot;
     TTF_Font* font;
-    TTF_Font* fallback; /* Owned Cyrillic fallback, closed with the primary. */
+    TTF_Font* fallback; /* Owned glyph fallback, closed with the primary. */
+    TTF_Font* picker_fallback; /* Endonyms in Western tutorial menus. */
     Uint64 last_used;
 } story_font_entry;
 
@@ -1087,6 +1095,7 @@ typedef struct sdl_question_menu_button_state {
 typedef struct sdl_question_menu_state {
     bool text_input;
     bool active;
+    bool tutorial_fonts;
     enum sdl_menu_font font_menu;
     SDL_FRect header_controls;
     bool blocking_input;
@@ -3267,6 +3276,8 @@ void sdl_present_batch_begin(void);
 void sdl_present_batch_end(void);
 void sdl_present_if_needed(sdl_view* d);
 float sdl_touch_tutorial_draw_text_line(cptr text, float x, float y, float max_w, int font_px, SDL_Color color, bool centered);
+float sdl_tutorial_draw_text_line_for_slot(cptr text, float x, float y,
+    float max_w, int font_px, int slot, SDL_Color color, bool centered);
 int sdl_touch_tutorial_wrap_lines(cptr text, TTF_Font* font, float max_w, char lines[][SDL_TOUCH_TUTORIAL_LINE_LEN], int max_lines);
 float sdl_touch_tutorial_draw_wrapped(cptr text, float x, float y, float max_w, int font_px, SDL_Color color);
 float sdl_touch_tutorial_draw_wrapped_centered(cptr text, float x, float y, float max_w, int font_px, SDL_Color color);

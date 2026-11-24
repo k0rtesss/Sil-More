@@ -435,6 +435,15 @@ void sdl_render_mono_utf8_glyph(TTF_Font* font, float cell_w,
     if (cell_span < 1)
         cell_span = 1;
 
+    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP) {
+        int slot = sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL);
+        const char *p = s;
+        size_t remaining = (size_t)len;
+        if (slot != SDL_STORY_FONT_SLOT_TUTORIAL || !TTF_FontHasGlyph(font, SDL_StepUTF8(&p, &remaining))) {
+            TTF_Font *help_font = sdl_story_font_for_height_slot(MAX(1, (int)cell_h), slot);
+            if (help_font) font = help_font;
+        }
+    }
     memcpy(text_buf, s, (size_t)len);
     text_buf[len] = '\0';
 

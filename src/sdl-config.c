@@ -2103,6 +2103,23 @@ static tutorial_mode sdl_config_gameplay_tutorial_mode_from_json(const cJSON *ap
     return cJSON_IsFalse(item) ? TUTORIAL_MODE_DISABLED : TUTORIAL_MODE_EXTENDED;
 }
 
+/* The first device guide can open before the player has seen a language
+ * picker. Use the device's primary language when it has a translated guide. */
+static const char *sdl_default_tutorial_language(void)
+{
+    const char *code = "en";
+    int count = 0;
+    SDL_Locale **locales = SDL_GetPreferredLocales(&count);
+    if (locales && count && locales[0]->language) {
+        const char *language = locales[0]->language;
+        if (streq(language, "ko")) code = "ko";
+        else if (streq(language, "ja")) code = "ja";
+        else if (streq(language, "zh")) code = "zh";
+    }
+    SDL_free(locales);
+    return code;
+}
+
 void sdl_config_load_app_options(const char* filename)
 {
     char* content;
@@ -2118,7 +2135,7 @@ void sdl_config_load_app_options(const char* filename)
 
     g_app_intro_seen = config_exists;
     g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
-    tutorial_set_language("en");
+    tutorial_set_language(sdl_default_tutorial_language());
     g_app_touch_tutorial_seen = false;
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
@@ -2162,7 +2179,7 @@ void sdl_config_load_app_options(const char* filename)
     g_app_gameplay_tutorial_mode = sdl_config_gameplay_tutorial_mode_from_json(app_options);
     {
         const cJSON *language = cJSON_GetObjectItemCaseSensitive(app_options, "tutorialLanguage");
-        tutorial_set_language(cJSON_IsString(language) ? language->valuestring : "en");
+        if (cJSON_IsString(language)) tutorial_set_language(language->valuestring);
     }
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "touchTutorialSeen");

@@ -3,14 +3,16 @@
 
 No player file or configuration is loaded. Catalogue-derived views are injected
 at the renderer boundary; this checks pixels/layout, not physical input.
-Pass --all to check every catalogue step without saving bulk screenshots.
+Pass --all for every English step, or --language CODE for a translated catalogue.
 """
 from pathlib import Path
+import argparse
 import json
 import os
 import shlex
 import subprocess
-import sys
+
+from check_tutorial_translation import LANGUAGES
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
@@ -27,10 +29,10 @@ static float desktop_font_density = 1.0f;
 float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID display)
 { (void)display; return desktop_font_density; }
 #endif
-#define sdl_touch_tutorial_draw_text_line fixture_draw_text_line
+#define sdl_tutorial_draw_text_line_for_slot fixture_draw_text_line
 #include "sdl/ui/sdl-gameplay-tutorial.c"
-#undef sdl_touch_tutorial_draw_text_line
-float sdl_touch_tutorial_draw_text_line(cptr,float,float,float,int,SDL_Color,bool);
+#undef sdl_tutorial_draw_text_line_for_slot
+float sdl_tutorial_draw_text_line_for_slot(cptr,float,float,float,int,int,SDL_Color,bool);
 static SDL_FRect drawn_text[64];
 static bool drawn_button[64];
 static int drawn_count;
@@ -40,6 +42,8 @@ static bool drawn_space,drawn_enter;
 static int drawn_continue_px;
 static int fixture_run_count;
 static char fixture_id[160];
+static TTF_Font *bare_title_font;
+static TTF_Font *bare_body_font;
 static int fixture_width,fixture_height,fixture_font,fixture_scroll;
 static bool fixture_touch_controls;
 static SDL_FRect fixture_wheel, fixture_quick_access;
@@ -81,17 +85,34 @@ static void fixture_check(bool condition,const char *expression)
     }
 }
 #define fixture_assert(condition) fixture_check((condition),#condition)
-float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Color color,bool centered)
+float fixture_draw_text_line(cptr text,float x,float y,float width,int px,int slot,SDL_Color color,bool centered)
 {
-    TTF_Font *font=sdl_story_font_for_height_slot(px,SDL_STORY_FONT_SLOT_TUTORIAL);
+    TTF_Font *font=sdl_story_font_for_height_slot(px,slot);
     int w=0,h=0;
     if (text && text[0] && font) {
+        bool localized_title=tutorial_uses_localized_title();
+        bool title=!centered && color.r==244 && color.g==202 && color.b==111;
+        fixture_assert(slot==sdl_tutorial_font_slot(localized_title && title
+            ? SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE : SDL_STORY_FONT_SLOT_TUTORIAL));
         /* Record the actual wrapped texture drawn by the shared text helper.
          * A shrink-to-fit estimate misses labels wrapping below their button. */
         SDL_Texture *texture=width>0
             ?sdl_ui_wrapped_text_texture(font,text,MAX(1,(int)width),color,&w,&h)
             :sdl_ui_text_texture(font,text,color,&w,&h);
         fixture_assert(texture!=NULL);
+        if (centered && color.r==240 && fixture_width==360
+            && !strncmp(fixture_id,"opening.move.",13) && strcmp(tutorial_language(),"ru")
+            && slot==SDL_STORY_FONT_SLOT_TUTORIAL) {
+            for (const char *word=text; *word;) {
+                word += strspn(word," ");
+                size_t len=strcspn(word," ");
+                int word_w,word_h;
+                if (!len) break;
+                fixture_assert(TTF_GetStringSize(font,word,len,&word_w,&word_h));
+                fixture_assert(word_w<=(int)width);
+                word+=len;
+            }
+        }
         SDL_strlcat(drawn_content,text,sizeof(drawn_content));
         SDL_strlcat(drawn_content,"\n",sizeof(drawn_content));
         if (!centered && color.r==182 && color.g==191 && color.b==204) {
@@ -107,7 +128,7 @@ float fixture_draw_text_line(cptr text,float x,float y,float width,int px,SDL_Co
         drawn_text[drawn_count]=(SDL_FRect){centered?x-w/2.0f:x,y,w,h};
         drawn_button[drawn_count++]=centered;
     }
-    return sdl_touch_tutorial_draw_text_line(text,x,y,width,px,color,centered);
+    return sdl_tutorial_draw_text_line_for_slot(text,x,y,width,px,slot,color,centered);
 }
 static tutorial_view fixture;
 static tutorial_mode fixture_mode=TUTORIAL_MODE_EXTENDED;
@@ -171,10 +192,19 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     fixture_assert(view->canvas!=NULL);
     cJSON *language=cJSON_GetObjectItemCaseSensitive(entry,"language");
     tutorial_set_language(cJSON_IsString(language)?language->valuestring:"en");
-    if (!strcmp(tutorial_language(),"ru")) {
-        TTF_Font *russian_font=sdl_story_font_for_height_slot(20,SDL_STORY_FONT_SLOT_TUTORIAL);
-        fixture_assert(russian_font && TTF_FontHasGlyph(russian_font,0x416)
-            && TTF_FontHasGlyph(russian_font,0x451));
+    const char *code=tutorial_language();
+    bool cyrillic=streq(code,"ru") || streq(code,"bg") || streq(code,"uk");
+    bool european=sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL)==SDL_STORY_FONT_SLOT_TUTORIAL;
+    if (european) fixture_assert(tutorial_uses_localized_title()==cyrillic);
+    if (cyrillic) {
+        TTF_Font *body_font=sdl_story_font_for_height_slot(20,SDL_STORY_FONT_SLOT_TUTORIAL);
+        TTF_Font *title_font=sdl_story_font_for_height_slot(20,SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE);
+        fixture_assert(title_font && strstr(TTF_GetFontFamilyName(title_font),"Cormorant SC")
+            && TTF_FontHasGlyph(title_font,0x416) && TTF_FontHasGlyph(title_font,0x451));
+        fixture_assert(body_font && TTF_FontHasGlyph(body_font,0x416)
+            && TTF_FontHasGlyph(body_font,0x451)
+            && TTF_FontHasGlyph(body_font,0x491) && TTF_FontHasGlyph(body_font,0x457)
+            && streq(TTF_GetFontFamilyName(body_font),"EB Garamond"));
     }
     fixture=(tutorial_view){.active=true,.step=1,.step_count=3,.revision=1};
     cJSON *step=cJSON_GetObjectItemCaseSensitive(entry,"step");
@@ -183,15 +213,36 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     if (cJSON_IsNumber(step_count)) fixture.step_count=step_count->valueint;
     field(entry,"title",fixture.title,sizeof(fixture.title));
     field(entry,"body",fixture.body,sizeof(fixture.body));
-    if (!strcmp(tutorial_language(),"ru")) {
-        char wrapped[512][SDL_TOUCH_TUTORIAL_LINE_LEN], joined[8192]="";
-        TTF_Font *font=sdl_story_font_for_height_slot(font_size,SDL_STORY_FONT_SLOT_TUTORIAL);
+    {
+        /* Check the bundled faces directly, before any fallback is attached. */
+        const char *strings[] = {fixture.title,fixture.body};
+        TTF_Font *fonts[] = {cyrillic ? bare_title_font : bare_body_font,bare_body_font};
+        if (!european) {
+            TTF_Font *face=sdl_story_font_for_height_slot(20,sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL));
+            const char *family=streq(code,"ja") ? "Tutorial Sans JP" : streq(code,"ko") ? "Tutorial Sans KR" : "Tutorial Sans SC";
+            fixture_assert(face && streq(TTF_GetFontFamilyName(face),family));
+            fonts[0]=fonts[1]=face;
+        }
+        for (size_t i=0;i<N_ELEMENTS(strings);++i) {
+            const char *at=strings[i];
+            while (*at) {
+                Uint32 ch=SDL_StepUTF8(&at,NULL);
+                if (ch>=32) fixture_assert(TTF_FontHasGlyph(fonts[i],ch));
+            }
+        }
+    }
+    if (strcmp(tutorial_language(),"en")) {
+        char wrapped[512][SDL_TOUCH_TUTORIAL_LINE_LEN];
+        const char *remaining=fixture.body;
+        TTF_Font *font=sdl_story_font_for_height_slot(font_size,sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL));
         int count=sdl_touch_tutorial_wrap_lines(fixture.body,font,width-32,wrapped,512);
         for(int line=0;line<count;++line) {
-            if(line) SDL_strlcat(joined," ",sizeof(joined));
-            SDL_strlcat(joined,wrapped[line],sizeof(joined));
+            remaining+=strspn(remaining," \n\t");
+            size_t bytes=strlen(wrapped[line]);
+            fixture_assert(bytes && !strncmp(remaining,wrapped[line],bytes));
+            remaining+=bytes;
         }
-        fixture_assert(!strcmp(joined,fixture.body));
+        fixture_assert(!remaining[strspn(remaining," \n\t")]);
     }
 
     field(entry,"action",fixture.action,sizeof(fixture.action));
@@ -373,13 +424,12 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         SDL_DestroySurface(pixels);
     }
     if (!character_icky) {
-        bool scrolling_hint=strstr(drawn_hints,"PgUp")
-            || strstr(drawn_hints,"PgDn") || strstr(drawn_hints,"Wheel")
-            || strstr(drawn_hints,"drag") || strstr(drawn_hints,"Swipe")
-            || strstr(drawn_hints,"scroll") || strstr(drawn_hints,"read card")
-            || strstr(drawn_hints,": read") || strstr(drawn_hints,"читать")
-            || strstr(drawn_hints,"прокрутка") || strstr(drawn_hints,"Читайте")
-            || strstr(drawn_hints,"Листайте");
+        tutorial_controls scrolling,plain;
+        tutorial_build_controls(&fixture,&scrolling,true);
+        tutorial_build_controls(&fixture,&plain,false);
+        bool scrolling_hint=(scrolling.read_hint[0] && strstr(drawn_hints,scrolling.read_hint))
+            || (scrolling.controls_hint[0] && strcmp(scrolling.controls_hint,plain.controls_hint)
+                && strstr(drawn_hints,scrolling.controls_hint));
         fixture_assert(scrolling_hint==(tutorial_max_scroll>0));
     }
     if (tutorial_last_input==TUTORIAL_INPUT_KEYBOARD && fixture.can_continue
@@ -476,7 +526,10 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         sdl_character_sheet_screen_hide();
     }
     if (weapon_menu) sdl_question_menu_clear();
-    sdl_story_font_cache_clear();
+    /* Textures belong to this software renderer. Font faces can be reused
+     * across the catalogue sweep, just as they are between live cards. */
+    if (cJSON_GetObjectItemCaseSensitive(entry,"language")) sdl_ui_text_cache_clear();
+    else sdl_story_font_cache_clear();
     SDL_DestroyTexture(view->canvas); view->canvas=NULL;
     term_nuke(&view->t); view->term_ready=false; term_screen=NULL; Term=NULL;
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
@@ -497,6 +550,11 @@ int main(int argc,char **argv)
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS));
     assert(TTF_Init());
+    char title_path[1024];
+    assert(path_build(title_path,sizeof(title_path),ANGBAND_DIR_XTRA,"font/CormorantSC-SemiBold.ttf"));
+    bare_title_font=TTF_OpenFont(title_path,20);
+    bare_body_font=TTF_OpenFont(argv[1],20);
+    assert(bare_title_font && bare_body_font);
     sdl_config_set_defaults(&config);
     sdl_sync_palette();
     SDL_strlcpy(config.story_font,argv[1],sizeof(config.story_font));
@@ -507,11 +565,23 @@ int main(int argc,char **argv)
     p_ptr->playing=true; p_ptr->py=7;p_ptr->px=8;
     p_ptr->cur_map_hgt=32;p_ptr->cur_map_wid=64;
     character_generated=character_dungeon=true;
-    tutorial_set_language("ru");
-    assert(sdl_config_save("tutorial-language.json",&config,NULL,0));
-    tutorial_set_language("en");
-    sdl_config_load_app_options("tutorial-language.json");
-    assert(!strcmp(tutorial_language(),"ru"));
+    size_t locale_count;
+    const tutorial_locale *locales=tutorial_available_locales(&locale_count);
+    for (size_t i=0;i<locale_count;++i) {
+        tutorial_set_language(locales[i].code);
+        TTF_Font *picker=sdl_story_font_for_height_slot(20,sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL_MENU));
+        for (size_t j=0;j<locale_count;++j) {
+            const char *p=locales[j].name;
+            while (*p) assert(TTF_FontHasGlyph(picker,SDL_StepUTF8(&p,NULL)));
+        }
+    }
+    for (size_t i=1;i<locale_count;++i) {
+        tutorial_set_language(locales[i].code);
+        assert(sdl_config_save("tutorial-language.json",&config,NULL,0));
+        tutorial_set_language("en");
+        sdl_config_load_app_options("tutorial-language.json");
+        assert(!strcmp(tutorial_language(),locales[i].code));
+    }
     tutorial_set_language("en");
 
 #if defined(SDL_DESKTOP_FONT_FIXTURE) && !SIL_SDL_MOBILE_BUILD
@@ -713,7 +783,7 @@ int main(int argc,char **argv)
             int width=cJSON_GetArrayItem(fixture_size,0)->valueint;
             int height=cJSON_GetArrayItem(fixture_size,1)->valueint;
             paint(entry,width,height,i,0,0,save);
-            if (cJSON_GetObjectItemCaseSensitive(entry,"language")
+            if ((cJSON_GetObjectItemCaseSensitive(entry,"language") && tutorial_max_scroll>0)
                 || cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"expected_scroll")))
                 paint(entry,width,height,i,1000,0,false);
             continue;
@@ -733,7 +803,9 @@ int main(int argc,char **argv)
             paint(entry,320,240,i,0,0,save);
         paint(entry,320,240,i,1000,0,save);
     }
-    cJSON_Delete(entries); TTF_Quit(); SDL_Quit();
+    cJSON_Delete(entries); sdl_story_font_cache_clear();
+    TTF_CloseFont(bare_title_font); TTF_CloseFont(bare_body_font);
+    TTF_Quit(); SDL_Quit();
     puts("Gameplay tutorial software-render fixtures: PASS");
     return 0;
 }
@@ -741,7 +813,13 @@ int main(int argc,char **argv)
 
 
 def main():
-    OUT.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--language", choices=LANGUAGES)
+    parser.add_argument("--russian", dest="language", action="store_const", const="ru")
+    args = parser.parse_args()
+    out = OUT / args.language if args.language else OUT
+    out.mkdir(parents=True, exist_ok=True)
     catalogue = json.loads((ROOT / "lib/help/tutorials.json").read_text())
     lessons = catalogue["lessons"]
     opening = next(lesson for lesson in lessons if lesson["id"] == "opening.move")
@@ -938,33 +1016,33 @@ def main():
                 fixtures.append(dict(fixture, id=fixture["id"]+".reading",
                                      reading=True, expected_scroll=True, size=[320, 240],
                                      capture=False))
-    if "--all" in sys.argv[1:]:
+    if args.all:
         for lesson in lessons:
             for step in lesson["steps"]:
                 fixtures.append(make_fixture(
                     lesson, step, False, 1, False,
                     fixture_id=f"{lesson['id']}.step{lesson['steps'].index(step) + 1}.sweep",
                     capture=False, bulk=True))
-    if "--russian" in sys.argv[1:]:
-        russian = json.loads((ROOT / "lib/help/tutorials.ru.json").read_text(encoding="utf-8"))
+    if args.language:
+        locale = json.loads((ROOT / f"lib/help/tutorials.{args.language}.json").read_text(encoding="utf-8"))
         fixtures = []
         for lesson in lessons:
-            localized = russian["lessons"][lesson["id"]]
+            localized = locale["lessons"][lesson["id"]]
             for step_index, step in enumerate(lesson["steps"]):
                 translated = dict(lesson, title=localized["title"])
                 translated_step = dict(step, text=localized["steps"][step_index])
                 translated["steps"] = [dict(s, text=t) for s,t in zip(lesson["steps"],localized["steps"])]
                 for device, size, font_size in ((1,[1280,720],20),(3,[360,800],28),(4,[800,360],20)):
                     fixture = make_fixture(translated, translated_step, False, device, False,
-                                           fixture_id=lesson["id"]+".ru", capture=False,
-                                           context_text="Проверьте текущие требования и затраты.",
-                                           subject_name="Выбранное существо")
-                    fixture.update(language="ru", size=size, font_size=font_size)
+                                           fixture_id=f"{lesson['id']}.{args.language}", capture=False,
+                                           context_text=locale["strings"]["This item is identified. Read its known properties and any drawbacks."],
+                                           subject_name=locale["strings"]["This creature"])
+                    fixture.update(language=args.language, size=size, font_size=font_size)
                     if lesson["id"] == "opening.move" and step_index == 0:
-                        fixture.update(capture=True, expected_text="Далее", forbidden_text="Skip tutorial")
+                        fixture.update(capture=True, expected_text=locale["strings"]["Continue"], forbidden_text="Skip tutorial")
                     fixtures.append(fixture)
-    (OUT / "fixtures.json").write_text(json.dumps(fixtures), encoding="utf-8")
-    source = OUT / "check.c"
+    (out / "fixtures.json").write_text(json.dumps(fixtures), encoding="utf-8")
+    source = out / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     excluded = ("/src/main.c.obj", "/src/sdl/ui/sdl-gameplay-tutorial.c.obj",
@@ -972,13 +1050,13 @@ def main():
                 "/src/sdl/core/sdl-layout.c.obj", "/src/sdl/config/sdl-settings.c.obj",
                 "/src/tutorial/tutorial.c.obj")
     objects = [obj for obj in objects if not obj.endswith(excluded)]
-    response = OUT / "objects.rsp"
+    response = out / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(
         [str(BUILD / "_deps" / dep) for dep in ["SDL", "SDL_ttf", "SDL_image", "SDL_mixer"]] +
         ["C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
-    exe = OUT / "check.exe"
+    exe = out / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-DSDL_DESKTOP_FONT_FIXTURE", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source),
                     str(ROOT / "src/sdl/ui/sdl-main-menu.c"), str(ROOT / "src/sdl-config.c"),
@@ -989,7 +1067,7 @@ def main():
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
     subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"),
                     str(ROOT / "lib/help/tutorials.json"),str(ROOT / "lib/xtra")],
-                   cwd=OUT, env=env, check=True, timeout=600 if any(flag in sys.argv[1:] for flag in ("--all", "--russian")) else 60)
+                   cwd=out, env=env, check=True, timeout=600 if args.all or args.language else 60)
 
 
 if __name__ == "__main__":

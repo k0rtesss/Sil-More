@@ -1107,6 +1107,52 @@ static void check_help(void)
     puts("Help source overlap and pagination checks: PASS (15 topics, 6 widths)");
 }
 
+void check_localized_help(void)
+{
+    size_t count;
+    const tutorial_locale *locales = tutorial_available_locales(&count);
+    assert(tutorial_load_catalogue(getenv("SIL_TEST_HELP_CATALOGUE")));
+    for (size_t i = 1; i < count; i++) {
+        tutorial_set_language(locales[i].code);
+        for (int page = 1; page <= HELP_SOURCE_PAGE_COUNT; page++) {
+            g_help_doc_ops_n = 0;
+            g_help_doc_string_pool_used = 0;
+            g_help_record_base_y = 0;
+            g_help_record_page_min_y = INT_MAX;
+            g_help_record_page_max_y = INT_MIN;
+            g_help_record_ops = true;
+            show_help_screen_legacy(page, page, HELP_SOURCE_PAGE_COUNT, false);
+            g_help_record_ops = false;
+            int n = help_build_compact_display_rows(32, g_help_record_page_max_y + 1);
+            assert(n > 0);
+            for (int j = 0; j < g_help_display_spans_n; j++) {
+                const help_display_span_t *span = &g_help_display_spans[j];
+                if (!span->use_role) continue; /* A map tile may contain a raw byte. */
+                const char *s = span->text;
+                while (*s) {
+                    if (SDL_StepUTF8(&s, NULL) == 0xfffd) {
+                        fprintf(stderr, "%s help page %d, span %d has broken UTF-8: %s\n",
+                            locales[i].code, page, j, span->text);
+                        abort();
+                    }
+                }
+            }
+            if (page == 1) {
+                char row[HELP_DOC_MAX_COLS + 1];
+                bool found = false;
+                const char *goal = tutorial_help_text("GOAL");
+                for (int j = 0; j < n && !found; j++)
+                    found = help_search_display_row_text(j, row, sizeof(row)) && streq(row, goal);
+                assert(found);
+            }
+        }
+    }
+    tutorial_set_language("en");
+    tutorial_shutdown();
+    printf("Localized reference: all %d source pages in %zu translations paginate and produce searchable UTF-8 rows. PASS\n",
+        HELP_SOURCE_PAGE_COUNT, count - 1);
+}
+
 int main(void)
 {
     term t;
@@ -1135,6 +1181,7 @@ int main(void)
     fixture_check_binding_labels();
     fixture_check_wizard_debug_routing();
     check_help();
+    check_localized_help();
     term_nuke(&t);
     SDL_Quit();
     return 0;
@@ -1294,7 +1341,7 @@ def main():
         harness = harness.replace('#include "sdl/input/sdl-gamepad.c"',
             '#include "yes-no-baseline-gamepad.c"')
     source.write_text(harness.replace('#include "ui/help.c"', '')
-        + "void check_help(void);\nvoid check_main_menu_shortcuts(void);\nvoid fixture_check_binding_labels(void);\nvoid fixture_check_wizard_debug_routing(void);\n" + HARNESS[main_start:], encoding="utf-8")
+        + "void check_help(void);\nvoid check_localized_help(void);\nvoid check_main_menu_shortcuts(void);\nvoid fixture_check_binding_labels(void);\nvoid fixture_check_wizard_debug_routing(void);\n" + HARNESS[main_start:], encoding="utf-8")
     menu_source = OUT / "menu-check.c"
     menu_source.write_text(MENU_CHECK, encoding="utf-8")
     settings_source = OUT / "settings-check.c"
@@ -1316,6 +1363,7 @@ def main():
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects), encoding="utf-8")
     env = os.environ.copy()
+    env["SIL_TEST_HELP_CATALOGUE"] = str(ROOT / "lib/help/tutorials.json")
     env["PATH"] = os.pathsep.join([
         str(BUILD / "_deps/SDL"), str(BUILD / "_deps/SDL_ttf"),
         str(BUILD / "_deps/SDL_image"), str(BUILD / "_deps/SDL_mixer"),

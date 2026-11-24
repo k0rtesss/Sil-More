@@ -105,7 +105,7 @@ static void render_preview(pickup_destination_preview* preview, int width,
     config.aux_view_font_size = 20;
     ui_question_show("Pick up where?", "Choose where to put 12 arrows.",
         preview->options, preview->icons, preview->count, -1, -1, 3,
-        &scroll, true, NULL, 0, false);
+        &scroll, true, NULL, 0, false, false);
     assert(sdl_question_menu_layout(&layout));
     assert(layout.panel.x >= 0 && layout.panel.y >= 0);
     assert(layout.panel.x + layout.panel.w <= width + 1);
@@ -210,7 +210,7 @@ int main(void)
     angband_term[0] = &test_term;
     ui_question_show("Pick up where?", "Choose where to put a dagger.",
         preview.options, preview.icons, preview.count, -1, -1, heading,
-        &scroll, true, NULL, 0, false);
+        &scroll, true, NULL, 0, false, false);
     assert(g_question_menu.count == preview.count);
     for (int i = 0; i < preview.count; i++)
     {
@@ -227,7 +227,7 @@ int main(void)
         inkey_next_set(keys[i]);
         assert(ui_question_ask_aux("Pick up where?", "Choose destination.",
             preview.options, preview.icons, preview.count, -1, -1, 0,
-            false, NULL, 0, false, NULL) == expected[i]);
+            false, NULL, 0, false, NULL, false) == expected[i]);
         inkey_next_set(NULL);
     }
     puts("PASS: Direct keys, up/down plus Enter, and Escape return correct heading/cancel values.");

@@ -1046,8 +1046,8 @@ static void tutorial_game_upgrade_notice(void)
         ? tutorial_translate("Your saved tutorial setting is Disabled. They will stay off until you choose Normal or Extended in Options.")
         : tutorial_translate("Extended is the default. You can choose Disabled, Normal or Extended in Options; changing this setting will not enable tutorials for an older character."));
     ui_question_option options[] = {{'c', tutorial_translate("Continue"), TERM_WHITE, false}};
-    int choice = ui_question_ask_overlay(tutorial_translate("Updated to 0.9.8"), message,
-        options, 1, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
+    int choice = ui_question_ask_tutorial(tutorial_translate("Updated to 0.9.8"), message,
+        options, 1, 0);
     if (choice == 0) {
         tale->tutorial_upgrade_pending = 0;
         metar.tutorial_upgrade_pending = 0;
@@ -1552,8 +1552,8 @@ void tutorial_game_archive(void)
                 card_count);
             options[count] = (ui_question_option){'s', tutorial_translate("Tutorial settings"), TERM_L_BLUE, false};
             options[count + 1] = (ui_question_option){'x', tutorial_translate("Back"), TERM_WHITE, false};
-            int choice = ui_question_ask_overlay(tutorial_translate("Tutorial cards"), description,
-                options, count + 2, -1, -1, topic_selection);
+            int choice = ui_question_ask_tutorial(tutorial_translate("Tutorial cards"), description,
+                options, count + 2, topic_selection);
             if (choice == count) {
                 tutorial_game_settings();
                 card_count = tutorial_archive_collect_cards(cards, capacity,
@@ -1598,8 +1598,8 @@ void tutorial_game_archive(void)
             tutorial_translate("Page %d of %d. Select a card to read it again. Escape returns to topics."),
             offset / TUTORIAL_ARCHIVE_PAGE_SIZE + 1,
             (topic_counts[topic] + TUTORIAL_ARCHIVE_PAGE_SIZE - 1) / TUTORIAL_ARCHIVE_PAGE_SIZE);
-        int choice = ui_question_ask_overlay(title, description, options,
-            count + 3, -1, -1, card_selection);
+        int choice = ui_question_ask_tutorial(title, description, options,
+            count + 3, card_selection);
         if (choice < 0 || choice >= count + 2) { topic = -1; continue; }
         if (choice == count) {
             if (offset + count < topic_counts[topic]) offset += TUTORIAL_ARCHIVE_PAGE_SIZE;
@@ -1667,15 +1667,35 @@ bool tutorial_game_select_mode(void)
         {'n', tutorial_translate("Normal"), TERM_WHITE, false},
         {'e', tutorial_translate("Extended"), TERM_WHITE, false}
     };
-    int choice = ui_question_ask_overlay(tutorial_translate("Gameplay tutorial mode"), description,
-        options, N_ELEMENTS(options), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL,
-        (int)current);
+    int choice = ui_question_ask_tutorial(tutorial_translate("Gameplay tutorial mode"), description,
+        options, N_ELEMENTS(options), (int)current);
 
     if (choice < 0 || choice >= (int)N_ELEMENTS(options))
         return false;
 
     if ((tutorial_mode)choice != current)
         set_sdl_gameplay_tutorial_mode((tutorial_mode)choice);
+    return true;
+}
+
+bool tutorial_game_select_language(void)
+{
+    size_t count;
+    const tutorial_locale *locales = tutorial_available_locales(&count);
+    ui_question_option *options = calloc(count, sizeof(*options));
+    int current = 0;
+    if (!options) return false;
+    for (size_t i = 0; i < count; ++i) {
+        options[i].label = locales[i].name;
+        options[i].attr = TERM_WHITE;
+        if (!strcmp(tutorial_language(), locales[i].code)) current = (int)i;
+    }
+    int choice = ui_question_ask_tutorial(tutorial_translate("Language"), NULL,
+        options, (int)count, current);
+    free(options);
+    if (choice < 0 || (size_t)choice >= count || choice == current) return false;
+    tutorial_set_language(locales[choice].code);
+    (void)save_pane_config_to_json();
     return true;
 }
 
@@ -1691,17 +1711,19 @@ void tutorial_game_settings(void)
         ui_question_option options[] = {
             {'e', mode_label, TERM_L_BLUE, false},
             {'r', tutorial_translate("Reset tutorials for this Tale"), TERM_ORANGE, run_mode_is_blitz()},
+            {'l', tutorial_translate("Language"), TERM_WHITE, false},
             {'b', tutorial_translate("Back"), TERM_WHITE, false}
         };
-        int choice = ui_question_ask_overlay(tutorial_translate("Gameplay tutorials"),
+        int choice = ui_question_ask_tutorial(tutorial_translate("Gameplay tutorials"),
             p_ptr && p_ptr->tutorial_deferred
             ? tutorial_translate("Tutorials are deferred for this older character. Mode changes and reset apply to your next new character. Choose Disabled, Normal or Extended; Extended includes all lessons. Revealed tutorial cards remain available to read.")
-            : tutorial_translate("Choose Disabled, Normal or Extended. Normal teaches core controls and survival; Extended adds detailed mechanics. Lessons are remembered across heroes in this Tale. Reading is free; guided actions keep their normal costs."), options, N_ELEMENTS(options), -1, -1, 0);
-        if (choice < 0 || choice == 2) break;
-        if (choice == 0) tutorial_game_select_mode();
+            : tutorial_translate("Choose Disabled, Normal or Extended. Normal teaches core controls and survival; Extended adds detailed mechanics. Lessons are remembered across heroes in this Tale. Reading is free; guided actions keep their normal costs."), options, N_ELEMENTS(options), 0);
+        if (choice < 0 || choice == 3) break;
+        if (choice == 2) tutorial_game_select_language();
+        else if (choice == 0) tutorial_game_select_mode();
         else if (choice == 1) {
             ui_question_option confirm[] = {{'r', tutorial_translate("Reset this Tale's lesson history"), TERM_ORANGE, false}, {'c', tutorial_translate("Cancel"), TERM_WHITE, false}};
-            if (ui_question_ask_overlay(tutorial_translate("Reset tutorials"), tutorial_translate("Only tutorial history for the current Tale will be cleared. The game and device controls do not reset."), confirm, 2, -1, -1, 1) == 0) {
+            if (ui_question_ask_tutorial(tutorial_translate("Reset tutorials"), tutorial_translate("Only tutorial history for the current Tale will be cleared. The game and device controls do not reset."), confirm, 2, 1) == 0) {
                 tutorial_reset_tale();
                 opening_pending = true;
             }

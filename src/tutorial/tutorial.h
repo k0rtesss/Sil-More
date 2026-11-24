@@ -52,13 +52,23 @@ typedef struct tutorial_view {
     tutorial_mode level;
 } tutorial_view;
 
+typedef struct tutorial_locale {
+    const char *code;
+    const char *name; /* Shown in the language's own spelling. */
+    bool localized_title; /* Use the locale's tutorial heading font. */
+} tutorial_locale;
+
 /* Lazy loading also occurs at checkpoint. Reload is useful for content tests.
  * A failed catalogue reload leaves the previous valid catalogue intact. */
 bool tutorial_load_catalogue(const char *path);
 /* Presentation preference only: changing it never advances a lesson. */
 const char *tutorial_language(void);
 void tutorial_set_language(const char *language);
+const tutorial_locale *tutorial_available_locales(size_t *count);
+bool tutorial_uses_localized_title(void);
 const char *tutorial_translate(const char *english);
+const char *tutorial_device_text(const char *english);
+const char *tutorial_help_text(const char *english);
 void tutorial_shutdown(void);
 void tutorial_set_mode(tutorial_mode mode);
 tutorial_mode tutorial_get_mode(void);

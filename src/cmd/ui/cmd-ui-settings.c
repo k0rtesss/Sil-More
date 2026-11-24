@@ -9783,7 +9783,8 @@ static void do_cmd_mouse_settings(bool* settings_changed)
                     get_sdl_mouse_tile_pointer() ? "On" : "Off",
                     sizeof(action_buf));
             } else {
-                label = "Mouse tutorial";
+                settings_semantic_add_row(i, tutorial_help_text("Mouse tutorial"), a);
+                continue;
             }
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
@@ -9794,9 +9795,8 @@ static void do_cmd_mouse_settings(bool* settings_changed)
                 settings_semantic_line_from_menu_line(semantic_line,
                     sizeof(semantic_line), line_buf);
                 settings_semantic_add_row(i, semantic_line, a);
-                if (i != MOUSE_SETTING_TUTORIAL)
-                    sdl_character_sheet_screen_set_last_select_row_reset(
-                        SETTINGS_CLICK_RESET_ROW_BASE + i);
+                sdl_character_sheet_screen_set_last_select_row_reset(
+                    SETTINGS_CLICK_RESET_ROW_BASE + i);
             }
         }
 
@@ -9817,6 +9817,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             };
             cptr md = (highlight >= 0 && highlight < MOUSE_SETTING_COUNT)
                 ? mouse_setting_desc[highlight] : NULL;
+            if (highlight == MOUSE_SETTING_TUTORIAL) md = tutorial_help_text(md);
 
             sdl_character_sheet_screen_set_select_description(md ? md : "");
             sdl_character_sheet_screen_commit_select(highlight);
@@ -10426,7 +10427,7 @@ enum input_option_action {
 struct input_option_row {
     enum input_option_action action;
     char key;
-    char label[64];
+    char label[192];
     cptr description;
 };
 
@@ -10476,18 +10477,18 @@ static int input_option_rows_collect(struct input_option_row* rows,
             "mapping, stick movement, and movement delays.");
     }
     if (sdl_touch_tutorial_device_available()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', "Touch Tutorial",
-            "Replay the touch-controls tutorial.");
+        ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', tutorial_help_text("Touch Tutorial"),
+            tutorial_help_text("Replay the touch-controls tutorial."));
     }
     if (SDL_HasMouse() || sdl_control_enabled()) {
         ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'e', "Mouse Input",
             "Mouse behavior, including click-to-move and pointer options.");
     }
     ADD_INPUT_OPTION(INPUT_OPTION_WHEEL_TUTORIAL, 'f',
-        "Character Wheel Tutorial",
-        "Replay the player action-wheel tutorial.");
-    ADD_INPUT_OPTION(INPUT_OPTION_ZONES_TUTORIAL, 'g', "Zones Tutorial",
-        "Replay the screen-zones tutorial.");
+        tutorial_help_text("Character Wheel Tutorial"),
+        tutorial_help_text("Replay the player action-wheel tutorial."));
+    ADD_INPUT_OPTION(INPUT_OPTION_ZONES_TUTORIAL, 'g', tutorial_help_text("Zones Tutorial"),
+        tutorial_help_text("Replay the screen-zones tutorial."));
     ADD_INPUT_OPTION(INPUT_OPTION_RETURN, 'o', "Return to Options",
         "Return to the Options menu.");
 

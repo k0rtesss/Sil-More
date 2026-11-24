@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "sdl-config.h"
+#include "tutorial/tutorial.h"
 #include "ui/menu-click.h"
 #include "ui/question.h"
 
@@ -22,11 +23,13 @@ static void ui_question_show(cptr title, cptr desc,
     const object_type* const object_icons[], int count, int anchor_y,
     int anchor_x, int highlight, int* scroll_offset,
     bool scroll_follow_highlight, const ui_question_button* buttons,
-    int button_count, bool desc_on_demand)
+    int button_count, bool desc_on_demand, bool localized_tutorial)
 {
     char letter[4];
 
     sdl_question_menu_begin(title);
+    if (localized_tutorial)
+        sdl_question_menu_use_tutorial_fonts();
     sdl_question_menu_set_scroll_offset_target(scroll_offset,
         scroll_follow_highlight);
     if ((anchor_y >= 0) && (anchor_x >= 0))
@@ -126,7 +129,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
     const object_type* const object_icons[], int count, int anchor_y,
     int anchor_x, int default_index, bool repaint_background,
     const ui_question_button* buttons, int button_count,
-    bool desc_on_demand, const cptr disabled_reasons[])
+    bool desc_on_demand, const cptr disabled_reasons[], bool localized_tutorial)
 {
     int highlight;
     int result = -1;
@@ -169,7 +172,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_question_show(title, desc, options, object_icons, count, anchor_y,
             anchor_x, highlight, &scroll_offset, scroll_follow_highlight,
-            buttons, button_count, desc_on_demand);
+            buttons, button_count, desc_on_demand, localized_tutorial);
 
         which = inkey();
         if (sdl_question_menu_take_touch_scrolled())
@@ -356,7 +359,7 @@ int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, true, NULL, 0, false, NULL);
+        anchor_x, default_index, true, NULL, 0, false, NULL, false);
 }
 
 int ui_question_ask_with_reasons(cptr title, cptr desc,
@@ -364,7 +367,7 @@ int ui_question_ask_with_reasons(cptr title, cptr desc,
     int count, int anchor_y, int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, true, NULL, 0, false, disabled_reasons);
+        anchor_x, default_index, true, NULL, 0, false, disabled_reasons, false);
 }
 
 int ui_question_ask_objects(cptr title, cptr desc,
@@ -373,7 +376,7 @@ int ui_question_ask_objects(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, object_icons, count,
-        anchor_y, anchor_x, default_index, true, NULL, 0, false, NULL);
+        anchor_y, anchor_x, default_index, true, NULL, 0, false, NULL, false);
 }
 
 int ui_question_ask_objects_with_help(cptr title, cptr desc,
@@ -382,7 +385,7 @@ int ui_question_ask_objects_with_help(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, object_icons, count,
-        anchor_y, anchor_x, default_index, true, NULL, 0, true, NULL);
+        anchor_y, anchor_x, default_index, true, NULL, 0, true, NULL, false);
 }
 
 int ui_question_ask_overlay(cptr title, cptr desc,
@@ -390,7 +393,15 @@ int ui_question_ask_overlay(cptr title, cptr desc,
     int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, false, NULL, 0, false, NULL);
+        anchor_x, default_index, false, NULL, 0, false, NULL, false);
+}
+
+int ui_question_ask_tutorial(cptr title, cptr desc,
+    const ui_question_option* options, int count, int default_index)
+{
+    return ui_question_ask_aux(title, desc, options, NULL, count,
+        UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, default_index, false,
+        NULL, 0, false, NULL, true);
 }
 
 int ui_question_ask_overlay_buttons(cptr title, cptr desc,
@@ -399,5 +410,5 @@ int ui_question_ask_overlay_buttons(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, false, buttons, button_count, false, NULL);
+        anchor_x, default_index, false, buttons, button_count, false, NULL, false);
 }

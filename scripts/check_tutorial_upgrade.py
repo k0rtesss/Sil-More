@@ -63,12 +63,13 @@ size_t strnfmt(char *buf, size_t size, const char *fmt, ...)
 { va_list args; va_start(args,fmt); int n=SDL_vsnprintf(buf,size,fmt,args); va_end(args); return n<0?0:(size_t)n; }
 void log_log(int level, const char *file, int line, const char *fmt, ...)
 { (void)level; (void)file; (void)line; (void)fmt; }
-int ui_question_ask_overlay(cptr title,cptr text,const ui_question_option *options,
-    int count,int y,int x,int initial)
+const char *tutorial_translate(const char *text) { return text; }
+int ui_question_ask_tutorial(cptr title,cptr text,const ui_question_option *options,
+    int count,int initial)
 {
     assert(managing && !strcmp(title,"Updated to 0.9.8"));
     assert(count==1 && !strcmp(options[0].label,"Continue"));
-    assert(y==UI_QUESTION_GLOBAL && x==UI_QUESTION_GLOBAL && initial==0);
+    assert(initial==0);
     SDL_strlcpy(last_message,text,sizeof(last_message)); ++notices; return answer;
 }
 

@@ -165,14 +165,20 @@ void fixture_smithing_attributes(void)
     p_ptr->stat_base[A_STR] = 3;
     p_ptr->stat_base[A_DEX] = 5;
     p_ptr->stat_base[A_GRA] = 6;
-    p_ptr->tmp_dex = 5;
-    p_ptr->stat_drain[A_GRA] = -2;
     p_ptr->innate_ability[S_SMT][SMT_JEWELLER] = true;
     p_ptr->innate_ability[S_SMT][SMT_ARTEFACT] = true;
     calc_bonuses();
-    assert(p_ptr->stat_use[A_DEX] != 5 && p_ptr->stat_use[A_GRA] != 6);
     assert(p_ptr->skill_stat_mod[S_SMT] == 14);
     assert(smithing_capacity() == 16);
+
+    p_ptr->tmp_dex = 5;
+    calc_bonuses();
+    assert(p_ptr->stat_use[A_DEX] == 8 && smithing_capacity() == 18);
+    p_ptr->stat_drain[A_GRA] = -2;
+    calc_bonuses();
+    assert(p_ptr->stat_use[A_GRA] == 4 && smithing_capacity() == 14);
+    p_ptr->tmp_dex = 0;
+    p_ptr->stat_drain[A_GRA] = 0;
 
     p_ptr->skill_base[S_SMT] = 2;
     p_ptr->innate_ability[S_SMT][SMT_WEAPONSMITH] = true;
@@ -191,6 +197,10 @@ void fixture_smithing_attributes(void)
     calc_bonuses();
     assert(p_ptr->skill_stat_mod[S_SMT] == 29);
     assert(smithing_capacity() == 33);
+    p_ptr->tmp_str = 5;
+    calc_bonuses();
+    assert(p_ptr->stat_use[A_STR] == 6 && smithing_capacity() == 35);
+    p_ptr->tmp_str = 0;
     p_ptr->active_ability[S_SMT][SMT_ARTEFACT] = false;
     calc_bonuses();
     assert(smithing_capacity() == 27);
@@ -225,7 +235,72 @@ void fixture_smithing_attributes(void)
     p_ptr->skill_use[S_SMT] -= 2;
     assert(!too_difficult(&sword) && smithing_cost.drain == 2);
     assert(smith_reforge_difficulty_affordable(difficulty, &drain) && drain == 2);
-    puts("PASS Smithing ranks, global abilities, single rounding, forge and Reforge thresholds");
+    puts("PASS Smithing ranks, current attributes, global abilities, rounding and forge thresholds");
+}
+static void finish_equipment_action(void)
+{
+    for (int turns = 0; turns < 10 && player_pack_action_pending(); ++turns)
+        player_pack_action_process();
+    assert(!player_pack_action_pending());
+    calc_bonuses();
+}
+static void equip_smithing_item(object_type* item, int slot)
+{
+    object_known(item);
+    assert(player_carried_extra_load(item));
+    int handle = CARRIED_EXTRA_INDEX + player_carried_extra_entry_count() - 1;
+    assert(do_cmd_wield_to_slot(player_inventory_object(handle), handle, slot));
+    finish_equipment_action();
+}
+void fixture_smithing_equipment(void)
+{
+    rp_ptr = &p_info[0];
+    current_character_profile = &c_info[0];
+    p_ptr->stat_base[A_DEX] = 0;
+    p_ptr->stat_base[A_GRA] = 0;
+    p_ptr->skill_base[S_SMT] = 0;
+    p_ptr->innate_ability[S_SMT][SMT_WEAPONSMITH] = true;
+    p_ptr->innate_ability[S_SMT][SMT_JEWELLER] = true;
+    calc_bonuses();
+
+    object_type recipe;
+    object_prep(&recipe, lookup_kind(TV_SWORD, SV_GREAT_SWORD));
+    const int difficulty = object_difficulty(&recipe);
+    const int capacity = difficulty - 1;
+    assert(capacity >= smithing_capacity());
+    p_ptr->skill_base[S_SMT] = capacity - smithing_capacity();
+    calc_bonuses();
+    assert(smithing_capacity() == capacity);
+    assert(!affordable(&recipe));
+    assert(!smith_reforge_difficulty_affordable(difficulty, NULL));
+
+    object_type jewel;
+    object_prep(&jewel, lookup_kind(TV_LIGHT, SV_LIGHT_LESSER_JEWEL));
+    object_set_ego_suffix(&jewel, EGO_GRACE);
+    assert(object_apply_ego_affix(&jewel, EGO_GRACE, true));
+    const int grace_delta = 2 - jewel.stat_bonus[A_GRA];
+    jewel.pval += grace_delta;
+    object_apply_pval_delta_with_mask(&jewel, TR1_GRA, grace_delta);
+    equip_smithing_item(&jewel, INVEN_LITE);
+    assert(p_ptr->stat_use[A_GRA] == 2);
+    assert(smithing_capacity() == capacity + 2);
+    assert(object_difficulty(&recipe) == difficulty && affordable(&recipe));
+    assert(smith_reforge_difficulty_affordable(difficulty, NULL));
+
+    do_cmd_takeoff(&inventory[INVEN_LITE], INVEN_LITE);
+    finish_equipment_action();
+    assert(p_ptr->stat_use[A_GRA] == 0 && smithing_capacity() == capacity);
+    assert(!affordable(&recipe));
+
+    object_type hammer;
+    object_prep(&hammer, lookup_kind(TV_HAFTED, SV_WAR_HAMMER));
+    object_set_ego_suffix(&hammer, EGO_UNQUENCHED_FIRE);
+    assert(object_apply_ego_affix(&hammer, EGO_UNQUENCHED_FIRE, true));
+    assert(hammer.skill_bonus[S_SMT] > 0);
+    equip_smithing_item(&hammer, INVEN_WIELD);
+    assert(smithing_capacity() == capacity + hammer.skill_bonus[S_SMT]);
+    assert(object_difficulty(&recipe) == difficulty && affordable(&recipe));
+    puts("PASS equipping and removing a +2 Lesser Jewel of Grace, direct Smithing gear, and forge eligibility");
 }
 void fixture_dwarven_smithing(void)
 {
@@ -522,6 +597,8 @@ static void difficulty_checks(void)
     scenario="Smithing attributes";prepare(3);
     p_ptr->pcharacter=0;current_character_profile=&c_info[0];
     fixture_smithing_attributes();
+    scenario="Smithing equipment";prepare(3);
+    fixture_smithing_equipment();
     scenario="Dwarven Smithing";prepare(3);
     fixture_dwarven_smithing();
     scenario="unified difficulty";prepare(30);
@@ -579,6 +656,7 @@ def main():
         "static bool inject_draft;\n"
         "void fixture_build_negative_draft(void);\n"
         "void fixture_smithing_attributes(void);\n"
+        "void fixture_smithing_equipment(void);\n"
     )
     tests = TESTS.replace("static bool inject_draft;\n", "")
     source = OUT / "check.c"

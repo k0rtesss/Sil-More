@@ -75,6 +75,10 @@ int ui_question_ask_overlay(cptr title, cptr desc,
     const ui_question_option* options, int count, int anchor_y, int anchor_x,
     int default_index);
 
+/* Centered overlay for the tutorial archive and settings. */
+int ui_question_ask_tutorial(cptr title, cptr desc,
+    const ui_question_option* options, int count, int default_index);
+
 int ui_question_ask_overlay_buttons(cptr title, cptr desc,
     const ui_question_option* options, int count,
     const ui_question_button* buttons, int button_count, int anchor_y,

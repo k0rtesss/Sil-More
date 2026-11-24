@@ -82,9 +82,30 @@ static bool pack_pending;
 metarun metar;
 metarun *metarun_current_mutable(void) { return &test_tale; }
 errr save_metaruns(void) { return 0; }
-int ui_question_ask_overlay(cptr title,cptr desc,const ui_question_option *options,
-    int count,int anchor_y,int anchor_x,int default_index)
-{ (void)title;(void)desc;(void)options;(void)count;(void)anchor_y;(void)anchor_x;(void)default_index;return 0; }
+static int language_choice=-1;
+static int language_saves;
+static int settings_language_step=-1;
+bool save_pane_config_to_json(void) { ++language_saves; return true; }
+void set_sdl_gameplay_tutorial_mode(tutorial_mode mode) { tutorial_set_mode(mode); }
+int ui_question_ask_tutorial(cptr title,cptr desc,const ui_question_option *options,
+    int count,int default_index)
+{
+    (void)desc;
+    if (settings_language_step>=0 && !strcmp(title,tutorial_translate("Gameplay tutorials"))) {
+        assert(count==4 && options[2].key=='l' && options[3].key=='b');
+        assert(!strcmp(options[2].label,tutorial_translate("Language")));
+        return settings_language_step++==0 ? 2 : 3;
+    }
+    if (!strcmp(title,tutorial_translate("Language"))) {
+        size_t n;
+        const tutorial_locale *locales=tutorial_available_locales(&n);
+        assert((size_t)count==n && !strcmp(locales[default_index].code,tutorial_language()));
+        for (size_t i=0;i<n;++i)
+            assert(!options[i].disabled && !strcmp(options[i].label,locales[i].name));
+        return language_choice;
+    }
+    return 0;
+}
 bool death_spectator_active(void) { return false; }
 bool player_can_treat_as_throwing(const object_type *o) { return o && o->tval==TV_POLEARM; }
 bool player_power_throw_ready(void) { return false; }
@@ -955,6 +976,24 @@ int main(void)
     started=true;
     test_tale.id=200;
     assert(tutorial_load_catalogue("catalogue.json"));
+    size_t nlocales;
+    const tutorial_locale *locales=tutorial_available_locales(&nlocales);
+    assert(!tutorial_game_select_language() && language_saves==0);
+    for (size_t i=1;i<nlocales;++i) {
+        language_choice=(int)i;
+        assert(tutorial_game_select_language() && !strcmp(tutorial_language(),locales[i].code));
+        assert(!tutorial_game_select_language() && language_saves==(int)i);
+    }
+    language_choice=0;
+    assert(tutorial_game_select_language() && !strcmp(tutorial_language(),"en"));
+    settings_language_step=0;
+    language_choice=1;
+    managing=true;
+    tutorial_game_settings();
+    assert(settings_language_step==2 && !strcmp(tutorial_language(),locales[1].code));
+    managing=false;
+    settings_language_step=-1;
+    tutorial_set_language("en");
     tutorial_sync_tale();
 
     mon_list[1]=(monster_type){.r_idx=1,.ml=true,.fy=5,.fx=6,.alertness=ALERTNESS_ALERT};

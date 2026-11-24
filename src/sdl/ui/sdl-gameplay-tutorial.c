@@ -31,7 +31,7 @@ static float tutorial_scroll_y;
 static bool tutorial_reading;
 static bool tutorial_force_sync;
 static unsigned int tutorial_input_epoch;
-static bool tutorial_mode_selector_active;
+static bool tutorial_selector_active;
 static bool tutorial_menu_preview_available;
 static bool tutorial_menu_preview_shown;
 static char tutorial_menu_preview_control[64];
@@ -610,34 +610,31 @@ static void tutorial_update_mouse_hover(float x, float y)
 
 static void tutorial_activate(int button, const tutorial_view *view)
 {
-    if (button == 3) {
-        bool reading = tutorial_reading;
-        tutorial_set_language(!strcmp(tutorial_language(), "en") ? "ru" : "en");
-        (void)save_pane_config_to_json();
-        sdl_gameplay_tutorial_sync();
-        tutorial_reading = reading;
-        tutorial_focus = 3;
-        g_state.need_present = true;
-        return;
-    }
     if (button==0 && !view->can_continue && tutorial_reading) {
         tutorial_set_reading(false);
         tutorial_focus=0;
         g_state.need_present=true;
         return;
     }
-    if (button == 2) {
+    if (button == 2 || button == 3) {
         tutorial_view next;
         int saved_focus=tutorial_focus, saved_scroll=tutorial_scroll;
         bool saved_reading=tutorial_reading;
         bool restore_command_wait=inkey_flag;
-        tutorial_mode_selector_active = true;
-        bool selected = tutorial_game_select_mode();
-        tutorial_mode_selector_active = false;
+        tutorial_selector_active = true;
+        bool selected = button == 3 ? tutorial_game_select_language() : tutorial_game_select_mode();
+        tutorial_selector_active = false;
         if (restore_command_wait && character_icky == 0)
             inkey_flag = true;
         if (!selected) {
             g_state.need_present=true;
+            return;
+        }
+        if (button == 3) {
+            sdl_gameplay_tutorial_sync();
+            tutorial_reading = saved_reading;
+            tutorial_focus = 3;
+            g_state.need_present = true;
             return;
         }
         /* Choosing Disabled also closes a manual archive replay. Eligible
@@ -673,17 +670,51 @@ static void tutorial_activate(int button, const tutorial_view *view)
 }
 
 /* The shared text drawer wraps at this width in every font mode. */
-static float tutorial_text_height(const char *text, int font_px, float width)
+static float tutorial_text_height(const char *text, int font_px, int slot, float width)
 {
     TTF_Font *font;
     int w=0,h=0;
     if (!text[0]) return 0;
-    font=sdl_story_font_for_height_slot(font_px,SDL_STORY_FONT_SLOT_TUTORIAL);
+    font=sdl_story_font_for_height_slot(font_px,slot);
     if (font && width > 0
         && TTF_GetStringSizeWrapped(font,text,0,MAX(1,(int)width),&w,&h))
         return h;
     if (!font || !TTF_GetStringSize(font,text,0,&w,&h)) return font_px;
     return h;
+}
+
+enum { TUTORIAL_BUTTON_TEXT_PADDING = 8 };
+
+/* On narrow cards, give long button words space that shorter labels can spare. */
+static bool tutorial_button_widths(const tutorial_controls *controls, int first,
+    float inner_width, TTF_Font *font, float widths[4])
+{
+    int count = 3 - first;
+    float available = inner_width - 50 - 6 * count;
+    float equal = available / count, total = 0, widest = 0;
+    float needed[3] = {0};
+    widths[3] = 50;
+    for (int i = first; i < 3; ++i) {
+        widths[i] = equal;
+        needed[i] = 44;
+        const char *word = controls->label[i];
+        while (font && *word) {
+            word += strspn(word, " ");
+            size_t len = strcspn(word, " ");
+            int w, h;
+            if (!len) break;
+            if (TTF_GetStringSize(font, word, len, &w, &h))
+                needed[i] = MAX(needed[i], w + TUTORIAL_BUTTON_TEXT_PADDING);
+            word += len;
+        }
+        widest = MAX(widest, needed[i]);
+        total += needed[i];
+    }
+    if (widest > equal && total <= available) {
+        for (int i = first; i < 3; ++i)
+            widths[i] = needed[i] + (available - total) / count;
+    }
+    return total <= available;
 }
 
 void sdl_gameplay_tutorial_render(void)
@@ -699,9 +730,10 @@ void sdl_gameplay_tutorial_render(void)
     SDL_FRect card_space;
     float margin, width, height, pad, line_h, body_y, body_h, heading_h;
     float button_h=44, button_pad, gap, footer_h, footer_y, hint_h[2];
-    float label_h[4]={0}, shortcut_h[4]={0};
-    int label_px, shortcut_px, hint_px[2], first_button, button_count;
+    float label_h[4]={0}, shortcut_h[4]={0}, button_w[4]={0};
+    int label_px, shortcut_px, hint_px[2], first_button;
     int font_px, title_px, line_count, visible_lines;
+    int scrolling_title_lines = 0;
     char heading[384];
     static char large_lines[512][SDL_TOUCH_TUTORIAL_LINE_LEN];
     char (*lines)[SDL_TOUCH_TUTORIAL_LINE_LEN] = large_lines;
@@ -711,7 +743,7 @@ void sdl_gameplay_tutorial_render(void)
     const SDL_Color white = {240,239,231,255}, gold = {244,202,111,255};
     const SDL_Color muted = {182,191,204,255};
     sdl_gameplay_tutorial_sync();
-    if (tutorial_mode_selector_active) return;
+    if (tutorial_selector_active) return;
     if (!tutorial_get_view(&view) || screen.w <= 0 || screen.h <= 0) return;
     /* Aiming needs the whole map: the target, other creatures and the path
      * can all lie under the card or its shade. Keep the lesson pending and
@@ -722,6 +754,10 @@ void sdl_gameplay_tutorial_render(void)
     }
     lore_copy(view.title, sizeof(view.title), view.title);
     lore_copy(view.body, sizeof(view.body), view.body);
+    bool localized_title = tutorial_uses_localized_title();
+    int body_slot = sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL);
+    int title_slot = localized_title
+        ? sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE) : body_slot;
     tutorial_build_controls(&view,&controls,false);
     action_step=!view.can_continue && !tutorial_reading;
     compact_action=action_step && screen.h<360;
@@ -741,9 +777,9 @@ void sdl_gameplay_tutorial_render(void)
         ? sdl_ui_role_font_px(SDL_UI_FONT_TITLE)
                                   : font_px + 2;
     if (compact_action) pad=4;
-    font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
+    font = sdl_story_font_for_height_slot(font_px, body_slot);
     if (!font) return;
-    line_h = MAX(font_px*1.35f,tutorial_text_height("Ag",font_px,0)+1);
+    line_h = MAX(font_px*1.35f,tutorial_text_height("Ag",font_px,body_slot,0)+1);
     width = MIN(screen.w-2*margin, MAX(690.0f,font_px*24.0f));
     if (sdl_handheld_ui_active() && get_sdl_bigger_font())
     {
@@ -788,7 +824,6 @@ void sdl_gameplay_tutorial_render(void)
         if (compact_action) pad = 4;
     }
     first_button=controls.primary?0:1;
-    button_count=3-first_button;
     /* Try to include shortcuts on desktop. Their actual wrapped height and
      * the remaining card space decide whether they fit below the labels. */
     show_shortcuts = !config.bigger_font || !sdl_handheld_ui_active();
@@ -822,23 +857,29 @@ void sdl_gameplay_tutorial_render(void)
     strnfmt(heading,sizeof(heading),"%s  %d/%d",view.title,view.step,view.step_count);
     for (;;) {
         button_h=minimum_button_h;
+        if (!tutorial_button_widths(&controls,first_button,width-2*pad,
+                sdl_story_font_for_height_slot(label_px,body_slot),button_w)
+            && !config.bigger_font && label_px>13) {
+            --label_px;
+            continue;
+        }
         for (int i=first_button;i<4;++i) {
-            float text_w=i==3 ? 38 : (width-2*pad-56)/button_count-18;
-            label_h[i]=tutorial_text_height(controls.label[i],label_px,text_w);
+            float text_w=button_w[i]-TUTORIAL_BUTTON_TEXT_PADDING;
+            label_h[i]=tutorial_text_height(controls.label[i],label_px,body_slot,text_w);
             shortcut_h[i]=show_shortcuts
-                ? tutorial_text_height(controls.shortcut[i],shortcut_px,text_w) : 0;
+                ? tutorial_text_height(controls.shortcut[i],shortcut_px,body_slot,text_w) : 0;
             button_h=MAX(button_h,2*button_pad+label_h[i]
                 +(shortcut_h[i]>0?gap+shortcut_h[i]:0));
         }
         float reading_h=tutorial_text_height(scrolling_controls.controls_hint,
-            hint_px[1],width-2*pad);
-        float action_h=tutorial_text_height(controls.action_hint,hint_px[0],width-2*pad);
+            hint_px[1],body_slot,width-2*pad);
+        float action_h=tutorial_text_height(controls.action_hint,hint_px[0],body_slot,width-2*pad);
         float controls_h=button_h+gap;
         if (!compact_action && !config.bigger_font)
             controls_h+=action_h+reading_h+gap*(action_h>0?2:1);
         if (config.bigger_font && show_shortcuts
             && controls_h + 2*pad + line_h
-                + tutorial_text_height(heading,title_px,width-2*pad) + gap
+                + tutorial_text_height(heading,title_px,title_slot,width-2*pad) + gap
                 > card_space.h) {
             /* Preserve the named actions and prose before squeezing their
              * font: shortcuts are supplementary and can be hidden. */
@@ -858,38 +899,46 @@ void sdl_gameplay_tutorial_render(void)
         hint_px[0]=MAX(12,hint_px[0]-1);
         hint_px[1]=MAX(11,hint_px[1]-1);
     }
-    hint_h[0]=tutorial_text_height(controls.action_hint,hint_px[0],width-2*pad);
-    hint_h[1]=tutorial_text_height(controls.controls_hint,hint_px[1],width-2*pad);
+    hint_h[0]=tutorial_text_height(controls.action_hint,hint_px[0],body_slot,width-2*pad);
+    hint_h[1]=tutorial_text_height(controls.controls_hint,hint_px[1],body_slot,width-2*pad);
     footer_h=button_h+gap;
     if (!compact_action && !config.bigger_font)
         footer_h+=hint_h[0]+hint_h[1]+gap*(hint_h[0]>0?2:1);
     /* The catalogue places live context with {detail}/{subject}. Appending
      * lesson-wide context here repeats it on every page, even unrelated ones. */
-    font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_TUTORIAL);
-    if (!font) return;
-    heading_h = tutorial_text_height(heading,title_px,
+    float wrap_width = width-2*pad-(config.bigger_font ? 2 : 0);
+    heading_h = tutorial_text_height(heading,title_px,title_slot,
         width-2*pad-(!config.bigger_font && compact_action?100:0)) + gap;
     if (!config.bigger_font) heading_h=MAX(heading_h,line_h*1.5f);
+    SDL_strlcpy(large_body, view.body, sizeof(large_body));
     if (heading_h + footer_h + line_h + 2 * pad > card_space.h) {
         /* Very short screens put the title into the scrolling prose. */
-        strnfmt(large_body, sizeof(large_body), "%s\n%s", heading, view.body);
+        if (localized_title) {
+            TTF_Font *title_font = sdl_story_font_for_height_slot(title_px, title_slot);
+            scrolling_title_lines = sdl_touch_tutorial_wrap_lines(heading,
+                title_font, wrap_width, lines, line_capacity);
+        } else
+            strnfmt(large_body, sizeof(large_body), "%s\n%s", heading, view.body);
         heading_h = 0;
-    } else
-        SDL_strlcpy(large_body, view.body, sizeof(large_body));
-    line_count = sdl_touch_tutorial_wrap_lines(large_body,
-        font,width-2*pad-(config.bigger_font ? 2 : 0),lines,line_capacity);
+    }
+    font = sdl_story_font_for_height_slot(font_px, body_slot);
+    if (!font) return;
+    line_count = scrolling_title_lines + sdl_touch_tutorial_wrap_lines(large_body,
+        font,wrap_width,lines+scrolling_title_lines,line_capacity-scrolling_title_lines);
     /* Include extra wrapping of a long word or truncation ellipsis too. */
-    for (int i = 0; i < line_count; i++)
-        line_h = MAX(line_h, tutorial_text_height(lines[i], font_px,
-            width - 2 * pad) + 1.0f);
+    for (int i = 0; i < line_count; i++) {
+        bool title_line = i < scrolling_title_lines;
+        line_h = MAX(line_h, tutorial_text_height(lines[i], title_line ? title_px : font_px,
+            title_line ? title_slot : body_slot, width - 2 * pad) + 1.0f);
+    }
     /* Fit the complete lesson before resorting to scrolling. Only the small
      * live-action strip deliberately limits how much body text is shown. */
     int requested_scroll=tutorial_scroll;
     for (int pass=0;pass<3;++pass) {
         /* Scroll guidance and its counter can wrap as well as action labels.
          * Reflow after discovering overflow so both hint rows stay separate. */
-        hint_h[0]=tutorial_text_height(controls.action_hint,hint_px[0],width-2*pad);
-        hint_h[1]=tutorial_text_height(controls.controls_hint,hint_px[1],width-2*pad);
+        hint_h[0]=tutorial_text_height(controls.action_hint,hint_px[0],body_slot,width-2*pad);
+        hint_h[1]=tutorial_text_height(controls.controls_hint,hint_px[1],body_slot,width-2*pad);
         footer_h=button_h+gap;
         if (!compact_action && !config.bigger_font)
             footer_h+=hint_h[0]+hint_h[1]+gap*(hint_h[0]>0?2:1);
@@ -946,15 +995,19 @@ void sdl_gameplay_tutorial_render(void)
     SDL_SetRenderDrawColor(g_state.renderer,gold.r,gold.g,gold.b,255);
     SDL_RenderRect(g_state.renderer,&tutorial_card);
     if (heading_h > 0)
-        sdl_touch_tutorial_draw_text_line(heading,tutorial_card.x+pad,tutorial_card.y+pad,
-            width-2*pad-(!config.bigger_font && compact_action && tutorial_max_scroll?100:0),title_px,gold,false);
+        sdl_tutorial_draw_text_line_for_slot(heading,tutorial_card.x+pad,tutorial_card.y+pad,
+            width-2*pad-(!config.bigger_font && compact_action && tutorial_max_scroll?100:0),title_px,title_slot,gold,false);
     if (heading_h > 0 && !config.bigger_font && compact_action && tutorial_max_scroll)
-        sdl_touch_tutorial_draw_text_line(controls.read_hint,
-            tutorial_card.x+width-pad-94,tutorial_card.y+pad+2,94,12,muted,false);
+        sdl_tutorial_draw_text_line_for_slot(controls.read_hint,
+            tutorial_card.x+width-pad-94,tutorial_card.y+pad+2,94,12,body_slot,muted,false);
     body_y = tutorial_card.y+pad+heading_h;
-    for (int i=0;i<visible_lines && i+tutorial_scroll<line_count;++i)
-        sdl_touch_tutorial_draw_text_line(lines[i+tutorial_scroll],tutorial_card.x+pad,
-            body_y+i*line_h,width-2*pad,font_px,white,false);
+    for (int i=0;i<visible_lines && i+tutorial_scroll<line_count;++i) {
+        int row = i+tutorial_scroll;
+        bool title_line = row < scrolling_title_lines;
+        sdl_tutorial_draw_text_line_for_slot(lines[row],tutorial_card.x+pad,
+            body_y+i*line_h,width-2*pad,title_line ? title_px : font_px,
+            title_line ? title_slot : body_slot,title_line ? gold : white,false);
+    }
     if (tutorial_max_scroll) {
         SDL_FRect viewport = { tutorial_card.x + pad, body_y,
             width - pad - 3.0f * sdl_ui_density_scale(), visible_lines * line_h };
@@ -963,29 +1016,29 @@ void sdl_gameplay_tutorial_render(void)
     }
     if (!compact_action && !config.bigger_font) {
         footer_y=tutorial_card.y+height-pad-footer_h+gap;
-        sdl_touch_tutorial_draw_text_line(controls.action_hint,tutorial_card.x+pad,
-            footer_y,width-2*pad,hint_px[0],muted,false);
+        sdl_tutorial_draw_text_line_for_slot(controls.action_hint,tutorial_card.x+pad,
+            footer_y,width-2*pad,hint_px[0],body_slot,muted,false);
         if (hint_h[0]>0) footer_y+=hint_h[0]+gap;
-        sdl_touch_tutorial_draw_text_line(controls.controls_hint,tutorial_card.x+pad,
-            footer_y,width-2*pad,hint_px[1],muted,false);
+        sdl_tutorial_draw_text_line_for_slot(controls.controls_hint,tutorial_card.x+pad,
+            footer_y,width-2*pad,hint_px[1],body_slot,muted,false);
     }
     tutorial_buttons[0]=(SDL_FRect){0};
+    float button_x = tutorial_card.x + pad;
     for (int i=first_button;i<4;++i) {
-        tutorial_buttons[i] = (SDL_FRect){i==3 ? tutorial_card.x+width-pad-50
-                : tutorial_card.x+pad+(i-first_button)*(width-2*pad-56)/button_count,
-            tutorial_card.y+height-pad-button_h,
-            i==3 ? 50 : (width-2*pad-56)/button_count-6,button_h};
+        tutorial_buttons[i] = (SDL_FRect){button_x,tutorial_card.y+height-pad-button_h,
+            button_w[i],button_h};
+        button_x += button_w[i] + 6;
         SDL_SetRenderDrawColor(g_state.renderer,i==tutorial_focus?66:34,i==tutorial_focus?58:43,47,255);
         SDL_RenderFillRect(g_state.renderer,&tutorial_buttons[i]);
         SDL_SetRenderDrawColor(g_state.renderer,i==tutorial_focus?244:90,i==tutorial_focus?202:103,111,255);
         SDL_RenderRect(g_state.renderer,&tutorial_buttons[i]);
         float text_y=tutorial_buttons[i].y+(button_h-label_h[i]
             -(shortcut_h[i]>0?gap+shortcut_h[i]:0))/2;
-        sdl_touch_tutorial_draw_text_line(controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
-            text_y,tutorial_buttons[i].w-12,label_px,white,true);
-        if (show_shortcuts && controls.shortcut[i][0]) sdl_touch_tutorial_draw_text_line(controls.shortcut[i],
+        sdl_tutorial_draw_text_line_for_slot(controls.label[i],tutorial_buttons[i].x+tutorial_buttons[i].w/2,
+            text_y,tutorial_buttons[i].w-TUTORIAL_BUTTON_TEXT_PADDING,label_px,body_slot,white,true);
+        if (show_shortcuts && controls.shortcut[i][0]) sdl_tutorial_draw_text_line_for_slot(controls.shortcut[i],
             tutorial_buttons[i].x+tutorial_buttons[i].w/2,text_y+label_h[i]+gap,
-            tutorial_buttons[i].w-12,shortcut_px,gold,true);
+            tutorial_buttons[i].w-TUTORIAL_BUTTON_TEXT_PADDING,shortcut_px,body_slot,gold,true);
     }
 }
 
@@ -997,7 +1050,7 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
     float x=0,y=0;
     SDL_FingerID finger=0;
     sdl_gameplay_tutorial_sync();
-    if (tutorial_mode_selector_active) return false;
+    if (tutorial_selector_active) return false;
     active = tutorial_get_view(&view);
     /* The selector can open before the next present. Discard stale card
      * hitboxes immediately so the first tap on its former area can aim. */

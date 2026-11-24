@@ -72,7 +72,19 @@ int main(int argc, char **argv)
     );
     write_text("tale-101-tutorials.json", "{\"version\":1,\"lessons\":{\"future-lesson\":{\"status\":\"completed\",\"extra\":9},\"item.skeleton\":{\"status\":\"completed\"},\"item.chest\":{\"status\":\"skipped\"}}}");
     test_tale.id = 101;
+    /* Settings can select a language before the English catalogue is loaded.
+     * A mislabeled sidecar, or a missing entry in a valid one, uses English. */
+    tutorial_set_language("fr");
+    write_text("tutorials.fr.json", "{\"version\":1,\"language\":\"de\",\"strings\":{\"Continue\":\"Weiter\"}}");
     assert(tutorial_load_catalogue("catalogue.json"));
+    assert(!strcmp(tutorial_translate("Continue"),"Continue"));
+    write_text("tutorials.fr.json", "{\"version\":1,\"language\":\"fr\",\"strings\":{\"Continue\":\"Continuer\"}}");
+    assert(tutorial_load_catalogue("catalogue.json"));
+    assert(!strcmp(tutorial_translate("Continue"),"Continuer"));
+    assert(!strcmp(tutorial_translate("Back"),"Back"));
+    assert(tutorial_archive_entry(0,&view,NULL) && !strcmp(view.title,"Movement"));
+    tutorial_set_language("en");
+    assert(SDL_RemovePath("tutorials.fr.json"));
     tutorial_sync_tale();
     SDL_strlcpy(context.subject, "visible orc", sizeof(context.subject));
     SDL_strlcpy(context.text, "public detail", sizeof(context.text));
@@ -459,7 +471,44 @@ int main(int argc, char **argv)
         assert(strstr(view.body,"Это существо"));
         assert(tutorial_revision()>old_revision);
         assert(tutorial_lesson_status(view.id)==old_status);
+        size_t locale_count;
+        const tutorial_locale *locales=tutorial_available_locales(&locale_count);
+        assert(argc==3+(int)locale_count-1);
+        for (int i=3;i<argc;++i) {
+            tutorial_set_language(argv[i]);
+            assert(!strcmp(tutorial_language(),argv[i]));
+            assert(strcmp(tutorial_translate("Continue"),"Continue"));
+            assert(strcmp(tutorial_translate("Language"),"Language"));
+            assert(strcmp(tutorial_help_text("Tutorials & Help"),"Tutorials & Help"));
+            assert(strcmp(tutorial_device_text("Choose Touch Preset"),"Choose Touch Preset"));
+            assert(locales[language_index].name[0]);
+            if (!strcmp(argv[i],"ru")) continue; /* Tested above. */
+            assert(tutorial_get_view(&view) && view.step==old_step);
+            assert(strstr(view.body,tutorial_translate("This creature")));
+            assert(tutorial_lesson_status(view.id)==old_status);
+            const char *space=context_translation("Pack space: 12.5/24.0 qt.",localized,sizeof(localized));
+            const bool decimal_point = !strcmp(argv[i],"ja") || !strcmp(argv[i],"ko") || !strcmp(argv[i],"zh");
+            assert(strstr(space,decimal_point ? "12.5/24.0" : "12,5/24,0"));
+            const cJSON *lessons=cJSON_GetObjectItemCaseSensitive(translations[language_index],"lessons");
+            for (int lesson=0;lesson<catalogue_count;++lesson) {
+                const cJSON *entry=cJSON_GetObjectItemCaseSensitive(lessons,catalogue[lesson].id);
+                const cJSON *pages=cJSON_GetObjectItemCaseSensitive(entry,"steps");
+                assert(entry && cJSON_GetArraySize(pages)==catalogue[lesson].count);
+                for (int page=0;page<catalogue[lesson].count;++page) {
+                    tutorial_context empty={0};
+                    tutorial_view localized_view;
+                    char expected[sizeof(localized_view.body)];
+                    const cJSON *body=cJSON_GetArrayItem(pages,page);
+                    assert(cJSON_IsString(body));
+                    render_text(expected,sizeof(expected),body->valuestring,&empty);
+                    fill_view(&localized_view,lesson,page,&empty);
+                    assert(!strcmp(localized_view.title,json_string(entry,"title")));
+                    assert(!strcmp(localized_view.body,expected));
+                }
+            }
+        }
         tutorial_set_language("en");
+        assert(!strcmp(tutorial_language(),"en"));
         assert(tutorial_get_view(&view) && strstr(view.body,"This creature"));
         tutorial_set_language("unsupported");
         assert(!strcmp(tutorial_language(),"en"));
@@ -495,6 +544,7 @@ def main():
             1 for lesson in data['lessons']
             if lesson['id'].startswith('ability.'))
         command.extend([str(catalogue), str(expected_abilities)])
+        command.extend(sorted(p.name.split(".")[1] for p in catalogue.parent.glob("tutorials.*.json")))
     subprocess.run(command, cwd=OUT, env=env, check=True, timeout=30)
 
 

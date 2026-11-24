@@ -324,7 +324,51 @@ def write_reference(lessons, counts, unwired):
               'includes Help JSON in iOS resources; `android/app/build.gradle` synchronizes '
               'the game library into Android assets before building. The validator checks '
               'these source routes; this is not confirmation of a device installation.', '']
-    lines += ['## Tutorial modes', '',
+    lines += ['## Tutorial modes', '']
+    lines += '''### Tutorial language
+
+The button showing the current language on each gameplay tutorial card opens a
+list of languages in their native spelling. Select a row with the keyboard,
+controller, mouse or touch. The current page updates immediately and keeps its
+place in the Tale. The same picker is available in Tutorial settings. The
+archive uses the selected language.
+
+The available languages are English, Bulgarian, Simplified Chinese, Czech,
+Danish, Dutch, Finnish, French, German, Hungarian, Italian, Japanese, Korean,
+Norwegian Bokmål, Polish, Brazilian Portuguese, Romanian, Russian, Spanish,
+Swedish, Turkish and Ukrainian.
+Latin-script tutorials use the English tutorial fonts. Bulgarian and Ukrainian
+use the Russian tutorial fonts, with Cormorant SC for titles. The default
+tutorial body font is EB Garamond.
+The app saves the choice in `appOptions.tutorialLanguage` in `sil_sdl.json`.
+A missing or unknown code selects English.
+
+Each `lib/help/tutorials.<code>.json` file contains lesson titles and ordered
+pages keyed by the stable English lesson ID. Its `strings` object contains
+controls and fixed messages. Its `patterns` object translates observations
+while preserving the captured values, such as attack rolls and carrying
+capacity. Missing translations use the corresponding English text. Switching
+languages reuses the original observation, including item and creature names.
+
+The same language applies to the gameplay reference, search results, device
+control guides and character-creation instructions. Reference translations
+live in `lib/help/reference.<code>.json`. Its `help` table contains reference
+text and binding labels. Control instructions come from the `device` table
+in the tutorial or reference file. Live buttons and key assignments fill
+the translated format strings when the player opens a guide.
+
+Tutorial cards wrap UTF-8 text and scroll on smaller displays. The render
+test opens the bundled Cormorant SC and EB Garamond files directly to check
+glyph coverage for tutorials using this font pairing.
+
+Run `python scripts/check_tutorial_translation.py` to check coverage,
+placeholders, UTF-8 limits and English source hashes. Each lesson hash covers
+its English title and step texts joined with NUL characters. Update it after
+reviewing a changed lesson in that language. Run
+`python scripts/check_gameplay_tutorial_render.py --language fr` to render every
+French page at desktop, portrait and controller sizes, including scrolled cards.
+The same check accepts the other translation codes.'''.splitlines()
+    lines += ['', '### Lesson level', '',
               f"Default: **Extended**. The catalogue has **{levels['normal']} Normal** lessons and "
               f"**{levels['extended']} Extended** lessons. The card's mode button opens a selector "
               'for **Disabled**, **Normal**, and **Extended**.', '',

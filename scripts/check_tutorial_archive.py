@@ -158,13 +158,11 @@ static void use_script(const int *choices, int count)
     memset(calls, 0, sizeof(calls));
 }
 
-int ui_question_ask_overlay(cptr title, cptr description,
-    const ui_question_option *options, int count, int anchor_y, int anchor_x,
-    int default_index)
+int ui_question_ask_tutorial(cptr title, cptr description,
+    const ui_question_option *options, int count, int default_index)
 {
     ui_call *call;
     assert(managing);
-    assert(anchor_y == UI_QUESTION_GLOBAL && anchor_x == UI_QUESTION_GLOBAL);
     assert(call_count < (int)N_ELEMENTS(calls));
     call = &calls[call_count++];
     SDL_strlcpy(call->title, title, sizeof(call->title));

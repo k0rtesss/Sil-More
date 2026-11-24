@@ -5,6 +5,7 @@ Checks card separation, text containment, gesture copy, and stale tooltips.
 Uses the configured Windows build; no player files or settings are loaded.
 """
 from pathlib import Path
+import argparse
 import os
 import shlex
 import subprocess
@@ -28,6 +29,8 @@ HARNESS = r'''
 static SDL_Rect fixture_screen;
 static SDL_FRect fixture_rolls;
 static bool fixture_mobile;
+static bool fixture_localized;
+static int fixture_wheel_input=SDL_WHEEL_COACH_INPUT_TOUCH;
 static bool fixture_crowded;
 static int fixture_font, fixture_page;
 static SDL_FRect cards[8], footer;
@@ -112,6 +115,14 @@ SDL_Texture *__wrap_sdl_ui_text_texture(TTF_Font *font, cptr text,
     SDL_strlcat(drawn_words, " ", sizeof(drawn_words));
     return __real_sdl_ui_text_texture(font, text, color, w, h);
 }
+SDL_Texture *__real_sdl_ui_wrapped_text_texture(TTF_Font *,cptr,int,SDL_Color,int *,int *);
+SDL_Texture *__wrap_sdl_ui_wrapped_text_texture(TTF_Font *font,cptr text,int width,
+    SDL_Color color,int *w,int *h)
+{
+    SDL_strlcat(drawn_words,text,sizeof(drawn_words));
+    SDL_strlcat(drawn_words," ",sizeof(drawn_words));
+    return __real_sdl_ui_wrapped_text_texture(font,text,width,color,w,h);
+}
 bool __wrap_sdl_touch_only_mobile_device_active(void) { return fixture_mobile; }
 bool __wrap_sdl_touch_tutorial_device_available(void) { return fixture_mobile; }
 bool __wrap_touch_shortcut_context_action(int binding, bool description,
@@ -124,7 +135,7 @@ bool __wrap_sdl_touch_pane_current_rect(SDL_Rect *r)
         fixture_screen.w / 2, 170};
     return true;
 }
-bool __wrap_steamdeck_controls_active(void) { return false; }
+bool __wrap_steamdeck_controls_active(void) { return fixture_wheel_input==SDL_WHEEL_COACH_INPUT_CONTROLLER; }
 int __wrap_sdl_main_menu_pane_font_px(void) { return fixture_font; }
 SDL_Rect __wrap_sdl_get_layout_screen_rect(void) { return fixture_screen; }
 bool __wrap_sdl_main_menu_pane_current_rect(SDL_FRect *r)
@@ -273,7 +284,16 @@ static void paint(int width, int height, bool mobile, int font, int inset, int p
                 "shortcut explanation covers the rolls description");
         }
         bool last_part = tutorial_panel_part + 1 == tutorial_panel_parts;
-        if (page == pages - 1 && last_part) {
+        if (fixture_localized && page == 0 && tutorial_panel_part == 0) {
+            const char *title = tutorial_device_text(mobile ? "Dungeon & Menus" : "Default Touch Layout");
+            char prefix[24];
+            const char *end = title;
+            for (int n = 0; *end && *end != ' ' && n < 4; n++) SDL_StepUTF8(&end, NULL);
+            memcpy(prefix, title, end - title);
+            prefix[end - title] = '\0';
+            check(*prefix && strstr(drawn_words, prefix), "selected language missing from drawn guide");
+        }
+        if (!fixture_localized && page == pages - 1 && last_part) {
             if (profile == SDL_TOUCH_PROFILE_ROUND_WHEEL) {
             check(strstr(page_words, "Long press an arrow:") != NULL,
                 "long-press instructions missing");
@@ -290,7 +310,7 @@ static void paint(int width, int height, bool mobile, int font, int inset, int p
                     "touch pane instructions missing");
             }
             check(strstr(drawn_words, "close") != NULL, "last page does not say close");
-        } else if (page == pages - 1) {
+        } else if (!fixture_localized && page == pages - 1) {
             check(strstr(drawn_words, "next") != NULL, "continuation must not close the guide");
         }
         if (page == pages - 1 && profile == SDL_TOUCH_PROFILE_ROUND_WHEEL) {
@@ -304,9 +324,11 @@ static void paint(int width, int height, bool mobile, int font, int inset, int p
         char name[128];
         snprintf(name, sizeof(name), "%dx%d-mobile%d-font%d-inset%d-profile%d-page%d-part%d.png",
             width, height, mobile, font, inset, profile, page + 1, tutorial_panel_part + 1);
-        SDL_Surface *pixels = SDL_RenderReadPixels(g_state.renderer, NULL);
-        check(pixels && IMG_SavePNG(pixels, name), "capture failed");
-        SDL_DestroySurface(pixels);
+        {
+            SDL_Surface *pixels = SDL_RenderReadPixels(g_state.renderer, NULL);
+            check(pixels && IMG_SavePNG(pixels, name), "capture failed");
+            SDL_DestroySurface(pixels);
+        }
         /* Match the live guide's frame boundary before the next redraw. */
         SDL_RenderPresent(g_state.renderer);
         if (last_part) break;
@@ -350,6 +372,10 @@ static void paint(int width, int height, bool mobile, int font, int inset, int p
                     fixture_screen.w, fixture_screen.h};
                 for (int i = 0; i < card_count; i++) {
                     check(contains(screen, cards[i]), "mouse guide card outside screen");
+                    if (cards[i].y + cards[i].h > footer.y)
+                        fprintf(stderr, "mouse %s big=%d part=%d/%d card=%d y=%.1f h=%.1f footer=%.1f\n",
+                            tutorial_language(), big, tutorial_panel_part + 1, tutorial_panel_parts,
+                            i, cards[i].y, cards[i].h, footer.y);
                     check(cards[i].y + cards[i].h <= footer.y,
                         "mouse guide card overlaps footer");
                 }
@@ -367,7 +393,8 @@ static void paint(int width, int height, bool mobile, int font, int inset, int p
             /* At a short height this sentence can cross a continuation
              * page, with other UI text painted between its two fragments. */
             const char *buttons = strstr(words, "+/- buttons");
-            check(buttons && strstr(buttons, "below depth"),
+            if (fixture_localized) check(strstr(words,"+") || strstr(words,"＋"), "translated zoom controls missing");
+            else check(buttons && strstr(buttons, "below depth"),
                 "mouse zoom instruction is missing or ambiguous");
         }
         config.bigger_font = false;
@@ -427,7 +454,7 @@ static void large_coach(int width, int height, float density, bool wheel)
         ? (SDL_FRect){100,14,width-140,height*.45f}
         : (SDL_FRect){width*.40f,20,height-40,height-40};
     char body[2048], all_words[32768]="";
-    cptr text=wheel?sdl_character_wheel_coach_body(SDL_WHEEL_COACH_INPUT_TOUCH,body,sizeof(body))
+    cptr text=wheel?sdl_character_wheel_coach_body(fixture_wheel_input,body,sizeof(body))
         :birth_coach_body_for_step(&birth_coach_stats_step,body,sizeof(body));
     int page=0, rendered=0;
     tutorial_panel_part=0; tutorial_panel_parts=1;
@@ -435,19 +462,47 @@ static void large_coach(int width, int height, float density, bool wheel)
         card_count=0; active_card=-1; drawn_words[0]=0;
         footer=(SDL_FRect){0};
         birth_coach_draw_callout(&fixture_screen,&zone,
-            wheel?"Action wheel":"Assign attributes",text,MIN(120,width<height?height*.12f:40));
+            tutorial_device_text(wheel?"Action wheel":"Assign attributes"),text,MIN(120,width<height?height*.12f:40));
+        if (fixture_localized) SDL_strlcat(all_words, drawn_words, sizeof(all_words));
         sdl_touch_tutorial_draw_footer(&fixture_screen,false,true);
         check(card_count==1,"coach card missing");
         check(cards[0].y+cards[0].h<=footer.y,"coach overlaps footer");
         if(wheel) check(!SDL_HasRectIntersectionFloat(&zone,&cards[0]),"coach covers action wheel");
-        SDL_strlcat(all_words,drawn_words,sizeof(all_words));
+        if (!fixture_localized) SDL_strlcat(all_words,drawn_words,sizeof(all_words));
         check(++rendered<64,"coach continuation did not finish");
         if(sdl_touch_tutorial_navigate(&page,1,1)) break;
     }
-    if(height<=1280 || width>height)
+    if(!fixture_localized && (height<=1280 || width>height))
         check(rendered>1,"large coach did not paginate");
-    check(strstr(all_words,wheel?"outside":"budget")!=NULL,"last instruction disappeared");
-    if(rendered>1) check(strstr(all_words,"Text")!=NULL,"coach continuation not labelled");
+    if (fixture_localized) {
+        char plain[2048];
+        sdl_touch_tutorial_rich_strip(text,plain,sizeof(plain));
+        const char *strings[] = {plain, all_words, tutorial_device_text(wheel ? "Action wheel" : "Assign attributes")};
+        char compact[3][32768];
+        for (int i=0;i<3;++i) {
+            size_t length=0;
+            for (const char *p=strings[i]; *p; ++p)
+                if (!isspace((unsigned char)*p)) compact[i][length++]=*p;
+            compact[i][length]='\0';
+        }
+        /* Continuation pages repeat the heading between pieces of the body. */
+        for (int i=0; i<2 && compact[2][0]; i++) {
+            char *at;
+            while ((at=strstr(compact[i],compact[2])) != NULL)
+                memmove(at, at+strlen(compact[2]), strlen(at+strlen(compact[2]))+1);
+        }
+        size_t n=strlen(compact[0]);
+        if (n > 12 && !strstr(compact[1], compact[0] + n - 12))
+            fprintf(stderr, "%s expected ending [%s], final drawn text [%s]\n", tutorial_language(),
+                compact[0] + (n > 80 ? n - 80 : 0),
+                compact[1] + MAX(0, (int)strlen(compact[1]) - 180));
+        check(n>12 && strstr(compact[1],compact[0]+n-12),"end of translated coach text missing");
+        check(strstr(text,"%s")==NULL && !strstr(text,"Common actions while standing") && !strstr(text,"Spend your points across"),
+            "guide or controller binding missing");
+    } else {
+        check(strstr(all_words,wheel?"outside":"budget")!=NULL,"last instruction disappeared");
+        if(rendered>1) check(strstr(all_words,"Text")!=NULL,"coach continuation not labelled");
+    }
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
     SDL_DestroyRenderer(g_state.renderer); g_state.renderer=NULL;
     SDL_DestroyWindow(g_state.window); g_state.window=NULL;
@@ -459,10 +514,12 @@ static void large_coach(int width, int height, float density, bool wheel)
 int main(int argc, char **argv)
 {
     maxima limits = {0}; player_type player = {0};
-    assert(argc == 2);
+    assert(argc == 4 || argc == 5);
+    fixture_localized=argc==5;
     setbuf(stdout, NULL); log_set_quiet(true);
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)); assert(TTF_Init());
+    ANGBAND_DIR_XTRA=argv[3];
     sdl_config_set_defaults(&config);
     SDL_strlcpy(config.story_font, argv[1], sizeof(config.story_font));
     SDL_strlcpy(config.story_font2, argv[1], sizeof(config.story_font2));
@@ -478,6 +535,26 @@ int main(int argc, char **argv)
     g_state.palette[TERM_L_RED] = (SDL_Color){255, 100, 100, 255};
     g_state.palette[TERM_VIOLET] = (SDL_Color){200, 110, 240, 255};
     g_state.palette[TERM_UMBER] = (SDL_Color){170, 120, 80, 255};
+    if (fixture_localized) {
+        assert(tutorial_load_catalogue(argv[2]));
+        tutorial_set_language(argv[4]);
+        assert(strcmp(tutorial_device_text("Action wheel"),"Action wheel"));
+        for (int profile=0; profile<SDL_TOUCH_PROFILE_COUNT; ++profile) {
+            paint(360,800,true,32,0,profile);
+            paint(800,360,true,24,0,profile);
+        }
+        paint(1024,576,false,24,0,SDL_TOUCH_PROFILE_ROUND_WHEEL);
+        large_coach(720,1280,2,false);
+        for (int i=0;i<3;++i) {
+            const int inputs[]={SDL_WHEEL_COACH_INPUT_TOUCH,SDL_WHEEL_COACH_INPUT_CONTROLLER,
+                SDL_WHEEL_COACH_INPUT_MOUSE};
+            fixture_wheel_input=inputs[i];
+            large_coach(720,1280,2,true);
+        }
+        tutorial_shutdown();
+        TTF_Quit(); SDL_Quit();
+        return 0;
+    }
     for (int profile = 0; profile < SDL_TOUCH_PROFILE_COUNT; ++profile) {
         paint(588, 1254, true, 32, 0, profile);
         paint(360, 800, true, 32, 0, profile);
@@ -509,14 +586,19 @@ int main(int argc, char **argv)
 
 
 def main():
-    OUT.mkdir(parents=True, exist_ok=True)
-    source = OUT / "check.c"
+    parser = argparse.ArgumentParser(description=__doc__)
+    from check_tutorial_translation import LANGUAGES
+    parser.add_argument("--language", choices=(*LANGUAGES, "all"))
+    language = parser.parse_args().language
+    out = OUT / language if language else OUT
+    out.mkdir(parents=True, exist_ok=True)
+    source = out / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     objects = [obj for obj in objects if not obj.endswith((
         "/src/main.c.obj", "/src/sdl/input/sdl-touch-tutorial.c.obj",
         "/src/sdl/input/sdl-touch-controls.c.obj"))]
-    response = OUT / "objects.rsp"
+    response = out / "objects.rsp"
     response.write_text("\n".join('"' + obj + '"' for obj in objects), encoding="utf-8")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join(["C:/msys64/mingw64/bin", "C:/msys64/usr/bin"] +
@@ -532,14 +614,20 @@ def main():
              "sdl_view_is_overlay_log_pane",
              "sdl_main_cell_rect", "sdl_touch_top_panel_compute_layout_for_display",
              "sdl_touch_round_compute_layout", "sdl_render_current_window_frame"]
-    wraps.extend(["sdl_gamepad_send_direction_mods","SDL_GetDisplayContentScale"])
-    exe = OUT / "check.exe"
+    wraps.extend(["sdl_gamepad_send_direction_mods","SDL_GetDisplayContentScale","sdl_ui_wrapped_text_texture"])
+    exe = out / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
                     "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl," + ",".join("--wrap=" + w for w in wraps),
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
-                   cwd=OUT, env=env, check=True, timeout=60)
+    command = [str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"),
+               str(ROOT / "lib/help/tutorials.json"), str(ROOT / "lib/xtra")]
+    for code in LANGUAGES if language == "all" else (language,):
+        directory = out / code if language == "all" else out
+        directory.mkdir(exist_ok=True)
+        subprocess.run(command + ([code] if code else []), cwd=directory, env=env,
+                       check=True, timeout=120)
+
 
 
 if __name__ == "__main__":

@@ -44,6 +44,7 @@ void tutorial_game_action_done(const char *action, const object_type *item);
 bool tutorial_game_begin_action(const char *action, const object_type *item);
 void tutorial_game_end_action(void);
 bool tutorial_game_select_mode(void);
+bool tutorial_game_select_language(void);
 void tutorial_game_settings(void);
 void tutorial_game_archive(void);
 

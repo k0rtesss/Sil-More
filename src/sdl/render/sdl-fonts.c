@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
 
 /* Readable text and touch targets follow the device, independently of the
  * selected input mode. A desktop with an attached controller stays desktop. */
@@ -677,12 +678,21 @@ SDL_Texture* sdl_acquire_mono_font_atlas_cells_ex(const char* font_path,
     return atlas;
 }
 
-/* Story fonts come in numbered slots (STORY_FONT_SLOTS); slot 0 is the default
- * font used everywhere, slot 1 is the secondary font assigned to select UI
- * contexts (quest book, popup menus, log).  Each slot has its own configured
- * path, style options and fallback. */
+/* Each regional face has its own cache key so a language switch takes
+ * effect even when both cards use the same pixel height. */
+int sdl_tutorial_font_slot(int normal_slot)
+{
+    const char *code = tutorial_language();
+    if (streq(code, "ja")) return SDL_STORY_FONT_SLOT_TUTORIAL_JA;
+    if (streq(code, "ko")) return SDL_STORY_FONT_SLOT_TUTORIAL_KO;
+    if (streq(code, "zh")) return SDL_STORY_FONT_SLOT_TUTORIAL_ZH;
+    return normal_slot;
+}
+
 static int sdl_story_slot_clamp(int slot)
 {
+    if (slot >= STORY_FONT_SLOTS && slot <= SDL_STORY_FONT_SLOT_TUTORIAL_ZH)
+        return slot;
     if (slot < 0)
         return 0;
     if (slot >= STORY_FONT_SLOTS)
@@ -692,21 +702,21 @@ static int sdl_story_slot_clamp(int slot)
 
 const char* sdl_story_font_path_for_slot(int slot)
 {
-    if (sdl_story_slot_clamp(slot) == 1)
+    if (sdl_story_slot_clamp(slot) != SDL_STORY_FONT_SLOT_DEFAULT)
         return (config.story_font2[0] != '\0') ? config.story_font2 : NULL;
     return (config.story_font[0] != '\0') ? config.story_font : NULL;
 }
 
 static const char* sdl_story_fallback_for_slot(int slot)
 {
-    return (sdl_story_slot_clamp(slot) == 1)
+    return (sdl_story_slot_clamp(slot) != SDL_STORY_FONT_SLOT_DEFAULT)
         ? sdl_story_fallback_font2
         : sdl_story_fallback_font;
 }
 
 static void sdl_story_slot_style(int slot, mono_font_style_key* out)
 {
-    if (sdl_story_slot_clamp(slot) == 1) {
+    if (sdl_story_slot_clamp(slot) != SDL_STORY_FONT_SLOT_DEFAULT) {
         out->bold = config.story2_bold;
         out->italic = config.story2_italic;
         out->underline = config.story2_underline;
@@ -735,6 +745,26 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
     TTF_Font* font = NULL;
 
     sdl_story_slot_style(slot, &style);
+
+    const char* bundled = NULL;
+    switch (slot) {
+    case SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE: bundled = "font/CormorantSC-SemiBold.ttf"; break;
+    case SDL_STORY_FONT_SLOT_TUTORIAL_JA: bundled = "font/TutorialSansJP.otf"; break;
+    case SDL_STORY_FONT_SLOT_TUTORIAL_KO: bundled = "font/TutorialSansKR.otf"; break;
+    case SDL_STORY_FONT_SLOT_TUTORIAL_ZH: bundled = "font/TutorialSansSC.otf"; break;
+    }
+    if (bundled) {
+        char path[1024];
+        path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra",
+            bundled);
+        font = TTF_OpenFont(path, font_size);
+        if (font) {
+            log_trace("Loaded tutorial font: %s at size %d", path, font_size);
+            sdl_apply_mono_font_style_key(font, &style);
+            return font;
+        }
+        log_warn("Failed to load tutorial font '%s': %s", path, SDL_GetError());
+    }
 
     if (font_path && font_path[0] != '\0') {
         font = TTF_OpenFont(font_path, font_size);
@@ -773,6 +803,10 @@ void sdl_story_font_cache_clear(void)
         if (g_state.story_fonts[i].fallback) {
             TTF_CloseFont(g_state.story_fonts[i].fallback);
             g_state.story_fonts[i].fallback = NULL;
+        }
+        if (g_state.story_fonts[i].picker_fallback) {
+            TTF_CloseFont(g_state.story_fonts[i].picker_fallback);
+            g_state.story_fonts[i].picker_fallback = NULL;
         }
         g_state.story_fonts[i].pixel_height = 0;
         g_state.story_fonts[i].slot = 0;
@@ -839,16 +873,36 @@ void sdl_story_font_cache_mark_config(void)
     }
 }
 
+static TTF_Font *sdl_add_story_fallback(TTF_Font *font, cptr filename, int px, int slot)
+{
+    char path[1024];
+    mono_font_style_key style;
+    path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra", filename);
+    TTF_Font *face = TTF_OpenFont(path, px);
+    if (face) {
+        sdl_story_slot_style(slot, &style);
+        sdl_apply_mono_font_style_key(face, &style);
+        if (!TTF_AddFallbackFont(font, face)) {
+            TTF_CloseFont(face);
+            return NULL;
+        }
+    }
+    return face;
+}
+
 TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
 {
     const char* font_path;
     TTF_Font* font;
     TTF_Font* fallback = NULL;
+    TTF_Font* picker_fallback = NULL;
     int target_index;
 
     if (pixel_height <= 0)
         return NULL;
 
+    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
+        slot = sdl_tutorial_font_slot(slot);
     slot = sdl_story_slot_clamp(slot);
 
     for (int i = 0; i < g_state.story_font_count; i++) {
@@ -864,24 +918,16 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
     if (!font)
         return NULL;
 
-    /* The shipped decorative fonts contain Latin only. Keep their existing
-     * glyphs and use the bundled Victor Mono for missing Cyrillic characters,
-     * including translated tutorial settings rendered by ordinary menus. */
-    if (!TTF_FontHasGlyph(font, 0x416) || !TTF_FontHasGlyph(font, 0x451)) {
-        char path[1024];
-        mono_font_style_key style;
-        path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra",
-            "font/VictorMono-Regular.ttf");
-        fallback = TTF_OpenFont(path, pixel_height);
-        if (fallback) {
-            sdl_story_slot_style(slot, &style);
-            sdl_apply_mono_font_style_key(fallback, &style);
-            if (!TTF_AddFallbackFont(font, fallback)) {
-                TTF_CloseFont(fallback);
-                fallback = NULL;
-            }
-        }
-    }
+    bool picker = slot == SDL_STORY_FONT_SLOT_TUTORIAL_MENU;
+    bool regional = slot >= SDL_STORY_FONT_SLOT_TUTORIAL_JA && slot <= SDL_STORY_FONT_SLOT_TUTORIAL_ZH;
+    if (regional)
+        fallback = sdl_add_story_fallback(font, "font/EBGaramond-Regular.ttf", pixel_height, slot);
+    else if (!TTF_FontHasGlyph(font, 0x416) || !TTF_FontHasGlyph(font, 0x451)
+        || (picker && (!TTF_FontHasGlyph(font, 0x010c) || !TTF_FontHasGlyph(font, 0x0457))))
+        fallback = sdl_add_story_fallback(font, "font/VictorMono-Regular.ttf", pixel_height, slot);
+    /* Every native name must be visible even before a locale is chosen. */
+    if (picker)
+        picker_fallback = sdl_add_story_fallback(font, "font/TutorialSansJP.otf", pixel_height, slot);
 
     if (g_state.story_font_count >= MAX_STORY_FONT_CACHE) {
         target_index = 0;
@@ -902,6 +948,8 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
         TTF_CloseFont(g_state.story_fonts[target_index].font);
         if (g_state.story_fonts[target_index].fallback)
             TTF_CloseFont(g_state.story_fonts[target_index].fallback);
+        if (g_state.story_fonts[target_index].picker_fallback)
+            TTF_CloseFont(g_state.story_fonts[target_index].picker_fallback);
         sdl_story_font_cache_changed();
     } else {
         target_index = g_state.story_font_count++;
@@ -911,6 +959,7 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
     g_state.story_fonts[target_index].slot = slot;
     g_state.story_fonts[target_index].font = font;
     g_state.story_fonts[target_index].fallback = fallback;
+    g_state.story_fonts[target_index].picker_fallback = picker_fallback;
     g_state.story_fonts[target_index].last_used = ++g_story_font_use_clock;
     return font;
 }

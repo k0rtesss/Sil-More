@@ -5,8 +5,13 @@ Public releases of Sil-More should use and redistribute only the following
 documented open fonts from this folder:
 
  * Cinzel (Regular, Medium, Bold)
+ * Cormorant SC (SemiBold, see OFL-CormorantSC.txt)
+ * EB Garamond (Regular, see OFL-EBGaramond.txt)
  * Marcellus SC (Regular)
  * Recursive
+ * Tutorial Sans JP, KR and SC (regional subsets of Noto Sans CJK Regular,
+   release Sans2.004, https://github.com/notofonts/noto-cjk).
+   See OFL-NotoSansCJK.txt and tools/subset_tutorial_fonts.py.
  * Victor Mono (Regular, Medium, Light)
 
 These fonts are distributed under the SIL Open Font License, Version 1.1.

@@ -2662,6 +2662,7 @@ extern void sdl_song_menu_set_highlight(int choice);
 extern void sdl_song_menu_finish(void);
 extern void sdl_song_menu_clear(void);
 extern void sdl_question_menu_begin(cptr title);
+extern void sdl_question_menu_use_tutorial_fonts(void);
 extern void sdl_question_menu_set_text_input(bool enabled);
 extern void sdl_question_menu_set_anchor_grid(int y, int x);
 extern void sdl_question_menu_set_desc(cptr text);

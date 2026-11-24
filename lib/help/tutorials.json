@@ -2746,7 +2746,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Choose an item or improvement to see its difficulty, your capacity, and the costs. Smithing adds half your permanent Dexterity and half your permanent Grace. Learned, active crafting abilities and masteries add further bonuses to every recipe. Naugrim add each positive Smithing affinity level to the attributes used here. Add the bonuses together and round down once. Smithing skill bonuses from equipment still apply.",
+          "text": "Choose an item or improvement to see its difficulty, your capacity, and the costs. Smithing adds half your current Dexterity and half your current Grace. Equipment, temporary effects and stat drain affect those values. Learned, active crafting abilities and masteries add further bonuses to every recipe. Naugrim add each positive Smithing affinity level to the attributes used here. Add the bonuses together and round down once. Smithing skill bonuses from equipment still apply.",
           "kind": "info",
           "anchor": "menu"
         }
@@ -4491,11 +4491,9 @@
       },
       "sources": [
         "lib/edit/ability.txt",
-        "src/melee/melee-process.c",
         "src/birth/birth-traits.c",
-        "src/cave/cave-visuals.c",
         "src/melee/melee-process.c",
-        "src/sdl/render/sdl-term-callbacks.c"
+        "src/monster/monster-senses.c"
       ],
       "ability": {
         "serial": 60,
@@ -4506,9 +4504,8 @@
         "runtime_symbol": "STL_DISGUISE",
         "runtime_sources": [
           "src/birth/birth-traits.c",
-          "src/cave/cave-visuals.c",
           "src/melee/melee-process.c",
-          "src/sdl/render/sdl-term-callbacks.c"
+          "src/monster/monster-senses.c"
         ]
       },
       "category": "Stealth"
@@ -5602,7 +5599,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create weapons at a forge. You also gain a modest bonus to identifying weapons. While learned and active, it adds half your permanent Dexterity to every craft.",
+          "text": "Create weapons at a forge. You also gain a modest bonus to identifying weapons. While learned and active, it adds half your current Dexterity to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5639,7 +5636,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create armour at a forge. You also gain a modest bonus to identifying armour. While learned and active, it adds half your permanent Strength to every craft.",
+          "text": "Create armour at a forge. You also gain a modest bonus to identifying armour. While learned and active, it adds half your current Strength to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5676,7 +5673,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties. While learned and active, it adds half your permanent Grace to every craft.",
+          "text": "Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties. While learned and active, it adds half your current Grace to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5713,7 +5710,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus. While learned and active, it adds your permanent Grace to every craft.",
+          "text": "Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus. While learned and active, it adds your current Grace to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5750,7 +5747,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal. While learned and active, it adds your permanent Dexterity to every craft.",
+          "text": "Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal. While learned and active, it adds your current Dexterity to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5785,7 +5782,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties. While learned and active, it adds your permanent Grace to every craft.",
+          "text": "Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties. While learned and active, it adds your current Grace to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -14187,7 +14184,7 @@
       "priority": 38,
       "steps": [
         {
-          "text": "Contact with poisonous acid adds 6 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.",
+          "text": "Contact with poisonous acid adds 8 poison severity before resistance and applicable Protection. Poison caves can increase exposure by reducing resistance. New doses occur on entry and on later turns spent in the acid, even while resting or using an item.",
           "kind": "info",
           "anchor": "map"
         },

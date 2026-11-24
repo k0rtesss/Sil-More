@@ -11,6 +11,7 @@
 
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "tutorial/tutorial.h"
 #include "log/perf.h"
 
 #include <math.h>
@@ -459,6 +460,23 @@ static int sdl_question_menu_display_columns(cptr text, bool compact,
     return 2;
 }
 
+static int sdl_question_menu_body_slot(void)
+{
+    return g_question_menu.tutorial_fonts
+        ? sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL_MENU)
+        : SDL_STORY_FONT_SLOT_MENU;
+}
+
+static TTF_Font* sdl_question_menu_title_font(int font_px)
+{
+    bool large = sdl_handheld_ui_active() && get_sdl_menu_bigger_font();
+    int slot = large ? SDL_STORY_FONT_SLOT_DEFAULT : SDL_STORY_FONT_SLOT_MENU;
+    if (g_question_menu.tutorial_fonts && tutorial_uses_localized_title())
+        slot = sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE);
+    return sdl_story_font_for_height_slot(
+        large ? sdl_menu_role_font_px(SDL_UI_FONT_TITLE) : font_px, slot);
+}
+
 static float sdl_question_menu_text_width(TTF_Font* font, cptr text,
     int font_px)
 {
@@ -734,7 +752,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
             font_px = sdl_menu_font_px(13);
     }
     story_font = sdl_story_font_for_height_slot(font_px,
-        SDL_STORY_FONT_SLOT_MENU);
+        sdl_question_menu_body_slot());
     if (!story_font)
         return false;
     desc_font = story_font;
@@ -805,14 +823,9 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
     out->has_title = (g_question_menu.title[0] != '\0');
     if (out->has_title)
     {
-        TTF_Font* title_font = story_font;
-        int title_px = font_px;
-        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
-        {
-            title_px = sdl_menu_role_font_px(SDL_UI_FONT_TITLE);
-            title_font = sdl_story_font_for_height_slot(title_px,
-                SDL_STORY_FONT_SLOT_DEFAULT);
-        }
+        int title_px = sdl_handheld_ui_active() && get_sdl_menu_bigger_font()
+            ? sdl_menu_role_font_px(SDL_UI_FONT_TITLE) : font_px;
+        TTF_Font* title_font = sdl_question_menu_title_font(font_px);
         /* Size the header with the font used to draw it. Measuring the
          * smaller body font can split even a short title within a word. */
         title_w = sdl_question_menu_text_width(title_font,
@@ -1017,10 +1030,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
             close_reserve = info_reserve = suppress_reserve = 0.0f;
             title_available = available_w;
         }
-        TTF_Font* title_font = story_font;
-        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
-            title_font = sdl_story_font_for_height_slot(
-            sdl_menu_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
+        TTF_Font* title_font = sdl_question_menu_title_font(font_px);
         int title_h = sdl_question_menu_wrapped_text_height(title_font,
             g_question_menu.title, title_available);
 
@@ -1210,7 +1220,7 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
                 for (int px = font_px - 1; px >= min_desc_px; px--)
                 {
                     TTF_Font* candidate = sdl_story_font_for_height_slot(px,
-                        SDL_STORY_FONT_SLOT_MENU);
+                        sdl_question_menu_body_slot());
                     float candidate_h;
 
                     if (!candidate)
@@ -2015,6 +2025,11 @@ void sdl_question_menu_set_text_input(bool enabled)
     g_question_menu.text_input = enabled;
 }
 
+void sdl_question_menu_use_tutorial_fonts(void)
+{
+    g_question_menu.tutorial_fonts = true;
+}
+
 void sdl_question_menu_set_anchor_grid(int y, int x)
 {
     if (!g_question_menu.active)
@@ -2343,12 +2358,12 @@ void sdl_question_menu_render(void)
         sil_popup_trace_stage("popup-layout-complete");
 
     story_font = sdl_story_font_for_height_slot(layout.font_px,
-        SDL_STORY_FONT_SLOT_MENU);
+        sdl_question_menu_body_slot());
     if (!story_font)
         return;
     desc_font = (layout.desc_font_px == layout.font_px)
         ? story_font : sdl_story_font_for_height_slot(layout.desc_font_px,
-            SDL_STORY_FONT_SLOT_MENU);
+            sdl_question_menu_body_slot());
     if (!desc_font)
         desc_font = story_font;
     mono_font = sdl_main_menu_mono_font_for_height(layout.font_px);
@@ -2381,10 +2396,7 @@ void sdl_question_menu_render(void)
 
     if (layout.has_title)
     {
-        TTF_Font* title_font = story_font;
-        if (sdl_handheld_ui_active() && get_sdl_menu_bigger_font())
-            title_font = sdl_story_font_for_height_slot(
-            sdl_menu_role_font_px(SDL_UI_FONT_TITLE), SDL_STORY_FONT_SLOT_DEFAULT);
+        TTF_Font* title_font = sdl_question_menu_title_font(layout.font_px);
         sdl_question_menu_draw_text(title_font,
             g_question_menu.help_open ? "Help" : g_question_menu.title,
             g_state.palette[TERM_WHITE], layout.title_row.x,

@@ -385,10 +385,8 @@ void sdl_touch_pane_append_ellipsis(char* line, size_t line_size)
     if (len <= line_size - 4) {
         SDL_strlcat(line, "...", line_size);
     } else {
-        line[line_size - 4] = '.';
-        line[line_size - 3] = '.';
-        line[line_size - 2] = '.';
-        line[line_size - 1] = '\0';
+        len = utf8_safe_prefix_len(line, (int)line_size - 4);
+        memcpy(line + len, "...", 4);
     }
 }
 

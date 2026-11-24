@@ -7,6 +7,7 @@
  */
 #include "angband.h"
 #include "tutorial/tutorial-game.h"
+#include "tutorial/tutorial.h"
 #include "ui/help.h"
 #include "externs.h"
 #include "log/log.h"
@@ -566,6 +567,14 @@ void binding_action_short(int binding, char* buf, size_t buflen)
     }
 }
 
+static void help_binding_label(int binding, char *buf, size_t size, bool short_name)
+{
+    if (short_name) binding_action_short(binding, buf, size);
+    else binding_action_label(binding, buf, size);
+    const char *label = tutorial_help_text(buf);
+    if (label != buf) SDL_strlcpy(buf, label, size);
+}
+
 static void help_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
 {
     if (!buf || !buflen)
@@ -985,7 +994,8 @@ typedef struct {
 #define HELP_DOC_MAX_OPS 8192
 #define HELP_DOC_MAX_ROWS 1024
 #define HELP_DOC_MAX_PAGES 256
-#define HELP_DOC_MAX_COLS 256
+#define HELP_DOC_MAX_COLS 1024
+#define HELP_TRANSLATED_ROW_BYTES 2048
 #define HELP_DOC_STRING_POOL_SIZE 65536
 #define HELP_DOC_DISPLAY_MAX_ROWS 4096
 #define HELP_DOC_DISPLAY_MAX_SPANS 16384
@@ -1313,6 +1323,78 @@ static int help_compact_row_indent(int first_used)
     return indent;
 }
 
+/* Translate a complete sentence when it spans several coloured phrases.
+ * For diagrams and live binding tables, keep the symbols and keys in place
+ * and translate their captions individually. */
+static int help_localize_row(help_row_cell_t *cells, int length, int capacity)
+{
+    help_row_cell_t result[HELP_TRANSLATED_ROW_BYTES];
+    char key[HELP_DOC_MAX_COLS + 1];
+    bool prose = true;
+    int n = 0;
+    if (!length || streq(tutorial_language(), "en")) return length;
+    for (int i = 0; i < length; i++) {
+        if (!cells[i].use_role || cells[i].role == ROLE_KEY) prose = false;
+        if (cells[i].ch != ' ' || (n && key[n - 1] != ' ')) key[n++] = cells[i].ch;
+    }
+    key[n] = '\0';
+    const char *line = prose ? tutorial_help_text(key) : key;
+    if (line != key && strlen(line) <= (size_t)capacity) {
+        n = (int)strlen(line);
+        help_row_cell_t style = cells[0];
+        for (int i = 0; i < n; i++) {
+            result[i] = style;
+            result[i].ch = line[i];
+        }
+        /* A translated sentence can reorder the highlighted game terms. */
+        for (int i = 0; i < length;) {
+            int end = i + 1;
+            while (end < length && cells[end].role == cells[i].role) end++;
+            if (cells[i].role != style.role && cells[i].role != ROLE_BODY) {
+                int first = i, last = end;
+                while (first < last && cells[first].ch == ' ') first++;
+                while (last > first && cells[last - 1].ch == ' ') last--;
+                for (int j = first; j < last; j++) key[j - first] = cells[j].ch;
+                key[last - first] = '\0';
+                const char *term = tutorial_help_text(key);
+                if (term == key) term = tutorial_translate(key);
+                const char *at = *term ? strstr(line, term) : NULL;
+                if (at) {
+                    size_t offset = (size_t)(at - line);
+                    for (size_t j = 0; term[j]; j++) result[offset + j].role = cells[i].role;
+                }
+            }
+            i = end;
+        }
+        memcpy(cells, result, n * sizeof(*cells));
+        return n;
+    }
+    int used = 0;
+    for (int i = 0; i < length;) {
+        int end = i + 1;
+        while (end < length && cells[end].use_role == cells[i].use_role
+            && cells[end].role == cells[i].role && cells[end].attr == cells[i].attr) end++;
+        int first = i, last = end;
+        while (first < last && cells[first].ch == ' ') first++;
+        while (last > first && cells[last - 1].ch == ' ') last--;
+        for (int j = first; j < last; j++) key[j - first] = cells[j].ch;
+        key[last - first] = '\0';
+        const char *label = cells[i].use_role && cells[i].role != ROLE_KEY
+            ? tutorial_help_text(key) : key;
+        int bytes = (int)strlen(label);
+        if (used + first - i + bytes + end - last > capacity) return length;
+        for (int j = i; j < first; j++) result[used++] = cells[j];
+        for (int j = 0; j < bytes; j++) {
+            result[used] = cells[i];
+            result[used++].ch = label[j];
+        }
+        for (int j = last; j < end; j++) result[used++] = cells[j];
+        i = end;
+    }
+    memcpy(cells, result, used * sizeof(*cells));
+    return used;
+}
+
 static int help_build_compact_display_rows(int term_wid, int doc_hgt)
 {
     help_row_cell_t source_cells[HELP_DOC_MAX_COLS];
@@ -1321,7 +1403,7 @@ static int help_build_compact_display_rows(int term_wid, int doc_hgt)
 
     for (int y = 0; y < doc_hgt; y++)
     {
-        help_row_cell_t compact_cells[HELP_DOC_MAX_COLS];
+        help_row_cell_t compact_cells[HELP_TRANSLATED_ROW_BYTES];
         help_row_cell_t fill_style;
         int first_used = 0;
         int last_used = -1;
@@ -1364,6 +1446,7 @@ static int help_build_compact_display_rows(int term_wid, int doc_hgt)
 
         while (compact_len > 0 && compact_cells[compact_len - 1].ch == ' ')
             compact_len--;
+        compact_len = help_localize_row(compact_cells, compact_len, N_ELEMENTS(compact_cells));
 
         if (compact_len <= 0)
         {
@@ -1417,7 +1500,13 @@ static int help_build_compact_display_rows(int term_wid, int doc_hgt)
                 else
                 {
                     line_end = limit;
-                    next_pos = limit;
+                    /* Terminal strings occupy byte cells. Keep multibyte
+                     * letters together when a long word has to wrap. */
+                    while (line_end > line_start && compact_cells[line_end].use_role
+                        && ((unsigned char)compact_cells[line_end].ch & 0xC0) == 0x80)
+                        line_end--;
+                    if (line_end == line_start) line_end = limit;
+                    next_pos = line_end;
                 }
             }
 
@@ -1650,12 +1739,12 @@ static void show_help_screen_dynamic_document(
     int doc_start_y,
     int doc_end_y)
 {
-    char header[96];
+    char header[512];
     const int col = 1;
     const int top = 2;
 
     strnfmt(header, sizeof(header),
-        lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]"),
+        lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]")),
         page, total_pages);
     put_role(ROLE_HEADER, header, 0, col);
 
@@ -1686,12 +1775,12 @@ static void show_help_screen_compact_document(
     int row_start,
     int row_end)
 {
-    char header[96];
+    char header[512];
     const int col = 1;
     const int top = 2;
 
     strnfmt(header, sizeof(header),
-        lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]"),
+        lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]")),
         page, total_pages);
     put_role(ROLE_HEADER, header, 0, col);
 
@@ -1733,7 +1822,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
     int total_pages, bool include_header)
 {
     int row, col;
-    char page_header[96];
+    char page_header[512];
 
     switch (source_page)
     {
@@ -1745,7 +1834,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: GOAL & HEROES"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: GOAL & HEROES")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -1853,7 +1942,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: DEPTH & DANGER"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: DEPTH & DANGER")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -1971,7 +2060,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT & DEFENCE"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT & DEFENCE")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -2100,7 +2189,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (include_header)
         {
             strnfmt(page_header, sizeof(page_header),
-                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT ROLLS EXPLAINED"),
+                lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: COMBAT ROLLS EXPLAINED")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2246,7 +2335,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EARLY TIPS"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EARLY TIPS")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
@@ -2425,7 +2514,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (include_header)
         {
             strnfmt(page_header, sizeof(page_header),
-                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CHARACTER & ADVANCEMENT"),
+                lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CHARACTER & ADVANCEMENT")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2531,7 +2620,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (include_header)
         {
             strnfmt(page_header, sizeof(page_header),
-                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EXPLORATION & INFORMATION"),
+                lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: EXPLORATION & INFORMATION")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2624,7 +2713,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (include_header)
         {
             strnfmt(page_header, sizeof(page_header),
-                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES"),
+                lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SONGS, STATUS & OBJECTIVES")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -2715,14 +2804,14 @@ static void show_help_screen_legacy(int source_page, int display_page,
             MOVEMENT_INPUT_DIRECTION_SOUTHEAST,
         };
         char grid_keys[9][32];
-        char line[96];
+        char line[512];
         char key_buf[48];
-        char heading[96];
+        char heading[512];
         u16b modifiers = 0;
 
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: MOVEMENT & MISCELLANEOUS"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("HELP [%d/%d]: MOVEMENT & MISCELLANEOUS")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
@@ -2743,7 +2832,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
 
         row = 3;
         col = 2;
-        strnfmt(heading, sizeof(heading), "Keyboard movement - %s",
+        strnfmt(heading, sizeof(heading), tutorial_help_text("Keyboard movement - %s"),
             sdl_config_movement_preset_label(config.movement_keyboard_preset));
         help_emit_heading(heading, row - 2, col);
 
@@ -2761,20 +2850,20 @@ static void show_help_screen_legacy(int source_page, int display_page,
             row++, col);
         help_movement_bindings_label(MOVEMENT_INPUT_ACTION_WAIT,
             MOVEMENT_INPUT_DIRECTION_NONE, key_buf, sizeof(key_buf));
-        strnfmt(line, sizeof(line), "Wait: %s", key_buf);
+        strnfmt(line, sizeof(line), tutorial_help_text("Wait: %s"), key_buf);
         put_role(ROLE_SUBTLE, line, row++, col);
 
         if (help_directional_action_uses_move_keys(
                 MOVEMENT_INPUT_ACTION_RUN_DIR, &modifiers))
         {
             help_modifier_label(modifiers, key_buf, sizeof(key_buf));
-            strnfmt(line, sizeof(line), "Run: %s + a movement key", key_buf);
+            strnfmt(line, sizeof(line), tutorial_help_text("Run: %s + a movement key"), key_buf);
         }
         else
         {
             help_movement_bindings_label(MOVEMENT_INPUT_ACTION_RUN_DIR,
                 MOVEMENT_INPUT_DIRECTION_NORTH, key_buf, sizeof(key_buf));
-            strnfmt(line, sizeof(line), "Run north: %s", key_buf);
+            strnfmt(line, sizeof(line), tutorial_help_text("Run north: %s"), key_buf);
         }
         put_role(ROLE_SUBTLE, line, row++, col);
 
@@ -2782,19 +2871,19 @@ static void show_help_screen_legacy(int source_page, int display_page,
                 MOVEMENT_INPUT_ACTION_INTERACT_DIR, &modifiers))
         {
             help_modifier_label(modifiers, key_buf, sizeof(key_buf));
-            strnfmt(line, sizeof(line), "Interact: %s + a movement key", key_buf);
+            strnfmt(line, sizeof(line), tutorial_help_text("Interact: %s + a movement key"), key_buf);
         }
         else
         {
             help_movement_bindings_label(MOVEMENT_INPUT_ACTION_INTERACT_DIR,
                 MOVEMENT_INPUT_DIRECTION_NORTH, key_buf, sizeof(key_buf));
-            strnfmt(line, sizeof(line), "Interact north: %s", key_buf);
+            strnfmt(line, sizeof(line), tutorial_help_text("Interact north: %s"), key_buf);
         }
         put_role(ROLE_SUBTLE, line, row++, col);
 
         help_movement_bindings_label(MOVEMENT_INPUT_ACTION_REST,
             MOVEMENT_INPUT_DIRECTION_NONE, key_buf, sizeof(key_buf));
-        strnfmt(line, sizeof(line), "Rest: %s", key_buf);
+        strnfmt(line, sizeof(line), tutorial_help_text("Rest: %s"), key_buf);
         put_role(ROLE_SUBTLE, line, row, col);
 
         row = 12;
@@ -2847,7 +2936,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* SIL-MORE: TERRAIN & ITEMS */
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: TERRAIN & ITEMS"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("HELP [%d/%d]: TERRAIN & ITEMS")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
@@ -2920,7 +3009,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* SIL-MORE: CORE COMMANDS FROM THE CANONICAL KEYBIND CATALOG */
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: CORE COMMANDS"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("HELP [%d/%d]: CORE COMMANDS")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
 
@@ -2951,7 +3040,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         /* SIL-MORE: COMPLETE SUPPLEMENTARY COMMAND CATALOG */
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("HELP [%d/%d]: ALL OTHER COMMANDS"),
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("HELP [%d/%d]: ALL OTHER COMMANDS")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, 0, 1);
         }
@@ -2982,52 +3071,52 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row = 0; col = 1;
         if (include_header)
         {
-            strnfmt(page_header, sizeof(page_header), lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CONTROLLER CONTROLS"), display_page, total_pages);
+            strnfmt(page_header, sizeof(page_header), lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: CONTROLLER CONTROLS")), display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
         row += 2;
 
-        char action_buf[96];
-        char gameplay_action[64];
+        char action_buf[512];
+        char gameplay_action[192];
         int binding = 0;
 
         /* Movement and Action Controls */
         col = 1;
         help_emit_heading("MOVEMENT & ACTION", row, col); row += 2;
         strnfmt(action_buf, sizeof(action_buf),
-            "Input %s; movement: D-pad %s, left stick %s, right stick %s",
-            get_sdl_gamepad_enabled() ? "on" : "off",
-            get_sdl_gamepad_use_dpad() ? "on" : "off",
-            get_sdl_gamepad_use_left_stick() ? "on" : "off",
-            get_sdl_gamepad_use_right_stick() ? "on" : "off");
+            tutorial_help_text("Input %s; movement: D-pad %s, left stick %s, right stick %s"),
+            get_sdl_gamepad_enabled() ? tutorial_help_text("on") : tutorial_help_text("off"),
+            get_sdl_gamepad_use_dpad() ? tutorial_help_text("on") : tutorial_help_text("off"),
+            get_sdl_gamepad_use_left_stick() ? tutorial_help_text("on") : tutorial_help_text("off"),
+            get_sdl_gamepad_use_right_stick() ? tutorial_help_text("on") : tutorial_help_text("off"));
         put_role(get_sdl_gamepad_enabled() ? ROLE_BODY : ROLE_BAD,
             action_buf, row, col); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
-        binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
+        help_binding_label(binding, gameplay_action, sizeof(gameplay_action), false);
         strnfmt(action_buf, sizeof(action_buf),
-            "Confirm / activate focus; %s in play", gameplay_action);
+            tutorial_help_text("Confirm / activate focus; %s in play"), gameplay_action);
         put_role(ROLE_KEY, "A", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_WEST);
-        binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
-        strnfmt(action_buf, sizeof(action_buf), "Alternate in menus; %s in play",
+        help_binding_label(binding, gameplay_action, sizeof(gameplay_action), false);
+        strnfmt(action_buf, sizeof(action_buf), tutorial_help_text("Alternate in menus; %s in play"),
             gameplay_action);
         put_role(ROLE_KEY, "X", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH);
-        binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
-        strnfmt(action_buf, sizeof(action_buf), "Secondary in menus; %s in play",
+        help_binding_label(binding, gameplay_action, sizeof(gameplay_action), false);
+        strnfmt(action_buf, sizeof(action_buf), tutorial_help_text("Secondary in menus; %s in play"),
             gameplay_action);
         put_role(ROLE_KEY, "Y", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
-        binding_action_label(binding, gameplay_action, sizeof(gameplay_action));
+        help_binding_label(binding, gameplay_action, sizeof(gameplay_action), false);
         strnfmt(action_buf, sizeof(action_buf),
-            "Back / close / exit; %s in play", gameplay_action);
+            tutorial_help_text("Back / close / exit; %s in play"), gameplay_action);
         put_role(ROLE_KEY, "B", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
@@ -3037,7 +3126,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             cptr label = stick ? "Right Stick" : "Left Stick";
             if (moves)
                 strnfmt(action_buf, sizeof(action_buf),
-                    "Walk; cardinal delay %d ms; diagonals immediate",
+                    tutorial_help_text("Walk; cardinal delay %d ms; diagonals immediate"),
                     get_sdl_gamepad_stick_delay_ms(stick));
             else
                 SDL_strlcpy(action_buf, "Navigate UI focus; directional bindings are configurable",
@@ -3047,7 +3136,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
             put_role(ROLE_BODY, action_buf, row++, col + (int)strlen(label) + 3);
         }
         strnfmt(action_buf, sizeof(action_buf),
-            "D-pad movement delay: %d ms. Menu navigation is immediate.",
+            tutorial_help_text("D-pad movement delay: %d ms. Menu navigation is immediate."),
             get_sdl_gamepad_dpad_diagonal_delay_ms());
         put_role(ROLE_BODY, action_buf, row++, col);
 
@@ -3070,10 +3159,10 @@ static void show_help_screen_legacy(int source_page, int display_page,
         int text_col = 0;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        binding_action_label(binding, gameplay_action,
-            sizeof(gameplay_action));
+        help_binding_label(binding, gameplay_action,
+            sizeof(gameplay_action), false);
         strnfmt(action_buf, sizeof(action_buf),
-            "Previous page in menus; %s in play", gameplay_action);
+            tutorial_help_text("Previous page in menus; %s in play"), gameplay_action);
         input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3081,7 +3170,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_trigger_binding(0);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = sdl_gamepad_trigger_label(0);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3089,7 +3178,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_PADDLE1);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = "L4 (Back)";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3097,7 +3186,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_PADDLE2);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = "L5 (Back)";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3105,7 +3194,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_shoulder_combo_binding();
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = sdl_gamepad_playstation_prompts() ? "L1+R1 Combo" : "LB+RB Combo";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3120,10 +3209,10 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 2;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        binding_action_label(binding, gameplay_action,
-            sizeof(gameplay_action));
+        help_binding_label(binding, gameplay_action,
+            sizeof(gameplay_action), false);
         strnfmt(action_buf, sizeof(action_buf),
-            "Next page in menus; %s in play", gameplay_action);
+            tutorial_help_text("Next page in menus; %s in play"), gameplay_action);
         input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3131,7 +3220,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_trigger_binding(1);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = sdl_gamepad_trigger_label(1);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3139,7 +3228,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = "R4 (Back)";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3147,7 +3236,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = "R5 (Back)";
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3155,7 +3244,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_START);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_START);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3163,7 +3252,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
         binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
-        binding_action_label(binding, action_buf, sizeof(action_buf));
+        help_binding_label(binding, action_buf, sizeof(action_buf), false);
         input = sdl_gamepad_button_label(SDL_GAMEPAD_BUTTON_BACK);
         put_role(ROLE_KEY, input, row, col);
         text_col = col + (int)strlen(input);
@@ -3176,24 +3265,24 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 1;
         {
             char shift_label[16];
-            char south[24], east[24], west[24], north[24];
-            char note_buf[160];
+            char south[192], east[192], west[192], north[192];
+            char note_buf[HELP_DOC_MAX_COLS];
 
             help_prompt_label(GAMEPAD_BIND_SHIFT, "L2", shift_label, sizeof(shift_label));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_SHIFT, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_SOUTH), south, sizeof(south));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                SDL_GAMEPAD_BUTTON_SOUTH), south, sizeof(south), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_SHIFT, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_EAST), east, sizeof(east));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                SDL_GAMEPAD_BUTTON_EAST), east, sizeof(east), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_SHIFT, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_WEST), west, sizeof(west));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                SDL_GAMEPAD_BUTTON_WEST), west, sizeof(west), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_SHIFT, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_NORTH), north, sizeof(north));
+                SDL_GAMEPAD_BUTTON_NORTH), north, sizeof(north), true);
             strnfmt(note_buf, sizeof(note_buf),
-                "%s combos: A=%s  B=%s  X=%s  Y=%s",
+                tutorial_help_text("%s combos: A=%s  B=%s  X=%s  Y=%s"),
                 shift_label, south, east, west, north);
             put_role(ROLE_SUBTLE, note_buf, row, 1);
         }
@@ -3201,24 +3290,24 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 1;
         {
             char ctrl_label[16];
-            char south[24], east[24], west[24], north[24];
-            char note_buf[160];
+            char south[192], east[192], west[192], north[192];
+            char note_buf[HELP_DOC_MAX_COLS];
 
             help_prompt_label(GAMEPAD_BIND_CTRL, "R2", ctrl_label, sizeof(ctrl_label));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_SOUTH), south, sizeof(south));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                SDL_GAMEPAD_BUTTON_SOUTH), south, sizeof(south), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_EAST), east, sizeof(east));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                SDL_GAMEPAD_BUTTON_EAST), east, sizeof(east), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_WEST), west, sizeof(west));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                SDL_GAMEPAD_BUTTON_WEST), west, sizeof(west), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_NORTH), north, sizeof(north));
+                SDL_GAMEPAD_BUTTON_NORTH), north, sizeof(north), true);
             strnfmt(note_buf, sizeof(note_buf),
-                "%s combos: A=%s  B=%s  X=%s  Y=%s",
+                tutorial_help_text("%s combos: A=%s  B=%s  X=%s  Y=%s"),
                 ctrl_label, south, east, west, north);
             put_role(ROLE_SUBTLE, note_buf, row, 1);
         }
@@ -3227,29 +3316,29 @@ static void show_help_screen_legacy(int source_page, int display_page,
         {
             char shift_label[16];
             char ctrl_label[16];
-            char shift_l1[24], shift_r1[24], ctrl_l1[24], ctrl_r1[24];
-            char note_buf[160];
+            char shift_l1[192], shift_r1[192], ctrl_l1[192], ctrl_r1[192];
+            char note_buf[HELP_DOC_MAX_COLS];
 
             help_prompt_label(GAMEPAD_BIND_SHIFT, "L2", shift_label, sizeof(shift_label));
             help_prompt_label(GAMEPAD_BIND_CTRL, "R2", ctrl_label, sizeof(ctrl_label));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_SHIFT, GAMEPAD_CAPTURE_BUTTON,
                 SDL_GAMEPAD_BUTTON_LEFT_SHOULDER), shift_l1,
-                sizeof(shift_l1));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                sizeof(shift_l1), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_SHIFT, GAMEPAD_CAPTURE_BUTTON,
                 SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER), shift_r1,
-                sizeof(shift_r1));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                sizeof(shift_r1), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
                 SDL_GAMEPAD_BUTTON_LEFT_SHOULDER), ctrl_l1,
-                sizeof(ctrl_l1));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+                sizeof(ctrl_l1), true);
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
                 SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER), ctrl_r1,
-                sizeof(ctrl_r1));
+                sizeof(ctrl_r1), true);
             strnfmt(note_buf, sizeof(note_buf),
-                "Shoulders: %s+L1=%s  %s+R1=%s  %s+L1=%s  %s+R1=%s",
+                tutorial_help_text("Shoulders: %s+L1=%s  %s+R1=%s  %s+L1=%s  %s+R1=%s"),
                 shift_label, shift_l1, shift_label, shift_r1,
                 ctrl_label, ctrl_l1, ctrl_label, ctrl_r1);
             put_role(ROLE_SUBTLE, note_buf, row, 1);
@@ -3258,15 +3347,15 @@ static void show_help_screen_legacy(int source_page, int display_page,
         row += 1;
         {
             char ctrl_label[16];
-            char view_action[32];
-            char note_buf[120];
+            char view_action[192];
+            char note_buf[HELP_DOC_MAX_COLS];
 
             help_prompt_label(GAMEPAD_BIND_CTRL, "R2", ctrl_label, sizeof(ctrl_label));
-            binding_action_short(get_sdl_gamepad_combo_binding(
+            help_binding_label(get_sdl_gamepad_combo_binding(
                 GAMEPAD_MODIFIER_CTRL, GAMEPAD_CAPTURE_BUTTON,
-                SDL_GAMEPAD_BUTTON_BACK), view_action, sizeof(view_action));
+                SDL_GAMEPAD_BUTTON_BACK), view_action, sizeof(view_action), true);
             strnfmt(note_buf, sizeof(note_buf),
-                "View combo: %s+Back=%s", ctrl_label, view_action);
+                tutorial_help_text("View combo: %s+Back=%s"), ctrl_label, view_action);
             put_role(ROLE_SUBTLE, note_buf, row, 1);
         }
 
@@ -3287,7 +3376,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (include_header)
         {
             strnfmt(page_header, sizeof(page_header),
-                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: STORAGE & READINESS"),
+                lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: STORAGE & READINESS")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -3470,7 +3559,7 @@ static void show_help_screen_legacy(int source_page, int display_page,
         if (include_header)
         {
             strnfmt(page_header, sizeof(page_header),
-                lore_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SURVIVAL & CHECKS"),
+                lore_text(tutorial_help_text("SIL-MORE: SHINING DARKNESS - HELP [%d/%d]: SURVIVAL & CHECKS")),
                 display_page, total_pages);
             put_role(ROLE_HEADER, page_header, row, col);
         }
@@ -3671,8 +3760,8 @@ static int help_menu_collect_entries(help_menu_entry* entries, int max_entries)
         if (help_menu_action_available((ACTION)) && count < max_entries) {    \
             entries[count].action = (ACTION);                                \
             entries[count].key = (KEY);                                      \
-            entries[count].label = (LABEL);                                  \
-            entries[count].description = (DESCRIPTION);                      \
+            entries[count].label = tutorial_help_text(LABEL);                                  \
+            entries[count].description = tutorial_help_text(DESCRIPTION);                      \
             count++;                                                          \
         }                                                                      \
     } while (0)
@@ -3838,7 +3927,7 @@ static void help_search_add_result(cptr query, int page, cptr line,
 
     result = &g_help_search_results[*stored_count];
     result->page = page;
-    strnfmt(result->label, sizeof(result->label), "Page %d | %s", page,
+    strnfmt(result->label, sizeof(result->label), tutorial_help_text("Page %d | %s"), page,
         line);
     (*stored_count)++;
 }
@@ -3908,7 +3997,7 @@ static int help_search_choose_result(cptr query, int stored_count,
     ui_question_option options[HELP_SEARCH_RESULTS_PER_PAGE];
     ui_question_button buttons[2];
     char title[128];
-    char desc[192];
+    char desc[512];
     int result_page = 0;
 
     if (stored_count <= 0)
@@ -3922,10 +4011,13 @@ static int help_search_choose_result(cptr query, int stored_count,
         int end = start + shown_count;
         int choice;
 
-        strnfmt(title, sizeof(title), "Search results: %s", query);
-        strnfmt(desc, sizeof(desc),
-            "%d match%s. Showing %d-%d; choose one to open its page.",
-            total_count, total_count == 1 ? "" : "es", start + 1, end);
+        strnfmt(title, sizeof(title), tutorial_help_text("Search results: %s"), query);
+        if (streq(tutorial_language(), "en"))
+            strnfmt(desc, sizeof(desc), "%d match%s. Showing %d-%d; choose one to open its page.",
+                total_count, total_count == 1 ? "" : "es", start + 1, end);
+        else
+            strnfmt(desc, sizeof(desc), tutorial_help_text("Results: %d. Showing %d-%d."),
+                total_count, start + 1, end);
 
         for (int i = 0; i < shown_count; i++)
         {
@@ -3935,11 +4027,11 @@ static int help_search_choose_result(cptr query, int stored_count,
             };
         }
         buttons[0] = (ui_question_button){
-            HELP_SEARCH_PREVIOUS_PAGE, 'p', "Previous results", TERM_L_BLUE,
+            HELP_SEARCH_PREVIOUS_PAGE, 'p', tutorial_help_text("Previous results"), TERM_L_BLUE,
             result_page == 0
         };
         buttons[1] = (ui_question_button){
-            HELP_SEARCH_NEXT_PAGE, 'n', "Next results", TERM_L_BLUE,
+            HELP_SEARCH_NEXT_PAGE, 'n', tutorial_help_text("Next results"), TERM_L_BLUE,
             end >= stored_count
         };
 
@@ -3998,12 +4090,12 @@ void do_cmd_help_menu(void)
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_menu_click_set_touch_exit_button(true);
-        sdl_character_sheet_screen_begin_select(selected, "Tutorials & Help");
+        sdl_character_sheet_screen_begin_select(selected, tutorial_help_text("Tutorials & Help"));
         sdl_character_sheet_screen_set_select_menu_style(true);
 
         for (int entry = 0; entry < count; entry++)
         {
-            char label[96];
+            char label[256];
 
             if (menu_letters)
                 strnfmt(label, sizeof(label), "%c) %s", entries[entry].key,
@@ -4226,10 +4318,29 @@ void do_cmd_help(void)
 
         /* Navigation prompt + pointer / touch hit regions */
         {
-            char nav[192];
+            char nav[512];
             int mid_col = wid / 2;
 
-            if (sdl_touch_only_device_active()) {
+            if (!streq(tutorial_language(), "en")) {
+                const char *prev = tutorial_help_text("Prev");
+                const char *next = tutorial_help_text("Next");
+                const char *search = tutorial_help_text("Search");
+                const char *quit = tutorial_help_text("Quit");
+                if (sdl_touch_only_device_active()) {
+                    strnfmt(nav, sizeof(nav), "%s   %s   %s   %s", prev, next, search, quit);
+                } else if (help_controller_available() && steamdeck_controls_active()) {
+                    char back[32], forward[32], info[32], close[32];
+                    help_prompt_label(steamdeck_prev_page_key(), "L1", back, sizeof(back));
+                    help_prompt_label(steamdeck_next_page_key(), "R1", forward, sizeof(forward));
+                    help_prompt_label(steamdeck_info_key(), "View", info, sizeof(info));
+                    help_prompt_label(steamdeck_back_key(), "B", close, sizeof(close));
+                    strnfmt(nav, sizeof(nav), "[%s] %s  [%s] %s  [%s] %s  [%s] %s",
+                        back, prev, forward, next, info, search, close, quit);
+                } else {
+                    strnfmt(nav, sizeof(nav), "[←] %s  [→] %s  [/] %s  [Esc] %s",
+                        prev, next, search, quit);
+                }
+            } else if (sdl_touch_only_device_active()) {
                 SDL_strlcpy(nav,
                     get_sdl_menu_bigger_font()
                         ? "Search finds topics; swipe pages; Exit closes"
@@ -4279,13 +4390,13 @@ void do_cmd_help(void)
             ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
             ui_menu_click_set_touch_exit_button(true);
             ui_menu_click_add_text_token(HELP_CLICK_PREV, 1, nav_row, nav,
-                "Prev");
+                tutorial_help_text("Prev"));
             ui_menu_click_add_text_token(HELP_CLICK_NEXT, 1, nav_row, nav,
-                "Next");
+                tutorial_help_text("Next"));
             ui_menu_click_add_text_token(HELP_CLICK_QUIT, 1, nav_row, nav,
-                "Quit");
+                tutorial_help_text("Quit"));
             ui_menu_click_add_text_token(HELP_CLICK_SEARCH, 1, nav_row, nav,
-                "Search");
+                tutorial_help_text("Search"));
 
             if (mid_col < 1)
                 mid_col = 1;
@@ -4353,9 +4464,9 @@ void do_cmd_help(void)
         /* Direct page navigation with 'x' prefix */
         else if (ch == 'x' || ch == 'X')
         {
-            char prompt[32];
+            char prompt[192];
             char tmp[8];
-            strnfmt(prompt, sizeof(prompt), "Go to page (1-%d)", total_pages);
+            strnfmt(prompt, sizeof(prompt), tutorial_help_text("Go to page (1-%d)"), total_pages);
             SDL_strlcpy(tmp, "1", sizeof(tmp));
             if (get_string_panel(prompt, tmp, sizeof(tmp)))
             {
@@ -4374,7 +4485,7 @@ void do_cmd_help(void)
             int target = 0;
 
             query[0] = '\0';
-            if (get_string_panel("Search Gameplay Reference", query,
+            if (get_string_panel(tutorial_help_text("Search Gameplay Reference"), query,
                     sizeof(query)))
             {
                 help_search_trim_text(query);
@@ -4399,7 +4510,7 @@ void do_cmd_help(void)
                     }
                     else
                     {
-                        bell("No reference text matches that search.");
+                        bell(tutorial_help_text("No reference text matches that search."));
                     }
 
                     if (target > 0)

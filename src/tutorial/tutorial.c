@@ -54,27 +54,87 @@ static bool replaying;
 static bool awaiting_checkpoint;
 static tutorial_context active_context;
 static unsigned int revision;
-static bool russian;
-static cJSON *translation;
+/* The default is first. Show each language in its own orthography in the picker. */
+static const tutorial_locale languages[] = {
+    {"en", "English", false},
+    {"bg", "Български", true},
+    {"cs", "Čeština", false},
+    {"da", "Dansk", false},
+    {"de", "Deutsch", false},
+    {"es", "Español", false},
+    {"fr", "Français", false},
+    {"it", "Italiano", false},
+    {"hu", "Magyar", false},
+    {"nl", "Nederlands", false},
+    {"nb", "Norsk bokmål", false},
+    {"pl", "Polski", false},
+    {"pt", "Português (Brasil)", false},
+    {"ro", "Română", false},
+    {"ru", "Русский", true},
+    {"fi", "Suomi", false},
+    {"sv", "Svenska", false},
+    {"tr", "Türkçe", false},
+    {"uk", "Українська", true},
+    {"zh", "简体中文", true},
+    {"ja", "日本語", true},
+    {"ko", "한국어", true},
+};
+static size_t language_index;
+static char *translation_directory;
+/* Menus may still hold pointers to strings while a card changes language. */
+static cJSON *translations[N_ELEMENTS(languages)];
+static cJSON *references[N_ELEMENTS(languages)];
 static void ensure_catalogue(void);
+static void load_translation(void);
 
-const char *tutorial_language(void) { return russian ? "ru" : "en"; }
+const char *tutorial_language(void) { return languages[language_index].code; }
+bool tutorial_uses_localized_title(void) { return languages[language_index].localized_title; }
+
+const tutorial_locale *tutorial_available_locales(size_t *count)
+{
+    *count = N_ELEMENTS(languages);
+    return languages;
+}
 
 void tutorial_set_language(const char *language)
 {
-    bool next = language && !strcmp(language, "ru");
-    if (next != russian) { russian = next; ++revision; }
+    size_t next = 0;
+    for (size_t i = 1; language && i < N_ELEMENTS(languages); ++i) {
+        if (!strcmp(language, languages[i].code)) { next = i; break; }
+    }
+    if (next == language_index) return;
+    language_index = next;
+    load_translation();
+    ++revision;
 }
 
-const char *tutorial_translate(const char *english)
+static const char *translate_string(const char *group, const char *english)
 {
     const cJSON *value;
-    if (!english || !russian) return english ? english : "";
+    if (!english || !language_index) return english ? english : "";
     ensure_catalogue();
     value = cJSON_GetObjectItemCaseSensitive(
-        cJSON_GetObjectItemCaseSensitive(translation, "strings"), english);
+        cJSON_GetObjectItemCaseSensitive(translations[language_index], group), english);
     return cJSON_IsString(value) && value->valuestring[0]
         ? value->valuestring : english;
+}
+
+const char *tutorial_translate(const char *english) { return translate_string("strings", english); }
+static const char *reference_text(const char *group, const char *english)
+{
+    if (!english || !language_index) return english ? english : "";
+    ensure_catalogue();
+    const cJSON *entries = cJSON_GetObjectItemCaseSensitive(references[language_index], group);
+    const cJSON *value = cJSON_GetObjectItemCaseSensitive(entries, english);
+    return cJSON_IsString(value) && value->valuestring[0] ? value->valuestring : english;
+}
+
+const char *tutorial_help_text(const char *english) { return reference_text("help", english); }
+
+const char *tutorial_device_text(const char *english)
+{
+    const char *text = translate_string("device", english);
+    return text == english ? reference_text("device", english) : text;
 }
 static char current_menu[80];
 
@@ -135,6 +195,41 @@ static cJSON *read_json(const char *path, bool *exists)
     }
     SDL_CloseIO(file);
     return root;
+}
+
+static void clear_translations(void)
+{
+    SDL_free(translation_directory);
+    translation_directory = NULL;
+    for (size_t i = 1; i < N_ELEMENTS(languages); ++i) {
+        cJSON_Delete(translations[i]);
+        translations[i] = NULL;
+        cJSON_Delete(references[i]);
+        references[i] = NULL;
+    }
+}
+
+static cJSON *load_language_file(const char *basename)
+{
+    char path[1024];
+    bool exists;
+    if (SDL_snprintf(path, sizeof(path), "%s%s.%s.json", translation_directory,
+            basename, tutorial_language()) >= (int)sizeof(path)) return NULL;
+    cJSON *root = read_json(path, &exists);
+    const cJSON *version = cJSON_GetObjectItemCaseSensitive(root, "version");
+    const char *code = json_string(root, "language");
+    if (cJSON_IsNumber(version) && version->valuedouble == 1
+        && code && !strcmp(code, tutorial_language()))
+        return root;
+    cJSON_Delete(root);
+    return NULL;
+}
+
+static void load_translation(void)
+{
+    if (!language_index || !translation_directory) return;
+    if (!translations[language_index]) translations[language_index] = load_language_file("tutorials");
+    if (!references[language_index]) references[language_index] = load_language_file("reference");
 }
 
 static bool copy_field(char *dst, size_t size, const cJSON *object,
@@ -305,26 +400,12 @@ bool tutorial_load_catalogue(const char *path)
     /* Translation is optional; a missing or broken file falls back to English.
      * Load beside the requested catalogue, including isolated test catalogues. */
     {
-        char localized_path[1024];
-        cJSON *localized;
         const char *slash = strrchr(path, '/');
         const char *backslash = strrchr(path, '\\');
         if (!slash || (backslash && backslash > slash)) slash = backslash;
-        size_t prefix = slash ? (size_t)(slash - path + 1) : 0;
-        localized_path[0] = '\0';
-        if (prefix < sizeof(localized_path)) {
-            memcpy(localized_path, path, prefix);
-            localized_path[prefix] = '\0';
-            SDL_strlcat(localized_path, "tutorials.ru.json", sizeof(localized_path));
-        }
-        localized = read_json(localized_path, &exists);
-        cJSON_Delete(translation);
-        const cJSON *localized_version = cJSON_GetObjectItemCaseSensitive(localized, "version");
-        const char *localized_language = json_string(localized, "language");
-        translation = cJSON_IsObject(localized) && cJSON_IsNumber(localized_version)
-            && localized_version->valuedouble == 1 && localized_language
-            && !strcmp(localized_language, "ru") ? localized : NULL;
-        if (!translation) cJSON_Delete(localized);
+        clear_translations();
+        translation_directory = SDL_strndup(path, slash ? (size_t)(slash - path + 1) : 0);
+        load_translation();
     }
     return true;
 }
@@ -751,8 +832,8 @@ static const char *context_translation(const char *english, char *out, size_t si
 {
     const char *exact = tutorial_translate(english);
     const cJSON *pattern;
-    if (!russian || exact != english) return exact;
-    cJSON_ArrayForEach(pattern, cJSON_GetObjectItemCaseSensitive(translation, "patterns")) {
+    if (!language_index || exact != english) return exact;
+    cJSON_ArrayForEach(pattern, cJSON_GetObjectItemCaseSensitive(translations[language_index], "patterns")) {
         char values[16][384];
         int count = 0;
         const char *p = pattern->string, *input = english;
@@ -848,8 +929,8 @@ static void fill_view(tutorial_view *view, int index, int step_index,
     const tutorial_step *step = &lesson->steps[step_index];
     memset(view, 0, sizeof(*view));
     SDL_strlcpy(view->id, lesson->id, sizeof(view->id));
-    const cJSON *localized = russian ? cJSON_GetObjectItemCaseSensitive(
-        cJSON_GetObjectItemCaseSensitive(translation, "lessons"), lesson->id) : NULL;
+    const cJSON *localized = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(translations[language_index], "lessons"), lesson->id);
     const char *title = json_string(localized, "title");
     const cJSON *text = cJSON_GetArrayItem(
         cJSON_GetObjectItemCaseSensitive(localized, "steps"), step_index);
@@ -1008,8 +1089,7 @@ void tutorial_shutdown(void)
     catalogue = NULL;
     catalogue_count = 0;
     catalogue_attempted = false;
-    cJSON_Delete(translation);
-    translation = NULL;
+    clear_translations();
     cJSON_Delete(progress);
     progress = NULL;
     tale_loaded = false;

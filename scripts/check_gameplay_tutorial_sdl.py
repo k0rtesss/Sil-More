@@ -52,10 +52,18 @@ bool dismiss_active_narrative_banner(void)
 }
 static tutorial_mode g_app_gameplay_tutorial_mode=TUTORIAL_MODE_EXTENDED;
 static int config_saves;
-static bool test_russian;
-const char *tutorial_language(void) { return test_russian ? "ru" : "en"; }
-void tutorial_set_language(const char *language)
-{ test_russian = !strcmp(language, "ru"); ++revision; }
+static int language_activations;
+static bool cancel_language;
+const char *tutorial_language(void) { return "en"; }
+bool tutorial_uses_localized_title(void) { return false; }
+bool tutorial_game_select_language(void)
+{
+    assert(tutorial_selector_active);
+    ++language_activations;
+    if (cancel_language) return false;
+    ++config_saves; ++revision;
+    return true;
+}
 const char *tutorial_translate(const char *text) { return text; }
 
 void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
@@ -447,13 +455,13 @@ int main(void)
         e=button_event(SDL_EVENT_GAMEPAD_BUTTON_DOWN,SDL_GAMEPAD_BUTTON_SOUTH);
         assert(sdl_gameplay_tutorial_handle_event(&e) && !disabled);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_NORMAL);
-        assert(mode_selector_calls > 0 && !tutorial_mode_selector_active);
+        assert(mode_selector_calls > 0 && !tutorial_selector_active);
         show(true,"",""); /* An archive card can also be opened while Disabled. */
         tutorial_focus=2; tutorial_scroll=3;
         pending_mode_choice=-1;
         tutorial_activate(2,&current);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_NORMAL);
-        assert(!tutorial_mode_selector_active);
+        assert(!tutorial_selector_active);
         pending_mode_choice=TUTORIAL_MODE_EXTENDED;
         tutorial_activate(2,&current);
         assert(current.active && get_sdl_gameplay_tutorial_mode()==TUTORIAL_MODE_EXTENDED);
@@ -640,11 +648,11 @@ int main(void)
     assert(tutorial_focus==3);
     int saved_config_saves=config_saves;
     tutorial_activate(3,&current);
-    assert(test_russian && current.active && config_saves==saved_config_saves+1);
+    assert(language_activations==1 && current.active && config_saves==saved_config_saves+1);
     assert(tutorial_focus==3 && !key_count);
     e=key_event(SDL_EVENT_KEY_DOWN,SDLK_SPACE,SDL_SCANCODE_SPACE);
     assert(sdl_gameplay_tutorial_handle_event(&e));
-    assert(!test_russian && current.active && !key_count);
+    assert(language_activations==2 && current.active && !key_count);
     tutorial_buttons[3]=(SDL_FRect){300,150,50,44};
     SDL_zero(e); e.button.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
     e.button.timestamp=tutorial_input_barrier+1000000;
@@ -653,11 +661,16 @@ int main(void)
     assert(sdl_gameplay_tutorial_handle_event(&e));
     e.button.type=SDL_EVENT_MOUSE_BUTTON_UP;
     assert(sdl_gameplay_tutorial_handle_event(&e));
-    assert(test_russian && current.active && !key_count);
+    assert(language_activations==3 && current.active && !key_count);
     show(false,"move","");
     tutorial_reading=true;
     tutorial_activate(3,&current);
-    assert(!test_russian && current.active && tutorial_reading && !key_count);
+    assert(language_activations==4 && current.active && tutorial_reading && !key_count);
+    cancel_language=true;
+    saved_config_saves=config_saves;
+    tutorial_activate(3,&current);
+    assert(!tutorial_selector_active && current.active && tutorial_reading && !key_count);
+    assert(config_saves==saved_config_saves && tutorial_focus==3);
     SDL_Quit();
     puts("Gameplay tutorial SDL gate: PASS (banner dismissal, info/menu ownership, required commands, keymaps, fresh keyboard/gamepad/mouse/touch, resize, quit)");
     return 0;

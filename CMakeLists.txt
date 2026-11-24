@@ -625,7 +625,7 @@ if(SIL_IOS)
   # iOS apps are sandboxed; read-only data must live inside the .app bundle.
   file(GLOB SIL_RES_EDIT    CONFIGURE_DEPENDS "lib/edit/*.txt")
   file(GLOB SIL_RES_PREF    CONFIGURE_DEPENDS "lib/pref/*.json")
-  file(GLOB SIL_RES_FONT    CONFIGURE_DEPENDS "lib/xtra/font/*.ttf")
+  file(GLOB SIL_RES_FONT    CONFIGURE_DEPENDS "lib/xtra/font/*.ttf" "lib/xtra/font/*.otf" "lib/xtra/font/OFL-*.txt")
   file(GLOB SIL_RES_GRAF    CONFIGURE_DEPENDS "lib/xtra/graf/*.png")
   file(GLOB_RECURSE SIL_RES_SOUND LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/sound/*")
   file(GLOB_RECURSE SIL_RES_MUSIC LIST_DIRECTORIES false CONFIGURE_DEPENDS "lib/xtra/music/*")
