@@ -54,6 +54,28 @@ static bool replaying;
 static bool awaiting_checkpoint;
 static tutorial_context active_context;
 static unsigned int revision;
+static bool russian;
+static cJSON *translation;
+static void ensure_catalogue(void);
+
+const char *tutorial_language(void) { return russian ? "ru" : "en"; }
+
+void tutorial_set_language(const char *language)
+{
+    bool next = language && !strcmp(language, "ru");
+    if (next != russian) { russian = next; ++revision; }
+}
+
+const char *tutorial_translate(const char *english)
+{
+    const cJSON *value;
+    if (!english || !russian) return english ? english : "";
+    ensure_catalogue();
+    value = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(translation, "strings"), english);
+    return cJSON_IsString(value) && value->valuestring[0]
+        ? value->valuestring : english;
+}
 static char current_menu[80];
 
 typedef struct tutorial_suspended {
@@ -280,6 +302,30 @@ bool tutorial_load_catalogue(const char *path)
     free_catalogue(catalogue, catalogue_count);
     catalogue = next;
     catalogue_count = count;
+    /* Translation is optional; a missing or broken file falls back to English.
+     * Load beside the requested catalogue, including isolated test catalogues. */
+    {
+        char localized_path[1024];
+        cJSON *localized;
+        const char *slash = strrchr(path, '/');
+        const char *backslash = strrchr(path, '\\');
+        if (!slash || (backslash && backslash > slash)) slash = backslash;
+        size_t prefix = slash ? (size_t)(slash - path + 1) : 0;
+        localized_path[0] = '\0';
+        if (prefix < sizeof(localized_path)) {
+            memcpy(localized_path, path, prefix);
+            localized_path[prefix] = '\0';
+            SDL_strlcat(localized_path, "tutorials.ru.json", sizeof(localized_path));
+        }
+        localized = read_json(localized_path, &exists);
+        cJSON_Delete(translation);
+        const cJSON *localized_version = cJSON_GetObjectItemCaseSensitive(localized, "version");
+        const char *localized_language = json_string(localized, "language");
+        translation = cJSON_IsObject(localized) && cJSON_IsNumber(localized_version)
+            && localized_version->valuedouble == 1 && localized_language
+            && !strcmp(localized_language, "ru") ? localized : NULL;
+        if (!translation) cJSON_Delete(localized);
+    }
     return true;
 }
 
@@ -698,6 +744,80 @@ void tutorial_menu_opened(const char *menu)
 
 void tutorial_menu_closed(void) { current_menu[0] = '\0'; }
 
+/* Context is stored in its original language so a live card can switch both
+ * ways. Match authored printf-shaped messages without executing catalogue
+ * strings as format strings. Captures retain the public names and numbers. */
+static const char *context_translation(const char *english, char *out, size_t size)
+{
+    const char *exact = tutorial_translate(english);
+    const cJSON *pattern;
+    if (!russian || exact != english) return exact;
+    cJSON_ArrayForEach(pattern, cJSON_GetObjectItemCaseSensitive(translation, "patterns")) {
+        char values[16][384];
+        int count = 0;
+        const char *p = pattern->string, *input = english;
+        if (!p || !cJSON_IsString(pattern)) continue;
+        bool matched = true;
+        while (*p && *input) {
+            if (*p != '%') {
+                if (*p++ != *input++) { matched = false; break; }
+                continue;
+            }
+            ++p;
+            if (*p == '%') {
+                if (*input != '%') { matched = false; break; }
+                ++p; ++input; continue;
+            }
+            while (*p && strchr("+-.0123456789", *p)) ++p;
+            char kind = *p;
+            if (!kind || count == 16) { matched = false; break; }
+            ++p;
+            const char *start = input;
+            if (kind == 'd' || kind == 'u' || kind == 'f') {
+                if (*input == '-' || *input == '+') ++input;
+                const char *digits = input;
+                while (*input >= '0' && *input <= '9') ++input;
+                if (input == digits) { matched = false; break; }
+                if (kind == 'f' && *input == '.') {
+                    ++input;
+                    while (*input >= '0' && *input <= '9') ++input;
+                }
+            } else if (kind == 's') {
+                char separator[256];
+                size_t length = strcspn(p, "%");
+                if (length >= sizeof(separator)) { matched = false; break; }
+                memcpy(separator, p, length); separator[length] = '\0';
+                input = length ? strstr(input, separator) : input + strlen(input);
+                if (!input) { matched = false; break; }
+            } else { matched = false; break; }
+            size_t length = (size_t)(input - start);
+            if (length >= sizeof(values[0])) { matched = false; break; }
+            memcpy(values[count], start, length); values[count++][length] = '\0';
+        }
+        if (!matched || *p || *input) continue;
+        p = pattern->valuestring;
+        int index = 0;
+        out[0] = '\0';
+        while (*p) {
+            if (*p == '%') {
+                ++p;
+                if (*p != '%') {
+                    while (*p && strchr("+-.0123456789", *p)) ++p;
+                    if (!*p || index >= count) break;
+                    ++p;
+                    SDL_strlcat(out, tutorial_translate(values[index++]), size);
+                    continue;
+                }
+            }
+            size_t used = strlen(out);
+            if (used + 1 >= size) break;
+            out[used] = *p++; out[used + 1] = '\0';
+        }
+        if (!*p && index == count) return out;
+    }
+    return english;
+}
+
 static void render_text(char *out, size_t size, const char *text,
     const tutorial_context *context)
 {
@@ -709,6 +829,8 @@ static void render_text(char *out, size_t size, const char *text,
         else if (!strncmp(text, "{context}", 9)) { replacement = context->text; skip = 9; }
         else if (!strncmp(text, "{detail}", 8)) { replacement = context->text; skip = 8; }
         if (replacement) {
+            char localized[2048];
+            replacement = context_translation(replacement, localized, sizeof(localized));
             size_t length = strlen(replacement);
             if (length > size - used - 1) length = size - used - 1;
             memcpy(out + used, replacement, length);
@@ -726,8 +848,16 @@ static void fill_view(tutorial_view *view, int index, int step_index,
     const tutorial_step *step = &lesson->steps[step_index];
     memset(view, 0, sizeof(*view));
     SDL_strlcpy(view->id, lesson->id, sizeof(view->id));
-    SDL_strlcpy(view->title, lesson->title, sizeof(view->title));
-    render_text(view->body, sizeof(view->body), lore_text(step->text), context);
+    const cJSON *localized = russian ? cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(translation, "lessons"), lesson->id) : NULL;
+    const char *title = json_string(localized, "title");
+    const cJSON *text = cJSON_GetArrayItem(
+        cJSON_GetObjectItemCaseSensitive(localized, "steps"), step_index);
+    SDL_strlcpy(view->title, title && *title && strlen(title) < sizeof(view->title)
+        ? title : lesson->title, sizeof(view->title));
+    render_text(view->body, sizeof(view->body),
+        cJSON_IsString(text) && text->valuestring[0] && strlen(text->valuestring) < 3072
+            ? text->valuestring : lore_text(step->text), context);
     SDL_strlcpy(view->action, step->action, sizeof(view->action));
     SDL_strlcpy(view->action_subject, step->subject_type, sizeof(view->action_subject));
     SDL_strlcpy(view->anchor, step->anchor, sizeof(view->anchor));
@@ -878,6 +1008,8 @@ void tutorial_shutdown(void)
     catalogue = NULL;
     catalogue_count = 0;
     catalogue_attempted = false;
+    cJSON_Delete(translation);
+    translation = NULL;
     cJSON_Delete(progress);
     progress = NULL;
     tale_loaded = false;

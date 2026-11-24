@@ -164,6 +164,7 @@ typedef struct story_font_entry {
     int pixel_height;
     int slot;
     TTF_Font* font;
+    TTF_Font* fallback; /* Owned Cyrillic fallback, closed with the primary. */
     Uint64 last_used;
 } story_font_entry;
 

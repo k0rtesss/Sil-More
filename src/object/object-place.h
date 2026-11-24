@@ -9,8 +9,7 @@
 s16b floor_carry(int y, int x, object_type* j_ptr);
 bool object_terrain_allows_generation(int feat, int tval);
 s16b drop_near(object_type* j_ptr, int chance, int y, int x);
-bool drop_quiver_arrows_near(const object_type* arrows, int count,
-    int excluded_floor_item);
+bool drop_objects_near(const object_type* objects, int count, int excluded_floor_item);
 s16b drop_disarmed_weapon(object_type* j_ptr, int y, int x);
 void acquirement(int y1, int x1, int num, drop_quality quality);
 void place_object(int y, int x, drop_quality quality, int droptype,

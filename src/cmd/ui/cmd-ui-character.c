@@ -161,6 +161,7 @@ static const character_sheet_named_trait character_sheet_named_traits[] = {
     { "Woven Master", "Song is not reduced for woven minor themes." },
     { "Gift of Eru", "Story deaths are not counted if you die." },
     { "Seafarer", "Abilities cost less to acquire." },
+    { "Dwarven Smithing", "Each positive Smithing affinity level adds +1 to the attributes used for Smithing." },
     { "Kinslayer", "Retrieving Silmarils may endanger your kin." },
     { "Treacherous", "You may steal a Silmaril at the end." },
     { "Doom of Mandos", "Curses offered to you grow more complex." },
@@ -430,6 +431,7 @@ static int character_sheet_collect_semantic_items(character_sheet_item items[],
     ADD_SEMANTIC_UNIQUE_U("Woven Master", UNQ_WOVEN_MASTER);
     ADD_SEMANTIC_UNIQUE("Gift of Eru", RHF_GIFTERU);
     ADD_SEMANTIC_UNIQUE("Seafarer", RHF_FREE);
+    ADD_SEMANTIC_UNIQUE("Dwarven Smithing", RHF_DWARVEN_SMITHING);
     ADD_SEMANTIC_UNIQUE("Kinslayer", RHF_KINSLAYER);
     ADD_SEMANTIC_UNIQUE("Treacherous", RHF_TREACHERY);
     ADD_SEMANTIC_UNIQUE("Doom of Mandos", RHF_CURSE);

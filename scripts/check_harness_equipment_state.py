@@ -24,6 +24,8 @@ CHECKS = r'''
 #include "ui/question.h"
 extern void player_pack_action_process(void);
 extern bool fixture_examine(int item, bool supplies);
+extern bool fixture_replacement_allowed(const supply_menu_request* request,
+    const object_type* candidate);
 
 static int examined, examined_item;
 static bool examined_equipped;
@@ -31,6 +33,57 @@ static int knowledge_checks[INVEN_TOTAL];
 static bool capturing_knowledge;
 static bool transfer_identified_equipped;
 static bool pack_choice_seen, pack_choice_disabled;
+static int drop_quantity = -1;
+static int capacity_choice = -1, capacity_prompts;
+static bool pick_hand;
+static int hand_choice, hand_prompts, second_replacement_kind;
+static bool accept_oath_break;
+static int oath_prompts, oath_breaks;
+
+bool __real_do_cmd_knowledge_supplies(const supply_menu_request* request);
+bool __wrap_do_cmd_knowledge_supplies(const supply_menu_request* request)
+{
+    if (pick_hand && request && request->slot_pick_mode)
+    {
+        hand_prompts++;
+        if (hand_choice < 0)
+            return false;
+        assert(request->slot_pick_enabled[hand_choice]);
+        *request->slot_pick_item_out = hand_choice;
+        return true;
+    }
+    if (capacity_choice >= 0 && request && request->replacement_mode)
+    {
+        capacity_prompts++;
+        assert(request->inventory_group == INVENTORY_MENU_GROUP_HARNESS);
+        if (capacity_prompts > 1)
+        {
+            for (int i = 0; i < request->replacement_staged_count; i++)
+            {
+                const object_type* staged = player_inventory_object(
+                    request->replacement_staged_items[i]);
+                assert(staged && !fixture_replacement_allowed(request, staged));
+            }
+            for (int i = 0; i < player_pack_entry_count(); i++)
+                if (player_pack_entry_at(i)->k_idx == second_replacement_kind)
+                {
+                    *request->replacement_item_out = player_pack_entry_handle_at(i);
+                    return true;
+                }
+            return false;
+        }
+        *request->replacement_item_out = capacity_choice;
+        return true;
+    }
+    if (capacity_choice >= 0 && request && request->storage_exchange_mode)
+    {
+        capacity_prompts++;
+        assert(request->storage_exchange_target == OBJECT_STORAGE_HARNESS);
+        *request->storage_exchange_item_out = capacity_choice;
+        return true;
+    }
+    return __real_do_cmd_knowledge_supplies(request);
+}
 
 void __wrap_handle_stuff(void) {}
 void __wrap_update_stuff(void) {}
@@ -38,8 +91,22 @@ void __wrap_calc_bonuses_for_preview(void) {}
 void __wrap_msg_print(cptr message) { (void)message; }
 void __wrap_msg_format(cptr format, ...) { (void)format; }
 bool __wrap_get_check(cptr prompt) { (void)prompt; return true; }
+bool __wrap_get_check_oath_multiline(cptr prompt)
+{
+    assert(prompt && prompt[0]);
+    oath_prompts++;
+    return accept_oath_break;
+}
+void __wrap_apply_oath_breaking_curse(int oath)
+{
+    assert(oath == OATH_SMITH);
+    oath_breaks++;
+}
 s16b __wrap_get_quantity_action(cptr prompt, cptr action, int max)
-{ (void)prompt; (void)action; return max; }
+{
+    (void)prompt;
+    return drop_quantity >= 0 && streq(action, "Drop") ? drop_quantity : max;
+}
 bool __wrap_tutorial_game_action_allowed(const char* action, const object_type* obj)
 { (void)action; (void)obj; return true; }
 void __wrap_tutorial_game_explain(const char* id, const char* title, const char* text)
@@ -185,6 +252,236 @@ static void check_removal(void)
     puts("PASS: Stored cursed melee weapons, bows and shields can be removed/dropped, preserve their curse even with Curse Breaking; equipped controls remain bound.");
 }
 
+static void check_drop_stack(void)
+{
+    int drop_amounts[] = { 0, 4, 6 };
+    for (int i = 0; i < (int)N_ELEMENTS(drop_amounts); i++)
+    {
+        prepare(INVEN_WIELD, true);
+        object_type* wielded = &inventory[INVEN_WIELD];
+        wielded->ident &= ~IDENT_CURSED;
+        wielded->number = 6;
+        make_item(0, TV_SWORD, SV_DAGGER);
+        inventory[0].number = 5;
+        p_ptr->inven_cnt = 1;
+        assert(object_similar(wielded, &inventory[0]));
+        assert(wielded->number + inventory[0].number > object_stack_limit(wielded));
+        int kind = wielded->k_idx;
+        drop_quantity = drop_amounts[i];
+        assert(do_cmd_drop_item_by_index_confirm(INVEN_WIELD, false)
+            == (drop_quantity > 0));
+
+        int dropped = 0, carried = 0;
+        for (int j = 1; j < o_max; j++)
+            if (o_list[j].k_idx == kind)
+                dropped += o_list[j].number;
+        for (int j = 0; j < player_pack_entry_count(); j++)
+            if (player_pack_entry_at(j)->k_idx == kind)
+                carried += player_pack_entry_at(j)->number;
+        assert(dropped + carried + wielded->number == 11);
+        assert(dropped == drop_quantity);
+        assert(player_pack_entry_count() == 1 && inventory[0].number == 5);
+        assert(wielded->number == 6 - drop_quantity);
+        assert(p_ptr->equip_cnt == (drop_quantity == 6 ? 1 : 2));
+        assert(p_ptr->energy_use == (drop_quantity > 0 ? 50 : 0));
+    }
+    drop_quantity = -1;
+    puts("PASS: Partial and whole equipped-stack drops preserve Harness counts, exact floor quantity, and cancellation.");
+}
+
+static void check_wield_capacity(void)
+{
+    for (int from_pack = 0; from_pack < 2; from_pack++)
+    {
+        for (int cursed = 0; cursed < 2; cursed++)
+        {
+            prepare(INVEN_WIELD, true);
+            if (!cursed)
+                inventory[INVEN_WIELD].ident &= ~IDENT_CURSED;
+            make_item(0, TV_POLEARM, SV_HAND_AXE);
+            int capacity = inventory_limit_limit_for_group(INV_LIMIT_HARNESS);
+            inventory[0].volume += capacity - inventory_limit_usage_for_group(INV_LIMIT_HARNESS);
+            assert(inventory_limit_usage_for_group(INV_LIMIT_HARNESS) == capacity);
+            p_ptr->inven_cnt = 1;
+            capacity_choice = 0;
+            capacity_prompts = 0;
+
+            int floor = 0;
+            int item;
+            object_type* incoming;
+            if (from_pack)
+            {
+                item = 1;
+                make_item(item, TV_SWORD, SV_DAGGER);
+                inventory[item].storage = OBJECT_STORAGE_PACK;
+                inventory[item].att++;
+                p_ptr->inven_cnt++;
+                incoming = &inventory[item];
+            }
+            else
+            {
+                object_type sword;
+                object_prep(&sword, lookup_kind(TV_SWORD, SV_SHORT_SWORD));
+                floor = floor_carry(p_ptr->py, p_ptr->px, &sword);
+                assert(floor > 0);
+                item = -floor;
+                incoming = &o_list[floor];
+            }
+            int incoming_kind = incoming->k_idx;
+            int incoming_attack = incoming->att;
+            int harness_kind = inventory[0].k_idx;
+            object_type before[INVEN_TOTAL];
+            memcpy(before, inventory, sizeof(before));
+            bool started = do_cmd_wield_to_slot(incoming, item, INVEN_WIELD);
+            if (from_pack)
+            {
+                assert(started && player_pack_action_pending());
+                finish_pack();
+            }
+            else
+                assert(started == !cursed);
+
+            if (cursed)
+            {
+                assert(!memcmp(before, inventory, sizeof(before)));
+                assert(!capacity_prompts);
+                assert(o_cnt == !from_pack && (!floor || o_list[floor].number == 1));
+                assert(p_ptr->energy_use == (from_pack ? 100 : 0));
+            }
+            else
+            {
+                assert(capacity_prompts == 1);
+                assert(inventory[INVEN_WIELD].k_idx == incoming_kind);
+                assert(inventory[INVEN_WIELD].att == incoming_attack);
+                if (from_pack)
+                {
+                    object_type* exchanged = carried_kind(harness_kind);
+                    assert(exchanged && exchanged->storage == OBJECT_STORAGE_PACK);
+                    assert(!o_cnt);
+                }
+                else
+                {
+                    assert(!carried_kind(harness_kind));
+                    assert(!o_list[floor].k_idx && o_cnt == 1);
+                    int dropped = 0;
+                    for (int i = 1; i < o_max; i++)
+                        dropped += o_list[i].k_idx == harness_kind ? o_list[i].number : 0;
+                    assert(dropped == 1);
+                }
+            }
+        }
+    }
+    capacity_choice = -1;
+    puts("PASS: Full Harness cannot drop or exchange an item to replace bound equipment. Both legal equips commit the selected replacement.");
+}
+
+static void check_wield_hand(void)
+{
+    for (int scenario = 0; scenario < 3; scenario++)
+    {
+        prepare(INVEN_WIELD, true);
+        if (scenario != 1)
+            inventory[INVEN_WIELD].ident &= ~IDENT_CURSED;
+        p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING] = scenario == 1;
+        make_item(0, TV_POLEARM, SV_HAND_AXE);
+        int capacity = inventory_limit_limit_for_group(INV_LIMIT_HARNESS);
+        inventory[0].volume += capacity - inventory_limit_usage_for_group(INV_LIMIT_HARNESS);
+        assert(inventory_limit_usage_for_group(INV_LIMIT_HARNESS) == capacity);
+        p_ptr->inven_cnt = 1;
+        capacity_choice = scenario == 2 ? INVEN_WIELD : 0;
+        capacity_prompts = hand_prompts = 0;
+        pick_hand = true;
+        hand_choice = scenario == 0 ? -1 : INVEN_WIELD;
+
+        object_type dagger;
+        object_prep(&dagger, lookup_kind(TV_SWORD, SV_DAGGER));
+        dagger.att++;
+        int floor = floor_carry(p_ptr->py, p_ptr->px, &dagger);
+        assert(floor > 0);
+        object_type before[INVEN_TOTAL];
+        memcpy(before, inventory, sizeof(before));
+        do_cmd_wield(&o_list[floor], -floor);
+        assert(hand_prompts == 1);
+        if (scenario < 2)
+        {
+            assert(!memcmp(before, inventory, sizeof(before)));
+            assert(!capacity_prompts && o_cnt == 1 && o_list[floor].k_idx);
+            assert(!p_ptr->energy_use);
+        }
+        else
+        {
+            assert(capacity_prompts == 1 && !o_list[floor].k_idx && o_cnt == 1);
+            assert(inventory[INVEN_WIELD].att == dagger.att);
+            assert(inventory[0].k_idx == before[0].k_idx && p_ptr->equip_cnt == 2);
+            assert(p_ptr->energy_use == 100);
+        }
+    }
+    pick_hand = false;
+    capacity_choice = -1;
+    puts("PASS: Floor throwing equip preserves gear when slot selection is cancelled or bound, and can replace its own destination.");
+}
+
+static void check_wield_two_drops(void)
+{
+    for (int scenario = 0; scenario < 4; scenario++)
+    {
+        prepare(INVEN_WIELD, true);
+        inventory[INVEN_WIELD].ident &= ~IDENT_CURSED;
+        make_item(0, TV_POLEARM, SV_HAND_AXE);
+        make_item(1, TV_SWORD, SV_SHORT_SWORD);
+        make_item(2, TV_SHIELD, SV_ROUND_SHIELD);
+        inventory[0].volume = 2;
+        inventory[1].volume = 2;
+        int capacity = inventory_limit_limit_for_group(INV_LIMIT_HARNESS);
+        inventory[2].volume += capacity - inventory_limit_usage_for_group(INV_LIMIT_HARNESS);
+        assert(inventory_limit_usage_for_group(INV_LIMIT_HARNESS) == capacity);
+        p_ptr->inven_cnt = 3;
+        capacity_choice = 0;
+        capacity_prompts = 0;
+        second_replacement_kind = scenario ? inventory[1].k_idx : -1;
+        p_ptr->oath_type = OATH_SMITH;
+        p_ptr->oaths_broken = 0;
+        oath_prompts = oath_breaks = 0;
+        accept_oath_break = scenario != 3;
+
+        object_type dagger;
+        object_prep(&dagger, lookup_kind(TV_SWORD, SV_DAGGER));
+        dagger.att++;
+        int floor = floor_carry(p_ptr->py, p_ptr->px, &dagger);
+        assert(floor > 0);
+        object_type before[INVEN_TOTAL];
+        memcpy(before, inventory, sizeof(before));
+        int max_objects = z_info->o_max;
+        if (scenario == 2)
+            z_info->o_max = o_max + 1;
+        assert(do_cmd_wield_to_slot(&o_list[floor], -floor, INVEN_WIELD) == (scenario == 1));
+        z_info->o_max = max_objects;
+        assert(capacity_prompts == 2);
+        assert(oath_prompts == (scenario != 0) && oath_breaks == (scenario == 1));
+        assert(oath_invalid(OATH_SMITH) == (scenario == 1));
+        if (scenario != 1)
+        {
+            assert(!memcmp(before, inventory, sizeof(before)));
+            assert(o_cnt == 1 && o_list[floor].k_idx && !p_ptr->energy_use);
+        }
+        else
+        {
+            assert(!o_list[floor].k_idx && o_cnt == 2 && p_ptr->energy_use == 100);
+            assert(inventory[INVEN_WIELD].att == dagger.att);
+            assert(!carried_kind(before[0].k_idx) && !carried_kind(before[1].k_idx));
+            int dropped = 0;
+            for (int i = 1; i < o_max; i++)
+                if (o_list[i].k_idx == before[0].k_idx || o_list[i].k_idx == before[1].k_idx)
+                    dropped += o_list[i].number;
+            assert(dropped == 2);
+        }
+    }
+    p_ptr->oath_type = p_ptr->oaths_broken = 0;
+    second_replacement_kind = 0;
+    capacity_choice = -1;
+    puts("PASS: Second-choice cancellation, oath refusal and placement failure preserve gear and oath; success commits exactly both selections.");
+}
+
 static void check_transfers(void)
 {
     prepare(INVEN_WIELD, false);
@@ -300,6 +597,12 @@ static void check_self_knowledge(void)
 '''
 
 WRAPPER = r'''
+bool fixture_replacement_allowed(const supply_menu_request* request,
+    const object_type* candidate)
+{
+    return inventory_replacement_object_allowed(request, candidate, false);
+}
+
 bool fixture_examine(int item, bool supplies)
 {
     if (supplies)
@@ -323,14 +626,17 @@ bool fixture_examine(int item, bool supplies)
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", action="store_true")
-    parser.add_argument("--case", choices=("all", "removal", "transfers", "identification", "self_knowledge"), default="all")
+    cases = ("removal", "drop_stack", "wield_capacity", "wield_hand", "wield_two_drops",
+             "transfers", "identification", "self_knowledge")
+    parser.add_argument("--case", choices=("all", *cases), default="all")
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     prefix = ENGINE_FIXTURE[:ENGINE_FIXTURE.index("static const char* guids[]")]
     prefix += fixture_function("terminal_extra") + "\n" + fixture_function("reset_map") + "\n"
     init = ENGINE_FIXTURE[ENGINE_FIXTURE.index("int main(int argc,char** argv)"):]
     init = init[:init.index("    check_templates();")]
-    cases = ("removal", "transfers", "identification", "self_knowledge") if args.case == "all" else (args.case,)
+    if args.case != "all":
+        cases = (args.case,)
     source = OUT / "check.c"
     source.write_text(prefix + CHECKS + init
         + "    assert(!init_flavor_info()); flavor_init();\n"
@@ -340,7 +646,8 @@ def main():
     excluded = ["/src/main.c.obj", "/src/cmd/ui/cmd-ui-knowledge.c.obj"]
     extra = []
     if args.baseline:
-        for unit, name in (("cmd/item/cmd-item-core", "core"), ("cmd/ui/cmd-ui-knowledge", "ui")):
+        for unit, name in (("cmd/item/cmd-item-core", "core"), ("cmd/ui/cmd-ui-knowledge", "ui"),
+                           ("object/object-inventory", "inventory"), ("object/object-place", "place")):
             baseline = OUT / f"baseline-{name}.c"
             baseline.write_bytes(subprocess.check_output(["git", "show", f"HEAD:src/{unit}.c"], cwd=ROOT))
             if name == "ui":
@@ -348,6 +655,10 @@ def main():
             else:
                 extra.append(str(baseline))
                 excluded.append(f"/src/{unit}.c.obj")
+    else:
+        for unit in ("cmd/item/cmd-item-core", "object/object-inventory", "object/object-place"):
+            extra.append(str(ROOT / "src" / f"{unit}.c"))
+            excluded.append(f"/src/{unit}.c.obj")
     wrapper = OUT / "ui-check.c"
     wrapper.write_text(f'#include "{ui_source.as_posix()}"\n' + WRAPPER, encoding="utf-8")
     cmake = BUILD / "CMakeFiles/sil-more.dir"
@@ -362,7 +673,8 @@ def main():
         "get_quantity_action", "tutorial_game_action_allowed", "tutorial_game_explain",
         "object_info_screen", "object_info_screen_multi",
         "player_try_identify_smithing_object_on_examine", "self_knowledge",
-        "player_try_identify_smithing_object")
+        "player_try_identify_smithing_object", "do_cmd_knowledge_supplies",
+        "get_check_oath_multiline", "apply_oath_breaking_curse")
     exe = OUT / ("baseline.exe" if args.baseline else "check.exe")
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", "-I"+str(ROOT / "src/cmd/ui"),

@@ -2118,6 +2118,7 @@ void sdl_config_load_app_options(const char* filename)
 
     g_app_intro_seen = config_exists;
     g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
+    tutorial_set_language("en");
     g_app_touch_tutorial_seen = false;
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
@@ -2159,6 +2160,10 @@ void sdl_config_load_app_options(const char* filename)
         g_app_intro_seen = cJSON_IsTrue(item);
 
     g_app_gameplay_tutorial_mode = sdl_config_gameplay_tutorial_mode_from_json(app_options);
+    {
+        const cJSON *language = cJSON_GetObjectItemCaseSensitive(app_options, "tutorialLanguage");
+        tutorial_set_language(cJSON_IsString(language) ? language->valuestring : "en");
+    }
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "touchTutorialSeen");
     if (cJSON_IsBool(item))
@@ -6002,6 +6007,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON_AddBoolToObject(app_options, "introSeen", g_app_intro_seen);
             cJSON_AddStringToObject(app_options, "gameplayTutorialMode",
                 tutorial_mode_name(g_app_gameplay_tutorial_mode));
+            cJSON_AddStringToObject(app_options, "tutorialLanguage", tutorial_language());
             cJSON_AddBoolToObject(app_options, "touchTutorialSeen",
                 g_app_touch_tutorial_seen);
             cJSON_AddBoolToObject(app_options, "mouseTutorialSeen",

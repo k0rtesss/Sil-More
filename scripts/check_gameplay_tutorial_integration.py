@@ -1380,9 +1380,9 @@ static bool object_info_blocked_by_hallucination(void) { return p_ptr->image>0; 
 static int object_info_screen_preferred_capture_width(bool story) { (void)story; return 40; }
 static bool object_info_screen_capture_build(const object_type **objects,
     const char **headings,int count,object_info_screen_capture *capture,
-    int width,bool story,bool interactive,bool compare)
+    int width,bool story,bool interactive,bool has_view_toggle,bool compare)
 {
-    (void)objects;(void)headings;(void)count;(void)width;(void)story;(void)interactive;(void)compare;
+    (void)objects;(void)headings;(void)count;(void)width;(void)story;(void)interactive;(void)has_view_toggle;(void)compare;
     if (!mock_description_capture) return false;
     memset(capture,0,sizeof(*capture)); capture->width=40; capture->height=5; capture->target_cols=40;
     return true;

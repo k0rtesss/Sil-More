@@ -802,7 +802,7 @@ static bool replace_quiver_arrows(int requested, int item)
         drop->storage = OBJECT_STORAGE_NONE;
     }
 
-    if (!drop_quiver_arrows_near(drops, drop_count, item < 0 ? -item : 0))
+    if (!drop_objects_near(drops, drop_count, item < 0 ? -item : 0))
     {
         msg_print("There is no room to drop all the arrows you would replace.");
         return false;
@@ -1497,7 +1497,8 @@ static bool replacement_choice_allowed(const object_type* incoming,
 static bool open_inventory_replacement_menu_with_action(
     inventory_menu_group group, const object_type* incoming,
     bool include_equip, bool include_supplies, cptr reason,
-    cptr operation, int* replacement_item)
+    cptr operation, int* replacement_item, const int* staged_items,
+    int staged_count, int staged_volume)
 {
     object_choice_entry* entries;
     int capacity;
@@ -1533,6 +1534,9 @@ static bool open_inventory_replacement_menu_with_action(
         request.replacement_operation = operation;
         request.replacement_reason = reason;
         request.replacement_item_out = replacement_item;
+        request.replacement_staged_items = staged_items;
+        request.replacement_staged_count = staged_count;
+        request.replacement_staged_volume = staged_volume;
         return do_cmd_knowledge_supplies(&request);
     }
 
@@ -1645,15 +1649,17 @@ bool open_inventory_replacement_menu(inventory_menu_group group,
 {
     return open_inventory_replacement_menu_with_action(group, incoming,
         include_equip, include_supplies, reason, "Picking up",
-        replacement_item);
+        replacement_item, NULL, 0, 0);
 }
 
 static bool open_inventory_equip_replacement_menu(
     inventory_menu_group group, const object_type* incoming,
-    bool include_equip, cptr reason, int* replacement_item)
+    cptr reason, int* replacement_item, const int* staged_items,
+    int staged_count, int staged_volume)
 {
     return open_inventory_replacement_menu_with_action(group, incoming,
-        include_equip, false, reason, "Equipping", replacement_item);
+        true, false, reason, "Equipping", replacement_item, staged_items,
+        staged_count, staged_volume);
 }
 
 static void format_storage_exchange_reason(const object_type* incoming,
@@ -2618,143 +2624,141 @@ bool do_cmd_move_item_to_storage(int item, byte target_storage)
     return true;
 }
 
-static bool drop_equipped_harness_replacement_item(int item, int amount)
+typedef struct wield_replacements
 {
-    object_type* source;
-    object_type dropped;
-    char o_name[120];
+    int* items;
+    object_type* drops;
+    int count;
+} wield_replacements;
 
-    if (!player_inventory_handle_is_equipped(item) || amount <= 0)
+static bool plan_floor_wield_replacements(
+    const object_type* incoming, int quantity, wield_replacements* plan)
+{
+    object_type incoming_unit;
+    object_copy(&incoming_unit, incoming);
+    incoming_unit.number = quantity;
+
+    if (inventory_type_slot_available(&incoming_unit, true))
+        return true;
+
+    int capacity = player_pack_entry_count() + INVEN_TOTAL - INVEN_WIELD;
+    plan->items = mem_alloc_array(capacity, int);
+    plan->drops = mem_alloc_array(capacity, object_type);
+
+    int used = inventory_limit_usage_for_group(INV_LIMIT_HARNESS);
+    int limit = inven_carry_limit_value();
+    int needed = inventory_limit_additional_space_for_object(&incoming_unit);
+    int staged_volume = 0;
+    while (used + needed - staged_volume > limit)
+    {
+        int replacement_item = -1;
+        int projected_used = used - staged_volume;
+        int left = MAX(limit - projected_used, 0);
+        char reason[280];
+
+        strnfmt(reason, sizeof(reason),
+            "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; choose an item to drop.",
+            projected_used / 10, projected_used % 10, limit / 10, limit % 10,
+            left / 10, left % 10, needed / 10, needed % 10);
+
+        /* The selector uses the recorded limit group to find candidates. */
+        (void)inventory_type_slot_available(&incoming_unit, true);
+        if (plan->count >= capacity
+            || !open_inventory_equip_replacement_menu(
+                INVENTORY_MENU_GROUP_HARNESS, &incoming_unit, reason,
+                &replacement_item, plan->items, plan->count, staged_volume))
+        {
+            return false;
+        }
+
+        object_type* candidate = player_inventory_object(replacement_item);
+        if (!candidate || !candidate->k_idx || candidate->number <= 0
+            || inventory_limit_group_for_object(candidate) != INV_LIMIT_HARNESS
+            || (player_equipment_slot_counts_as_equipped(replacement_item)
+                && cursed_p(candidate)))
+        {
+            return false;
+        }
+
+        /* Descending handles keep lower legacy and expandable slots stable
+         * when the committed removals compact their respective stores. */
+        int insert = plan->count;
+        while (insert > 0 && plan->items[insert - 1] < replacement_item)
+            insert--;
+        if (insert > 0 && plan->items[insert - 1] == replacement_item)
+            return false;
+
+        object_type drop;
+        object_copy(&drop, candidate);
+        drop.number = 1;
+        int unit_volume = inventory_limit_space_for_object(&drop);
+        if (unit_volume <= 0)
+            return false;
+        int shortage = projected_used + needed - limit;
+        drop.number = MIN(candidate->number, 1 + (shortage - 1) / unit_volume);
+        drop.pickup = false;
+        drop.pickup_slot = -1;
+        drop.marked = false;
+        staged_volume += unit_volume * drop.number;
+
+        int shift = plan->count - insert;
+        memmove(&plan->items[insert + 1], &plan->items[insert],
+            (size_t)shift * sizeof(*plan->items));
+        memmove(&plan->drops[insert + 1], &plan->drops[insert],
+            (size_t)shift * sizeof(*plan->drops));
+        plan->items[insert] = replacement_item;
+        object_copy(&plan->drops[insert], &drop);
+        plan->count++;
+    }
+
+    return true;
+}
+
+static bool commit_floor_wield_replacements(const wield_replacements* plan,
+    int floor_item)
+{
+    if (!plan->count)
+        return true;
+
+    if (!drop_objects_near(plan->drops, plan->count, 0 - floor_item))
+    {
+        msg_print("There is no room nearby for all the items you would replace.");
         return false;
+    }
 
-    source = player_inventory_object(item);
-    if (!source || !source->k_idx
-        || (player_equipment_slot_counts_as_equipped(item) && cursed_p(source)))
-        return false;
+    for (int i = 0; i < plan->count; i++)
+    {
+        int item = plan->items[i];
+        char name[120];
 
-    amount = MIN(amount, source->number);
-    if (amount <= 0)
-        return false;
-
-    /* Do not route an equipped Harness object through inven_takeoff().  That
-     * would first carry it back into the Harness, where it can merge with an
-     * identical carried item and leave the selected object apparently behind.
-     * Copy and remove the equipment directly, then place exactly that copy on
-     * the floor. */
-    object_copy(&dropped, source);
-    dropped.number = amount;
-    dropped.next_o_idx = 0;
-    dropped.held_m_idx = 0;
-    dropped.iy = dropped.ix = 0;
-    dropped.marked = false;
-    dropped.pickup = false;
-    dropped.pickup_slot = -1;
-    if (object_can_choose_pack_or_harness(&dropped))
-        dropped.storage = OBJECT_STORAGE_HARNESS;
-
-    object_desc(o_name, sizeof(o_name), &dropped, true, 3);
-    msg_format("You drop %s (%c).", o_name, player_inventory_label(item));
-
-    drop_near(&dropped, 0, p_ptr->py, p_ptr->px);
-    inven_item_increase(item, -amount);
-    inven_item_describe(item);
-    inven_item_optimize(item);
+        object_desc(name, sizeof(name), &plan->drops[i], true, 3);
+        msg_format("You drop %s (%c).", name, player_inventory_label(item));
+        inven_item_increase(item, 0 - plan->drops[i].number);
+        inven_item_describe(item);
+        inven_item_optimize(item);
+    }
+    p_ptr->notice |= PN_COMBINE | PN_REORDER;
     p_ptr->redraw |= PR_MAP | PR_QUIVER | PR_EQUIPPY | PR_RESIST;
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
     return true;
 }
 
-static bool drop_harness_replacement_for_floor_wield(
-    const object_type* incoming)
+static bool wield_replacements_remove_slot(const wield_replacements* plan, int slot)
 {
-    enum inventory_limit_group group = INV_LIMIT_HARNESS;
-    object_type incoming_unit;
-    object_type* candidate;
-    int replacement_item = -1;
-    int used;
-    int limit;
-    int needed;
-    int left;
-    int remove_amount;
-    char reason[280];
-
-    if (!incoming || !incoming->k_idx)
-        return false;
-
-    /* Equipping consumes one member of a floor stack.  Keep capacity
-     * accounting about that one item even if dropping the selected old item
-     * later combines it with the floor stack. */
-    object_copy(&incoming_unit, incoming);
-    incoming_unit.number = 1;
-
-    /* Recheck after every selected drop so the replacement menu can enumerate
-     * the remaining Harness choices until the one incoming item fits. */
-    while (!inventory_type_slot_available(&incoming_unit, true))
+    for (int i = 0; i < plan->count; i++)
     {
-        replacement_item = -1;
-        used = inventory_limit_usage_for_group(group);
-        limit = inven_carry_limit_value();
-        if (limit <= 0)
-            limit = inventory_limit_limit_for_group(group);
-        needed = inventory_limit_additional_space_for_object(&incoming_unit);
-        left = MAX(limit - used, 0);
-        strnfmt(reason, sizeof(reason),
-            "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
-            "Incoming needs %d.%d qt; choose an item to drop.",
-            used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
-            left / 10, ABS(left % 10), needed / 10, ABS(needed % 10));
-
-        if (!open_inventory_equip_replacement_menu(
-                INVENTORY_MENU_GROUP_HARNESS, &incoming_unit, true, reason,
-                &replacement_item))
-        {
-            return false;
-        }
-
-        if (!player_inventory_handle_valid(replacement_item))
-            return false;
-
-        candidate = player_inventory_object(replacement_item);
-        if (!candidate || !candidate->k_idx
-            || inventory_limit_group_for_object(candidate) != group
-            || (player_equipment_slot_counts_as_equipped(replacement_item)
-                && cursed_p(candidate)))
-        {
-            msg_print("That item cannot be dropped.");
-            continue;
-        }
-
-        /* Drop only as much of a stack as needed when one choice is enough;
-         * otherwise drop the whole selected stack and let the next menu
-         * choose another Harness item. */
-        remove_amount = MAX(candidate->number, 1);
-        for (int amount = 1; amount <= candidate->number; amount++)
-        {
-            int projected = inventory_limit_usage_after_replacing(
-                &incoming_unit, candidate, amount);
-
-            if (projected >= 0 && projected <= limit)
-            {
-                remove_amount = amount;
-                break;
-            }
-        }
-
-        if (player_inventory_handle_is_equipped(replacement_item))
-        {
-            if (!drop_equipped_harness_replacement_item(replacement_item,
-                    remove_amount))
-            {
-                return false;
-            }
-        }
-        else
-            inven_drop(replacement_item, remove_amount);
-        p_ptr->notice |= PN_COMBINE | PN_REORDER;
-        notice_stuff();
+        if (plan->items[i] == slot)
+            return plan->drops[i].number == inventory[slot].number;
     }
+    return false;
+}
 
-    return true;
+static void free_wield_replacements(wield_replacements* plan)
+{
+    plan->items = mem_free(plan->items);
+    plan->drops = mem_free(plan->drops);
+    plan->count = 0;
 }
 
 void do_cmd_use_item_by_index(int item)
@@ -3210,6 +3214,21 @@ void do_cmd_equip(void)
     do_cmd_equip_direct();
 }
 
+static bool wield_slot_bound_by_curse(int slot)
+{
+    object_type* worn = &inventory[slot];
+    char name[80];
+
+    /* Inactive reserved slots are Harness storage. */
+    if (!player_equipment_slot_counts_as_equipped(slot) || !cursed_p(worn))
+        return false;
+
+    object_desc(name, sizeof(name), worn, false, 0);
+    msg_format("You cannot bear to give up the %s you are %s.", name,
+        describe_use(slot));
+    return true;
+}
+
 /*
  * Wield or wear a single item from the pack or floor
  */
@@ -3243,6 +3262,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     int lamp_replacement_item = -1;
     bool lamp_flask_replacement_planned = false;
     bool move_pack_weapon_to_harness = false;
+    int pack_exchange_item = -1;
+    int pack_exchange_quantity = 0;
 
     u32b f1, f2, f3, f4;
 
@@ -3386,58 +3407,6 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
         msg_format("You cannot wear or wield %s.", o_name);
         return;
-    }
-
-    /* Equipping directly from the floor is still an acquisition.  Harness
-     * items continue to consume Harness volume after being equipped, so this
-     * path must not bypass the same limit enforced by normal pickup.  Wielding
-     * takes one item from a floor stack, so preflight one item rather than the
-     * entire stack. */
-    if (item < 0
-        && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
-    {
-        object_type capacity_item;
-
-        object_copy(&capacity_item, o_ptr);
-        capacity_item.number = 1;
-
-        if (inventory_type_slot_available(&capacity_item, true))
-        {
-            /* There is already room; continue below and equip the floor
-             * object normally. */
-        }
-        else
-        {
-            /* A floor Equip is a Harness replacement, not a Pack exchange.
-             * Let the player choose which Harness item to drop, then continue
-             * through the ordinary wield path with the incoming item. */
-            if (drop_harness_replacement_for_floor_wield(o_ptr)
-                && inventory_type_slot_available(&capacity_item, false))
-            {
-                /* The selected item has been dropped; continue below and
-                 * equip the floor object normally. */
-            }
-            else
-            {
-                enum inventory_limit_group group = inven_carry_limit_group();
-
-                if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
-                {
-                    int used = inventory_limit_usage_for_group(group);
-                    int limit = inven_carry_limit_value();
-                    int needed = inventory_limit_additional_space_for_object(
-                        &capacity_item);
-                    int left = MAX(limit - used, 0);
-
-                    msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
-                               "this item needs %d.%d qt.",
-                        inventory_limit_group_name(group), used / 10,
-                        used % 10, limit / 10, limit % 10, left / 10,
-                        left % 10, needed / 10, needed % 10);
-                }
-                return;
-            }
-        }
     }
 
     if ((item < 0) && player_light_carry_cap(o_ptr) > 0
@@ -3622,52 +3591,6 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
     }
 
-    move_pack_weapon_to_harness = player_inventory_handle_is_carried(item)
-        && object_can_choose_pack_or_harness(o_ptr)
-        && o_ptr->storage == OBJECT_STORAGE_PACK;
-    if (move_pack_weapon_to_harness)
-    {
-        int moving_quantity = (forced_wield_full_stack && is_throwing
-                && slot == INVEN_WIELD)
-            ? MIN(o_ptr->number, object_stack_limit(o_ptr)) : 1;
-
-        if (!item_storage_destination_available(o_ptr,
-                OBJECT_STORAGE_HARNESS, moving_quantity, false))
-        {
-            int exchange_item = -1;
-            object_type* exchange_object;
-
-            /* A normal wield can move only one member of a throwing stack.
-             * Storage exchange changes the pool of the whole object entry, so
-             * leave that partial wield on the ordinary failure path. */
-            if (moving_quantity < o_ptr->number)
-            {
-                (void)item_storage_destination_available(o_ptr,
-                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
-                return;
-            }
-
-            if (!choose_storage_exchange_item(o_ptr,
-                    OBJECT_STORAGE_HARNESS, false, false, false, &exchange_item))
-            {
-                (void)item_storage_destination_available(o_ptr,
-                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
-                return;
-            }
-
-            exchange_object = player_inventory_object(exchange_item);
-            if (!exchange_object
-                || !inventory_limit_storage_exchange_possible(o_ptr,
-                    exchange_object)
-                || !do_cmd_move_item_to_storage_exchange(item,
-                    OBJECT_STORAGE_HARNESS, exchange_item, moving_quantity))
-            {
-                (void)item_storage_destination_available(o_ptr,
-                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
-                return;
-            }
-        }
-    }
     // Check for paired weapons (e.g., Glamdring + Orcrist)
     // Paired weapons can be wielded together without Two Weapon Fighting
     bool paired_weapon_prompt = false;
@@ -3710,20 +3633,8 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    /* Only equipped curses bind; inactive reserved slots are Harness storage. */
-    if (player_equipment_slot_counts_as_equipped(slot)
-        && cursed_p(&inventory[slot]))
-    {
-        /* Describe it */
-        object_desc(o_name, sizeof(o_name), &inventory[slot], false, 0);
-
-        /* Message */
-        msg_format("You cannot bear to give up the %s you are %s.", o_name,
-            describe_use(slot));
-
-        /* Cancel the command */
+    if (wield_slot_bound_by_curse(slot))
         return;
-    }
 
     /* Check if Maedhros character is trying to wield a two-handed weapon */
     if ((k_info[o_ptr->k_idx].flags3 & (TR3_TWO_HANDED))
@@ -3851,40 +3762,81 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         }
     }
 
-    /* Deal with wielding of shield or second weapon when already wielding a
-     * hand and a half weapon */
-    if ((slot == INVEN_ARM)
-        && (k_info[inventory[INVEN_WIELD].k_idx].flags3 & (TR3_HAND_AND_A_HALF))
-        && (!inventory[INVEN_ARM].k_idx))
+    move_pack_weapon_to_harness = player_inventory_handle_is_carried(item)
+        && object_can_choose_pack_or_harness(o_ptr)
+        && o_ptr->storage == OBJECT_STORAGE_PACK;
+    if (move_pack_weapon_to_harness)
     {
-        weapon_less_effective = true;
+        int moving_quantity = (forced_wield_full_stack && is_throwing
+                && slot == INVEN_WIELD)
+            ? MIN(o_ptr->number, object_stack_limit(o_ptr)) : 1;
+
+        if (!item_storage_destination_available(o_ptr,
+                OBJECT_STORAGE_HARNESS, moving_quantity, false))
+        {
+            object_type* exchange_object;
+
+            /* A normal wield can move only one member of a throwing stack.
+             * Storage exchange changes the pool of the whole object entry, so
+             * leave that partial wield on the ordinary failure path. */
+            if (moving_quantity < o_ptr->number)
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+
+            if (!choose_storage_exchange_item(o_ptr,
+                    OBJECT_STORAGE_HARNESS, false, false, false,
+                    &pack_exchange_item))
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+
+            exchange_object = player_inventory_object(pack_exchange_item);
+            if (!exchange_object
+                || !inventory_limit_storage_exchange_possible(o_ptr,
+                    exchange_object))
+            {
+                (void)item_storage_destination_available(o_ptr,
+                    OBJECT_STORAGE_HARNESS, moving_quantity, true);
+                return;
+            }
+            pack_exchange_quantity = moving_quantity;
+        }
     }
 
-    if (smith_oath_forbids_object(o_ptr) && !smith_oath_confirm_break())
-        return;
-
-    if (inventory[slot].k_idx && !combine
-        && smith_oath_takeoff_hits_pack(&inventory[slot], item)
-        && !smith_oath_confirm_break())
+    wield_replacements floor_replacements = {0};
+    if (item < 0 && inventory_limit_group_for_object(o_ptr) == INV_LIMIT_HARNESS)
     {
-        return;
+        int quantity = (forced_wield_full_stack && is_throwing && slot == INVEN_WIELD)
+            ? MIN(o_ptr->number, object_stack_limit(o_ptr)) : 1;
+
+        if (!plan_floor_wield_replacements(o_ptr, quantity, &floor_replacements))
+            goto cancel_wield;
     }
 
-    if ((k_info[o_ptr->k_idx].flags3 & (TR3_TWO_HANDED))
-        && inventory[INVEN_ARM].k_idx
-        && smith_oath_takeoff_hits_pack(&inventory[INVEN_ARM], item)
-        && !smith_oath_confirm_break())
+    bool break_smith_oath = smith_oath_forbids_object(o_ptr)
+        || (inventory[slot].k_idx && !combine
+            && !wield_replacements_remove_slot(&floor_replacements, slot)
+            && smith_oath_takeoff_hits_pack(&inventory[slot], item))
+        || ((k_info[o_ptr->k_idx].flags3 & TR3_TWO_HANDED)
+            && inventory[INVEN_ARM].k_idx
+            && !wield_replacements_remove_slot(&floor_replacements, INVEN_ARM)
+            && smith_oath_takeoff_hits_pack(&inventory[INVEN_ARM], item))
+        || (slot == INVEN_ARM && inventory[INVEN_WIELD].k_idx
+            && (k_info[inventory[INVEN_WIELD].k_idx].flags3 & TR3_TWO_HANDED)
+            && !wield_replacements_remove_slot(&floor_replacements, INVEN_WIELD)
+            && smith_oath_takeoff_hits_pack(&inventory[INVEN_WIELD], item));
+    if (break_smith_oath)
     {
-        return;
-    }
-
-    if ((slot == INVEN_ARM)
-        && inventory[INVEN_WIELD].k_idx
-        && (k_info[inventory[INVEN_WIELD].k_idx].flags3 & (TR3_TWO_HANDED))
-        && smith_oath_takeoff_hits_pack(&inventory[INVEN_WIELD], item)
-        && !smith_oath_confirm_break())
-    {
-        return;
+        cptr prompt = oath_confirmation_prompt(OATH_SMITH);
+        if (!prompt || !prompt[0])
+            prompt = "Are you certain you wish to break your Oath of the Smith?";
+        if (!get_check_oath_multiline(prompt))
+            goto cancel_wield;
     }
 
     if (item < 0 && o_ptr->tval == TV_LIGHT
@@ -3897,7 +3849,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 &lamp_flasks_to_replace, &lamp_flask_oil,
                 &replacement_aborted);
         if (replacement_aborted)
-            return;
+            goto cancel_wield;
 
         if (!lamp_flask_replacement_planned
             && player_light_available_capacity(o_ptr) <= 0)
@@ -3913,7 +3865,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                     true, "Replace a brass lantern to make room.",
                     &lamp_replacement_item))
             {
-                return;
+                goto cancel_wield;
             }
         }
     }
@@ -3926,9 +3878,10 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             (item < 0) ? 1 : 0)
         && !get_check("Taking this lamp will waste some oil. Proceed? "))
     {
-        return;
+        goto cancel_wield;
     }
     
+    bool break_light_oath = false;
     /* Oath of Light: warn before equipping light-dimming items */
     if (chosen_oath(OATH_LIGHT) && !oath_invalid(OATH_LIGHT))
     {
@@ -3943,14 +3896,10 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
             if (!get_check_oath_multiline(prompt))
             {
                 log_trace("do_cmd_wield: Player declined to break Oath of Light for item (tval=%d, sval=%d)", o_ptr->tval, o_ptr->sval);
-                return;
+                goto cancel_wield;
             }
             
-            p_ptr->oaths_broken |= OATH_LIGHT_FLAG;
-            p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] = false;
-            apply_oath_breaking_curse(OATH_LIGHT);
-            metarun_ban_oath(OATH_LIGHT);
-            log_trace("do_cmd_wield: Oath of Light broken by equipping light-dimming item");
+            break_light_oath = true;
         }
     }
 
@@ -3960,7 +3909,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                 lamp_flask_oil))
         {
             msg_print("The oil flask could not be replaced.");
-            return;
+            goto cancel_wield;
         }
     }
     else if (lamp_replacement_item >= 0
@@ -3972,7 +3921,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
                     lamp_replacement_item - SUPPLIES_INDEX, 1))
             {
                 msg_print("The brass lantern could not be replaced.");
-                return;
+                goto cancel_wield;
             }
         }
         else if (player_inventory_handle_is_carried(lamp_replacement_item))
@@ -3982,8 +3931,44 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         else
         {
             msg_print("That lantern cannot be replaced here.");
-            return;
+            goto cancel_wield;
         }
+    }
+
+    if (pack_exchange_item >= 0
+        && !do_cmd_move_item_to_storage_exchange(item, OBJECT_STORAGE_HARNESS,
+            pack_exchange_item, pack_exchange_quantity))
+    {
+        (void)item_storage_destination_available(o_ptr, OBJECT_STORAGE_HARNESS,
+            pack_exchange_quantity, true);
+        goto cancel_wield;
+    }
+
+    if (!commit_floor_wield_replacements(&floor_replacements, item))
+        goto cancel_wield;
+    free_wield_replacements(&floor_replacements);
+
+    if (break_smith_oath)
+    {
+        p_ptr->oaths_broken |= OATH_SMITH_FLAG;
+        apply_oath_breaking_curse(OATH_SMITH);
+    }
+    if (break_light_oath)
+    {
+        p_ptr->oaths_broken |= OATH_LIGHT_FLAG;
+        p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] = false;
+        apply_oath_breaking_curse(OATH_LIGHT);
+        metarun_ban_oath(OATH_LIGHT);
+        log_trace("do_cmd_wield: Oath of Light broken by equipping light-dimming item");
+    }
+
+    /* Deal with wielding of shield or second weapon when already wielding a
+     * hand and a half weapon */
+    if ((slot == INVEN_ARM)
+        && (k_info[inventory[INVEN_WIELD].k_idx].flags3 & (TR3_HAND_AND_A_HALF))
+        && (!inventory[INVEN_ARM].k_idx))
+    {
+        weapon_less_effective = true;
     }
 
     if (!from_supplies && item >= 0)
@@ -4388,6 +4373,10 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     }
 
     sdl_quick_access_suggest_equipped_item(o_ptr->tval);
+    return;
+
+cancel_wield:
+    free_wield_replacements(&floor_replacements);
 }
 
 bool do_cmd_wield_to_slot(

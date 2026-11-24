@@ -995,8 +995,7 @@ extern char* oath_forbidden(int oath_id);
 extern char* oath_reward_text(int oath_id);
 extern void do_cmd_ability_screen(void);
 extern int object_difficulty(object_type* o_ptr);
-extern int smithing_common_stat_bonus(void);
-extern int smithing_item_skill(const object_type* object);
+extern int smithing_stat_bonus(void);
 extern int smithing_work_difficulty(void);
 extern void smithing_alloy_save_state(
     byte state[SMITHING_ALLOY_STATE_BYTES]);

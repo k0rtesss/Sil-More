@@ -169,6 +169,13 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     view->canvas=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
         SDL_TEXTUREACCESS_TARGET,width,height);
     fixture_assert(view->canvas!=NULL);
+    cJSON *language=cJSON_GetObjectItemCaseSensitive(entry,"language");
+    tutorial_set_language(cJSON_IsString(language)?language->valuestring:"en");
+    if (!strcmp(tutorial_language(),"ru")) {
+        TTF_Font *russian_font=sdl_story_font_for_height_slot(20,SDL_STORY_FONT_SLOT_TUTORIAL);
+        fixture_assert(russian_font && TTF_FontHasGlyph(russian_font,0x416)
+            && TTF_FontHasGlyph(russian_font,0x451));
+    }
     fixture=(tutorial_view){.active=true,.step=1,.step_count=3,.revision=1};
     cJSON *step=cJSON_GetObjectItemCaseSensitive(entry,"step");
     cJSON *step_count=cJSON_GetObjectItemCaseSensitive(entry,"step_count");
@@ -176,6 +183,17 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     if (cJSON_IsNumber(step_count)) fixture.step_count=step_count->valueint;
     field(entry,"title",fixture.title,sizeof(fixture.title));
     field(entry,"body",fixture.body,sizeof(fixture.body));
+    if (!strcmp(tutorial_language(),"ru")) {
+        char wrapped[512][SDL_TOUCH_TUTORIAL_LINE_LEN], joined[8192]="";
+        TTF_Font *font=sdl_story_font_for_height_slot(font_size,SDL_STORY_FONT_SLOT_TUTORIAL);
+        int count=sdl_touch_tutorial_wrap_lines(fixture.body,font,width-32,wrapped,512);
+        for(int line=0;line<count;++line) {
+            if(line) SDL_strlcat(joined," ",sizeof(joined));
+            SDL_strlcat(joined,wrapped[line],sizeof(joined));
+        }
+        fixture_assert(!strcmp(joined,fixture.body));
+    }
+
     field(entry,"action",fixture.action,sizeof(fixture.action));
     field(entry,"subject",fixture.action_subject,sizeof(fixture.action_subject));
     field(entry,"anchor",fixture.anchor,sizeof(fixture.anchor));
@@ -326,7 +344,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     }
     if (suspended) {
         fixture_assert(drawn_count==0);
-        for (int b=0;b<3;++b) fixture_assert(!tutorial_buttons[b].w);
+        for (int b=0;b<4;++b) fixture_assert(!tutorial_buttons[b].w);
     } else if (character_icky && !fixture.can_continue && !tutorial_reading) {
         SDL_FRect rows;
         if (tutorial_menu_rect(&rows))
@@ -359,7 +377,9 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
             || strstr(drawn_hints,"PgDn") || strstr(drawn_hints,"Wheel")
             || strstr(drawn_hints,"drag") || strstr(drawn_hints,"Swipe")
             || strstr(drawn_hints,"scroll") || strstr(drawn_hints,"read card")
-            || strstr(drawn_hints,": read");
+            || strstr(drawn_hints,": read") || strstr(drawn_hints,"читать")
+            || strstr(drawn_hints,"прокрутка") || strstr(drawn_hints,"Читайте")
+            || strstr(drawn_hints,"Листайте");
         fixture_assert(scrolling_hint==(tutorial_max_scroll>0));
     }
     if (tutorial_last_input==TUTORIAL_INPUT_KEYBOARD && fixture.can_continue
@@ -373,7 +393,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
     fixture_assert(tutorial_card.x>=0 && tutorial_card.y>=0);
     fixture_assert(tutorial_card.x+tutorial_card.w<=width);
     fixture_assert(tutorial_card.y+tutorial_card.h<=height);
-    for (int i=0;i<3;++i) {
+    for (int i=0;i<4;++i) {
         if (!tutorial_buttons[i].w) { fixture_assert(i==0 || suspended); continue; }
         fixture_assert(tutorial_buttons[i].h>=44);
         fixture_assert(tutorial_buttons[i].x>=tutorial_card.x);
@@ -392,7 +412,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
         fixture_assert(r->y+r->h<=tutorial_card.y+tutorial_card.h+0.01f);
         if (drawn_button[i]) {
             bool contained=false;
-            for (int b=0;b<3;++b) {
+            for (int b=0;b<4;++b) {
                 SDL_FRect *button=&tutorial_buttons[b];
                 if (r->x>=button->x && r->y>=button->y
                     && r->x+r->w<=button->x+button->w+0.01f
@@ -400,7 +420,7 @@ static void paint(cJSON *entry,int width,int height,int index,int scroll,
             }
             fixture_assert(contained);
         } else {
-            for (int b=0;b<3;++b)
+            for (int b=0;b<4;++b)
                 fixture_assert(!SDL_HasRectIntersectionFloat(r,&tutorial_buttons[b]));
         }
         for (int j=0;j<i;++j) {
@@ -469,7 +489,9 @@ int main(int argc,char **argv)
     char *data;
     maxima limits={0};
     player_type player={0};
-    assert(argc==2);
+    assert(argc>=2);
+    if (argc>3) ANGBAND_DIR_XTRA=argv[3];
+    if (argc>2) assert(tutorial_load_catalogue(argv[2]));
     setbuf(stdout,NULL);
     log_set_quiet(true);
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
@@ -485,6 +507,13 @@ int main(int argc,char **argv)
     p_ptr->playing=true; p_ptr->py=7;p_ptr->px=8;
     p_ptr->cur_map_hgt=32;p_ptr->cur_map_wid=64;
     character_generated=character_dungeon=true;
+    tutorial_set_language("ru");
+    assert(sdl_config_save("tutorial-language.json",&config,NULL,0));
+    tutorial_set_language("en");
+    sdl_config_load_app_options("tutorial-language.json");
+    assert(!strcmp(tutorial_language(),"ru"));
+    tutorial_set_language("en");
+
 #if defined(SDL_DESKTOP_FONT_FIXTURE) && !SIL_SDL_MOBILE_BUILD
     /* Test auto text against several available canvases, including a
      * constrained side pane, explicit choices, and doubled display density. */
@@ -684,7 +713,8 @@ int main(int argc,char **argv)
             int width=cJSON_GetArrayItem(fixture_size,0)->valueint;
             int height=cJSON_GetArrayItem(fixture_size,1)->valueint;
             paint(entry,width,height,i,0,0,save);
-            if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"expected_scroll")))
+            if (cJSON_GetObjectItemCaseSensitive(entry,"language")
+                || cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(entry,"expected_scroll")))
                 paint(entry,width,height,i,1000,0,false);
             continue;
         }
@@ -915,6 +945,24 @@ def main():
                     lesson, step, False, 1, False,
                     fixture_id=f"{lesson['id']}.step{lesson['steps'].index(step) + 1}.sweep",
                     capture=False, bulk=True))
+    if "--russian" in sys.argv[1:]:
+        russian = json.loads((ROOT / "lib/help/tutorials.ru.json").read_text(encoding="utf-8"))
+        fixtures = []
+        for lesson in lessons:
+            localized = russian["lessons"][lesson["id"]]
+            for step_index, step in enumerate(lesson["steps"]):
+                translated = dict(lesson, title=localized["title"])
+                translated_step = dict(step, text=localized["steps"][step_index])
+                translated["steps"] = [dict(s, text=t) for s,t in zip(lesson["steps"],localized["steps"])]
+                for device, size, font_size in ((1,[1280,720],20),(3,[360,800],28),(4,[800,360],20)):
+                    fixture = make_fixture(translated, translated_step, False, device, False,
+                                           fixture_id=lesson["id"]+".ru", capture=False,
+                                           context_text="Проверьте текущие требования и затраты.",
+                                           subject_name="Выбранное существо")
+                    fixture.update(language="ru", size=size, font_size=font_size)
+                    if lesson["id"] == "opening.move" and step_index == 0:
+                        fixture.update(capture=True, expected_text="Далее", forbidden_text="Skip tutorial")
+                    fixtures.append(fixture)
     (OUT / "fixtures.json").write_text(json.dumps(fixtures), encoding="utf-8")
     source = OUT / "check.c"
     source.write_text(HARNESS, encoding="utf-8")
@@ -939,8 +987,9 @@ def main():
                     "@CMakeFiles/sil-more.dir/linkLibs.rsp",
                     "-Wl,--wrap=tutorial_get_view,--wrap=tutorial_is_active,--wrap=tutorial_revision,--wrap=get_sdl_gameplay_tutorial_mode,--wrap=SDL_WaitEvent,--wrap=sdl_touch_round_layer_controls_active,--wrap=sdl_touch_round_compute_layout,--wrap=sdl_touch_thumb_current_bounds,--wrap=sdl_map_grid_cell_rect,--wrap=SDL_GetDisplayContentScale",
                     "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf")],
-                   cwd=OUT, env=env, check=True, timeout=600 if "--all" in sys.argv[1:] else 60)
+    subprocess.run([str(exe), str(ROOT / "lib/xtra/font/EBGaramond-Regular.ttf"),
+                    str(ROOT / "lib/help/tutorials.json"),str(ROOT / "lib/xtra")],
+                   cwd=OUT, env=env, check=True, timeout=600 if any(flag in sys.argv[1:] for flag in ("--all", "--russian")) else 60)
 
 
 if __name__ == "__main__":

@@ -1849,6 +1849,11 @@ void drop_system_init(void)
     log_debug("drop_system_init: checking against '%s'", txt_path);
     need_rebuild |= (check_modification_date_sdl(raw_path, txt_path) != 0);
     
+    /* Item difficulty includes the levels of granted abilities. */
+    path_build(txt_path, sizeof(txt_path), ANGBAND_DIR_EDIT, "ability.txt");
+    log_debug("drop_system_init: checking against '%s'", txt_path);
+    need_rebuild |= (check_modification_date_sdl(raw_path, txt_path) != 0);
+
     log_debug("drop_system_init: need_rebuild=%d", need_rebuild);
 #else
     bool need_rebuild = true;

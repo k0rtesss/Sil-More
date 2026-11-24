@@ -2746,7 +2746,7 @@
       "priority": 40,
       "steps": [
         {
-          "text": "Choose an item or improvement to see its difficulty, your capacity, and the costs. Permanent Dexterity and Grace boost all Smithing. Heavy metal adds half Strength plus half Dexterity, mail and light crafts add Dexterity, and jewellery adds Grace. Round the total down. Smithing skill bonuses from equipment still apply.",
+          "text": "Choose an item or improvement to see its difficulty, your capacity, and the costs. Smithing adds half your permanent Dexterity and half your permanent Grace. Learned, active crafting abilities and masteries add further bonuses to every recipe. Naugrim add each positive Smithing affinity level to the attributes used here. Add the bonuses together and round down once. Smithing skill bonuses from equipment still apply.",
           "kind": "info",
           "anchor": "menu"
         }
@@ -5602,7 +5602,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create weapons at a forge. You also gain a modest bonus to identifying weapons.",
+          "text": "Create weapons at a forge. You also gain a modest bonus to identifying weapons. While learned and active, it adds half your permanent Dexterity to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5639,7 +5639,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create armour at a forge. You also gain a modest bonus to identifying armour.",
+          "text": "Create armour at a forge. You also gain a modest bonus to identifying armour. While learned and active, it adds half your permanent Strength to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5676,7 +5676,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties.",
+          "text": "Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties. While learned and active, it adds half your permanent Grace to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5713,7 +5713,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus.",
+          "text": "Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus. While learned and active, it adds your permanent Grace to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5750,7 +5750,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal.",
+          "text": "Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal. While learned and active, it adds your permanent Dexterity to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5785,7 +5785,7 @@
       "priority": 65,
       "steps": [
         {
-          "text": "Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties.",
+          "text": "Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties. While learned and active, it adds your permanent Grace to every craft.",
           "kind": "decision",
           "anchor": "abilities"
         }
@@ -5804,7 +5804,7 @@
         "serial": 125,
         "skill": 6,
         "slot": 5,
-        "base_requirement": 7,
+        "base_requirement": 10,
         "mechanics_source": "ability template and owning runtime",
         "runtime_symbol": "SMT_ARTEFACT",
         "runtime_sources": [
@@ -5841,7 +5841,7 @@
         "serial": 126,
         "skill": 6,
         "slot": 6,
-        "base_requirement": 8,
+        "base_requirement": 12,
         "mechanics_source": "ability template and owning runtime",
         "runtime_symbol": "SMT_MASTERPIECE",
         "runtime_sources": [
@@ -5878,7 +5878,7 @@
         "serial": 127,
         "skill": 6,
         "slot": 7,
-        "base_requirement": 10,
+        "base_requirement": 12,
         "mechanics_source": "ability template and owning runtime",
         "runtime_symbol": "SMT_GRA",
         "runtime_sources": [

@@ -31,56 +31,39 @@ static int smithing_permanent_stat(int stat)
     return MAX(BASE_STAT_MIN, MIN(BASE_STAT_MAX, value));
 }
 
-int smithing_common_stat_bonus(void)
+static int smithing_affinity_stat_bonus(void)
 {
-    return smithing_permanent_stat(A_DEX) + smithing_permanent_stat(A_GRA);
+    if (!rp_ptr || !current_character_profile
+        || !((rp_ptr->flags | current_character_profile->flags) & RHF_DWARVEN_SMITHING))
+        return 0;
+
+    int affinity = affinity_level(S_SMT);
+    return MAX(0, affinity);
 }
 
-enum craft_category { CRAFT_HEAVY, CRAFT_JEWELLERY, CRAFT_LIGHT };
-
-static enum craft_category smithing_stat_category(const object_kind* kind)
+/* Capacity is shared by all recipes. Keep half-points until the full
+ * attribute and ability contribution can be rounded down together. */
+int smithing_stat_bonus(void)
 {
-    /* Classify the base kind so affixes, alloys, and weight edits cannot
-     * change which attribute the craft uses. */
-    switch (kind->tval)
-    {
-    case TV_RING: case TV_AMULET: case TV_HORN: case TV_LIGHT:
-        return CRAFT_JEWELLERY;
-    case TV_MAIL: case TV_BOW: case TV_SOFT_ARMOR: case TV_CLOAK:
-        return CRAFT_LIGHT;
-    case TV_SHIELD:
-        return kind->sval == SV_MITHRIL_SHIELD ? CRAFT_HEAVY : CRAFT_LIGHT;
-    case TV_HAFTED:
-        return kind->sval == SV_QUARTERSTAFF ? CRAFT_LIGHT : CRAFT_HEAVY;
-    case TV_BOOTS:
-        return (kind->sval == SV_PAIR_OF_LEATHER_BOOTS
-                || kind->sval == SV_PAIR_OF_SHABBY_BOOTS)
-            ? CRAFT_LIGHT : CRAFT_HEAVY;
-    case TV_GLOVES:
-        return kind->sval == SV_SET_OF_LEATHER_GLOVES ? CRAFT_LIGHT : CRAFT_HEAVY;
-    default:
-        return CRAFT_HEAVY;
-    }
-}
+    const byte* learned = p_ptr->innate_ability[S_SMT];
+    const byte* active = p_ptr->active_ability[S_SMT];
+    int dwarven_bonus = smithing_affinity_stat_bonus();
+    int dex = smithing_permanent_stat(A_DEX) + dwarven_bonus;
+    int gra = smithing_permanent_stat(A_GRA) + dwarven_bonus;
+    int doubled = dex + gra;
 
-int smithing_item_skill(const object_type* object)
-{
-    int skill = p_ptr->skill_use[S_SMT];
-    if (!object || !object->k_idx)
-        return skill;
+    if (learned[SMT_ARMOURSMITH] && active[SMT_ARMOURSMITH])
+        doubled += smithing_permanent_stat(A_STR) + dwarven_bonus;
+    if (learned[SMT_WEAPONSMITH] && active[SMT_WEAPONSMITH])
+        doubled += dex;
+    if (learned[SMT_JEWELLER] && active[SMT_JEWELLER])
+        doubled += gra;
+    if (learned[SMT_ENCHANTMENT] && active[SMT_ENCHANTMENT])
+        doubled += 2 * gra;
+    if (learned[SMT_EXPERTISE] && active[SMT_EXPERTISE])
+        doubled += 2 * dex;
+    if (learned[SMT_ARTEFACT] && active[SMT_ARTEFACT])
+        doubled += 2 * gra;
 
-    switch (smithing_stat_category(&k_info[object->k_idx]))
-    {
-    case CRAFT_HEAVY: {
-        int sum = smithing_permanent_stat(A_STR) + smithing_permanent_stat(A_DEX);
-        /* The shared bonus is an integer. Floor the half-point term even
-         * when the combined attributes are negative. */
-        return skill + (sum - (sum < 0 && sum % 2 != 0)) / 2;
-    }
-    case CRAFT_JEWELLERY:
-        return skill + smithing_permanent_stat(A_GRA);
-    case CRAFT_LIGHT:
-        return skill + smithing_permanent_stat(A_DEX);
-    }
-    return skill;
+    return (doubled - (doubled < 0 && doubled % 2 != 0)) / 2;
 }

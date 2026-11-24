@@ -7864,6 +7864,11 @@ static bool inventory_replacement_object_allowed(
 
     if (!o_ptr || !o_ptr->k_idx)
         return false;
+    for (int i = 0; i < request->replacement_staged_count; i++)
+    {
+        if (o_ptr == player_inventory_object(request->replacement_staged_items[i]))
+            return false;
+    }
 
     if (equipped)
     {
@@ -8090,7 +8095,7 @@ static void inventory_replacement_volume_status(
     if (group != INV_LIMIT_PACK && group != INV_LIMIT_HARNESS)
         return;
 
-    used = inventory_limit_usage_for_group(group);
+    used = inventory_limit_usage_for_group(group) - request->replacement_staged_volume;
     limit = inventory_limit_limit_for_group(group);
     if (inven_carry_limit_failed() && inven_carry_limit_group() == group)
         limit = MAX(limit, inven_carry_limit_value());
@@ -8107,6 +8112,8 @@ static void inventory_replacement_volume_status(
             projected = inventory_limit_usage_after_replacing(
                 request->replacement_incoming, candidate, amount);
             remove_amount = amount;
+            if (projected >= 0)
+                projected -= request->replacement_staged_volume;
             if (projected >= 0 && projected <= limit)
                 break;
         }

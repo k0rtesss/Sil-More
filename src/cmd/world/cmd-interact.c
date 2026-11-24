@@ -443,112 +443,21 @@ static bool is_closed(int feat)
         || feat == FEAT_WARDED || feat == FEAT_WARDED2 || feat == FEAT_WARDED3);
 }
 
-/*
- * Return true if the given feature is a trap
- */
-static bool is_trap(int feat)
+static bool interact_target_nearby(bool (*test)(int y, int x), bool under)
 {
-    bool test_trap = false;
-
-    if (FEAT_IS_TRAP(feat))
-        test_trap = true;
-
-    return (test_trap);
+    for (int d = 0; d < (under ? 9 : 8); d++)
+    {
+        int y = p_ptr->py + ddy_ddd[d];
+        int x = p_ptr->px + ddx_ddd[d];
+        if (in_bounds_fully(y, x) && test(y, x)) return true;
+    }
+    return false;
 }
 
-/*
- * Return the number of doors/traps around (or under) the character.
- */
-static int count_feats(int* y, int* x, bool (*test)(int feat), bool under)
+static s16b closed_chest_at(int y, int x)
 {
-    int d;
-    int xx, yy;
-    int count = 0; /* Count how many matches */
-
-    /* Check around (and under) the character */
-    for (d = 0; d < 9; d++)
-    {
-        /* if not searching under player continue */
-        if ((d == 8) && !under)
-            continue;
-
-        /* Extract adjacent (legal) location */
-        yy = p_ptr->py + ddy_ddd[d];
-        xx = p_ptr->px + ddx_ddd[d];
-
-        /* Paranoia */
-        if (!in_bounds_fully(yy, xx))
-            continue;
-
-        /* Must have knowledge */
-        if (!(cave_info[yy][xx] & (CAVE_MARK)))
-            continue;
-
-        /* Not looking for this feature */
-        if (!((*test)(cave_feat[yy][xx])))
-            continue;
-
-        /* Count it */
-        ++count;
-
-        /* Remember the location of the last door found */
-        *y = yy;
-        *x = xx;
-    }
-
-    /* All done */
-    return count;
-}
-
-/*
- * Return the number of chests around (or under) the character.
- * If requested, count only trapped chests.
- */
-static int count_chests(int* y, int* x, bool trapped)
-{
-    int d, count, o_idx;
-
-    object_type* o_ptr;
-
-    /* Count how many matches */
-    count = 0;
-
-    /* Check around (and under) the character */
-    for (d = 0; d < 9; d++)
-    {
-        /* Extract adjacent (legal) location */
-        int yy = p_ptr->py + ddy_ddd[d];
-        int xx = p_ptr->px + ddx_ddd[d];
-
-        /* No (visible) chest is there */
-        if ((o_idx = chest_check(yy, xx)) == 0)
-            continue;
-
-        /* Grab the object */
-        o_ptr = &o_list[o_idx];
-
-        /* Already open */
-        if (o_ptr->pval == 0)
-            continue;
-
-        /* No (known) traps here */
-        if (trapped && !chest_trap_minigame
-            && (!object_known_p(o_ptr) || (o_ptr->pval < 0)
-                || !object_chest_trap_flags(o_ptr)))
-        {
-            continue;
-        }
-
-        /* Count it */
-        ++count;
-
-        /* Remember the location of the last chest found */
-        *y = yy;
-        *x = xx;
-    }
-
-    /* All done */
-    return count;
+    s16b idx = chest_check(y, x);
+    return idx && o_list[idx].pval ? idx : 0;
 }
 
 /*
@@ -903,6 +812,8 @@ bool do_cmd_open_aux(int y, int x)
         {
             more = do_cmd_bash_aux(y, x, NULL, NULL);
         }
+        else
+            p_ptr->energy_use = 0;
     }
 
     /* Legacy locked-door behavior.  The setting explicitly suppresses the
@@ -987,8 +898,6 @@ void do_cmd_open(void)
     bool door_target = false;
     bool chest_target = false;
 
-    int num_doors, num_chests;
-
     door_target = lockpick_minigame && door_minigame_retry_target(&y, &x);
     chest_target = !door_target && chest_trap_minigame
         && chest_minigame_retry_target(&y, &x);
@@ -1002,9 +911,7 @@ void do_cmd_open(void)
         if (!adjacent || y < 0 || x < 0 || y >= p_ptr->cur_map_hgt
             || x >= p_ptr->cur_map_wid
             || (door_target && !cave_known_closed_door_bold(y, x))
-            || (chest_target
-                && (!(o_idx = chest_check(y, x))
-                    || o_list[o_idx].pval == 0)))
+            || (chest_target && !(o_idx = closed_chest_at(y, x))))
         {
             door_minigame_clear_retry();
             chest_minigame_clear_retry();
@@ -1017,13 +924,7 @@ void do_cmd_open(void)
     }
     else
     {
-        /* Count closed doors */
-        num_doors = count_feats(&y, &x, is_closed, false);
-
-        /* Count chests (locked) */
-        num_chests = count_chests(&y, &x, false);
-
-        if ((num_doors + num_chests) == 0)
+        if (!interact_target_nearby(grid_is_open_target, true))
         {
             msg_print("There is nothing in your square (or adjacent) to open.");
             return;
@@ -1043,7 +944,7 @@ void do_cmd_open(void)
         x = p_ptr->px + ddx[dir];
 
         /* Check for chests */
-        o_idx = chest_check(y, x);
+        o_idx = closed_chest_at(y, x);
     }
 
     /* Verify legality */
@@ -1064,7 +965,7 @@ void do_cmd_open(void)
         x = p_ptr->px + ddx[dir];
 
         /* Check for chest */
-        o_idx = chest_check(y, x);
+        o_idx = closed_chest_at(y, x);
     }
 
     /* Allow repeated command */
@@ -1284,13 +1185,6 @@ static bool grid_is_known_closed_door(int y, int x)
     return (cave_info[y][x] & (CAVE_MARK)) && is_closed(cave_feat[y][x]);
 }
 
-static bool grid_is_closed_chest(int y, int x)
-{
-    s16b o_idx = chest_check(y, x);
-
-    return (o_idx != 0) && (o_list[o_idx].pval != 0);
-}
-
 static bool grid_is_known_trapped_chest(int y, int x)
 {
     s16b o_idx = chest_check(y, x);
@@ -1308,20 +1202,37 @@ static bool grid_is_known_trapped_chest(int y, int x)
 
 static bool grid_is_open_target(int y, int x)
 {
-    return grid_is_known_closed_door(y, x) || grid_is_closed_chest(y, x);
+    return grid_is_known_closed_door(y, x) || closed_chest_at(y, x);
 }
 
 static bool grid_is_known_trap(int y, int x)
 {
     /* A rewired trap is harmless to the player and is not a disarm target. */
-    return (cave_info[y][x] & (CAVE_MARK)) && is_trap(cave_feat[y][x])
-        && !cave_rewired[y][x];
+    return (cave_info[y][x] & CAVE_MARK) && cave_trap_bold(y, x)
+        && !cave_floorlike_bold(y, x) && !cave_rewired[y][x];
+}
+
+static s16b disarm_chest_at(int y, int x)
+{
+    s16b idx = closed_chest_at(y, x);
+    if (!idx || chest_trap_minigame) return idx;
+    const object_type* chest = &o_list[idx];
+    /* Legacy Disarm inspects an unopened chest whose trap status is unknown. */
+    if (chest->pval > 0 && (!object_known_p(chest) || object_chest_trap_flags(chest)))
+        return idx;
+    return 0;
 }
 
 static bool grid_is_disarm_target(int y, int x)
 {
-    return grid_is_known_trap(y, x) || grid_is_known_trapped_chest(y, x)
-        || (chest_trap_minigame && grid_is_closed_chest(y, x));
+    return grid_is_known_trap(y, x) || disarm_chest_at(y, x);
+}
+
+static bool grid_has_searchable_skeleton(int y, int x)
+{
+    const object_type* obj = get_first_object(y, x);
+    return obj && obj->tval == TV_SKELETON && !object_is_searched_skeleton(obj)
+        && ((y == p_ptr->py && x == p_ptr->px) || object_is_visible(obj));
 }
 
 static bool grid_is_tunnel_target(int y, int x)
@@ -1585,17 +1496,11 @@ bool grid_interact_available(int y, int x)
         return true;
 
     /* Chests and unsearched skeletons */
-    if (chest_check(y, x))
+    if (chest_check(y, x) || grid_has_searchable_skeleton(y, x))
         return true;
     if (cave_o_idx[y][x])
     {
-        object_type* o_ptr = &o_list[cave_o_idx[y][x]];
-
-        if ((o_ptr->tval == TV_SKELETON)
-            && !object_is_searched_skeleton(o_ptr) && object_is_visible(o_ptr))
-        {
-            return true;
-        }
+        object_type* o_ptr;
 
         /* Other visible objects keep the describe popup */
         for (o_ptr = get_first_object(y, x); o_ptr;
@@ -1663,7 +1568,9 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     /* These targets own richer cyclic overlays.  A pointer/long-press has
      * already selected the grid, so route straight to the canonical minigame
      * instead of presenting a redundant Pick/Bash or Open/Disarm popup. */
-    if (lockpick_minigame && cave_known_closed_door_bold(y, x)
+    bool visible_monster = cave_m_idx[y][x] > 0 && mon_list[cave_m_idx[y][x]].ml;
+    if (!visible_monster && lockpick_minigame && (cave_info[y][x] & (CAVE_MARK | CAVE_SEEN))
+        && cave_known_closed_door_bold(y, x)
         && feat >= FEAT_DOOR_HEAD + 0x01 && feat <= FEAT_DOOR_TAIL)
     {
         if (out_command)
@@ -1673,7 +1580,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
         return true;
     }
     chest_o_idx = chest_check(y, x);
-    if (chest_trap_minigame && chest_o_idx
+    if (!visible_monster && chest_trap_minigame && chest_o_idx
         && o_list[chest_o_idx].pval != 0)
     {
         if (out_command)
@@ -1697,8 +1604,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     GRID_Q_ADD_EX((cmd_), (key_), (label_), (attr_), false)
 
     /* --- Alert thrall --- */
-    if ((cave_m_idx[y][x] > 0) && mon_list[cave_m_idx[y][x]].ml
-        && is_alert_thrall(&mon_list[cave_m_idx[y][x]]))
+    if (visible_monster && is_alert_thrall(&mon_list[cave_m_idx[y][x]]))
     {
         monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
         char m_name[80];
@@ -1953,10 +1859,9 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     }
 
     /* --- Chests --- */
-    else if (chest_check(y, x))
+    else if (chest_o_idx)
     {
-        s16b o_idx = chest_check(y, x);
-        object_type* o_ptr = &o_list[o_idx];
+        object_type* o_ptr = &o_list[chest_o_idx];
         char o_name[80];
 
         object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
@@ -1989,9 +1894,7 @@ bool grid_interact_question(int y, int x, int* out_command, int* out_dir)
     }
 
     /* --- Skeletons --- */
-    else if (cave_o_idx[y][x]
-        && (o_list[cave_o_idx[y][x]].tval == TV_SKELETON)
-        && !object_is_searched_skeleton(&o_list[cave_o_idx[y][x]]))
+    else if (grid_has_searchable_skeleton(y, x))
     {
         char o_name[80];
 
@@ -2165,7 +2068,7 @@ void do_cmd_close(void)
     bool more = false;
 
     /* No open door adjacent */
-    if (count_feats(&y, &x, is_open, false) == 0)
+    if (!interact_target_nearby(grid_is_known_open_door, false))
     {
         msg_print("There is no adjacent door to close.");
         return;
@@ -3021,15 +2924,7 @@ void do_cmd_disarm(void)
 
     bool more = false;
 
-    int num_traps, num_chests;
-
-    /* Count visible traps */
-    num_traps = count_feats(&y, &x, is_trap, true);
-
-    /* Count chests (trapped) */
-    num_chests = count_chests(&y, &x, true);
-
-    if ((num_traps + num_chests) == 0)
+    if (!p_ptr->command_dir && !interact_target_nearby(grid_is_disarm_target, true))
     {
         msg_print("There is nothing in your square (or adjacent) to disarm.");
         return;
@@ -3049,7 +2944,7 @@ void do_cmd_disarm(void)
     x = p_ptr->px + ddx[dir];
 
     /* Check for chests */
-    o_idx = chest_check(y, x);
+    o_idx = disarm_chest_at(y, x);
 
     /* Verify legality */
     if (!o_idx && !do_cmd_disarm_test(y, x))
@@ -3069,7 +2964,7 @@ void do_cmd_disarm(void)
         x = p_ptr->px + ddx[dir];
 
         /* Check for chests */
-        o_idx = chest_check(y, x);
+        o_idx = disarm_chest_at(y, x);
     }
 
     /* Allow repeated command */
@@ -3349,7 +3244,7 @@ void do_cmd_bash(void)
     int y, x, dir;
 
     /* No closed door adjacent */
-    if (count_feats(&y, &x, is_closed, false) == 0)
+    if (!interact_target_nearby(grid_is_known_closed_door, false))
     {
         msg_print("There is no adjacent door to bash.");
         return;
@@ -3491,11 +3386,7 @@ void do_cmd_alter(void)
     }
 
     // check for chests and chest traps
-    if (chest_trap_minigame)
-        chest_o_idx = chest_check(y, x);
-    else if (cave_o_idx[y][x]
-        && o_list[cave_o_idx[y][x]].tval == TV_CHEST)
-        chest_o_idx = cave_o_idx[y][x];
+    chest_o_idx = closed_chest_at(y, x);
     if (chest_o_idx)
     {
         object_type* o_ptr = &o_list[chest_o_idx];
@@ -3507,16 +3398,8 @@ void do_cmd_alter(void)
                                     : object_known_p(o_ptr)))
             chest_trap = true;
     }
-    else if (cave_o_idx[y][x])
-    {
-        object_type* o_ptr = &o_list[cave_o_idx[y][x]];
-
-        if ((o_ptr->tval == TV_SKELETON)
-            && !object_is_searched_skeleton(o_ptr))
-        {
-            skeleton_present = true;
-        }
-    }
+    else
+        skeleton_present = grid_has_searchable_skeleton(y, x);
 
     bool is_marked = (cave_info[y][x] & CAVE_MARK) > 0;
     bool is_visible = (cave_info[y][x] & CAVE_SEEN) > 0;

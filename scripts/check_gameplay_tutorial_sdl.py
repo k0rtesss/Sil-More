@@ -52,6 +52,12 @@ bool dismiss_active_narrative_banner(void)
 }
 static tutorial_mode g_app_gameplay_tutorial_mode=TUTORIAL_MODE_EXTENDED;
 static int config_saves;
+static bool test_russian;
+const char *tutorial_language(void) { return test_russian ? "ru" : "en"; }
+void tutorial_set_language(const char *language)
+{ test_russian = !strcmp(language, "ru"); ++revision; }
+const char *tutorial_translate(const char *text) { return text; }
+
 void set_sdl_gameplay_tutorial_mode(tutorial_mode mode);
 bool save_pane_config_to_json(void) { ++config_saves; return true; }
 const char *tutorial_mode_name(tutorial_mode mode)
@@ -626,6 +632,32 @@ int main(void)
     e=key_event(SDL_EVENT_KEY_DOWN,SDLK_X,SDL_SCANCODE_X);
     e.common.timestamp=tutorial_input_barrier-1;
     assert(sdl_gameplay_tutorial_handle_event(&e));
+
+    /* Language activation is presentation-only and participates in focus. */
+    show(true,"","");
+    tutorial_focus=2;
+    tutorial_move_focus(1,&current);
+    assert(tutorial_focus==3);
+    int saved_config_saves=config_saves;
+    tutorial_activate(3,&current);
+    assert(test_russian && current.active && config_saves==saved_config_saves+1);
+    assert(tutorial_focus==3 && !key_count);
+    e=key_event(SDL_EVENT_KEY_DOWN,SDLK_SPACE,SDL_SCANCODE_SPACE);
+    assert(sdl_gameplay_tutorial_handle_event(&e));
+    assert(!test_russian && current.active && !key_count);
+    tutorial_buttons[3]=(SDL_FRect){300,150,50,44};
+    SDL_zero(e); e.button.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    e.button.timestamp=tutorial_input_barrier+1000000;
+    e.button.button=SDL_BUTTON_LEFT; e.button.which=1; e.button.x=320; e.button.y=170;
+    tutorial_blocked_mouse=0;
+    assert(sdl_gameplay_tutorial_handle_event(&e));
+    e.button.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    assert(sdl_gameplay_tutorial_handle_event(&e));
+    assert(test_russian && current.active && !key_count);
+    show(false,"move","");
+    tutorial_reading=true;
+    tutorial_activate(3,&current);
+    assert(!test_russian && current.active && tutorial_reading && !key_count);
     SDL_Quit();
     puts("Gameplay tutorial SDL gate: PASS (banner dismissal, info/menu ownership, required commands, keymaps, fresh keyboard/gamepad/mouse/touch, resize, quit)");
     return 0;

@@ -2871,7 +2871,7 @@ static bool handle_peaceful_attack_target(int y, int x, int attack_type)
 void py_attack_aux(int y, int x, int attack_type)
 {
     /* Reactions must not refund the movement/action that triggered them. */
-    if (player_submerged_in_deep_water())
+    if (p_ptr->is_dead || p_ptr->leaving || player_submerged_in_deep_water())
         return;
 
     int num = 0;
@@ -3559,6 +3559,12 @@ void py_attack_aux(int y, int x, int attack_type)
                     monster_lore* l_ptr = &l_list[m_ptr->r_idx];
                     l_ptr->flags2 |= (RF2_RIPOSTE);
                 }
+
+                /* Resolve the reaction before committing any remaining blows. */
+                if (p_ptr->is_dead || p_ptr->leaving)
+                    return;
+                if (cave_m_idx[y][x] != m_idx)
+                    break;
             }
         }
 

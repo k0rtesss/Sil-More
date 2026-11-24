@@ -52,15 +52,15 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "1.0.0"
+#define VERSION_STRING "1.0.1"
 /*
  * Version components (0.9.9.10).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 0
-#define VERSION_PATCH 0
-#define VERSION_EXTRA 1
+#define VERSION_PATCH 1
+#define VERSION_EXTRA 0
 /* Earlier saves omit optional version-gated fields. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
@@ -2426,7 +2426,7 @@
 #define RHF_FREE 0x00800000L
 #define RHF_MOR_CURSE 0x01000000L
 #define RHF_KHELED_ZARAM 0x02000000L
-#define RHF_RHFXXX27 0x04000000L
+#define RHF_DWARVEN_SMITHING 0x04000000L /* Smithing affinity adds to crafting stats */
 #define RHF_RHFXXX28 0x08000000L
 #define RHF_RHFXXX29 0x10000000L
 #define RHF_RHFXXX30 0x20000000L

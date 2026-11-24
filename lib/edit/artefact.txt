@@ -179,7 +179,7 @@
 
 # Version stamp (required)
 
-V:1.0.0
+V:1.0.1
 
 #################################################################
 # Here is the list of 'Special' artefacts. 
@@ -368,7 +368,7 @@ D: music for breaking of the heart.'
 ## (ability 6/3 is Enchantment)
 ## (ability 6/6 is Masterpiece)
 
-# Smithing difficulty: 59
+# Smithing difficulty: 61
 
 N:9:of Fëanor
 Q:9c8638ee3bc2e0cd
@@ -1979,7 +1979,7 @@ D: Hidden King who defied Morgoth until the very end.
 ## 1st age namesake
 ## (ability 6/5 is Artifice)
 
-# Smithing difficulty: 38
+# Smithing difficulty: 39
 
 N:107:of Telchar
 Q:6dcfc128b65b235a

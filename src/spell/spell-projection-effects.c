@@ -342,7 +342,7 @@ bool project_f(
  *
  * We return "true" if the effect of the projection is "obvious".
  */
-bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
+static bool project_floor_objects(int y, int x, int typ, s16b first_o_idx)
 {
     s16b this_o_idx, next_o_idx = 0;
 
@@ -352,12 +352,8 @@ bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
 
     char o_name[80];
 
-    /* Unused parameters */
-    (void)who;
-    (void)dif;
-
     /* Scan all objects in the grid */
-    for (this_o_idx = cave_o_idx[y][x]; this_o_idx; this_o_idx = next_o_idx)
+    for (this_o_idx = first_o_idx; this_o_idx; this_o_idx = next_o_idx)
     {
         object_type* o_ptr;
 
@@ -367,12 +363,6 @@ bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
         bool do_kill = false;
 
         cptr note_kill = NULL;
-
-        // Sil-y: previously used damage to see if items were broken, now just
-        // ignoring damage
-        // int dam = damroll(dd, ds);
-        (void)dd; // cast to soothe compiler warnings
-        (void)ds; // cast to soothe compiler warnings
 
         /* Get the object */
         o_ptr = &o_list[this_o_idx];
@@ -549,10 +539,17 @@ bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
                     msg_format("The %s%s", o_name, note_kill);
                 }
 
-                if ((o_ptr->tval == TV_CHEST) && (typ != GF_SOUND)
+                if (o_ptr->tval == TV_CHEST && o_ptr->pval && (typ != GF_SOUND)
                     && (typ != GF_EARTHQUAKE))
                 {
-                    chest_release_contents(o_ptr, y, x, typ);
+                    object_type shell = *o_ptr;
+                    delete_object_idx(this_o_idx);
+                    /* A legacy pile can contain other objects. Resolve the
+                     * hit on them before the loot can reuse or move slots. */
+                    if (next_o_idx && project_floor_objects(y, x, typ, next_o_idx))
+                        obvious = true;
+                    chest_release_contents(&shell, y, x, typ);
+                    return obvious;
                 }
 
                 /* Delete the object */
@@ -566,6 +563,15 @@ bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
 
     /* Return "Anything seen?" */
     return (obvious);
+}
+
+bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
+{
+    (void)who;
+    (void)dd;
+    (void)ds;
+    (void)dif;
+    return project_floor_objects(y, x, typ, cave_o_idx[y][x]);
 }
 
 /*

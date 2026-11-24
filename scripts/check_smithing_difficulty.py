@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/smithing-difficulty"
 
-# Snapshot of the pre-unification fees; difficulty discounts must not refund fees.
+# Expected resource fees using the current ability ranks.
 # Values: STR, DEX, CON, GRA, experience, mithril, star iron.
 RESOURCE_FEES = {
     1: (0, 0, 0, 1, 100, 0, 0),
@@ -32,7 +32,7 @@ RESOURCE_FEES = {
     6: (0, 0, 0, 3, 0, 0, 0),
     7: (0, 0, 0, 0, 400, 0, 0),
     8: (0, 0, 0, 0, 300, 0, 0),
-    9: (0, 0, 0, 1, 650, 0, 0),
+    9: (0, 0, 0, 1, 850, 0, 0),
     10: (0, 0, 3, 0, 0, 0, 0),
     11: (0, 0, 0, 0, 600, 0, 0),
     21: (0, 0, 0, 1, 0, 0, 0),
@@ -104,7 +104,7 @@ RESOURCE_FEES = {
     101: (0, 2, 0, 0, 0, 0, 0),
     104: (0, 0, 0, 0, 850, 0, 0),
     105: (0, 0, 0, 3, 0, 0, 0),
-    107: (0, 0, 0, 0, 350, 0, 0),
+    107: (0, 0, 0, 0, 500, 0, 0),
     108: (2, 0, 0, 0, 0, 0, 0),
     114: (1, 0, 0, 0, 0, 0, 0),
     117: (0, 0, 0, 0, 350, 0, 0),
@@ -152,54 +152,130 @@ SMITH_HELPERS = r'''
 #include "player/player-upkeep-internal.h"
 void fixture_smithing_attributes(void)
 {
-    object_type heavy, light, mail, jewellery;
-    int drain;
-    object_prep(&heavy, lookup_kind(TV_SWORD, SV_SHORT_SWORD));
-    object_prep(&light, lookup_kind(TV_BOW, SV_LONG_BOW));
-    object_prep(&mail, lookup_kind(TV_MAIL, SV_MAIL_CORSLET));
-    object_prep(&jewellery, lookup_kind(TV_RING, SV_RING_ACCURACY));
-    p_ptr->stat_base[A_STR] = 5;
-    p_ptr->stat_base[A_DEX] = 2;
-    p_ptr->stat_base[A_GRA] = 4;
+    static const int required_ranks[] = {2, 3, 4, 5, 6, 10, 12, 12, 6, 4};
+    for (size_t ability = 0; ability < N_ELEMENTS(required_ranks); ++ability)
+        assert(b_info[ability_index(S_SMT, ability)].level == required_ranks[ability]);
+
+    /* Use Fëanor's recommended attributes to cover the two half-points
+     * that combine when he learns Weaponsmith. */
+    p_ptr->pcharacter = 1;
+    rp_ptr = &p_info[0];
+    current_character_profile = &c_info[1];
+    p_ptr->skill_base[S_SMT] = 0;
+    p_ptr->stat_base[A_STR] = 3;
+    p_ptr->stat_base[A_DEX] = 5;
+    p_ptr->stat_base[A_GRA] = 6;
     p_ptr->tmp_dex = 5;
     p_ptr->stat_drain[A_GRA] = -2;
+    p_ptr->innate_ability[S_SMT][SMT_JEWELLER] = true;
+    p_ptr->innate_ability[S_SMT][SMT_ARTEFACT] = true;
     calc_bonuses();
-    assert(p_ptr->stat_use[A_DEX] != 2 && p_ptr->stat_use[A_GRA] != 4);
-    assert(p_ptr->skill_stat_mod[S_SMT] == 6);
-    int shared = p_ptr->skill_use[S_SMT];
-    assert(smithing_item_skill(&heavy) == shared + 3);
-    assert(smithing_item_skill(&light) == shared + 2);
-    assert(smithing_item_skill(&mail) == shared + 2);
-    assert(smithing_item_skill(&jewellery) == shared + 4);
-    p_ptr->stat_base[A_STR] = -5;
-    assert(smithing_item_skill(&heavy) == shared - 2);
-    assert(smithing_item_skill(&light) == shared + 2);
-    p_ptr->stat_base[A_STR] = 5;
+    assert(p_ptr->stat_use[A_DEX] != 5 && p_ptr->stat_use[A_GRA] != 6);
+    assert(p_ptr->skill_stat_mod[S_SMT] == 14);
+    assert(smithing_capacity() == 16);
 
-    int difficulty = object_difficulty(&heavy);
-    cave_feat[p_ptr->py][p_ptr->px] = FEAT_FORGE_GOOD_HEAD + 3;
-    p_ptr->skill_use[S_SMT] = difficulty - 6;
-    assert(!too_difficult(&heavy));
-    assert(smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
-    assert(drain == 0);
-    p_ptr->stat_base[A_STR] -= 2;
-    assert(too_difficult(&heavy));
-    assert(!smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
-    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = true;
-    assert(!too_difficult(&heavy) && smithing_cost.drain == 1);
-    assert(smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
-    assert(drain == 1);
-    p_ptr->have_ability[S_SPC][SPC_AULE] = true;
-    p_ptr->skill_use[S_SMT] -= 2;
-    assert(!too_difficult(&heavy) && smithing_cost.drain == 2);
-    assert(smith_reforge_difficulty_affordable(&heavy, difficulty, &drain));
-    assert(drain == 2);
+    p_ptr->skill_base[S_SMT] = 2;
+    p_ptr->innate_ability[S_SMT][SMT_WEAPONSMITH] = true;
+    p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH] = true;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 17);
+    assert(smithing_capacity() == 21);
+
+    /* Enchantment, Expertise, and Armoursmith stack on any project. */
+    p_ptr->innate_ability[S_SMT][SMT_ARMOURSMITH] = true;
+    p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH] = true;
+    p_ptr->innate_ability[S_SMT][SMT_ENCHANTMENT] = true;
+    p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT] = true;
+    p_ptr->innate_ability[S_SMT][SMT_EXPERTISE] = true;
+    p_ptr->active_ability[S_SMT][SMT_EXPERTISE] = true;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 29);
+    assert(smithing_capacity() == 33);
+    p_ptr->active_ability[S_SMT][SMT_ARTEFACT] = false;
+    calc_bonuses();
+    assert(smithing_capacity() == 27);
+    p_ptr->active_ability[S_SMT][SMT_ARTEFACT] = true;
 
     p_ptr->innate_ability[S_ARC][ARC_DEX] = true;
     p_ptr->active_ability[S_ARC][ARC_DEX] = true;
     calc_bonuses();
-    assert(p_ptr->skill_stat_mod[S_SMT] == 7);
-    puts("PASS permanent Smithing attributes, craft categories, negative rounding, forge and Reforge thresholds");
+    assert(p_ptr->skill_stat_mod[S_SMT] == 31);
+
+    p_ptr->stat_base[A_STR] = -5;
+    p_ptr->stat_base[A_DEX] = -1; /* Learned Dexterity raises this to zero. */
+    p_ptr->stat_base[A_GRA] = 0;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == -3);
+
+    object_type sword;
+    int drain;
+    object_prep(&sword, lookup_kind(TV_SWORD, SV_SHORT_SWORD));
+    int difficulty = object_difficulty(&sword);
+    cave_feat[p_ptr->py][p_ptr->px] = FEAT_FORGE_GOOD_HEAD + 3;
+    p_ptr->skill_use[S_SMT] = difficulty - 3;
+    assert(!too_difficult(&sword));
+    assert(smith_reforge_difficulty_affordable(difficulty, &drain) && drain == 0);
+    --p_ptr->skill_use[S_SMT];
+    assert(too_difficult(&sword));
+    assert(!smith_reforge_difficulty_affordable(difficulty, &drain));
+    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = true;
+    assert(!too_difficult(&sword) && smithing_cost.drain == 1);
+    assert(smith_reforge_difficulty_affordable(difficulty, &drain) && drain == 1);
+    p_ptr->have_ability[S_SPC][SPC_AULE] = true;
+    p_ptr->skill_use[S_SMT] -= 2;
+    assert(!too_difficult(&sword) && smithing_cost.drain == 2);
+    assert(smith_reforge_difficulty_affordable(difficulty, &drain) && drain == 2);
+    puts("PASS Smithing ranks, global abilities, single rounding, forge and Reforge thresholds");
+}
+void fixture_dwarven_smithing(void)
+{
+    const player_race* original_race = rp_ptr;
+    character_profile* original_profile = current_character_profile;
+    player_race naugrim = p_info[4];
+    character_profile profile = c_info[20];
+    const int crafts[] = { SMT_ARMOURSMITH, SMT_WEAPONSMITH, SMT_JEWELLER,
+        SMT_ENCHANTMENT, SMT_EXPERTISE, SMT_ARTEFACT };
+    const struct {
+        u32b race_penalty;
+        u32b character_flags;
+        int affinity;
+        int stat_bonus;
+    } cases[] = {
+        { 0, 0, 1, 35 },
+        { 0, RHF_SMT_AFFINITY, 2, 40 },
+        { 0, RHF_SMT_PENALTY, 0, 29 },
+        { RHF_SMT_PENALTY, RHF_SMT_PENALTY, -1, 29 },
+    };
+
+    assert(naugrim.flags & RHF_DWARVEN_SMITHING);
+    assert(!(p_info[0].flags & RHF_DWARVEN_SMITHING));
+    rp_ptr = &naugrim;
+    current_character_profile = &profile;
+    p_ptr->prace = 4;
+    p_ptr->pcharacter = 20;
+    p_ptr->stat_base[A_STR] = 3;
+    p_ptr->stat_base[A_DEX] = 5;
+    p_ptr->stat_base[A_GRA] = 6;
+    p_ptr->skill_base[S_SMT] = 3;
+    for (size_t i = 0; i < N_ELEMENTS(crafts); ++i)
+    {
+        p_ptr->innate_ability[S_SMT][crafts[i]] = true;
+        p_ptr->active_ability[S_SMT][crafts[i]] = true;
+    }
+    for (size_t i = 0; i < N_ELEMENTS(cases); ++i)
+    {
+        naugrim.flags = p_info[4].flags | cases[i].race_penalty;
+        profile.flags = c_info[20].flags | cases[i].character_flags;
+        calc_bonuses();
+        assert(affinity_level(S_SMT) == cases[i].affinity);
+        assert(p_ptr->skill_stat_mod[S_SMT] == cases[i].stat_bonus);
+        assert(smithing_capacity() == 3 + cases[i].affinity + cases[i].stat_bonus);
+        assert(p_ptr->stat_use[A_STR] == 3 && p_ptr->stat_use[A_DEX] == 5
+            && p_ptr->stat_use[A_GRA] == 6);
+    }
+    rp_ptr = original_race;
+    current_character_profile = original_profile;
+    puts("PASS Naugrim crafting attributes at positive, zero and negative Smithing affinity");
 }
 static int draft_stat, draft_before, draft_after;
 void fixture_build_negative_draft(void)
@@ -331,6 +407,7 @@ TESTS = r'''
 #include "object/object-difficulty.h"
 #include "player/player-upkeep-internal.h"
 void fixture_build_negative_draft(void);
+void fixture_dwarven_smithing(void);
 void fixture_set_draft_stat(int);
 int fixture_draft_rating(void);
 void fixture_check_costs(const object_type*);
@@ -417,8 +494,7 @@ static void real_craft(int stat)
 {
     prepare(3);player_carried_extra_reset_store();
     p_ptr->pcharacter=0;current_character_profile=&c_info[0];
-    /* The sword gets 20 additional capacity from 20 STR and 20 DEX. */
-    p_ptr->skill_base[S_SMT]=200;p_ptr->skill_use[S_SMT]=13;
+    p_ptr->skill_base[S_SMT]=200;p_ptr->skill_use[S_SMT]=33;
     p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]=false;
     for(int a=0;a<ABILITIES_MAX;++a)
         p_ptr->innate_ability[S_SMT][a]=p_ptr->have_ability[S_SMT][a]=true;
@@ -446,6 +522,8 @@ static void difficulty_checks(void)
     scenario="Smithing attributes";prepare(3);
     p_ptr->pcharacter=0;current_character_profile=&c_info[0];
     fixture_smithing_attributes();
+    scenario="Dwarven Smithing";prepare(3);
+    fixture_dwarven_smithing();
     scenario="unified difficulty";prepare(30);
     p_ptr->pcharacter=0;current_character_profile=&c_info[0];
     p_ptr->skill_use[S_SMT]=p_ptr->skill_base[S_SMT]=1000;

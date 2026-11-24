@@ -1019,8 +1019,7 @@ void calc_bonuses(void)
     /* Affect Skill -- will (GRA) */
     p_ptr->skill_stat_mod[S_WIL] = p_ptr->stat_use[A_GRA];
 
-    /* Item-specific Smithing adds its category bonus to this shared bonus. */
-    p_ptr->skill_stat_mod[S_SMT] = smithing_common_stat_bonus();
+    p_ptr->skill_stat_mod[S_SMT] = smithing_stat_bonus();
 
     /* Affect Skill -- song (GRA) */
     p_ptr->skill_stat_mod[S_SNG] = p_ptr->stat_use[A_GRA];

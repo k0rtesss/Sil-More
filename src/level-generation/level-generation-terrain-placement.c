@@ -204,19 +204,58 @@ void place_traps(void)
     }
 }
 
+static bool player_start_grid_ok(int y, int x, const coord* down_stairs,
+    int stair_count)
+{
+    if (!cave_naked_bold(y, x) || (cave_info[y][x] & CAVE_ICKY))
+        return false;
+    if (playerturn == 0 && !(cave_info[y][x] & CAVE_ROOM))
+        return false;
+    if (down_stairs)
+    {
+        if (!stair_count || !in_bounds_fully(y, x))
+            return false;
+        for (int i = 0; i < stair_count; i++)
+            if (distance(y, x, down_stairs[i].y, down_stairs[i].x) < 87)
+                return false;
+    }
+    return !p_ptr->create_stair || !stairs_within_los(y, x);
+}
+
+static bool place_player_start(const coord* down_stairs, int stair_count)
+{
+    for (int i = 0; i <= 100; i++)
+    {
+        int y = rand_int(p_ptr->cur_map_hgt);
+        int x = rand_int(p_ptr->cur_map_wid);
+        if (player_start_grid_ok(y, x, down_stairs, stair_count)
+            && player_place(y, x))
+            return true;
+    }
+
+    /* Nienna's distance constraint can leave few eligible starting grids. */
+    if (stair_count)
+    {
+        for (int y = 1; y < p_ptr->cur_map_hgt - 1; y++)
+        {
+            for (int x = 1; x < p_ptr->cur_map_wid - 1; x++)
+            {
+                if (player_start_grid_ok(y, x, down_stairs, stair_count)
+                    && player_place(y, x))
+                    return true;
+            }
+        }
+    }
+
+    log_trace("place_rubble_player failed: Could not find suitable player placement");
+    return false;
+}
+
 bool place_rubble_player(void)
 {
-    int r;
-    int y, x;
-    int i, panels;
-    bool niena_level = (quest_lottery_winner == QUEST_ID_NIENA);
-
-    /* Basic "amount" */
-
-    panels = (p_ptr->cur_map_hgt / PANEL_HGT)
+    int panels = (p_ptr->cur_map_hgt / PANEL_HGT)
         * (p_ptr->cur_map_wid / PANEL_WID_FIXED);
-
-    r = dieroll(panels / 3);
+    int r = dieroll(panels / 3);
 
     // occasionally produce much more rubble on deep levels
     if ((p_ptr->depth >= 10) && one_in_(10))
@@ -224,70 +263,27 @@ bool place_rubble_player(void)
 
     /* Put some rubble in corridors */
     alloc_object_global(ALLOC_SET_BOTH, ALLOC_TYP_RUBBLE, r, false);
+    if (quest_lottery_winner != QUEST_ID_NIENA)
+        return place_player_start(NULL, 0);
 
-    /* simple way to place player */
-    for (i = 0; i <= 100; i++)
+    coord* down_stairs = mem_alloc_array(
+        p_ptr->cur_map_hgt * p_ptr->cur_map_wid, coord);
+    if (!down_stairs)
     {
-        y = rand_int(p_ptr->cur_map_hgt);
-        x = rand_int(p_ptr->cur_map_wid);
-        // require empty square that isn't in an interesting room or vault
-        if (cave_naked_bold(y, x) && !(cave_info[y][x] & (CAVE_ICKY)))
+        log_error("Could not allocate the stair list for Nienna's trial");
+        return false;
+    }
+    int stair_count = 0;
+    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+    {
+        for (int x = 0; x < p_ptr->cur_map_wid; x++)
         {
-            // require a room if it is the first level
-            if ((playerturn > 0) || (cave_info[y][x] & (CAVE_ROOM)))
-            {
-                // don't generate stairs within line of sight if player arrived
-                // using stairs
-                if (!stairs_within_los(y, x) || (p_ptr->create_stair == false))
-                {
-                    if (niena_level)
-                    {
-                        int nearest_down = calculate_nearest_down_stair_distance_from(y, x);
-                        if (nearest_down < 87)
-                            continue;
-                    }
-
-                    player_place(y, x);
-                    break;
-                }
-            }
-        }
-        if (i == 100)
-        {
-            log_trace("place_rubble_player failed: Could not find suitable player placement after 100 attempts");
-            return (false);
+            if (cave_down_stairs_bold(y, x))
+                down_stairs[stair_count++] = (coord){ (byte)y, (byte)x };
         }
     }
 
-    /* Nienna levels need a long run to the only down stair; do an exhaustive
-     * fallback scan before giving up on the level. */
-    if (niena_level)
-    {
-        int nearest_down = calculate_nearest_down_stair_distance_from(p_ptr->py, p_ptr->px);
-        if (nearest_down < 87)
-        {
-            for (y = 1; y < p_ptr->cur_map_hgt - 1; y++)
-            {
-                for (x = 1; x < p_ptr->cur_map_wid - 1; x++)
-                {
-                    if (!cave_naked_bold(y, x) || (cave_info[y][x] & CAVE_ICKY))
-                        continue;
-                    if ((playerturn == 0) && !(cave_info[y][x] & CAVE_ROOM))
-                        continue;
-
-                    nearest_down = calculate_nearest_down_stair_distance_from(y, x);
-                    if (nearest_down < 87)
-                        continue;
-
-                    player_place(y, x);
-                    return true;
-                }
-            }
-
-            log_trace("place_rubble_player failed: Nienna level could not find player start at least 87 from the down stair");
-            return false;
-        }
-    }
-
-    return (true);
+    bool placed = place_player_start(down_stairs, stair_count);
+    mem_free(down_stairs);
+    return placed;
 }

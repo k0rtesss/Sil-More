@@ -12,6 +12,38 @@ The catalogue contains 556 lessons, including 107 ability previews. Every live a
 
 ## Tutorial modes
 
+### Tutorial language
+
+The small `en` / `ru` button on each gameplay tutorial card switches the current
+lesson immediately. Keyboard and controller users can focus it with the other
+card buttons. Switching does not advance the lesson, spend a turn, or change
+Tale progress. The app saves `appOptions.tutorialLanguage` in `sil_sdl.json`;
+missing or unknown language codes use English.
+
+Russian titles and pages live in `lib/help/tutorials.ru.json`, alongside the
+English catalogue. Its `lessons` object uses stable lesson IDs and ordered
+`steps`; `strings` translates tutorial controls and fixed public context, while
+`patterns` translates numeric public context without interpreting catalogue text
+as a printf format. The engine retains the original observations so switching
+back restores English. Item and creature names continue to match the game.
+Missing translations fall back to English. The archive and tutorial settings
+also use the selected language. Existing lesson IDs and saved progress are unchanged.
+
+The bundled Victor Mono Regular supplies Cyrillic glyphs missing from decorative
+story fonts. The primary font continues to render the characters it supports.
+Long cards scroll without dropping text at UTF-8 byte boundaries.
+
+Run `python scripts/check_tutorial_translation.py` for complete coverage,
+placeholders, byte limits, and source-drift checks. A lesson's `source_sha256`
+hash covers its English title and step text, joined with NUL characters; update
+it only after reviewing the corresponding translation. Run
+`python scripts/check_gameplay_tutorial_render.py --russian` for every Russian
+page at desktop, portrait, and controller sizes, including the end of scrolling
+cards and a settings save/reload check. Core and SDL event checks also cover
+language changes without completing lessons or dispatching game commands.
+
+### Lesson level
+
 Default: **Extended**. The catalogue has **170 Normal** lessons and **386 Extended** lessons. The card's mode button opens a selector for **Disabled**, **Normal**, and **Extended**.
 
 Normal covers core controls, survival, general item handling and its complete action chains, storage, main menus, combat fundamentals and Tale events. Extended includes all Normal lessons and adds individual abilities and item effects, learned monster traits, terrain and region details, individual quest introductions and specialist status or knowledge pages.
@@ -2114,7 +2146,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Choose an item or improvement to see its difficulty, your capacity, and the costs. Permanent Dexterity and Grace boost all Smithing. Heavy metal adds half Strength plus half Dexterity, mail and light crafts add Dexterity, and jewellery adds Grace. Round the total down. Smithing skill bonuses from equipment still apply.
+Choose an item or improvement to see its difficulty, your capacity, and the costs. Smithing adds half your permanent Dexterity and half your permanent Grace. Learned, active crafting abilities and masteries add further bonuses to every recipe. Naugrim add each positive Smithing affinity level to the attributes used here. Add the bonuses together and round down once. Smithing skill bonuses from equipment still apply.
 
 Trigger: The named menu is actually opened: smithing.
 
@@ -3408,7 +3440,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create weapons at a forge. You also gain a modest bonus to identifying weapons.
+Create weapons at a forge. You also gain a modest bonus to identifying weapons. While learned and active, it adds half your permanent Dexterity to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 120, skill 6, ability slot 0.
 
@@ -3424,7 +3456,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create armour at a forge. You also gain a modest bonus to identifying armour.
+Create armour at a forge. You also gain a modest bonus to identifying armour. While learned and active, it adds half your permanent Strength to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 121, skill 6, ability slot 1.
 
@@ -3440,7 +3472,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties.
+Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties. While learned and active, it adds half your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 122, skill 6, ability slot 2.
 
@@ -3456,7 +3488,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus.
+Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus. While learned and active, it adds your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 123, skill 6, ability slot 3.
 
@@ -3472,7 +3504,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal.
+Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal. While learned and active, it adds your permanent Dexterity to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 124, skill 6, ability slot 4.
 
@@ -3488,7 +3520,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties.
+Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties. While learned and active, it adds your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 125, skill 6, ability slot 5.
 

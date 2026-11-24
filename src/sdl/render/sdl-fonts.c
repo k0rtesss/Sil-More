@@ -770,6 +770,10 @@ void sdl_story_font_cache_clear(void)
             TTF_CloseFont(g_state.story_fonts[i].font);
             g_state.story_fonts[i].font = NULL;
         }
+        if (g_state.story_fonts[i].fallback) {
+            TTF_CloseFont(g_state.story_fonts[i].fallback);
+            g_state.story_fonts[i].fallback = NULL;
+        }
         g_state.story_fonts[i].pixel_height = 0;
         g_state.story_fonts[i].slot = 0;
         g_state.story_fonts[i].last_used = 0;
@@ -839,6 +843,7 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
 {
     const char* font_path;
     TTF_Font* font;
+    TTF_Font* fallback = NULL;
     int target_index;
 
     if (pixel_height <= 0)
@@ -859,6 +864,25 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
     if (!font)
         return NULL;
 
+    /* The shipped decorative fonts contain Latin only. Keep their existing
+     * glyphs and use the bundled Victor Mono for missing Cyrillic characters,
+     * including translated tutorial settings rendered by ordinary menus. */
+    if (!TTF_FontHasGlyph(font, 0x416) || !TTF_FontHasGlyph(font, 0x451)) {
+        char path[1024];
+        mono_font_style_key style;
+        path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra",
+            "font/VictorMono-Regular.ttf");
+        fallback = TTF_OpenFont(path, pixel_height);
+        if (fallback) {
+            sdl_story_slot_style(slot, &style);
+            sdl_apply_mono_font_style_key(fallback, &style);
+            if (!TTF_AddFallbackFont(font, fallback)) {
+                TTF_CloseFont(fallback);
+                fallback = NULL;
+            }
+        }
+    }
+
     if (g_state.story_font_count >= MAX_STORY_FONT_CACHE) {
         target_index = 0;
 
@@ -876,6 +900,8 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
         sdl_ui_text_cache_clear_font(
             g_state.story_fonts[target_index].font);
         TTF_CloseFont(g_state.story_fonts[target_index].font);
+        if (g_state.story_fonts[target_index].fallback)
+            TTF_CloseFont(g_state.story_fonts[target_index].fallback);
         sdl_story_font_cache_changed();
     } else {
         target_index = g_state.story_font_count++;
@@ -884,6 +910,7 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
     g_state.story_fonts[target_index].pixel_height = pixel_height;
     g_state.story_fonts[target_index].slot = slot;
     g_state.story_fonts[target_index].font = font;
+    g_state.story_fonts[target_index].fallback = fallback;
     g_state.story_fonts[target_index].last_used = ++g_story_font_use_clock;
     return font;
 }

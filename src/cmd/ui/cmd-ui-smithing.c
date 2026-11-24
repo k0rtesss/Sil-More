@@ -1678,9 +1678,9 @@ int forge_bonus(int y, int x)
         return (7);
 }
 
-static int smithing_capacity(const object_type* object)
+static int smithing_capacity(void)
 {
-    return smithing_item_skill(object) + forge_bonus(p_ptr->py, p_ptr->px);
+    return p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
 }
 
 /* Difficulty comes exclusively from the shared item evaluator. This layer
@@ -1787,7 +1787,7 @@ int object_difficulty(object_type* o_ptr)
         o_ptr->ident |= IDENT_CANT_MELT;
     }
 
-    int effective_skill = smithing_capacity(o_ptr);
+    int effective_skill = smithing_capacity();
     if (p_ptr->have_ability[S_SPC][SPC_AULE] && dif > effective_skill)
     {
         int maximum = effective_skill + p_ptr->skill_base[S_SMT] * 2;
@@ -1823,7 +1823,7 @@ int object_difficulty(object_type* o_ptr)
  */
 int too_difficult(object_type* o_ptr)
 {
-    int ability = smithing_capacity(o_ptr);
+    int ability = smithing_capacity();
     int dif = object_difficulty(o_ptr);
 
     if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
@@ -2241,10 +2241,9 @@ int smithing_work_difficulty(void)
     return difficulty;
 }
 
-static bool smith_reforge_difficulty_affordable(const object_type* object,
-    int difficulty, int* drain_out)
+static bool smith_reforge_difficulty_affordable(int difficulty, int* drain_out)
 {
-    int effective_skill = smithing_capacity(object);
+    int effective_skill = smithing_capacity();
 
     if (drain_out)
         *drain_out = 0;
@@ -2338,9 +2337,8 @@ static bool reforge_preview_build(const object_type* source, int prefix_idx,
     smithing_cost_delta_positive(&before_cost, &after_cost, &preview->cost);
     preview->cost.uses = 1;
 
-    preview->affordable
-        = smith_reforge_difficulty_affordable(
-            source, preview->scaled_difficulty, &preview->cost.drain);
+    preview->affordable = smith_reforge_difficulty_affordable(
+        preview->scaled_difficulty, &preview->cost.drain);
 
     if (!p_ptr->active_ability[S_SMT][SMT_REPAIR])
     {
@@ -2810,7 +2808,7 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     int space = sheet->footer - y;
     int weight = item->weight * item->number;
     char desc[160], name[160], suffix[100], weight_text[32], stats[150];
-    int skill = smithing_capacity(item);
+    int skill = smithing_capacity();
     int uses = forge_uses(p_ptr->py, p_ptr->px);
     if (continuing) smith_ui_detail_turns = p_ptr->smithing_leftover;
     int turns = smith_ui_detail_turns;
@@ -4051,7 +4049,7 @@ static void create_special(int ego_prefix, int ego_suffix)
 
     /* Apply ego bonuses */
     if (object_has_ego(smith_o_ptr))
-        object_into_special(smith_o_ptr, smithing_item_skill(smith_o_ptr), true);
+        object_into_special(smith_o_ptr, p_ptr->skill_use[S_SMT], true);
 
     /* Re-evaluate stack size now that an enchantment is applied */
     smith_o_ptr->number = smith_default_stack_size(smith_o_ptr);

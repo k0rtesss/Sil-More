@@ -412,6 +412,27 @@ int main(int argc, char **argv)
         }
         assert(argc > 2);
         assert(abilities == atoi(argv[2]));
+        tutorial_set_language("ru");
+        assert(!strcmp(tutorial_language(),"ru"));
+        assert(!strcmp(tutorial_translate("Continue"),"Далее"));
+        for (int i=0;i<catalogue_count;++i) {
+            for (int j=0;j<catalogue[i].count;++j) {
+                tutorial_context empty={0};
+                fill_view(&view,i,j,&empty);
+                assert(strcmp(view.title,catalogue[i].title));
+                assert(strcmp(view.body,catalogue[i].steps[j].text));
+            }
+        }
+        char localized[2048];
+        assert(!strcmp(context_translation("Severity 15; at this value the next damage tick is 3 Health.",localized,sizeof(localized)),
+            "Тяжесть 15; при ней следующий тик урона отнимет 3 здоровья."));
+        assert(!strcmp(context_translation("Pack space: 12.5/24.0 qt.",localized,sizeof(localized)),
+            "Объём рюкзака: 12.5/24.0 кварты."));
+        assert(strstr(context_translation("Strength drain changed from -1 to -2. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.",localized,sizeof(localized)),"Сила"));
+        assert(strstr(context_translation("Your hit margin was 12 with a 3.0 lb weapon, adding 1 critical dice. Damage now rolls 3d5 before Protection.",localized,sizeof(localized)),"3d5"));
+        assert(!strcmp(context_translation("Unknown public item",localized,sizeof(localized)),"Unknown public item"));
+        tutorial_set_language("en");
+
         tutorial_shutdown();
         char help_directory[1024];
         SDL_strlcpy(help_directory, argv[1], sizeof(help_directory));
@@ -430,6 +451,19 @@ int main(int argc, char **argv)
         assert(tutorial_replay("combat.first_monster")); tutorial_checkpoint(true);
         assert(tutorial_get_view(&view) && strstr(view.body, "This creature"));
         assert(!view.context.text[0] && !view.action[0] && view.can_continue);
+        unsigned int old_revision=tutorial_revision();
+        int old_step=view.step;
+        tutorial_status old_status=tutorial_lesson_status(view.id);
+        tutorial_set_language("ru");
+        assert(tutorial_get_view(&view) && view.step==old_step);
+        assert(strstr(view.body,"Это существо"));
+        assert(tutorial_revision()>old_revision);
+        assert(tutorial_lesson_status(view.id)==old_status);
+        tutorial_set_language("en");
+        assert(tutorial_get_view(&view) && strstr(view.body,"This creature"));
+        tutorial_set_language("unsupported");
+        assert(!strcmp(tutorial_language(),"en"));
+
         tutorial_shutdown();
     }
     SDL_Quit();

@@ -105,6 +105,9 @@ typedef struct supply_menu_request
     int item_select_flags; /* USE_INVEN / USE_EQUIP / USE_FLOOR */
     cptr item_select_reason; /* shown atop menu */
     int* item_select_item_out; /* inventory slot, equipment slot, or -floor_idx */
+    const int* replacement_staged_items; /* handles already selected for replacement */
+    int replacement_staged_count;
+    int replacement_staged_volume;
 } supply_menu_request;
 
 void supplies_init(void);

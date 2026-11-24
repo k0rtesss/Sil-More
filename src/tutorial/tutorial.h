@@ -38,8 +38,8 @@ typedef enum tutorial_status {
 typedef struct tutorial_view {
     bool active;
     char id[80];
-    char title[160];
-    char body[2048];
+    char title[320];
+    char body[4096];
     char action[128]; /* Semantic action(s), separated by | for alternatives. */
     char action_subject[48]; /* Required public semantic target, if any. */
     char anchor[48];
@@ -55,6 +55,10 @@ typedef struct tutorial_view {
 /* Lazy loading also occurs at checkpoint. Reload is useful for content tests.
  * A failed catalogue reload leaves the previous valid catalogue intact. */
 bool tutorial_load_catalogue(const char *path);
+/* Presentation preference only: changing it never advances a lesson. */
+const char *tutorial_language(void);
+void tutorial_set_language(const char *language);
+const char *tutorial_translate(const char *english);
 void tutorial_shutdown(void);
 void tutorial_set_mode(tutorial_mode mode);
 tutorial_mode tutorial_get_mode(void);

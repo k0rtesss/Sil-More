@@ -385,6 +385,53 @@ static void check_sprinting_history(void)
     }
     puts("Sprinting: only continuous movement counts, compass bends work, stops and sharp turns reset, both armour thresholds set speed: PASS.");
 }
+
+static void check_fatal_monster_riposte(void)
+{
+    for (int lethal = 0; lethal <= 1; lethal++)
+    {
+        monster_type* m = combat_fixture(403, -100);
+        cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+        object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+        p_ptr->chp = lethal ? 1 : 1000;
+        p_ptr->skill_base[S_MEL] = p_ptr->skill_use[S_MEL] = -100;
+        p_ptr->skill_base[S_EVN] = -100;
+        p_ptr->innate_ability[S_MEL][MEL_RAPID_ATTACK] = true;
+        p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] = true;
+        p_ptr->energy_use = 100;
+        player_attacked = false;
+        assert(r_info[m->r_idx].flags2 & RF2_RIPOSTE);
+        py_attack(10, 10, ATT_MAIN);
+        assert(player_attacked && p_ptr->is_dead == lethal);
+        printf("Ringwion's Riposte (%s player): %d combat rolls.\n",
+            lethal ? "dead" : "surviving", combat_number);
+        assert(combat_number == (lethal ? 2 : 3));
+    }
+    puts("Rapid Attack: Ringwion's lethal Riposte stops the rest of the attack; surviving the Riposte allows the second blow: PASS.");
+}
+
+static void check_counter_riposte_kill(void)
+{
+    monster_type* m = combat_fixture(403, 42);
+    cave_m_idx[p_ptr->py][p_ptr->px] = -1;
+    object_prep(&inventory[INVEN_WIELD], lookup_kind(TV_SWORD, SV_LONG_SWORD));
+    p_ptr->skill_base[S_MEL] = p_ptr->skill_use[S_MEL] = 13;
+    p_ptr->skill_base[S_EVN] = 42;
+    p_ptr->mdd = 10;
+    p_ptr->mds = 5;
+    p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] = true;
+    p_ptr->active_ability[S_EVN][EVN_RIPOSTE] = true;
+    p_ptr->energy_use = 100;
+    player_attacked = false;
+    m->hp = 1;
+
+    /* Initial miss, Ringwion's miss, and the player's lethal counter-riposte. */
+    Rand_state_init(3);
+    py_attack(10, 10, ATT_MAIN);
+    assert(p_ptr->ripostes == 1 && !m->r_idx);
+    printf("Counter-riposte kill: %d combat rolls.\n", combat_number);
+    assert(combat_number == 3 && m->alertness == 0);
+}
 '''
 
 
@@ -401,6 +448,8 @@ def main():
         "    check_scare_resistance();",
         "    check_disarm();",
         "    check_sprinting_history();",
+        "    check_fatal_monster_riposte();",
+        "    check_counter_riposte_kill();",
     ]))
     source.write_text(harness, encoding="utf-8")
     cmake = engine.BUILD / "CMakeFiles/sil-more.dir"

@@ -1827,22 +1827,6 @@ void inven_drop(int item, int amt)
         return;
     }
 
-    /* Take off equipment */
-    if (item >= INVEN_WIELD && item < INVEN_TOTAL)
-    {
-        /* Take off first */
-        item = inven_takeoff(item, amt);
-
-        if (item < 0)
-            return;
-
-        if (!inven_index_valid(item, "inven_drop"))
-            return;
-
-        /* Get the original object */
-        o_ptr = player_inventory_object(item);
-    }
-
     /* Get local object */
     i_ptr = &object_type_body;
 
@@ -1857,7 +1841,12 @@ void inven_drop(int item, int amt)
 
     /* Modify quantity */
     i_ptr->number = amt;
-    if (inventory_slot_is_quivered_arrow(item))
+    /* Drop equipped gear directly. Taking it off into carried inventory
+     * first can spread a stack across multiple slots before it is dropped. */
+    bool equipped = player_inventory_handle_is_equipped(item);
+    if (equipped)
+        forget_carried_object_location(i_ptr);
+    if (equipped || inventory_slot_is_quivered_arrow(item))
     {
         i_ptr->pickup = false;
         i_ptr->pickup_slot = -1;

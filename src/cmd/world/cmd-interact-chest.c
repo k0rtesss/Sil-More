@@ -10,6 +10,7 @@
 s16b chest_check(int y, int x)
 {
     s16b this_o_idx, next_o_idx = 0;
+    if (!in_bounds(y, x)) return 0;
 
     /* Scan all objects in the grid */
     for (this_o_idx = cave_o_idx[y][x]; this_o_idx; this_o_idx = next_o_idx)
@@ -22,11 +23,10 @@ s16b chest_check(int y, int x)
         /* Get the next object */
         next_o_idx = o_ptr->next_o_idx;
 
-        /* Skip unknown chests XXX XXX */
-        /* if (!o_ptr->marked) continue; */
-
-        /* Check for chest */
-        if (o_ptr->tval == TV_CHEST)
+        /* The player can feel a chest underfoot. Adjacent chests must have
+         * been discovered and must still be visible through any water. */
+        if (o_ptr->tval == TV_CHEST
+            && ((y == p_ptr->py && x == p_ptr->px) || object_is_visible(o_ptr)))
             return (this_o_idx);
     }
 
@@ -95,8 +95,8 @@ static chest_alignment_type chest_item_alignment(const object_type* o_ptr)
 void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
 {
     int number;
-    bool generated_an_item = false;
-    bool dropped_an_item = false;
+    int generated_contents = 0;
+    int unplaced_contents = 0;
     chest_alignment_type chest_alignment = CHEST_ALIGNMENT_STANDARD;
     int destroyed_contents = 0;
     int old_generation_mode = object_generation_mode;
@@ -107,15 +107,11 @@ void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
 
     object_type object_type_body;
 
-    if (!o_ptr || o_ptr->tval != TV_CHEST)
+    if (!o_ptr || o_ptr->tval != TV_CHEST || !o_ptr->pval)
         return;
 
     /* Determine how much to drop (see above) */
     number = (o_ptr->sval >= SV_CHEST_MIN_LARGE) ? 4 : rand_range(2, 3);
-
-    /* Zero pval means empty chest */
-    if (!o_ptr->pval)
-        return;
 
     /* Opening a chest */
     object_generation_mode = OB_GEN_MODE_CHEST;
@@ -158,6 +154,12 @@ void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
         || (o_ptr->sval == SV_CHEST_PRESENT))
         chest_quality = DROP_QUALITY_SUPERB;
 
+    /* Placing treasure can compact the object list or replace the shell's
+     * own floor slot. Finish updating the chest while it still occupies it. */
+    o_ptr->pval = 0;
+    o_ptr->xtra1 = 0;
+    object_known(o_ptr);
+
     /* Drop some objects (non-chests) */
     for (; number > 0; --number)
     {
@@ -179,26 +181,23 @@ void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
 
             chest_alignment_type item_alignment = chest_item_alignment(i_ptr);
 
-            if (item_alignment == CHEST_ALIGNMENT_INVALID)
-                continue;
-
-            if (item_alignment == CHEST_ALIGNMENT_NOBLE
-                || item_alignment == CHEST_ALIGNMENT_EVIL)
+            if (item_alignment == CHEST_ALIGNMENT_INVALID
+                || (chest_alignment != CHEST_ALIGNMENT_STANDARD
+                    && item_alignment != CHEST_ALIGNMENT_STANDARD
+                    && chest_alignment != item_alignment))
             {
-                if (chest_alignment == CHEST_ALIGNMENT_STANDARD)
-                {
-                    chest_alignment = item_alignment;
-                    chest_apply_drop_alignment(chest_alignment);
-                }
-                else if (chest_alignment != item_alignment)
-                {
-                    continue;
-                }
+                if (artefact_p(i_ptr)) a_info[i_ptr->name1].cur_num = 0;
+                continue;
+            }
+            if (chest_alignment == CHEST_ALIGNMENT_STANDARD && item_alignment != CHEST_ALIGNMENT_STANDARD)
+            {
+                chest_alignment = item_alignment;
+                chest_apply_drop_alignment(chest_alignment);
             }
 
-            generated_an_item = true;
+            generated_contents++;
 
-            if ((destroy_typ >= 0)
+            if (destroy_typ >= 0 && !artefact_p(i_ptr)
                 && elemental_attack_destroys_object(destroy_typ, i_ptr))
             {
                 destroyed_contents++;
@@ -206,8 +205,11 @@ void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
                 continue;
             }
 
-            drop_near(i_ptr, -1, y, x);
-            dropped_an_item = true;
+            if (!drop_near(i_ptr, -1, y, x))
+            {
+                if (artefact_p(i_ptr)) a_info[i_ptr->name1].cur_num = 0;
+                unplaced_contents++;
+            }
             accepted = true;
         }
     }
@@ -217,20 +219,11 @@ void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
     drop_allow_noble = old_allow_noble;
     drop_allow_evil = old_allow_evil;
 
-    /* Empty */
-    o_ptr->pval = 0;
-
-    /*Paranoia, delete chest theme*/
-    o_ptr->xtra1 = 0;
-
-    /* Known */
-    object_known(o_ptr);
-
-    if (!generated_an_item)
+    if (!generated_contents)
     {
         msg_print("The chest is empty.");
     }
-    else if (!dropped_an_item && destroyed_contents > 0)
+    else if (destroyed_contents == generated_contents)
     {
         msg_print("The chest's contents are ruined.");
     }
@@ -238,6 +231,8 @@ void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
     {
         msg_print("Some of the chest's contents are ruined.");
     }
+    if (unplaced_contents)
+        msg_print("There is no room for all the treasure.");
 }
 
 /*
@@ -5240,8 +5235,7 @@ static bool do_cmd_chest_minigame(int y, int x, s16b o_idx)
             return true;
         }
 
-        message_at(y, x, MSG_LOCKPICK_FAIL, 0,
-            "You have picked the lock.");
+        msg_print("You have picked the lock.");
     }
 
     sound_at(MSG_CHEST_OPEN, y, x);
@@ -5294,8 +5288,7 @@ static bool do_cmd_open_chest_legacy(int y, int x, s16b o_idx)
         /* Success -- May still have traps */
         if (result > 0)
         {
-            message_at(y, x, MSG_LOCKPICK_FAIL, 0,
-                "You have picked the lock.");
+            msg_print("You have picked the lock.");
 
             /* A known trap gets a committed disarm attempt after the lock.
              * An undiscovered trap cannot be disarmed and fires when the

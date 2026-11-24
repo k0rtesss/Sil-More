@@ -36,15 +36,15 @@ typedef struct drop_grid
     int x;
 } drop_grid;
 
-typedef struct arrow_drop_plan
+typedef struct object_drop_plan
 {
-    drop_grid grids[QUIVER_ARROW_CAPACITY + 1];
+    drop_grid* grids;
     int count;
     int free_slots;
     int excluded_floor_item;
-} arrow_drop_plan;
+} object_drop_plan;
 
-static bool drop_grid_reserved(const arrow_drop_plan* plan, int y, int x)
+static bool drop_grid_reserved(const object_drop_plan* plan, int y, int x)
 {
     for (int i = 0; i < plan->count; i++)
     {
@@ -55,7 +55,7 @@ static bool drop_grid_reserved(const arrow_drop_plan* plan, int y, int x)
 }
 
 static bool find_drop_grid(const object_type* drop, int y, int x, int radius,
-    bool disarmed, const arrow_drop_plan* plan, drop_grid* result)
+    bool disarmed, const object_drop_plan* plan, drop_grid* result)
 {
     /* A zero radius searches the whole level for a scatter destination. */
     int extent = radius ? radius : MAX(p_ptr->cur_map_wid, p_ptr->cur_map_hgt);
@@ -215,6 +215,60 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
 
     /* Result */
     return (o_idx);
+}
+
+static void play_floor_drop_sound(const object_type* j_ptr, int y, int x)
+{
+    int drop_sound = MSG_DROP_GENERIC;
+    const bool is_boots = (j_ptr->tval == TV_BOOTS);
+    const bool is_gloves = (j_ptr->tval == TV_GLOVES);
+    const bool is_greaves = is_boots &&
+        (j_ptr->sval == SV_PAIR_OF_STEEL_GREAVES || j_ptr->sval == SV_PAIR_OF_MITHRIL_GREAVES);
+    const bool is_gauntlets = is_gloves && (j_ptr->sval == SV_SET_OF_GAUNTLETS);
+
+    if (j_ptr->tval == TV_POTION || j_ptr->tval == TV_FLASK || j_ptr->tval == TV_GEM ||
+        (j_ptr->tval == TV_LIGHT && j_ptr->sval == SV_LIGHT_SILMARIL)) {
+        drop_sound = MSG_DROP_GLASS;
+    }
+    else if (j_ptr->tval == TV_RING || j_ptr->tval == TV_AMULET ||
+             (j_ptr->tval == TV_LIGHT && (j_ptr->sval == SV_LIGHT_FEANORIAN ||
+                                           j_ptr->sval == SV_LIGHT_LESSER_JEWEL))) {
+        drop_sound = MSG_DROP_SMALL_METAL;
+    }
+    else if ((j_ptr->tval == TV_SOFT_ARMOR && j_ptr->sval == SV_ROBE) ||
+             j_ptr->tval == TV_FOOD || j_ptr->tval == TV_EASTER || j_ptr->tval == TV_NOTE) {
+        drop_sound = MSG_DROP_CLOTH;
+    }
+    else if ((is_boots && !is_greaves) || (is_gloves && !is_gauntlets) ||
+             (j_ptr->tval == TV_SOFT_ARMOR &&
+              (j_ptr->sval == SV_LEATHER_ARMOR || j_ptr->sval == SV_STUDDED_LEATHER))) {
+        drop_sound = MSG_DROP_LEATHER;
+    }
+    else if (j_ptr->tval == TV_MAIL || j_ptr->tval == TV_SHIELD ||
+             j_ptr->tval == TV_CHEST || j_ptr->tval == TV_METAL || j_ptr->tval == TV_DIGGING ||
+             (j_ptr->tval == TV_HELM && (j_ptr->sval == SV_GREAT_HELM || j_ptr->sval == SV_DWARF_MASK))) {
+        drop_sound = MSG_DROP_BIG_METAL;
+    }
+    else if (j_ptr->tval == TV_SWORD || j_ptr->tval == TV_POLEARM || j_ptr->tval == TV_CROWN ||
+             (j_ptr->tval == TV_HELM && j_ptr->sval != SV_GREAT_HELM && j_ptr->sval != SV_DWARF_MASK) ||
+             (j_ptr->tval == TV_LIGHT && j_ptr->sval == SV_LIGHT_LANTERN) ||
+             is_greaves || is_gauntlets) {
+        drop_sound = MSG_DROP_METAL_MEDIUM;
+    }
+    else if (j_ptr->tval == TV_HAFTED || j_ptr->tval == TV_STAFF || j_ptr->tval == TV_HORN ||
+             j_ptr->tval == TV_ARROW ||
+             (j_ptr->tval == TV_LIGHT && (j_ptr->sval == SV_LIGHT_TORCH ||
+                                           j_ptr->sval == SV_LIGHT_MALLORN))) {
+        drop_sound = MSG_DROP_WOOD;
+    }
+    else {
+        drop_sound = MSG_DROP_GENERIC;
+    }
+
+    /* Only play drop sound while the player is actively in a live dungeon. */
+    if (character_dungeon) {
+        sound_at(drop_sound, y, x);
+    }
 }
 
 /*
@@ -378,59 +432,7 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
 
     update_stuff();
 
-    /* Sound - material-based drop sound (strictly matches design table) */
-    {
-        int drop_sound = MSG_DROP_GENERIC;
-        const bool is_boots = (j_ptr->tval == TV_BOOTS);
-        const bool is_gloves = (j_ptr->tval == TV_GLOVES);
-        const bool is_greaves = is_boots &&
-            (j_ptr->sval == SV_PAIR_OF_STEEL_GREAVES || j_ptr->sval == SV_PAIR_OF_MITHRIL_GREAVES);
-        const bool is_gauntlets = is_gloves && (j_ptr->sval == SV_SET_OF_GAUNTLETS);
-
-        if (j_ptr->tval == TV_POTION || j_ptr->tval == TV_FLASK || j_ptr->tval == TV_GEM ||
-            (j_ptr->tval == TV_LIGHT && j_ptr->sval == SV_LIGHT_SILMARIL)) {
-            drop_sound = MSG_DROP_GLASS;
-        }
-        else if (j_ptr->tval == TV_RING || j_ptr->tval == TV_AMULET ||
-                 (j_ptr->tval == TV_LIGHT && (j_ptr->sval == SV_LIGHT_FEANORIAN ||
-                                               j_ptr->sval == SV_LIGHT_LESSER_JEWEL))) {
-            drop_sound = MSG_DROP_SMALL_METAL;
-        }
-        else if ((j_ptr->tval == TV_SOFT_ARMOR && j_ptr->sval == SV_ROBE) ||
-                 j_ptr->tval == TV_FOOD || j_ptr->tval == TV_EASTER || j_ptr->tval == TV_NOTE) {
-            drop_sound = MSG_DROP_CLOTH;
-        }
-        else if ((is_boots && !is_greaves) || (is_gloves && !is_gauntlets) ||
-                 (j_ptr->tval == TV_SOFT_ARMOR &&
-                  (j_ptr->sval == SV_LEATHER_ARMOR || j_ptr->sval == SV_STUDDED_LEATHER))) {
-            drop_sound = MSG_DROP_LEATHER;
-        }
-        else if (j_ptr->tval == TV_MAIL || j_ptr->tval == TV_SHIELD ||
-                 j_ptr->tval == TV_CHEST || j_ptr->tval == TV_METAL || j_ptr->tval == TV_DIGGING ||
-                 (j_ptr->tval == TV_HELM && (j_ptr->sval == SV_GREAT_HELM || j_ptr->sval == SV_DWARF_MASK))) {
-            drop_sound = MSG_DROP_BIG_METAL;
-        }
-        else if (j_ptr->tval == TV_SWORD || j_ptr->tval == TV_POLEARM || j_ptr->tval == TV_CROWN ||
-                 (j_ptr->tval == TV_HELM && j_ptr->sval != SV_GREAT_HELM && j_ptr->sval != SV_DWARF_MASK) ||
-                 (j_ptr->tval == TV_LIGHT && j_ptr->sval == SV_LIGHT_LANTERN) ||
-                 is_greaves || is_gauntlets) {
-            drop_sound = MSG_DROP_METAL_MEDIUM;
-        }
-        else if (j_ptr->tval == TV_HAFTED || j_ptr->tval == TV_STAFF || j_ptr->tval == TV_HORN ||
-                 j_ptr->tval == TV_ARROW ||
-                 (j_ptr->tval == TV_LIGHT && (j_ptr->sval == SV_LIGHT_TORCH ||
-                                               j_ptr->sval == SV_LIGHT_MALLORN))) {
-            drop_sound = MSG_DROP_WOOD;
-        }
-        else {
-            drop_sound = MSG_DROP_GENERIC;
-        }
-
-        /* Only play drop sound while the player is actively in a live dungeon. */
-        if (character_dungeon) {
-            sound_at(drop_sound, by, bx);
-        }
-    }
+    play_floor_drop_sound(j_ptr, by, bx);
 
     /* Mega-Hack -- no message if "dropped" by player */
     /* Message when an object falls under the player */
@@ -447,37 +449,37 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
     return drop_near_aux(j_ptr, chance, y, x, false);
 }
 
-bool drop_quiver_arrows_near(const object_type* arrows, int count,
-    int excluded_floor_item)
+bool drop_objects_near(const object_type* objects, int count, int excluded_floor_item)
 {
+    if (count <= 0)
+        return false;
+
     int y = p_ptr->py;
     int x = p_ptr->px;
-    int feat = cave_feat[y][x];
-    bool floor_impact = object_drop_grid(feat, TV_ARROW, false)
-        || feat == FEAT_WATER || feat == FEAT_DEEP_WATER;
-    arrow_drop_plan plan = { .free_slots = z_info->o_max - o_max,
+    /* Water supports the wide search even for drops that cannot land in it. */
+    bool floor_impact = object_drop_grid(cave_feat[y][x], TV_GEM, false);
+    object_drop_plan plan = { .grids = mem_alloc_array(count, drop_grid),
+        .free_slots = z_info->o_max - o_max,
         .excluded_floor_item = excluded_floor_item };
 
-    if (count <= 0 || count > (int)N_ELEMENTS(plan.grids))
-        return false;
     for (int i = 1; i < o_max; i++)
     {
         if (!o_list[i].k_idx)
             plan.free_slots++;
     }
 
-    /* Reserve distinct grids with a full merge or an available object slot.
-     * A partial merge can change the floor even when floor_carry() fails.
-     * Accounting for empty slots avoids compacting live objects. */
+    /* Reserve distinct grids with a full merge or an available object slot
+     * to avoid partial merges and compaction before the batch can land. */
     for (int i = 0; i < count; i++)
     {
         drop_grid* grid = &plan.grids[i];
-        bool can_scatter = floor_impact || artefact_p(&arrows[i]);
+        bool can_scatter = floor_impact || artefact_p(&objects[i]);
 
-        if (!find_drop_grid(&arrows[i], y, x, can_scatter ? 10 : 4, false, &plan, grid))
+        if (!find_drop_grid(&objects[i], y, x, can_scatter ? 10 : 4, false, &plan, grid)
+            && (!can_scatter || !find_drop_grid(&objects[i], y, x, 0, false, &plan, grid)))
         {
-            if (!can_scatter || !find_drop_grid(&arrows[i], y, x, 0, false, &plan, grid))
-                return false;
+            mem_free(plan.grids);
+            return false;
         }
         if (!cave_o_idx[grid->y][grid->x])
             plan.free_slots--;
@@ -489,12 +491,12 @@ bool drop_quiver_arrows_near(const object_type* arrows, int count,
         drop_grid grid = plan.grids[i];
         object_type drop;
 
-        object_copy(&drop, &arrows[i]);
+        object_copy(&drop, &objects[i]);
         /* Distinct destinations keep every placement valid during commit. */
         (void)floor_carry(grid.y, grid.x, &drop);
-        if (character_dungeon)
-            sound_at(MSG_DROP_WOOD, grid.y, grid.x);
+        play_floor_drop_sound(&drop, grid.y, grid.x);
     }
+    mem_free(plan.grids);
     return true;
 }
 

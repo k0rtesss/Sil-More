@@ -486,6 +486,15 @@ void run_quest_lottery(void) {
             continue;
         }
 
+        /* Nienna's trial requires a distant down stair. An arrival from below
+         * creates a down stair under the player after generation. */
+        if (entry->quest_id == QUEST_ID_NIENA
+            && (p_ptr->create_stair == FEAT_MORE
+                || p_ptr->create_stair == FEAT_MORE_SHAFT)) {
+            log_trace("Quest lottery: Skipping Nienna with a down return stair");
+            continue;
+        }
+
         /* Check quest state - must be NOT_STARTED */
         if (*entry->quest_state_ptr != 0) { /* 0 = NOT_STARTED for all quest types */
             log_trace("Quest lottery: Quest %d not eligible (state=%d)",

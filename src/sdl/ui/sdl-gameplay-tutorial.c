@@ -21,7 +21,7 @@ static int tutorial_focus;
 static int tutorial_scroll;
 static int tutorial_max_scroll;
 static SDL_FRect tutorial_card;
-static SDL_FRect tutorial_buttons[3];
+static SDL_FRect tutorial_buttons[4];
 static bool tutorial_pointer_gameplay;
 static SDL_FingerID tutorial_pointer_finger;
 static bool tutorial_pointer_mouse;
@@ -255,32 +255,32 @@ typedef struct tutorial_controls {
     int command;
     bool native_command;
     bool primary;
-    char label[3][80];
-    char shortcut[3][64];
-    char action_hint[192];
-    char controls_hint[192];
-    char read_hint[48];
+    char label[4][160];
+    char shortcut[4][96];
+    char action_hint[384];
+    char controls_hint[384];
+    char read_hint[96];
 } tutorial_controls;
 
 static const char *tutorial_command_label(int command)
 {
     switch (command) {
-    case 'i': return "Open inventory";
-    case 'e': return "Open equipment";
-    case 'j': return "Open supplies";
-    case 'y': return "Open abilities";
-    case 'H': return "Open skills";
-    case 'h': return "Open character";
-    case 'm': return "Open main menu";
-    case '0': return "Open smithing";
-    case 'O': return "Open settings";
+    case 'i': return tutorial_translate("Open inventory");
+    case 'e': return tutorial_translate("Open equipment");
+    case 'j': return tutorial_translate("Open supplies");
+    case 'y': return tutorial_translate("Open abilities");
+    case 'H': return tutorial_translate("Open skills");
+    case 'h': return tutorial_translate("Open character");
+    case 'm': return tutorial_translate("Open main menu");
+    case '0': return tutorial_translate("Open smithing");
+    case 'O': return tutorial_translate("Open settings");
     default: break;
     }
     for (int i=0;i<COMMAND_PRIMARY_KEYBIND_COUNT;++i)
-        if (command_primary_keybinds[i].key_code==command) return command_primary_keybinds[i].key_name;
+        if (command_primary_keybinds[i].key_code==command) return tutorial_translate(command_primary_keybinds[i].key_name);
     for (int i=0;i<COMMAND_SECONDARY_KEYBIND_COUNT;++i)
-        if (command_secondary_keybinds[i].key_code==command) return command_secondary_keybinds[i].key_name;
-    return "Choose an action";
+        if (command_secondary_keybinds[i].key_code==command) return tutorial_translate(command_secondary_keybinds[i].key_name);
+    return tutorial_translate("Choose an action");
 }
 
 static void tutorial_build_controls(const tutorial_view *view, tutorial_controls *out,
@@ -294,40 +294,41 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
     const char *menu=sdl_gamepad_button_short_label(SDL_GAMEPAD_BUTTON_START);
     char binding[96]="";
     memset(out,0,sizeof(*out));
-    SDL_strlcpy(out->label[1],"Skip tutorial",sizeof(out->label[1]));
-    strnfmt(out->label[2],sizeof(out->label[2]),"Mode: %s",
-        tutorial_mode_name(get_sdl_gameplay_tutorial_mode()));
+    SDL_strlcpy(out->label[3],tutorial_language(),sizeof(out->label[3]));
+    SDL_strlcpy(out->label[1],tutorial_translate("Skip tutorial"),sizeof(out->label[1]));
+    strnfmt(out->label[2],sizeof(out->label[2]),tutorial_translate("Mode: %s"),
+        tutorial_translate(tutorial_mode_name(get_sdl_gameplay_tutorial_mode())));
     if (view->can_continue || tutorial_reading) {
         out->primary=true;
-        SDL_strlcpy(out->label[0],view->can_continue?"Continue":"Resume action",sizeof(out->label[0]));
+        SDL_strlcpy(out->label[0],view->can_continue?tutorial_translate("Continue"):tutorial_translate("Resume action"),sizeof(out->label[0]));
     } else if (native) {
         if (strstr(view->action,"examine") && tutorial_menu_preview_available) {
             if (!tutorial_menu_preview_shown) {
                 out->primary=true; out->native_command=true; out->command='x';
-                SDL_strlcpy(out->label[0],"Preview item",sizeof(out->label[0]));
+                SDL_strlcpy(out->label[0],tutorial_translate("Preview item"),sizeof(out->label[0]));
                 if (input==TUTORIAL_INPUT_KEYBOARD) SDL_strlcpy(binding,"x",sizeof(binding));
                 else if (input==TUTORIAL_INPUT_CONTROLLER)
                     SDL_strlcpy(binding,tutorial_menu_preview_control,sizeof(binding));
-                strnfmt(out->action_hint,sizeof(out->action_hint),"Preview the selected item%s%s",
+                strnfmt(out->action_hint,sizeof(out->action_hint),tutorial_translate("Preview the selected item%s%s"),
                     binding[0]?": ":"",binding);
-            } else SDL_strlcpy(out->action_hint,"The selected item's preview is open.",sizeof(out->action_hint));
+            } else SDL_strlcpy(out->action_hint,tutorial_translate("The selected item's preview is open."),sizeof(out->action_hint));
         } else if (strstr(view->action,"ready"))
-            SDL_strlcpy(out->action_hint,"Select the item, then choose Ready.",sizeof(out->action_hint));
+            SDL_strlcpy(out->action_hint,tutorial_translate("Select the item, then choose Ready."),sizeof(out->action_hint));
         else if (strstr(view->action,"equip"))
-            SDL_strlcpy(out->action_hint,"Select the equipment you want to wear or wield.",sizeof(out->action_hint));
+            SDL_strlcpy(out->action_hint,tutorial_translate("Select the equipment you want to wear or wield."),sizeof(out->action_hint));
         else if (strstr(view->action,"examine"))
-            SDL_strlcpy(out->action_hint,"Select an item to preview.",sizeof(out->action_hint));
+            SDL_strlcpy(out->action_hint,tutorial_translate("Select an item to preview."),sizeof(out->action_hint));
         else if (strstr(view->action,"use-item"))
-            SDL_strlcpy(out->action_hint,"Select the required item and choose Use.",sizeof(out->action_hint));
+            SDL_strlcpy(out->action_hint,tutorial_translate("Select the required item and choose Use."),sizeof(out->action_hint));
         else if (!strcmp(view->action,"change-active")
             && !strcmp(view->action_subject,"throwing"))
-            SDL_strlcpy(out->action_hint,"Choose a Throwing row, then confirm the change.",sizeof(out->action_hint));
-        else SDL_strlcpy(out->action_hint,"Make the requested selection in the open menu.",sizeof(out->action_hint));
+            SDL_strlcpy(out->action_hint,tutorial_translate("Choose a Throwing row, then confirm the change."),sizeof(out->action_hint));
+        else SDL_strlcpy(out->action_hint,tutorial_translate("Make the requested selection in the open menu."),sizeof(out->action_hint));
     } else {
         out->command=tutorial_command(view); out->primary=out->command!=0;
         if (out->primary) {
             const char *label = !strcmp(view->id,"item.throwing.use")
-                ? "Throw active weapon" : tutorial_command_label(out->command);
+                ? tutorial_translate("Throw active weapon") : tutorial_command_label(out->command);
             SDL_strlcpy(out->label[0],label,sizeof(out->label[0]));
             if (input==TUTORIAL_INPUT_KEYBOARD)
                 help_describe_command_bindings(out->command,binding,sizeof(binding));
@@ -335,52 +336,52 @@ static void tutorial_build_controls(const tutorial_view *view, tutorial_controls
                 sdl_gamepad_action_binding_short_label(out->command,binding,sizeof(binding));
             strnfmt(out->action_hint,sizeof(out->action_hint),"%s%s%s",out->label[0],binding[0]?": ":"",binding);
         } else {
-            const char *verb=strstr(view->action,"attack")?"Attack":"Move";
+            const char *verb=strstr(view->action,"attack")?tutorial_translate("Attack"):tutorial_translate("Move");
             strnfmt(out->action_hint,sizeof(out->action_hint),"%s%s",verb,
-                input==TUTORIAL_INPUT_CONTROLLER?" with your movement controls."
+                input==TUTORIAL_INPUT_CONTROLLER?tutorial_translate(" with your movement controls.")
                 :input==TUTORIAL_INPUT_TOUCH?(sdl_touch_round_layer_controls_active()
-                    ?" with the direction wheel or tap the target square."
-                    :" by tapping the target square.")
-                :input==TUTORIAL_INPUT_MOUSE?" by clicking the target square."
-                :" with your movement keys.");
+                    ?tutorial_translate(" with the direction wheel or tap the target square.")
+                    :tutorial_translate(" by tapping the target square."))
+                :input==TUTORIAL_INPUT_MOUSE?tutorial_translate(" by clicking the target square.")
+                :tutorial_translate(" with your movement keys."));
         }
     }
     if (input==TUTORIAL_INPUT_KEYBOARD) {
         if (out->native_command) SDL_strlcpy(out->shortcut[0],"x",sizeof(out->shortcut[0]));
-        else if (!native && tutorial_focus>=0 && tutorial_focus<3)
+        else if (!native && tutorial_focus>=0 && tutorial_focus<4)
             SDL_strlcpy(out->shortcut[tutorial_focus],"Space",sizeof(out->shortcut[0]));
         if (!native) SDL_strlcpy(out->shortcut[1],"Esc",sizeof(out->shortcut[1]));
         SDL_strlcpy(out->controls_hint,view->can_continue||tutorial_reading
-            ?(scrollable?"Tab: buttons | PgUp/PgDn: scroll":"Tab: buttons")
-            :(scrollable?"Ctrl+Tab: tutorial | PgUp/PgDn: read":"Ctrl+Tab: tutorial"),sizeof(out->controls_hint));
-        SDL_strlcpy(out->read_hint,"PgUp/Dn: read",sizeof(out->read_hint));
+            ?(scrollable?tutorial_translate("Tab: buttons | PgUp/PgDn: scroll"):tutorial_translate("Tab: buttons"))
+            :(scrollable?tutorial_translate("Ctrl+Tab: tutorial | PgUp/PgDn: read"):tutorial_translate("Ctrl+Tab: tutorial")),sizeof(out->controls_hint));
+        SDL_strlcpy(out->read_hint,tutorial_translate("PgUp/Dn: read"),sizeof(out->read_hint));
     } else if (input==TUTORIAL_INPUT_CONTROLLER) {
         /* The buttons already show their actions and controller shortcuts. */
         if (out->primary) out->action_hint[0]='\0';
         if (out->native_command) SDL_strlcpy(out->shortcut[0],binding,sizeof(out->shortcut[0]));
         if (!native) {
-            if (tutorial_focus>=0 && tutorial_focus<3)
+            if (tutorial_focus>=0 && tutorial_focus<4)
                 SDL_strlcpy(out->shortcut[tutorial_focus],confirm,sizeof(out->shortcut[0]));
             SDL_strlcpy(out->shortcut[1],back,sizeof(out->shortcut[1]));
         }
-        if (native) strnfmt(out->controls_hint,sizeof(out->controls_hint),"%s: tutorial buttons | %s: back",menu,back);
+        if (native) strnfmt(out->controls_hint,sizeof(out->controls_hint),tutorial_translate("%s: tutorial buttons | %s: back"),menu,back);
         else if (view->can_continue || tutorial_reading)
             SDL_strlcpy(out->controls_hint,
-                scrollable ? "D-pad: buttons | RS: scroll" : "D-pad: buttons",
+                scrollable ? tutorial_translate("D-pad: buttons | RS: scroll") : tutorial_translate("D-pad: buttons"),
                 sizeof(out->controls_hint));
         else if (scrollable) strnfmt(out->controls_hint,sizeof(out->controls_hint),
-            "%s: read card | RS: scroll",read);
-        strnfmt(out->read_hint,sizeof(out->read_hint),"%s: read",native?menu:read);
+            tutorial_translate("%s: read card | RS: scroll"),read);
+        strnfmt(out->read_hint,sizeof(out->read_hint),tutorial_translate("%s: read"),native?menu:read);
     } else if (input==TUTORIAL_INPUT_TOUCH) {
-        SDL_strlcpy(out->controls_hint,scrollable?"Swipe this card to read":"",sizeof(out->controls_hint));
-        SDL_strlcpy(out->read_hint,"Swipe: read",sizeof(out->read_hint));
+        SDL_strlcpy(out->controls_hint,scrollable?tutorial_translate("Swipe this card to read"):"",sizeof(out->controls_hint));
+        SDL_strlcpy(out->read_hint,tutorial_translate("Swipe: read"),sizeof(out->read_hint));
     } else {
-        SDL_strlcpy(out->controls_hint,scrollable?"Wheel or drag to read":"",sizeof(out->controls_hint));
-        SDL_strlcpy(out->read_hint,"Wheel: read",sizeof(out->read_hint));
+        SDL_strlcpy(out->controls_hint,scrollable?tutorial_translate("Wheel or drag to read"):"",sizeof(out->controls_hint));
+        SDL_strlcpy(out->read_hint,tutorial_translate("Wheel: read"),sizeof(out->read_hint));
     }
     if (!scrollable) out->read_hint[0]='\0';
-    if (out->shortcut[2][0]) SDL_strlcat(out->shortcut[2],": select",sizeof(out->shortcut[2]));
-    else SDL_strlcpy(out->shortcut[2],"Select mode",sizeof(out->shortcut[2]));
+    if (out->shortcut[2][0]) SDL_strlcat(out->shortcut[2],tutorial_translate(": select"),sizeof(out->shortcut[2]));
+    else SDL_strlcpy(out->shortcut[2],tutorial_translate("Select mode"),sizeof(out->shortcut[2]));
 }
 
 static bool tutorial_has_primary(const tutorial_view *view)
@@ -393,9 +394,9 @@ static bool tutorial_has_primary(const tutorial_view *view)
 
 static void tutorial_move_focus(int delta,const tutorial_view *view)
 {
-    tutorial_focus=(tutorial_focus+delta+3)%3;
+    tutorial_focus=(tutorial_focus+delta+4)%4;
     if (tutorial_focus==0 && !tutorial_has_primary(view))
-        tutorial_focus=delta<0?2:1;
+        tutorial_focus=delta<0?3:1;
 }
 
 static bool tutorial_pane_rect(enum pane_type pane, SDL_FRect *rect)
@@ -597,7 +598,7 @@ static bool tutorial_hit(float x, float y, const SDL_FRect *r)
 
 static void tutorial_update_mouse_hover(float x, float y)
 {
-    for (int i=0; i<3; ++i) {
+    for (int i=0; i<4; ++i) {
         if (!tutorial_hit(x,y,&tutorial_buttons[i])) continue;
         if (tutorial_focus != i) {
             tutorial_focus=i;
@@ -609,6 +610,16 @@ static void tutorial_update_mouse_hover(float x, float y)
 
 static void tutorial_activate(int button, const tutorial_view *view)
 {
+    if (button == 3) {
+        bool reading = tutorial_reading;
+        tutorial_set_language(!strcmp(tutorial_language(), "en") ? "ru" : "en");
+        (void)save_pane_config_to_json();
+        sdl_gameplay_tutorial_sync();
+        tutorial_reading = reading;
+        tutorial_focus = 3;
+        g_state.need_present = true;
+        return;
+    }
     if (button==0 && !view->can_continue && tutorial_reading) {
         tutorial_set_reading(false);
         tutorial_focus=0;
@@ -688,14 +699,13 @@ void sdl_gameplay_tutorial_render(void)
     SDL_FRect card_space;
     float margin, width, height, pad, line_h, body_y, body_h, heading_h;
     float button_h=44, button_pad, gap, footer_h, footer_y, hint_h[2];
-    float label_h[3]={0}, shortcut_h[3]={0};
+    float label_h[4]={0}, shortcut_h[4]={0};
     int label_px, shortcut_px, hint_px[2], first_button, button_count;
     int font_px, title_px, line_count, visible_lines;
-    char heading[256], normal_lines[48][SDL_TOUCH_TUTORIAL_LINE_LEN];
+    char heading[384];
     static char large_lines[512][SDL_TOUCH_TUTORIAL_LINE_LEN];
-    char (*lines)[SDL_TOUCH_TUTORIAL_LINE_LEN] = config.bigger_font
-        ? large_lines : normal_lines;
-    int line_capacity = config.bigger_font ? 512 : 48;
+    char (*lines)[SDL_TOUCH_TUTORIAL_LINE_LEN] = large_lines;
+    int line_capacity = 512;
     char large_body[8192];
     TTF_Font *font;
     const SDL_Color white = {240,239,231,255}, gold = {244,202,111,255};
@@ -812,8 +822,8 @@ void sdl_gameplay_tutorial_render(void)
     strnfmt(heading,sizeof(heading),"%s  %d/%d",view.title,view.step,view.step_count);
     for (;;) {
         button_h=minimum_button_h;
-        for (int i=first_button;i<3;++i) {
-            float text_w=(width-2*pad)/button_count-18;
+        for (int i=first_button;i<4;++i) {
+            float text_w=i==3 ? 38 : (width-2*pad-56)/button_count-18;
             label_h[i]=tutorial_text_height(controls.label[i],label_px,text_w);
             shortcut_h[i]=show_shortcuts
                 ? tutorial_text_height(controls.shortcut[i],shortcut_px,text_w) : 0;
@@ -960,9 +970,11 @@ void sdl_gameplay_tutorial_render(void)
             footer_y,width-2*pad,hint_px[1],muted,false);
     }
     tutorial_buttons[0]=(SDL_FRect){0};
-    for (int i=first_button;i<3;++i) {
-        tutorial_buttons[i] = (SDL_FRect){tutorial_card.x+pad+(i-first_button)*(width-2*pad)/button_count,
-            tutorial_card.y+height-pad-button_h,(width-2*pad)/button_count-6,button_h};
+    for (int i=first_button;i<4;++i) {
+        tutorial_buttons[i] = (SDL_FRect){i==3 ? tutorial_card.x+width-pad-50
+                : tutorial_card.x+pad+(i-first_button)*(width-2*pad-56)/button_count,
+            tutorial_card.y+height-pad-button_h,
+            i==3 ? 50 : (width-2*pad-56)/button_count-6,button_h};
         SDL_SetRenderDrawColor(g_state.renderer,i==tutorial_focus?66:34,i==tutorial_focus?58:43,47,255);
         SDL_RenderFillRect(g_state.renderer,&tutorial_buttons[i]);
         SDL_SetRenderDrawColor(g_state.renderer,i==tutorial_focus?244:90,i==tutorial_focus?202:103,111,255);
@@ -1161,7 +1173,7 @@ bool sdl_gameplay_tutorial_handle_event(const SDL_Event *ev)
         tutorial_pointer_mouse=mouse; tutorial_pointer_finger=finger;
         tutorial_pressed_button=-1; tutorial_pointer_gameplay=false;
         tutorial_scrolling=false;
-        for (int i=0;i<3;++i) if (tutorial_hit(x,y,&tutorial_buttons[i])) {
+        for (int i=0;i<4;++i) if (tutorial_hit(x,y,&tutorial_buttons[i])) {
             tutorial_focus=i; tutorial_pressed_button=i; g_state.need_present=true; return true;
         }
         if (tutorial_hit(x,y,&tutorial_card)) {

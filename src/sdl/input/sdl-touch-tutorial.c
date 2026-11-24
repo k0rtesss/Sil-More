@@ -205,8 +205,9 @@ int sdl_touch_tutorial_wrap_lines(cptr text, TTF_Font* font,
         }
 
         strnfmt(candidate, sizeof(candidate), "%s %s", current, word);
-        if (max_w > 1.0f
-            && sdl_touch_pane_story_text_width(font, candidate) > (int)max_w)
+        if (strlen(current) + 1 + word_len >= sizeof(candidate)
+            || (max_w > 1.0f
+                && sdl_touch_pane_story_text_width(font, candidate) > (int)max_w))
         {
             if (line_count >= max_lines) {
                 truncated = true;
