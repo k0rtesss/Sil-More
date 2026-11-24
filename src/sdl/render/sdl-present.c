@@ -189,7 +189,7 @@ static void sdl_render_smithing_section(const sdl_view* view, int row, int col,
     TTF_Font* font = sdl_smithing_face(ch, height);
     if (!font)
         return;
-    SDL_Color ink = sdl_color_from_attr(TERM_WHITE);
+    SDL_Color ink = sdl_color_from_attr(TERM_L_BLUE);
     int w, h;
     SDL_Texture* texture = sdl_ui_text_texture(font, label, ink, &w, &h);
     if (!texture || h > height || w > (free_end - col) * cw)

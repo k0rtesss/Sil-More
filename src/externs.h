@@ -661,7 +661,7 @@ extern bool graphics_are_ascii();
 extern void new_wandering_flow(monster_type* m_ptr, int y, int x);
 extern void new_wandering_destination(
     monster_type* m_ptr, monster_type* leader_ptr);
-extern void drop_iron_crown(monster_type* m_ptr, const char* msg);
+extern bool drop_iron_crown(monster_type* m_ptr, const char* msg);
 extern void make_alert(monster_type* m_ptr);
 extern void set_alertness(monster_type* m_ptr, int alertness);
 extern void perceive(void);
@@ -2429,7 +2429,7 @@ extern bool random_stair_location(int* sy, int* sx);
 extern void break_truce(bool obvious);
 extern bool similar_monsters(int m1y, int m1x, int m2y, int m2x);
 extern void scare_onlooking_friends(const monster_type* m_ptr, int amount);
-extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
+extern bool create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
 extern void award_quest_completion_exp(void);
 extern void apply_quest_rewards(int quest_idx);

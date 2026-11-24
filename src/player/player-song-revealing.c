@@ -13,26 +13,39 @@
 static byte song_revealing_hint[MAX_MONSTERS];  // Stores detection result quality
 static bool song_revealing_has_data = false;
 
-#define SONG_REVEALING_HINT_TTL 3
+#define SONG_REVEALING_DECAY 3
 #define SONG_REVEALING_FULL_VISIBILITY 10  // Threshold for full visibility
+
+bool song_revealing_monster_visible(int m_idx)
+{
+    return m_idx > 0 && m_idx < MAX_MONSTERS
+        && song_revealing_hint[m_idx] > SONG_REVEALING_FULL_VISIBILITY;
+}
+
+static void set_revealing_hint(int m_idx, byte strength)
+{
+    byte old = song_revealing_hint[m_idx];
+    song_revealing_hint[m_idx] = strength;
+    if (m_idx >= mon_max || !mon_list[m_idx].r_idx)
+        return;
+
+    if ((old > SONG_REVEALING_FULL_VISIBILITY) != song_revealing_monster_visible(m_idx))
+        update_mon(m_idx, false);
+    else if ((old == 0) != (strength == 0))
+        lite_spot(mon_list[m_idx].fy, mon_list[m_idx].fx);
+}
 
 void song_revealing_decay(void)
 {
+    if (!song_revealing_has_data)
+        return;
     bool any = false;
 
     for (int i = 1; i < MAX_MONSTERS; i++)
     {
-        if (song_revealing_hint[i] > 0)
-        {
-            // Decay the detection quality each turn (reduce by ~3-4 points per turn)
-            if (song_revealing_hint[i] > 3)
-                song_revealing_hint[i] -= 3;
-            else
-                song_revealing_hint[i] = 0;
-        }
-
-        if (song_revealing_hint[i] > 0)
-            any = true;
+        if (!song_revealing_hint[i]) continue;
+        set_revealing_hint(i, MAX(0, song_revealing_hint[i] - SONG_REVEALING_DECAY));
+        if (song_revealing_hint[i]) any = true;
     }
 
     song_revealing_has_data = any;
@@ -46,22 +59,15 @@ bool song_revealing_overlay(int m_idx, byte* a, char* c)
     if (m_idx <= 0 || m_idx >= MAX_MONSTERS)
         return false;
 
-    if (!song_revealing_hint[m_idx])
+    if (!song_revealing_hint[m_idx] || song_revealing_monster_visible(m_idx))
         return false;
 
-    monster_type* m_ptr = &mon_list[m_idx];
+    const monster_type* m_ptr = &mon_list[m_idx];
 
     if (!m_ptr->r_idx || m_ptr->ml)
         return false;
 
-    // If detection quality is high enough, make the monster fully visible
-    if (song_revealing_hint[m_idx] > SONG_REVEALING_FULL_VISIBILITY)
-    {
-        m_ptr->ml = true;
-        return false;  // Let normal rendering handle it
-    }
-
-    // Otherwise show as a hint marker
+    // A weak detection shows only an unidentified marker.
     if (graphics_are_ascii())
     {
         int base = 0x30;
@@ -210,17 +216,8 @@ void sing_song_of_revealing(int score)
         // This will determine visualization (full visibility vs hint marker)
         if (result > 0)
         {
-            // Store the detection result (capped at reasonable maximum)
-            song_revealing_hint[i] = (byte)MIN(result, 30);
             song_revealing_has_data = true;
-            
-            // If detection is strong enough, make fully visible immediately
-            if (result > SONG_REVEALING_FULL_VISIBILITY)
-            {
-                m_ptr->ml = true;
-            }
-            
-            lite_spot(m_ptr->fy, m_ptr->fx);
+            set_revealing_hint(i, (byte)MIN(result, 30));
         }
     }
 
@@ -232,7 +229,8 @@ void song_revealing_clear(void)
 {
     if (song_revealing_has_data)
     {
-        memset(song_revealing_hint, 0, MAX_MONSTERS * sizeof(byte));
+        for (int i = 1; i < MAX_MONSTERS; i++)
+            if (song_revealing_hint[i]) set_revealing_hint(i, 0);
         song_revealing_has_data = false;
     }
 }

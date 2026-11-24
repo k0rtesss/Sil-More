@@ -10,6 +10,7 @@
 s16b chest_check(int y, int x)
 {
     s16b this_o_idx, next_o_idx = 0;
+    s16b empty_chest = 0;
     if (!in_bounds(y, x)) return 0;
 
     /* Scan all objects in the grid */
@@ -27,11 +28,14 @@ s16b chest_check(int y, int x)
          * been discovered and must still be visible through any water. */
         if (o_ptr->tval == TV_CHEST
             && ((y == p_ptr->py && x == p_ptr->px) || object_is_visible(o_ptr)))
-            return (this_o_idx);
+        {
+            if (o_ptr->pval) return this_o_idx;
+            if (!empty_chest) empty_chest = this_o_idx;
+        }
     }
 
-    /* No chest */
-    return (0);
+    /* An empty shell remains inspectable once the pile has no closed chest. */
+    return empty_chest;
 }
 
 typedef enum
@@ -402,6 +406,7 @@ static void chest_trap(int y, int x, s16b o_idx)
 
         update_combat_rolls1b(NULL, PLAYER, true);
 
+        killer_mark_other(SCORE_KILLER_TRAP);
         fire_dam_pure(10 + bonus * 2, 4, true, "a trapped chest");
 
         /* Make some noise */

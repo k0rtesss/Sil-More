@@ -412,6 +412,10 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         return;
     }
 
+    /* A strong result reveals the creature even outside the drawn map. */
+    if (song_revealing_monster_visible(m_idx))
+        flag = true;
+
     /* The monster is now visible */
     if (flag || immobile_seen)
     {
@@ -449,10 +453,6 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
 
             /* Window stuff */
             p_ptr->window |= PW_MONLIST;
-
-            // identify see invisible items
-            if ((r_ptr->flags2 & (RF2_INVISIBLE)) && (p_ptr->see_inv > 0))
-                ident_see_invisible(m_ptr);
         }
     }
 
@@ -488,6 +488,11 @@ static void update_mon_aux(int m_idx, bool full, bool preview)
         {
             /* Mark as easily visible */
             m_ptr->mflag |= (MFLAG_VIEW);
+
+            /* A creature sensed earlier can now demonstrate See Invisible. */
+            if ((r_ptr->flags2 & RF2_INVISIBLE) && p_ptr->see_inv > 0
+                && player_can_see_bold(fy, fx))
+                ident_see_invisible(m_ptr);
 
             /* Disturb on appearance */
             disturb(0, 0);

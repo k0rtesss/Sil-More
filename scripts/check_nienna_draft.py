@@ -19,6 +19,16 @@ static int stage;
 static int offers[RUN_BLESSING_OFFER_COUNT];
 static u64b expected;
 static bool known_curses;
+static int expected_curse_rows = 3;
+static int scarce_pool_rolls = -1;
+
+u32b __real_Rand_div(u32b bound);
+u32b __wrap_Rand_div(u32b bound)
+{
+    if (scarce_pool_rolls >= 0)
+        fixture_assert(++scarce_pool_rolls < 128);
+    return __real_Rand_div(bound);
+}
 
 /* This fixture owns one offscreen term. Drive its events explicitly so
  * background pane reconstruction and real-time fade delays stay out of it. */
@@ -108,12 +118,12 @@ char __wrap_metarun_inkey_hidden(void)
     sdl_poetry_screen_state *screen = &g_sdl_poetry_screen;
     render_picker();
     if (replay == CURSE_PICK) {
-        fixture_assert(screen->choice_count == 3 && screen->selection_limit == 0);
-        for (int i = 0; i < 3; i++) {
+        fixture_assert(screen->choice_count == expected_curse_rows && screen->selection_limit == 0);
+        for (int i = 0; i < screen->choice_count; i++) {
             fixture_assert(screen->choices[i].body[0]);
             fixture_assert((screen->choices[i].effect[0] != 0) == known_curses);
         }
-        if (!stage && fixture_width == 720) capture("curse-picker");
+        if (expected_curse_rows == 3 && !stage && fixture_width == 720) capture("curse-picker");
         return stage++ ? '\r' : '2';
     }
 
@@ -208,11 +218,47 @@ static void check_draft(void)
         stage = 0;
         fixture_assert(metarun_debug_preview_curse_menu() >= 0 && stage == 2);
     }
+
+    /* Saturate the shipped catalogue, leaving Fate's Tyranny unowned so
+     * ordinary selection still opens the menu. */
+    int fate = -1;
+    for (int id = 0; id < MIN(z_info->cu_max, METAR_CURSE_SLOTS); id++) {
+        if (!cu_info[id].name) continue;
+        fixture_assert(CURSE_CURSE_CAP(id) > 0);
+        CURSE_SET(id, CURSE_CURSE_CAP(id));
+        if (cu_info[id].flags_u & CUR_NOCHOICE) fate = id;
+    }
+    fixture_assert(fate > 0);
+    CURSE_SET(fate, 0);
+    CURSE_SET(0, 0);
+    expected_curse_rows = 2;
+    scarce_pool_rolls = stage = 0;
+    int chosen = menu_choose_one_curse(0);
+    fixture_assert((chosen == fate || chosen == 0) && stage == 2);
+    CURSE_SET(0, CURSE_CURSE_CAP(0));
+    expected_curse_rows = 1;
+    stage = 0;
+    fixture_assert(menu_choose_one_curse(0) == fate && stage == 2);
+
+    /* Fate picks automatically. A legal last stack whose integer weight
+     * rounded to zero is still preferable to a capped or unused entry. */
+    CURSE_SET(fate, CURSE_CURSE_CAP(fate));
+    stage = 0;
+    u32b previous_message = message_sequence(0);
+    fixture_assert(menu_choose_one_curse(0) == -1 && stage == 0);
+    fixture_assert(message_sequence(0) != previous_message);
+    fixture_assert(strstr(message_str(0), "You already bear every available curse."));
+    message_discard_pending();
+    CURSE_SET(0, CURSE_CURSE_CAP(0) - 1);
+    fixture_assert(menu_choose_one_curse(0) == 0 && stage == 0);
+    scarce_pool_rolls = -1;
+    expected_curse_rows = 3;
+    metar = original;
 }
 '''
 
 base.OUT = base.ROOT / "scripts/output/nienna-draft-check"
-base.EXTRA_WRAPS = ("metarun_inkey_hidden", "screen_push_supporting_panes_hidden",
+base.EXTRA_WRAPS = ("metarun_inkey_hidden", "Rand_div", "screen_push_supporting_panes_hidden",
                     "screen_pop_supporting_panes_hidden")
 base.HARNESS = base.PREFIX + CHECKS + INIT + r'''
     static player_race race;
@@ -221,6 +267,7 @@ base.HARNESS = base.PREFIX + CHECKS + INIT + r'''
     ANGBAND_DIR_EDIT = DRAFT_EDIT_DIR;
     ANGBAND_DIR_DATA = ".";
     fixture_assert(init_z_info() == 0 && init_cu_info() == 0);
+    fixture_assert(messages_init() == 0);
     g_sdl_blocking_key_wait = true;
     view->t.xtra_hook = fixture_term_extra;
     fixture.active = false;
@@ -235,7 +282,7 @@ base.HARNESS = base.PREFIX + CHECKS + INIT + r'''
     }
     printf("%dx%d @%.3f: twelve fixed offers, four-pick limit, replace/confirm/cancel, touch scrolling, keyboard and curse choices PASS\n",
         fixture_width, fixture_height, fixture_density);
-    sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
+    messages_free(); sdl_ui_text_cache_clear(); sdl_story_font_cache_clear(); term_nuke(&view->t);
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window); TTF_Quit(); SDL_Quit();
 }
 '''

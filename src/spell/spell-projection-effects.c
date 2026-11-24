@@ -1724,11 +1724,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     /* Get the monster race. */
     r_ptr = &r_info[m_ptr->r_idx];
 
-    if (who > 0 && who < mon_max) {
-        killer_mark_monster(m_ptr);
-    } else {
-        killer_mark_other(SCORE_KILLER_OTHER);
-    }
+    monster_type* attacker = (who > 0 && who < mon_max) ? m_ptr : NULL;
 
     /* Get the monster name */
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
@@ -1759,6 +1755,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by acid!");
+        killer_mark_monster(attacker);
         acid_dam(dam, dd, dd * ds, dam, killer);
         break;
     }
@@ -1768,6 +1765,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by lightning!");
+        killer_mark_monster(attacker);
         elec_dam(dam, dd, dd * ds, dam, killer);
         break;
     }
@@ -1777,7 +1775,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by fire!");
-        fire_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
+        fire_dam_pure_observed(dd, ds, true, killer, attacker);
         break;
     }
 
@@ -1786,7 +1784,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by cold!");
-        cold_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
+        cold_dam_pure_observed(dd, ds, true, killer, attacker);
         break;
     }
 
@@ -1795,7 +1793,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by something!");
-        dark_dam_pure_observed(dd, ds, true, killer, who > 0 ? m_ptr : NULL);
+        dark_dam_pure_observed(dd, ds, true, killer, attacker);
         break;
     }
 
@@ -1812,7 +1810,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by poison!");
-        pois_dam_pure_observed(dd, ds, true, who > 0 ? m_ptr : NULL);
+        pois_dam_pure_observed(dd, ds, true, attacker);
         break;
     }
 
@@ -1882,6 +1880,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
 
             if (net_dam)
             {
+                killer_mark_monster(attacker);
                 take_hit(net_dam, killer);
 
                 // deal with crippling shot ability
@@ -1979,6 +1978,7 @@ bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
 
             if (net_dam)
             {
+                killer_mark_monster(attacker);
                 take_hit(net_dam, killer);
             }
 

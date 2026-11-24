@@ -17,7 +17,6 @@ void sing_song_of_freedom(int score)
     int base_difficulty, difficulty;
     int result;
     int new_feat;
-    object_type* o_ptr;
     bool closed_chasm = false;
 
     // set the base difficulty
@@ -38,49 +37,27 @@ void sing_song_of_freedom(int score)
             if (!in_bounds_fully(y, x))
                 continue;
 
-            // get the object present (if any)
-            o_ptr = &o_list[cave_o_idx[y][x]];
-
-            /* Locked/trapped chest */
-            if (o_ptr->tval == TV_CHEST)
+            for (object_type* chest = get_first_object(y, x); chest;
+                 chest = get_next_object(chest))
             {
-                /* Disarm/Unlock traps */
-                if (o_ptr->pval > 0)
+                if (chest->tval != TV_CHEST || chest->pval <= 0)
+                    continue;
+                difficulty = base_difficulty + 5 + flow_dist(FLOW_PLAYER_NOISE, y, x);
+                if (skill_check(PLAYER, score, difficulty, NULL) > 0)
                 {
-                    difficulty = base_difficulty + 5
-                        + flow_dist(FLOW_PLAYER_NOISE, y, x);
-                    if (skill_check(PLAYER, score, difficulty, NULL) > 0)
-                    {
-                        /* Disarm or Unlock */
-                        o_ptr->pval = (0 - o_ptr->pval);
-
-                        /* Identify */
-                        object_known(o_ptr);
-                    }
+                    chest->pval = -chest->pval;
+                    object_known(chest);
                 }
             }
 
             // Chasm
-            else if (cave_feat[y][x] == FEAT_CHASM)
+            if (cave_feat[y][x] == FEAT_CHASM)
             {
                 closed_chasm |= close_chasm(
                     y, x, score - flow_dist(FLOW_PLAYER_NOISE, y, x) - 5);
             }
 
-            /* Invisible trap */
-            else if (cave_trap_bold(y, x) && (cave_info[y][x] & (CAVE_HIDDEN)))
-            {
-                difficulty
-                    = base_difficulty + 5 + flow_dist(FLOW_PLAYER_NOISE, y, x);
-                if (skill_check(PLAYER, score, difficulty, NULL) > 0)
-                {
-                    /* Remove the trap */
-                    cave_feat[y][x] = FEAT_FLOOR;
-                    sil_achievements_on_event(SIL_ACH_RELEASE_FROM_BONDAGE);
-                }
-            }
-
-            /* Visible trap */
+            /* Disarm both visible and hidden traps. */
             else if (cave_trap_bold(y, x))
             {
                 difficulty
@@ -88,13 +65,8 @@ void sing_song_of_freedom(int score)
                 if (skill_check(PLAYER, score, difficulty, NULL) > 0)
                 {
                     /* Remove the trap */
-                    cave_feat[y][x] = FEAT_FLOOR;
+                    cave_set_feat(y, x, FEAT_FLOOR);
                     sil_achievements_on_event(SIL_ACH_RELEASE_FROM_BONDAGE);
-
-                    if (cave_info[y][x] & (CAVE_SEEN))
-                    {
-                        lite_spot(y, x);
-                    }
                 }
             }
 
@@ -133,7 +105,7 @@ void sing_song_of_freedom(int score)
                     if (new_feat <= FEAT_DOOR_HEAD + 0x08)
                         new_feat = FEAT_DOOR_HEAD;
 
-                    cave_feat[y][x] = new_feat;
+                    cave_set_feat(y, x, new_feat);
                 }
             }
 
@@ -151,7 +123,7 @@ void sing_song_of_freedom(int score)
                     if (new_feat < FEAT_DOOR_HEAD)
                         new_feat = FEAT_DOOR_HEAD;
 
-                    cave_feat[y][x] = new_feat;
+                    cave_set_feat(y, x, new_feat);
                 }
             }
 

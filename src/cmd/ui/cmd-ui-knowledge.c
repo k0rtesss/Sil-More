@@ -8940,11 +8940,11 @@ void apply_magic_fake(object_type* o_ptr)
         break;
     }
 
-    /*give them one charge*/
+    /* Give sample staves one usable charge. */
     case TV_STAFF:
     {
-        if (o_ptr->pval < 1)
-            o_ptr->pval = 1;
+        if (o_ptr->pval < CHANNELING_CHARGE_MULTIPLIER)
+            o_ptr->pval = CHANNELING_CHARGE_MULTIPLIER;
 
         break;
     }

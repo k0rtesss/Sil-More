@@ -235,7 +235,6 @@ static bool create_chosen_artefact_marked(
     object_type* i_ptr;
     object_type object_type_body;
     artefact_type* a_ptr = &a_info[name1];
-    bool quest_reward = creation != ARTEFACT_FIXED_DROP;
 
     log_trace("create_chosen_artefact: Creating artifact %d at (%d,%d), identify=%s", name1, y, x, identify ? "true" : "false");
 
@@ -272,6 +271,7 @@ static bool create_chosen_artefact_marked(
     i_ptr->name1 = name1;
 
     /* Mega-Hack -- Actually create the artefact */
+    int artefacts_before = p_ptr->artefacts;
     apply_magic(i_ptr, -1, true, true, true, true);
 
     if (!character_dungeon)
@@ -281,15 +281,10 @@ static bool create_chosen_artefact_marked(
 
     log_trace("create_chosen_artefact: Magic applied successfully");
 
-    // Identify it if desired
+    /* Set the item description before placement. Grant awareness only after
+     * a physical item exists, since it can award identification XP. */
     if (identify)
-    {
-        log_trace("create_chosen_artefact: Identifying artifact %d", name1);
-        if (!quest_reward)
-            object_aware(i_ptr);
         object_known(i_ptr);
-        log_trace("create_chosen_artefact: Artifact identified");
-    }
 
     log_trace("create_chosen_artefact: About to drop artifact %d at (%d,%d)", name1, y, x);
 
@@ -297,28 +292,38 @@ static bool create_chosen_artefact_marked(
     s16b placed = drop_near(i_ptr, -1, y, x);
     if (!placed)
     {
-        if (quest_reward)
-            a_ptr->cur_num = 0;
+        a_ptr->cur_num = 0;
+        p_ptr->artefacts = artefacts_before;
         return false;
     }
 
-    /* Identification can award XP. Wait until the promised item exists. */
-    if (quest_reward)
+    if (identify)
         object_aware(&o_list[placed]);
 
     log_trace("create_chosen_artefact: Successfully created and dropped artifact %d", name1);
     return true;
 }
 
-extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
+bool create_chosen_artefact(byte name1, int y, int x, bool identify)
 {
-    create_chosen_artefact_marked(name1, y, x, identify, 0, ARTEFACT_FIXED_DROP);
+    return create_chosen_artefact_marked(
+        name1, y, x, identify, 0, ARTEFACT_FIXED_DROP);
 }
 
 bool create_quest_reward_artefact(byte name1, int y, int x, bool tulkas_prize)
 {
     return create_chosen_artefact_marked(name1, y, x, true, 0,
         tulkas_prize ? ARTEFACT_TULKAS_PRIZE : ARTEFACT_QUEST_REWARD);
+}
+
+static void release_unseen_lost_artefact(const object_type* loot)
+{
+    if (!loot->name1
+        || (loot->name1 >= ART_MORGOTH_0 && loot->name1 <= ART_MORGOTH_3))
+        return;
+    artefact_type* artefact = &a_info[loot->name1];
+    if (!(artefact->seen & ART_SEEN_PHYSICAL) && !artefact->found_num)
+        artefact->cur_num = 0;
 }
 
 static int drop_carried_objects(monster_type* m_ptr, u32b source_ident)
@@ -334,8 +339,9 @@ static int drop_carried_objects(monster_type* m_ptr, u32b source_ident)
         loot.held_m_idx = loot.next_o_idx = 0;
         loot.ident &= ~IDENT_HIDE_CARRY;
         loot.ident |= source_ident;
-        if (drop_near(&loot, -1, m_ptr->fy, m_ptr->fx)
-            && loot.tval == TV_POTION && loot.sval == SV_POTION_ORCISH_LIQUOR)
+        if (!drop_near(&loot, -1, m_ptr->fy, m_ptr->fx))
+            release_unseen_lost_artefact(&loot);
+        else if (loot.tval == TV_POTION && loot.sval == SV_POTION_ORCISH_LIQUOR)
             liquor_stacks++;
     }
     return liquor_stacks;
@@ -522,11 +528,9 @@ int drop_loot(monster_type* m_ptr)
         object_known(i_ptr);
         i_ptr->ident |= source_ident;
 
-        /* Assume seen XXX XXX XXX */
-        dump_item++;
-
         /* Drop it in the dungeon */
-        drop_near(i_ptr, -1, y, x);
+        if (drop_near(i_ptr, -1, y, x))
+            dump_item++;
 
         // Drop one fewer object to compensate
         number--;
@@ -571,11 +575,9 @@ int drop_loot(monster_type* m_ptr)
 
         i_ptr->ident |= source_ident;
 
-        /* Assume seen XXX XXX XXX */
-        dump_item++;
-
         /* Drop it in the dungeon */
-        drop_near(i_ptr, -1, y, x);
+        if (drop_near(i_ptr, -1, y, x))
+            dump_item++;
 
         // Drop one fewer object to compensate
         number--;
@@ -602,6 +604,7 @@ int drop_loot(monster_type* m_ptr)
     /* Drop some objects */
     for (j = 0; j < number; j++)
     {
+        int artefacts_before = p_ptr->artefacts;
         /* Get local object */
         i_ptr = &object_type_body;
 
@@ -653,11 +656,14 @@ int drop_loot(monster_type* m_ptr)
 
         i_ptr->ident |= source_ident;
 
-        /* Assume seen XXX XXX XXX */
-        dump_item++;
-
         /* Drop it in the dungeon */
-        drop_near(i_ptr, -1, y, x);
+        if (drop_near(i_ptr, -1, y, x))
+            dump_item++;
+        else if (i_ptr->name1)
+        {
+            a_info[i_ptr->name1].cur_num = 0;
+            p_ptr->artefacts = artefacts_before;
+        }
     }
 
     object_generation_mode = old_gen_mode;
@@ -1138,6 +1144,11 @@ void monster_death(int m_idx)
                 && (m_ptr->ml || (r_ptr->flags1 & RF1_UNIQUE)))
                 lore_treasure(cave_m_idx[m_ptr->fy][m_ptr->fx], liquor_stacks);
         }
+    }
+    else
+    {
+        for (int idx = m_ptr->hold_o_idx; idx; idx = o_list[idx].next_o_idx)
+            release_unseen_lost_artefact(&o_list[idx]);
     }
 
     return;

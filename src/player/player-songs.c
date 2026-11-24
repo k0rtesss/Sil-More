@@ -75,21 +75,46 @@ void change_song(int song)
         return;
     }
 
+    bool starts_theme = song != SNG_NOTHING && song != SNG_EXCHANGE_THEMES;
+    if (starts_theme && p_ptr->csp < 1)
+    {
+        msg_print("You have no Voice left to sing.");
+        return;
+    }
+
     if (song == SNG_DISGUISE && song_disguise_any_monster_observes_player())
     {
         msg_print("You cannot begin the Song of Disguise while observed.");
         return;
     }
 
-    if ((song_to_change == 1) && new_song_is_duel)
+    if (new_song_is_duel && p_ptr->song_lockout_timer > 0)
     {
-        if (p_ptr->song_lockout_timer > 0)
-        {
-            msg_print("Your voice has not yet recovered for such a song.");
+        msg_print("Your voice has not yet recovered for such a song.");
+        return;
+    }
+
+    bool breaks_silence = starts_theme && chosen_oath(OATH_SILENCE)
+        && !oath_invalid(OATH_SILENCE);
+    if (breaks_silence)
+    {
+        cptr prompt = oath_confirmation_prompt(OATH_SILENCE);
+        if (!prompt || !prompt[0])
+            prompt = "Are you certain you wish to break your Oath of Silence?";
+        if (!get_check_oath_multiline(prompt))
             return;
-        }
-        if (!song_duel_select_target(song))
-            return;
+    }
+
+    if (new_song_is_duel && !song_duel_select_target(song))
+        return;
+
+    /* A cancelled or ineligible duel never begins a song. */
+    if (breaks_silence)
+    {
+        log_info("Player broke oath of silence to sing");
+        do_cmd_note("Broke your oath", p_ptr->depth);
+        apply_oath_breaking_curse(OATH_SILENCE);
+        p_ptr->oaths_broken |= OATH_SILENCE_FLAG;
     }
 
     if ((song_to_change == 1) && old_song_is_duel && !new_song_is_duel)

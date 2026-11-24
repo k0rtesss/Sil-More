@@ -62,7 +62,7 @@ void attempt_to_cheat_death(void)
  * when he dies, since the "You die." message is shown before setting
  * the player to "dead".
  */
-void take_hit(int dam, cptr kb_str)
+static void take_hit_from_source(int dam, cptr kb_str, killer_info source)
 {
     int old_chp = p_ptr->chp;
 
@@ -109,7 +109,7 @@ void take_hit(int dam, cptr kb_str)
                 "%s (while hallucinating)", kb_str);
         }
 
-        killer_commit(kb_str);
+        killer_commit_source(source);
         sil_achievements_on_wolf_death(killer_last() && killer_last()->first_wolf);
         sil_achievements_on_death();
 
@@ -128,7 +128,7 @@ void take_hit(int dam, cptr kb_str)
         SDL_strlcat(notes_buffer, "\n", sizeof(notes_buffer));
 
         /*killed by */
-        sprintf(buf, "Slain by %s.", p_ptr->died_from);
+        strnfmt(buf, sizeof(buf), "Slain by %s.", p_ptr->died_from);
 
         /* Write message */
         do_cmd_note(buf, p_ptr->depth);
@@ -161,6 +161,12 @@ void take_hit(int dam, cptr kb_str)
 
     // Cancel entrancement
     set_entranced(0);
+}
+
+void take_hit(int dam, cptr kb_str)
+{
+    /* Bind the pending mark to this hit before its side effects run. */
+    take_hit_from_source(dam, kb_str, killer_take_pending());
 }
 
 /*
@@ -2351,12 +2357,13 @@ void acid_damage_items(int raw_dam, int min_raw, int max_raw, int damage)
  */
 void acid_dam(int raw_dam, int min_raw, int max_raw, int hp_dam, cptr kb_str)
 {
+    killer_info source = killer_take_pending();
     /* Abort if no damage to receive */
     if (hp_dam <= 0)
         return;
 
     /* Take damage */
-    take_hit(hp_dam, kb_str);
+    take_hit_from_source(hp_dam, kb_str, source);
 
     /* Elemental item damage */
     acid_damage_items(raw_dam, min_raw, max_raw, hp_dam);
@@ -2367,12 +2374,13 @@ void acid_dam(int raw_dam, int min_raw, int max_raw, int hp_dam, cptr kb_str)
  */
 void elec_dam(int raw_dam, int min_raw, int max_raw, int hp_dam, cptr kb_str)
 {
+    killer_info source = killer_take_pending();
     /* Abort if no damage to receive */
     if (hp_dam <= 0)
         return;
 
     /* Take damage */
-    take_hit(hp_dam, kb_str);
+    take_hit_from_source(hp_dam, kb_str, source);
 
     /* Elemental item damage */
     elemental_attack_affect_multiple_items(GF_ELEC, raw_dam, min_raw, max_raw,
@@ -2485,12 +2493,13 @@ static void log_elemental_damage_context(const char* tag, cptr kb_str, int dam,
 void fire_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str)
 {
+    killer_info source = killer_take_pending();
     /* Abort if no damage to receive */
     if (hp_dam <= 0)
         return;
 
     /* Take damage */
-    take_hit(hp_dam, kb_str);
+    take_hit_from_source(hp_dam, kb_str, source);
 
     /* Elemental item damage */
     elemental_attack_affect_multiple_items(GF_FIRE, raw_dam, min_raw, max_raw,
@@ -2524,6 +2533,9 @@ void fire_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 void fire_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
     monster_type* observer)
 {
+    killer_info source = killer_take_pending();
+    if (observer)
+        source = killer_monster_source(observer);
     int dam = damroll(dd, ds);
     int net_dam;
     int prt = protection_roll(GF_FIRE, false);
@@ -2548,7 +2560,7 @@ void fire_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
         return;
 
     /* Take damage */
-    take_hit(net_dam, kb_str);
+    take_hit_from_source(net_dam, kb_str, source);
 
     /* Elemental item damage */
     elemental_attack_affect_multiple_items(GF_FIRE, dam, dd, dd * ds,
@@ -2564,12 +2576,13 @@ void fire_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
 void cold_dam_mixed(int raw_dam, int min_raw, int max_raw, int hp_dam,
     cptr kb_str)
 {
+    killer_info source = killer_take_pending();
     /* Abort if no damage to receive */
     if (hp_dam <= 0)
         return;
 
     /* Take damage */
-    take_hit(hp_dam, kb_str);
+    take_hit_from_source(hp_dam, kb_str, source);
 
     /* Elemental item damage */
     elemental_attack_affect_multiple_items(GF_COLD, raw_dam, min_raw, max_raw,
@@ -2590,6 +2603,9 @@ void cold_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 void cold_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
     monster_type* observer)
 {
+    killer_info source = killer_take_pending();
+    if (observer)
+        source = killer_monster_source(observer);
     int dam = damroll(dd, ds);
     int net_dam;
     int prt = protection_roll(GF_COLD, false);
@@ -2614,7 +2630,7 @@ void cold_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
         return;
 
     /* Take damage */
-    take_hit(net_dam, kb_str);
+    take_hit_from_source(net_dam, kb_str, source);
 
     /* Elemental item damage */
     elemental_attack_affect_multiple_items(GF_COLD, dam, dd, dd * ds,
@@ -2629,12 +2645,13 @@ void cold_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
  */
 void dark_dam_mixed(int dam, cptr kb_str)
 {
+    killer_info source = killer_take_pending();
     /* Abort if no damage to receive */
     if (dam <= 0)
         return;
 
     /* Take damage */
-    take_hit(dam, kb_str);
+    take_hit_from_source(dam, kb_str, source);
 }
 
 /*
@@ -2648,6 +2665,9 @@ void dark_dam_pure(int dd, int ds, bool update_rolls, cptr kb_str)
 void dark_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
     monster_type* observer)
 {
+    killer_info source = killer_take_pending();
+    if (observer)
+        source = killer_monster_source(observer);
     int dam = damroll(dd, ds);
     int net_dam;
     int prt = protection_roll(GF_DARK, false);
@@ -2675,7 +2695,7 @@ void dark_dam_pure_observed(int dd, int ds, bool update_rolls, cptr kb_str,
         return;
 
     /* Take damage */
-    take_hit(net_dam, kb_str);
+    take_hit_from_source(net_dam, kb_str, source);
 }
 
 /*

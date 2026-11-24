@@ -496,6 +496,7 @@ errr rd_dungeon(void)
         {
             cave_o_idx[y][x] = 0;
             cave_m_idx[y][x] = 0;
+            cave_rewired[y][x] = 0;
             cave_natural[y][x] = 0;
         }
     }
@@ -771,7 +772,9 @@ errr rd_dungeon(void)
 
             for (i = count; i > 0; i--)
             {
-                cave_rewired[y][x] = tmp8u;
+                /* Earlier saves could retain wiring after a trap disappeared. */
+                if (tmp8u && trap_is_rewireable(cave_feat[y][x]))
+                    cave_rewired[y][x] = tmp8u;
 
                 if (++x >= p_ptr->cur_map_wid)
                 {

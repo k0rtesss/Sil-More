@@ -460,7 +460,15 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
     bool seen = (!blind && m_ptr->ml);
 
     /* Recheck legality and pay declared non-song costs before any effect. */
+    int old_mana = m_ptr->mana;
     if (!monster_ranged_commit(m_ptr, attack)) return false;
+    /* A failed hatch leaves the monster free to take an ordinary action. */
+    if (attack == 96 + 16 && !hatch_spider(m_ptr))
+    {
+        m_ptr->mana = old_mana;
+        return false;
+    }
+
     /* Casting is a completed nonmovement action, never a deliberate wait. */
     m_ptr->previous_action[0] = ACTION_ARCHERY;
 
@@ -803,13 +811,9 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         break;
     }
 
-        /* RF4_HATCH_SPIDER */
+    /* RF4_HATCH_SPIDER was resolved before recording the cast. */
     case 96 + 16:
-    {
-        hatch_spider(m_ptr);
-
         break;
-    }
 
         /* RF4_DIM */
     case 96 + 17:

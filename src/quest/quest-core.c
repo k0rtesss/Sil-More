@@ -11,6 +11,31 @@ void quests_on_level_departure(void)
 {
     varda_quest_fail_if_bastion_missed();
     niena_quest_leave_level();
+
+    if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
+    {
+        p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
+        p_ptr->varda_level = 0;
+        /* The encounter still counts against the initiated quest cap. */
+    }
+
+    if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED
+        && p_ptr->aule_quest < AULE_QUEST_REWARDED)
+    {
+        if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE)
+            msg_print("You have abandoned Aulë's forge. The quest is lost.");
+        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+        p_ptr->aule_level = 0;
+    }
+
+    if (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED
+        && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    {
+        if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE)
+            msg_print("You have abandoned the tomb. Mandos' quest is lost.");
+        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        p_ptr->mandos_level = 0;
+    }
 }
 
 /*

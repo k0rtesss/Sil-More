@@ -17,6 +17,9 @@ typedef struct killer_info {
 void killer_reset(void);
 void killer_mark_monster(const struct monster_type* m_ptr);
 void killer_mark_other(score_killer_kind kind);
+killer_info killer_monster_source(const struct monster_type* m_ptr);
+killer_info killer_take_pending(void);
+void killer_commit_source(killer_info source);
 void killer_commit(cptr cause);
 const killer_info* killer_last(void);
 

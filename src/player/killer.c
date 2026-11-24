@@ -13,44 +13,45 @@ void killer_reset(void)
     memset(&last_info, 0, sizeof(last_info));
 }
 
-static void killer_set_pending(score_killer_kind kind, score_guid64 guid,
-                               u16b race_index)
+killer_info killer_monster_source(const monster_type* m_ptr)
 {
-    pending_info.kind = kind;
-    pending_info.guid = guid;
-    pending_info.race_index = race_index;
-    pending_info.first_wolf = false;
-    pending_info.valid = true;
+    return (killer_info){
+        .valid = true,
+        .kind = SCORE_KILLER_MONSTER,
+        .guid = score_guid_from_u64(r_info[m_ptr->r_idx].guid),
+        .race_index = (u16b)m_ptr->r_idx,
+        .first_wolf = m_ptr->achievement_first_wolf && m_ptr->r_idx == 11
+    };
 }
 
 void killer_mark_monster(const monster_type* m_ptr)
 {
-    if (!m_ptr)
-        return;
-
-    monster_race* r_ptr = &r_info[m_ptr->r_idx];
-    guid64 guid = score_guid_from_u64(r_ptr->guid);
-    killer_set_pending(SCORE_KILLER_MONSTER, guid, (u16b)m_ptr->r_idx);
-    pending_info.first_wolf = m_ptr->achievement_first_wolf && m_ptr->r_idx == 11;
+    if (m_ptr)
+        pending_info = killer_monster_source(m_ptr);
 }
 
 void killer_mark_other(score_killer_kind kind)
 {
-    killer_set_pending(kind, score_guid_from_u64(0), 0);
+    pending_info = (killer_info){ .valid = true, .kind = kind };
+}
+
+killer_info killer_take_pending(void)
+{
+    killer_info source = pending_info;
+    pending_info.valid = false;
+    return source;
+}
+
+void killer_commit_source(killer_info source)
+{
+    last_info = source.valid ? source
+        : (killer_info){ .valid = true, .kind = SCORE_KILLER_OTHER };
 }
 
 void killer_commit(cptr cause)
 {
     (void)cause;
-    if (pending_info.valid) {
-        last_info = pending_info;
-        pending_info.valid = false;
-    } else {
-        killer_set_pending(SCORE_KILLER_OTHER, score_guid_from_u64(0), 0);
-        last_info = pending_info;
-        pending_info.valid = false;
-    }
-    last_info.valid = true;
+    killer_commit_source(killer_take_pending());
 }
 
 const killer_info* killer_last(void)

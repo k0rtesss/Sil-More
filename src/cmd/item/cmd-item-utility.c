@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "cave/cave-environment.h"
 #include "monster/monster-ai.h"
 #include "externs.h"
 #include "item_set.h"
@@ -38,8 +39,9 @@ void do_cmd_exchange(void)
     sdl_player_exchange_cancel_direction_prompt();
 
     /* Get location */
-    y = p_ptr->py + ddy[dir];
-    x = p_ptr->px + ddx[dir];
+    int from_y = p_ptr->py, from_x = p_ptr->px;
+    y = from_y + ddy[dir];
+    x = from_x + ddx[dir];
 
     // deal with overburdened characters
     if (p_ptr->total_weight > weight_limit() * 3 / 2)
@@ -96,6 +98,13 @@ void do_cmd_exchange(void)
         /* Message */
         msg_print("You cannot enter the rubble.");
 
+        return;
+    }
+    else if (cave_feat[y][x] == FEAT_CHASM
+        && (cave_info[y][x] & (CAVE_SEEN | CAVE_MARK))
+        && cave_environment_known_feature(y, x) == FEAT_CHASM)
+    {
+        msg_print("You cannot exchange places over the chasm.");
         return;
     }
     else
@@ -168,7 +177,8 @@ void do_cmd_exchange(void)
     }
 
     // recalculate the monster info (in case confusion changed the move)
-    m_ptr = &mon_list[cave_m_idx[y][x]];
+    int m_idx = cave_m_idx[y][x];
+    m_ptr = &mon_list[m_idx];
     r_ptr = &r_info[m_ptr->r_idx];
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
@@ -180,31 +190,30 @@ void do_cmd_exchange(void)
         return;
     }
 
-    /* Message */
-    msg_format("You exchange places with %s.", m_name);
-    monster_ai_witness(MON_AI_EXCHANGE, 3, y, x);
-
     // attack of opportunity
-    if ((m_ptr->alertness >= ALERTNESS_ALERT) && !m_ptr->confused
+    if (!(r_ptr->flags1 & (RF1_PEACEFUL | RF1_NEVER_BLOW))
         && !(r_ptr->flags2 & (RF2_MINDLESS))
         && monster_abilities_can_react(m_ptr))
     {
-        msg_print("It attacks you as you slip past.");
+        msg_format("%^s attacks you as you slip past.", m_name);
         make_attack_reaction(m_ptr);
+        if (p_ptr->is_dead || p_ptr->leaving || p_ptr->py != from_y
+            || p_ptr->px != from_x || cave_m_idx[y][x] != m_idx)
+            return;
     }
 
     // Alert the monster
     make_alert(m_ptr);
 
     // Swap positions with the monster
-    {
-        int from_feat = cave_feat[p_ptr->py][p_ptr->px];
-        p_ptr->leaping = false;
-        monster_swap(p_ptr->py, p_ptr->px, y, x);
-        if (p_ptr->is_dead) return;
-        if (p_ptr->py == y && p_ptr->px == x)
-            player_water_movement(from_feat, cave_feat[y][x]);
-    }
+    int from_feat = cave_feat[from_y][from_x];
+    p_ptr->leaping = false;
+    monster_swap(from_y, from_x, y, x);
+    if (p_ptr->is_dead || p_ptr->leaving || p_ptr->py != y || p_ptr->px != x)
+        return;
+    msg_format("You exchange places with %s.", m_name);
+    monster_ai_witness(MON_AI_EXCHANGE, 3, y, x);
+    player_water_movement(from_feat, cave_feat[y][x]);
 
     /* Set off traps */
     if (cave_trap_bold(y, x) || (cave_feat[y][x] == FEAT_CHASM))

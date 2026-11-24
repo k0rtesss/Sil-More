@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "object/object-desc.h"
 #include "object/object-internal.h"
+#include "object/object-use.h"
 #include "log/log.h"
 #include "support/utf8.h"
 #include <ctype.h>
@@ -1502,9 +1503,7 @@ void object_desc(
             object_desc_chr_macro(t, ' ');
             object_desc_chr_macro(t, p1);
 
-            /* Always show actual usable charges (internal pval is 2x for mechanics) */
-            int visible_charges = (o_ptr->pval + CHANNELING_CHARGE_MULTIPLIER - 1)
-                / CHANNELING_CHARGE_MULTIPLIER;
+            int visible_charges = staff_usable_charges(o_ptr->pval);
             object_desc_num_macro(t, visible_charges);
 
             /*write out the word charge(s) as appropriate*/

@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "object/object-inventory.h"
 #include "object/object-internal.h"
+#include "object/object-use.h"
 #include "log/log.h"
 #include "supplies.h"
 
@@ -269,7 +270,6 @@ void inven_item_charges(int item)
     if (!inven_index_valid(item, "inven_item_charges"))
         return;
 
-    int visible_charges = 0;
     object_type* o_ptr = player_inventory_object(item);
 
     /* Require staff */
@@ -280,10 +280,7 @@ void inven_item_charges(int item)
     if (!object_known_p(o_ptr))
         return;
 
-    visible_charges = (o_ptr->pval + CHANNELING_CHARGE_MULTIPLIER - 1)
-        / CHANNELING_CHARGE_MULTIPLIER;
-    if (visible_charges < 0)
-        visible_charges = 0;
+    int visible_charges = staff_usable_charges(o_ptr->pval);
 
     /* Print a message */
     msg_format("You have %d charge%s remaining.", visible_charges,
@@ -362,11 +359,6 @@ void inven_item_increase(int item, int num)
         {
             log_debug("inven_item_increase: staff at slot %d now has number=%d (changed by %d)",
                       item, o_ptr->number, num);
-            if (o_ptr->number == 0)
-            {
-                log_error("WARNING: Staff number changed to 0! This will cause deletion. k_idx=%d sval=%d pval=%d",
-                          o_ptr->k_idx, o_ptr->sval, o_ptr->pval);
-            }
         }
 
         /* Recalculate bonuses */
@@ -407,13 +399,6 @@ void inven_item_optimize(int item)
     /* Only optimize empty items */
     if (o_ptr->number)
         return;
-
-    /* Log staff deletion */
-    if (o_ptr->tval == TV_STAFF)
-    {
-        log_error("STAFF DELETION BUG: Deleting staff at slot %d with number=0! k_idx=%d sval=%d pval=%d",
-                  item, o_ptr->k_idx, o_ptr->sval, o_ptr->pval);
-    }
 
     if (player_carried_extra_handle_valid(item))
     {
@@ -478,7 +463,6 @@ void inven_item_optimize(int item)
  */
 void floor_item_charges(int item)
 {
-    int visible_charges = 0;
     object_type* o_ptr = &o_list[item];
 
     /* Require staff */
@@ -489,10 +473,7 @@ void floor_item_charges(int item)
     if (!object_known_p(o_ptr))
         return;
 
-    visible_charges = (o_ptr->pval + CHANNELING_CHARGE_MULTIPLIER - 1)
-        / CHANNELING_CHARGE_MULTIPLIER;
-    if (visible_charges < 0)
-        visible_charges = 0;
+    int visible_charges = staff_usable_charges(o_ptr->pval);
 
     /* Print a message */
     msg_format("There are %d charge%s remaining.", visible_charges,

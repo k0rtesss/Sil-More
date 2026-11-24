@@ -8349,6 +8349,7 @@ static int sdl_touch_menu_button_layout(
      * independent of the button height. */
     for (int i = 0; font && i < count; i++)
     {
+        if (!strchr(buttons[i].label, ' ')) continue;
         int text_w = 0, text_h = 0;
         if (TTF_GetStringSizeWrapped(font, buttons[i].label, 0,
                 MAX(1, (int)widths[i]), &text_w, &text_h))
@@ -8420,6 +8421,23 @@ void sdl_touch_exit_button_render(void)
 
     font_px = sdl_touch_exit_button_font_px(buttons[0].rect.h);
     font = sdl_story_font_for_height_slot(font_px, SDL_STORY_FONT_SLOT_MENU);
+    bool bigger = get_sdl_menu_bigger_font();
+    float padding = sdl_ui_density_scale() * 8.0f;
+    int fitted_px = font_px;
+    for (int i = 0; font && i < count; i++)
+    {
+        /* Keep short commands on one line when the strip fills the width. */
+        if (bigger && strchr(buttons[i].label, ' ')) continue;
+        float width = MAX(1.0f, buttons[i].rect.w - padding);
+        if (sdl_char_sheet_text_width(font, buttons[i].label) > width)
+        {
+            int px = sdl_ui_fitted_font_px(buttons[i].label,
+                SDL_STORY_FONT_SLOT_MENU, font_px, width, buttons[i].rect.h, false);
+            fitted_px = MIN(fitted_px, px);
+        }
+    }
+    if (fitted_px < font_px)
+        font = sdl_story_font_for_height_slot(fitted_px, SDL_STORY_FONT_SLOT_MENU);
 
     for (int i = 0; i < count; i++)
     {

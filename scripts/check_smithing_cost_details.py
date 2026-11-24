@@ -140,6 +140,9 @@ typedef struct editor_step {
     cptr missing_choice;
     bool reselected_base;
     bool report_bill;
+    bool description_scroll;
+    bool full_description;
+    int skill, skill_bonus;
 } editor_step;
 static const editor_step* editor_steps;
 static int editor_step_index;
@@ -208,6 +211,31 @@ static int editor_require(cptr text, bool clickable, int* col)
     return row;
 }
 
+static bool editor_touch_button(cptr text, int* choice)
+{
+    if (!editor_touch) return false;
+    bool found = false;
+    for (int i = 0; i < ui_menu_click_touch_button_count(); i++)
+    {
+        int id;
+        cptr label;
+        assert(ui_menu_click_touch_button_get(i, &id, &label, NULL));
+        if (strcmp(label, text)) continue;
+        assert(!found);
+        found = true;
+        if (choice) *choice = id;
+    }
+    return found;
+}
+
+static int editor_require_action(cptr label, int* target)
+{
+    if (!editor_touch) return editor_require(label, true, target);
+    assert(editor_touch_button(label, target));
+    assert(!editor_frame_find(label, NULL, NULL, true));
+    return Term->hgt - 1 - sdl_touch_menu_button_reserved_rows();
+}
+
 static int report_value(cptr label, int* row)
 {
     int col, value;
@@ -221,7 +249,7 @@ static int report_value(cptr label, int* row)
 static void check_report_bill(void)
 {
     int heading = editor_require("COMPLETE COSTS", false, NULL);
-    int back = editor_require("Back", true, NULL);
+    int back = editor_require_action("Back", NULL);
     int paid, uses_row, turns_row, uses, turns;
     fixture_detail_bill(&uses, &turns);
     assert(report_value("Forge uses", &uses_row) == uses);
@@ -294,7 +322,7 @@ static void editor_check_inline(int col, int row, cptr label, cptr value,
 
 static void editor_check_geometry(void)
 {
-    int tab_col, tab_row, details_col, details_row, primary_col;
+    int tab_col, tab_row, details_target, details_row, primary_target;
     bool browser = editor_frame_find("Weapons", &tab_col, &tab_row, true);
     bool editor = !browser &&
         editor_frame_find("Enhancements", &tab_col, &tab_row, true);
@@ -302,7 +330,7 @@ static void editor_check_geometry(void)
 
     int heading_row = editor_require("Smithing", false, NULL);
     assert(heading_row < tab_row);
-    details_row = editor_require("Costs", true, &details_col);
+    details_row = editor_require_action("Costs", &details_target);
     assert(tab_row < details_row && details_row < Term->hgt);
 
     int* footer = browser ? &browser_footer_row : &design_footer_row;
@@ -311,24 +339,36 @@ static void editor_check_geometry(void)
     if (browser)
     {
         bool replace = editor_frame_find("Change base item", NULL, NULL, false);
+        if (editor_touch)
+        {
+            assert(ui_menu_click_touch_exit_button_active() == !replace);
+            assert(editor_touch_button("Back", NULL) == replace);
+            assert(!editor_touch_button("Exit", NULL));
+        }
         if (!replace)
         {
-            assert(editor_require("Melt", true, NULL) == details_row);
-            assert(editor_require("Reforge", true, NULL) == details_row);
+            assert(editor_require_action("Melt", NULL) == details_row);
+            assert(editor_require_action("Reforge", NULL) == details_row);
         }
         if (replace || Term->wid >= 48)
-            assert(editor_require("Inspect", true, NULL) == details_row);
-        assert(editor_require("Design", true, &primary_col) == details_row);
+            assert(editor_require_action("Inspect", NULL) == details_row);
+        assert(editor_require_action("Design", &primary_target) == details_row);
     }
     else
     {
-        bool choosing = editor_frame_find("Apply", NULL, NULL, true);
+        bool choosing = editor_touch_button("Apply", NULL)
+            || editor_frame_find("Apply", NULL, NULL, true);
         cptr primary = choosing ? "Apply" : p_ptr->smithing_leftover ? "Resume" : "Craft";
-        assert(editor_require(primary, true, &primary_col) == details_row);
+        assert(editor_require_action(primary, &primary_target) == details_row);
         if (!choosing)
-            assert(editor_require("Inspect", true, NULL) == details_row);
+            assert(editor_require_action("Inspect", NULL) == details_row);
+        if (editor_touch)
+        {
+            assert(!ui_menu_click_touch_exit_button_active());
+            assert(editor_require_action("Back", NULL) == details_row);
+        }
     }
-    assert(primary_col != details_col);
+    assert(primary_target != details_target);
 
     int difficulty_col, uses_col, turns_col, uses_row;
     int difficulty_row = editor_require("Difficulty", false, &difficulty_col);
@@ -367,13 +407,30 @@ static void editor_check_geometry(void)
 static char editor_step_key(void)
 {
     const editor_step* step = editor_steps++;
-    int col, row;
+    int col = 0, row = 0, touch_choice;
     assert(step->label);
-    row = editor_require(step->label,
-        step->click || step->base_sval || step->row_value
-            || step->current_attack || step->check_target, &col);
+    bool touch_action = editor_touch_button(step->label, &touch_choice);
+    if (touch_action)
+        assert(!editor_frame_find(step->label, NULL, NULL, true));
+    else
+        row = editor_require(step->label,
+            step->click || step->base_sval || step->row_value
+                || step->current_attack || step->check_target, &col);
     editor_check_geometry();
     if (step->report_bill) check_report_bill();
+    if (step->full_description)
+    {
+        int description_col;
+        int first = editor_require("Description", true, &description_col);
+        int end = editor_require_action("Costs", NULL);
+        assert(!ui_scroll_area_has_cell(description_col, first));
+        for (int y = first + 1; y < end; y++)
+        {
+            char line[256];
+            editor_frame_line(y, line);
+            assert(!strstr(line, "..."));
+        }
+    }
     if (step->base_sval || step->row_value || step->current_attack)
     {
         cptr value = step->row_value;
@@ -385,10 +442,13 @@ static char editor_step_key(void)
         }
         editor_check_inline(col, row, step->label, value, step->base_sval);
     }
-    if (step->also) editor_require(step->also, false, NULL);
+    if (step->also && !editor_touch_button(step->also, NULL))
+        editor_require(step->also, false, NULL);
     if (step->missing) assert(!editor_frame_find(step->missing, NULL, NULL, false));
     if (step->missing_choice)
         assert(!editor_frame_find(step->missing_choice, NULL, NULL, true));
+    if (step->skill)
+        assert(smith_o_ptr->skill_bonus[step->skill] == step->skill_bonus);
     ++editor_step_index;
     if (step->draft)
     {
@@ -438,11 +498,19 @@ static char editor_step_key(void)
     }
     if (step->click)
     {
+        if (touch_action)
+        {
+            assert(ui_menu_click_handle_choice_action(touch_choice,
+                UI_MENU_CLICK_PRIMARY, NULL));
+            return UI_MENU_CLICK_WAKE_KEY;
+        }
         assert(ui_menu_click_handle_cell(col, row));
-        return 0;
+        return '\r'; /* SDL primary clicks wake inkey() with Enter. */
     }
     if (step->drag_rows)
     {
+        if (step->base_sval || step->description_scroll)
+            assert(ui_scroll_area_has_cell(col, row));
         assert(ui_scroll_area_has_offset_target());
         assert(ui_scroll_area_offset_scroll(step->drag_rows));
         return 0;
@@ -557,22 +625,83 @@ static void editor_checks(void)
         { "Attack", '[' },
         { "Stat bonuses", 'a', .row_value = "0 properties" },
         { "Str bonus", 'a' },
-        { "Property", ESCAPE },
-        { "h) Melee", 0, true, DRAFT_ARTEFACT },
+        { "Str bonus", 0, true, .row_value = "+0" },
+        { "Choose Strength", '6', .also = "Artifice" },
+        { "Choose Strength", ESCAPE },
+        { "Str bonus", '\r', .row_value = "+0" },
+        { "b) +1", 0, true, .also = "Choose Strength" },
+        { "Str bonus", ESCAPE, .row_value = "+1" },
+        { "h) Melee", 0, true, DRAFT_ARTEFACT, .strength = 1 },
         { "Finesse", 'b' },
         { "Ability", ESCAPE },
-        { "h) Melee", ']', false, DRAFT_ARTEFACT, 0, 0, true, .row_value = "1 ability" },
-        { "Strength", 0, true, DRAFT_ARTEFACT, 0, 0, true },
-        { "b) +1", 0, true, DRAFT_ARTEFACT, 0, 0, true, "Choose Strength" },
-        { "Strength", '[', false, DRAFT_ARTEFACT, 0, 1, true },
-        { "1 ability", 'h', false, DRAFT_ARTEFACT, 0, 1, true },
+        { "h) Melee", 'a', false, DRAFT_ARTEFACT, 0, 1, true, .row_value = "1 ability" },
+        { "Edit", 0, true, .also = "Str bonus" },
+        { "c) +2", 0, true, .also = "Choose Strength" },
+        { "Str bonus", ESCAPE, .row_value = "+2" },
+        { "1 ability", ']', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "Attack", '[', false, DRAFT_ARTEFACT, 0, 2, true, .missing_choice = "Strength" },
+        { "1 ability", 'h', false, DRAFT_ARTEFACT, 0, 2, true },
         { "Finesse", ESCAPE },
-        { "1 ability", ']', false, DRAFT_ARTEFACT, 0, 1, true },
-        { "Strength", ']', false, DRAFT_ARTEFACT, 0, 1, true },
-        { "Prefix", 'a', false, DRAFT_ARTEFACT, 0, 1, true },
-        { "Prefix", '[', false, DRAFT_ARTEFACT, 0, 1, true },
-        { "Attack", ESCAPE, false, DRAFT_ARTEFACT, 0, 1, true },
+        { "1 ability", ']', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "Attack", ']', false, DRAFT_ARTEFACT, 0, 2, true, .missing_choice = "Strength" },
+        { "Prefix", 'a', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "Prefix", '[', false, DRAFT_ARTEFACT, 0, 2, true, .missing_choice = "Strength" },
+        { "Attack", '[', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "Stat bonuses", 'a', .row_value = "1 property" },
+        { "Remove", 0, true, .also = "Str bonus" },
+        { "Str bonus", ESCAPE, .missing_choice = "Remove" },
+        { "Stat bonuses", ']', .row_value = "0 properties" },
+        { "Attack", ESCAPE, .missing_choice = "Strength" },
         { "Shortsword", ESCAPE },
+        { 0 },
+    };
+    const editor_step description_reader_steps[] = {
+        { "Description", 'D', .missing = "longer weapon." },
+        { "A belt-knife", '3', .also = "Description" },
+        { "weapon.", ESCAPE, .also = "Back" },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step affix_bonus_steps[] = {
+        { "Armour", 0, true },
+        { "Robe", 0, true },
+        { "Weight", ']', .missing_choice = "Stealth " },
+        { "Prefix", 0, true },
+        { "Stealthy", 0, true },
+        { "Stealthy", 0, true },
+        { "Stealth ", 0, true, .row_value = "+1", .skill = S_STL, .skill_bonus = 1 },
+        { "b) +2", 0, true, .also = "Choose Stealth" },
+        { "Stealth ", '[', .row_value = "+2", .skill = S_STL, .skill_bonus = 2 },
+        { "Weight", ESCAPE, .missing_choice = "Stealth ", .skill = S_STL, .skill_bonus = 2 },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step intrinsic_bonus_steps[] = {
+        { "Jewellery", 0, true },
+        { "Ring of the Laiquendi", 0, true },
+        { "Weight", ']', .missing_choice = "Stealth" },
+        { "Stealth", 0, true, .row_value = "+1" },
+        { "b) +2", 0, true, .also = "Choose Stealth" },
+        { "Archery", '[', .row_value = "+1", .skill = S_STL, .skill_bonus = 2 },
+        { "Weight", ESCAPE, .missing_choice = "Stealth", .skill = S_STL, .skill_bonus = 2 },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step description_scroll_steps[] = {
+        { "Description", 0, .also = "A belt-knife", .missing = "weapon.",
+            .drag_rows = 100, .description_scroll = true },
+        { "weapon.", '9', .also = "Choose base item" },
+        { "Description", '9' },
+        { "A belt-knife", '2', .missing = "weapon." },
+        { "Description", 0, true },
+        { "Back", ESCAPE, .also = "warrior." },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step portrait_description_steps[] = {
+        { "Dagger", 0, true, .also = "weapon.", .full_description = true },
+        { "Attack", ESCAPE, .also = "weapon.", .full_description = true },
+        { "Choose base item", ESCAPE },
         { 0 },
     };
     const editor_step interrupted_steps[] = {
@@ -607,6 +736,19 @@ static void editor_checks(void)
         { "Arrow", ESCAPE, .missing = "Dagger" },
         { 0 },
     };
+    const editor_step touch_actions[] = {
+        { "Design", 0, true, .also = "Choose base item" },
+        { "Attack", 0, true, .row_value = "+0" },
+        { "Choose Attack", '6' },
+        { "Apply", 0, true, .also = "Choose Attack" },
+        { "Attack", 0, true, .row_value = "+1" },
+        { "Back", 0, true, .also = "Choose Attack" },
+        { "Costs", 0, true, .also = "Craft" },
+        { "Back", 0, true, .report_bill = true },
+        { "Back", 0, true, .also = "Simple" },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
     const editor_step artifice_scroll_steps[] = {
         { "Shortsword", 'b' },
         { "Attack", '[' },
@@ -625,15 +767,23 @@ static void editor_checks(void)
     };
     run_editor_steps("Smithing browser, editor, Costs and draft recovery", 80, 24, steps, NEW_WORK);
     run_editor_steps("Smithing prefix commit survives page changes and blocks Artifice", 80, 24, prefix_steps, NEW_WORK);
-    run_editor_steps("Smithing property and ability commits survive stat edits and blocks Enhancements", 80, 24, property_steps, NEW_WORK);
+    run_editor_steps("Smithing Artifice edits values in the property list and preserves the draft", 80, 24, property_steps, NEW_WORK);
+    run_editor_steps("Smithing affix values are editable beside their affix", 80, 24, affix_bonus_steps, NEW_WORK);
+    run_editor_steps("Smithing intrinsic values have independent editors in Enhancements", 80, 70, intrinsic_bonus_steps, NEW_WORK);
     run_editor_steps("Smithing browser, editor, Costs and draft recovery", 42, 32, steps, NEW_WORK);
     run_editor_steps("Smithing browser and editor in portrait", 80, 70, steps, NEW_WORK);
     run_editor_steps("Smithing browser reaches items below the fold and preserves scroll", 30, 12, scroll_steps, NEW_WORK);
     run_editor_steps("Smithing browser reaches items below the fold and preserves scroll", 80, 10, scroll_steps, NEW_WORK);
     run_editor_steps("Smithing cancelled replacement preserves interrupted work", 80, 24, interrupted_steps, INTERRUPTED_WORK);
     run_editor_steps("Smithing prepaid reforge can resume at an exhausted forge", 30, 12, prepaid_steps, PAID_REFORGE);
+    run_editor_steps("Smithing full description opens and pages on a short screen", 30, 12, description_reader_steps, NEW_WORK);
     editor_touch = true;
+    run_editor_steps("Smithing native touch actions design, apply, costs and back", 30, 15, touch_actions, NEW_WORK);
     run_editor_steps("Smithing drag scroll and touch targets", 30, 15, touch_scroll_steps, NEW_WORK);
+    run_editor_steps("Smithing description drags independently and opens by tapping", 44, 29, description_scroll_steps, NEW_WORK);
+    run_editor_steps("Smithing portrait recovers unused catalogue rows", 44, 36, portrait_description_steps, NEW_WORK);
+    run_editor_steps("Smithing portrait shows the full description without scrolling", 44, 45, portrait_description_steps, NEW_WORK);
+    assert(!Term_resize(30, 15));
     scenario = "Smithing report drag scroll, paging and Back";
     prepare(3);
     editor_steps = cost_scroll_steps;

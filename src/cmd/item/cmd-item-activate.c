@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "object/object-internal.h"
 #include "object/object-ui-select.h"
+#include "object/object-use.h"
 
 /* Utility and restorative items remain usable underwater. Offensive effects
  * are checked before Pack preparation, targeting, charges, or voice costs. */
@@ -583,6 +584,7 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     bool ident;
     bool aware;
     int kind_index;
+    bool is_herb;
 
     object_type* o_ptr = NULL;
     int supply_index = supplies_current_action();
@@ -672,9 +674,10 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     /* Identity not known yet */
     ident = false;
 
-    // Save the k_idx and awareness info
+    /* Consuming the last item may remove or reuse its slot. */
     kind_index = o_ptr->k_idx;
     aware = object_aware_p(o_ptr);
+    is_herb = o_ptr->sval <= SV_FOOD_SICKNESS;
 
     /* Eat the food */
     use_object(o_ptr, &ident);
@@ -728,7 +731,7 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
         }
         else
         {
-            if (get_check((o_ptr->sval <= SV_FOOD_SICKNESS)
+            if (get_check(is_herb
                     ? "Autoinscribe this herb type? "
                     : "Autoinscribe this food type? "))
             {
@@ -1032,18 +1035,21 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         return;
 
     if (!tutorial_game_action_allowed("use-item", o_ptr)) return;
-    if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
-            false, o_ptr))
-        return;
-
     if (reject_broken_item_use(o_ptr))
         return;
 
-    if (o_ptr->ident & (IDENT_EMPTY))
+    /* An identified staff shows its remaining charges. Only discovering an
+     * empty unidentified staff costs a turn. */
+    bool empty = staff_usable_charges(o_ptr->pval) == 0;
+    if ((o_ptr->ident & IDENT_EMPTY) || (empty && object_known_p(o_ptr)))
     {
         msg_print("The staff has no charges left.");
         return;
     }
+
+    if (player_pack_action_start(PLAYER_PACK_ACTION_ACTIVATE_STAFF, item, 0,
+            false, o_ptr))
+        return;
 
     /* Take a turn */
     p_ptr->energy_use = 100;
@@ -1055,7 +1061,7 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
     ident = false;
 
     /* Notice empty staffs */
-    if (o_ptr->pval < CHANNELING_CHARGE_MULTIPLIER)
+    if (empty)
     {
         flush();
         msg_print("The staff has no charges left.");

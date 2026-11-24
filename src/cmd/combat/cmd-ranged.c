@@ -321,6 +321,48 @@ static bool abort_for_valorous_ranged_path(int range, int ty, int tx)
     return false;
 }
 
+/* Clip a directional shot to the map boundary along its original heading. */
+static void ranged_direction_endpoint(int dir, int range, int* y, int* x)
+{
+    int dy = ddy[dir], dx = ddx[dir];
+    if (dy < 0) range = MIN(range, p_ptr->py);
+    if (dy > 0) range = MIN(range, p_ptr->cur_map_hgt - 1 - p_ptr->py);
+    if (dx < 0) range = MIN(range, p_ptr->px);
+    if (dx > 0) range = MIN(range, p_ptr->cur_map_wid - 1 - p_ptr->px);
+    *y = p_ptr->py + dy * range;
+    *x = p_ptr->px + dx * range;
+}
+
+static bool abort_for_projectile_mercy(monster_type* m_ptr, bool* confirmed)
+{
+    if (*confirmed || !m_ptr->ml || !merciless_attack(m_ptr)
+        || (r_info[m_ptr->r_idx].flags1 & RF1_PEACEFUL))
+        return false;
+    if (abort_for_mercy(m_ptr))
+        return true;
+    *confirmed = true;
+    return false;
+}
+
+/* The first hostile can be checked before launching. Any foe behind it
+ * may never be reached, so check that foe only if the projectile gets there. */
+static bool abort_for_first_projectile_target(const u16b* path, int length,
+    bool* confirmed)
+{
+    if (*confirmed || !chosen_oath(OATH_MERCY) || oath_invalid(OATH_MERCY))
+        return false;
+    for (int i = 0; i < length; ++i)
+    {
+        int y = GRID_Y(path[i]), x = GRID_X(path[i]);
+        if (!cave_floor_bold(y, x))
+            break;
+        int idx = cave_m_idx[y][x];
+        if (idx > 0 && !(r_info[mon_list[idx].r_idx].flags1 & RF1_PEACEFUL))
+            return abort_for_projectile_mercy(&mon_list[idx], confirmed);
+    }
+    return false;
+}
+
 static bool warding_girdle_can_place_glyph(int y, int x)
 {
     if (!in_bounds_fully(y, x))
@@ -460,6 +502,7 @@ void do_cmd_fire(int quiver)
     bool returning_arrow = false;
     bool warding_girdle_active = false;
     bool clear_location_target = false;
+    bool mercy_confirmed = false;
     int arrows_spent = 0;
     int selected_arrows = 0;
 
@@ -524,43 +567,46 @@ void do_cmd_fire(int quiver)
     }
 
     /* Get a direction (or cancel) */
-    if (!get_aim_dir(&dir, tdis))
+    if (!get_aim_dir(&dir, tdis) || dir < 1 || dir > 9)
         return;
 
     /* Start at the player */
     y = p_ptr->py;
     x = p_ptr->px;
 
-    /* Predict the "target" location */
-    ty = p_ptr->py + 99 * ddy[dir];
-    tx = p_ptr->px + 99 * ddx[dir];
-
-    if ((dir == DIRECTION_UP) || (dir == DIRECTION_DOWN))
-    {
-        ty = p_ptr->py;
-        tx = p_ptr->px;
-    }
-
     /* Check for "target request" */
-    if ((dir == 5) && target_okay(tdis))
+    if (dir == 5)
     {
+        if (!target_okay(tdis))
+        {
+            msg_print("You have no target.");
+            return;
+        }
         ty = p_ptr->target_row;
         tx = p_ptr->target_col;
         clear_location_target = (p_ptr->target_who == 0);
-
-        m_ptr = &mon_list[cave_m_idx[ty][tx]];
-        r_ptr = &r_info[m_ptr->r_idx];
-
-        if (abort_for_mercy(m_ptr))
-        {
+        int idx = cave_m_idx[ty][tx];
+        if (idx > 0 && abort_for_projectile_mercy(&mon_list[idx], &mercy_confirmed))
             return;
-        }
     }
+    else
+        ranged_direction_endpoint(dir, tdis, &ty, &tx);
 
     if (!tutorial_ranged_aim_allowed(tdis,ty,tx,dir==5)) return;
 
     /* Warn before ranged attacks that might hit fleeing enemies (Oath of Valor) */
     if (abort_for_valorous_ranged_path(tdis, ty, tx))
+        return;
+
+    ty2 = ty;
+    tx2 = tx;
+    path_n = project_path(path_g, tdis, y, x, &ty2, &tx2, PROJECT_THRU);
+    if (path_n <= 0)
+    {
+        msg_print("You cannot fire there.");
+        return;
+    }
+    if (abort_for_first_projectile_target(path_g, path_n, &mercy_confirmed))
         return;
 
     /* Get local object */
@@ -620,15 +666,6 @@ void do_cmd_fire(int quiver)
     }
 
     p_ptr->killed_enemy_with_arrow = false;
-
-    // set dummy variables to pass to project_path (so it doesn't clobber the
-    // real ones)
-    ty2 = ty;
-    tx2 = tx;
-
-    /* Calculate the path */
-    path_n = project_path(
-        path_g, tdis, p_ptr->py, p_ptr->px, &ty2, &tx2, PROJECT_THRU);
 
     /* Hack -- Handle stuff */
     handle_stuff();
@@ -782,9 +819,13 @@ void do_cmd_fire(int quiver)
                 m_ptr = &mon_list[cave_m_idx[y][x]];
                 r_ptr = &r_info[m_ptr->r_idx];
 
-                if (abort_for_mercy(m_ptr))
+                if (abort_for_projectile_mercy(m_ptr, &mercy_confirmed))
                 {
-                    return;
+                    /* The shot has already flown. Stop it before this foe,
+                     * then finish the normal shot and ammunition accounting. */
+                    final_y = y = oy;
+                    final_x = x = ox;
+                    break;
                 }
 
                 // record the co-ordinates of the first monster in line of fire
@@ -1183,12 +1224,12 @@ void do_cmd_fire(int quiver)
                                               "balance.");
                                     p_ptr->morgoth_hits++;
                                 }
-                                else if (p_ptr->morgoth_hits == 1)
-                                {
-                                    drop_iron_crown(m_ptr,
+                                else if (p_ptr->morgoth_hits == 1
+                                    && drop_iron_crown(m_ptr,
                                         "You knock his crown from off his "
                                         "brow, and "
-                                        "it falls to the ground nearby.");
+                                        "it falls to the ground nearby."))
+                                {
                                     p_ptr->morgoth_hits++;
                                 }
                             }
@@ -1991,6 +2032,7 @@ void do_cmd_throw(bool automatic)
     int missed_monsters = 0;
 
     bool spatial_target = false;
+    bool mercy_confirmed = false;
 
     char o_name[80];
     char punctuation[20];
@@ -2044,32 +2086,19 @@ void do_cmd_throw(bool automatic)
         return;
     }
 
-    /* Hack -- Cannot remove cursed items */
-    if (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr))
+    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+    bool break_curse = player_equipment_slot_counts_as_equipped(item)
+        && cursed_p(o_ptr);
+    if (break_curse && (!p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING]
+            || (f3 & TR3_PERMA_CURSE)))
     {
-        if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
-        {
-            /* Message */
-            msg_print("With a great strength of will, you break the curse!");
-
-            /* Uncurse the object */
-            uncurse_object(o_ptr);
-        }
-        else
-        {
-            /* Oops */
-            msg_print("You cannot bear to part with it.");
-
-            /* Nope */
-            return;
-        }
+        msg_print("You cannot bear to part with it.");
+        return;
     }
 
     // Determine throwing range
     tdis = throwing_range(o_ptr);
 
-    /* Examine the item */
-    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
     {
         bool throwing_potion = player_can_throw_potions()
             && potion_has_thrown_effect(o_ptr);
@@ -2115,6 +2144,8 @@ void do_cmd_throw(bool automatic)
     // Otherwise get a direction (or cancel) */
     else if (!get_aim_dir(&dir, tdis))
         return;
+    if (dir < 1 || dir > 9)
+        return;
 
     int original_slot = player_inventory_handle_is_equipped(item) ? item : -1;
 
@@ -2130,10 +2161,6 @@ void do_cmd_throw(bool automatic)
     /* Start at the player */
     y = p_ptr->py;
     x = p_ptr->px;
-
-    /* Predict the "target" location */
-    ty = p_ptr->py + 99 * ddy[dir];
-    tx = p_ptr->px + 99 * ddx[dir];
 
     /* Check for "target request" */
     if (dir == 5)
@@ -2161,35 +2188,14 @@ void do_cmd_throw(bool automatic)
         if (!spatial_target && (p_ptr->target_who > 0))
         {
             monster_type* target_m_ptr = &mon_list[p_ptr->target_who];
-            if (abort_for_mercy(target_m_ptr))
+            if (abort_for_projectile_mercy(target_m_ptr, &mercy_confirmed))
             {
                 return;
             }
         }
     }
-
-    if ((dir == DIRECTION_UP) || (dir == DIRECTION_DOWN))
-    {
-        ty = p_ptr->py;
-        tx = p_ptr->px;
-    }
-
-    /* Clamp directional throws to the actual range before indexing grids */
-    if ((dir != 5) && (dir != DIRECTION_UP) && (dir != DIRECTION_DOWN))
-    {
-        ty = p_ptr->py + tdis * ddy[dir];
-        tx = p_ptr->px + tdis * ddx[dir];
-
-        if (ty < 0)
-            ty = 0;
-        else if (ty >= p_ptr->cur_map_hgt)
-            ty = p_ptr->cur_map_hgt - 1;
-
-        if (tx < 0)
-            tx = 0;
-        else if (tx >= p_ptr->cur_map_wid)
-            tx = p_ptr->cur_map_wid - 1;
-    }
+    else
+        ranged_direction_endpoint(dir, tdis, &ty, &tx);
 
     /* Warn before ranged attacks that might hit fleeing enemies (Oath of Valor) */
     if (abort_for_valorous_ranged_path(tdis, ty, tx))
@@ -2217,11 +2223,6 @@ void do_cmd_throw(bool automatic)
 
             msg_format("You stop before you hit %s.", m_name);
 
-            return;
-        }
-
-        if (abort_for_mercy(m_ptr))
-        {
             return;
         }
     }
@@ -2293,8 +2294,18 @@ void do_cmd_throw(bool automatic)
         msg_print("You cannot throw there.");
         return;
     }
+    if (abort_for_first_projectile_target(path_g, path_n, &mercy_confirmed))
+        return;
 
     if (!tutorial_ranged_aim_allowed(tdis,ty,tx,dir==5)) return;
+
+    /* Break the curse only once the throw is committed, before copying the weapon. */
+    if (break_curse)
+    {
+        msg_print("With a great strength of will, you break the curse!");
+        uncurse_object(o_ptr);
+        object_flags4(o_ptr, &f1, &f2, &f3, &f4);
+    }
 
     /* Get local object */
     i_ptr = &object_type_body;
@@ -2434,6 +2445,10 @@ void do_cmd_throw(bool automatic)
             }
             break;
         }
+
+        int idx = cave_m_idx[ny][nx];
+        if (idx > 0 && abort_for_projectile_mercy(&mon_list[idx], &mercy_confirmed))
+            break;
 
         /* Advance */
         x = nx;
@@ -2950,12 +2965,12 @@ void do_cmd_throw(bool automatic)
                                           "balance.");
                                 p_ptr->morgoth_hits++;
                             }
-                            else if (p_ptr->morgoth_hits == 1)
-                            {
-                                drop_iron_crown(m_ptr,
+                            else if (p_ptr->morgoth_hits == 1
+                                && drop_iron_crown(m_ptr,
                                     "You knock his crown from off his brow, "
                                     "and it "
-                                    "falls to the ground nearby.");
+                                    "falls to the ground nearby."))
+                            {
                                 p_ptr->morgoth_hits++;
                             }
                         }

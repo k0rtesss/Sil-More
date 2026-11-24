@@ -445,6 +445,69 @@ static void check_revealing_removal_before_disguise(void)
     puts("Revealing removal clears an empty/reused slot before any Disguise buffers are needed PASS.");
 }
 
+static void check_see_invisible_identification(void)
+{
+    monster_type* m = adaptive_fixture(175, 0); /* Invisible cat assassin. */
+    int idx = (int)(m - mon_list);
+    object_type* helm = &inventory[INVEN_HEAD];
+    object_prep(helm, lookup_kind(TV_HELM, SV_HELM));
+    object_set_ego_suffix(helm, 73); /* of true Sight */
+    assert(!object_known_p(helm));
+    m->ml = false;
+    m->mflag &= ~MFLAG_VIEW;
+    p_ptr->see_inv = 1;
+    p_ptr->blind = 1;
+    assert(detect_monsters(20) && m->ml);
+    assert(!(helm->ident & IDENT_EXPERIENCED));
+    p_ptr->blind = 0;
+    p_ptr->skill_use[S_PER] = 100;
+    cave_info[m->fy][m->fx] |= CAVE_VIEW | CAVE_SEEN;
+    update_mon(idx, false);
+    assert((m->mflag & MFLAG_VIEW) && (helm->ident & IDENT_EXPERIENCED));
+    puts("True Sight equipment is recognized on seeing an invisible creature, including one already detected.");
+}
+
+static void check_revealing_visibility(void)
+{
+    monster_type* m = adaptive_fixture(41, 0);
+    int idx = (int)(m - mon_list);
+    int old_wx = p_ptr->wx;
+    p_ptr->wx = 32;  /* Keep the detected orc outside the main viewport. */
+    cave_info[m->fy][m->fx] = 0;
+    m->ml = false;
+    song_revealing_clear();
+    update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
+    sing_song_of_revealing(1000);
+    assert(m->ml);
+    update_mon(idx, false);
+    bool before_draw = m->ml;
+    byte a, ta;
+    char c, tc;
+    map_info(m->fy, m->fx, &a, &c, &ta, &tc);
+    printf("Strong Revealing detection: offscreen %d, after drawing %d.\n", before_draw, m->ml);
+    assert(before_draw && m->ml && !(m->mflag & MFLAG_VIEW));
+    assert(!m->encountered);
+
+    /* A maximum-strength result decays from 30 to 9, then to zero. */
+    for (int i = 0; i < 7; i++) song_revealing_decay();
+    assert(!m->ml && song_revealing_overlay(idx, &a, &c));
+    for (int i = 0; i < 3; i++) song_revealing_decay();
+    assert(!m->ml && !song_revealing_overlay(idx, &a, &c));
+
+    sing_song_of_revealing(1000);
+    song_revealing_clear();
+    assert(!m->ml && !song_revealing_overlay(idx, &a, &c));
+    sing_song_of_revealing(1000);
+    m->mflag |= MFLAG_MARK; /* An independently active detection still applies. */
+    song_revealing_clear();
+    assert(m->ml);
+    m->mflag &= ~MFLAG_MARK;
+    update_mon(idx, false);
+    assert(!m->ml);
+    p_ptr->wx = old_wx;
+    puts("Revealing visibility and hint expiry are independent of redraws; other detections survive.");
+}
+
 static void check_light_morale_perception(void)
 {
     monster_type* m = adaptive_fixture(51, 0);
@@ -582,11 +645,13 @@ static void check_song_tracking_compaction(void)
     survivor->ml = false;
     byte attr = 0; char glyph = 0;
     assert(!song_revealing_overlay((int)(survivor - mon_list), &attr, &glyph));
+    assert(!survivor->ml);
+    update_mon((int)(survivor - mon_list), false);
     assert(survivor->ml);
-    survivor->ml = false;
     delete_monster_idx((int)(first - mon_list));
     compact_monsters(0);
     assert(mon_list[1].r_idx == 175);
+    update_mon(1, false);
     assert(!song_revealing_overlay(1, &attr, &glyph) && mon_list[1].ml);
     song_revealing_clear();
     p_ptr->song1 = SNG_NOTHING;
@@ -1185,7 +1250,7 @@ def main():
         "int main(int argc,char** argv)", CHECKS + "\nint main(int argc,char** argv)")
     engine.HARNESS = engine.HARNESS.replace(
         "    check_combat();",
-        "    check_revealing_removal_before_disguise();\n    check_combat();\n    check_adaptive_integration();")
+        "    check_see_invisible_identification();\n    check_revealing_visibility();\n    check_revealing_removal_before_disguise();\n    check_combat();\n    check_adaptive_integration();")
     engine.HARNESS = engine.HARNESS.replace(
         "    check_templates();", "    check_command_profiles();\n    check_templates();")
     engine.main()

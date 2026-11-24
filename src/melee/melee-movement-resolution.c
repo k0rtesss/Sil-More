@@ -196,6 +196,8 @@ void monster_exchange_places(monster_type* m_ptr)
 
     int y = m_ptr->fy;
     int x = m_ptr->fx;
+    int player_y = p_ptr->py, player_x = p_ptr->px;
+    bool seen = m_ptr->ml;
 
     monster_desc(m_name1, sizeof(m_name1), m_ptr, 0);
     monster_desc(m_name2, sizeof(m_name2), m_ptr, 0x21);
@@ -209,23 +211,28 @@ void monster_exchange_places(monster_type* m_ptr)
     p_ptr->leaping = false;
     // swap positions with the player
     monster_abilities_forced_movement(m_ptr);
-    monster_swap(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px);
-    if (!m_ptr->r_idx || p_ptr->is_dead)
+    monster_swap(y, x, player_y, player_x);
+    if (p_ptr->py != y || p_ptr->px != x)
+        return;
+    if (seen || m_ptr->ml)
+        l_ptr->flags2 |= RF2_EXCHANGE_PLACES;
+    if (p_ptr->is_dead || p_ptr->leaving)
         return;
 
-    if (m_ptr->r_idx && (m_ptr->fy != y || m_ptr->fx != x))
+    bool foe_present = m_ptr->r_idx && m_ptr->fy == player_y && m_ptr->fx == player_x;
+    if (foe_present)
     {
         m_ptr->energy -= water_movement_energy(100, cave_feat[y][x],
             cave_feat[m_ptr->fy][m_ptr->fx],
             (r_info[m_ptr->r_idx].flags2 & RF2_FLYING) != 0) - 100;
-        player_water_displaced(player_from_feat, cave_feat[p_ptr->py][p_ptr->px]);
     }
+    player_water_displaced(player_from_feat, cave_feat[y][x]);
 
     // update some things
     update_view();
 
     // attack of opportunity
-    if (player_active_weapon_is_melee()
+    if (foe_present && player_active_weapon_is_melee()
         && !p_ptr->afraid && !p_ptr->entranced && (p_ptr->stun <= 100))
     {
         if (valorous_oath_auto_attack_safety && chosen_oath(OATH_VALOROUS)
@@ -243,9 +250,8 @@ void monster_exchange_places(monster_type* m_ptr)
         }
     }
 
-    // remember that the monster can do this
-    if (m_ptr->ml)
-        l_ptr->flags2 |= (RF2_EXCHANGE_PLACES);
+    if (p_ptr->is_dead || p_ptr->leaving || p_ptr->py != y || p_ptr->px != x)
+        return;
 
     /* Set off traps */
     if (cave_trap_bold(y, x) || (cave_feat[y][x] == FEAT_CHASM))

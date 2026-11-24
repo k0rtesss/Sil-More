@@ -25,6 +25,7 @@ ROOT = base.ROOT
 OUT = ROOT / "scripts/output/player-systems-expanded"
 
 EXTRA_GLOBALS = r'''
+#include "metarun.h"
 static int work_pause_after, work_steps;
 static bool work_paused, work_pause_used;
 static void publish_json(const char* leaf, cJSON* root, bool append)
@@ -66,6 +67,7 @@ static void observe_player(cJSON* root)
     N("lamp_oil",p_ptr->lamp_oil);N("climbing",p_ptr->climbing);N("leaping",p_ptr->leaping);
     N("hero",p_ptr->pcharacter);N("race",p_ptr->prace);
     N("oath",p_ptr->oath_type);N("broken_oaths",p_ptr->oaths_broken);
+    N("curse_stacks",metarun_net_curse_stacks());
     N("item_tester_tval",item_tester_tval);N("item_tester_hook",item_tester_hook!=NULL);
     N("item_tester_full",item_tester_full);N("get_item_mode",p_ptr->get_item_mode);
     N("fixture_work_pause",work_paused);
@@ -196,6 +198,8 @@ def fixture_source() -> str:
                             EXTRA_STATS+'\n    character_generated=character_dungeon=true; character_icky=character_xtra=0;\n    turn=playerturn=100;')
     source = source.replace('        o.storage=number(entry,"storage",o.storage);',
                             '        o.storage=number(entry,"storage",o.storage);\n'+EXTRA_ITEM)
+    source = source.replace('m->alertness=ALERTNESS_UNWARY;',
+                            'm->alertness=number(entry,"alertness",ALERTNESS_UNWARY);')
     source = source.replace('    p_ptr->energy=100; p_ptr->redraw=',EXTRA_STATUS+'\n    p_ptr->energy=100; p_ptr->redraw=')
     return source+'\n'+WORK_OBSERVER
 
@@ -750,6 +754,118 @@ def terrain(c: Campaign):
             items=[dict(kind=kind,floor=1,pval=-3)]),chest,'chests')
 
 
+def exchange_reactions(c: Campaign):
+    def slip_past_troll(s):
+        s.press('X', 'Right')
+        troll = s.p['targets'][0]
+        messages = s.state['messages']
+        knocked = 'You are knocked back.' in messages
+        exchanged = any('You exchange places' in msg for msg in messages)
+        if s.p['dead']:
+            assert not exchanged and troll['x'] == 13
+        elif knocked:
+            assert (s.p['x'], troll['x']) == (11, 13) and not exchanged
+            assert s.p['player_turn'] == s.initial['player_turn'] + 2
+        else:
+            assert (s.p['x'], troll['x']) == (13, 12) and exchanged
+            assert s.p['player_turn'] == s.initial['player_turn'] + 1
+
+    c.variant('exchange-with-mountain-troll', dict(stats=3, constitution=0,
+              skills=0, food=4000, abilities=[dict(skill=3, ability=3)],
+              targets=[dict(race=74, y=12, x=13, hp=90, alertness=10)]),
+              slip_past_troll, 'exchange')
+
+
+def resting_and_slow(c: Campaign):
+    for count, light_off in ((1, True), (3, True), (7, False)):
+        def timed_rest(s, count=count, light_off=light_off):
+            def fuel(player):
+                return next(item['timeout'] for item in player['items'] if item['handle'] == 30)
+
+            s.press('R', str(count), 'Z')
+            assert 'while resting' in s.p.get('confirmation', '')
+            s.press('y' if light_off else 'n')
+            assert s.p['player_turn'] == s.initial['player_turn'] + count, s.brief()
+            assert not s.p['resting'] and s.p['light'] == s.initial['light']
+            assert (fuel(s.p) == fuel(s.initial)) == light_off
+
+        c.variant(f'timed-rest-{count}', dict(food=5000), timed_rest, 'upkeep')
+
+    def find_door(s):
+        assert s.initial['tiles'][12][13] == 48  # Secret door
+        s.press('R', '7', 'Z', 'y')
+        assert 32 <= s.p['tiles'][12][13] <= 47
+        assert any('found a secret door' in msg for msg in s.state['messages'])
+        assert s.p['player_turn'] == s.initial['player_turn'] + 1
+        assert not s.p['resting'] and s.p['light'] == s.initial['light']
+
+    c.variant('rest-finds-door-on-first-turn',
+              dict(food=5000, skills=60, tiles=[dict(y=12, x=13, feat=48)]), find_door, 'upkeep')
+
+    for skill in (0, 3):
+        def recover(s, skill=skill):
+            effective = max(0, s.initial['skills_use'][7])
+            assert (effective == 0) == (skill == 0)
+            s.press('s', 'd')  # Song of Freedom
+            assert s.p['song'] == 3
+            assert s.p['slow'] == max(0, s.initial['slow'] - max(1, effective))
+            s.press('KP5')
+            assert s.p['slow'] == max(0, s.initial['slow'] - 2 * max(1, effective))
+
+        c.variant(f'freedom-slow-recovery-{skill}',
+                  dict(food=5000, grace=-2, skills=skill, slow=8,
+                       abilities=[dict(skill=7, ability=3)]), recover, 'upkeep')
+
+
+def silence_oath(c: Campaign):
+    def expect_intact(s):
+        for key in ('broken_oaths', 'curse_stacks', 'player_turn', 'song', 'voice'):
+            assert s.p[key] == s.initial[key], (key, s.p[key], s.initial[key])
+
+    def observed(s):
+        s.press('s', 'n')  # Song of Disguise
+        assert any('while observed' in msg for msg in s.state['messages'])
+        assert 'Breaking a Sacred Oath' not in s.terminal
+        expect_intact(s)
+
+    c.variant('silence-oath-observed-disguise',
+              dict(oath=2, abilities=[dict(skill=7, ability=13)],
+                   targets=[dict(race=15, x=14, alertness=0)]), observed, 'songs')
+
+    def exhausted(s):
+        s.press('s', 't')
+        assert any('no Voice left' in msg for msg in s.state['messages'])
+        assert 'Breaking a Sacred Oath' not in s.terminal
+        expect_intact(s)
+
+    c.variant('silence-oath-no-voice',
+              dict(oath=2, voice=0, abilities=[dict(skill=7, ability=18)],
+                   targets=[dict(race=15, x=14)]), exhausted, 'songs')
+
+    def cancel_duel(s):
+        s.press('s', 't')  # Song of Contest
+        assert 'Breaking a Sacred Oath' in s.terminal
+        s.press('y', 'Escape')
+        assert any('before it finds a target' in msg for msg in s.state['messages'])
+        expect_intact(s)
+
+    c.variant('silence-oath-cancel-duel',
+              dict(oath=2, abilities=[dict(skill=7, ability=18)],
+                   targets=[dict(race=15, x=14)]), cancel_duel, 'songs')
+
+    def sing_after_declining(s):
+        s.press('s', 'a', 'n')  # Song of Elbereth
+        expect_intact(s)
+        s.press('s', 'a', 'y', 'Space', 'Space')
+        assert s.p['broken_oaths'] == 2 and s.p['curse_stacks'] == s.initial['curse_stacks'] + 1
+        assert s.p['song'] == 0 and s.p['player_turn'] == s.initial['player_turn'] + 1
+        s.press('s', 's')
+        assert s.p['song'] == 100 and s.p['curse_stacks'] == s.initial['curse_stacks'] + 1
+
+    c.variant('silence-oath-decline-then-sing',
+              dict(oath=2, voice=1, abilities=[dict(skill=7, ability=0)]), sing_after_declining, 'songs')
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--output',type=Path,default=OUT)
@@ -768,6 +884,9 @@ def main():
     work(campaign)
     ui_rng(campaign)
     terrain(campaign)
+    exchange_reactions(campaign)
+    resting_and_slow(campaign)
+    silence_oath(campaign)
     campaign.finish()
     assert campaign.results,'No selected scenarios'
     campaign.receipt['finished_at']=datetime.now(timezone.utc).isoformat();campaign.save()

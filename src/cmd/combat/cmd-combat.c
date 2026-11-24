@@ -1892,6 +1892,7 @@ void hit_trap(int y, int x)
         update_combat_rolls2(
             4 + trap_depth_dice(7), 4, dam, -1, -1, prt, 100, GF_HURT, false);
 
+        killer_mark_other(SCORE_KILLER_TRAP);
         acid_dam(dam, 4, 16, net_dam, "an acid trap");
 
         /* Make a small amount of noise */
@@ -2751,12 +2752,6 @@ void apply_oath_breaking_curse(int oath_id)
         /* Apply the chosen curse */
         add_curse_stack(chosen_curse);
         log_trace("Applied chosen curse %d for breaking oath", chosen_curse);
-    } else {
-        /* Fallback to random curse if UI failed */
-        int selected_curse = 0;
-        if (z_info && z_info->cu_max > 0) selected_curse = rand_int(z_info->cu_max);
-        add_curse_stack(selected_curse);
-        log_trace("Applied fallback random curse %d for breaking oath", selected_curse);
     }
     
     /* Ban this oath for the rest of the metarun */
@@ -3476,11 +3471,11 @@ void py_attack_aux(int y, int x, int attack_type)
                                       "Crown off balance.");
                             p_ptr->morgoth_hits++;
                         }
-                        else if (p_ptr->morgoth_hits == 1)
-                        {
-                            drop_iron_crown(m_ptr,
+                        else if (p_ptr->morgoth_hits == 1
+                            && drop_iron_crown(m_ptr,
                                 "You knock his crown from off his brow, and it "
-                                "falls to the ground nearby.");
+                                "falls to the ground nearby."))
+                        {
                             p_ptr->morgoth_hits++;
                         }
                     }

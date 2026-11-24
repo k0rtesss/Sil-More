@@ -80,6 +80,8 @@ static int random_value, random_calls, expected_bound, disturbances;
 static int identity_calls, name_roll, herb_roll, diagnosis_calls, diagnosis_rolls[2];
 static int healing_calls, stat_loss_calls;
 static int extra_version,patch_version;
+/* These disease cases use an uncursed character. */
+int curse_flag_count_cur(u32b flag) {assert(flag == CUR_HALLU);return 0;}
 u32b Rand_div(u32b bound) {
     if(bound==DISEASE_NAME_COUNT) {++identity_calls;return name_roll;}
     if(bound==DISEASE_HERB_COUNT-1) {++identity_calls;return herb_roll;}

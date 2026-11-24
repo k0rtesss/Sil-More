@@ -655,32 +655,34 @@ void monster_swap_observing_falls(int y1, int x1, int y2, int x2,
                         && !m_ptr->confused && (m_ptr->stance != STANCE_FLEEING)
                         && monster_abilities_can_react(m_ptr))
                     {
-                        // Opportunist
+                        u32b reaction;
                         if ((r_ptr->flags2 & (RF2_OPPORTUNIST))
                             && (distance(m_ptr->fy, m_ptr->fx, y2, x2) > 1))
                         {
                             msg_format(
                                 "%^s attacks you as you step away.", m_name);
-                            make_attack_reaction(m_ptr);
-
-                            // remember that the monster can do this
-                            if (m_ptr->ml)
-                                l_ptr->flags2 |= (RF2_OPPORTUNIST);
+                            reaction = RF2_OPPORTUNIST;
                         }
-
-                        // Zone of Control
-                        if ((r_ptr->flags2 & (RF2_ZONE_OF_CONTROL))
+                        else if ((r_ptr->flags2 & (RF2_ZONE_OF_CONTROL))
                             && !monster_moved_last_action(m_ptr)
                             && (distance(m_ptr->fy, m_ptr->fx, y2, x2) == 1))
                         {
                             msg_format("You move through %s's zone of control.",
                                 m_name);
-                            make_attack_reaction(m_ptr);
-
-                            // remember that the monster can do this
-                            if (m_ptr->ml)
-                                l_ptr->flags2 |= (RF2_ZONE_OF_CONTROL);
+                            reaction = RF2_ZONE_OF_CONTROL;
                         }
+                        else continue;
+
+                        bool seen = m_ptr->ml;
+                        make_attack_reaction(m_ptr);
+                        if (seen || m_ptr->ml)
+                            l_ptr->flags2 |= reaction;
+
+                        /* A passing attack can end the turn or displace either
+                         * occupant. Its actual outcome supersedes this move. */
+                        if (p_ptr->is_dead || p_ptr->leaving
+                            || cave_m_idx[y1][x1] != m1 || cave_m_idx[y2][x2] != m2)
+                            return;
                     }
                 }
             }

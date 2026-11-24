@@ -531,7 +531,10 @@ int player_lamp_oil_capacity(void)
 
 int player_lamp_oil_capacity_with_bonus(int lantern_bonus)
 {
+    /* An incoming lantern may be between stores while the old light is
+     * removed. Keep its reserved capacity during any intervening redraw. */
     int slots = player_carried_oil_container_slots()
+        + player_reserved_oil_container_slots()
         + (lantern_bonus * PLAYER_BRASS_LAMP_SLOT_COST);
 
     return player_lamp_oil_capacity_from_slots(slots);

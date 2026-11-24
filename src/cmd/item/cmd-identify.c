@@ -1181,49 +1181,38 @@ void search_square(int y, int x, int dist, int searching)
 {
     int score = 0;
     int difficulty = 0;
-    int chest_level = 0;
+    bool search_adjacent = searching && dist == 1;
+    bool hidden_trap = cave_trap_bold(y, x) && (cave_info[y][x] & CAVE_HIDDEN);
+    bool redraw = false;
+    object_type* chest = NULL;
 
-    object_type* o_ptr;
-    int chest_trap_present = false;
-
-    // determine if a trap is present
-    for (o_ptr = get_first_object(y, x); o_ptr; o_ptr = get_next_object(o_ptr))
+    if (search_adjacent && !(cave_info[y][x] & CAVE_MARK) && !cave_floorlike_bold(y, x))
     {
-        if (!chest_trap_minigame && (o_ptr->tval == TV_CHEST)
-            && (o_ptr->pval > 0)
-            && object_chest_trap_flags(o_ptr) && !object_known_p(o_ptr))
-        {
-            chest_trap_present = true;
-            chest_level = o_ptr->pval;
-            break;
-        }
+        cave_info[y][x] |= CAVE_MARK;
+        redraw = true;
     }
 
-    // if searching, discover unknown adjacent squares of interest
-    if (searching)
+    /* An object underfoot is within reach. Elsewhere, water can conceal
+     * both the object and the mechanism of a trapped chest. */
+    object_type* obj = get_first_object(y, x);
+    if (obj && ((y == p_ptr->py && x == p_ptr->px) || object_can_see_floor(y, x)))
     {
-        if ((dist == 1) && !(cave_info[y][x] & (CAVE_MARK)))
+        for (; obj; obj = get_next_object(obj))
         {
-            // mark all non-floor non-trap squares
-            if (!cave_floorlike_bold(y, x))
+            if (search_adjacent && !obj->marked)
             {
-                cave_info[y][x] |= (CAVE_MARK);
+                obj->marked = true;
+                redraw = true;
             }
-
-            // mark an object, but not the square it is in
-            if (cave_o_idx[y][x] != 0)
-            {
-                (&o_list[cave_o_idx[y][x]])->marked = true;
-            }
-
-            /* Redraw */
-            lite_spot(y, x);
+            if (!chest && !chest_trap_minigame && obj->tval == TV_CHEST
+                && obj->pval > 0 && object_chest_trap_flags(obj) && !object_known_p(obj))
+                chest = obj;
         }
     }
+    if (redraw) lite_spot(y, x);
 
     // if there is anything to notice...
-    if ((cave_trap_bold(y, x) && (cave_info[y][x] & (CAVE_HIDDEN)))
-        || (cave_feat[y][x] == FEAT_SECRET) || chest_trap_present)
+    if (hidden_trap || cave_feat[y][x] == FEAT_SECRET || chest)
     {
         // give up if the square is unseen and not adjacent
         if ((dist > 1) && !(cave_info[y][x] & (CAVE_SEEN)))
@@ -1243,9 +1232,9 @@ void search_square(int y, int x, int dist, int searching)
             score += 5;
 
         // Determine the base difficulty
-        if (chest_trap_present)
+        if (chest)
         {
-            difficulty = chest_level / 2;
+            difficulty = chest->pval / 2;
         }
         else
         {
@@ -1270,17 +1259,17 @@ void search_square(int y, int x, int dist, int searching)
             difficulty += 4; // distance 3
         if (dist == 4)
             difficulty += 6; // distance 4
-        if cave_trap_bold (y, x)
+        if (hidden_trap)
             difficulty += 8; // dungeon trap
         if (cave_feat[y][x] == FEAT_SECRET)
             difficulty += 10; // secret door
-        if (chest_trap_present)
+        if (chest)
             difficulty += 18; // chest trap
         // if (cave_info[y][x] & (CAVE_ICKY)) difficulty
         // += 2;   // inside least/lesser/greater vaults
 
         // Spider bane bonus helps to find webs
-        if (cave_feat[y][x] == FEAT_TRAP_WEB)
+        if (hidden_trap && cave_feat[y][x] == FEAT_TRAP_WEB)
         {
             difficulty -= spider_bane_bonus();
             difficulty -= artifact_spider_bane_bonus();
@@ -1290,7 +1279,7 @@ void search_square(int y, int x, int dist, int searching)
         if (skill_check(PLAYER, score, difficulty, NULL) > 0)
         {
             /* Dungeon trap */
-            if (cave_trap_bold(y, x))
+            if (hidden_trap)
             {
                 /* Reveal the trap */
                 reveal_trap(y, x);
@@ -1315,13 +1304,15 @@ void search_square(int y, int x, int dist, int searching)
                 disturb(0, 0);
             }
 
-            if (chest_trap_present)
+            if (chest)
             {
                 /* Message */
                 msg_print("You have discovered a trap on the chest!");
 
-                /* Know the trap */
-                object_known(o_ptr);
+                /* Remember the chest that the player just located. */
+                object_known(chest);
+                chest->marked = true;
+                lite_spot(y, x);
 
                 /* Notice it */
                 disturb(0, 0);

@@ -47,7 +47,7 @@ int __wrap_ui_question_ask(cptr title, cptr desc,
     return movement_choice;
 }
 static int artefact_y, artefact_x, artefact_count;
-void __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
+bool __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
     assert(id==ART_DURIN);(void)identify;
     artefact_y=y;artefact_x=x;artefact_count++;
     /* This sparse fixture has no artefact metadata, but must preserve the
@@ -56,6 +56,7 @@ void __wrap_create_chosen_artefact(byte id,int y,int x,bool identify) {
     object_wipe(&item);
     item.k_idx=1;item.tval=TV_MAIL;item.sval=SV_MAIL_CORSLET;item.number=1;
     assert(floor_carry(y,x,&item)>0);
+    return true;
 }
 
 static bool status_has_label(const status_pane_entry* entries, int count,

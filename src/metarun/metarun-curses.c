@@ -13,67 +13,52 @@ int any_curse_flag_active(u32b flag)
     return count;
 }
 
-static int weighted_random_curse(void)
+static int roll_curse_offers(int offers[], int requested)
 {
-    long total = 0;
-    int  w_max = 1;
+    if (!z_info || !cu_info) return 0;
+    int limit = MIN(z_info->cu_max, METAR_CURSE_SLOTS);
+    int weights[METAR_CURSE_SLOTS];
+    int max_weight = 1;
+    int available = 0;
+    int total = 0;
+    bool tilt = (p_info[p_ptr->prace].flags | c_info[p_ptr->pcharacter].flags) & RHF_CURSE;
 
-    /* Does the hero's lineage carry the flag? */
-    bool tilt = (p_info[p_ptr->prace].flags  & RHF_CURSE) ||
-                (c_info[p_ptr->pcharacter].flags & RHF_CURSE);
+    for (int id = 0; id < limit; id++)
+        if (cu_info[id].name) max_weight = MAX(max_weight, cu_info[id].weight);
 
-    /* Pass 1 - find the largest weight and (later) build the total */
-    for (int i = 0; i < z_info->cu_max; i++)
-    {
-        if (!cu_info[i].name) continue;          /* <- unused slot */
-        byte w   = cu_info[i].weight ? cu_info[i].weight : 1;
-        if (w > w_max) w_max = w;
+    for (int id = 0; id < limit; id++) {
+        weights[id] = -1;
+        int stacks = CURSE_CURSE_STACK(id);
+        int cap = CURSE_CURSE_CAP(id);
+        if (!cu_info[id].name || (cap && stacks >= cap)) continue;
+
+        int weight = MAX(1, cu_info[id].weight);
+        if (tilt)
+            weight = weight == max_weight ? 0 : weight + (max_weight + 1 - weight) / 2;
+        weights[id] = weight / (stacks + 1);
+        total += weights[id];
+        available++;
     }
 
-    /* Pass 2 - sum effective weights */
-    for (int i = 0; i < z_info->cu_max; i++)
-    {
-        if (!cu_info[i].name) continue;          /* <- unused slot */
-        byte w   = cu_info[i].weight ? cu_info[i].weight : 1;
-        int  cnt = CURSE_CURSE_STACK(i);
-        byte cap = (byte)CURSE_CURSE_CAP(i);
-        if (cap && cnt >= cap) continue;           /* cap reached */
-
-        /* RHF_CURSE excludes the most weighted choices */
-        if (tilt && w == w_max) continue;
-
-        long base = tilt
-            ? w + ((w_max + 1 - w) >> 1)           /* lift the tail */
-            : w;
-
-        total += base / (cnt + 1);
+    /* Draw without replacement. If every remaining weight is zero, draw
+     * uniformly among the remaining legal entries. */
+    int count = MIN(requested, available);
+    for (int row = 0; row < count; row++) {
+        int roll = rand_int(total ? total : available);
+        for (int id = 0; id < limit; id++) {
+            if (weights[id] < 0) continue;
+            int tickets = total ? weights[id] : 1;
+            if (roll < tickets) {
+                offers[row] = id;
+                total -= weights[id];
+                weights[id] = -1;
+                available--;
+                break;
+            }
+            roll -= tickets;
+        }
     }
-
-    if (!total) return rand_int(z_info->cu_max);    /* safety net */
-
-    /* Pass 3 - roulette wheel */
-    long pick = rand_int(total), run = 0;
-    for (int i = 0; i < z_info->cu_max; i++)
-    {
-        if (!cu_info[i].name) continue;          /* <- unused slot */
-        byte w   = cu_info[i].weight ? cu_info[i].weight : 1;
-        int  cnt = CURSE_CURSE_STACK(i);
-        byte cap = (byte)CURSE_CURSE_CAP(i);
-        if (cap && cnt >= cap) continue;
-
-        /* RHF_CURSE excludes the most weighted choices */
-        if (tilt && w == w_max) continue;
-
-        long base = tilt
-            ? w + ((w_max + 1 - w) >> 1)
-            : w;
-
-        long eff = base / (cnt + 1);
-        run += eff;
-        if (pick < run) return i;
-    }
-
-    return rand_int(z_info->cu_max);                /* unreachable */
+    return count;
 }
 
 static void curse_menu_fade_title(void)
@@ -126,6 +111,9 @@ static bool curse_menu_fade_choice(int choice, byte color)
 
 void add_curse_stack(int idx)
 {
+    if (!z_info || !cu_info || idx < 0 || idx >= MIN(z_info->cu_max, METAR_CURSE_SLOTS)
+        || !cu_info[idx].name) return;
+
     /* respect per-curse stack cap */
     if (CURSE_CURSE_CAP(idx) &&
         CURSE_CURSE_STACK(idx) >= CURSE_CURSE_CAP(idx))
@@ -234,7 +222,7 @@ static u16b menu_choose_effects(cptr title, const int *offers, int count, bool b
             strnfmt(prompt, sizeof(prompt), "D-pad navigate  [%s] accept  [%s] cancel", accept, back);
         } else {
             SDL_strlcpy(prompt, sdl_touch_only_device_active() ? "Tap the highlighted curse to accept"
-                : letters ? "Arrows navigate  Enter accept  a/b/c select" : "Arrows navigate  Enter accept",
+                : letters ? "Arrows navigate  Enter accept  Letter selects" : "Arrows navigate  Enter accept",
                 sizeof(prompt));
         }
         sdl_poetry_screen_set_prompt(prompt, true);
@@ -321,24 +309,18 @@ static int menu_choose_one_curse_aux(int n, bool force_menu)
     char title[96];
     const char *ordinals[] = { "a", "the second", "the third", "the fourth" };
 
-    if (!force_menu && any_curse_flag_active(CUR_NOCHOICE))
-        return weighted_random_curse();
-
-    for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        bool duplicate;
-        do {
-            pick[i] = weighted_random_curse();
-            duplicate = CURSE_CURSE_CAP(pick[i])
-                && CURSE_CURSE_STACK(pick[i]) >= CURSE_CURSE_CAP(pick[i]);
-            for (int j = 0; j < i; j++)
-                if (pick[j] == pick[i]) duplicate = true;
-        } while (duplicate);
+    bool automatic = !force_menu && any_curse_flag_active(CUR_NOCHOICE);
+    int count = roll_curse_offers(pick, automatic ? 1 : CURSE_MENU_LINES);
+    if (!count) {
+        msg_print("You already bear every available curse.");
+        return -1;
     }
+    if (automatic) return pick[0];
 
     strnfmt(title, sizeof(title), "Choose %s curse",
         ordinals[(n >= 0 && n < (int)N_ELEMENTS(ordinals)) ? n : 0]);
-    u16b choice = menu_choose_effects(title, pick, CURSE_MENU_LINES, false);
-    for (int row = 0; row < CURSE_MENU_LINES; row++)
+    u16b choice = menu_choose_effects(title, pick, count, false);
+    for (int row = 0; row < count; row++)
         if (choice & (1U << row)) return pick[row];
     return -1;
 }

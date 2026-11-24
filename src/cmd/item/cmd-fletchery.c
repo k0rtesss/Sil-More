@@ -6,6 +6,7 @@
 #include "metarun.h"
 #include "ui/question.h"
 #include "object/object-internal.h"
+#include "object/object-place.h"
 
 static bool item_tester_hook_fletchery_source(const object_type* o_ptr)
 {
@@ -354,87 +355,35 @@ static bool consume_fletchery_supply_torches(int sval, int amount)
     return amount == 0;
 }
 
-static bool drop_fletchered_arrows_near(object_type* arrows)
+static bool drop_fletchered_arrows_near(const object_type* arrows)
 {
-    object_type drop_obj;
-    s16b o_idx;
+    object_type drop;
 
-    if (!arrows || arrows->number <= 0 || arrows->k_idx == 0)
+    if (!arrows || !arrows->k_idx || arrows->number <= 0)
         return false;
 
     log_fletchery_object_state("drop_attempt", arrows, -1);
+    object_copy(&drop, arrows);
+    drop.pickup = false;
+    drop.pickup_slot = -1;
 
-    if ((cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR)
-        || (cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT)
-        || FEAT_IS_BRIDGE(cave_feat[p_ptr->py][p_ptr->px]))
-    {
-        object_copy(&drop_obj, arrows);
-        o_idx = floor_carry(p_ptr->py, p_ptr->px, &drop_obj);
-        if (o_idx > 0)
-        {
-            log_debug("fletchery:drop_here_success o_idx=%d y=%d x=%d",
-                o_idx, p_ptr->py, p_ptr->px);
-            log_fletchery_object_state("drop_here_floor", &o_list[o_idx], -1);
-            return true;
-        }
-    }
+    /* The entire stack must fit before changing the floor. A failed direct
+     * floor_carry can otherwise leave a partial merge behind. */
+    if (drop_objects_near(&drop, 1, 0))
+        return true;
 
-    for (int d = 0; d < 8; d++)
-    {
-        int yy = p_ptr->py + ddy_ddd[d];
-        int xx = p_ptr->px + ddx_ddd[d];
-
-        if (!in_bounds_fully(yy, xx))
-            continue;
-
-        if (cave_feat[yy][xx] != FEAT_FLOOR
-            && cave_feat[yy][xx] != FEAT_SUNLIGHT
-            && !FEAT_IS_BRIDGE(cave_feat[yy][xx]))
-        {
-            continue;
-        }
-
-        object_copy(&drop_obj, arrows);
-        o_idx = floor_carry(yy, xx, &drop_obj);
-        if (o_idx > 0)
-        {
-            log_debug("fletchery:drop_adjacent_success o_idx=%d y=%d x=%d",
-                o_idx, yy, xx);
-            log_fletchery_object_state("drop_adjacent_floor", &o_list[o_idx], -1);
-            return true;
-        }
-    }
-
-    /*
-     * Force placement for crafted-arrow overflow so partial fletchery results
-     * do not vanish when the pack is full and nearby floor grids are crowded.
-     */
-    object_copy(&drop_obj, arrows);
-    drop_obj.pickup = true;
-    drop_obj.pickup_slot = -1;
-
-    o_idx = drop_near(&drop_obj, 0, p_ptr->py, p_ptr->px);
-
-    if (!o_idx)
+    /* Keep the existing last resort for crafted arrows on a crowded floor. */
+    drop.pickup = true;
+    s16b index = drop_near(&drop, 0, p_ptr->py, p_ptr->px);
+    if (index <= 0)
     {
         log_warn("drop_fletchered_arrows_near: failed to place %d crafted arrows",
             arrows->number);
         return false;
     }
 
-    /*
-     * These are crafted arrows, not auto-recovering fired ammo. Clear the
-     * temporary force-place flag after the floor object is created/updated.
-     */
-    if (o_idx > 0)
-    {
-        log_debug("fletchery:drop_near_success o_idx=%d", o_idx);
-        log_fletchery_object_state("drop_near_floor_before_clear", &o_list[o_idx], -1);
-        o_list[o_idx].pickup = false;
-        o_list[o_idx].pickup_slot = -1;
-        log_fletchery_object_state("drop_near_floor_after_clear", &o_list[o_idx], -1);
-    }
-
+    o_list[index].pickup = false;
+    o_list[index].pickup_slot = -1;
     return true;
 }
 
@@ -766,10 +715,16 @@ void do_cmd_fletchery(void)
 
         object_type arrow_proto;
         object_prep(&arrow_proto, lookup_kind(TV_ARROW, SV_NORMAL_ARROW));
-        arrow_proto.number = produced_total;
         arrow_proto.att = 3;
 
-        distribute_fletchered_arrows(&arrow_proto);
+        /* Keep the total in an int and distribute legal stacks. The object
+         * quantity field cannot hold the yield of a large floor cache. */
+        int stack_limit = object_stack_limit(&arrow_proto);
+        for (int left = produced_total; left > 0; left -= arrow_proto.number)
+        {
+            arrow_proto.number = MIN(left, stack_limit);
+            distribute_fletchered_arrows(&arrow_proto);
+        }
         return;
     }
 

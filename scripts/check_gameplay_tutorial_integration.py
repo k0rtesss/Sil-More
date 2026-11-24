@@ -135,7 +135,8 @@ void sil_achievements_on_healing(void) {}
 void sil_achievements_on_damage(int damage,int before) { (void)damage;(void)before; }
 void sil_achievements_on_wolf_death(bool first) { (void)first; }
 void sil_achievements_on_death(void) {}
-void killer_commit(cptr cause) { (void)cause; }
+killer_info killer_take_pending(void) { return (killer_info){0}; }
+void killer_commit_source(killer_info source) { (void)source; }
 const killer_info *killer_last(void) { return NULL; }
 void disturb(int stop,int unused) { (void)stop;(void)unused; }
 void message(u16b type,s16b extra,cptr text) { (void)type;(void)extra;(void)text; }
@@ -1541,7 +1542,9 @@ def main():
     game = game.replace('#include "tutorial-world.h"', '#include "tutorial/tutorial-world.h"')
     vitals_source = (ROOT / 'src/player/player-vitals.c').read_text()
     vitals = '\n'.join(c_function(vitals_source, name) for name in ('rescale_vital', 'calc_hitpoints'))
-    damage = c_function((ROOT / 'src/spell/spell-damage.c').read_text(), 'take_hit')
+    damage_source = (ROOT / 'src/spell/spell-damage.c').read_text()
+    damage = '\n'.join(c_function(damage_source, name) for name in
+                       ('take_hit_from_source', 'take_hit'))
     ranged = (ROOT / "src/cmd/combat/cmd-ranged.c").read_text()
     tutorial_frontend = (ROOT / "src/sdl/ui/sdl-gameplay-tutorial.c").read_text()
     tutorial_command = c_function(tutorial_frontend, 'tutorial_command')

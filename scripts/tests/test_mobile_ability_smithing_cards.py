@@ -55,6 +55,7 @@ typedef struct {int level;cptr state;} ability_type;
 #define ABILITY_BROWSER_INSIGHT 100
 #define ABILITY_MENU_CLICK_ABILITY_BASE 1000
 #define SMITH_CLICK_CALC 99
+#define SMITH_CLICK_BACK 100
 #define TERM_L_WHITE 9
 #define TERM_SHADE 16
 #define TERM_UI_SELECTED 192
@@ -65,7 +66,8 @@ static int menu_text_display_width(cptr text){return (int)strlen(text);}
 static void draw_supply_icon(int x,int y,const object_type*obj){(void)x;(void)y;(void)obj;}
 #define SMITH_BILL_EXTRAS_MAX 15
 static int height=30,reserved=2,click_id[64],click_rows[64],click_count;
-static bool portrait=true;
+static int touch_id[8],touch_count;
+static bool portrait=true,touch,touch_exit;
 static char screen[40][31];
 static byte ink[40][30];
 static int strnfmt(char*s,size_t n,cptr f,...) {va_list a;va_start(a,f);int r=vsnprintf(s,n,f,a);va_end(a);return r;}
@@ -92,12 +94,15 @@ static void Term_putstr(int x,int y,int n,byte a,cptr s){assert(x>=0&&y>=0&&y<he
 static void ability_browser_put_fitted(int x,int y,int n,byte a,cptr s){Term_putstr(x,y,MIN(n,(int)strlen(s)),a,s);}
 static void ability_browser_fill_row(int x,int y,int n,byte a){assert(y<height&&x+n<=30);memset(screen[y]+x,' ',n);}
 static void ui_menu_click_add(int id,int x,int y,int w){assert(x>=0&&x+w<=30&&y<height);click_id[click_count]=id;click_rows[click_count++]=y;}
+static bool sdl_touch_only_device_active(void){return touch;}
+static bool ui_menu_click_touch_exit_button_active(void){return touch_exit;}
+static void ui_menu_click_add_touch_button(int id,cptr label,byte attr){assert(touch_count<8&&*label);touch_id[touch_count++]=id;}
 static int smith_ui_content_bottom_row(void){return height-reserved-1;}
 static void Term_erase(int x,int y,int w){assert(x>=0&&x+w<=30&&y>=0&&y<height);memset(screen[y]+x,' ',w);}
 static int smith_ui_safe_width(int x,int w){return MIN(w,30-x);}
 static int indexed_menu_prefix_col(int col){return MAX(0,col-2);}
 static void smith_ui_fill_row(int x,int y,int w,byte attr){Term_erase(x,y,w);}
-static void clear(void){for(int y=0;y<40;y++){memset(screen[y],' ',30);screen[y][30]=0;}click_count=0;}
+static void clear(void){for(int y=0;y<40;y++){memset(screen[y],' ',30);screen[y][30]=0;}click_count=touch_count=0;}
 '''
 state=r'''
 static void ability_browser_entry_state(char*s,size_t n,int skill,const void*e){const ability_browser_entry*entry=e;strnfmt(s,n,"%s",entry->b_ptr->state);}
@@ -143,10 +148,16 @@ int main(void){
   assert(bill[i].requirement==!strcmp(bill[i].label,"Requires"));
  }
  smith_sheet_layout sheet={.width=30,.margin=1,.list_width=28};
- smith_sheet_action actions[]={{1,"Back",TERM_WHITE},{SMITH_CLICK_CALC,"Costs",TERM_WHITE},{2,"Apply",TERM_WHITE}};
+ smith_sheet_action actions[]={{SMITH_CLICK_BACK,"Back",TERM_WHITE},{SMITH_CLICK_CALC,"Costs",TERM_WHITE},{2,"Apply",TERM_WHITE}};
  for(int h=12;h<=30;h+=18){
   height=h;clear();sheet.footer=smith_ui_content_bottom_row();smith_sheet_actions(&sheet,actions,3,0);
-  assert(strstr(screen[sheet.footer],"Costs")&&click_count==3&&click_id[1]==SMITH_CLICK_CALC);
+  assert(strstr(screen[sheet.footer],"Costs")&&click_count==3&&click_id[1]==SMITH_CLICK_CALC&&touch_count==0);
+  touch=true;clear();smith_sheet_actions(&sheet,actions,3,0);
+  assert(!strstr(screen[sheet.footer],"Costs")&&click_count==0&&touch_count==3);
+  assert(touch_id[0]==SMITH_CLICK_CALC&&touch_id[1]==2&&touch_id[2]==SMITH_CLICK_BACK);
+  touch_exit=true;clear();smith_sheet_actions(&sheet,actions,3,0);
+  assert(click_count==0&&touch_count==2);
+  touch=touch_exit=false;
  }
  /* Touch has no letter prefix. The icon-free property name occupies its whole row. */
  const char*labels[]={"Oath of the Valorous Heart","Resistance to Stunning","Cycle alloy metal"};

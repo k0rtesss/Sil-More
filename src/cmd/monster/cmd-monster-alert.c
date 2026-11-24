@@ -175,43 +175,33 @@ void new_wandering_destination(monster_type* m_ptr, monster_type* leader_ptr)
  * Makes Morgoth drop his Iron Crown with an appropriate message.
  */
 
-void drop_iron_crown(monster_type* m_ptr, const char* msg)
+bool drop_iron_crown(monster_type* m_ptr, const char* msg)
 {
-    int i, near_y, near_x;
+    if (a_info[ART_MORGOTH_3].cur_num)
+        return false;
 
-    log_debug("drop_iron_crown: called, ART_MORGOTH_3 cur_num=%d", 
-              (&a_info[ART_MORGOTH_3])->cur_num);
-
-    if ((&a_info[ART_MORGOTH_3])->cur_num == 0)
+    int near_y = m_ptr->fy;
+    int near_x = m_ptr->fx;
+    /* Prefer an adjacent square, with the carrier's own grid as a fallback. */
+    for (int i = 0; i < 1000; i++)
     {
-        log_debug("drop_iron_crown: crown not yet dropped, dropping now");
-        msg_print(msg);
-
-        // choose a nearby location, but not his own square
-        for (i = 0; i < 1000; i++)
+        int y = m_ptr->fy + rand_range(-1, 1);
+        int x = m_ptr->fx + rand_range(-1, 1);
+        if ((y != m_ptr->fy || x != m_ptr->fx) && in_bounds_fully(y, x)
+            && cave_floor_bold(y, x))
         {
-            near_y = m_ptr->fy + rand_range(-1, 1);
-            near_x = m_ptr->fx + rand_range(-1, 1);
-
-            if (((near_y != m_ptr->fy) || (near_x != m_ptr->fx))
-                && cave_floor_bold(near_y, near_x))
-                break;
+            near_y = y;
+            near_x = x;
+            break;
         }
-
-        log_debug("drop_iron_crown: dropping crown at (%d, %d)", near_y, near_x);
-        
-        // drop it there
-        create_chosen_artefact(ART_MORGOTH_3, near_y, near_x, true);
-
-        log_debug("drop_iron_crown: calling anger_morgoth(1) - crown lost");
-        // lower Morgoth's protection, remove his light source, increase his
-        // will and perception and evasion
-        anger_morgoth(1);
     }
-    else
-    {
-        log_debug("drop_iron_crown: crown already dropped, skipping");
-    }
+
+    if (!create_chosen_artefact(ART_MORGOTH_3, near_y, near_x, true))
+        return false;
+
+    msg_print(msg);
+    anger_morgoth(1);
+    return true;
 }
 
 void make_alert(monster_type* m_ptr)

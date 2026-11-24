@@ -412,6 +412,8 @@ void cave_environment_changed(int y, int x, int old_feat, int new_feat)
     if (!state.ready || !in_bounds(y,x) || old_feat == new_feat) return;
     environment_cell* c = &cells[y][x];
     if (cave_info[y][x] & CAVE_SEEN) c->known_feat = new_feat;
+    else if ((cave_info[y][x] & CAVE_HIDDEN) && FEAT_IS_TRAP(c->known_feat))
+        c->known_feat = FEAT_FLOOR;
     if (new_feat == FEAT_DAMAGED_WALL || new_feat == FEAT_CRACKED_QUARTZ)
         c->integrity = MIN(c->integrity, 60);
     if (!changing) {

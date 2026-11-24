@@ -1404,42 +1404,7 @@ void do_cmd_change_song()
             return;
         }
 
-        bool choice_stops_current_song = (song_choice == p_ptr->song1)
-            || ((p_ptr->song2 != SNG_NOTHING) && (song_choice == p_ptr->song2));
-
-        if ((song_choice != SNG_NOTHING)
-            && (song_choice != SNG_EXCHANGE_THEMES)
-            && !choice_stops_current_song)
-        {
-            if (chosen_oath(OATH_SILENCE) && !oath_invalid(OATH_SILENCE))
-            {
-                /* Use oath-specific confirmation prompt */
-                char* prompt = oath_confirmation_prompt(OATH_SILENCE);
-                if (!prompt || !prompt[0]) prompt = "Are you certain you wish to break your Oath of Silence?";
-
-                if (get_check_oath_multiline(prompt))
-                {
-                    log_info("Player broke oath of silence to sing");
-
-                    /* Curse message and selection handled by apply_oath_breaking_curse */
-                    do_cmd_note("Broke your oath", p_ptr->depth);
-
-                    /* Apply oath breaking consequences */
-                    apply_oath_breaking_curse(OATH_SILENCE);
-
-                    /* Only mark oath as broken if player actually has it */
-                    p_ptr->oaths_broken |= OATH_SILENCE_FLAG;
-                }
-                else
-                {
-                    log_debug("Player cancelled song due to oath of silence");
-                    return;
-                }
-            }
-        }
-
-        log_info("Player changed song to %s", song_choice == SNG_NOTHING ? "silence" :
-                 song_choice == SNG_EXCHANGE_THEMES ? "exchange themes" : "new song");
+        log_info("Player selected song menu action %d", song_choice);
         change_song(song_choice);
         if (song_menu_is_singable(song_choice) && singing(song_choice))
             song_menu_mark_used(song_choice);

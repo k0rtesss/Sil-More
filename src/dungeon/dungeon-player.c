@@ -250,6 +250,17 @@ void process_player_aux(void)
     }
 }
 
+/* Report a fatal hit and count its paid action before leaving turn upkeep. */
+static bool upkeep_damage_ends_turn(int damage, cptr cause)
+{
+    killer_mark_other(SCORE_KILLER_OTHER);
+    take_hit(damage, cause);
+    if (!p_ptr->is_dead)
+        return false;
+    playerturn++;
+    return true;
+}
+
 /*
  * Process the player
  *
@@ -647,16 +658,6 @@ void process_player(void)
         /* Resting */
         else if (p_ptr->resting)
         {
-            /* Timed rest */
-            if (p_ptr->resting > 0)
-            {
-                /* Reduce rest count */
-                p_ptr->resting--;
-
-                /* Redraw the state */
-                p_ptr->redraw |= (PR_STATE);
-            }
-
             /* Take a turn */
             p_ptr->energy_use = 100;
 
@@ -1071,12 +1072,19 @@ void process_player(void)
 
     // make less noise if you did nothing at all
     // (+7 in total whether or not stealth mode is used)
-    if (p_ptr->resting)
+    if (p_ptr->resting && p_ptr->previous_action[0] == 5)
     {
         if (p_ptr->stealth_mode)
             stealth_score += 2;
         else
             stealth_score += 7;
+
+        /* Starting a rest and continuing it each spend one resting turn. */
+        if (p_ptr->resting > 0)
+        {
+            p_ptr->resting--;
+            p_ptr->redraw |= PR_STATE;
+        }
     }
 
     // make much more noise when smithing
@@ -1108,8 +1116,8 @@ void process_player(void)
         // amount is one fifth of the poison, rounding up
         amount = (p_ptr->poisoned + 4) / 5;
 
-        killer_mark_other(SCORE_KILLER_OTHER);
-        take_hit(amount, "poison");
+        if (upkeep_damage_ends_turn(amount, "poison"))
+            return;
     }
 
     /* Take damage from cuts */
@@ -1118,8 +1126,8 @@ void process_player(void)
         amount = (p_ptr->cut + 4) / 5;
 
         /* Take damage */
-        killer_mark_other(SCORE_KILLER_OTHER);
-        take_hit(amount, "a fatal wound");
+        if (upkeep_damage_ends_turn(amount, "a fatal wound"))
+            return;
     }
 
     /*** Check the Food, and Regenerate ***/
@@ -1161,8 +1169,8 @@ void process_player(void)
         i = 1; // old: (PY_FOOD_STARVE - p_ptr->food) / 10;
 
         /* Take damage */
-        killer_mark_other(SCORE_KILLER_OTHER);
-        take_hit(i, "starvation");
+        if (upkeep_damage_ends_turn(i, "starvation"))
+            return;
     }
 
     /* Lower the staircasiness */
@@ -1262,10 +1270,8 @@ void process_player(void)
     /* Slow */
     if (p_ptr->slow)
     {
-        if (singing(SNG_FREEDOM))
-            (void)set_slow(p_ptr->slow - ability_bonus(S_SNG, SNG_FREEDOM));
-        else
-            (void)set_slow(p_ptr->slow - 1);
+        int recovery = singing(SNG_FREEDOM) ? ability_bonus(S_SNG, SNG_FREEDOM) : 1;
+        (void)set_slow(p_ptr->slow - MAX(1, recovery));
     }
 
     /* Rage */

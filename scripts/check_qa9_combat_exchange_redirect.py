@@ -26,8 +26,10 @@ GUARD = '''    /* Confusion can select a different creature with different restr
 CHECKS = r'''
 #include "angband.h"
 #include "cmd/item/cmd-item-utility.c"
+#include "melee/melee-movement.h"
 #include <assert.h>
 extern void fixture_reset_map(void);
+extern bool current_build_vault_exact_token;
 static int intended, redirected, prompts, confusion_calls, reactions, rolls;
 bool __wrap_get_rep_dir(int* dir)
 { ++prompts; *dir=intended; return intended!=0; }
@@ -80,6 +82,86 @@ static void stationary(int actor,int y,int x,int energy)
     assert(cave_m_idx[y][x]==actor && mon_list[actor].fy==y && mon_list[actor].fx==x);
     assert(p_ptr->energy_use==energy && !reactions && !rolls); conserved();
 }
+
+static void check_interrupted_exchanges(void)
+{
+    prepare();
+    int troll = place(20,19,74,ALERTNESS_VERY_ALERT);
+    p_ptr->skill_use[S_EVN] = -100;
+    p_ptr->stat_use[A_CON] = -5;
+    do_cmd_exchange();
+    printf("Troll response: player x=%d, troll x=%d, knockback=%d.\n",
+        p_ptr->px, mon_list[troll].fx, p_ptr->knocked_back);
+    assert(p_ptr->knocked_back && p_ptr->skip_next_turn && p_ptr->chp > 0);
+    assert(p_ptr->px == 21 && cave_m_idx[20][21] == -1);
+    assert(mon_list[troll].fx == 19 && cave_m_idx[20][19] == troll);
+    assert(!cave_m_idx[20][20] && p_ptr->energy_use == 100);
+
+    prepare();
+    int scout = place(20,19,31,ALERTNESS_VERY_ALERT);
+    mon_list[scout].hp = 1;
+    p_ptr->active_ability[S_EVN][EVN_RIPOSTE] = true;
+    p_ptr->skill_use[S_EVN] = p_ptr->skill_use[S_MEL] = 100;
+    p_ptr->mdd = 10; p_ptr->mds = 5;
+    do_cmd_exchange();
+    assert(p_ptr->ripostes == 1 && !mon_list[scout].r_idx);
+    assert(p_ptr->px == 20 && cave_m_idx[20][20] == -1 && !cave_m_idx[20][19]);
+    assert(!mon_list[scout].alertness && p_ptr->energy_use == 100);
+
+    prepare();
+    int bird = place(20,19,22,ALERTNESS_ALERT);
+    cave_set_feat(20,19,FEAT_CHASM);
+    cave_info[20][19] |= CAVE_SEEN;
+    do_cmd_exchange();
+    stationary(bird,20,19,0);
+
+    prepare();
+    bird = place(20,19,22,ALERTNESS_ALERT);
+    cave_set_feat(20,19,FEAT_CHASM);
+    cave_info[20][19] &= ~(CAVE_MARK | CAVE_SEEN);
+    do_cmd_exchange();
+    stationary(bird,20,19,100);
+
+    prepare();
+    place(20,19,31,ALERTNESS_ALERT);
+    bird = place(21,19,22,ALERTNESS_ALERT);
+    cave_set_feat(21,19,FEAT_CHASM);
+    redirected=1;
+    do_cmd_exchange();
+    stationary(bird,21,19,100);
+    puts("Interrupted Exchange: knockback and counter-kills retain real positions; deliberate chasm refusal is free.");
+}
+
+static void check_monster_exchange_landing(void)
+{
+    prepare();
+    int cat = place(20,19,154,ALERTNESS_VERY_ALERT);
+    p_ptr->leaping = true;
+    cave_set_feat(20,20,FEAT_CHASM);
+    cave_set_feat(20,19,FEAT_TRAP_PIT);
+    monster_exchange_places(&mon_list[cat]);
+    assert(!mon_list[cat].r_idx && !cave_m_idx[20][20]);
+    assert(!p_ptr->leaping && p_ptr->px == 19 && cave_m_idx[20][19] == -1);
+    printf("Cat falls in chasm: player reaches pit with %d of 1000 HP.\n", p_ptr->chp);
+    assert(p_ptr->chp < 1000);
+}
+
+static void check_fatal_passing_attack(void)
+{
+    prepare();
+    current_build_vault_exact_token = true;
+    int ulfang = place(19,20,125,ALERTNESS_VERY_ALERT);
+    int reaper = place(20,19,406,ALERTNESS_VERY_ALERT);
+    current_build_vault_exact_token = false;
+    int old_deaths = l_list[406].deaths;
+    p_ptr->chp = 1;
+    p_ptr->skill_use[S_EVN] = -100;
+    monster_swap(20,20,21,20);
+    assert(p_ptr->is_dead && cave_m_idx[20][20] == -1 && !cave_m_idx[21][20]);
+    printf("Lethal passing attack: %d reactions, %d combat rolls.\n", reactions, rolls);
+    assert(reactions == 1 && rolls == 1 && l_list[406].deaths == old_deaths);
+    assert(cave_m_idx[19][20] == ulfang && cave_m_idx[20][19] == reaper);
+}
 void checks(void)
 {
     prepare(); int scout=place(20,19,31,ALERTNESS_VERY_ALERT); intended=0;
@@ -122,6 +204,13 @@ void checks(void)
     assert(p_ptr->py==21 && p_ptr->px==19 && cave_m_idx[21][19]==-1);
     assert(cave_m_idx[20][20]==thrall && cave_m_idx[20][19]==scout);
     assert(p_ptr->energy_use==100 && !reactions && !rolls); conserved();
+    prepare();
+    int peaceful = place(20,19,14,ALERTNESS_VERY_ALERT);
+    do_cmd_exchange();
+    assert(p_ptr->px == 19 && cave_m_idx[20][20] == peaceful && !reactions && !rolls);
+    check_interrupted_exchanges();
+    check_monster_exchange_landing();
+    check_fatal_passing_attack();
     puts("PASS: real Exchange cancellation/initial immovable+wall refusals free; redirected thorn/Grotesque/alert-thrall/empty/wall refusals paid without reactions or displacement; normal floor and both water swaps have one real passing attack/correct100or150energy, movable-friendly policy and gear conserved.");
 }
 '''

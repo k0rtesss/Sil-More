@@ -390,12 +390,14 @@ bool monster_charge(monster_type* m_ptr)
     // if it has the ability and isn't slow
     if ((r_ptr->flags2 & (RF2_CHARGE)) && (speed >= 2))
     {
+        /* During a monster action, slot zero is for the action underway. */
+        int previous_move = m_ptr->previous_action[m_ptr->ability_in_action ? 1 : 0];
         // try all three directions
         for (i = -1; i <= 1; i++)
         {
             d = cycle[chome[dir_from_delta(deltay, deltax)] + i];
 
-            if (m_ptr->previous_action[1] == d)
+            if (previous_move == d)
             {
                 return (true);
             }
@@ -551,6 +553,7 @@ void do_betrayal_helm_crown(void)
  * In particular, no player equipment, exact HP or actual resistance is read. */
 static void monster_damage_player(monster_type* m_ptr, int damage, cptr cause)
 {
+    killer_mark_monster(m_ptr);
     take_hit(damage, cause);
     if (damage > 0)
         monster_ai_observe(m_ptr, MON_AI_WOUNDED, 1);
@@ -765,8 +768,6 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
     int prt_percent = 100; // a default value to soothe compilation warnings
 
     int dam_type;
-
-    killer_mark_monster(m_ptr);
 
     /* Not allowed to attack */
     if (r_ptr->flags1 & (RF1_NEVER_BLOW))
@@ -1617,6 +1618,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                 msg_print("You are covered in acid!");
 
                 /* Special damage */
+                killer_mark_monster(m_ptr);
                 acid_dam(dam, total_damage_dice, total_damage_dice * ds,
                     net_dam, ddesc);
 
@@ -1636,6 +1638,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     msg_print("You are struck by electricity!");
 
                 /* Take damage (special) */
+                killer_mark_monster(m_ptr);
                 elec_dam(dam, total_damage_dice, total_damage_dice * ds,
                     net_dam, ddesc);
 
@@ -1651,6 +1654,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                 obvious = true;
 
                 /* Take damage */
+                killer_mark_monster(m_ptr);
                 dark_dam_mixed(net_dam, ddesc);
 
                 dam_type = GF_DARK;
@@ -1687,6 +1691,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     msg_print("You are enveloped in flames!");
 
                 /* Take damage (special) */
+                killer_mark_monster(m_ptr);
                 fire_dam_mixed(dam, total_damage_dice, total_damage_dice * ds,
                     net_dam, ddesc);
 
@@ -1707,6 +1712,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     msg_print("You are covered with frost!");
 
                 /* Take damage (special) */
+                killer_mark_monster(m_ptr);
                 cold_dam_mixed(dam, total_damage_dice, total_damage_dice * ds,
                     net_dam, ddesc);
 
@@ -2105,6 +2111,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
         /* Monster missed player */
         else
         {
+            bool describe_miss = m_ptr->ml && !p_ptr->confused;
             /* Analyze failed attacks */
             switch (method)
             {
@@ -2119,15 +2126,14 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             case RBM_ENGULF:
             case RBM_CRAWL:
             case RBM_THORN:
-
-                /* Visible monsters */
-                if (m_ptr->ml && !p_ptr->confused)
+                if (describe_miss || effect == RBE_SHATTER)
                 {
                     bool quake_anyway = false;
                     int damage = m_ptr->maxhp - m_ptr->hp;
 
                     /* Disturbing */
-                    disturb(1, 0);
+                    if (describe_miss)
+                        disturb(1, 0);
 
                     // Extra earthquakes as more damaged
                     // (really for Morgoth, who has more
@@ -2141,48 +2147,40 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     if ((effect == RBE_SHATTER)
                         && ((hit_result > -3) || quake_anyway))
                     {
-                        /* Message */
-                        msg_format("%^s just misses you.", m_name);
+                        if (describe_miss)
+                            msg_format("%^s just misses you.", m_name);
                         update_combat_rolls_no_damage();
 
-                        /* Gender based message */
-                        // No female earthquake causers
+                        /* No female monster currently has a shattering blow. */
                         if (r_ptr->flags1 & (RF1_FEMALE))
                         {
-                            msg_print("Her blow slams into the floor where you "
-                                      "stood, and the "
-                                      "ground shakes violently!");
+                            if (describe_miss)
+                                msg_print("Her blow slams into the floor where you "
+                                          "stood, and the ground shakes violently!");
                         }
-
-                        // Morgoth
-                        else if (r_ptr->flags1 & (RF1_MALE))
-                        {
-                            msg_print("You leap aside as his great hammer "
-                                      "slams into the floor.");
-                            msg_print("The ground shakes violently with the "
-                                      "force of the blow!");
-
-                            /* Radius 5 earthquake centered on the monster */
-                            earthquake(m_ptr->fy, m_ptr->fx, p_ptr->py,
-                                p_ptr->px, 5, cave_m_idx[m_ptr->fy][m_ptr->fx]);
-                        }
-
-                        // Kemenrauko
                         else
                         {
-                            msg_print("You leap aside as its stony fist slams "
-                                      "into the floor.");
-                            msg_print("The ground shakes violently with the "
-                                      "force of the blow!");
+                            bool hammer = (r_ptr->flags1 & RF1_MALE) != 0;
+                            if (describe_miss)
+                            {
+                                msg_print(hammer
+                                    ? "You leap aside as his great hammer slams into the floor."
+                                    : "You leap aside as its stony fist slams into the floor.");
+                                msg_print("The ground shakes violently with the force of the blow!");
+                            }
+                            else
+                            {
+                                msg_print("The ground shakes violently!");
+                            }
 
-                            /* Radius 4 earthquake centered on the monster */
-                            earthquake(m_ptr->fy, m_ptr->fx, -1, -1, 4,
-                                cave_m_idx[m_ptr->fy][m_ptr->fx]);
+                            earthquake(m_ptr->fy, m_ptr->fx,
+                                hammer ? p_ptr->py : -1, hammer ? p_ptr->px : -1,
+                                hammer ? 5 : 4, cave_m_idx[m_ptr->fy][m_ptr->fx]);
                         }
                     }
 
                     // a normal miss
-                    else
+                    else if (describe_miss)
                     {
                         /* Message */
                         msg_format("%^s misses you.", m_name);

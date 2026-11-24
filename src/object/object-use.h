@@ -5,6 +5,12 @@
 
 #include "angband.h"
 
+/* Partial stored charges cannot power a staff activation. */
+static inline int staff_usable_charges(int stored_charges)
+{
+    return MAX(0, stored_charges) / CHANNELING_CHARGE_MULTIPLIER;
+}
+
 int get_paired_artefact(int art_idx);
 bool player_can_treat_as_throwing_flags(const object_type* o_ptr, u32b f3);
 bool weapon_is_impale_eligible(const object_type* o_ptr);

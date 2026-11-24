@@ -4839,6 +4839,15 @@ void do_cmd_jewelry_preset_shortcut(void)
     (void)do_cmd_jewelry_preset_apply(choice);
 }
 
+static bool curse_breaking_can_release(const object_type* o_ptr)
+{
+    u32b f1, f2, f3;
+    if (!p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
+        return false;
+    object_flags(o_ptr, &f1, &f2, &f3);
+    return !(f3 & TR3_PERMA_CURSE);
+}
+
 /*
  * Take off an item
  */
@@ -4846,7 +4855,6 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
 {
     if (!tutorial_game_action_allowed("remove", default_o_ptr)) return;
     int item;
-    bool can_break_curse;
     bool bound_curse;
 
     object_type* o_ptr;
@@ -4886,13 +4894,12 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
         return;
     }
 
-    can_break_curse = p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING];
     bound_curse = cursed_p(o_ptr)
         && (player_equipment_slot_counts_as_equipped(item) || item == INVEN_QUIVER1);
 
     /* Reject an impossible removal before charging for Pack access. Keep
      * curse breaking itself after the delay, so cancellation cannot uncurse. */
-    if (bound_curse && (!can_break_curse
+    if (bound_curse && (!curse_breaking_can_release(o_ptr)
             || item == INVEN_QUIVER1 || item == INVEN_BELT))
     {
         msg_print("You cannot bear to part with it.");
@@ -5084,8 +5091,9 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
         && confirm && !confirm_drop_item_amount(o_ptr, amt))
         return false;
 
-    if (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr)
-        && !p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
+    bool bound_curse = player_equipment_slot_counts_as_equipped(item)
+        && cursed_p(o_ptr);
+    if (bound_curse && !curse_breaking_can_release(o_ptr))
     {
         msg_print("You cannot bear to part with it.");
         return false;
@@ -5097,27 +5105,12 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
         return true;
     }
 
-    /* Hack -- Cannot remove cursed items */
-    if (player_equipment_slot_counts_as_equipped(item) && cursed_p(o_ptr))
+    if (bound_curse)
     {
-        if (p_ptr->active_ability[S_WIL][WIL_CURSE_BREAKING])
-        {
-            /* Message */
-            msg_print("With a great strength of will, you break the curse!");
-
-            /* Uncurse the object */
-            uncurse_object(o_ptr);
-            if (!cursed_p(o_ptr))
-                sil_achievements_on_event(SIL_ACH_NO_LONGER_BINDING);
-        }
-        else
-        {
-            /* Oops */
-            msg_print("You cannot bear to part with it.");
-
-            /* Nope */
-            return false;
-        }
+        msg_print("With a great strength of will, you break the curse!");
+        uncurse_object(o_ptr);
+        if (!cursed_p(o_ptr))
+            sil_achievements_on_event(SIL_ACH_NO_LONGER_BINDING);
     }
 
     /* Take a turn */
@@ -6706,22 +6699,47 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    bool from_lantern = o_ptr->tval == TV_LIGHT && o_ptr->sval == SV_LIGHT_LANTERN;
+    bool split_lantern = from_lantern && o_ptr->number > 1;
+    if (split_lantern)
+    {
+        object_type emptied;
+        bool stored = false;
+
+        object_copy(&emptied, o_ptr);
+        emptied.number = 1;
+        emptied.timeout = 0;
+        emptied.pickup = false;
+        emptied.pickup_slot = -1;
+
+        if (item >= 0)
+        {
+            /* Try Supplies with one unit's space freed. A multi-item donor
+             * keeps its handle, and carrying a lantern goes to Supplies. */
+            o_ptr->number--;
+            stored = inven_carry(&emptied, false) >= 0;
+            o_ptr->number++;
+        }
+
+        /* Place the emptied unit before committing the stack or fuel change. */
+        if (!stored && !drop_objects_near(&emptied, 1, item < 0 ? -item : 0))
+        {
+            msg_print("There is no room nearby for the emptied lantern.");
+            return;
+        }
+        if (item >= 0)
+            inven_item_increase(item, -1);
+        else
+            floor_item_increase(-item, -1);
+    }
+
     /* Take a turn */
     p_ptr->energy_use = 100;
 
     // store the action type
     p_ptr->previous_action[0] = ACTION_MISC;
 
-    /* Refuel from a latern */
-    if (o_ptr->sval == SV_LIGHT_LANTERN)
-    {
-        player_light_add_fuel(j_ptr, source_oil);
-    }
-    /* Refuel from a flask */
-    else
-    {
-        player_light_add_fuel(j_ptr, source_oil);
-    }
+    player_light_add_fuel(j_ptr, source_oil);
 
     /* Message */
     msg_print("You fuel your lamp.");
@@ -6733,47 +6751,11 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
         msg_print("Your lamp is full.");
     }
 
-    /* Refilled from a latern */
-    if (o_ptr->sval == SV_LIGHT_LANTERN)
+    /* Refilled from a lantern */
+    if (from_lantern)
     {
-        /* Unstack if necessary */
-        if (o_ptr->number > 1)
-        {
-            object_type* i_ptr;
-            object_type object_type_body;
-
-            /* Get local object */
-            i_ptr = &object_type_body;
-
-            /* Obtain a local object */
-            object_copy(i_ptr, o_ptr);
-
-            /* Modify quantity */
-            i_ptr->number = 1;
-
-            /* Remove fuel */
-            i_ptr->timeout = 0;
-
-            /* Unstack the used item */
-            o_ptr->number--;
-
-            /* Carry or drop */
-            if (item >= 0)
-            {
-                item = inven_carry(i_ptr, false);
-                if (item < 0)
-                    drop_near(i_ptr, 0, p_ptr->py, p_ptr->px);
-            }
-            else
-                drop_near(i_ptr, 0, p_ptr->py, p_ptr->px);
-        }
-
-        /* Empty a single latern */
-        else
-        {
-            /* No more fuel */
+        if (!split_lantern)
             o_ptr->timeout = 0;
-        }
 
         /* Combine / Reorder the pack (later) */
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);

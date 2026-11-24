@@ -976,7 +976,11 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     int old_flow_feature = cave_flow_feature(old_feat);
     int new_flow_feature = cave_flow_feature(feat);
     if (old_feat != feat)
+    {
+        if (cave_rewired)
+            cave_rewired[y][x] = 0;
         cave_flood_surface_changed(y, x, feat);
+    }
     bool removed_floor_border = cave_feat[y][x] != feat
         && (styles_floor_border(cave_bridge_underlay(cave_feat[y][x]), NULL, NULL)
             || FEAT_IS_ICE(cave_bridge_underlay(cave_feat[y][x]))
@@ -1002,7 +1006,12 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         cave_natural[y][x] = 0;
     /* Change the feature */
     cave_feat[y][x] = feat;
+    /* Record what the player saw before clearing the old trap's concealment.
+     * During load, the saved concealment is already installed for the new map. */
     cave_environment_changed(y, x, old_feat, feat);
+    if (old_feat != feat && character_dungeon && !p_ptr->restoring
+        && (FEAT_IS_TRAP(old_feat) || FEAT_IS_TRAP(feat)))
+        cave_info[y][x] &= ~CAVE_HIDDEN;
     if (old_feat != feat && old_flow_feature != new_flow_feature)
         cave_water_flow_invalidate_at(y, x);
     if ((feat == FEAT_WATER || feat == FEAT_DEEP_WATER) && cave_when)

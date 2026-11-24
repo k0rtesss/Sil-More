@@ -381,36 +381,6 @@ finish_ascent:
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
     }
 
-    /* Reset aule quest if active */
-    if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Aulë's forge. The quest is lost.");
-    }
-    else if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-    }
-
-    /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-        msg_print("You have abandoned the tomb. Mandos' quest is lost.");
-    }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-    }
-
-    /* Reset Varda quest if she was waiting on the previous level */
-    if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
-        p_ptr->varda_level = 0;
-        /* Encountering a quest giver still counts against the initiated quest cap. */
-    }
-
     // another staircase has been used...
     p_ptr->stairs_taken++;
     p_ptr->staircasiness += 1000;
@@ -566,36 +536,6 @@ finish_descent:
     if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
-    }
-
-    /* Reset Varda quest if she was waiting on the previous level */
-    if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
-        p_ptr->varda_level = 0;
-        /* Encountering a quest giver still counts against the initiated quest cap. */
-    }
-
-    /* Reset aule quest if active */
-    if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Aulë's forge. The quest is lost.");
-    }
-    else if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
-    {
-        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-    }
-
-    /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-        msg_print("You have abandoned the tomb. Mandos' quest is lost.");
-    }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
-    {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
     }
 
     // another staircase has been used...
@@ -1026,6 +966,10 @@ void do_cmd_rest(void)
 
     /* Handle stuff */
     handle_stuff();
+
+    /* The first paid rest turn searches just like each continuation. */
+    if (p_ptr->resting)
+        search();
 
     /* Refresh */
     Term_fresh();
