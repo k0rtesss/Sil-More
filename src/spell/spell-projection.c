@@ -264,6 +264,7 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
 
     /* Assume the player has seen nothing */
     bool visual = false;
+    bool erase_pending = false;
 
     /* Assume the player has seen no blast grids */
     bool drawn = false;
@@ -410,8 +411,14 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
 
                     /* Erase the visual effects */
                     lite_spot(y, x);
-                    if (op_ptr->delay_factor)
-                        Term_fresh();
+                    if (op_ptr->delay_factor) {
+                        /* A moving bolt can erase the last cell and draw the
+                         * next one in a single frame. Beams retain a trail. */
+                        if (flg & PROJECT_BEAM)
+                            Term_fresh();
+                        else
+                            erase_pending = true;
+                    }
 
                     /* Re-display the beam  XXX */
                     if (flg & (PROJECT_BEAM))
@@ -434,12 +441,19 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                 /* Hack -- Always delay for consistency */
                 else if (visual)
                 {
+                    if (erase_pending) {
+                        Term_fresh();
+                        erase_pending = false;
+                    }
                     /* Delay for consistency */
                     Term_xtra(TERM_XTRA_DELAY, msec);
                 }
             }
         }
     }
+
+    if (erase_pending)
+        Term_fresh();
 
     /* Save the "blast epicenter" */
     y2 = y;

@@ -1429,23 +1429,7 @@ void process_player(void)
 
     /* Count down active narrative banners by full player turns.
        0-turn banners are dismissed in request_command() before any action. */
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        if (g_active_partition_banner_skip_next_decay)
-        {
-            g_active_partition_banner_skip_next_decay = false;
-        }
-        else
-        {
-            g_banner_force_redraw_remaining--;
-        }
-        if (g_banner_force_redraw_remaining == 0)
-        {
-            g_active_partition_banner_consumes_input = false;
-            g_active_partition_banner_text[0] = '\0';
-            do_cmd_redraw();
-        }
-    }
+    advance_narrative_banner_turn();
 
     min_depth_timer_status(NULL, NULL, &depth_counter_increment, NULL, NULL);
 

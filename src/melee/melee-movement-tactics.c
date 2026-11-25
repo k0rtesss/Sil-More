@@ -93,11 +93,21 @@ static void tactical_frontier_update(tactical_frontier* f, int cell,
     }
 }
 
+typedef struct tactical_ally_info
+{
+    int target_distance;
+    s16b index;
+    bool ranged;
+} tactical_ally_info;
+
 typedef struct tactical_context
 {
     monster_type* actor;
-    monster_type* allies[TACTICAL_MAX_CELLS];
-    int ally_count, oy, ox, py, px, original_distance;
+    tactical_ally_info allies[TACTICAL_MAX_CELLS];
+    int ally_count, oy, ox, py, px, original_distance, width;
+    /* The map and actor stay fixed throughout either local search. */
+    byte* shot_status;
+    bool trailing_ally;
     bool ranged, shadow, sight, commanded, pack;
 } tactical_context;
 
@@ -148,6 +158,27 @@ static bool tactical_has_shot(const monster_type* m, int y, int x, int ty, int t
         return true;
     }
     return false;
+}
+
+static bool tactical_context_has_shot(const tactical_context* c, int y, int x)
+{
+    enum { SHOT_UNKNOWN, SHOT_UNAVAILABLE, SHOT_AVAILABLE };
+    int at = (y - c->oy) * c->width + x - c->ox;
+    if (c->shot_status[at] == SHOT_UNKNOWN)
+        c->shot_status[at] = tactical_has_shot(c->actor, y, x, c->py, c->px)
+            ? SHOT_AVAILABLE : SHOT_UNAVAILABLE;
+    return c->shot_status[at] == SHOT_AVAILABLE;
+}
+
+static void tactical_record_ally(tactical_context* c, monster_type* ally)
+{
+    int target_distance = distance(ally->fy, ally->fx, c->py, c->px);
+    c->allies[c->ally_count++] = (tactical_ally_info){
+        .target_distance = target_distance, .index = (s16b)(ally - mon_list),
+        .ranged = r_info[ally->r_idx].freq_ranged && !monster_ai_challenge_melee(ally) };
+    if (target_distance > 1 && distance(ally->fy, ally->fx,
+            c->actor->fy, c->actor->fx) == 1)
+        c->trailing_ally = true;
 }
 
 static int tactical_confidence(const monster_type* m_ptr, int feature)
@@ -278,10 +309,10 @@ static int tactical_shadow_score(const tactical_context* c, int y, int x)
         old_player, new_player, &player_before, &player_after);
     for (int i = 0; i < c->ally_count; ++i)
     {
-        monster_type* ally = c->allies[i];
+        monster_type* ally = &mon_list[c->allies[i].index];
         monster_race* race = &r_info[ally->r_idx];
         int before, after;
-        int engagement = distance(ally->fy, ally->fx, c->py, c->px);
+        int engagement = c->allies[i].target_distance;
         if (engagement > 4 || ally->alertness < ALERTNESS_ALERT) continue;
         int old = cave_light_contribution(r_ptr->light, glow,
             m_ptr->fy, m_ptr->fx, ally->fy, ally->fx);
@@ -316,8 +347,8 @@ static int tactical_shadow_score(const tactical_context* c, int y, int x)
 static bool tactical_on_lane(int y, int x, int sy, int sx, int ty, int tx)
 {
     int dy = ty - sy, dx = tx - sx, yy = y - sy, xx = x - sx;
-    return (yy || xx) && yy * dx == xx * dy && yy * dy + xx * dx > 0
-        && distance(sy, sx, y, x) < distance(sy, sx, ty, tx);
+    int dot = yy * dy + xx * dx;
+    return yy * dx == xx * dy && dot > 0 && dot < dy * dy + dx * dx;
 }
 
 static int tactical_reaction_cost(const tactical_context* c,
@@ -384,13 +415,13 @@ static int tactical_guard_score_visible(const tactical_context* c, int y, int x,
     monster_type* m = c->actor;
     if (!c->sight || c->ranged || monster_ai_challenge_melee(m) || m->hp * 2 <= m->maxhp
         || (r_info[m->r_idx].flags1 & RF1_NEVER_BLOW)) return 0;
-    int dist = distance(y, x, c->py, c->px), best = 0;
+    int dist = distance(y, x, c->py, c->px);
     if (dist > 2 || !los(y, x, c->py, c->px)) return 0;
     for (int i = 0; i < c->ally_count; ++i)
     {
-        monster_type* ally = c->allies[i];
+        monster_type* ally = &mon_list[c->allies[i].index];
         if (visible_only && !ally->ml) continue;
-        int ally_dist = distance(ally->fy, ally->fx, c->py, c->px);
+        int ally_dist = c->allies[i].target_distance;
         if (ally->alertness < ALERTNESS_ALERT || ally_dist <= dist || ally_dist > 5
             || distance(y, x, ally->fy, ally->fx) > 2) continue;
         if (withdrawal)
@@ -400,7 +431,7 @@ static int tactical_guard_score_visible(const tactical_context* c, int y, int x,
         }
         else
         {
-            if (!r_info[ally->r_idx].freq_ranged || monster_ai_challenge_melee(ally)
+            if (!c->allies[i].ranged
                 || ally->stance == STANCE_FLEEING
                 || ally_dist < 2
                 || !los(ally->fy, ally->fx, c->py, c->px)
@@ -410,12 +441,12 @@ static int tactical_guard_score_visible(const tactical_context* c, int y, int x,
         bool covered = false;
         for (int j = 0; j < c->ally_count; ++j)
         {
-            monster_type* guard = c->allies[j];
+            monster_type* guard = &mon_list[c->allies[j].index];
             if (guard == ally || guard->stance == STANCE_FLEEING
                 || guard->alertness < ALERTNESS_ALERT || guard->hp * 2 <= guard->maxhp
                 || guard->min_range > 1
                 || (r_info[guard->r_idx].flags1 & RF1_NEVER_BLOW)) continue;
-            int guard_dist = distance(guard->fy, guard->fx, c->py, c->px);
+            int guard_dist = c->allies[j].target_distance;
             if (guard_dist <= 2 && guard_dist < ally_dist
                 && distance(guard->fy, guard->fx, ally->fy, ally->fx) <= 2
                 && los(guard->fy, guard->fx, c->py, c->px)
@@ -423,9 +454,9 @@ static int tactical_guard_score_visible(const tactical_context* c, int y, int x,
                     ally->fy, ally->fx, c->py, c->px)))
             { covered = true; break; }
         }
-        if (!covered) best = MAX(best, withdrawal ? 30 : 24);
+        if (!covered) return withdrawal ? 30 : 24;
     }
-    return best;
+    return 0;
 }
 
 static int tactical_guard_score(const tactical_context* c, int y, int x,
@@ -485,11 +516,10 @@ static int tactical_position_details(const tactical_context* c, int y, int x,
     int dist = distance(y, x, c->py, c->px);
     bool moved = y != m_ptr->fy || x != m_ptr->fx;
     int score = c->ranged ? 42 - ABS(dist - m_ptr->best_range) * 9 : 56 - dist * 8;
-    int trailing = 0;
     int impale = MAX(0, tactical_confidence(m_ptr, MON_AI_IMPALE));
     int sweep = MAX(0, tactical_confidence(m_ptr, MON_AI_WHIRLWIND));
     int follow = MAX(0, tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH));
-    bool has_shot = !c->ranged || tactical_has_shot(m_ptr, y, x, c->py, c->px);
+    bool has_shot = !c->ranged || tactical_context_has_shot(c, y, x);
     if (!c->ranged && dist == 1) score += 8;
     if (c->ranged && !has_shot) score -= 24;
     if (c->ranged && dist < m_ptr->min_range) score -= 15;
@@ -507,9 +537,8 @@ static int tactical_position_details(const tactical_context* c, int y, int x,
     if (parts[MON_TACTIC_WITHDRAWAL]) parts[MON_TACTIC_GUARD] = 0;
     for (int i = 0; i < c->ally_count; ++i)
     {
-        monster_type* ally = c->allies[i];
-        int ally_dist = distance(ally->fy, ally->fx, c->py, c->px);
-        int separation = distance(y, x, ally->fy, ally->fx);
+        monster_type* ally = &mon_list[c->allies[i].index];
+        int ally_dist = c->allies[i].target_distance;
         if (dist == 1 && ally_dist == 1)
         {
             int dot = (y - c->py) * (ally->fy - c->py) + (x - c->px) * (ally->fx - c->px);
@@ -524,17 +553,19 @@ static int tactical_position_details(const tactical_context* c, int y, int x,
             if (!c->ranged && !dot)
                 score += MAX(0, tactical_confidence(m_ptr, MON_AI_FLANKING)) * 2;
         }
-        if (distance(m_ptr->fy, m_ptr->fx, ally->fy, ally->fx) == 1 && ally_dist > 1) trailing++;
-        if (separation == 1) score -= 3;
+        if (distance(y, x, ally->fy, ally->fx) == 1) score -= 3;
         if (impale && tactical_impale_pair(c->py, c->px, y, x, ally->fy, ally->fx))
             parts[MON_TACTIC_IMPALE] -= impale * 8;
-        if (r_info[ally->r_idx].freq_ranged && !monster_ai_challenge_melee(ally)
+        if (c->allies[i].ranged
             && tactical_on_lane(y, x, ally->fy, ally->fx, c->py, c->px)) score -= 18;
         if (ally->stance == STANCE_FLEEING
             && tactical_on_lane(ally->fy, ally->fx, c->py, c->px, y, x)) score -= 10;
     }
-    if (trailing && tactical_open_neighbors(m_ptr->fy, m_ptr->fx) <= 4
-        && tactical_open_neighbors(y, x) > tactical_open_neighbors(m_ptr->fy, m_ptr->fx)) score += 18;
+    if (c->trailing_ally)
+    {
+        int open = tactical_open_neighbors(m_ptr->fy, m_ptr->fx);
+        if (open <= 4 && tactical_open_neighbors(y, x) > open) score += 18;
+    }
     if (dist == 1)
     {
         score += tactical_knockback(m_ptr, y, x) / 2;
@@ -628,14 +659,16 @@ static int tactical_position_score(const tactical_context* c, int y, int x)
     return tactical_position_details(c, y, x, NULL);
 }
 
-static bool tactical_enterable(monster_type* m_ptr, int y, int x)
+static bool tactical_enterable(monster_type* m_ptr, int y, int x, byte* terrain_cost)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
     bool bash = false;
     if (!in_bounds(y, x) || !cave_exist_mon(r_ptr, y, x, false, false)) return false;
     if ((r_ptr->flags1 & RF1_HIDDEN_MOVE)
         && ((cave_info[y][x] & CAVE_SEEN) || seen_by_keen_senses(y, x))) return false;
-    if (monster_terrain_penalty(m_ptr, y, x) >= 100) return false;
+    int penalty = monster_terrain_penalty(m_ptr, y, x);
+    if (penalty >= 100) return false;
+    if (terrain_cost) *terrain_cost = (byte)penalty;
     return cave_passable_mon(m_ptr, y, x, &bash) >= 100;
 }
 
@@ -791,7 +824,7 @@ static int squad_position_score(const tactical_context* c, int y, int x)
         + squad_job_score(c->actor, y, x);
     for (int i = 0; i < c->ally_count; ++i)
     {
-        const monster_type* ally = c->allies[i];
+        const monster_type* ally = &mon_list[c->allies[i].index];
         if (ally->squad.commander != order->commander || !ally->squad.role) continue;
         if (y == ally->squad.y && x == ally->squad.x) score -= 40;
         if (squad_ranged(ally) && squad_on_lane(y, x, ally->squad.y,
@@ -807,7 +840,7 @@ static bool squad_enterable(monster_type* m, const monster_type* leader, int y, 
     return in_bounds_fully(y, x)
         && (!cave_m_idx[y][x] || (y == m->fy && x == m->fx))
         && (los(m->fy, m->fx, y, x) || los(leader->fy, leader->fx, y, x))
-        && tactical_enterable(m, y, x)
+        && tactical_enterable(m, y, x, NULL)
         && monster_ai_poison_safe(m, y, x, TACTICAL_RADIUS);
 }
 
@@ -930,14 +963,16 @@ static bool squad_assign_position(monster_type* m, monster_type* leader,
     monster_type* members[SQUAD_MEMBERS], bool assigned[SQUAD_MEMBERS], int count,
     const monster_squad_order* previous)
 {
+    byte shot_status[TACTICAL_CELLS] = { 0 };
     tactical_context c = { .actor = m, .py = p_ptr->py, .px = p_ptr->px,
+        .shot_status = shot_status, .width = TACTICAL_WIDTH,
         .original_distance = distance(m->fy, m->fx, p_ptr->py, p_ptr->px),
         .ranged = squad_ranged(m), .sight = monster_ai_can_see_player(m),
         .pack = r_info[m->r_idx].command_style == MON_COMMAND_PACK };
     c.oy = m->fy - TACTICAL_RADIUS; c.ox = m->fx - TACTICAL_RADIUS;
     c.shadow = (r_info[m->r_idx].flags2 & RF2_SMART) && r_info[m->r_idx].light < 0;
     for (int i = 0; i < count; ++i)
-        if (members[i] != m) c.allies[c.ally_count++] = members[i];
+        if (members[i] != m) tactical_record_ally(&c, members[i]);
     int costs[TACTICAL_CELLS], steps[TACTICAL_CELLS] = { 0 };
     bool done[TACTICAL_CELLS] = { false };
     for (int i = 0; i < TACTICAL_CELLS; ++i) costs[i] = 100000;
@@ -973,7 +1008,7 @@ static bool squad_assign_position(monster_type* m, monster_type* leader,
         /* Ranged units need an actual shot, not just their preferred range.
          * Melee without a reachable contact square gets an approach position. */
         if (!reserved && dist && (m->squad.plan == MON_PLAN_REGROUP || !c.ranged || (dist >= 2
-                && tactical_has_shot(m, y, x, c.py, c.px))))
+                && tactical_context_has_shot(&c, y, x))))
         {
             int score = tactical_position_score(&c, y, x) + formation - costs[at]
                 + squad_job_score(m, y, x);
@@ -1110,14 +1145,14 @@ void monster_squad_prepare(void)
 }
 
 /* A cheap but poisoned label cannot erase a survivable alternative. */
-static void tactical_add_label(tactical_label labels[TACTICAL_LABELS], tactical_label next)
+static bool tactical_add_label(tactical_label labels[TACTICAL_LABELS], tactical_label next)
 {
     int slot = -1;
     for (int i = 0; i < TACTICAL_LABELS; ++i)
     {
         if (!labels[i].used) { slot = i; continue; }
         if (labels[i].cost <= next.cost && labels[i].damage <= next.damage
-            && labels[i].pending <= next.pending && labels[i].steps <= next.steps) return;
+            && labels[i].pending <= next.pending && labels[i].steps <= next.steps) return false;
     }
     for (int i = 0; i < TACTICAL_LABELS; ++i)
         if (labels[i].used && next.cost <= labels[i].cost && next.damage <= labels[i].damage
@@ -1131,10 +1166,11 @@ static void tactical_add_label(tactical_label labels[TACTICAL_LABELS], tactical_
         for (int i = 0; i < TACTICAL_LABELS; ++i)
             if (i != safest && (worst < 0 || labels[i].cost > labels[worst].cost)) worst = i;
         if (next.cost >= labels[worst].cost
-            && next.damage + next.pending >= labels[safest].damage + labels[safest].pending) return;
+            && next.damage + next.pending >= labels[safest].damage + labels[safest].pending) return false;
         slot = worst;
     }
     labels[slot] = next;
+    return true;
 }
 
 static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
@@ -1175,18 +1211,23 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     tactical_frontier frontier;
     int position_scores[TACTICAL_MAX_CELLS];
     bool position_scored[TACTICAL_MAX_CELLS] = { false };
+    byte shot_status[TACTICAL_MAX_CELLS] = { 0 };
+    enum { STEP_UNKNOWN, STEP_BLOCKED, STEP_PASSABLE };
+    struct { byte status, terrain_cost; } step[TACTICAL_MAX_CELLS] = { 0 };
     frontier.count = 0;
     for (int i = 0; i < cells; ++i) frontier.index[i] = -1;
     int max_steps = seek_shot ? radius * 2 : TACTICAL_STEPS;
     start = radius * width + radius;
     c.oy = m_ptr->fy - radius; c.ox = m_ptr->fx - radius;
+    c.width = width; c.shot_status = shot_status;
     adjacent = c.original_distance == 1;
     avoid_sweep = tactical_confidence(m_ptr, MON_AI_WHIRLWIND) > 0
         || tactical_confidence(m_ptr, MON_AI_FOLLOW_THROUGH) > 0;
     for (int i = 0; i < cells; ++i)
     {
         int y = c.oy + i / width, x = c.ox + i % width;
-        if (tactical_ally(m_ptr, y, x)) c.allies[c.ally_count++] = &mon_list[cave_m_idx[y][x]];
+        if (tactical_ally(m_ptr, y, x))
+            tactical_record_ally(&c, &mon_list[cave_m_idx[y][x]]);
     }
     baseline = tactical_position_score(&c, m_ptr->fy, m_ptr->fx)
         - monster_ai_poison_damage(m_ptr, m_ptr->fy, m_ptr->fx, 1) * 3;
@@ -1219,7 +1260,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
              * A nearer clear lane beats waiting behind a melee screen when
              * no post at the ideal distance is reachable in this search. */
             if (seek_shot && dist >= 2
-                && tactical_has_shot(m_ptr, y, x, c.py, c.px) && score > shot_score)
+                && tactical_context_has_shot(&c, y, x) && score > shot_score)
             { shot_score = score; shot_first = here.first; shot_goal = at; }
         }
         if (here.steps >= max_steps || (adjacent && at != start && !c.ranged)) continue;
@@ -1227,19 +1268,28 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
         {
             int yy = y + ddy_ddd[d], xx = x + ddx_ddd[d];
             int ry = yy - c.oy, rx = xx - c.ox;
-            if (ry < 0 || ry >= width || rx < 0 || rx >= width
-                || !tactical_enterable(m_ptr, yy, xx)) continue;
+            if (ry < 0 || ry >= width || rx < 0 || rx >= width) continue;
+            int next_cell = ry * width + rx;
+            if (next_cell == start) continue;
             /* A dry missile user cannot keep a swimming plan: mandatory
              * water escape cancels it on the next action, producing a
              * shore/water loop. Keep firing-position routes on usable ground;
              * normal pursuit and already-swimming escape retain crossings. */
-            if (c.ranged && (r_ptr->flags4 & RF4_ARCHERY_MASK)
-                && !(r_ptr->flags2 & RF2_FLYING)
-                && cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_DEEP_WATER
-                && cave_feat[yy][xx] == FEAT_DEEP_WATER) continue;
-            if (radius > TACTICAL_RADIUS && !los(m_ptr->fy, m_ptr->fx, yy, xx)) continue;
-            int next_cell = ry * width + rx;
-            if (next_cell == start) continue;
+            if (step[next_cell].status == STEP_UNKNOWN)
+            {
+                bool enterable = tactical_enterable(m_ptr, yy, xx,
+                    &step[next_cell].terrain_cost);
+                if (enterable && c.ranged && (r_ptr->flags4 & RF4_ARCHERY_MASK)
+                    && !(r_ptr->flags2 & RF2_FLYING)
+                    && cave_feat[m_ptr->fy][m_ptr->fx] != FEAT_DEEP_WATER
+                    && cave_feat[yy][xx] == FEAT_DEEP_WATER)
+                    enterable = false;
+                if (enterable && radius > TACTICAL_RADIUS
+                    && !los(m_ptr->fy, m_ptr->fx, yy, xx))
+                    enterable = false;
+                step[next_cell].status = enterable ? STEP_PASSABLE : STEP_BLOCKED;
+            }
+            if (step[next_cell].status == STEP_BLOCKED) continue;
             bool pool = cave_feat[yy][xx] == FEAT_POISON
                 && !(r_ptr->flags2 & RF2_FLYING) && !(r_ptr->flags3 & RF3_RES_POIS);
             tactical_label next = here;
@@ -1254,9 +1304,9 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             next.cost += water_movement_energy(100, cave_feat[y][x], cave_feat[yy][xx],
                 (r_ptr->flags2 & RF2_FLYING) != 0) / 25;
             next.cost += tactical_reaction_cost(&c, y, x, yy, xx);
-            next.cost += monster_terrain_penalty(m_ptr, yy, xx);
-            tactical_add_label(labels[next_cell], next);
-            tactical_frontier_update(&frontier, next_cell, labels[next_cell]);
+            next.cost += step[next_cell].terrain_cost;
+            if (tactical_add_label(labels[next_cell], next))
+                tactical_frontier_update(&frontier, next_cell, labels[next_cell]);
         }
     }
     /* A useful post can cost more than its immediate positional reward.
@@ -1265,8 +1315,8 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
     if (shot_first >= 0 && (best_goal < 0
             || distance(c.oy + best_goal / width,
                 c.ox + best_goal % width, c.py, c.px) < 2
-            || !tactical_has_shot(m_ptr, c.oy + best_goal / width,
-                c.ox + best_goal % width, c.py, c.px)))
+            || !tactical_context_has_shot(&c, c.oy + best_goal / width,
+                c.ox + best_goal % width)))
     {
         best_first = shot_first; best_goal = shot_goal;
         best_score = MAX(baseline + 1, shot_score);
@@ -1304,7 +1354,7 @@ static bool tactical_choose(monster_type* m_ptr, tactical_choice* choice)
             bool visible_ally = false;
             for (int n = 0; n < c.ally_count; ++n)
             {
-                monster_type* ally = c.allies[n];
+                monster_type* ally = &mon_list[c.allies[n].index];
                 if (ally->ml && (i == MON_TACTIC_IMPALE
                         ? tactical_impale_pair(c.py, c.px, m_ptr->fy, m_ptr->fx,
                             ally->fy, ally->fx)

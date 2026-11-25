@@ -2382,7 +2382,12 @@ int sdl_narrative_banner_line_count(void);
 void sdl_narrative_banner_draw_line(TTF_Font* font, cptr text, SDL_Color color, float left_x, float y, float max_w, float line_h);
 void sdl_narrative_banner_render(void);
 bool sdl_narrative_banner_handle_pointer(float x, float y);
+bool active_narrative_banner_has_followup(void);
+void show_active_narrative_banner_followup(void);
 void sdl_narrative_banner_show(bool line_delay, bool fast_fade);
+void sdl_narrative_banner_show_followup(bool line_delay, bool fast_fade);
+void sdl_narrative_banner_update(Uint64 now_ns);
+int sdl_narrative_banner_timeout_ms(Uint64 now_ns);
 int sdl_touch_pane_wrap_prompt_lines(cptr text, TTF_Font* font, float max_w, char lines[][SDL_TOUCH_YES_NO_LINE_LEN], int max_lines);
 bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect, SDL_FRect* prompt_rect, SDL_FRect* yes_rect, SDL_FRect* no_rect);
 bool sdl_touch_pane_point_to_slot(float x, float y, int* out_slot);
@@ -3274,6 +3279,7 @@ void sdl_set_present_suppressed(bool suppressed);
 extern bool g_sdl_present_suppressed;
 void sdl_present_batch_begin(void);
 void sdl_present_batch_end(void);
+void sdl_present_batch_end_deferred(void);
 void sdl_present_if_needed(sdl_view* d);
 float sdl_touch_tutorial_draw_text_line(cptr text, float x, float y, float max_w, int font_px, SDL_Color color, bool centered);
 float sdl_tutorial_draw_text_line_for_slot(cptr text, float x, float y,
@@ -3359,6 +3365,7 @@ void sdl_water_floor_transition_draw(int y, int x, const SDL_FRect* dst,
 bool sdl_material_edge_draw(int y, int x, byte ta, char tc,
     const SDL_FRect* dst, bool preserve_floor_contour);
 bool sdl_material_edge_at(int y, int x);
+void sdl_material_edge_batch(bool begin);
 int sdl_idle_animation_timeout_ms(Uint64 now_ns);
 void sdl_idle_animation_update(Uint64 now_ns);
 bool sdl_map_grid_is_player(int y, int x);
@@ -3799,6 +3806,7 @@ SDL_Color sdl_color_from_attr(byte attr);
 void sdl_render_health_bar_rect(const SDL_FRect* rect, byte level,
     byte fill_attr);
 void sdl_fill_cell_span_with_attr(sdl_view* d, int x, int y, int n, byte attr);
+bool sdl_render_overlay_log_row(int y);
 void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row, const char* row_chars, const byte* row_attr);
 void sdl_render_story_text_grid(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s, SDL_Color col);
 

@@ -1700,40 +1700,17 @@ if (playerturn == 0) {
         terrain_generation_reset();
         terrain_vault_reset();
 
-        /* Start with a blank cave */
-        for (y = 0; y < MAX_DUNGEON_HGT; y++)
-        {
-            for (x = 0; x < MAX_DUNGEON_WID; x++)
-            {
-                /* No flags */
-                cave_info[y][x] = 0;
-
-                /* No features */
-                cave_feat[y][x] = 0;
-
-                /* No colors (use default) */
-                cave_color[y][x] = 0;
-
-                /* No natural cave footprint */
-                cave_natural[y][x] = 0;
-
-                /* No rewired traps */
-                cave_rewired[y][x] = 0;
-
-                /* No objects */
-                cave_o_idx[y][x] = 0;
-
-                /* No monsters */
-                cave_m_idx[y][x] = 0;
-
-                for (i = 0; i < MAX_FLOWS; i++)
-                {
-                    cave_cost[i][y][x] = FLOW_MAX_DIST;
-                }
-
-                cave_when[y][x] = 0;
-            }
-        }
+        /* Each flow occupies a contiguous plane. Reset the planes in storage
+         * order on every generation attempt, including discarded levels. */
+        memset(cave_cost, FLOW_MAX_DIST, sizeof(cave_cost));
+        memset(cave_info, 0, MAX_DUNGEON_HGT * sizeof(*cave_info));
+        memset(cave_feat, 0, MAX_DUNGEON_HGT * sizeof(*cave_feat));
+        memset(cave_color, 0, MAX_DUNGEON_HGT * sizeof(*cave_color));
+        memset(cave_natural, 0, MAX_DUNGEON_HGT * sizeof(*cave_natural));
+        memset(cave_rewired, 0, MAX_DUNGEON_HGT * sizeof(*cave_rewired));
+        memset(cave_o_idx, 0, MAX_DUNGEON_HGT * sizeof(*cave_o_idx));
+        memset(cave_m_idx, 0, MAX_DUNGEON_HGT * sizeof(*cave_m_idx));
+        memset(cave_when, 0, MAX_DUNGEON_HGT * sizeof(*cave_when));
 
     log_debug("generate_cave: Cave initialization completed successfully");
 
@@ -1963,9 +1940,9 @@ if (playerturn == 0) {
 
     /* Note any forges generated -- have to do this here in case generation
      * fails earlier */
-    for (y = 0; y < MAX_DUNGEON_HGT; y++)
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
     {
-        for (x = 0; x < MAX_DUNGEON_WID; x++)
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
         {
             if (cave_forge_bold(y, x))
             {

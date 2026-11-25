@@ -2,8 +2,11 @@
 #include "sdl/main-sdl-private.h"
 
 #define SDL_NARRATIVE_BANNER_TRANSITION_FADE_MS 500
+#define SDL_NARRATIVE_DISCOVERY_READ_MS 3000
 
 static Uint8 g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
+static Uint64 banner_fade_start_ns, banner_fade_duration_ns, banner_next_frame_ns;
+static Uint64 banner_followup_due_ns;
 static int g_yes_no_prompt_page;
 static int g_yes_no_prompt_pages = 1;
 
@@ -901,6 +904,14 @@ int sdl_narrative_banner_line_count(void)
         SDL_NARRATIVE_BANNER_MAX_LINES);
 }
 
+static bool narrative_banner_can_render(void)
+{
+    return sdl_narrative_banner_overlay_enabled()
+        && active_narrative_banner_visible() && character_icky == 0
+        && !g_main_menu_overlay_active && !g_touch_pane_yes_no_prompt_active
+        && !sdl_question_menu_captures_pointer() && !sdl_question_menu_blocks_input();
+}
+
 static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     float* out_pad_x, float* out_pad_y, float* out_line_h,
     int* out_shown_lines,
@@ -928,12 +939,7 @@ static bool sdl_narrative_banner_layout(SDL_FRect* out_panel,
     float close_gap;
     float close_reserve;
 
-    if (!sdl_narrative_banner_overlay_enabled())
-        return false;
-    if (!active_narrative_banner_visible() || character_icky > 0
-        || g_touch_pane_yes_no_prompt_active
-        || sdl_question_menu_captures_pointer()
-        || sdl_question_menu_blocks_input())
+    if (!narrative_banner_can_render())
         return false;
     if (!sdl_narrative_banner_base_layout(&rect, &span_width))
         return false;
@@ -1181,75 +1187,107 @@ bool sdl_narrative_banner_handle_pointer(float x, float y)
     }
 
     (void)dismiss_active_narrative_banner();
-    /*
-     * Closing this composited overlay must not rebuild the supporting panes:
-     * their intermediate terminal frames are visible as a brief blink.
-     */
-    p_ptr->redraw |= PR_MAP;
-    redraw_stuff();
-    Term_fresh();
-    g_state.need_present = true;
     return true;
 }
 
-static void sdl_narrative_banner_present_frame(sdl_view* restore_view)
+void sdl_narrative_banner_hidden(void)
 {
+    banner_fade_duration_ns = 0;
+    banner_followup_due_ns = 0;
+    g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
+    /* The banner is drawn onto the window, never into the dungeon canvas. */
     g_state.need_present = true;
-    if (sdl_render_current_window_frame()) {
-        SDL_RenderPresent(g_state.renderer);
-        g_state.need_present = false;
+}
+
+int sdl_narrative_banner_timeout_ms(Uint64 now_ns)
+{
+    Uint64 next_ns;
+
+    if (banner_fade_duration_ns)
+        next_ns = banner_next_frame_ns;
+    else if (active_narrative_banner_has_followup())
+        next_ns = banner_followup_due_ns;
+    else
+        return -1;
+    if (!narrative_banner_can_render())
+        return -1;
+    if (now_ns >= next_ns)
+        return 0;
+    return (int)SDL_NS_TO_MS(next_ns - now_ns + SDL_NS_PER_MS - 1);
+}
+
+void sdl_narrative_banner_update(Uint64 now_ns)
+{
+    if (!banner_fade_duration_ns && !active_narrative_banner_has_followup())
+        return;
+    if (!active_narrative_banner_visible()) {
+        banner_fade_duration_ns = 0;
+        banner_followup_due_ns = 0;
+        g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
+        return;
     }
-    sdl_restore_render_target(restore_view);
+    if (!narrative_banner_can_render()) {
+        /* Menus and questions own the screen. Give the notice its reading
+         * time when gameplay becomes visible again. */
+        banner_followup_due_ns = 0;
+        return;
+    }
+    if (sdl_narrative_banner_timeout_ms(now_ns) != 0)
+        return;
+
+    if (!banner_fade_duration_ns) {
+        if (!banner_followup_due_ns)
+            banner_followup_due_ns = now_ns + SDL_MS_TO_NS(SDL_NARRATIVE_DISCOVERY_READ_MS);
+        else
+            show_active_narrative_banner_followup();
+        return;
+    }
+
+    Uint64 elapsed = now_ns - banner_fade_start_ns;
+    if (elapsed >= banner_fade_duration_ns) {
+        g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
+        banner_fade_duration_ns = 0;
+        if (active_narrative_banner_has_followup())
+            banner_followup_due_ns = now_ns + SDL_MS_TO_NS(SDL_NARRATIVE_DISCOVERY_READ_MS);
+    } else {
+        g_sdl_narrative_banner_alpha = (Uint8)((elapsed * SDL_ALPHA_OPAQUE
+            + banner_fade_duration_ns / 2) / banner_fade_duration_ns);
+        banner_next_frame_ns = MIN(banner_fade_start_ns + banner_fade_duration_ns,
+            now_ns + SDL_MS_TO_NS(SDL_NARRATIVE_BANNER_FADE_FRAME_MS));
+    }
+    g_state.need_present = true;
+}
+
+static void sdl_narrative_banner_start(bool line_delay, bool fast_fade,
+    bool cancel_touches)
+{
+    if (!sdl_narrative_banner_overlay_enabled() || !active_narrative_banner_visible())
+        return;
+    /* Banner presentation is an input boundary.  Do not let a touch press
+     * armed while the previous command was being collected survive into the
+     * banner and age into a Ctrl+direction gesture. */
+    if (cancel_touches)
+        sdl_touch_cancel_all_inputs();
+
+    /* Fade on the normal SDL event clock. The dungeon may accept another
+     * command (including dismissal) as soon as this one has finished. */
+    banner_fade_start_ns = SDL_GetTicksNS();
+    banner_fade_duration_ns = line_delay ? SDL_MS_TO_NS(fast_fade
+        ? SDL_NARRATIVE_BANNER_TRANSITION_FADE_MS : SDL_NARRATIVE_BANNER_FADE_MS) : 0;
+    banner_next_frame_ns = banner_fade_start_ns;
+    banner_followup_due_ns = 0;
+    g_sdl_narrative_banner_alpha = line_delay ? 0 : SDL_ALPHA_OPAQUE;
+    g_state.need_present = true;
 }
 
 void sdl_narrative_banner_show(bool line_delay, bool fast_fade)
 {
-    sdl_view* restore_view;
+    sdl_narrative_banner_start(line_delay, fast_fade, true);
+}
 
-    if (!sdl_narrative_banner_overlay_enabled())
-        return;
-    if (!active_narrative_banner_visible())
-        return;
-
-    /* Banner presentation is an input boundary.  Do not let a touch press
-     * armed while the previous command was being collected survive into the
-     * banner and age into a Ctrl+direction gesture. */
-    sdl_touch_cancel_all_inputs();
-
-    restore_view = sdl_view_from_term(Term);
-    if (!restore_view)
-        restore_view = &g_views[PANE_MAIN];
-
-    if (!line_delay) {
-        g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
-        sdl_narrative_banner_present_frame(restore_view);
-        return;
-    }
-
-    Uint64 start_ns = SDL_GetTicksNS();
-    int fade_ms = fast_fade ? SDL_NARRATIVE_BANNER_TRANSITION_FADE_MS
-                            : SDL_NARRATIVE_BANNER_FADE_MS;
-    Uint64 fade_ns = (Uint64)fade_ms * 1000000ULL;
-
-    for (;;) {
-        Uint64 elapsed_ns = SDL_GetTicksNS() - start_ns;
-
-        if (elapsed_ns >= fade_ns) {
-            g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
-        } else {
-            g_sdl_narrative_banner_alpha =
-                (Uint8)((elapsed_ns * SDL_ALPHA_OPAQUE + fade_ns / 2)
-                    / fade_ns);
-        }
-
-        sdl_narrative_banner_present_frame(restore_view);
-        if (g_sdl_narrative_banner_alpha >= SDL_ALPHA_OPAQUE)
-            break;
-
-        SDL_Delay(SDL_NARRATIVE_BANNER_FADE_FRAME_MS);
-    }
-
-    g_sdl_narrative_banner_alpha = SDL_ALPHA_OPAQUE;
+void sdl_narrative_banner_show_followup(bool line_delay, bool fast_fade)
+{
+    sdl_narrative_banner_start(line_delay, fast_fade, false);
 }
 
 int sdl_touch_pane_wrap_prompt_lines(cptr text, TTF_Font* font,

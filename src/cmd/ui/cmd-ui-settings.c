@@ -20,6 +20,7 @@ extern void sdl_log_pane_set_rows(enum pane_type pane, int rows);
 #include "pane.h"
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/question.h"
+#include "ui/ui-language.h"
 #include "game/progress-reset.h"
 #include "ui/command-reference.h"
 #include "tutorial/tutorial-game.h"
@@ -633,6 +634,9 @@ void settings_ui_fit_text(char* buf, size_t buflen, cptr text,
 static cptr settings_ui_pick_label(int max_chars, cptr long_label,
     cptr medium_label, cptr short_label)
 {
+    if (long_label) long_label = ui_text(long_label);
+    if (medium_label) medium_label = ui_text(medium_label);
+    if (short_label) short_label = ui_text(short_label);
     if (sdl_character_sheet_screen_active()
         && (get_sdl_menu_bigger_font() || sdl_handheld_ui_active())
         && long_label && long_label[0])
@@ -1081,6 +1085,8 @@ static cptr option_menu_label(int opt)
 static void option_menu_format_line(char* buf, size_t buflen, cptr label,
     cptr value)
 {
+    label = ui_text(label);
+    value = ui_text(value);
     if (!option_menu_use_compact_layout())
     {
         strnfmt(buf, buflen, "%-48s: %s", label, value);
@@ -1119,7 +1125,7 @@ static void settings_semantic_menu_begin(cptr title, int selected_choice)
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
 
-    sdl_character_sheet_screen_begin_select(selected_choice, title ? title : "");
+    sdl_character_sheet_screen_begin_select(selected_choice, ui_text(title ? title : ""));
     sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_SETTINGS);
     sdl_character_sheet_screen_set_select_menu_style(true);
 }
@@ -2187,7 +2193,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                 ? option_group_for_setting(groups, opt[i]) : NULL;
 
             if (group_label)
-                sdl_character_sheet_screen_add_select_heading(group_label);
+                sdl_character_sheet_screen_add_select_heading(ui_text(group_label));
 
             /* Color current option */
             if (i == k)
@@ -2581,7 +2587,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                 else if (!is_sound_page && o >= 0 && o < OPT_MAX)
                     od = option_desc[o];
                 sdl_character_sheet_screen_set_select_description(
-                    od ? od : "");
+                    ui_text(od ? od : ""));
             }
             sdl_character_sheet_screen_commit_select(k);
         }
@@ -3592,7 +3598,7 @@ static void do_cmd_big_font_settings(bool* settings_changed)
             any_on |= get_sdl_menu_bigger_font_for(menu);
         }
         settings_semantic_menu_begin("Big Font", selected);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
         for (int row = 0; row < FONT_COUNT; row++) {
             cptr label = row == FONT_ALL ? "All fonts" : row == FONT_UI ? "UI"
                 : row == FONT_SHOW_BUTTON ? "Show B button"
@@ -3601,7 +3607,7 @@ static void do_cmd_big_font_settings(bool* settings_changed)
                 : (row == FONT_UI ? get_sdl_bigger_font()
                     : row == FONT_SHOW_BUTTON ? get_sdl_show_menu_font_button()
                     : get_sdl_menu_bigger_font_for(row - FONT_MENU_FIRST)) ? "On" : "Off";
-            settings_semantic_add_pair_row(row, label, value,
+            settings_semantic_add_pair_row(row, ui_text(label), ui_text(value),
                 row == selected ? TERM_L_BLUE : TERM_WHITE);
             sdl_character_sheet_screen_set_last_select_row_reset(
                 SETTINGS_CLICK_RESET_ROW_BASE + row);
@@ -3759,10 +3765,10 @@ static void do_cmd_pane_settings_for_page(bool text_only)
         int label_hint;
         settings_semantic_menu_begin(text_only ? "Text Size and Fonts" : "Display and Layout", k);
         sdl_character_sheet_screen_set_select_confirm_label(
-            k == PANE_SETTING_BIG_FONT ? "Open"
+            ui_text(k == PANE_SETTING_BIG_FONT ? "Open"
             : k == PANE_SETTING_RESET_ALL ? "Reset"
             : k == PANE_SETTING_VIEW_PANE_CONFIGURATION
-                || k == PANE_SETTING_PANE_FONT_SIZES ? "Open" : "Done");
+                || k == PANE_SETTING_PANE_FONT_SIZES ? "Open" : "Done"));
 
         /* Display current settings */
         char buf[96];
@@ -3787,8 +3793,8 @@ static void do_cmd_pane_settings_for_page(bool text_only)
         } while (0)
 
         a = (k == PANE_SETTING_BIG_FONT) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf), "Big Font",
-            "Configure", row_width, 9);
+        settings_ui_format_pair_line(buf, sizeof(buf), ui_text("Big Font"),
+            ui_text("Configure"), row_width, 9);
         ADD_PANE_SETTING_ROW(PANE_SETTING_BIG_FONT, 0, a, buf);
 
         /* Minimum Terminal Size */
@@ -3917,13 +3923,13 @@ static void do_cmd_pane_settings_for_page(bool text_only)
 
         /* Fullscreen */
         a = (k == PANE_SETTING_FULLSCREEN) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf), "Fullscreen",
+        settings_ui_format_pair_line(buf, sizeof(buf), ui_text("Fullscreen"),
             get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_FULLSCREEN, 6, a, buf);
 
         /* Tiles */
         a = (k == PANE_SETTING_TILES) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf), "Tiles [Alt+A]",
+        settings_ui_format_pair_line(buf, sizeof(buf), ui_text("Tiles [Alt+A]"),
             get_sdl_tiles() ? "yes" : "no", row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TILES, 7, a, buf);
 
@@ -4002,7 +4008,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
         /* Return (changes are saved automatically on exit). */
         a = (k == PANE_SETTING_SAVE_RETURN) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
-            text_only ? "Return to Text Options" : "Return to Options Menu",
+            ui_text(text_only ? "Return to Text Options" : "Return to Options Menu"),
             row_width);
         ADD_PANE_SETTING_ROW(PANE_SETTING_SAVE_RETURN, 16, a, buf);
 
@@ -4104,7 +4110,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
             };
             cptr d = (k >= 0 && k < PANE_SETTING_COUNT)
                 ? pane_setting_desc[k] : NULL;
-            sdl_character_sheet_screen_set_select_description(d ? d : "");
+            sdl_character_sheet_screen_set_select_description(ui_text(d ? d : ""));
             sdl_character_sheet_screen_commit_select(k);
         }
         /* Get key */
@@ -4849,7 +4855,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
     if (pane_count <= 0)
     {
         settings_semantic_menu_begin("Pane Fonts", -1);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
         sdl_character_sheet_screen_set_select_description(
             "No configurable panes are configured.");
         sdl_character_sheet_screen_commit_select(-1);
@@ -4869,7 +4875,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
         {
             int row_width;
             settings_semantic_menu_begin("Pane Fonts", sel);
-            sdl_character_sheet_screen_set_select_confirm_label("Done");
+            sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
             row_width = settings_ui_line_width(2);
 
             for (int i = 0; i < pane_count; i++)
@@ -6566,7 +6572,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
     if (pane_count <= 0)
     {
         settings_semantic_menu_begin("Pane Layout", -1);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
         sdl_character_sheet_screen_set_select_description(
             "No configurable panes are configured.");
         sdl_character_sheet_screen_commit_select(-1);
@@ -6588,7 +6594,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Pane Layout", sel);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
 
         for (int i = 0; i < pane_count; i++)
         {
@@ -8173,7 +8179,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             highlight = total_rows - 1;
 
         settings_semantic_menu_begin("Touch Pane Buttons", highlight);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -8580,7 +8586,7 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
             highlight = 0;
 
         settings_semantic_menu_begin("Quick Access Buttons", highlight);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -8782,7 +8788,7 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Thumb Buttons", highlight);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -9109,7 +9115,7 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Set Touch Profile", highlight);
-        sdl_character_sheet_screen_set_select_confirm_label("Apply");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Apply"));
 
         for (int i = 0; i < (int)N_ELEMENTS(profiles); i++)
         {
@@ -9259,8 +9265,8 @@ static void do_cmd_touch_settings(bool* settings_changed)
                 label = "Return";
             }
 
-            settings_ui_format_pair_line(line_buf, sizeof(line_buf), label,
-                action_buf, row_width, 24);
+            settings_ui_format_pair_line(line_buf, sizeof(line_buf), i == TOUCH_SETTINGS_TUTORIAL ? tutorial_help_text("Touch Tutorial") : ui_text(label),
+                ui_text(action_buf), row_width, 24);
             {
                 char semantic_line[160];
 
@@ -9412,7 +9418,7 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             highlight = total_rows - 1;
 
         settings_semantic_menu_begin("Detailed Touch Controls", highlight);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
 
         for (int i = 0; i < total_rows; i++)
         {
@@ -9757,7 +9763,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
         int row_width = settings_ui_line_width(2);
 
         settings_semantic_menu_begin("Mouse Input", highlight);
-        sdl_character_sheet_screen_set_select_confirm_label("Done");
+        sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
 
         for (int i = 0; i < MOUSE_SETTING_COUNT; i++)
         {
@@ -9788,7 +9794,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             }
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                label, action_buf, row_width, 18);
+                ui_text(label), ui_text(action_buf), row_width, 18);
             {
                 char semantic_line[160];
 
@@ -9818,6 +9824,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             cptr md = (highlight >= 0 && highlight < MOUSE_SETTING_COUNT)
                 ? mouse_setting_desc[highlight] : NULL;
             if (highlight == MOUSE_SETTING_TUTORIAL) md = tutorial_help_text(md);
+            else if (md) md = ui_text(md);
 
             sdl_character_sheet_screen_set_select_description(md ? md : "");
             sdl_character_sheet_screen_commit_select(highlight);
@@ -10022,10 +10029,10 @@ static int about_actions_menu(int* highlight)
         byte attr = choice == *highlight ? TERM_L_BLUE : TERM_WHITE;
         if (death_view && choice == ABOUT_ACTION_END_CHARACTER)
             attr = TERM_L_DARK;
-        keyed_menu_entry_label(line, sizeof(line), rows[i].key, rows[i].label);
+        keyed_menu_entry_label(line, sizeof(line), rows[i].key, ui_text(rows[i].label));
         settings_semantic_add_row(choice, line, attr);
     }
-    sdl_character_sheet_screen_set_select_description(rows[*highlight - 1].description);
+    sdl_character_sheet_screen_set_select_description(ui_text(rows[*highlight - 1].description));
     sdl_character_sheet_screen_commit_select(*highlight);
     hide_cursor = true;
     int key = inkey();
@@ -10099,67 +10106,94 @@ static void do_cmd_about_actions(void)
 }
 
 
+enum {
+    OPTIONS_TUTORIAL_LANGUAGE = 10,
+    OPTIONS_UI_LANGUAGE,
+    OPTIONS_RETURN
+};
+
+static cptr settings_tutorial_language_name(void)
+{
+    /* Standard menu fonts lack CJK glyphs. The picker uses its own font
+     * and shows every endonym; use the interface spelling here. */
+    cptr language = tutorial_language();
+    if (streq(language, "ja")) return ui_text("Japanese");
+    if (streq(language, "ko")) return ui_text("Korean");
+    if (streq(language, "zh")) return ui_text("Simplified Chinese");
+
+    size_t count;
+    const tutorial_locale* locales = tutorial_available_locales(&count);
+    for (size_t i = 0; i < count; i++)
+        if (streq(locales[i].code, language))
+            return locales[i].name;
+    return language;
+}
+
+static void settings_choose_ui_language(void)
+{
+    const ui_question_option languages[] = {
+        { 'e', "English", TERM_WHITE, false },
+        { 'd', "Deutsch", TERM_WHITE, false }
+    };
+    int current = streq(ui_language(), "de") ? 1 : 0;
+    int choice = ui_question_ask_overlay(ui_text("Interface language"),
+        ui_text("Choose the language for menus, controls, status text, and messages."), languages,
+        N_ELEMENTS(languages), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, current);
+    if (choice >= 0 && choice < (int)N_ELEMENTS(languages) && choice != current)
+    {
+        ui_set_language(choice == 1 ? "de" : "en");
+        (void)save_pane_config_to_json();
+    }
+}
+
 int options_menu(int* highlight)
 {
+    static const struct {
+        char key;
+        cptr label;
+        cptr description;
+    } rows[] = {
+        { 'a', "Input Options", "Keyboard, controller, and mouse input settings and tutorials." },
+        { 'b', "Display and Layout", "Window and map layout, zoom, fullscreen, tiles, and supporting panes." },
+        { 'c', "Interface Options", "How information is presented and how menus and the HUD behave." },
+        { 'd', "Visual Options", "Map and tile appearance, highlighting, and related visuals." },
+        { 'e', "Text Options", "Text size, fonts, names and lore, and narrative presentation." },
+        { 'f', "Gameplay Options", "Rules and quality-of-life options that affect play." },
+        { 'g', "Sound Options", "Sound effects, music, and volume." },
+        { 'i', "About and Actions", "Privacy policy, journal notes, and ending the current character." },
+        { 'p', "Developer Settings", "Generation, item and dungeon diagnostics, and raw configuration access." },
+        { 't', "Tutorial and help language", "Choose the language for tutorials and help pages." },
+        { 'l', "Interface language", "Choose the language for menus, controls, status text, and messages." },
+        { 'o', "Return to Game", "Close the menu and return to play." },
+    };
     tutorial_game_menu("settings", "Input, presentation and gameplay options are separate. Gameplay tutorial mode and Tale tutorial history are managed from Tutorial cards; controls tutorials and skeleton tips retain their separate settings.");
     int ch;
-    int options = 10;
+    int options = (int)N_ELEMENTS(rows);
     int clicked_choice = 0;
-    char line_buf[80];
     bool steamdeck = steamdeck_controls_active();
     bool menu_letters = sdl_menu_letters_enabled();
 
-    if (*highlight < 1)
-        *highlight = 1;
-    else if (*highlight > options)
-        *highlight = options;
-
+    *highlight = MAX(1, MIN(*highlight, options));
     settings_semantic_menu_begin("Options", *highlight);
 
-#define ADD_OPTIONS_MENU_ROW(CHOICE, KEY, TEXT)                                \
-    do {                                                                       \
-        keyed_menu_entry_label(line_buf, sizeof(line_buf), (KEY), (TEXT));     \
-        settings_semantic_add_row((CHOICE), line_buf,                          \
-            (*highlight == (CHOICE)) ? TERM_L_BLUE : TERM_WHITE);              \
-    } while (0)
-
-    ADD_OPTIONS_MENU_ROW(1, 'a', "Input Options");
-    ADD_OPTIONS_MENU_ROW(2, 'b', "Display and Layout");
-    ADD_OPTIONS_MENU_ROW(3, 'c', "Interface Options");
-    ADD_OPTIONS_MENU_ROW(4, 'd', "Visual Options");
-    ADD_OPTIONS_MENU_ROW(5, 'e', "Text Options");
-    ADD_OPTIONS_MENU_ROW(6, 'f', "Gameplay Options");
-    ADD_OPTIONS_MENU_ROW(7, 'g', "Sound Options");
-    ADD_OPTIONS_MENU_ROW(8, 'i', "About and Actions");
-    ADD_OPTIONS_MENU_ROW(9, 'p', "Developer Settings");
-    ADD_OPTIONS_MENU_ROW(10, 'o', "Return to Game");
-
-#undef ADD_OPTIONS_MENU_ROW
-
-    /* Show product name and version on the bottom of the menu */
+    for (int i = 0; i < options; i++)
     {
-        char verbuf[128];
-        strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
-        static const char* const options_row_desc[] = {
-            NULL,
-            "Keyboard, controller, and mouse input settings and tutorials.",
-            "Window and map layout, zoom, fullscreen, tiles, and supporting panes.",
-            "How information is presented and how menus and the HUD behave.",
-            "Map and tile appearance, highlighting, and related visuals.",
-            "Text size, fonts, names and lore, and narrative presentation.",
-            "Rules and quality-of-life options that affect play.",
-            "Sound effects, music, and volume.",
-            "Privacy policy, journal notes, and ending the current character.",
-            "Generation, item and dungeon diagnostics, and raw configuration access.",
-            "Close the menu and return to play.",
-        };
-        cptr d = (*highlight >= 1
-            && *highlight < (int)N_ELEMENTS(options_row_desc))
-            ? options_row_desc[*highlight] : NULL;
-
-        sdl_character_sheet_screen_set_select_description(d ? d : verbuf);
-        sdl_character_sheet_screen_commit_select(*highlight);
+        char label[128];
+        cptr value = NULL;
+        int choice = i + 1;
+        keyed_menu_entry_label(label, sizeof(label), rows[i].key, ui_text(rows[i].label));
+        if (choice == OPTIONS_TUTORIAL_LANGUAGE)
+            value = settings_tutorial_language_name();
+        else if (choice == OPTIONS_UI_LANGUAGE)
+            value = streq(ui_language(), "de") ? "Deutsch" : "English";
+        byte attr = *highlight == choice ? TERM_L_BLUE : TERM_WHITE;
+        if (value)
+            settings_semantic_add_pair_row(choice, label, value, attr);
+        else
+            settings_semantic_add_row(choice, label, attr);
     }
+    sdl_character_sheet_screen_set_select_description(ui_text(rows[*highlight - 1].description));
+    sdl_character_sheet_screen_commit_select(*highlight);
 
     /* Get key (while allowing menu commands) */
     hide_cursor = true;
@@ -10174,11 +10208,11 @@ int options_menu(int* highlight)
             if (click_action == UI_MENU_CLICK_HOVER && clicked_choice < 0)
                 return (0);
             if (clicked_choice == -1)
-                clicked_choice = 10;
+                clicked_choice = OPTIONS_RETURN;
             else if (clicked_choice == -2)
                 clicked_choice = *highlight;
             if (clicked_choice == SETTINGS_CLICK_RETURN)
-                clicked_choice = 10;
+                clicked_choice = OPTIONS_RETURN;
             if (clicked_choice < 1 || clicked_choice > options)
                 return (0);
             *highlight = clicked_choice;
@@ -10190,65 +10224,20 @@ int options_menu(int* highlight)
 
     ch = settings_menu_key(ch, '8', '2', false);
 
-    if (menu_letters && ((ch == 'a') || (ch == 'A')))
+    if (ch == ESCAPE || (steamdeck && ch == steamdeck_back_key())
+        || (menu_letters && ch == 'q'))
     {
-        *highlight = 1;
-        return (1);
+        *highlight = OPTIONS_RETURN;
+        return *highlight;
     }
-
-    if (menu_letters && ((ch == 'b') || (ch == 'B')))
+    if (menu_letters)
     {
-        *highlight = 2;
-        return (2);
-    }
-
-    if (menu_letters && ((ch == 'c') || (ch == 'C')))
-    {
-        *highlight = 3;
-        return (3);
-    }
-
-    if (menu_letters && ((ch == 'd') || (ch == 'D')))
-    {
-        *highlight = 4;
-        return (4);
-    }
-
-    if (menu_letters && ((ch == 'e') || (ch == 'E')))
-    {
-        *highlight = 5;
-        return (5);
-    }
-
-    if (menu_letters && ((ch == 'f') || (ch == 'F')))
-    {
-        *highlight = 6;
-        return (6);
-    }
-
-    if (menu_letters && ((ch == 'g') || (ch == 'G')))
-    {
-        *highlight = 7;
-        return (7);
-    }
-
-    if (menu_letters && ((ch == 'i') || (ch == 'I')))
-    {
-        *highlight = 8;
-        return (8);
-    }
-
-    if ((menu_letters && ((ch == 'o') || (ch == 'O') || (ch == 'q')))
-        || (ch == ESCAPE) || (steamdeck && ch == steamdeck_back_key()))
-    {
-        *highlight = 10;
-        return (10);
-    }
-
-    if (menu_letters && ((ch == 'p') || (ch == 'P')))
-    {
-        *highlight = 9;
-        return (9);
+        for (int i = 0; i < options; i++)
+            if (tolower((unsigned char)ch) == rows[i].key)
+            {
+                *highlight = i + 1;
+                return *highlight;
+            }
     }
 
     /* Choose current  */
@@ -10288,7 +10277,7 @@ static void do_cmd_keyboard_input_settings(void)
 
 #define ADD_KEYBOARD_ROW(CHOICE, LABEL, VALUE)                                \
         do {                                                                   \
-            settings_semantic_add_pair_row((CHOICE), (LABEL), (VALUE),        \
+            settings_semantic_add_pair_row((CHOICE), ui_text(LABEL), ui_text(VALUE),        \
                 selected == (CHOICE) ? TERM_L_BLUE : TERM_WHITE);              \
         } while (0)
 
@@ -10318,7 +10307,7 @@ static void do_cmd_keyboard_input_settings(void)
             cptr d = (selected >= 1 && selected <= 5)
                 ? keyboard_row_desc[selected] : NULL;
 
-            sdl_character_sheet_screen_set_select_description(d ? d : "");
+            sdl_character_sheet_screen_set_select_description(ui_text(d ? d : ""));
             sdl_character_sheet_screen_commit_select(selected);
         }
 
@@ -10451,8 +10440,8 @@ static int input_option_rows_collect(struct input_option_row* rows,
     {
         char mode_label[64];
 
-        strnfmt(mode_label, sizeof(mode_label), "Input UI: %s",
-            get_sdl_input_ui_mode_label(get_sdl_input_ui_mode()));
+        strnfmt(mode_label, sizeof(mode_label), ui_text("Input UI: %s"),
+            ui_text(get_sdl_input_ui_mode_label(get_sdl_input_ui_mode())));
 #if SIL_SDL_MOBILE_BUILD
         ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
             "Auto detects the device. Touch or Controller overrides detection. "
@@ -10467,30 +10456,30 @@ static int input_option_rows_collect(struct input_option_row* rows,
 #endif
     }
     if (SDL_HasKeyboard() || sdl_control_enabled()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_KEYBOARD, 'b', "Keyboard Input",
-            "Keyboard movement presets, the Angband keyset, and key "
-            "rebinding.");
+        ADD_INPUT_OPTION(INPUT_OPTION_KEYBOARD, 'b', ui_text("Keyboard Input"),
+            ui_text("Keyboard movement presets, the Angband keyset, and key "
+                "rebinding."));
     }
     if (SDL_HasGamepad()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_CONTROLLER, 'c', "Controller Settings",
-            "Set up the connected game controller or Steam Deck: button "
-            "mapping, stick movement, and movement delays.");
+        ADD_INPUT_OPTION(INPUT_OPTION_CONTROLLER, 'c', ui_text("Controller Settings"),
+            ui_text("Set up the connected game controller or Steam Deck: button "
+                "mapping, stick movement, and movement delays."));
     }
     if (sdl_touch_tutorial_device_available()) {
         ADD_INPUT_OPTION(INPUT_OPTION_TOUCH_TUTORIAL, 'd', tutorial_help_text("Touch Tutorial"),
             tutorial_help_text("Replay the touch-controls tutorial."));
     }
     if (SDL_HasMouse() || sdl_control_enabled()) {
-        ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'e', "Mouse Input",
-            "Mouse behavior, including click-to-move and pointer options.");
+        ADD_INPUT_OPTION(INPUT_OPTION_MOUSE, 'e', ui_text("Mouse Input"),
+            ui_text("Mouse behavior, including click-to-move and pointer options."));
     }
     ADD_INPUT_OPTION(INPUT_OPTION_WHEEL_TUTORIAL, 'f',
         tutorial_help_text("Character Wheel Tutorial"),
         tutorial_help_text("Replay the player action-wheel tutorial."));
     ADD_INPUT_OPTION(INPUT_OPTION_ZONES_TUTORIAL, 'g', tutorial_help_text("Zones Tutorial"),
         tutorial_help_text("Replay the screen-zones tutorial."));
-    ADD_INPUT_OPTION(INPUT_OPTION_RETURN, 'o', "Return to Options",
-        "Return to the Options menu.");
+    ADD_INPUT_OPTION(INPUT_OPTION_RETURN, 'o', ui_text("Return to Options"),
+        ui_text("Return to the Options menu."));
 
 #undef ADD_INPUT_OPTION
 
@@ -10821,7 +10810,13 @@ void do_cmd_options(void)
             Term_clear();
             break;
         }
-        case 10:
+        case OPTIONS_TUTORIAL_LANGUAGE:
+            tutorial_game_select_language();
+            break;
+        case OPTIONS_UI_LANGUAGE:
+            settings_choose_ui_language();
+            break;
+        case OPTIONS_RETURN:
         {
             settings_semantic_menu_hide();
             return_to_game = true;

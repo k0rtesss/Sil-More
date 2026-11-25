@@ -42,6 +42,7 @@ void cave_water_flow_set(int y, int x, int direction);
 int cave_water_flow_direction(int y, int x);
 bool cave_water_flow_is_lake(int y, int x);
 bool cave_water_flow_is_valid(void);
+u32b cave_water_flow_revision(void);
 
 /* Packed per-cell form used by the dungeon save lane.  Bits 0..2 hold the
  * direction and bit 3 marks a basin/lake cell. */

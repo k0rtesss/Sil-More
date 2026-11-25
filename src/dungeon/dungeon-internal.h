@@ -39,6 +39,8 @@ void play_game_pop_startup_icky(bool* startup_icky_active, cptr reason);
 bool restore_player_position_after_denied_move(int y, int x);
 void snapshot_run_history(const char* reason);
 void reset_level_entry_tracking(void);
+void advance_narrative_banner_turn(void);
+void sdl_narrative_banner_show_followup(bool line_delay, bool fast_fade);
 void display_partition_narrative_banner(int old_sidx, int new_sidx,
     level_partition_kind kind, bool line_delay);
 void describe_greater_vault_entry(cptr vault_name);

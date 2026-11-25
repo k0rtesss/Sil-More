@@ -101,9 +101,15 @@ int main(void)
     turn+=60; CHECK(!cave_event_for_listener(5,3,10,0,&e)); CHECK(cave_sound_mask_at(5,3)==0);
     cave_events_reset(); features[5][4]=FEAT_WATER;
     CHECK(cave_sound_mask_at(5,3)==0);
-    cave_water_flow_set(5,4,CAVE_WATER_FLOW_EAST); cave_events_terrain_changed();
+    cave_water_flow_set(5,4,CAVE_WATER_FLOW_EAST);
     CHECK(cave_sound_mask_at(5,3)==7); CHECK(cave_sound_mask_at(5,18)==0);
-    cave_water_flow_reset(); cave_events_terrain_changed();
+    turn += 10;
+    CHECK(cave_sound_mask_at(5,3)==7);
+    cave_water_flow_set(5,4,CAVE_WATER_FLOW_CALM);
+    CHECK(cave_sound_mask_at(5,3)==0 && cave_still_liquid_sound_level_at(5,4)>0);
+    cave_water_flow_reset();
+    CHECK(cave_flowing_water_sound_level_at(5,4)>0 && cave_still_liquid_sound_level_at(5,4)==0);
+    turn -= 10;
     /* Single hallway: a closed door absorbs four extra sound units. */
     for(int y=0;y<15;y++) for(int x=0;x<22;x++) features[y][x]=FEAT_WALL_PERM;
     for(int x=2;x<=8;x++) features[5][x]=FEAT_FLOOR;
@@ -149,7 +155,7 @@ int main(void)
     CHECK(strcmp(option_text[OPT_show_dungeon_events], "show_dungeon_events")==0);
     bool listed=false;
     for(int i=0;i<OPT_PAGE_PER;i++) {
-        if(option_page[INTERFACE_PAGE][i]==OPT_show_dungeon_events) listed=true;
+        if(option_page[DEVELOPER_PAGE][i]==OPT_show_dungeon_events) listed=true;
         CHECK(option_page[DEBUG_PAGE][i]!=OPT_show_dungeon_events);
     }
     CHECK(listed);
@@ -193,6 +199,13 @@ int main(void)
     CHECK(cave_flowing_water_sound_level_at(5,5)==7);
     CHECK(cave_flowing_water_sound_level_at(5,11)==1);
     CHECK(cave_flowing_water_sound_level_at(5,12)==0);
+    CHECK(cave_bridge_work_sound_level_at(5,6)==0);
+    cave_events_note_bridge_work(5,5);
+    CHECK(cave_bridge_work_sound_level_at(5,6)>0);
+    turn++;
+    CHECK(cave_bridge_work_sound_level_at(5,6)==0);
+    cave_events_note_bridge_work(5,8);
+    CHECK(cave_bridge_work_sound_level_at(5,8)==CAVE_FLOWING_LIQUID_SOUND_RADIUS+1);
     CHECK(sound_level_gain(1,7)>0.027f && sound_level_gain(1,7)<0.029f);
     CHECK(sound_level_gain(0,7)==0.0f);
     CHECK(sound_level_gain(6,7)==1.0f);

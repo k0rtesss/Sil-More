@@ -10,6 +10,17 @@ bool g_active_partition_banner_consumes_input = false;
  * command prompt rather than being consumed by the arrival action itself. */
 bool g_active_partition_banner_skip_next_decay = false;
 
+static struct {
+    bool active;
+    int y, x, depth;
+    s32b turn;
+} discovery_banner_entry;
+
+static struct {
+    char text[sizeof(g_active_partition_banner_text)];
+    bool line_delay, fast_fade;
+} narrative_followup;
+
 static int last_partition_pi = -1;
 static level_partition_kind last_partition_kind = LEVEL_PART_NONE;
 
@@ -31,10 +42,7 @@ void reset_level_entry_tracking(void)
     sdl_side_map_pane_forget_level();
 #endif
     g_labyrinth_view_active = false;
-    g_banner_force_redraw_remaining = 0;
-    g_active_partition_banner_text[0] = '\0';
-    g_active_partition_banner_consumes_input = false;
-    g_active_partition_banner_skip_next_decay = false;
+    clear_active_narrative_banner();
     greater_vault_xp_name[0] = '\0';
     greater_vault_xp_awarded = false;
     last_partition_pi = -1;
@@ -76,10 +84,14 @@ bool active_narrative_banner_consumes_input(void)
 
 void clear_active_narrative_banner(void)
 {
+    if (g_active_partition_banner_text[0])
+        sdl_narrative_banner_hidden();
     g_banner_force_redraw_remaining = 0;
     g_active_partition_banner_text[0] = '\0';
     g_active_partition_banner_consumes_input = false;
     g_active_partition_banner_skip_next_decay = false;
+    discovery_banner_entry.active = false;
+    narrative_followup.text[0] = '\0';
 }
 
 bool dismiss_active_narrative_banner(void)
@@ -88,6 +100,52 @@ bool dismiss_active_narrative_banner(void)
 
     clear_active_narrative_banner();
     return was_visible;
+}
+
+bool active_narrative_banner_has_followup(void)
+{
+    return narrative_followup.text[0] != '\0';
+}
+
+static void set_active_narrative_banner(cptr text, bool skip_next_decay)
+{
+    byte turns = narrative_banner_turn_setting();
+
+    SDL_strlcpy(g_active_partition_banner_text, text,
+        sizeof(g_active_partition_banner_text));
+    g_active_partition_banner_consumes_input = (turns == 0);
+    g_active_partition_banner_skip_next_decay = skip_next_decay;
+    g_banner_force_redraw_remaining = turns ? turns : 1;
+}
+
+void show_active_narrative_banner_followup(void)
+{
+    if (!active_narrative_banner_has_followup())
+        return;
+
+    discovery_banner_entry.active = false;
+    set_active_narrative_banner(narrative_followup.text, false);
+    narrative_followup.text[0] = '\0';
+    sdl_narrative_banner_show_followup(narrative_followup.line_delay,
+        narrative_followup.fast_fade);
+}
+
+void advance_narrative_banner_turn(void)
+{
+    if (g_banner_force_redraw_remaining <= 0)
+        return;
+    if (g_active_partition_banner_skip_next_decay)
+    {
+        g_active_partition_banner_skip_next_decay = false;
+        return;
+    }
+    if (--g_banner_force_redraw_remaining != 0)
+        return;
+
+    if (active_narrative_banner_has_followup())
+        show_active_narrative_banner_followup();
+    else
+        clear_active_narrative_banner();
 }
 
 /*
@@ -227,6 +285,8 @@ static void display_narrative_text(cptr text, int narrative_mode,
     if (command_transition)
         disturb(0, 0);
 
+    clear_active_narrative_banner();
+
     /*
      * Partition entry is detected while cleaning up the movement command,
      * before the dungeon loop's next normal refresh.  Present the completed
@@ -238,23 +298,12 @@ static void display_narrative_text(cptr text, int narrative_mode,
     {
         /* Do not let either the previous banner or the new banner flash at
          * full opacity on the movement frame before the fade begins. */
-        clear_active_narrative_banner();
         handle_stuff();
         Term_fresh();
     }
 
-    SDL_strlcpy(g_active_partition_banner_text, text,
-        sizeof(g_active_partition_banner_text));
-    g_active_partition_banner_consumes_input =
-        (narrative_banner_turn_setting() == 0);
-    g_active_partition_banner_skip_next_decay =
-        command_transition;
-    g_banner_force_redraw_remaining = g_active_partition_banner_consumes_input
-        ? 1
-        : narrative_banner_turn_setting();
-
-    sdl_narrative_banner_show(
-        line_delay || banner_with_delay, command_transition);
+    set_active_narrative_banner(text, command_transition);
+    sdl_narrative_banner_show(line_delay || banner_with_delay, command_transition);
 }
 
 static void display_partition_narrative(int old_sidx, int new_sidx,
@@ -272,6 +321,18 @@ void display_partition_narrative_banner(int old_sidx, int new_sidx,
     char buf[1024];
 
     build_partition_narrative_text(old_sidx, new_sidx, kind, buf, sizeof(buf));
+    /* Discovery and description can be issued by separate callbacks during
+     * the same entry. Keep the discovery up while staging the description. */
+    if (buf[0] && discovery_banner_entry.active && active_narrative_banner_visible()
+        && p_ptr && p_ptr->py == discovery_banner_entry.y
+        && p_ptr->px == discovery_banner_entry.x && p_ptr->depth == discovery_banner_entry.depth
+        && turn == discovery_banner_entry.turn)
+    {
+        SDL_strlcpy(narrative_followup.text, buf, sizeof(narrative_followup.text));
+        narrative_followup.line_delay = line_delay;
+        narrative_followup.fast_fade = (p_ptr->command_cmd != 0);
+        return;
+    }
     display_narrative_text(buf, PARTITION_NARRATIVE_BANNER, line_delay);
 }
 
@@ -446,6 +507,15 @@ static void maybe_award_partition_discovery_xp(level_partition_kind kind,
     p_ptr->discovery_lore_flags |= bit;
     gain_exp(300);
     display_narrative_text(text, narrative_mode, line_delay);
+    if ((narrative_mode == PARTITION_NARRATIVE_BANNER
+            || narrative_mode == PARTITION_NARRATIVE_BANNER_DELAY) && text[0])
+    {
+        discovery_banner_entry.active = true;
+        discovery_banner_entry.y = p_ptr->py;
+        discovery_banner_entry.x = p_ptr->px;
+        discovery_banner_entry.depth = p_ptr->depth;
+        discovery_banner_entry.turn = turn;
+    }
 }
 
 static cptr vault_entry_message_for_name(cptr vault_name)

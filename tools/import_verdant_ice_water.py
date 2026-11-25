@@ -6,9 +6,10 @@ the exact geometry, ice lips and snow pixels; staged freshwater atlases supply
 the existing animation surfaces. LICENSE-verdant-worlds.txt and
 LICENSE-verdant-tidewater.txt cover the incorporated game assets.
 
-Shallow/deep/bank atlases contain the same 16 pages as transition_freshwater:
+Shallow/deep atlases contain the same 16 pages as transition_freshwater:
 four calm frames, then three current frames for each of N/E/S/W. Select these
-with the combined ice/water neighbour mask. Solid (one page) and melting
+with the combined ice/water neighbour mask. The static bank has one page.
+Solid (one page) and melting
 (four pages) are transparent ice overlays selected with the ice-only mask.
 The existing freshwater_depth atlas can be drawn beneath the snow bank.
 
@@ -25,7 +26,7 @@ import zipfile
 from PIL import Image
 
 from import_verdant_worlds_floors import normalize_mask
-from import_verdant_tidewater import WATER, DEEP_WATER
+from import_verdant_tidewater import WATER, DEEP_WATER, SHORE_MASKS, compact_water_atlas
 
 ROOT = Path(__file__).resolve().parents[1]
 GRAF = ROOT / "lib/xtra/graf"
@@ -40,7 +41,11 @@ def pixels(image):
 
 
 def tile_at(atlas, mask, page=0):
-    x, y = mask % 16 * TILE, mask // 16 * TILE + page * PAGE
+    if atlas.width == 8 * TILE:
+        slot = SHORE_MASKS.index(normalize_mask(mask))
+        x, y = slot % 8 * TILE, (slot // 8 + page * 6) * TILE
+    else:
+        x, y = mask % 16 * TILE, mask // 16 * TILE + page * PAGE
     return atlas.crop((x, y, x + TILE, y + TILE))
 
 
@@ -121,7 +126,8 @@ def import_assets(read):
     assert staged_melting.size == (PAGE, PAGE * 4)
     shallow = Image.open(GRAF / "transition_freshwater.png").convert("RGBA")
     deep = Image.open(GRAF / "transition_freshwater_deep.png").convert("RGBA")
-    assert shallow.size == deep.size == (PAGE, PAGE * WATER_PAGES)
+    assert shallow.size == deep.size and shallow.size in (
+        (PAGE, PAGE * WATER_PAGES), (8 * TILE, 6 * TILE * WATER_PAGES))
     surfaces = [[tile_at(atlas, 255, page) for page in range(WATER_PAGES)]
                 for atlas in (shallow, deep)]
     for frames, palette in zip(surfaces, (set(WATER), set(DEEP_WATER.values()))):
@@ -159,6 +165,7 @@ def import_assets(read):
 
     for name, atlas in outputs.items():
         path = GRAF / f"transition_ice_water_{name}.png"
+        atlas = compact_water_atlas(atlas)
         atlas.save(path)
         print(f"{path.name}: {atlas.width}x{atlas.height}")
     print("PASS: 47 native shapes, exact snow/ice reconstruction, retained highlights,")

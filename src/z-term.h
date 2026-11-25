@@ -240,6 +240,9 @@ struct term
 
     errr (*text_hook)(int x, int y, int n, byte a, cptr s);
 
+    /* Return true when the frontend painted the entire requested row. */
+    bool (*row_hook)(int y);
+
     errr (*pict_hook)(int x, int y, int n, const byte* ap, const char* cp,
         const byte* tap, const char* tcp);
 };
@@ -276,6 +279,7 @@ struct term
 #define TERM_XTRA_ALIVE 11 /* Change the "hard" level (optional) */
 #define TERM_XTRA_LEVEL 12 /* Change the "soft" level (optional) */
 #define TERM_XTRA_DELAY 13 /* Delay some milliseconds (optional) */
+#define TERM_XTRA_DRAW_ROWS 14 /* Begin (1) or finish (0) drawing dirty rows */
 
 #define MAX_COLORS 32 /* The number of usable colours */
 #define BG_BLACK 0 /* The set number for the black-background glyphs */

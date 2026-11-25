@@ -106,10 +106,9 @@ if /I "%BUILD_TARGET%"=="steam" (
     copy /Y README.md "%STANDARD_DEPLOY_DIR%\README.md" >nul
 )
 
-REM Always update lib/xtra/font folder to ensure latest fonts are deployed
-REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
-if exist %STANDARD_DEPLOY_DIR%\lib\xtra\font rmdir /S /Q %STANDARD_DEPLOY_DIR%\lib\xtra\font
-xcopy /E /I /Y /K lib\xtra\font %STANDARD_DEPLOY_DIR%\lib\xtra\font
+REM Mirror shipped faces in place. Unchanged fonts may be open in the game.
+robocopy "lib\xtra\font" "%STANDARD_DEPLOY_DIR%\lib\xtra\font" /MIR /XJ /R:1 /W:1 /XF InputMono-Bold.ttf
+if errorlevel 8 exit /b 1
 
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.
@@ -216,10 +215,9 @@ for %%f in (
 REM Copy game data
 if not exist sil-more-windows-sdl3-portable\lib xcopy /E /I /Y /K lib sil-more-windows-sdl3-portable\lib
 
-REM Always update lib/xtra/font folder to ensure latest fonts are deployed
-REM (e.g. EBGaramond-Regular.ttf and any newly added typefaces)
-if exist sil-more-windows-sdl3-portable\lib\xtra\font rmdir /S /Q sil-more-windows-sdl3-portable\lib\xtra\font
-xcopy /E /I /Y /K lib\xtra\font sil-more-windows-sdl3-portable\lib\xtra\font
+REM Mirror shipped faces in place. Unchanged fonts may be open in the game.
+robocopy "lib\xtra\font" "sil-more-windows-sdl3-portable\lib\xtra\font" /MIR /XJ /R:1 /W:1 /XF InputMono-Bold.ttf
+if errorlevel 8 exit /b 1
 
 REM Exclude non-OFL fallback font from deployment; public releases use the
 REM documented redistributable font set.

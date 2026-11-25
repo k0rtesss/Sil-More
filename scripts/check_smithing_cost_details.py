@@ -42,7 +42,8 @@ void fixture_details(int item, int prefix, int mode)
         if (mode == 2)
         {
             smith_sheet_layout sheet = smith_sheet_geometry();
-            smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), true, false);
+            smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), true, false,
+                SMITH_NAME_READ_ONLY);
             assert(smith_ui_detail_valid && smith_ui_detail_paid);
             smithing_cost_type zero = { 0 };
             assert(!memcmp(&zero, &smith_ui_detail_cost, sizeof(zero)));
@@ -96,7 +97,8 @@ void fixture_long_costs(void)
 {
     create_base_object(TV_SWORD, SV_SHORT_SWORD);
     smith_sheet_layout sheet = smith_sheet_geometry();
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
+        SMITH_NAME_READ_ONLY);
     smith_ui_detail_reforge = false;
     smith_ui_detail_paid = false;
     smith_ui_detail_cost = (smithing_cost_type){
@@ -143,9 +145,11 @@ typedef struct editor_step {
     bool description_scroll;
     bool full_description;
     int skill, skill_bonus;
+    cptr name_input;
 } editor_step;
 static const editor_step* editor_steps;
 static int editor_step_index;
+static cptr editor_name_input;
 static draft_check previous_draft;
 static object_type editor_blueprint;
 static bool editor_wide;
@@ -406,9 +410,17 @@ static void editor_check_geometry(void)
 
 static char editor_step_key(void)
 {
+    if (editor_name_input && *editor_name_input) return *editor_name_input++;
     const editor_step* step = editor_steps++;
     int col = 0, row = 0, touch_choice;
     assert(step->label);
+    if (step->name_input)
+    {
+        assert(sdl_question_menu_is_active());
+        editor_name_input = step->name_input;
+        ++editor_step_index;
+        return *editor_name_input++;
+    }
     bool touch_action = editor_touch_button(step->label, &touch_choice);
     if (touch_action)
         assert(!editor_frame_find(step->label, NULL, NULL, true));
@@ -614,7 +626,8 @@ static void editor_checks(void)
         { "Prefix", 'a' },
         { "Prefix", 'b' },
         { "Prefix", ']', false, DRAFT_PREFIX },
-        { "Stat bonuses", 'a', false, DRAFT_PREFIX },
+        { "Stat bonuses", 'a', false, DRAFT_PREFIX, .row_value = "0 / 0 properties",
+            .missing_choice = "Shortsword" },
         { "Stat bonuses", ']', false, DRAFT_PREFIX },
         { "Attack", ESCAPE, false, DRAFT_PREFIX },
         { "Shortsword", ESCAPE },
@@ -623,7 +636,7 @@ static void editor_checks(void)
     const editor_step property_steps[] = {
         { "Shortsword", 'b' },
         { "Attack", '[' },
-        { "Stat bonuses", 'a', .row_value = "0 properties" },
+        { "Stat bonuses", 'a', .row_value = "0 / 8 properties" },
         { "Str bonus", 'a' },
         { "Str bonus", 0, true, .row_value = "+0" },
         { "Choose Strength", '6', .also = "Artifice" },
@@ -631,26 +644,26 @@ static void editor_checks(void)
         { "Str bonus", '\r', .row_value = "+0" },
         { "b) +1", 0, true, .also = "Choose Strength" },
         { "Str bonus", ESCAPE, .row_value = "+1" },
-        { "h) Melee", 0, true, DRAFT_ARTEFACT, .strength = 1 },
+        { "h) Melee", 0, true, DRAFT_ARTEFACT, .strength = 1, .row_value = "0 / 13 abilities" },
         { "Finesse", 'b' },
         { "Ability", ESCAPE },
-        { "h) Melee", 'a', false, DRAFT_ARTEFACT, 0, 1, true, .row_value = "1 ability" },
+        { "h) Melee", 'a', false, DRAFT_ARTEFACT, 0, 1, true, .row_value = "1 / 13 abilities" },
         { "Edit", 0, true, .also = "Str bonus" },
         { "c) +2", 0, true, .also = "Choose Strength" },
         { "Str bonus", ESCAPE, .row_value = "+2" },
-        { "1 ability", ']', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "1 / 13 abilities", ']', false, DRAFT_ARTEFACT, 0, 2, true },
         { "Attack", '[', false, DRAFT_ARTEFACT, 0, 2, true, .missing_choice = "Strength" },
-        { "1 ability", 'h', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "1 / 13 abilities", 'h', false, DRAFT_ARTEFACT, 0, 2, true },
         { "Finesse", ESCAPE },
-        { "1 ability", ']', false, DRAFT_ARTEFACT, 0, 2, true },
+        { "1 / 13 abilities", ']', false, DRAFT_ARTEFACT, 0, 2, true },
         { "Attack", ']', false, DRAFT_ARTEFACT, 0, 2, true, .missing_choice = "Strength" },
         { "Prefix", 'a', false, DRAFT_ARTEFACT, 0, 2, true },
         { "Prefix", '[', false, DRAFT_ARTEFACT, 0, 2, true, .missing_choice = "Strength" },
         { "Attack", '[', false, DRAFT_ARTEFACT, 0, 2, true },
-        { "Stat bonuses", 'a', .row_value = "1 property" },
+        { "Stat bonuses", 'a', .row_value = "1 / 8 properties" },
         { "Remove", 0, true, .also = "Str bonus" },
         { "Str bonus", ESCAPE, .missing_choice = "Remove" },
-        { "Stat bonuses", ']', .row_value = "0 properties" },
+        { "Stat bonuses", ']', .row_value = "0 / 8 properties" },
         { "Attack", ESCAPE, .missing_choice = "Strength" },
         { "Shortsword", ESCAPE },
         { 0 },
@@ -752,10 +765,28 @@ static void editor_checks(void)
     const editor_step artifice_scroll_steps[] = {
         { "Shortsword", 'b' },
         { "Attack", '[' },
-        { "Stat bonuses", '8', .row_value = "0" },
-        { "Craft", '8', .missing_choice = "Name artefact" },
-        { "Name artefact", ESCAPE, .check_target = true, .missing_choice = "Stat bonuses" },
+        { "Stat bonuses", '8', .row_value = "0 / 8", .missing = "Name artefact" },
+        { "Craft", '8' },
+        { "Shortsword", '8', .check_target = true, .also = "Rename" },
+        { "Song", '2', .check_target = true, .missing_choice = "Stat bonuses" },
+        { "Shortsword", '\r', .check_target = true, .also = "Rename" },
+        { "Artifact name", .name_input = "\033" },
+        { "Song", ESCAPE, .check_target = true, .missing_choice = "Stat bonuses" },
         { "Shortsword", ESCAPE },
+        { 0 },
+    };
+    const editor_step artifice_name_steps[] = {
+        { "Shortsword", 'b' },
+        { "Attack", '[', .missing_choice = "Shortsword" },
+        { "Shortsword", 0, true, DRAFT_PLAIN, .missing = "Name artefact" },
+        { "Artifact name", .name_input = "Cancelled\033" },
+        { "Shortsword", 0, true, DRAFT_PLAIN },
+        { "Artifact name", .name_input = "of Dawn (Test)\r" },
+        { "Shortsword of Dawn (Test)", ']', .check_target = true },
+        { "Shortsword of Dawn (Test)", 0, true },
+        { "Artifact name", .name_input = "of Dusk\r" },
+        { "Shortsword of Dusk", ESCAPE, .check_target = true },
+        { "Shortsword of Dusk", ESCAPE, .missing_choice = "Shortsword of Dusk" },
         { 0 },
     };
     const editor_step cost_scroll_steps[] = {
@@ -768,6 +799,7 @@ static void editor_checks(void)
     run_editor_steps("Smithing browser, editor, Costs and draft recovery", 80, 24, steps, NEW_WORK);
     run_editor_steps("Smithing prefix commit survives page changes and blocks Artifice", 80, 24, prefix_steps, NEW_WORK);
     run_editor_steps("Smithing Artifice edits values in the property list and preserves the draft", 80, 24, property_steps, NEW_WORK);
+    run_editor_steps("Smithing Work Order renames the artefact and preserves a cancelled draft", 80, 24, artifice_name_steps, NEW_WORK);
     run_editor_steps("Smithing affix values are editable beside their affix", 80, 24, affix_bonus_steps, NEW_WORK);
     run_editor_steps("Smithing intrinsic values have independent editors in Enhancements", 80, 70, intrinsic_bonus_steps, NEW_WORK);
     run_editor_steps("Smithing browser, editor, Costs and draft recovery", 42, 32, steps, NEW_WORK);
@@ -778,6 +810,7 @@ static void editor_checks(void)
     run_editor_steps("Smithing prepaid reforge can resume at an exhausted forge", 30, 12, prepaid_steps, PAID_REFORGE);
     run_editor_steps("Smithing full description opens and pages on a short screen", 30, 12, description_reader_steps, NEW_WORK);
     editor_touch = true;
+    run_editor_steps("Smithing portrait touch renames the artefact from the Work Order", 44, 45, artifice_name_steps, NEW_WORK);
     run_editor_steps("Smithing native touch actions design, apply, costs and back", 30, 15, touch_actions, NEW_WORK);
     run_editor_steps("Smithing drag scroll and touch targets", 30, 15, touch_scroll_steps, NEW_WORK);
     run_editor_steps("Smithing description drags independently and opens by tapping", 44, 29, description_scroll_steps, NEW_WORK);

@@ -140,7 +140,7 @@ typedef struct {
 } character_sheet_named_trait;
 
 static const character_sheet_named_trait character_sheet_named_traits[] = {
-    { "Master Artisan", "Artifacts use only 1 forge charge; fire and light items are easier to make." },
+    { "Master Artisan", "Artefacts use 2 forge charges. Fire and light items are easier to make." },
     { "Creator of Galvorn", "You may smith Galvorn armour and begin with humbler bread." },
     { "Chosen of Ulmo", "Horns are twice as effective." },
     { "Indomitable Will", "Will Affinity is fixed at 3 and cannot be reduced by curses." },

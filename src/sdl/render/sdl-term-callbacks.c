@@ -85,6 +85,7 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_question_menu_pending_timeout_ms(now_ns);
             int popup_notification_timeout_ms =
                 sdl_popup_notification_pending_timeout_ms(now_ns);
+            int banner_timeout_ms = sdl_narrative_banner_timeout_ms(now_ns);
             int mouse_cursor_timeout_ms =
                 sdl_mouse_cursor_animation_timeout_ms(now_ns);
             int idle_animation_timeout_ms =
@@ -188,6 +189,8 @@ errr callback_sdl_xtra(int n, int v)
                 timeout_ms = thumb_touch_timeout_ms;
             }
             timeout_ms = sdl_control_wait_timeout(timeout_ms);
+            if (banner_timeout_ms >= 0 && (timeout_ms < 0 || banner_timeout_ms < timeout_ms))
+                timeout_ms = banner_timeout_ms;
             g_sdl_blocking_key_wait = true;
             {
                 sil_perf_flush();
@@ -365,15 +368,21 @@ errr callback_sdl_xtra(int n, int v)
             sil_popup_trace_player_drawn(p_ptr->py, p_ptr->px);
         sdl_present_if_needed(d);
         return 0;
+    case TERM_XTRA_DRAW_ROWS:
+        if (Term == term_screen)
+            sdl_material_edge_batch(v != 0);
+        return 0;
     case TERM_XTRA_DELAY: {
-        /* Break delay into chunks and process events to keep app responsive */
-        Uint32 total_delay = (Uint32)v;
-        Uint32 chunk = 20; /* Process events every 20ms */
-        
-        while (total_delay > 0) {
-            Uint32 this_delay = (total_delay < chunk) ? total_delay : chunk;
-            SDL_Delay(this_delay);
-            total_delay -= this_delay;
+        if (v <= 0)
+            return 0;
+        /* Time spent pumping events and drawing idle frames is part of the
+         * animation interval, particularly on slower mobile renderers. */
+        Uint64 now = SDL_GetTicksNS();
+        Uint64 deadline = now + SDL_MS_TO_NS((Uint64)v);
+        sdl_present_if_needed(d);
+        now = SDL_GetTicksNS();
+        while (now < deadline) {
+            SDL_DelayNS(MIN(deadline - now, SDL_MS_TO_NS(20)));
             
             /* Update music streams */
             sdl_music_update();
@@ -411,6 +420,7 @@ errr callback_sdl_xtra(int n, int v)
                 sdl_idle_animation_update(flush_ns);
                 sdl_present_if_needed(d);
             }
+            now = SDL_GetTicksNS();
         }
         return 0;
     }
@@ -624,7 +634,6 @@ errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
 
     bg_col.a = selected_attr ? 255 : sdl_view_background_alpha(d);
 
-    TTF_Font* story_font = sdl_story_font_for_view(d);
     if (selected_attr)
     {
         bg_col.r = angband_color_table[selected_bg_attr][1];
@@ -632,28 +641,22 @@ errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
         bg_col.b = angband_color_table[selected_bg_attr][3];
     }
 
-    // Check if any character in this chunk should use story font
-    // First check the global chunk flag (for whole-line story rendering)
-    bool chunk_story_font = (Term && Term->story_chunk_active && story_font);
-    
-    // Also check per-character story font flags
-    if (!chunk_story_font && Term && Term->scr && story_font) {
-        // Check if ANY character in this chunk (from x to x+n) has the story font flag
-        // story is a byte** (2D array), so we need story[y] which gives us byte* for that row
-        if (y >= 0 && y < Term->hgt && Term->scr->story && Term->scr->story[y]) {
-            // Check all characters in the chunk, not just the first one
-            for (int i = 0; i < n && (x + i) < Term->wid; i++) {
-                if (Term->scr->story[y][x + i]) {
-                    chunk_story_font = true;
-                    log_trace("callback_sdl_text: Using story font based on per-char flag at y=%d x=%d (chunk starts at x=%d)",
-                              y, x + i, x);
-                    break;
-                }
+    /* Determine whether the run needs a story face before touching the font
+     * cache. ASCII map and combat runs normally use the view's mono atlas. */
+    byte* story_row = Term->scr && Term->scr->story
+        ? Term->scr->story[y] : NULL;
+    bool chunk_story_font = Term->story_chunk_active;
+    if (!chunk_story_font && story_row) {
+        for (int i = 0; i < n; i++) {
+            if (story_row[x + i]) {
+                chunk_story_font = true;
+                break;
             }
         }
     }
 
-    bool story_mode = (chunk_story_font && story_font);
+    TTF_Font* story_font = chunk_story_font ? sdl_story_font_for_view(d) : NULL;
+    bool story_mode = (story_font != NULL);
 
     if (!story_mode) {
         // Clear destination cell span so shorter/narrower glyphs don't leave leftovers
@@ -702,12 +705,9 @@ errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
               g_state.story_font_depth,
               (void*)story_font);
 
-    byte* story_row = NULL;
     char* row_chars = NULL;
     byte* row_attr = NULL;
     if (Term && Term->scr && y >= 0 && y < Term->hgt) {
-        if (Term->scr->story)
-            story_row = Term->scr->story[y];
         if (Term->scr->c)
             row_chars = Term->scr->c[y];
         if (Term->scr->a)
@@ -4981,6 +4981,8 @@ errr sdl_view_link_term(sdl_view* d, int term_index)
     t->bigcurs_hook = callback_sdl_bigcurs;
     t->wipe_hook = callback_sdl_wipe;
     t->text_hook = callback_sdl_text;
+    if (term_index == PANE_ROLLS)
+        t->row_hook = sdl_render_overlay_log_row;
     if (g_state.use_tiles)
         t->pict_hook = callback_sdl_pict;
     t->data = (void*)(uintptr_t)term_index;

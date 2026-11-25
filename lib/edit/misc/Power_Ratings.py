@@ -14,7 +14,7 @@ ANSI_BRIGHT_YELLOW = '\033[93m'
 # To customize scoring for individual uniques, change the values below
 # FREE ability is now integrated as a unique trait score (1.5 points)
 UNIQUE_SCORES = {
-    'SMT_FEANOR': 2,        # Uses only 1 forge cast for custom artifacts
+    'SMT_FEANOR': 2,        # Uses 2 forge charges for custom artefacts
     'WIL_FIN': 1.5,         # Majesty ability gets 1.5x more base will
     'MEL_MAEDHROS': 1.5,    # One handed
     'SNG_FIN': 1.5,         # Song of Staying is twice as effective

@@ -19,6 +19,8 @@ void map_info_default(int y, int x, byte* ap, char* cp);
 
 void move_cursor_relative(int y, int x);
 void print_rel(char c, byte a, int y, int x);
+bool queue_map_effect_cell(char c, byte a, int y, int x);
+void restore_map_effect_cell(int y, int x);
 void note_spot(int y, int x);
 void lite_spot(int y, int x);
 void prt_map(void);

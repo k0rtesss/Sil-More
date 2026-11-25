@@ -92,14 +92,6 @@ void request_command(void)
             if (ui_message_line_enabled())
                 prt("", 0, 0);
             clear_active_narrative_banner();
-            /*
-             * The banner is drawn over the main map.  Repaint only that map
-             * after dismissal: do_cmd_redraw() also reacts and refreshes every
-             * supporting pane, exposing intermediate left/combat pane frames.
-             */
-            p_ptr->redraw |= PR_MAP;
-            redraw_stuff();
-            Term_fresh();
             continue;
         }
 

@@ -14,7 +14,32 @@ static int prompts;
 static int aim_cancellations;
 static bool accept;
 static bool cancel_drop_quantity, cancel_drop_confirmation;
+static bool trace_bow;
+static int release_cues, release_delays, flight_steps;
 enum { ROW = 10, PLAYER_X = 32, FRONT_X = 31, TARGET_X = 30 };
+
+void __real_sound(int effect);
+void __wrap_sound(int effect)
+{
+    if (trace_bow && effect == MSG_SHOOT)
+        release_cues++;
+    __real_sound(effect);
+}
+
+errr __real_Term_xtra(int action, int value);
+errr __wrap_Term_xtra(int action, int value)
+{
+    if (trace_bow && action == TERM_XTRA_DELAY) {
+        if (value == 350) {
+            assert(release_cues == 1 && flight_steps == 0);
+            release_delays++;
+        } else if (value == op_ptr->delay_factor * op_ptr->delay_factor) {
+            assert(release_cues == 1 && release_delays == (use_sound ? 1 : 0));
+            flight_steps++;
+        }
+    }
+    return __real_Term_xtra(action, value);
+}
 
 bool __wrap_get_check_oath_multiline(cptr prompt)
 {
@@ -325,14 +350,24 @@ static void check_bystander(bool throwing, bool stops)
     else assert(player_quiver_arrow_count() == 3);
 }
 
-static void check_acceptance(void)
+static void check_acceptance(bool sound_enabled)
 {
     monster_type* target = setup(false, false, false);
     assert(target_able((int)(target - mon_list)));
     target_set_monster((int)(target - mon_list));
     p_ptr->command_dir = 5;
     accept = true;
+    bool previous_sound = use_sound;
+    int previous_delay = op_ptr->delay_factor;
+    use_sound = sound_enabled;
+    op_ptr->delay_factor = 3;
+    release_cues = release_delays = flight_steps = 0;
+    trace_bow = true;
     shoot(false, -100);
+    trace_bow = false;
+    use_sound = previous_sound;
+    op_ptr->delay_factor = previous_delay;
+    assert(release_cues == 1 && release_delays == (sound_enabled ? 1 : 0) && flight_steps > 0);
     assert(prompts == 1 && p_ptr->energy_use == 100 && player_attacked);
     assert(target->hp == 30000 && player_quiver_arrow_count() == 3);
 }
@@ -395,7 +430,9 @@ static void checks(void)
         check_bystander(throwing, false);
         check_near_boundary(throwing);
     }
-    check_acceptance();
+    check_acceptance(false);
+    check_acceptance(true);
+    puts("Bow release precedes flight, with the 350 ms lead-in only when sound is enabled: PASS.");
     check_zero_path();
     check_cursed_throw();
     check_ordinary_cursed_drop();
@@ -434,7 +471,8 @@ def main():
         *(str(ROOT / part) for part in replacements), "@" + str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-Wl,--wrap=get_check_oath_multiline",
         "-Wl,--wrap=target_select_aim", "-Wl,--wrap=get_quantity_action",
-        "-Wl,--wrap=get_check", "-o", str(exe)], cwd=BUILD, env=env, check=True)
+        "-Wl,--wrap=get_check", "-Wl,--wrap=sound", "-Wl,--wrap=Term_xtra",
+        "-o", str(exe)], cwd=BUILD, env=env, check=True)
     with tempfile.TemporaryDirectory(prefix="data-", dir=out) as data:
         subprocess.run([str(exe), str(ROOT / "lib/edit"), data], cwd=data, env=env, check=True, timeout=30)
 

@@ -28,6 +28,23 @@ typedef struct material_edge_source {
     bool has_light_variant;
 } material_edge_source;
 
+/* A row and its two neighbours cover the eight samples for each painted
+ * tile. These are physical, untinted sources, shared only while flushing
+ * one batch of terminal rows. Lighting is applied to each receiver below. */
+static struct {
+    Uint64 batch;
+    int y;
+    material_edge_source source;
+} sampled_rows[3][MAX_DUNGEON_WID];
+static Uint64 sample_batch;
+static bool sampling_rows;
+
+void sdl_material_edge_batch(bool begin)
+{
+    sampling_rows = begin;
+    if (begin) ++sample_batch;
+}
+
 /* Clockwise from north.  Keeping this order fixed is important at corners:
  * no gameplay RNG is consumed and repeated redraws produce the same pixels. */
 static const int material_edge_dy[8] = {
@@ -286,6 +303,27 @@ static bool material_edge_sources_differ(const material_edge_source* a,
 
 /* Physical neighbour artwork preserves custom styles without making the
  * boundary shape depend on which neighbouring cells are displayed. */
+static void material_edge_sample(int y, int x, material_edge_source* out)
+{
+    int row = y % 3;
+    if (sampling_rows && sampled_rows[row][x].batch == sample_batch
+        && sampled_rows[row][x].y == y) {
+        *out = sampled_rows[row][x].source;
+        return;
+    }
+    byte a = 0;
+    char c = 0;
+    *out = (material_edge_source){0};
+    map_info_actual_terrain(y, x, &a, &c);
+    if (!material_edge_describe(y, x, a, c, out))
+        out->class_id = MATERIAL_EDGE_NONE;
+    if (sampling_rows) {
+        sampled_rows[row][x].batch = sample_batch;
+        sampled_rows[row][x].y = y;
+        sampled_rows[row][x].source = *out;
+    }
+}
+
 static int material_edge_collect(int y, int x, byte ta, char tc,
     material_edge_source* current, material_edge_source neighbours[8],
     bool collect_sources)
@@ -301,9 +339,6 @@ static int material_edge_collect(int y, int x, byte ta, char tc,
     {
         int ny = y + material_edge_dy[i];
         int nx = x + material_edge_dx[i];
-        byte nta = 0;
-        char ntc = 0;
-
         neighbours[i].class_id = MATERIAL_EDGE_NONE;
         neighbours[i].material_id = 0;
         neighbours[i].row = neighbours[i].col = 0;
@@ -313,8 +348,8 @@ static int material_edge_collect(int y, int x, byte ta, char tc,
 
         /* p_ptr->image is rejected above because map_info() may randomize
          * hallucinated styles while resolving this terrain source. */
-        map_info_actual_terrain(ny, nx, &nta, &ntc);
-        if (!material_edge_describe(ny, nx, nta, ntc, &neighbours[i]))
+        material_edge_sample(ny, nx, &neighbours[i]);
+        if (neighbours[i].class_id == MATERIAL_EDGE_NONE)
             continue;
 
         /* Physical sampling intentionally ignores neighbour discovery, and
@@ -408,6 +443,13 @@ static bool material_edge_draw_sources(int y, int x,
     const material_edge_source neighbours[8], const SDL_FRect* dst,
     bool preserve_floor_contour)
 {
+    if (preserve_floor_contour && current->class_id == MATERIAL_EDGE_FLOOR)
+        return false;
+    bool has_donor = false;
+    for (int i = 0; i < 8 && !has_donor; ++i)
+        has_donor = material_edge_lower(current, &neighbours[i]);
+    if (!has_donor)
+        return false;
     bool drawn = false;
     SDL_BlendMode texture_blend = SDL_BLENDMODE_NONE, draw_blend = SDL_BLENDMODE_NONE;
     Uint8 r, g, b, a, tr, tg, tb, ta;

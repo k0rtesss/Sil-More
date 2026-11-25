@@ -339,9 +339,13 @@ Norwegian Bokmål, Polish, Brazilian Portuguese, Romanian, Russian, Spanish,
 Swedish, Turkish and Ukrainian.
 Latin-script tutorials use the English tutorial fonts. Bulgarian and Ukrainian
 use the Russian tutorial fonts, with Cormorant SC for titles. The default
-tutorial body font is EB Garamond.
+tutorial body font is EB Garamond. Japanese, Korean and Simplified Chinese
+use regional Noto Sans CJK subsets for tutorial headings, body text and
+controls. Regenerate these assets with `tools/subset_tutorial_fonts.py`
+after introducing characters outside the shipped repertoire.
 The app saves the choice in `appOptions.tutorialLanguage` in `sil_sdl.json`.
-A missing or unknown code selects English.
+Without a saved choice, a Japanese, Korean or Chinese device starts its guides
+in that language. Other device languages and unknown saved codes use English.
 
 Each `lib/help/tutorials.<code>.json` file contains lesson titles and ordered
 pages keyed by the stable English lesson ID. Its `strings` object contains

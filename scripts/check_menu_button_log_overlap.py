@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/menu-button-log-overlap"
 EXTRA_MOBILE_SOURCES = []
+EXTRA_WRAPS = []
 
 CHECK = r'''
 static void check_menu_and_log(void)
@@ -147,7 +148,7 @@ def main():
     wraps = ["SDL_GetDisplayContentScale", "sdl_touch_only_device_active",
         "sdl_layout_matches_supporting_pane_visibility", "prt_frame_basic",
         "sdl_depth_menu_pane_label", "player_current_movement_energy",
-        "player_current_movement_speed"]
+        "player_current_movement_speed"] + EXTRA_WRAPS
     exe = OUT / "check.exe"
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-DSIL_IOS",
         "-std=c17", "-O0", "-g", "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source)]

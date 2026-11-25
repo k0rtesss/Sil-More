@@ -1835,6 +1835,7 @@ static void do_cmd_wiz_tile_test(void)
 
     for (int i = 2; i < 7; ++i)
         cave_info[3][i] = CAVE_WALL;
+    cave_events_terrain_changed();
 
     for (int i = 1; i < mon_max; i++)
     {

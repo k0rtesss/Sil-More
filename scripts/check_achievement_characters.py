@@ -37,7 +37,10 @@ int fixture_smith(int tval,int sval,bool artifact,bool sharp,int uses)
     }
     cave_feat[p_ptr->py][p_ptr->px]=FEAT_FORGE_NORMAL_HEAD+uses;
     object_difficulty(smith_o_ptr);
-    assert(smithing_cost.uses<=uses);
+    if (uses < smithing_cost.uses) {
+        assert(!smith_design_allows(SMT_MENU_ACCEPT));
+        return -1;
+    }
     create_smithing_item();
     for(int i=0;i<player_pack_entry_count();i++) {
         int handle=player_pack_entry_handle_at(i);
@@ -91,15 +94,18 @@ static void crown(void)
 static void smiths(void)
 {
     character(UNQ_SMT_FEANOR,41);
-    assert(fixture_smith(TV_SWORD,SV_SHORT_SWORD,true,false,2)>=0);
-    assert(!events[SIL_ACH_A_SINGLE_SPARK]);
+    assert(fixture_smith(TV_SWORD,SV_SHORT_SWORD,true,false,1)<0);
+    assert(!events[SIL_ACH_A_SINGLE_SPARK] && forge_uses(p_ptr->py,p_ptr->px)==1);
+    character(UNQ_SMT_FEANOR,41);
+    assert(fixture_smith(TV_SWORD,SV_SHORT_SWORD,true,false,3)>=0);
+    assert(!events[SIL_ACH_A_SINGLE_SPARK] && forge_uses(p_ptr->py,p_ptr->px)==1);
     character(UNQ_SMT_FEANOR,41);
     assert(fixture_smith(TV_SWORD,SV_SHORT_SWORD,false,false,1)>=0);
     assert(!events[SIL_ACH_A_SINGLE_SPARK]);
     character(UNQ_SMT_FEANOR,41);
-    assert(fixture_smith(TV_SWORD,SV_SHORT_SWORD,true,false,1)>=0);
+    assert(fixture_smith(TV_SWORD,SV_SHORT_SWORD,true,false,2)>=0);
     assert(events[SIL_ACH_A_SINGLE_SPARK]==1 && forge_uses(p_ptr->py,p_ptr->px)==0);
-    puts("PASS Feanor: actual artifact completion on last charge; spare charge and ordinary item excluded");
+    puts("PASS Feanor: one charge blocks crafting; spending the final two charges earns A Single Spark");
 
     character(UNQ_SMT_GAMIL,41);
     item(&inventory[0],TV_METAL,SV_METAL_MITHRIL,100);

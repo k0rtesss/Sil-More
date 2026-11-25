@@ -53,7 +53,9 @@ void sdl_ui_render_scroll_indicator(SDL_FRect viewport, float offset,
 enum {
     SDL_UI_TEXT_CACHE_MAX = 256,
     SDL_UI_TEXT_CACHE_PIXEL_BUDGET = 8 * 1024 * 1024,
+    SDL_TEXT_SINGLE_LINE = -1,
 };
+static const SDL_Color white_ink = {255, 255, 255, 255};
 
 typedef struct sdl_ui_text_cache_entry {
     bool valid;
@@ -61,6 +63,7 @@ typedef struct sdl_ui_text_cache_entry {
     SDL_Renderer* renderer;
     int wrap_width;
     TTF_HorizontalAlignment wrap_alignment;
+    SDL_Color ink;
     char* text;
     SDL_Texture* texture;
     int width;
@@ -143,8 +146,8 @@ static sdl_ui_text_cache_entry* sdl_ui_text_cache_oldest_valid(void)
 }
 
 static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
-    cptr text_value, int wrap_width, SDL_Color color, int* out_width,
-    int* out_height)
+    cptr text_value, int wrap_width, SDL_Color ink, SDL_Color tint,
+    int* out_width, int* out_height)
 {
     static SDL_GamepadType cached_prompt_type = SDL_GAMEPAD_TYPE_UNKNOWN;
     SDL_GamepadType prompt_type = sdl_gamepad_prompt_type();
@@ -157,7 +160,6 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     SDL_Texture* texture;
     char* text_copy;
     size_t pixels;
-    SDL_Color white = { 255, 255, 255, 255 };
     TTF_HorizontalAlignment wrap_alignment;
 
     if (out_width)
@@ -167,8 +169,10 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     if (!g_state.renderer || !font || !text_value || !text_value[0])
         return NULL;
 
-    wrap_alignment = wrap_width > 0 || strchr(text_value, '\n')
-        ? TTF_GetFontWrapAlignment(font) : TTF_HORIZONTAL_ALIGN_LEFT;
+    /* A negative width uses SDL_ttf's single-line rasterizer. Zero keeps
+     * explicit line breaks, and positive widths also enable soft wrapping. */
+    wrap_alignment = wrap_width >= 0 ? TTF_GetFontWrapAlignment(font)
+        : TTF_HORIZONTAL_ALIGN_LEFT;
 
     for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
         sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
@@ -177,13 +181,14 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
             || entry->renderer != g_state.renderer
             || entry->wrap_width != wrap_width
             || entry->wrap_alignment != wrap_alignment
+            || SDL_memcmp(&entry->ink, &ink, sizeof(ink)) != 0
             || strcmp(entry->text, text_value) != 0)
         {
             continue;
         }
         entry->last_used = ++g_ui_text_cache_clock;
-        SDL_SetTextureColorMod(entry->texture, color.r, color.g, color.b);
-        SDL_SetTextureAlphaMod(entry->texture, color.a);
+        SDL_SetTextureColorMod(entry->texture, tint.r, tint.g, tint.b);
+        SDL_SetTextureAlphaMod(entry->texture, tint.a);
         if (out_width)
             *out_width = entry->width;
         if (out_height)
@@ -192,13 +197,13 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     }
 
     /* Zero width preserves forced verse/stanza breaks without soft wrapping. */
-    surface = wrap_width > 0 || strchr(text_value, '\n')
-        ? TTF_RenderText_Blended_Wrapped(font, text_value, 0, white,
+    surface = wrap_width >= 0
+        ? TTF_RenderText_Blended_Wrapped(font, text_value, 0, ink,
             wrap_width)
-        : TTF_RenderText_Blended(font, text_value, 0, white);
+        : TTF_RenderText_Blended(font, text_value, 0, ink);
     if (!surface)
         return NULL;
-    sdl_controller_glyphs_paint(font, surface, text_value, wrap_width);
+    sdl_controller_glyphs_paint(font, surface, text_value, MAX(0, wrap_width));
     texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
     if (!texture) {
         SDL_DestroySurface(surface);
@@ -246,6 +251,7 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     victim->renderer = g_state.renderer;
     victim->wrap_width = wrap_width;
     victim->wrap_alignment = wrap_alignment;
+    victim->ink = ink;
     victim->text = text_copy;
     victim->texture = texture;
     victim->width = surface->w;
@@ -253,8 +259,8 @@ static SDL_Texture* sdl_ui_text_texture_internal(TTF_Font* font,
     victim->last_used = ++g_ui_text_cache_clock;
     g_ui_text_cache_pixels += pixels;
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureColorMod(texture, color.r, color.g, color.b);
-    SDL_SetTextureAlphaMod(texture, color.a);
+    SDL_SetTextureColorMod(texture, tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaMod(texture, tint.a);
     if (out_width)
         *out_width = surface->w;
     if (out_height)
@@ -267,8 +273,9 @@ SDL_Texture* sdl_ui_text_texture(TTF_Font* font, cptr text_value,
     SDL_Color color, int* out_width, int* out_height)
 {
     text_value = lore_text(text_value);
-    return sdl_ui_text_texture_internal(font, text_value, 0, color,
-        out_width, out_height);
+    int wrap_width = text_value && strchr(text_value, '\n') ? 0 : SDL_TEXT_SINGLE_LINE;
+    return sdl_ui_text_texture_internal(font, text_value, wrap_width,
+        white_ink, color, out_width, out_height);
 }
 
 SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text_value,
@@ -277,8 +284,8 @@ SDL_Texture* sdl_ui_wrapped_text_texture(TTF_Font* font, cptr text_value,
     text_value = lore_text(text_value);
     if (wrap_width < 1)
         wrap_width = 1;
-    return sdl_ui_text_texture_internal(font, text_value, wrap_width, color,
-        out_width, out_height);
+    return sdl_ui_text_texture_internal(font, text_value, wrap_width,
+        white_ink, color, out_width, out_height);
 }
 
 /* Semantic layouts use renderer pixels. Centering can leave a fractional
@@ -423,8 +430,7 @@ void sdl_render_mono_utf8_glyph(TTF_Font* font, float cell_w,
     int cell_offset, int cell_span, const char* s, int len, SDL_Color col)
 {
     char text_buf[8];
-    SDL_Surface* text_surface;
-    SDL_Texture* text_texture;
+    int width, height;
 
     if (!font || !s || len <= 0 || len >= (int)sizeof(text_buf)
         || cell_w <= 0.0f || cell_h <= 0.0f)
@@ -447,45 +453,30 @@ void sdl_render_mono_utf8_glyph(TTF_Font* font, float cell_w,
     memcpy(text_buf, s, (size_t)len);
     text_buf[len] = '\0';
 
-    text_surface = TTF_RenderText_Blended(font, text_buf, 0, col);
-    if (!text_surface)
+    /* Let SDL_ttf color the glyph so a color font keeps its intrinsic ink. */
+    SDL_Texture* texture = sdl_ui_text_texture_internal(font, text_buf,
+        SDL_TEXT_SINGLE_LINE, col, white_ink, &width, &height);
+    if (!texture)
         return;
 
-    text_texture = SDL_CreateTextureFromSurface(g_state.renderer, text_surface);
-    if (text_texture)
-    {
-        float surf_w_f = (float)text_surface->w;
-        float surf_h_f = (float)text_surface->h;
-        float scale = (surf_h_f > 0.0f) ? (cell_h / surf_h_f) : 1.0f;
-        float render_w = surf_w_f * scale;
-        float max_w = (float)cell_span * cell_w;
-        SDL_FRect dst;
-
-        if (render_w > max_w) {
-            if (origin_x > 0.0f || g_left_panel_debug_dump_rows) {
-                log_debug("left-panel utf8 glyph clamp: term_x=%d y=%d "
-                    "offset=%d span=%d cell=%.1fx%.1f surf=%dx%d "
-                    "scaled_w=%.1f max_w=%.1f first_byte=0x%02x",
-                    x, y, cell_offset, cell_span, (double)cell_w,
-                    (double)cell_h, text_surface->w, text_surface->h,
-                    (double)render_w, (double)max_w,
-                    (unsigned int)(unsigned char)s[0]);
-            }
-            render_w = max_w;
+    float render_w = (float)width * (cell_h / (float)height);
+    float max_w = (float)cell_span * cell_w;
+    if (render_w > max_w) {
+        if (origin_x > 0.0f || g_left_panel_debug_dump_rows) {
+            log_debug("left-panel utf8 glyph clamp: term_x=%d y=%d "
+                "offset=%d span=%d cell=%.1fx%.1f surf=%dx%d "
+                "scaled_w=%.1f max_w=%.1f first_byte=0x%02x",
+                x, y, cell_offset, cell_span, (double)cell_w,
+                (double)cell_h, width, height, (double)render_w,
+                (double)max_w, (unsigned int)(unsigned char)s[0]);
         }
-
-        dst.x = origin_x + ((float)(x + cell_offset) * cell_w)
-            + ((max_w - render_w) * 0.5f);
-        dst.y = origin_y + (float)y * cell_h;
-        dst.w = render_w;
-        dst.h = cell_h;
-
-        SDL_SetTextureBlendMode(text_texture, SDL_BLENDMODE_BLEND);
-        SDL_RenderTexture(g_state.renderer, text_texture, NULL, &dst);
-        SDL_DestroyTexture(text_texture);
+        render_w = max_w;
     }
-
-    SDL_DestroySurface(text_surface);
+    SDL_FRect dst = {
+        origin_x + (float)(x + cell_offset) * cell_w + (max_w - render_w) * 0.5f,
+        origin_y + (float)y * cell_h, render_w, cell_h
+    };
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
 }
 
 void sdl_render_mono_utf8_text_cells_at(SDL_Texture* atlas,
@@ -629,79 +620,32 @@ void sdl_render_story_text_free(sdl_view* d, TTF_Font* font, int x, int y, int n
     memcpy(text_buf, s, len);
     text_buf[len] = '\0';
 
-    SDL_Color white = {255,255,255,255};
-    SDL_Surface* text_surface = TTF_RenderText_Blended(font, text_buf, 0, white);
-    if (!text_surface)
+    int width, height;
+    SDL_Texture* texture = sdl_ui_text_texture_internal(font, text_buf,
+        SDL_TEXT_SINGLE_LINE, white_ink, col, &width, &height);
+    if (!texture)
         return;
-
-    sdl_controller_glyphs_paint(font,text_surface,text_buf,0);
-
-    SDL_Texture* text_texture = SDL_CreateTextureFromSurface(g_state.renderer, text_surface);
-    if (text_texture) {
-        SDL_SetTextureColorMod(text_texture,col.r,col.g,col.b);
-        SDL_SetTextureAlphaMod(text_texture,col.a);
-        float cell_h_f = (float)d->cell_h;
-        float surf_h_f = (float)text_surface->h;
-        float scale = (surf_h_f > 0.0f) ? (cell_h_f / surf_h_f) : 1.0f;
-        float max_w = (float)(n * d->cell_w);
-
-        SDL_FRect dst = {
-            (float)(x * d->cell_w),
-            (float)(y * d->cell_h),
-            (float)(text_surface->w) * scale,
-            cell_h_f
-        };
-        SDL_FRect clip = {
-            dst.x,
-            dst.y,
-            max_w,
-            cell_h_f
-        };
-
-        SDL_SetTextureBlendMode(text_texture, SDL_BLENDMODE_BLEND);
-        sdl_render_texture_with_clip(text_texture, &dst, &clip);
-        SDL_DestroyTexture(text_texture);
-    }
-
-    SDL_DestroySurface(text_surface);
+    float scale = (float)d->cell_h / (float)height;
+    SDL_FRect dst = {x * d->cell_w, y * d->cell_h, width * scale, d->cell_h};
+    SDL_FRect clip = {dst.x, dst.y, n * d->cell_w, dst.h};
+    sdl_render_texture_with_clip(texture, &dst, &clip);
 }
 
-int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y, const char* s, int n,
-    SDL_Color col, float max_w_px)
+/* Draw one terminated run and return the scale used for its raster. */
+static float sdl_draw_story_run_px(sdl_view* d, TTF_Font* font, float x_px,
+    int y, const char* text, SDL_Color col, float max_w_px)
 {
-    if (!d || !font || !s || n <= 0)
-        return 0;
-
-    char text_buf[256];
-    int len = (n < 255) ? n : 255;
-    len = utf8_safe_prefix_len(s, len);
-    if (len <= 0)
-        return 0;
-    for (int i = 0; i < len; i++)
-    {
-        unsigned char ch = (unsigned char)s[i];
-        text_buf[i] = (ch ? (char)ch : ' ');
-    }
-    text_buf[len] = '\0';
-
     int texture_w = 0;
     int texture_h = 0;
-    SDL_Texture* text_texture = sdl_ui_text_texture(font, text_buf, col,
+    SDL_Texture* text_texture = sdl_ui_text_texture(font, text, col,
         &texture_w, &texture_h);
     if (!text_texture)
-        return 0;
-
-    int adv_w_unscaled = 0;
-    TTF_MeasureString(font, text_buf, len, 0, &adv_w_unscaled, NULL);
+        return 0.0f;
 
     float cell_h_f = (float)d->cell_h;
     float texture_h_f = (float)texture_h;
     float scale = (texture_h_f > 0.0f) ? (cell_h_f / texture_h_f) : 1.0f;
-    float advance_w = (float)adv_w_unscaled * scale;
     float render_w = (float)texture_w * scale;
-
-    if (max_w_px > 0.0f && advance_w > max_w_px)
-        advance_w = max_w_px;
 
     SDL_FRect dst = {
         x_px,
@@ -718,7 +662,24 @@ int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y
 
     sdl_render_texture_with_clip(text_texture, &dst,
         max_w_px > 0.0f ? &clip : NULL);
-    return (int)advance_w;
+    return scale;
+}
+
+int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y,
+    const char* s, int n, SDL_Color col, float max_w_px)
+{
+    char text[256];
+    int len = utf8_safe_prefix_len(s, MIN(n, (int)sizeof(text) - 1));
+    if (!d || !font || !len)
+        return 0;
+    memcpy(text, s, len);
+    text[len] = '\0';
+    float scale = sdl_draw_story_run_px(d, font, x_px, y, text, col, max_w_px);
+    int width;
+    if (!scale || !TTF_MeasureString(font, text, len, 0, &width, NULL))
+        return 0;
+    float advance = width * scale;
+    return (int)(max_w_px > 0 ? MIN(advance, max_w_px) : advance);
 }
 
 bool sdl_story_cell_is_text(byte a, char c)
@@ -827,39 +788,6 @@ void sdl_fill_cell_span_with_attr(sdl_view* d, int x, int y, int n,
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
 }
 
-/* Width, in pixels, the secondary story font needs for a text segment when
- * scaled to the term cell height (matches sdl_render_story_text_free_px). */
-static float sdl_story_seg_width_px(sdl_view* d, TTF_Font* font, const char* s,
-    int n)
-{
-    char buf[256];
-    int len;
-    int adv_unscaled = 0;
-    int font_h;
-
-    if (!d || !font || !s || n <= 0)
-        return 0.0f;
-
-    len = (n < 255) ? n : 255;
-    len = utf8_safe_prefix_len(s, len);
-    if (len <= 0)
-        return 0.0f;
-    for (int i = 0; i < len; i++)
-    {
-        unsigned char ch = (unsigned char)s[i];
-        buf[i] = (ch ? (char)ch : ' ');
-    }
-    buf[len] = '\0';
-
-    if (!TTF_MeasureString(font, buf, len, 0, &adv_unscaled, NULL))
-        return 0.0f;
-
-    font_h = TTF_GetFontHeight(font);
-    if (font_h < 1)
-        font_h = d->cell_h;
-    return (float)adv_unscaled * ((float)d->cell_h / (float)font_h);
-}
-
 /*
  * Word-wrap a message to the overlay log's visible band, measured in pixels
  * with the proportional secondary story font (so it wraps where the text
@@ -894,38 +822,29 @@ int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
         return 1;
     }
 
+    int font_h = TTF_GetFontHeight(font);
+    int max_width = MAX(1, (int)(band_px * (font_h > 0 ? font_h : d->cell_h)
+        / (float)d->cell_h));
     while (pos < len && n < max_segs)
     {
         int remain = len - pos;
-        int limit = remain;
-        int last_fit = 0;
-        int last_space = -1;
-        int take;
-
-        if (limit >= 96)
-            limit = 95;
-
-        for (int k = 1; k <= limit; k++)
-        {
-            float w = sdl_story_seg_width_px(d, font, msg + pos, k);
-
-            if (w > band_px && last_fit > 0)
-                break;
-
-            last_fit = k;
-            if (msg[pos + k - 1] == ' ')
-                last_space = k;
-
-            if (w > band_px)
-                break;
-        }
-
-        take = (last_fit > 0) ? last_fit : 1;
+        int limit = utf8_safe_prefix_len(msg + pos, MIN(remain, 95));
+        size_t fit = 0;
+        /* SDL_ttf returns the byte offset of the first cluster that does
+         * not fit. Shape each line once instead of shaping every prefix. */
+        if (limit > 0 && !TTF_MeasureString(font, msg + pos, limit,
+                max_width, NULL, &fit))
+            fit = limit;
+        int take = fit ? (int)fit : utf8_sequence_len_n(msg + pos, remain);
 
         if (take < remain)
         {
-            if (last_space > 0)
-                take = last_space;
+            for (int k = take; k > 0; --k) {
+                if (msg[pos + k - 1] == ' ') {
+                    take = k;
+                    break;
+                }
+            }
         }
 
         out_off[n] = pos;
@@ -940,12 +859,10 @@ int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
     return n;
 }
 
-static void sdl_render_overlay_log_message_row_px(sdl_view* d, int y,
-    byte attr, cptr text)
+static void sdl_render_overlay_log_message_row_px(sdl_view* d, TTF_Font* font,
+    int y, byte attr, cptr text)
 {
     const int wid = Term->wid;
-    TTF_Font* font = sdl_story_font_for_view_slot(d,
-        STORY_FONT_SLOT_SECONDARY);
     int margin;
     float px;
     float right_edge;
@@ -966,8 +883,7 @@ static void sdl_render_overlay_log_message_row_px(sdl_view* d, int y,
         return;
 
     col = sdl_color_from_attr(sdl_ui_text_fg_attr(attr));
-    sdl_render_story_text_free_px(d, font, px, y, text, (int)strlen(text),
-        col, max_w);
+    sdl_draw_story_run_px(d, font, px, y, text, col, max_w);
 }
 
 /*
@@ -980,14 +896,12 @@ static void sdl_render_overlay_log_message_row_px(sdl_view* d, int y,
  * tiles drawn inline -- left-aligned to the band so it starts where the
  * messages start.
  */
-static void sdl_render_combat_roll_row_px(sdl_view* d, int y)
+static void sdl_render_combat_roll_row_px(sdl_view* d, TTF_Font* font,
+    int y, const combat_roll_token* toks, int ntok)
 {
     const int wid = Term->wid;
     const float cell_w_f = (float)d->cell_w;
     const float cell_h_f = (float)d->cell_h;
-    TTF_Font* font = sdl_story_font_for_view_slot(d, STORY_FONT_SLOT_SECONDARY);
-    const combat_roll_token* toks = NULL;
-    int ntok = pane_log_combat_row_tokens(y, &toks);
     int tile_cols = (use_bigtile && !graphics_are_ascii()) ? 2 : 1;
     float tile_w = (float)tile_cols * cell_w_f;
     int margin;
@@ -1005,6 +919,8 @@ static void sdl_render_combat_roll_row_px(sdl_view* d, int y)
         ? sdl_overlay_log_left_margin(wid) : 0;
     px = (float)margin * cell_w_f + SDL_OVERLAY_LOG_TEXT_LEFT_PAD(d);
     right_edge = (float)wid * cell_w_f;
+    int font_h = TTF_GetFontHeight(font);
+    float advance_scale = font_h > 0 ? cell_h_f / (float)font_h : 1.0f;
 
     for (int i = 0; i < ntok && px < right_edge; i++)
     {
@@ -1026,11 +942,46 @@ static void sdl_render_combat_roll_row_px(sdl_view* d, int y)
             if (len <= 0)
                 continue;
             col = sdl_color_from_attr(sdl_ui_text_fg_attr(t->attr));
-            sdl_render_story_text_free_px(d, font, px, y, t->text, len, col,
-                right_edge - px);
-            px += sdl_story_seg_width_px(d, font, t->text, len);
+            sdl_draw_story_run_px(d, font, px, y, t->text, col, right_edge - px);
+            int advance = 0;
+            if (TTF_MeasureString(font, t->text, len, 0, &advance, NULL))
+                px += advance * advance_scale;
         }
     }
+}
+
+/* These rows have a pixel layout independent of the fallback terminal cells.
+ * Paint all tokens in one pass, including when their color runs change. */
+bool sdl_render_overlay_log_row(int y)
+{
+    sdl_view* d = &g_views[PANE_ROLLS];
+    if (Term != &d->t || !d->canvas || y < 0 || y >= Term->hgt
+        || !Term->scr || !Term->scr->story || !Term->scr->story[y])
+        return false;
+
+    cptr message = NULL;
+    byte attr = TERM_WHITE;
+    const combat_roll_token* tokens = NULL;
+    int count = pane_log_combat_row_tokens(y, &tokens);
+    if (!pane_log_overlay_message_row(y, &message, &attr) && count <= 0)
+        return false;
+
+    const byte* flags = Term->scr->story[y];
+    for (int x = 0; x < Term->wid; ++x) {
+        if (!(flags[x] & STORY_FLAG_PIXEL_PACK))
+            continue;
+        TTF_Font* font = sdl_story_font_for_view_slot(d, STORY_FONT_SLOT_SECONDARY);
+        if (!font || !SDL_SetRenderTarget(g_state.renderer, d->canvas))
+            return false;
+        SDL_SetRenderClipRect(g_state.renderer, NULL);
+        if (message)
+            sdl_render_overlay_log_message_row_px(d, font, y, attr, message);
+        else
+            sdl_render_combat_roll_row_px(d, font, y, tokens, count);
+        g_state.need_present = true;
+        return true;
+    }
+    return false;
 }
 
 void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row,
@@ -1042,32 +993,9 @@ void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte*
     const int wid = Term->wid;
     const float cell_w_f = (float)d->cell_w;
 
-    /* Overlay message/combat rows may carry side-buffered pixel layouts. */
-    if (Term->scr && Term->scr->story && y >= 0 && y < Term->hgt)
-    {
-        for (int x = 0; x < wid; x++)
-        {
-            if (story_row[x] & STORY_FLAG_PIXEL_PACK)
-            {
-                cptr msg = NULL;
-                byte attr = TERM_WHITE;
-
-                if (pane_log_overlay_message_row(y, &msg, &attr))
-                {
-                    sdl_render_overlay_log_message_row_px(d, y, attr, msg);
-                    return;
-                }
-
-                if (pane_log_combat_row_tokens(y, NULL) > 0)
-                {
-                    sdl_render_combat_roll_row_px(d, y);
-                    return;
-                }
-
-                break;
-            }
-        }
-    }
+    /* Direct cell redraws (e.g. restoring a soft cursor) bypass the row hook. */
+    if (d == &g_views[PANE_ROLLS] && sdl_render_overlay_log_row(y))
+        return;
 
     int x = 0;
     while (x < wid)
@@ -1246,42 +1174,21 @@ void sdl_render_story_text_grid(sdl_view* d, TTF_Font* font, int x, int y, int n
     float cell_h_f = (float)d->cell_h;
 
     for (int i = 0; i < n; i++) {
-        Uint32 ch = (unsigned char)s[i];
-        if (!ch || ch == ' ')
+        if (!s[i] || s[i] == ' ')
             continue;
 
-        SDL_Surface* glyph_surface = TTF_RenderGlyph_Blended(font, ch, col);
-        if (!glyph_surface)
+        char glyph[2] = {s[i], '\0'};
+        int width, height;
+        SDL_Texture* texture = sdl_ui_text_texture_internal(font, glyph,
+            SDL_TEXT_SINGLE_LINE, col, white_ink, &width, &height);
+        if (!texture)
             continue;
-
-        SDL_Texture* glyph_texture = SDL_CreateTextureFromSurface(g_state.renderer, glyph_surface);
-        if (glyph_texture) {
-            float surf_w = (float)glyph_surface->w;
-            float surf_h = (float)glyph_surface->h;
-            float scale = (surf_h > 0.0f) ? (cell_h_f / surf_h) : 1.0f;
-            float scaled_w = surf_w * scale;
-            float dst_w = scaled_w;
-            float offset_x = 0.0f;
-
-            if (scaled_w > cell_w_f) {
-                dst_w = cell_w_f;
-                scale = (surf_w > 0.0f) ? (dst_w / surf_w) : 1.0f;
-            } else {
-                offset_x = (cell_w_f - scaled_w) * 0.5f;
-            }
-
-            SDL_FRect dst = {
-                (float)((x + i) * d->cell_w) + offset_x,
-                (float)(y * d->cell_h),
-                dst_w,
-                cell_h_f
-            };
-
-            SDL_SetTextureBlendMode(glyph_texture, SDL_BLENDMODE_BLEND);
-            SDL_RenderTexture(g_state.renderer, glyph_texture, NULL, &dst);
-            SDL_DestroyTexture(glyph_texture);
-        }
-
-        SDL_DestroySurface(glyph_surface);
+        float scaled_w = (float)width * (cell_h_f / (float)height);
+        float dst_w = MIN(scaled_w, cell_w_f);
+        SDL_FRect dst = {
+            (float)((x + i) * d->cell_w) + (cell_w_f - dst_w) * 0.5f,
+            (float)(y * d->cell_h), dst_w, cell_h_f
+        };
+        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
     }
 }

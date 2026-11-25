@@ -25,7 +25,10 @@ static bool terrain_source_changed(int y, int x)
     if (!in_bounds(y, x) || graphics_are_ascii()) return false;
     current = ((u64b)1 << 63) | (u64b)cave_feat[y][x]
         | ((u64b)cave_color[y][x] << 8)
-        | ((u64b)cave_info[y][x] << 16)
+        /* FOV scratch flags and the previous turn's torch history never
+         * select terrain artwork or its neighbours' connection pixels. */
+        | ((u64b)(cave_info[y][x] & ~(CAVE_TEMP | CAVE_FIRE
+                | CAVE_OLD_VIEW | CAVE_OLD_LIT | CAVE_OLD_TORCH)) << 16)
         | ((u64b)(byte)cave_light[y][x] << 32);
     if (previous[y][x] == current) return false;
     previous[y][x] = current;
@@ -172,49 +175,26 @@ void move_cursor_relative(int y, int x)
         (void)Term_gotoxy(vx, vy);
 }
 
-/*
- * Display an attr/char pair at the given map location
- *
- * Note the inline use of "panel_contains()" for efficiency.
- *
- * Note the use of "Term_queue_char()" for efficiency.
- *
- * The main screen will always be at least 24x80 in size.
- */
-void print_rel(char c, byte a, int y, int x)
+static bool map_effect_cell_position(int y, int x, int* vy, int* vx)
+{
+    if (!panel_contains(y, x))
+        return false;
+
+    int cell_w = use_bigtile ? 2 : 1;
+    *vy = y - p_ptr->wy + ROW_MAP;
+    *vx = (x - p_ptr->wx) * cell_w + COL_MAP;
+    return !hidden_left_panel_masked_span(*vy, *vx, cell_w);
+}
+
+/* Queue a temporary map effect and report whether its cell can be painted. */
+bool queue_map_effect_cell(char c, byte a, int y, int x)
 {
     byte ta = 0;
     char tc = 0;
-    int ky, kx;
     int vy, vx;
-    int cell_w;
 
-    /* Location relative to panel */
-    ky = y - p_ptr->wy;
-
-    /* Verify location */
-    if ((ky < 0) || (ky >= SCREEN_HGT))
-        return;
-
-    /* Location relative to panel */
-    kx = x - p_ptr->wx;
-
-    /* Verify location */
-    if ((kx < 0) || (kx >= SCREEN_WID))
-        return;
-
-    /* Location in window */
-    vy = ky + ROW_MAP;
-
-    /* Location in window */
-    vx = kx + COL_MAP;
-
-    if (use_bigtile)
-        vx += kx;
-
-    cell_w = use_bigtile ? 2 : 1;
-    if (hidden_left_panel_masked_span(vy, vx, cell_w))
-        return;
+    if (!map_effect_cell_position(y, x, &vy, &vx))
+        return false;
 
     /*
      * Transparent tile animations need the real dungeon terrain beneath
@@ -241,6 +221,13 @@ void print_rel(char c, byte a, int y, int x)
         else
             Term_queue_char(vx + 1, vy, TERM_WHITE, ' ', 0, 0);
     }
+
+    return true;
+}
+
+void print_rel(char c, byte a, int y, int x)
+{
+    (void)queue_map_effect_cell(c, a, y, x);
 }
 
 /*
@@ -341,13 +328,35 @@ void cave_floor_border_redraw_neighbors(int y, int x)
     floor_border_redrawing_neighbors = false;
 }
 
-void lite_spot(int y, int x)
+static void queue_map_grid(int y, int x, int vy, int vx)
 {
     byte a;
     char c;
     byte ta;
     char tc;
 
+    map_info(y, x, &a, &c, &ta, &tc);
+    Term_queue_char(vx, vy, a, c, ta, tc);
+    if (use_bigtile)
+    {
+        if (a & 0x80)
+            Term_queue_char(vx + 1, vy, 255, -1, 0, 0);
+        else
+            Term_queue_char(vx + 1, vy, TERM_WHITE, ' ', TERM_WHITE, ' ');
+    }
+}
+
+void restore_map_effect_cell(int y, int x)
+{
+    int vy, vx;
+
+    /* Painting over the effect only changes this cell in the main map. */
+    if (map_effect_cell_position(y, x, &vy, &vx))
+        queue_map_grid(y, x, vy, vx);
+}
+
+void lite_spot(int y, int x)
+{
     int ky, kx;
     int vy, vx;
     int cell_w;
@@ -356,12 +365,13 @@ void lite_spot(int y, int x)
     /* Discovery and view changes alter adjacent banks and connected surfaces,
      * including cells outside the main viewport in the retained side map. */
     byte underlay = cave_bridge_underlay(cave_feat[y][x]);
-    if (FEAT_IS_ICE(underlay) || underlay == FEAT_LAVA
+    if (!floor_border_redrawing_neighbors && (terrain_changed
+        || FEAT_IS_ICE(underlay) || underlay == FEAT_LAVA
         || underlay == FEAT_WATER || underlay == FEAT_DEEP_WATER
         || underlay == FEAT_POISON
         || underlay == FEAT_CHASM
-        || terrain_changed || floor_material_transition_at(y, x)
-        || styles_floor_border(underlay, NULL, NULL))
+        || floor_material_transition_at(y, x)
+        || styles_floor_border(underlay, NULL, NULL)))
         cave_floor_border_redraw_neighbors(y, x);
 
 #ifdef USE_SDL
@@ -398,22 +408,7 @@ void lite_spot(int y, int x)
     if (hidden_left_panel_masked_span(vy, vx, cell_w))
         return;
 
-    /* Hack -- redraw the grid */
-    map_info(y, x, &a, &c, &ta, &tc);
-
-    /* Hack -- Queue it */
-    Term_queue_char(vx, vy, a, c, ta, tc);
-
-    if (use_bigtile)
-    {
-        vx++;
-
-        /* Mega-Hack : Queue dummy char */
-        if (a & 0x80)
-            Term_queue_char(vx, vy, 255, -1, 0, 0);
-        else
-            Term_queue_char(vx, vy, TERM_WHITE, ' ', TERM_WHITE, ' ');
-    }
+    queue_map_grid(y, x, vy, vx);
 
     if (!graphics_are_ascii())
     {
@@ -431,7 +426,7 @@ void lite_spot(int y, int x)
 #ifdef USE_SDL
         /* Removing a water surface or wall fixture can leave the same base
          * glyph. Repaint its cached pixels even after the feature changed. */
-        force_visual_redraw |= sdl_idle_animation_tracks_grid(y, x)
+        force_visual_redraw = force_visual_redraw || sdl_idle_animation_tracks_grid(y, x)
             || sdl_material_edge_at(y, x);
 #endif
 
@@ -446,7 +441,7 @@ void lite_spot(int y, int x)
         }
 
         if (force_visual_redraw)
-            force_term_cell_redraw(vx - (use_bigtile ? 1 : 0), vy, cell_w);
+            force_term_cell_redraw(vx, vy, cell_w);
     }
 }
 
@@ -527,17 +522,17 @@ void prt_map(void)
                         ' ');
             }
 
-            bool material_border = false;
-#ifdef USE_SDL
-            material_border = !graphics_are_ascii() && sdl_material_edge_at(y, x);
-#endif
-            if (force_rage_map_filter_refresh || panel_moved || material_border
+            if (force_rage_map_filter_refresh || panel_moved
                 || (!graphics_are_ascii() && ((cave_m_idx[y][x] < 0)
                     || cave_fixture_at(y, x) != CAVE_FIXTURE_NONE
                     || cave_feat[y][x] == FEAT_WATER || cave_feat[y][x] == FEAT_DEEP_WATER || cave_feat[y][x] == FEAT_LAVA
                     || FEAT_IS_ICE(cave_feat[y][x]) || cave_feat[y][x] == FEAT_POISON
                     || floor_material_transition_at(y, x)
-                    || FEAT_IS_BRIDGE(cave_feat[y][x]))))
+                    || FEAT_IS_BRIDGE(cave_feat[y][x])
+#ifdef USE_SDL
+                    || sdl_material_edge_at(y, x)
+#endif
+                    )))
                 force_term_cell_redraw(vx, vy, cell_w);
         }
     }

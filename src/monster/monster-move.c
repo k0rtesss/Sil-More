@@ -4,6 +4,7 @@
 #include "achievements.h"
 #include "log/perf.h"
 #include "cave/cave.h"
+#include "cave/cave-events.h"
 
 static void monster_link_carried_object(int m_idx, int o_idx)
 {
@@ -896,7 +897,10 @@ s16b player_place(int y, int x)
     /* Mark cave grid */
     cave_m_idx[y][x] = -1;
     if (cave_feat[y][x] == FEAT_RUBBLE)
+    {
         cave_feat[y][x] = FEAT_FLOOR;
+        cave_events_terrain_changed();
+    }
 
     /* Success */
     return (-1);

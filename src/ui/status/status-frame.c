@@ -1349,7 +1349,13 @@ void window_stuff(void)
         fix_monster();
     }
 
-    sdl_present_batch_end();
+    /* Auxiliary canvases can update several times during one dungeon turn.
+     * Present them with the main map at its next refresh, input or delay. */
+    if (Term == term_screen && character_dungeon && !character_icky
+        && p_ptr->playing && !p_ptr->leaving && !p_ptr->is_dead)
+        sdl_present_batch_end_deferred();
+    else
+        sdl_present_batch_end();
 
     // log_trace("window_stuff: completed all window updates");
 }

@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "object/object-difficulty.h"
+#include "cave/cave-events.h"
 #include "achievements.h"
 #include "achievements-character.h"
 #include "tutorial/tutorial-game.h"
@@ -313,50 +314,6 @@ static void smith_ui_draw_fitted(int col, int row, int width, byte attr,
 static void smith_ui_put_fitted(int col, int row, int width, byte attr, cptr text)
 {
     smith_ui_draw_fitted(col, row, width, attr, text, true);
-}
-
-static void smith_ui_split_object_title(cptr description,
-    char* name, size_t name_size, char* suffix, size_t suffix_size)
-{
-    const char* suffix_start = NULL;
-    size_t description_len;
-    size_t name_len;
-
-    if (!description)
-        description = "";
-
-    description_len = strlen(description);
-
-    /* Combat/protection/pval details begin after a space and one of these
-     * delimiters.  Keep the delimiter with the suffix, but draw that suffix
-     * immediately after the item name when it fits on one line. */
-    for (const char* p = description; *p; p++)
-    {
-        if ((p > description) && (p[-1] == ' ')
-            && strchr("([{<", *p))
-        {
-            suffix_start = p;
-            break;
-        }
-    }
-
-    if (!suffix_start)
-        suffix_start = description + description_len;
-
-    name_len = (size_t)(suffix_start - description);
-    if (suffix_start < description + description_len && name_len > 0)
-        name_len--;
-
-    if (name_size > 0)
-    {
-        if (name_len >= name_size)
-            name_len = name_size - 1;
-        SDL_memcpy(name, description, name_len);
-        name[name_len] = '\0';
-    }
-
-    if (suffix_size > 0)
-        SDL_strlcpy(suffix, suffix_start, suffix_size);
 }
 
 static void smith_ui_build_object_stats(char* stats, size_t stats_size,
@@ -851,6 +808,7 @@ typedef struct smithing_flag_cat
 #define MAX_CATS 7
 
 #define MAX_SMITHING_FLAGS (32 * 4)
+#define SMITH_ARTEFACT_ABILITY_MAX 4
 
 static const smithing_flag_cat smithing_flag_cats[]
     = { { CAT_STAT, "Stat bonuses" }, { CAT_SUST, "Sustains" },
@@ -1701,6 +1659,14 @@ int forge_uses(int y, int x)
         return (feat - FEAT_FORGE_UNIQUE_HEAD);
 }
 
+static void spend_forge_uses(int uses)
+{
+    int y = p_ptr->py, x = p_ptr->px;
+    cave_feat[y][x] -= uses;
+    if (!forge_uses(y, x))
+        cave_events_terrain_changed();
+}
+
 /*
  * Determines how high a bonus is provided by a given forge.
  */
@@ -1808,7 +1774,8 @@ int object_difficulty(object_type* o_ptr)
     for (int i = 0; i < o_ptr->abilities; ++i)
         smithing_cost.exp += 50 * b_info[ability_index(
             o_ptr->skilltype[i], o_ptr->abilitynum[i])].level;
-    if (o_ptr->name1 && !(hero & UNQ_SMT_FEANOR)) smithing_cost.uses += 2;
+    if (o_ptr->name1)
+        smithing_cost.uses += (hero & UNQ_SMT_FEANOR) ? 1 : 2;
 
     if (k_ptr->flags3 & TR3_MITHRIL) smithing_cost.mithril += o_ptr->weight;
     if (k_ptr->flags3 & TR3_STAR_IRON) smithing_cost.star_iron += o_ptr->weight;
@@ -1987,7 +1954,7 @@ void pay_costs()
     if (smithing_cost.star_iron > 0)
         use_star_iron(smithing_cost.star_iron);
     if (smithing_cost.uses > 0)
-        cave_feat[p_ptr->py][p_ptr->px] -= smithing_cost.uses;
+        spend_forge_uses(smithing_cost.uses);
     if (smithing_cost.drain > 0)
         p_ptr->skill_base[S_SMT] -= smithing_cost.drain;
 
@@ -2489,7 +2456,7 @@ static void pay_smithing_cost_struct(const smithing_cost_type* cost)
         use_star_iron(cost->star_iron);
     if (cost->uses > 0)
     {
-        cave_feat[p_ptr->py][p_ptr->px] -= cost->uses;
+        spend_forge_uses(cost->uses);
         lite_spot(p_ptr->py, p_ptr->px);
     }
     if (cost->drain > 0)
@@ -2556,6 +2523,16 @@ enum {
     SMITH_BROWSER_REFORGE_CLICK,
     SMITH_BROWSER_INSPECT_CLICK,
     SMITH_BROWSER_DESIGN_CLICK,
+};
+
+enum {
+    SMITH_EDITOR_TAB = 33100,
+    SMITH_EDITOR_INSPECT = 33110,
+    SMITH_EDITOR_COSTS,
+    SMITH_EDITOR_CRAFT,
+    SMITH_EDITOR_APPLY,
+    SMITH_EDITOR_EDIT_VALUE,
+    SMITH_EDITOR_RENAME,
 };
 
 typedef struct smith_picker_entry {
@@ -2953,23 +2930,30 @@ static void smith_show_description(void)
     screen_load();
 }
 
+typedef enum {
+    SMITH_NAME_READ_ONLY, SMITH_NAME_EDITABLE, SMITH_NAME_FOCUSED
+} smith_name_mode;
+
 static void smith_sheet_order(const smith_sheet_layout* sheet,
-    const object_type* item, int difficulty, bool continuing, bool draft)
+    const object_type* item, int difficulty, bool continuing, bool draft,
+    smith_name_mode name_mode)
 {
     const int x = (sheet->divider >= 0 ? sheet->divider : 0) + sheet->margin;
     int w = sheet->width - sheet->margin - x;
     int y = sheet->summary;
     int space = sheet->footer - y;
     int weight = item->weight * item->number;
-    char desc[160], name[160], suffix[100], weight_text[32], stats[150];
+    char desc[160], name[160], weight_text[32], stats[150];
     int skill = smithing_capacity();
     int uses = forge_uses(p_ptr->py, p_ptr->px);
     if (continuing) smith_ui_detail_turns = p_ptr->smithing_leftover;
     int turns = smith_ui_detail_turns;
     const smithing_cost_type* cost = &smith_ui_detail_cost;
 
+    object_desc(name, sizeof(name), item, item->number > 1, 0);
     object_desc(desc, sizeof(desc), item, item->number > 1, 2);
-    smith_ui_split_object_title(desc, name, sizeof(name), suffix, sizeof(suffix));
+    cptr suffix = desc + strlen(name);
+    while (*suffix == ' ') suffix++;
     SDL_strlcpy(smith_ui_detail_name, name, sizeof(smith_ui_detail_name));
     char lore_buf[sizeof(smith_description.text)];
     cptr lore = object_lore_select_base_text(item, lore_buf, sizeof(lore_buf));
@@ -2991,7 +2975,10 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
         draw_supply_icon(x, y, item);
     int text_x = x + art_cols + 1;
     int text_w = w - art_cols - 1;
+    int name_row = y;
     byte name_attr = item->name1 ? TERM_YELLOW : object_has_ego(item) ? TERM_L_BLUE : TERM_WHITE;
+    if (name_mode == SMITH_NAME_EDITABLE) name_attr = TERM_L_BLUE;
+    if (name_mode == SMITH_NAME_FOCUSED) name_attr = TERM_UI_SELECTED + TERM_L_BLUE;
     if (space < 6 && draft)
         smith_sheet_field(text_x, y++, text_w, name, "Draft", name_attr, TERM_L_BLUE);
     else
@@ -3000,6 +2987,9 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
             space >= 10 ? 2 : 1, name_attr, name);
         y += MAX(1, name_rows);
     }
+    if (name_mode != SMITH_NAME_READ_ONLY)
+        for (int row = name_row; row < y; row++)
+            ui_menu_click_add(SMITH_EDITOR_RENAME, text_x, row, text_w);
     if (space >= 6)
         smith_ui_put_fitted(text_x, y++, text_w, TERM_L_BLUE, stats);
 
@@ -3219,7 +3209,7 @@ static void smith_browser_preview(const smith_sheet_layout* sheet, int kind,
     }
     int difficulty = smith_measure_design();
     smith_sheet_order(sheet, smith_o_ptr, difficulty,
-        draft && p_ptr->smithing_leftover > 0, draft);
+        draft && p_ptr->smithing_leftover > 0, draft, SMITH_NAME_READ_ONLY);
     smith_o_ptr = saved_object;
     smith_alloy = saved_alloy;
     smithing_cost = saved_cost;
@@ -3815,15 +3805,6 @@ typedef enum {
     SMITH_SIMPLE, SMITH_ENHANCEMENTS, SMITH_ARTIFICE, SMITH_PAGE_COUNT
 } smith_page;
 
-enum {
-    SMITH_EDITOR_TAB = 33100,
-    SMITH_EDITOR_INSPECT = 33110,
-    SMITH_EDITOR_COSTS,
-    SMITH_EDITOR_CRAFT,
-    SMITH_EDITOR_APPLY,
-    SMITH_EDITOR_EDIT_VALUE
-};
-
 static void smith_editor_tabs(const smith_sheet_layout* sheet, smith_page page,
     bool interactive)
 {
@@ -3887,7 +3868,8 @@ static bool smith_number_card_menu(const smith_number_card* card, smith_page pag
         smith_apply_number(card, value);
         int difficulty = smith_measure_design();
         smith_sheet_order(&sheet, smith_o_ptr, difficulty,
-            focus == current && p_ptr->smithing_leftover > 0, false);
+            focus == current && p_ptr->smithing_leftover > 0, false,
+            SMITH_NAME_READ_ONLY);
         *smith_o_ptr = *smith3_o_ptr;
         smith_alloy = smith3_alloy;
         smithing_cost = original_cost;
@@ -4058,7 +4040,8 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
     smith_ui_detail_cost = preview->cost;
     smith_ui_detail_turns = preview->turns;
     smith_sheet_layout sheet = smith_sheet_geometry();
-    smith_sheet_order(&sheet, smith_o_ptr, preview->scaled_difficulty, false, false);
+    smith_sheet_order(&sheet, smith_o_ptr, preview->scaled_difficulty, false, false,
+        SMITH_NAME_READ_ONLY);
 }
 
 static bool reforge_preview_missing_ability(const reforge_preview_type* preview)
@@ -4340,7 +4323,8 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     else
         create_special(fixed_prefix, choice[*highlight - 1]);
 
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
+        SMITH_NAME_READ_ONLY);
     ch = smith_sheet_read_choice(highlight, entry_count, '\r');
 
     /* Choose by letter */
@@ -4512,20 +4496,27 @@ void prepare_artefact(void)
     log_trace("Artifact preparation complete - %d abilities synchronized", smith_a_ptr->abilities);
 }
 
-/*
- * Does the given object type support the given flag type?
- */
-bool applicable_flag(u32b f, int flagset, object_type* o_ptr)
+static bool smith_property_is_listed(const smithing_flag_desc* property)
 {
-    bool ok = false;
-    int i;
-    u32b f1, f2, f3, f4;
+    return property->flagset != 1 || property->flag != TR1_SHARPNESS2
+        || (c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_TELCHAR);
+}
 
-    /* Telchar may always put SHARPNESS II on a melee weapon               */
-    if ((flagset == 1) && (f == TR1_SHARPNESS2) &&
-        (c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_TELCHAR))
+static bool smith_artefact_has_property(const artefact_type* art,
+    const smithing_flag_desc* property)
+{
+    if (!art) return false;
+    const u32b flags[] = { 0, art->flags1, art->flags2, art->flags3, art->flags4 };
+    return (flags[property->flagset] & property->flag) != 0;
+}
+
+static bool smith_property_applicable(const smithing_flag_desc* property,
+    const object_type* item)
+{
+    /* Telchar may always put Sharpness II on a melee weapon. */
+    if (property->flagset == 1 && property->flag == TR1_SHARPNESS2)
     {
-        switch (smith_o_ptr->tval)                   /* any melee weapon   */
+        switch (item->tval)
         {
             case TV_SWORD: case TV_HAFTED:
             case TV_POLEARM: case TV_DIGGING:
@@ -4533,60 +4524,21 @@ bool applicable_flag(u32b f, int flagset, object_type* o_ptr)
         }
     }
 
-    /* Extract the object flags */
-    object_flags4(o_ptr, &f1, &f2, &f3, &f4);
-
     /* Warhammers-only: Smithing bonus requires Brand Fire on the same item. */
-    if ((flagset == 1) && (f == TR1_SMT))
+    if (property->flagset == 1 && property->flag == TR1_SMT)
     {
-        if (o_ptr->tval != TV_HAFTED || o_ptr->sval != SV_WAR_HAMMER)
+        if (item->tval != TV_HAFTED || item->sval != SV_WAR_HAMMER)
             return false;
-        if (!(f1 & TR1_BRAND_FIRE))
-            return false;
-        return true;
+        u32b f1, f2, f3;
+        object_flags(item, &f1, &f2, &f3);
+        return (f1 & TR1_BRAND_FIRE) != 0;
     }
 
-    /* Go through the list of artefacts and see if the flag is applicable for
-     * this type  */
-    for (i = ART_ULTIMATE; i < z_info->art_norm_max; i++)
-    {
-        /* Access the artefact */
-        artefact_type* a_ptr = &a_info[i];
-
-        /* Skip other types of artefacts */
-        if (a_ptr->tval != o_ptr->tval)
-            continue;
-
-        switch (flagset)
-        {
-        case 1:
-        {
-            if (a_ptr->flags1 & f)
-                ok = true;
-            break;
-        }
-        case 2:
-        {
-            if (a_ptr->flags2 & f)
-                ok = true;
-            break;
-        }
-        case 3:
-        {
-            if (a_ptr->flags3 & f)
-                ok = true;
-            break;
-        }
-        case 4:
-        {
-            if (a_ptr->flags4 & f)
-                ok = true;
-            break;
-        }
-        }
-    }
-
-    return (ok);
+    /* Match properties carried by existing artefacts of this item type. */
+    for (int i = ART_ULTIMATE; i < z_info->art_norm_max; i++)
+        if (a_info[i].tval == item->tval && smith_artefact_has_property(&a_info[i], property))
+            return true;
+    return false;
 }
 
 /*
@@ -4672,67 +4624,30 @@ int artefact_flag_menu_aux(int category, int* highlight)
     prepare_artefact();
     int bonus_count = smith_collect_bonus_numbers(bonuses);
 
-    // display the categories
-    for (i = 0; smithing_flag_types[i].flag != 0; i++)
+    for (const smithing_flag_desc* property = smithing_flag_types; property->flag; property++)
     {
-        if (category == smithing_flag_types[i].category)
+        if (property->category != category || !smith_property_is_listed(property))
+            continue;
+
+        flag[num] = property->flag;
+        flagset[num] = property->flagset;
+        flag_desc[num] = property->desc;
+        flag_present[num] = smith_artefact_has_property(smith2_a_ptr, property);
+        flag_valid[num] = flag_present[num] || smith_property_applicable(property, smith_o_ptr);
+        if (flag_present[num] && property->flagset == 1)
         {
-            /* Telchar-only: skip Sharpness2 if not in character Telchar */
-            if ((smithing_flag_types[i].flagset == 1) &&
-                (smithing_flag_types[i].flag == TR1_SHARPNESS2) &&
-                !(c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_TELCHAR))
-            {
-                /* don't even consider it */
-                continue;
-            }
-            flag[num] = smithing_flag_types[i].flag;
-            flagset[num] = smithing_flag_types[i].flagset;
-
-            if (((flagset[num] == 1) && (smith2_a_ptr->flags1 & flag[num]))
-                || ((flagset[num] == 2) && (smith2_a_ptr->flags2 & flag[num]))
-                || ((flagset[num] == 3) && (smith2_a_ptr->flags3 & flag[num]))
-                || ((flagset[num] == 4) && (smith2_a_ptr->flags4 & flag[num])))
-            {
-                flag_present[num] = true;
-                flag_valid[num] = true;
-                if (flagset[num] == 1)
-                    for (int j = 0; j < bonus_count; j++)
-                        if (bonuses[j].flags & flag[num]) flag_number[num] = &bonuses[j];
-            }
-
-            else
-            {
-                // require that the flag can be present on the object
-                if (applicable_flag(flag[num], flagset[num], smith_o_ptr))
-                {
-                    flag_valid[num] = true;
-
-                    // add this flag to the dummy artefact under construction
-                    add_artefact_flag(flag[num], flagset[num]);
-
-                    // Check whether it is a valid choice for creating (needs to
-                    // be affordable and successful)
-                    if (affordable(smith_o_ptr))
-                    {
-                        flag_affordable[num] = true;
-                    }
-                }
-            }
-
-        // /* Lock Sharpness II behind Telchar forge */
-        // if (flag[num] == TR1_SHARPNESS2 &&
-        //     !(c_info[p_ptr->pcharacter].flags_u & UNQ_SMT_TELCHAR))
-        //     flag_valid[num] = false;
-
-            flag_attr[num] = flag_present[num]
-                ? TERM_BLUE
-                : (flag_valid[num]
-                        ? (flag_affordable[num] ? TERM_WHITE : TERM_SLATE)
-                        : TERM_L_DARK);
-            flag_desc[num] = smithing_flag_types[i].desc;
-
-            num++;
+            for (int j = 0; j < bonus_count; j++)
+                if (bonuses[j].flags & property->flag) flag_number[num] = &bonuses[j];
         }
+        if (flag_valid[num] && !flag_present[num])
+        {
+            add_artefact_flag(property->flag, property->flagset);
+            flag_affordable[num] = affordable(smith_o_ptr);
+        }
+
+        flag_attr[num] = !flag_valid[num] ? TERM_L_DARK
+            : flag_affordable[num] ? TERM_WHITE : TERM_SLATE;
+        num++;
     }
 
     *highlight = MAX(1, MIN(*highlight, num));
@@ -4769,7 +4684,8 @@ int artefact_flag_menu_aux(int category, int* highlight)
     // add this flag to the dummy artefact under construction
     add_artefact_flag(flag[*highlight - 1], flagset[*highlight - 1]);
 
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
+        SMITH_NAME_READ_ONLY);
     ch = smith_sheet_read_choice(highlight, num, '-');
     if (steamdeck_controls_active() && ch == steamdeck_alt_action_key()) ch = '-';
 
@@ -4892,7 +4808,7 @@ void artefact_flag_menu(int category)
  * Can this ability be applied to any item at all?
  * Returns false for stat-only abilities like Grace/Strength/etc that have no valid item types.
  */
-static bool ability_can_be_smithed(ability_type* b_ptr)
+static bool ability_can_be_smithed(const ability_type* b_ptr)
 {
     int j;
 
@@ -4906,44 +4822,26 @@ static bool ability_can_be_smithed(ability_type* b_ptr)
     return false;
 }
 
-/*
- * Does the given object type support the given ability type?
- */
-bool applicable_ability(ability_type* b_ptr, object_type* o_ptr)
+static bool smith_ability_can_add(const ability_type* ability, const object_type* item,
+    int ability_count)
 {
-    bool ok = false;
-    int j;
+    if (ability_count >= SMITH_ARTEFACT_ABILITY_MAX) return false;
 
-    u32b f1, f2, f3;
-
-    /* Test if this is a legal item type for this ability */
-    for (j = 0; j < ABILITY_TVALS_MAX; j++)
+    for (int i = 0; i < ABILITY_TVALS_MAX; i++)
     {
-        /* Require identical base type */
-        if (o_ptr->tval == b_ptr->tval[j])
-        {
-            /* Require sval in bounds, lower */
-            if (o_ptr->sval >= b_ptr->min_sval[j])
-            {
-                /* Require sval in bounds, upper */
-                if (o_ptr->sval <= b_ptr->max_sval[j])
-                {
-                    /* Accept */
-                    ok = true;
-                }
-            }
-        }
+        if (item->tval == ability->tval[i] && item->sval >= ability->min_sval[i]
+            && item->sval <= ability->max_sval[i])
+            return true;
     }
 
-    // Polearm Mastery is OK for Polearms
-    object_flags(o_ptr, &f1, &f2, &f3);
-    if (f3 & TR3_POLEARM)
+    /* Polearm Mastery also applies to items with the polearm flag. */
+    if (ability->skilltype == S_MEL && ability->abilitynum == MEL_POLEARMS)
     {
-        if ((b_ptr->skilltype == S_MEL) && (b_ptr->abilitynum == MEL_POLEARMS))
-            ok = true;
+        u32b f1, f2, f3;
+        object_flags(item, &f1, &f2, &f3);
+        return (f3 & TR3_POLEARM) != 0;
     }
-
-    return (ok);
+    return false;
 }
 
 /*
@@ -4959,7 +4857,7 @@ void add_artefact_ability(int skilltype, int abilitynum)
     prepare_artefact();
 
     // set new ability on the artefact
-    if (smith_a_ptr->abilities < 4)
+    if (smith_a_ptr->abilities < SMITH_ARTEFACT_ABILITY_MAX)
     {
         bool already_present = false;
 
@@ -5045,18 +4943,17 @@ void remove_artefact_ability(int skilltype, int abilitynum)
 /*
  * Determines if an artefact type has a given ability.
  */
-bool has_ability(artefact_type* a_ptr, int skilltype, int abilitynum)
+static bool smith_artefact_has_ability(const artefact_type* art,
+    const ability_type* ability)
 {
-    int i;
-
-    for (i = 0; i < a_ptr->abilities; i++)
+    if (!art) return false;
+    for (int i = 0; i < art->abilities; i++)
     {
-        if ((a_ptr->skilltype[i] == skilltype)
-            && (a_ptr->abilitynum[i] == abilitynum))
-            return (true);
+        if (art->skilltype[i] == ability->skilltype
+            && art->abilitynum[i] == ability->abilitynum)
+            return true;
     }
-
-    return (false);
+    return false;
 }
 
 /*
@@ -5102,39 +4999,16 @@ int artefact_ability_menu_aux(int skill, int* highlight)
         ability_nums[num] = b_ptr->abilitynum;
 
         // Determine the appropriate colour
-        if (has_ability(smith2_a_ptr, skill, b_ptr->abilitynum))
+        if (smith_artefact_has_ability(smith2_a_ptr, b_ptr))
         {
             ability_present[num] = true;
             ability_valid[num] = true;
         }
-        else
+        else if (smith_ability_can_add(b_ptr, smith_o_ptr, smith2_a_ptr->abilities))
         {
-            // require that the ability can be present on the object
-            if (applicable_ability(b_ptr, smith_o_ptr))
-            {
-                ability_valid[num] = true;
-
-                // add this flag to the dummy artefact under construction
-                add_artefact_ability(skill, b_ptr->abilitynum);
-
-                // require that the ability was successfully added
-                if (has_ability(smith_a_ptr, skill, b_ptr->abilitynum))
-                {
-                    // Check whether it is a valid choice for creating (needs to
-                    // be affordable and successful)
-                    if (affordable(smith_o_ptr))
-                    {
-                        ability_affordable[num] = true;
-                    }
-                }
-
-                // if the ability wasn't added properly (the item had too many),
-                // then it is not valid after all
-                else
-                {
-                    ability_valid[num] = false;
-                }
-            }
+            add_artefact_ability(skill, b_ptr->abilitynum);
+            ability_valid[num] = true;
+            ability_affordable[num] = affordable(smith_o_ptr);
         }
 
         num++;
@@ -5185,7 +5059,8 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     // add this ability to the dummy artefact under construction (use actual ability number)
     add_artefact_ability(skill, ability_nums[*highlight - 1]);
 
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false);
+    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
+        SMITH_NAME_READ_ONLY);
     ch = smith_sheet_read_choice(highlight, num, '\r');
 
     /* Choose by letter */
@@ -5318,6 +5193,13 @@ static bool rename_artefact(void)
     return true;
 }
 
+static int smith_artifice_jewellery_sval(int tval)
+{
+    if (tval == TV_RING) return SV_RING_SELF_MADE;
+    if (tval == TV_AMULET) return SV_AMULET_SELF_MADE;
+    return 0;
+}
+
 static void smith_prepare_artifice_design(void)
 {
     if (!smith_o_ptr->name1)
@@ -5330,20 +5212,14 @@ static void smith_prepare_artifice_design(void)
         // add 'ignore all'
         smith2_a_ptr->flags3 |= (TR3_IGNORE_MASK);
 
-        // change the SV for rings and amulets when they start to get made into
-        // artefacts
-        if (smith_o_ptr->tval == TV_RING)
+        /* Rings and amulets use their custom base when Artifice begins. */
+        int sval = smith_artifice_jewellery_sval(smith_o_ptr->tval);
+        if (sval)
         {
-            create_base_object(TV_RING, SV_RING_SELF_MADE);
+            create_base_object(smith_o_ptr->tval, sval);
             object_copy(smith2_o_ptr, smith_o_ptr);
             smith2_alloy = smith_alloy;
-        }
-        if (smith_o_ptr->tval == TV_AMULET)
-        {
-            create_base_object(TV_AMULET, SV_AMULET_SELF_MADE);
-            object_copy(smith2_o_ptr, smith_o_ptr);
-            smith2_alloy = smith_alloy;
-            smith2_o_ptr->pd = 1;
+            if (smith_o_ptr->tval == TV_AMULET) smith2_o_ptr->pd = 1;
         }
     }
 
@@ -5864,7 +5740,7 @@ static bool smith_reforge_item(void)
             return false;
         }
 
-        cave_feat[p_ptr->py][p_ptr->px] -= 1;
+        spend_forge_uses(1);
         lite_spot(p_ptr->py, p_ptr->px);
 
         object_desc(new_name, sizeof(new_name), target, true, 0);
@@ -5941,7 +5817,7 @@ typedef struct {
     const smith_number_card* number;
 } smith_editor_card;
 
-#define SMITH_EDITOR_MAX MAX(2 + 2 * SMITH_BONUS_NUMBER_MAX, MAX_CATS + S_MAX)
+#define SMITH_EDITOR_MAX MAX(2 + 2 * SMITH_BONUS_NUMBER_MAX, MAX_CATS + S_SPC)
 
 static bool smith_edit_artifice(int index)
 {
@@ -5953,12 +5829,12 @@ static bool smith_edit_artifice(int index)
     artefact_type before = *smith2_a_ptr;
     object_type before_object = *smith2_o_ptr;
     bool named_new_design = false;
-    if (index < MAX_CATS)
-        artefact_flag_menu(smithing_flag_cats[index].category);
-    else if (index < MAX_CATS + S_SPC)
-        artefact_ability_menu(index - MAX_CATS);
-    else
+    if (index == SMITH_EDITOR_RENAME)
         named_new_design = rename_artefact() && !original.name1;
+    else if (index < MAX_CATS)
+        artefact_flag_menu(smithing_flag_cats[index].category);
+    else
+        artefact_ability_menu(index - MAX_CATS);
 
     /* Previewing a property can temporarily change the object's kind (jewellery),
      * flags and abilities. Back without an edit preserves the exact draft. */
@@ -5983,6 +5859,64 @@ static void smith_editor_number(smith_editor_card* card,
     *card = (smith_editor_card){ .label = number->label, .enabled = number->editable,
         .indented = indented, .number = number };
     SDL_strlcpy(card->value, number->value, sizeof(card->value));
+}
+
+typedef struct {
+    int added, available;
+} smith_artifice_count;
+
+static int smith_artifice_cards(bool allowed, bool compact, smith_editor_card* cards)
+{
+    smith_artifice_count properties[MAX_CATS] = { 0 }, abilities[S_SPC] = { 0 };
+    object_type item = *smith_o_ptr;
+    const artefact_type* art = item.name1 ? smith_a_ptr : NULL;
+    int ability_count = art ? art->abilities : 0;
+    int jewellery_sval = smith_artifice_jewellery_sval(item.tval);
+    if (!art && allowed && jewellery_sval)
+    {
+        item.sval = jewellery_sval;
+        item.k_idx = lookup_kind(item.tval, item.sval);
+    }
+
+    /* Count options that can be toggled, including ones already added. */
+    for (const smithing_flag_desc* property = smithing_flag_types; property->flag; property++)
+    {
+        if (!smith_property_is_listed(property)) continue;
+        smith_artifice_count* count = &properties[property->category - 1];
+        bool added = smith_artefact_has_property(art, property);
+        count->added += added;
+        count->available += added || (allowed && smith_property_applicable(property, &item));
+    }
+    for (int i = 0; i < z_info->b_max; i++)
+    {
+        const ability_type* ability = &b_info[i];
+        if (!ability->name || ability->skilltype >= S_SPC || !ability_can_be_smithed(ability))
+            continue;
+        smith_artifice_count* count = &abilities[ability->skilltype];
+        bool added = smith_artefact_has_ability(art, ability);
+        count->added += added;
+        count->available += added || (allowed && smith_ability_can_add(ability, &item, ability_count));
+    }
+
+    for (int i = 0; i < MAX_CATS; i++)
+    {
+        smith_editor_card* card = &cards[i];
+        smith_artifice_count count = properties[i];
+        card->label = smithing_flag_cats[i].desc;
+        card->enabled = allowed;
+        strnfmt(card->value, sizeof(card->value), "%d / %d%s", count.added,
+            count.available, compact ? "" : count.available == 1 ? " property" : " properties");
+    }
+    for (int i = 0; i < S_SPC; i++)
+    {
+        smith_editor_card* card = &cards[MAX_CATS + i];
+        smith_artifice_count count = abilities[i];
+        card->label = skill_names_full[i];
+        card->enabled = allowed;
+        strnfmt(card->value, sizeof(card->value), "%d / %d%s", count.added,
+            count.available, compact ? "" : count.available == 1 ? " ability" : " abilities");
+    }
+    return MAX_CATS + S_SPC;
 }
 
 static int smith_editor_cards(smith_page page, bool allowed, bool compact,
@@ -6034,42 +5968,7 @@ static int smith_editor_cards(smith_page page, bool allowed, bool compact,
         return count;
     }
 
-    const u32b selected_flags[] = { 0, smith_a_ptr->flags1, smith_a_ptr->flags2,
-        smith_a_ptr->flags3, smith_a_ptr->flags4 };
-    int property_count[MAX_CATS] = { 0 };
-    if (smith_o_ptr->name1)
-    {
-        for (int i = 0; smithing_flag_types[i].flag; ++i)
-        {
-            const smithing_flag_desc *property = &smithing_flag_types[i];
-            if (selected_flags[property->flagset] & property->flag)
-                property_count[property->category - 1]++;
-        }
-    }
-    for (int i = 0; i < MAX_CATS; i++)
-    {
-        cards[i].label = smithing_flag_cats[i].desc;
-        strnfmt(cards[i].value, sizeof(cards[i].value), "%d%s", property_count[i],
-            compact ? "" : property_count[i] == 1 ? " property" : " properties");
-        cards[i].enabled = allowed;
-    }
-    for (int skill = 0; skill < S_SPC; skill++)
-    {
-        smith_editor_card *card = &cards[MAX_CATS + skill];
-        card->label = skill_names_full[skill];
-        int selected = 0;
-        for (int i = 0; i < smith_o_ptr->abilities; ++i)
-            if (smith_o_ptr->skilltype[i] == skill) selected++;
-        strnfmt(card->value, sizeof(card->value), "%d%s", selected,
-            compact ? "" : selected == 1 ? " ability" : " abilities");
-        card->enabled = allowed;
-    }
-    smith_editor_card *name = &cards[MAX_CATS + S_SPC];
-    name->label = "Name artefact";
-    SDL_strlcpy(name->value, smith_o_ptr->name1 ? smith_a_ptr->name : "",
-        sizeof(name->value));
-    name->enabled = allowed;
-    return MAX_CATS + S_SPC + 1;
+    return smith_artifice_cards(allowed, compact, cards);
 }
 
 /* Show the resources on hand below the editable fields when there is room. */
@@ -6145,8 +6044,13 @@ static bool smith_editor(smith_page page, bool death_view)
         smith_editor_card cards[SMITH_EDITOR_MAX] = { 0 };
         smith_sheet_layout sheet = smith_sheet_geometry();
         int cols = page == SMITH_ARTIFICE && sheet.list_width >= 62 ? 2 : 1;
-        int count = smith_editor_cards(page, allowed, sheet.list_width / cols < 32, numbers, cards);
-        int last = count + 2;
+        bool compact = sheet.list_width / cols < (sdl_menu_letters_enabled() ? 38 : 35);
+        int count = smith_editor_cards(page, allowed, compact, numbers, cards);
+        bool can_rename = page == SMITH_ARTIFICE ? allowed
+            : smith_o_ptr->name1 == smith_a_name && smith_design_allows(SMT_MENU_ARTEFACT);
+        int name_focus = can_rename ? count : -1;
+        int first_action = count + can_rename;
+        int last = first_action + 2;
         focus = MIN(focus, last);
         const smith_editor_card* card = focus < count ? &cards[focus] : NULL;
         int notes = note[0] ? 1 : 0;
@@ -6177,7 +6081,11 @@ static bool smith_editor(smith_page page, bool death_view)
         smith_editor_context(&sheet, first + used, page, card, note);
 
         int difficulty = smith_measure_design();
-        smith_sheet_order(&sheet, smith_o_ptr, difficulty, p_ptr->smithing_leftover > 0, false);
+        smith_name_mode name_mode = SMITH_NAME_READ_ONLY;
+        if (can_rename)
+            name_mode = focus == name_focus ? SMITH_NAME_FOCUSED : SMITH_NAME_EDITABLE;
+        smith_sheet_order(&sheet, smith_o_ptr, difficulty, p_ptr->smithing_leftover > 0,
+            false, name_mode);
         bool keys = sheet.width >= 68 && !sdl_touch_only_device_active() && !steamdeck_controls_active();
         cptr accept = p_ptr->smithing_leftover ? "Resume" : "Craft";
         const smith_sheet_action actions[] = {
@@ -6187,8 +6095,8 @@ static bool smith_editor(smith_page page, bool death_view)
                 craftable ? TERM_L_GREEN : TERM_SLATE },
         };
         smith_sheet_actions(&sheet, actions, N_ELEMENTS(actions),
-            focus >= count ? actions[focus - count].id : 0);
-        smith_sheet_navigation(&sheet, false, "Edit", true);
+            focus >= first_action ? actions[focus - first_action].id : 0);
+        smith_sheet_navigation(&sheet, false, focus == name_focus ? "Rename" : "Edit", true);
         Term_fresh();
         int key = smith_sheet_read_key('[', ']');
 
@@ -6205,7 +6113,12 @@ static bool smith_editor(smith_page page, bool death_view)
             }
             else if (choice >= SMITH_EDITOR_INSPECT && choice <= SMITH_EDITOR_CRAFT)
             {
-                focus = count + choice - SMITH_EDITOR_INSPECT;
+                focus = first_action + choice - SMITH_EDITOR_INSPECT;
+                activate = click != UI_MENU_CLICK_HOVER;
+            }
+            else if (choice == SMITH_EDITOR_RENAME && can_rename)
+            {
+                focus = name_focus;
                 activate = click != UI_MENU_CLICK_HOVER;
             }
             else if (choice >= 1 && choice <= count)
@@ -6221,12 +6134,26 @@ static bool smith_editor(smith_page page, bool death_view)
         if (key == '4' || key == '6')
             focus = (focus + (key == '4' ? last : 1)) % (last + 1);
         if (key == '2')
-            focus = focus >= count ? MIN(count - 1, (focus - count) % cols)
-                : focus + cols < count ? focus + cols : count + MIN(2, focus % cols);
+        {
+            if (focus >= first_action)
+                focus = MIN(count - 1, (focus - first_action) % cols);
+            else if (focus == name_focus)
+                focus = first_action;
+            else if (focus + cols < count)
+                focus += cols;
+            else
+                focus = can_rename ? name_focus : first_action + MIN(2, focus % cols);
+        }
         if (key == '8')
-            focus = focus >= count ? MIN(count - 1,
-                ((count - 1) / cols) * cols + MIN(cols - 1, focus - count))
-                : focus >= cols ? focus - cols : count + MIN(2, focus);
+        {
+            if (focus >= first_action)
+                focus = can_rename ? name_focus : MIN(count - 1,
+                    ((count - 1) / cols) * cols + MIN(cols - 1, focus - first_action));
+            else if (focus == name_focus)
+                focus = count - 1;
+            else
+                focus = focus >= cols ? focus - cols : first_action + MIN(2, focus);
+        }
         if (sdl_menu_letters_enabled() && key >= 'a' && key <= 'z' && key - 'a' < count)
         {
             focus = key - 'a';
@@ -6235,15 +6162,15 @@ static bool smith_editor(smith_page page, bool death_view)
         if (key == 'I' || key == 'F' || key == '?'
             || (steamdeck_controls_active() && key == steamdeck_info_key()))
         {
-            focus = key == 'F' ? last : key == '?' ? count + 1 : count;
+            focus = key == 'F' ? last : key == '?' ? first_action + 1 : first_action;
             activate = true;
         }
         if (!activate && key != '\r' && key != '\n' && key != ' ') continue;
         bool edit_number = focus < count && cards[focus].number && cards[focus].enabled;
         if (!edit_number) sdl_smithing_sheet_clear();
-        if (focus == count)
+        if (focus == first_action)
             describe_object_with_comparisons(smith_o_ptr, true);
-        else if (focus == count + 1)
+        else if (focus == first_action + 1)
             smith_show_cost_details();
         else if (focus == last)
         {
@@ -6255,12 +6182,14 @@ static bool smith_editor(smith_page page, bool death_view)
             smith_root_note_for_choice(SMT_MENU_ACCEPT, false, note, sizeof(note));
             bell(death_view ? "You cannot craft during this final look." : note);
         }
-        else if (!cards[focus].enabled)
+        else if (focus < count && !cards[focus].enabled)
             bell(note[0] ? note : "This choice is unavailable for this item.");
         else
         {
             bool changed;
-            if (edit_number)
+            if (focus == name_focus)
+                changed = smith_edit_artifice(SMITH_EDITOR_RENAME);
+            else if (edit_number)
             {
                 changed = smith_number_card_menu(cards[focus].number, page, &next_page);
                 if (changed)
@@ -6325,7 +6254,8 @@ int smithing_menu_aux(int* highlight)
     if (smith_o_ptr->k_idx)
     {
         int difficulty = smith_measure_design();
-        smith_sheet_order(&sheet, smith_o_ptr, difficulty, true, false);
+        smith_sheet_order(&sheet, smith_o_ptr, difficulty, true, false,
+            SMITH_NAME_READ_ONLY);
     }
     const smith_sheet_action footer[] = {
         { SMITH_CLICK_BACK, "Exit", TERM_WHITE }, { SMITH_CLICK_CALC, "Costs", TERM_WHITE }

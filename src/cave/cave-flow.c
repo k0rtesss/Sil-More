@@ -51,6 +51,21 @@ int flow_dist(int which_flow, int y, int x)
  *
  */
 
+/* A reverse expansion tests up to eight moves into the same destination.
+ * Its occupants, hazards, door and actor permissions are fixed for the
+ * expansion. Only the incoming bank changes the step cost: shallow water,
+ * deep water or neither. Poison dose is still tracked per edge below; the
+ * step cost itself charges the same preference for either positive dose. */
+static int reverse_step_cost(monster_type* m_ptr, int from_y, int from_x,
+    int to_y, int to_x, int cached[3])
+{
+    int feat = cave_feat[from_y][from_x];
+    int bank = feat == FEAT_DEEP_WATER ? 2 : feat == FEAT_WATER ? 1 : 0;
+    if (cached[bank] < 0)
+        cached[bank] = monster_step_cost(m_ptr, from_y, from_x, to_y, to_x);
+    return cached[bank];
+}
+
 /* With no possible poison exposure, the cheapest route dominates every
  * alternative. Keep just one label per square and avoid the Pareto scratch
  * initialization and comparisons on ordinary maps or for immune creatures. */
@@ -92,6 +107,7 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
             int grid = heads[cost];
             int y = grid / MAX_DUNGEON_WID;
             int x = grid % MAX_DUNGEON_WID;
+            int step_costs[3] = {-1, -1, -1};
             heads[cost] = next[grid];
             if (next[grid] >= 0)
                 previous[next[grid]] = -1;
@@ -112,13 +128,14 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
                     continue;
                 neighbor = yy * MAX_DUNGEON_WID + xx;
                 old = cave_cost[which_flow][yy][xx];
-                /* Positive edge costs cannot improve a settled square. */
-                if (old < FLOW_MAX_DIST && previous[neighbor] == -2)
+                /* Even a one-turn edge cannot improve this label. This also
+                 * covers every settled square in the cost-ordered queue. */
+                if (old <= cost + 1)
                     continue;
                 /* Match the Pareto flow's reverse edges and virtual player
                  * endpoint, including escape from forbidden terrain. */
                 edge = grid == origin && cave_m_idx[y][x] < 0 ? 1
-                    : monster_step_cost(m_ptr, yy, xx, y, x);
+                    : reverse_step_cost(m_ptr, yy, xx, y, x, step_costs);
                 if (!edge)
                     continue;
                 total = cost + edge;
@@ -178,6 +195,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
             int grid = label / LABELS;
             int y = grid / MAX_DUNGEON_WID;
             int x = grid % MAX_DUNGEON_WID;
+            int step_costs[3] = {-1, -1, -1};
             heads[cost] = next[label];
             if (next[label] >= 0)
                 previous[next[label]] = -1;
@@ -197,7 +215,7 @@ static void update_monster_flow(int cy, int cx, int which_flow,
                  * origin is also a virtual approach target for NEVER_BLOW
                  * monsters; their real melee permission stays unchanged. */
                 edge = grid == origin && cave_m_idx[y][x] < 0 ? 1
-                    : monster_step_cost(m_ptr, yy, xx, y, x);
+                    : reverse_step_cost(m_ptr, yy, xx, y, x, step_costs);
                 if (!edge)
                     continue;
                 poison = poison_damage[label]
@@ -277,6 +295,52 @@ static void update_monster_flow(int cy, int cx, int which_flow,
     }
 }
 
+/* The hearing distance field depends only on terrain, the active map size
+ * and the source. Keep the last player result separate from the live field,
+ * which level setup and the tutorial preview can reset or restore directly. */
+static struct {
+    int y, x, height, width;
+    byte terrain[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+    byte cost[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+} player_noise_cache;
+
+static bool restore_player_noise_flow(int cy, int cx)
+{
+    int height = p_ptr->cur_map_hgt;
+    int width = p_ptr->cur_map_wid;
+
+    if (height <= 0 || width <= 0
+        || cy != player_noise_cache.y || cx != player_noise_cache.x
+        || height != player_noise_cache.height || width != player_noise_cache.width)
+        return false;
+
+    /* Compare exactly, including doors and secret passages. Comparing rows
+     * also covers direct map loads and changes outside cave_set_feat(). */
+    for (int y = 0; y < height; ++y)
+        if (memcmp(cave_feat[y], player_noise_cache.terrain[y], width))
+            return false;
+
+    for (int y = 0; y < height; ++y)
+        memcpy(cave_cost[FLOW_PLAYER_NOISE][y], player_noise_cache.cost[y], width);
+    return true;
+}
+
+static void remember_player_noise_flow(int cy, int cx)
+{
+    int height = p_ptr->cur_map_hgt;
+    int width = p_ptr->cur_map_wid;
+
+    for (int y = 0; y < height; ++y)
+    {
+        memcpy(player_noise_cache.terrain[y], cave_feat[y], width);
+        memcpy(player_noise_cache.cost[y], cave_cost[FLOW_PLAYER_NOISE][y], width);
+    }
+    player_noise_cache.y = cy;
+    player_noise_cache.x = cx;
+    player_noise_cache.height = height;
+    player_noise_cache.width = width;
+}
+
 static void update_flow_aux(int cy, int cx, int which_flow,
     bool pursuit, bool allow_player)
 {
@@ -353,15 +417,19 @@ static void update_flow_aux(int cy, int cx, int which_flow,
     update_center_y[which_flow] = cy;
     update_center_x[which_flow] = cx;
 
+    if (which_flow == FLOW_PLAYER_NOISE && restore_player_noise_flow(cy, cx))
+    {
+        sil_perf_end("flow.noise.reuse", perf_start);
+        return;
+    }
+
     /* Erase all of the current flow (noise) information */
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
     {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            cave_cost[which_flow][y][x] = FLOW_MAX_DIST;
-            if (poison_possible && cave_feat[y][x] == FEAT_POISON)
-                poison_present = true;
-        }
+        memset(cave_cost[which_flow][y], FLOW_MAX_DIST, p_ptr->cur_map_wid);
+        if (poison_possible && !poison_present)
+            poison_present = memchr(cave_feat[y], FEAT_POISON,
+                p_ptr->cur_map_wid) != NULL;
     }
 
     /*** Update or rebuild the flow ***/
@@ -481,6 +549,8 @@ static void update_flow_aux(int cy, int cx, int which_flow,
             next_cycle = 1;
         }
     }
+    if (which_flow == FLOW_PLAYER_NOISE)
+        remember_player_noise_flow(cy, cx);
     sil_perf_end("flow.noise", perf_start);
 }
 

@@ -26,9 +26,13 @@ Norwegian Bokmål, Polish, Brazilian Portuguese, Romanian, Russian, Spanish,
 Swedish, Turkish and Ukrainian.
 Latin-script tutorials use the English tutorial fonts. Bulgarian and Ukrainian
 use the Russian tutorial fonts, with Cormorant SC for titles. The default
-tutorial body font is EB Garamond.
+tutorial body font is EB Garamond. Japanese, Korean and Simplified Chinese
+use regional Noto Sans CJK subsets for tutorial headings, body text and
+controls. Regenerate these assets with `tools/subset_tutorial_fonts.py`
+after introducing characters outside the shipped repertoire.
 The app saves the choice in `appOptions.tutorialLanguage` in `sil_sdl.json`.
-A missing or unknown code selects English.
+Without a saved choice, a Japanese, Korean or Chinese device starts its guides
+in that language. Other device languages and unknown saved codes use English.
 
 Each `lib/help/tutorials.<code>.json` file contains lesson titles and ordered
 pages keyed by the stable English lesson ID. Its `strings` object contains
@@ -2160,7 +2164,7 @@ Priority: **40** (higher appears first).
 
 **1. Info**
 
-Choose an item or improvement to see its difficulty, your capacity, and the costs. Smithing adds half your current Dexterity and half your current Grace. Equipment, temporary effects and stat drain affect those values. Learned, active crafting abilities and masteries add further bonuses to every recipe. Naugrim add each positive Smithing affinity level to the attributes used here. Add the bonuses together and round down once. Smithing skill bonuses from equipment still apply.
+Choose an item or improvement to see its difficulty, your capacity, and the costs. Smithing adds half your permanent Dexterity and half your permanent Grace. Permanent attributes include base stats and unconditional learned stat abilities; equipment, temporary effects, stat drain, songs and conditional bonuses do not affect those values. Learned, active crafting abilities and masteries add further bonuses to every recipe. Naugrim add each positive Smithing affinity level to the attributes used here. Add the bonuses together and round down once. Smithing skill bonuses from equipment still apply.
 
 Trigger: The named menu is actually opened: smithing.
 
@@ -3454,7 +3458,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create weapons at a forge. You also gain a modest bonus to identifying weapons. While learned and active, it adds half your current Dexterity to every craft.
+Create weapons at a forge. You also gain a modest bonus to identifying weapons. While learned and active, it adds half your permanent Dexterity to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 120, skill 6, ability slot 0.
 
@@ -3470,7 +3474,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create armour at a forge. You also gain a modest bonus to identifying armour. While learned and active, it adds half your current Strength to every craft.
+Create armour at a forge. You also gain a modest bonus to identifying armour. While learned and active, it adds half your permanent Strength to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 121, skill 6, ability slot 1.
 
@@ -3486,7 +3490,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties. While learned and active, it adds half your current Grace to every craft.
+Create rings, amulets, horns and lights at a forge, and automatically recognise their kinds. Individual equipment may still need identification of its special properties. While learned and active, it adds half your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 122, skill 6, ability slot 2.
 
@@ -3502,7 +3506,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus. While learned and active, it adds your current Grace to every craft.
+Create enchanted items with named special properties at a forge. You can determine enchantments on items and gain a modest identification bonus. While learned and active, it adds half your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 123, skill 6, ability slot 3.
 
@@ -3518,7 +3522,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal. While learned and active, it adds your current Dexterity to every craft.
+Halve smithing time and remove the normal XP and attribute costs of smithing. Materials and forge uses still matter; inspect the complete proposal. While learned and active, it adds half your permanent Dexterity to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 124, skill 6, ability slot 4.
 
@@ -3534,7 +3538,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties. While learned and active, it adds your current Grace to every craft.
+Create custom artefacts at a forge and gain a significant identification bonus. The smithing preview shows the cost of your chosen properties. While learned and active, it adds half your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 125, skill 6, ability slot 5.
 
@@ -3550,7 +3554,7 @@ Priority: **65** (higher appears first).
 
 **1. Decision**
 
-Forge an item above your normal difficulty limit by permanently spending base Smithing: one skill point per excess difficulty point. The amount available is limited by your invested Smithing.
+Forge an item above your normal difficulty limit by permanently spending base Smithing: one skill point per excess difficulty point. The amount available is limited by your invested Smithing. While learned and active, Masterpiece also adds half your permanent Grace to every craft.
 
 Trigger: Public ability preview or newly available ability; raw serial 126, skill 6, ability slot 6.
 

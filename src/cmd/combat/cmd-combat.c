@@ -2,6 +2,7 @@
 #include "achievements.h"
 #include "achievements-character.h"
 #include "achievements-lore.h"
+#include "cave/cave.h"
 #include "cave/cave-flood.h"
 #include "monster/monster-ai.h"
 #include "tutorial/tutorial-game.h"
@@ -2212,43 +2213,31 @@ static u16b hit_pict(int net_dam, int dam_type, bool fatal_blow)
 
 void display_hit(int y, int x, int net_dam, int dam_type, bool fatal_blow)
 {
-    u16b p1;
-    u16b p2;
-
-    int tens = net_dam / 10;
-    int units = net_dam % 10;
-    if (tens > 9)
-    {
-        tens = 9;
-        units = 9;
-    }
-
-    // do nothing unless the appropriate option is set
-    if (!display_hits)
+    int delay = 25 * op_ptr->delay_factor;
+    if (!display_hits || delay == 0)
         return;
 
-    /* Obtain the hit pict */
-    p1 = hit_pict(units, dam_type, fatal_blow);
-    p2 = hit_pict(tens, dam_type, fatal_blow);
-
-    /* Display the visual effects */
-    print_rel(PICT_C(p1), PICT_A(p1), y, x);
-    move_cursor_relative(y, x);
-
-    if (net_dam >= 10)
+    int damage = MIN(net_dam, 99);
+    u16b pict = hit_pict(damage % 10, dam_type, fatal_blow);
+    bool drew_units = queue_map_effect_cell(PICT_C(pict), PICT_A(pict), y, x);
+    bool drew_tens = false;
+    if (damage >= 10)
     {
-        print_rel(PICT_C(p2), PICT_A(p2), y, x - 1);
-        move_cursor_relative(y, x - 1);
+        pict = hit_pict(damage / 10, dam_type, fatal_blow);
+        drew_tens = queue_map_effect_cell(PICT_C(pict), PICT_A(pict), y, x - 1);
     }
 
+    if (!drew_units && !drew_tens)
+        return;
+
+    move_cursor_relative(y, drew_tens ? x - 1 : x);
     Term_fresh();
+    Term_xtra(TERM_XTRA_DELAY, delay);
 
-    /* Delay */
-    Term_xtra(TERM_XTRA_DELAY, 25 * op_ptr->delay_factor);
-
-    /* Erase the visual effects */
-    lite_spot(y, x);
-    lite_spot(y, x - 1);
+    if (drew_units)
+        restore_map_effect_cell(y, x);
+    if (drew_tens)
+        restore_map_effect_cell(y, x - 1);
     Term_fresh();
 }
 

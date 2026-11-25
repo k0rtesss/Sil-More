@@ -7,6 +7,7 @@
 #include "support/feedback.h"
 #include "support/screen.h"
 #include "ui/menu-click.h"
+#include "tutorial/tutorial.h"
 
 /*
  * Get some input at the cursor location.
@@ -358,6 +359,8 @@ static bool string_panel_append_byte(char* buf, size_t len, size_t* used,
 
 static void string_panel_add_action(int choice, cptr label, byte attr)
 {
+    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
+        label = tutorial_help_text(label);
 #if defined(__ANDROID__)
     sdl_question_menu_add_button(choice, label, attr);
 #else

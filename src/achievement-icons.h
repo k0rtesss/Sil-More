@@ -49,7 +49,7 @@ SIL_ACHIEVEMENT_ICON_RECT(A_WILL_OF_YOUR_OWN, 64, 16, 64) /* Warding glyph */
 SIL_ACHIEVEMENT_ICON(HURINS_DEFIANCE, 5, 18, 5, 25, 2) /* object.txt N:44 shield and N:103 Mithril Helm, mental resilience */
 SIL_ACHIEVEMENT_ICON_RECT(NO_LONGER_BINDING, 68, 20, 64) /* Equipment ring and warding glyph */
 SIL_ACHIEVEMENT_ICON(A_FOOLS_HOPE, 12, 10, 12, 10, 1) /* existing question-mark sprite for an unlikely skill check */
-SIL_ACHIEVEMENT_ICON(A_SINGLE_SPARK, 15, 4, 15, 4, 1) /* terrain.txt N:65 forge with exactly one charge */
+SIL_ACHIEVEMENT_ICON(A_SINGLE_SPARK, 15, 3, 15, 3, 1) /* terrain.txt N:66 forge with exactly two charges */
 SIL_ACHIEVEMENT_ICON(ON_THE_OTHER_HAND, 6, 7, 6, 7, 1) /* object.txt N:67 Bastard Sword, a hand-and-a-half weapon */
 SIL_ACHIEVEMENT_ICON(IRON_CLEAVER, 6, 3, 6, 3, 1) /* object.txt N:64 Longsword */
 SIL_ACHIEVEMENT_ICON(OUT_OF_THIN_ORE, 1, 21, 1, 21, 1) /* object.txt N:410 Piece of Mithril */

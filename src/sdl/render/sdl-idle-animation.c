@@ -7,7 +7,8 @@
 #include "sdl/render/sdl-bridge.h"
 
 /* Fixtures share one 160x16 atlas; each animated liquid shares one 64x16 atlas.
- * Connected surfaces use 256x256 atlas pages. Calm freshwater and acid have
+ * Connected surfaces use compact 47-shape or expanded 256-mask pages.
+ * Calm freshwater and acid have
  * four Verdant 03 frames; directional currents retain their three native
  * frames.
  * The original isolated textures remain the fallback if an atlas is absent.
@@ -46,6 +47,13 @@ static SDL_Texture* fixture_texture;
 static bool fixture_load_attempted;
 static idle_cell* cells;
 static int cell_count, cell_capacity;
+/* A cached tile owns one or two consecutive terminal columns. The slots
+ * hold its packed array index plus one (zero is empty). Each row starts
+ * with a tile count so a repaint can skip empty rows. A world grid can
+ * still have a tile at an old screen position while a pan is being painted. */
+static int* screen_cells;
+static int screen_cols, screen_rows;
+static int grid_cells[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static Uint64 frame_tick;
 static SDL_Texture* water_texture;
 static bool water_load_attempted;
@@ -244,19 +252,59 @@ static byte water_depth_transition_mask(int y, int x)
     return mask;
 }
 
+/* Compact pages store the 47 authored shoreline shapes in ascending mask
+ * order. A diagonal joins only when its two adjacent cardinals join.
+ * Expanded artwork can still supply a distinct tile for each of 256 masks. */
+enum { SHORE_COLS = 8, SHORE_ROWS = 6 };
+static byte shore_slots[256];
+
+static void init_shore_slots(void)
+{
+    int count = 0;
+    for (int raw = 0; raw < 256; raw++) {
+        int mask = raw;
+        for (int bit = 1; bit < 8; bit += 2) {
+            int adjacent = (1 << (bit - 1)) | (1 << ((bit + 1) % 8));
+            if ((mask & adjacent) != adjacent)
+                mask &= ~(1 << bit);
+        }
+        shore_slots[raw] = mask == raw ? count++ : shore_slots[mask];
+    }
+}
+
+static SDL_FRect transition_tile(const SDL_Texture* atlas, byte mask, int page)
+{
+    int cols = 16, rows = 16, slot = mask;
+    if (atlas->w == SHORE_COLS * TILE_SIZE) {
+        cols = SHORE_COLS;
+        rows = SHORE_ROWS;
+        slot = shore_slots[mask];
+        if (atlas->h == rows * TILE_SIZE)
+            page = 0; /* Static banks share one page across all frames. */
+    }
+    return (SDL_FRect){ (slot % cols) * TILE_SIZE,
+        (page * rows + slot / cols) * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+}
+
 static SDL_Texture* load_transition_atlas(SDL_Texture** texture,
     bool* attempted, const char* path, int frame_count)
 {
     if (*texture || *attempted) return *texture;
     *attempted = true;
     SDL_Surface* atlas = IMG_Load(path);
-    if (!atlas || atlas->w != 16 * TILE_SIZE
-        || atlas->h != frame_count * 16 * TILE_SIZE)
+    bool expanded = atlas && atlas->w == 16 * TILE_SIZE
+        && atlas->h == frame_count * 16 * TILE_SIZE;
+    bool compact = atlas && atlas->w == SHORE_COLS * TILE_SIZE
+        && (atlas->h == frame_count * SHORE_ROWS * TILE_SIZE
+            || atlas->h == SHORE_ROWS * TILE_SIZE);
+    if (!expanded && !compact)
     {
         log_warn("Terrain transitions unavailable: %s (%s)", path, SDL_GetError());
         SDL_DestroySurface(atlas);
         return NULL;
     }
+    if (compact && !shore_slots[255])
+        init_shore_slots();
     *texture = SDL_CreateTextureFromSurface(g_state.renderer, atlas);
     SDL_DestroySurface(atlas);
     if (*texture)
@@ -516,23 +564,22 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
     {
         byte mask = floor_shore ? 255 : liquid_transition_mask(y, x, feat);
         texture = transition;
-        src.x = (mask % 16) * TILE_SIZE;
         /* Select surface direction independently of the fixed shoreline mask.
          * Rotating an entire tile would rotate its bank into the channel. */
         int page = liquid_has_current(feat)
             ? water_page_index(cave_water_flow_direction(y, x), frame) : frame;
-        src.y = (mask / 16 + page * 16) * TILE_SIZE;
+        src = transition_tile(transition, mask, page);
         if (feat == FEAT_WATER && water_depth_transition_texture
             && bank_overlay)
         {
             byte depth_mask = water_depth_transition_mask(y, x);
             if (depth_mask != 255)
             {
-                bank_src = src;
                 draw_bank = !floor_shore;
+                if (draw_bank)
+                    bank_src = transition_tile(bank_overlay, mask, page);
                 texture = water_depth_transition_texture;
-                src.x = (depth_mask % 16) * TILE_SIZE;
-                src.y = (depth_mask / 16 + page * 16) * TILE_SIZE;
+                src = transition_tile(texture, depth_mask, page);
             }
         }
     }
@@ -562,8 +609,7 @@ static bool draw_liquid_region(int y, int x, const SDL_FRect* dst,
         byte mask = ice_only_transition_mask(y, x);
         int ice_frame = live && ice_feat == FEAT_MELTING_ICE
             ? (int)((frame_tick / 8) % 4) : 0;
-        SDL_FRect ice_src = { (mask % 16) * TILE_SIZE,
-            (mask / 16 + ice_frame * 16) * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+        SDL_FRect ice_src = transition_tile(ice_overlay, mask, ice_frame);
         if (pixels)
         {
             ice_src.x += pixels->x; ice_src.y += pixels->y;
@@ -691,17 +737,44 @@ static bool load_fixture_texture(void)
     return true;
 }
 
+static int* screen_cell_row(int row)
+{
+    return screen_cells + (size_t)row * (screen_cols + 1);
+}
+
+static void set_screen_cell_index(const idle_cell* cell, int index)
+{
+    int* slot = screen_cell_row(cell->row) + 1 + cell->col;
+    slot[0] = index;
+    if (cell->width == 2)
+        slot[1] = index;
+}
+
+static void remove_idle_cell(int index)
+{
+    idle_cell* cell = &cells[index];
+    set_screen_cell_index(cell, 0);
+    screen_cell_row(cell->row)[0]--;
+    grid_cells[cell->y][cell->x]--;
+
+    int last = --cell_count;
+    if (index != last)
+    {
+        *cell = cells[last];
+        set_screen_cell_index(cell, index + 1);
+    }
+}
+
 void sdl_idle_animation_clear_cells(void)
 {
-    cell_count = 0;
+    while (cell_count)
+        remove_idle_cell(cell_count - 1);
 }
 
 bool sdl_idle_animation_tracks_grid(int y, int x)
 {
-    for (int i = 0; i < cell_count; i++)
-        if (cells[i].y == y && cells[i].x == x)
-            return true;
-    return false;
+    return (unsigned)y < MAX_DUNGEON_HGT && (unsigned)x < MAX_DUNGEON_WID
+        && grid_cells[y][x] > 0;
 }
 
 void sdl_idle_animation_redraw_cached_cells(
@@ -776,9 +849,13 @@ void sdl_idle_animation_shutdown(void)
     SDL_DestroyTexture(fixture_texture);
     fixture_texture = NULL;
     fixture_load_attempted = false;
+    sdl_idle_animation_clear_cells();
+    SDL_free(screen_cells);
+    screen_cells = NULL;
+    screen_cols = screen_rows = 0;
     SDL_free(cells);
     cells = NULL;
-    cell_count = cell_capacity = 0;
+    cell_capacity = 0;
 }
 
 /* Discovered fixtures keep burning outside the current field of view.
@@ -829,28 +906,61 @@ bool sdl_idle_animation_draw(int y, int x, const SDL_FRect* dst)
 
 void sdl_idle_animation_invalidate_span(int col, int row, int width)
 {
-    if (Term != term_screen)
+    if (Term != term_screen || !cell_count || width <= 0
+        || row < 0 || row >= screen_rows || col >= screen_cols)
         return;
-    for (int i = 0; i < cell_count;)
+
+    const int* row_cells = screen_cell_row(row);
+    if (!row_cells[0])
+        return;
+    const int* slots = row_cells + 1;
+    int end = MIN(col + width, screen_cols);
+    for (int x = MAX(0, col); x < end; x++)
     {
-        idle_cell* cell = &cells[i];
-        if (cell->row == row && cell->col < col + width
-            && cell->col + cell->width > col)
-            cells[i] = cells[--cell_count];
-        else
-            i++;
+        if (slots[x])
+            remove_idle_cell(slots[x] - 1);
     }
+}
+
+static bool reserve_screen_cells(int col, int row, int width)
+{
+    if (col + width <= screen_cols && row < screen_rows)
+        return true;
+
+    /* Preserve old screen locations until the next redraw invalidates them.
+     * A big tile can occupy half of the last visible terminal cell pair. */
+    int cols = MAX(screen_cols, Term->wid + (use_bigtile ? 1 : 0));
+    int rows = MAX(screen_rows, Term->hgt);
+    int* resized = SDL_calloc(rows, ((size_t)cols + 1) * sizeof(*screen_cells));
+    if (!resized)
+        return false;
+    for (int y = 0; y < screen_rows; y++)
+        memcpy(resized + (size_t)y * (cols + 1), screen_cell_row(y),
+            ((size_t)screen_cols + 1) * sizeof(*screen_cells));
+    SDL_free(screen_cells);
+    screen_cells = resized;
+    screen_cols = cols;
+    screen_rows = rows;
+    return true;
 }
 
 void sdl_idle_animation_track(int col, int row, int y, int x,
     byte a, char c, byte ta, char tc)
 {
-    idle_cell* cell;
-    sdl_idle_animation_invalidate_span(col, row, use_bigtile ? 2 : 1);
-    byte liquid = visible_liquid(y, x);
-    if ((!liquid && !visible_fixture(y, x))
-        || !(ta & TILE_FLAG) || !((byte)tc & TILE_FLAG))
+    if (!Term || Term != term_screen || col < 0 || col >= Term->wid
+        || row < 0 || row >= Term->hgt)
         return;
+
+    int width = use_bigtile ? 2 : 1;
+    sdl_idle_animation_invalidate_span(col, row, width);
+    if (!(ta & TILE_FLAG) || !((byte)tc & TILE_FLAG))
+        return;
+
+    byte liquid = visible_liquid(y, x);
+    byte fixture = liquid ? CAVE_FIXTURE_NONE : visible_fixture(y, x);
+    if ((!liquid && !fixture) || !reserve_screen_cells(col, row, width))
+        return;
+
     if (cell_count == cell_capacity)
     {
         int capacity = cell_capacity ? cell_capacity * 2 : 32;
@@ -860,9 +970,12 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
         cells = resized;
         cell_capacity = capacity;
     }
-    cell = &cells[cell_count++];
+    idle_cell* cell = &cells[cell_count++];
     *cell = (idle_cell){ .col = col, .row = row, .y = y, .x = x,
-        .width = use_bigtile ? 2 : 1, .a = a, .ta = ta, .c = c, .tc = tc };
+        .width = width, .a = a, .ta = ta, .c = c, .tc = tc };
+    set_screen_cell_index(cell, cell_count);
+    screen_cell_row(row)[0]++;
+    grid_cells[y][x]++;
     cell->liquid_feat = liquid;
     if (liquid)
     {
@@ -872,9 +985,8 @@ void sdl_idle_animation_track(int col, int row, int y, int x,
             ? (byte)((frame_tick / 8) % liquid_frame_count_at(y, x, liquid)) : 0;
         return;
     }
-    byte fixture_kind = visible_fixture(y, x);
-    fixture_timing(y, x, fixture_kind, &cell->frame_steps, &cell->phase_steps);
-    cell->frame_count = fixture_frame_count(fixture_kind);
+    fixture_timing(y, x, fixture, &cell->frame_steps, &cell->phase_steps);
+    cell->frame_count = fixture_frame_count(fixture);
     cell->drawn_frame = (!p_ptr->blind
         && (op_ptr->opt[OPT_torch_animation_always] || (cave_info[y][x] & CAVE_SEEN)))
         ? fixture_frame(frame_tick, cell->frame_steps, cell->phase_steps,

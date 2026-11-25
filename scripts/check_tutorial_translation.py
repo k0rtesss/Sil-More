@@ -79,6 +79,12 @@ def main():
                   for code in LANGUAGES}
     expected_help = set(references["ru"]["help"])
     expected_device = set(references["ru"]["device"]) | set(locales["ru"].get("device", {}))
+    string_literal = r'"(?:\\.|[^"\\])*"'
+    for path in ("src/birth/birth-skills.c", "src/sdl/input/sdl-touch-tutorial.c"):
+        source_code = (ROOT / path).read_text(encoding="utf-8")
+        calls = re.findall(r"tutorial_device_text\(\s*((?:" + string_literal + r"\s*)+)\)", source_code)
+        used = {"".join(json.loads(part) for part in re.findall(string_literal, call)) for call in calls}
+        assert used <= expected_device, (path, "missing control-guide strings", used - expected_device)
     formats = re.compile(r"%(?:%|[-+.0-9]*[csdiuf])")
     tags = re.compile(r"</?[atyngvru]>|</>")
     for code, locale in locales.items():
@@ -90,7 +96,8 @@ def main():
         assert set(device) == expected_device, (code, "device tutorials")
         for source, translated in (*reference["help"].items(), *device.items()):
             assert translated.strip() and not BAD_TEXT.search(translated), (code, source)
-            assert "▁" not in translated, (code, source, "unconverted word boundaries")
+            assert "▁" not in translated and "<unk>" not in translated, (code, source, "unconverted text")
+            assert not re.search(r"\b([^\W\d_]{2,})(?:\s+\1){3,}\b", translated, re.IGNORECASE), (code, source, "repeated words")
             assert formats.findall(source) == formats.findall(translated), (code, source, "control bindings")
             if code in CJK_SCRIPTS and source in device:
                 # Localized callouts can emphasize a shorter phrase or move a

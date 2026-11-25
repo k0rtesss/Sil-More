@@ -127,7 +127,7 @@ Google provider IDs are unchanged.
 | `CLAD_IN_THE_NIGHT` | Clad in the Night | As Eöl, forge and wear your own galvorn armour. | No | Heroes and Lore |
 | `LORD_OF_THE_FOUNTAIN` | Lord of the Fountain | As Ecthelion, slay Gothmog. | No | Heroes and Lore |
 | `BEFORE_THE_RISING_OF_THE_SUN` | Before the Rising of the Sun | As Eärendil, slay Ancalagon the Black. | No | Heroes and Lore |
-| `A_SINGLE_SPARK` | A Single Spark | As Fëanor, create an artefact using a forge's last charge. “His spirit burned as a flame.” | No | Heroes and Lore |
+| `A_SINGLE_SPARK` | A Single Spark | As Fëanor, create an artefact using the forge's final two charges. “His spirit burned as a flame.” | No | Heroes and Lore |
 | `THESE_THINGS_ARE_MINE` | These Things Are Mine | As Fëanor, escape with all three Silmarils. | No | Heroes and Lore |
 | `THE_OATH_HE_SHOULD_HAVE_SWORN` | The Oath He Should Have Sworn | As Fëanor, escape with a Silmaril and an unbroken Oath of Mercy. | No | Heroes and Lore |
 | `HIS_FATHERS_LIGHT` | His Father's Light | As Fëanor, use Finwë's lamp to lift the curse on Fëanor's crown. | No | Heroes and Lore |

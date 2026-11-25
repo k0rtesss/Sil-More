@@ -30,6 +30,15 @@ def main():
             text += json.dumps(json.loads(reference.read_text(encoding="utf-8")), ensure_ascii=False)
         font = TTFont(args.upstream / f"NotoSansCJK{region.lower()}-Regular.otf", recalcTimestamp=False)
         repertoire = set(map(ord, text)) | set(range(32, 0x250)) | set(range(0x400, 0x530))
+        # Live names and reference entries can contain characters beyond this
+        # revision's lessons. Keep modern Hangul or the regional core Han set.
+        if language == "ko":
+            repertoire.update(range(0xac00, 0xd7a4))
+        else:
+            encoding = "euc_jp" if language == "ja" else "gb2312"
+            for lead in range(0xa1, 0xff):
+                for trail in range(0xa1, 0xff):
+                    repertoire.update(map(ord, bytes((lead, trail)).decode(encoding, errors="ignore")))
         options = subset.Options()
         options.name_IDs = ["*"]
         options.name_languages = ["*"]

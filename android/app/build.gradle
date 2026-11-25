@@ -136,6 +136,12 @@ android {
     ndkVersion '27.3.13750724'
     flavorDimensions 'delivery'
 
+    androidResources {
+        // FreeType seeks while fitting faces and building the map glyph atlas.
+        // Keep those reads random-access in the installed APK.
+        noCompress += ['ttf', 'otf']
+    }
+
     if (!buildBundle) {
         splits {
             abi {

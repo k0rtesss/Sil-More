@@ -33,10 +33,10 @@ static void poison_frame_pixels(SDL_Surface* canvas, int frame) {
     byte mask=liquid_transition_mask(10,11,FEAT_POISON);
     int page=water_page_index(CAVE_WATER_FLOW_EAST,
         frame % WATER_CURRENT_FRAME_COUNT);
+    SDL_FRect tile=transition_tile(poison_transition_texture,mask,page);
     for(int y=0;y<16;y++)for(int x=0;x<16;x++) {
         Uint8 r,g,b,a,pr,pg,pb,pa;
-        assert(SDL_ReadSurfacePixel(source,(mask%16)*16+x,
-            ((mask/16)+page*16)*16+y,&r,&g,&b,&a));
+        assert(SDL_ReadSurfacePixel(source,(int)tile.x+x,(int)tile.y+y,&r,&g,&b,&a));
         assert(SDL_ReadSurfacePixel(canvas,(COL_MAP+11)*16+x,
             (ROW_MAP+10)*16+y,&pr,&pg,&pb,&pa));
         assert(pr==r&&pg==g&&pb==b&&pa==a);

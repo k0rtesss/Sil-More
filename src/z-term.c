@@ -362,45 +362,21 @@ static errr term_win_init(term_win* s, int w, int h)
     return (0);
 }
 
-/*
- * Copy a "term_win" from another
- */
+static void term_win_copy_row(term_win* dest, const term_win* src, int y, int w)
+{
+    memcpy(dest->a[y], src->a[y], w);
+    memcpy(dest->c[y], src->c[y], w);
+    memcpy(dest->ta[y], src->ta[y], w);
+    memcpy(dest->tc[y], src->tc[y], w);
+    memcpy(dest->story[y], src->story[y], w);
+    memcpy(dest->health[y], src->health[y], w);
+}
+
+/* Copy a "term_win" from another. */
 static errr term_win_copy(term_win* s, term_win* f, int w, int h)
 {
-    int x, y;
-
-    /* Copy contents */
-    for (y = 0; y < h; y++)
-    {
-        byte* f_aa = f->a[y];
-        char* f_cc = f->c[y];
-
-        byte* s_aa = s->a[y];
-        char* s_cc = s->c[y];
-
-        byte* f_taa = f->ta[y];
-        char* f_tcc = f->tc[y];
-
-        byte* s_taa = s->ta[y];
-        char* s_tcc = s->tc[y];
-
-        byte* f_story = f->story[y];
-        byte* s_story = s->story[y];
-        byte* f_health = f->health[y];
-        byte* s_health = s->health[y];
-
-        for (x = 0; x < w; x++)
-        {
-            *s_aa++ = *f_aa++;
-            *s_cc++ = *f_cc++;
-
-            *s_taa++ = *f_taa++;
-            *s_tcc++ = *f_tcc++;
-
-            *s_story++ = *f_story++;
-            *s_health++ = *f_health++;
-        }
-    }
+    for (int y = 0; y < h; y++)
+        term_win_copy_row(s, f, y, w);
 
     /* Copy cursor */
     s->cx = f->cx;
@@ -1559,6 +1535,10 @@ errr Term_fresh(void)
             }
         }
 
+        /* Frontends can reuse read-only samples while painting these rows.
+         * End the scope before composition, event handling or game updates. */
+        Term_xtra(TERM_XTRA_DRAW_ROWS, 1);
+
         /* Scan the "modified" rows */
         for (y = y1; y <= y2; ++y)
         {
@@ -1568,8 +1548,12 @@ errr Term_fresh(void)
             /* Flush each "modified" row */
             if (x1 <= x2)
             {
+                if (Term->row_hook && Term->row_hook(y))
+                {
+                    term_win_copy_row(old, scr, y, w);
+                }
                 /* Always use "Term_pict()" */
-                if (Term->always_pict)
+                else if (Term->always_pict)
                 {
                     /* Flush the row */
                     Term_fresh_row_pict(y, x1, x2);
@@ -1602,6 +1586,7 @@ errr Term_fresh(void)
         /* No rows are invalid */
         Term->y1 = h;
         Term->y2 = 0;
+        Term_xtra(TERM_XTRA_DRAW_ROWS, 0);
     }
 
     /* Cursor-style overlay for selections that should not move the cursor */

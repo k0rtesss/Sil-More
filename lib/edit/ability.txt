@@ -602,27 +602,27 @@ E:+1 Constitution. +6.0 qt Pack capacity.
 N:120:Weaponsmith
 I:6:0:2
 D:Forging weapons in the tradition of the great smiths of Nogrod, who crafted the legendary knife Angrist that Curufin bore, its edge keen enough to cut iron as if it were green wood. To know the making of a weapon is also to understand its nature at a glance.
-E:Create weapons at the forge. Modest bonus to identifying weapons. Adds half your current Dexterity to all Smithing when learned and active.
+E:Create weapons at the forge. Modest bonus to identifying weapons. Adds half your permanent Dexterity to all Smithing when learned and active.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:121:Armoursmith
 I:6:1:3
 D:Crafting armour as the dwarves of Belegost fashioned the Dragon-helm of Dor-lomin for Azaghal their lord, whose coat of mail turned even the fire of Glaurung. To forge armour is to learn how each ring and plate bears the weight of a blow, knowledge that reveals the quality of any harness at a touch.
-E:Create armour at the forge. Modest bonus to identifying armour. Adds half your current Strength to all Smithing when learned and active.
+E:Create armour at the forge. Modest bonus to identifying armour. Adds half your permanent Strength to all Smithing when learned and active.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
 N:122:Jeweller
 I:6:2:4
 D:Working gems and precious metals as the craftsmen of the Noldor fashioned the Nauglamir in the hidden workshops of Nargothrond. The jeweller's art encompasses not only rings and necklaces but also the shaping of crystals and light-bearing vessels, and one versed in this craft recognises such works at once.
-E:Create rings, amulets, horns, and light sources. Auto-identify them. Modest jewellery ID bonus. Adds half your current Grace to all Smithing when learned and active.
+E:Create rings, amulets, horns, and light sources. Auto-identify them. Modest jewellery ID bonus. Adds half your permanent Grace to all Smithing when learned and active.
 T:31:0:99  # Gloves
 
 N:123:Enchantment
 I:6:3:5
 D:Enchanting items with the artistry of Telchar of Nogrod, greatest of dwarven smiths, whose works were imbued with power beyond their mere substance. The enchanter weaves virtue into the very fabric of their creations, and can discern the enchantments hidden within the works of others.
-E:Create {special} items. Determine enchantments on items. Modest ID bonus. Adds your current Grace to all Smithing when learned and active.
+E:Create {special} items. Determine enchantments on items. Modest ID bonus. Adds half your permanent Grace to all Smithing when learned and active.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -630,7 +630,7 @@ N:124:Expertise
 I:6:4:6
 P:6/3
 D:Attaining the effortless mastery of Curufin, most skilled of the sons of Fëanor in the crafts of hand, who could shape metal with a speed and ease that seemed almost careless. Such expertise allows the smith to work without waste, achieving in moments what lesser craftsmen labor over for hours.
-E:Halve forging time. Negate all experience and stat costs of smithing. Adds your current Dexterity to all Smithing when learned and active.
+E:Halve forging time. Negate all experience and stat costs of smithing. Adds half your permanent Dexterity to all Smithing when learned and active.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -638,7 +638,7 @@ N:125:Artifice
 I:6:5:10
 P:6/2:6/3
 D:Mastering the highest artifice as Fëanor did when he created the Silmarils and the palantiri in the Blessed Realm, works so extraordinary that they could never be duplicated. Such mastery allows the creation of truly unique objects of power, and grants deep insight into the nature of all crafted things.
-E:Create highly customised artifacts. Significant bonus to identifying items. Adds your current Grace to all Smithing when learned and active.
+E:Create highly customised artifacts. Significant bonus to identifying items. Adds half your permanent Grace to all Smithing when learned and active.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 
@@ -646,7 +646,7 @@ N:126:Masterpiece
 I:6:6:12
 P:6/3
 D:Crafting a masterpiece that strains the very limits of skill, as the great works of the First Age were wrought only through tremendous sacrifice. The smith pours their very essence into the creation, achieving what should be impossible, though the effort leaves them diminished.
-E:Create items beyond normal difficulty limit. Drains Smithing skill per excess difficulty point.
+E:Create items beyond normal difficulty limit. Drains Smithing skill per excess difficulty point. Adds half your permanent Grace to all Smithing when learned and active.
 T:21:8:8   # Hafted (War Hammer only)
 T:31:0:99  # Gloves
 

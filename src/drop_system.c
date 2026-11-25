@@ -55,6 +55,8 @@ typedef struct
 static drop_entry* g_drop_entries = NULL;
 static size_t g_drop_count = 0;
 static size_t g_drop_capacity = 0;
+static const drop_entry** g_drop_category_entries;
+static size_t g_drop_category_offsets[DROP_CAT_MAX + 1];
 
 static int ego_s8(byte v)
 {
@@ -1751,10 +1753,45 @@ static void build_artifact_variants(int a_idx)
 
 static void clear_drop_entries(void)
 {
+    mem_free_null(g_drop_category_entries);
     mem_free_null(g_drop_entries);
     g_drop_entries = NULL;
     g_drop_count = 0;
     g_drop_capacity = 0;
+}
+
+/* Keep each category in catalogue order so indexed and full scans present
+ * the same candidates to the weighted selectors. This index is runtime-only. */
+static void index_drop_categories(void)
+{
+    size_t counts[DROP_CAT_MAX] = { 0 };
+    size_t next[DROP_CAT_MAX];
+
+    if (g_drop_count == 0)
+        return;
+    for (size_t i = 0; i < g_drop_count; i++)
+    {
+        drop_category category = g_drop_entries[i].category;
+        if ((unsigned)category >= DROP_CAT_MAX)
+            return;
+        counts[category]++;
+    }
+
+    g_drop_category_entries = mem_alloc_array(g_drop_count, const drop_entry*);
+    if (!g_drop_category_entries)
+        return;
+
+    g_drop_category_offsets[0] = 0;
+    for (int category = 0; category < DROP_CAT_MAX; category++)
+    {
+        next[category] = g_drop_category_offsets[category];
+        g_drop_category_offsets[category + 1] = next[category] + counts[category];
+    }
+    for (size_t i = 0; i < g_drop_count; i++)
+    {
+        const drop_entry* entry = &g_drop_entries[i];
+        g_drop_category_entries[next[entry->category]++] = entry;
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1861,6 +1898,7 @@ void drop_system_init(void)
 
     if (!need_rebuild && load_drop_raw())
     {
+        index_drop_categories();
         log_info("Loaded drop catalog from drops.raw (%zu entries)", g_drop_count);
         return;
     }
@@ -1900,6 +1938,8 @@ void drop_system_init(void)
     /* Artefacts */
     for (int a_idx = 1; a_idx < z_info->art_max; a_idx++)
         build_artifact_variants(a_idx);
+
+    index_drop_categories();
 
     /* Log catalog size by category/group for diagnostics */
     size_t cat_counts[DROP_CAT_MAX] = { 0 };
@@ -1951,6 +1991,7 @@ typedef struct
     int base_roll;
     int lower;
     int upper;
+    int next_lower; /* Highest eligible difficulty below the current band. */
     bool allow_artefacts; /* whether artefacts can be selected */
     bool artefacts_only; /* whether only artefact entries are allowed */
     bool allow_noble; /* explicit override for noble-tagged entries */
@@ -2061,8 +2102,8 @@ static int drop_entry_pick_weight(const drop_entry* e, int base_rarity,
     return weight;
 }
 
-static int drop_group_pick_bonus(const drop_group* grp, drop_entry* entries,
-    const drop_request* req)
+static int drop_group_pick_bonus(const drop_group* grp,
+    const drop_entry* const* entries, const drop_request* req)
 {
     int noble_count = 0;
 
@@ -2073,7 +2114,7 @@ static int drop_group_pick_bonus(const drop_group* grp, drop_entry* entries,
 
     for (int i = 0; i < grp->entry_count; i++)
     {
-        if (entries[grp->entry_indices[i]].noble)
+        if (entries[grp->entry_indices[i]]->noble)
             noble_count++;
     }
 
@@ -2243,12 +2284,28 @@ static bool droptype_matches(const drop_request* req, const drop_entry* e)
 }
 
 static bool collect_candidate_entries(
-    const drop_request* req, bool relaxed, drop_entry** out, size_t* out_count)
+    drop_request* req, bool relaxed, const drop_entry*** out, size_t* out_count)
 {
+    req->next_lower = DROP_MIN_DIFFICULTY - 1;
     if (!g_drop_entries || g_drop_count == 0)
         return false;
 
-    drop_entry* buf = mem_alloc_array(g_drop_count, drop_entry);
+    bool logging = gen_log_initialized;
+    const drop_entry* const* category_entries = NULL;
+    size_t scan_count = g_drop_count;
+
+    if (!logging && g_drop_category_entries && req->cat_mask == (1U << req->cat))
+    {
+        size_t start = g_drop_category_offsets[req->cat];
+        category_entries = &g_drop_category_entries[start];
+        scan_count = g_drop_category_offsets[req->cat + 1] - start;
+    }
+
+    /* Catalogue entries are stable for the duration of a pick. Keep an
+     * ordered list of references and only copy the final object's data. */
+    const drop_entry** buf = mem_alloc_array(scan_count, const drop_entry*);
+    if (!buf)
+        return false;
     size_t count = 0;
     int gen_depth = req->depth;
     int depth = req->legal_depth;
@@ -2258,15 +2315,20 @@ static bool collect_candidate_entries(
     int filter_artifact = 0, filter_droptype = 0, filter_category = 0;
     int filter_maxdepth = 0, filter_difficulty = 0, filter_total = 0;
 
-    for (size_t i = 0; i < g_drop_count; i++)
+    for (size_t i = 0; i < scan_count; i++)
     {
-        drop_entry e = g_drop_entries[i];
+        const drop_entry* e = category_entries ? category_entries[i] : &g_drop_entries[i];
         filter_total++;
 
-        if (req->artefacts_only && e.group_kind != DROP_GROUP_ARTIFACT)
+        /* Check the category first during play. Preserve the original
+         * filter order when recording which filter rejected each entry. */
+        if (!logging && !category_entries && (req->cat_mask & (1U << e->category)) == 0)
             continue;
 
-        if (e.group_kind == DROP_GROUP_ARTIFACT)
+        if (req->artefacts_only && e->group_kind != DROP_GROUP_ARTIFACT)
+            continue;
+
+        if (e->group_kind == DROP_GROUP_ARTIFACT)
         {
             /* Skip artefacts if not allowed by the drop request */
             if (!req->allow_artefacts || req->quality < DROP_QUALITY_GOOD) {
@@ -2274,29 +2336,29 @@ static bool collect_candidate_entries(
                 continue;
             }
             
-            artefact_type* a_ptr = &a_info[e.group_id];
+            artefact_type* a_ptr = &a_info[e->group_id];
             /* Skip if the artefact is already present this run, or if the
              * player has already physically seen it and preserved it. */
             if (a_ptr->cur_num || (a_ptr->seen & ART_SEEN_PHYSICAL)
-                || quest_artefact_reserved(e.group_id)) {
+                || quest_artefact_reserved(e->group_id)) {
                 filter_artifact++;
                 continue;
             }
             /* Skip monster-specific automatic drop artefacts (indexes 20+, weapons/armor only)
              * Jewelry artefacts (1-19) have INSTA_ART for flavor system but should still drop normally */
-            if ((a_ptr->flags3 & TR3_INSTA_ART) && e.group_id >= 20) {
+            if ((a_ptr->flags3 & TR3_INSTA_ART) && e->group_id >= 20) {
                 filter_artifact++;
                 continue;
             }
         }
 
-        if (req->alignment_filter == DROP_ALIGNMENT_FILTER_NOBLE && !e.noble)
+        if (req->alignment_filter == DROP_ALIGNMENT_FILTER_NOBLE && !e->noble)
             continue;
 
-        if (req->alignment_filter == DROP_ALIGNMENT_FILTER_EVIL && !e.evil)
+        if (req->alignment_filter == DROP_ALIGNMENT_FILTER_EVIL && !e->evil)
             continue;
 
-        if (e.noble)
+        if (e->noble)
         {
             bool noble_allowed = req->allow_noble
                 || ((object_generation_mode != OB_GEN_MODE_CHEST)
@@ -2306,7 +2368,7 @@ static bool collect_candidate_entries(
                 continue;
         }
 
-        if (e.evil)
+        if (e->evil)
         {
             bool evil_allowed = req->allow_evil
                 || ((object_generation_mode != OB_GEN_MODE_CHEST)
@@ -2315,35 +2377,35 @@ static bool collect_candidate_entries(
                 continue;
         }
 
-        if (!droptype_matches(req, &e)) {
+        if (!droptype_matches(req, e)) {
             filter_droptype++;
             continue;
         }
 
-        if ((req->cat_mask & (1U << e.category)) == 0) {
+        if (logging && (req->cat_mask & (1U << e->category)) == 0) {
             filter_category++;
             continue;
         }
 
             /* Only apply max_depth filter if explicitly set (non-zero) */
-        if (e.max_depth > 0 && depth > e.max_depth) {
+        if (e->max_depth > 0 && depth > e->max_depth) {
             filter_maxdepth++;
             /* DEBUG: Log first few maxdepth rejections */
             if (filter_maxdepth <= 3 && gen_log_initialized && gen_depth >= 19) {
                 gen_log_write("DROP_MAXDEPTH_REJECT",
                     "depth=%d item_maxdepth=%d k_idx=%d group_kind=%d",
-                    gen_depth, e.max_depth, e.obj.k_idx, e.group_kind);
+                    gen_depth, e->max_depth, e->obj.k_idx, e->group_kind);
             }
             continue;
         }
 
-        int rarity_weight = group_rarity_at_depth(&e, depth);
+        int rarity_weight = group_rarity_at_depth(e, depth);
         if (rarity_weight <= 0)
             continue;
 
-        int effective_dif = e.difficulty;
-        if (penalty_depth < e.min_depth)
-            effective_dif += 2 * (e.min_depth - penalty_depth);
+        int effective_dif = e->difficulty;
+        if (penalty_depth < e->min_depth)
+            effective_dif += 2 * (e->min_depth - penalty_depth);
 
         if (req->is_supply)
         {
@@ -2353,6 +2415,8 @@ static bool collect_candidate_entries(
 
         if (!relaxed && (effective_dif < req->lower || effective_dif > req->upper)) {
             filter_difficulty++;
+            if (effective_dif < req->lower && effective_dif > req->next_lower)
+                req->next_lower = effective_dif;
             continue;
         }
 
@@ -2379,7 +2443,7 @@ static bool collect_candidate_entries(
         int samples = (count < 5) ? count : 5;
         for (int i = 0; i < samples; i++)
         {
-            drop_entry* e = &buf[i];
+            const drop_entry* e = buf[i];
             int effective_dif = e->difficulty;
             if (penalty_depth < e->min_depth)
                 effective_dif += 2 * (e->min_depth - penalty_depth);
@@ -2417,8 +2481,8 @@ static int group_rarity_at_depth(const drop_entry* e, int depth)
     return rarity;
 }
 
-static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
-    s16b* entry_indices, int* group_count)
+static bool build_groups(const drop_entry* const* entries, size_t count,
+    drop_group* groups, s16b* entry_indices, int* group_count)
 {
     int gcount = 0;
 
@@ -2426,7 +2490,7 @@ static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
      * group made one ordinary object selection allocate tens of megabytes. */
     for (size_t i = 0; i < count; i++)
     {
-        drop_entry* e = &entries[i];
+        const drop_entry* e = entries[i];
         bool found = false;
         for (int g = 0; g < gcount; g++)
         {
@@ -2461,7 +2525,7 @@ static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
 
     for (size_t i = 0; i < count; i++)
     {
-        drop_entry* e = &entries[i];
+        const drop_entry* e = entries[i];
 
         for (int g = 0; g < gcount; g++)
         {
@@ -2479,7 +2543,7 @@ static bool build_groups(drop_entry* entries, size_t count, drop_group* groups,
 }
 
 static drop_group* choose_group(drop_group* groups, int group_count,
-    drop_entry* entries, int depth, const drop_request* req)
+    const drop_entry* const* entries, int depth, const drop_request* req)
 {
     if (group_count <= 0)
         return NULL;
@@ -2490,7 +2554,7 @@ static drop_group* choose_group(drop_group* groups, int group_count,
     for (int i = 0; i < group_count; i++)
     {
         int entry_idx = groups[i].entry_indices[0];
-        int w = group_rarity_at_depth(&entries[entry_idx], depth);
+        int w = group_rarity_at_depth(entries[entry_idx], depth);
         int group_bonus = drop_group_pick_bonus(&groups[i], entries, req);
         if (w > 0)
             w += group_bonus;
@@ -2527,7 +2591,7 @@ static drop_group* choose_group(drop_group* groups, int group_count,
         for (int i = 0; i < samples; i++)
         {
             int entry_idx = groups[i].entry_indices[0];
-            int weight = group_rarity_at_depth(&entries[entry_idx], depth);
+            int weight = group_rarity_at_depth(entries[entry_idx], depth);
             int group_bonus = drop_group_pick_bonus(&groups[i], entries, req);
             if (weight > 0)
                 weight += group_bonus;
@@ -2552,14 +2616,14 @@ static drop_group* choose_group(drop_group* groups, int group_count,
     return &groups[chosen];
 }
 
-static drop_entry* choose_entry_from_group(drop_entry* entries,
+static const drop_entry* choose_entry_from_group(const drop_entry* const* entries,
     const drop_group* grp, int depth, const drop_request* req)
 {
     int base_rarity;
     if (grp->entry_count <= 0)
         return NULL;
 
-    base_rarity = group_rarity_at_depth(&entries[grp->entry_indices[0]], depth);
+    base_rarity = group_rarity_at_depth(entries[grp->entry_indices[0]], depth);
 
     int* weights = mem_alloc_array(grp->entry_count, int);
     int total = 0;
@@ -2568,7 +2632,7 @@ static drop_entry* choose_entry_from_group(drop_entry* entries,
     for (int i = 0; i < grp->entry_count; i++)
     {
         int entry_idx = grp->entry_indices[i];
-        int weight = drop_entry_pick_weight(&entries[entry_idx], base_rarity,
+        int weight = drop_entry_pick_weight(entries[entry_idx], base_rarity,
             grp->entry_count, req);
         weights[i] = weight;
         total += weight;
@@ -2577,7 +2641,7 @@ static drop_entry* choose_entry_from_group(drop_entry* entries,
     if (total <= 0)
     {
         mem_free_null(weights);
-        return &entries[grp->entry_indices[0]];
+        return entries[grp->entry_indices[0]];
     }
 
     int pick = rand_int(total);
@@ -2590,7 +2654,7 @@ static drop_entry* choose_entry_from_group(drop_entry* entries,
             break;
         }
     }
-    drop_entry* chosen = &entries[grp->entry_indices[chosen_slot]];
+    const drop_entry* chosen = entries[grp->entry_indices[chosen_slot]];
 
     if (gen_log_initialized)
     {
@@ -2607,12 +2671,12 @@ static drop_entry* choose_entry_from_group(drop_entry* entries,
     return chosen;
 }
 
-static drop_entry* choose_supply_entry(drop_entry* entries, size_t count,
-    int depth, const drop_request* req)
+static const drop_entry* choose_supply_entry(const drop_entry* const* entries,
+    size_t count, int depth, const drop_request* req)
 {
     typedef struct
     {
-        drop_entry** items;
+        const drop_entry** items;
         int count;
         int cap;
     } supply_bucket;
@@ -2628,7 +2692,7 @@ static drop_entry* choose_supply_entry(drop_entry* entries, size_t count,
 
     for (size_t i = 0; i < count; i++)
     {
-        drop_entry* e = &entries[i];
+        const drop_entry* e = entries[i];
         drop_supply_group_id gid = supply_group_for_entry(e);
         supply_bucket* b = &buckets[gid];
         if (b->count + 1 > b->cap)
@@ -2636,7 +2700,8 @@ static drop_entry* choose_supply_entry(drop_entry* entries, size_t count,
             int new_cap = (b->cap == 0) ? 64 : b->cap * 2;
             if (new_cap < b->count + 1)
                 new_cap = b->count + 1;
-            drop_entry** new_items = (drop_entry**)SDL_realloc(b->items, new_cap * sizeof(*new_items));
+            const drop_entry** new_items = SDL_realloc(b->items,
+                new_cap * sizeof(*new_items));
             if (!new_items)
             {
                 for (int j = 0; j < DROP_SUPPLY_GROUP_MAX; j++)
@@ -2693,7 +2758,7 @@ static drop_entry* choose_supply_entry(drop_entry* entries, size_t count,
     int total_item_weight = 0;
     for (int i = 0; i < chosen_bucket->count; i++)
     {
-        drop_entry* e = chosen_bucket->items[i];
+        const drop_entry* e = chosen_bucket->items[i];
         int rarity_weight = group_rarity_at_depth(e, depth);
         if (rarity_weight <= 0)
         {
@@ -2713,7 +2778,7 @@ static drop_entry* choose_supply_entry(drop_entry* entries, size_t count,
     }
 
     int pick_item = rand_int(total_item_weight);
-    drop_entry* chosen = chosen_bucket->items[chosen_bucket->count - 1];
+    const drop_entry* chosen = chosen_bucket->items[chosen_bucket->count - 1];
     for (int i = 0, acc = 0; i < chosen_bucket->count; i++)
     {
         acc += item_weights[i];
@@ -3079,8 +3144,8 @@ bool drop_generate_object(int depth, drop_quality quality, int droptype,
         depth, quality, droptype, 0, allow_artefacts, NULL, out);
 }
 
-static drop_entry* drop_try_pick(drop_request* req, int legal_depth,
-    drop_entry** candidates, size_t* cand_count, size_t* strict_count,
+static const drop_entry* drop_try_pick(drop_request* req, int legal_depth,
+    const drop_entry*** candidates, size_t* cand_count, size_t* strict_count,
     size_t* relaxed_count, bool relaxed, bool fallback)
 {
     mem_free_null(*candidates);
@@ -3118,7 +3183,7 @@ static drop_entry* drop_try_pick(drop_request* req, int legal_depth,
         *strict_count = *cand_count;
     }
 
-    drop_entry* chosen = NULL;
+    const drop_entry* chosen = NULL;
     if (*cand_count > 0)
     {
         if (req->is_supply)
@@ -3375,11 +3440,11 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
         return false;
     }
 
-    drop_entry* candidates = NULL;
+    const drop_entry** candidates = NULL;
     size_t cand_count = 0;
     size_t strict_count = 0;
     size_t relaxed_count = 0;
-    drop_entry* chosen = NULL;
+    const drop_entry* chosen = NULL;
 
     bool partition_driven_cat = false;
     switch (droptype)
@@ -3449,11 +3514,16 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
         }
     }
 
-    /* If still empty, relax the band downward until something exists. */
-    /* Keep widening into negative difficulty bands, but stop at the floor. */
+    /* Visit the first wider band that can add a candidate. Empty bands
+     * consume no RNG. Diagnostics retain the per-band rejection reports. */
     while (!negative_target && !chosen && !req.is_supply && req.lower > DROP_MIN_DIFFICULTY)
     {
-        req.lower--;
+        if (gen_log_initialized || cand_count > 0)
+            req.lower--;
+        else if (req.next_lower >= DROP_MIN_DIFFICULTY)
+            req.lower = req.next_lower;
+        else
+            break;
         chosen = drop_try_pick(&req, legal_depth, &candidates, &cand_count,
             &strict_count, &relaxed_count, false, true);
     }
@@ -3542,11 +3612,11 @@ bool drop_generate_guaranteed_artefact(int depth,
 bool drop_generate_chasm_sanctum_object(int depth, object_type* out)
 {
     drop_request req = { 0 };
-    drop_entry* candidates = NULL;
+    const drop_entry** candidates = NULL;
     size_t cand_count = 0;
     size_t strict_count = 0;
     size_t relaxed_count = 0;
-    drop_entry* chosen = NULL;
+    const drop_entry* chosen = NULL;
     int legal_depth;
     int penalty_depth;
     bool allow_artefacts = !(adult_no_artefacts || birth_no_artefacts);

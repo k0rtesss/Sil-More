@@ -27,6 +27,7 @@
 #define TORCH_LOOP_SOUND_PATH "sound/torch_light/Torch Loop.ogg"
 #define LAVA_LOOP_SOUND_PATH "sound/lava/Lava Loop.ogg"
 #define FORGE_LOOP_SOUND_PATH "sound/forge/Fire in Furnace Loop.ogg"
+#define FORGE_VOLUME_SCALE 0.5f
 #define BRIDGE_LOOP_WOOD_SOUND_PATH "sound/bridge/wood.ogg"
 #define BRIDGE_LOOP_OTHER_SOUND_PATH "sound/bridge/other.ogg"
 #define WATER_WALK_SOUND_PATH "sound/water_walking"
@@ -140,17 +141,25 @@ typedef enum {
     MUSIC_CUE_DEATH, MUSIC_CUE_AMBIENT, MUSIC_CUE_MENU
 } music_cue;
 static music_cue g_music_cue = MUSIC_CUE_NONE;
+/* Race and action assignments can share the same recording. Each path owns
+ * its decoded audio until the sound bank is reset. */
+typedef struct monster_sound_sample {
+    struct monster_sound_sample* next;
+    MIX_Audio* audio;
+    bool attempted;
+    char path[];
+} monster_sound_sample;
+
 /* Allocate only for race/action pairs encountered; cache missing folders too. */
 typedef struct monster_sound_entry {
     int race_idx;
     int action;
     int count;
-    char files[SDL_SOUND_MAX_VARIANTS][SDL_SOUND_NAME_LEN];
-    MIX_Audio* audio[SDL_SOUND_MAX_VARIANTS];
-    bool attempted[SDL_SOUND_MAX_VARIANTS];
+    monster_sound_sample* samples[SDL_SOUND_MAX_VARIANTS];
     struct monster_sound_entry* next;
 } monster_sound_entry;
 static monster_sound_entry* g_monster_sounds;
+static monster_sound_sample* g_monster_samples;
 static cJSON* g_monster_sound_config;
 static bool g_monster_sound_config_loaded;
 static SDL_Mutex* g_sound_mutex = NULL;
@@ -349,7 +358,7 @@ static bool is_sound_enabled(int sound_idx)
 static float get_sound_volume(int sound_idx)
 {
     if (sound_idx == MSG_FORGE) {
-        return sound_state.volume_forge;
+        return sound_state.volume_forge * FORGE_VOLUME_SCALE;
     }
 
     if (sound_is_combat(sound_idx)) {
@@ -527,10 +536,14 @@ static void sdl_sound_destroy_cached_audio(void)
     while (g_monster_sounds) {
         monster_sound_entry* entry = g_monster_sounds;
         g_monster_sounds = entry->next;
-        for (int i = 0; i < entry->count; ++i)
-            if (entry->audio[i])
-                MIX_DestroyAudio(entry->audio[i]);
         SDL_free(entry);
+    }
+    while (g_monster_samples) {
+        monster_sound_sample* sample = g_monster_samples;
+        g_monster_samples = sample->next;
+        if (sample->audio)
+            MIX_DestroyAudio(sample->audio);
+        SDL_free(sample);
     }
     for (int i = 0; i < MSG_MAX; i++) {
         for (int j = 0; j < SDL_SOUND_MAX_VARIANTS; j++) {
@@ -1889,7 +1902,7 @@ void sdl_sound_update_environment(void)
         sound_state.volume_lava) : 0.0f;
     float forge = sound_state.enable_forge ? sdl_sound_environment_gain(
         cave_forge_sound_level_at(y, x), CAVE_FORGE_SOUND_RADIUS + 1,
-        sound_state.volume_forge) : 0.0f;
+        sound_state.volume_forge * FORGE_VOLUME_SCALE) : 0.0f;
     float bridge = sound_state.enable_bridge ? sdl_sound_environment_gain(
         cave_bridge_work_sound_level_at(y, x), CAVE_FLOWING_LIQUID_SOUND_RADIUS + 1,
         sound_state.volume_bridge) : 0.0f;
@@ -2193,6 +2206,24 @@ static bool monster_sound_ranged_reuses_melee(int race_idx, const char* path)
     return false;
 }
 
+static monster_sound_sample* monster_sound_sample_for_path(const char* path)
+{
+    for (monster_sound_sample* sample = g_monster_samples; sample;
+         sample = sample->next) {
+        if (streq(sample->path, path))
+            return sample;
+    }
+
+    size_t length = strlen(path) + 1;
+    monster_sound_sample* sample = SDL_calloc(1, sizeof(*sample) + length);
+    if (!sample)
+        return NULL;
+    memcpy(sample->path, path, length);
+    sample->next = g_monster_samples;
+    g_monster_samples = sample;
+    return sample;
+}
+
 void sdl_sound_monster_at(int race_idx, int action, int y, int x, bool force_idle)
 {
     sound_origin origin = sdl_sound_origin(y, x,
@@ -2258,28 +2289,28 @@ void sdl_sound_monster_at(int race_idx, int action, int y, int x, bool force_idl
                 log_warn("Monster sound path too long: %s", path);
                 continue;
             }
-            SDL_strlcpy(entry->files[entry->count++], path, SDL_SOUND_NAME_LEN);
+            entry->samples[entry->count++] = monster_sound_sample_for_path(path);
         }
-
     }
     sil_perf_end("audio.monster.lookup", phase);
     if (entry->count > 0) {
-        int sample = SDL_rand(entry->count);
-        if (!entry->attempted[sample]) {
+        monster_sound_sample* sample = entry->samples[SDL_rand(entry->count)];
+        if (!sample)
+            goto finished;
+        if (!sample->attempted) {
             phase = sil_perf_begin();
-            entry->attempted[sample] = true;
-            entry->audio[sample] = MIX_LoadAudio(sound_state.mixer,
-                entry->files[sample], true);
+            sample->attempted = true;
+            sample->audio = MIX_LoadAudio(sound_state.mixer, sample->path, true);
             sil_perf_end("audio.monster.decode", phase);
-            if (!entry->audio[sample])
+            if (!sample->audio)
                 log_warn("Cannot load monster sound '%s': %s",
-                    entry->files[sample], SDL_GetError());
+                    sample->path, SDL_GetError());
         }
-        if (entry->audio[sample]) {
+        if (sample->audio) {
             phase = sil_perf_begin();
             MIX_Track* track = sdl_sound_acquire_sfx_track(true);
             float gain = sound_state.volume_monster_hits * gain_scale;
-            if (track && sdl_sound_play_track_audio(track, entry->audio[sample],
+            if (track && sdl_sound_play_track_audio(track, sample->audio,
                     gain, 0, true))
                 sdl_sound_remember_origin(track, -1, gain, &origin);
             sil_perf_end("audio.monster.play", phase);

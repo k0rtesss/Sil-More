@@ -746,7 +746,8 @@ void cave_environment_process(void)
     int remaining=config.changes;
     /* Warnings use a finer clock than geology so they last their advertised
      * number of world turns even when the geology pulse is slower. */
-    for(int y=1;y<p_ptr->cur_map_hgt-1;y++)for(int x=1;x<p_ptr->cur_map_wid-1;x++) {
+    for (int y = 1; pending_count && remaining && y < p_ptr->cur_map_hgt - 1; ++y)
+    for (int x = 1; x < p_ptr->cur_map_wid - 1; ++x) {
         environment_cell* c=&cells[y][x];
         if(!c->pending_feat||turn<c->due||!remaining)continue;
         int f=c->pending_feat, event=(f==FEAT_RUBBLE||f==FEAT_CHASM)?CAVE_EVENT_COLLAPSE:
@@ -941,9 +942,12 @@ bool cave_environment_bridge_work(int y,int x,int material)
     /* Reinforcing an intact occupied deck changes no collision or underlay. */
     if (cave_feat[y][x] == job.feature) cave_event_emit(CAVE_EVENT_BRIDGE,y,x,12);
     else if(!commit(y,x,job.feature,CAVE_EVENT_BRIDGE)){c->work--;return false;}
+    int old_underlay = cave_environment_actual_underlay(y, x);
     c->flags|=ENV_BRIDGE;c->bridge_feat=job.feature;c->material=material;
     if(!job.repair)c->underlay=cave_bridge_underlay(job.feature);
     c->integrity=100;c->work=0;
+    if (old_underlay != cave_environment_actual_underlay(y, x))
+        cave_events_terrain_changed();
     cave_events_note_bridge_work(y, x);
     cave_environment_observe(y,x);
     return true;
@@ -982,6 +986,7 @@ bool cave_environment_restore_state(environment_state value)
         return false;
     }
     state=value;load_config();reconcile_lava_fringe=true;
+    cave_events_terrain_changed();
     log_info("ENV restore state: turn=%d playerturn=%d last_turn=%d sources=%d budget=%d ready=%d speed=%d pulse=%d crack_step=%d warning=%d",
         turn, playerturn, state.last_turn, state.source_count, state.mineral_budget,
         state.ready, op_ptr->environment_speed, scaled_interval(config.pulse),
@@ -995,6 +1000,8 @@ bool cave_environment_restore_cell(int y,int x,environment_cell c)
         ||c.integrity>100||c.work>16||c.pending_feat>=FEAT_COUNT||c.owner>state.source_count
         ||c.known_underlay>=FEAT_COUNT||c.known_material>ENV_BRIDGE_STONE
         ||c.heat< -12||c.heat>12||c.due<0||c.due>turn+100000)return false;
+    if ((cells[y][x].flags | c.flags) & ENV_BRIDGE)
+        cave_events_terrain_changed();
     if(cells[y][x].pending_feat&&pending_count)pending_count--;
     cells[y][x]=c;if(c.pending_feat)pending_count++;
     if((c.flags&ENV_BRIDGE)||FEAT_IS_BRIDGE(c.base_feat)||FEAT_IS_BRIDGE(c.known_feat))

@@ -94,7 +94,7 @@ void sil_achievement_character_on_smithing_completed(
     u32b f1, f2, f3;
     if (!sil_achievements_eligible() || !object || !object->k_idx) return;
     if (has_unique(UNQ_SMT_FEANOR) && custom_artefact
-        && forge_uses_before == 1 && forge_uses_paid == 1)
+        && forge_uses_before == 2 && forge_uses_paid == forge_uses_before)
         sil_achievements_on_event(SIL_ACH_A_SINGLE_SPARK);
     sil_achievement_lore_on_forged(object, custom_artefact);
     object_flags(object, &f1, &f2, &f3);

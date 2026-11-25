@@ -4,15 +4,26 @@
 Requires build-incremental.ps1. Uses only temporary engine fixture data.
 """
 from pathlib import Path
+import base64
 import os
 import shlex
 import subprocess
 import tempfile
+import zlib
 from check_monster_scent_save import ENGINE_FIXTURE, fixture_function, WRITER, READER, TESTS as SCENT_TESTS
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build-standard'
 OUT = ROOT / 'scripts/output/living-dungeon-save'
+
+# The 20x24 test map with one surviving Orc, a water tile, and a bridge,
+# emitted by the dungeon and monster writers from 06dbb6b28f782d7a.
+# The two final words are the checksum sentinels used by the fixture reader.
+V16_DUNGEON = (
+    b'eNrj4uLn5+KSY/v5U0Lihea1a+ZAoCfIzsZirauDm5aQlPDxFZWTl1UyMTXnwE/rCL95w8vLcGEC'
+    b'pSBhUWzsnj0+/QUFEye+lAA6V+fyZSMjY2NDQ2npnp6W3vnze3uLenv7e6CgDwk0Ph0Fo2B4Aub4'
+    b'UTDMwbp169bHxcXFrF27tnIXx8qXN3++BABToKIo'
+)
 
 start = SCENT_TESTS.index('static void fresh_map(void)')
 FRESH_MAP = SCENT_TESTS[start:SCENT_TESTS.index('\n}', start) + 2]
@@ -134,21 +145,17 @@ static void test_current_roundtrip(void)
     CHECK(cave_event_latest(&latest) && latest.serial==expected_serial-1);
     CHECK(latest.y==9 && latest.x==11 && latest.kind==CAVE_EVENT_WARNING);
     CHECK(!cave_event_for_listener(9,11,100,0,&latest));
-    puts("v17: source budget, environmental cells, warning, bridge work, events and compacted actor job roundtrip PASS.");
+    puts("Current save: source budget, environmental cells, warning, bridge work, events and compacted actor job roundtrip PASS.");
 }
 static void test_legacy_v16(void)
 {
-    /* Append-only extension removal preserves the complete historical v16
-     * dungeon (including scent, water flow, flood and surface-marker lanes). */
-    memcpy(corrupted,plain,extension_offset);
-    memcpy(corrupted+extension_offset,plain+extension_end,8);
-    size_t length=extension_offset+8;
-    encode(corrupted,modified,length);
     clean_map();
     cave_event_emit(CAVE_EVENT_COLLAPSE,5,5,30);
     u32b sentinel; size_t consumed;
-    CHECK(fixture_read_dungeon(modified,length,16,&sentinel,&consumed)==0);
-    CHECK(sentinel==0xA1B2C3D4U && consumed==length);
+    CHECK(fixture_read_dungeon(v16_dungeon,sizeof(v16_dungeon),16,&sentinel,&consumed)==0);
+    CHECK(sentinel==0xA1B2C3D4U && consumed==sizeof(v16_dungeon));
+    CHECK(p_ptr->cur_map_hgt==20 && p_ptr->cur_map_wid==24);
+    CHECK(cave_feat[9][10]==FEAT_WATER && cave_feat[9][11]==FEAT_BRIDGE_WATER_H);
     CHECK(mon_max==2 && cave_m_idx[8][9]==1);
     monster_world_state empty={0};
     CHECK(!memcmp(&mon_list[1].world,&empty,sizeof(empty)));
@@ -225,7 +232,7 @@ static void test_corruption(void)
         clean_map(); u32b sentinel; size_t consumed;
         CHECK(fixture_read_current_dungeon(encoded,positions[i],&sentinel,&consumed)!=0);
     }
-    puts("v17: invalid headers, budgets, RLE, cells, events, actor jobs and truncated tails rejected PASS.");
+    puts("Current save: invalid headers, budgets, RLE, cells, events, actor jobs and truncated tails rejected PASS.");
 }
 '''
 
@@ -237,7 +244,13 @@ def main():
     prefix+='#include "cave/cave-environment.h"\n#include "cave/cave-events.h"\n'
     init=ENGINE_FIXTURE[ENGINE_FIXTURE.index('int main(int argc,char** argv)'):]
     init=init[:init.index('    check_templates();')]
-    harness=prefix+fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'+FRESH_MAP+'\n'+TESTS+'\n'+init
+    legacy_bytes = zlib.decompress(base64.b64decode(V16_DUNGEON))
+    legacy_rows = [
+        ', '.join(f'0x{value:02x}' for value in legacy_bytes[start:start + 16])
+        for start in range(0, len(legacy_bytes), 16)
+    ]
+    legacy_vector = 'static const byte v16_dungeon[] = {\n    ' + ',\n    '.join(legacy_rows) + '\n};\n'
+    harness=prefix+fixture_function('terminal_extra')+'\n'+fixture_function('reset_map')+'\n'+FRESH_MAP+'\n'+legacy_vector+TESTS+'\n'+init
     harness+='    test_current_roundtrip(); test_legacy_v16(); test_corruption(); test_lava_continuation();\n'
     harness+='    printf("Living dungeon persistence: %d checks PASS.\\n",checks);\n    SDL_Quit(); return 0;\n}\n'
     sources=[]

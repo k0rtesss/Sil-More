@@ -55,13 +55,33 @@ static bool player_visual_facing_enabled(void)
     return op_ptr && mirror_player_tile_facing;
 }
 
+/* Movement may set the direction before melee requests its visible frame. */
+static bool player_facing_changed;
+
+static void refresh_visual_facing(int y, int x, int dir, bool changed)
+{
+    /* Vertical directions fall back to the previous action. An explicit
+     * horizontal direction that hasn't changed has no new frame to show. */
+    if (graphics_are_ascii() || (!changed && dir >= 1 && dir <= 9 && ddx[dir])) {
+        handle_stuff();
+        return;
+    }
+    sdl_present_batch_begin();
+    lite_spot(y, x);
+    handle_stuff();
+    Term_fresh();
+    sdl_present_batch_end();
+}
+
 void player_set_visual_facing_dir(int dir)
 {
     if (!p_ptr)
         return;
 
-    if ((dir >= 1) && (dir <= 9))
+    if (dir >= 1 && dir <= 9 && p_ptr->visual_facing_dir != dir) {
         p_ptr->visual_facing_dir = (byte)dir;
+        player_facing_changed = true;
+    }
 }
 
 void player_set_visual_facing_target(int y, int x)
@@ -79,9 +99,18 @@ static void player_refresh_visual_facing(void)
     if (!in_bounds(p_ptr->py, p_ptr->px))
         return;
 
-    lite_spot(p_ptr->py, p_ptr->px);
-    handle_stuff();
-    Term_fresh();
+    bool changed = player_facing_changed;
+    player_facing_changed = false;
+    int dir = p_ptr->visual_facing_dir;
+    int previous = p_ptr->previous_action[0];
+    /* A vertical facing falls back to the last drawn horizontal facing
+     * when the previous action also has no horizontal component. */
+    if (playerturn > 1 && !changed && dir >= 1 && dir <= 9 && !ddx[dir]
+        && (previous < 1 || previous > 9 || !ddx[previous])) {
+        handle_stuff();
+        return;
+    }
+    refresh_visual_facing(p_ptr->py, p_ptr->px, dir, changed);
 }
 
 void player_set_visual_facing_dir_immediate(int dir)
@@ -119,28 +148,31 @@ void monster_set_visual_facing_target(monster_type* m_ptr, int y, int x)
         m_ptr, rough_direction(m_ptr->fy, m_ptr->fx, y, x));
 }
 
-static void monster_refresh_visual_facing(const monster_type* m_ptr)
+static void monster_refresh_visual_facing(const monster_type* m_ptr, int previous_dir)
 {
     if (!p_ptr || !character_dungeon || !monster_visual_facing_enabled())
         return;
     if (!m_ptr || !m_ptr->ml || !in_bounds(m_ptr->fy, m_ptr->fx))
         return;
 
-    lite_spot(m_ptr->fy, m_ptr->fx);
-    handle_stuff();
-    Term_fresh();
+    refresh_visual_facing(m_ptr->fy, m_ptr->fx, m_ptr->visual_facing_dir,
+        m_ptr->visual_facing_dir != previous_dir);
 }
 
 void monster_set_visual_facing_dir_immediate(monster_type* m_ptr, int dir)
 {
+    if (!m_ptr)
+        return;
+    int previous_dir = m_ptr->visual_facing_dir;
     monster_set_visual_facing_dir(m_ptr, dir);
-    monster_refresh_visual_facing(m_ptr);
+    monster_refresh_visual_facing(m_ptr, previous_dir);
 }
 
 void monster_set_visual_facing_target_immediate(monster_type* m_ptr, int y, int x)
 {
-    monster_set_visual_facing_target(m_ptr, y, x);
-    monster_refresh_visual_facing(m_ptr);
+    if (m_ptr)
+        monster_set_visual_facing_dir_immediate(m_ptr,
+            rough_direction(m_ptr->fy, m_ptr->fx, y, x));
 }
 
 /*

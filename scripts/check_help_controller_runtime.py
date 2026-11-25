@@ -1123,6 +1123,31 @@ void check_localized_help(void)
             g_help_record_ops = true;
             show_help_screen_legacy(page, page, HELP_SOURCE_PAGE_COUNT, false);
             g_help_record_ops = false;
+            /* Narrative pages are authored as coloured spans. Check the
+             * actual assembled English rows so changes cannot silently fall
+             * back to English in every translation at once. */
+            if (page != 5 && page != 7 && page != 8 && page != 12) {
+                for (int y = 0; y <= g_help_record_page_max_y; y++) {
+                    help_row_cell_t cells[HELP_DOC_MAX_COLS];
+                    char key[HELP_DOC_MAX_COLS + 1];
+                    int first, last;
+                    bool content;
+                    help_build_compact_source_row(y, cells, &first, &last, &content, NULL);
+                    if (!content) continue;
+                    for (int x = first; x <= last; x++) {
+                        if (!cells[x].used) {
+                            cells[x] = cells[x-1];
+                            cells[x].ch = ' ';
+                        }
+                    }
+                    if (!help_row_translation_key(cells + first, last - first + 1, key)) continue;
+                    if (strchr(key, ' ') && strpbrk(key, "abcdefghijklmnopqrstuvwxyz")
+                        && tutorial_help_text(key) == key) {
+                        fprintf(stderr, "%s missing help page %d row %d: %s\n", locales[i].code, page, y, key);
+                        abort();
+                    }
+                }
+            }
             int n = help_build_compact_display_rows(32, g_help_record_page_max_y + 1);
             assert(n > 0);
             for (int j = 0; j < g_help_display_spans_n; j++) {
@@ -1139,11 +1164,15 @@ void check_localized_help(void)
             }
             if (page == 1) {
                 char row[HELP_DOC_MAX_COLS + 1];
+                int starts[HELP_DOC_MAX_PAGES], ends[HELP_DOC_MAX_PAGES], matches = 0;
                 bool found = false;
                 const char *goal = tutorial_help_text("GOAL");
                 for (int j = 0; j < n && !found; j++)
                     found = help_search_display_row_text(j, row, sizeof(row)) && streq(row, goal);
                 assert(found);
+                int pages = help_dynamic_build_display_pages(24, n, starts, ends);
+                assert(help_search_collect_dynamic(goal, true, g_help_record_page_max_y + 1,
+                    starts, ends, pages, &matches) > 0 && matches > 0);
             }
         }
     }

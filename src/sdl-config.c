@@ -7,6 +7,7 @@
 #include "pane.h"
 #include "cJSON.h"
 #include "tutorial/tutorial.h"
+#include "ui/ui-language.h"
 #include <SDL3/SDL_keyboard.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2112,9 +2113,12 @@ static const char *sdl_default_tutorial_language(void)
     SDL_Locale **locales = SDL_GetPreferredLocales(&count);
     if (locales && count && locales[0]->language) {
         const char *language = locales[0]->language;
-        if (streq(language, "ko")) code = "ko";
-        else if (streq(language, "ja")) code = "ja";
-        else if (streq(language, "zh")) code = "zh";
+        /* Apple may report a script in the language field, e.g. zh-Hans. */
+        if (strcspn(language, "-_") == 2) {
+            if (!SDL_strncasecmp(language, "ko", 2)) code = "ko";
+            else if (!SDL_strncasecmp(language, "ja", 2)) code = "ja";
+            else if (!SDL_strncasecmp(language, "zh", 2)) code = "zh";
+        }
     }
     SDL_free(locales);
     return code;
@@ -2136,6 +2140,7 @@ void sdl_config_load_app_options(const char* filename)
     g_app_intro_seen = config_exists;
     g_app_gameplay_tutorial_mode = TUTORIAL_MODE_EXTENDED;
     tutorial_set_language(sdl_default_tutorial_language());
+    ui_set_language("en");
     g_app_touch_tutorial_seen = false;
     g_app_mouse_tutorial_seen = false;
     g_app_character_wheel_tutorial_seen = false;
@@ -2181,6 +2186,8 @@ void sdl_config_load_app_options(const char* filename)
         const cJSON *language = cJSON_GetObjectItemCaseSensitive(app_options, "tutorialLanguage");
         if (cJSON_IsString(language)) tutorial_set_language(language->valuestring);
     }
+    item = cJSON_GetObjectItemCaseSensitive(app_options, "uiLanguage");
+    if (cJSON_IsString(item)) ui_set_language(item->valuestring);
 
     item = cJSON_GetObjectItemCaseSensitive(app_options, "touchTutorialSeen");
     if (cJSON_IsBool(item))
@@ -6025,6 +6032,7 @@ bool sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON_AddStringToObject(app_options, "gameplayTutorialMode",
                 tutorial_mode_name(g_app_gameplay_tutorial_mode));
             cJSON_AddStringToObject(app_options, "tutorialLanguage", tutorial_language());
+            cJSON_AddStringToObject(app_options, "uiLanguage", ui_language());
             cJSON_AddBoolToObject(app_options, "touchTutorialSeen",
                 g_app_touch_tutorial_seen);
             cJSON_AddBoolToObject(app_options, "mouseTutorialSeen",

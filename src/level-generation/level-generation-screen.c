@@ -1160,7 +1160,7 @@ void level_gen_screen_start_attempt(void)
     level_gen_screen.final_text[0] = '\0';
     SDL_strlcpy(level_gen_screen.status_text, level_gen_stage_status[LEVEL_GEN_STAGE_PLANNING],
         sizeof(level_gen_screen.status_text));
-    level_gen_screen_maybe_draw(true);
+    level_gen_screen_maybe_draw(level_gen_screen.debug);
 }
 
 void level_gen_screen_set_stage(level_gen_screen_stage_t stage,
@@ -1178,7 +1178,9 @@ void level_gen_screen_set_stage(level_gen_screen_stage_t stage,
     else
         level_gen_screen.detail_text[0] = '\0';
 
-    level_gen_screen_maybe_draw(true);
+    /* Several stages can finish inside one display interval. Keep the latest
+     * status and let the ordinary progress cadence present it. */
+    level_gen_screen_maybe_draw(level_gen_screen.debug);
 }
 
 void level_gen_screen_note_failure(cptr reason)
@@ -1209,7 +1211,7 @@ void level_gen_screen_note_failure(cptr reason)
             sizeof(level_gen_screen.detail_text));
     }
 
-    level_gen_screen_maybe_draw(true);
+    level_gen_screen_maybe_draw(level_gen_screen.debug);
 }
 
 void level_gen_screen_finish(bool success)

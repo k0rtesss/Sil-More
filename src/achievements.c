@@ -114,7 +114,7 @@ static const sil_achievement_definition catalogue[SIL_ACH_COUNT] = {
     { "A_FOOLS_HOPE", "A Fool's Hope",
         "Succeed at a skill check with a success chance of 10% or less.", true },
     { "A_SINGLE_SPARK", "A Single Spark",
-        "As Fëanor, create an artefact using a forge's last charge. “His spirit burned as a flame.”", false },
+        "As Fëanor, create an artefact using the forge's final two charges. “His spirit burned as a flame.”", false },
     { "ON_THE_OTHER_HAND", "More Deadly Than His Right",
         "As Maedhros, kill with a Subtlety critical using a hand-and-a-half weapon.", false },
     { "IRON_CLEAVER", "Iron-Cleaver",

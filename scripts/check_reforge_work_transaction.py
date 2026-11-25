@@ -52,6 +52,7 @@ int fixture_reforge_plan(int item,int *prefix,int *turns,int *dex)
 '''
 CHECKS = r'''
 #undef assert
+#include "cave/cave-events.h"
 #include <setjmp.h>
 #define assert(expr) do { if(!(expr)) { fprintf(stderr,"%s: %s line %d\n",scenario,#expr,__LINE__); exit(1); } } while(0)
 static const char *scenario="initialization";
@@ -142,6 +143,8 @@ static void checks(void)
 {
     int prefix,turns,dex_cost;
     scenario="free prefix cancellation";prepare(1);
+    cave_events_terrain_changed();
+    assert(cave_forge_sound_level_at(5,5)>0);
     int choice=fixture_reforge_plan(selected_item,&prefix,&turns,&dex_cost);assert(choice>=0);
     object_wipe(smith_o_ptr);keys="\033";
     assert(!fixture_reforge() && !*keys && !p_ptr->smithing_leftover);
@@ -156,6 +159,7 @@ static void checks(void)
     assert(streq(quark_str(smith_o_ptr->obj_note),"preserved reforge inscription"));
     assert(object_ego_prefix(smith_o_ptr)==prefix && source_count()==0);
     assert(forge_uses(5,5)==0 && p_ptr->stat_drain[A_DEX]==-dex_cost);
+    assert(cave_forge_sound_level_at(5,5)==0);
     byte drain[sizeof(p_ptr->stat_drain)];memcpy(drain,p_ptr->stat_drain,sizeof(drain));
     /* Identifying the finished affix may legitimately grant experience. */
     long exp=p_ptr->new_exp-p_ptr->ident_exp;int smt=p_ptr->skill_base[S_SMT];

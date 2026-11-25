@@ -1527,8 +1527,8 @@
         {
           "locale": "en-US",
           "name": "A Single Spark",
-          "beforeEarnedDescription": "As F\u00ebanor, create an artefact using a forge's last charge. \u201cHis spirit burned as a flame.\u201d",
-          "afterEarnedDescription": "As F\u00ebanor, create an artefact using a forge's last charge. \u201cHis spirit burned as a flame.\u201d",
+          "beforeEarnedDescription": "As F\u00ebanor, create an artefact using the forge's final two charges. \u201cHis spirit burned as a flame.\u201d",
+          "afterEarnedDescription": "As F\u00ebanor, create an artefact using the forge's final two charges. \u201cHis spirit burned as a flame.\u201d",
           "image": "A_SINGLE_SPARK.png"
         }
       ]

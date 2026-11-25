@@ -859,6 +859,58 @@ static void pan_tests(void) {
     use_bigtile = false;
     puts("Map pan out/back: incremental pixels match a full repaint, both animation modes and tile widths: PASS");
 }
+
+static void track_fixture_at(int col, int row, int x) {
+    byte attr = TILE_FLAG;
+    char glyph = (char)(TILE_FLAG | 4);
+    sdl_idle_animation_track(col, row, 9, x, attr, glyph, attr, glyph);
+}
+
+static void tracked_cell_tests(void) {
+    sdl_idle_animation_clear_cells();
+    use_bigtile = true;
+    track_fixture_at(10, 9, 11);
+    track_fixture_at(12, 9, 19);
+    /* An old screen position can persist during a panel repaint. */
+    track_fixture_at(10, 10, 11);
+    assert(cell_count == 3);
+    assert(sdl_idle_animation_tracks_grid(9, 11));
+    sdl_idle_animation_invalidate_span(11, 9, 1);
+    assert(cell_count == 2 && sdl_idle_animation_tracks_grid(9, 11));
+    sdl_idle_animation_invalidate_span(11, 10, 1);
+    assert(cell_count == 1 && !sdl_idle_animation_tracks_grid(9, 11));
+    assert(sdl_idle_animation_tracks_grid(9, 19));
+
+    /* An odd-column tile can overlap the first half of the next big tile. */
+    track_fixture_at(11, 9, 11);
+    assert(cell_count == 1 && !sdl_idle_animation_tracks_grid(9, 19));
+    track_fixture_at(13, 9, 19);
+    sdl_idle_animation_invalidate_span(12, 9, 3);
+    assert(cell_count == 0 && !sdl_idle_animation_tracks_grid(9, 11));
+    assert(!sdl_idle_animation_tracks_grid(9, 19));
+
+    int wid = Term->wid, hgt = Term->hgt;
+    track_fixture_at(10, 9, 11);
+    assert(Term_resize(wid + 17, hgt + 8) == 0);
+    track_fixture_at(wid + 16, hgt + 7, 19);
+    assert(cell_count == 2 && sdl_idle_animation_tracks_grid(9, 19));
+    sdl_idle_animation_invalidate_span(wid + 17, hgt + 7, 1);
+    assert(cell_count == 1 && !sdl_idle_animation_tracks_grid(9, 19));
+    sdl_idle_animation_invalidate_span(10, 9, 1);
+    assert(cell_count == 0 && !sdl_idle_animation_tracks_grid(9, 11));
+
+    track_fixture_at(wid + 16, hgt + 7, 19);
+    assert(Term_resize(wid, hgt) == 0);
+    sdl_idle_animation_clear_cells();
+    assert(cell_count == 0 && !sdl_idle_animation_tracks_grid(9, 19));
+    use_bigtile = false;
+    track_fixture_at(10, 9, 11);
+    assert(cell_count == 1 && sdl_idle_animation_tracks_grid(9, 11));
+    sdl_idle_animation_track(10, 9, 9, 11, 0, ' ', 0, ' ');
+    assert(cell_count == 0 && !sdl_idle_animation_tracks_grid(9, 11));
+    puts("Tracked cells: overlapping big tiles, duplicate world grids, resize, clear, and replacement: PASS");
+}
+
 int main(void) {
     setbuf(stdout, NULL); log_set_level(LOG_WARN);
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
@@ -924,6 +976,7 @@ int main(void) {
     torch_frame_tests();
     animation_tests();
     pan_tests();
+    tracked_cell_tests();
     asynchronous_tests();
     fixture_light_tests();
     sdl_idle_animation_shutdown();

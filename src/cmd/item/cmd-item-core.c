@@ -3038,9 +3038,7 @@ void do_cmd_wield_enhanced(void)
     log_trace("do_cmd_wield_enhanced: Starting enhanced wear/wield cycle");
     
     /* Clear any active banner before starting enhanced menu cycle */
-    if (dismiss_active_narrative_banner()) {
-        do_cmd_redraw();
-    }
+    (void)dismiss_active_narrative_banner();
     
     /* Set the filter to only show wearable items */
     item_tester_hook = item_tester_hook_wear;

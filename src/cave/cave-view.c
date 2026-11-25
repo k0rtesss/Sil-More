@@ -875,9 +875,9 @@ static void update_view_aux(bool generation_preview)
 
     // Sil: get the starting light values based on permanent light (and backup
     // old values)
-    for (i = 0; i < MAX_DUNGEON_HGT; i++)
+    for (i = 0; i < p_ptr->cur_map_hgt; i++)
     {
-        for (j = 0; j < MAX_DUNGEON_WID; j++)
+        for (j = 0; j < p_ptr->cur_map_wid; j++)
         {
             if (cave_info[i][j] & (CAVE_GLOW))
             {
@@ -1040,8 +1040,6 @@ static void update_view_aux(bool generation_preview)
         /* Get the next object from the dungeon */
         object_type* o_ptr = &o_list[k];
 
-        u32b f1, f2, f3;
-
         int obj_light = 0;
         int obj_rad;
 
@@ -1052,8 +1050,6 @@ static void update_view_aux(bool generation_preview)
         /* Access the location */
         fx = o_ptr->ix;
         fy = o_ptr->iy;
-
-        object_flags(o_ptr, &f1, &f2, &f3);
 
         // The Iron Crown glows
         if ((o_ptr->name1 >= ART_MORGOTH_1) && (o_ptr->name1 <= ART_MORGOTH_3))
@@ -1263,9 +1259,9 @@ static void update_view_aux(bool generation_preview)
     }
 
     // Sil: this is needed to properly darken certain spots
-    for (i = 0; i < MAX_DUNGEON_HGT; i++)
+    for (i = 0; i < p_ptr->cur_map_hgt; i++)
     {
-        for (j = 0; j < MAX_DUNGEON_WID; j++)
+        for (j = 0; j < p_ptr->cur_map_wid; j++)
         {
             if ((cave_info[i][j] & (CAVE_GLOW))
                 && (cave_info[i][j] & (CAVE_VIEW))
@@ -1338,10 +1334,12 @@ static void update_view_aux(bool generation_preview)
     // update_view()
     //      so that they player can be disturbed when lighting changes
     //      unexpectedly
-    p_ptr->old_light = p_ptr->cur_light;
-    for (i = 0; i < MAX_DUNGEON_HGT; i++)
+    int torch_radius = p_ptr->cur_light;
+    p_ptr->old_light = torch_radius;
+    for (i = 0; i < p_ptr->cur_map_hgt; i++)
     {
-        for (j = 0; j < MAX_DUNGEON_WID; j++)
+        bool near_torch = ABS(i - py) <= torch_radius;
+        for (j = 0; j < p_ptr->cur_map_wid; j++)
         {
             // store view information for last turn
             if (cave_info[i][j] & (CAVE_VIEW))
@@ -1365,7 +1363,8 @@ static void update_view_aux(bool generation_preview)
             }
 
             // store 'torchlight' information for last turn
-            if (distance(py, px, i, j) <= p_ptr->old_light)
+            if (near_torch && ABS(j - px) <= torch_radius
+                && distance(py, px, i, j) <= torch_radius)
             {
                 cave_info[i][j] |= (CAVE_OLD_TORCH);
             }

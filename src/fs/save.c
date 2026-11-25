@@ -403,8 +403,30 @@ static u32b x_stamp = 0L; /* A simple "checksum" on the encoded bytes */
 /* Track if a write error has occurred */
 static bool write_error = false;
 
+/* Batch encoded bytes across the SDL I/O boundary. The staged file is
+ * still flushed, closed and activated by the usual save transaction. */
+static byte save_output[8192];
+static size_t save_output_used;
+/* Record writers also support callers that inspect the stream directly. */
+static size_t save_output_chunk_size = 1;
+
 /* Track save byte offset for detailed logging */
 u32b save_byte_offset = 0;
+
+static void sf_flush_output(void)
+{
+    if (!save_output_used || write_error)
+        return;
+
+    size_t written = SDL_WriteIO(fff, save_output, save_output_used);
+    if (written != save_output_used)
+    {
+        log_error("Save write failed: %zu of %zu buffered bytes written near offset %u: %s",
+            written, save_output_used, (unsigned)save_byte_offset, SDL_GetError());
+        write_error = true;
+    }
+    save_output_used = 0;
+}
 
 /*
  * These functions place information into a savefile a byte at a time
@@ -412,26 +434,12 @@ u32b save_byte_offset = 0;
 
 static void sf_put(byte v)
 {
-    size_t result;
-    
+    if (write_error)
+        return;
+
     /* Encode the value */
     xor_byte ^= v;
-    
-    /* Write the byte directly */
-    result = SDL_WriteIO(fff, &xor_byte, 1);
-    
-    /* Check for write error */
-    if (result != 1)
-    {
-        if (!write_error)
-        {
-            log_error("sf_put: Write error detected (SDL_WriteIO failed) - SDL Error: %s", SDL_GetError());
-            log_error("sf_put: fff pointer = %p, attempted to write byte 0x%02x at offset %u", 
-                     (void*)fff, xor_byte, save_byte_offset);
-            write_error = true;
-        }
-        return;
-    }
+    save_output[save_output_used++] = xor_byte;
 
     /* Track byte offset */
     save_byte_offset++;
@@ -439,6 +447,9 @@ static void sf_put(byte v)
     /* Maintain the checksum info */
     v_stamp += v;
     x_stamp += xor_byte;
+
+    if (save_output_used == save_output_chunk_size)
+        sf_flush_output();
 }
 
 void wr_byte(byte v) { 
@@ -1036,8 +1047,9 @@ static bool wr_savefile(void)
 
     log_trace("Starting wr_savefile");
     
-    /* Reset write error flag */
+    /* Discard staging state from any previous save attempt. */
     write_error = false;
+    save_output_used = 0;
 
     /* Reset byte offset counter */
     save_byte_offset = 0;
@@ -1322,6 +1334,7 @@ static bool wr_savefile(void)
     wr_u32b(x_stamp);
 
     /* Check for write errors */
+    sf_flush_output();
     if (write_error)
     {
         log_error("Save aborted: write_error flag was set during save");
@@ -1397,7 +1410,10 @@ static bool save_player_aux(cptr name)
         {
             /* Write the savefile */
             log_trace("Writing savefile %s", name);
+            save_output_chunk_size = sizeof(save_output);
             bool write_ok = wr_savefile();
+            save_output_chunk_size = 1;
+            save_output_used = 0;
             if (write_ok)
             {
                 ok = true;

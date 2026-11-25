@@ -45,6 +45,7 @@ void lite_spot(int y, int x) { (void)y; (void)x; ++commits; }
 void update_mon(int i, bool full) { (void)i; (void)full; ++commits; }
 void disturb(int a, int b) { (void)a; (void)b; ++commits; }
 void lava_light(void) {}
+bool death_spectator_active(void) { return false; }
 void object_flags(const object_type *o, u32b *a, u32b *b, u32b *c) {
     (void)o; *a = *b = *c = 0;
 }

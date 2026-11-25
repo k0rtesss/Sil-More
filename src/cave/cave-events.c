@@ -18,13 +18,15 @@ static byte lava_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte forge_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte bridge_work_sources[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte bridge_work_ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-static s32b ambient_turn = -1, last_notice[CAVE_EVENT_MAX];
+static s32b last_notice[CAVE_EVENT_MAX];
 static s32b bridge_work_turn = -1, bridge_work_field_turn = -1;
 static u32b bridge_work_revision = 1;
 static u32b bridge_work_field_revision, bridge_work_field_terrain_revision;
 static s32b ambient_notice_turn = -200;
 static bool in_ambient_noise;
 static u32b ambient_revision, announced[CAVE_EVENTS_MAX];
+static u32b ambient_flow_revision;
+static int ambient_width, ambient_height;
 static int queue[SOUND_CELLS], head, tail, count;
 static byte audio_field[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u32b audio_revision;
@@ -165,7 +167,7 @@ void cave_events_reset(void)
     memset(bridge_work_sources, 0, sizeof(bridge_work_sources));
     memset(bridge_work_ambient, 0, sizeof(bridge_work_ambient));
     memset(last_notice, -1, sizeof(last_notice));
-    next_serial = 1; revision++; ambient_turn = -1; player_moved = false;
+    next_serial = 1; revision++; ambient_width = 0; player_moved = false;
     bridge_work_turn = -1; bridge_work_field_turn = -1;
     bridge_work_revision++;
     bridge_work_field_revision = 0;
@@ -217,8 +219,13 @@ static void refresh_ambient_fields(void)
 {
     int yy, xx;
 
-    if (!p_ptr || (ambient_turn == turn / 10
-        && ambient_revision == revision))
+    /* Static terrain and liquid sources have the same propagation on every
+     * turn. Transient world events are aged separately by event_strength(). */
+    u32b flow_revision = cave_water_flow_revision();
+    if (!p_ptr || (ambient_revision == revision
+        && ambient_flow_revision == flow_revision
+        && ambient_width == p_ptr->cur_map_wid
+        && ambient_height == p_ptr->cur_map_hgt))
         return;
 
     memset(ambient, 0, sizeof(ambient));
@@ -302,8 +309,10 @@ static void refresh_ambient_fields(void)
                 enqueue(yy, xx);
     propagate(forge_ambient, true);
 
-    ambient_turn = turn / 10;
     ambient_revision = revision;
+    ambient_flow_revision = flow_revision;
+    ambient_width = p_ptr->cur_map_wid;
+    ambient_height = p_ptr->cur_map_hgt;
 }
 
 int cave_flowing_water_sound_level_at(int y, int x)
@@ -352,7 +361,7 @@ static void refresh_bridge_work_field(void)
 
 int cave_bridge_work_sound_level_at(int y, int x)
 {
-    if (!in_bounds(y, x)) return 0;
+    if (bridge_work_turn != turn || !in_bounds(y, x)) return 0;
     refresh_bridge_work_field();
     return bridge_work_ambient[y][x];
 }

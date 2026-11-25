@@ -28,6 +28,12 @@ static int flow_channel_owner[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static int flow_queue[WATER_FLOW_CELLS];
 static int flow_component[WATER_FLOW_CELLS];
 static bool flow_valid;
+static u32b flow_revision;
+
+u32b cave_water_flow_revision(void)
+{
+    return flow_revision;
+}
 
 static bool map_coord(int y, int x)
 {
@@ -57,6 +63,7 @@ static bool liquid_cell(int y, int x)
 
 void cave_water_flow_reset(void)
 {
+    flow_revision++;
     memset(flow_direction, 0, sizeof(flow_direction));
     memset(flow_lake, 0, sizeof(flow_lake));
     memset(topology_basin, 0, sizeof(topology_basin));
@@ -70,6 +77,7 @@ void cave_water_flow_invalidate(void)
 {
     /* Keep this cheap: feature edits are common during generation, while the
      * final graph is built once after all terrain edits have settled. */
+    if (flow_valid) flow_revision++;
     flow_valid = false;
 }
 
@@ -95,6 +103,7 @@ void cave_water_flow_generation_plan_cell(int y, int x, int feature,
 void cave_water_flow_invalidate_at(int y, int x)
 {
     if (!map_coord(y, x)) return;
+    flow_revision++;
     /* The caller invokes this when the material at this cell changes.  Clear
      * the cell even when the replacement is another flow liquid, so a stale
      * water arrow cannot survive a water/acid conversion. */
@@ -123,6 +132,7 @@ void cave_water_flow_set(int y, int x, int direction)
     if (!map_coord(y, x)) return;
     if (direction < CAVE_WATER_FLOW_CALM || direction > CAVE_WATER_FLOW_WEST)
         direction = CAVE_WATER_FLOW_CALM;
+    flow_revision++;
     flow_direction[y][x] = (byte)direction;
     flow_lake[y][x] = 0;
     flow_valid = true;
@@ -161,6 +171,7 @@ bool cave_water_flow_restore_cell(int y, int x, byte encoded)
         | WATER_FLOW_DIRECTION_MASK)))
         || (encoded & WATER_FLOW_DIRECTION_MASK) > CAVE_WATER_FLOW_WEST)
         return false;
+    if (flow_valid) flow_revision++;
     flow_direction[y][x] = encoded & WATER_FLOW_DIRECTION_MASK;
     flow_lake[y][x] = (encoded & WATER_FLOW_LAKE_BIT) != 0;
     return true;
@@ -169,6 +180,7 @@ bool cave_water_flow_restore_cell(int y, int x, byte encoded)
 void cave_water_flow_restore_finish(void)
 {
     flow_valid = true;
+    flow_revision++;
 }
 
 static int flow_material_feature(int material)

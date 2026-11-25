@@ -2377,6 +2377,12 @@ void sdl_present_batch_begin(void)
     g_sdl_present_batch_depth++;
 }
 
+void sdl_present_batch_end_deferred(void)
+{
+    if (g_sdl_present_batch_depth > 0)
+        --g_sdl_present_batch_depth;
+}
+
 void sdl_present_batch_end(void)
 {
     sdl_view* view;
@@ -2384,7 +2390,7 @@ void sdl_present_batch_end(void)
     if (g_sdl_present_batch_depth <= 0)
         return;
 
-    g_sdl_present_batch_depth--;
+    sdl_present_batch_end_deferred();
     if (g_sdl_present_batch_depth > 0)
         return;
 
@@ -2408,6 +2414,7 @@ void sdl_present_if_needed(sdl_view* d)
         return;
     }
 
+    sdl_narrative_banner_update(SDL_GetTicksNS());
     if (!g_state.need_present)
         return;
 

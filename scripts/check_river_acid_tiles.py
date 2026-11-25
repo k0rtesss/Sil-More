@@ -54,6 +54,18 @@ static void chasm_surface_tests(void) {
     idle_cell cell={.liquid_feat=FEAT_CHASM};assert(!cell_can_animate(&cell));
     puts("Chasms: chasm_1/2/3 fill variants, physical bridge underlay and center discovery gating: PASS");
 }
+/* Independent reference addressing for the published 47 shapes. */
+static SDL_FRect wet_reference_tile(SDL_Texture* texture,int mask,int page) {
+    if(mask < 0) return (SDL_FRect){page*16,0,16,16};
+    if(texture->w == 256)
+        return (SDL_FRect){(mask%16)*16,(mask/16+page*16)*16,16,16};
+    assert(texture->w==128);
+    int slot=0;
+    for(int m=0;m<normalized_shore(mask);m++)
+        if(normalized_shore(m)==m) slot++;
+    if(texture->h==96) page=0;
+    return (SDL_FRect){(slot%8)*16,(slot/8+page*6)*16,16,16};
+}
 static SDL_Surface* wet_expected(SDL_Texture* texture,int mask,int frame,int light,bool deep_fallback) {
     SDL_Texture* previous=SDL_GetRenderTarget(g_state.renderer);
     SDL_Texture* target=SDL_CreateTexture(g_state.renderer,SDL_PIXELFORMAT_RGBA8888,
@@ -62,8 +74,7 @@ static SDL_Surface* wet_expected(SDL_Texture* texture,int mask,int frame,int lig
     SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);SDL_RenderClear(g_state.renderer);
     bool floor_shore=liquid_is_water(cave_feat[10][11]) && !cave_water_has_icy_shore(10,11);
     if(floor_shore && mask>=0) mask=255;
-    SDL_FRect dst={0,0,16,16},src={mask<0?frame*16:(mask%16)*16,
-        mask<0?0:(mask/16+frame*16)*16,16,16};
+    SDL_FRect dst={0,0,16,16},src=wet_reference_tile(texture,mask,frame);
     SDL_SetTextureColorMod(texture,deep_fallback?80*light/255:light,
         deep_fallback?105*light/255:light,deep_fallback?205*light/255:light);
     assert(SDL_RenderTexture(g_state.renderer,texture,&src,&dst));
@@ -109,9 +120,9 @@ static SDL_Surface* wet_mixed_expected(SDL_Texture* depth,SDL_Texture* bank,int 
     SDL_SetRenderTarget(g_state.renderer,target);
     SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);SDL_RenderClear(g_state.renderer);
     SDL_FRect dst={0,0,16,16};
-    SDL_FRect src={(depthmask%16)*16,(depthmask/16+frame*16)*16,16,16};
+    SDL_FRect src=wet_reference_tile(depth,depthmask,frame);
     SDL_SetTextureColorMod(depth,255,255,255);assert(SDL_RenderTexture(g_state.renderer,depth,&src,&dst));
-    src=(SDL_FRect){(bankmask%16)*16,(bankmask/16+frame*16)*16,16,16};
+    src=wet_reference_tile(bank,bankmask,frame);
     SDL_SetTextureColorMod(bank,255,255,255);
     if(cave_water_has_icy_shore(10,11)) assert(SDL_RenderTexture(g_state.renderer,bank,&src,&dst));
     else sdl_water_floor_transition_draw(10,11,&dst,NULL);

@@ -33,6 +33,9 @@ void __wrap_sdl_present_batch_begin(void)
 { ++batch_depth; __real_sdl_present_batch_begin(); }
 void __wrap_sdl_present_batch_end(void)
 { assert(batch_depth>0); --batch_depth; __real_sdl_present_batch_end(); }
+extern void __real_sdl_present_batch_end_deferred(void);
+void __wrap_sdl_present_batch_end_deferred(void)
+{ assert(batch_depth>0); --batch_depth; __real_sdl_present_batch_end_deferred(); }
 static void assert_gameplay_ownership(void)
 {
     assert(character_icky==0);
@@ -234,7 +237,7 @@ def main():
         SDL_AUDIO_DRIVER='dummy',CONTROL_TEST_ASSETS=str(ROOT/'lib'))
     wrapped = ('inkey','inkey_movement_context','get_check','handle_stuff','message_flush','fire_arc',
         'monster_perception','break_truce','sdl_present_batch_begin',
-        'sdl_present_batch_end','sdl_pointer_aim_select_begin','sdl_pointer_aim_select_end',
+        'sdl_present_batch_end','sdl_present_batch_end_deferred','sdl_pointer_aim_select_begin','sdl_pointer_aim_select_end',
         'tutorial_game_action_allowed','tutorial_game_action_done')
     exe = OUT / 'check.exe'
     subprocess.run(['C:/msys64/mingw64/bin/cc.exe','-DUSE_SDL','-std=c17','-O0',

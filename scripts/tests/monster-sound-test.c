@@ -32,14 +32,14 @@ static bool monster_entry_has_audio(const monster_sound_entry* entry)
 {
     if (!entry) return false;
     for (int i = 0; i < entry->count; ++i)
-        if (entry->audio[i]) return true;
+        if (entry->samples[i] && entry->samples[i]->audio) return true;
     return false;
 }
 static bool monster_entry_has_file(const monster_sound_entry* entry, const char* needle)
 {
     if (!entry) return false;
     for (int i = 0; i < entry->count; ++i)
-        if (strstr(entry->files[i], needle)) return true;
+        if (entry->samples[i] && strstr(entry->samples[i]->path, needle)) return true;
     return false;
 }
 bool path_build(char* buf, size_t max, cptr base, cptr leaf)
@@ -310,6 +310,21 @@ int main(int argc, char** argv)
         assert(g_monster_sounds->count > 0);
         assert(monster_entry_has_audio(g_monster_sounds));
     }
+    /* An Orc champion and Othrod have distinct assignments for one recording.
+     * Both tracks can attach the same decoded sample at the same time. */
+    mon.r_idx = 81;
+    monster_sound(&mon, MONSTER_SOUND_DEATH);
+    monster_sound_entry* champion = g_monster_sounds;
+    assert(champion->race_idx == 81 && champion->count == 1);
+    MIX_Track* champion_track = last_sfx();
+    mon.r_idx = 105;
+    monster_sound(&mon, MONSTER_SOUND_DEATH);
+    monster_sound_entry* othrod = g_monster_sounds;
+    assert(othrod->race_idx == 105 && othrod->count == 1);
+    assert(champion->samples[0] == othrod->samples[0]);
+    assert(othrod->samples[0]->audio && champion_track != last_sfx());
+    assert(MIX_GetTrackAudio(champion_track) == othrod->samples[0]->audio);
+    assert(MIX_GetTrackAudio(last_sfx()) == othrod->samples[0]->audio);
     /* Normal attacks must never select a special attack recording. */
     const int variant_races[] = {21, 104, 32};
     SDL_srand(456);
@@ -324,7 +339,7 @@ int main(int argc, char** argv)
         assert(entry && entry->count > 0);
         assert(monster_entry_has_audio(entry));
         for (int i = 0; i < entry->count; ++i)
-            assert(!strstr(entry->files[i], "Bonus_"));
+            assert(!strstr(entry->samples[i]->path, "Bonus_"));
     }
     /* A stale ranged assignment must not reuse one of the same race's melee
      * recordings, even when the race already has valid ranged sounds. */
@@ -379,7 +394,7 @@ int main(int argc, char** argv)
     mon.r_idx = 43; monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(monster_entry_has_audio(g_monster_sounds));
     mon.r_idx = 63; monster_sound(&mon, MONSTER_SOUND_RANGED_BASE + 8);
-    assert(g_monster_sounds->audio[0] && strstr(g_monster_sounds->files[0], "Sonic"));
+    assert(g_monster_sounds->samples[0]->audio && monster_entry_has_file(g_monster_sounds, "Sonic"));
     mon.r_idx = 12;
     monster_sound(&mon, MONSTER_SOUND_RANGED_BASE);
     assert(g_monster_sounds->count == 0);
@@ -388,7 +403,7 @@ int main(int argc, char** argv)
     mon.r_idx = 104;
     monster_sound(&mon, MONSTER_SOUND_DAMAGE);
     assert(monster_entry_has_audio(g_monster_sounds));
-    assert(strstr(g_monster_sounds->files[0], "Bat_Damage.ogg"));
+    assert(monster_entry_has_file(g_monster_sounds, "Bat_Damage.ogg"));
     mon.r_idx = 21; mon.fx = 1; test_acoustic_distance = 12;
     monster_sound_entry* before = g_monster_sounds;
     for (int i = 0; i < 1000; ++i) monster_sound(&mon, MONSTER_SOUND_IDLE);
@@ -406,7 +421,7 @@ int main(int argc, char** argv)
     }
     assert(emitted > 25 && emitted < 75);
     assert(g_monster_sounds->action == MONSTER_SOUND_IDLE);
-    assert(g_monster_sounds->audio[0]);
+    assert(g_monster_sounds->samples[0]->audio);
     for (int i = 1; i < argc; ++i) {
         MIX_Audio* audio = MIX_LoadAudio(sound_state.mixer, argv[i], true);
         if (!audio) {
@@ -442,7 +457,7 @@ int main(int argc, char** argv)
     for (int i = 0; i < 1000; ++i) monster_sound(&mon, MONSTER_SOUND_IDLE);
     assert(sound_state.next_sfx_track == old_track);
     g_sound_config.enable_damage = g_sound_config.enable_death = g_sound_config.enable_idle = true;
-    sdl_sound_shutdown(); assert(!g_monster_sounds);
+    sdl_sound_shutdown(); assert(!g_monster_sounds && !g_monster_samples);
     monster_sound(&mon, MONSTER_SOUND_MELEE_BASE);
     assert(monster_entry_has_audio(g_monster_sounds));
     test_spatial_playback();

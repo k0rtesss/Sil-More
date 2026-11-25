@@ -73,6 +73,21 @@ int sdl_ui_min_tap_px(void)
 
 static Uint64 g_story_font_use_clock;
 
+/* Repeated labels and cell heights are common during overlay redraws. */
+enum { SDL_FONT_FIT_CACHE_SIZE = 32, SDL_FONT_FIT_TEXT_MAX = 128 };
+typedef struct {
+    char text[SDL_FONT_FIT_TEXT_MAX];
+    int slot;
+    int maximum_px;
+    float width;
+    float height;
+    bool wrapped;
+    int fitted_px;
+} sdl_font_fit_entry;
+
+static sdl_font_fit_entry g_font_fit_cache[SDL_FONT_FIT_CACHE_SIZE];
+static int g_font_fit_cache_next;
+
 static void sdl_story_font_cache_changed(void)
 {
     g_story_font_generation++;
@@ -700,6 +715,13 @@ static int sdl_story_slot_clamp(int slot)
     return slot;
 }
 
+static int sdl_story_slot_resolve(int slot)
+{
+    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
+        slot = sdl_tutorial_font_slot(slot);
+    return sdl_story_slot_clamp(slot);
+}
+
 const char* sdl_story_font_path_for_slot(int slot)
 {
     if (sdl_story_slot_clamp(slot) != SDL_STORY_FONT_SLOT_DEFAULT)
@@ -735,6 +757,95 @@ static void sdl_story_slot_style(int slot, mono_font_style_key* out)
     }
 }
 
+#ifdef __ANDROID__
+typedef struct story_font_asset {
+    struct story_font_asset* next;
+    void* bytes;
+    size_t size;
+    char path[];
+} story_font_asset;
+
+static story_font_asset* g_story_font_assets;
+
+static SDL_IOStream* sdl_story_font_io(const char* path)
+{
+    for (story_font_asset* asset = g_story_font_assets; asset; asset = asset->next) {
+        if (streq(asset->path, path)) {
+            SDL_IOStream* memory = SDL_IOFromConstMem(asset->bytes, asset->size);
+            return memory ? memory : SDL_IOFromFile(path, "rb");
+        }
+    }
+
+    SDL_IOStream* file = SDL_IOFromFile(path, "rb");
+    if (!file || !SDL_GetPointerProperty(SDL_GetIOProperties(file),
+            SDL_PROP_IOSTREAM_ANDROID_AASSET_POINTER, NULL))
+        return file;
+
+    /* FreeType seeks repeatedly while opening, sizing and drawing faces.
+     * Inflate the APK entry once and share its bytes across all face sizes. */
+    Sint64 expected_size = SDL_GetIOSize(file);
+    if (expected_size <= 0)
+        return file;
+
+    size_t path_size = SDL_strlen(path) + 1;
+    story_font_asset* asset = SDL_malloc(sizeof(*asset) + path_size);
+    if (!asset)
+        return file;
+
+    asset->bytes = SDL_LoadFile_IO(file, &asset->size, false);
+    SDL_IOStream* memory = asset->bytes && asset->size == (Uint64)expected_size
+        ? SDL_IOFromConstMem(asset->bytes, asset->size) : NULL;
+    if (!memory) {
+        SDL_free(asset->bytes);
+        SDL_free(asset);
+        if (SDL_SeekIO(file, 0, SDL_IO_SEEK_SET) >= 0)
+            return file;
+        SDL_CloseIO(file);
+        return NULL;
+    }
+
+    SDL_CloseIO(file);
+    SDL_memcpy(asset->path, path, path_size);
+    asset->next = g_story_font_assets;
+    g_story_font_assets = asset;
+    return memory;
+}
+
+static void sdl_story_font_assets_clear(void)
+{
+    while (g_story_font_assets) {
+        story_font_asset* asset = g_story_font_assets;
+        g_story_font_assets = asset->next;
+        SDL_free(asset->bytes);
+        SDL_free(asset);
+    }
+}
+#endif
+
+static TTF_Font* sdl_open_story_font(const char* path, int font_size)
+{
+#ifdef __ANDROID__
+    SDL_IOStream* input = sdl_story_font_io(path);
+    if (!input)
+        return NULL;
+
+    /* Keep the source name that SDL_ttf uses for diagnostics. */
+    SDL_PropertiesID props = SDL_CreateProperties();
+    TTF_Font* font = NULL;
+    if (props && SDL_SetStringProperty(props, TTF_PROP_FONT_CREATE_FILENAME_STRING, path)
+        && SDL_SetPointerProperty(props, TTF_PROP_FONT_CREATE_IOSTREAM_POINTER, input)
+        && SDL_SetBooleanProperty(props, TTF_PROP_FONT_CREATE_IOSTREAM_AUTOCLOSE_BOOLEAN, true)
+        && SDL_SetFloatProperty(props, TTF_PROP_FONT_CREATE_SIZE_FLOAT, (float)font_size))
+        font = TTF_OpenFontWithProperties(props);
+    else
+        SDL_CloseIO(input);
+    SDL_DestroyProperties(props);
+    return font;
+#else
+    return TTF_OpenFont(path, font_size);
+#endif
+}
+
 /*
  * Load a story font for a slot, applying that slot's style and falling back to
  * the slot's fallback font when the configured path fails to load.
@@ -757,7 +868,7 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
         char path[1024];
         path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra",
             bundled);
-        font = TTF_OpenFont(path, font_size);
+        font = sdl_open_story_font(path, font_size);
         if (font) {
             log_trace("Loaded tutorial font: %s at size %d", path, font_size);
             sdl_apply_mono_font_style_key(font, &style);
@@ -767,7 +878,7 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
     }
 
     if (font_path && font_path[0] != '\0') {
-        font = TTF_OpenFont(font_path, font_size);
+        font = sdl_open_story_font(font_path, font_size);
         if (font) {
             log_trace("Loaded story font (slot %d): %s at size %d", slot,
                 font_path, font_size);
@@ -778,7 +889,7 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
     }
 
     const char* fallback = sdl_story_fallback_for_slot(slot);
-    font = TTF_OpenFont(fallback, font_size);
+    font = sdl_open_story_font(fallback, font_size);
     if (font) {
         log_trace("Using fallback story font (slot %d): %s at size %d",
             slot, fallback, font_size);
@@ -794,6 +905,8 @@ void sdl_story_font_cache_clear(void)
     /* Wrapped-description entries hold non-owning TTF_Font pointers. */
     sdl_char_sheet_fitted_wrap_cache_clear();
     sdl_ui_text_cache_clear();
+    SDL_zeroa(g_font_fit_cache);
+    g_font_fit_cache_next = 0;
 
     for (int i = 0; i < g_state.story_font_count; i++) {
         if (g_state.story_fonts[i].font) {
@@ -812,6 +925,10 @@ void sdl_story_font_cache_clear(void)
         g_state.story_fonts[i].slot = 0;
         g_state.story_fonts[i].last_used = 0;
     }
+#ifdef __ANDROID__
+    /* SDL_ttf faces and their copies keep reading from these buffers. */
+    sdl_story_font_assets_clear();
+#endif
     g_state.story_font_count = 0;
     g_story_font_use_clock = 0;
     g_state.story_font_cache_valid = false;
@@ -878,7 +995,7 @@ static TTF_Font *sdl_add_story_fallback(TTF_Font *font, cptr filename, int px, i
     char path[1024];
     mono_font_style_key style;
     path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra", filename);
-    TTF_Font *face = TTF_OpenFont(path, px);
+    TTF_Font *face = sdl_open_story_font(path, px);
     if (face) {
         sdl_story_slot_style(slot, &style);
         sdl_apply_mono_font_style_key(face, &style);
@@ -890,20 +1007,13 @@ static TTF_Font *sdl_add_story_fallback(TTF_Font *font, cptr filename, int px, i
     return face;
 }
 
-TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
+static TTF_Font* sdl_story_font_lookup(int pixel_height, int slot)
 {
     const char* font_path;
     TTF_Font* font;
     TTF_Font* fallback = NULL;
     TTF_Font* picker_fallback = NULL;
     int target_index;
-
-    if (pixel_height <= 0)
-        return NULL;
-
-    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
-        slot = sdl_tutorial_font_slot(slot);
-    slot = sdl_story_slot_clamp(slot);
 
     for (int i = 0; i < g_state.story_font_count; i++) {
         if (g_state.story_fonts[i].pixel_height == pixel_height
@@ -964,13 +1074,40 @@ TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
     return font;
 }
 
+TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
+{
+    return pixel_height > 0
+        ? sdl_story_font_lookup(pixel_height, sdl_story_slot_resolve(slot))
+        : NULL;
+}
+
 /* Fit point size before rasterization for fixed-size controls. Body text
  * instead keeps its chosen font and uses the menu's wrapping/paging layout. */
 int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
     float width, float height, bool wrapped)
 {
     int low = 1, high = MAX(1, maximum_px), best = 1;
-    TTF_Font* base = sdl_story_font_for_height_slot(high, slot);
+    maximum_px = high;
+    text = text ? text : "Mg";
+    wrapped = wrapped && width > 0.0f;
+    slot = sdl_story_slot_resolve(slot);
+    size_t text_len = strlen(text);
+    bool cacheable = text_len < SDL_FONT_FIT_TEXT_MAX;
+
+    if (cacheable) {
+        for (int i = 0; i < SDL_FONT_FIT_CACHE_SIZE; i++) {
+            const sdl_font_fit_entry* entry = &g_font_fit_cache[i];
+
+            if (entry->maximum_px == maximum_px && entry->slot == slot
+                && entry->width == width && entry->height == height
+                && entry->wrapped == wrapped && streq(entry->text, text))
+            {
+                return entry->fitted_px;
+            }
+        }
+    }
+
+    TTF_Font* base = sdl_story_font_lookup(maximum_px, slot);
     TTF_Font* measure = base ? TTF_CopyFont(base) : NULL;
     if (!measure)
         return best;
@@ -980,10 +1117,12 @@ int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
         int px = low + (high - low) / 2;
         int w = 0, h = 0;
         bool measured = TTF_SetFontSize(measure, (float)px)
-            && (wrapped && width > 0.0f
-                ? TTF_GetStringSizeWrapped(measure, text ? text : "Mg", 0,
+            && (wrapped
+                ? TTF_GetStringSizeWrapped(measure, text, text_len,
                     MAX(1, (int)width), &w, &h)
-                : TTF_GetStringSize(measure, text ? text : "Mg", 0, &w, &h));
+                : TTF_GetStringSize(measure, text, text_len, &w, &h));
+        if (!measured)
+            cacheable = false;
         if (measured && (width <= 0.0f || w <= width)
             && (height <= 0.0f || h <= height)) {
             best = px;
@@ -991,6 +1130,20 @@ int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
         } else high = px - 1;
     }
     TTF_CloseFont(measure);
+
+    if (cacheable) {
+        sdl_font_fit_entry* entry = &g_font_fit_cache[g_font_fit_cache_next];
+
+        memcpy(entry->text, text, text_len + 1);
+        entry->slot = slot;
+        entry->maximum_px = maximum_px;
+        entry->width = width;
+        entry->height = height;
+        entry->wrapped = wrapped;
+        entry->fitted_px = best;
+        g_font_fit_cache_next = (g_font_fit_cache_next + 1)
+            % SDL_FONT_FIT_CACHE_SIZE;
+    }
     return best;
 }
 

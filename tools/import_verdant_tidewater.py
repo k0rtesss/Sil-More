@@ -8,14 +8,13 @@ moving currents.  Caves use the latter for directional water, while Verdant
 03's ``anim_water_surface`` frames provide the moving calm-lake surface.  The generated atlas keeps
 bank/depth geometry fixed while only the water pixels move.
 
-The generated freshwater and acid atlases have the same layout.  They are 16
-pages high (four calm frames followed by four directions with three current
-frames each), each page containing the normal 16x16-mask atlas (256x256
-pixels):
+Freshwater and acid store 47 distinct shapes per animation page, ordered by
+normalized mask in an 8-column, 6-row grid. Static bank overlays share one
+page. Animated atlases have four calm frames followed by four directions
+with three current frames each:
 
     page = frame                                  (direction 0, calm)
     page = 4 + (direction - 1) * 3 + frame       (direction 1..4)
-    source rectangle = (mask % 16, mask // 16 + page * 16) * 16
 
 Direction 0 is a calm lake with four Verdant 03 frames.  Directions 1 and 4
 use vertically/horizontally flipped copies of the native south/east river
@@ -46,6 +45,35 @@ STILL_FRAME_COUNT = 4
 CURRENT_FRAME_COUNT = 3
 DIRECTION_COUNT = 5
 PAGE_COUNT = STILL_FRAME_COUNT + (DIRECTION_COUNT - 1) * CURRENT_FRAME_COUNT
+SHORE_MASKS = sorted({normalize_mask(raw) for raw in range(256)})
+
+
+def compact_water_atlas(atlas):
+    """Pack a full 256-mask atlas and reject any loss of authored pixels."""
+    width, height = atlas.size
+    if width != MASK_ATLAS_SIZE or height % MASK_ATLAS_SIZE:
+        raise ValueError(f"Invalid expanded water atlas size {atlas.size}")
+    pages = []
+    for top in range(0, height, MASK_ATLAS_SIZE):
+        page = Image.new("RGBA", (8 * TILE_SIZE, 6 * TILE_SIZE))
+        tiles = {}
+        for raw in range(256):
+            x, y = raw % 16 * TILE_SIZE, top + raw // 16 * TILE_SIZE
+            tile = atlas.crop((x, y, x + TILE_SIZE, y + TILE_SIZE))
+            mask = normalize_mask(raw)
+            if mask == raw:
+                slot = len(tiles)
+                tiles[mask] = tile.tobytes()
+                page.paste(tile, (slot % 8 * TILE_SIZE, slot // 8 * TILE_SIZE))
+            elif tile.tobytes() != tiles[mask]:
+                raise ValueError(f"Mask {raw} differs from its shoreline shape {mask}")
+        pages.append(page)
+    if all(page.tobytes() == pages[0].tobytes() for page in pages[1:]):
+        return pages[0]
+    result = Image.new("RGBA", (pages[0].width, pages[0].height * len(pages)))
+    for index, page in enumerate(pages):
+        result.paste(page, (0, index * page.height))
+    return result
 
 # Verdant 01, Verdant 03 and Verdant 04 freshwater art share this exact blue palette.
 WATER = ((22, 58, 92), (31, 86, 128), (45, 122, 168),
@@ -142,7 +170,7 @@ def write_atlas(name, pages):
             tile = page_tiles[raw_mask]
             atlas.paste(tile, page_position(raw_mask, page))
     path = GRAF / f"transition_{name}.png"
-    atlas.save(path)
+    compact_water_atlas(atlas).save(path)
     return path
 
 
@@ -295,6 +323,8 @@ def import_acid_and_river(tide, tide_tiles, banks):
                 atlas.paste(page[raw_mask],
                             ((raw_mask % 16) * TILE_SIZE,
                              (raw_mask // 16 + frame * 16) * TILE_SIZE))
+        if name == "acid_on_stone":
+            atlas = compact_water_atlas(atlas)
         atlas.save(GRAF / f"transition_{name}.png")
         if name == "acid_on_stone":
             print(f"Imported {name}: 47 shore shapes, {STILL_FRAME_COUNT} "

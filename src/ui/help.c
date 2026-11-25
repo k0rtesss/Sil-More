@@ -83,6 +83,7 @@ static inline void put_role(color_role_t role, const char *s, int row, int col) 
 
 static int help_span_advance(cptr text, int canonical_width)
 {
+    if (!streq(tutorial_language(), "en")) return canonical_width;
     return canonical_width + (int)strlen(lore_text(text)) - (int)strlen(text);
 }
 
@@ -1135,27 +1136,24 @@ static void help_doc_record_attr(byte attr, const char* s, int row, int col)
 
 static void help_emit_role(color_role_t role, const char* s, int row, int col)
 {
-    s = lore_text(s);
     if (g_help_record_ops)
-        help_doc_record_role(role, s, false, row, col);
+        help_doc_record_role(role, streq(tutorial_language(), "en") ? lore_text(s) : s, false, row, col);
     else
         put_role(role, s, row, col);
 }
 
 static void help_emit_heading(const char* s, int row, int col)
 {
-    s = lore_text(s);
     if (g_help_record_ops)
-        help_doc_record_role(ROLE_SECTION, s, true, row, col);
+        help_doc_record_role(ROLE_SECTION, streq(tutorial_language(), "en") ? lore_text(s) : s, true, row, col);
     else
         put_role(ROLE_SECTION, s, row, col);
 }
 
 static void help_emit_attr(byte attr, const char* s, int row, int col)
 {
-    s = lore_text(s);
     if (g_help_record_ops)
-        help_doc_record_attr(attr, s, row, col);
+        help_doc_record_attr(attr, streq(tutorial_language(), "en") ? lore_text(s) : s, row, col);
     else
         c_put_str(attr, s, row, col);
 }
@@ -1323,6 +1321,19 @@ static int help_compact_row_indent(int first_used)
     return indent;
 }
 
+static bool help_row_translation_key(const help_row_cell_t *cells, int length, char *key)
+{
+    bool prose = true;
+    int n = 0;
+    for (int i = 0; i < length; i++) {
+        if (!cells[i].use_role || cells[i].role == ROLE_KEY) prose = false;
+        if (cells[i].ch != ' ' || (n && key[n - 1] != ' ')) key[n++] = cells[i].ch;
+    }
+    while (n && key[n - 1] == ' ') n--;
+    key[n] = '\0';
+    return prose;
+}
+
 /* Translate a complete sentence when it spans several coloured phrases.
  * For diagrams and live binding tables, keep the symbols and keys in place
  * and translate their captions individually. */
@@ -1330,17 +1341,11 @@ static int help_localize_row(help_row_cell_t *cells, int length, int capacity)
 {
     help_row_cell_t result[HELP_TRANSLATED_ROW_BYTES];
     char key[HELP_DOC_MAX_COLS + 1];
-    bool prose = true;
-    int n = 0;
     if (!length || streq(tutorial_language(), "en")) return length;
-    for (int i = 0; i < length; i++) {
-        if (!cells[i].use_role || cells[i].role == ROLE_KEY) prose = false;
-        if (cells[i].ch != ' ' || (n && key[n - 1] != ' ')) key[n++] = cells[i].ch;
-    }
-    key[n] = '\0';
+    bool prose = help_row_translation_key(cells, length, key);
     const char *line = prose ? tutorial_help_text(key) : key;
     if (line != key && strlen(line) <= (size_t)capacity) {
-        n = (int)strlen(line);
+        int n = (int)strlen(line);
         help_row_cell_t style = cells[0];
         for (int i = 0; i < n; i++) {
             result[i] = style;
@@ -1376,11 +1381,12 @@ static int help_localize_row(help_row_cell_t *cells, int length, int capacity)
             && cells[end].role == cells[i].role && cells[end].attr == cells[i].attr) end++;
         int first = i, last = end;
         while (first < last && cells[first].ch == ' ') first++;
+        if (first + 1 < last && cells[first].ch == '-' && cells[first + 1].ch == ' ')
+            first += 2;
         while (last > first && cells[last - 1].ch == ' ') last--;
         for (int j = first; j < last; j++) key[j - first] = cells[j].ch;
         key[last - first] = '\0';
-        const char *label = cells[i].use_role && cells[i].role != ROLE_KEY
-            ? tutorial_help_text(key) : key;
+        const char *label = cells[i].use_role ? tutorial_help_text(key) : key;
         int bytes = (int)strlen(label);
         if (used + first - i + bytes + end - last > capacity) return length;
         for (int j = i; j < first; j++) result[used++] = cells[j];
@@ -2896,9 +2902,15 @@ static void show_help_screen_legacy(int source_page, int display_page,
         put_role(ROLE_SUBTLE, "Interacting with your own square also:", row, col); row++;
         put_role(ROLE_SUBTLE, "- picks up an item, preferring Harness when movable", row, col + 2); row++;
         put_role(ROLE_SUBTLE, "- uses a staircase/forge", row, col + 2); row++;
-        put_role(ROLE_SUBTLE, "- can be done by pressing , or Space", row, col + 2);
-        put_role(ROLE_KEY,    ",", row, col + 28);
-        put_role(ROLE_KEY,    "Space", row, col + 33);
+        if (streq(tutorial_language(), "en")) {
+            put_role(ROLE_SUBTLE, "- can be done by pressing , or Space", row, col + 2);
+            put_role(ROLE_KEY, ",", row, col + 28);
+            put_role(ROLE_KEY, "Space", row, col + 33);
+        } else {
+            strnfmt(line, sizeof(line), tutorial_help_text("- Press %s or %s to interact with your own square."),
+                ",", "Space");
+            put_role(ROLE_SUBTLE, line, row, col + 2);
+        }
 
         row += 4; col = 2;
         help_emit_heading("Miscellaneous", row - 2, col);
@@ -4217,11 +4229,7 @@ void do_cmd_help(void)
     int doc_hgt = 0;
 
     /* Clear any active banner before opening help */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
+    (void)dismiss_active_narrative_banner();
 
     /* Save screen */
     screen_save();

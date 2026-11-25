@@ -21,6 +21,7 @@ extern struct sound_config g_sound_config;
 #include "cmd/ui/cmd-ui-internal.h"
 #include "ui/story_font.h"
 #include "ui/question.h"
+#include "ui/ui-language.h"
 #include "thrall_quest.h"
 
 #define MAIN_MENU_LABEL_WIDTH 21
@@ -42,26 +43,26 @@ cptr main_menu_title(int choice)
 {
     switch (choice)
     {
-    case MAIN_MENU_CHARACTER: return "Character sheet";
-    case MAIN_MENU_INVENTORY: return "Inventory";
-    case MAIN_MENU_SMITHING: return "Smithing";
-    case MAIN_MENU_KNOWLEDGE: return "Known lore";
-    case MAIN_MENU_HINTS_QUESTS: return "Hints & Quests";
-    case MAIN_MENU_HALLS_OF_MANDOS: return "Halls of Mandos";
-    case MAIN_MENU_MAP: return "Map";
-    case MAIN_MENU_LOG_HISTORY: return "Log & combat history";
-    case MAIN_MENU_STORY: return "The tale so far";
-    case MAIN_MENU_STORY_STATS: return "Tale statistics";
-    case MAIN_MENU_BLITZ: return "Blitz";
-    case MAIN_MENU_OPTIONS: return "Options";
-    case MAIN_MENU_HELP: return "Help";
-    case MAIN_MENU_TUTORIAL_CARDS: return "Tutorial cards";
-    case MAIN_MENU_ACHIEVEMENTS: return "Achievements";
-    case MAIN_MENU_ABOUT: return "About";
-    case MAIN_MENU_SAVE: return "Save";
+    case MAIN_MENU_CHARACTER: return ui_text("Character sheet");
+    case MAIN_MENU_INVENTORY: return ui_text("Inventory");
+    case MAIN_MENU_SMITHING: return ui_text("Smithing");
+    case MAIN_MENU_KNOWLEDGE: return ui_text("Known lore");
+    case MAIN_MENU_HINTS_QUESTS: return ui_text("Hints & Quests");
+    case MAIN_MENU_HALLS_OF_MANDOS: return ui_text("Halls of Mandos");
+    case MAIN_MENU_MAP: return ui_text("Map");
+    case MAIN_MENU_LOG_HISTORY: return ui_text("Log & combat history");
+    case MAIN_MENU_STORY: return ui_text("The tale so far");
+    case MAIN_MENU_STORY_STATS: return ui_text("Tale statistics");
+    case MAIN_MENU_BLITZ: return ui_text("Blitz");
+    case MAIN_MENU_OPTIONS: return ui_text("Options");
+    case MAIN_MENU_HELP: return ui_text("Help");
+    case MAIN_MENU_TUTORIAL_CARDS: return ui_text("Tutorial cards");
+    case MAIN_MENU_ACHIEVEMENTS: return ui_text("Achievements");
+    case MAIN_MENU_ABOUT: return ui_text("About");
+    case MAIN_MENU_SAVE: return ui_text("Save");
     case MAIN_MENU_SAVE_QUIT:
-        return death_spectator_active() ? "Quit" : "Quit with save";
-    case MAIN_MENU_RETURN_GAME: return "Return to game";
+        return ui_text(death_spectator_active() ? "Quit" : "Quit with save");
+    case MAIN_MENU_RETURN_GAME: return ui_text("Return to game");
     default: return "";
     }
 }
@@ -96,7 +97,7 @@ int main_menu_keyboard_key(int choice)
 static size_t main_menu_append_fixed(char* buf, size_t buflen, size_t cur,
     cptr text, int width)
 {
-    int len = text ? (int)strlen(text) : 0;
+    int len = text ? utf8_display_width_n(text, (int)strlen(text)) : 0;
 
     if (!buf || !buflen || cur >= buflen)
         return cur;
@@ -336,7 +337,7 @@ static void main_menu_format_controller_prompt(char* buf, size_t buflen)
         confirm_label, sizeof(confirm_label));
     controller_prompt_label(steamdeck_back_key(), "B",
         back_label, sizeof(back_label));
-    strnfmt(buf, buflen, "D-pad select  %s open  %s back",
+    strnfmt(buf, buflen, ui_text("D-pad select  %s open  %s back"),
         confirm_label, back_label);
 }
 
@@ -349,7 +350,7 @@ static int main_menu_calc_width(void)
         int w;
 
         main_menu_format_line(i, line, sizeof(line));
-        w = (int)strlen(line);
+        w = utf8_display_width_n(line, (int)strlen(line));
         if (w > max_w)
             max_w = w;
     }
@@ -359,7 +360,7 @@ static int main_menu_calc_width(void)
         int w;
 
         main_menu_format_controller_prompt(prompt, sizeof(prompt));
-        w = (int)strlen(prompt);
+        w = utf8_display_width_n(prompt, (int)strlen(prompt));
         if (w > max_w)
             max_w = w;
     }
@@ -384,7 +385,7 @@ static int main_menu_about_count_rows(int indent, int wrap_right,
                 total++;
         }
         else
-            total += count_wrapped_lines(lines[i].text, wrap_right, indent);
+            total += count_wrapped_lines(ui_text(lines[i].text), wrap_right, indent);
     }
 
     return total;
@@ -429,7 +430,7 @@ static void main_menu_about_draw_spans(int row, int indent, int wrap_right,
     text_out_indent = indent;
     Term_gotoxy(indent, row);
     for (int i = 0; i < span_count; i++)
-        text_out_to_screen(spans[i].attr, spans[i].text);
+        text_out_to_screen(spans[i].attr, ui_text(spans[i].text));
     text_out_wrap = old_wrap;
     text_out_indent = old_indent;
 }
@@ -469,7 +470,7 @@ static void main_menu_about_semantic_attrs(int index,
 
 static void main_menu_about_semantic_build(const main_menu_about_line* lines)
 {
-    sdl_character_sheet_screen_begin_book("About Sil-More");
+    sdl_character_sheet_screen_begin_book(ui_text("About Sil-More"));
     sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_ABOUT);
     sdl_character_sheet_screen_set_book_full_width(true);
     sdl_character_sheet_screen_set_book_terminal_style(true);
@@ -478,11 +479,12 @@ static void main_menu_about_semantic_build(const main_menu_about_line* lines)
     for (int i = 0; lines[i].text; ++i)
     {
         char blank[] = " ";
-        cptr text = lines[i].text[0] ? lines[i].text : blank;
+        cptr text = lines[i].text[0] ? ui_text(lines[i].text) : blank;
+        main_menu_about_line display = { lines[i].attr, text };
         byte attrs[160];
         int length = MIN((int)strlen(text), (int)sizeof(attrs));
 
-        main_menu_about_semantic_attrs(i, &lines[i], attrs,
+        main_menu_about_semantic_attrs(i, &display, attrs,
             (int)sizeof(attrs));
         if (!lines[i].text[0])
             attrs[0] = TERM_WHITE;
@@ -657,15 +659,15 @@ about_font_redraw:
         }
 
         {
-            cptr title = "About Sil-More";
-            int title_x = box_left + MAX((box_w - (int)strlen(title)) / 2 - 2, 0);
+            cptr title = ui_text("About Sil-More");
+            int title_x = box_left + MAX((box_w - utf8_display_width_n(title, (int)strlen(title))) / 2 - 2, 0);
             Term_putstr(title_x, row_top, -1, TERM_YELLOW, title);
         }
 
         row = row_top + 1;
         for (int i = 0; i < line_count; i++)
         {
-            cptr text = about_lines[i].text;
+            cptr text = ui_text(about_lines[i].text);
 
             if (!text[0])
             {
@@ -844,13 +846,13 @@ static cptr log_history_filter_label(int filter)
     switch (filter)
     {
     case LOG_HISTORY_FILTER_MESSAGES:
-        return "Log";
+        return ui_text("Log");
     case LOG_HISTORY_FILTER_COMBAT:
-        return "Combat";
+        return ui_text("Combat");
     case LOG_HISTORY_FILTER_NOTES:
-        return "Notes";
+        return ui_text("Notes");
     default:
-        return "All";
+        return ui_text("All");
     }
 }
 
@@ -1111,10 +1113,10 @@ static int log_history_filter_layout(int term_wid,
     log_history_filter_control controls[4])
 {
     const log_history_filter_control defaults[4] = {
-        {"All", LOG_HISTORY_FILTER_ALL, 0, 0},
-        {"Log", LOG_HISTORY_FILTER_MESSAGES, 0, 0},
-        {"Combat", LOG_HISTORY_FILTER_COMBAT, 0, 0},
-        {"Notes", LOG_HISTORY_FILTER_NOTES, 0, 0}
+        {ui_text("All"), LOG_HISTORY_FILTER_ALL, 0, 0},
+        {ui_text("Log"), LOG_HISTORY_FILTER_MESSAGES, 0, 0},
+        {ui_text("Combat"), LOG_HISTORY_FILTER_COMBAT, 0, 0},
+        {ui_text("Notes"), LOG_HISTORY_FILTER_NOTES, 0, 0}
     };
     int row = 1;
     int col = 8;
@@ -1130,7 +1132,7 @@ static int log_history_filter_layout(int term_wid,
         col = compact ? 0 : 8;
         for (int i = 0; i < 4; i++)
         {
-            int width = (int)strlen(defaults[i].label) + (compact ? 0 : 2);
+            int width = utf8_display_width_n(defaults[i].label, (int)strlen(defaults[i].label)) + (compact ? 0 : 2);
             int available = term_wid;
 #ifdef USE_SDL
             available = sdl_menu_font_button_available_columns(row, term_wid);
@@ -1165,8 +1167,8 @@ static void log_history_draw_filters(int active_filter, int hover_filter,
 
     if (!compact)
     {
-        Term_putstr(0, 0, term_wid, TERM_L_WHITE + TERM_SHADE, "Logs");
-        Term_putstr(0, 1, -1, TERM_WHITE, "Filter: ");
+        Term_putstr(0, 0, term_wid, TERM_L_WHITE + TERM_SHADE, ui_text("Logs"));
+        Term_putstr(0, 1, -1, TERM_WHITE, ui_text("Filter: "));
     }
     for (int i = 0; i < 4; i++)
         (void)log_history_draw_filter(controls[i].row, controls[i].col,
@@ -1621,6 +1623,7 @@ static void do_cmd_hint_quest_menu(hint_quest_page initial_page,
  */
 static void main_menu_blitz_text_line(int* row, int wrap, byte attr, cptr text)
 {
+    text = ui_text(text);
     Term_gotoxy(2, *row);
     text_out_c(attr, text);
     *row += count_wrapped_lines(text, wrap, 2) + 1;
@@ -1635,11 +1638,11 @@ static void main_menu_blitz_intro_mobile_build(void)
         { TERM_WHITE, "If you already have a living Blitz character, it will be resumed." },
         { TERM_SLATE, "Switching to Blitz will save your current tale game first." }
     };
-    sdl_character_sheet_screen_begin_book("Blitz Mode");
+    sdl_character_sheet_screen_begin_book(ui_text("Blitz Mode"));
     sdl_character_sheet_screen_set_book_close_button(true);
     sdl_character_sheet_screen_set_book_close_label("Continue");
     for (size_t i = 0; i < N_ELEMENTS(lines); ++i)
-        sdl_character_sheet_screen_add_book_paragraph_colored(lines[i].text, lines[i].attr);
+        sdl_character_sheet_screen_add_book_paragraph_colored(ui_text(lines[i].text), lines[i].attr);
     sdl_character_sheet_screen_commit_book();
 }
 
@@ -1678,13 +1681,13 @@ static void log_history_layout(int hgt, int* top, int* bottom, int* prompt)
 static bool main_menu_blitz_confirm_mobile(void)
 {
     const ui_question_option choices[] = {
-        { 'y', "Yes, save and switch", TERM_L_GREEN, false },
-        { 'n', "No, return to tale", TERM_WHITE, false }
+        { 'y', ui_text("Yes, save and switch"), TERM_L_GREEN, false },
+        { 'n', ui_text("No, return to tale"), TERM_WHITE, false }
     };
     main_menu_blitz_intro_mobile_build();
     if (!main_menu_mobile_book_wait()) return false;
-    return ui_question_ask_overlay("Switch to Blitz?",
-        "Save your story game and switch to Blitz now?",
+    return ui_question_ask_overlay(ui_text("Switch to Blitz?"),
+        ui_text("Save your story game and switch to Blitz now?"),
         choices, N_ELEMENTS(choices), UI_QUESTION_GLOBAL,
         UI_QUESTION_GLOBAL, 1) == 0;
 }
@@ -1699,14 +1702,14 @@ static void do_cmd_start_blitz(void)
 
     if (run_mode_is_blitz())
     {
-        msg_print("You are already playing a Blitz run.");
+        msg_print(ui_text("You are already playing a Blitz run."));
         return;
     }
 
     if (!p_ptr || !p_ptr->playing || p_ptr->is_dead
         || death_spectator_active())
     {
-        msg_print("You cannot start a Blitz run right now.");
+        msg_print(ui_text("You cannot start a Blitz run right now."));
         return;
     }
 
@@ -1730,7 +1733,7 @@ static void do_cmd_start_blitz(void)
             hgt = 24;
 
         wrap = MAX(20, wid - 4);
-        c_put_str(TERM_YELLOW, "Blitz Mode", row, MAX((wid - 10) / 2, 0));
+        c_put_str(TERM_YELLOW, ui_text("Blitz Mode"), row, MAX((wid - (int)strlen(ui_text("Blitz Mode"))) / 2, 0));
         row += 2;
 
         text_out_hook = text_out_to_screen;
@@ -1752,7 +1755,7 @@ static void do_cmd_start_blitz(void)
             "Switching to Blitz will save your current tale game first.");
 
         Term_fresh();
-        confirmed = get_check_lower("Save your story game and switch to Blitz now? ");
+        confirmed = get_check_lower(ui_text("Save your story game and switch to Blitz now? "));
     }
 
     if (!confirmed)
@@ -3581,7 +3584,7 @@ void do_cmd_messages_with_filter(int initial_filter)
         log_history_draw_filters(filter, hover_filter, wid);
 
         /* Display header XXX XXX XXX */
-        prt(format("Log (%s, %d-%d of %d)",
+        prt(format(ui_text("Log (%s, %d-%d of %d)"),
                 log_history_filter_label(filter), range_first, range_last, n),
             (body_top > 0) ? body_top - 1 : 0, 0);
 
@@ -3605,15 +3608,15 @@ void do_cmd_messages_with_filter(int initial_filter)
                 controller_prompt_label(steamdeck_back_key(), "B",
                     back_label, sizeof(back_label));
                 strnfmt(prompt_full, sizeof(prompt_full),
-                    "%s/%s page  Left/Right filter  Up/Down line  / find  = highlight  %s back",
+                    ui_text("%s/%s page  Left/Right filter  Up/Down line  / find  = highlight  %s back"),
                     prev_label, next_label, back_label);
                 strnfmt(prompt_mid, sizeof(prompt_mid),
-                    "Left/Right filter  %s/%s page  Up/Down line  %s back",
+                    ui_text("Left/Right filter  %s/%s page  Up/Down line  %s back"),
                     prev_label, next_label, back_label);
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad L/R filter  %s/%s page  %s back", prev_label, next_label, back_label);
+                    ui_text("D-pad L/R filter  %s/%s page  %s back"), prev_label, next_label, back_label);
                 strnfmt(prompt_compact, sizeof(prompt_compact),
-                    "D-pad filter %s/%s page %s back", prev_label, next_label, back_label);
+                    ui_text("D-pad filter %s/%s page %s back"), prev_label, next_label, back_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
@@ -3624,9 +3627,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             else if (sdl_touch_only_device_active())
             {
                 const char* variants[] = {
-                    "Swipe left/right tabs, drag up/down to scroll",
-                    "Swipe tabs, drag to scroll",
-                    "Tap a tab to filter"
+                    ui_text("Swipe left/right tabs, drag up/down to scroll"),
+                    ui_text("Swipe tabs, drag to scroll"),
+                    ui_text("Tap a tab to filter")
                 };
                 terminal_prompt_pick_variant(prompt, sizeof(prompt), wid, false,
                     variants, N_ELEMENTS(variants));
@@ -3634,9 +3637,9 @@ void do_cmd_messages_with_filter(int initial_filter)
             else
             {
                 const char* variants[] = {
-                    "e/i filter  Up/Down line  PgUp/PgDn page  / find  = highlight  Esc",
-                    "e/i filter  Up/Down line  Pg page  / find  Esc",
-                    "e/i filter  / find  Esc",
+                    ui_text("e/i filter  Up/Down line  PgUp/PgDn page  / find  = highlight  Esc"),
+                    ui_text("e/i filter  Up/Down line  Pg page  / find  Esc"),
+                    ui_text("e/i filter  / find  Esc"),
                     "Esc"
                 };
                 terminal_prompt_pick_variant(prompt, sizeof(prompt), wid, false,
@@ -3644,16 +3647,16 @@ void do_cmd_messages_with_filter(int initial_filter)
             }
         }
         prt(prompt, prompt_row, 0);
-        ui_menu_click_add_text_token('8', 0, prompt_row, prompt, "Up");
-        ui_menu_click_add_text_token('2', 0, prompt_row, prompt, "Down");
+        ui_menu_click_add_text_token('8', 0, prompt_row, prompt, ui_text("Up"));
+        ui_menu_click_add_text_token('2', 0, prompt_row, prompt, ui_text("Down"));
         ui_menu_click_add_text_token('9', 0, prompt_row, prompt, "PgUp");
         ui_menu_click_add_text_token('3', 0, prompt_row, prompt, "PgDn");
-        ui_menu_click_add_text_token('i', 0, prompt_row, prompt, "filter");
+        ui_menu_click_add_text_token('i', 0, prompt_row, prompt, ui_text("filter"));
         ui_menu_click_add_text_token('i', 0, prompt_row, prompt, "e/i");
         ui_menu_click_add_text_token('/', 0, prompt_row, prompt, "/");
-        ui_menu_click_add_text_token('/', 0, prompt_row, prompt, "find");
+        ui_menu_click_add_text_token('/', 0, prompt_row, prompt, ui_text("find"));
         ui_menu_click_add_text_token('=', 0, prompt_row, prompt, "=");
-        ui_menu_click_add_text_token('=', 0, prompt_row, prompt, "highlight");
+        ui_menu_click_add_text_token('=', 0, prompt_row, prompt, ui_text("highlight"));
         ui_menu_click_add_text_token(ESCAPE, 0, prompt_row, prompt, "Esc");
 
         /* Get a command without showing the terminal cursor */
@@ -3780,7 +3783,7 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_scroll_area_clear();
 
             /* Get a "shower" string, or continue */
-            if (!get_string_panel("Highlight Log Text", shower,
+            if (!get_string_panel(ui_text("Highlight Log Text"), shower,
                     sizeof(shower)))
                 continue;
 
@@ -3797,7 +3800,7 @@ void do_cmd_messages_with_filter(int initial_filter)
             ui_scroll_area_clear();
 
             /* Get a "finder" string, or continue */
-            if (!get_string_panel("Search Message Log", finder,
+            if (!get_string_panel(ui_text("Search Message Log"), finder,
                     sizeof(finder)))
                 continue;
 

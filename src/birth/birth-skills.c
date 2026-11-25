@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "tutorial/tutorial-game.h"
+#include "tutorial/tutorial.h"
 #include "birth/birth-internal.h"
 #include "ui/question.h"
 
@@ -30,20 +31,20 @@ void birth_skill_recommendation_text(char* buf, size_t len)
                 | UNQ_SNG_THINGOL | UNQ_SNG_TURGON | UNQ_MINSTREL)) != 0;
 
     SDL_strlcpy(buf,
-        "Suggested base skills: Melee 5, Evasion 5, Will 3, Perception 3. "
-        "Lower any purchased rank here to recover its XP.", len);
+        tutorial_device_text("Suggested base skills: Melee 5, Evasion 5, Will 3, Perception 3. "
+        "Lower any purchased rank here to recover its XP."), len);
     if (stealth_character)
-        SDL_strlcat(buf, " Your character suits stealth: consider spending "
-            "remaining XP on Stealth to help avoid detection.", len);
+        SDL_strlcat(buf, tutorial_device_text(" Your character suits stealth: consider spending "
+            "remaining XP on Stealth to help avoid detection."), len);
     if (song_character)
     {
         if (p_ptr && p_ptr->oath_type == OATH_SILENCE)
-            SDL_strlcat(buf, " Your character suits Song, but singing would "
-                "break your Oath of Silence.", len);
+            SDL_strlcat(buf, tutorial_device_text(" Your character suits Song, but singing would "
+                "break your Oath of Silence."), len);
         else
-            SDL_strlcat(buf, " Your character suits singing: consider raising "
+            SDL_strlcat(buf, tutorial_device_text(" Your character suits singing: consider raising "
                 "Song. Training Song does not teach you a song: you must know "
-                "a song ability and actively sing it to benefit.", len);
+                "a song ability and actively sing it to benefit."), len);
     }
 }
 
@@ -178,13 +179,12 @@ static NavResult gain_skills_aux(bool birth)
         {
             char advice[1024];
             const ui_question_option close[] = {
-                { 0, "Continue", TERM_L_WHITE, false }
+                { 0, tutorial_translate("Continue"), TERM_L_WHITE, false }
             };
 
             birth_skill_recommendation_text(advice, sizeof(advice));
-            (void)ui_question_ask_overlay("Starting skill advice", advice,
-                close, N_ELEMENTS(close), UI_QUESTION_GLOBAL,
-                UI_QUESTION_GLOBAL, 0);
+            (void)ui_question_ask_tutorial(tutorial_device_text("Starting skill advice"),
+                advice, close, N_ELEMENTS(close), 0);
             advice_pending = false;
             /* Rebuild allocation hit targets after the popup consumed input. */
             continue;

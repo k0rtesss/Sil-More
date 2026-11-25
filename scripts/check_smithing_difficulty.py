@@ -168,15 +168,15 @@ void fixture_smithing_attributes(void)
     p_ptr->innate_ability[S_SMT][SMT_JEWELLER] = true;
     p_ptr->innate_ability[S_SMT][SMT_ARTEFACT] = true;
     calc_bonuses();
-    assert(p_ptr->skill_stat_mod[S_SMT] == 14);
-    assert(smithing_capacity() == 16);
+    assert(p_ptr->skill_stat_mod[S_SMT] == 11);
+    assert(smithing_capacity() == 13);
 
     p_ptr->tmp_dex = 5;
     calc_bonuses();
-    assert(p_ptr->stat_use[A_DEX] == 8 && smithing_capacity() == 18);
+    assert(p_ptr->stat_use[A_DEX] == 8 && smithing_capacity() == 13);
     p_ptr->stat_drain[A_GRA] = -2;
     calc_bonuses();
-    assert(p_ptr->stat_use[A_GRA] == 4 && smithing_capacity() == 14);
+    assert(p_ptr->stat_use[A_GRA] == 4 && smithing_capacity() == 13);
     p_ptr->tmp_dex = 0;
     p_ptr->stat_drain[A_GRA] = 0;
 
@@ -184,8 +184,8 @@ void fixture_smithing_attributes(void)
     p_ptr->innate_ability[S_SMT][SMT_WEAPONSMITH] = true;
     p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH] = true;
     calc_bonuses();
-    assert(p_ptr->skill_stat_mod[S_SMT] == 17);
-    assert(smithing_capacity() == 21);
+    assert(p_ptr->skill_stat_mod[S_SMT] == 14);
+    assert(smithing_capacity() == 18);
 
     /* Enchantment, Expertise, and Armoursmith stack on any project. */
     p_ptr->innate_ability[S_SMT][SMT_ARMOURSMITH] = true;
@@ -195,21 +195,65 @@ void fixture_smithing_attributes(void)
     p_ptr->innate_ability[S_SMT][SMT_EXPERTISE] = true;
     p_ptr->active_ability[S_SMT][SMT_EXPERTISE] = true;
     calc_bonuses();
-    assert(p_ptr->skill_stat_mod[S_SMT] == 29);
-    assert(smithing_capacity() == 33);
+    assert(p_ptr->skill_stat_mod[S_SMT] == 21);
+    assert(smithing_capacity() == 25);
     p_ptr->tmp_str = 5;
     calc_bonuses();
-    assert(p_ptr->stat_use[A_STR] == 6 && smithing_capacity() == 35);
+    assert(p_ptr->stat_use[A_STR] == 6 && smithing_capacity() == 25);
     p_ptr->tmp_str = 0;
     p_ptr->active_ability[S_SMT][SMT_ARTEFACT] = false;
     calc_bonuses();
-    assert(smithing_capacity() == 27);
+    assert(smithing_capacity() == 22);
     p_ptr->active_ability[S_SMT][SMT_ARTEFACT] = true;
+
+    /* An equipment-granted stat ability is active but not permanently learned. */
+    p_ptr->active_ability[S_ARC][ARC_DEX] = true;
+    assert(smithing_stat_bonus() == 21);
+    calc_bonuses();
 
     p_ptr->innate_ability[S_ARC][ARC_DEX] = true;
     p_ptr->active_ability[S_ARC][ARC_DEX] = true;
     calc_bonuses();
-    assert(p_ptr->skill_stat_mod[S_SMT] == 31);
+    assert(p_ptr->skill_stat_mod[S_SMT] == 22);
+
+    p_ptr->innate_ability[S_SMT][SMT_MASTERPIECE] = true;
+    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = true;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 25);
+    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = false;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 22);
+    p_ptr->innate_ability[S_SMT][SMT_MASTERPIECE] = false;
+
+    /* Late-game Feanor: all unconditional stat abilities and Masterpiece.
+     * STR 4, DEX 8, GRA 9 give floor(2 + 12 + 22.5) = 36. */
+    const int stat_skills[] = { S_MEL, S_EVN, S_STL, S_PER, S_SMT, S_SNG };
+    const int stat_abilities[] = { MEL_STR, EVN_DEX, STL_DEX, PER_GRA, SMT_GRA, SNG_GRA };
+    for (size_t i = 0; i < N_ELEMENTS(stat_skills); ++i)
+    {
+        p_ptr->innate_ability[stat_skills[i]][stat_abilities[i]] = true;
+        p_ptr->active_ability[stat_skills[i]][stat_abilities[i]] = true;
+    }
+    p_ptr->innate_ability[S_SMT][SMT_MASTERPIECE] = true;
+    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = true;
+    p_ptr->skill_base[S_SMT] = 27;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 36 && smithing_capacity() == 65);
+    p_ptr->tmp_str = p_ptr->tmp_dex = p_ptr->tmp_gra = 5;
+    p_ptr->stat_drain[A_GRA] = -2;
+    p_ptr->stat_disease[A_DEX] = -2;
+    calc_bonuses();
+    assert(p_ptr->skill_stat_mod[S_SMT] == 36 && smithing_capacity() == 65);
+    p_ptr->tmp_str = p_ptr->tmp_dex = p_ptr->tmp_gra = 0;
+    p_ptr->stat_drain[A_GRA] = p_ptr->stat_disease[A_DEX] = 0;
+    for (size_t i = 0; i < N_ELEMENTS(stat_skills); ++i)
+    {
+        p_ptr->innate_ability[stat_skills[i]][stat_abilities[i]] = false;
+        p_ptr->active_ability[stat_skills[i]][stat_abilities[i]] = false;
+    }
+    p_ptr->innate_ability[S_SMT][SMT_MASTERPIECE] = false;
+    p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = false;
+    p_ptr->skill_base[S_SMT] = 2;
 
     p_ptr->stat_base[A_STR] = -5;
     p_ptr->stat_base[A_DEX] = -1; /* Learned Dexterity raises this to zero. */
@@ -235,7 +279,7 @@ void fixture_smithing_attributes(void)
     p_ptr->skill_use[S_SMT] -= 2;
     assert(!too_difficult(&sword) && smithing_cost.drain == 2);
     assert(smith_reforge_difficulty_affordable(difficulty, &drain) && drain == 2);
-    puts("PASS Smithing ranks, current attributes, global abilities, rounding and forge thresholds");
+    puts("PASS Smithing ranks, permanent attributes, global abilities, rounding and forge thresholds");
 }
 static void finish_equipment_action(void)
 {
@@ -283,9 +327,9 @@ void fixture_smithing_equipment(void)
     object_apply_pval_delta_with_mask(&jewel, TR1_GRA, grace_delta);
     equip_smithing_item(&jewel, INVEN_LITE);
     assert(p_ptr->stat_use[A_GRA] == 2);
-    assert(smithing_capacity() == capacity + 2);
-    assert(object_difficulty(&recipe) == difficulty && affordable(&recipe));
-    assert(smith_reforge_difficulty_affordable(difficulty, NULL));
+    assert(smithing_capacity() == capacity);
+    assert(object_difficulty(&recipe) == difficulty && !affordable(&recipe));
+    assert(!smith_reforge_difficulty_affordable(difficulty, NULL));
 
     do_cmd_takeoff(&inventory[INVEN_LITE], INVEN_LITE);
     finish_equipment_action();
@@ -316,10 +360,10 @@ void fixture_dwarven_smithing(void)
         int affinity;
         int stat_bonus;
     } cases[] = {
-        { 0, 0, 1, 35 },
-        { 0, RHF_SMT_AFFINITY, 2, 40 },
-        { 0, RHF_SMT_PENALTY, 0, 29 },
-        { RHF_SMT_PENALTY, RHF_SMT_PENALTY, -1, 29 },
+        { 0, 0, 1, 25 },
+        { 0, RHF_SMT_AFFINITY, 2, 29 },
+        { 0, RHF_SMT_PENALTY, 0, 21 },
+        { RHF_SMT_PENALTY, RHF_SMT_PENALTY, -1, 21 },
     };
 
     assert(naugrim.flags & RHF_DWARVEN_SMITHING);

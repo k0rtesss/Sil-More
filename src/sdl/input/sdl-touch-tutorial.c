@@ -968,11 +968,16 @@ static float sdl_touch_tutorial_footer_height_normal(const SDL_Rect* screen)
         54.0f, 78.0f);
 
     if (sdl_touch_only_mobile_device_active()) {
-        int lines = sdl_touch_tutorial_rich_line_count(tutorial_device_text("Tap for next page"),
-            font_px, (float)screen->w * 0.90f)
-            + sdl_touch_tutorial_rich_line_count(tutorial_device_text("Last page: tap to close."),
-                font_px, (float)screen->w * 0.90f);
-        return MAX(legacy_h, line_h * (float)lines + bottom_pad);
+        char advance[160], page[192];
+        float width = screen->w * 0.90f;
+        float height = 0.0f;
+        for (int last = 0; last < 2; ++last) {
+            sdl_touch_tutorial_footer_text(false, last != 0, advance, sizeof(advance), page, sizeof(page));
+            float measured = sdl_touch_tutorial_footer_text_height(advance, font_px, width)
+                + sdl_touch_tutorial_footer_text_height(page, font_px, width);
+            height = MAX(height, measured);
+        }
+        return MAX(legacy_h, height + bottom_pad);
     }
     return MAX(legacy_h, line_h * 2.0f + bottom_pad);
 }
@@ -1026,57 +1031,8 @@ static void sdl_touch_tutorial_draw_footer_normal(const SDL_Rect* screen, bool m
         .h = (float)(screen->y + screen->h) - y + 8.0f,
     });
 
-    if (steamdeck_controls_active())
-    {
-        char confirm_label[16];
-        char back_label[16];
-        char prev_label[16];
-        char next_label[16];
-
-        sdl_touch_tutorial_prompt_label(steamdeck_confirm_key(), "A",
-            confirm_label, sizeof(confirm_label));
-        sdl_touch_tutorial_prompt_label(steamdeck_back_key(), "B",
-            back_label, sizeof(back_label));
-        sdl_touch_tutorial_prompt_label(steamdeck_prev_page_key(), "L1",
-            prev_label, sizeof(prev_label));
-        sdl_touch_tutorial_prompt_label(steamdeck_next_page_key(), "R1",
-            next_label, sizeof(next_label));
-
-        strnfmt(advance_text, sizeof(advance_text),
-            tutorial_device_text("<y>%s</y> to <a>%s</a>"), confirm_label,
-            single_page ? tutorial_device_text("close") : tutorial_device_text("continue"));
-        strnfmt(page_text, sizeof(page_text),
-            tutorial_device_text("<y>%s/%s</y> changes page   <y>%s</y> <a>closes</a>"),
-            prev_label, next_label, back_label);
-    }
-    else if (!mouse && sdl_touch_tutorial_device_available())
-    {
-        SDL_strlcpy(advance_text,
-            single_page ? tutorial_device_text("<a>Tap</a> to <a>close</a>")
-                        : tutorial_device_text("<a>Tap</a> for <a>next page</a>"),
-            sizeof(advance_text));
-        SDL_strlcpy(page_text,
-            single_page ? tutorial_device_text("<t>Touch guide</t>")
-                        : tutorial_device_text("<t>Last page: tap to close.</t>"),
-            sizeof(page_text));
-    }
-    else
-    {
-        SDL_strlcpy(advance_text,
-            mouse
-                ? (single_page ? tutorial_device_text("<a>Click</a> or <y>Space</y> to <a>close</a>")
-                               : tutorial_device_text("<a>Click</a> or <y>Space</y> for <a>next</a>"))
-                : (single_page ? tutorial_device_text("<a>Tap</a> or <y>Space</y> to <a>close</a>")
-                               : tutorial_device_text("<a>Tap</a> or <y>Space</y> for <a>next</a>")),
-            sizeof(advance_text));
-        SDL_strlcpy(page_text,
-            tutorial_device_text("<y>Left/Right</y> changes page   <y>Esc</y> <a>closes</a>"),
-            sizeof(page_text));
-    }
-
-    if (tutorial_panel_parts > 1)
-        strnfmt(page_text, sizeof(page_text), tutorial_device_text("Text %d/%d"),
-            tutorial_panel_part + 1, tutorial_panel_parts);
+    sdl_touch_tutorial_footer_text(mouse, single_page, advance_text, sizeof(advance_text),
+        page_text, sizeof(page_text));
 
     line_h = sdl_touch_tutorial_draw_rich_centered(advance_text,
         (float)screen->x + (float)screen->w * 0.5f, y,

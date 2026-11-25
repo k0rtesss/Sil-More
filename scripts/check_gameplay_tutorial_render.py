@@ -567,6 +567,14 @@ int main(int argc,char **argv)
     character_generated=character_dungeon=true;
     size_t locale_count;
     const tutorial_locale *locales=tutorial_available_locales(&locale_count);
+    const char *devices[]={"ja_JP","ko_KR","zh_CN","zh-Hans_CN","en_US"};
+    const char *defaults[]={"ja","ko","zh","zh","en"};
+    for (size_t i=0;i<N_ELEMENTS(devices);++i) {
+        SDL_SetHint(SDL_HINT_PREFERRED_LOCALES,devices[i]);
+        sdl_config_load_app_options("no-saved-tutorial-choice.json");
+        assert(streq(tutorial_language(),defaults[i]));
+    }
+    SDL_ResetHint(SDL_HINT_PREFERRED_LOCALES);
     for (size_t i=0;i<locale_count;++i) {
         tutorial_set_language(locales[i].code);
         TTF_Font *picker=sdl_story_font_for_height_slot(20,sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL_MENU));

@@ -19,7 +19,7 @@
 #define bell test_bell
 #define msg_print test_msg_print
 #define log_log test_log_log
-#define ui_question_ask_overlay test_ui_question_ask_overlay
+#define ui_question_ask_tutorial test_ui_question_ask_tutorial
 #include "angband.h"
 #include "birth/birth-internal.h"
 #include "tutorial/tutorial-game.h"
@@ -67,9 +67,11 @@ bool ui_menu_click_take_action(int* choice, int* action)
 }
 void birth_coach_show_once(int stage) {}
 void sdl_character_sheet_screen_hide(void) {}
-int ui_question_ask_overlay(cptr title, cptr desc,
-    const ui_question_option* options, int count, int anchor_y, int anchor_x,
-    int default_index)
+const char *tutorial_device_text(const char *english) { return english; }
+const char *tutorial_translate(const char *english) { return english; }
+
+int ui_question_ask_tutorial(cptr title, cptr desc,
+    const ui_question_option* options, int count, int default_index)
 {
     char expected[1024];
     birth_skill_recommendation_text(expected, sizeof(expected));
@@ -79,7 +81,6 @@ int ui_question_ask_overlay(cptr title, cptr desc,
     assert(count == 1 && default_index == 0);
     assert(strcmp(options[0].label, "Continue") == 0);
     assert(!options[0].disabled);
-    assert(anchor_y == UI_QUESTION_GLOBAL && anchor_x == UI_QUESTION_GLOBAL);
     assert(frames > 0 && skill_gain_in_progress);
     assert(!spectator && !character_generated);
     advice_popups++;

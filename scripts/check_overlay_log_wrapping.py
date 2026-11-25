@@ -4,7 +4,63 @@ import check_menu_button_log_overlap as base
 
 base.OUT = base.ROOT / "scripts/output/overlay-log-wrapping"
 base.EXTRA_MOBILE_SOURCES = ["src/sdl/render/sdl-text.c"]
+base.EXTRA_WRAPS = ["TTF_MeasureString", "pane_log_combat_row_tokens"]
 base.CHECK = r'''
+static int measures;
+static bool test_roll;
+static const combat_roll_token roll[] = {
+    {.text="+17", .attr=TERM_WHITE}, {.text=" vs ", .attr=TERM_SLATE},
+    {.text="12", .attr=TERM_L_RED}
+};
+bool __real_TTF_MeasureString(TTF_Font*, const char*, size_t, int, int*, size_t*);
+bool __wrap_TTF_MeasureString(TTF_Font* font, const char* text, size_t length,
+    int maximum, int* width, size_t* fit)
+{
+    ++measures;
+    return __real_TTF_MeasureString(font, text, length, maximum, width, fit);
+}
+int __real_pane_log_combat_row_tokens(int, const combat_roll_token**);
+int __wrap_pane_log_combat_row_tokens(int row, const combat_roll_token** tokens)
+{
+    if (!test_roll || row != 0)
+        return __real_pane_log_combat_row_tokens(row, tokens);
+    if (tokens) *tokens = roll;
+    return N_ELEMENTS(roll);
+}
+
+static void check_roll_redraw(void)
+{
+    sdl_view *log = &g_views[PANE_ROLLS];
+    log->cols = 48; log->rows = 2; log->cell_w = 10; log->cell_h = 20;
+    log->canvas = SDL_CreateTexture(g_state.renderer, SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET, log->cols * log->cell_w, log->rows * log->cell_h);
+    assert(log->canvas && !sdl_view_link_term(log, PANE_ROLLS));
+    Term_activate(&log->t);
+    sdl_set_present_suppressed(true);
+    test_roll = true;
+    Term->story_font_active = true;
+    Term->story_pixel_pack = true;
+    for (int col = 0; col < 6; ++col)
+        Term_putstr(col, 0, 1, col % 2 ? TERM_SLATE : TERM_WHITE, "X");
+    measures = 0;
+    Term_fresh();
+    assert(measures == N_ELEMENTS(roll));
+    assert(!memcmp(Term->old->a[0], Term->scr->a[0], Term->wid));
+    assert(!memcmp(Term->old->story[0], Term->scr->story[0], Term->wid));
+
+    /* An ordinary row can reuse the same y while the side buffer exists. */
+    Term->story_font_active = Term->story_pixel_pack = false;
+    Term_clear();
+    Term_putstr(0, 0, -1, TERM_WHITE, "ordinary");
+    measures = 0;
+    Term_fresh();
+    assert(measures == 0 && !memcmp(Term->old->c[0], "ordinary", 8));
+    test_roll = false;
+    sdl_set_present_suppressed(false);
+    term_nuke(&log->t); log->term_ready = false; Term = NULL;
+    puts("Combat roll: six fallback color runs render and measure three tokens once PASS");
+}
+
 static void check_wrap(void)
 {
     static const char *messages[] = {
@@ -30,8 +86,9 @@ static void check_wrap(void)
         for(int m=0;m<N_ELEMENTS(messages);m++) {
             const char *message=messages[m];
             int offsets[8], lengths[8], pos=0;
+            measures=0;
             int n=sdl_overlay_log_wrap(message,8,offsets,lengths);
-            assert(n>0);
+            assert(n>0 && measures==n);
             for(int i=0;i<n;i++) {
                 char segment[256]; int tw=0,th=0;
                 assert(offsets[i]==pos && lengths[i]>0 && lengths[i]<96);
@@ -66,6 +123,7 @@ int main(int argc,char **argv)
     assert(g_state.window); g_state.renderer=SDL_CreateRenderer(g_state.window,"software");
     assert(g_state.renderer);
     check_wrap();
+    check_roll_redraw();
     sdl_story_font_cache_clear(); sdl_ui_text_cache_clear();
     SDL_DestroyRenderer(g_state.renderer); SDL_DestroyWindow(g_state.window);
     TTF_Quit(); SDL_Quit(); return 0;

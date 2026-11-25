@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 0
 #define VERSION_PATCH 1
-#define VERSION_EXTRA 3
+#define VERSION_EXTRA 5
 /* Earlier saves omit optional version-gated fields. */
 #define MIN_VERSION_EXTRA 0  /* New reads are version-gated; accept earlier saves. */
 
