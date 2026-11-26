@@ -61,14 +61,14 @@ static void handoff(void)
 
             /* The old finger-up was taken by the contextual menu. The same
              * Android finger ID is reused by the next tap or run gesture. */
-            assert(sdl_touch_round_handle_pointer_down(drag?0:radius*.8f,0,7));
+            assert(sdl_touch_round_handle_pointer_down(drag?0:radius*.8f,0,7,now));
             if (drag) {
                 now+=50000000ULL;
                 assert(sdl_touch_round_handle_pointer_motion(radius,0,7));
             }
             now+=50000000ULL;
             assert(!sdl_main_map_handle_drag_up(radius*.8f,0,false,7));
-            assert(sdl_touch_round_handle_pointer_up(drag?radius:radius*.8f,0,7));
+            assert(sdl_touch_round_handle_pointer_up(drag?radius:radius*.8f,0,7,now));
             assert(sends==1 && sent_dir==6 && sent_run==(bool)drag && !sent_ctrl);
             assert(!g_touch_round_press.active);
         }
@@ -89,7 +89,8 @@ def main():
 
     constants = "\n".join(re.findall(r"^#define SDL_TOUCH_ROUND_\w+ .*$", controls, re.M))
     constants += "\n#define TOUCH_PANE_LONG_PRESS_MS " + re.search(r"TOUCH_PANE_LONG_PRESS_MS\s*=\s*(\d+)", header).group(1)
-    names = ["sdl_touch_round_dir_for_delta", "sdl_touch_round_point_to_wheel",
+    names = ["sdl_touch_press_elapsed", "sdl_touch_press_event_elapsed",
+             "sdl_touch_round_dir_for_delta", "sdl_touch_round_point_to_wheel",
              "sdl_touch_round_drag_is_run", "sdl_touch_round_send_dir",
              "sdl_touch_round_cancel_press", "sdl_touch_round_handle_pointer_down",
              "sdl_touch_round_handle_pointer_motion", "sdl_touch_round_handle_pointer_up"]

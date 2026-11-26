@@ -304,6 +304,10 @@ void ui_menu_click_add_text_token(int choice, int col, int row, cptr text,
     cptr token)
 {
     cptr match;
+    int prefix_bytes;
+    int token_bytes;
+    int prefix_cells;
+    int token_cells;
     int token_col;
     int token_width;
 
@@ -314,14 +318,18 @@ void ui_menu_click_add_text_token(int choice, int col, int row, cptr text,
     if (!match)
         return;
 
-    token_col = col + (int)(match - text);
-    token_width = (int)strlen(token);
+    prefix_bytes = (int)(match - text);
+    token_bytes = (int)strlen(token);
+    prefix_cells = utf8_display_width_n(text, prefix_bytes);
+    token_cells = utf8_display_width_n(token, token_bytes);
+    token_col = col + prefix_cells;
+    token_width = token_cells;
 
     if (sdl_is_story_font_enabled() && !sdl_is_story_font_grid())
     {
         int cell_width = sdl_get_active_cell_width();
-        int prefix_px = sdl_story_font_text_width(text, (int)(match - text));
-        int token_px = sdl_story_font_text_width(token, token_width);
+        int prefix_px = sdl_story_font_text_width(text, prefix_bytes);
+        int token_px = sdl_story_font_text_width(token, token_bytes);
 
         if (cell_width > 0 && token_px > 0)
         {
@@ -344,8 +352,9 @@ void ui_menu_click_add_text_token(int choice, int col, int row, cptr text,
 
     if (ui_menu_click_hover_current && ui_menu_click_hover_choice == choice)
     {
-        Term_putstr(col + (int)(match - text), row, (int)strlen(token),
-            TERM_L_BLUE, token);
+        /* Terminal storage keeps UTF-8 bytes even when their glyphs use one cell. */
+        Term_putstr(col + prefix_bytes, row, token_bytes, TERM_L_BLUE,
+            token);
     }
 }
 

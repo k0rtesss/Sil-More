@@ -65,6 +65,59 @@ static void check_diagonal_fixture_audio(void)
         CHECK(cave_fixture_sound_gain_at(listener_y,listener_x)==0.0f);
     }
 }
+
+static void check_active_event_queries(void)
+{
+    cave_world_event observed;
+    cave_world_event saved[CAVE_EVENTS_MAX] = {0};
+
+    turn = 800;
+    cave_events_reset();
+    cave_water_flow_reset();
+    for (int y = 0; y < 15; ++y)
+        for (int x = 0; x < 22; ++x)
+            features[y][x] = FEAT_FLOOR;
+
+    CHECK(!cave_event_for_listener(5, 3, 0, 0, &observed));
+    cave_event_emit(CAVE_EVENT_FIGHT, 5, 3, 24);
+    CHECK(cave_event_for_listener(5, 3, 0, 0, &observed) && observed.serial == 1);
+    CHECK(cave_fighting_mask_at(5, 3) == 8 && cave_sound_mask_at(5, 3) == 8);
+    CHECK(!cave_event_for_listener(5, 3, 0, 1, &observed));
+
+    /* Restored equal-strength events still break ties in ring-slot order,
+     * even when the earliest slot has the larger serial. */
+    saved[0] = (cave_world_event){ .serial = 40, .turn = turn,
+        .kind = CAVE_EVENT_BUILD, .y = 5, .x = 3, .volume = 24 };
+    saved[CAVE_EVENTS_MAX - 1] = (cave_world_event){ .serial = 31, .turn = turn,
+        .kind = CAVE_EVENT_FIGHT, .y = 5, .x = 3, .volume = 24 };
+    cave_events_restore(saved, 41);
+    CHECK(cave_event_for_listener(5, 3, 0, 0, &observed) && observed.serial == 40);
+    CHECK(cave_fighting_mask_at(5, 3) == 8);
+    CHECK(!cave_event_for_listener(5, 3, 0, 40, &observed));
+    cave_event_emit(CAVE_EVENT_WARNING, 5, 3, 30);
+    CHECK(cave_event_for_listener(5, 3, 0, 40, &observed) && observed.serial == 41);
+
+    turn += 60;
+    CHECK(!cave_event_for_listener(5, 3, 0, 0, &observed));
+    CHECK(cave_fighting_mask_at(5, 3) == 0 && cave_sound_mask_at(5, 3) == 0);
+    CHECK(cave_event_latest(&observed) && observed.serial == 41);
+    turn -= 60;
+    CHECK(cave_event_for_listener(5, 3, 0, 40, &observed) && observed.serial == 41);
+
+    cave_events_reset();
+    cave_event_emit(CAVE_EVENT_FIGHT, 5, 18, 64);
+    CHECK(cave_fighting_mask_at(5, 3) > 0);
+    p_ptr->cur_map_wid = 15;
+    CHECK(cave_fighting_mask_at(5, 3) == 0);
+    p_ptr->cur_map_wid = 22;
+    CHECK(cave_fighting_mask_at(5, 3) > 0);
+    for (int i = 0; i < CAVE_EVENTS_MAX; ++i)
+        cave_event_emit(CAVE_EVENT_BUILD, 5, 3, 24);
+    CHECK(cave_fighting_mask_at(5, 3) == 0);
+    CHECK(cave_event_for_listener(5, 3, 0, CAVE_EVENTS_MAX, &observed));
+    CHECK(observed.serial == CAVE_EVENTS_MAX + 1);
+}
+
 int main(void)
 {
     cave_world_event e, saved[CAVE_EVENTS_MAX];
@@ -223,5 +276,6 @@ int main(void)
     CHECK(cave_audio_distance(5,8,5,9)==1); /* door emits at its own face */
     CHECK(cave_audio_distance(-1,0,5,9)==-1);
     check_diagonal_fixture_audio();
+    check_active_event_queries();
     printf("World sound tests: %d checks passed.\n",checks); return 0;
 }

@@ -48,6 +48,27 @@ static void check_roll_redraw(void)
     assert(!memcmp(Term->old->a[0], Term->scr->a[0], Term->wid));
     assert(!memcmp(Term->old->story[0], Term->scr->story[0], Term->wid));
 
+    SDL_Rect row_rect={0,0,log->canvas->w,log->cell_h};
+    assert(SDL_SetRenderTarget(g_state.renderer,log->canvas));
+    SDL_Surface* first=SDL_RenderReadPixels(g_state.renderer,&row_rect);
+    measures=0;
+    assert(sdl_render_overlay_log_row(0) && measures==0);
+    SDL_Surface* second=SDL_RenderReadPixels(g_state.renderer,&row_rect);
+    assert(first && second && first->format==second->format && first->pitch==second->pitch);
+    assert(!memcmp(first->pixels,second->pixels,(size_t)first->h*first->pitch));
+    SDL_DestroySurface(first);
+    SDL_DestroySurface(second);
+
+    /* A face can change size without its pointer changing. The advance of
+     * an unwrapped token must be measured again at the new generation. */
+    TTF_Font* roll_font=sdl_story_font_for_view_slot(log,STORY_FONT_SLOT_SECONDARY);
+    float size=TTF_GetFontSize(roll_font);
+    assert(TTF_SetFontSize(roll_font,size+2));
+    measures=0;
+    assert(sdl_render_overlay_log_row(0) && measures==N_ELEMENTS(roll));
+    assert(TTF_SetFontSize(roll_font,size));
+    sdl_ui_text_cache_clear_font(roll_font);
+
     /* An ordinary row can reuse the same y while the side buffer exists. */
     Term->story_font_active = Term->story_pixel_pack = false;
     Term_clear();
@@ -86,9 +107,17 @@ static void check_wrap(void)
         for(int m=0;m<N_ELEMENTS(messages);m++) {
             const char *message=messages[m];
             int offsets[8], lengths[8], pos=0;
+            sdl_ui_text_cache_clear_font(font);
             measures=0;
             int n=sdl_overlay_log_wrap(message,8,offsets,lengths);
             assert(n>0 && measures==n);
+            int hot_offsets[8],hot_lengths[8];
+            measures=0;
+            assert(sdl_overlay_log_wrap(message,8,hot_offsets,hot_lengths)==n);
+            assert(!memcmp(offsets,hot_offsets,n*sizeof(int)));
+            assert(!memcmp(lengths,hot_lengths,n*sizeof(int)));
+            /* Hash collisions may cause a miss but must not change the fit. */
+            assert(measures<n);
             for(int i=0;i<n;i++) {
                 char segment[256]; int tw=0,th=0;
                 assert(offsets[i]==pos && lengths[i]>0 && lengths[i]<96);
@@ -101,6 +130,14 @@ static void check_wrap(void)
             }
             assert(pos==(int)strlen(message));
         }
+        char mutable[]="iiiiiiii iiiiiiii iiiiiiii iiiiiiii";
+        int off[8],len[8],expected_off[8],expected_len[8];
+        sdl_overlay_log_wrap(mutable,8,off,len);
+        for (size_t i=0; mutable[i]; i++) if (mutable[i]=='i') mutable[i]='W';
+        int n=sdl_overlay_log_wrap(mutable,8,off,len);
+        sdl_ui_text_cache_clear_font(font);
+        assert(sdl_overlay_log_wrap(mutable,8,expected_off,expected_len)==n);
+        assert(!memcmp(off,expected_off,n*sizeof(int)) && !memcmp(len,expected_len,n*sizeof(int)));
         term_nuke(&log->t); log->term_ready=false; Term=NULL;
     }
     puts("Overlay log: both achievement messages preserve UTF-8 and every segment fits the rendered band at 16 font sizes PASS");

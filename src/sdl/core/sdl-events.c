@@ -3,6 +3,10 @@
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 
+#if defined(SDL_PLATFORM_ANDROID)
+#include <time.h>
+#endif
+
 #define SDL_TEXT_INPUT_QUEUE_LIMIT 128
 
 static bool g_description_overlay_mouse_release_claimed = false;
@@ -348,6 +352,176 @@ void sdl_handle_renderer_reset(void)
 }
 
 #if SIL_SDL_MOBILE_BUILD
+#if defined(SDL_PLATFORM_ANDROID)
+/* Native SDL touch events are queued synchronously by SDLSurface.onTouch.
+ * Keep the Android uptime scoped to that UI thread and Android callback;
+ * SDL still creates, filters, watches, and queues the same physical events. */
+static _Thread_local Uint64 android_touch_event_uptime_ns;
+static Uint64 android_touch_clock_origin_ns;
+static bool android_touch_time_filter_registered;
+static SDL_AtomicInt android_thumb_confirmation_event;
+
+/* Remember recent corrected DOWN edges until SDL dispatch. Synthetic events
+ * keep the old timer path without using SDL's reserved event fields. */
+static struct {
+    Uint64 timestamp;
+    SDL_TouchID touch;
+    SDL_FingerID finger;
+    SDL_WindowID window;
+} android_touch_down_edges[64];
+static unsigned android_touch_down_next;
+static SDL_SpinLock android_touch_down_lock;
+
+JNIEXPORT void JNICALL
+Java_com_silqh_silmore_SilMoreActivity_setTouchEventUptime(
+    JNIEnv* env, jclass cls, jlong uptime_ms)
+{
+    (void)env;
+    (void)cls;
+    android_touch_event_uptime_ns = uptime_ms > 0
+        && (Uint64)uptime_ms <= SDL_MAX_UINT64 / SDL_NS_PER_MS
+        ? SDL_MS_TO_NS((Uint64)uptime_ms) : 0;
+}
+
+static bool SDLCALL sdl_android_touch_time_filter(void* userdata, SDL_Event* ev)
+{
+    Uint64 uptime = android_touch_event_uptime_ns;
+    (void)userdata;
+    if (uptime <= android_touch_clock_origin_ns
+        || (ev->type != SDL_EVENT_FINGER_DOWN && ev->type != SDL_EVENT_FINGER_UP
+            && ev->type != SDL_EVENT_FINGER_CANCELED)
+        || ev->tfinger.touchID == SDL_MOUSE_TOUCHID
+        || ev->tfinger.touchID == SDL_PEN_TOUCHID)
+        return true;
+
+    Uint64 timestamp = uptime - android_touch_clock_origin_ns;
+    if (timestamp <= ev->tfinger.timestamp) {
+        ev->tfinger.timestamp = timestamp;
+        if (ev->type == SDL_EVENT_FINGER_DOWN) {
+            SDL_LockSpinlock(&android_touch_down_lock);
+            unsigned index = android_touch_down_next;
+            android_touch_down_next = (index + 1) % N_ELEMENTS(android_touch_down_edges);
+            android_touch_down_edges[index].timestamp = timestamp;
+            android_touch_down_edges[index].touch = ev->tfinger.touchID;
+            android_touch_down_edges[index].finger = ev->tfinger.fingerID;
+            android_touch_down_edges[index].window = ev->tfinger.windowID;
+            SDL_UnlockSpinlock(&android_touch_down_lock);
+        }
+    }
+    return true;
+}
+
+static bool sdl_android_take_touch_down(const SDL_Event* ev)
+{
+    if (ev->type != SDL_EVENT_FINGER_DOWN || !ev->tfinger.timestamp
+        || !SDL_GetAtomicInt(&android_thumb_confirmation_event))
+        return false;
+
+    bool found = false;
+    SDL_LockSpinlock(&android_touch_down_lock);
+    for (unsigned i = 0; i < N_ELEMENTS(android_touch_down_edges); ++i) {
+        if (android_touch_down_edges[i].timestamp == ev->tfinger.timestamp
+            && android_touch_down_edges[i].touch == ev->tfinger.touchID
+            && android_touch_down_edges[i].finger == ev->tfinger.fingerID
+            && android_touch_down_edges[i].window == ev->tfinger.windowID) {
+            android_touch_down_edges[i].timestamp = 0;
+            found = true;
+            break;
+        }
+    }
+    SDL_UnlockSpinlock(&android_touch_down_lock);
+    return found;
+}
+
+JNIEXPORT void JNICALL
+Java_com_silqh_silmore_SilMoreActivity_confirmThumbHold(
+    JNIEnv* env, jclass cls, jint token)
+{
+    (void)env;
+    (void)cls;
+    Uint32 type = (Uint32)SDL_GetAtomicInt(&android_thumb_confirmation_event);
+    if (type && token > 0) {
+        SDL_Event event = {0};
+        event.type = type;
+        event.user.code = token;
+        (void)SDL_PushEvent(&event);
+    }
+}
+
+static void sdl_android_touch_time_register(void)
+{
+    struct timespec monotonic;
+    /* Do not take over a filter installed by another caller. */
+    if (android_touch_time_filter_registered || SDL_GetEventFilter(NULL, NULL))
+        return;
+
+    /* Android MotionEvent uptime and the pinned SDL Android timer both use
+     * CLOCK_MONOTONIC. Register after SDL_Init; calibrate once so physical
+     * press/release durations are exact even when UI dispatch is delayed. */
+    Uint64 ticks = SDL_GetTicksNS();
+    if (clock_gettime(CLOCK_MONOTONIC, &monotonic) != 0)
+        return;
+    Uint64 uptime = SDL_SECONDS_TO_NS((Uint64)monotonic.tv_sec)
+        + (Uint64)monotonic.tv_nsec;
+    if (uptime <= ticks)
+        return;
+    android_touch_clock_origin_ns = uptime - ticks;
+    SDL_SetAtomicInt(&android_thumb_confirmation_event, (int)SDL_RegisterEvents(1));
+    SDL_SetEventFilter(sdl_android_touch_time_filter, NULL);
+    android_touch_time_filter_registered = true;
+}
+
+static void sdl_android_touch_time_unregister(void)
+{
+    SDL_EventFilter filter;
+    void* userdata;
+    if (!android_touch_time_filter_registered)
+        return;
+    if (SDL_GetEventFilter(&filter, &userdata)
+        && filter == sdl_android_touch_time_filter && userdata == NULL)
+        SDL_SetEventFilter(NULL, NULL);
+    SDL_SetAtomicInt(&android_thumb_confirmation_event, 0);
+    SDL_LockSpinlock(&android_touch_down_lock);
+    SDL_zeroa(android_touch_down_edges);
+    android_touch_down_next = 0;
+    SDL_UnlockSpinlock(&android_touch_down_lock);
+    android_touch_time_filter_registered = false;
+}
+
+void sdl_android_request_thumb_hold(SDL_TouchID device, SDL_FingerID finger,
+    Uint64 event_time, Sint32 token)
+{
+    JNIEnv* env = (JNIEnv*)SDL_GetAndroidJNIEnv();
+    if (!env || !SDL_GetAtomicInt(&android_thumb_confirmation_event)
+        || !device || finger < 1 || finger > SDL_MAX_SINT32
+        || event_time > SDL_MAX_UINT64 - android_touch_clock_origin_ns)
+        return;
+
+    /* Reverse the ID translation in the pinned Android SDL backend. */
+    Sint64 mapped_device = (Sint64)device;
+    Sint64 android_device = mapped_device < 0 ? mapped_device + 2 : mapped_device - 1;
+    if (android_device < SDL_MIN_SINT32 || android_device > SDL_MAX_SINT32)
+        return;
+    jobject activity = (jobject)SDL_GetAndroidActivity();
+    if (!activity)
+        return;
+    jclass cls = (*env)->GetObjectClass(env, activity);
+    if (cls) {
+        jmethodID method = (*env)->GetMethodID(env, cls,
+            "requestThumbHoldConfirmation", "(IIJI)V");
+        if (method) {
+            Uint64 uptime = event_time + android_touch_clock_origin_ns;
+            (*env)->CallVoidMethod(env, activity, method, (jint)android_device,
+                (jint)(finger - 1), (jlong)SDL_NS_TO_MS(uptime), (jint)token);
+        }
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    if ((*env)->ExceptionCheck(env))
+        (*env)->ExceptionClear(env);
+    (*env)->DeleteLocalRef(env, activity);
+}
+#endif
+
 enum {
     SDL_MOBILE_LIFECYCLE_EVENT_COUNT = 6
 };
@@ -540,6 +714,9 @@ bool SDLCALL sdl_mobile_lifecycle_event_watch(void* userdata, SDL_Event* ev)
 
 void sdl_mobile_lifecycle_register(void)
 {
+#if defined(SDL_PLATFORM_ANDROID)
+    sdl_android_touch_time_register();
+#endif
     if (g_mobile_lifecycle_watch_registered)
         return;
 
@@ -569,6 +746,9 @@ void sdl_mobile_lifecycle_register(void)
 
 void sdl_mobile_lifecycle_unregister(void)
 {
+#if defined(SDL_PLATFORM_ANDROID)
+    sdl_android_touch_time_unregister();
+#endif
     if (!g_mobile_lifecycle_watch_registered)
         return;
 
@@ -1363,6 +1543,14 @@ static bool sdl_poetry_screen_consume_pointer(const SDL_Event* ev)
 
 void sdl_handle_event(sdl_state* st, SDL_Event* ev)
 {
+#if defined(SDL_PLATFORM_ANDROID)
+    Uint32 thumb_confirmation = (Uint32)SDL_GetAtomicInt(&android_thumb_confirmation_event);
+    if (thumb_confirmation && ev->type == thumb_confirmation) {
+        sdl_touch_thumb_confirm_android_hold(ev->user.code);
+        return;
+    }
+    bool android_touch_down = sdl_android_take_touch_down(ev);
+#endif
     /* A description action runs on press. Its release can arrive inside the
      * next modal, which has its own early return below. Retire the claim on
      * arrival while preserving the active modal's usual event priority. */
@@ -2254,8 +2442,13 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
          * later "tap away to cancel" path, so tapping the button fires the
          * button action. */
         if (sdl_touch_thumb_handle_pointer_down(x, y, false,
-                ev->tfinger.fingerID))
+                ev->tfinger.fingerID, ev->tfinger.timestamp))
         {
+#if defined(SDL_PLATFORM_ANDROID)
+            if (android_touch_down)
+                sdl_touch_thumb_note_android_press(ev->tfinger.touchID,
+                    ev->tfinger.fingerID, ev->tfinger.timestamp);
+#endif
             return;
         }
         /* In aim-select mode the visible round wheel is a direct
@@ -2264,7 +2457,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
         if (g_pointer_aim.active && g_pointer_aim.select_mode
             && !g_pointer_aim.select_location
             && sdl_touch_round_handle_pointer_down(x, y,
-                ev->tfinger.fingerID))
+                ev->tfinger.fingerID, ev->tfinger.timestamp))
         {
             return;
         }
@@ -2382,7 +2575,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
                 return;
             }
             if (sdl_touch_round_handle_pointer_down(x, y,
-                    ev->tfinger.fingerID))
+                    ev->tfinger.fingerID, ev->tfinger.timestamp))
             {
                 return;
             }
@@ -2660,7 +2853,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
             && g_touch_thumb_press.finger_id == ev->tfinger.fingerID)
         {
             (void)sdl_touch_thumb_handle_pointer_up(x, y, false,
-                ev->tfinger.fingerID);
+                ev->tfinger.fingerID, ev->tfinger.timestamp);
             return;
         }
         if (sdl_touch_round_layer_controls_active()
@@ -2703,7 +2896,7 @@ void sdl_handle_event(sdl_state* st, SDL_Event* ev)
                 return;
             }
             if (sdl_touch_round_handle_pointer_up(x, y,
-                    ev->tfinger.fingerID))
+                    ev->tfinger.fingerID, ev->tfinger.timestamp))
             {
                 return;
             }

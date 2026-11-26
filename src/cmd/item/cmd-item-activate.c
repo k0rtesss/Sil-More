@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-internal.h"
@@ -481,13 +482,13 @@ static bool sanctity_choose_target_from_entries(
         strnfmt(label, sizeof(label), "%c)", index_to_label(i));
         object_choice_entry_make(&choices[i], entries[i].item,
             entries[i].o_ptr, label,
-            (entries[i].item < 0) ? "On floor"
+            (entries[i].item < 0) ? ui_text("On floor")
                                   : mention_use(entries[i].item));
     }
 
-    strnfmt(desc, sizeof(desc), "%d eligible sanctity target%s", count,
-        (count == 1) ? "" : "s");
-    if (!object_choice_overlay("Cleanse which item?", desc, choices, count, 0,
+    strnfmt(desc, sizeof(desc), ui_text("%d eligible %s"), count,
+        ui_text(count == 1 ? "sanctity target" : "sanctity targets"));
+    if (!object_choice_overlay(ui_text("Cleanse which item?"), desc, choices, count, 0,
             &selected))
     {
         choices = mem_free(choices);

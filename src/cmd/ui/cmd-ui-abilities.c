@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
@@ -167,7 +168,7 @@ static void ability_menu_format_amount_line(char* buf, size_t buflen,
     if (max_width <= 30)
         strnfmt(buf, buflen, "%s %d / %d", short_label, need, have);
     else
-        strnfmt(buf, buflen, "%d %s (you have %d)", need, long_label, have);
+        strnfmt(buf, buflen, ui_text("%d %s (you have %d)"), need, long_label, have);
 }
 
 static void ability_menu_append_text(char* out, size_t outsz, size_t* cur,
@@ -207,8 +208,8 @@ static cptr ability_menu_controller_text(cptr src, char* out, size_t outsz)
     controller_prompt_label_no_sticks('X', "X", exchange_label, sizeof(exchange_label));
 
     strnfmt(wait_token, sizeof(wait_token), "(%s/5)", wait_label);
-    strnfmt(fletch_token, sizeof(fletch_token), "Use %s to", fletch_label);
-    strnfmt(exchange_token, sizeof(exchange_token), "Use %s to", exchange_label);
+    strnfmt(fletch_token, sizeof(fletch_token), ui_text("Use %s to"), fletch_label);
+    strnfmt(exchange_token, sizeof(exchange_token), ui_text("Use %s to"), exchange_label);
 
     replacements[0].from = "(z/5)";
     replacements[0].to = wait_token;
@@ -269,7 +270,7 @@ static void ability_menu_render_prerequisites_block(int skilltype,
     int info_width = ability_menu_text_width(desc_col, 2);
     char buf[80];
 
-    Term_putstr(desc_col, row, -1, TERM_YELLOW, "Prerequisites:");
+    Term_putstr(desc_col, row, -1, TERM_YELLOW, ui_text("Prerequisites:"));
 
     ability_menu_format_amount_line(buf, sizeof(buf), "skill points", "Skill",
         b_ptr->level, p_ptr->skill_base[skilltype], info_width);
@@ -295,7 +296,7 @@ static void ability_menu_render_prerequisites_block(int skilltype,
             }
             else
             {
-                strnfmt(buf, sizeof(buf), "or %s",
+                strnfmt(buf, sizeof(buf), ui_text("or %s"),
                     b_name
                         + (&b_info[ability_index(b_ptr->prereq_skilltype[j],
                                b_ptr->prereq_abilitynum[j])])
@@ -314,7 +315,7 @@ static void ability_menu_render_prerequisites_block(int skilltype,
     }
     else if (b_ptr->prereqs > 0)
     {
-        Term_putstr(desc_col + 2, row, -1, TERM_GREEN, "Quick Study");
+        Term_putstr(desc_col + 2, row, -1, TERM_GREEN, ui_text("Quick Study"));
         row++;
     }
 
@@ -322,7 +323,7 @@ static void ability_menu_render_prerequisites_block(int skilltype,
     {
         int exp_cost = ability_purchase_exp_cost(skilltype);
 
-        Term_putstr(desc_col, row, -1, TERM_YELLOW, "Current price:");
+        Term_putstr(desc_col, row, -1, TERM_YELLOW, ui_text("Current price:"));
 
         ability_menu_format_amount_line(buf, sizeof(buf), "experience", "Exp",
             exp_cost, p_ptr->new_exp, info_width);
@@ -399,8 +400,8 @@ static bool ability_menu_weapon_skill_bonus_text(int skilltype,
         ? ability_current_skill_bonus(skilltype, abilitynum)
         : ability_potential_skill_bonus(skilltype, abilitynum);
 
-    strnfmt(bonus_text, text_size, "%s bonus: +%d %s.",
-        current ? "Current" : "Potential", bonus, target_skill);
+    strnfmt(bonus_text, text_size, ui_text("%s bonus: +%d %s."),
+        current ? ui_text("Current") : ui_text("Potential"), bonus, target_skill);
 
     if (!current
         && p_ptr->active_ability[partner_skilltype][partner_abilitynum])
@@ -439,13 +440,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
             if (current)
             {
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: %+d evasion while moving in light armour.",
+                    ui_text("Current bonus: %+d evasion while moving in light armour."),
                     dodging_bonus());
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: +3 evasion when you move while wearing only light armour.");
+                    ui_text("Potential bonus: +3 evasion when you move while wearing only light armour."));
             }
             break;
 
@@ -455,13 +456,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
             if (current)
             {
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: %+d evasion from your primary melee weapon.",
+                    ui_text("Current bonus: %+d evasion from your primary melee weapon."),
                     player_active_weapon_is_melee() ? bonus : 0);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: %+d evasion from your primary melee weapon when melee is active.",
+                    ui_text("Potential bonus: %+d evasion from your primary melee weapon when melee is active."),
                     bonus);
             }
             break;
@@ -478,13 +479,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
             if (current)
             {
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: %+d melee vs non-alert creatures and Song of Disguise targets.",
+                    ui_text("Current bonus: %+d melee vs non-alert creatures and Song of Disguise targets."),
                     bonus);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: %+d melee vs non-alert creatures and Song of Disguise targets.",
+                    ui_text("Potential bonus: %+d melee vs non-alert creatures and Song of Disguise targets."),
                     bonus);
             }
         }
@@ -498,13 +499,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
             if (current)
             {
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: up to %+d attack after passing the previous turn.",
+                    ui_text("Current bonus: up to %+d attack after passing the previous turn."),
                     bonus);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: up to %+d attack after passing the previous turn.",
+                    ui_text("Potential bonus: up to %+d attack after passing the previous turn."),
                     bonus);
             }
             break;
@@ -523,13 +524,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
                 }
 
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: up to %+d attack on the same target (currently %+d).",
+                    ui_text("Current bonus: up to %+d attack on the same target (currently %+d)."),
                     bonus, current_bonus);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: up to %+d attack per consecutive round on the same target.",
+                    ui_text("Potential bonus: up to %+d attack per consecutive round on the same target."),
                     bonus);
             }
             break;
@@ -539,13 +540,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
             if (current)
             {
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: up to %+d attack per previous kill of the same monster type.",
+                    ui_text("Current bonus: up to %+d attack per previous kill of the same monster type."),
                     bonus);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: up to %+d attack per previous kill of the same monster type.",
+                    ui_text("Potential bonus: up to %+d attack per previous kill of the same monster type."),
                     bonus);
             }
             break;
@@ -570,13 +571,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
                     bonus = 3;
 
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: %+d Strength, %+d Dexterity, %+d Grace at current health.",
+                    ui_text("Current bonus: %+d Strength, %+d Dexterity, %+d Grace at current health."),
                     bonus, bonus, bonus);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: +1 Strength, Dexterity, and Grace at 50%% HP; +3 each at 25%% HP.");
+                    ui_text("Potential bonus: +1 Strength, Dexterity, and Grace at 50%% HP; +3 each at 25%% HP."));
             }
             break;
 
@@ -584,13 +585,13 @@ static bool ability_menu_other_bonus_text(int skilltype, int abilitynum,
             if (current)
             {
                 strnfmt(bonus_text, text_size,
-                    "Current bonus: %+d melee damage die ready after taking melee damage.",
+                    ui_text("Current bonus: %+d melee damage die ready after taking melee damage."),
                     p_ptr->vengeance);
             }
             else
             {
                 strnfmt(bonus_text, text_size,
-                    "Potential bonus: +1 melee damage die after taking melee damage.");
+                    ui_text("Potential bonus: +1 melee damage die after taking melee damage."));
             }
             break;
 
@@ -662,20 +663,20 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
     {
         int will_penalty = (song_skill > 0) ? MAX(1, song_skill / 5) : 0;
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: enemy Will -%d.", will_penalty);
+            ui_text("\n\nCurrent effect: enemy Will -%d."), will_penalty);
         break;
     }
     case SNG_CHALLENGE:
     {
         int debuff = (song_skill > 0) ? MAX(1, song_skill / 5) : 0;
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: enemy Will and Stealth -%d.", debuff);
+            ui_text("\n\nCurrent effect: enemy Will and Stealth -%d."), debuff);
         break;
     }
     case SNG_DELVINGS:
     {
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: delving range %d squares.", song_skill + 8);
+            ui_text("\n\nCurrent effect: delving range %d squares."), song_skill + 8);
         break;
     }
     case SNG_FREEDOM:
@@ -690,7 +691,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
         int silence_bonus = song_skill / 2;
         int enemy_song_penalty = silence_bonus / 2;
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: +%d to hush/noise checks; enemy songs -%d.",
+            ui_text("\n\nCurrent effect: +%d to hush/noise checks; enemy songs -%d."),
             silence_bonus, enemy_song_penalty);
         break;
     }
@@ -702,13 +703,13 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
         if (extra_turns > 0)
         {
             strnfmt(bonus_text, sizeof(bonus_text),
-                "\n\nCurrent effect: stops bleeding and heals %d HP/turn, with +1 extra on %d turns in 12.",
+                ui_text("\n\nCurrent effect: stops bleeding and heals %d HP/turn, with +1 extra on %d turns in 12."),
                 base_heal, extra_turns);
         }
         else
         {
             strnfmt(bonus_text, sizeof(bonus_text),
-                "\n\nCurrent effect: stops bleeding and heals %d HP/turn.",
+                ui_text("\n\nCurrent effect: stops bleeding and heals %d HP/turn."),
                 base_heal);
         }
         break;
@@ -724,7 +725,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
     {
         int light_radius = ability_menu_stepped_song_bonus(song_skill, 5, 6);
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: +%d light radius.", light_radius);
+            ui_text("\n\nCurrent effect: +%d light radius."), light_radius);
         break;
     }
     case SNG_WOVEN_THEMES:
@@ -732,7 +733,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
         int minor_skill = ability_menu_minor_song_score(song_skill);
         int synergy_bonus = ability_menu_song_synergy_bonus(song_skill);
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: a minor theme uses Song %d; a valid synergy pair adds +%d Song. Minor themes pay their normal Voice cost.",
+            ui_text("\n\nCurrent effect: a minor theme uses Song %d; a valid synergy pair adds +%d Song. Minor themes pay their normal Voice cost."),
             minor_skill, synergy_bonus);
         break;
     }
@@ -743,14 +744,14 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
             hp_threshold *= 2;
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: criticals can slay foes at %d HP or less.",
+            ui_text("\n\nCurrent effect: criticals can slay foes at %d HP or less."),
             hp_threshold);
         break;
     }
     case SNG_REVEALING:
     {
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: rolls to reveal monsters/items within %d squares; revealed, carried, and equipped items get +1d5 identification.",
+            ui_text("\n\nCurrent effect: rolls to reveal monsters/items within %d squares; revealed, carried, and equipped items get +1d5 identification."),
             (song_skill / 2) + 8);
         break;
     }
@@ -758,7 +759,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
     {
         int evasion_bonus = ability_menu_stepped_song_bonus(song_skill, 7, 8);
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: +1 Grace and +%d Evasion.",
+            ui_text("\n\nCurrent effect: +1 Grace and +%d Evasion."),
             evasion_bonus);
         break;
     }
@@ -774,7 +775,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
         }
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: +%d Will and [%dd2] protection.",
+            ui_text("\n\nCurrent effect: +%d Will and [%dd2] protection."),
             will_bonus, protection_dice);
         break;
     }
@@ -786,7 +787,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
             : "";
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: disguise checks use %d + Will%s.",
+            ui_text("\n\nCurrent effect: disguise checks use %d + Will%s."),
             disguise_bonus, extra);
         break;
     }
@@ -798,13 +799,13 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
             sleep_score = (3 * song_skill) / 2;
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: sleep checks use %d.", sleep_score);
+            ui_text("\n\nCurrent effect: sleep checks use %d."), sleep_score);
         break;
     }
     case SNG_SHATTERING:
     {
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: each successful shatter has a %d%% weaken chance.",
+            ui_text("\n\nCurrent effect: each successful shatter has a %d%% weaken chance."),
             song_skill / 3);
         break;
     }
@@ -816,7 +817,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
             mastery_bonus = (7 * song_skill) / 4;
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: mastery rolls are 2d8 + %d.",
+            ui_text("\n\nCurrent effect: mastery rolls are 2d8 + %d."),
             mastery_bonus);
         break;
     }
@@ -834,7 +835,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
         int armour_penalty = MAX(1, song_skill / 12);
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: duel checks add Will/2; victory inflicts -%d Will, -%d Stealth, -%d Evasion, -%d armour die.",
+            ui_text("\n\nCurrent effect: duel checks add Will/2; victory inflicts -%d Will, -%d Stealth, -%d Evasion, -%d armour die."),
             will_penalty, stealth_penalty, evasion_penalty,
             armour_penalty);
         break;
@@ -845,7 +846,7 @@ static void ability_menu_render_song_bonus_block(const ability_type* b_ptr)
         int attrition_steps = MAX(1, song_skill / 12);
 
         strnfmt(bonus_text, sizeof(bonus_text),
-            "\n\nCurrent effect: duel checks add Will/2; victory inflicts -%d Will and -%d health/damage steps.",
+            ui_text("\n\nCurrent effect: duel checks add Will/2; victory inflicts -%d Will and -%d health/damage steps."),
             will_penalty, attrition_steps);
         break;
     }
@@ -1191,9 +1192,9 @@ void do_cmd_change_song()
     {
         char buf[80];
 
-        strnfmt(buf, sizeof(buf), "You cannot sing for %d more turn%s.",
+        strnfmt(buf, sizeof(buf), ui_text("You cannot sing for %d more %s."),
             p_ptr->song_lockout_timer,
-            (p_ptr->song_lockout_timer == 1) ? "" : "s");
+            ui_text(p_ptr->song_lockout_timer == 1 ? "turn" : "turns"));
         song_menu_show_message(buf);
         return;
     }
@@ -1785,7 +1786,7 @@ int bane_menu(int* highlight)
     ui_menu_click_begin();
     ui_menu_click_set_hover_enabled(true);
 
-    Term_putstr(list_col, 2, -1, TERM_WHITE, "Enemy types");
+    Term_putstr(list_col, 2, -1, TERM_WHITE, ui_text("Enemy types"));
 
     // list the enemies
     for (i = 1; i < BANE_TYPES; i++)
@@ -1846,7 +1847,7 @@ int bane_menu(int* highlight)
         if (compact_layout)
         {
             wipe_screen_from(desc_col);
-            Term_putstr(desc_col, 2, -1, TERM_WHITE, "Enemy Details");
+            Term_putstr(desc_col, 2, -1, TERM_WHITE, ui_text("Enemy Details"));
             Term_putstr(desc_col, detail_row, term_wid - desc_col,
                 (k >= 4) ? TERM_SLATE : TERM_L_DARK,
                 bane_name[*highlight]);
@@ -1860,12 +1861,12 @@ int bane_menu(int* highlight)
 
         if (k >= 4)
         {
-            strnfmt(buf, 80, "You have slain %d of these foes.", k);
+            strnfmt(buf, 80, ui_text("You have slain %d of these foes."), k);
         }
         else
         {
             strnfmt(buf, 80,
-                "You have slain %d of these foes, and need to slay %d more.",
+                ui_text("You have slain %d of these foes, and need to slay %d more."),
                 k, 4 - k);
         }
         text_out_to_screen(detail_attr, buf);
@@ -1877,8 +1878,8 @@ int bane_menu(int* highlight)
     if (compact_layout)
     {
         Term_putstr(desc_col, nav_row_1, term_wid - desc_col, TERM_SLATE,
-            sdl_touch_only_device_active() ? "Tap row; selected row chooses"
-                : (steamdeck ? "D-pad navigate" : "Dir navigate"));
+            sdl_touch_only_device_active() ? ui_text("Tap row; selected row chooses")
+                : (steamdeck ? ui_text("D-pad navigate") : ui_text("Dir navigate")));
         {
             char prompt[96];
             if (steamdeck)
@@ -1890,7 +1891,7 @@ int bane_menu(int* highlight)
                     confirm_label, sizeof(confirm_label));
                 controller_prompt_label(steamdeck_back_key(), "B",
                     back_label, sizeof(back_label));
-                strnfmt(prompt, sizeof(prompt), "%s Select  %s Back",
+                strnfmt(prompt, sizeof(prompt), ui_text("%s Select  %s Back"),
                     confirm_label, back_label);
             }
             else if (sdl_touch_only_device_active())
@@ -2198,7 +2199,7 @@ int oath_menu(int* highlight)
     ui_menu_click_set_hover_enabled(true);
 
     // Title in the abilities column
-    Term_putstr(ability_col, 2, -1, TERM_WHITE, "Oaths");
+    Term_putstr(ability_col, 2, -1, TERM_WHITE, ui_text("Oaths"));
 
     // Build visible oaths list and display them (1..OATH_TYPES)
     for (i = 1; i <= OATH_TYPES && i < (int)N_ELEMENTS(oath_name); i++)
@@ -2252,13 +2253,13 @@ int oath_menu(int* highlight)
         wipe_screen_from(desc_col);
 
         // Oath title
-        Term_putstr(desc_col, 2, -1, TERM_WHITE, "Oath Details");
+        Term_putstr(desc_col, 2, -1, TERM_WHITE, ui_text("Oath Details"));
 
         if (oath_invalid(oath_idx))
         {
             // Menacing text for broken oaths
             Term_putstr(desc_col, row++, term_wid - desc_col, TERM_L_RED,
-                "OATH BROKEN");
+                ui_text("OATH BROKEN"));
             row++;
             row = oath_menu_put_wrapped(desc_col, row, TERM_RED,
                 "\"Thy oath lies shattered, thy word worthless as dust.\"");
@@ -2275,12 +2276,12 @@ int oath_menu(int* highlight)
             char* quote = (oath_idx < (int)N_ELEMENTS(oath_tolkien_desc)) ? oath_tolkien_desc[oath_idx] : "";
 
             Term_putstr(desc_col, row++, term_wid - desc_col, TERM_YELLOW,
-                "Quote:");
+                ui_text("Quote:"));
             row = oath_menu_put_wrapped(desc_col, row, TERM_SLATE, quote);
 
             // Oath vow
             Term_putstr(desc_col, row++, term_wid - desc_col, TERM_WHITE,
-                "Vow:");
+                ui_text("Vow:"));
             row = oath_menu_put_wrapped(desc_col, row, TERM_SLATE,
                 (oath_idx >= 0 && oath_idx < (int)N_ELEMENTS(oath_desc1))
                     ? oath_desc1[oath_idx]
@@ -2290,7 +2291,7 @@ int oath_menu(int* highlight)
             if (row < nav_row_1)
             {
                 Term_putstr(desc_col, row++, term_wid - desc_col, TERM_L_RED,
-                    "Restriction:");
+                    ui_text("Restriction:"));
                 row = oath_menu_put_wrapped(desc_col, row, TERM_L_RED,
                     oath_desc2_short(oath_idx));
             }
@@ -2299,7 +2300,7 @@ int oath_menu(int* highlight)
             if (row < nav_row_1)
             {
                 Term_putstr(desc_col, row++, term_wid - desc_col, TERM_L_GREEN,
-                    "Reward:");
+                    ui_text("Reward:"));
                 (void)oath_menu_put_wrapped(desc_col, row, TERM_L_GREEN,
                     oath_reward_short(oath_idx));
             }
@@ -2307,8 +2308,8 @@ int oath_menu(int* highlight)
 
         // Navigation instructions at bottom
         Term_putstr(desc_col, nav_row_1, term_wid - desc_col, TERM_SLATE,
-            sdl_touch_only_device_active() ? "Tap row; selected row chooses"
-                : (steamdeck ? "D-pad navigate" : "Dir navigate"));
+            sdl_touch_only_device_active() ? ui_text("Tap row; selected row chooses")
+                : (steamdeck ? ui_text("D-pad navigate") : ui_text("Dir navigate")));
         {
             char prompt[96];
             if (steamdeck)
@@ -2320,7 +2321,7 @@ int oath_menu(int* highlight)
                     confirm_label, sizeof(confirm_label));
                 controller_prompt_label(steamdeck_back_key(), "B",
                     back_label, sizeof(back_label));
-                strnfmt(prompt, sizeof(prompt), "%s Select  %s Back",
+                strnfmt(prompt, sizeof(prompt), ui_text("%s Select  %s Back"),
                     confirm_label, back_label);
             }
             else if (sdl_touch_only_device_active())
@@ -3224,7 +3225,7 @@ static void ability_browser_build_summary(int skilltype, char* summary,
         && skilltype >= 0 && skilltype < S_MAX)
     {
         strnfmt(summary, summary_len, "XP %ld | %s %d (%d)",
-            (long)p_ptr->new_exp, skill_names_full[skilltype],
+            (long)p_ptr->new_exp, ui_text(skill_names_full[skilltype]),
             p_ptr->skill_base[skilltype], p_ptr->skill_use[skilltype]);
         return;
     }
@@ -3238,12 +3239,12 @@ static void ability_browser_build_summary(int skilltype, char* summary,
     }
     else
     {
-        SDL_strlcpy(next_skill, "granted", sizeof(next_skill));
+        SDL_strlcpy(next_skill, ui_text("granted"), sizeof(next_skill));
         SDL_strlcpy(ability_price, "n/a", sizeof(ability_price));
     }
 
     strnfmt(summary, summary_len,
-        "XP %ld | %s base %d, current %d | next skill +1: %s | ability price %s",
+        ui_text("XP %ld | %s base %d, current %d | next skill +1: %s | ability price %s"),
         (long)p_ptr->new_exp,
         (skilltype >= 0 && skilltype < S_MAX) ? skill_names_full[skilltype]
                                               : "Skill",
@@ -3255,7 +3256,7 @@ static void ability_browser_build_summary(int skilltype, char* summary,
 static bool ability_browser_train_skill(int skilltype)
 {
     if (!tutorial_game_action_allowed("train", NULL)) return false;
-    tutorial_game_explain_now("advancement.skills", "Train a skill", "The next base rank costs 100 times the new rank in XP. Training changes the base skill; attributes and equipment contribute separately.");
+    tutorial_game_explain_now("advancement.skills", ui_text("Train a skill"), ui_text("The next base rank costs 100 times the new rank in XP. Training changes the base skill; attributes and equipment contribute separately."));
     if (!tutorial_game_action_allowed("train", NULL)) return false;
     int cost;
     int old_base;
@@ -3287,8 +3288,8 @@ static bool ability_browser_train_skill(int skilltype)
         return false;
     }
 
-    strnfmt(prompt, sizeof(prompt), "Increase %s from %d to %d for %d XP? ",
-        skill_names_full[skilltype], p_ptr->skill_base[skilltype],
+    strnfmt(prompt, sizeof(prompt), ui_text("Increase %s from %d to %d for %d XP? "),
+        ui_text(skill_names_full[skilltype]), p_ptr->skill_base[skilltype],
         p_ptr->skill_base[skilltype] + 1, cost);
     if (!get_check(prompt))
         return false;
@@ -3299,7 +3300,7 @@ static bool ability_browser_train_skill(int skilltype)
     p_ptr->update |= (PU_BONUS | PU_MANA);
     handle_stuff();
 
-    msg_format("%s increased to %d.", skill_names_full[skilltype],
+    msg_format("%s increased to %d.", ui_text(skill_names_full[skilltype]),
         p_ptr->skill_base[skilltype]);
     if (old_base == 0)
         sdl_quick_access_suggest_skill_shortcut(skilltype);
@@ -3356,8 +3357,8 @@ static void ability_browser_build_skill_tokens(int skill_options,
 {
     for (int skill = 0; skill < skill_options; skill++)
     {
-        cptr base_label = full_labels ? skill_names_full[skill]
-                                      : skill_names[skill];
+        cptr base_label = ui_text(full_labels ? skill_names_full[skill]
+                                      : skill_names[skill]);
         cptr suffix = ability_browser_skill_trait_suffix(skill);
         char label[32];
 
@@ -3551,16 +3552,16 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
         case MEL_SMITE:
         case MEL_RAPID_ATTACK:
             if (!player_active_weapon_is_melee())
-                reason = "Requires your melee weapon to be active.";
+                reason = ui_text("Requires your melee weapon to be active.");
             break;
         case MEL_POWER_THROW:
             if (!player_active_weapon_is_melee())
             {
-                reason = "Requires your melee weapon to be active.";
+                reason = ui_text("Requires your melee weapon to be active.");
             }
             else if (!inventory[INVEN_WIELD].k_idx)
             {
-                reason = "Requires an equipped melee weapon.";
+                reason = ui_text("Requires an equipped melee weapon.");
             }
             else
             {
@@ -3579,13 +3580,13 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
                     }
                 }
                 if (!has_weapon)
-                    reason = "Requires an inactive Harness spear or hand axe.";
+                    reason = ui_text("Requires an inactive Harness spear or hand axe.");
             }
             break;
         case MEL_TWO_WEAPON:
             if (!player_active_weapon_is_melee())
             {
-                reason = "Requires your melee weapon to be active.";
+                reason = ui_text("Requires your melee weapon to be active.");
             }
             else
             {
@@ -3596,7 +3597,7 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
                         || (off->tval == TV_DIGGING));
 
                 if (!has_offhand_weapon)
-                    reason = "Requires a second weapon in your off hand.";
+                    reason = ui_text("Requires a second weapon in your off hand.");
             }
             break;
         default:
@@ -3610,11 +3611,11 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
         case EVN_DODGING:
         case EVN_FLANKING:
             if (!wearing_only_light_armour())
-                reason = "Requires wearing only light armour.";
+                reason = ui_text("Requires wearing only light armour.");
             break;
         case EVN_PARRY:
             if (!player_active_weapon_is_melee())
-                reason = "Requires your melee weapon to be active.";
+                reason = ui_text("Requires your melee weapon to be active.");
             break;
         default:
             break;
@@ -3631,13 +3632,13 @@ static bool ability_inactive_reason(int skilltype, int abilitynum,
         case ARC_CRIPPLING:
         case ARC_DEADLY_HAIL:
             if (!player_active_weapon_is_ranged())
-                reason = "Requires your ranged weapon to be active.";
+                reason = ui_text("Requires your ranged weapon to be active.");
             break;
         case ARC_SKIRMISHING:
             if (!player_active_weapon_is_ranged())
-                reason = "Requires your ranged weapon to be active.";
+                reason = ui_text("Requires your ranged weapon to be active.");
             else if (!wearing_only_light_armour())
-                reason = "Requires wearing only light armour.";
+                reason = ui_text("Requires wearing only light armour.");
             break;
         default:
             break;
@@ -3790,7 +3791,7 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
 
     if (player_ability_restriction(skilltype, abilitynum))
     {
-        SDL_strlcpy(buf, "unavailable", buflen);
+        SDL_strlcpy(buf, ui_text("unavailable"), buflen);
         return;
     }
 
@@ -3800,37 +3801,37 @@ static void ability_browser_entry_state(char* buf, size_t buflen,
             && p_ptr->active_ability[skilltype][abilitynum]
             && ability_is_blocked(skilltype, abilitynum))
         {
-            SDL_strlcpy(buf, "idle", buflen);
+            SDL_strlcpy(buf, ui_text("idle"), buflen);
         }
         else if (!p_ptr->innate_ability[skilltype][abilitynum])
             SDL_strlcpy(buf,
-                p_ptr->active_ability[skilltype][abilitynum] ? "item" : "off",
+                p_ptr->active_ability[skilltype][abilitynum] ? ui_text("item") : ui_text("off"),
                 buflen);
         else if (skilltype == S_SPC)
         {
             int oath_id = ability_browser_oath_for_special(abilitynum);
             SDL_strlcpy(buf,
-                p_ptr->active_ability[skilltype][abilitynum] ? "grant"
-                    : (oath_id > 0 && oath_invalid(oath_id)) ? "lost" : "off",
+                p_ptr->active_ability[skilltype][abilitynum] ? ui_text("grant")
+                    : (oath_id > 0 && oath_invalid(oath_id)) ? ui_text("lost") : ui_text("off"),
                 buflen);
         }
         else
             SDL_strlcpy(buf,
-                p_ptr->active_ability[skilltype][abilitynum] ? "on" : "off",
+                p_ptr->active_ability[skilltype][abilitynum] ? ui_text("on") : ui_text("off"),
                 buflen);
         return;
     }
 
     if (skilltype == S_SPC)
     {
-        SDL_strlcpy(buf, "grant", buflen);
+        SDL_strlcpy(buf, ui_text("grant"), buflen);
         return;
     }
 
     if (prereqs(skilltype, abilitynum))
         strnfmt(buf, buflen, "%d XP", ability_purchase_exp_cost(skilltype));
     else
-        SDL_strlcpy(buf, "locked", buflen);
+        SDL_strlcpy(buf, ui_text("locked"), buflen);
 }
 
 /* Keep displayed shortcuts separate from the browser's commands.  In
@@ -3900,7 +3901,7 @@ static void ability_browser_draw_ability_list(
 
     ability_browser_put_fitted(layout->ability_col, layout->header_row,
         layout->ability_w, TERM_SLATE, get_sdl_menu_bigger_font() && layout->visible_w < 55
-            ? "Abilities (scroll)" : "Lvl Ability                       State");
+            ? ui_text("Abilities (scroll)") : ui_text("Lvl Ability                       State"));
 
     for (int i = 0; i < visible_entries; i++)
     {
@@ -3972,7 +3973,7 @@ static void ability_browser_draw_ability_list(
                     card_w, row_attr, line);
             }
             ability_browser_entry_state(state, sizeof(state), skilltype, entry);
-            strnfmt(metadata, sizeof(metadata), "Level %s | %s", level_text, state);
+            strnfmt(metadata, sizeof(metadata), ui_text("Level %s | %s"), level_text, state);
             ability_browser_put_fitted(card_col, y + entry_rows - 1,
                 card_w, state_attr, metadata);
             continue;
@@ -4015,20 +4016,20 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
     {
         int will_penalty = (song_skill > 0) ? MAX(1, song_skill / 5) : 0;
         strnfmt(bonus_text, text_size,
-            "Current effect: enemy Will -%d.", will_penalty);
+            ui_text("Current effect: enemy Will -%d."), will_penalty);
         break;
     }
     case SNG_CHALLENGE:
     {
         int debuff = (song_skill > 0) ? MAX(1, song_skill / 5) : 0;
         strnfmt(bonus_text, text_size,
-            "Current effect: enemy Will and Stealth -%d.", debuff);
+            ui_text("Current effect: enemy Will and Stealth -%d."), debuff);
         break;
     }
     case SNG_DELVINGS:
     {
         strnfmt(bonus_text, text_size,
-            "Current effect: delving range %d squares.", song_skill + 8);
+            ui_text("Current effect: delving range %d squares."), song_skill + 8);
         break;
     }
     case SNG_FREEDOM:
@@ -4042,7 +4043,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
         int silence_bonus = song_skill / 2;
         int enemy_song_penalty = silence_bonus / 2;
         strnfmt(bonus_text, text_size,
-            "Current effect: +%d to hush/noise checks; enemy songs -%d.",
+            ui_text("Current effect: +%d to hush/noise checks; enemy songs -%d."),
             silence_bonus, enemy_song_penalty);
         break;
     }
@@ -4054,13 +4055,13 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
         if (extra_turns > 0)
         {
             strnfmt(bonus_text, text_size,
-                "Current effect: stops bleeding and heals %d HP/turn, with +1 extra on %d turns in 12.",
+                ui_text("Current effect: stops bleeding and heals %d HP/turn, with +1 extra on %d turns in 12."),
                 base_heal, extra_turns);
         }
         else
         {
             strnfmt(bonus_text, text_size,
-                "Current effect: stops bleeding and heals %d HP/turn.",
+                ui_text("Current effect: stops bleeding and heals %d HP/turn."),
                 base_heal);
         }
         break;
@@ -4075,7 +4076,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
     {
         int light_radius = ability_menu_stepped_song_bonus(song_skill, 5, 6);
         strnfmt(bonus_text, text_size,
-            "Current effect: +%d light radius.", light_radius);
+            ui_text("Current effect: +%d light radius."), light_radius);
         break;
     }
     case SNG_WOVEN_THEMES:
@@ -4083,7 +4084,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
         int minor_skill = ability_menu_minor_song_score(song_skill);
         int synergy_bonus = ability_menu_song_synergy_bonus(song_skill);
         strnfmt(bonus_text, text_size,
-            "Current effect: a minor theme uses Song %d; a valid synergy pair adds +%d Song. Minor themes pay their normal Voice cost.",
+            ui_text("Current effect: a minor theme uses Song %d; a valid synergy pair adds +%d Song. Minor themes pay their normal Voice cost."),
             minor_skill, synergy_bonus);
         break;
     }
@@ -4094,14 +4095,14 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
             hp_threshold *= 2;
 
         strnfmt(bonus_text, text_size,
-            "Current effect: criticals can slay foes at %d HP or less.",
+            ui_text("Current effect: criticals can slay foes at %d HP or less."),
             hp_threshold);
         break;
     }
     case SNG_REVEALING:
     {
         strnfmt(bonus_text, text_size,
-            "Current effect: rolls to reveal monsters/items within %d squares; revealed, carried, and equipped items get +1d5 identification.",
+            ui_text("Current effect: rolls to reveal monsters/items within %d squares; revealed, carried, and equipped items get +1d5 identification."),
             (song_skill / 2) + 8);
         break;
     }
@@ -4109,7 +4110,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
     {
         int evasion_bonus = ability_menu_stepped_song_bonus(song_skill, 7, 8);
         strnfmt(bonus_text, text_size,
-            "Current effect: +1 Grace and +%d Evasion.", evasion_bonus);
+            ui_text("Current effect: +1 Grace and +%d Evasion."), evasion_bonus);
         break;
     }
     case SNG_STAYING:
@@ -4124,7 +4125,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
         }
 
         strnfmt(bonus_text, text_size,
-            "Current effect: +%d Will and [%dd2] protection.",
+            ui_text("Current effect: +%d Will and [%dd2] protection."),
             will_bonus, protection_dice);
         break;
     }
@@ -4136,7 +4137,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
             : "";
 
         strnfmt(bonus_text, text_size,
-            "Current effect: disguise checks use %d + Will%s.",
+            ui_text("Current effect: disguise checks use %d + Will%s."),
             disguise_bonus, extra);
         break;
     }
@@ -4148,13 +4149,13 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
             sleep_score = (3 * song_skill) / 2;
 
         strnfmt(bonus_text, text_size,
-            "Current effect: sleep checks use %d.", sleep_score);
+            ui_text("Current effect: sleep checks use %d."), sleep_score);
         break;
     }
     case SNG_SHATTERING:
     {
         strnfmt(bonus_text, text_size,
-            "Current effect: each successful shatter has a %d%% weaken chance.",
+            ui_text("Current effect: each successful shatter has a %d%% weaken chance."),
             song_skill / 3);
         break;
     }
@@ -4166,7 +4167,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
             mastery_bonus = (7 * song_skill) / 4;
 
         strnfmt(bonus_text, text_size,
-            "Current effect: mastery rolls are 2d8 + %d.", mastery_bonus);
+            ui_text("Current effect: mastery rolls are 2d8 + %d."), mastery_bonus);
         break;
     }
     case SNG_GRA:
@@ -4182,7 +4183,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
         int armour_penalty = MAX(1, song_skill / 12);
 
         strnfmt(bonus_text, text_size,
-            "Current effect: duel checks add Will/2; victory inflicts -%d Will, -%d Stealth, -%d Evasion, -%d armour die.",
+            ui_text("Current effect: duel checks add Will/2; victory inflicts -%d Will, -%d Stealth, -%d Evasion, -%d armour die."),
             will_penalty, stealth_penalty, evasion_penalty, armour_penalty);
         break;
     }
@@ -4192,7 +4193,7 @@ static bool ability_browser_song_bonus_text(const ability_type* b_ptr,
         int attrition_steps = MAX(1, song_skill / 12);
 
         strnfmt(bonus_text, text_size,
-            "Current effect: duel checks add Will/2; victory inflicts -%d Will and -%d health/damage steps.",
+            ui_text("Current effect: duel checks add Will/2; victory inflicts -%d Will and -%d health/damage steps."),
             will_penalty, attrition_steps);
         break;
     }
@@ -4219,8 +4220,8 @@ static void ability_browser_add_prerequisites(
     ability_desc_add_blank(lines, line_count);
     ability_desc_add_heading(lines, line_count, TERM_YELLOW, "Requirements");
 
-    strnfmt(buf, sizeof(buf), "Skill: %d %s base (%d now)",
-        b_ptr->level, skill_names_full[skilltype],
+    strnfmt(buf, sizeof(buf), ui_text("Skill: %d %s base (%d now)"),
+        b_ptr->level, ui_text(skill_names_full[skilltype]),
         p_ptr->skill_base[skilltype]);
     ability_desc_add_wrapped(lines, line_count,
         (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
@@ -4232,7 +4233,7 @@ static void ability_browser_add_prerequisites(
         int skill_xp = ability_browser_skill_training_cost(
             p_ptr->skill_base[skilltype], b_ptr->level);
 
-        strnfmt(buf, sizeof(buf), "Skill XP: %d needed to reach level %d",
+        strnfmt(buf, sizeof(buf), ui_text("Skill XP: %d needed to reach level %d"),
             skill_xp, b_ptr->level);
         ability_desc_add_wrapped(lines, line_count, TERM_L_DARK, buf, width);
     }
@@ -4276,12 +4277,12 @@ static void ability_browser_add_prerequisites(
         if (skill_xp > 0)
         {
             strnfmt(buf, sizeof(buf),
-                "Total XP: %d (%d skill + %d ability; %ld available)",
+                ui_text("Total XP: %d (%d skill + %d ability; %ld available)"),
                 total_xp, skill_xp, ability_xp, (long)p_ptr->new_exp);
         }
         else
         {
-            strnfmt(buf, sizeof(buf), "Ability XP: %d (%ld available)",
+            strnfmt(buf, sizeof(buf), ui_text("Ability XP: %d (%ld available)"),
                 ability_xp, (long)p_ptr->new_exp);
         }
         ability_desc_add_wrapped(lines, line_count, cost_attr, buf, width);
@@ -4343,7 +4344,7 @@ static void ability_browser_add_current_blocks(
                 (mercy_ratio_times_10 + total_seen - 1) / total_seen;
 
             strnfmt(buf, sizeof(buf),
-                "Current bonus: +%d stealth (%d seen, %d spared)",
+                ui_text("Current bonus: +%d stealth (%d seen, %d spared)"),
                 stealth_bonus, total_seen, total_seen - total_killed);
         }
         else
@@ -4366,7 +4367,7 @@ static void ability_browser_add_current_blocks(
 
         strnfmt(buf, sizeof(buf),
             learned
-                ? "Current bonus: +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)"
+                ? ui_text("Current bonus: +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)")
                 : "With current equipment: +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)",
             protection_bonus, evasion_bonus, armour_weight / 10,
             armour_weight % 10);
@@ -4386,12 +4387,12 @@ static void ability_browser_add_current_blocks(
             threshold *= 2;
 
         ability_desc_add_blank(lines, line_count);
-        strnfmt(buf, sizeof(buf), "%s-Bane: %d slain, %+d bonus",
+        strnfmt(buf, sizeof(buf), ui_text("%s-Bane: %d slain, %+d bonus"),
             bane_name[p_ptr->bane_type], killed, current_bonus);
         ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN, buf, width);
         if (threshold <= 64 || current_bonus == 0)
         {
-            strnfmt(buf, sizeof(buf), "Next bonus at %d slain.", threshold);
+            strnfmt(buf, sizeof(buf), ui_text("Next bonus at %d slain."), threshold);
             ability_desc_add_wrapped(lines, line_count, TERM_SLATE, buf, width);
         }
     }
@@ -4401,7 +4402,7 @@ static void ability_browser_add_current_blocks(
         && (p_ptr->oath_type > 0))
     {
         ability_desc_add_blank(lines, line_count);
-        strnfmt(buf, sizeof(buf), "Oath: %s",
+        strnfmt(buf, sizeof(buf), ui_text("Oath: %s"),
             oath_name_short(p_ptr->oath_type));
         ability_desc_add_wrapped(lines, line_count, TERM_L_BLUE, buf, width);
         strnfmt(buf, sizeof(buf), "You have sworn not to %s.",
@@ -4410,7 +4411,7 @@ static void ability_browser_add_current_blocks(
 
         if (oath_invalid(p_ptr->oath_type))
             ability_desc_add_wrapped(lines, line_count, TERM_RED,
-                "You are an oathbreaker.", width);
+                ui_text("You are an oathbreaker."), width);
         else
         {
             strnfmt(buf, sizeof(buf), "Bonus: %s.",
@@ -4434,12 +4435,12 @@ static void ability_browser_add_current_blocks(
         }
 
         ability_desc_add_blank(lines, line_count);
-        strnfmt(buf, sizeof(buf), "Unique Bane: %d uniques slain, %+d bonus",
+        strnfmt(buf, sizeof(buf), ui_text("Unique Bane: %d uniques slain, %+d bonus"),
             uniques_killed, current_bonus);
         ability_desc_add_wrapped(lines, line_count, TERM_L_GREEN, buf, width);
         if (threshold <= 64 || current_bonus == 0)
         {
-            strnfmt(buf, sizeof(buf), "Next bonus at %d uniques.", threshold);
+            strnfmt(buf, sizeof(buf), ui_text("Next bonus at %d uniques."), threshold);
             ability_desc_add_wrapped(lines, line_count, TERM_SLATE, buf, width);
         }
     }
@@ -4461,7 +4462,7 @@ static int ability_browser_build_description(int skilltype,
     if (!entry || !entry->b_ptr)
     {
         ability_desc_add_line(lines, &line_count, TERM_L_DARK,
-            "No abilities available for this skill.");
+            ui_text("No abilities available for this skill."));
         return line_count;
     }
 
@@ -4477,21 +4478,21 @@ static int ability_browser_build_description(int skilltype,
     {
         strnfmt(status, sizeof(status), "%s; %s.",
             p_ptr->innate_ability[skilltype][b_ptr->abilitynum]
-                ? "Learned"
-                : "Granted by equipment",
+                ? ui_text("Learned")
+                : ui_text("Granted by equipment"),
             p_ptr->active_ability[skilltype][b_ptr->abilitynum]
-                ? "active"
-                : "inactive");
+                ? ui_text("active")
+                : ui_text("inactive"));
     }
     else if (skilltype == S_SPC)
     {
-        SDL_strlcpy(status, "Special ability; granted by quests or story.",
+        SDL_strlcpy(status, ui_text("Special ability; granted by quests or story."),
             sizeof(status));
     }
     else
     {
-        strnfmt(status, sizeof(status), "%s. Price %d XP.",
-            prereqs(skilltype, b_ptr->abilitynum) ? "Available" : "Locked",
+        strnfmt(status, sizeof(status), ui_text("%s. Price %d XP."),
+            prereqs(skilltype, b_ptr->abilitynum) ? ui_text("Available") : ui_text("Locked"),
             ability_purchase_exp_cost(skilltype));
     }
     ability_desc_add_wrapped(lines, &line_count, TERM_SLATE, status, width);
@@ -4507,7 +4508,7 @@ static int ability_browser_build_description(int skilltype,
             char blocked[160];
 
             ability_desc_add_blank(lines, &line_count);
-            strnfmt(blocked, sizeof(blocked), "Not active now: %s", reason);
+            strnfmt(blocked, sizeof(blocked), ui_text("Not active now: %s"), reason);
             ability_desc_add_wrapped(lines, &line_count, TERM_ORANGE, blocked,
                 width);
         }
@@ -4526,14 +4527,14 @@ static int ability_browser_build_description(int skilltype,
         if (broken_message && broken_message[0])
         {
             ability_desc_add_heading(lines, &line_count, TERM_RED,
-                "Broken oath");
+                ui_text("Broken oath"));
             ability_desc_add_wrapped(lines, &line_count, TERM_RED,
                 broken_message, width);
         }
         else
         {
             ability_desc_add_line(lines, &line_count, TERM_RED,
-                "Broken oath");
+                ui_text("Broken oath"));
         }
     }
     else
@@ -4551,7 +4552,7 @@ static int ability_browser_build_description(int skilltype,
         {
             ability_desc_add_blank(lines, &line_count);
             ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
-                "Effect");
+                ui_text("Effect"));
             ability_desc_add_wrapped(lines, &line_count, TERM_L_WHITE,
                 effect_text, width);
         }
@@ -4563,7 +4564,7 @@ static int ability_browser_build_description(int skilltype,
         {
             ability_desc_add_blank(lines, &line_count);
             ability_desc_add_heading(lines, &line_count, TERM_YELLOW,
-                "Lore");
+                ui_text("Lore"));
             ability_desc_add_wrapped(lines, &line_count, TERM_SLATE,
                 desc_text, width);
         }
@@ -4686,8 +4687,8 @@ static int ability_browser_highlight_match(cptr line, int offset, byte* attr,
     {
         for (int skill = 0; skill < S_MAX; skill++)
         {
-            cptr full_name = skill_names_full[skill];
-            cptr short_name = skill_names[skill];
+            cptr full_name = ui_text(skill_names_full[skill]);
+            cptr short_name = ui_text(skill_names[skill]);
 
             if (ability_browser_phrase_matches_exact(line, offset, full_name))
             {
@@ -4704,10 +4705,10 @@ static int ability_browser_highlight_match(cptr line, int offset, byte* attr,
 
     for (size_t i = 0; i < N_ELEMENTS(rules); i++)
     {
-        if (ability_browser_phrase_matches_ci(line, offset, rules[i].phrase))
+        if (ability_browser_phrase_matches_ci(line, offset, ui_text(rules[i].phrase)))
         {
             *attr = rules[i].attr;
-            return (int)strlen(rules[i].phrase);
+            return (int)strlen(ui_text(rules[i].phrase));
         }
     }
 
@@ -4856,7 +4857,7 @@ static void ability_browser_draw_summary(const ability_browser_layout* layout,
         if (train_start)
         {
             train_start += 3;
-            train_end = strstr(train_start, " | ability price");
+            train_end = strstr(train_start, ui_text(" | ability price"));
         }
     }
 
@@ -4920,9 +4921,9 @@ static void ability_browser_draw_frame(const ability_browser_layout* layout,
 
     Term_clear();
 
-    strnfmt(title, sizeof(title), "Abilities - %s",
+    strnfmt(title, sizeof(title), ui_text("Abilities - %s"),
         (skilltype >= 0 && skilltype < S_MAX) ? skill_names_full[skilltype]
-                                              : "Skills");
+                                              : ui_text("Skills"));
     ability_browser_put_fitted(layout->visible_col, layout->title_row,
         layout->visible_w, TERM_L_WHITE + TERM_SHADE, title);
     ability_browser_draw_summary(layout, skilltype, summary, train_hovered);
@@ -4961,7 +4962,7 @@ static void ability_browser_register_prompt_clicks(
         layout->prompt_row, prompt, "Space");
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_ACTION,
         layout->visible_col,
-        layout->prompt_row, prompt, "buy/toggle");
+        layout->prompt_row, prompt, ui_text("buy/toggle"));
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_TRAIN, layout->visible_col,
         layout->prompt_row, prompt, "+");
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_TRAIN, layout->visible_col,
@@ -4974,16 +4975,16 @@ static void ability_browser_register_prompt_clicks(
         layout->prompt_row, prompt, "[/]");
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_PREV_SKILL,
         layout->visible_col,
-        layout->prompt_row, prompt, "prev skill");
+        layout->prompt_row, prompt, ui_text("prev skill"));
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_SCROLL_UP,
         layout->visible_col,
         layout->prompt_row, prompt, "9/3");
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_SCROLL_DOWN,
         layout->visible_col,
-        layout->prompt_row, prompt, "scroll");
+        layout->prompt_row, prompt, ui_text("scroll"));
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_SKILL_ALLOCATE,
         layout->visible_col,
-        layout->prompt_row, prompt, "i skills");
+        layout->prompt_row, prompt, ui_text("i skills"));
     ui_menu_click_add_text_token(ABILITY_MENU_CLICK_EXIT, layout->visible_col,
         layout->prompt_row, prompt, "Esc");
 }
@@ -5012,12 +5013,12 @@ static void ability_browser_draw_prompt(const ability_browser_layout* layout)
             sizeof(back_label));
 
         strnfmt(prompt_full, sizeof(prompt_full),
-            "D-pad move/scroll  [%s] buy/toggle  [%s] train  [%s] back",
+            ui_text("D-pad move/scroll  [%s] buy/toggle  [%s] train  [%s] back"),
             confirm_label, train_label, back_label);
         strnfmt(prompt_mid, sizeof(prompt_mid),
-            "[%s] buy/toggle  [%s] train  [%s] back",
+            ui_text("[%s] buy/toggle  [%s] train  [%s] back"),
             confirm_label, train_label, back_label);
-        strnfmt(prompt_short, sizeof(prompt_short), "[%s] buy  [%s] back",
+        strnfmt(prompt_short, sizeof(prompt_short), ui_text("[%s] buy  [%s] back"),
             confirm_label, back_label);
         variants[0] = prompt_full;
         variants[1] = prompt_mid;
@@ -5034,9 +5035,9 @@ static void ability_browser_draw_prompt(const ability_browser_layout* layout)
          * below scans this string for them, so dropping them would remove
          * those tap targets on touch. */
         const char* variants[] = {
-            "Tap row to select; selected row buy/toggle, train, prev skill, scroll, i skills",
-            "Selected row: buy/toggle, train, scroll, i skills",
-            "Selected row buy/toggle"
+            ui_text("Tap row to select; selected row buy/toggle, train, prev skill, scroll, i skills"),
+            ui_text("Selected row: buy/toggle, train, scroll, i skills"),
+            ui_text("Selected row buy/toggle")
         };
 
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->visible_w,
@@ -5047,9 +5048,9 @@ static void ability_browser_draw_prompt(const ability_browser_layout* layout)
     else
     {
         const char* variants[] = {
-            "Dir move  Tab skill  Space buy/toggle  + train  Pg scroll  i skills  Esc",
-            "Dir move  Tab skill  Space buy/toggle  + train  Esc",
-            "Space buy/toggle  + train  Esc"
+            ui_text("Dir move  Tab skill  Space buy/toggle  + train  Pg scroll  i skills  Esc"),
+            ui_text("Dir move  Tab skill  Space buy/toggle  + train  Esc"),
+            ui_text("Space buy/toggle  + train  Esc")
         };
 
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->visible_w,
@@ -5225,14 +5226,14 @@ static bool ability_browser_activate_choice(int skilltype, int abilitynum)
             if (train_skill)
             {
                 strnfmt(prompt, sizeof(prompt),
-                    "Raise %s %d to %d (%d XP) and gain %s (%d XP), %d XP total? ",
-                    skill_names_full[skilltype], old_skill_base,
+                    ui_text("Raise %s %d to %d (%d XP) and gain %s (%d XP), %d XP total? "),
+                    ui_text(skill_names_full[skilltype]), old_skill_base,
                     b_ptr->level, skill_cost, gain_name, exp_cost,
                     total_exp_cost);
             }
             else
             {
-                strnfmt(prompt, sizeof(prompt), "Gain %s for %d XP? ",
+                strnfmt(prompt, sizeof(prompt), ui_text("Gain %s for %d XP? "),
                     gain_name, exp_cost);
             }
             if (!get_check(prompt))
@@ -5370,13 +5371,13 @@ static void ability_menu_draw_skills(int highlight, int options, int click_base)
     int i;
     char buf[80];
 
-    Term_putstr(COL_SKILL, 2, -1, TERM_WHITE, "Skills");
+    Term_putstr(COL_SKILL, 2, -1, TERM_WHITE, ui_text("Skills"));
 
     for (i = 0; i < options; i++)
     {
         int row = i + 4;
 
-        indexed_menu_entry_label(buf, sizeof(buf), i, skill_names_full[i]);
+        indexed_menu_entry_label(buf, sizeof(buf), i, ui_text(skill_names_full[i]));
         Term_putstr(COL_SKILL, row, -1,
             (highlight == i + 1) ? TERM_L_BLUE : TERM_WHITE, buf);
 
@@ -5521,7 +5522,7 @@ int abilities_menu2(int skilltype, int* highlight)
             ABILITY_MENU_CLICK_SKILL_BASE);
 
     // abilities title with color
-    Term_putstr(ability_col, 1, -1, TERM_L_BLUE, "Abilities");
+    Term_putstr(ability_col, 1, -1, TERM_L_BLUE, ui_text("Abilities"));
     ability_menu_put_exit_button();
 
     // For special abilities, we may need to adjust highlight to first visible ability
@@ -5662,7 +5663,7 @@ int abilities_menu2(int skilltype, int* highlight)
 
     /* Safety check: if no abilities are visible, show message and exit */
     if (visible_count == 0) {
-        Term_putstr(ability_col, 4, -1, TERM_L_DARK, "No abilities available for this skill.");
+        Term_putstr(ability_col, 4, -1, TERM_L_DARK, ui_text("No abilities available for this skill."));
         do {
             int clicked_choice = -1;
             int click_action = UI_MENU_CLICK_PRIMARY;
@@ -5885,14 +5886,14 @@ int abilities_menu2(int skilltype, int* highlight)
 
                             char bonus_text[100];
                             strnfmt(bonus_text, sizeof(bonus_text),
-                                   "\n\nCurrent bonus: +%d stealth (%d seen, %d spared)",
+                                   ui_text("\n\nCurrent bonus: +%d stealth (%d seen, %d spared)"),
                                    stealth_bonus, total_monsters_seen,
                                    total_monsters_seen - total_monsters_killed);
                             text_out_to_screen(TERM_L_GREEN, bonus_text);
                         }
                         else
                         {
-                            text_out_to_screen(TERM_SLATE, "\n\nCurrent bonus: +0 stealth (no monsters encountered yet)");
+                            text_out_to_screen(TERM_SLATE, ui_text("\n\nCurrent bonus: +0 stealth (no monsters encountered yet)"));
                         }
                     }
 
@@ -5909,8 +5910,8 @@ int abilities_menu2(int skilltype, int* highlight)
 
                         strnfmt(bonus_text, sizeof(bonus_text),
                             learned
-                                ? "\n\nCurrent bonus: +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)"
-                                : "\n\nWith current equipment, this would grant +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)",
+                                ? ui_text("\n\nCurrent bonus: +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)")
+                                : ui_text("\n\nWith current equipment, this would grant +%d protection vs physical attacks and %+d evasion (%d.%d lb counted)"),
                             protection_bonus, evasion_bonus, armour_weight / 10,
                             armour_weight % 10);
                         text_out_to_screen(TERM_L_GREEN, bonus_text);
@@ -5949,16 +5950,16 @@ int abilities_menu2(int skilltype, int* highlight)
                 /* Place bane stats dynamically after description text */
                 int bane_row = post_desc_row + (compact_mode ? 1 : 2);
                 Term_putstr(desc_col, bane_row, -1, TERM_WHITE,
-                    format("%s-Bane:", bane_name[p_ptr->bane_type]));
+                    format(ui_text("%s-Bane:"), bane_name[p_ptr->bane_type]));
                 Term_putstr(desc_col, bane_row + 2, -1, TERM_WHITE,
-                    format("  %d slain, giving a %+d bonus", killed, current_bonus));
+                    format(ui_text("  %d slain, giving a %+d bonus"), killed, current_bonus));
 
                 if (current_bonus == 0 && killed < 2) {
                     Term_putstr(desc_col, bane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d slain)", next_threshold));
+                        format(ui_text("  (next bonus at %d slain)"), next_threshold));
                 } else if (next_threshold <= 64) {  // Don't show if threshold is too high
                     Term_putstr(desc_col, bane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d slain)", next_threshold));
+                        format(ui_text("  (next bonus at %d slain)"), next_threshold));
                 }
             }
             else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
@@ -5967,7 +5968,7 @@ int abilities_menu2(int skilltype, int* highlight)
             {
                 /* Place oath info dynamically after description text */
                 int oath_row = post_desc_row + (compact_mode ? 1 : 2);
-                Term_putstr(desc_col, oath_row, -1, TERM_WHITE, "Oath:");
+                Term_putstr(desc_col, oath_row, -1, TERM_WHITE, ui_text("Oath:"));
                 Term_putstr(desc_col + 6, oath_row, -1, TERM_L_BLUE,
                     oath_name_short(p_ptr->oath_type));
 
@@ -5987,10 +5988,11 @@ int abilities_menu2(int skilltype, int* highlight)
 
                 if (oath_invalid(p_ptr->oath_type))
                     Term_putstr(desc_col, oath_row + 4, -1, TERM_RED,
-                        "You are an oathbreaker.");
+                        ui_text("You are an oathbreaker."));
                 else
                     Term_putstr(desc_col, oath_row + 4, -1, TERM_WHITE,
-                        format("Bonus: %s.", oath_reward_short(p_ptr->oath_type)));
+                        format(ui_text("Bonus: %s."),
+                            ui_text(oath_reward_short(p_ptr->oath_type))));
             }
             // if you have the unique bane special ability
             else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
@@ -6017,17 +6019,17 @@ int abilities_menu2(int skilltype, int* highlight)
 
                 /* Place unique bane stats dynamically after description text */
                 int ubane_row = post_desc_row + (compact_mode ? 1 : 2);
-                Term_putstr(desc_col, ubane_row, -1, TERM_WHITE, "Unique Bane:");
+                Term_putstr(desc_col, ubane_row, -1, TERM_WHITE, ui_text("Unique Bane:"));
                 Term_putstr(desc_col, ubane_row + 2, -1, TERM_WHITE,
-                    format("  %d uniques slain, giving a %+d bonus",
+                    format(ui_text("  %d uniques slain, giving a %+d bonus"),
                            uniques_killed, current_bonus));
 
                 if (current_bonus == 0 && uniques_killed < 2) {
                     Term_putstr(desc_col, ubane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d uniques)", next_threshold));
+                        format(ui_text("  (next bonus at %d uniques)"), next_threshold));
                 } else if (next_threshold <= 64) {  // Don't show if threshold is too high
                     Term_putstr(desc_col, ubane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d uniques)", next_threshold));
+                        format(ui_text("  (next bonus at %d uniques)"), next_threshold));
                 }
             }
         }
@@ -6191,7 +6193,7 @@ int abilities_menu2(int skilltype, int* highlight)
 
 void do_cmd_ability_screen(void)
 {
-    tutorial_game_menu("abilities", "Select a skill and an ability to read its requirements, XP cost and current effect. Buying and toggling are separate from browsing.");
+    tutorial_game_menu("abilities", ui_text("Select a skill and an ability to read its requirements, XP cost and current effect. Buying and toggling are separate from browsing."));
     int skill_cur = S_MEL;
     int entry_cur = 0;
     int entry_top = 0;
@@ -6370,18 +6372,18 @@ void do_cmd_ability_screen(void)
                     };
 
                     strnfmt(status_full, sizeof(status_full),
-                        "%s: %s | next %s point costs %d XP",
+                        ui_text("%s: %s | next %s point costs %d XP"),
                         entries[entry_cur].name, state,
-                        skill_names_full[skilltype],
+                        ui_text(skill_names_full[skilltype]),
                         ability_browser_next_skill_cost(skilltype));
                     strnfmt(status_mid, sizeof(status_mid),
-                        "%s: %s | next %s: %d XP",
+                        ui_text("%s: %s | next %s: %d XP"),
                         entries[entry_cur].name, state,
-                        skill_names_full[skilltype],
+                        ui_text(skill_names_full[skilltype]),
                         ability_browser_next_skill_cost(skilltype));
                     strnfmt(status_short, sizeof(status_short),
                         "%s | %s +1: %d XP", state,
-                        skill_names_full[skilltype],
+                        ui_text(skill_names_full[skilltype]),
                         ability_browser_next_skill_cost(skilltype));
                     terminal_prompt_pick_variant(status, sizeof(status),
                         layout.visible_w, true, variants,
@@ -6391,8 +6393,8 @@ void do_cmd_ability_screen(void)
             else
             {
                 strnfmt(status, sizeof(status),
-                    "%s has no visible abilities.",
-                    skill_names_full[skilltype]);
+                    ui_text("%s has no visible abilities."),
+                    ui_text(skill_names_full[skilltype]));
             }
             ability_browser_draw_colored_text_line_ex(layout.visible_col,
                 layout.status_row, layout.visible_w, TERM_L_WHITE, status,

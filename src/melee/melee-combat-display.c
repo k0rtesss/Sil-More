@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
@@ -718,7 +719,7 @@ static int combat_roll_compact_cols(const combat_roll* roll, int res)
     }
     else if (roll->att_type == COMBAT_ROLL_AUTO)
     {
-        cols += combat_roll_text_cols("auto ");
+        cols += combat_roll_text_cols(ui_text("auto "));
     }
     else
     {
@@ -766,12 +767,12 @@ static int combat_roll_compact_cols(const combat_roll* roll, int res)
         {
             if (res > 1)
             {
-                strnfmt(buf, sizeof(buf), " 1/%d then", res);
+                strnfmt(buf, sizeof(buf), ui_text(" 1/%d then"), res);
                 cols += combat_roll_text_cols(buf);
             }
             else if (res < 0)
             {
-                strnfmt(buf, sizeof(buf), " x%d then", -res);
+                strnfmt(buf, sizeof(buf), ui_text(" x%d then"), -res);
                 cols += combat_roll_text_cols(buf);
             }
         }
@@ -865,7 +866,7 @@ static void draw_combat_roll_line_compact(int row, int base_col_offset,
     }
     else if (roll->att_type == COMBAT_ROLL_AUTO)
     {
-        col = combat_roll_put_text(col, row, TERM_L_DARK, "auto ");
+        col = combat_roll_put_text(col, row, TERM_L_DARK, ui_text("auto "));
     }
     else
     {
@@ -917,12 +918,12 @@ static void draw_combat_roll_line_compact(int row, int base_col_offset,
         {
             if (res > 1)
             {
-                strnfmt(buf, sizeof(buf), " 1/%d then", res);
+                strnfmt(buf, sizeof(buf), ui_text(" 1/%d then"), res);
                 col = combat_roll_put_text(col, row, TERM_L_BLUE, buf);
             }
             else if (res < 0)
             {
-                strnfmt(buf, sizeof(buf), " x%d then", -res);
+                strnfmt(buf, sizeof(buf), ui_text(" x%d then"), -res);
                 col = combat_roll_put_text(col, row, TERM_L_BLUE, buf);
             }
         }
@@ -1355,12 +1356,12 @@ static void draw_combat_roll_line(int row, int base_col_offset,
             {
                 if (res > 1)
                 {
-                    strnfmt(buf, sizeof(buf), "  1/%d then", res);
+                    strnfmt(buf, sizeof(buf), ui_text("  1/%d then"), res);
                     Term_addstr(-1, TERM_L_BLUE, buf);
                 }
                 else if (res < 0)
                 {
-                    strnfmt(buf, sizeof(buf), "  x%d then", -res);
+                    strnfmt(buf, sizeof(buf), ui_text("  x%d then"), -res);
                     Term_addstr(-1, TERM_L_BLUE, buf);
                 }
             }
@@ -1489,13 +1490,13 @@ static void log_history_draw_tabs(bool combat_active, int hover_tab, int term_wi
     if (term_wid < 1)
         term_wid = 80;
 
-    Term_putstr(0, 0, term_wid, TERM_L_WHITE + TERM_SHADE, "Logs");
+    Term_putstr(0, 0, term_wid, TERM_L_WHITE + TERM_SHADE, ui_text("Logs"));
     Term_erase(0, 1, 255);
 
-    col = log_history_draw_tab(1, col, "Messages", !combat_active,
+    col = log_history_draw_tab(1, col, ui_text("Messages"), !combat_active,
         hover_tab == LOG_HISTORY_CLICK_MESSAGE_TAB,
         LOG_HISTORY_CLICK_MESSAGE_TAB);
-    (void)log_history_draw_tab(1, col, "Combat", combat_active,
+    (void)log_history_draw_tab(1, col, ui_text("Combat"), combat_active,
         hover_tab == LOG_HISTORY_CLICK_COMBAT_TAB,
         LOG_HISTORY_CLICK_COMBAT_TAB);
 }
@@ -1514,8 +1515,8 @@ void do_cmd_combat_history_legacy(void)
     char finder[80];
     char buf[120];
     int hover_tab = 0;
-    cptr prompt =
-        "e/i tabs  Up/Down line  PgUp/PgDn page  Wheel/drag  / find  Left/Right pan  Esc";
+    cptr prompt = ui_text(
+        "e/i tabs  Up/Down line  PgUp/PgDn page  Wheel/drag  / find  Left/Right pan  Esc");
     
     /* Wipe finder */
     SDL_strlcpy(finder, "", sizeof(finder));
@@ -1842,22 +1843,22 @@ void do_cmd_combat_history_legacy(void)
         log_history_draw_tabs(true, hover_tab, wid);
 
         /* Display header */
-        prt(format("Combat Log (%d-%d of %d rolls), Offset %d",
+        prt(format(ui_text("Combat Log (%d-%d of %d rolls), Offset %d"),
                    range_first, range_last, n, q),
             (body_top > 0) ? body_top - 1 : 0, 0);
         
         /* Display prompt */
         prt(prompt, hgt - 1, 0);
-        ui_menu_click_add_text_token('8', 0, hgt - 1, prompt, "Up");
-        ui_menu_click_add_text_token('2', 0, hgt - 1, prompt, "Down");
-        ui_menu_click_add_text_token('9', 0, hgt - 1, prompt, "PgUp");
-        ui_menu_click_add_text_token('3', 0, hgt - 1, prompt, "PgDn");
-        ui_menu_click_add_text_token('i', 0, hgt - 1, prompt, "tabs");
+        ui_menu_click_add_text_token('8', 0, hgt - 1, prompt, ui_text("Up"));
+        ui_menu_click_add_text_token('2', 0, hgt - 1, prompt, ui_text("Down"));
+        ui_menu_click_add_text_token('9', 0, hgt - 1, prompt, ui_text("PgUp"));
+        ui_menu_click_add_text_token('3', 0, hgt - 1, prompt, ui_text("PgDn"));
+        ui_menu_click_add_text_token('i', 0, hgt - 1, prompt, ui_text("tabs"));
         ui_menu_click_add_text_token('i', 0, hgt - 1, prompt, "e/i");
         ui_menu_click_add_text_token('/', 0, hgt - 1, prompt, "/");
-        ui_menu_click_add_text_token('/', 0, hgt - 1, prompt, "find");
-        ui_menu_click_add_text_token('4', 0, hgt - 1, prompt, "Left");
-        ui_menu_click_add_text_token('6', 0, hgt - 1, prompt, "Right");
+        ui_menu_click_add_text_token('/', 0, hgt - 1, prompt, ui_text("find"));
+        ui_menu_click_add_text_token('4', 0, hgt - 1, prompt, ui_text("Left"));
+        ui_menu_click_add_text_token('6', 0, hgt - 1, prompt, ui_text("Right"));
         ui_menu_click_add_text_token(ESCAPE, 0, hgt - 1, prompt, "Esc");
         
         /* Get a command without showing the terminal cursor */
@@ -2045,9 +2046,10 @@ void display_combat_round_details(combat_history_round* round)
     Term_clear();
     
     /* Display header */
-    strnfmt(buf, sizeof(buf), "Combat Details - Turn %d (%d roll%s)", 
-            round->turn_count, round->num_rolls, 
-            (round->num_rolls == 1) ? "" : "s");
+    cptr heading = round->num_rolls == 1 ? "Combat Details - Turn %d (%d roll)"
+        : "Combat Details - Turn %d (%d rolls)";
+    strnfmt(buf, sizeof(buf), ui_text(heading), round->turn_count,
+        round->num_rolls);
     prt(buf, 0, 0);
     
     /* Display each combat roll using similar logic to display_combat_rolls */
@@ -2132,7 +2134,7 @@ void display_combat_round_details(combat_history_round* round)
     }
     
     /* Display instructions */
-    prt("[Press any key to return]", Term->hgt - 1, 0);
+    prt(ui_text("[Press any key to return]"), Term->hgt - 1, 0);
     
     /* Wait for input */
     inkey();

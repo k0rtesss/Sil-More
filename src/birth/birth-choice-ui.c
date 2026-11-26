@@ -1,6 +1,7 @@
 /* File: birth/birth-choice-ui.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "birth/birth-internal.h"
 
 /*
@@ -296,7 +297,7 @@ int get_player_choice(birth_menu* choices, int num, int def,
                     }
 
                     if (choices[cur].ghost)
-                        bell("Your race cannot choose that character.");
+                        bell(ui_text("Your race cannot choose that character."));
                     else
                         return (cur);
                     continue;
@@ -412,7 +413,7 @@ int get_player_choice(birth_menu* choices, int num, int def,
         /* Make a choice */
         if (birth_confirm_input(c, steamdeck) || (c == '6')) {
             if (choices[cur].ghost)
-                bell("Your race cannot choose that character.");
+                bell(ui_text("Your race cannot choose that character."));
             else
             {
                 ui_menu_click_clear();
@@ -474,11 +475,11 @@ int get_player_choice(birth_menu* choices, int num, int def,
                 }
         else if ((choice > -1) && (choice < num) && choices[choice].ghost)
                 {
-                    bell("Your race cannot choose that character.");
+                    bell(ui_text("Your race cannot choose that character."));
                 }
                 else
                 {
-                    bell("Illegal response to question!");
+                    bell(ui_text("Illegal response to question!"));
                 }
             }
         }
@@ -530,7 +531,7 @@ int get_player_choice(birth_menu* choices, int num, int def,
 
         /* Invalid input */
         else
-            bell("Illegal response to question!");
+            bell(ui_text("Illegal response to question!"));
 
     }
 

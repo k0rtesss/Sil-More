@@ -324,7 +324,7 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
         if (j_ptr->tval != TV_POTION)
         {
             /* Message */
-            msg_format("The %s break%s.", o_name, (plural ? "" : "s"));
+            msg_format(plural ? "The %s break." : "The %s breaks.", o_name);
         }
 
         /* Debug */
@@ -419,7 +419,8 @@ static s16b drop_near_aux(object_type* j_ptr, int chance, int y, int x,
         /* A failed disarm leaves the original weapon equipped. */
         if (!disarmed && player_has_los_bold(y, x))
         {
-            msg_format("The %s disappear%s.", o_name, (plural ? "" : "s"));
+            msg_format(plural ? "The %s disappear." : "The %s disappears.",
+                o_name);
         }
 
         /* Debug */

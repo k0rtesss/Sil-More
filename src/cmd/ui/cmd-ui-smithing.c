@@ -1,5 +1,7 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "object/object-difficulty.h"
+#include "object/object-info.h"
 #include "cave/cave-events.h"
 #include "achievements.h"
 #include "achievements-character.h"
@@ -151,7 +153,7 @@ static int smith_ui_scroll_top[SMITH_SCROLL_MAX];
 static struct {
     char text[2048];
     int top, rows, max_top;
-    bool active;
+    bool active, effects;
 } smith_description;
 
 static void smith_show_description(void);
@@ -414,24 +416,24 @@ static int smith_bill_extras(const smithing_cost_type* cost, bool reforge,
 {
     int n = 0;
     const struct { cptr name; bool missing; } abilities[] = {
-        { "Reforging", reforge }, { "Weaponsmith", cost->weaponsmith },
-        { "Armoursmith", cost->armoursmith }, { "Jeweller", cost->jeweller },
-        { "Enchantment", cost->enchantment }, { "Artifice", cost->artifice },
-        { "Alloy Mastery", cost->alloy_mastery }
+        { ui_text("Reforging"), reforge }, { ui_text("Weaponsmith"), cost->weaponsmith },
+        { ui_text("Armoursmith"), cost->armoursmith }, { ui_text("Jeweller"), cost->jeweller },
+        { ui_text("Enchantment"), cost->enchantment }, { ui_text("Artifice"), cost->artifice },
+        { ui_text("Alloy Mastery"), cost->alloy_mastery }
     };
     for (size_t i = 0; i < N_ELEMENTS(abilities); i++)
     {
         if (!abilities[i].missing) continue;
-        lines[n].label = "Requires";
+        lines[n].label = ui_text("Requires");
         lines[n].requirement = true;
         SDL_strlcpy(lines[n++].value, abilities[i].name, sizeof(lines[0].value));
     }
     const struct { cptr name; int amount; bool weight; } charges[] = {
-        { "Smithing ranks", cost->drain, false },
-        { "Mithril", cost->mithril, true }, { "Star iron", cost->star_iron, true },
-        { "Strength", cost->str, false }, { "Dexterity", cost->dex, false },
-        { "Constitution", cost->con, false }, { "Grace", cost->gra, false },
-        { "Experience", cost->exp, false }
+        { ui_text("Smithing ranks"), cost->drain, false },
+        { "Mithril", cost->mithril, true }, { ui_text("Star iron"), cost->star_iron, true },
+        { ui_text("Strength"), cost->str, false }, { ui_text("Dexterity"), cost->dex, false },
+        { ui_text("Constitution"), cost->con, false }, { ui_text("Grace"), cost->gra, false },
+        { ui_text("Experience"), cost->exp, false }
     };
     for (size_t i = 0; i < N_ELEMENTS(charges); i++)
     {
@@ -440,7 +442,7 @@ static int smith_bill_extras(const smithing_cost_type* cost, bool reforge,
         lines[n].label = charges[i].name;
         lines[n].requirement = false;
         if (charges[i].weight)
-            strnfmt(lines[n].value, sizeof(lines[n].value), "%d.%d lb",
+            strnfmt(lines[n].value, sizeof(lines[n].value), ui_text("%d.%d lb"),
                 amount / 10, ABS(amount % 10));
         else
             strnfmt(lines[n].value, sizeof(lines[n].value), "%d", amount);
@@ -1411,7 +1413,7 @@ bool melt_metal_item(int item_num)
                 char prompt[160];
 
                 object_desc(o_name, sizeof(o_name), o_ptr, false, 4);
-                strnfmt(prompt, sizeof(prompt), "Melt %s down? ", o_name);
+                strnfmt(prompt, sizeof(prompt), ui_text("Melt %s down? "), o_name);
                 if (!get_check(prompt))
                     return (false);
             }
@@ -2531,7 +2533,7 @@ enum {
     SMITH_EDITOR_COSTS,
     SMITH_EDITOR_CRAFT,
     SMITH_EDITOR_APPLY,
-    SMITH_EDITOR_EDIT_VALUE,
+    SMITH_EDITOR_REMOVE,
     SMITH_EDITOR_RENAME,
 };
 
@@ -2579,7 +2581,7 @@ static smith_sheet_layout smith_sheet_geometry(void)
     };
 }
 
-/* Recover spare list rows only when the work order could use them. */
+/* Keep the work order adjacent to short lists on narrow screens. */
 static void smith_sheet_fit_list(smith_sheet_layout* sheet, int count, int columns,
     int details)
 {
@@ -2587,13 +2589,8 @@ static void smith_sheet_fit_list(smith_sheet_layout* sheet, int count, int colum
     int rows = MAX(1, (count + columns - 1) / columns);
     int space = sheet->summary - sheet->body - 1 - details;
     int stride = sdl_touch_only_device_active() && space >= 2 * rows ? 2 : 1;
-    int list_end = sheet->body + 1 + rows * stride + details;
-    /* Allow for the bill and a typical paragraph without moving the split
-     * whenever the highlighted item changes. */
-    int wrap = MAX(1, MIN(72, sheet->width - 2 * sheet->margin));
-    int order_rows = 9 + (300 + wrap - 1) / wrap;
     sheet->summary = sheet->list_end = MIN(sheet->summary,
-        MAX(list_end, sheet->footer - order_rows));
+        sheet->body + 1 + rows * stride + details);
 }
 
 static void smith_sheet_begin(const smith_sheet_layout* sheet, bool root)
@@ -2601,7 +2598,7 @@ static void smith_sheet_begin(const smith_sheet_layout* sheet, bool root)
     int x = sheet->width >= 72 ? 3 : 2;
     int y = sheet->tabs == 1 ? 0 : 1;
     bool forge = cave_forge_bold(p_ptr->py, p_ptr->px);
-    cptr location = forge ? "At the forge" : "Away from forge";
+    cptr location = forge ? ui_text("At the forge") : ui_text("Away from forge");
     int status_x = sheet->divider >= 0 ? sheet->divider + sheet->margin : x + 19;
 
     smith_description.active = false;
@@ -2614,7 +2611,8 @@ static void smith_sheet_begin(const smith_sheet_layout* sheet, bool root)
         ui_menu_click_set_touch_exit_button(true);
     sdl_smithing_sheet_set(sheet->tabs, sheet->body, sheet->divider,
         sheet->divider >= 0 ? -1 : sheet->summary, sheet->footer);
-    smith_ui_put_fitted(x, y, 8, TERM_L_WHITE, "Smithing");
+    smith_ui_put_fitted(x, y, status_x - x - 1, TERM_L_WHITE,
+        ui_text("Smithing"));
     if (status_x + (int)strlen(location) + 17 <= sheet->width)
         smith_ui_put_fitted(status_x, y, (int)strlen(location),
             forge ? TERM_L_GREEN : TERM_L_WHITE, location);
@@ -2624,7 +2622,7 @@ static void smith_sheet_tabs(const smith_sheet_layout* sheet, const cptr* names,
     int count, int selected, int first_id)
 {
     int letters = 0;
-    for (int i = 0; i < count; i++) letters += (int)strlen(names[i]);
+    for (int i = 0; i < count; i++) letters += (int)strlen(ui_text(names[i]));
     int available = sheet->width - 2 * sheet->margin;
     bool brackets = available >= letters + count + 1;
     int pad = MAX(0, MIN(2, (available - letters - count - 1) / (2 * count)));
@@ -2633,9 +2631,9 @@ static void smith_sheet_tabs(const smith_sheet_layout* sheet, const cptr* names,
     {
         char label[32];
         if (i == selected && brackets)
-            strnfmt(label, sizeof(label), "[%s]", names[i]);
+            strnfmt(label, sizeof(label), "[%s]", ui_text(names[i]));
         else
-            SDL_strlcpy(label, names[i], sizeof(label));
+            SDL_strlcpy(label, ui_text(names[i]), sizeof(label));
         int w = (int)strlen(label) + 2 * pad;
         smith_ui_draw_fitted(x + pad, sheet->tabs, w - pad,
             i == selected ? TERM_L_BLUE : TERM_L_WHITE, label, false);
@@ -2656,7 +2654,7 @@ static void smith_sheet_actions(const smith_sheet_layout* sheet,
                     actions[i].attr == TERM_SLATE ? TERM_L_DARK : TERM_DARK);
         }
         if (!ui_menu_click_touch_exit_button_active())
-            ui_menu_click_add_touch_button(SMITH_CLICK_BACK, "Back", TERM_DARK);
+            ui_menu_click_add_touch_button(SMITH_CLICK_BACK, ui_text("Back"), TERM_DARK);
         return;
     }
 
@@ -2693,7 +2691,7 @@ static void smith_sheet_navigation(const smith_sheet_layout* sheet, bool root,
         controller_prompt_label(steamdeck_next_page_key(), "RB", next, sizeof(next));
         strnfmt(page_keys, sizeof(page_keys), "%s/%s", prev, next);
     }
-    strnfmt(text, sizeof(text), "%s %s", back, root ? "Exit" : "Back");
+    strnfmt(text, sizeof(text), "%s %s", back, root ? ui_text("Exit") : ui_text("Back"));
     if (confirm)
     {
         size_t len = strlen(text);
@@ -2702,7 +2700,7 @@ static void smith_sheet_navigation(const smith_sheet_layout* sheet, bool root,
     if (pages && sheet->width >= 40)
     {
         size_t len = strlen(text);
-        strnfcat(text, sizeof(text), &len, "   %s Tabs", page_keys);
+        strnfcat(text, sizeof(text), &len, ui_text("   %s Tabs"), page_keys);
     }
     int row = smith_ui_prompt_row();
     Term_putstr(sheet->margin, row, sheet->width - sheet->margin, TERM_SLATE, text);
@@ -2846,6 +2844,11 @@ static void smith_sheet_choice(const smith_sheet_layout* sheet,
 }
 
 /* Wrap the full paragraph for both the work order and the reading view. */
+static cptr smith_description_heading(void)
+{
+    return smith_description.effects ? ui_text("Effects") : ui_text("Description");
+}
+
 static int smith_description_viewport(int x, int row, int width, int end,
     int* top, bool inline_order)
 {
@@ -2862,9 +2865,9 @@ static int smith_description_viewport(int x, int row, int width, int end,
         strnfmt(range, sizeof(range), "%d-%d/%d%s", *top + 1, *top + rows, count,
             inline_order && !sdl_touch_only_device_active() && !steamdeck_controls_active() ? " [D]" : "");
     else if (inline_order && !rows)
-        SDL_strlcpy(range, sdl_touch_only_device_active() ? "Read" : "Read [D]", sizeof(range));
+        SDL_strlcpy(range, sdl_touch_only_device_active() ? ui_text("Read") : ui_text("Read [D]"), sizeof(range));
 
-    smith_sheet_field(x, row, width, "Description", range,
+    smith_sheet_field(x, row, width, smith_description_heading(), range,
         TERM_WHITE + TERM_SHADE, TERM_L_BLUE);
     if (inline_order)
         ui_menu_click_add(SMITH_CLICK_DESCRIPTION, x, row, width);
@@ -2901,10 +2904,10 @@ static void smith_show_description(void)
         int count = 0;
         if (max_top)
         {
-            actions[count++] = (smith_sheet_action){ DESC_PREVIOUS, "Previous", top ? TERM_WHITE : TERM_SLATE };
-            actions[count++] = (smith_sheet_action){ DESC_NEXT, "Next", top < max_top ? TERM_WHITE : TERM_SLATE };
+            actions[count++] = (smith_sheet_action){ DESC_PREVIOUS, ui_text("Previous"), top ? TERM_WHITE : TERM_SLATE };
+            actions[count++] = (smith_sheet_action){ DESC_NEXT, ui_text("Next"), top < max_top ? TERM_WHITE : TERM_SLATE };
         }
-        actions[count++] = (smith_sheet_action){ SMITH_CLICK_BACK, "Back", TERM_L_BLUE };
+        actions[count++] = (smith_sheet_action){ SMITH_CLICK_BACK, ui_text("Back"), TERM_L_BLUE };
         smith_sheet_actions(&sheet, actions, count, 0);
         smith_sheet_navigation(&sheet, false, NULL, false);
         Term_fresh();
@@ -2934,9 +2937,17 @@ typedef enum {
     SMITH_NAME_READ_ONLY, SMITH_NAME_EDITABLE, SMITH_NAME_FOCUSED
 } smith_name_mode;
 
-static void smith_sheet_order(const smith_sheet_layout* sheet,
+static void smith_append_volume_effect(char* text, size_t size, int from, int to)
+{
+    if (from == to) return;
+    size_t used = strlen(text);
+    strnfcat(text, size, &used, "%s%s %d.%d → %d.%d qt.", used ? " " : "",
+        ui_text("Volume per item"), from / 10, from % 10, to / 10, to % 10);
+}
+
+static void smith_sheet_order_with_effects(const smith_sheet_layout* sheet,
     const object_type* item, int difficulty, bool continuing, bool draft,
-    smith_name_mode name_mode)
+    smith_name_mode name_mode, cptr effects)
 {
     const int x = (sheet->divider >= 0 ? sheet->divider : 0) + sheet->margin;
     int w = sheet->width - sheet->margin - x;
@@ -2955,19 +2966,29 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     cptr suffix = desc + strlen(name);
     while (*suffix == ' ') suffix++;
     SDL_strlcpy(smith_ui_detail_name, name, sizeof(smith_ui_detail_name));
-    char lore_buf[sizeof(smith_description.text)];
-    cptr lore = object_lore_select_base_text(item, lore_buf, sizeof(lore_buf));
-    if (!lore) lore = "";
-    if (strcmp(smith_description.text, lore) != 0)
+    char text_buf[sizeof(smith_description.text)];
+    if (!effects && (item->name1 || object_has_ego(item)))
     {
-        SDL_strlcpy(smith_description.text, lore, sizeof(smith_description.text));
+        object_info_effect_text(item, NULL, text_buf, sizeof(text_buf));
+        if (object_has_ego(item) && item->storage != OBJECT_STORAGE_NONE)
+            smith_append_volume_effect(text_buf, sizeof(text_buf), item->volume,
+                object_effective_volume(item));
+        if (*text_buf) effects = text_buf;
+    }
+    cptr description = effects ? effects
+        : object_lore_select_base_text(item, text_buf, sizeof(text_buf));
+    if (!description) description = "";
+    if (strcmp(smith_description.text, description) != 0)
+    {
+        SDL_strlcpy(smith_description.text, description, sizeof(smith_description.text));
         smith_description.top = 0;
     }
-    smith_description.active = *lore != '\0';
-    strnfmt(weight_text, sizeof(weight_text), "%d.%d lb", weight / 10, weight % 10);
+    smith_description.active = *description != '\0';
+    smith_description.effects = effects != NULL;
+    strnfmt(weight_text, sizeof(weight_text), ui_text("%d.%d lb"), weight / 10, weight % 10);
     smith_ui_build_object_stats(stats, sizeof(stats), suffix, weight_text);
     if (space >= 6)
-        smith_sheet_field(x, y++, w, "Work order", draft ? "Draft" : "",
+        smith_sheet_field(x, y++, w, ui_text("Work order"), draft ? ui_text("Draft") : "",
             TERM_WHITE + TERM_SHADE, TERM_L_BLUE);
     int art_rows = space >= 8 ? 2 : 1;
     int art_cols = art_rows * 2;
@@ -2980,7 +3001,7 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     if (name_mode == SMITH_NAME_EDITABLE) name_attr = TERM_L_BLUE;
     if (name_mode == SMITH_NAME_FOCUSED) name_attr = TERM_UI_SELECTED + TERM_L_BLUE;
     if (space < 6 && draft)
-        smith_sheet_field(text_x, y++, text_w, name, "Draft", name_attr, TERM_L_BLUE);
+        smith_sheet_field(text_x, y++, text_w, name, ui_text("Draft"), name_attr, TERM_L_BLUE);
     else
     {
         int name_rows = smith_ui_put_wrapped(text_x, y, text_w,
@@ -2998,26 +3019,27 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     byte difficulty_attr = difficulty > skill ? TERM_L_RED : TERM_L_GREEN;
     byte uses_attr = !smith_ui_detail_paid && cost->uses > uses ? TERM_L_RED : TERM_YELLOW;
     if (y < sheet->footer)
-        smith_sheet_field(x, y++, measure, "Difficulty", format("%d / %d", difficulty, skill),
+        smith_sheet_field(x, y++, measure, ui_text("Difficulty"), format("%d / %d", difficulty, skill),
             TERM_WHITE, difficulty_attr);
     if (space <= 6 && y < sheet->footer)
     {
         int left = measure / 2;
-        smith_sheet_field(x, y, left - 1, "Uses", smith_ui_detail_paid ? "Paid" : format("%d/%d", cost->uses, uses),
+        smith_sheet_field(x, y, left - 1, ui_text("Uses"), smith_ui_detail_paid ? ui_text("Paid") : format("%d/%d", cost->uses, uses),
             TERM_WHITE, uses_attr);
-        smith_sheet_field(x + left, y++, measure - left, "Turns", format("%d", turns),
+        smith_sheet_field(x + left, y++, measure - left, ui_text("Turns"), format("%d", turns),
             TERM_WHITE, TERM_VIOLET);
     }
     else if (y + 1 < sheet->footer)
     {
-        smith_sheet_field(x, y++, measure, "Forge uses", smith_ui_detail_paid ? "Paid"
+        smith_sheet_field(x, y++, measure, ui_text("Forge uses"), smith_ui_detail_paid ? ui_text("Paid")
             : format("%d / %d", cost->uses, uses), TERM_WHITE, uses_attr);
-        smith_sheet_field(x, y++, measure, "Turns", format("%d", turns), TERM_WHITE, TERM_VIOLET);
+        smith_sheet_field(x, y++, measure, ui_text("Turns"), format("%d", turns), TERM_WHITE, TERM_VIOLET);
     }
 
     int room = sheet->footer - y;
+    int detail_rows = smith_description.effects ? 5 : room >= 4 ? 3 : 2;
     int extra_end = sheet->footer - (smith_description.active
-        ? MIN(room, room >= 4 ? 3 : 2) : 0);
+        ? MIN(room, detail_rows) : 0);
     smith_bill_line extra[SMITH_BILL_EXTRAS_MAX];
     int n = smith_bill_extras(cost, smith_ui_detail_reforge && !smith_ui_detail_paid
         && !p_ptr->active_ability[S_SMT][SMT_REPAIR], extra);
@@ -3025,7 +3047,7 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     {
         if (y == extra_end - 1 && i + 1 < n)
         {
-            smith_ui_put_fitted(x, y, measure, TERM_L_BLUE, "See full bill");
+            smith_ui_put_fitted(x, y, measure, TERM_L_BLUE, ui_text("See full bill"));
             ui_menu_click_add(SMITH_CLICK_CALC, x, y++, measure);
             break;
         }
@@ -3040,7 +3062,8 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     }
     else if (smith_description.active)
     {
-        cptr label = sdl_touch_only_device_active() ? "Description" : "[D] Description";
+        cptr heading = smith_description_heading();
+        cptr label = sdl_touch_only_device_active() ? heading : format("[D] %s", heading);
         int length = (int)strlen(label);
         int col = sheet->width - sheet->margin - length;
         int row = sheet->tabs == 1 ? 0 : 1;
@@ -3050,27 +3073,35 @@ static void smith_sheet_order(const smith_sheet_layout* sheet,
     }
 }
 
+static void smith_sheet_order(const smith_sheet_layout* sheet,
+    const object_type* item, int difficulty, bool continuing, bool draft,
+    smith_name_mode name_mode)
+{
+    smith_sheet_order_with_effects(sheet, item, difficulty, continuing, draft,
+        name_mode, NULL);
+}
+
 static void smith_sheet_stock(int x, int row, int width, int end)
 {
     if (row + 3 >= end) return;
-    smith_ui_put_fitted(x, row++, width, TERM_WHITE + TERM_SHADE, "On hand");
+    smith_ui_put_fitted(x, row++, width, TERM_WHITE + TERM_SHADE, ui_text("On hand"));
     if (row + 4 < end) row++;
     int mithril = mithril_carried(), iron = star_iron_carried();
-    smith_sheet_field(x, row++, width, "Mithril", format("%d.%d lb", mithril / 10,
+    smith_sheet_field(x, row++, width, "Mithril", format(ui_text("%d.%d lb"), mithril / 10,
         mithril % 10), TERM_WHITE, TERM_L_BLUE);
-    smith_sheet_field(x, row++, width, "Star iron", format("%d.%d lb", iron / 10,
+    smith_sheet_field(x, row++, width, ui_text("Star iron"), format(ui_text("%d.%d lb"), iron / 10,
         iron % 10), TERM_WHITE, TERM_VIOLET);
-    smith_sheet_field(x, row, width, "Experience", format("%ld", (long)p_ptr->new_exp),
+    smith_sheet_field(x, row, width, ui_text("Experience"), format("%ld", (long)p_ptr->new_exp),
         TERM_WHITE, TERM_YELLOW);
 }
 
 static int smith_complete_bill(const smithing_cost_type* cost, bool reforge,
     int turns, smith_bill_line* bill)
 {
-    bill[0] = (smith_bill_line){ .label = "Forge uses" };
+    bill[0] = (smith_bill_line){ .label = ui_text("Forge uses") };
     strnfmt(bill[0].value, sizeof(bill[0].value), "%d", cost->uses);
     int n = 1 + smith_bill_extras(cost, reforge, bill + 1);
-    bill[n] = (smith_bill_line){ .label = "Turns" };
+    bill[n] = (smith_bill_line){ .label = ui_text("Turns") };
     strnfmt(bill[n].value, sizeof(bill[n].value), "%d", turns);
     return n + 1;
 }
@@ -3090,13 +3121,13 @@ static void smith_show_cost_details(void)
         smith_sheet_layout sheet = smith_sheet_geometry();
         if (sheet.divider < 0) sheet.summary = sheet.list_end = sheet.footer;
         smith_sheet_begin(&sheet, false);
-        cptr name = count && smith_ui_detail_name[0] ? smith_ui_detail_name : "Work order";
+        cptr name = count && smith_ui_detail_name[0] ? smith_ui_detail_name : ui_text("Work order");
         smith_ui_put_fitted(sheet.margin, sheet.tabs, sheet.width - 2 * sheet.margin,
             TERM_L_BLUE, name);
         int first = smith_sheet_list_first(&sheet);
         if (count && smith_ui_detail_paid && first + 1 < sheet.list_end)
             smith_ui_put_fitted(sheet.margin, first++, sheet.list_width, TERM_L_BLUE,
-                "Costs already paid.");
+                ui_text("Costs already paid."));
         smith_picker_grid grid = smith_sheet_grid(&sheet, count, 1, first, sheet.list_end);
         int max_top = MAX(0, count - grid.visible);
         top = MAX(0, MIN(top, max_top));
@@ -3104,10 +3135,10 @@ static void smith_show_cost_details(void)
         smith_sheet_list_scroll(&sheet, first, sheet.list_end);
         ui_scroll_area_set_offset_target(&top, max_top);
         ui_scroll_area_set_indicator(top, max_top);
-        smith_sheet_heading(&sheet, "COMPLETE COSTS", &grid, count);
+        smith_sheet_heading(&sheet, ui_text("COMPLETE COSTS"), &grid, count);
         if (!count)
             smith_ui_put_wrapped(sheet.margin, first, sheet.list_width,
-                sheet.list_end - first, TERM_WHITE, "Choose an item to see its complete costs.");
+                sheet.list_end - first, TERM_WHITE, ui_text("Choose an item to see its complete costs."));
         for (int i = top; i < count && i < top + grid.visible; i++)
         {
             int row = first + (i - top) * grid.stride;
@@ -3125,10 +3156,10 @@ static void smith_show_cost_details(void)
         int n = 0;
         if (max_top)
         {
-            actions[n++] = (smith_sheet_action){ BILL_PREVIOUS, "Previous", top ? TERM_WHITE : TERM_SLATE };
-            actions[n++] = (smith_sheet_action){ BILL_NEXT, "Next", top < max_top ? TERM_WHITE : TERM_SLATE };
+            actions[n++] = (smith_sheet_action){ BILL_PREVIOUS, ui_text("Previous"), top ? TERM_WHITE : TERM_SLATE };
+            actions[n++] = (smith_sheet_action){ BILL_NEXT, ui_text("Next"), top < max_top ? TERM_WHITE : TERM_SLATE };
         }
-        actions[n++] = (smith_sheet_action){SMITH_CLICK_BACK, "Back", TERM_L_BLUE};
+        actions[n++] = (smith_sheet_action){SMITH_CLICK_BACK, ui_text("Back"), TERM_L_BLUE};
         smith_sheet_actions(&sheet, actions, n, 0);
         smith_sheet_navigation(&sheet, false, NULL, false);
         Term_fresh();
@@ -3170,7 +3201,7 @@ static void smith_picker_draw(const smith_sheet_layout* sheet,
         smith_prepare_base_object(&icon, entries[i].kind);
         byte attr = affordable(&icon) ? object_display_color(&icon, TERM_WHITE) : TERM_L_WHITE;
         smith_sheet_choice(sheet, grid, i, i + 1, i - first, entries[i].name,
-            entries[i].kind == draft_kind && grid->step >= 25 ? "Draft" : "",
+            entries[i].kind == draft_kind && grid->step >= 25 ? ui_text("Draft") : "",
             &icon, i + 1 == highlight, attr);
     }
     smith_alloy = saved_alloy;
@@ -3266,7 +3297,7 @@ static int smith_item_browser(int* group, int* highlight, bool replace, int* kin
     smith_sheet_tabs(&sheet, groups, SMITH_BROWSER_GROUP_COUNT, *group,
         SMITH_BROWSER_GROUP_CLICK);
     smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_SVAL, count, item - 1);
-    smith_sheet_heading(&sheet, replace ? "Change base item" : "Choose base item",
+    smith_sheet_heading(&sheet, replace ? ui_text("Change base item") : ui_text("Choose base item"),
         &grid, count);
     if (count)
     {
@@ -3278,36 +3309,39 @@ static int smith_item_browser(int* group, int* highlight, bool replace, int* kin
         smith_ui_detail_valid = false;
         sdl_smithing_artwork_clear();
         smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width,
-            TERM_SLATE, "No items in this category.");
+            TERM_SLATE, ui_text("No items in this category."));
     }
     smith_sheet_action actions[5];
     int num_actions = 0;
     bool keys = sheet.width >= 76 && !sdl_touch_only_device_active() && !controller;
-    char melt[32] = "Melt", reforge[32] = "Reforge";
+    char melt[32];
+    char reforge[32];
+    SDL_strlcpy(melt, ui_text("Melt"), sizeof(melt));
+    SDL_strlcpy(reforge, ui_text("Reforge"), sizeof(reforge));
     if (!replace)
     {
         if (controller && sheet.width >= 40)
         {
             char button[16];
             controller_prompt_label(steamdeck_alt_action_key(), "X", button, sizeof(button));
-            strnfmt(melt, sizeof(melt), "[%s] Melt", button);
+            strnfmt(melt, sizeof(melt), ui_text("[%s] Melt"), button);
             controller_prompt_label(steamdeck_secondary_key(), "Y", button, sizeof(button));
-            strnfmt(reforge, sizeof(reforge), "[%s] Reforge", button);
+            strnfmt(reforge, sizeof(reforge), ui_text("[%s] Reforge"), button);
         }
         actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_MELT_CLICK,
-            keys ? "[M] Melt" : melt, allow_melt ? TERM_WHITE : TERM_SLATE};
+            keys ? ui_text("[M] Melt") : melt, allow_melt ? TERM_WHITE : TERM_SLATE};
         actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_REFORGE_CLICK,
-            keys ? "[R] Reforge" : reforge, allow_reforge ? TERM_WHITE : TERM_SLATE};
+            keys ? ui_text("[R] Reforge") : reforge, allow_reforge ? TERM_WHITE : TERM_SLATE};
     }
     if (sheet.width >= 48 || replace)
         actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_INSPECT_CLICK,
-            keys ? "[I] Inspect" : "Inspect", TERM_WHITE};
+            keys ? ui_text("[I] Inspect") : ui_text("Inspect"), TERM_WHITE};
     actions[num_actions++] = (smith_sheet_action){SMITH_CLICK_CALC,
-        keys ? "[?] Costs" : "Costs", TERM_WHITE};
-    actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_DESIGN_CLICK, "Design",
+        keys ? ui_text("[?] Costs") : ui_text("Costs"), TERM_WHITE};
+    actions[num_actions++] = (smith_sheet_action){SMITH_BROWSER_DESIGN_CLICK, ui_text("Design"),
         count ? TERM_L_GREEN : TERM_SLATE};
     smith_sheet_actions(&sheet, actions, num_actions, cost_focus ? SMITH_CLICK_CALC : 0);
-    smith_sheet_navigation(&sheet, !replace, "Design", true);
+    smith_sheet_navigation(&sheet, !replace, ui_text("Design"), true);
     Term_fresh();
 
     int ch = smith_sheet_read_key('[', ']');
@@ -3381,8 +3415,8 @@ static int smith_item_browser(int* group, int* highlight, bool replace, int* kin
         if (ch == 'M' ? allow_melt : allow_reforge)
             action = (ch == 'M') ? SMT_MENU_MELT : SMT_MENU_REPAIR;
         else
-            bell(ch == 'M' ? "You cannot melt anything here."
-                           : "You have nothing to repair or reforge.");
+            bell(ch == 'M' ? ui_text("You cannot melt anything here.")
+                           : ui_text("You have nothing to repair or reforge."));
     }
     else if (count)
     {
@@ -3555,7 +3589,7 @@ typedef enum
     SMITH_NUMBER_PVAL,
 } smith_number_kind;
 
-#define SMITH_SIMPLE_NUMBER_MAX 6
+#define SMITH_SIMPLE_NUMBER_MAX 7
 #define SMITH_BONUS_NUMBER_MAX (A_MAX + 7 + 2)
 
 typedef struct
@@ -3593,12 +3627,12 @@ static void smith_format_number(const smith_number_card* card, int value,
             strnfmt(text, size, "%dd%d", smith_o_ptr->pd, smith_o_ptr->ps);
         break;
     case SMITH_NUMBER_WEIGHT:
-        strnfmt(text, size, "%d.%d lb", value / 10, ABS(value % 10));
+        strnfmt(text, size, ui_text("%d.%d lb"), value / 10, ABS(value % 10));
         break;
     case SMITH_NUMBER_ALLOY:
     {
         static const cptr names[] = { "None", "Mithril", "Star iron" };
-        SDL_strlcpy(text, names[value], size);
+        SDL_strlcpy(text, ui_text(names[value]), size);
         break;
     }
     default:
@@ -3627,6 +3661,18 @@ static void smith_set_number_card(smith_number_card* card, cptr label,
     smith_format_number(card, current, card->value, sizeof(card->value));
 }
 
+static bool smith_has_builtin_tunneling(const object_type* item)
+{
+    return item->tval == TV_DIGGING && (k_info[item->k_idx].flags1 & TR1_TUNNEL);
+}
+
+static void smith_set_tunneling_card(smith_number_card* card)
+{
+    smith_set_number_card(card, ui_text("Tunneling"), SMITH_NUMBER_PVAL, 0,
+        smith_o_ptr->pval, MAX(1, pval_min()), pval_max(), 1);
+    card->flags = TR1_TUNNEL;
+}
+
 static int smith_collect_simple_numbers(smith_number_card* cards)
 {
     object_type* item = smith_o_ptr;
@@ -3641,14 +3687,14 @@ static int smith_collect_simple_numbers(smith_number_card* cards)
     int ps_lo = ps_min(), ps_hi = ps_max();
 
     if (item->att || att_hi > att_lo)
-        smith_set_number_card(&cards[count++], "Attack", SMITH_NUMBER_ATTACK,
+        smith_set_number_card(&cards[count++], ui_text("Attack"), SMITH_NUMBER_ATTACK,
             0, item->att, att_lo, (att_hi > att_lo) ? att_hi : att_lo - 1,
             (item->tval == TV_ARROW && !item->name1) ? 3 : 1);
     if (item->dd || ds_hi > ds_lo)
-        smith_set_number_card(&cards[count++], "Damage", SMITH_NUMBER_DAMAGE,
+        smith_set_number_card(&cards[count++], ui_text("Damage"), SMITH_NUMBER_DAMAGE,
             0, item->ds, ds_lo, (ds_hi > ds_lo) ? ds_hi : ds_lo - 1, 1);
     if (item->evn || evn_hi > evn_lo)
-        smith_set_number_card(&cards[count++], "Evasion", SMITH_NUMBER_EVASION,
+        smith_set_number_card(&cards[count++], ui_text("Evasion"), SMITH_NUMBER_EVASION,
             0, item->evn, evn_lo, (evn_hi > evn_lo) ? evn_hi : evn_lo - 1, 1);
 
     if (smithing_variable_protection_dice(item))
@@ -3658,15 +3704,18 @@ static int smith_collect_simple_numbers(smith_number_card* cards)
         if (current < 0)
             current = (item->pd == 1 && empty) ? -1 : -2;
         bool can_edit = ps_hi > ps_lo && (current >= 0 || empty);
-        smith_set_number_card(&cards[count++], "Protection",
+        smith_set_number_card(&cards[count++], ui_text("Protection"),
             SMITH_NUMBER_PROTECTION_DICE, 0, current, (ps_lo < 1) ? -1 : 0,
             can_edit ? (int)N_ELEMENTS(smithing_amulet_protection_combos) - 1 : -2,
             1);
     }
     else if (item->pd || ps_hi > ps_lo)
-        smith_set_number_card(&cards[count++], "Protection",
+        smith_set_number_card(&cards[count++], ui_text("Protection"),
             SMITH_NUMBER_PROTECTION, 0, item->ps, ps_lo,
             (ps_hi > ps_lo) ? ps_hi : ps_lo - 1, 1);
+
+    if (smith_has_builtin_tunneling(item))
+        smith_set_tunneling_card(&cards[count++]);
 
     bool can_weigh = wgt_valid();
     smith_set_number_card(&cards[count++], "Weight", SMITH_NUMBER_WEIGHT, 0,
@@ -3711,7 +3760,7 @@ static int smith_collect_bonus_numbers(smith_number_card* cards)
         bool negative = (f1 & stats[i].negative) != 0;
         if (positive || negative)
         {
-            smith_set_number_card(&cards[count], stats[i].label,
+            smith_set_number_card(&cards[count], ui_text(stats[i].label),
                 SMITH_NUMBER_STAT, i, item->stat_bonus[i],
                 negative ? -max_bonus : floor_bonus, positive ? max_bonus : 0, 1);
             cards[count++].flags = f1 & (stats[i].positive | stats[i].negative);
@@ -3741,16 +3790,12 @@ static int smith_collect_bonus_numbers(smith_number_card* cards)
 
     if (f1 & TR1_DAMAGE_SIDES)
     {
-        smith_set_number_card(&cards[count], "Damage bonus", SMITH_NUMBER_PVAL,
+        smith_set_number_card(&cards[count], ui_text("Damage bonus"), SMITH_NUMBER_PVAL,
             0, item->pval, floor_bonus, max_bonus, 1);
         cards[count++].flags = TR1_DAMAGE_SIDES;
     }
     if (f1 & TR1_TUNNEL)
-    {
-        smith_set_number_card(&cards[count], "Tunneling", SMITH_NUMBER_PVAL,
-            0, item->pval, floor_bonus, max_bonus, 1);
-        cards[count++].flags = TR1_TUNNEL;
-    }
+        smith_set_tunneling_card(&cards[count++]);
 
     return count;
 }
@@ -3813,6 +3858,16 @@ static void smith_editor_tabs(const smith_sheet_layout* sheet, smith_page page,
         interactive ? SMITH_EDITOR_TAB : 0);
 }
 
+static void smith_flag_effect_text(const object_type* item, int flagset,
+    u32b flag, char* text, size_t size)
+{
+    object_type property = *item;
+    property.abilities = 0;
+    u32b mask[4] = { 0 };
+    mask[flagset - 1] = flag;
+    object_info_effect_text(&property, mask, text, size);
+}
+
 static bool smith_number_card_menu(const smith_number_card* card, smith_page page,
     int* page_out)
 {
@@ -3839,7 +3894,7 @@ static bool smith_number_card_menu(const smith_number_card* card, smith_page pag
         if (page_out)
             smith_editor_tabs(&sheet, page, true);
         else
-            smith_ui_put_fitted(sheet.margin, sheet.tabs, sheet.list_width, TERM_L_BLUE, "Artifice");
+            smith_ui_put_fitted(sheet.margin, sheet.tabs, sheet.list_width, TERM_L_BLUE, ui_text("Artifice"));
         smith_picker_grid grid = smith_sheet_grid(&sheet, count, cols,
             smith_sheet_list_first(&sheet), sheet.list_end);
         if (initial)
@@ -3848,7 +3903,7 @@ static bool smith_number_card_menu(const smith_number_card* card, smith_page pag
             initial = false;
         }
         smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_VALUES, count, focus);
-        smith_sheet_heading(&sheet, format("Choose %s", card->label), &grid, count);
+        smith_sheet_heading(&sheet, format(ui_text("Choose %s"), card->label), &grid, count);
         int start = grid.top * cols;
         int limit = MIN(count, start + grid.visible * cols);
         for (int i = start; i < limit; i++)
@@ -3861,35 +3916,36 @@ static bool smith_number_card_menu(const smith_number_card* card, smith_page pag
             *smith_o_ptr = *smith3_o_ptr;
             smith_alloy = smith3_alloy;
             smith_sheet_choice(&sheet, &grid, i, i - start + 1, i - start,
-                label, i == current ? (grid.step >= 22 ? "Current" : "*") : "",
+                label, i == current ? (grid.step >= 22 ? ui_text("Current") : "*") : "",
                 NULL, i == focus, attr);
         }
         int value = focus == current ? card->current : card->first + focus * card->step;
         smith_apply_number(card, value);
         int difficulty = smith_measure_design();
-        smith_sheet_order(&sheet, smith_o_ptr, difficulty,
+        char effects[sizeof(smith_description.text)];
+        if (card->flags)
+        {
+            smith_flag_effect_text(smith_o_ptr, 1, card->flags, effects, sizeof(effects));
+            if (!*effects)
+            {
+                char preview[32];
+                smith_format_number(card, value, preview, sizeof(preview));
+                strnfmt(effects, sizeof(effects), "%s %s.", card->label, preview);
+            }
+        }
+        smith_sheet_order_with_effects(&sheet, smith_o_ptr, difficulty,
             focus == current && p_ptr->smithing_leftover > 0, false,
-            SMITH_NAME_READ_ONLY);
+            SMITH_NAME_READ_ONLY, card->flags ? effects : NULL);
         *smith_o_ptr = *smith3_o_ptr;
         smith_alloy = smith3_alloy;
         smithing_cost = original_cost;
 
-        int detail = grid.first + grid.stride * ((count + cols - 1) / cols);
-        if (detail + 1 < sheet.list_end)
-        {
-            char preview[32];
-            smith_format_number(card, value, preview, sizeof(preview));
-            smith_sheet_field(sheet.margin, detail, sheet.list_width, "Current",
-                card->value, TERM_WHITE, TERM_L_WHITE);
-            smith_sheet_field(sheet.margin, detail + 1, sheet.list_width, "Selected",
-                preview, TERM_WHITE, TERM_L_GREEN);
-        }
         const smith_sheet_action actions[] = {
-            { SMITH_CLICK_BACK, "Back", TERM_WHITE }, { SMITH_EDITOR_COSTS, "Costs", TERM_WHITE },
-            { SMITH_EDITOR_APPLY, "Apply", TERM_L_GREEN }
+            { SMITH_CLICK_BACK, ui_text("Back"), TERM_WHITE }, { SMITH_EDITOR_COSTS, ui_text("Costs"), TERM_WHITE },
+            { SMITH_EDITOR_APPLY, ui_text("Apply"), TERM_L_GREEN }
         };
         smith_sheet_actions(&sheet, actions, N_ELEMENTS(actions), 0);
-        smith_sheet_navigation(&sheet, false, "Apply", page_out != NULL);
+        smith_sheet_navigation(&sheet, false, ui_text("Apply"), page_out != NULL);
         Term_fresh();
         int key = smith_sheet_read_key(page_out ? '[' : 0, page_out ? ']' : 0);
 
@@ -3983,10 +4039,12 @@ static void ego_name_for_enchant_menu(int e_idx, char* buf, size_t buflen)
     SDL_strlcpy(buf, raw, buflen);
 }
 
-static smith_picker_grid smith_sheet_sublist(const smith_sheet_layout* sheet,
+static smith_picker_grid smith_sheet_sublist(smith_sheet_layout* sheet,
     smith_ui_scroll_id id, int count, int focus, cptr section, cptr heading,
-    cptr verb, bool edit_value)
+    cptr verb, cptr remove)
 {
+    if (id != SMITH_SCROLL_MELT)
+        smith_sheet_fit_list(sheet, count, 1, 0);
     smith_sheet_begin(sheet, false);
     smith_ui_put_fitted(sheet->margin, sheet->tabs, sheet->width - 2 * sheet->margin,
         TERM_L_BLUE, section);
@@ -3996,19 +4054,20 @@ static smith_picker_grid smith_sheet_sublist(const smith_sheet_layout* sheet,
     smith_sheet_heading(sheet, heading, &grid, count);
     smith_sheet_action actions[4];
     int n = 0;
-    actions[n++] = (smith_sheet_action){ SMITH_CLICK_BACK, "Back", TERM_WHITE };
+    actions[n++] = (smith_sheet_action){ SMITH_CLICK_BACK, ui_text("Back"), TERM_WHITE };
     if (id != SMITH_SCROLL_MELT)
-        actions[n++] = (smith_sheet_action){ SMITH_CLICK_CALC, "Costs", TERM_WHITE };
-    actions[n++] = (smith_sheet_action){ SMITH_EDITOR_APPLY, verb,
-        edit_value ? TERM_L_RED : count ? TERM_L_GREEN : TERM_SLATE };
-    if (edit_value)
-        actions[n++] = (smith_sheet_action){ SMITH_EDITOR_EDIT_VALUE, "Edit", TERM_L_GREEN };
+        actions[n++] = (smith_sheet_action){ SMITH_CLICK_CALC, ui_text("Costs"), TERM_WHITE };
+    if (remove)
+        actions[n++] = (smith_sheet_action){ SMITH_EDITOR_REMOVE, remove, TERM_L_RED };
+    if (verb)
+        actions[n++] = (smith_sheet_action){ SMITH_EDITOR_APPLY, verb,
+            count ? TERM_L_GREEN : TERM_SLATE };
     smith_sheet_actions(sheet, actions, n, 0);
-    smith_sheet_navigation(sheet, false, edit_value ? "Edit value" : verb, false);
+    smith_sheet_navigation(sheet, false, verb, false);
     return grid;
 }
 
-static int smith_sheet_read_choice(int* highlight, int count, int action_key)
+static int smith_sheet_read_choice(int* highlight, int count)
 {
     Term_fresh();
     int key = smith_sheet_read_key(0, 0);
@@ -4017,8 +4076,8 @@ static int smith_sheet_read_choice(int* highlight, int count, int action_key)
     {
         if (id == SMITH_CLICK_BACK || action == UI_MENU_CLICK_SECONDARY)
             return action == UI_MENU_CLICK_HOVER ? 0 : ESCAPE;
-        if (id == SMITH_EDITOR_APPLY) return action == UI_MENU_CLICK_PRIMARY ? action_key : 0;
-        if (id == SMITH_EDITOR_EDIT_VALUE) return action == UI_MENU_CLICK_PRIMARY ? '\r' : 0;
+        if (id == SMITH_EDITOR_APPLY) return action == UI_MENU_CLICK_PRIMARY ? '\r' : 0;
+        if (id == SMITH_EDITOR_REMOVE) return action == UI_MENU_CLICK_PRIMARY ? '-' : 0;
         if (id > 0 && id <= count)
             return smith_ui_pointer_choice_confirms(id, action, highlight) ? '\r' : 0;
         return 0;
@@ -4031,7 +4090,49 @@ static int smith_sheet_read_choice(int* highlight, int count, int action_key)
     return key;
 }
 
-static void prt_reforge_preview(const reforge_preview_type* preview)
+static void smith_affix_effects(const object_type* item, const object_type* base,
+    int affix, char* text, size_t size)
+{
+    const ego_item_type* ego = &e_info[affix];
+    u32b mask[4] = { ego->flags1, ego->flags2, ego->flags3, ego->flags4 };
+    if (item->pval != base->pval)
+        mask[0] |= object_kind_pval_flags1(&k_info[item->k_idx])
+            | TR1_TUNNEL | TR1_DAMAGE_SIDES;
+
+    object_type changed = *item;
+    changed.abilities = 0;
+    for (int i = 0; i < item->abilities; i++)
+    {
+        if (object_grants_ability(base, item->skilltype[i], item->abilitynum[i]))
+            continue;
+        int j = changed.abilities++;
+        changed.skilltype[j] = item->skilltype[i];
+        changed.abilitynum[j] = item->abilitynum[i];
+        changed.bane_type[j] = item->bane_type[i];
+    }
+    object_info_effect_text(&changed, mask, text, size);
+
+    size_t used = strlen(text);
+    if (item->att != base->att)
+        strnfcat(text, size, &used, "%s%s %+d.", used ? " " : "",
+            ui_text("Attack"), item->att - base->att);
+    if (item->evn != base->evn)
+        strnfcat(text, size, &used, "%s%s %+d.", used ? " " : "",
+            ui_text("Evasion"), item->evn - base->evn);
+    if (item->dd != base->dd || item->ds != base->ds)
+        strnfcat(text, size, &used, "%s%s %dd%d → %dd%d.", used ? " " : "",
+            ui_text("Damage"), base->dd, base->ds, item->dd, item->ds);
+    if (item->pd != base->pd || item->ps != base->ps)
+        strnfcat(text, size, &used, "%s%s %dd%d → %dd%d.", used ? " " : "",
+            ui_text("Protection"), base->pd, base->ps, item->pd, item->ps);
+    smith_append_volume_effect(text, size, object_effective_volume(base),
+        object_effective_volume(item));
+    if (!*text)
+        SDL_strlcpy(text, ui_text("No additional effects."), size);
+}
+
+static void prt_reforge_preview(const smith_sheet_layout* sheet,
+    const reforge_preview_type* preview, const object_type* source)
 {
     smith_ui_detail_valid = preview != NULL;
     if (!preview) return;
@@ -4039,9 +4140,11 @@ static void prt_reforge_preview(const reforge_preview_type* preview)
     smith_ui_detail_paid = false;
     smith_ui_detail_cost = preview->cost;
     smith_ui_detail_turns = preview->turns;
-    smith_sheet_layout sheet = smith_sheet_geometry();
-    smith_sheet_order(&sheet, smith_o_ptr, preview->scaled_difficulty, false, false,
-        SMITH_NAME_READ_ONLY);
+    char effects[sizeof(smith_description.text)];
+    smith_affix_effects(smith_o_ptr, source, object_ego_prefix(smith_o_ptr),
+        effects, sizeof(effects));
+    smith_sheet_order_with_effects(sheet, smith_o_ptr, preview->scaled_difficulty,
+        false, false, SMITH_NAME_READ_ONLY, effects);
 }
 
 static bool reforge_preview_missing_ability(const reforge_preview_type* preview)
@@ -4105,12 +4208,13 @@ static int reforge_prefix_menu(const object_type* source)
 
         highlight = MAX(1, MIN(highlight, entry_count));
         smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_REFORGE,
-            entry_count, highlight - 1, "Reforging", "Prefix", "Reforge", false);
+            entry_count, highlight - 1, ui_text("Reforging"), ui_text("Prefix"),
+            entry_count ? ui_text("Reforge") : NULL, NULL);
         if (!entry_count)
         {
             smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width,
-                TERM_SLATE, "No legal prefixes available.");
-            (void)smith_sheet_read_choice(&highlight, 0, '\r');
+                TERM_SLATE, ui_text("No legal prefixes available."));
+            (void)smith_sheet_read_choice(&highlight, 0);
             sdl_smithing_sheet_clear();
             ui_menu_click_clear();
             screen_load();
@@ -4128,12 +4232,12 @@ static int reforge_prefix_menu(const object_type* source)
         }
         (void)reforge_preview_build(source, choice[highlight - 1],
             &previews[highlight - 1]);
-        prt_reforge_preview(&previews[highlight - 1]);
+        prt_reforge_preview(&sheet, &previews[highlight - 1], source);
         int detail = grid.first + entry_count * grid.stride + 1;
         if (detail < sheet.list_end)
-            smith_sheet_field(sheet.margin, detail, sheet.list_width, "Raw difficulty increase",
+            smith_sheet_field(sheet.margin, detail, sheet.list_width, ui_text("Raw difficulty increase"),
                 format("+%d", previews[highlight - 1].raw_delta_difficulty), TERM_WHITE, TERM_L_WHITE);
-        ch = smith_sheet_read_choice(&highlight, entry_count, '\r');
+        ch = smith_sheet_read_choice(&highlight, entry_count);
 
         if (sdl_menu_letters_enabled()
             && (ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
@@ -4148,11 +4252,11 @@ static int reforge_prefix_menu(const object_type* source)
             )
         {
             if (reforge_preview_missing_ability(&previews[highlight - 1]))
-                bell("You lack the ability for that reforge.");
+                bell(ui_text("You lack the ability for that reforge."));
             else if (reforge_preview_missing_forge(&previews[highlight - 1]))
-                bell("You need a forge with resources for that reforge.");
+                bell(ui_text("You need a forge with resources for that reforge."));
             else if (!valid[highlight - 1])
-                bell("You cannot afford that reforge.");
+                bell(ui_text("You cannot afford that reforge."));
             else
             {
                 sdl_smithing_sheet_clear();
@@ -4252,14 +4356,18 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     bool valid[26];
     int choice[26];
     smith_sheet_layout sheet = smith_sheet_geometry();
+    const object_type original = *smith_o_ptr;
+    const smith_alloy_state original_alloy = smith_alloy;
+    const smithing_cost_type original_cost = smithing_cost;
     bool no_prefix_allowed = selecting_prefix
         && ego_forbids_prefix_combo(fixed_suffix);
 
-    int selected_affix = selecting_prefix ? object_ego_prefix(smith_o_ptr)
-        : object_ego_suffix(smith_o_ptr);
+    int selected_affix = selecting_prefix ? object_ego_prefix(&original)
+        : object_ego_suffix(&original);
 
-    /* Always allow selecting no affix */
-    valid[entry_count] = true;
+    create_special(fixed_prefix, fixed_suffix);
+    const object_type base = *smith_o_ptr;
+    valid[entry_count] = affordable(smith_o_ptr);
     choice[entry_count] = 0;
     entry_count++;
 
@@ -4302,30 +4410,46 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     if (*highlight < 1) *highlight = 1;
     if (*highlight > entry_count) *highlight = entry_count;
 
+    int affix = choice[*highlight - 1];
+    cptr verb = !affix && selected_affix ? ui_text("Remove") : ui_text("Apply");
     smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_ENCHANT,
-        entry_count, *highlight - 1, "Enhancements", selecting_prefix ? "Prefix" : "Suffix", "Apply", false);
+        entry_count, *highlight - 1, ui_text("Enhancements"),
+        selecting_prefix ? ui_text("Prefix") : ui_text("Suffix"), verb, NULL);
     for (i = grid.top; i < entry_count && i < grid.top + grid.visible; i++)
     {
         char label[64];
-        if (choice[i] == 0) SDL_strlcpy(label, "(none)", sizeof(label));
+        if (choice[i] == 0) SDL_strlcpy(label, ui_text("(none)"), sizeof(label));
         else ego_name_for_enchant_menu(choice[i], label, sizeof(label));
         smith_sheet_choice(&sheet, &grid, i, i + 1, i, label,
-            choice[i] && choice[i] == selected_affix ? "Current" : "",
+            choice[i] == selected_affix ? ui_text("Current") : "",
             NULL, i + 1 == *highlight, valid[i] ? TERM_WHITE : TERM_SLATE);
     }
-    if (no_prefix_allowed && grid.first + grid.stride < sheet.list_end)
-        smith_ui_put_fitted(sheet.margin, grid.first + grid.stride, sheet.list_width,
-            TERM_L_WHITE, "This suffix excludes prefixes.");
 
-    /* Make a preview 'special' version of the object */
-    if (selecting_prefix)
-        create_special(choice[*highlight - 1], fixed_suffix);
+    create_special(selecting_prefix ? affix : fixed_prefix,
+        selecting_prefix ? fixed_suffix : affix);
+    char effects[sizeof(smith_description.text)];
+    if (affix)
+    {
+        smith_affix_effects(smith_o_ptr, &base, affix, effects, sizeof(effects));
+        if (!selecting_prefix && fixed_prefix && ego_forbids_prefix_combo(affix))
+        {
+            SDL_strlcat(effects, " ", sizeof(effects));
+            SDL_strlcat(effects, ui_text("This suffix excludes prefixes."), sizeof(effects));
+        }
+    }
     else
-        create_special(fixed_prefix, choice[*highlight - 1]);
-
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
-        SMITH_NAME_READ_ONLY);
-    ch = smith_sheet_read_choice(highlight, entry_count, '\r');
+    {
+        cptr description = no_prefix_allowed ? ui_text("This suffix excludes prefixes.")
+            : selecting_prefix ? ui_text("Use this item without a prefix.")
+            : ui_text("Use this item without a suffix.");
+        SDL_strlcpy(effects, description, sizeof(effects));
+    }
+    smith_sheet_order_with_effects(&sheet, smith_o_ptr, smith_measure_design(),
+        false, false, SMITH_NAME_READ_ONLY, effects);
+    *smith_o_ptr = original;
+    smith_alloy = original_alloy;
+    smithing_cost = original_cost;
+    ch = smith_sheet_read_choice(highlight, entry_count);
 
     /* Choose by letter */
     if (sdl_menu_letters_enabled()
@@ -4397,6 +4521,7 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
 static bool smith_choose_affix(bool prefix)
 {
     object_type original = *smith_o_ptr;
+    smith_alloy_state original_alloy = smith_alloy;
     int old_prefix = object_ego_prefix(&original);
     int old_suffix = object_ego_suffix(&original);
 
@@ -4416,6 +4541,7 @@ static bool smith_choose_affix(bool prefix)
         && object_ego_suffix(smith_o_ptr) == old_suffix))
     {
         *smith_o_ptr = original;
+        smith_alloy = original_alloy;
         return false;
     }
     return true;
@@ -4510,6 +4636,14 @@ static bool smith_artefact_has_property(const artefact_type* art,
     return (flags[property->flagset] & property->flag) != 0;
 }
 
+static bool smith_kind_has_property(const object_type* item,
+    const smithing_flag_desc* property)
+{
+    const object_kind* kind = &k_info[item->k_idx];
+    const u32b flags[] = { 0, kind->flags1, kind->flags2, kind->flags3, kind->flags4 };
+    return (flags[property->flagset] & property->flag) != 0;
+}
+
 static bool smith_property_applicable(const smithing_flag_desc* property,
     const object_type* item)
 {
@@ -4568,6 +4702,8 @@ void add_artefact_flag(u32b f, int flagset)
 
     object_flags(smith_o_ptr, &f1_after, &f2, &f3);
     smith_apply_stat_skill_flag_delta(smith_o_ptr, f1_before, f1_after);
+    if (!(f1_before & TR1_TUNNEL) && (f1_after & TR1_TUNNEL))
+        smith_o_ptr->pval = MAX(1, smith_o_ptr->pval);
 }
 
 /*
@@ -4601,6 +4737,8 @@ void remove_artefact_flag(u32b f, int flagset)
 
     object_flags(smith_o_ptr, &f1_after, &f2, &f3);
     smith_apply_stat_skill_flag_delta(smith_o_ptr, f1_before, f1_after);
+    if ((f1_before & TR1_TUNNEL) && !(f1_after & (TR1_TUNNEL | TR1_DAMAGE_SIDES)))
+        smith_o_ptr->pval = k_info[smith_o_ptr->k_idx].pval;
 }
 
 /*
@@ -4608,19 +4746,16 @@ void remove_artefact_flag(u32b f, int flagset)
  */
 int artefact_flag_menu_aux(int category, int* highlight)
 {
-    char ch;
-    int i, num = 0;
-
-    bool flag_present[MAX_SMITHING_FLAGS] = { false };
-    bool flag_valid[MAX_SMITHING_FLAGS] = { false };
-    bool flag_affordable[MAX_SMITHING_FLAGS] = { false };
-    u32b flag[MAX_SMITHING_FLAGS];
-    int flagset[MAX_SMITHING_FLAGS];
-    byte flag_attr[MAX_SMITHING_FLAGS];
-    cptr flag_desc[MAX_SMITHING_FLAGS];
-    const smith_number_card* flag_number[MAX_SMITHING_FLAGS] = { NULL };
+    struct property_row {
+        const smithing_flag_desc* property;
+        const smith_number_card* number;
+        bool inherent, added;
+        byte attr;
+    } rows[MAX_SMITHING_FLAGS];
+    int num = 0;
     smith_number_card bonuses[SMITH_BONUS_NUMBER_MAX];
     smith_sheet_layout sheet = smith_sheet_geometry();
+    const smithing_cost_type original_cost = smithing_cost;
     prepare_artefact();
     int bonus_count = smith_collect_bonus_numbers(bonuses);
 
@@ -4629,64 +4764,82 @@ int artefact_flag_menu_aux(int category, int* highlight)
         if (property->category != category || !smith_property_is_listed(property))
             continue;
 
-        flag[num] = property->flag;
-        flagset[num] = property->flagset;
-        flag_desc[num] = property->desc;
-        flag_present[num] = smith_artefact_has_property(smith2_a_ptr, property);
-        flag_valid[num] = flag_present[num] || smith_property_applicable(property, smith_o_ptr);
-        if (flag_present[num] && property->flagset == 1)
+        bool inherent = smith_kind_has_property(smith_o_ptr, property);
+        bool added = !inherent && smith_artefact_has_property(smith2_a_ptr, property);
+        if (!inherent && !added && !smith_property_applicable(property, smith_o_ptr))
+            continue;
+
+        struct property_row* row = &rows[num++];
+        *row = (struct property_row){ .property = property,
+            .inherent = inherent, .added = added, .attr = TERM_L_BLUE };
+        if ((inherent || added) && property->flagset == 1)
         {
             for (int j = 0; j < bonus_count; j++)
-                if (bonuses[j].flags & property->flag) flag_number[num] = &bonuses[j];
+                if (bonuses[j].flags & property->flag) row->number = &bonuses[j];
         }
-        if (flag_valid[num] && !flag_present[num])
+        if (!inherent && !added)
         {
             add_artefact_flag(property->flag, property->flagset);
-            flag_affordable[num] = affordable(smith_o_ptr);
+            row->attr = affordable(smith_o_ptr) ? TERM_WHITE : TERM_SLATE;
+            prepare_artefact();
         }
-
-        flag_attr[num] = !flag_valid[num] ? TERM_L_DARK
-            : flag_affordable[num] ? TERM_WHITE : TERM_SLATE;
-        num++;
     }
 
     *highlight = MAX(1, MIN(*highlight, num));
-    const smith_number_card* selected_number = flag_number[*highlight - 1];
-    bool edit_value = selected_number && selected_number->editable;
-    cptr toggle = "Toggle";
-    char remove[32];
-    if (edit_value)
+    const struct property_row* selected = num ? &rows[*highlight - 1] : NULL;
+    cptr verb = NULL, remove = NULL;
+    char remove_label[40];
+    if (selected && selected->number && selected->number->editable)
     {
-        char key[16] = "-";
-        if (steamdeck_controls_active())
-            controller_prompt_label(steamdeck_alt_action_key(), "X", key, sizeof(key));
-        strnfmt(remove, sizeof(remove), "[%s] Remove", key);
-        toggle = sdl_touch_only_device_active() || sheet.width < 30 ? "Remove" : remove;
+        verb = ui_text("Edit");
+        if (selected->added)
+        {
+            char key[16] = "-";
+            if (steamdeck_controls_active())
+                controller_prompt_label(steamdeck_alt_action_key(), "X", key, sizeof(key));
+            strnfmt(remove_label, sizeof(remove_label), ui_text("[%s] Remove"), key);
+            remove = sdl_touch_only_device_active() || sheet.width < 40
+                ? ui_text("Remove") : remove_label;
+        }
     }
+    else if (selected && !selected->inherent)
+        verb = selected->added ? ui_text("Remove") : ui_text("Add");
+
     char section[80];
-    strnfmt(section, sizeof(section), "Artifice  /  %s", smithing_flag_cats[category - 1].desc);
-    smith_sheet_fit_list(&sheet, num, 1, 0);
+    strnfmt(section, sizeof(section), ui_text("Artifice  /  %s"), ui_text(smithing_flag_cats[category - 1].desc));
     smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_FLAG,
-        num, *highlight - 1, section, "Property", toggle, edit_value);
-    if (num == 0)
+        num, *highlight - 1, section, ui_text("Property"), verb, remove);
+    if (!selected)
     {
         smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width, TERM_SLATE,
-            "No properties can be added.");
-        (void)smith_sheet_read_choice(highlight, 0, '\r');
-        return -1;
+            ui_text("No properties can be added."));
+        int key = smith_sheet_read_choice(highlight, 0);
+        return key == ESCAPE || key == '4' ? -1 : 0;
     }
-    for (i = grid.top; i < num && i < grid.top + grid.visible; i++)
-        smith_sheet_choice(&sheet, &grid, i, i + 1, i, flag_desc[i],
-            flag_number[i] ? flag_number[i]->value : flag_present[i] ? "Added" : "",
-            NULL, *highlight == i + 1,
-            flag_present[i] ? TERM_L_BLUE : flag_attr[i]);
+    for (int i = grid.top; i < num && i < grid.top + grid.visible; i++)
+    {
+        const struct property_row* row = &rows[i];
+        cptr value = row->number ? row->number->value : row->inherent ? ui_text("Built in")
+            : row->added ? ui_text("Added") : "";
+        smith_sheet_choice(&sheet, &grid, i, i + 1, i, ui_text(row->property->desc),
+            value, NULL, *highlight == i + 1, row->attr);
+    }
 
-    // add this flag to the dummy artefact under construction
-    add_artefact_flag(flag[*highlight - 1], flagset[*highlight - 1]);
-
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
-        SMITH_NAME_READ_ONLY);
-    ch = smith_sheet_read_choice(highlight, num, '-');
+    const smithing_flag_desc* property = selected->property;
+    if (!selected->inherent && !selected->added)
+        add_artefact_flag(property->flag, property->flagset);
+    char effects[sizeof(smith_description.text)];
+    smith_flag_effect_text(smith_o_ptr, property->flagset, property->flag,
+        effects, sizeof(effects));
+    if (!*effects && selected->number)
+        strnfmt(effects, sizeof(effects), "%s %s.", selected->number->label,
+            selected->number->value);
+    smith_sheet_order_with_effects(&sheet, smith_o_ptr, smith_measure_design(),
+        false, false, SMITH_NAME_READ_ONLY,
+        *effects ? effects : ui_text("No additional effects."));
+    prepare_artefact();
+    smithing_cost = original_cost;
+    int ch = smith_sheet_read_choice(highlight, num);
     if (steamdeck_controls_active() && ch == steamdeck_alt_action_key()) ch = '-';
 
     /* Choose by letter */
@@ -4697,54 +4850,36 @@ int artefact_flag_menu_aux(int category, int* highlight)
         ch = '\r';
     }
 
-    /* Toggle the selected logical row from the saved baseline.  add/remove
-     * prepare that baseline themselves, so this is correct even when a click
-     * changed the highlight after another row was previewed. */
     if (ch == '\r' || ch == '\n' || ch == ' ' || ch == '6' || ch == '-')
     {
-        if (flag_valid[*highlight - 1])
+        selected = &rows[*highlight - 1];
+        property = selected->property;
+        if (ch != '-' && selected->number && selected->number->editable)
         {
-            selected_number = flag_number[*highlight - 1];
-            if (ch != '-' && selected_number && selected_number->editable)
+            if (smith_number_card_menu(selected->number, SMITH_ARTIFICE, NULL))
             {
-                prepare_artefact();
-                if (smith_number_card_menu(selected_number, SMITH_ARTIFICE, NULL))
-                {
-                    *smith2_o_ptr = *smith_o_ptr;
-                    smith2_alloy = smith_alloy;
-                }
-                return 0;
+                *smith2_o_ptr = *smith_o_ptr;
+                smith2_alloy = smith_alloy;
             }
-
-            if (flag_present[*highlight - 1])
-                remove_artefact_flag(
-                    flag[*highlight - 1], flagset[*highlight - 1]);
-            else
-                add_artefact_flag(
-                    flag[*highlight - 1], flagset[*highlight - 1]);
-
-            // backup the new artefact
-            artefact_copy(smith2_a_ptr, smith_a_ptr);
-            object_copy(smith2_o_ptr, smith_o_ptr);
-            smith2_alloy = smith_alloy;
-
-            return (*highlight);
+            return 0;
         }
 
+        if (selected->inherent || (ch == '-' && !selected->added))
+            return 0;
+        if (selected->added)
+            remove_artefact_flag(property->flag, property->flagset);
         else
-        {
-            bell("Invalid choice.");
-        }
+            add_artefact_flag(property->flag, property->flagset);
+        artefact_copy(smith2_a_ptr, smith_a_ptr);
+        object_copy(smith2_o_ptr, smith_o_ptr);
+        smith2_alloy = smith_alloy;
+        return *highlight;
     }
 
     /* Exit */
     if ((ch == '4') || (ch == ESCAPE))
     {
         *highlight = -1;
-
-        // restore the backup artefact and object
-        prepare_artefact();
-
         return (*highlight);
     }
 
@@ -5016,14 +5151,17 @@ int artefact_ability_menu_aux(int skill, int* highlight)
 
     *highlight = MAX(1, MIN(*highlight, num));
     char section[80];
-    strnfmt(section, sizeof(section), "Artifice  /  %s", skill_names_full[skill]);
+    strnfmt(section, sizeof(section), ui_text("Artifice  /  %s"), ui_text(skill_names_full[skill]));
+    int selected = *highlight - 1;
+    cptr verb = num && ability_valid[selected]
+        ? (ability_present[selected] ? ui_text("Remove") : ui_text("Add")) : NULL;
     smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_ABILITY,
-        num, *highlight - 1, section, "Ability", "Toggle", false);
+        num, selected, section, ui_text("Ability"), verb, NULL);
     if (!num)
     {
         smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width, TERM_SLATE,
-            "No abilities can be added.");
-        (void)smith_sheet_read_choice(highlight, 0, '\r');
+            ui_text("No abilities can be added."));
+        (void)smith_sheet_read_choice(highlight, 0);
         mem_free(ability_present);
         mem_free(ability_valid);
         mem_free(ability_affordable);
@@ -5038,7 +5176,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
             : (ability_valid[i]
                     ? (ability_affordable[i] ? TERM_WHITE : TERM_SLATE)
                     : TERM_L_DARK);
-        cptr name = "Ability";
+        cptr name = ui_text("Ability");
 
 
         for (int j = 0; j < z_info->b_max; j++)
@@ -5052,16 +5190,19 @@ int artefact_ability_menu_aux(int skill, int* highlight)
             }
         }
         smith_sheet_choice(&sheet, &grid, i, i + 1, i, name,
-            ability_present[i] ? "Added" : "", NULL, *highlight == i + 1,
+            ability_present[i] ? ui_text("Added") : "", NULL, *highlight == i + 1,
             ability_present[i] ? TERM_L_BLUE : attr);
     }
 
-    // add this ability to the dummy artefact under construction (use actual ability number)
-    add_artefact_ability(skill, ability_nums[*highlight - 1]);
+    if (ability_valid[selected] && !ability_present[selected])
+        add_artefact_ability(skill, ability_nums[selected]);
+    else
+        prepare_artefact();
 
-    smith_sheet_order(&sheet, smith_o_ptr, smith_measure_design(), false, false,
-        SMITH_NAME_READ_ONLY);
-    ch = smith_sheet_read_choice(highlight, num, '\r');
+    b_ptr = &b_info[ability_index(skill, ability_nums[selected])];
+    smith_sheet_order_with_effects(&sheet, smith_o_ptr, smith_measure_design(),
+        false, false, SMITH_NAME_READ_ONLY, b_ptr->effect ? ui_text(b_text + b_ptr->effect) : NULL);
+    ch = smith_sheet_read_choice(highlight, num);
 
     /* Choose by letter */
     if (sdl_menu_letters_enabled()
@@ -5093,7 +5234,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
         }
         else
         {
-            bell("Invalid choice.");
+            bell(ui_text("Invalid choice."));
         }
     }
 
@@ -5251,12 +5392,13 @@ int melt_menu_aux(int* highlight)
 
     *highlight = MAX(1, MIN(*highlight, num));
     smith_picker_grid grid = smith_sheet_sublist(&sheet, SMITH_SCROLL_MELT, num,
-        *highlight - 1, "Melting", "Carried metalwork", "Melt", false);
+        *highlight - 1, ui_text("Melting"), ui_text("Carried metalwork"),
+        num ? ui_text("Melt") : NULL, NULL);
     if (!num)
     {
         smith_ui_put_fitted(sheet.margin, grid.first, sheet.list_width, TERM_SLATE,
-            "No carried metal items can be melted.");
-        (void)smith_sheet_read_choice(highlight, 0, '\r');
+            ui_text("No carried metal items can be melted."));
+        (void)smith_sheet_read_choice(highlight, 0);
         return -1;
     }
     for (i = grid.top; i < num && i < grid.top + grid.visible; i++)
@@ -5265,7 +5407,7 @@ int melt_menu_aux(int* highlight)
         o_ptr = player_inventory_object(handle);
         object_desc(desc, sizeof(desc), o_ptr, false, 0);
         smith_sheet_choice(&sheet, &grid, i, i + 1, i, desc,
-            format("%d.%d lb", o_ptr->weight / 10, o_ptr->weight % 10), o_ptr,
+            format(ui_text("%d.%d lb"), o_ptr->weight / 10, o_ptr->weight % 10), o_ptr,
             i + 1 == *highlight, TERM_WHITE);
     }
     o_ptr = player_inventory_object(smith_melt_item_handle_for_choice(*highlight));
@@ -5274,7 +5416,7 @@ int melt_menu_aux(int* highlight)
     u32b f1, f2, f3;
     object_flags(o_ptr, &f1, &f2, &f3);
     bool iron = (f3 & TR3_STAR_IRON) != 0;
-    smith_ui_put_fitted(x, y++, w, TERM_WHITE + TERM_SHADE, "Metal recovery");
+    smith_ui_put_fitted(x, y++, w, TERM_WHITE + TERM_SHADE, ui_text("Metal recovery"));
     if (sheet.footer - y >= 4)
     {
         object_desc(desc, sizeof(desc), o_ptr, false, 0);
@@ -5282,12 +5424,12 @@ int melt_menu_aux(int* highlight)
         smith_ui_put_fitted(x + 3, y++, w - 3, TERM_L_WHITE, desc);
         y++;
     }
-    smith_sheet_field(x, y++, w, iron ? "Star iron" : "Mithril",
-        format("%d.%d lb", o_ptr->weight / 10, o_ptr->weight % 10), TERM_WHITE, TERM_L_WHITE);
+    smith_sheet_field(x, y++, w, iron ? ui_text("Star iron") : "Mithril",
+        format(ui_text("%d.%d lb"), o_ptr->weight / 10, o_ptr->weight % 10), TERM_WHITE, TERM_L_WHITE);
     if (y < sheet.footer)
     {
         int carried = iron ? star_iron_carried() : mithril_carried();
-        smith_sheet_field(x, y, w, "Already carried", format("%d.%d lb", carried / 10,
+        smith_sheet_field(x, y, w, ui_text("Already carried"), format(ui_text("%d.%d lb"), carried / 10,
             carried % 10), TERM_WHITE, TERM_L_WHITE);
     }
     Term_fresh();
@@ -5453,14 +5595,14 @@ static void smith_root_build_entries(bool valid[SMT_MENU_MAX],
     int reforge_target = find_reforge_target_item();
     byte valid_attr;
 
-    SDL_strlcpy(labels[SMT_MENU_CREATE - 1], "Change base item", 32);
-    SDL_strlcpy(labels[SMT_MENU_ENCHANT - 1], "Enhancements", 32);
-    SDL_strlcpy(labels[SMT_MENU_ARTEFACT - 1], "Artifice", 32);
-    SDL_strlcpy(labels[SMT_MENU_NUMBERS - 1], "Edit item", 32);
-    SDL_strlcpy(labels[SMT_MENU_MELT - 1], "Melt", 32);
-    SDL_strlcpy(labels[SMT_MENU_REPAIR - 1], "Reforge", 32);
+    SDL_strlcpy(labels[SMT_MENU_CREATE - 1], ui_text("Change base item"), 32);
+    SDL_strlcpy(labels[SMT_MENU_ENCHANT - 1], ui_text("Enhancements"), 32);
+    SDL_strlcpy(labels[SMT_MENU_ARTEFACT - 1], ui_text("Artifice"), 32);
+    SDL_strlcpy(labels[SMT_MENU_NUMBERS - 1], ui_text("Edit item"), 32);
+    SDL_strlcpy(labels[SMT_MENU_MELT - 1], ui_text("Melt"), 32);
+    SDL_strlcpy(labels[SMT_MENU_REPAIR - 1], ui_text("Reforge"), 32);
     SDL_strlcpy(labels[SMT_MENU_ACCEPT - 1],
-        (p_ptr->smithing_leftover == 0) ? "Craft" : "Resume", 32);
+        (p_ptr->smithing_leftover == 0) ? ui_text("Craft") : ui_text("Resume"), 32);
 
     valid[SMT_MENU_CREATE - 1] = true;
     valid[SMT_MENU_ENCHANT - 1] = smith_design_allows(SMT_MENU_ENCHANT);
@@ -5526,9 +5668,9 @@ static void smith_root_note_for_choice(int choice, bool valid, char* buf,
     if (smith_pending_reforge())
     {
         if (choice != SMT_MENU_ACCEPT)
-            SDL_strlcpy(buf, "Finish the current reforging work first.", buflen);
+            SDL_strlcpy(buf, ui_text("Finish the current reforging work first."), buflen);
         else if (!at_forge)
-            SDL_strlcpy(buf, "Resume at a forge; costs are already paid.", buflen);
+            SDL_strlcpy(buf, ui_text("Resume at a forge; costs are already paid."), buflen);
         return;
     }
 
@@ -5539,69 +5681,69 @@ static void smith_root_note_for_choice(int choice, bool valid, char* buf,
                 || p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
                 || p_ptr->active_ability[S_SMT][SMT_JEWELLER]))
         {
-            SDL_strlcpy(buf, "No smithing craft is learned yet.", buflen);
+            SDL_strlcpy(buf, ui_text("No smithing craft is learned yet."), buflen);
         }
         break;
     case SMT_MENU_ENCHANT:
         if (!smith_o_ptr->tval)
-            SDL_strlcpy(buf, "Select a base item first.", buflen);
+            SDL_strlcpy(buf, ui_text("Select a base item first."), buflen);
         else if (smith_o_ptr->name1)
-            SDL_strlcpy(buf, "Artifice already claims this work.", buflen);
+            SDL_strlcpy(buf, ui_text("Artifice already claims this work."), buflen);
         else if (enchant_then_numbers)
-            SDL_strlcpy(buf, "This enchanted item has custom stats.", buflen);
+            SDL_strlcpy(buf, ui_text("This enchanted item has custom stats."), buflen);
         else if (smith_o_ptr->tval == TV_HORN)
-            SDL_strlcpy(buf, "Horns cannot take this enchantment path.", buflen);
+            SDL_strlcpy(buf, ui_text("Horns cannot take this enchantment path."), buflen);
         else if ((smith_o_ptr->tval == TV_DIGGING)
             && (smith_o_ptr->sval == SV_SHOVEL))
         {
-            SDL_strlcpy(buf, "Shovels cannot be enchanted here.", buflen);
+            SDL_strlcpy(buf, ui_text("Shovels cannot be enchanted here."), buflen);
         }
         else if (!p_ptr->active_ability[S_SMT][SMT_ENCHANTMENT])
-            SDL_strlcpy(buf, "Requires Enchantment.", buflen);
+            SDL_strlcpy(buf, ui_text("Requires Enchantment."), buflen);
         break;
     case SMT_MENU_ARTEFACT:
         if (!smith_o_ptr->tval)
-            SDL_strlcpy(buf, "Select a base item first.", buflen);
+            SDL_strlcpy(buf, ui_text("Select a base item first."), buflen);
         else if (object_has_ego(smith_o_ptr))
-            SDL_strlcpy(buf, "Remove the enchantment choice first.", buflen);
+            SDL_strlcpy(buf, ui_text("Remove the enchantment choice first."), buflen);
         else if (smith_o_ptr->tval == TV_HORN)
-            SDL_strlcpy(buf, "Horns cannot be made into custom artefacts.", buflen);
+            SDL_strlcpy(buf, ui_text("Horns cannot be made into custom artefacts."), buflen);
         else if (!p_ptr->active_ability[S_SMT][SMT_ARTEFACT])
-            SDL_strlcpy(buf, "Requires Artifice.", buflen);
+            SDL_strlcpy(buf, ui_text("Requires Artifice."), buflen);
         else if (!valid)
-            SDL_strlcpy(buf, "Self-made artefact limit reached.", buflen);
+            SDL_strlcpy(buf, ui_text("Self-made artefact limit reached."), buflen);
         break;
     case SMT_MENU_NUMBERS:
         if (!smith_o_ptr->tval)
-            SDL_strlcpy(buf, "Select a base item first.", buflen);
+            SDL_strlcpy(buf, ui_text("Select a base item first."), buflen);
         break;
     case SMT_MENU_MELT:
         if (!at_forge)
-            SDL_strlcpy(buf, "Requires a forge.", buflen);
+            SDL_strlcpy(buf, ui_text("Requires a forge."), buflen);
         else if (!meltable_metal_items_carried())
-            SDL_strlcpy(buf, "Carry mithril or star-iron gear to melt.", buflen);
+            SDL_strlcpy(buf, ui_text("Carry mithril or star-iron gear to melt."), buflen);
         break;
     case SMT_MENU_REPAIR:
         if (find_reforge_target_item() < 0)
-            SDL_strlcpy(buf, "Carry damaged or prefixable gear.", buflen);
+            SDL_strlcpy(buf, ui_text("Carry damaged or prefixable gear."), buflen);
         else if (!at_forge)
-            SDL_strlcpy(buf, "Preview only away from a forge.", buflen);
+            SDL_strlcpy(buf, ui_text("Preview only away from a forge."), buflen);
         else if (uses <= 0)
-            SDL_strlcpy(buf, "This forge is exhausted.", buflen);
+            SDL_strlcpy(buf, ui_text("This forge is exhausted."), buflen);
         else if (!p_ptr->active_ability[S_SMT][SMT_REPAIR])
-            SDL_strlcpy(buf, "Requires Reforging.", buflen);
+            SDL_strlcpy(buf, ui_text("Requires Reforging."), buflen);
         break;
     case SMT_MENU_ACCEPT:
         if (!smith_o_ptr->tval)
-            SDL_strlcpy(buf, "Select a base item first.", buflen);
+            SDL_strlcpy(buf, ui_text("Select a base item first."), buflen);
         else if (!at_forge)
-            SDL_strlcpy(buf, "Requires a forge.", buflen);
+            SDL_strlcpy(buf, ui_text("Requires a forge."), buflen);
         else if (uses <= 0)
-            SDL_strlcpy(buf, "This forge is exhausted.", buflen);
+            SDL_strlcpy(buf, ui_text("This forge is exhausted."), buflen);
         else if (object_has_evil_alignment(smith_o_ptr))
-            SDL_strlcpy(buf, "This work is too fell to make.", buflen);
+            SDL_strlcpy(buf, ui_text("This work is too fell to make."), buflen);
         else if (!valid)
-            SDL_strlcpy(buf, "The design is beyond your current means.", buflen);
+            SDL_strlcpy(buf, ui_text("The design is beyond your current means."), buflen);
         break;
     }
 }
@@ -5684,7 +5826,7 @@ static bool smith_reforge_item(void)
     screen_save();
     item_tester_hook = smith_item_tester_hook_reforge_target;
     bool selected = open_inventory_item_select_menu(USE_EQUIP | USE_INVEN,
-        "Reforge which item? ", "You have nothing to repair or reforge.", &slot);
+        ui_text("Reforge which item? "), ui_text("You have nothing to repair or reforge."), &slot);
     item_tester_hook = NULL;
     screen_load();
     ui_menu_click_clear();
@@ -5706,7 +5848,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("You can only reforge items at a forge.");
+            bell(ui_text("You can only reforge items at a forge."));
             return false;
         }
 
@@ -5716,7 +5858,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("This forge has no resources left.");
+            bell(ui_text("This forge has no resources left."));
             return false;
         }
 
@@ -5726,7 +5868,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("You do not know how to reforge gear.");
+            bell(ui_text("You do not know how to reforge gear."));
             return false;
         }
 
@@ -5736,7 +5878,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("You cannot repair that item.");
+            bell(ui_text("You cannot repair that item."));
             return false;
         }
 
@@ -5756,7 +5898,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("You cannot reforge that item.");
+            bell(ui_text("You cannot reforge that item."));
             return false;
         }
 
@@ -5777,7 +5919,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("You cannot afford that reforge.");
+            bell(ui_text("You cannot afford that reforge."));
             return false;
         }
 
@@ -5788,7 +5930,7 @@ static bool smith_reforge_item(void)
             object_copy(smith2_o_ptr, &smith2_backup);
             smith_alloy = alloy_backup;
             smith2_alloy = alloy2_backup;
-            bell("You cannot reforge that item.");
+            bell(ui_text("You cannot reforge that item."));
             return false;
         }
 
@@ -5858,7 +6000,10 @@ static void smith_editor_number(smith_editor_card* card,
 {
     *card = (smith_editor_card){ .label = number->label, .enabled = number->editable,
         .indented = indented, .number = number };
-    SDL_strlcpy(card->value, number->value, sizeof(card->value));
+    if (number->flags == TR1_TUNNEL && !number->editable)
+        strnfmt(card->value, sizeof(card->value), "%s (%s)", number->value, ui_text("Fixed"));
+    else
+        SDL_strlcpy(card->value, number->value, sizeof(card->value));
 }
 
 typedef struct {
@@ -5883,9 +6028,12 @@ static int smith_artifice_cards(bool allowed, bool compact, smith_editor_card* c
     {
         if (!smith_property_is_listed(property)) continue;
         smith_artifice_count* count = &properties[property->category - 1];
-        bool added = smith_artefact_has_property(art, property);
+        bool inherent = smith_kind_has_property(&item, property);
+        bool added = !inherent && smith_artefact_has_property(art, property);
         count->added += added;
-        count->available += added || (allowed && smith_property_applicable(property, &item));
+        count->available += added || (allowed && (inherent
+                ? property->flagset == 1 && (property->flag & TR1_PVAL_MASK)
+                : smith_property_applicable(property, &item)));
     }
     for (int i = 0; i < z_info->b_max; i++)
     {
@@ -5902,19 +6050,19 @@ static int smith_artifice_cards(bool allowed, bool compact, smith_editor_card* c
     {
         smith_editor_card* card = &cards[i];
         smith_artifice_count count = properties[i];
-        card->label = smithing_flag_cats[i].desc;
+        card->label = ui_text(smithing_flag_cats[i].desc);
         card->enabled = allowed;
         strnfmt(card->value, sizeof(card->value), "%d / %d%s", count.added,
-            count.available, compact ? "" : count.available == 1 ? " property" : " properties");
+            count.available, compact ? "" : count.available == 1 ? ui_text(" property") : ui_text(" properties"));
     }
     for (int i = 0; i < S_SPC; i++)
     {
         smith_editor_card* card = &cards[MAX_CATS + i];
         smith_artifice_count count = abilities[i];
-        card->label = skill_names_full[i];
+        card->label = ui_text(skill_names_full[i]);
         card->enabled = allowed;
         strnfmt(card->value, sizeof(card->value), "%d / %d%s", count.added,
-            count.available, compact ? "" : count.available == 1 ? " ability" : " abilities");
+            count.available, compact ? "" : count.available == 1 ? ui_text(" ability") : ui_text(" abilities"));
     }
     return MAX_CATS + S_SPC;
 }
@@ -5934,7 +6082,8 @@ static int smith_editor_cards(smith_page page, bool allowed, bool compact,
         int prefix = object_ego_prefix(smith_o_ptr);
         int suffix = object_ego_suffix(smith_o_ptr);
         int bonuses = smith_collect_bonus_numbers(numbers);
-        u32b placed = 0;
+        u32b simple = smith_has_builtin_tunneling(smith_o_ptr) ? TR1_TUNNEL : 0;
+        u32b placed = simple;
         if (smith_o_ptr->name1)
         {
             /* Added artefact powers have their own property rows. */
@@ -5948,16 +6097,16 @@ static int smith_editor_cards(smith_page page, bool allowed, bool compact,
             int affix = i == 0 ? prefix : suffix;
             u32b flags = affix ? e_info[affix].flags1 : 0;
             smith_editor_card* slot = &cards[count++];
-            slot->label = i == 0 ? "Prefix" : "Suffix";
+            slot->label = i == 0 ? ui_text("Prefix") : ui_text("Suffix");
             slot->prefix = i == 0;
-            SDL_strlcpy(slot->value, "None", sizeof(slot->value));
+            SDL_strlcpy(slot->value, ui_text("None"), sizeof(slot->value));
             if (affix)
                 ego_name_for_enchant_menu(affix, slot->value, sizeof(slot->value));
             slot->enabled = allowed && (affix ||
                 enchant_menu_has_applicable_affix(smith2_o_ptr,
                     i == 0 ? 0 : prefix, i == 0 ? suffix : 0, i == 0));
             for (int j = 0; j < bonuses; j++)
-                if (numbers[j].flags & flags)
+                if (numbers[j].flags & flags & ~simple)
                     smith_editor_number(&cards[count++], &numbers[j], true);
             placed |= flags;
         }
@@ -5971,9 +6120,21 @@ static int smith_editor_cards(smith_page page, bool allowed, bool compact,
     return smith_artifice_cards(allowed, compact, cards);
 }
 
-/* Show the resources on hand below the editable fields when there is room. */
+static cptr smith_fixed_number_note(const smith_number_card* number)
+{
+    if (!number || number->editable || number->flags != TR1_TUNNEL) return NULL;
+    if (!smith_o_ptr->name1 && !object_has_ego(smith_o_ptr)
+        && smith_design_allows(SMT_MENU_ARTEFACT))
+    {
+        if (smith_o_ptr->sval == SV_MATTOCK)
+            return ui_text("Raise with Artifice or the Stone-hewers.");
+        return ui_text("Use Artifice to raise tunneling.");
+    }
+    return ui_text("Tunneling is fixed for this design.");
+}
+
 static void smith_editor_context(const smith_sheet_layout* sheet, int row,
-    smith_page page, const smith_editor_card* card, cptr note)
+    const smith_editor_card* card, cptr note)
 {
     int x = sheet->margin, w = sheet->list_width, end = sheet->list_end;
     if (row >= end) return;
@@ -5987,33 +6148,15 @@ static void smith_editor_context(const smith_sheet_layout* sheet, int row,
         smith_format_number(field, field->first + field->step * (field->count - 1),
             hi, sizeof(hi));
         if (field->kind == SMITH_NUMBER_ALLOY)
-            smith_ui_put_fitted(x, row++, w, TERM_L_WHITE, "None, Mithril, Star iron");
+            smith_ui_put_fitted(x, row++, w, TERM_L_WHITE, ui_text("None, Mithril, Star iron"));
         else
-            smith_sheet_field(x, row++, w, "Available range", format("%s to %s", lo, hi),
+            smith_sheet_field(x, row++, w, ui_text("Available range"), format(ui_text("%s to %s"), lo, hi),
                 TERM_L_WHITE, TERM_L_BLUE);
     }
-    else if (card && card->enabled && row + 2 < end && page == SMITH_ENHANCEMENTS)
+    else if (card && row < end)
     {
-        bool prefix = card->prefix;
-        int fixed_prefix = prefix ? 0 : object_ego_prefix(smith_o_ptr);
-        int fixed_suffix = prefix ? object_ego_suffix(smith_o_ptr) : 0;
-        char names[1024] = "";
-        size_t used = 0;
-        for (int i = 1; i < z_info->e_max; i++)
-        {
-            if (!smith_ego_can_apply_to_object(smith2_o_ptr, i, fixed_prefix, fixed_suffix, prefix))
-                continue;
-            char name[64];
-            ego_name_for_enchant_menu(i, name, sizeof(name));
-            strnfcat(names, sizeof(names), &used, "%s%s", used ? ", " : "", name);
-        }
-        if (*names)
-        {
-            smith_ui_put_fitted(x, row++, w, TERM_WHITE + TERM_SHADE,
-                prefix ? "Available prefixes" : "Available suffixes");
-            row += smith_ui_put_wrapped(x, row, MIN(64, w), MIN(5, end - row),
-                TERM_WHITE, names) + 1;
-        }
+        cptr hint = smith_fixed_number_note(card->number);
+        if (hint) row += smith_ui_put_wrapped(x, row, w, MIN(2, end - row), TERM_WHITE, hint);
     }
     smith_sheet_stock(x, row, w, end);
 }
@@ -6068,7 +6211,7 @@ static bool smith_editor(smith_page page, bool death_view)
         int current = focus < count ? focus : smith_ui_scroll_top[SMITH_SCROLL_EDITOR] * cols;
         smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_EDITOR, count, current);
         static const cptr headings[] = { "Item attributes", "Affix slots", "Artefact design" };
-        cptr heading = page == SMITH_ENHANCEMENTS && count > 2 ? "Affixes and bonuses" : headings[page];
+        cptr heading = page == SMITH_ENHANCEMENTS && count > 2 ? ui_text("Affixes and bonuses") : ui_text(headings[page]);
         smith_sheet_heading(&sheet, heading, &grid, count);
         for (int i = grid.top * cols; i < count && i < (grid.top + grid.visible) * cols; i++)
         {
@@ -6078,7 +6221,7 @@ static bool smith_editor(smith_page page, bool death_view)
         }
 
         int used = MIN(grid.visible, (count + cols - 1) / cols) * grid.stride;
-        smith_editor_context(&sheet, first + used, page, card, note);
+        smith_editor_context(&sheet, first + used, card, note);
 
         int difficulty = smith_measure_design();
         smith_name_mode name_mode = SMITH_NAME_READ_ONLY;
@@ -6087,16 +6230,21 @@ static bool smith_editor(smith_page page, bool death_view)
         smith_sheet_order(&sheet, smith_o_ptr, difficulty, p_ptr->smithing_leftover > 0,
             false, name_mode);
         bool keys = sheet.width >= 68 && !sdl_touch_only_device_active() && !steamdeck_controls_active();
-        cptr accept = p_ptr->smithing_leftover ? "Resume" : "Craft";
+        cptr accept = p_ptr->smithing_leftover ? ui_text("Resume") : ui_text("Craft");
         const smith_sheet_action actions[] = {
-            { SMITH_EDITOR_INSPECT, keys ? "[I] Inspect" : "Inspect", TERM_WHITE },
-            { SMITH_EDITOR_COSTS, keys ? "[?] Costs" : "Costs", TERM_WHITE },
+            { SMITH_EDITOR_INSPECT, keys ? ui_text("[I] Inspect") : ui_text("Inspect"), TERM_WHITE },
+            { SMITH_EDITOR_COSTS, keys ? ui_text("[?] Costs") : ui_text("Costs"), TERM_WHITE },
             { SMITH_EDITOR_CRAFT, keys ? format("[F] %s", accept) : accept,
                 craftable ? TERM_L_GREEN : TERM_SLATE },
         };
         smith_sheet_actions(&sheet, actions, N_ELEMENTS(actions),
             focus >= first_action ? actions[focus - first_action].id : 0);
-        smith_sheet_navigation(&sheet, false, focus == name_focus ? "Rename" : "Edit", true);
+        cptr confirm = focus == name_focus ? ui_text("Rename")
+            : focus == first_action ? ui_text("Inspect")
+            : focus == first_action + 1 ? ui_text("Costs")
+            : focus == last ? accept
+            : card && card->enabled ? (card->number ? ui_text("Edit") : ui_text("Choose")) : NULL;
+        smith_sheet_navigation(&sheet, false, confirm, true);
         Term_fresh();
         int key = smith_sheet_read_key('[', ']');
 
@@ -6180,10 +6328,13 @@ static bool smith_editor(smith_page page, bool death_view)
                 break;
             }
             smith_root_note_for_choice(SMT_MENU_ACCEPT, false, note, sizeof(note));
-            bell(death_view ? "You cannot craft during this final look." : note);
+            bell(death_view ? ui_text("You cannot craft during this final look.") : note);
         }
         else if (focus < count && !cards[focus].enabled)
-            bell(note[0] ? note : "This choice is unavailable for this item.");
+        {
+            cptr hint = smith_fixed_number_note(cards[focus].number);
+            bell(hint ? hint : note[0] ? note : ui_text("This choice is unavailable for this item."));
+        }
         else
         {
             bool changed;
@@ -6232,11 +6383,11 @@ int smithing_menu_aux(int* highlight)
     smith_sheet_fit_list(&sheet, count, 1, 1);
     smith_sheet_begin(&sheet, true);
     smith_ui_put_fitted(sheet.margin, sheet.tabs, sheet.list_width, TERM_L_BLUE,
-        smith_pending_reforge() ? "Reforging" : "Smithing in progress");
+        smith_pending_reforge() ? ui_text("Reforging") : ui_text("Smithing in progress"));
     smith_picker_grid grid = smith_sheet_grid(&sheet, count, 1,
         smith_sheet_list_first(&sheet), sheet.list_end);
     smith_sheet_open_list(&sheet, &grid, SMITH_SCROLL_EDITOR, count, index);
-    smith_sheet_heading(&sheet, "Work in progress", &grid, count);
+    smith_sheet_heading(&sheet, ui_text("Work in progress"), &grid, count);
     for (int i = grid.top; i < count && i < grid.top + grid.visible; i++)
     {
         int id = actions[i];
@@ -6258,10 +6409,10 @@ int smithing_menu_aux(int* highlight)
             SMITH_NAME_READ_ONLY);
     }
     const smith_sheet_action footer[] = {
-        { SMITH_CLICK_BACK, "Exit", TERM_WHITE }, { SMITH_CLICK_CALC, "Costs", TERM_WHITE }
+        { SMITH_CLICK_BACK, ui_text("Exit"), TERM_WHITE }, { SMITH_CLICK_CALC, ui_text("Costs"), TERM_WHITE }
     };
     smith_sheet_actions(&sheet, footer, N_ELEMENTS(footer), 0);
-    smith_sheet_navigation(&sheet, true, "Select", false);
+    smith_sheet_navigation(&sheet, true, ui_text("Select"), false);
     Term_fresh();
 
     int ch = smith_sheet_read_key(0, 0);
@@ -6295,7 +6446,7 @@ int smithing_menu_aux(int* highlight)
     if (ch == '\r' || ch == '\n' || ch == ' ' || ch == '6')
     {
         if (valid[*highlight - 1]) return *highlight;
-        bell("Invalid choice.");
+        bell(ui_text("Invalid choice."));
         return 0;
     }
     if (ch == '8') *highlight = actions[(index + count - 1) % count];
@@ -6309,7 +6460,7 @@ int smithing_menu_aux(int* highlight)
  */
 void do_cmd_smithing_screen(void)
 {
-    tutorial_game_menu("smithing", "Preview an item and read its difficulty and full costs before accepting. Creating, resuming and reforging keep their ordinary forge, resource and time costs.");
+    tutorial_game_menu("smithing", ui_text("Preview an item and read its difficulty and full costs before accepting. Creating, resuming and reforging keep their ordinary forge, resource and time costs."));
     int actiontype = -1;
     int highlight = 1;
     bool leave_menu = false;
@@ -6459,7 +6610,7 @@ void do_cmd_smithing_screen(void)
             }
             else
             {
-                bell("You don't have any mithril or star-iron items.");
+                bell(ui_text("You don't have any mithril or star-iron items."));
             }
 
             break;
@@ -6493,8 +6644,8 @@ void do_cmd_smithing_screen(void)
                 char buf[80];
 
                 sprintf(buf,
-                    "This will drain your smithing skill by %d points. "
-                    "Proceed? ",
+                    ui_text("This will drain your smithing skill by %d points. "
+                    "Proceed? "),
                     smithing_cost.drain);
                 if (!get_check(buf))
                     break;
@@ -6720,7 +6871,7 @@ void create_smithing_item(void)
     object_desc(o_name, sizeof(o_name), smith_o_ptr, true, 3);
 
     // Record the depth where the object was created
-    do_cmd_note(format("Made %s  %d.%d lb", o_name,
+    do_cmd_note(format(ui_text("Made %s  %d.%d lb"), o_name,
                     (smith_o_ptr->weight * smith_o_ptr->number) / 10,
                     (smith_o_ptr->weight * smith_o_ptr->number) % 10),
         p_ptr->depth);

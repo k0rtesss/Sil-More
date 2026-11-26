@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "achievements-character.h"
 #include "achievements-lore.h"
@@ -871,83 +872,111 @@ int crit_bonus(int hit_result, int weight, const monster_race* r_ptr,
 }
 
 /*
- * Describes the effect of a slay
+ * Describes the effect of a slay, using the original context for the
+ * canonical text and localized grammatical pieces for the displayed text.
  */
-void slay_desc(char* description, u32b flag, const monster_type* m_ptr)
+static void slay_desc(char* description, size_t size, u32b flag,
+    const monster_type* m_ptr, bool localized)
 {
-    char m_name[80];
-    char m_poss[80];
-
-    /* Monster description */
-    monster_desc(m_name, sizeof(m_name), m_ptr, 0);
-    monster_desc(m_poss, sizeof(m_poss), m_ptr, 0x22);
+    char monster[80];
+    bool possessive = flag == TR3_WILL_DRAIN || flag == TR4_ARMOR_SHATTER;
+    cptr format;
 
     if (flag == TR3_WILL_DRAIN)
+        format = "drains %s will";
+    else
     {
-        sprintf(description, "drains %s will", m_poss);
+        switch (flag)
+        {
+        case TR1_SHARPNESS:
+            format = "cuts deeply";
+            break;
+        case TR1_SHARPNESS2:
+            format = "cuts effortlessly";
+            break;
+        case TR1_VAMPIRIC:
+            format = "drains life from %s";
+            break;
+        case TR1_SLAY_ORC:
+        case TR1_SLAY_WOLF:
+        case TR1_SLAY_SPIDER:
+        case TR1_SLAY_UNDEAD:
+        case TR1_SLAY_RAUKO:
+        case TR1_SLAY_DRAGON:
+        case TR1_SLAY_TROLL:
+        case TR1_SLAY_MAN_OR_ELF:
+        case TR4_SLAY_SERPENT:
+        case TR4_SLAY_VAMPIRE:
+        case TR4_SLAY_HORROR:
+        case TR4_SLAY_CAT:
+        case TR4_SLAY_GIANT:
+            format = "strikes truly";
+            break;
+        case TR1_BRAND_ELEC:
+            format = "shocks %s with the force of lightning";
+            break;
+        case TR1_BRAND_FIRE:
+            format = "burns %s with an inner fire";
+            break;
+        case TR1_BRAND_COLD:
+            format = "freezes %s";
+            break;
+        case TR1_BRAND_POIS:
+            format = "poisons %s";
+            break;
+        case TR4_ARMOR_SHATTER:
+            format = "shatters %s armor";
+            break;
+        default:
+            description[0] = '\0';
+            return;
+        }
+    }
+
+    monster_desc(monster, sizeof(monster), m_ptr, possessive ? 0x22 : 0);
+    cptr display_format = localized ? ui_text(format) : format;
+    cptr target = monster;
+    if (display_format != format)
+        target = prefix(monster, "the ") ? monster + 4 : ui_text(monster);
+    strnfmt(description, size, display_format, target);
+}
+
+static void report_slay(cptr object_name, const monster_type* m_ptr, u32b flag,
+    cptr context)
+{
+    char description[160];
+    char english[300];
+    char localized[300];
+    cptr format = context ? "Your %s %s %s."
+                         : object_name ? "Your %s %s." : "Your shot %s.";
+    cptr display_format = ui_message_text(format);
+
+    slay_desc(description, sizeof(description), flag, m_ptr, false);
+    if (context)
+        strnfmt(english, sizeof(english), format, context, object_name,
+            description);
+    else if (object_name)
+        strnfmt(english, sizeof(english), format, object_name, description);
+    else
+        strnfmt(english, sizeof(english), format, description);
+
+    if (display_format == format)
+    {
+        msg_print_localized(english, english);
         return;
     }
 
-    switch (flag)
-    {
-    case TR1_SHARPNESS:
-        sprintf(description, "cuts deeply");
-        break;
-    case TR1_SHARPNESS2:
-        sprintf(description, "cuts effortlessly");
-        break;
-    case TR1_VAMPIRIC:
-        sprintf(description, "drains life from %s", m_name);
-        break;
-    case TR1_SLAY_ORC:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_WOLF:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_SPIDER:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_UNDEAD:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_RAUKO:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_DRAGON:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_TROLL:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_SLAY_MAN_OR_ELF:
-        sprintf(description, "strikes truly");
-        break;
-    case TR4_SLAY_SERPENT:
-    case TR4_SLAY_VAMPIRE:
-    case TR4_SLAY_HORROR:
-    case TR4_SLAY_CAT:
-    case TR4_SLAY_GIANT:
-        sprintf(description, "strikes truly");
-        break;
-    case TR1_BRAND_ELEC:
-        sprintf(description, "shocks %s with the force of lightning", m_name);
-        break;
-    case TR1_BRAND_FIRE:
-        sprintf(description, "burns %s with an inner fire", m_name);
-        break;
-    case TR1_BRAND_COLD:
-        sprintf(description, "freezes %s", m_name);
-        break;
-    case TR1_BRAND_POIS:
-        sprintf(description, "poisons %s", m_name);
-        break;
-    case TR4_ARMOR_SHATTER:
-        sprintf(description, "shatters %s armor", m_poss);
-        break;
-    }
+    slay_desc(description, sizeof(description), flag, m_ptr, true);
+    if (context)
+        strnfmt(localized, sizeof(localized), display_format, ui_text(context),
+            object_name, description);
+    else if (object_name)
+        strnfmt(localized, sizeof(localized), display_format, object_name,
+            description);
+    else
+        strnfmt(localized, sizeof(localized), display_format, description);
 
-    return;
+    msg_print_localized(english, localized);
 }
 
 void ident_weapon_by_use_context(object_type* o_ptr,
@@ -955,20 +984,12 @@ void ident_weapon_by_use_context(object_type* o_ptr,
 {
     char o_short_name[80];
     char o_full_name[80];
-    char slay_description[160];
 
     /* Short, pre-identification object description */
     object_desc(o_short_name, sizeof(o_short_name), o_ptr, false, 0);
 
-    /* Description of the 'slay' */
-    slay_desc(slay_description, flag, m_ptr);
-
-    /* Print the messages */
-    if (context && context[0])
-        msg_format(
-            "Your %s %s %s.", context, o_short_name, slay_description);
-    else
-        msg_format("Your %s %s.", o_short_name, slay_description);
+    report_slay(o_short_name, m_ptr, flag,
+        (context && context[0]) ? context : NULL);
     if (object_uses_smithing_difficulty(o_ptr))
     {
         player_mark_object_experienced(o_ptr);
@@ -1001,7 +1022,6 @@ void ident_bow_arrow_by_use(object_type* j_ptr, object_type* i_ptr,
     char i_full_name[80];
     char j_short_name[80];
     char j_full_name[80];
-    char slay_description[160];
 
     /* Short, pre-identification bow and arrow description */
     object_desc(j_short_name, sizeof(j_short_name), j_ptr, false, 0);
@@ -1009,9 +1029,7 @@ void ident_bow_arrow_by_use(object_type* j_ptr, object_type* i_ptr,
 
     if (arrow_flag)
     {
-        slay_desc(slay_description, arrow_flag, m_ptr);
-
-        msg_format("Your %s %s.", i_short_name, slay_description);
+        report_slay(i_short_name, m_ptr, arrow_flag, NULL);
         if (object_uses_smithing_difficulty(i_ptr))
         {
             player_mark_object_experienced(i_ptr);
@@ -1050,9 +1068,7 @@ void ident_bow_arrow_by_use(object_type* j_ptr, object_type* i_ptr,
 
     if (bow_flag)
     {
-        slay_desc(slay_description, bow_flag, m_ptr);
-
-        msg_format("Your shot %s.", slay_description);
+        report_slay(NULL, m_ptr, bow_flag, NULL);
         if (object_uses_smithing_difficulty(j_ptr))
         {
             player_mark_object_experienced(j_ptr);
@@ -1114,10 +1130,23 @@ void apply_weapon_combat_effects(object_type* o_ptr, monster_type* m_ptr,
                     if (m_ptr->ml)
                     {
                         char m_poss[80];
+                        char english[160];
+                        char localized[160];
+                        cptr noun = armor_shatter_noun
+                            ? armor_shatter_noun : "attack";
+                        cptr format = "Your %s shatters %s armor!";
+                        cptr display_format = ui_message_text(format);
+
                         monster_desc(m_poss, sizeof(m_poss), m_ptr, 0x22);
-                        msg_format("Your %s shatters %s armor!",
-                            armor_shatter_noun ? armor_shatter_noun : "attack",
-                            m_poss);
+                        strnfmt(english, sizeof(english), format, noun, m_poss);
+                        if (display_format == format)
+                            msg_print_localized(english, english);
+                        else
+                        {
+                            strnfmt(localized, sizeof(localized), display_format,
+                                ui_text(noun), ui_text(m_poss));
+                            msg_print_localized(english, localized);
+                        }
                     }
 
                     if (!object_known_p(o_ptr))
@@ -1140,8 +1169,21 @@ void apply_weapon_combat_effects(object_type* o_ptr, monster_type* m_ptr,
                 if (m_ptr->ml)
                 {
                     char m_poss[80];
+                    char english[120];
+                    char localized[120];
+                    cptr format = "You drain %s will!";
+                    cptr display_format = ui_message_text(format);
+
                     monster_desc(m_poss, sizeof(m_poss), m_ptr, 0x22);
-                    msg_format("You drain %s will!", m_poss);
+                    strnfmt(english, sizeof(english), format, m_poss);
+                    if (display_format == format)
+                        msg_print_localized(english, english);
+                    else
+                    {
+                        strnfmt(localized, sizeof(localized), display_format,
+                            ui_text(m_poss));
+                        msg_print_localized(english, localized);
+                    }
                 }
 
                 if (!object_known_p(o_ptr))

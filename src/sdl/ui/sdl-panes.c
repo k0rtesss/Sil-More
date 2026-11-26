@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 
 bool sdl_touch_pane_binding_is_direction(int binding)
@@ -71,7 +72,7 @@ void sdl_touch_pane_finish_reset_confirm(bool confirmed)
 
     if (confirmed) {
         sdl_touch_pane_reset_bindings_to_default();
-        msg_print("Touch controls reset to defaults.");
+        msg_print(ui_text("Touch controls reset to defaults."));
     }
 
     g_state.need_present = true;
@@ -863,7 +864,7 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
         }
         if (sources > 0)
         {
-            cptr source = sources > 1 ? "choose" : "Harness";
+            cptr source = ui_text(sources > 1 ? ui_text("choose") : "Harness");
             sdl_status_pane_add(entries, max_entries, &count, "Power Throw",
                 source, TERM_YELLOW);
         }
@@ -885,9 +886,9 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
             p_ptr->fletching, TERM_WHITE);
     if (p_ptr->resting) {
         if (p_ptr->resting == -1)
-            SDL_strlcpy(detail, "until healed", sizeof(detail));
+            SDL_strlcpy(detail, ui_text("until healed"), sizeof(detail));
         else if (p_ptr->resting == -2)
-            SDL_strlcpy(detail, "until done", sizeof(detail));
+            SDL_strlcpy(detail, ui_text("until done"), sizeof(detail));
         else
             sdl_status_pane_format_turns(detail, sizeof(detail),
                 p_ptr->resting);
@@ -895,7 +896,7 @@ int sdl_status_pane_collect(status_pane_entry* entries, int max_entries)
             detail, TERM_WHITE);
     }
     if (p_ptr->command_rep > 0) {
-        strnfmt(detail, sizeof(detail), "%d left", p_ptr->command_rep);
+        strnfmt(detail, sizeof(detail), ui_text("%d left"), p_ptr->command_rep);
         sdl_status_pane_add(entries, max_entries, &count, "Repeat",
             detail, TERM_WHITE);
     }
@@ -1072,9 +1073,9 @@ void sdl_status_pane_entry_line(const status_pane_entry* entry,
         return;
 
     if (entry->detail[0])
-        strnfmt(out, out_sz, "%s %s", entry->label, entry->detail);
+        strnfmt(out, out_sz, "%s %s", ui_text(entry->label), entry->detail);
     else
-        SDL_strlcpy(out, entry->label, out_sz);
+        SDL_strlcpy(out, ui_text(entry->label), out_sz);
 }
 
 int sdl_status_pane_text_width(TTF_Font* font, cptr text)
@@ -1170,7 +1171,7 @@ int sdl_status_pane_layout_entries(TTF_Font* font,
         int line_w;
 
         item.attr = TERM_SLATE;
-        strnfmt(item.line, sizeof(item.line), "More +%d", more_count);
+        strnfmt(item.line, sizeof(item.line), ui_text("More +%d"), more_count);
         line_w = sdl_status_pane_text_width(font, item.line) + item_pad_x * 2;
         if (line_w < min_item_w)
             line_w = min_item_w;
@@ -1562,7 +1563,7 @@ static int sdl_status_depth_pane_pack(TTF_Font* font,
                 sizeof(item.line));
             item.attr = entries[token - 1].attr;
         } else {
-            strnfmt(item.line, sizeof(item.line), "More +%d", more_count);
+            strnfmt(item.line, sizeof(item.line), ui_text("More +%d"), more_count);
             item.attr = TERM_SLATE;
         }
 

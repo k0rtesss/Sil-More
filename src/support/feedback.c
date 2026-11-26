@@ -2,6 +2,7 @@
 #include "support/feedback.h"
 #include "externs.h"
 #include "sdl-sound.h"
+#include "ui/ui-language.h"
 
 /*
  * Flush the screen, make a noise
@@ -13,7 +14,7 @@ void bell(cptr reason)
 
     if (character_generated && reason)
     {
-        message_add(reason, MSG_BELL);
+        message_add(ui_message_text(reason), MSG_BELL);
 
         /* Window stuff */
         p_ptr->window |= (PW_MESSAGE);

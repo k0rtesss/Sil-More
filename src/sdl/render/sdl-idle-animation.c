@@ -1069,15 +1069,20 @@ int sdl_idle_animation_timeout_ms(Uint64 now_ns)
     if (!animation_context_active())
         return -1;
     for (int i = 0; i < cell_count; i++)
-        if (cell_can_animate(&cells[i]))
-        {
-            Uint64 next = fixture_next_tick(frame_tick,
-                cells[i].frame_steps, cells[i].phase_steps) * IDLE_STEP_NS;
-            if (now_ns >= next)
-                return 0;
-            if (!next_ns || next < next_ns)
-                next_ns = next;
-        }
+    {
+        const idle_cell* cell = &cells[i];
+        Uint64 next = fixture_next_tick(frame_tick, cell->frame_steps,
+            cell->phase_steps) * IDLE_STEP_NS;
+        /* Once a visible cell supplies a deadline, testing the visibility of
+         * cells due at the same time or later cannot change the wakeup. */
+        if (next_ns && next >= next_ns)
+            continue;
+        if (!cell_can_animate(cell))
+            continue;
+        if (now_ns >= next)
+            return 0;
+        next_ns = next;
+    }
     return next_ns ? (int)((next_ns - now_ns + 999999ULL) / 1000000ULL) : -1;
 }
 

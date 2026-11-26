@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "object/object-compare.h"
 #include "object/object-info.h"
@@ -390,7 +391,7 @@ static void comparison_token(int* any, byte attr, cptr text)
         text_out_c(attr, text);
     }
     else if (*any == 6)
-        text_out_c(TERM_SLATE, "; more changes in Full view");
+        text_out_c(TERM_SLATE, ui_text("; more changes in Full view"));
     (*any)++;
 }
 
@@ -398,7 +399,7 @@ static void comparison_delta(int* any, cptr name, int delta)
 {
     if (delta)
         comparison_token(any, delta > 0 ? TERM_L_GREEN : TERM_L_RED,
-            format("%s %+d", name, delta));
+            format("%s %+d", ui_text(name), delta));
 }
 
 static void comparison_tier(int* any, cptr name, int before, int after,
@@ -407,7 +408,8 @@ static void comparison_tier(int* any, cptr name, int before, int after,
     if (before != after)
         comparison_token(any, (after > before) != drawback
             ? TERM_L_GREEN : TERM_L_RED,
-            format("%s %s -> %s", name, names[before], names[after]));
+            format("%s %s -> %s", name, ui_text(names[before]),
+                ui_text(names[after])));
 }
 
 static int comparison_curse(u32b flags)
@@ -445,22 +447,22 @@ static void comparison_combat_out(const object_type* selected,
         return;
     if (slot == INVEN_ARM && comparison_melee(selected))
     {
-        comparison_combat_number("Off-hand attack", before.offhand_attack,
+        comparison_combat_number(ui_text("Off-hand attack"), before.offhand_attack,
             after.offhand_attack);
         before.dd = before.offhand_dd; before.ds = before.offhand_ds;
         after.dd = after.offhand_dd; after.ds = after.offhand_ds;
     }
     else
-        comparison_combat_number(after.ranged ? "Archery attack"
-                : after.throwing ? "Throwing attack" : "Attack",
+        comparison_combat_number(after.ranged ? ui_text("Archery attack")
+                : after.throwing ? ui_text("Throwing attack") : ui_text("Attack"),
             before.attack, after.attack);
     text_out("; ");
-    comparison_combat_number("Evasion", before.evasion, after.evasion);
+    comparison_combat_number(ui_text("Evasion"), before.evasion, after.evasion);
     text_out("; ");
     int any = 0;
-    comparison_dice(&any, "Damage", before.dd, before.ds, after.dd, after.ds);
+    comparison_dice(&any, ui_text("Damage"), before.dd, before.ds, after.dd, after.ds);
     if (!any)
-        text_out(format("Damage %dd%d (unchanged)", after.dd, after.ds));
+        text_out(format(ui_text("Damage %dd%d (unchanged)"), after.dd, after.ds));
     if (selected->pd || (reference && reference->pd)
         || before.armor_min != after.armor_min || before.armor_max != after.armor_max)
     {
@@ -472,21 +474,21 @@ static void comparison_combat_out(const object_type* selected,
         if (after.armor_min <= before.armor_min && after.armor_max <= before.armor_max
             && (after.armor_min != before.armor_min || after.armor_max != before.armor_max))
             attr = TERM_L_RED;
-        text_out_c(attr, format("Armor %d-%d -> %d-%d", before.armor_min,
+        text_out_c(attr, format(ui_text("Armor %d-%d -> %d-%d"), before.armor_min,
             before.armor_max, after.armor_min, after.armor_max));
     }
     if ((slot != INVEN_ARM || !comparison_melee(selected))
         && (before.offhand || after.offhand))
     {
         text_out("; ");
-        comparison_combat_number("Off-hand attack", before.offhand_attack,
+        comparison_combat_number(ui_text("Off-hand attack"), before.offhand_attack,
             after.offhand_attack);
         text_out("; ");
         any = 0;
-        comparison_dice(&any, "Off-hand damage", before.offhand_dd,
+        comparison_dice(&any, ui_text("Off-hand damage"), before.offhand_dd,
             before.offhand_ds, after.offhand_dd, after.offhand_ds);
         if (!any)
-            text_out(format("Off-hand damage %dd%d (unchanged)",
+            text_out(format(ui_text("Off-hand damage %dd%d (unchanged)"),
                 after.offhand_dd, after.offhand_ds));
     }
     text_out(".\n  ");
@@ -511,8 +513,8 @@ static void comparison_dice(int* any, cptr name, int old_dd, int old_ds,
         strnfmt(before, sizeof(before), "%dd%d", old_dd, old_ds);
         strnfmt(after, sizeof(after), "%dd%d", new_dd, new_ds);
         comparison_token(any, attr, format("%s %s -> %s", name,
-            old_dd && old_ds ? before : "none",
-            new_dd && new_ds ? after : "none"));
+            old_dd && old_ds ? before : ui_text("none"),
+            new_dd && new_ds ? after : ui_text("none")));
     }
 }
 
@@ -568,7 +570,7 @@ static void comparison_pair_out(const object_type* selected,
     reference = current.object;
 
     comparison_combat_out(selected, reference, slot);
-    comparison_dice(&any, "Protection", reference ? reference->pd : 0,
+    comparison_dice(&any, ui_text("Protection"), reference ? reference->pd : 0,
         comparison_protection_sides(&current), selected->pd,
         comparison_protection_sides(&candidate));
     /* Essential combat values never consume the limited property budget. */
@@ -578,7 +580,7 @@ static void comparison_pair_out(const object_type* selected,
 
     if (candidate.known && current.known)
     {
-        static const char* curse_names[] = { "none", "light", "heavy", "permanent" };
+        static const char* curse_names[] = { "none", "light curse", "heavy curse", "permanent curse" };
         static const char* sharpness_names[] = { "none", "half", "full" };
         static const char* stat_labels[] = { "Str", "Dex", "Con", "Gra" };
         static const u32b stat_flags[] = { TR1_STR | TR1_NEG_STR,
@@ -586,9 +588,9 @@ static void comparison_pair_out(const object_type* selected,
             TR1_GRA | TR1_NEG_GRA };
         static const u32b skill_flags[S_MAX] = { TR1_MEL, TR1_ARC, 0,
             TR1_STL, TR1_PER, TR1_WIL, TR1_SMT, TR1_SNG };
-        comparison_tier(&any, "Curse", comparison_curse(current.flags[2]),
+        comparison_tier(&any, ui_text("Curse"), comparison_curse(current.flags[2]),
             comparison_curse(candidate.flags[2]), curse_names, true);
-        comparison_tier(&any, "Sharpness", comparison_sharpness(current.flags[0]),
+        comparison_tier(&any, ui_text("Sharpness"), comparison_sharpness(current.flags[0]),
             comparison_sharpness(candidate.flags[0]), sharpness_names, false);
         for (int i = 0; i < A_MAX; i++)
             comparison_delta(&any, stat_labels[i],
@@ -600,10 +602,10 @@ static void comparison_pair_out(const object_type* selected,
                 (candidate.flags[0] & skill_flags[i] ? selected->skill_bonus[i] : 0)
                 - (reference && (current.flags[0] & skill_flags[i])
                     ? reference->skill_bonus[i] : 0));
-        comparison_delta(&any, "Tunneling",
+        comparison_delta(&any, ui_text("Tunneling"),
             (candidate.flags[0] & TR1_TUNNEL ? selected->pval : 0)
             - (reference && (current.flags[0] & TR1_TUNNEL) ? reference->pval : 0));
-        comparison_delta(&any, "Damage sides",
+        comparison_delta(&any, ui_text("Damage sides"),
             (candidate.flags[0] & TR1_DAMAGE_SIDES ? selected->pval : 0)
             - (reference && (current.flags[0] & TR1_DAMAGE_SIDES) ? reference->pval : 0));
         {
@@ -612,16 +614,16 @@ static void comparison_pair_out(const object_type* selected,
             u32b after = candidate.flags[2] & handling;
             if (before != after)
                 comparison_token(&any, TERM_WHITE,
-                    format("Handling %s -> %s",
-                        before & TR3_TWO_HANDED ? "two-handed"
-                            : before ? "hand-and-a-half" : "one-handed",
-                        after & TR3_TWO_HANDED ? "two-handed"
-                            : after ? "hand-and-a-half" : "one-handed"));
+                    format(ui_text("Handling %s -> %s"),
+                        before & TR3_TWO_HANDED ? ui_text("two-handed")
+                            : before ? ui_text("hand-and-a-half") : ui_text("one-handed"),
+                        after & TR3_TWO_HANDED ? ui_text("two-handed")
+                            : after ? ui_text("hand-and-a-half") : ui_text("one-handed")));
         }
         if ((candidate.flags[3] ^ current.flags[3]) & TR4_DEPTH_SCALE_PS)
             comparison_token(&any, TERM_WHITE,
                 candidate.flags[3] & TR4_DEPTH_SCALE_PS
-                    ? "+protection growth with depth" : "-protection growth with depth");
+                    ? ui_text("+protection growth with depth") : ui_text("-protection growth with depth"));
         for (size_t i = 0; i < N_ELEMENTS(comparison_properties); i++)
         {
             const comparison_property* property = &comparison_properties[i];
@@ -630,7 +632,7 @@ static void comparison_pair_out(const object_type* selected,
             if (gain != had)
                 comparison_token(&any, gain != property->drawback
                     ? TERM_L_GREEN : TERM_L_RED,
-                    format("%c%s", gain ? '+' : '-', property->name));
+                    format("%c%s", gain ? '+' : '-', ui_text(property->name)));
         }
         comparison_abilities(&any, selected, reference, true);
         comparison_abilities(&any, reference, selected, false);
@@ -640,13 +642,13 @@ static void comparison_pair_out(const object_type* selected,
         int delta = selected->weight - (reference ? reference->weight : 0);
         if (delta)
             comparison_token(&any, TERM_WHITE,
-                format("Weight %c%d.%d lb each", delta > 0 ? '+' : '-',
+                format(ui_text("Weight %c%d.%d lb each"), delta > 0 ? '+' : '-',
                     ABS(delta) / 10, ABS(delta) % 10));
     }
     if (!any)
-        text_out("No other known changes");
+        text_out(ui_text("No other known changes"));
     if (!candidate.known || !current.known)
-        text_out_c(TERM_SLATE, "; unidentified effects unknown");
+        text_out_c(TERM_SLATE, ui_text("; unidentified effects unknown"));
     text_out(".\n");
 }
 
@@ -678,7 +680,7 @@ void object_compare_summary_out(const object_type** objects,
         for (int i = 1; i < count && shown < 2; i++)
         {
             int slot = -1;
-            cptr heading = headings && headings[i] ? headings[i] : "compared item";
+            cptr heading = headings && headings[i] ? headings[i] : ui_text("compared item");
             const object_type* reference = objects[i];
             if (reference == objects[0]
                 || !comparison_target_matches(objects[0], reference))
@@ -690,22 +692,22 @@ void object_compare_summary_out(const object_type** objects,
                 continue;
             if (!shown)
                 text_out_c(TERM_L_BLUE,
-                    "Known item changes (with your strength and abilities):\n");
+                    ui_text("Known item changes (with your strength and abilities):\n"));
             {
                 int heading_len = (int)strlen(heading);
                 while (heading_len > 0 && (heading[heading_len - 1] == ':'
                     || heading[heading_len - 1] == ' '))
                     heading_len--;
-                text_out_c(TERM_L_BLUE, format("vs %.*s%s: ", heading_len, heading,
+                text_out_c(TERM_L_BLUE, format(ui_text("vs %.*s%s: "), heading_len, heading,
                     slot >= 0 && reference && reference->k_idx
                         && !player_equipment_slot_counts_as_equipped(slot)
-                        ? " (Harness)" : ""));
+                        ? ui_text(" (Harness)") : ""));
                 if (reference && reference->k_idx)
                 {
                     object_info_item_header_out(reference);
                 }
                 else
-                    text_out("(empty slot)");
+                    text_out(ui_text("(empty slot)"));
                 text_out("\n  ");
             }
             comparison_pair_out(objects[0], reference,

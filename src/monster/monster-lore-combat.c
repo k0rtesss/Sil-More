@@ -1,6 +1,7 @@
 /* File: monster-lore-combat.c */
 
 #include "monster-internal.h"
+#include "ui/ui-language.h"
 
 void describe_monster_spells(int r_idx, const monster_lore* l_ptr)
 {
@@ -52,7 +53,7 @@ void describe_monster_spells(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
@@ -60,15 +61,15 @@ void describe_monster_spells(int r_idx, const monster_lore* l_ptr)
             /* Intro */
             if (n == 0)
             {
-                text_out(" may ");
+                text_out(ui_text(" may "));
             }
 
             else if (n < vn - 1)
                 text_out(", ");
             else if (n == 1)
-                text_out(" or ");
+                text_out(ui_text(" or "));
             else
-                text_out(", or ");
+                text_out(ui_text(", or "));
 
             /* Dump */
             text_out_c(TERM_L_RED, vp[n]);
@@ -124,20 +125,20 @@ void describe_monster_spells(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
         {
             /* Intro */
             if (n == 0)
-                text_out(" may breathe ");
+                text_out(ui_text(" may breathe "));
             else if (n < vn - 1)
                 text_out(", ");
             else if (n == 1)
-                text_out(" or ");
+                text_out(ui_text(" or "));
             else
-                text_out(", or ");
+                text_out(ui_text(", or "));
 
             /* Dump */
             text_out_c(TERM_L_RED, vp[n]);
@@ -176,19 +177,19 @@ void describe_monster_spells(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s may ", wd_he[msex]));
+        text_out(format(ui_text("%^s may "), ui_text(wd_he[msex])));
 
         /* Normal spells */
         for (n = 0; n < m; n++)
         {
             if (n == 0)
-                text_out("attempt to ");
+                text_out(ui_text("attempt to "));
             else if (n < m - 1)
                 text_out(", ");
             else if (n != 1)
-                text_out(", or ");
+                text_out(ui_text(", or "));
             else
-                text_out(" or ");
+                text_out(ui_text(" or "));
 
             /* Dump */
             text_out_c(TERM_ORANGE, vp[n]);
@@ -202,12 +203,7 @@ void describe_monster_spells(int r_idx, const monster_lore* l_ptr)
 void describe_monster_drop(int r_idx, const monster_lore* l_ptr)
 {
     const monster_race* r_ptr = &r_info[r_idx];
-
-    bool sin = false;
-
-    int n;
-
-    cptr p;
+    int count = l_ptr->drop_item;
 
     int msex = 0;
 
@@ -218,110 +214,53 @@ void describe_monster_drop(int r_idx, const monster_lore* l_ptr)
         msex = 1;
 
     /* Drops items */
-    if (l_ptr->drop_item)
+    if (count)
     {
+        bool single = count == 1;
+        bool chest = (l_ptr->flags1 & RF1_DROP_CHEST) != 0;
+        bool artefact = (l_ptr->flags3 & RF3_DROP_ARTEFACT) != 0;
+        cptr item;
+
         if (r_ptr->flags2 & (RF2_TERRITORIAL))
         {
             /* Territorial monsters do not carry loot off; they keep it.
              * An artefact-bearer hoards its treasure rather than guarding
              * a scattering of lesser finds. */
-            if (l_ptr->flags3 & (RF3_DROP_ARTEFACT))
-                text_out(format("%^s hoards", wd_he[msex]));
+            if (artefact)
+                text_out(format(ui_text("%^s hoards"), ui_text(wd_he[msex])));
             else
-                text_out(format("%^s may be found with", wd_he[msex]));
+                text_out(format(ui_text("%^s may be found with"), ui_text(wd_he[msex])));
         }
         else
         {
             /* Intro */
-            text_out(format("%^s may carry", wd_he[msex]));
+            text_out(format(ui_text("%^s may carry"), ui_text(wd_he[msex])));
         }
 
-        /* Count maximum drop */
-        n = l_ptr->drop_item;
+        if (count == 2)
+            text_out(ui_text(" one or two"));
+        else if (!single)
+            text_out(format(ui_text(" up to %d"), count));
 
-        /* One drop (may need an "n") */
-        if (n == 1)
-        {
-            text_out(" a");
-            sin = true;
-        }
-
-        /* Two drops */
-        else if (n == 2)
-        {
-            text_out(" one or two");
-        }
-
-        /* Many drops */
-        else
-        {
-            text_out(format(" up to %d", n));
-        }
-
-        if (l_ptr->flags3 & RF3_DROP_ARTEFACT)
-        {
-            p = " legendary";
-            sin = false;
-        }
-
-        /* Chests are not noted as good or great
-         * (no "n" needed)
-         */
-        else if (l_ptr->flags1 & RF1_DROP_CHEST)
-        {
-            p = NULL;
-            sin = false;
-        }
-
-        /* Superb (no "n" needed) */
+        /* Translate the article, quality and noun together. */
+        if (artefact && chest)
+            item = single ? " a legendary chest" : " legendary chests";
+        else if (artefact)
+            item = single ? " a legendary object" : " legendary objects";
+        else if (chest)
+            item = single ? " a chest" : " chests";
         else if (l_ptr->flags2 & RF2_DROP_SUPERB)
-        {
-            p = " superb";
-            sin = false;
-        }
-
-        /* Great */
+            item = single ? " a superb object" : " superb objects";
         else if (l_ptr->flags1 & RF1_DROP_GREAT)
-        {
-            p = " exceptional";
-        }
-
-        /* Good (no "n" needed) */
+            item = single ? " an exceptional object" : " exceptional objects";
         else if (l_ptr->flags1 & RF1_DROP_GOOD)
-        {
-            p = " good";
-            sin = false;
-        }
-
-        /* Okay */
+            item = single ? " a good object" : " good objects";
         else
-        {
-            p = NULL;
-        }
+            item = single ? " an object" : " objects";
 
-        /* Objects */
-        if (l_ptr->drop_item)
-        {
-            /* Handle singular "an" */
-            if (sin)
-                text_out("n");
-            sin = false;
-
-            /* Dump "object(s)" */
-            if (p)
-                text_out(p);
-
-            /*specify chests where needed*/
-            if (l_ptr->flags1 & RF1_DROP_CHEST)
-                text_out(" chest");
-            else
-                text_out(" object");
-            if (n != 1)
-                text_out("s");
-
-            if (l_ptr->flags3 & RF3_DROP_ARTEFACT)
-                text_out(", including an artefact");
-        }
+        text_out(ui_text(item));
+        if (artefact)
+            text_out(ui_text(", including an artefact"));
 
         /* End this sentence */
         text_out(".  ");
@@ -550,7 +489,7 @@ void describe_monster_attack(
         /* Introduce the attack description */
         if (!r)
         {
-            text_out(format("%^s can ", wd_he[msex]));
+            text_out(format(ui_text("%^s can "), ui_text(wd_he[msex])));
         }
         else if (r < n - 1)
         {
@@ -558,7 +497,7 @@ void describe_monster_attack(
         }
         else
         {
-            text_out(", or ");
+            text_out(ui_text(", or "));
         }
 
         /* Hack -- force a method */
@@ -572,7 +511,7 @@ void describe_monster_attack(
         if (q)
         {
             /* Describe the attack type */
-            text_out(" to ");
+            text_out(ui_text(" to "));
             text_out_c(TERM_L_RED, q);
 
             /* Describe damage (if known) */
@@ -605,13 +544,13 @@ void describe_monster_attack(
     /* Notice lack of attacks */
     else if (l_ptr->flags1 & RF1_NEVER_BLOW)
     {
-        text_out(format("%^s has no physical attacks.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s has no physical attacks.  "), ui_text(wd_he[msex])));
     }
 
     /* Or describe the lack of knowledge */
     else
     {
-        text_out(format("Nothing is known about %s attack.  ", wd_his[msex]));
+        text_out(format(ui_text("Nothing is known about %s attack.  "), ui_text(wd_his[msex])));
     }
 }
 
@@ -691,20 +630,20 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
         {
             /* Intro */
             if ((n == 0) && (vn > 1))
-                text_out(" has the abilities: ");
+                text_out(ui_text(" has the abilities: "));
             else if (n == 0)
-                text_out(" has the ability: ");
+                text_out(ui_text(" has the ability: "));
             else if (n < vn - 1)
                 text_out(", ");
             else
-                text_out(" and ");
+                text_out(ui_text(" and "));
 
             /* Dump */
             text_out_c(TERM_RED, vp[n]);
@@ -716,46 +655,46 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
 
     /* Describe the timing and counterplay of observed stateful abilities. */
     if (l_ptr->flags5 & RF5_BRIDGE_BUILDER)
-        text_out("It can repair damaged crossings and build short bridges, "
-            "using limited supplies and several actions of noisy work.  ");
+        text_out(ui_text("It can repair damaged crossings and build short bridges, "
+            "using limited supplies and several actions of noisy work.  "));
     if (l_ptr->flags5 & RF5_SMITE)
     {
-        text_out(format("Smite spends %d effort on an immediate melee strike "
+        text_out(format(ui_text("Smite spends %d effort on an immediate melee strike "
             "with a normal hit roll and maximum damage on every die, including "
             "critical dice. The next full action is spent recovering, even "
-            "after a miss; reactions are also prevented during recovery.  ",
+            "after a miss; reactions are also prevented during recovery.  "),
             MON_MANA_COST));
     }
     if (l_ptr->flags5 & RF5_SPRINTING)
     {
-        text_out("Sprinting raises Fast speed to Very Fast after four moves "
+        text_out(ui_text("Sprinting raises Fast speed to Very Fast after four moves "
             "in a continuing direction. A sharp turn, attack, alarm, wait or "
-            "lost action breaks the run.  ");
+            "lost action breaks the run.  "));
     }
     if (l_ptr->flags5 & RF5_CONCENTRATION)
     {
-        text_out(format("Concentration adds +1 accuracy after each ordinary "
+        text_out(format(ui_text("Concentration adds +1 accuracy after each ordinary "
             "melee attack, hit or miss, up to +%d. Moving, waiting, casting or "
             "losing an action resets it. Reactions neither build the bonus "
-            "nor benefit from it.  ", MAX(0, r_ptr->per / 2)));
+            "nor benefit from it.  "), MAX(0, r_ptr->per / 2)));
     }
     if (l_ptr->flags5 & RF5_DODGING)
     {
-        text_out("Dodging grants +3 evasion after moving, until the next "
-            "action ends.  ");
+        text_out(ui_text("Dodging grants +3 evasion after moving, until the next "
+            "action ends.  "));
     }
     if (l_ptr->flags5 & RF5_BLOCKING)
     {
-        text_out("Blocking doubles the shield's protection dice while "
+        text_out(ui_text("Blocking doubles the shield's protection dice while "
             "holding position; body armour keeps its ordinary value. Moving "
-            "loses this extra shield protection until a stationary action.  ");
+            "loses this extra shield protection until a stationary action.  "));
     }
     if (l_ptr->flags5 & RF5_VENGEANCE)
     {
-        text_out("Taking melee damage that gets through protection charges "
+        text_out(ui_text("Taking melee damage that gets through protection charges "
             "Vengeance, adding one damage die to the next melee hit. The "
             "charge does not stack; a miss preserves it, and a hit spends it "
-            "even if blocked. Ranged damage does not charge Vengeance.  ");
+            "even if blocked. Ranged damage does not charge Vengeance.  "));
     }
 
     /* Collect special abilities. */
@@ -797,18 +736,18 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
         {
             /* Intro */
             if (n == 0)
-                text_out(" can ");
+                text_out(ui_text(" can "));
             else if (n < vn - 1)
                 text_out(", ");
             else
-                text_out(" and ");
+                text_out(ui_text(" and "));
 
             /* Dump */
             text_out(vp[n]);
@@ -821,23 +760,23 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     /* Describe special abilities. */
     if (l_ptr->flags2 & RF2_INVISIBLE)
     {
-        text_out(format("%^s is very difficult to see.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s is very difficult to see.  "), ui_text(wd_he[msex])));
     }
     if (l_ptr->flags2 & RF2_MULTIPLY)
     {
-        text_out(format("%^s breeds explosively.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s breeds explosively.  "), ui_text(wd_he[msex])));
     }
     if (l_ptr->flags2 & RF2_REGENERATE)
     {
-        text_out(format("%^s regenerates quickly.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s regenerates quickly.  "), ui_text(wd_he[msex])));
     }
     if (l_ptr->flags1 & RF1_NO_CRIT)
     {
-        text_out(format("%^s cannot be critically hit.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s cannot be critically hit.  "), ui_text(wd_he[msex])));
     }
     if (l_ptr->flags1 & RF1_RES_CRIT)
     {
-        text_out(format("%^s is resistant to critical hits.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s is resistant to critical hits.  "), ui_text(wd_he[msex])));
     }
 
     if (l_ptr->flags2 & (RF2_CLOUD_SURROUND))
@@ -855,26 +794,26 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
             && (r_ptr->flags4 & (RF4_BRTH_COLD)))
         {
             text_out(
-                format("%^s is surrounded by shimmering haze of ever changing "
-                       "elements (%dd%d).  ",
-                    wd_he[msex], dd, ds));
+                format(ui_text("%^s is surrounded by shimmering haze of ever changing "
+                       "elements (%dd%d).  "),
+                    ui_text(wd_he[msex]), dd, ds));
         }
 
         /* We emit something */
         else if (typ)
         {
             text_out(format(
-                "%^s is surrounded by a shimmering haze of ", wd_he[msex]));
+                ui_text("%^s is surrounded by a shimmering haze of "), ui_text(wd_he[msex])));
 
             /* Describe cloud */
             if (typ == GF_FIRE)
-                text_out_c(TERM_L_RED, "fire");
+                text_out_c(TERM_L_RED, ui_text("fire"));
             else if (typ == GF_COLD)
-                text_out_c(TERM_L_RED, "frost");
+                text_out_c(TERM_L_RED, ui_text("frost"));
             else if (typ == GF_POIS)
-                text_out_c(TERM_L_RED, "poison");
+                text_out_c(TERM_L_RED, ui_text("poison"));
             else if (typ == GF_DARK)
-                text_out_c(TERM_L_RED, "darkness");
+                text_out_c(TERM_L_RED, ui_text("darkness"));
             text_out(format(" (%dd%d).  ", dd, ds));
         }
     }
@@ -882,7 +821,7 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     /* Describe intelligence. */
     if (r_ptr->flags2 & RF2_MINDLESS)
     {
-        text_out(format("%^s is mindless.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s is mindless.  "), ui_text(wd_he[msex])));
     }
     else if (r_ptr->flags2 & RF2_SMART)
     {
@@ -890,7 +829,7 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     }
     else
     {
-        text_out(format("%^s is unintelligent.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s is unintelligent.  "), ui_text(wd_he[msex])));
     }
 
     /* Collect susceptibilities */
@@ -908,18 +847,18 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
         {
             /* Intro */
             if (n == 0)
-                text_out(" is vulnerable to ");
+                text_out(ui_text(" is vulnerable to "));
             else if (n < vn - 1)
                 text_out(", ");
             else
-                text_out(" and ");
+                text_out(ui_text(" and "));
 
             /* Dump */
             text_out_c(TERM_L_BLUE, vp[n]);
@@ -944,18 +883,18 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
         {
             /* Intro */
             if (n == 0)
-                text_out(" resists ");
+                text_out(ui_text(" resists "));
             else if (n < vn - 1)
                 text_out(", ");
             else
-                text_out(" and ");
+                text_out(ui_text(" and "));
 
             /* Dump */
             text_out(vp[n]);
@@ -982,18 +921,18 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     if (vn)
     {
         /* Intro */
-        text_out(format("%^s", wd_he[msex]));
+        text_out(format("%^s", ui_text(wd_he[msex])));
 
         /* Scan */
         for (n = 0; n < vn; n++)
         {
             /* Intro */
             if (n == 0)
-                text_out(" cannot be ");
+                text_out(ui_text(" cannot be "));
             else if (n < vn - 1)
                 text_out(", ");
             else
-                text_out(" or ");
+                text_out(ui_text(" or "));
 
             /* Dump */
             text_out_c(TERM_YELLOW, vp[n]);
@@ -1006,26 +945,26 @@ void describe_monster_abilities(int r_idx, const monster_lore* l_ptr)
     /* Describe escort */
     if (l_ptr->flags1 & RF1_ESCORT)
     {
-        text_out(format("%^s usually appears with escorts.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s usually appears with escorts.  "), ui_text(wd_he[msex])));
     }
 
     /* Describe escorts */
     if (l_ptr->flags1 & RF1_ESCORTS)
     {
         text_out(
-            format("%^s usually appears with many escorts.  ", wd_he[msex]));
+            format(ui_text("%^s usually appears with many escorts.  "), ui_text(wd_he[msex])));
     }
 
     /* Describe friend */
     else if (l_ptr->flags1 & RF1_FRIEND)
     {
-        text_out(format("%^s sometimes appears in groups.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s sometimes appears in groups.  "), ui_text(wd_he[msex])));
     }
 
     /* Describe friends */
     else if (l_ptr->flags1 & RF1_FRIENDS)
     {
-        text_out(format("%^s usually appears in groups.  ", wd_he[msex]));
+        text_out(format(ui_text("%^s usually appears in groups.  "), ui_text(wd_he[msex])));
     }
 }
 
@@ -1048,7 +987,7 @@ static void compact_monster_flags(cptr heading, u32b flags,
         text_out_c(color, entries[i].label);
         found = true;
     }
-    if (!found) text_out_c(TERM_SLATE, "unknown");
+    if (!found) text_out_c(TERM_SLATE, ui_text("unknown"));
     text_out("\n");
 }
 
@@ -1171,18 +1110,18 @@ void describe_monster_compact(int r_idx, const monster_lore* lore,
     int speed = live && live->mspeed ? live->mspeed : race->speed;
     int speed_index = MAX(0, MIN(speed, 7));
 
-    text_out_c(TERM_L_BLUE, "Speed: ");
+    text_out_c(TERM_L_BLUE, ui_text("Speed: "));
     if (lore->flags1 & RF1_NEVER_MOVE)
-        text_out("cannot move");
+        text_out(ui_text("cannot move"));
     else if (lore->flags1 & RF1_HIDDEN_MOVE)
-        text_out("moves only when unseen");
+        text_out(ui_text("moves only when unseen"));
     else
-        text_out(format("%d (%d%% of normal)", speed,
+        text_out(format(ui_text("%d (%d%% of normal)"), speed,
             (extract_energy[speed_index] * 100) / extract_energy[2]));
     if (lore->flags1 & (RF1_RAND_25 | RF1_RAND_50))
-        text_out(", erratic");
-    if (live && live->hasted) text_out(", hasted");
-    if (live && live->slowed) text_out(", slowed");
+        text_out(ui_text(", erratic"));
+    if (live && live->hasted) text_out(ui_text(", hasted"));
+    if (live && live->slowed) text_out(ui_text(", slowed"));
     text_out("\n");
 
     compact_monster_flags("Resists: ", lore->flags3, resistances,
@@ -1192,11 +1131,11 @@ void describe_monster_compact(int r_idx, const monster_lore* lore,
     compact_monster_flags("Immune to: ", lore->flags3, immunities,
         N_ELEMENTS(immunities), TERM_WHITE);
     if (lore->flags1 & RF1_NO_CRIT)
-        text_out("Critical hits: immune\n");
+        text_out(ui_text("Critical hits: immune\n"));
     else if (lore->flags1 & RF1_RES_CRIT)
-        text_out("Critical hits: resistant\n");
+        text_out(ui_text("Critical hits: resistant\n"));
 
-    text_out_c(TERM_L_BLUE, "Melee: ");
+    text_out_c(TERM_L_BLUE, ui_text("Melee: "));
     for (int i = 0; i < MONSTER_BLOW_MAX; i++)
     {
         const monster_blow* blow = &race->blow[i];
@@ -1228,16 +1167,16 @@ void describe_monster_compact(int r_idx, const monster_lore* lore,
     }
     if (!found)
         text_out_c(TERM_SLATE, (lore->flags1 & RF1_NEVER_BLOW)
-            ? "no physical attacks" : "unknown");
+            ? ui_text("no physical attacks") : ui_text("unknown"));
     text_out("\n");
 
     compact_monster_flags("Ranged and spells: ", lore->flags4, ranged,
         N_ELEMENTS(ranged), TERM_L_RED);
-    text_out_c(TERM_L_BLUE, "Abilities: ");
+    text_out_c(TERM_L_BLUE, ui_text("Abilities: "));
     found = false;
     if (race->flags2 & RF2_ELFBANE)
     {
-        text_out("Elf-bane");
+        text_out(ui_text("Elf-bane"));
         found = true;
     }
     for (int i = 0; i < (int)N_ELEMENTS(obvious_banes); i++)
@@ -1258,6 +1197,6 @@ void describe_monster_compact(int r_idx, const monster_lore* lore,
             if (found) text_out(", ");
             text_out(abilities5[i].label); found = true;
         }
-    if (!found) text_out_c(TERM_SLATE, "unknown");
+    if (!found) text_out_c(TERM_SLATE, ui_text("unknown"));
     text_out("\n");
 }

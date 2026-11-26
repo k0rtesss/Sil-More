@@ -527,6 +527,7 @@ set(SIL_MORE_SOURCES
     src/ui/menu-click.c
     src/ui/question.c
     src/ui/story_font.c
+    src/ui/ui-language.c
     src/ui/status/status-frame.c
     src/ui/status/status-health.c
     src/ui/status/status-line.c

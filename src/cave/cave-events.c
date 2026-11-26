@@ -9,6 +9,14 @@
 #define SOUND_LIFETIME 60
 static cave_world_event events[CAVE_EVENTS_MAX];
 static u32b next_serial = 1, revision = 1;
+static struct {
+    bool valid;
+    s32b turn;
+    int height, width;
+    int count, fight_count;
+    u32b newest_serial;
+    byte slots[CAVE_EVENTS_MAX], fight_slots[CAVE_EVENTS_MAX];
+} active_event_index;
 static byte fields[CAVE_EVENTS_MAX][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static u32b field_revision[CAVE_EVENTS_MAX], field_serial[CAVE_EVENTS_MAX];
 static byte ambient[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
@@ -146,10 +154,39 @@ static bool active(const cave_world_event* e)
 {
     return recorded(e) && turn - e->turn < SOUND_LIFETIME;
 }
+
+/* Monster actions and perception ask about the same turn's live sounds.
+ * Keep the ring's slot order, since the first equal strength wins. Expired
+ * entries remain in the ring for save/load and wizard travel. */
+static void refresh_active_event_index(void)
+{
+    int height = p_ptr->cur_map_hgt, width = p_ptr->cur_map_wid;
+
+    if (active_event_index.valid && active_event_index.turn == turn
+        && active_event_index.height == height && active_event_index.width == width)
+        return;
+
+    active_event_index.count = active_event_index.fight_count = 0;
+    active_event_index.newest_serial = 0;
+    for (int i = 0; i < CAVE_EVENTS_MAX; ++i)
+    {
+        if (!active(&events[i]))
+            continue;
+        active_event_index.slots[active_event_index.count++] = i;
+        if (events[i].kind == CAVE_EVENT_FIGHT)
+            active_event_index.fight_slots[active_event_index.fight_count++] = i;
+        active_event_index.newest_serial = MAX(active_event_index.newest_serial, events[i].serial);
+    }
+    active_event_index.turn = turn;
+    active_event_index.height = height;
+    active_event_index.width = width;
+    active_event_index.valid = true;
+}
+
+/* Callers select an active slot and an in-bounds listener first. */
 static int event_strength(int i, int y, int x)
 {
     cave_world_event* e = &events[i];
-    if (!active(e) || !in_bounds(y, x)) return 0;
     if (field_revision[i] != revision || field_serial[i] != e->serial)
     {
         memset(fields[i], 0, sizeof(fields[i])); begin_field();
@@ -163,6 +200,7 @@ void cave_events_terrain_changed(void) { revision++; }
 void cave_events_reset(void)
 {
     memset(events, 0, sizeof(events)); memset(field_serial, 0, sizeof(field_serial));
+    active_event_index.valid = false;
     memset(announced, 0, sizeof(announced));
     memset(bridge_work_sources, 0, sizeof(bridge_work_sources));
     memset(bridge_work_ambient, 0, sizeof(bridge_work_ambient));
@@ -182,6 +220,7 @@ void cave_event_emit(int kind, int y, int x, int volume)
     e = &events[(next_serial - 1) % CAVE_EVENTS_MAX];
     e->serial = next_serial++; e->turn = turn;
     e->kind = kind; e->y = y; e->x = x; e->volume = MAX(1, MIN(64, volume));
+    active_event_index.valid = false;
     /* Log at emission: hearing filters, cooldowns and ring-buffer replacement
      * must not hide debug events. Normal hearing and AI remain unchanged. */
     if (op_ptr->opt[OPT_show_dungeon_events])
@@ -202,9 +241,17 @@ bool cave_event_latest(cave_world_event* event)
 bool cave_event_for_listener(int y, int x, int perception, u32b after,
     cave_world_event* event)
 {
-    int i, best = -1, score = 0;
-    for (i = 0; i < CAVE_EVENTS_MAX; i++)
+    int best = -1, score = 0;
+
+    if (!p_ptr || !in_bounds(y, x))
+        return false;
+    refresh_active_event_index();
+    if (active_event_index.newest_serial <= after)
+        return false;
+
+    for (int entry = 0; entry < active_event_index.count; ++entry)
     {
+        int i = active_event_index.slots[entry];
         int strength;
         if (events[i].serial <= after) continue;
         strength = event_strength(i, y, x);
@@ -389,20 +436,27 @@ int cave_forge_sound_level_at(int y, int x)
 
 int cave_sound_mask_at(int y, int x)
 {
-    int i, mask;
     if (!in_bounds(y, x)) return 0;
     refresh_ambient_fields();
-    mask = ambient[y][x];
-    for (i = 0; i < CAVE_EVENTS_MAX; i++)
-        mask = MAX(mask, event_strength(i, y, x) / 3);
+    refresh_active_event_index();
+    int mask = ambient[y][x];
+    for (int i = 0; i < active_event_index.count; ++i)
+    {
+        int strength = event_strength(active_event_index.slots[i], y, x) / 3;
+        mask = MAX(mask, strength);
+    }
     return MIN(10, mask);
 }
 int cave_fighting_mask_at(int y, int x)
 {
+    if (!p_ptr || !in_bounds(y, x)) return 0;
+    refresh_active_event_index();
     int mask = 0;
-    for (int i = 0; i < CAVE_EVENTS_MAX; i++)
-        if (events[i].kind == CAVE_EVENT_FIGHT)
-            mask = MAX(mask, event_strength(i, y, x) / 3);
+    for (int i = 0; i < active_event_index.fight_count; ++i)
+    {
+        int strength = event_strength(active_event_index.fight_slots[i], y, x) / 3;
+        mask = MAX(mask, strength);
+    }
     return MIN(10, mask);
 }
 
@@ -433,7 +487,8 @@ void cave_events_process(void)
         int dy, dx, strength;
         bool danger;
         const char* direction;
-        if (announced[i] == e->serial || !active(e)) continue;
+        if (announced[i] == e->serial || !active(e) || !in_bounds(p_ptr->py, p_ptr->px))
+            continue;
         strength = event_strength(i, p_ptr->py, p_ptr->px);
         if (!strength) continue;
         danger = (e->kind == CAVE_EVENT_WARNING || e->kind == CAVE_EVENT_COLLAPSE

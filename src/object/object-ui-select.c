@@ -1,6 +1,7 @@
 /* File: object/object-ui-select.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "object/object-ui-select.h"
 #include "object/object-ui-enhanced.h"
@@ -216,7 +217,7 @@ static void object_choice_copy_title(char* out, size_t out_size, cptr title)
     if (!out || out_size == 0)
         return;
 
-    SDL_strlcpy(out, (title && title[0]) ? title : "Choose item", out_size);
+    SDL_strlcpy(out, (title && title[0]) ? title : ui_text("Choose item"), out_size);
     len = strlen(out);
     while (len > 0 && isspace((unsigned char)out[len - 1]))
         out[--len] = '\0';
@@ -256,7 +257,7 @@ void object_choice_entry_make(object_choice_entry* entry, int item,
         if (item >= INVEN_WIELD && item < INVEN_TOTAL)
             SDL_strlcpy(desc, describe_empty_slot(item), sizeof(desc));
         else
-            SDL_strlcpy(desc, "(empty)", sizeof(desc));
+            SDL_strlcpy(desc, ui_text("(empty)"), sizeof(desc));
     }
     else if (item < 0)
     {
@@ -273,11 +274,11 @@ void object_choice_entry_make(object_choice_entry* entry, int item,
     }
     else if (item < 0)
     {
-        strnfmt(text, sizeof(text), "On floor: %s", desc);
+        strnfmt(text, sizeof(text), ui_text("On floor: %s"), desc);
     }
     else if (item >= SUPPLIES_INDEX)
     {
-        strnfmt(text, sizeof(text), "Supplies: %s", desc);
+        strnfmt(text, sizeof(text), ui_text("Supplies: %s"), desc);
     }
     else if (item >= INVEN_WIELD && item < INVEN_TOTAL)
     {
@@ -351,13 +352,13 @@ static void object_choice_inspect(const object_choice_entry* entry)
 
     if (inventory_item_is_supply_summary(entry->item))
     {
-        bell("Open supplies to inspect a specific item.");
+        bell(ui_text("Open supplies to inspect a specific item."));
         return;
     }
 
     if (!entry->o_ptr || !entry->o_ptr->k_idx)
     {
-        bell("There is nothing to inspect.");
+        bell(ui_text("There is nothing to inspect."));
         return;
     }
 
@@ -584,7 +585,7 @@ bool object_choice_overlay(cptr title, cptr desc,
             break;
 
         default:
-            bell("Illegal item choice!");
+            bell(ui_text("Illegal item choice!"));
             break;
         }
     }
@@ -768,7 +769,7 @@ bool object_item_select_overlay(int mode, cptr reason, cptr none_msg,
         }
     }
 
-    if (!object_choice_overlay(reason ? reason : "Choose item", NULL, entries,
+    if (!object_choice_overlay(reason ? reason : ui_text("Choose item"), NULL, entries,
             count, 0, &selected))
     {
         inventory_menu_set_include_equip(old_include_equip);
@@ -1476,7 +1477,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 show_inven();
 
             /* Begin the prompt */
-            sprintf(out_val, combined_inven_equip ? "Items:" : "Inven:");
+            SDL_strlcpy(out_val,
+                ui_text(combined_inven_equip ? "Items:" : "Inven:"),
+                sizeof(out_val));
 
             /* List choices */
             if (vis_inven_cnt > 0)
@@ -1492,15 +1495,15 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
             /* Indicate ability to "view" */
             if (!p_ptr->command_see)
-                SDL_strlcat(out_val, " * to see,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" * to see,"), sizeof(out_val));
 
             /* Indicate legality of "toggle" */
             if (!combined_inven_equip && allow_equip_menu)
-                SDL_strlcat(out_val, " / for Equip,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" / for Equip,"), sizeof(out_val));
 
             /* Indicate legality of the "floor" */
             if (allow_floor)
-                SDL_strlcat(out_val, " - for floor,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" - for floor,"), sizeof(out_val));
     }
 
     /* Viewing equipment */
@@ -1514,7 +1517,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Begin the prompt */
-            sprintf(out_val, "Equip:");
+            SDL_strlcpy(out_val, ui_text("Equip:"), sizeof(out_val));
 
             /* List choices */
             if (e1 <= e2)
@@ -1529,15 +1532,15 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
             /* Indicate ability to "view" */
             if (!p_ptr->command_see)
-                SDL_strlcat(out_val, " * to see,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" * to see,"), sizeof(out_val));
 
             /* Indicate legality of "toggle" */
             if (allow_inven_menu)
-                SDL_strlcat(out_val, " / for Inven,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" / for Inven,"), sizeof(out_val));
 
             /* Indicate legality of the "floor" */
             if (allow_floor)
-                SDL_strlcat(out_val, " - for floor,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" - for floor,"), sizeof(out_val));
     }
 
     /* Viewing floor */
@@ -1548,7 +1551,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 show_floor(floor_list, floor_num, floor_scroll_offset);
 
             /* Begin the prompt */
-            sprintf(out_val, "Floor:");
+            SDL_strlcpy(out_val, ui_text("Floor:"), sizeof(out_val));
 
             /* List choices */
             if (f1 <= f2)
@@ -1562,17 +1565,17 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
             /* Indicate ability to "view" */
             if (!p_ptr->command_see)
-                SDL_strlcat(out_val, " * to see,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" * to see,"), sizeof(out_val));
 
             /* Append */
             if (allow_inven_menu)
                 SDL_strlcat(out_val,
-                    combined_inven_equip ? " / for Items," : " / for Inven,",
+                    combined_inven_equip ? ui_text(" / for Items,") : ui_text(" / for Inven,"),
                     sizeof(out_val));
 
             /* Append */
             else if (allow_equip_menu)
-                SDL_strlcat(out_val, " / for Equip,", sizeof(out_val));
+                SDL_strlcat(out_val, ui_text(" / for Equip,"), sizeof(out_val));
         }
 
         /* Finish the prompt */
@@ -1584,17 +1587,18 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         if (sdl_touch_only_device_active())
         {
             cptr touch_label =
-                (p_ptr->command_wrk == (USE_EQUIP)) ? "a piece of equipment"
-              : (p_ptr->command_wrk == (USE_FLOOR)) ? "a floor item"
-              : "an item";
+                (p_ptr->command_wrk == (USE_EQUIP)) ? ui_text("a piece of equipment")
+              : (p_ptr->command_wrk == (USE_FLOOR)) ? ui_text("a floor item")
+              : ui_text("an item");
 
             strnfmt(tmp_val, sizeof(tmp_val),
-                "(Tap %s, tap away to cancel) %s", touch_label, pmt);
+                ui_text("(Tap %s, tap away to cancel) %s"), touch_label,
+                ui_text(pmt));
         }
         else
         {
             /* Build the prompt */
-            strnfmt(tmp_val, sizeof(tmp_val), "(%s) %s", out_val, pmt);
+            strnfmt(tmp_val, sizeof(tmp_val), "(%s) %s", out_val, ui_text(pmt));
         }
 
         if (inventory_choice_debug_logging && p_ptr->command_wrk == (USE_INVEN))
@@ -1746,7 +1750,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                     if (!legal_channel || !get_item_okay(clicked_item))
                     {
-                        bell("Illegal object choice (click)!");
+                        bell(ui_text("Illegal object choice (click)!"));
                         continue;
                     }
 
@@ -1870,7 +1874,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 }
                 else
                 {
-                    bell("Cannot switch item selector!");
+                    bell(ui_text("Cannot switch item selector!"));
                     break;
                 }
             }
@@ -1893,7 +1897,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             /* No toggle allowed */
             else
             {
-                bell("Cannot switch item selector!");
+                bell(ui_text("Cannot switch item selector!"));
                 break;
             }
 
@@ -1918,7 +1922,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             /* Paranoia */
             if (!allow_floor)
             {
-                bell("Cannot select floor!");
+                bell(ui_text("Cannot select floor!"));
                 break;
             }
 
@@ -1980,12 +1984,12 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 }
                 else
                 {
-                    bell("Nothing is selected to examine.");
+                    bell(ui_text("Nothing is selected to examine."));
                 }
             }
             else
             {
-                bell("No highlighted item to examine.");
+                bell(ui_text("No highlighted item to examine."));
             }
 
             break;
@@ -2102,7 +2106,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             /* Validate the item */
             if (!item_found)
             {
-                bell("No valid items found.");
+                bell(ui_text("No valid items found."));
                 break;
             }
 
@@ -2132,7 +2136,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 } else if (p_ptr->command_wrk == (USE_FLOOR) && highlight_row < vis_floor_cnt) {
                     int obj_idx = floor_list[vis_floor[highlight_row]]; k = 0 - obj_idx; }
                 else { break; }
-                if (!get_item_okay(k)) { bell("Illegal object choice (highlight)!"); break; }
+                if (!get_item_okay(k)) { bell(ui_text("Illegal object choice (highlight)!")); break; }
                 if (!get_item_allow(k)) { done = true; break; }
                 (*cp)=k; item=true; done=true; break; }
 
@@ -2141,7 +2145,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             {
                 if (vis_inven_cnt != 1)
                 {
-                    bell("Illegal object choice (default)!");
+                    bell(ui_text("Illegal object choice (default)!"));
                     break;
                 }
 
@@ -2153,7 +2157,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             {
                 if (e1 != e2)
                 {
-                    bell("Illegal object choice (default)!");
+                    bell(ui_text("Illegal object choice (default)!"));
                     break;
                 }
 
@@ -2165,7 +2169,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             {
                 if (f1 != f2)
                 {
-                    bell("Illegal object choice (default)!");
+                    bell(ui_text("Illegal object choice (default)!"));
                     break;
                 }
 
@@ -2175,7 +2179,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             /* Validate the item */
             if (!get_item_okay(k))
             {
-                bell("Illegal object choice (default)!");
+                bell(ui_text("Illegal object choice (default)!"));
                 break;
             }
 
@@ -2213,7 +2217,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     else break; 
                     
                     if (!get_item_okay(k)) { 
-                        bell("Illegal object choice (highlight)!"); 
+                        bell(ui_text("Illegal object choice (highlight)!"));
                         break; 
                     } 
                     if (!get_item_allow(k)) { 
@@ -2229,7 +2233,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
             if (steamdeck_controls_active() && isalpha((unsigned char)which))
             {
-                bell("Use D-pad and confirm to select items in this mode.");
+                bell(ui_text("Use D-pad and confirm to select items in this mode."));
                 break;
             }
 
@@ -2246,7 +2250,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (k < 0)
                 {
-                    bell("Illegal object choice (inven)!");
+                    bell(ui_text("Illegal object choice (inven)!"));
                     break;
                 }
             }
@@ -2258,7 +2262,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (k < 0)
                 {
-                    bell("Illegal object choice (equip)!");
+                    bell(ui_text("Illegal object choice (equip)!"));
                     break;
                 }
             }
@@ -2270,7 +2274,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (k < 0 || k >= floor_num)
                 {
-                    bell("Illegal object choice (floor)!");
+                    bell(ui_text("Illegal object choice (floor)!"));
                     break;
                 }
 
@@ -2281,12 +2285,12 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             /* Validate the item */
             if (!get_item_okay(k))
             {
-                bell("Illegal object choice (normal)!");
+                bell(ui_text("Illegal object choice (normal)!"));
                 break;
             }
 
             /* Verify the item */
-            if (verify && !verify_item("Try", k))
+            if (verify && !verify_item(ui_text("Try"), k))
             {
                 done = true;
                 break;

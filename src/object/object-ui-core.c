@@ -1,6 +1,7 @@
 /* File: object/object-ui-core.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "object/object-ui-display.h"
 #include "object/object-ui-select.h"
@@ -115,10 +116,10 @@ static void story_prepare_equipment_desc(char* dest, size_t dest_size, cptr src,
         char base[160];
         SDL_strlcpy(base, dest, sizeof(base));
         if (base[0])
-            strnfmt(dest, dest_size, "%s (belt items keep passive bonuses)",
+            strnfmt(dest, dest_size, ui_text("%s (belt items keep passive bonuses)"),
                 base);
         else
-            SDL_strlcpy(dest, "(belt items keep passive bonuses)", dest_size);
+            SDL_strlcpy(dest, ui_text("(belt items keep passive bonuses)"), dest_size);
     }
 
     if (max_cols > 0 && sdl_is_story_font_enabled())
@@ -695,7 +696,7 @@ void describe_inventory_menu_entry(int item, char* buf, size_t len)
 
 bool item_prompt_is_replace(cptr pmt)
 {
-    return pmt && strstr(pmt, "Replace which item to pick up ") != NULL;
+    return pmt && strstr(pmt, ui_text("Replace which item to pick up ")) != NULL;
 }
 
 void log_inventory_selector_state(cptr stage, cptr pmt,
@@ -913,55 +914,55 @@ cptr describe_empty_slot(int i)
     switch (i)
     {
     case INVEN_WIELD:
-        p = "(no weapon)";
+        p = ui_text("(no weapon)");
         break;
     case INVEN_BOW:
-        p = "(no bow)";
+        p = ui_text("(no bow)");
         break;
     case INVEN_STAFF:
-        p = "(no walking staff)";
+        p = ui_text("(no walking staff)");
         break;
     case INVEN_LEFT:
-        p = "(no left ring)";
+        p = ui_text("(no left ring)");
         break;
     case INVEN_RIGHT:
-        p = "(no right ring)";
+        p = ui_text("(no right ring)");
         break;
     case INVEN_NECK:
-        p = "(no amulet)";
+        p = ui_text("(no amulet)");
         break;
     case INVEN_LITE:
-        p = "(no light source)";
+        p = ui_text("(no light source)");
         break;
     case INVEN_BODY:
-        p = "(no body armour)";
+        p = ui_text("(no body armour)");
         break;
     case INVEN_OUTER:
-        p = "(no cloak)";
+        p = ui_text("(no cloak)");
         break;
     case INVEN_ARM:
-        p = "(no shield)";
+        p = ui_text("(no shield)");
         break;
     case INVEN_HEAD:
-        p = "(no helmet)";
+        p = ui_text("(no helmet)");
         break;
     case INVEN_HANDS:
-        p = "(no gloves)";
+        p = ui_text("(no gloves)");
         break;
     case INVEN_FEET:
-        p = "(no boots)";
+        p = ui_text("(no boots)");
         break;
     case INVEN_QUIVER1:
-        p = "(empty quiver)";
+        p = ui_text("(empty quiver)");
         break;
     case INVEN_BELT:
-        p = "(empty belt)";
+        p = ui_text("(empty belt)");
         break;
     case INVEN_HORN:
-        p = "(no horn)";
+        p = ui_text("(no horn)");
         break;
     default:
-        p = "(empty slot)";
+        p = ui_text("(empty slot)");
         break;
     }
 
@@ -989,55 +990,55 @@ cptr mention_use(int i)
     switch (i)
     {
     case INVEN_WIELD:
-        p = "Wielding";
+        p = ui_text("Wielding");
         break;
     case INVEN_BOW:
-        p = "Shooting";
+        p = ui_text("Shooting");
         break;
     case INVEN_STAFF:
-        p = "Walking staff";
+        p = ui_text("Walking staff");
         break;
     case INVEN_LEFT:
-        p = "Left ring";
+        p = ui_text("Left ring");
         break;
     case INVEN_RIGHT:
-        p = "Right ring";
+        p = ui_text("Right ring");
         break;
     case INVEN_NECK:
-        p = "Around neck";
+        p = ui_text("Around neck");
         break;
     case INVEN_LITE:
         p = "Light";
         break;
     case INVEN_BODY:
-        p = "On body";
+        p = ui_text("On body");
         break;
     case INVEN_OUTER:
-        p = "About body";
+        p = ui_text("About body");
         break;
     case INVEN_ARM:
-        p = "Off-hand";
+        p = ui_text("Off-hand");
         break;
     case INVEN_HEAD:
-        p = "On head";
+        p = ui_text("On head");
         break;
     case INVEN_HANDS:
-        p = "On hands";
+        p = ui_text("On hands");
         break;
     case INVEN_FEET:
-        p = "On feet";
+        p = ui_text("On feet");
         break;
     case INVEN_QUIVER1:
         p = "Quiver";
         break;
     case INVEN_BELT:
-        p = "Belt";
+        p = ui_text("Belt");
         break;
     case INVEN_HORN:
         p = "Horn";
         break;
     default:
-        p = "In pack";
+        p = ui_text("In pack");
         break;
     }
 
@@ -1568,7 +1569,7 @@ void display_equip(void)
         
         if (use_story_font)
         {
-            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+            strnfmt(tmp_val, sizeof(tmp_val), ui_text("armour: %3d.%1d lb"),
                 armour_weight / 10, armour_weight % 10);
             if (divider_row >= 0)
                 story_print_text_grid(divider_row, col, 8, TERM_L_DARK,
@@ -1584,7 +1585,7 @@ void display_equip(void)
         }
         else
         {
-            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+            strnfmt(tmp_val, sizeof(tmp_val), ui_text("armour: %3d.%1d lb"),
                 armour_weight / 10, armour_weight % 10);
             if (divider_row >= 0)
                 Term_putstr(col, divider_row, -1, TERM_L_DARK, "--------");
@@ -2460,7 +2461,7 @@ void display_supplies(void)
     for (int row = 0; row < term_hgt; row++)
         Term_erase(0, row, 255);
 
-    strnfmt(header, sizeof(header), "Supply %d.%1d/%d.%1d lb",
+    strnfmt(header, sizeof(header), ui_text("Supply %d.%1d/%d.%1d lb"),
         supplies_limit_weight() / 10, supplies_limit_weight() % 10,
         supplies_current_weight_cap() / 10,
         supplies_current_weight_cap() % 10);
@@ -2469,7 +2470,7 @@ void display_supplies(void)
     if (count <= 0)
     {
         if (term_hgt > 1)
-            Term_putstr(0, 1, term_wid, TERM_SLATE, "(none)");
+            Term_putstr(0, 1, term_wid, TERM_SLATE, ui_text("(none)"));
         return;
     }
 
@@ -2521,7 +2522,7 @@ void display_supplies(void)
         char more[40];
         int row = term_hgt - 1;
 
-        strnfmt(more, sizeof(more), "... %d more", count - max_rows);
+        strnfmt(more, sizeof(more), ui_text("... %d more"), count - max_rows);
         Term_erase(0, row, 255);
         Term_putstr(0, row, term_wid, TERM_SLATE, more);
     }
@@ -2715,7 +2716,7 @@ void show_equip(void)
         if (i == INVEN_BELT)
         {
             int note_col = col + 12 + 2 + (int)strlen(out_desc[j]);
-            c_put_str(TERM_L_DARK, " (belt; keeps passive bonuses)", j + 1,
+            c_put_str(TERM_L_DARK, ui_text(" (belt; keeps passive bonuses)"), j + 1,
                 note_col);
         }
 
@@ -2740,7 +2741,7 @@ void show_equip(void)
 
         if (use_story_font)
         {
-            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+            strnfmt(tmp_val, sizeof(tmp_val), ui_text("armour: %3d.%1d lb"),
                 armour_weight / 10, armour_weight % 10);
             if (divider_row >= 0)
                 story_print_text_grid(divider_row, weight_col, 8, TERM_L_DARK,
@@ -2751,7 +2752,7 @@ void show_equip(void)
         }
         else
         {
-            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+            strnfmt(tmp_val, sizeof(tmp_val), ui_text("armour: %3d.%1d lb"),
                 armour_weight / 10,
                 armour_weight % 10);
             if (divider_row >= 0)

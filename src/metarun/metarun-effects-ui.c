@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "metarun-internal.h"
 
 static int metarun_effect_wrap_width(int term_width)
@@ -42,7 +43,7 @@ static int metarun_active_effect_block_lines(int id, int stacks, int term_width)
 
         if (power && *power) {
             char effect_line[1024];
-            strnfmt(effect_line, sizeof(effect_line), "Effect: %s", power);
+            strnfmt(effect_line, sizeof(effect_line), ui_text("Effect: %s"), power);
             lines += metarun_count_effect_lines(effect_line, wrap_width, text_col);
         }
     } else {
@@ -90,13 +91,13 @@ static int metarun_render_active_effect_block(int id, int stacks, int row, int t
 
         if (power && *power) {
             char effect_line[1024];
-            strnfmt(effect_line, sizeof(effect_line), "Effect: %s", power);
+            strnfmt(effect_line, sizeof(effect_line), ui_text("Effect: %s"), power);
             Term_gotoxy(text_col, row);
             text_out_c(name_attr, effect_line);
             row += metarun_count_effect_lines(effect_line, wrap_width, text_col);
         }
     } else {
-        Term_putstr(text_col, row++, -1, TERM_L_DARK, "(Effect not yet identified)");
+        Term_putstr(text_col, row++, -1, TERM_L_DARK, ui_text("(Effect not yet identified)"));
     }
 
     row++;
@@ -132,16 +133,16 @@ void show_all_active_curses(void)
 
     if (active_count == 0) {
         Term_clear();
-        Term_putstr(2, 1, -1, TERM_YELLOW, "=== All Active Effects ===");
-        Term_putstr(2, 3, -1, TERM_L_DARK, "No active curses or blessings");
+        Term_putstr(2, 1, -1, TERM_YELLOW, ui_text("=== All Active Effects ==="));
+        Term_putstr(2, 3, -1, TERM_L_DARK, ui_text("No active curses or blessings"));
         if (steamdeck) {
             char hint_buf[64];
-            strnfmt(hint_buf, sizeof(hint_buf), "Press [%s] to return.", accept_label);
+            strnfmt(hint_buf, sizeof(hint_buf), ui_text("Press [%s] to return."), accept_label);
             Term_putstr(2, 5, -1, TERM_L_DARK, hint_buf);
         } else if (sdl_touch_only_device_active()) {
-            Term_putstr(2, 5, -1, TERM_L_DARK, "Tap to return");
+            Term_putstr(2, 5, -1, TERM_L_DARK, ui_text("Tap to return"));
         } else {
-            Term_putstr(2, 5, -1, TERM_L_DARK, "Press any key to return.");
+            Term_putstr(2, 5, -1, TERM_L_DARK, ui_text("Press any key to return."));
         }
         ui_menu_click_begin();
         ui_menu_click_add_full_row('\r', 5);
@@ -187,10 +188,10 @@ void show_all_active_curses(void)
         /* Title with page info */
         char title_buf[80];
         if (total_pages > 1) {
-            snprintf(title_buf, sizeof title_buf, "=== Active Effects (Page %d/%d) ===",
+            snprintf(title_buf, sizeof title_buf, ui_text("=== Active Effects (Page %d/%d) ==="),
                      current_page + 1, total_pages);
         } else {
-            SDL_strlcpy(title_buf, "=== All Active Effects ===", sizeof title_buf);
+            SDL_strlcpy(title_buf, ui_text("=== All Active Effects ==="), sizeof title_buf);
         }
         Term_putstr(2, 1, -1, TERM_YELLOW, title_buf);
 
@@ -215,45 +216,45 @@ void show_all_active_curses(void)
                 const char* variants[2];
 
                 snprintf(prompt_full, sizeof prompt_full,
-                         "D-pad navigate  [%s] ok  [%s] back",
+                         ui_text("D-pad navigate  [%s] ok  [%s] back"),
                          accept_label, back_label);
                 snprintf(prompt_short, sizeof prompt_short,
-                         "[%s] ok  [%s] back", accept_label, back_label);
+                         ui_text("[%s] ok  [%s] back"), accept_label, back_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_short;
                 terminal_prompt_pick_variant(footer_buf, sizeof footer_buf,
                     term_width, false, variants, N_ELEMENTS(variants));
             } else {
-                snprintf(footer_buf, sizeof footer_buf, "[%s] ok  [%s] back",
+                snprintf(footer_buf, sizeof footer_buf, ui_text("[%s] ok  [%s] back"),
                          accept_label, back_label);
             }
         } else if (sdl_touch_only_device_active()) {
-            SDL_strlcpy(footer_buf, "Tap to return", sizeof footer_buf);
+            SDL_strlcpy(footer_buf, ui_text("Tap to return"), sizeof footer_buf);
         } else {
             if (total_pages > 1) {
                 const char* variants[] = {
-                    "Dir left/right pages  Any key returns",
-                    "Dir pages  Any key returns",
-                    "Any key returns"
+                    ui_text("Dir left/right pages  Any key returns"),
+                    ui_text("Dir pages  Any key returns"),
+                    ui_text("Any key returns")
                 };
                 terminal_prompt_pick_variant(footer_buf, sizeof footer_buf,
                     term_width, false, variants, N_ELEMENTS(variants));
             } else {
-                SDL_strlcpy(footer_buf, "Press any key to return.", sizeof footer_buf);
+                SDL_strlcpy(footer_buf, ui_text("Press any key to return."), sizeof footer_buf);
             }
         }
 
         Term_putstr(0, term_height - 1, -1, TERM_L_DARK, footer_buf);
         ui_menu_click_add_text_token(-1, 0, term_height - 1, footer_buf,
-            "back");
+            ui_text("back"));
         ui_menu_click_add_text_token(-1, 0, term_height - 1, footer_buf,
-            "return");
+            ui_text("return"));
         ui_menu_click_add_text_token(-2, 0, term_height - 1, footer_buf,
-            "right");
+            ui_text("right"));
         ui_menu_click_add_text_token(-3, 0, term_height - 1, footer_buf,
-            "left");
+            ui_text("left"));
         ui_menu_click_add_text_token(-1, 0, term_height - 1, footer_buf,
-            "ok");
+            ui_text("ok"));
         Term_fresh();
 
         /* Get input */

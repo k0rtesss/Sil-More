@@ -330,8 +330,9 @@ def write_reference(lessons, counts, unwired):
 The button showing the current language on each gameplay tutorial card opens a
 list of languages in their native spelling. Select a row with the keyboard,
 controller, mouse or touch. The current page updates immediately and keeps its
-place in the Tale. The same picker is available in Tutorial settings. The
-archive uses the selected language.
+place in the Tale. The same picker is available under **Options → Tutorial and
+help language** and in Tutorial settings. The archive uses the selected
+language.
 
 The available languages are English, Bulgarian, Simplified Chinese, Czech,
 Danish, Dutch, Finnish, French, German, Hungarian, Italian, Japanese, Korean,
@@ -372,6 +373,21 @@ reviewing a changed lesson in that language. Run
 `python scripts/check_gameplay_tutorial_render.py --language fr` to render every
 French page at desktop, portrait and controller sizes, including scrolled cards.
 The same check accepts the other translation codes.'''.splitlines()
+    lines += ['', '### Interface language', '',
+              '**Options → Interface language** controls menus, controls, status labels and gameplay messages. '
+              'Choose any of the 22 supported languages independently of tutorial and help language. The app saves the choice '
+              'as `appOptions.uiLanguage` in `sil_sdl.json` and defaults to English.', '',
+              'The catalogues are `lib/help/ui.<language>.json`; English source strings are the fallback. Missing or invalid entries use the English source text. '
+              'Message history keeps the wording recorded when each message was generated.', '',
+              'New UI packs are marked `machine-assisted` and need native-speaker review. '
+              'They reuse existing terminology and reviewed navigation labels. Run '
+              '`python scripts/check_ui_translation.py` to check all catalogue keys, UTF-8 text, '
+              'language scripts, newlines, and ordered format arguments. The runtime rejects invalid '
+              'format entries and falls back to English. Run '
+              '`python scripts/check_ui_language_fonts.py --capture` for glyph coverage, language '
+              'switching, terminal rendering, and desktop/touch language-picker captures. '
+              '`python tools/apply_ui_translation_overrides.py --check` verifies the reviewed label '
+              'overrides; omit `--check` to reapply them to the authoritative shipped catalogues.']
     lines += ['', '### Lesson level', '',
               f"Default: **Extended**. The catalogue has **{levels['normal']} Normal** lessons and "
               f"**{levels['extended']} Extended** lessons. The card's mode button opens a selector "

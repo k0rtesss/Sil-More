@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "blitz.h"
 #include "sdl/main-sdl-private.h"
@@ -377,7 +378,7 @@ bool sdl_main_menu_pane_button_rect(SDL_FRect* out)
     float panel_w;
     float panel_h;
     int previous_font_context;
-    cptr label = "Menu";
+    cptr label = ui_text("Menu");
 
     if (out)
         *out = (SDL_FRect){ 0 };
@@ -1280,7 +1281,7 @@ void sdl_main_menu_pane_render(void)
     SDL_RenderFillRect(g_state.renderer, &rect);
 
     story_font = sdl_story_font_for_height(sdl_main_menu_pane_font_px());
-    sdl_main_menu_draw_text(story_font, "Menu", rect.x + rect.w * 0.10f,
+    sdl_main_menu_draw_text(story_font, ui_text("Menu"), rect.x + rect.w * 0.10f,
         rect.y, rect.w * 0.80f, rect.h, text,
         MAIN_MENU_TEXT_CENTER);
 }
@@ -1585,19 +1586,19 @@ static void sdl_quick_access_suggest_unlocked_shortcut(cptr unlock_name,
         SDL_strlcpy(desc, custom_desc, sizeof(desc));
     } else if (character_wheel_available) {
         strnfmt(desc, sizeof(desc),
-            "You acquired %s. Add %s to Quick Access? You can also use it "
-            "through the character wheel.",
-            unlock_name, action_name);
+            ui_text("You acquired %s. Add %s to Quick Access? You can also use it "
+            "through the character wheel."),
+            ui_text(unlock_name), ui_text(action_name));
     } else {
         strnfmt(desc, sizeof(desc),
-            "You acquired %s. Add %s to Quick Access?",
-            unlock_name, action_name);
+            ui_text("You acquired %s. Add %s to Quick Access?"),
+            ui_text(unlock_name), ui_text(action_name));
     }
-    options[0] = (ui_question_option){ 'y', "Add to Quick Access",
+    options[0] = (ui_question_option){ 'y', ui_text("Add to Quick Access"),
         TERM_L_GREEN, false };
     options[1]
-        = (ui_question_option){ 'n', "Not now", TERM_SLATE, false };
-    choice = ui_question_ask("New Quick Access action", desc, options, 2,
+        = (ui_question_option){ 'n', ui_text("Not now"), TERM_SLATE, false };
+    choice = ui_question_ask(ui_text("New Quick Access action"), desc, options, 2,
         UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1);
     if (choice != 0)
         return;
@@ -1672,9 +1673,9 @@ void sdl_quick_access_suggest_equipped_item(int tval)
     /* The first successful equip consumes the offer even when it is declined. */
     p_ptr->quick_access_prompt_flags |= prompt_flag;
     strnfmt(desc, sizeof(desc),
-        "You equipped %s for the first time this run. Add %s to Quick "
-        "Access? You can also %s it from the character wheel.",
-        item_name, action_name, wheel_verb);
+        ui_text("You equipped %s for the first time this run. Add %s to Quick "
+        "Access? You can also %s it from the character wheel."),
+        ui_text(item_name), ui_text(action_name), ui_text(wheel_verb));
     sdl_quick_access_suggest_unlocked_shortcut(item_name, action_name,
         binding, true, desc);
 }
@@ -1699,8 +1700,8 @@ static bool sdl_main_menu_button_run_pending_disable_prompt(void)
 {
     ui_question_option options[2];
     const char* desc =
-        "Turn off the fixed Main Menu button? Main Menu will be added to "
-        "Quick Access, and Quick Access will be enabled if needed.";
+        ui_text("Turn off the fixed Main Menu button? Main Menu will be added to "
+        "Quick Access, and Quick Access will be enabled if needed.");
     int choice;
 
     if (!g_main_menu_button_disable_prompt_pending)
@@ -1715,11 +1716,11 @@ static bool sdl_main_menu_button_run_pending_disable_prompt(void)
     g_main_menu_button_disable_prompt_pending = false;
 
     options[0]
-        = (ui_question_option){ 'y', "Turn off button", TERM_ORANGE, false };
+        = (ui_question_option){ 'y', ui_text("Turn off button"), TERM_ORANGE, false };
     options[1]
-        = (ui_question_option){ 'c', "Cancel", TERM_SLATE, false };
+        = (ui_question_option){ 'c', ui_text("Cancel"), TERM_SLATE, false };
 
-    choice = ui_question_ask("Turn off Main Menu button", desc, options,
+    choice = ui_question_ask(ui_text("Turn off Main Menu button"), desc, options,
         2, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1);
     if (choice != 0)
         return true;

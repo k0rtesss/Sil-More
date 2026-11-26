@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "player/player-upkeep-internal.h"
+#include "player/player-active-weapon.h"
 #include "ui/question.h"
 
 static byte last_ranged_weapon_mode = PLAYER_ACTIVE_WEAPON_RANGED_1;
@@ -528,18 +529,6 @@ typedef struct active_weapon_choice
     char label[400];
 } active_weapon_choice;
 
-typedef struct active_weapon_preview
-{
-    int attack;
-    int dd;
-    int ds;
-    bool throwing;
-    bool has_offhand;
-    int offhand_attack;
-    int offhand_dd;
-    int offhand_ds;
-} active_weapon_preview;
-
 static int active_weapon_preview_curse_adjusted_ds(int ds)
 {
     int shift = curse_flag_delta_cur(CUR_MDS_SHIFT);
@@ -854,31 +843,25 @@ static bool active_weapon_choice_preview(int mode, int item, int target_slot,
     return available;
 }
 
-bool player_active_weapon_stats_preview(int mode, int* attack, int* dd,
-    int* ds, bool* throwing)
+bool player_equipped_weapon_preview(int mode, active_weapon_preview* preview)
 {
-    active_weapon_preview preview;
-    int item;
-    int target_slot;
+    int slot;
 
     mode = normalize_active_weapon_mode(mode);
     if (mode == PLAYER_ACTIVE_WEAPON_MELEE)
     {
-        item = INVEN_WIELD;
-        target_slot = INVEN_WIELD;
+        slot = INVEN_WIELD;
     }
     else if (mode == PLAYER_ACTIVE_WEAPON_RANGED_1)
     {
         if (player_active_weapon_kind()
             == PLAYER_ACTIVE_WEAPON_KIND_THROWING)
         {
-            item = INVEN_WIELD;
-            target_slot = INVEN_WIELD;
+            slot = INVEN_WIELD;
         }
         else
         {
-            item = INVEN_BOW;
-            target_slot = INVEN_BOW;
+            slot = INVEN_BOW;
         }
     }
     else
@@ -886,8 +869,15 @@ bool player_active_weapon_stats_preview(int mode, int* attack, int* dd,
         return false;
     }
 
-    if (!active_weapon_choice_preview(mode, item, target_slot,
-            player_quiver_selected_arrow_slot(), -1, &preview))
+    return active_weapon_choice_preview(mode, slot, slot,
+        player_quiver_selected_arrow_slot(), -1, preview);
+}
+
+bool player_active_weapon_stats_preview(int mode, int* attack, int* dd,
+    int* ds, bool* throwing)
+{
+    active_weapon_preview preview;
+    if (!player_equipped_weapon_preview(mode, &preview))
         return false;
     if (attack)
         *attack = preview.attack;

@@ -1,6 +1,7 @@
 /* File: birth/birth-oath.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "birth/birth-internal.h"
 
 static int oath_selectable_max_id(void)
@@ -104,7 +105,7 @@ static void oath_add_semantic_details(int oath_id)
     {
         char* banned_text = oath_banned_text(oath_id);
 
-        oath_add_semantic_detail_line(NULL, "OATH BROKEN", TERM_L_RED);
+        oath_add_semantic_detail_line(NULL, ui_text("OATH BROKEN"), TERM_L_RED);
         oath_add_semantic_detail_line(NULL,
             (banned_text && banned_text[0])
                 ? banned_text
@@ -118,17 +119,17 @@ static void oath_add_semantic_details(int oath_id)
         oath_add_semantic_detail_line(NULL, "Walk free of binding words.",
             TERM_SLATE);
         oath_add_semantic_detail_line(NULL,
-            "Take no oath and remain unbound by sacred vows.", TERM_SLATE);
+            ui_text("Take no oath and remain unbound by sacred vows."), TERM_SLATE);
         return;
     }
 
-    oath_add_semantic_detail_line("Description", oath_description(oath_id),
+    oath_add_semantic_detail_line(ui_text("Description"), oath_description(oath_id),
         TERM_SLATE);
-    oath_add_semantic_detail_line("Pledge", oath_pledge(oath_id),
+    oath_add_semantic_detail_line(ui_text("Pledge"), oath_pledge(oath_id),
         TERM_L_BLUE);
-    oath_add_semantic_detail_line("Reward", oath_reward_text(oath_id),
+    oath_add_semantic_detail_line(ui_text("Reward"), oath_reward_text(oath_id),
         TERM_L_GREEN);
-    oath_add_semantic_detail_line("Forbidden", oath_forbidden(oath_id),
+    oath_add_semantic_detail_line(ui_text("Forbidden"), oath_forbidden(oath_id),
         TERM_L_RED);
 }
 
@@ -175,7 +176,7 @@ NavResult select_oath(void)
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         sdl_character_sheet_screen_begin_select(highlight,
-            "Choose your Oath");
+            ui_text("Choose your Oath"));
         sdl_character_sheet_screen_set_select_menu_style(true);
         sdl_character_sheet_screen_set_select_dynamic_description(true);
 
@@ -195,9 +196,9 @@ NavResult select_oath(void)
 
             if (show_letter)
                 strnfmt(label, sizeof(label), "%c) %s", 'a' + i,
-                    oath_name_str(oath_id));
+                    ui_text(oath_name_str(oath_id)));
             else
-                SDL_strlcpy(label, oath_name_str(oath_id), sizeof(label));
+                SDL_strlcpy(label, ui_text(oath_name_str(oath_id)), sizeof(label));
             sdl_character_sheet_screen_add_select_row(oath_id, label, attr,
                 "");
         }

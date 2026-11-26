@@ -1,6 +1,7 @@
 /* File: cave-map-ui.c */
 
 #include "cave-internal.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-fixtures.h"
@@ -879,7 +880,7 @@ void do_cmd_view_map(void)
     screen_push_supporting_panes_hidden();
 
     /* Note */
-    prt("Please wait...", 0, 0);
+    prt(ui_text("Please wait..."), 0, 0);
 
     /* Flush */
     Term_fresh();

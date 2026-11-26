@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "metarun-internal.h"
 
 bool metarun_set_difficulty_inline(int choice)
@@ -50,7 +51,7 @@ static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
 {
     if (!runtype_info || runtype_id >= z_info->rt_max || buf_size < 64)
     {
-        strncpy(buf, "No curses", buf_size - 1);
+        strncpy(buf, ui_text("No curses"), buf_size - 1);
         buf[buf_size - 1] = '\0';
         return;
     }
@@ -59,7 +60,7 @@ static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
 
     if (!rt->start_curses)
     {
-        strncpy(buf, "No curses", buf_size - 1);
+        strncpy(buf, ui_text("No curses"), buf_size - 1);
         buf[buf_size - 1] = '\0';
         return;
     }
@@ -82,7 +83,7 @@ static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
 
     if (curse_count == 0)
     {
-        strncpy(buf, "No curses", buf_size - 1);
+        strncpy(buf, ui_text("No curses"), buf_size - 1);
         buf[buf_size - 1] = '\0';
         return;
     }
@@ -91,13 +92,13 @@ static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
     if (min_stacks == max_stacks)
     {
         if (min_stacks == 1)
-            snprintf(buf, buf_size, "Curses: %d x %d stack", curse_count, min_stacks);
+            snprintf(buf, buf_size, ui_text("Curses: %d x %d stack"), curse_count, min_stacks);
         else
-            snprintf(buf, buf_size, "Curses: %d x %d stacks", curse_count, min_stacks);
+            snprintf(buf, buf_size, ui_text("Curses: %d x %d stacks"), curse_count, min_stacks);
     }
     else
     {
-        snprintf(buf, buf_size, "Curses: %d (%d-%d stacks)", curse_count, min_stacks, max_stacks);
+        snprintf(buf, buf_size, ui_text("Curses: %d (%d-%d stacks)"), curse_count, min_stacks, max_stacks);
     }
 }
 
@@ -127,7 +128,7 @@ void choose_difficulty_menu(void)
         ui_menu_click_set_outside_cancel_enabled(true);
 
         /* Title */
-        Term_putstr(2, 1, -1, TERM_YELLOW, "=== Select Difficulty Level ===");
+        Term_putstr(2, 1, -1, TERM_YELLOW, ui_text("=== Select Difficulty Level ==="));
 
         int row = 3;
         for (int i = 0; i <= max_difficulty; i++)
@@ -170,13 +171,13 @@ void choose_difficulty_menu(void)
             }
 
             /* Get dynamic name and stats from runtype */
-            const char *rt_name = "Unknown";
+            const char *rt_name = ui_text("Unknown");
             int win_goal = WINCON_SILMARILS;
             u32b blessing_thresh = runtype_threshold_for_mode(i, METARUN_BLESSING_THRESHOLD_NORMAL);
 
             if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
             {
-                rt_name = runtype_info[i].name;
+                rt_name = ui_text(runtype_info[i].name);
                 win_goal = runtype_info[i].win_con ? runtype_info[i].win_con : WINCON_SILMARILS;
             }
 
@@ -185,21 +186,21 @@ void choose_difficulty_menu(void)
             get_curse_description(i, curse_buf, sizeof(curse_buf));
 
             if (is_locked) {
-                snprintf(desc_buf, sizeof(desc_buf), "[LOCKED] Win: %d Silmarils, Threshold: %lu points, %s",
+                snprintf(desc_buf, sizeof(desc_buf), ui_text("[LOCKED] Win: %d Silmarils, Threshold: %lu points, %s"),
                          win_goal, (unsigned long)blessing_thresh, curse_buf);
             } else {
-                snprintf(desc_buf, sizeof(desc_buf), "Win: %d Silmarils, Threshold: %lu points, %s",
+                snprintf(desc_buf, sizeof(desc_buf), ui_text("Win: %d Silmarils, Threshold: %lu points, %s"),
                          win_goal, (unsigned long)blessing_thresh, curse_buf);
             }
 
             char name_buf[128];
             if (!menu_letters) {
                 if (is_locked)
-                    snprintf(name_buf, sizeof(name_buf), "   %s [LOCKED]", rt_name);
+                    snprintf(name_buf, sizeof(name_buf), ui_text("   %s [LOCKED]"), rt_name);
                 else
                     snprintf(name_buf, sizeof(name_buf), "   %s", rt_name);
             } else if (is_locked) {
-                snprintf(name_buf, sizeof(name_buf), "%c) %s [LOCKED]", 'a'+i, rt_name);
+                snprintf(name_buf, sizeof(name_buf), ui_text("%c) %s [LOCKED]"), 'a'+i, rt_name);
             } else {
                 snprintf(name_buf, sizeof(name_buf), "%c) %s", 'a'+i, rt_name);
             }
@@ -223,23 +224,23 @@ void choose_difficulty_menu(void)
             const char* variants[2];
 
             strnfmt(prompt_full, sizeof(prompt_full),
-                "D-pad navigate  [%s] accept  [%s] cancel", accept_label,
+                ui_text("D-pad navigate  [%s] accept  [%s] cancel"), accept_label,
                 back_label);
             strnfmt(prompt_short, sizeof(prompt_short),
-                "[%s] accept  [%s] cancel", accept_label, back_label);
+                ui_text("[%s] accept  [%s] cancel"), accept_label, back_label);
             variants[0] = prompt_full;
             variants[1] = prompt_short;
             terminal_prompt_pick_variant(hint_buf, sizeof(hint_buf),
                 metarun_term_width() - 2, false, variants,
                 N_ELEMENTS(variants));
             Term_putstr(2, row + 1, -1, TERM_L_WHITE, hint_buf);
-            ui_menu_click_add_text_token(-1, 2, row + 1, hint_buf, "cancel");
+            ui_menu_click_add_text_token(-1, 2, row + 1, hint_buf, ui_text("cancel"));
         } else if (sdl_touch_only_device_active()) {
             char prompt_text[96];
             const char* variants[] = {
-                "Tap a row to select, tap away to exit",
-                "Tap to select, tap away to exit",
-                "Tap to select"
+                ui_text("Tap a row to select, tap away to exit"),
+                ui_text("Tap to select, tap away to exit"),
+                ui_text("Tap to select")
             };
             terminal_prompt_pick_variant(prompt_text, sizeof(prompt_text),
                 metarun_term_width() - 2, false, variants,
@@ -248,17 +249,17 @@ void choose_difficulty_menu(void)
         } else {
             char prompt_text[96];
             const char* variants[] = {
-                "Dir navigate  Enter accept  Esc cancel",
-                "Enter accept  Esc cancel"
+                ui_text("Dir navigate  Enter accept  Esc cancel"),
+                ui_text("Enter accept  Esc cancel")
             };
             terminal_prompt_pick_variant(prompt_text, sizeof(prompt_text),
                 metarun_term_width() - 2, false, variants,
                 N_ELEMENTS(variants));
             Term_putstr(2, row + 1, -1, TERM_L_WHITE, prompt_text);
             ui_menu_click_add_text_token(-1, 2, row + 1, prompt_text,
-                "Esc Cancel");
+                ui_text("Esc Cancel"));
             ui_menu_click_add_text_token(-1, 2, row + 1, prompt_text,
-                "Esc cancel");
+                ui_text("Esc cancel"));
         }
 
         /* Get input */
@@ -302,7 +303,7 @@ void choose_difficulty_menu(void)
             /* Check if trying to select a locked difficulty */
             if (choice < metar.max_difficulty_reached) {
                 /* Show warning and stay in menu */
-                Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this tale!");
+                Term_putstr(2, row + 3, -1, TERM_RED, ui_text("Cannot select easier difficulty - locked for this tale!"));
                 Term_fresh();
                 Term_xtra(TERM_XTRA_DELAY, 2000);
                 continue;
@@ -329,7 +330,7 @@ void choose_difficulty_menu(void)
             if (new_choice <= max_difficulty) {
                 if (new_choice < metar.max_difficulty_reached) {
                     /* Show warning for locked difficulty */
-                    Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this tale!");
+                    Term_putstr(2, row + 3, -1, TERM_RED, ui_text("Cannot select easier difficulty - locked for this tale!"));
                     Term_fresh();
                     Term_xtra(TERM_XTRA_DELAY, 2000);
                 } else {
@@ -343,7 +344,7 @@ void choose_difficulty_menu(void)
             if (new_choice <= max_difficulty) {
                 if (new_choice < metar.max_difficulty_reached) {
                     /* Show warning for locked difficulty */
-                    Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this tale!");
+                    Term_putstr(2, row + 3, -1, TERM_RED, ui_text("Cannot select easier difficulty - locked for this tale!"));
                     Term_fresh();
                     Term_xtra(TERM_XTRA_DELAY, 2000);
                 } else {
@@ -364,31 +365,31 @@ void choose_difficulty_menu(void)
             bool portable = portable_controls_active();
             screen_save();
             Term_clear();
-            Term_putstr(2, 5, -1, TERM_YELLOW, "WARNING: Increasing Difficulty");
+            Term_putstr(2, 5, -1, TERM_YELLOW, ui_text("WARNING: Increasing Difficulty"));
             if (term_wid < 70)
             {
                 Term_putstr(2, 7, term_wid - 2, TERM_WHITE,
-                    "You cannot return to an easier level");
+                    ui_text("You cannot return to an easier level"));
                 Term_putstr(2, 8, term_wid - 2, TERM_WHITE,
-                    "for the rest of this tale.");
+                    ui_text("for the rest of this tale."));
             }
             else
             {
-                Term_putstr(2, 7, -1, TERM_WHITE, "If you increase the difficulty level, you will NOT be able to");
-                Term_putstr(2, 8, -1, TERM_WHITE, "go back to an easier level for the rest of this tale.");
+                Term_putstr(2, 7, -1, TERM_WHITE, ui_text("If you increase the difficulty level, you will NOT be able to"));
+                Term_putstr(2, 8, -1, TERM_WHITE, ui_text("go back to an easier level for the rest of this tale."));
             }
-            Term_putstr(2, 10, -1, TERM_L_RED, "This change is PERMANENT for this tale!");
+            Term_putstr(2, 10, -1, TERM_L_RED, ui_text("This change is PERMANENT for this tale!"));
             if (steamdeck) {
                 char prompt_buf[64];
                 strnfmt(prompt_buf, sizeof(prompt_buf),
-                        "Continue? [%s] yes  [%s] no", accept_label, back_label);
+                        ui_text("Continue? [%s] yes  [%s] no"), accept_label, back_label);
                 Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE, prompt_buf);
             } else {
                 Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE,
-                    portable ? "Do you want to continue? (y/n/sp)"
-                             : "Do you want to continue? (y/n)");
+                    portable ? ui_text("Do you want to continue? (y/n/sp)")
+                             : ui_text("Do you want to continue? (y/n)"));
             }
-            sdl_touch_pane_begin_yes_no_prompt("Do you want to continue?");
+            sdl_touch_pane_begin_yes_no_prompt(ui_text("Do you want to continue?"));
             Term_fresh();
             char confirm = metarun_inkey_hidden();
             sdl_touch_pane_end_yes_no_prompt();

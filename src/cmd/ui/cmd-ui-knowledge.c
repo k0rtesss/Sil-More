@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -97,7 +98,7 @@ static bool confirm_object_action(cptr action, const object_type* o_ptr,
     else
         object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
 
-    strnfmt(prompt, sizeof(prompt), "%s %s? ", action, o_name);
+    strnfmt(prompt, sizeof(prompt), "%s %s? ", ui_text(action), o_name);
     return get_check(prompt);
 }
 
@@ -116,10 +117,10 @@ static bool confirm_supply_entry_action(cptr action,
         cptr name = jewelry_preset_name(entry->preset_idx);
 
         if (name && name[0])
-            strnfmt(prompt, sizeof(prompt), "%s jewelry set %d (%s)? ", action,
+            strnfmt(prompt, sizeof(prompt), ui_text("%s jewelry set %d (%s)? "), action,
                 entry->preset_idx + 1, name);
         else
-            strnfmt(prompt, sizeof(prompt), "%s jewelry set %d? ", action,
+            strnfmt(prompt, sizeof(prompt), ui_text("%s jewelry set %d? "), action,
                 entry->preset_idx + 1);
         return get_check(prompt);
     }
@@ -151,7 +152,7 @@ static bool confirm_drop_amount(const object_type* o_ptr, int amt)
     object_copy(&prompt_obj, o_ptr);
     prompt_obj.number = amt;
     object_desc(prompt_name, sizeof(prompt_name), &prompt_obj, false, 0);
-    strnfmt(prompt, sizeof(prompt), "Drop %s? ", prompt_name);
+    strnfmt(prompt, sizeof(prompt), ui_text("Drop %s? "), prompt_name);
     return get_check(prompt);
 }
 
@@ -229,7 +230,7 @@ static bool supplies_menu_use_entry(supply_list_entry* entry,
         break;
     default:
         supplies_end_action();
-        bell("Cannot use that item here!");
+        bell(ui_text("Cannot use that item here!"));
         msg_print("Cannot use that item here.");
         return false;
     }
@@ -260,7 +261,7 @@ static bool supplies_menu_drop_entry(supply_list_entry* entry)
 
     if (entry->preset_idx >= 0)
     {
-        bell("Nothing to drop here.");
+        bell(ui_text("Nothing to drop here."));
         msg_print("Use c to clear a jewelry set.");
         return false;
     }
@@ -285,9 +286,9 @@ static bool supplies_menu_drop_entry(supply_list_entry* entry)
     char o_name[80];
     char quantity_prompt[160];
     object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-    strnfmt(quantity_prompt, sizeof(quantity_prompt), "Drop how many %s? ",
+    strnfmt(quantity_prompt, sizeof(quantity_prompt), ui_text("Drop how many %s? "),
         o_name);
-    int actual_amt = get_quantity_action(quantity_prompt, "Drop", max_amt);
+    int actual_amt = get_quantity_action(quantity_prompt, ui_text("Drop"), max_amt);
     if (actual_amt <= 0)
         return false;
     if (!confirm_drop_amount(o_ptr, actual_amt))
@@ -327,7 +328,7 @@ static bool supply_object_show_with_compare(object_type* o_ptr,
         2);
 
     strnfmt(heading_texts[count], sizeof(heading_texts[count]),
-        "Selected item");
+        ui_text("Selected item"));
     headings[count] = heading_texts[count];
     objects[count++] = o_ptr;
 
@@ -351,7 +352,7 @@ static bool supply_object_show_with_compare(object_type* o_ptr,
     if (floor_ptr && count < 3)
     {
         strnfmt(heading_texts[count], sizeof(heading_texts[count]),
-            "On floor");
+            ui_text("On floor"));
         headings[count] = heading_texts[count];
         objects[count++] = floor_ptr;
     }
@@ -382,7 +383,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
     {
         const object_type* objects[JEWELRY_PRESET_SLOT_MAX];
         const char* headings[JEWELRY_PRESET_SLOT_MAX] = {
-            "Left ring", "Right ring", "Amulet"
+            ui_text("Left ring"), ui_text("Right ring"), ui_text("Amulet")
         };
         int count = 0;
 
@@ -390,7 +391,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
         {
             if (!overlay)
             {
-                bell("That jewelry set is empty.");
+                bell(ui_text("That jewelry set is empty."));
                 msg_print("That jewelry set is empty.");
             }
             return false;
@@ -419,7 +420,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
 
         if (!overlay)
         {
-            bell("That jewelry set is empty.");
+            bell(ui_text("That jewelry set is empty."));
             msg_print("That jewelry set is empty.");
         }
         return false;
@@ -480,7 +481,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
 
         if (!overlay)
         {
-            bell("You have not identified that yet.");
+            bell(ui_text("You have not identified that yet."));
             msg_print("You have not identified that yet.");
         }
         return false;
@@ -488,7 +489,7 @@ static bool supplies_menu_show_entry_description(supply_list_entry* entry,
 
     if (!overlay)
     {
-        bell("Nothing to recall.");
+        bell(ui_text("Nothing to recall."));
         msg_print("Nothing to recall.");
     }
     return false;
@@ -514,18 +515,18 @@ static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
 static cptr supply_group_browser_text(int group)
 {
     if (!get_sdl_compact_inventory_menus())
-        return supply_group_text[group];
+        return ui_text(supply_group_text[group]);
 
     switch (group)
     {
     case SUPPLY_GROUP_LIGHTS:
-        return "Light/Oil";
+        return ui_text("Light/Oil");
     case SUPPLY_GROUP_JEWELRY:
-        return "Jewelry";
+        return ui_text("Jewelry");
     case SUPPLY_GROUP_JEWELRY_PRESETS:
-        return "Jewelry";
+        return ui_text("Jewelry");
     default:
-        return supply_group_text[group];
+        return ui_text(supply_group_text[group]);
     }
 }
 
@@ -544,7 +545,7 @@ void do_cmd_note(char* note, int what_depth)
     /* If a note is passed, use that, otherwise accept user input. */
     if (streq(note, ""))
     {
-        if (!term_get_string("Note: ", buf, 57))
+        if (!term_get_string(ui_text("Note: "), buf, 57))
             return;
     }
     else
@@ -564,15 +565,15 @@ void do_cmd_note(char* note, int what_depth)
      */
     if (what_depth == 0)
     {
-        SDL_strlcpy(depths, "   Gates", sizeof(depths));
+        SDL_strlcpy(depths, ui_text("   Gates"), sizeof(depths));
     }
     else if (what_depth == CHEST_LEVEL)
     {
-        SDL_strlcpy(depths, "   Chest", sizeof(depths));
+        SDL_strlcpy(depths, ui_text("   Chest"), sizeof(depths));
     }
     else if (what_depth == SKELETON_LEVEL)
     {
-        SDL_strlcpy(depths, "   Skeleton", sizeof(depths));
+        SDL_strlcpy(depths, ui_text("   Skeleton"), sizeof(depths));
     }
     else
     {
@@ -670,7 +671,7 @@ void do_cmd_version(void)
 {
     /* Silly message - use msg_print so message is shown immediately */
     char verbuf[128];
-    strnfmt(verbuf, sizeof(verbuf), "You are playing %s %s.  Type '?' for more info.",
+    strnfmt(verbuf, sizeof(verbuf), ui_text("You are playing %s %s.  Type '?' for more info."),
         VERSION_NAME, VERSION_STRING);
     msg_print(verbuf);
 }
@@ -775,110 +776,110 @@ void do_cmd_knowledge_oaths(void)
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Scan the oaths */
-    SDL_IOprintf(fff, "Oath Status\n\n");
+    SDL_IOprintf(fff, "%s", ui_text("Oath Status\n\n"));
 
     /* Check current character oath */
     if (p_ptr->have_ability[S_SPC][SPC_OATH_MERCY])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_MERCY])
-            SDL_IOprintf(fff, "Current Oath: Oath of Mercy (Active)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Mercy (Active)\n\n"));
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Mercy (Broken)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Mercy (Broken)\n\n"));
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_SILENCE])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_SILENCE])
-            SDL_IOprintf(fff, "Current Oath: Oath of Silence (Active)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Silence (Active)\n\n"));
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Silence (Broken)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Silence (Broken)\n\n"));
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_IRON])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_IRON])
-            SDL_IOprintf(fff, "Current Oath: Oath of Iron (Active)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Iron (Active)\n\n"));
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Iron (Broken)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Iron (Broken)\n\n"));
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_SMITH])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_SMITH])
-            SDL_IOprintf(fff, "Current Oath: Oath of the Smith (Active)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of the Smith (Active)\n\n"));
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of the Smith (Broken)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of the Smith (Broken)\n\n"));
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_VALOROUS])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_VALOROUS])
-            SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Active)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Valorous Heart (Active)\n\n"));
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Broken)\n\n");
+            SDL_IOprintf(fff, "%s", ui_text("Current Oath: Oath of Valorous Heart (Broken)\n\n"));
     }
     else
     {
-        SDL_IOprintf(fff, "Current Oath: None\n\n");
+        SDL_IOprintf(fff, "%s", ui_text("Current Oath: None\n\n"));
     }
 
     /* Display tale oath status */
-    SDL_IOprintf(fff, "Tale Oath Status:\n");
+    SDL_IOprintf(fff, "%s", ui_text("Tale Oath Status:\n"));
 
     /* Check unlocked oaths */
     bool has_unlocked = false;
     if (oath_unlocked(OATH_MERCY))
     {
-        SDL_IOprintf(fff, "  Oath of Mercy: Unlocked");
+        SDL_IOprintf(fff, "%s", ui_text("  Oath of Mercy: Unlocked"));
         if (oath_banned(OATH_MERCY))
-            SDL_IOprintf(fff, " (Banned in this tale)");
+            SDL_IOprintf(fff, "%s", ui_text(" (Banned in this tale)"));
         SDL_IOprintf(fff, "\n");
         has_unlocked = true;
     }
 
     if (oath_unlocked(OATH_SILENCE))
     {
-        SDL_IOprintf(fff, "  Oath of Silence: Unlocked");
+        SDL_IOprintf(fff, "%s", ui_text("  Oath of Silence: Unlocked"));
         if (oath_banned(OATH_SILENCE))
-            SDL_IOprintf(fff, " (Banned in this tale)");
+            SDL_IOprintf(fff, "%s", ui_text(" (Banned in this tale)"));
         SDL_IOprintf(fff, "\n");
         has_unlocked = true;
     }
 
     if (oath_unlocked(OATH_IRON))
     {
-        SDL_IOprintf(fff, "  Oath of Iron: Unlocked");
+        SDL_IOprintf(fff, "%s", ui_text("  Oath of Iron: Unlocked"));
         if (oath_banned(OATH_IRON))
-            SDL_IOprintf(fff, " (Banned in this tale)");
+            SDL_IOprintf(fff, "%s", ui_text(" (Banned in this tale)"));
         SDL_IOprintf(fff, "\n");
         has_unlocked = true;
     }
 
     if (oath_unlocked(OATH_SMITH))
     {
-        SDL_IOprintf(fff, "  Oath of the Smith: Unlocked");
+        SDL_IOprintf(fff, "%s", ui_text("  Oath of the Smith: Unlocked"));
         if (oath_banned(OATH_SMITH))
-            SDL_IOprintf(fff, " (Banned in this tale)");
+            SDL_IOprintf(fff, "%s", ui_text(" (Banned in this tale)"));
         SDL_IOprintf(fff, "\n");
         has_unlocked = true;
     }
 
     if (oath_unlocked(OATH_VALOROUS))
     {
-        SDL_IOprintf(fff, "  Oath of Valorous Heart: Unlocked");
+        SDL_IOprintf(fff, "%s", ui_text("  Oath of Valorous Heart: Unlocked"));
         if (oath_banned(OATH_VALOROUS))
-            SDL_IOprintf(fff, " (Banned in this tale)");
+            SDL_IOprintf(fff, "%s", ui_text(" (Banned in this tale)"));
         SDL_IOprintf(fff, "\n");
         has_unlocked = true;
     }
 
     if (!has_unlocked)
     {
-        SDL_IOprintf(fff, "  No oaths unlocked yet.\n");
-        SDL_IOprintf(fff, "  Complete Valar quests to unlock new oaths.\n");
+        SDL_IOprintf(fff, "%s", ui_text("  No oaths unlocked yet.\n"));
+        SDL_IOprintf(fff, "%s", ui_text("  Complete Valar quests to unlock new oaths.\n"));
     }
 
     /* Close the file */
     sdl_fclose(fff);
 
     /* Display the file contents */
-    show_file(file_name, "Oath Status", 0);
+    show_file(file_name, ui_text("Oath Status"), 0);
 
     /* Remove the file */
     fd_kill(file_name);
@@ -1140,47 +1141,47 @@ static void describe_supply_group_status(int group_idx, int term_wid,
     case SUPPLY_GROUP_HERBS:
         weight = supply_group_uniform_weight(group_idx);
         if (weight >= 0)
-            strnfmt(buf, len, "All herbs weigh %d.%1d lb each.",
+            strnfmt(buf, len, ui_text("All herbs weigh %d.%1d lb each."),
                 weight / 10, weight % 10);
         break;
     case SUPPLY_GROUP_FOOD:
-        SDL_strlcpy(buf, "Food weight varies; each row shows per-item weight.",
+        SDL_strlcpy(buf, ui_text("Food weight varies; each row shows per-item weight."),
             len);
         break;
     case SUPPLY_GROUP_POTIONS:
         weight = supply_group_uniform_weight(group_idx);
         if (weight >= 0)
-            strnfmt(buf, len, "All potions weigh %d.%1d lb each.",
+            strnfmt(buf, len, ui_text("All potions weigh %d.%1d lb each."),
                 weight / 10, weight % 10);
         break;
     case SUPPLY_GROUP_GEMS:
         weight = supply_group_uniform_weight(group_idx);
         if (weight >= 0)
-            strnfmt(buf, len, "All gems weigh %d.%1d lb each.",
+            strnfmt(buf, len, ui_text("All gems weigh %d.%1d lb each."),
                 weight / 10, weight % 10);
         break;
     case SUPPLY_GROUP_LIGHTS:
         SDL_strlcpy(buf,
-            "Oil slots: lamp 2, flask 1 (max 4).",
+            ui_text("Oil slots: lamp 2, flask 1 (max 4)."),
             len);
         break;
     case SUPPLY_GROUP_JEWELRY:
         SDL_strlcpy(buf,
-            "Jewelry Pouch: rings and amulets.", len);
+            ui_text("Jewelry Pouch: rings and amulets."), len);
         break;
     case SUPPLY_GROUP_SUPPLY:
         SDL_strlcpy(buf,
-            "All supply-cache entries. Press a listed letter to use that item.",
+            ui_text("All supply-cache entries. Press a listed letter to use that item."),
             len);
         break;
     case SUPPLY_GROUP_JEWELRY_PRESETS:
         if (term_wid <= 42)
-            SDL_strlcpy(buf, "s save, n name, u equip, c clear", len);
+            SDL_strlcpy(buf, ui_text("s save, n name, u equip, c clear"), len);
         else if (term_wid <= 62)
-            SDL_strlcpy(buf, "s save, n name, u equip, c clear, Alt+1-5", len);
+            SDL_strlcpy(buf, ui_text("s save, n name, u equip, c clear, Alt+1-5"), len);
         else
             SDL_strlcpy(buf,
-                "Use s to save, n to name, u or Alt+1-5 to equip, c to clear.",
+                ui_text("Use s to save, n to name, u or Alt+1-5 to equip, c to clear."),
                 len);
         break;
     default:
@@ -1202,7 +1203,7 @@ static void build_supply_weight_summary(char* buf, size_t buflen, int term_wid,
         term_wid = 80;
 
     strnfmt(temp, sizeof(temp),
-        "Supply: %d.%1d/%d.%1d lb  Light: %d.%1d lb (%d.%1d items + %d.%1d oil)  Oil: %d/%d  Slots: %d/%d",
+        ui_text("Supply: %d.%1d/%d.%1d lb  Light: %d.%1d lb (%d.%1d items + %d.%1d oil)  Oil: %d/%d  Slots: %d/%d"),
         used_weight / 10, used_weight % 10,
         max_weight / 10, max_weight % 10,
         light_weight / 10, light_weight % 10,
@@ -1216,7 +1217,7 @@ static void build_supply_weight_summary(char* buf, size_t buflen, int term_wid,
     }
 
     strnfmt(temp, sizeof(temp),
-        "Sup %d.%1d/%d.%1d lb  Lgt %d.%1d lb (%d.%1d itm + %d.%1d oil)  Oil %d/%d  Slots %d/%d",
+        ui_text("Sup %d.%1d/%d.%1d lb  Lgt %d.%1d lb (%d.%1d itm + %d.%1d oil)  Oil %d/%d  Slots %d/%d"),
         used_weight / 10, used_weight % 10,
         max_weight / 10, max_weight % 10,
         light_weight / 10, light_weight % 10,
@@ -1230,7 +1231,7 @@ static void build_supply_weight_summary(char* buf, size_t buflen, int term_wid,
     }
 
     strnfmt(temp, sizeof(temp),
-        "Sup %d.%1d/%d.%1d  Lgt %d.%1d (%d.%1d+%d.%1d)  Oil %d/%d  Sl %d/%d",
+        ui_text("Sup %d.%1d/%d.%1d  Lgt %d.%1d (%d.%1d+%d.%1d)  Oil %d/%d  Sl %d/%d"),
         used_weight / 10, used_weight % 10,
         max_weight / 10, max_weight % 10,
         light_weight / 10, light_weight % 10,
@@ -1243,7 +1244,7 @@ static void build_supply_weight_summary(char* buf, size_t buflen, int term_wid,
         return;
     }
 
-    strnfmt(temp, sizeof(temp), "Sup %d.%1d/%d.%1d  Lgt %d.%1d  Oil %d/%d",
+    strnfmt(temp, sizeof(temp), ui_text("Sup %d.%1d/%d.%1d  Lgt %d.%1d  Oil %d/%d"),
         used_weight / 10, used_weight % 10,
         max_weight / 10, max_weight % 10,
         light_weight / 10, light_weight % 10,
@@ -1453,7 +1454,7 @@ static bool supply_entry_compact_flavorless_name(char* buf, size_t buflen,
     supply_strip_compact_kind_word(buf, buflen);
 
     if (object_tried_p(o_ptr))
-        SDL_strlcat(buf, " {tried}", buflen);
+        SDL_strlcat(buf, ui_text(" {tried}"), buflen);
 
     return true;
 }
@@ -1487,12 +1488,12 @@ static void supply_entry_display_name(char* buf, size_t buflen,
     {
         strip_supply_light_turns_suffix(buf);
         if (entry->equipped)
-            SDL_strlcat(buf, " [equipped]", buflen);
+            SDL_strlcat(buf, ui_text(" [equipped]"), buflen);
     }
     else if (current_group == SUPPLY_GROUP_JEWELRY)
     {
         if (entry->equipped)
-            SDL_strlcat(buf, " [equipped]", buflen);
+            SDL_strlcat(buf, ui_text(" [equipped]"), buflen);
     }
 }
 
@@ -1557,9 +1558,9 @@ static void jewelry_preset_summary(char* buf, size_t buflen, int preset)
     if (!jewelry_preset_is_set(preset))
     {
         if (name && name[0])
-            strnfmt(buf, buflen, "%s: <empty>", name);
+            strnfmt(buf, buflen, ui_text("%s: <empty>"), name);
         else
-            SDL_strlcpy(buf, "<empty>", buflen);
+            SDL_strlcpy(buf, ui_text("<empty>"), buflen);
         return;
     }
 
@@ -1584,10 +1585,10 @@ static void jewelry_preset_display_label(char* buf, size_t buflen, int preset)
     if (name && name[0])
         strnfmt(buf, buflen, "%d %s", preset + 1, name);
     else
-        strnfmt(buf, buflen, "Set %d", preset + 1);
+        strnfmt(buf, buflen, ui_text("Set %d"), preset + 1);
 
     if (jewelry_preset_is_equipped(preset))
-        SDL_strlcat(buf, " [equipped]", buflen);
+        SDL_strlcat(buf, ui_text(" [equipped]"), buflen);
 }
 
 static bool jewelry_preset_prompt_name(int preset)
@@ -1600,7 +1601,7 @@ static bool jewelry_preset_prompt_name(int preset)
         return false;
 
     SDL_strlcpy(name, jewelry_preset_name(preset), sizeof(name));
-    if (!term_get_string("Jewelry set name: ", name, sizeof(name) - 1))
+    if (!term_get_string(ui_text("Jewelry set name: "), name, sizeof(name) - 1))
         return false;
 
     start = name;
@@ -1681,7 +1682,7 @@ static void jewelry_preset_display_line(char* buf, size_t buflen, int preset,
     if (!jewelry_preset_is_set(preset))
     {
         if (line == 0)
-            SDL_strlcpy(buf, "<empty>", buflen);
+            SDL_strlcpy(buf, ui_text("<empty>"), buflen);
         return;
     }
 
@@ -3067,9 +3068,9 @@ static void supply_entry_append_metadata(const supply_list_entry* entry,
     {
         size_t used = strlen(metadata);
         if (turns >= 0)
-            strnfcat(metadata, sizeof(metadata), &used, " | %d turns", turns);
+            strnfcat(metadata, sizeof(metadata), &used, ui_text(" | %d turns"), turns);
         else if (turns == -1)
-            strnfcat(metadata, sizeof(metadata), &used, " | infinite turns");
+            strnfcat(metadata, sizeof(metadata), &used, ui_text(" | infinite turns"));
     }
     SDL_strlcat(text, metadata, text_len);
 }
@@ -3114,7 +3115,7 @@ static bool supply_entry_wrapped_values(
         (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
         label_prefix, name);
     if (entry->floor_idx > 0 && entry->floor_idx < o_max)
-        SDL_strlcat(display_name, " [floor]", display_name_len);
+        SDL_strlcat(display_name, ui_text(" [floor]"), display_name_len);
     if (get_sdl_menu_bigger_font() && layout->term_wid < 55)
         supply_entry_append_metadata(entry, o_ptr, current_group,
             display_name, display_name_len);
@@ -3129,7 +3130,7 @@ static bool supply_entry_wrapped_values(
             (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
             label_prefix, name);
         if (entry->floor_idx > 0 && entry->floor_idx < o_max)
-            SDL_strlcat(display_name, " [floor]", display_name_len);
+            SDL_strlcat(display_name, ui_text(" [floor]"), display_name_len);
         if (get_sdl_menu_bigger_font() && layout->term_wid < 55)
             supply_entry_append_metadata(entry, o_ptr, current_group,
                 display_name, display_name_len);
@@ -3446,7 +3447,7 @@ static int display_supply_list_wrapped(
             else if (turns == -2)
                 strnfmt(cell_buf, sizeof(cell_buf), "%5s", "");
             else
-                strnfmt(cell_buf, sizeof(cell_buf), "%5s", "inf");
+                strnfmt(cell_buf, sizeof(cell_buf), "%5s", ui_text("inf"));
             Term_putstr(cols->turns_col, row + used_rows, 5, base_attr,
                 cell_buf);
         }
@@ -3685,7 +3686,7 @@ static int display_supply_list(const knowledge_browser_layout* layout, int row,
             (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
             label_prefix, name);
         if (entry->floor_idx > 0 && entry->floor_idx < o_max)
-            SDL_strlcat(display_name, " [floor]", sizeof(display_name));
+            SDL_strlcat(display_name, ui_text(" [floor]"), sizeof(display_name));
         if (selected)
         {
             int selection_w = supply_browser_selection_width(layout->list_col,
@@ -3713,7 +3714,7 @@ static int display_supply_list(const knowledge_browser_layout* layout, int row,
             else if (turns == -2)
                 strnfmt(cell_buf, sizeof(cell_buf), "%5s", "");
             else
-                strnfmt(cell_buf, sizeof(cell_buf), "%5s", "inf");
+                strnfmt(cell_buf, sizeof(cell_buf), "%5s", ui_text("inf"));
             Term_putstr(cols->turns_col, y, 5, base_attr, cell_buf);
         }
 
@@ -3846,13 +3847,13 @@ static cptr supply_browser_page_text(int page)
     switch (page)
     {
     case SUPPLY_MENU_PAGE_EQUIPPED:
-        return "Equipped";
+        return ui_text("Equipped");
     case SUPPLY_MENU_PAGE_INVENTORY:
-        return "Inventory";
+        return ui_text("Inventory");
     case SUPPLY_MENU_PAGE_JEWELRY:
-        return "Jewelry";
+        return ui_text("Jewelry");
     case SUPPLY_MENU_PAGE_SUPPLIES:
-        return "Supplies";
+        return ui_text("Supplies");
     default:
         return "";
     }
@@ -3886,7 +3887,7 @@ static void supply_draw_category_return(const knowledge_browser_layout* layout,
         return;
     Term_erase(0, first_row, 255);
     supply_put_fitted(0, first_row, layout->term_wid, TERM_L_BLUE,
-        slots ? "< Slots" : "< Categories");
+        slots ? ui_text("< Slots") : ui_text("< Categories"));
     /* Two existing header rows give a 48dp target at a 24dp body font. */
     for (int row = first_row; row <= last_row; ++row)
         ui_menu_click_add(SUPPLY_CLICK_CATEGORY_RETURN, 0, row,
@@ -3949,7 +3950,7 @@ static bool supply_page_header_uses_wrapped_title(
 
 static bool supply_page_tabs_need_paging(const knowledge_browser_layout* layout)
 {
-    return layout && (get_sdl_menu_bigger_font() || sdl_handheld_ui_active())
+    return layout
         && supply_browser_page_tab_col(SUPPLY_MENU_PAGE_SUPPLIES)
             + supply_browser_page_token_width(SUPPLY_MENU_PAGE_SUPPLIES)
         > layout->term_wid;
@@ -3999,19 +4000,19 @@ static void supply_draw_page_summary(const knowledge_browser_layout* layout,
     {
         if (streq(text, "Pack, Harness, Quiver, and Jewelry Pouch items, equipment, and floor finds"))
         {
-            text = "Pack, Harness, Quiver, Jewelry; equipment and floor finds";
+            text = ui_text("Pack, Harness, Quiver, Jewelry; equipment and floor finds");
             if (!supply_page_summary_fits(text, layout->term_wid, rows))
-                text = "Pack, Harness, Quiver, Jewelry";
+                text = ui_text("Pack, Harness, Quiver, Jewelry");
             mobile_summary = true;
         }
         else if (streq(text, "All equipped shows active gear; slots include available items"))
         {
-            text = "Active gear; slots include available items";
+            text = ui_text("Active gear; slots include available items");
             mobile_summary = true;
         }
         else if (streq(text, "Browse jewelry and save or name equipment sets"))
         {
-            text = "Pouch and saved sets";
+            text = ui_text("Pouch and saved sets");
             mobile_summary = true;
         }
         /* Category/slot names remain in the browser list when a compact
@@ -4026,7 +4027,7 @@ static void supply_draw_page_summary(const knowledge_browser_layout* layout,
     {
         return;
     }
-    supply_put_wrapped(0, row, layout->term_wid, rows, attr, text);
+    supply_put_wrapped(0, row, layout->term_wid, rows, attr, ui_text(text));
 }
 
 static void supply_draw_page_header(const knowledge_browser_layout* layout,
@@ -4081,14 +4082,14 @@ static void supply_draw_page_header(const knowledge_browser_layout* layout,
     if (title && title[0] && supply_page_header_uses_wrapped_title(layout))
     {
         supply_put_wrapped(0, layout->tabs_row, layout->term_wid, 2,
-            TERM_L_WHITE + TERM_SHADE, title);
+            TERM_L_WHITE + TERM_SHADE, ui_text(title));
     }
     else if (title && title[0] && col + 3 < layout->term_wid)
     {
         Term_putstr(col, layout->title_row, 3, TERM_L_DARK, " - ");
         col += 3;
         supply_put_fitted(col, layout->title_row, layout->term_wid - col,
-            TERM_L_WHITE + TERM_SHADE, title);
+            TERM_L_WHITE + TERM_SHADE, ui_text(title));
     }
 }
 
@@ -4316,45 +4317,45 @@ static cptr equipment_slot_text(int slot)
     switch (slot)
     {
     case EQUIPMENT_MENU_ALL:
-        return "All equipped";
+        return ui_text("All equipped");
     case INVEN_WIELD:
-        return "Weapon";
+        return ui_text("Weapon");
     case INVEN_BOW:
         return "Bow";
     case INVEN_STAFF:
-        return "Walking staff";
+        return ui_text("Walking staff");
     case EQUIPMENT_MENU_RINGS:
-        return "Rings";
+        return ui_text("Rings");
     case INVEN_NECK:
-        return "Amulet";
+        return ui_text("Amulet");
     case INVEN_LITE:
-        return "Light";
+        return ui_text("Light");
     case INVEN_BODY:
-        return "Body armour";
+        return ui_text("Body armour");
     case INVEN_OUTER:
-        return "Cloak";
+        return ui_text("Cloak");
     case INVEN_ARM:
-        return "Off-hand";
+        return ui_text("Off-hand");
     case INVEN_HEAD:
-        return "Head";
+        return ui_text("Head");
     case INVEN_HANDS:
-        return "Hands";
+        return ui_text("Hands");
     case INVEN_FEET:
-        return "Feet";
+        return ui_text("Feet");
     case EQUIPMENT_MENU_QUIVERS:
-        return "Quiver";
+        return ui_text("Quiver");
     case INVEN_HORN:
         return "Horn";
     case INVEN_LEFT:
-        return "Left ring";
+        return ui_text("Left ring");
     case INVEN_RIGHT:
-        return "Right ring";
+        return ui_text("Right ring");
     case INVEN_QUIVER1:
-        return "Quiver";
+        return ui_text("Quiver");
     case INVEN_BELT:
-        return "Belt";
+        return ui_text("Belt");
     default:
-        return "Slot";
+        return ui_text("Slot");
     }
 }
 
@@ -4393,11 +4394,11 @@ static cptr equipment_slot_browser_text(int slot)
     switch (slot)
     {
     case EQUIPMENT_MENU_ALL:
-        return "All";
+        return ui_text("All");
     case INVEN_STAFF:
-        return "Staff";
+        return ui_text("Staff");
     case INVEN_BODY:
-        return "Armour";
+        return ui_text("Armour");
     default:
         return equipment_slot_text(slot);
     }
@@ -4409,17 +4410,17 @@ static cptr equipment_slot_where_text(int slot)
     switch (slot)
     {
     case INVEN_STAFF:
-        return "Staff";
+        return ui_text("Staff");
     case INVEN_LEFT:
-        return "L ring";
+        return ui_text("L ring");
     case INVEN_RIGHT:
-        return "R ring";
+        return ui_text("R ring");
     case INVEN_BODY:
-        return "Armour";
+        return ui_text("Armour");
     case INVEN_QUIVER1:
-        return "Quiver";
+        return ui_text("Quiver");
     case INVEN_BELT:
-        return "Belt";
+        return ui_text("Belt");
     default:
         return equipment_slot_text(slot);
     }
@@ -4602,7 +4603,7 @@ static cptr equipment_entry_active_action_text(
     const equipment_list_entry* entry)
 {
     return equipment_entry_is_active_combat(entry)
-        ? "Change setup" : "Make active";
+        ? ui_text("Change setup") : ui_text("Make active");
 }
 
 /* In the Off-hand category, loose candidates still equip into that hand.
@@ -4629,7 +4630,7 @@ static cptr equipment_entry_broken_stored_action_text(
     const equipment_list_entry* entry)
 {
     return object_can_choose_pack_or_harness(equipment_entry_object(entry))
-        ? "Store in Pack" : "Repair first";
+        ? ui_text("Store in Pack") : ui_text("Repair first");
 }
 
 static bool equipment_entry_is_quiver_arrow(
@@ -5172,7 +5173,7 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
     if (entry->placeholder != EQUIPMENT_ENTRY_PLACEHOLDER_NONE)
     {
         cptr name = inventory_limit_group_name(entry->limit_group);
-        return (name && name[0]) ? name : "Limit";
+        return ui_text((name && name[0]) ? name : "Limit");
     }
 
     if (entry->equip_idx >= INVEN_WIELD && entry->equip_idx < INVEN_TOTAL)
@@ -5180,11 +5181,11 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         if (!entry->equipped
             && equipment_slot_is_inactive_harness_item(entry->equip_idx))
         {
-            return "Harness (stored)";
+            return ui_text("Harness (stored)");
         }
         if (equipment_entry_is_active_combat(entry)
             && !sdl_mobile_portrait_layout_active())
-            return "Active";
+            return ui_text("Active");
         return equipment_slot_where_text(entry->equip_idx);
     }
 
@@ -5193,8 +5194,8 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
     {
         return entry->equipped
             ? (sdl_mobile_portrait_layout_active()
-                  ? "Quiver\n[active]" : "Quiver [active]")
-            : "Quiver";
+                  ? ui_text("Quiver\n[active]") : ui_text("Quiver [active]"))
+            : ui_text("Quiver");
     }
 
     if (entry->equipped)
@@ -5202,13 +5203,13 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         if (player_inventory_handle_is_carried(entry->item_idx)
             && inventory_slot_is_quivered_arrow(entry->item_idx))
         {
-            return "Quiver";
+            return ui_text("Quiver");
         }
-        return "Equipped";
+        return ui_text("Equipped");
     }
 
     if (entry->supply_idx >= 0)
-        return "Supply";
+        return ui_text("Supply");
 
     if (player_inventory_handle_is_carried(entry->item_idx))
     {
@@ -5216,8 +5217,7 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
         cptr group_name = inventory_limit_group_name(
             inventory_limit_group_for_object(o_ptr));
 
-        if (!group_name || !group_name[0])
-            group_name = "Pack";
+        group_name = ui_text((group_name && group_name[0]) ? group_name : "Pack");
         if (buf && buflen > 0)
             strnfmt(buf, buflen, "%s %c", group_name,
                 player_inventory_label(entry->item_idx));
@@ -5228,10 +5228,10 @@ static cptr equipment_entry_source_text(const equipment_list_entry* entry,
     {
         if (buf && buflen > 0)
         {
-            strnfmt(buf, buflen, "Floor");
+            strnfmt(buf, buflen, ui_text("Floor"));
             return buf;
         }
-        return "Floor";
+        return ui_text("Floor");
     }
 
     return "";
@@ -5302,8 +5302,11 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
 
     if (show_source && entries)
     {
-        int max_source_w = list_right - cols->name_col - min_name_w;
-        int width = (int)strlen("Where");
+        /* Keep long translated slot names from hiding item names. Source
+         * text can wrap within its column when there is room. */
+        int entry_width = list_right - cols->name_col;
+        int max_source_w = MIN(entry_width - min_name_w, entry_width / 3);
+        int width = (int)strlen(ui_text("Where"));
 
         for (int idx = 0; idx < entry_cnt; idx++)
         {
@@ -5327,7 +5330,7 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
             }
         }
 
-        if (max_source_w >= (int)strlen("Where"))
+        if (max_source_w >= (int)strlen(ui_text("Where")))
         {
             cols->show_source = true;
             cols->source_w = MIN(width, max_source_w);
@@ -5372,45 +5375,28 @@ static void equipment_entry_init_columns(const knowledge_browser_layout* layout,
         cols->name_w = 1;
 }
 
-static int equipment_entry_wrap_take(cptr text, int max_bytes, int max_cols)
+static int equipment_entry_wrap_take(cptr text, int text_bytes, int width)
 {
     int bytes = 0;
-    int cols = 0;
     int last_space = -1;
 
-    if (!text || max_bytes <= 0 || max_cols <= 0)
-        return 0;
-
-    while (bytes < max_bytes && text[bytes] && text[bytes] != '\n')
+    /* The terminal allocates a grid cell per UTF-8 byte. Wrap on that
+     * same limit so drawing the line cannot discard words before advancing. */
+    while (bytes < width && bytes < text_bytes && text[bytes] != '\n')
     {
-        unsigned char ch = (unsigned char)text[bytes];
-        int remaining = max_bytes - bytes;
-        int char_len = utf8_sequence_len_n(text + bytes, remaining);
-        int char_width;
+        int char_len = utf8_sequence_len_n(text + bytes, text_bytes - bytes);
 
-        if (char_len <= 0 || char_len > remaining)
+        if (char_len <= 0 || bytes + char_len > width)
             break;
-
-        char_width = utf8_display_width_n(text + bytes, char_len);
-        if (char_width > 0 && cols + char_width > max_cols)
-            break;
-        if (ch == ' ' || ch == '\t')
+        if (text[bytes] == ' ' || text[bytes] == '\t')
             last_space = bytes;
-
-        cols += char_width;
         bytes += char_len;
-        if (cols >= max_cols)
-            break;
     }
 
-    if (bytes >= max_bytes || text[bytes] == '\0' || text[bytes] == '\n')
+    if (bytes == text_bytes || text[bytes] == '\n'
+        || text[bytes] == ' ' || text[bytes] == '\t')
         return bytes;
-    if (last_space > 0)
-        return last_space;
-    if (bytes > 0)
-        return bytes;
-
-    return utf8_sequence_len_n(text, max_bytes);
+    return last_space > 0 ? last_space : bytes;
 }
 
 static bool equipment_entry_wrap_next(cptr* cursor, int width, char* line,
@@ -5435,6 +5421,8 @@ static bool equipment_entry_wrap_next(cptr* cursor, int width, char* line,
     }
 
     remaining = (int)strlen(p);
+    if ((size_t)width >= line_len)
+        width = (int)line_len - 1;
     take = equipment_entry_wrap_take(p, remaining, width);
     if (take <= 0)
         return false;
@@ -5445,10 +5433,6 @@ static bool equipment_entry_wrap_next(cptr* cursor, int width, char* line,
     {
         copy_len--;
     }
-    copy_len = utf8_safe_prefix_len(p, copy_len);
-    if (copy_len >= (int)line_len)
-        copy_len = utf8_safe_prefix_len(p, (int)line_len - 1);
-
     SDL_memcpy(line, p, (size_t)copy_len);
     line[copy_len] = '\0';
     p += take;
@@ -5521,8 +5505,8 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
     {
         cptr placeholder_text =
             (entry->placeholder == EQUIPMENT_ENTRY_PLACEHOLDER_RESERVED)
-                ? "(reserved)"
-                : "(empty space)";
+                ? ui_text("(reserved)")
+                : ui_text("(empty space)");
 
         *base_attr = TERM_L_DARK;
         strnfmt(display_name, display_name_len, "%s%s", label_prefix,
@@ -5542,12 +5526,12 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
                 || hand_and_a_half_bonus(&inventory[INVEN_WIELD])))
         {
             strnfmt(display_name, display_name_len,
-                "%s(used by two-handed weapon)", label_prefix);
+                ui_text("%s(used by two-handed weapon)"), label_prefix);
         }
         else if (show_source)
-            strnfmt(display_name, display_name_len, "%s(empty)", label_prefix);
+            strnfmt(display_name, display_name_len, ui_text("%s(empty)"), label_prefix);
         else
-            strnfmt(display_name, display_name_len, "%s(empty) %s",
+            strnfmt(display_name, display_name_len, ui_text("%s(empty) %s"),
                 label_prefix, equipment_slot_text(entry->equip_idx));
         return true;
     }
@@ -5574,16 +5558,16 @@ static bool equipment_entry_display_values(equipment_list_entry* entry,
                 && equipment_entry_is_active_combat(entry))))
         SDL_strlcat(name, equipment_entry_is_active_combat(entry)
             ? (sdl_mobile_portrait_layout_active()
-                  ? "\n[active]" : " [active]")
-            : " [equipped]", sizeof(name));
+                  ? ui_text("\n[active]") : ui_text(" [active]"))
+            : ui_text(" [equipped]"), sizeof(name));
     else if (!show_source && entry->equip_idx >= INVEN_WIELD
         && entry->equip_idx < INVEN_TOTAL
         && equipment_slot_is_inactive_harness_item(entry->equip_idx))
     {
-        SDL_strlcat(name, " [stored on Harness]", sizeof(name));
+        SDL_strlcat(name, ui_text(" [stored on Harness]"), sizeof(name));
     }
     else if (entry->floor_idx > 0 && entry->floor_idx < o_max && !show_source)
-        SDL_strlcat(name, " [floor]", sizeof(name));
+        SDL_strlcat(name, ui_text(" [floor]"), sizeof(name));
     /* Keep the floor shortcut visible alongside the ordinary letter hotkey. */
     strnfmt(display_name, display_name_len, "%s%s%s",
         (entry->floor_idx > 0 && entry->floor_idx < o_max) ? "-) " : "",
@@ -5907,7 +5891,7 @@ static int display_equipment_slot_entries_wrapped(
 
     if (entry_cnt == 0 && available_rows > 0)
         supply_put_fitted(layout->list_col, row, layout->list_w, TERM_L_DARK,
-            "(nothing available)");
+            ui_text("(nothing available)"));
 
     if (rendered_rows)
         *rendered_rows = used_rows;
@@ -6001,7 +5985,7 @@ static bool equipment_menu_show_entry_description(equipment_list_entry* entry,
     {
         if (!overlay)
         {
-            bell("Nothing to recall.");
+            bell(ui_text("Nothing to recall."));
             msg_print("Nothing to recall.");
         }
         return false;
@@ -6024,7 +6008,7 @@ static bool equipment_menu_show_entry_description(equipment_list_entry* entry,
         object_type* floor_ptr;
 
         strnfmt(heading_texts[count], sizeof(heading_texts[count]),
-            "Selected item");
+            ui_text("Selected item"));
         headings[count] = heading_texts[count];
         objects[count++] = o_ptr;
 
@@ -6047,7 +6031,7 @@ static bool equipment_menu_show_entry_description(equipment_list_entry* entry,
         if (floor_ptr && count < 3)
         {
             strnfmt(heading_texts[count], sizeof(heading_texts[count]),
-                "On floor");
+                ui_text("On floor"));
             headings[count] = heading_texts[count];
             objects[count++] = floor_ptr;
         }
@@ -6120,9 +6104,9 @@ static cptr floor_touch_action_text(supply_floor_action floor_action,
     case SUPPLY_FLOOR_ACTION_DEFAULT:
     default:
         if (object_can_choose_pack_or_harness(o_ptr))
-            return "Harness";
+            return ui_text("Harness");
         if (object_can_store_directly_in_pack(o_ptr))
-            return "Pack";
+            return ui_text("Pack");
         return "Pick up";
     }
 }
@@ -6185,7 +6169,7 @@ static bool equipment_use_broken_stored_item(equipment_list_entry* entry)
         msg_print("This item is already on your Harness. Repair it before equipping it.");
         return false;
     }
-    if (!confirm_equipment_entry_action("Store in Pack", entry))
+    if (!confirm_equipment_entry_action(ui_text("Store in Pack"), entry))
         return false;
     return do_cmd_move_item_to_storage(entry->equip_idx, OBJECT_STORAGE_PACK);
 }
@@ -6236,11 +6220,21 @@ static cptr equipment_menu_use_action_text(const equipment_list_entry* entry,
         return browser_item_use_action_text(&inventory[entry->equip_idx],
             entry->equip_idx);
     if (entry->item_idx >= QUIVER_INDEX && entry->item_idx < QUIVER_INDEX_END)
-        return entry->equipped ? "Remove" : "Make active";
+        return entry->equipped ? "Remove" : ui_text("Make active");
     obj = equipment_entry_object(entry);
     if (!obj || !obj->k_idx)
         return "Use";
-    return selected_slot == EQUIPMENT_MENU_QUIVERS ? "Quiver" : "Equip";
+    return selected_slot == EQUIPMENT_MENU_QUIVERS ? ui_text("Quiver") : "Equip";
+}
+
+static void supply_copy_prompt_action(char* buffer, size_t size, cptr label)
+{
+    int len = utf8_safe_prefix_len(label, (int)MIN(strlen(label), size - 1));
+
+    memcpy(buffer, label, (size_t)len);
+    buffer[len] = '\0';
+    if ((unsigned char)buffer[0] < 0x80)
+        buffer[0] = (char)tolower((unsigned char)buffer[0]);
 }
 
 static bool equipment_menu_use_entry(equipment_list_entry* entry,
@@ -6256,7 +6250,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         bool acted;
         cptr action = (selected_slot == EQUIPMENT_MENU_QUIVERS
                 && floor_action == SUPPLY_FLOOR_ACTION_WIELD)
-            ? "Quiver"
+            ? ui_text("Quiver")
             : floor_touch_action_text(floor_action,
                 &o_list[entry->floor_idx], entry->floor_idx);
 
@@ -6299,7 +6293,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
     {
         if (!confirm_equipment_entry_action(
                 selected_slot == EQUIPMENT_MENU_QUIVERS
-                    ? "Quiver" : "Equip", entry))
+                    ? ui_text("Quiver") : "Equip", entry))
         {
             return false;
         }
@@ -6329,7 +6323,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
         }
         if (!confirm_equipment_entry_action(
                 selected_slot == EQUIPMENT_MENU_QUIVERS
-                    ? "Quiver" : "Equip", entry))
+                    ? ui_text("Quiver") : "Equip", entry))
         {
             return false;
         }
@@ -6349,7 +6343,7 @@ static bool equipment_menu_use_entry(equipment_list_entry* entry,
     {
         if (!entry->equipped)
         {
-            if (!confirm_equipment_entry_action("Ready", entry))
+            if (!confirm_equipment_entry_action(ui_text("Ready"), entry))
                 return false;
             return player_ready_bow_with_arrow(entry->item_idx);
         }
@@ -6397,8 +6391,8 @@ static bool equipment_menu_drop_entry(equipment_list_entry* entry)
 
         object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
         strnfmt(quantity_prompt, sizeof(quantity_prompt),
-            "Drop how many %s? ", o_name);
-        actual_amt = get_quantity_action(quantity_prompt, "Drop",
+            ui_text("Drop how many %s? "), o_name);
+        actual_amt = get_quantity_action(quantity_prompt, ui_text("Drop"),
             o_ptr->number);
 
         if (actual_amt <= 0)
@@ -6431,15 +6425,15 @@ static cptr inventory_browser_group_text(inventory_menu_group group)
     switch (group)
     {
     case INVENTORY_MENU_GROUP_ALL:
-        return "All inventory";
+        return ui_text("All inventory");
     case INVENTORY_MENU_GROUP_PACK:
-        return "Pack";
+        return ui_text("Pack");
     case INVENTORY_MENU_GROUP_HARNESS:
-        return "Harness";
+        return ui_text("Harness");
     case INVENTORY_MENU_GROUP_QUIVER:
-        return "Quiver";
+        return ui_text("Quiver");
     case INVENTORY_MENU_GROUP_JEWELRY:
-        return "Jewelry Pouch";
+        return ui_text("Jewelry Pouch");
     default:
         return "";
     }
@@ -6453,7 +6447,7 @@ static cptr inventory_browser_group_label(inventory_menu_group group)
     switch (group)
     {
     case INVENTORY_MENU_GROUP_ALL:
-        return "All";
+        return ui_text("All");
     default:
         return inventory_browser_group_text(group);
     }
@@ -6647,7 +6641,7 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
     buf[0] = '\0';
     if (group == INVENTORY_MENU_GROUP_QUIVER)
     {
-        strnfmt(buf, buflen, "%d/%d arrows (%d free)",
+        strnfmt(buf, buflen, ui_text("%d/%d arrows (%d free)"),
             player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
             player_quiver_arrow_space());
         return;
@@ -6672,13 +6666,13 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
         if (saved > 0)
         {
             strnfmt(buf, buflen,
-                "%d.%d/%d.%d qt (%d.%d qt left; carriage saves %d.%d qt)",
+                ui_text("%d.%d/%d.%d qt (%d.%d qt left; carriage saves %d.%d qt)"),
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 left / 10, left % 10, saved / 10, saved % 10);
         }
         else
         {
-            strnfmt(buf, buflen, "%d.%d/%d.%d qt (%d.%d qt left)",
+            strnfmt(buf, buflen, ui_text("%d.%d/%d.%d qt (%d.%d qt left)"),
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 left / 10, left % 10);
         }
@@ -6690,13 +6684,13 @@ static void inventory_browser_group_limit_status(inventory_menu_group group,
         if (saved > 0)
         {
             strnfmt(buf, buflen,
-                "%d.%d/%d.%d qt (%d.%d qt over; carriage saves %d.%d qt)",
+                ui_text("%d.%d/%d.%d qt (%d.%d qt over; carriage saves %d.%d qt)"),
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 over / 10, over % 10, saved / 10, saved % 10);
         }
         else
         {
-            strnfmt(buf, buflen, "%d.%d/%d.%d qt (%d.%d qt over)",
+            strnfmt(buf, buflen, ui_text("%d.%d/%d.%d qt (%d.%d qt over)"),
                 used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
                 over / 10, over % 10);
         }
@@ -6801,7 +6795,7 @@ static void inventory_browser_section_header(inventory_menu_group group,
 
     if (group == INVENTORY_MENU_GROUP_QUIVER)
     {
-        strnfmt(buf, buflen, "%s (%d): %d/%d arrows; %d free",
+        strnfmt(buf, buflen, ui_text("%s (%d): %d/%d arrows; %d free"),
             inventory_browser_group_text(group), entry_cnt,
             player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
             player_quiver_arrow_space());
@@ -6831,14 +6825,14 @@ static void inventory_browser_section_header(inventory_menu_group group,
     else if (left >= 0 && saved > 0)
     {
         strnfmt(buf, buflen,
-            "%s (%d): %d.%d/%d.%d qt; %d.%d left; carriage saves %d.%d qt",
+            ui_text("%s (%d): %d.%d/%d.%d qt; %d.%d left; carriage saves %d.%d qt"),
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             left / 10, left % 10, saved / 10, saved % 10);
     }
     else if (left >= 0)
     {
-        strnfmt(buf, buflen, "%s (%d): %d.%d/%d.%d qt; %d.%d left",
+        strnfmt(buf, buflen, ui_text("%s (%d): %d.%d/%d.%d qt; %d.%d left"),
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             left / 10, left % 10);
@@ -6848,7 +6842,7 @@ static void inventory_browser_section_header(inventory_menu_group group,
         int over = 0 - left;
 
         strnfmt(buf, buflen,
-            "%s (%d): %d.%d/%d.%d qt; %d.%d over; carriage saves %d.%d qt",
+            ui_text("%s (%d): %d.%d/%d.%d qt; %d.%d over; carriage saves %d.%d qt"),
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             over / 10, over % 10, saved / 10, saved % 10);
@@ -6857,7 +6851,7 @@ static void inventory_browser_section_header(inventory_menu_group group,
     {
         int over = 0 - left;
 
-        strnfmt(buf, buflen, "%s (%d): %d.%d/%d.%d qt; %d.%d over",
+        strnfmt(buf, buflen, ui_text("%s (%d): %d.%d/%d.%d qt; %d.%d over"),
             inventory_browser_group_text(group), entry_cnt,
             used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
             over / 10, over % 10);
@@ -6891,58 +6885,59 @@ static void inventory_browser_group_status(inventory_menu_group group,
                 int remaining = limit - used;
                 int saved = inventory_limit_carriage_savings_for_group(limit_group);
                 strnfmt(buf, buflen,
-                    "Volume %d.%d/%d.%d qt; %d.%d %s",
+                    ui_text("Volume %d.%d/%d.%d qt; %d.%d %s"),
                     used / 10, ABS(used % 10), limit / 10,
                     ABS(limit % 10), ABS(remaining) / 10,
-                    ABS(remaining) % 10, remaining >= 0 ? "left" : "over");
+                    ABS(remaining) % 10, remaining >= 0 ? ui_text("left") : ui_text("over"));
                 size_t used_text = strlen(buf);
                 if (saved > 0)
                     strnfcat(buf, buflen, &used_text,
-                        "\nCarriage saves %d.%d qt", saved / 10, saved % 10);
-                strnfcat(buf, buflen, &used_text, "\nWeight %s", weight);
+                        ui_text("\nCarriage saves %d.%d qt"), saved / 10, saved % 10);
+                strnfcat(buf, buflen, &used_text, ui_text("\nWeight %s"), weight);
                 return;
             }
         }
         if (group == INVENTORY_MENU_GROUP_QUIVER)
-            strnfmt(buf, buflen, "Arrows %d/%d (%d free)\nWeight %s",
+            strnfmt(buf, buflen, ui_text("Arrows %d/%d (%d free)\nWeight %s"),
                 player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
                 player_quiver_arrow_space(), weight);
         else
-            strnfmt(buf, buflen, "%d choice%s\nWeight %s", entry_cnt,
-                entry_cnt == 1 ? "" : "s", weight);
+            strnfmt(buf, buflen, "%s: %d\n%s: %s", ui_text("Choices"), entry_cnt,
+                ui_text("Weight"), weight);
         return;
     }
 
     if (group == INVENTORY_MENU_GROUP_ALL)
     {
-        strnfmt(buf, buflen,
-            "%d choice%s. Weight %s.",
-            entry_cnt, (entry_cnt == 1) ? "" : "s", weight);
+        strnfmt(buf, buflen, "%s: %d. %s: %s.", ui_text("Choices"), entry_cnt,
+            ui_text("Weight"), weight);
         return;
     }
 
     if (group == INVENTORY_MENU_GROUP_QUIVER)
     {
-        strnfmt(buf, buflen,
-            "%s: %d choice%s. Arrows %d/%d (%d free). Weight %s.",
-            inventory_browser_group_text(group), entry_cnt,
-            (entry_cnt == 1) ? "" : "s", player_quiver_arrow_count(),
-            QUIVER_ARROW_CAPACITY, player_quiver_arrow_space(), weight);
+        char quiver[160];
+
+        strnfmt(quiver, sizeof(quiver), ui_text("Quiver: %d/%d arrows (%d free)"),
+            player_quiver_arrow_count(), QUIVER_ARROW_CAPACITY,
+            player_quiver_arrow_space());
+        strnfmt(buf, buflen, "%s: %d. %s. %s: %s.", ui_text("Choices"), entry_cnt,
+            quiver, ui_text("Weight"), weight);
         return;
     }
 
     inventory_browser_group_limit_status(group, limits, sizeof(limits));
     if (limits[0])
     {
-        strnfmt(buf, buflen, "%s: %d choice%s. Volume %s. Weight %s.",
-            inventory_browser_group_text(group), entry_cnt,
-            (entry_cnt == 1) ? "" : "s", limits, weight);
+        strnfmt(buf, buflen, "%s - %s: %d. %s: %s. %s: %s.",
+            inventory_browser_group_text(group), ui_text("Choices"), entry_cnt,
+            ui_text("Volume"), limits, ui_text("Weight"), weight);
     }
     else
     {
-        strnfmt(buf, buflen, "%s: %d choice%s. Weight %s.",
-            inventory_browser_group_text(group), entry_cnt,
-            (entry_cnt == 1) ? "" : "s", weight);
+        strnfmt(buf, buflen, "%s - %s: %d. %s: %s.",
+            inventory_browser_group_text(group), ui_text("Choices"), entry_cnt,
+            ui_text("Weight"), weight);
     }
 }
 
@@ -7799,10 +7794,10 @@ static bool inventory_storage_exchange_overlay_entry(
     if (source_group == INV_LIMIT_NONE || target_group == INV_LIMIT_NONE)
         return false;
 
-    strnfmt(incoming_heading, sizeof(incoming_heading), "Move to %s",
-        inventory_limit_group_name(target_group));
-    strnfmt(outgoing_heading, sizeof(outgoing_heading), "Move to %s",
-        inventory_limit_group_name(source_group));
+    strnfmt(incoming_heading, sizeof(incoming_heading), ui_text("Move to %s"),
+        ui_text(inventory_limit_group_name(target_group)));
+    strnfmt(outgoing_heading, sizeof(outgoing_heading), ui_text("Move to %s"),
+        ui_text(inventory_limit_group_name(source_group)));
     headings[0] = incoming_heading;
     headings[1] = outgoing_heading;
     objects[0] = request->storage_exchange_incoming;
@@ -7837,9 +7832,9 @@ static void inventory_storage_exchange_volume_status(
         && inventory_storage_exchange_possible(request, candidate))
     {
         strnfmt(buf, buflen,
-            "Move the incoming item to %s; the selected item moves to %s.",
-            inventory_limit_group_name(target_group),
-            inventory_limit_group_name(source_group));
+            ui_text("Move the incoming item to %s; the selected item moves to %s."),
+            ui_text(inventory_limit_group_name(target_group)),
+            ui_text(inventory_limit_group_name(source_group)));
     }
     else
     {
@@ -8051,7 +8046,7 @@ static bool inventory_replacement_overlay_entry(
     const supply_menu_request* request, equipment_list_entry* entry)
 {
     const object_type* objects[2];
-    const char* headings[2] = { "Picking up", "What to replace" };
+    const char* headings[2] = { ui_text("Picking up"), ui_text("What to replace") };
     object_type* candidate;
 
     if (!request || !request->replacement_mode
@@ -8130,8 +8125,8 @@ static void inventory_replacement_volume_status(
             if (candidate->number > 1)
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected drops "
-                    "%d and frees %d.%d qt; %d.%d qt still needed.",
+                    ui_text("%s %d.%d/%d.%d qt; incoming %d.%d qt; selected drops "
+                    "%d and frees %d.%d qt; %d.%d qt still needed."),
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, remove_amount, saved / 10, saved % 10,
@@ -8140,8 +8135,8 @@ static void inventory_replacement_volume_status(
             else
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected frees "
-                    "%d.%d qt; %d.%d qt still needed.",
+                    ui_text("%s %d.%d/%d.%d qt; incoming %d.%d qt; selected frees "
+                    "%d.%d qt; %d.%d qt still needed."),
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, saved / 10, saved % 10, remaining / 10,
@@ -8155,8 +8150,8 @@ static void inventory_replacement_volume_status(
             if (candidate->number > 1)
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected drops "
-                    "%d and frees %d.%d qt; %d.%d qt left after replacement.",
+                    ui_text("%s %d.%d/%d.%d qt; incoming %d.%d qt; selected drops "
+                    "%d and frees %d.%d qt; %d.%d qt left after replacement."),
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, remove_amount, saved / 10, saved % 10,
@@ -8165,8 +8160,8 @@ static void inventory_replacement_volume_status(
             else
             {
                 strnfmt(buf, buflen,
-                    "%s %d.%d/%d.%d qt; incoming %d.%d qt; selected frees "
-                    "%d.%d qt; %d.%d qt left after replacement.",
+                    ui_text("%s %d.%d/%d.%d qt; incoming %d.%d qt; selected frees "
+                    "%d.%d qt; %d.%d qt left after replacement."),
                     inventory_browser_group_text(selected_group), used / 10,
                     used % 10, limit / 10, limit % 10, needed / 10,
                     needed % 10, saved / 10, saved % 10, left_after / 10,
@@ -8274,7 +8269,7 @@ static bool inventory_slot_pick_overlay_entry(
     const supply_menu_request* request, equipment_list_entry* entry)
 {
     const object_type* objects[2];
-    const char* headings[2] = { "Placing", "Currently here" };
+    const char* headings[2] = { ui_text("Placing"), ui_text("Currently here") };
     object_type* current;
 
     if (!request || !request->slot_pick_mode || !request->slot_pick_incoming
@@ -8315,7 +8310,7 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
             &o_list[entry->floor_idx], entry->floor_idx);
 
     if (equipment_entry_is_quiver_arrow(entry))
-        return "Pack";
+        return ui_text("Pack");
 
     if (player_inventory_handle_is_carried(entry->item_idx))
     {
@@ -8323,7 +8318,7 @@ static cptr inventory_page_use_action_text(const equipment_list_entry* entry,
         if (object_can_choose_pack_or_harness(o_ptr))
         {
             return inventory_limit_group_for_object(o_ptr) == INV_LIMIT_PACK
-                ? "Move to Harness" : "Store in Pack";
+                ? ui_text("Move to Harness") : ui_text("Store in Pack");
         }
         return browser_item_use_action_text(o_ptr, entry->item_idx);
     }
@@ -8360,9 +8355,9 @@ static void inventory_storage_move_failure_text(const object_type* o_ptr,
     needed = inventory_limit_additional_space_for_object(&moving);
     left = MAX(limit - used, 0);
     strnfmt(buf, buflen,
-        "No room in %s: %d.%d/%d.%d qt used; %d.%d qt left, "
-        "%d.%d qt needed.",
-        inventory_limit_group_name(group), used / 10, ABS(used % 10),
+        ui_text("No room in %s: %d.%d/%d.%d qt used; %d.%d qt left, "
+        "%d.%d qt needed."),
+        ui_text(inventory_limit_group_name(group)), used / 10, ABS(used % 10),
         limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
         needed / 10, ABS(needed % 10));
 }
@@ -8410,7 +8405,7 @@ static bool inventory_page_use_entry(equipment_list_entry* entry,
 
     if (equipment_entry_is_quiver_arrow(entry))
     {
-        if (!confirm_equipment_entry_action("Pack", entry))
+        if (!confirm_equipment_entry_action(ui_text("Pack"), entry))
             return false;
 
         return do_cmd_move_item_to_storage(entry->item_idx,
@@ -8993,15 +8988,15 @@ static cptr knowledge_page_name(int page)
     switch (page)
     {
     case KNOWLEDGE_PAGE_ARTEFACTS:
-        return "Artefacts";
+        return ui_text("Artefacts");
     case KNOWLEDGE_PAGE_OBJECTS:
-        return "Objects";
+        return ui_text("Objects");
     case KNOWLEDGE_PAGE_MONSTERS:
-        return "Monsters";
+        return ui_text("Monsters");
     case KNOWLEDGE_PAGE_CURSES:
-        return "Curses";
+        return ui_text("Curses");
     default:
-        return "Known";
+        return ui_text("Known");
     }
 }
 
@@ -9025,7 +9020,7 @@ static cptr knowledge_tab_label(int page)
     if (page < KNOWLEDGE_PAGE_ARTEFACTS || page > KNOWLEDGE_PAGE_CURSES)
         return "";
 
-    return labels[page];
+    return ui_text(labels[page]);
 }
 
 static void knowledge_init_layout(knowledge_browser_layout* layout,
@@ -9173,8 +9168,9 @@ static void knowledge_draw_frame(const knowledge_browser_layout* layout, int pag
     char page_buf[16];
 
     Term_clear();
+    list_label = ui_text(list_label);
 
-    strnfmt(title, sizeof(title), "Known lore - %s", knowledge_page_name(page));
+    strnfmt(title, sizeof(title), ui_text("Known lore - %s"), knowledge_page_name(page));
     Term_putstr(0, layout->title_row, layout->term_wid, TERM_L_WHITE + TERM_SHADE,
         title);
 
@@ -9192,12 +9188,12 @@ static void knowledge_draw_frame(const knowledge_browser_layout* layout, int pag
     if (has_groups && layout->stacked)
     {
         Term_putstr(layout->group_col, layout->header_row, layout->group_w,
-            TERM_SLATE, "Group");
+            TERM_SLATE, ui_text("Group"));
     }
     else if (has_groups)
     {
         Term_putstr(layout->group_col, layout->header_row, layout->group_w,
-            TERM_SLATE, "Group");
+            TERM_SLATE, ui_text("Group"));
         Term_putstr(layout->list_col, layout->header_row, layout->list_w,
             TERM_SLATE, list_label);
     }
@@ -9263,13 +9259,13 @@ static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
         controller_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
         strnfmt(prompt_full, sizeof(prompt_full),
-            "D-pad move  [%s/%s] page  [%s] recall  [%s] back",
+            ui_text("D-pad move  [%s/%s] page  [%s] recall  [%s] back"),
             prev_label, next_label, confirm_label, back_label);
         strnfmt(prompt_mid, sizeof(prompt_mid),
-            "[%s/%s] page  [%s] recall  [%s] back",
+            ui_text("[%s/%s] page  [%s] recall  [%s] back"),
             prev_label, next_label, confirm_label, back_label);
         strnfmt(prompt_short, sizeof(prompt_short),
-            "[%s] recall  [%s] back", confirm_label, back_label);
+            ui_text("[%s] recall  [%s] back"), confirm_label, back_label);
         variants[0] = prompt_full;
         variants[1] = prompt_mid;
         variants[2] = prompt_short;
@@ -9281,9 +9277,9 @@ static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
     else if (sdl_touch_only_device_active())
     {
         const char* variants[] = {
-            "Swipe left/right tabs; tap a row to recall",
-            "Swipe tabs; tap to recall",
-            "Tap to recall"
+            ui_text("Swipe left/right tabs; tap a row to recall"),
+            ui_text("Swipe tabs; tap to recall"),
+            ui_text("Tap to recall")
         };
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->term_wid,
             false, variants, N_ELEMENTS(variants));
@@ -9293,9 +9289,9 @@ static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
     else
     {
         const char* variants[] = {
-            "Dir move  Tab page  Space recall  Esc",
-            "Tab page  Space recall  Esc",
-            "Space recall  Esc"
+            ui_text("Dir move  Tab page  Space recall  Esc"),
+            ui_text("Tab page  Space recall  Esc"),
+            ui_text("Space recall  Esc")
         };
         terminal_prompt_pick_variant(prompt, sizeof(prompt), layout->term_wid,
             false, variants, N_ELEMENTS(variants));
@@ -9421,9 +9417,9 @@ static void knowledge_register_prompt_clicks(
         return;
 
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_RECALL, 0,
-        layout->prompt_row, prompt, "recall");
+        layout->prompt_row, prompt, ui_text("recall"));
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_BACK, 0, layout->prompt_row,
-        prompt, "back");
+        prompt, ui_text("back"));
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_BACK, 0, layout->prompt_row,
         prompt, "Esc");
     ui_menu_click_add_text_token(KNOWLEDGE_CLICK_NEXT_PAGE, 0,
@@ -9634,7 +9630,7 @@ static void knowledge_display_groups(const knowledge_browser_layout* layout,
 
         if (idx == grp_cur)
         {
-            int selection_w = MIN((int)strlen(group_text[grp_idx[idx]]),
+            int selection_w = MIN((int)strlen(ui_text(group_text[grp_idx[idx]])),
                 layout->group_w);
             if (selection_w < 1)
                 selection_w = 1;
@@ -9644,7 +9640,7 @@ static void knowledge_display_groups(const knowledge_browser_layout* layout,
 
         Term_putstr(layout->group_col, y, layout->group_w,
             (idx == grp_cur) ? knowledge_selected_attr(TERM_WHITE) : TERM_WHITE,
-            group_text[grp_idx[idx]]);
+            ui_text(group_text[grp_idx[idx]]));
     }
 }
 
@@ -10014,8 +10010,8 @@ static void knowledge_display_artefacts(const knowledge_browser_layout* layout,
                                          : layout->header_row;
 
         Term_putstr(idx_col, header_row, 3, TERM_SLATE, "Idx");
-        Term_putstr(dep_col, header_row, 3, TERM_SLATE, "Dep");
-        Term_putstr(rar_col, header_row, 3, TERM_SLATE, "Rar");
+        Term_putstr(dep_col, header_row, 3, TERM_SLATE, ui_text("Dep"));
+        Term_putstr(rar_col, header_row, 3, TERM_SLATE, ui_text("Rar"));
     }
 
     for (i = 0; i < layout->entry_rows; i++)
@@ -10190,11 +10186,11 @@ static void knowledge_monster_summary(char* buf, size_t buflen, int grp_cur)
 
     if (monster_group_char[grp_cur] != (char*)-1L)
     {
-        strnfmt(buf, buflen, "Total creatures slain: %u.", (unsigned)slay_count);
+        strnfmt(buf, buflen, ui_text("Total creatures slain: %u."), (unsigned)slay_count);
     }
     else
     {
-        strnfmt(buf, buflen, "Known uniques: %u, slain uniques: %u.",
+        strnfmt(buf, buflen, ui_text("Known uniques: %u, slain uniques: %u."),
             (unsigned)known_uniques, (unsigned)dead_uniques);
     }
 }
@@ -10212,7 +10208,7 @@ static void knowledge_display_monsters(const knowledge_browser_layout* layout,
     {
         int header_row = layout->stacked ? layout->entry_header_row
                                          : layout->header_row;
-        Term_putstr(kills_col, header_row, 5, TERM_SLATE, "Kills");
+        Term_putstr(kills_col, header_row, 5, TERM_SLATE, ui_text("Kills"));
     }
 
     for (i = 0; i < layout->entry_rows; i++)
@@ -10249,7 +10245,7 @@ static void knowledge_display_monsters(const knowledge_browser_layout* layout,
         if (show_kills)
         {
             if (r_ptr->flags1 & RF1_UNIQUE)
-                put_str((r_ptr->max_num == 0) ? " dead" : "alive", row, kills_col);
+                put_str((r_ptr->max_num == 0) ? ui_text(" dead") : ui_text("alive"), row, kills_col);
             else
                 put_str(format("%5d", l_ptr->pkills), row, kills_col);
         }
@@ -10343,12 +10339,12 @@ static void knowledge_detail_prompt(int row, bool steamdeck, cptr title,
     if (steamdeck)
     {
         char hint_buf[48];
-        strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", accept_label);
+        strnfmt(hint_buf, sizeof(hint_buf), ui_text("(press %s)"), accept_label);
         Term_putstr(1, row, -1, TERM_L_WHITE, hint_buf);
     }
     else
     {
-        Term_putstr(1, row, -1, TERM_L_WHITE, "(press any key)");
+        Term_putstr(1, row, -1, TERM_L_WHITE, ui_text("(press any key)"));
     }
 
     ui_menu_click_begin();
@@ -10390,7 +10386,7 @@ static void knowledge_show_curse_detail(int curse_id)
 
     screen_save();
     Term_clear();
-    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, "Known Curse:");
+    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, ui_text("Known Curse:"));
 
     text_out_hook = text_out_to_screen;
     text_out_wrap = wrap_width;
@@ -10398,18 +10394,18 @@ static void knowledge_show_curse_detail(int curse_id)
     c_put_str(TERM_L_RED, cname, row++, 1);
 
     if (row + count_wrapped_lines(cdesc, text_out_wrap, 3) >= page_limit)
-        knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+        knowledge_detail_prompt(row, steamdeck, ui_text("Known Curse:"), accept_label);
     Term_gotoxy(3, row);
     text_out_c(TERM_WHITE, cdesc);
     row += count_wrapped_lines(cdesc, text_out_wrap, 3);
 
-    strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
-        (*cpower) ? cpower : "[no additional effect listed]");
+    strnfmt(effect_line, sizeof(effect_line), ui_text("Effect: %s"),
+        (*cpower) ? cpower : ui_text("[no additional effect listed]"));
     if (row + count_wrapped_lines(effect_line, text_out_wrap, 3) >= page_limit)
-        knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+        knowledge_detail_prompt(row, steamdeck, ui_text("Known Curse:"), accept_label);
     Term_gotoxy(3, row);
-    text_out_c(TERM_RED, "Effect: ");
-    text_out_c(TERM_L_DARK, (*cpower) ? cpower : "[no additional effect listed]");
+    text_out_c(TERM_RED, ui_text("Effect: "));
+    text_out_c(TERM_L_DARK, (*cpower) ? cpower : ui_text("[no additional effect listed]"));
     row += count_wrapped_lines(effect_line, text_out_wrap, 3);
 
     row++;
@@ -10419,36 +10415,36 @@ static void knowledge_show_curse_detail(int curse_id)
         char blessing_line[256];
 
         if (row + 1 >= page_limit)
-            knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+            knowledge_detail_prompt(row, steamdeck, ui_text("Known Curse:"), accept_label);
 
-        Term_putstr(3, row++, -1, TERM_L_GREEN, format("Blessing: %s", bname));
+        Term_putstr(3, row++, -1, TERM_L_GREEN, format(ui_text("Blessing: %s"), bname));
 
         if (has_blessing_text)
         {
             if (row + count_wrapped_lines(bdesc, text_out_wrap, 5) >= page_limit)
-                knowledge_detail_prompt(row, steamdeck, "Known Curse:",
+                knowledge_detail_prompt(row, steamdeck, ui_text("Known Curse:"),
                     accept_label);
             Term_gotoxy(5, row);
             text_out_c(TERM_WHITE, bdesc);
             row += count_wrapped_lines(bdesc, text_out_wrap, 5);
         }
 
-        strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
-            has_blessing_effect ? bpower : "[no additional effect listed]");
+        strnfmt(blessing_line, sizeof(blessing_line), ui_text("Effect: %s"),
+            has_blessing_effect ? bpower : ui_text("[no additional effect listed]"));
         if (row + count_wrapped_lines(blessing_line, text_out_wrap, 5) >= page_limit)
-            knowledge_detail_prompt(row, steamdeck, "Known Curse:",
+            knowledge_detail_prompt(row, steamdeck, ui_text("Known Curse:"),
                 accept_label);
         Term_gotoxy(5, row);
-        text_out_c(TERM_L_GREEN, "Effect: ");
+        text_out_c(TERM_L_GREEN, ui_text("Effect: "));
         text_out_c(TERM_WHITE,
-            has_blessing_effect ? bpower : "[no additional effect listed]");
+            has_blessing_effect ? bpower : ui_text("[no additional effect listed]"));
         row += count_wrapped_lines(blessing_line, text_out_wrap, 5);
     }
 
     if (row + 1 >= Term->hgt)
         row = Term->hgt - 2;
 
-    knowledge_detail_prompt(row + 1, steamdeck, "Known Curse:", accept_label);
+    knowledge_detail_prompt(row + 1, steamdeck, ui_text("Known Curse:"), accept_label);
     screen_load();
 }
 
@@ -10588,7 +10584,7 @@ void do_cmd_knowledge_browser_page(int page)
 
     for (i = 0; object_group_text[i] != NULL; i++)
     {
-        int len = (int)strlen(object_group_text[i]);
+        int len = (int)strlen(ui_text(object_group_text[i]));
 
         if (len > artefact_group_w)
             artefact_group_w = len;
@@ -10603,7 +10599,7 @@ void do_cmd_knowledge_browser_page(int page)
 
     for (i = 0; monster_group_text[i] != NULL; i++)
     {
-        int len = (int)strlen(monster_group_text[i]);
+        int len = (int)strlen(ui_text(monster_group_text[i]));
 
         if (len > monster_group_w)
             monster_group_w = len;
@@ -10633,16 +10629,16 @@ void do_cmd_knowledge_browser_page(int page)
             tutorial_page = page;
             switch (page) {
             case KNOWLEDGE_PAGE_ARTEFACTS:
-                tutorial_game_menu("knowledge-artefacts", "Browse known artefacts. Recall shows recorded properties; it does not grant or equip an item.");
+                tutorial_game_menu("knowledge-artefacts", ui_text("Browse known artefacts. Recall shows recorded properties; it does not grant or equip an item."));
                 break;
             case KNOWLEDGE_PAGE_OBJECTS:
-                tutorial_game_menu("knowledge-objects", "Browse known object kinds and their descriptions. This catalogue is separate from your carried inventory.");
+                tutorial_game_menu("knowledge-objects", ui_text("Browse known object kinds and their descriptions. This catalogue is separate from your carried inventory."));
                 break;
             case KNOWLEDGE_PAGE_MONSTERS:
-                tutorial_game_menu("knowledge-monsters", "Review learned creature information. Recall reflects what your character knows.");
+                tutorial_game_menu("knowledge-monsters", ui_text("Review learned creature information. Recall reflects what your character knows."));
                 break;
             case KNOWLEDGE_PAGE_CURSES:
-                tutorial_game_menu("knowledge-curses", "Review discovered curses and their effects. Reading an entry does not remove a curse.");
+                tutorial_game_menu("knowledge-curses", ui_text("Review discovered curses and their effects. Reading an entry does not remove a curse."));
                 break;
             }
         }
@@ -10662,7 +10658,7 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_browser_layout draw_layout;
             knowledge_browser_layout full_layout;
             char status[96];
-            cptr list_label = "Artefact";
+            cptr list_label = ui_text("Artefact");
             int split_name_w;
             int full_name_w;
             int max_name_len;
@@ -10693,7 +10689,7 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 knowledge_expand_active_column(&draw_layout);
                 if ((state.column[page] == 0) || (artefact_grp_cnt <= 0))
-                    list_label = "Group";
+                    list_label = ui_text("Group");
                 else
                     list_label = object_group_text[
                         artefact_grp_idx[state.group_cur[page]]];
@@ -10739,7 +10735,7 @@ void do_cmd_knowledge_browser_page(int page)
             }
             else
             {
-                SDL_strlcpy(status, "No known artefacts yet.", sizeof(status));
+                SDL_strlcpy(status, ui_text("No known artefacts yet."), sizeof(status));
             }
             knowledge_draw_status(&draw_layout, TERM_L_BLUE, status);
             knowledge_draw_prompt(&draw_layout);
@@ -10785,7 +10781,7 @@ void do_cmd_knowledge_browser_page(int page)
                 if (artefact_cnt > 0)
                     desc_art_fake(artefact_idx[state.entry_cur[page]]);
                 else
-                    bell("Nothing to recall.");
+                    bell(ui_text("Nothing to recall."));
                 break;
             }
 
@@ -10814,7 +10810,7 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_browser_layout draw_layout;
             knowledge_browser_layout full_layout;
             char status[112];
-            cptr list_label = "Object";
+            cptr list_label = ui_text("Object");
             int split_name_w;
             int full_name_w;
             int max_name_len;
@@ -10844,7 +10840,7 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 knowledge_expand_active_column(&draw_layout);
                 if ((state.column[page] == 0) || (object_grp_cnt <= 0))
-                    list_label = "Group";
+                    list_label = ui_text("Group");
                 else
                     list_label = object_group_text[
                         object_grp_idx[state.group_cur[page]]];
@@ -10906,7 +10902,7 @@ void do_cmd_knowledge_browser_page(int page)
             }
             else
             {
-                SDL_strlcpy(status, "No known objects yet.", sizeof(status));
+                SDL_strlcpy(status, ui_text("No known objects yet."), sizeof(status));
             }
             knowledge_draw_status(&draw_layout, TERM_L_BLUE, status);
             knowledge_draw_prompt(&draw_layout);
@@ -10958,7 +10954,7 @@ void do_cmd_knowledge_browser_page(int page)
                 }
                 else
                 {
-                    bell("Nothing to recall.");
+                    bell(ui_text("Nothing to recall."));
                 }
                 break;
             }
@@ -11018,7 +11014,7 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 knowledge_expand_active_column(&draw_layout);
                 if ((state.column[page] == 0) || (monster_grp_cnt <= 0))
-                    list_label = "Group";
+                    list_label = ui_text("Group");
                 else
                     list_label = monster_group_text[
                         monster_grp_idx[state.group_cur[page]]];
@@ -11063,7 +11059,7 @@ void do_cmd_knowledge_browser_page(int page)
             }
             else
             {
-                SDL_strlcpy(status, "No known monsters in this group yet.",
+                SDL_strlcpy(status, ui_text("No known monsters in this group yet."),
                     sizeof(status));
             }
             knowledge_draw_status(&draw_layout, TERM_L_BLUE, status);
@@ -11115,7 +11111,7 @@ void do_cmd_knowledge_browser_page(int page)
                 }
                 else
                 {
-                    bell("Nothing to recall.");
+                    bell(ui_text("Nothing to recall."));
                 }
                 break;
             }
@@ -11145,7 +11141,7 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_init_layout(&layout, 0, false);
             knowledge_clamp_list_state(&state.entry_cur[page], &state.entry_top[page],
                 curse_cnt, layout.list_rows);
-            knowledge_draw_frame(&layout, page, false, "Known curses",
+            knowledge_draw_frame(&layout, page, false, ui_text("Known curses"),
                 state.tabs_focus);
             knowledge_begin_clicks(&layout, &state.entry_top[page], curse_cnt);
             knowledge_display_curses(&layout, curse_idx, curse_cnt,
@@ -11157,12 +11153,12 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 curse_type* c = &cu_info[curse_idx[state.entry_cur[page]]];
                 cptr cpower = lore_text(cu_text + c->power);
-                strnfmt(status, sizeof(status), "Effect: %s",
-                    (*cpower) ? cpower : "[no additional effect listed]");
+                strnfmt(status, sizeof(status), ui_text("Effect: %s"),
+                    (*cpower) ? cpower : ui_text("[no additional effect listed]"));
             }
             else
             {
-                SDL_strlcpy(status, "No known curses yet.", sizeof(status));
+                SDL_strlcpy(status, ui_text("No known curses yet."), sizeof(status));
             }
             knowledge_draw_status(&layout, TERM_L_BLUE, status);
             knowledge_draw_prompt(&layout);
@@ -11195,7 +11191,7 @@ void do_cmd_knowledge_browser_page(int page)
                 if (curse_cnt > 0)
                     knowledge_show_curse_detail(curse_idx[state.entry_cur[page]]);
                 else
-                    bell("Nothing to recall.");
+                    bell(ui_text("Nothing to recall."));
                 break;
             }
 
@@ -11266,44 +11262,44 @@ static void supply_register_prompt_clicks(const knowledge_browser_layout* layout
 
     row = layout->prompt_row;
 
-    ui_menu_click_add_text_token(SUPPLY_CLICK_RECALL, 0, row, prompt, "recall");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_RECALL, 0, row, prompt, ui_text("recall"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_RECALL, 0, row, prompt, "r/->");
     ui_menu_click_add_text_token(SUPPLY_CLICK_RECALL, 0, row, prompt,
         recall_label);
     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0, row, prompt,
-        "x preview");
+        ui_text("x preview"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0, row, prompt,
-        "preview");
+        ui_text("preview"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0, row, prompt,
         "x/->");
-    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "use");
-    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "equip");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, ui_text("use"));
+    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, ui_text("equip"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt,
-        "make active");
+        ui_text("make active"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt,
-        "change setup");
-    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "take off");
+        ui_text("change setup"));
+    ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, ui_text("take off"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, "u/Space");
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt, use_label);
     ui_menu_click_add_text_token(SUPPLY_CLICK_USE, 0, row, prompt,
         confirm_label);
-    ui_menu_click_add_text_token(SUPPLY_CLICK_DROP, 0, row, prompt, "drop");
-    ui_menu_click_add_text_token(SUPPLY_CLICK_DROP, 0, row, prompt, "z drop");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_DROP, 0, row, prompt, ui_text("drop"));
+    ui_menu_click_add_text_token(SUPPLY_CLICK_DROP, 0, row, prompt, ui_text("z drop"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_DROP, 0, row, prompt, drop_label);
-    ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt, "delete");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt, ui_text("delete"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt,
-        "y delete");
+        ui_text("y delete"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_DELETE, 0, row, prompt,
-        "y prise a Silmaril");
+        ui_text("y prise a Silmaril"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_PRESET_SAVE, 0, row, prompt,
-        "s save");
+        ui_text("s save"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_PRESET_NAME, 0, row, prompt,
-        "n name");
+        ui_text("n name"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_PRESET_CLEAR, 0, row, prompt,
-        "c clear");
+        ui_text("c clear"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_TAB, 0, row, prompt, "Tab");
-    ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "back");
-    ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "cancel");
+    ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, ui_text("back"));
+    ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, ui_text("cancel"));
     ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, "Esc");
     ui_menu_click_add_text_token(SUPPLY_CLICK_BACK, 0, row, prompt, back_label);
 }
@@ -11739,9 +11735,9 @@ static cptr supply_touch_row_action_text(bool desc_overlay_on,
     if (delete_click_mode)
         return "delete";
     if (drop_click_mode)
-        return "drop";
+        return ui_text("drop");
     if (desc_overlay_on)
-        return "inspect";
+        return ui_text("inspect");
     return normal_action;
 }
 
@@ -11759,12 +11755,12 @@ static void supply_touch_row_prompt(char* buf, size_t buflen, int term_wid,
 
     action = supply_touch_row_action_text(desc_overlay_on, drop_click_mode,
         delete_click_mode, normal_action);
-    strnfmt(full, sizeof(full), "Swipe left/right tabs; tap a row to %s",
+    strnfmt(full, sizeof(full), ui_text("Swipe left/right tabs; tap a row to %s"),
         action);
-    strnfmt(compact, sizeof(compact), "Swipe tabs; tap row: %s", action);
+    strnfmt(compact, sizeof(compact), ui_text("Swipe tabs; tap row: %s"), action);
     variants[0] = full;
     variants[1] = compact;
-    variants[2] = "Tap row to act";
+    variants[2] = ui_text("Tap row to act");
     terminal_prompt_pick_variant(buf, buflen, term_wid, false, variants,
         N_ELEMENTS(variants));
 }
@@ -12189,7 +12185,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             equipment_entry_columns entry_cols;
             int selected_slot;
             char status_buf[120];
-            char primary_action[32] = "use";
+            char primary_action[96] = "use";
             int entry_page_rows;
             int max_entry_top;
             bool touch_only;
@@ -12236,11 +12232,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             }
             if (equip_entry_cnt > 0)
             {
-                SDL_strlcpy(primary_action,
+                supply_copy_prompt_action(primary_action, sizeof(primary_action),
                     equipment_menu_use_action_text(&equip_entries[equip_entry_cur],
-                        selected_slot, floor_action), sizeof(primary_action));
-                primary_action[0] = (char)tolower(
-                    (unsigned char)primary_action[0]);
+                        selected_slot, floor_action));
             }
             if (preserve_touch_view)
             {
@@ -12309,39 +12303,43 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (layout.stacked)
             {
                 Term_putstr(0, layout.header_row, layout.term_wid, TERM_SLATE,
-                    get_sdl_menu_bigger_font() ? "Slot (scroll up/down)" : "Slot");
+                    get_sdl_menu_bigger_font() ? ui_text("Slot (scroll up/down)") : ui_text("Slot"));
                 knowledge_draw_stacked_entry_divider(&layout);
-                Term_putstr(0, layout.entry_header_row, layout.term_wid,
+                /* Stop before the metadata columns. Overwriting a translated
+                 * title can leave part of a UTF-8 sequence in the grid. */
+                Term_putstr(0, layout.entry_header_row,
+                    entry_cols.name_col + entry_cols.name_w,
                     TERM_SLATE, equipment_slot_text(selected_slot));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.entry_header_row,
                         entry_cols.volume_w, TERM_SLATE,
-                        entry_cols.compact_units ? "V(qt)" : "Volume");
+                        entry_cols.compact_units ? ui_text("V(qt)") : ui_text("Volume"));
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.entry_header_row,
                         entry_cols.weight_w, TERM_SLATE,
-                        entry_cols.compact_units ? "W(lb)" : "Weight");
+                        entry_cols.compact_units ? ui_text("W(lb)") : ui_text("Weight"));
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.entry_header_row,
-                        entry_cols.source_w, TERM_SLATE, "Where");
+                        entry_cols.source_w, TERM_SLATE, ui_text("Where"));
             }
             else
             {
                 Term_putstr(0, layout.header_row, layout.group_w, TERM_SLATE,
-                    "Slot");
-                Term_putstr(layout.list_col, layout.header_row, layout.list_w,
+                    ui_text("Slot"));
+                Term_putstr(layout.list_col, layout.header_row,
+                    entry_cols.name_col + entry_cols.name_w - layout.list_col,
                     TERM_SLATE, equipment_slot_text(selected_slot));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.header_row,
                         entry_cols.volume_w, TERM_SLATE,
-                        entry_cols.compact_units ? "V(qt)" : "Volume");
+                        entry_cols.compact_units ? ui_text("V(qt)") : ui_text("Volume"));
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.header_row,
                         entry_cols.weight_w, TERM_SLATE,
-                        entry_cols.compact_units ? "W(lb)" : "Weight");
+                        entry_cols.compact_units ? ui_text("W(lb)") : ui_text("Weight"));
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.header_row,
-                        entry_cols.source_w, TERM_SLATE, "Where");
+                        entry_cols.source_w, TERM_SLATE, ui_text("Where"));
             }
 
             for (i = 0; i < layout.term_wid; i++)
@@ -12391,9 +12389,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (entry_page_rows < 1)
                 entry_page_rows = 1;
 
-            strnfmt(status_buf, sizeof(status_buf), "%s: %d choice%s.",
-                equipment_slot_text(selected_slot), equip_entry_cnt,
-                (equip_entry_cnt == 1) ? "" : "s");
+            strnfmt(status_buf, sizeof(status_buf), "%s - %s: %d",
+                equipment_slot_text(selected_slot), ui_text("Choices"), equip_entry_cnt);
             if (pack_combat_notice)
             {
                 knowledge_draw_status(&layout, TERM_ORANGE,
@@ -12435,26 +12432,26 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s] %s  [%s] drop  [%s] back",
-                        prev_label, next_label, info_label, confirm_label, primary_action,
+                        ui_text("D-pad nav  [%s/%s] page  [%s] info  [%s] %s  [%s] drop  [%s] back"),
+                        prev_label, next_label, info_label, confirm_label, ui_text(primary_action),
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s] %s  [%s] drop",
-                        info_label, confirm_label, primary_action, drop_label);
+                        ui_text("D-pad nav  [%s] info  [%s] %s  [%s] drop"),
+                        info_label, confirm_label, ui_text(primary_action), drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] %s  [%s] drop  [%s] back",
-                        prev_label, next_label, confirm_label, primary_action,
+                        ui_text("D-pad nav  [%s/%s] page  [%s] %s  [%s] drop  [%s] back"),
+                        prev_label, next_label, confirm_label, ui_text(primary_action),
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] %s  [%s] drop",
-                        confirm_label, primary_action, drop_label);
+                        ui_text("D-pad nav  [%s] %s  [%s] drop"),
+                        confirm_label, ui_text(primary_action), drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad nav  [%s] %s  [%s] drop", confirm_label,
-                    primary_action, drop_label);
+                    ui_text("D-pad nav  [%s] %s  [%s] drop"), confirm_label,
+                    ui_text(primary_action), drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
@@ -12463,7 +12460,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt_buf);
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL,
-                    primary_action, confirm_label, drop_label, back_label);
+                    ui_text(primary_action), confirm_label, drop_label, back_label);
                 if (info_available)
                     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
                         layout.prompt_row, prompt_buf, info_label);
@@ -12474,16 +12471,16 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 supply_touch_row_prompt(prompt_buf, sizeof(prompt_buf),
                     layout.term_wid, desc_overlay_on, drop_click_mode, false,
-                    primary_action);
+                    ui_text(primary_action));
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_SLATE, prompt_buf);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PREVIEW,
-                    desc_overlay_on ? "Hide Info" : "Preview",
+                    desc_overlay_on ? ui_text("Hide Info") : ui_text("Preview"),
                     supply_touch_mode_button_attr(
                         supply_touch_preview_mode_active(desc_overlay_on,
                             drop_click_mode, false)));
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_DROP,
-                    drop_click_mode ? "Drop On" : "Drop",
+                    drop_click_mode ? ui_text("Drop On") : ui_text("Drop"),
                     supply_touch_mode_button_attr(drop_click_mode));
             }
             else
@@ -12510,23 +12507,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 };
 
                 strnfmt(letter_full, sizeof(letter_full),
-                    "letter %s  Dir move  %s preview  %s %s  z drop  Tab  Esc",
-                    primary_action, preview_key, use_key, primary_action);
+                    ui_text("letter %s  Dir move  %s preview  %s %s  z drop  Tab  Esc"),
+                    ui_text(primary_action), preview_key, use_key, ui_text(primary_action));
                 strnfmt(letter_mid, sizeof(letter_mid),
-                    "letter %s  %s preview  %s %s  z drop  Tab  Esc",
-                    primary_action, preview_key, use_key, primary_action);
+                    ui_text("letter %s  %s preview  %s %s  z drop  Tab  Esc"),
+                    ui_text(primary_action), preview_key, use_key, ui_text(primary_action));
                 strnfmt(letter_short, sizeof(letter_short),
-                    "%s %s  %s preview  z drop  Esc", use_key,
-                    primary_action, preview_key);
+                    ui_text("%s %s  %s preview  z drop  Esc"), use_key,
+                    ui_text(primary_action), preview_key);
                 strnfmt(move_full, sizeof(move_full),
-                    "Dir move  %s preview  %s %s  z drop  Tab  Esc",
-                    preview_key, use_key, primary_action);
+                    ui_text("Dir move  %s preview  %s %s  z drop  Tab  Esc"),
+                    preview_key, use_key, ui_text(primary_action));
                 strnfmt(move_mid, sizeof(move_mid),
-                    "%s preview  %s %s  z drop  Tab  Esc", preview_key,
-                    use_key, primary_action);
+                    ui_text("%s preview  %s %s  z drop  Tab  Esc"), preview_key,
+                    use_key, ui_text(primary_action));
                 strnfmt(move_short, sizeof(move_short),
-                    "%s %s  %s preview  z drop  Esc", use_key,
-                    primary_action, preview_key);
+                    ui_text("%s %s  %s preview  z drop  Esc"), use_key,
+                    ui_text(primary_action), preview_key);
 
                 if (indexed_menu_letters_enabled())
                 {
@@ -12546,7 +12543,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL, NULL,
                     NULL, NULL, NULL);
                 if (drop_click_mode)
-                    supply_highlight_prompt_token(&layout, prompt_buf, "drop",
+                    supply_highlight_prompt_token(&layout, prompt_buf, ui_text("drop"),
                         TERM_YELLOW);
             }
 
@@ -12931,7 +12928,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             char jewelry_header[192] = "";
             char picker_heading[180] = "";
             char picker_detail[180] = "";
-            char primary_action[32] = "use";
+            char primary_action[96] = "use";
             cptr delete_action = "delete";
             cptr preview_key;
             byte picker_heading_attr = TERM_L_WHITE + TERM_SHADE;
@@ -12982,12 +12979,12 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     picker_heading_attr = TERM_YELLOW;
                 }
                 else
-                    SDL_strlcpy(picker_heading, "Exchange storage",
+                    SDL_strlcpy(picker_heading, ui_text("Exchange storage"),
                         sizeof(picker_heading));
                 strnfmt(picker_detail, sizeof(picker_detail),
-                    "Move to %s: %s - choose an item to move to %s",
-                    inventory_limit_group_name(target_group), incoming_name,
-                    inventory_limit_group_name(source_group));
+                    ui_text("Move to %s: %s - choose an item to move to %s"),
+                    ui_text(inventory_limit_group_name(target_group)), incoming_name,
+                    ui_text(inventory_limit_group_name(source_group)));
             }
             else if (replacement_mode)
             {
@@ -12995,7 +12992,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 cptr reason = request->replacement_reason;
                 cptr operation = request->replacement_operation
                     && request->replacement_operation[0]
-                    ? request->replacement_operation : "Picking up";
+                    ? request->replacement_operation : ui_text("Picking up");
 
                 object_desc(incoming_name, sizeof(incoming_name),
                     request->replacement_incoming, true, 3);
@@ -13007,11 +13004,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else
                 {
-                    SDL_strlcpy(picker_heading, "What to replace",
+                    SDL_strlcpy(picker_heading, ui_text("What to replace"),
                         sizeof(picker_heading));
                 }
                 strnfmt(picker_detail, sizeof(picker_detail),
-                    "%s: %s - choose one to %s", operation, incoming_name,
+                    ui_text("%s: %s - choose one to %s"), operation, incoming_name,
                     streq(operation, "Equipping") ? "drop" : "replace");
             }
             else if (slot_pick_mode)
@@ -13029,11 +13026,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else
                 {
-                    SDL_strlcpy(picker_heading, "Place where",
+                    SDL_strlcpy(picker_heading, ui_text("Place where"),
                         sizeof(picker_heading));
                 }
                 strnfmt(picker_detail, sizeof(picker_detail),
-                    "Placing: %s - choose a destination", incoming_name);
+                    ui_text("Placing: %s - choose a destination"), incoming_name);
             }
             else if (item_select_mode)
             {
@@ -13047,11 +13044,11 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else
                 {
-                    SDL_strlcpy(picker_heading, "Choose item",
+                    SDL_strlcpy(picker_heading, ui_text("Choose item"),
                         sizeof(picker_heading));
                 }
                 SDL_strlcpy(picker_detail,
-                    "Choose one matching item from inventory, equipment, or floor",
+                    ui_text("Choose one matching item from inventory, equipment, or floor"),
                     sizeof(picker_detail));
             }
 
@@ -13246,8 +13243,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 cptr action = inventory_page_use_action_text(
                     &equip_entries[inv_entry_cur], floor_action);
 
-                SDL_strlcpy(primary_action, action, sizeof(primary_action));
-                primary_action[0] = (char)tolower((unsigned char)primary_action[0]);
+                supply_copy_prompt_action(primary_action, sizeof(primary_action), action);
                 object_type* selected_object =
                     equipment_entry_object(&equip_entries[inv_entry_cur]);
                 if (equip_entries[inv_entry_cur].floor_idx > 0
@@ -13576,52 +13572,54 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             else if (layout.stacked)
             {
                 Term_putstr(0, layout.header_row, layout.term_wid, TERM_SLATE,
-                    get_sdl_menu_bigger_font() ? "Category (scroll up/down)" : "Category");
+                    get_sdl_menu_bigger_font() ? ui_text("Category (scroll up/down)") : ui_text("Category"));
                 knowledge_draw_stacked_entry_divider(&layout);
-                Term_putstr(0, layout.entry_header_row, layout.term_wid,
+                Term_putstr(0, layout.entry_header_row,
+                    entry_cols.name_col + entry_cols.name_w,
                     ordinary_inventory
                             && inventory_browser_group_over_limit(selected_group)
                         ? TERM_RED : TERM_SLATE,
-                    storage_exchange_mode ? "Storage exchange"
-                    : replacement_mode ? "Replacement candidates"
-                    : item_select_mode ? "Matching items"
+                    storage_exchange_mode ? ui_text("Storage exchange")
+                    : replacement_mode ? ui_text("Replacement candidates")
+                    : item_select_mode ? ui_text("Matching items")
                     : inventory_browser_group_text(selected_group));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.entry_header_row,
                         entry_cols.volume_w, TERM_SLATE,
-                        entry_cols.compact_units ? "V(qt)" : "Volume");
+                        entry_cols.compact_units ? ui_text("V(qt)") : ui_text("Volume"));
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.entry_header_row,
                         entry_cols.weight_w, TERM_SLATE,
-                        entry_cols.compact_units ? "W(lb)" : "Weight");
+                        entry_cols.compact_units ? ui_text("W(lb)") : ui_text("Weight"));
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.entry_header_row,
-                        entry_cols.source_w, TERM_SLATE, "Where");
+                        entry_cols.source_w, TERM_SLATE, ui_text("Where"));
             }
             else
             {
                 Term_putstr(0, layout.header_row, layout.group_w, TERM_SLATE,
-                    "Category");
-                Term_putstr(layout.list_col, layout.header_row, layout.list_w,
+                    ui_text("Category"));
+                Term_putstr(layout.list_col, layout.header_row,
+                    entry_cols.name_col + entry_cols.name_w - layout.list_col,
                     ordinary_inventory
                             && inventory_browser_group_over_limit(selected_group)
                         ? TERM_RED : TERM_SLATE,
-                    storage_exchange_mode ? "Storage exchange"
-                    : replacement_mode ? "Replacement candidates"
-                    : slot_pick_mode ? "Destination slots"
-                    : item_select_mode ? "Matching items"
+                    storage_exchange_mode ? ui_text("Storage exchange")
+                    : replacement_mode ? ui_text("Replacement candidates")
+                    : slot_pick_mode ? ui_text("Destination slots")
+                    : item_select_mode ? ui_text("Matching items")
                     : inventory_browser_group_text(selected_group));
                 if (entry_cols.show_volume)
                     Term_putstr(entry_cols.volume_col, layout.header_row,
                         entry_cols.volume_w, TERM_SLATE,
-                        entry_cols.compact_units ? "V(qt)" : "Volume");
+                        entry_cols.compact_units ? ui_text("V(qt)") : ui_text("Volume"));
                 if (entry_cols.show_weight)
                     Term_putstr(entry_cols.weight_col, layout.header_row,
                         entry_cols.weight_w, TERM_SLATE,
-                        entry_cols.compact_units ? "W(lb)" : "Weight");
+                        entry_cols.compact_units ? ui_text("W(lb)") : ui_text("Weight"));
                 if (entry_cols.show_source)
                     Term_putstr(entry_cols.source_col, layout.header_row,
-                        entry_cols.source_w, TERM_SLATE, "Where");
+                        entry_cols.source_w, TERM_SLATE, ui_text("Where"));
             }
 
             for (i = 0; i < layout.term_wid; i++)
@@ -13891,16 +13889,16 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             {
                 char prompt[160];
                 const char* variants[] = {
-                    "Exchange: select an item to move to the other pool",
-                    "Exchange: select an item",
-                    "Select an item"
+                    ui_text("Exchange: select an item to move to the other pool"),
+                    ui_text("Exchange: select an item"),
+                    ui_text("Select an item")
                 };
 
                 terminal_prompt_pick_variant(prompt, sizeof(prompt),
                     layout.term_wid, false, variants, N_ELEMENTS(variants));
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt);
-                supply_register_prompt_clicks(&layout, prompt, NULL, "select",
+                supply_register_prompt_clicks(&layout, prompt, NULL, ui_text("select"),
                     NULL, NULL, "Esc");
             }
             else if (replacement_mode)
@@ -13920,10 +13918,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     controller_prompt_label(steamdeck_back_key(), "B",
                         back_label, sizeof(back_label));
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "Replace: D-pad nav  [%s] select  [%s] cancel",
+                        ui_text("Replace: D-pad nav  [%s] select  [%s] cancel"),
                         confirm_label, back_label);
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "D-pad nav  [%s] select  [%s] cancel",
+                        ui_text("D-pad nav  [%s] select  [%s] cancel"),
                         confirm_label, back_label);
                     variants[0] = prompt_full;
                     variants[1] = prompt_short;
@@ -13934,9 +13932,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else if (sdl_touch_only_device_active())
                 {
                     const char* variants[] = {
-                        "Replace: tap a row to select",
-                        "Tap a row to select",
-                        "Tap to select"
+                        ui_text("Replace: tap a row to select"),
+                        ui_text("Tap a row to select"),
+                        ui_text("Tap to select")
                     };
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
@@ -13945,9 +13943,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else
                 {
                     const char* variants[] = {
-                        "Replace: Dir/mouse move  Enter select  Esc cancel",
-                        "Replace: Enter select  Esc cancel",
-                        "Enter select  Esc cancel"
+                        ui_text("Replace: Dir/mouse move  Enter select  Esc cancel"),
+                        ui_text("Replace: Enter select  Esc cancel"),
+                        ui_text("Enter select  Esc cancel")
                     };
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
@@ -13955,7 +13953,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt);
-                supply_register_prompt_clicks(&layout, prompt, NULL, "select",
+                supply_register_prompt_clicks(&layout, prompt, NULL, ui_text("select"),
                     NULL, NULL, "Esc");
             }
             else if (slot_pick_mode)
@@ -13975,10 +13973,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     controller_prompt_label(steamdeck_back_key(), "B",
                         back_label, sizeof(back_label));
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "Place: D-pad nav  [%s] select  [%s] cancel",
+                        ui_text("Place: D-pad nav  [%s] select  [%s] cancel"),
                         confirm_label, back_label);
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "D-pad nav  [%s] select  [%s] cancel",
+                        ui_text("D-pad nav  [%s] select  [%s] cancel"),
                         confirm_label, back_label);
                     variants[0] = prompt_full;
                     variants[1] = prompt_short;
@@ -13989,9 +13987,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else if (sdl_touch_only_device_active())
                 {
                     const char* variants[] = {
-                        "Place: tap a row to select",
-                        "Tap a row to select",
-                        "Tap to select"
+                        ui_text("Place: tap a row to select"),
+                        ui_text("Tap a row to select"),
+                        ui_text("Tap to select")
                     };
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
@@ -14000,9 +13998,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else
                 {
                     const char* variants[] = {
-                        "Place: Dir/mouse move  Enter select  Esc cancel",
-                        "Place: Enter select  Esc cancel",
-                        "Enter select  Esc cancel"
+                        ui_text("Place: Dir/mouse move  Enter select  Esc cancel"),
+                        ui_text("Place: Enter select  Esc cancel"),
+                        ui_text("Enter select  Esc cancel")
                     };
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
@@ -14010,7 +14008,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt);
-                supply_register_prompt_clicks(&layout, prompt, NULL, "select",
+                supply_register_prompt_clicks(&layout, prompt, NULL, ui_text("select"),
                     NULL, NULL, "Esc");
             }
             else if (item_select_mode)
@@ -14037,23 +14035,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     if (info_available)
                     {
                         strnfmt(prompt_full, sizeof(prompt_full),
-                            "Choose: D-pad nav  [%s] select  [%s] info  [%s] cancel",
+                            ui_text("Choose: D-pad nav  [%s] select  [%s] info  [%s] cancel"),
                             confirm_label, preview_label, back_label);
                         strnfmt(prompt_mid, sizeof(prompt_mid),
-                            "D-pad nav  [%s] select  [%s] info  [%s] cancel",
+                            ui_text("D-pad nav  [%s] select  [%s] info  [%s] cancel"),
                             confirm_label, preview_label, back_label);
                     }
                     else
                     {
                         strnfmt(prompt_full, sizeof(prompt_full),
-                            "Choose: D-pad nav  [%s] select  [%s] cancel",
+                            ui_text("Choose: D-pad nav  [%s] select  [%s] cancel"),
                             confirm_label, back_label);
                         strnfmt(prompt_mid, sizeof(prompt_mid),
-                            "D-pad nav  [%s] select  [%s] cancel",
+                            ui_text("D-pad nav  [%s] select  [%s] cancel"),
                             confirm_label, back_label);
                     }
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "D-pad nav  [%s] select  [%s] cancel",
+                        ui_text("D-pad nav  [%s] select  [%s] cancel"),
                         confirm_label, back_label);
                     variants[0] = prompt_full;
                     variants[1] = prompt_mid;
@@ -14065,9 +14063,9 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 else if (sdl_touch_only_device_active())
                 {
                     const char* variants[] = {
-                        "Choose: tap a row to select",
-                        "Tap a row to select",
-                        "Tap to select"
+                        ui_text("Choose: tap a row to select"),
+                        ui_text("Tap a row to select"),
+                        ui_text("Tap to select")
                     };
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
@@ -14080,23 +14078,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         full, short_hint
                     };
                     strnfmt(full, sizeof(full),
-                        "Choose: Dir/mouse move  Enter select  %s preview  Esc cancel", preview_key);
+                        ui_text("Choose: Dir/mouse move  Enter select  %s preview  Esc cancel"), preview_key);
                     strnfmt(short_hint, sizeof(short_hint),
-                        "Enter select  %s preview  Esc cancel", preview_key);
+                        ui_text("Enter select  %s preview  Esc cancel"), preview_key);
                     terminal_prompt_pick_variant(prompt, sizeof(prompt),
                         layout.term_wid, false, variants,
                         N_ELEMENTS(variants));
                 }
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_L_DARK, prompt);
-                supply_register_prompt_clicks(&layout, prompt, NULL, "select",
+                supply_register_prompt_clicks(&layout, prompt, NULL, ui_text("select"),
                     NULL, NULL, "Esc");
                 ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
-                    layout.prompt_row, prompt, "preview");
+                    layout.prompt_row, prompt, ui_text("preview"));
                 ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
-                    layout.prompt_row, prompt, "x preview");
+                    layout.prompt_row, prompt, ui_text("x preview"));
                 ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
-                    layout.prompt_row, prompt, "info");
+                    layout.prompt_row, prompt, ui_text("info"));
             }
             else if (steamdeck_controls_active())
             {
@@ -14128,27 +14126,27 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s] %s  [%s] drop  [%s] back",
+                        ui_text("D-pad nav  [%s/%s] page  [%s] info  [%s] %s  [%s] drop  [%s] back"),
                         prev_label, next_label, preview_label, confirm_label,
-                        primary_action, drop_label, back_label);
+                        ui_text(primary_action), drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s] %s  [%s] drop",
-                        preview_label, confirm_label, primary_action,
+                        ui_text("D-pad nav  [%s] info  [%s] %s  [%s] drop"),
+                        preview_label, confirm_label, ui_text(primary_action),
                         drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] %s  [%s] drop  [%s] back",
-                        prev_label, next_label, confirm_label, primary_action,
+                        ui_text("D-pad nav  [%s/%s] page  [%s] %s  [%s] drop  [%s] back"),
+                        prev_label, next_label, confirm_label, ui_text(primary_action),
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] %s  [%s] drop",
-                        confirm_label, primary_action, drop_label);
+                        ui_text("D-pad nav  [%s] %s  [%s] drop"),
+                        confirm_label, ui_text(primary_action), drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad nav  [%s] %s  [%s] drop", confirm_label,
-                    primary_action, drop_label);
+                    ui_text("D-pad nav  [%s] %s  [%s] drop"), confirm_label,
+                    ui_text(primary_action), drop_label);
                 variants[0] = prompt_full;
                 variants[1] = prompt_mid;
                 variants[2] = prompt_short;
@@ -14162,7 +14160,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     ui_menu_click_add_text_token(SUPPLY_CLICK_PREVIEW, 0,
                         layout.prompt_row, prompt_buf, preview_label);
                 if (drop_click_mode)
-                    supply_highlight_prompt_token(&layout, prompt_buf, "drop",
+                    supply_highlight_prompt_token(&layout, prompt_buf, ui_text("drop"),
                         TERM_YELLOW);
             }
             else if (sdl_touch_only_device_active())
@@ -14171,21 +14169,21 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
                 supply_touch_row_prompt(prompt_buf, sizeof(prompt_buf),
                     layout.term_wid, desc_overlay_on, drop_click_mode,
-                    delete_click_mode, primary_action);
+                    delete_click_mode, ui_text(primary_action));
                 Term_putstr(0, layout.prompt_row, layout.term_wid,
                     TERM_SLATE, prompt_buf);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PREVIEW,
-                    desc_overlay_on ? "Hide Info" : "Preview",
+                    desc_overlay_on ? ui_text("Hide Info") : ui_text("Preview"),
                     supply_touch_mode_button_attr(
                         supply_touch_preview_mode_active(desc_overlay_on,
                             drop_click_mode, delete_click_mode)));
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_DROP,
-                    drop_click_mode ? "Drop On" : "Drop",
+                    drop_click_mode ? ui_text("Drop On") : ui_text("Drop"),
                     supply_touch_mode_button_attr(drop_click_mode));
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_DELETE,
                     streq(delete_action, "delete")
-                        ? (delete_click_mode ? "Delete On" : "Delete")
-                        : "Prise a Silmaril",
+                        ? (delete_click_mode ? ui_text("Delete On") : ui_text("Delete"))
+                        : ui_text("Prise a Silmaril"),
                     supply_touch_mode_button_attr(delete_click_mode));
             }
             else
@@ -14211,26 +14209,26 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 cptr delete_key = browser_entry_index_from_label('y',
                     inventory_entry_cnt) >= 0 ? "Ctrl+y" : "y";
                 cptr short_delete = streq(delete_action, "delete")
-                    ? "delete" : "prise";
+                    ? "delete" : ui_text("prise");
                 strnfmt(letter_full, sizeof(letter_full),
-                    "letter %s  Dir move  %s preview  %s %s  z drop  %s %s  Tab  Esc",
-                    primary_action, preview_key, use_key, primary_action,
+                    ui_text("letter %s  Dir move  %s preview  %s %s  z drop  %s %s  Tab  Esc"),
+                    ui_text(primary_action), preview_key, use_key, ui_text(primary_action),
                     delete_key, delete_action);
                 strnfmt(letter_mid, sizeof(letter_mid),
-                    "%s %s  %s preview  z drop  %s %s  Esc",
-                    use_key, primary_action, preview_key, delete_key, delete_action);
+                    ui_text("%s %s  %s preview  z drop  %s %s  Esc"),
+                    use_key, ui_text(primary_action), preview_key, delete_key, delete_action);
                 strnfmt(letter_short, sizeof(letter_short),
-                    "%s %s  %s preview  %s %s  Esc",
-                    use_key, "use", preview_key, delete_key, short_delete);
+                    ui_text("%s %s  %s preview  %s %s  Esc"),
+                    use_key, ui_text("use"), preview_key, delete_key, short_delete);
                 strnfmt(move_full, sizeof(move_full),
-                    "Dir move  %s preview  %s %s  z drop  %s %s  Tab  Esc",
-                    preview_key, use_key, primary_action, delete_key, delete_action);
+                    ui_text("Dir move  %s preview  %s %s  z drop  %s %s  Tab  Esc"),
+                    preview_key, use_key, ui_text(primary_action), delete_key, delete_action);
                 strnfmt(move_mid, sizeof(move_mid),
-                    "%s %s  %s preview  z drop  %s %s  Esc",
-                    use_key, primary_action, preview_key, delete_key, delete_action);
+                    ui_text("%s %s  %s preview  z drop  %s %s  Esc"),
+                    use_key, ui_text(primary_action), preview_key, delete_key, delete_action);
                 strnfmt(move_short, sizeof(move_short),
-                    "%s %s  %s preview  %s %s  Esc",
-                    use_key, "use", preview_key, delete_key, short_delete);
+                    ui_text("%s %s  %s preview  %s %s  Esc"),
+                    use_key, ui_text("use"), preview_key, delete_key, short_delete);
 
                 if (indexed_menu_letters_enabled())
                 {
@@ -14250,7 +14248,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 supply_register_prompt_clicks(&layout, prompt_buf, NULL, NULL,
                     NULL, NULL, NULL);
                 if (drop_click_mode)
-                    supply_highlight_prompt_token(&layout, prompt_buf, "drop",
+                    supply_highlight_prompt_token(&layout, prompt_buf, ui_text("drop"),
                         TERM_YELLOW);
                 if (delete_click_mode)
                     supply_highlight_prompt_token(&layout, prompt_buf, "delete",
@@ -14570,8 +14568,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (!found_floor)
                 {
                     bell(inventory_one_page
-                        ? "No floor item in inventory."
-                        : "No floor item in this category.");
+                        ? ui_text("No floor item in inventory.")
+                        : ui_text("No floor item in this category."));
                     continue;
                 }
                 /* Like an item letter, the floor shortcut both selects the
@@ -15116,13 +15114,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             player_lamp_oil_capacity(), oil_slots, oil_slot_capacity);
 
         list_label = layout.stacked
-            ? supply_group_text[grp_idx[grp_cur]]
+            ? ui_text(supply_group_text[grp_idx[grp_cur]])
             : ((single_column && column)
-                    ? supply_group_text[grp_idx[grp_cur]]
+                    ? ui_text(supply_group_text[grp_idx[grp_cur]])
                     : "Name");
         title_label = (page == SUPPLY_MENU_PAGE_JEWELRY)
-            ? "Jewelry - Pouch and Sets"
-            : "Supplies - Supply, Herbs, Food, Potions, Gems, Lights/Oil";
+            ? ui_text("Jewelry - Pouch and Sets")
+            : ui_text("Supplies - Supply, Herbs, Food, Potions, Gems, Lights/Oil");
 
         if (grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS)
             list_label = "Set";
@@ -15145,7 +15143,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             if (draw_layout.stacked)
             {
                 Term_putstr(0, draw_layout.header_row, draw_layout.term_wid,
-                    TERM_SLATE, "Group");
+                    TERM_SLATE, ui_text("Group"));
                 knowledge_draw_stacked_entry_divider(&draw_layout);
                 if (draw_cols.show_sym)
                     Term_putstr(draw_cols.sym_hdr_col,
@@ -15156,24 +15154,24 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     TERM_SLATE, list_label);
                 if (draw_cols.show_weight)
                     Term_putstr(draw_cols.weight_col,
-                        draw_layout.entry_header_row, 5, TERM_SLATE, "Wt");
+                        draw_layout.entry_header_row, 5, TERM_SLATE, ui_text("Wt"));
                 if (draw_cols.show_turns)
                     Term_putstr(draw_cols.turns_col,
-                        draw_layout.entry_header_row, 5, TERM_SLATE, "Turns");
+                        draw_layout.entry_header_row, 5, TERM_SLATE, ui_text("Turns"));
                 if (draw_cols.show_qty)
                     Term_putstr(draw_cols.qty_col,
-                        draw_layout.entry_header_row, 3, TERM_SLATE, "Qty");
+                        draw_layout.entry_header_row, 3, TERM_SLATE, ui_text("Qty"));
             }
             else if (single_column && !column)
             {
                 Term_putstr(0, draw_layout.header_row, draw_layout.term_wid,
-                    TERM_SLATE, "Group");
+                    TERM_SLATE, ui_text("Group"));
             }
             else
             {
                 if (!single_column)
                     Term_putstr(0, draw_layout.header_row, draw_layout.group_w,
-                        TERM_SLATE, "Group");
+                        TERM_SLATE, ui_text("Group"));
                 if (draw_cols.show_sym)
                     Term_putstr(draw_cols.sym_hdr_col, draw_layout.header_row,
                         use_bigtile ? 2 : 1, TERM_SLATE, "S");
@@ -15181,13 +15179,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     draw_cols.name_w, TERM_SLATE, list_label);
                 if (draw_cols.show_weight)
                     Term_putstr(draw_cols.weight_col, draw_layout.header_row, 5,
-                        TERM_SLATE, "Wt");
+                        TERM_SLATE, ui_text("Wt"));
                 if (draw_cols.show_turns)
                     Term_putstr(draw_cols.turns_col, draw_layout.header_row, 5,
-                        TERM_SLATE, "Turns");
+                        TERM_SLATE, ui_text("Turns"));
                 if (draw_cols.show_qty)
                     Term_putstr(draw_cols.qty_col, draw_layout.header_row, 3,
-                        TERM_SLATE, "Qty");
+                        TERM_SLATE, ui_text("Qty"));
             }
 
             for (i = 0; i < draw_layout.term_wid; i++)
@@ -15330,49 +15328,49 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (save_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] name  [%s] save  [%s] back",
+                        ui_text("D-pad nav  [%s/%s] page  [%s] equip  [%s] name  [%s] save  [%s] back"),
                         prev_label, next_label, confirm_label, drop_label,
                         save_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "[%s] equip  [%s] name  [%s] save",
+                        ui_text("[%s] equip  [%s] name  [%s] save"),
                         confirm_label, drop_label, save_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] equip  [%s] name  [%s] back",
+                        ui_text("D-pad nav  [%s/%s] page  [%s] equip  [%s] name  [%s] back"),
                         prev_label, next_label, confirm_label, drop_label,
                         back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "[%s] equip  [%s] name", confirm_label, drop_label);
+                        ui_text("[%s] equip  [%s] name"), confirm_label, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "[%s] equip  [%s] name", confirm_label, drop_label);
+                    ui_text("[%s] equip  [%s] name"), confirm_label, drop_label);
             }
             else
             {
                 if (info_available)
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] info  [%s] use  [%s] drop  [%s] back",
+                        ui_text("D-pad nav  [%s/%s] page  [%s] info  [%s] use  [%s] drop  [%s] back"),
                         prev_label, next_label, info_label, confirm_label,
                         drop_label, back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] info  [%s] use  [%s] drop",
+                        ui_text("D-pad nav  [%s] info  [%s] use  [%s] drop"),
                         info_label, confirm_label, drop_label);
                 }
                 else
                 {
                     strnfmt(prompt_full, sizeof(prompt_full),
-                        "D-pad nav  [%s/%s] page  [%s] use  [%s] drop  [%s] back",
+                        ui_text("D-pad nav  [%s/%s] page  [%s] use  [%s] drop  [%s] back"),
                         prev_label, next_label, confirm_label, drop_label,
                         back_label);
                     strnfmt(prompt_mid, sizeof(prompt_mid),
-                        "D-pad nav  [%s] use  [%s] drop",
+                        ui_text("D-pad nav  [%s] use  [%s] drop"),
                         confirm_label, drop_label);
                 }
                 strnfmt(prompt_short, sizeof(prompt_short),
-                    "D-pad nav  [%s] use  [%s] drop", confirm_label,
+                    ui_text("D-pad nav  [%s] use  [%s] drop"), confirm_label,
                     drop_label);
             }
             variants[0] = prompt_full;
@@ -15387,7 +15385,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 jewelry_presets ? NULL : drop_label,
                 back_label);
             if (drop_click_mode)
-                supply_highlight_prompt_token(&draw_layout, prompt_buf, "drop",
+                supply_highlight_prompt_token(&draw_layout, prompt_buf, ui_text("drop"),
                     TERM_YELLOW);
         } else if (sdl_touch_only_device_active()) {
             char prompt_buf[160];
@@ -15396,37 +15394,37 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             supply_touch_row_prompt(prompt_buf, sizeof(prompt_buf),
                 draw_layout.term_wid, desc_overlay_on, drop_click_mode, false,
-                jewelry_presets ? "equip" : "use");
+                jewelry_presets ? ui_text("equip") : ui_text("use"));
             Term_putstr(0, draw_layout.prompt_row, draw_layout.term_wid,
                 TERM_SLATE, prompt_buf);
             if (jewelry_presets)
             {
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PRESET_SAVE,
-                    "Save", TERM_DARK);
+                    ui_text("Save"), TERM_DARK);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PRESET_NAME,
                     "Name", TERM_DARK);
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PRESET_CLEAR,
-                    "Clear", TERM_DARK);
+                    ui_text("Clear"), TERM_DARK);
             }
             else
             {
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_PREVIEW,
-                    desc_overlay_on ? "Hide Info" : "Preview",
+                    desc_overlay_on ? ui_text("Hide Info") : ui_text("Preview"),
                     supply_touch_mode_button_attr(
                         supply_touch_preview_mode_active(desc_overlay_on,
                             drop_click_mode, false)));
                 ui_menu_click_add_touch_button(SUPPLY_CLICK_DROP,
-                    drop_click_mode ? "Drop On" : "Drop",
+                    drop_click_mode ? ui_text("Drop On") : ui_text("Drop"),
                     supply_touch_mode_button_attr(drop_click_mode));
             }
         } else {
             char prompt_buf[160];
             const char* const* variants;
             size_t variant_count;
-            static const char* jewelry_variants[] = {
-                "Dir move  x preview  u equip  s save  n name  c clear  Tab  Alt+1-5  Esc",
-                "Dir move  u equip  s save  n name  c clear  Tab  Esc",
-                "u equip  s save  n name  c clear  Esc"
+            const char* jewelry_variants[] = {
+                ui_text("Dir move  x preview  u equip  s save  n name  c clear  Tab  Alt+1-5  Esc"),
+                ui_text("Dir move  u equip  s save  n name  c clear  Tab  Esc"),
+                ui_text("u equip  s save  n name  c clear  Esc")
             };
             char letter_full[160], letter_mid[128], letter_short[96];
             char move_full[160], move_mid[128], move_short[96];
@@ -15441,20 +15439,20 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 move_full, move_mid, move_short
             };
             strnfmt(letter_full, sizeof(letter_full),
-                "letter use  Dir move  %s preview  %s use  z drop  Tab  Esc",
+                ui_text("letter use  Dir move  %s preview  %s use  z drop  Tab  Esc"),
                 preview_key, use_key);
             strnfmt(letter_mid, sizeof(letter_mid),
-                "letter use  %s preview  %s use  z drop  Tab  Esc",
+                ui_text("letter use  %s preview  %s use  z drop  Tab  Esc"),
                 preview_key, use_key);
             strnfmt(letter_short, sizeof(letter_short),
-                "%s use  %s preview  z drop  Esc", use_key, preview_key);
+                ui_text("%s use  %s preview  z drop  Esc"), use_key, preview_key);
             strnfmt(move_full, sizeof(move_full),
-                "Dir move  %s preview  %s use  z drop  Tab  Esc",
+                ui_text("Dir move  %s preview  %s use  z drop  Tab  Esc"),
                 preview_key, use_key);
             strnfmt(move_mid, sizeof(move_mid),
-                "%s preview  %s use  z drop  Tab  Esc", preview_key, use_key);
+                ui_text("%s preview  %s use  z drop  Tab  Esc"), preview_key, use_key);
             strnfmt(move_short, sizeof(move_short),
-                "%s use  %s preview  z drop  Esc", use_key, preview_key);
+                ui_text("%s use  %s preview  z drop  Esc"), use_key, preview_key);
 
             if (grp_idx[grp_cur] == SUPPLY_GROUP_JEWELRY_PRESETS)
             {
@@ -15481,7 +15479,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             supply_register_prompt_clicks(&draw_layout, prompt_buf,
                 NULL, NULL, NULL, NULL, NULL);
             if (drop_click_mode)
-                supply_highlight_prompt_token(&draw_layout, prompt_buf, "drop",
+                supply_highlight_prompt_token(&draw_layout, prompt_buf, ui_text("drop"),
                     TERM_YELLOW);
         }
 
@@ -15522,7 +15520,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (single_column && column && compact_menu
             && sdl_touch_only_device_active())
             supply_draw_category_return(&draw_layout, draw_layout.header_row,
-                false, supply_group_text[grp_idx[grp_cur]], TERM_SLATE);
+                false, ui_text(supply_group_text[grp_idx[grp_cur]]), TERM_SLATE);
         char ch = inkey();
         bool click_generated_command = false;
         pack_combat_notice = false;
@@ -15709,7 +15707,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             if (!found_floor)
             {
-                bell("No floor item in this supply group.");
+                bell(ui_text("No floor item in this supply group."));
                 continue;
             }
             ch = 'u';
@@ -15929,7 +15927,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                         handled = true;
                         break;
                     default:
-                        bell("Cannot use that item here!");
+                        bell(ui_text("Cannot use that item here!"));
                         break;
                     }
 
@@ -15938,7 +15936,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else
                 {
-                    bell("You do not have any of that item.");
+                    bell(ui_text("You do not have any of that item."));
                     msg_print("You do not have any of that item.");
                 }
 
@@ -16000,7 +15998,7 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 }
                 else
                 {
-                    bell("Nothing to drop here.");
+                    bell(ui_text("Nothing to drop here."));
                     msg_print("Nothing to drop here.");
                 }
 
@@ -16236,7 +16234,7 @@ void do_cmd_knowledge_kills(void)
     sdl_fclose(fff);
 
     /* Display the file contents */
-    show_file(file_name, "Kill counts", 0);
+    show_file(file_name, ui_text("Kill counts"), 0);
 
     /* Remove the file */
     fd_kill(file_name);
@@ -16270,22 +16268,22 @@ static void do_cmd_knowledge_normal(void)
         ui_menu_click_set_hover_enabled(true);
 
         /* Ask for a choice */
-        prt("Display current knowledge", 2, 0);
+        prt(ui_text("Display current knowledge"), 2, 0);
 
         /* Give some choices */
-        prt("(1) Display known lore browser", 4, 5);
-        prt("(2) Display supplies overview", 5, 5);
-        prt("(3) Display names of the fallen", 6, 5);
-        prt("(4) Display kill counts", 7, 5);
+        prt(ui_text("(1) Display known lore browser"), 4, 5);
+        prt(ui_text("(2) Display supplies overview"), 5, 5);
+        prt(ui_text("(3) Display names of the fallen"), 6, 5);
+        prt(ui_text("(4) Display kill counts"), 7, 5);
 
         /*allow the player to see the notes taken if that option is selected*/
-        c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
-        prt("(6) Display oath status", 9, 5);
+        c_put_str(TERM_WHITE, ui_text("(5) Display character notes file"), 8, 5);
+        prt(ui_text("(6) Display oath status"), 9, 5);
         for (int i = 1; i <= 6; i++)
             ui_menu_click_add_full_row(i, i + 3);
 
         /* Prompt */
-        prt("Command: ", 11, 0);
+        prt(ui_text("Command: "), 11, 0);
 
         /* Prompt */
         ch = inkey();
@@ -16351,7 +16349,7 @@ static void do_cmd_knowledge_normal(void)
         /* Unknown option */
         else
         {
-            bell("Illegal command for knowledge!");
+            bell(ui_text("Illegal command for knowledge!"));
         }
 
         /* Flush messages */
@@ -16403,11 +16401,11 @@ void do_cmd_knowledge(void)
         ui_menu_click_set_hover_enabled(true);
 
         sdl_character_sheet_screen_begin_select(selected_choice,
-            "Display current knowledge");
+            ui_text("Display current knowledge"));
         sdl_character_sheet_screen_set_font_menu(SDL_MENU_FONT_KNOWLEDGE);
         sdl_character_sheet_screen_set_select_menu_style(true);
         for (int i = 0; i < (int)N_ELEMENTS(choices); ++i)
-            sdl_character_sheet_screen_add_select_row(i + 1, choices[i],
+            sdl_character_sheet_screen_add_select_row(i + 1, ui_text(choices[i]),
                 TERM_WHITE, "");
         if (!sdl_character_sheet_screen_commit_select(selected_choice))
         {
@@ -16418,13 +16416,13 @@ void do_cmd_knowledge(void)
             Term_get_size(&wid, &hgt);
             first_row = hgt >= 13 ? 4 : 1;
             col = wid >= 45 ? 5 : 0;
-            prt("Display current knowledge", 0, 0);
+            prt(ui_text("Display current knowledge"), 0, 0);
             for (int i = 0; i < (int)N_ELEMENTS(choices); ++i)
             {
-                prt(choices[i], first_row + i, col);
+                prt(ui_text(choices[i]), first_row + i, col);
                 ui_menu_click_add_full_row(i + 1, first_row + i);
             }
-            prt("Command: ", MIN(hgt - 1, first_row + 7), 0);
+            prt(ui_text("Command: "), MIN(hgt - 1, first_row + 7), 0);
         }
 
         /* Prompt */
@@ -16508,7 +16506,7 @@ void do_cmd_knowledge(void)
         /* Unknown option */
         else
         {
-            bell("Illegal command for knowledge!");
+            bell(ui_text("Illegal command for knowledge!"));
         }
 
         /* Flush messages */

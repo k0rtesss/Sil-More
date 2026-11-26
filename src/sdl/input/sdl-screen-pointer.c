@@ -874,7 +874,7 @@ bool sdl_screen_segment_col_hits_ci(const term* t, int row,
 
 bool sdl_screen_shows_any_key_prompt(void)
 {
-    const char* prompts[] = { "any key", "-more-" };
+    const char* prompts[] = { "any key", "beliebige taste", "-more-" };
     const term* t = Term;
 
     if (!t || !t->scr || !t->scr->c)

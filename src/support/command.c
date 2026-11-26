@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "support/command.h"
 #include "externs.h"
 #include "support/input.h"
@@ -219,7 +220,7 @@ void request_command(void)
             p_ptr->command_arg = 0;
 
             /* Begin the input */
-            prt("Repeat how many times: ", 0, 0);
+            prt(ui_text("Repeat how many times: "), 0, 0);
 
             /* Get a command count */
             while (1)
@@ -234,7 +235,7 @@ void request_command(void)
                     p_ptr->command_arg = p_ptr->command_arg / 10;
 
                     /* Show current count */
-                    prt(format("Repeat how many times: %d", p_ptr->command_arg),
+                    prt(format(ui_text("Repeat how many times: %d"), p_ptr->command_arg),
                         0, 0);
                 }
 
@@ -259,7 +260,7 @@ void request_command(void)
                     }
 
                     /* Show current count */
-                    prt(format("Repeat how many times: %d", p_ptr->command_arg),
+                    prt(format(ui_text("Repeat how many times: %d"), p_ptr->command_arg),
                         0, 0);
                 }
 
@@ -277,7 +278,7 @@ void request_command(void)
                 p_ptr->command_arg = 99;
 
                 /* Show current count */
-                prt(format("Repeat how many times: %d", p_ptr->command_arg), 0,
+                prt(format(ui_text("Repeat how many times: %d"), p_ptr->command_arg), 0,
                     0);
             }
 
@@ -288,7 +289,7 @@ void request_command(void)
                 p_ptr->command_arg = old_arg;
 
                 /* Show current count */
-                prt(format("Repeat how many times: %d", p_ptr->command_arg), 0,
+                prt(format(ui_text("Repeat how many times: %d"), p_ptr->command_arg), 0,
                     0);
             }
 

@@ -1,6 +1,7 @@
 /* File: object/object-inventory.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "object/object-inventory.h"
 #include "object/object-internal.h"
@@ -283,8 +284,8 @@ void inven_item_charges(int item)
     int visible_charges = staff_usable_charges(o_ptr->pval);
 
     /* Print a message */
-    msg_format("You have %d charge%s remaining.", visible_charges,
-        (visible_charges != 1) ? "s" : "");
+    msg_format(visible_charges == 1 ? "You have %d charge remaining."
+        : "You have %d charges remaining.", visible_charges);
 }
 
 /*
@@ -476,8 +477,8 @@ void floor_item_charges(int item)
     int visible_charges = staff_usable_charges(o_ptr->pval);
 
     /* Print a message */
-    msg_format("There are %d charge%s remaining.", visible_charges,
-        (visible_charges != 1) ? "s" : "");
+    msg_format(visible_charges == 1 ? "There is %d charge remaining."
+        : "There are %d charges remaining.", visible_charges);
 }
 
 /*
@@ -1549,6 +1550,8 @@ int inven_takeoff(int item, int amt)
         act = "You were wearing";
     }
 
+    act = ui_text(act);
+
     /* Modify, Optimize */
     log_debug("inven_takeoff: Before decrease - item=%d (k_idx=%d, prefix=%d, suffix=%d, number=%d)",
               item, o_ptr->k_idx, (int)object_ego_prefix(o_ptr), (int)object_ego_suffix(o_ptr), o_ptr->number);
@@ -1560,7 +1563,7 @@ int inven_takeoff(int item, int amt)
     if (discard_spent_light)
     {
         msg_format("%s %s; %s too spent to keep.", act, o_name,
-            (i_ptr->number > 1) ? "they are" : "it is");
+            ui_text((i_ptr->number > 1) ? "they are" : "it is"));
         p_ptr->redraw |= (PR_MAP | PR_LIGHT);
         p_ptr->window |= (PW_MESSAGE);
         handle_stuff();
@@ -1618,10 +1621,21 @@ int inven_takeoff(int item, int amt)
         if (group == INV_LIMIT_PACK || group == INV_LIMIT_HARNESS)
         {
             int used = inventory_limit_usage_for_group(group);
-
-            msg_format("Your %s has no room (%d.%d/%d.%d qt used).",
-                inventory_limit_group_name(group), used / 10, used % 10,
-                limit / 10, limit % 10);
+            cptr fmt = "Your %s has no room (%d.%d/%d.%d qt used).";
+            cptr name = inventory_limit_group_name(group);
+            cptr localized_fmt = ui_message_text(fmt);
+            if (localized_fmt == fmt)
+                msg_format(fmt, name, used / 10, used % 10, limit / 10, limit % 10);
+            else
+            {
+                char english[1024];
+                char localized[1024];
+                strnfmt(english, sizeof(english), fmt, name,
+                    used / 10, used % 10, limit / 10, limit % 10);
+                strnfmt(localized, sizeof(localized), localized_fmt, ui_text(name),
+                    used / 10, used % 10, limit / 10, limit % 10);
+                msg_print_localized(english, localized);
+            }
         }
         else if (label)
             msg_format("Your pack cannot hold more %s (limit %d).", label, limit);
@@ -1715,8 +1729,10 @@ static void inven_drop_equipped_supply_light(int item, int amt, int py, int px)
     if (player_light_destroyed_on_drop(&drop))
     {
         object_desc(o_name, sizeof(o_name), &drop, true, 3);
-        msg_format("You discard %s; %s too spent to keep.",
-            o_name, (drop.number > 1) ? "they are" : "it is");
+        msg_format(drop.number > 1
+                ? "You discard %s; they are too spent to keep."
+                : "You discard %s; it is too spent to keep.",
+            o_name);
 
         inven_item_increase(item, -amt);
         inven_item_optimize(item);
@@ -1845,8 +1861,10 @@ void inven_drop(int item, int amt)
 
     if (player_light_destroyed_on_drop(i_ptr))
     {
-        msg_format("You discard %s; %s too spent to keep.",
-            o_name, (i_ptr->number > 1) ? "they are" : "it is");
+        msg_format(i_ptr->number > 1
+                ? "You discard %s; they are too spent to keep."
+                : "You discard %s; it is too spent to keep.",
+            o_name);
 
         inven_item_increase(item, -amt);
         inven_item_describe(item);

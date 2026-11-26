@@ -125,7 +125,7 @@ bool los(int y1, int x1, int y2, int x2)
         {
             for (ty = y1 + 1; ty < y2; ty++)
             {
-                if (!cave_floor_bold(ty, x1))
+                if (cave_blocks_sight(ty, x1))
                     return (false);
             }
         }
@@ -135,7 +135,7 @@ bool los(int y1, int x1, int y2, int x2)
         {
             for (ty = y1 - 1; ty > y2; ty--)
             {
-                if (!cave_floor_bold(ty, x1))
+                if (cave_blocks_sight(ty, x1))
                     return (false);
             }
         }
@@ -152,7 +152,7 @@ bool los(int y1, int x1, int y2, int x2)
         {
             for (tx = x1 + 1; tx < x2; tx++)
             {
-                if (!cave_floor_bold(y1, tx))
+                if (cave_blocks_sight(y1, tx))
                     return (false);
             }
         }
@@ -162,7 +162,7 @@ bool los(int y1, int x1, int y2, int x2)
         {
             for (tx = x1 - 1; tx > x2; tx--)
             {
-                if (!cave_floor_bold(y1, tx))
+                if (cave_blocks_sight(y1, tx))
                     return (false);
             }
         }
@@ -180,7 +180,7 @@ bool los(int y1, int x1, int y2, int x2)
     {
         if (ay == 2)
         {
-            if (cave_floor_bold(y1 + sy, x1))
+            if (!cave_blocks_sight(y1 + sy, x1))
                 return (true);
         }
     }
@@ -190,7 +190,7 @@ bool los(int y1, int x1, int y2, int x2)
     {
         if (ax == 2)
         {
-            if (cave_floor_bold(y1, x1 + sx))
+            if (!cave_blocks_sight(y1, x1 + sx))
                 return (true);
         }
     }
@@ -225,7 +225,7 @@ bool los(int y1, int x1, int y2, int x2)
         /* the LOS exactly meets the corner of a tile. */
         while (x2 - tx)
         {
-            if (!cave_floor_bold(ty, tx))
+            if (cave_blocks_sight(ty, tx))
                 return (false);
 
             qy += m;
@@ -237,7 +237,7 @@ bool los(int y1, int x1, int y2, int x2)
             else if (qy > f2)
             {
                 ty += sy;
-                if (!cave_floor_bold(ty, tx))
+                if (cave_blocks_sight(ty, tx))
                     return (false);
                 qy -= f1;
                 tx += sx;
@@ -274,7 +274,7 @@ bool los(int y1, int x1, int y2, int x2)
         /* the LOS exactly meets the corner of a tile. */
         while (y2 - ty)
         {
-            if (!cave_floor_bold(ty, tx))
+            if (cave_blocks_sight(ty, tx))
                 return (false);
 
             qx += m;
@@ -286,7 +286,7 @@ bool los(int y1, int x1, int y2, int x2)
             else if (qx > f2)
             {
                 tx += sx;
-                if (!cave_floor_bold(ty, tx))
+                if (cave_blocks_sight(ty, tx))
                     return (false);
                 qx -= f1;
                 ty += sy;
@@ -344,7 +344,7 @@ bool seen_by_keen_senses(int fy, int fx)
             if (!in_bounds(y2, x2))
                 continue;
 
-            if ((cave_light[y2][x2] > 0) && cave_floor_bold(y2, x2)
+            if ((cave_light[y2][x2] > 0) && !cave_blocks_sight(y2, x2)
                 && (cave_info[y2][x2] & (CAVE_VIEW)))
             {
                 return (true);

@@ -54,12 +54,19 @@ static bool test_fixture_render(SDL_Renderer* renderer, SDL_Texture* texture,
     if (dst->x == (COL_MAP+14)*16 && dst->y == (ROW_MAP+9)*16) second_torch_draws++;
     return SDL_RenderTexture(renderer,texture,src,dst);
 }
+static int idle_geometry_checks;
+static bool test_idle_cell_rect(int y,int x,SDL_FRect* rect) {
+    idle_geometry_checks++;
+    return sdl_map_grid_cell_rect(y,x,rect);
+}
+#define sdl_map_grid_cell_rect test_idle_cell_rect
 #define SDL_GetWindowFlags test_window_flags
 #define IMG_Load test_image_load
 #define SDL_CreateTextureFromSurface test_texture
 #define SDL_realloc test_realloc
 #define SDL_RenderTexture test_fixture_render
 #include "sdl/render/sdl-idle-animation.c"
+#undef sdl_map_grid_cell_rect
 #undef SDL_GetWindowFlags
 #undef IMG_Load
 #undef SDL_CreateTextureFromSurface
@@ -637,6 +644,16 @@ static void freeze_tests(Uint64* now) {
 static void animation_tests(void) {
     Uint64 initial_tick = frame_tick;
     Uint64 now = initial_tick * IDLE_STEP_NS;
+    /* Liquid tiles use a common animation phase. Once its first visible
+     * member establishes the deadline the others need no viewport query. */
+    assert(cell_count==2);
+    byte old_steps=cells[1].frame_steps, old_phase=cells[1].phase_steps;
+    cells[1].frame_steps=cells[0].frame_steps;
+    cells[1].phase_steps=cells[0].phase_steps;
+    idle_geometry_checks=0;
+    assert(sdl_idle_animation_timeout_ms(now)>0 && idle_geometry_checks==1);
+    cells[1].frame_steps=old_steps;
+    cells[1].phase_steps=old_phase;
     assert(sdl_idle_animation_timeout_ms(now) > 0 && sdl_idle_animation_timeout_ms(now) <= 240);
     u64b rng = Rand_state_export();
     s32b turns = turn, player_turns = playerturn;

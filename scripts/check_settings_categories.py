@@ -26,6 +26,7 @@ static int choices[96], resets[96], row_count, selected;
 static const unsigned char* inputs;
 static int input_index, pending_choice = -9999, next_click;
 static int app_saves, meta_saves, url_opens, lore_changes;
+static int language_picker_calls;
 static bool lore_failure;
 static bool force_semantic_active;
 static bool force_handheld;
@@ -34,6 +35,26 @@ static int reset_answers[3], reset_questions, reset_requests, reset_errors;
 
 int __real_ui_question_ask_overlay(cptr, cptr, const ui_question_option*,
     int, int, int, int);
+int __real_ui_question_ask_language(cptr, cptr, const ui_question_option*,
+    int, int);
+int __wrap_ui_question_ask_language(cptr heading, cptr description,
+    const ui_question_option* answers, int count, int initial)
+{
+    ++language_picker_calls;
+    size_t locale_count;
+    const tutorial_locale *locales = tutorial_available_locales(&locale_count);
+    assert(streq(heading, ui_text("Interface language")));
+    assert(streq(description,
+        ui_text("Choose the language for menus, controls, status text, and messages.")));
+    assert((size_t)count == locale_count && initial >= 0 && initial < count);
+    assert(streq(locales[initial].code, ui_language()));
+    for (int i = 0; i < count; ++i) {
+        assert(streq(answers[i].label, locales[i].name));
+        assert(!answers[i].disabled);
+    }
+    return __real_ui_question_ask_language(heading, description, answers, count, initial);
+}
+
 int __wrap_ui_question_ask_overlay(cptr heading, cptr description,
     const ui_question_option* answers, int count, int y, int x, int initial)
 {
@@ -174,9 +195,9 @@ static void check_navigation(void)
     int focus = 1;
     p_ptr->noscore = 0; keys("p"); assert(options_menu(&focus) == 9); consumed();
     assert(find_row("Developer Settings") >= 0 && find_row("Debugging Options") < 0);
-    keys("\033"); assert(options_menu(&focus) == 10); consumed();
+    keys("\033"); assert(options_menu(&focus) == OPTIONS_RETURN); consumed();
     keys("\177"); next_click = SETTINGS_CLICK_RETURN;
-    assert(options_menu(&focus) == 10); consumed();
+    assert(options_menu(&focus) == OPTIONS_RETURN); consumed();
     const int pages[] = {3,4,5,6,7,9};
     for (int i = 0; i < (int)N_ELEMENTS(pages); i++) {
         assert(options_menu_page_choice_turn(pages[i],1) == pages[(i+1)%6]);
@@ -185,6 +206,51 @@ static void check_navigation(void)
     keys("\033"); assert(about_actions_menu(&focus) == ABOUT_ACTION_RETURN); consumed();
     assert(find_row("Palette") < 0 && find_row("Generic") < 0);
     puts("Developer is reachable in scored games; keyboard and touch Back return to play; page cycling and action grouping: PASS");
+}
+
+static void check_languages(void)
+{
+    int focus = 1;
+    app_saves = 0;
+    language_picker_calls = 0;
+    tutorial_set_language("fr");
+    ui_set_language("en");
+    keys("l\033o"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), "en") && !app_saves);
+    keys("l\ro"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), "en") && !app_saves);
+    keys("ldo"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), "de") && streq(tutorial_language(), "fr"));
+    assert(streq(title, "Optionen") && app_saves == 1);
+    assert(find_row("Français") >= 0 && find_row("Deutsch") >= 0);
+    next_click = OPTIONS_TUTORIAL_LANGUAGE;
+    keys("\177"); assert(options_menu(&focus) == OPTIONS_TUTORIAL_LANGUAGE); consumed();
+    /* Select English (index 0) in the real tutorial language picker. */
+    next_click = 0;
+    keys("t\177o"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), "de") && streq(tutorial_language(), "en"));
+    assert(app_saves == 2);
+    keys("leo"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), "en") && app_saves == 3);
+
+    size_t count;
+    const tutorial_locale *locales = tutorial_available_locales(&count);
+    tutorial_set_language("fr");
+    keys("l2\ro"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), locales[1].code) && app_saves == 4);
+    for (size_t i = 2; i < count; ++i) {
+        next_click = (int)i;
+        keys("l\177o"); do_cmd_options(); consumed();
+        assert(streq(ui_language(), locales[i].code));
+        assert(streq(tutorial_language(), "fr") && app_saves == 3 + (int)i);
+        assert(find_row(locales[i].name) >= 0);
+    }
+    next_click = 0;
+    keys("l\177o"); do_cmd_options(); consumed();
+    assert(streq(ui_language(), "en") && app_saves == 3 + (int)count);
+    assert(language_picker_calls == 4 + (int)count);
+    tutorial_set_language("en");
+    printf("All %zu interface locales are selectable through Options; keyboard, click, cancel and separate tutorial preference: PASS\n", count);
 }
 
 static void check_handheld_settings_labels(void)
@@ -304,7 +370,11 @@ static void check_persistence(void)
     op_ptr->opt[OPT_minimum_text_mode] = true;
     op_ptr->intro_style = INTRO_STYLE_HURIN;
     op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_OFF;
+    ui_set_language("de");
+    tutorial_set_language("fr");
     assert(sdl_config_save(config_file, &config, profiles, SDL_PANE_PROFILE_COUNT));
+    ui_set_language("en");
+    tutorial_set_language("en");
     op_ptr->opt[OPT_show_smithing_difficulty] = false;
     op_ptr->opt[OPT_show_dungeon_events] = false;
     op_ptr->opt[OPT_generic] = false;
@@ -313,6 +383,7 @@ static void check_persistence(void)
     op_ptr->intro_style = 0;
     op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_BANNER;
     sdl_config_load_app_options(config_file);
+    assert(streq(ui_language(), "de") && streq(tutorial_language(), "fr"));
     assert(op_ptr->opt[OPT_show_smithing_difficulty]);
     assert(op_ptr->opt[OPT_show_dungeon_events] && op_ptr->opt[OPT_generic]);
     assert(op_ptr->opt[OPT_ignore_monster_alarms]);
@@ -320,6 +391,32 @@ static void check_persistence(void)
     assert(op_ptr->intro_style == INTRO_STYLE_HURIN);
     assert(op_ptr->level_entry_narrative_mode == LEVEL_ENTRY_NARRATIVE_OFF);
     puts("Moved diagnostics, lore and narrative options round-trip through their existing JSON groups: PASS");
+
+    size_t count;
+    const tutorial_locale *locales = tutorial_available_locales(&count);
+    for (size_t i = 0; i < count; ++i) {
+        cptr interface_code = locales[i].code;
+        cptr tutorial_code = locales[(i + 1) % count].code;
+        ui_set_language(interface_code);
+        tutorial_set_language(tutorial_code);
+        assert(sdl_config_save(config_file, &config, profiles, SDL_PANE_PROFILE_COUNT));
+        ui_set_language(tutorial_code);
+        tutorial_set_language(interface_code);
+        sdl_config_load_app_options(config_file);
+        assert(streq(ui_language(), interface_code));
+        assert(streq(tutorial_language(), tutorial_code));
+    }
+
+    const char bad_config[] = "{\"appOptions\":{\"uiLanguage\":\"invalid\",\"tutorialLanguage\":\"fr\"}}";
+    assert(SDL_SaveFile(config_file, bad_config, sizeof(bad_config) - 1));
+    sdl_config_load_app_options(config_file);
+    assert(streq(ui_language(), "en") && streq(tutorial_language(), "fr"));
+    ui_set_language("de");
+    const char old_config[] = "{\"appOptions\":{\"tutorialLanguage\":\"fr\"}}";
+    assert(SDL_SaveFile(config_file, old_config, sizeof(old_config) - 1));
+    sdl_config_load_app_options(config_file);
+    assert(streq(ui_language(), "en") && streq(tutorial_language(), "fr"));
+    printf("All %zu interface locales round-trip separately; legacy and invalid settings select English: PASS\n", count);
 }
 
 static void check_minimum_text_option(void)
@@ -362,6 +459,108 @@ static void check_alarm_option(void)
     assert(!op_ptr->opt[OPT_ignore_monster_alarms]);
     puts("Ignore monster alarms: Gameplay row, off default, legacy-config default, touch toggle and reset: PASS");
 }
+static void check_ui_messages(void)
+{
+    const char *story = "With a voice as of rolling thunder, Morgoth, Lord of Darkness, speaks:";
+    bool was_generated = character_generated;
+    character_generated = true;
+    ui_set_language("de");
+    const char *german_menu = ui_text("main menu");
+    assert(streq(german_menu, "Hauptmenü"));
+    assert(streq(ui_message_text("Options"), "Options"));
+    msg_print("You are blind!");
+    assert(streq(message_str(0), "Du bist blind!"));
+    msg_format("%^s misses you.", "testork");
+    assert(streq(message_str(0), "Testork verfehlt dich."));
+    assert(message_color(0) == TERM_L_GREEN);
+    msg_print(story);
+    assert(streq(message_str(0), story));
+
+    size_t count;
+    const tutorial_locale *locales = tutorial_available_locales(&count);
+    cptr label = "main menu";
+    cptr message = "You are blind!";
+    for (size_t i = 1; i < count; ++i) {
+        ui_set_language(locales[i].code);
+        assert(ui_text(label) != label);
+        assert(ui_message_text(message) != message);
+        assert(streq(german_menu, "Hauptmenü"));
+    }
+    ui_set_language("de");
+    assert(ui_text("main menu") == german_menu);
+    ui_set_language("en");
+    msg_print("You are blind!");
+    assert(streq(message_str(0), "You are blind!"));
+    assert(streq(message_str(3), "Du bist blind!"));
+    character_generated = was_generated;
+    puts("Gameplay message language, formatted values, history, and story fallback: PASS");
+}
+
+static void save_ui_catalogue_fixture(cptr directory, cptr code, cptr contents)
+{
+    char filename[32], path[2048];
+    strnfmt(filename, sizeof(filename), "ui.%s.json", code);
+    assert(path_build(path, sizeof(path), directory, filename));
+    assert(SDL_SaveFile(path, contents, strlen(contents)));
+}
+
+static void check_catalogue_fallbacks(cptr directory)
+{
+    cptr original_help = ANGBAND_DIR_HELP;
+    cptr missing_entry = "Fixture missing entry";
+    cptr invalid_format = "Fixture %d";
+    cptr positional_format = "Fixture %s %d";
+    cptr unsafe_format = "Fixture %n";
+    cptr empty_value = "Fixture empty";
+    cptr valid_format = "Fixture %s: %02d%%";
+
+    ui_language_cleanup();
+    ui_set_language("cs");
+    ANGBAND_DIR_HELP = NULL;
+    assert(ui_text(valid_format) == valid_format);
+
+    save_ui_catalogue_fixture(directory, "cs",
+        "{\"version\":1,\"language\":\"cs\",\"strings\":{\"Fixture %d\":\"Local %s\","
+        "\"Fixture %s %d\":\"Local %2$d %1$s\",\"Fixture %n\":\"Local %n\","
+        "\"Fixture empty\":\"\",\"Fixture %s: %02d%%\":\"Local %s: %02d%%\"},"
+        "\"messages\":{\"Fixture message\":\"Local message\"}}");
+    save_ui_catalogue_fixture(directory, "da",
+        "{\"version\":1,\"strings\":{\"Fixture %s: %02d%%\":\"Local %s: %02d%%\","
+        "\"Fixture %s: %02d%%\":false},\"messages\":{}}");
+    save_ui_catalogue_fixture(directory, "es", "{\"version\":1,\"strings\":{},");
+    save_ui_catalogue_fixture(directory, "fr",
+        "{\"version\":2,\"strings\":{\"Fixture %s: %02d%%\":\"Local %s: %02d%%\"},"
+        "\"messages\":{}}");
+    save_ui_catalogue_fixture(directory, "it",
+        "{\"version\":1,\"language\":\"es\",\"strings\":{\"Fixture %s: %02d%%\":\"Local %s: %02d%%\"},"
+        "\"messages\":{}}");
+
+    ANGBAND_DIR_HELP = directory;
+    assert(streq(ui_text(valid_format), "Local %s: %02d%%"));
+    assert(streq(ui_message_text("Fixture message"), "Local message"));
+    assert(ui_text(missing_entry) == missing_entry);
+    assert(ui_text(invalid_format) == invalid_format);
+    assert(ui_text(positional_format) == positional_format);
+    assert(ui_text(unsafe_format) == unsafe_format);
+    assert(ui_text(empty_value) == empty_value);
+    assert(ui_text(NULL) == NULL && ui_message_text(NULL) == NULL);
+
+    const char *fallback_codes[] = {"bg", "da", "es", "fr", "it"};
+    for (size_t i = 0; i < N_ELEMENTS(fallback_codes); ++i) {
+        ui_set_language(fallback_codes[i]);
+        assert(streq(ui_language(), fallback_codes[i]));
+        assert(ui_text(valid_format) == valid_format);
+    }
+
+    ui_set_language("unknown");
+    assert(streq(ui_language(), "en") && ui_text(valid_format) == valid_format);
+    ui_set_language("cs");
+    ui_set_language(NULL);
+    assert(streq(ui_language(), "en"));
+    ui_language_cleanup();
+    ANGBAND_DIR_HELP = original_help;
+    puts("Missing, malformed, mislabelled, duplicate and invalid-format UI translations fall back safely: PASS");
+}
 '''
 
 
@@ -375,14 +574,16 @@ def main():
     body += '''    sdl_config_set_defaults(&config);
     char filename[2048]; strnfmt(filename, sizeof(filename), "%s/settings.json", argv[2]);
     config_file = filename;
-    check_categories(); check_navigation(); check_handheld_settings_labels(); check_diagnostics();
+    ANGBAND_DIR_HELP = argv[3];
+    check_categories(); check_navigation(); check_languages(); check_handheld_settings_labels(); check_diagnostics();
     check_progress_reset_warnings(); check_extra_controls();
-    check_alarm_option(); check_minimum_text_option(); check_persistence();
+    check_alarm_option(); check_minimum_text_option(); check_persistence(); check_ui_messages();
+    check_catalogue_fallbacks(argv[2]);
     SDL_Quit(); return 0;
 }
 '''
     harness = OUT / "check.c"
-    harness.write_text(body, encoding="utf-8")
+    harness.write_text(body.replace("assert(argc==3);", "assert(argc==4);"), encoding="utf-8")
     objects = shlex.split((BUILD / "CMakeFiles/sil-more.dir/objects1.rsp").read_text())
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"' + p + '"' for p in objects if not p.endswith(
@@ -398,7 +599,7 @@ def main():
         "tutorial_game_menu", "sdl_menu_letters_enabled", "sdl_touch_only_device_active",
         "sdl_character_sheet_screen_active",
         "sdl_handheld_ui_active",
-        "lore_set_generic", "sdl_lore_changed", "ui_question_ask_overlay",
+        "lore_set_generic", "sdl_lore_changed", "ui_question_ask_overlay", "ui_question_ask_language",
         "sil_progress_reset_request_restart"]
     for name, defines in (("desktop", []), ("mobile-policy", ["-DSIL_IOS"])):
         exe = OUT / f"check-{name}.exe"
@@ -411,7 +612,7 @@ def main():
             for catalog in (ROOT / "lib/pref").glob("generic_lore*.json"):
                 shutil.copy2(catalog, state)
             print(name, flush=True)
-            subprocess.run([str(exe), str(ROOT / "lib/edit"), state],
+            subprocess.run([str(exe), str(ROOT / "lib/edit"), state, str(ROOT / "lib/help")],
                 cwd=state, env=env, check=True, timeout=30)
 
 

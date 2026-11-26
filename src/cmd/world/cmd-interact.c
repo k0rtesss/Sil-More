@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -142,7 +143,7 @@ static void interaction_roll_render_overlay(cptr actor_label, cptr title, cptr a
     sdl_question_menu_begin(title);
     if ((y >= 0) && (x >= 0))
         sdl_question_menu_set_anchor_grid(y, x);
-    sdl_question_menu_set_desc(final ? "Final throw" : "Throwing...");
+    sdl_question_menu_set_desc(final ? ui_text("Final throw") : ui_text("Throwing..."));
 
     sdl_question_menu_add_text(action, final ? TERM_L_WHITE : TERM_L_BLUE);
 
@@ -256,7 +257,7 @@ void show_interaction_skill_roll_pair(cptr title, int y, int x,
     sdl_question_menu_begin(title);
     if ((y >= 0) && (x >= 0))
         sdl_question_menu_set_anchor_grid(y, x);
-    sdl_question_menu_set_desc("Final throws");
+    sdl_question_menu_set_desc(ui_text("Final throws"));
 
     interaction_roll_add_final_throw(first_label, first);
     interaction_roll_add_final_throw(second_label, second);
@@ -280,7 +281,7 @@ void show_interaction_skill_roll_status(cptr title, int y, int x,
     sdl_question_menu_begin(title);
     if ((y >= 0) && (x >= 0))
         sdl_question_menu_set_anchor_grid(y, x);
-    sdl_question_menu_set_desc("Final throw");
+    sdl_question_menu_set_desc(ui_text("Final throw"));
 
     interaction_roll_add_final_throw(roll_label, roll);
     sdl_question_menu_add_text(status, status_attr);

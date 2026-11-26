@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl/main-sdl-private.h"
 
@@ -119,14 +120,14 @@ static float sdl_halls_controller_card_h(const SDL_Rect* canvas, float width,
 
 static cptr sdl_halls_controller_hint(void)
 {
-    return "D-pad select   <RS> scroll   <LB>/<RB> page";
+    return ui_text("D-pad select   <RS> scroll   <LB>/<RB> page");
 }
 
 static cptr sdl_halls_mobile_action_label(const sdl_halls_action* action)
 {
-    if (streq(action->label, "Order: Score")) return "Sort: Score";
-    if (streq(action->label, "Order: Date")) return "Sort: Date";
-    return action->label;
+    if (streq(action->label, "Order: Score")) return ui_text("Sort: Score");
+    if (streq(action->label, "Order: Date")) return ui_text("Sort: Date");
+    return ui_text(action->label);
 }
 
 static TTF_Font* sdl_halls_role_font(enum sdl_ui_font_role role)
@@ -168,7 +169,7 @@ static void sdl_halls_mobile_action_grid(float width, int* columns,
     if (!count) {
         int w = 0, h = 0;
         count = 6;
-        TTF_GetStringSize(font, "Run History", 0, &w, &h);
+        TTF_GetStringSize(font, ui_text("Run History"), 0, &w, &h);
         natural_w = MAX(natural_w, w + 12.0f * dp);
     }
     /* Prefer the fewest rows that fit every complete label. Deriving columns
@@ -192,7 +193,7 @@ static void sdl_halls_mobile_action_grid(float width, int* columns,
                 sdl_halls_mobile_action_label(&g_sdl_halls.actions[i]),
                 SDL_UI_FONT_CONTROL, label_w) + 12.0f * dp);
     if (!g_sdl_halls.action_count)
-        *row_h = MAX(*row_h, sdl_halls_mobile_text_h("Run History",
+        *row_h = MAX(*row_h, sdl_halls_mobile_text_h(ui_text("Run History"),
             SDL_UI_FONT_CONTROL, label_w) + 12.0f * dp);
 }
 
@@ -271,7 +272,7 @@ static void sdl_halls_measure_layout(const SDL_Rect* canvas,
         layout->content_w = MAX(1.0f, canvas->w - 2.0f * layout->margin_x);
         sdl_halls_mobile_action_grid(layout->content_w, &columns, &rows, &row_h);
         layout->footer_h = row_h * rows + 6.0f * dp * (rows - 1);
-        layout->header_h = sdl_halls_mobile_text_h("Halls of Mandos",
+        layout->header_h = sdl_halls_mobile_text_h(ui_text("Halls of Mandos"),
             SDL_UI_FONT_TITLE, layout->content_w)
             + sdl_halls_mobile_text_h(g_sdl_halls.subtitle, SDL_UI_FONT_META,
                 layout->content_w)
@@ -767,7 +768,7 @@ static void sdl_halls_render_header(const SDL_Rect* canvas, float content_x,
         int px = sdl_menu_font_px(sdl_halls_clampi((int)(canvas->h * 0.040f), 18, 40));
         TTF_Font* font = sdl_story_font_for_height_slot(px, SDL_STORY_FONT_SLOT_DEFAULT);
         int text_w = 0, text_h = 0;
-        SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, "Halls of Mandos",
+        SDL_Texture* texture = sdl_ui_wrapped_text_texture(font, ui_text("Halls of Mandos"),
             MAX(1, (int)content_w), sdl_halls_color(TERM_YELLOW, 255), &text_w, &text_h);
         if (texture)
         {
@@ -791,7 +792,7 @@ static void sdl_halls_render_header(const SDL_Rect* canvas, float content_x,
 
     box = (SDL_FRect){ content_x, top, content_w, title_h };
     (void)sdl_halls_draw_fitted_text(
-        get_sdl_menu_bigger_font() ? "Halls of Mandos" : "H A L L S   O F   M A N D O S",
+        ui_text("H A L L S   O F   M A N D O S"),
         TERM_YELLOW, box, 0,
         title_min_px, title_px, SDL_STORY_FONT_SLOT_DEFAULT);
     sdl_halls_draw_rule(content_x + content_w * 0.33f, rule_y + 4.0f,
@@ -1277,7 +1278,7 @@ static void sdl_halls_draw_action_label(TTF_Font* font,
         box.y += badge_box.h;
         box.h -= badge_box.h;
     }
-    (void)sdl_halls_draw_text(font, label, action->attr, box, 0);
+    (void)sdl_halls_draw_text(font, ui_text(label), action->attr, box, 0);
 }
 
 static TTF_Font* sdl_halls_actions_font(float action_w, float inset,
@@ -1310,7 +1311,7 @@ static TTF_Font* sdl_halls_actions_font(float action_w, float inset,
                 continue;
             char badge[16];
             cptr label = sdl_halls_action_label(&g_sdl_halls.actions[i], badge, sizeof(badge));
-            if (!TTF_GetStringSize(font, label, 0,
+            if (!TTF_GetStringSize(font, ui_text(label), 0,
                     &text_w, &text_h)
                 || (float)text_w > available_w + 1.0f
                 || (float)text_h > h + 1.0f)
@@ -1529,7 +1530,7 @@ static void sdl_halls_render_mobile(const SDL_Rect* canvas,
         SDL_strlcpy(g_halls_mobile.page, page, sizeof(g_halls_mobile.page));
         g_halls_mobile.offset = 0;
     }
-    y += sdl_halls_mobile_text("Halls of Mandos", TERM_YELLOW,
+    y += sdl_halls_mobile_text(ui_text("Halls of Mandos"), TERM_YELLOW,
         SDL_UI_FONT_TITLE, x, y, width, true);
     y += sdl_halls_mobile_text(g_sdl_halls.subtitle, TERM_L_WHITE,
         SDL_UI_FONT_META, x, y, width, true);
@@ -1574,7 +1575,7 @@ static void sdl_halls_render_mobile(const SDL_Rect* canvas,
     }
     if (!g_sdl_halls.entry_count)
         sdl_halls_mobile_text(g_sdl_halls.empty_text[0]
-            ? g_sdl_halls.empty_text : "No recorded heroes yet.", TERM_SLATE,
+             ? ui_text(g_sdl_halls.empty_text) : ui_text("No recorded heroes yet."), TERM_SLATE,
             SDL_UI_FONT_BODY, x, layout->body_top, width, true);
     sdl_ui_render_scroll_indicator(
         (SDL_FRect){ x, layout->body_top, width, layout->body_h },
@@ -1665,7 +1666,7 @@ static void sdl_halls_render_controller_entries(const SDL_Rect* canvas,
     {
         SDL_FRect box = g_halls_controller.body;
         (void)sdl_halls_draw_fitted_text(g_sdl_halls.empty_text[0]
-            ? g_sdl_halls.empty_text : "No recorded heroes yet.", TERM_SLATE,
+             ? ui_text(g_sdl_halls.empty_text) : ui_text("No recorded heroes yet."), TERM_SLATE,
             box, 0, sdl_menu_font_px(19), sdl_menu_font_px(28),
             SDL_STORY_FONT_SLOT_NARRATIVE);
     }

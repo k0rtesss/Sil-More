@@ -10,6 +10,7 @@
 #include "sdl-config.h"
 #include "supplies.h"
 #include "tutorial/tutorial-game.h"
+#include "ui/ui-language.h"
 #include <math.h>
 
 void attempt_to_cheat_death(void)
@@ -1181,35 +1182,59 @@ static void elemental_describe_quantity(char* buf, size_t buf_size,
     object_desc(buf, buf_size, &desc_obj, false, 3);
 }
 
+static void elemental_format_item_message(char* text, size_t size,
+    const elemental_item_candidate* candidate, int original_number, int amount,
+    cptr o_name, cptr action, bool localized)
+{
+    char owner[40];
+    cptr owner_fmt = original_number > 1 ? "%d of your" : "Your";
+    cptr fmt;
+    bool has_label = false;
+
+    if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
+        fmt = "%s %s in your supplies %s";
+    else if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
+        fmt = "%s %s in your quiver %s";
+    else if (player_inventory_handle_is_carried(candidate->index))
+    {
+        fmt = "%s %s (%c) %s";
+        has_label = true;
+    }
+    else
+        fmt = "%s %s %s";
+
+    if (localized)
+    {
+        cptr localized_fmt = ui_message_text(fmt);
+        if (localized_fmt != fmt)
+        {
+            fmt = localized_fmt;
+            owner_fmt = ui_text(owner_fmt);
+            action = ui_text(action);
+        }
+    }
+
+    strnfmt(owner, sizeof(owner), owner_fmt, amount);
+    if (has_label)
+        strnfmt(text, size, fmt, owner, o_name,
+            player_inventory_label(candidate->index), action);
+    else
+        strnfmt(text, size, fmt, owner, o_name, action);
+}
+
 static void elemental_message_amount(const elemental_item_candidate* candidate,
     int original_number, int amount, cptr o_name, cptr singular_action,
     cptr plural_action)
 {
-    char owner[40];
-    cptr action = (amount > 1) ? plural_action : singular_action;
+    char english[1024];
+    char localized[1024];
+    cptr action = amount > 1 ? plural_action : singular_action;
 
-    if (original_number > 1)
-        strnfmt(owner, sizeof(owner), "%d of your", amount);
-    else
-        SDL_strlcpy(owner, "Your", sizeof(owner));
-
-    if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
-    {
-        msg_format("%s %s in your supplies %s", owner, o_name, action);
-    }
-    else if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
-    {
-        msg_format("%s %s in your quiver %s", owner, o_name, action);
-    }
-    else if (player_inventory_handle_is_carried(candidate->index))
-    {
-        msg_format("%s %s (%c) %s", owner, o_name,
-            player_inventory_label(candidate->index), action);
-    }
-    else
-    {
-        msg_format("%s %s %s", owner, o_name, action);
-    }
+    elemental_format_item_message(english, sizeof(english), candidate,
+        original_number, amount, o_name, action, false);
+    elemental_format_item_message(localized, sizeof(localized), candidate,
+        original_number, amount, o_name, action, true);
+    msg_print_localized(english, localized);
 }
 
 static void elemental_remove_quantity_from_candidate(
@@ -1981,30 +2006,8 @@ static bool elemental_select_candidate(int attack_type,
 static void elemental_message(const elemental_item_candidate* candidate,
     int original_number, cptr o_name, cptr action)
 {
-    char owner[40];
-
-    if (original_number > 1)
-        SDL_strlcpy(owner, "1 of your", sizeof(owner));
-    else
-        SDL_strlcpy(owner, "Your", sizeof(owner));
-
-    if (candidate->location == ELEMENTAL_CANDIDATE_SUPPLY)
-    {
-        msg_format("%s %s in your supplies %s", owner, o_name, action);
-    }
-    else if (candidate->location == ELEMENTAL_CANDIDATE_QUIVER)
-    {
-        msg_format("%s %s in your quiver %s", owner, o_name, action);
-    }
-    else if (player_inventory_handle_is_carried(candidate->index))
-    {
-        msg_format("%s %s (%c) %s", owner, o_name,
-            player_inventory_label(candidate->index), action);
-    }
-    else
-    {
-        msg_format("%s %s %s", owner, o_name, action);
-    }
+    elemental_message_amount(candidate, original_number, 1, o_name, action,
+        action);
 }
 
 static void elemental_mark_inventory_item_changed(void)
@@ -2994,8 +2997,10 @@ bool apply_disenchant(int mode)
     if (artefact_p(o_ptr) && percent_chance(60))
     {
         /* Message */
-        msg_format("Your %s (%c) resist%s disenchantment!", o_name,
-            index_to_label(t), ((o_ptr->number != 1) ? "" : "s"));
+        msg_format(o_ptr->number == 1
+                ? "Your %s (%c) resists disenchantment!"
+                : "Your %s (%c) resist disenchantment!",
+            o_name, index_to_label(t));
 
         /* Notice */
         return (true);
@@ -3015,8 +3020,9 @@ bool apply_disenchant(int mode)
     if (o_ptr->pd > k_ptr->pd)
         o_ptr->pd--;
 
-    msg_format("Your %s (%c) %s disenchanted!", o_name, index_to_label(t),
-        ((o_ptr->number != 1) ? "were" : "was"));
+    msg_format(o_ptr->number == 1 ? "Your %s (%c) was disenchanted!"
+                                 : "Your %s (%c) were disenchanted!",
+        o_name, index_to_label(t));
 
     /* Recalculate bonuses */
     p_ptr->update |= (PU_BONUS);

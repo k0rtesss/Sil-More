@@ -1,6 +1,7 @@
 /* File: birth/birth-skills.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "tutorial/tutorial.h"
 #include "birth/birth-internal.h"
@@ -148,7 +149,7 @@ static NavResult gain_skills_aux(bool birth)
 
         if (p_ptr->new_exp < 0)
         {
-            bell("Excessive skills!");
+            bell(ui_text("Excessive skills!"));
             skill_gain[skill]--;
             continue;
         }
@@ -240,7 +241,7 @@ static NavResult gain_skills_aux(bool birth)
             || (steamdeck && ch == steamdeck_alt_action_key())))
         {
             if (!birth_recommend_skills(old_base, skill_gain, old_new_exp))
-                bell("Not enough experience for the beginner defaults.");
+                bell(ui_text("Not enough experience for the beginner defaults."));
             else
                 advice_pending = true;
             continue;
@@ -305,7 +306,7 @@ static NavResult gain_skills_aux(bool birth)
             if (!tutorial_game_action_allowed("train", NULL)) continue;
             if (death_view)
             {
-                msg_print("You cannot do that during this final look.");
+                msg_print(ui_text("You cannot do that during this final look."));
                 continue;
             }
         }

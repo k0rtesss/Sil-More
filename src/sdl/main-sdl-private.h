@@ -160,6 +160,7 @@ enum {
     SDL_STORY_FONT_SLOT_TUTORIAL = 1,
     SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE = STORY_FONT_SLOTS,
     SDL_STORY_FONT_SLOT_TUTORIAL_MENU,
+    SDL_STORY_FONT_SLOT_LANGUAGE_PICKER,
     SDL_STORY_FONT_SLOT_TUTORIAL_JA,
     SDL_STORY_FONT_SLOT_TUTORIAL_KO,
     SDL_STORY_FONT_SLOT_TUTORIAL_ZH
@@ -167,12 +168,14 @@ enum {
 
 int sdl_tutorial_font_slot(int normal_slot);
 
+enum { SDL_STORY_FONT_FALLBACK_COUNT = 3 };
+
 typedef struct story_font_entry {
     int pixel_height;
     int slot;
+    int interface_region;
     TTF_Font* font;
-    TTF_Font* fallback; /* Owned glyph fallback, closed with the primary. */
-    TTF_Font* picker_fallback; /* Endonyms in Western tutorial menus. */
+    TTF_Font* fallbacks[SDL_STORY_FONT_FALLBACK_COUNT];
     Uint64 last_used;
 } story_font_entry;
 
@@ -1096,6 +1099,7 @@ typedef struct sdl_question_menu_state {
     bool text_input;
     bool active;
     bool tutorial_fonts;
+    bool language_picker;
     enum sdl_menu_font font_menu;
     SDL_FRect header_controls;
     bool blocking_input;
@@ -3046,9 +3050,18 @@ void sdl_touch_thumb_render(void);
 void sdl_touch_thumb_cancel_press(void);
 int sdl_touch_thumb_pending_timeout_ms(Uint64 now_ns);
 bool sdl_touch_thumb_flush_pending_press(Uint64 now_ns);
-bool sdl_touch_thumb_handle_pointer_down(float x, float y, bool mouse, SDL_FingerID finger_id);
+bool sdl_touch_thumb_handle_pointer_down(float x, float y, bool mouse,
+    SDL_FingerID finger_id, Uint64 event_time);
 bool sdl_touch_thumb_handle_pointer_motion(float x, float y, bool mouse, SDL_FingerID finger_id);
-bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse, SDL_FingerID finger_id);
+bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse,
+    SDL_FingerID finger_id, Uint64 event_time);
+#if defined(SDL_PLATFORM_ANDROID)
+void sdl_touch_thumb_note_android_press(SDL_TouchID device, SDL_FingerID finger,
+    Uint64 timestamp);
+void sdl_touch_thumb_confirm_android_hold(Sint32 token);
+void sdl_android_request_thumb_hold(SDL_TouchID device, SDL_FingerID finger,
+    Uint64 event_time, Sint32 token);
+#endif
 bool sdl_touch_round_layer_config_enabled(void);
 bool sdl_touch_round_layer_controls_active(void);
 bool sdl_touch_round_point_excluded(float x, float y);
@@ -3062,9 +3075,11 @@ void sdl_touch_target_layout_end(void);
 int sdl_touch_round_dir_for_delta(float dx, float dy);
 void sdl_touch_round_send_dir(int dir, bool ctrl, bool run);
 void sdl_touch_round_cancel_press(void);
-bool sdl_touch_round_handle_pointer_down(float x, float y, SDL_FingerID finger_id);
+bool sdl_touch_round_handle_pointer_down(float x, float y,
+    SDL_FingerID finger_id, Uint64 event_time);
 bool sdl_touch_round_handle_pointer_motion(float x, float y, SDL_FingerID finger_id);
-bool sdl_touch_round_handle_pointer_up(float x, float y, SDL_FingerID finger_id);
+bool sdl_touch_round_handle_pointer_up(float x, float y,
+    SDL_FingerID finger_id, Uint64 event_time);
 int sdl_touch_round_pending_timeout_ms(Uint64 now_ns);
 void sdl_touch_round_flush_pending_highlight(Uint64 now_ns);
 void sdl_touch_round_draw_circle(float cx, float cy, float radius, SDL_Color color);
@@ -4321,11 +4336,11 @@ bool sdl_touch_round_layer_controls_active(void);
 bool sdl_touch_round_layer_config_enabled(void);
 bool sdl_touch_movement_point_blocked_by_overlay(float x, float y);
 bool sdl_touch_round_handle_pointer_down(float x, float y,
-    SDL_FingerID finger_id);
+    SDL_FingerID finger_id, Uint64 event_time);
 bool sdl_touch_round_handle_pointer_motion(float x, float y,
     SDL_FingerID finger_id);
 bool sdl_touch_round_handle_pointer_up(float x, float y,
-    SDL_FingerID finger_id);
+    SDL_FingerID finger_id, Uint64 event_time);
 void sdl_touch_round_cancel_press(void);
 void sdl_touch_round_render(void);
 bool sdl_touch_round_compute_layout(float* out_cx, float* out_cy,

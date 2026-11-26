@@ -22,11 +22,19 @@ CHECKS = r'''
 #include "fs/path.h"
 #include "fs/io_sdl.h"
 #include "player/player-upkeep-internal.h"
+#include "ui/status/status-internal.h"
 #undef assert
 #define assert(c) do { if (!(c)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c); exit(1); } } while(0)
 static char wanted[320];
 static int pair_rows, active_rows, expected_rows=-1;
 static int attack,dd,ds,attack2,dd2,ds2;
+static int preview_calculations;
+void __real_calc_bonuses_for_preview(void);
+void __wrap_calc_bonuses_for_preview(void)
+{
+    preview_calculations++;
+    __real_calc_bonuses_for_preview();
+}
 static bool single, rendered_submenu, forbid_shield_rows;
 extern bool render_check;
 extern void render_options(const char*,const ui_question_option*,const object_type* const*,int,int);
@@ -257,6 +265,32 @@ static void check_stacked_pairs(void)
     expected_rows=0;do_cmd_toggle_active_weapon();
     puts("A cursed active throwing stack cannot be split by moving its members between hands PASS.");
 }
+static void check_hud_preview_count(void)
+{
+    for (int hands=0; hands<=2; hands++) {
+        prepare(true,false);
+        if (!hands) object_wipe(&inventory[INVEN_WIELD]);
+        if (hands==2) put(INVEN_ARM,TV_SWORD,SV_DAGGER);
+        calc_bonuses();
+        int expected_attack,expected_dd,expected_ds;
+        assert(player_active_weapon_stats_preview(PLAYER_ACTIVE_WEAPON_MELEE,
+            &expected_attack,&expected_dd,&expected_ds,NULL));
+        char expected[32],row[256];
+        strnfmt(expected,sizeof(expected),"(%+d,%dd%d)",expected_attack,expected_dd,expected_ds);
+        preview_calculations=0;
+        prt_mel();
+        assert(preview_calculations==1);
+        int main_row=hands==2 && ROW_MEL-1!=ROW_LIGHT ? ROW_MEL-1 : ROW_MEL;
+        memcpy(row,Term->scr->c[main_row],Term->wid);
+        row[Term->wid]=0;
+        assert(strstr(row,expected));
+        hidden_overlay_line lines[16];
+        preview_calculations=0;
+        assert(hidden_left_panel_build_lines(lines,16)>0 && preview_calculations==1);
+    }
+    puts("Both melee HUD layouts calculate one equipment preview for empty, single and paired hands: PASS.");
+}
+
 static void checks(void)
 {
     prepare(true,false);
@@ -672,7 +706,9 @@ def main():
     init = init[:init.index("    check_templates();")]
     source = OUT / "check.c"
     source.write_text(prefix + CHECKS + init
-        + "    assert(!init_flavor_info()); flavor_init(); checks(); "
+        + "    assert(!init_flavor_info()); flavor_init(); "
+        + ("" if args.baseline else "check_hud_preview_count(); ")
+        + "checks(); "
         + ("check_render(); " if args.render else "")
         + "SDL_Quit(); return 0;\n}\n", encoding="utf-8")
     cmake = BUILD / "CMakeFiles/sil-more.dir"
@@ -688,10 +724,11 @@ def main():
         "/src/cmd/ui/cmd-ui-abilities.c.obj"]
     extra = []
     if args.baseline:
-        baseline = OUT / "baseline.c"
-        baseline.write_bytes(subprocess.check_output(["git", "show", "HEAD:src/player/player-active-weapon.c"], cwd=ROOT))
-        extra.append(str(baseline))
-        excluded.append("/src/player/player-active-weapon.c.obj")
+        for path in ("src/player/player-active-weapon.c", "src/ui/status/status-panel.c"):
+            baseline = OUT / ("baseline-" + Path(path).name)
+            baseline.write_bytes(subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT))
+            extra.append(str(baseline))
+            excluded.append("/" + path + ".obj")
     response = OUT / "objects.rsp"
     response.write_text("\n".join('"'+p+'"' for p in objects if not p.endswith(tuple(excluded))))
     env = os.environ.copy()
@@ -701,7 +738,7 @@ def main():
     env["PATH"] = os.pathsep.join([*(str(BUILD / "_deps" / dep) for dep in
         ("SDL", "SDL_ttf", "SDL_image", "SDL_mixer")), "C:/msys64/mingw64/bin", "C:/msys64/usr/bin", env["PATH"]])
     exe = OUT / "check.exe"
-    wrapped = ("handle_stuff", "update_stuff", "msg_print", "get_check", "inkey",
+    wrapped = ("handle_stuff", "update_stuff", "calc_bonuses_for_preview", "msg_print", "get_check", "inkey",
         "tutorial_game_action_allowed", "tutorial_game_active_weapon_allowed",
         "tutorial_game_action_done", "tutorial_game_identified", "ui_question_ask_objects_with_help",
         "sdl_overlay_pane_anchor_rect")

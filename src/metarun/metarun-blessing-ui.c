@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "metarun-internal.h"
 
 static int blessing_points_remaining(void)
@@ -37,10 +38,10 @@ static void blessing_put_choice_prompt(int row, bool steamdeck,
         const char* variants[2];
 
         strnfmt(prompt_full, sizeof(prompt_full),
-            "D-pad navigate  [%s] accept  [%s] %s", accept_label,
-            back_label, back_word ? back_word : "cancel");
-        strnfmt(prompt_short, sizeof(prompt_short), "[%s] accept  [%s] %s",
-            accept_label, back_label, back_word ? back_word : "cancel");
+            ui_text("D-pad navigate  [%s] accept  [%s] %s"), accept_label,
+            back_label, back_word ? back_word : ui_text("cancel"));
+        strnfmt(prompt_short, sizeof(prompt_short), ui_text("[%s] accept  [%s] %s"),
+            accept_label, back_label, back_word ? back_word : ui_text("cancel"));
         variants[0] = prompt_full;
         variants[1] = prompt_short;
         terminal_prompt_pick_variant(prompt, sizeof(prompt), width, false,
@@ -49,9 +50,9 @@ static void blessing_put_choice_prompt(int row, bool steamdeck,
     else if (sdl_touch_only_device_active())
     {
         const char* variants[] = {
-            "Tap a row to select, tap away to exit",
-            "Tap to select, tap away to exit",
-            "Tap to select"
+            ui_text("Tap a row to select, tap away to exit"),
+            ui_text("Tap to select, tap away to exit"),
+            ui_text("Tap to select")
         };
         terminal_prompt_pick_variant(prompt, sizeof(prompt), width, false,
             variants, N_ELEMENTS(variants));
@@ -64,13 +65,13 @@ static void blessing_put_choice_prompt(int row, bool steamdeck,
         const char* variants[3];
 
         strnfmt(prompt_full, sizeof(prompt_full),
-            "Dir navigate  Enter accept  Letter select  Esc %s",
-            back_word ? back_word : "cancel");
+            ui_text("Dir navigate  Enter accept  Letter select  Esc %s"),
+            back_word ? back_word : ui_text("cancel"));
         strnfmt(prompt_mid, sizeof(prompt_mid),
-            "Dir navigate  Enter accept  Esc %s",
-            back_word ? back_word : "cancel");
-        strnfmt(prompt_short, sizeof(prompt_short), "Enter accept  Esc %s",
-            back_word ? back_word : "cancel");
+            ui_text("Dir navigate  Enter accept  Esc %s"),
+            back_word ? back_word : ui_text("cancel"));
+        strnfmt(prompt_short, sizeof(prompt_short), ui_text("Enter accept  Esc %s"),
+            back_word ? back_word : ui_text("cancel"));
         variants[0] = prompt_full;
         variants[1] = prompt_mid;
         variants[2] = prompt_short;
@@ -84,10 +85,10 @@ static void blessing_put_choice_prompt(int row, bool steamdeck,
         const char* variants[2];
 
         strnfmt(prompt_full, sizeof(prompt_full),
-            "Dir navigate  Enter accept  Esc %s",
-            back_word ? back_word : "cancel");
-        strnfmt(prompt_short, sizeof(prompt_short), "Enter accept  Esc %s",
-            back_word ? back_word : "cancel");
+            ui_text("Dir navigate  Enter accept  Esc %s"),
+            back_word ? back_word : ui_text("cancel"));
+        strnfmt(prompt_short, sizeof(prompt_short), ui_text("Enter accept  Esc %s"),
+            back_word ? back_word : ui_text("cancel"));
         variants[0] = prompt_full;
         variants[1] = prompt_short;
         terminal_prompt_pick_variant(prompt, sizeof(prompt), width, false,
@@ -96,8 +97,8 @@ static void blessing_put_choice_prompt(int row, bool steamdeck,
 
     Term_putstr(2, row, -1, TERM_L_DARK, prompt);
     ui_menu_click_add_text_token(-1, 2, row, prompt,
-        back_word ? back_word : "cancel");
-    ui_menu_click_add_text_token(-1, 2, row, prompt, "Esc cancel");
+        back_word ? back_word : ui_text("cancel"));
+    ui_menu_click_add_text_token(-1, 2, row, prompt, ui_text("Esc cancel"));
 }
 
 static void blessing_commit_changes(bool apply_runtime)
@@ -262,7 +263,7 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
 
     if (count == 0) {
         if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "No curses cling to this saga.", msg_size);
+            SDL_strlcpy(result_msg, ui_text("No curses cling to this saga."), msg_size);
             if (result_attr) *result_attr = TERM_L_DARK;
         }
         return false;
@@ -294,8 +295,8 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_outside_cancel_enabled(true);
 
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Remove a Curse (cost 1 blessing point)");
-        Term_putstr(2, 3, -1, TERM_L_WHITE, "Choose which curse to lift:");
+        Term_putstr(2, 1, -1, TERM_YELLOW, ui_text("Remove a Curse (cost 1 blessing point)"));
+        Term_putstr(2, 3, -1, TERM_L_WHITE, ui_text("Choose which curse to lift:"));
 
         int click_width = (metarun_term_width() > 6) ? metarun_term_width() - 4 : 76;
         int line = 5;
@@ -310,9 +311,9 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
             metarun_display_pad(padded, sizeof padded,
                                 curse_display_name(id), 28);
             if (!menu_letters)
-                snprintf(buf, sizeof buf, "   %s stacks: %d", padded, stacks);
+                snprintf(buf, sizeof buf, ui_text("   %s stacks: %d"), padded, stacks);
             else
-                snprintf(buf, sizeof buf, "%c) %s stacks: %d",
+                snprintf(buf, sizeof buf, ui_text("%c) %s stacks: %d"),
                          'a' + i, padded, stacks);
 
             if (i == selected) {
@@ -345,7 +346,7 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
         }
 
         blessing_put_choice_prompt(line + 1, steamdeck, menu_letters,
-            accept_label, back_label, "cancel");
+            accept_label, back_label, ui_text("cancel"));
         char key = metarun_inkey_hidden();
 
         {
@@ -408,10 +409,10 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
             if (idx >= 0 && idx < count) {
                 choice = idx;
             } else {
-                bell("Invalid selection.");
+                bell(ui_text("Invalid selection."));
             }
         } else {
-            bell("Invalid selection.");
+            bell(ui_text("Invalid selection."));
         }
     }
 
@@ -445,12 +446,12 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
 
     if (result_msg && msg_size > 0) {
         if (current_stacks > 1) {
-            snprintf(result_msg, msg_size, "One stack of %s is lifted. (%d remain%s)",
-                     curse_display_name(curse_id),
-                     current_stacks - 1,
-                     (current_stacks - 1 == 1) ? "s" : "");
+            snprintf(result_msg, msg_size, current_stacks == 2
+                ? ui_text("One stack of %s is lifted. (%d remains)")
+                : ui_text("One stack of %s is lifted. (%d remain)"),
+                curse_display_name(curse_id), current_stacks - 1);
         } else {
-            snprintf(result_msg, msg_size, "The curse of %s is lifted.", curse_display_name(curse_id));
+            snprintf(result_msg, msg_size, ui_text("The curse of %s is lifted."), curse_display_name(curse_id));
         }
         if (result_attr) *result_attr = TERM_L_BLUE;
     }
@@ -523,7 +524,7 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
 
         if (count == 0) {
             if (result_msg && msg_size > 0) {
-                SDL_strlcpy(result_msg, "No blessings are presently available.", msg_size);
+                SDL_strlcpy(result_msg, ui_text("No blessings are presently available."), msg_size);
                 if (result_attr) *result_attr = TERM_L_DARK;
             }
             return false;
@@ -586,8 +587,8 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_outside_cancel_enabled(true);
 
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Receive a Blessing (cost 1 blessing point)");
-        Term_putstr(2, 3, -1, TERM_L_WHITE, "Select a gift to accept:");
+        Term_putstr(2, 1, -1, TERM_YELLOW, ui_text("Receive a Blessing (cost 1 blessing point)"));
+        Term_putstr(2, 3, -1, TERM_L_WHITE, ui_text("Select a gift to accept:"));
 
         int click_width = (metarun_term_width() > 6) ? metarun_term_width() - 4 : 76;
         int line = 5;
@@ -622,7 +623,7 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
         }
 
         blessing_put_choice_prompt(line + 1, steamdeck, menu_letters,
-            accept_label, back_label, "cancel");
+            accept_label, back_label, ui_text("cancel"));
         char key = metarun_inkey_hidden();
 
         {
@@ -682,10 +683,10 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
             if (idx >= 0 && idx < picks) {
                 choice = idx;
             } else {
-                bell("Invalid selection.");
+                bell(ui_text("Invalid selection."));
             }
         } else {
-            bell("Invalid selection.");
+            bell(ui_text("Invalid selection."));
         }
     }
 
@@ -698,7 +699,7 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
     if (CURSE_BLESSING_CAP(blessing_id) > 0
         && blessing_stacks >= CURSE_BLESSING_CAP(blessing_id)) {
         if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "That blessing cannot grow any stronger.", msg_size);
+            SDL_strlcpy(result_msg, ui_text("That blessing cannot grow any stronger."), msg_size);
             if (result_attr) *result_attr = TERM_L_DARK;
         }
         return false;
@@ -717,7 +718,7 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
     blessing_commit_changes(true);
 
     if (result_msg && msg_size > 0) {
-        snprintf(result_msg, msg_size, "You receive the %s.", blessing_display_name(blessing_id));
+        snprintf(result_msg, msg_size, ui_text("You receive the %s."), blessing_display_name(blessing_id));
         if (result_attr) *result_attr = TERM_L_GREEN;
     }
     return true;
@@ -730,7 +731,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
     int cap = major_blessing_capacity();
     if (cap <= 0 || !mb_info) {
         if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "No major blessings are currently defined.", msg_size);
+            SDL_strlcpy(result_msg, ui_text("No major blessings are currently defined."), msg_size);
             if (result_attr) *result_attr = TERM_L_DARK;
         }
         return false;
@@ -752,7 +753,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
 
     if (option_count == 0) {
         if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "All major blessings are already sealed.", msg_size);
+            SDL_strlcpy(result_msg, ui_text("All major blessings are already sealed."), msg_size);
             if (result_attr) *result_attr = TERM_L_DARK;
         }
         return false;
@@ -783,7 +784,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
     /* If no affordable options, show message and return */
     if (selected < 0) {
         if (result_msg && msg_size > 0) {
-            snprintf(result_msg, msg_size, "You need %d blessing points to unlock any major blessing.",
+            snprintf(result_msg, msg_size, ui_text("You need %d blessing points to unlock any major blessing."),
                    major_blessing_cost(options[0].idx));
             if (result_attr) *result_attr = TERM_L_DARK;
         }
@@ -797,8 +798,8 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
         ui_menu_click_set_hover_enabled(true);
         ui_menu_click_set_outside_cancel_enabled(true);
 
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Unlock a Major Blessing");
-        Term_putstr(2, 3, -1, TERM_L_WHITE, "Select which covenant to forge:");
+        Term_putstr(2, 1, -1, TERM_YELLOW, ui_text("Unlock a Major Blessing"));
+        Term_putstr(2, 3, -1, TERM_L_WHITE, ui_text("Select which covenant to forge:"));
 
         /* Recalculate in case something changed (shouldn't happen but safe) */
         available = blessing_points_remaining();
@@ -816,9 +817,9 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
 
             char buf[160];
             if (!menu_letters)
-                snprintf(buf, sizeof buf, "   %s (cost %d)", name, cost);
+                snprintf(buf, sizeof buf, ui_text("   %s (cost %d)"), name, cost);
             else
-                snprintf(buf, sizeof buf, "%c) %s (cost %d)", key, name, cost);
+                snprintf(buf, sizeof buf, ui_text("%c) %s (cost %d)"), key, name, cost);
 
             if (i == selected) {
                 Term_putstr(2, line, -1, TERM_L_BLUE, ">");
@@ -848,11 +849,11 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
 
         /* Show available points */
         char points_msg[80];
-        snprintf(points_msg, sizeof points_msg, "Available blessing points: %d", available);
+        snprintf(points_msg, sizeof points_msg, ui_text("Available blessing points: %d"), available);
         Term_putstr(2, line++, -1, TERM_L_BLUE, points_msg);
 
         blessing_put_choice_prompt(line + 1, steamdeck, menu_letters,
-            accept_label, back_label, "cancel");
+            accept_label, back_label, ui_text("cancel"));
 
         char key = metarun_inkey_hidden();
         bool selected_from_confirm = false;
@@ -949,7 +950,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
                 if (lowered == options[i].key) {
                     int cost = major_blessing_cost(options[i].idx);
                     if (cost > available) {
-                        bell("Not enough blessing points for that covenant.");
+                        bell(ui_text("Not enough blessing points for that covenant."));
                         choice_idx = -2; /* Special marker for unaffordable */
                         break;
                     }
@@ -966,7 +967,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
         }
 
         if (choice_idx < 0) {
-            bell("Invalid selection.");
+            bell(ui_text("Invalid selection."));
             continue;
         }
 
@@ -982,7 +983,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
             if (msg && *msg) {
                 SDL_strlcpy(result_msg, msg, msg_size);
             } else {
-                snprintf(result_msg, msg_size, "You seal the %s.", major_blessing_name_str(choice_idx));
+                snprintf(result_msg, msg_size, ui_text("You seal the %s."), major_blessing_name_str(choice_idx));
             }
             if (result_attr) *result_attr = TERM_YELLOW;
         }
@@ -1044,9 +1045,9 @@ void open_blessing_exchange(void)
         ui_menu_click_set_outside_cancel_enabled(true);
         int click_width = (metarun_term_width() > 6) ? metarun_term_width() - 4 : 76;
 
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Blessing Exchange");
+        Term_putstr(2, 1, -1, TERM_YELLOW, ui_text("Blessing Exchange"));
         char buf[160];
-        snprintf(buf, sizeof buf, "Blessing Points Available: %d (spent %d / earned %d)",
+        snprintf(buf, sizeof buf, ui_text("Blessing Points Available: %d (spent %d / earned %d)"),
                  available, spent, earned);
         Term_putstr(2, 3, -1, TERM_L_WHITE, buf);
 
@@ -1054,21 +1055,21 @@ void open_blessing_exchange(void)
         u32b threshold = metarun_threshold_value(&metar);
         if (threshold == 0) threshold = 1;
 
-        snprintf(buf, sizeof buf, "Fallen Score Pool: %lu (progress %lu / %lu)",
+        snprintf(buf, sizeof buf, ui_text("Fallen Score Pool: %lu (progress %lu / %lu)"),
                  (unsigned long)metar.fallen_score_total,
                  (unsigned long)metar.fallen_score_pool,
                  (unsigned long)threshold);
         Term_putstr(2, 4, -1, TERM_L_WHITE, buf);
 
-        Term_putstr(2, 6, -1, TERM_L_GREEN, "Options:");
+        Term_putstr(2, 6, -1, TERM_L_GREEN, ui_text("Options:"));
 
         /* Option 0: Remove curse */
         cptr marker0 = (selected == 0) ? ">" : " ";
         byte attr0 = (selected == 0) ? TERM_L_WHITE : TERM_WHITE;
         Term_putstr(2, 8, -1, TERM_L_BLUE, marker0);
         Term_putstr(4, 8, -1, attr0,
-            menu_letters ? "r) Remove a curse (cost 1)"
-                         : "Remove a curse (cost 1)");
+            menu_letters ? ui_text("r) Remove a curse (cost 1)")
+                         : ui_text("Remove a curse (cost 1)"));
         ui_menu_click_add(0, 2, 8, click_width);
 
         /* Option 1: Minor blessing */
@@ -1076,8 +1077,8 @@ void open_blessing_exchange(void)
         byte attr1 = (selected == 1) ? TERM_L_WHITE : TERM_WHITE;
         Term_putstr(2, 9, -1, TERM_L_BLUE, marker1);
         Term_putstr(4, 9, -1, attr1,
-            menu_letters ? "m) Gain a minor blessing (cost 1)"
-                         : "Gain a minor blessing (cost 1)");
+            menu_letters ? ui_text("m) Gain a minor blessing (cost 1)")
+                         : ui_text("Gain a minor blessing (cost 1)"));
         ui_menu_click_add(1, 2, 9, click_width);
 
         /* Option 2: Major blessing */
@@ -1090,19 +1091,19 @@ void open_blessing_exchange(void)
                 attr2 = TERM_L_DARK; /* Grey out if unaffordable */
             }
             snprintf(buf, sizeof buf, menu_letters
-                     ? "u) Unlock a major blessing (cost %d)"
-                     : "Unlock a major blessing (cost %d)",
+                     ? ui_text("u) Unlock a major blessing (cost %d)")
+                     : ui_text("Unlock a major blessing (cost %d)"),
                      min_major_cost);
             Term_putstr(2, 10, -1, TERM_L_BLUE, marker2);
             Term_putstr(4, 10, -1, attr2, buf);
             ui_menu_click_add(2, 2, 10, click_width);
         } else {
             Term_putstr(4,10, -1, TERM_L_DARK,
-                menu_letters ? "u) Unlock a major blessing (none available)"
-                             : "Unlock a major blessing (none available)");
+                menu_letters ? ui_text("u) Unlock a major blessing (none available)")
+                             : ui_text("Unlock a major blessing (none available)"));
         }
         blessing_put_choice_prompt(12, steamdeck, menu_letters, accept_label,
-            back_label, "leave");
+            back_label, ui_text("leave"));
 
         /* Display status message if present */
         if (status_msg[0] != '\0') {
@@ -1205,7 +1206,7 @@ void open_blessing_exchange(void)
         }
 
         if (!menu_letters && !selected_from_confirm) {
-            bell("Use navigation and confirm to select in this mode.");
+            bell(ui_text("Use navigation and confirm to select in this mode."));
             continue;
         }
 
@@ -1213,7 +1214,7 @@ void open_blessing_exchange(void)
         case 'r':
         case 'R':
             if (available < 1) {
-                SDL_strlcpy(status_msg, "You need at least one blessing point to lift a curse.", sizeof(status_msg));
+                SDL_strlcpy(status_msg, ui_text("You need at least one blessing point to lift a curse."), sizeof(status_msg));
                 status_attr = TERM_ORANGE;
                 clear_status_on_next_key = true;
             } else if (blessing_remove_curse(status_msg, sizeof(status_msg), &status_attr)) {
@@ -1226,7 +1227,7 @@ void open_blessing_exchange(void)
         case 'm':
         case 'M':
             if (available < 1) {
-                SDL_strlcpy(status_msg, "You need at least one blessing point to receive a gift.", sizeof(status_msg));
+                SDL_strlcpy(status_msg, ui_text("You need at least one blessing point to receive a gift."), sizeof(status_msg));
                 status_attr = TERM_ORANGE;
                 clear_status_on_next_key = true;
             } else if (blessing_gain_minor(status_msg, sizeof(status_msg), &status_attr)) {
@@ -1239,11 +1240,11 @@ void open_blessing_exchange(void)
         case 'u':
         case 'U':
             if (!major_available) {
-                SDL_strlcpy(status_msg, "All major blessings have already been sealed.", sizeof(status_msg));
+                SDL_strlcpy(status_msg, ui_text("All major blessings have already been sealed."), sizeof(status_msg));
                 status_attr = TERM_L_DARK;
                 clear_status_on_next_key = true;
             } else if (!major_affordable) {
-                snprintf(status_msg, sizeof(status_msg), "You need %d blessing points to unlock a major blessing.", min_major_cost);
+                snprintf(status_msg, sizeof(status_msg), ui_text("You need %d blessing points to unlock a major blessing."), min_major_cost);
                 status_attr = TERM_ORANGE;
                 clear_status_on_next_key = true;
             } else if (blessing_unlock_major(status_msg, sizeof(status_msg), &status_attr)) {
@@ -1254,7 +1255,7 @@ void open_blessing_exchange(void)
             }
             break;
         default:
-            bell("Unrecognised option.");
+            bell(ui_text("Unrecognised option."));
             break;
         }
     }

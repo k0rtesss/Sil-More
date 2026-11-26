@@ -433,7 +433,7 @@ static void wheel_gestures(void)
             .start_time = SDL_GetTicksNS() - (Uint64)cases[i].ms * 1000000ULL,
         };
         direction_count = 0;
-        assert(sdl_touch_round_handle_pointer_up(100 + cases[i].distance, 100, 1));
+        assert(sdl_touch_round_handle_pointer_up(100 + cases[i].distance, 100, 1, 0));
         assert(direction_count == 1 && direction_sent == cases[i].dir);
         assert(direction_ctrl == cases[i].ctrl && direction_run == cases[i].run);
         assert(!g_touch_round_press.active);

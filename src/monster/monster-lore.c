@@ -1,6 +1,7 @@
 /* File: monster-lore.c */
 
 #include "monster-internal.h"
+#include "ui/ui-language.h"
 #include "monster-ai.h"
 #include "monster-social.h"
 #include "fs/path.h"
@@ -205,38 +206,38 @@ static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)
         if (l_ptr->deaths)
         {
             /* Killed predecessors */
-            text_out(format("%^s has slain %d of your predecessors",
-                wd_he[msex], l_ptr->deaths));
+            text_out(format(ui_text("%^s has slain %d of your predecessors"),
+                ui_text(wd_he[msex]), l_ptr->deaths));
 
             /* But we've also killed it */
             if (dead)
             {
-                text_out(", but you have taken revenge!  ");
+                text_out(ui_text(", but you have taken revenge!  "));
             }
 
             /* Unavenged (ever) */
             else
             {
-                text_out(format(", who %s unavenged.  ",
-                    plural(l_ptr->deaths, "remains", "remain")));
+                text_out(ui_text(plural(l_ptr->deaths,
+                    ", who remains unavenged.  ", ", who remain unavenged.  ")));
             }
         }
 
         /* Dead unique who never hurt us */
         else if (dead)
         {
-            text_out("You have slain this foe.  ");
+            text_out(ui_text("You have slain this foe.  "));
         }
 
         if (!dead)
         {
             if (l_ptr->psights)
             {
-                text_out("You have encountered this foe.  ");
+                text_out(ui_text("You have encountered this foe.  "));
             }
             else
             {
-                text_out("You are yet to encounter this foe.  ");
+                text_out(ui_text("You are yet to encounter this foe.  "));
             }
         }
     }
@@ -246,30 +247,32 @@ static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)
     {
         /* Dead predecessors */
         text_out(
-            format("%d of your predecessors %s been killed by this creature, ",
-                l_ptr->deaths, plural(l_ptr->deaths, "has", "have")));
+            format(ui_text(plural(l_ptr->deaths,
+                "%d of your predecessors has been killed by this creature, ",
+                "%d of your predecessors have been killed by this creature, ")),
+                l_ptr->deaths));
 
         /* Some kills this life */
         if (l_ptr->pkills)
         {
             text_out(format(
-                "and you have slain %d of the %d you have encountered.  ",
+                ui_text("and you have slain %d of the %d you have encountered.  "),
                 l_ptr->pkills, l_ptr->psights));
         }
 
         /* Some kills past lives */
         else if (real_tkills)
         {
-            text_out(format("and %s have slain %d in return.  ",
-                "your predecessors", real_tkills));
+            text_out(format(ui_text("and %s have slain %d in return.  "),
+                ui_text("your predecessors"), real_tkills));
 
             if (l_ptr->psights)
             {
-                text_out(format("You have encountered %d.  ", l_ptr->psights));
+                text_out(format(ui_text("You have encountered %d.  "), l_ptr->psights));
             }
             else
             {
-                text_out("You are yet to encounter one.  ");
+                text_out(ui_text("You are yet to encounter one.  "));
             }
         }
 
@@ -277,15 +280,15 @@ static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)
         else
         {
             text_out_c(TERM_RED,
-                format("and it is not known to have been defeated.  "));
+                format(ui_text("and it is not known to have been defeated.  ")));
 
             if (l_ptr->psights)
             {
-                text_out(format("You have encountered %d.  ", l_ptr->psights));
+                text_out(format(ui_text("You have encountered %d.  "), l_ptr->psights));
             }
             else
             {
-                text_out("You are yet to encounter one.  ");
+                text_out(ui_text("You are yet to encounter one.  "));
             }
         }
     }
@@ -296,20 +299,20 @@ static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)
         /* Encountered some this life */
         if (l_ptr->psights && !l_ptr->pkills)
         {
-            text_out(format("You have encountered %d of these creatures, ",
+            text_out(format(ui_text("You have encountered %d of these creatures, "),
                 l_ptr->psights));
 
             /* Killed some last life */
             if (real_tkills)
             {
                 text_out(format(
-                    "and your predecessors have slain %d.  ", real_tkills));
+                    ui_text("and your predecessors have slain %d.  "), real_tkills));
             }
 
             /* Killed none */
             else
             {
-                text_out("but no battles to the death are recalled.  ");
+                text_out(ui_text("but no battles to the death are recalled.  "));
             }
         }
 
@@ -317,33 +320,33 @@ static void describe_monster_kills(int r_idx, const monster_lore* l_ptr)
         else if (l_ptr->pkills)
         {
             text_out(
-                format("You have slain %d of the %d you have encountered.  ",
+                format(ui_text("You have slain %d of the %d you have encountered.  "),
                     l_ptr->pkills, l_ptr->psights));
         }
 
         /* Encountered some this life */
         else
         {
-            text_out(format("You have encountered none of these creatures, ",
+            text_out(format(ui_text("You have encountered none of these creatures, "),
                 l_ptr->psights));
 
             /* Killed some this life -- should be impossible to reach here */
             if (l_ptr->pkills)
             {
-                text_out(format("but slain %d.  ", l_ptr->pkills));
+                text_out(format(ui_text("but slain %d.  "), l_ptr->pkills));
             }
 
             /* Killed some last life */
             else if (real_tkills)
             {
                 text_out(format(
-                    "but your predecessors have slain %d.  ", real_tkills));
+                    ui_text("but your predecessors have slain %d.  "), real_tkills));
             }
 
             /* Killed none */
             else
             {
-                text_out("and no battles to the death are recalled.  ");
+                text_out(ui_text("and no battles to the death are recalled.  "));
             }
         }
     }
@@ -388,7 +391,7 @@ static void describe_monster_toughness(
 
         if (knows_hp)
         {
-            text_out(format("%^s has ", wd_he[msex]));
+            text_out(format(ui_text("%^s has "), ui_text(wd_he[msex])));
             text_out_c(TERM_GREEN, hp_text);
             if (m_ptr)
             {
@@ -424,9 +427,9 @@ static void describe_monster_toughness(
         }
 
         if (knows_hp && knows_defence)
-            text_out(" and a defence of ");
+            text_out(ui_text(" and a defence of "));
         else if (knows_defence)
-            text_out(format("%^s has a defence of ", wd_he[msex]));
+            text_out(format(ui_text("%^s has a defence of "), ui_text(wd_he[msex])));
 
         if (knows_defence && (prot_dice > 0) && (prot_sides > 0))
         {
@@ -484,7 +487,7 @@ static void describe_monster_skills(
             perception = monster_skill(live, S_PER);
         }
 
-        text_out(format("%^s has ", wd_he[msex]));
+        text_out(format(ui_text("%^s has "), ui_text(wd_he[msex])));
         if (knows_will)
         {
             text_out_c(TERM_L_GREEN, format("%d", will));
@@ -504,7 +507,7 @@ static void describe_monster_skills(
             if (printed)
                 text_out(", ");
             text_out_c(TERM_L_GREEN, format("%d", perception));
-            text_out(" Perception");
+            text_out(ui_text(" Perception"));
         }
 
         if (r_ptr->sleep > 20) // 21 +
@@ -542,7 +545,7 @@ static void describe_monster_skills(
         }
         else
         {
-            text_out(format(", and %s.  ", act));
+            text_out(format(ui_text(", and %s.  "), ui_text(act)));
         }
     }
 }
@@ -558,7 +561,7 @@ static void describe_monster_song_duel_progress(
     if (lore_knows_contest_stats(l_ptr) && !m_ptr->song_contest_completed)
     {
         text_out_c(TERM_YELLOW,
-            format("Song of Contest pressure: %d/%d",
+            format(ui_text("Song of Contest pressure: %d/%d"),
                 m_ptr->song_contest_stacks, SONG_DUEL_STACK_LIMIT));
         printed = true;
     }
@@ -568,7 +571,7 @@ static void describe_monster_song_duel_progress(
         if (printed)
             text_out("; ");
         text_out_c(TERM_YELLOW,
-            format("Song of Lament pressure: %d/%d",
+            format(ui_text("Song of Lament pressure: %d/%d"),
                 m_ptr->song_lament_stacks, SONG_DUEL_STACK_LIMIT));
         printed = true;
     }
@@ -637,7 +640,7 @@ static void describe_monster_observations(const monster_type* m_ptr)
     bool printed = false;
 
     text_out("\n");
-    text_out_c(TERM_L_BLUE, "Observations about you: ");
+    text_out_c(TERM_L_BLUE, ui_text("Observations about you: "));
     for (int feature = 0; feature < MON_AI_FEATURE_COUNT; feature++)
     {
         /* Use the AI accessor so forgotten or disabled memories stay hidden. */
@@ -656,7 +659,7 @@ static void describe_monster_observations(const monster_type* m_ptr)
         printed = true;
     }
     if (!printed)
-        text_out("none remembered");
+        text_out(ui_text("none remembered"));
     text_out(".  ");
 }
 
@@ -666,25 +669,40 @@ static void describe_monster_live_state(const monster_type* m_ptr)
         return;
 
     text_out_c(m_ptr->poisoned > 0 ? TERM_GREEN : TERM_SLATE,
-        format("Poison stacks: %d.  ", m_ptr->poisoned));
+        format(ui_text("Poison stacks: %d.  "), m_ptr->poisoned));
     if (!(r_info[m_ptr->r_idx].flags2 & RF2_MINDLESS))
     {
         int morale = m_ptr->morale >= 0
             ? (m_ptr->morale + 9) / 10 : m_ptr->morale / 10;
         text_out_c(m_ptr->morale < 0 ? TERM_L_RED : TERM_SLATE,
-            format("Morale: %d.  ", morale));
+            format(ui_text("Morale: %d.  "), morale));
     }
     switch (m_ptr->social_state)
     {
-        case MON_SOCIAL_CHALLENGE: text_out("It is confronting a rival.  "); break;
-        case MON_SOCIAL_FIGHT: text_out("It has an ongoing quarrel.  "); break;
-        case MON_SOCIAL_HELP: text_out("It has taken an ally's side in a quarrel.  "); break;
-        case MON_SOCIAL_AVOID: text_out("It is trying to withdraw from a disturbance.  "); break;
+        case MON_SOCIAL_CHALLENGE: text_out(ui_text("It is confronting a rival.  ")); break;
+        case MON_SOCIAL_FIGHT: text_out(ui_text("It has an ongoing quarrel.  ")); break;
+        case MON_SOCIAL_HELP: text_out(ui_text("It has taken an ally's side in a quarrel.  ")); break;
+        case MON_SOCIAL_AVOID: text_out(ui_text("It is trying to withdraw from a disturbance.  ")); break;
         default: break;
     }
     if (monster_ai_confidence(m_ptr, MON_AI_SLAY_FEAR) > 0)
-        text_out("It remembers weapon strikes that frightened its kind.  ");
+        text_out(ui_text("It remembers weapon strikes that frightened its kind.  "));
     describe_monster_observations(m_ptr);
+}
+
+/* Localized lore uses the known name to avoid declining an object pronoun. */
+static void describe_unique_monster_exp(cptr english, int r_idx, cptr pronoun)
+{
+    cptr phrase = ui_text(english);
+    if (streq(phrase, english))
+    {
+        text_out(format(english, pronoun));
+        return;
+    }
+
+    char name[80];
+    monster_desc_race(name, sizeof(name), r_idx);
+    text_out(format(phrase, name));
 }
 
 static void describe_monster_exp(int r_idx, const monster_lore* l_ptr)
@@ -709,25 +727,26 @@ static void describe_monster_exp(int r_idx, const monster_lore* l_ptr)
         {
             if (l_ptr->flags1 & RF1_UNIQUE)
             {
-                text_out(format("Encountering %s was worth", wd_him[msex]));
+                describe_unique_monster_exp("Encountering %s was worth",
+                    r_idx, wd_him[msex]);
             }
             else
-                text_out("Encountering another would be worth");
+                text_out(ui_text("Encountering another would be worth"));
         }
         else
         {
             if (l_ptr->flags1 & RF1_UNIQUE)
-                text_out(
-                    format("Encountering %s would be worth", wd_him[msex]));
+                describe_unique_monster_exp("Encountering %s would be worth",
+                    r_idx, wd_him[msex]);
             else
-                text_out("Encountering one would be worth");
+                text_out(ui_text("Encountering one would be worth"));
         }
 
         /* calculate the integer exp part */
         i = adjusted_mon_exp(r_ptr, false);
 
         /* Mention the experience */
-        text_out(format(" %ld experience.  ", (long)i));
+        text_out(format(ui_text(" %ld experience.  "), (long)i));
 
         /* Introduction for Kills */
         if (!(r_ptr->flags1 & (RF1_PEACEFUL)))
@@ -735,16 +754,18 @@ static void describe_monster_exp(int r_idx, const monster_lore* l_ptr)
             if (l_ptr->pkills)
             {
                 if (l_ptr->flags1 & RF1_UNIQUE)
-                    text_out(format("Killing %s was worth", wd_him[msex]));
+                    describe_unique_monster_exp("Killing %s was worth",
+                        r_idx, wd_him[msex]);
                 else
-                    text_out("Killing another would be worth");
+                    text_out(ui_text("Killing another would be worth"));
             }
             else
             {
                 if (l_ptr->flags1 & RF1_UNIQUE)
-                    text_out(format("Killing %s would be worth", wd_him[msex]));
+                    describe_unique_monster_exp("Killing %s would be worth",
+                        r_idx, wd_him[msex]);
                 else
-                    text_out("Killing one would be worth");
+                    text_out(ui_text("Killing one would be worth"));
             }
 
             /* calculate the integer exp part */
@@ -787,68 +808,68 @@ static void describe_monster_movement(
         is_slowed = (m_ptr->slowed > 0);
     }
 
-    text_out("This");
+    text_out(ui_text("This"));
 
     if (l_ptr->flags3 & RF3_UNDEAD)
-        text_out_c(TERM_L_BLUE, " undead");
+        text_out_c(TERM_L_BLUE, ui_text(" undead"));
 
     if (l_ptr->flags3 & RF3_DRAGON)
-        text_out_c(TERM_L_BLUE, " dragon");
+        text_out_c(TERM_L_BLUE, ui_text(" dragon"));
     else if (l_ptr->flags3 & RF3_SERPENT)
-        text_out_c(TERM_L_BLUE, " serpent");
+        text_out_c(TERM_L_BLUE, ui_text(" serpent"));
     else if (l_ptr->flags3 & RF3_VAMPIRE)
-        text_out_c(TERM_L_BLUE, " vampire");
+        text_out_c(TERM_L_BLUE, ui_text(" vampire"));
     else if ((l_ptr->flags3 & (RF3_RAUKO | RF3_MAN))
         == (RF3_RAUKO | RF3_MAN))
-        text_out_c(TERM_L_BLUE, " rauko in an assumed human form");
+        text_out_c(TERM_L_BLUE, ui_text(" rauko in an assumed human form"));
     else if ((l_ptr->flags3 & (RF3_RAUKO | RF3_ORC))
         == (RF3_RAUKO | RF3_ORC))
-        text_out_c(TERM_L_BLUE, " rauko in an assumed Orc form");
+        text_out_c(TERM_L_BLUE, ui_text(" rauko in an assumed Orc form"));
     else if (l_ptr->flags3 & RF3_RAUKO)
-        text_out_c(TERM_L_BLUE, " rauko");
+        text_out_c(TERM_L_BLUE, ui_text(" rauko"));
     else if (l_ptr->flags3 & RF3_TROLL)
-        text_out_c(TERM_L_BLUE, " troll");
+        text_out_c(TERM_L_BLUE, ui_text(" troll"));
     else if (l_ptr->flags3 & RF3_ORC)
         text_out_c(TERM_L_BLUE, " orc");
     else if (l_ptr->flags3 & RF3_GIANT)
-        text_out_c(TERM_L_BLUE, " giant");
+        text_out_c(TERM_L_BLUE, ui_text(" giant"));
     else if (l_ptr->flags3 & RF3_WOLF)
-        text_out_c(TERM_L_BLUE, " wolf");
+        text_out_c(TERM_L_BLUE, ui_text(" wolf"));
     else if (l_ptr->flags3 & RF3_SPIDER)
-        text_out_c(TERM_L_BLUE, " spider");
+        text_out_c(TERM_L_BLUE, ui_text(" spider"));
     else if (l_ptr->flags3 & RF3_CAT)
-        text_out_c(TERM_L_BLUE, " cat");
+        text_out_c(TERM_L_BLUE, ui_text(" cat"));
     else if (l_ptr->flags3 & RF3_HORROR)
-        text_out_c(TERM_L_BLUE, " horror");
+        text_out_c(TERM_L_BLUE, ui_text(" horror"));
     else if (l_ptr->flags3 & RF3_MAN)
-        text_out_c(TERM_L_BLUE, " man");
+        text_out_c(TERM_L_BLUE, ui_text(" man"));
     else if (l_ptr->flags3 & RF3_ELF)
-        text_out_c(TERM_L_BLUE, " elf");
+        text_out_c(TERM_L_BLUE, ui_text(" elf"));
     else
-        text_out(" creature");
+        text_out(ui_text(" creature"));
 
     /* Describe location */
     if (r_ptr->level == 0)
     {
-        text_out_c(TERM_YELLOW, " dwells at the gates of Angband");
+        text_out_c(TERM_YELLOW, ui_text(" dwells at the gates of Angband"));
         old = true;
     }
     else
     {
         if (l_ptr->flags1 & RF1_FORCE_DEPTH)
-            text_out(" is found ");
+            text_out(ui_text(" is found "));
         else
-            text_out(" is normally found ");
+            text_out(ui_text(" is normally found "));
 
         if (r_idx == R_IDX_CARCHAROTH)
         {
-            text_out_c(TERM_YELLOW, "guarding the gates of Angband");
+            text_out_c(TERM_YELLOW, ui_text("guarding the gates of Angband"));
         }
         else
         {
-            text_out("at depths of ");
+            text_out(ui_text("at depths of "));
             text_out_c(TERM_YELLOW,
-                format("%d feet", monster_lore_encounter_depth(r_ptr) * 50));
+                format(ui_text("%d feet"), monster_lore_encounter_depth(r_ptr) * 50));
         }
         old = true;
     }
@@ -857,16 +878,16 @@ static void describe_monster_movement(
     if (l_ptr->flags1 & RF1_NEVER_MOVE)
     {
         if (old)
-            text_out(", and");
-        text_out(" cannot move");
+            text_out(ui_text(", and"));
+        text_out(ui_text(" cannot move"));
     }
 
     /* Deal with non-moving creatures */
     else if (l_ptr->flags1 & RF1_HIDDEN_MOVE)
     {
         if (old)
-            text_out(", and");
-        text_out(" never moves when you are looking");
+            text_out(ui_text(", and"));
+        text_out(ui_text(" never moves when you are looking"));
     }
 
     /* most other creatures display their speed */
@@ -874,8 +895,8 @@ static void describe_monster_movement(
         || (l_ptr->flags1 & RF1_RAND_25))
     {
         if (old)
-            text_out(", and");
-        text_out(" moves");
+            text_out(ui_text(", and"));
+        text_out(ui_text(" moves"));
 
         /* Random-ness */
         if ((l_ptr->flags1 & RF1_RAND_50) || (l_ptr->flags1 & RF1_RAND_25))
@@ -883,56 +904,56 @@ static void describe_monster_movement(
             /* Adverb */
             if ((l_ptr->flags1 & RF1_RAND_50) && (l_ptr->flags1 & RF1_RAND_25))
             {
-                text_out(" extremely");
+                text_out(ui_text(" extremely"));
             }
             else if (l_ptr->flags1 & RF1_RAND_50)
             {
-                text_out(" somewhat");
+                text_out(ui_text(" somewhat"));
             }
             else if (l_ptr->flags1 & RF1_RAND_25)
             {
-                text_out(" a bit");
+                text_out(ui_text(" a bit"));
             }
 
             /* Adjective */
-            text_out(" erratically");
+            text_out(ui_text(" erratically"));
 
             /* Hack -- Occasional conjunction */
             if (display_speed != 2)
-                text_out(", and");
+                text_out(ui_text(", and"));
         }
 
         /* Speed */
         if (display_speed > 2)
         {
             if (display_speed > 5)
-                text_out_c(TERM_ORANGE, " incredibly");
+                text_out_c(TERM_ORANGE, ui_text(" incredibly"));
             else if (display_speed > 4)
-                text_out_c(TERM_ORANGE, " extremely");
+                text_out_c(TERM_ORANGE, ui_text(" extremely"));
             else if (display_speed > 3)
-                text_out_c(TERM_ORANGE, " very");
-            text_out_c(TERM_ORANGE, " quickly");
+                text_out_c(TERM_ORANGE, ui_text(" very"));
+            text_out_c(TERM_ORANGE, ui_text(" quickly"));
         }
         else if (display_speed < 2)
         {
-            text_out_c(TERM_L_BLUE, " slowly");
+            text_out_c(TERM_L_BLUE, ui_text(" slowly"));
         }
 
         {
             int speed_index = MAX(0, MIN(display_speed, 7));
             text_out_c(TERM_L_BLUE,
-                format(" (speed %d; %d%% of normal)", display_speed,
+                format(ui_text(" (speed %d; %d%% of normal)"), display_speed,
                     (extract_energy[speed_index] * 100) / extract_energy[2]));
         }
 
         if (m_ptr)
         {
             if (is_hasted && is_slowed)
-                text_out(" while hasted and slowed");
+                text_out(ui_text(" while hasted and slowed"));
             else if (is_hasted)
-                text_out(" while hasted");
+                text_out(ui_text(" while hasted"));
             else if (is_slowed)
-                text_out(" while slowed");
+                text_out(ui_text(" while slowed"));
         }
     }
 
@@ -950,11 +971,11 @@ static void describe_monster_movement(
         else if (r_ptr->flags1 & RF1_MALE)
             msex = 1;
 
-        text_out(format("%^s defends %s lair but will not pursue you beyond it.  ",
-            wd_he[msex], wd_his[msex]));
+        text_out(format(ui_text("%^s defends %s lair but will not pursue you beyond it.  "),
+            ui_text(wd_he[msex]), ui_text(wd_his[msex])));
         if (r_ptr->flags3 & RF3_DRAGON)
-            text_out(format("%^s can follow your scent within %s lair.  ",
-                wd_he[msex], wd_his[msex]));
+            text_out(format(ui_text("%^s can follow your scent within %s lair.  "),
+                ui_text(wd_he[msex]), ui_text(wd_his[msex])));
     }
 }
 

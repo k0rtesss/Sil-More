@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements-lore.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -232,10 +233,10 @@ static bool pickup_partial_volume_stack(object_type* floor_object,
     if (max_qty <= 0 || max_qty >= incoming->number)
         return false;
 
-    capacity_name = quiver_quantity > 0 ? "Quiver and Pack"
-                                        : inventory_limit_group_name(group);
+    capacity_name = ui_text(quiver_quantity > 0 ? "Quiver and Pack"
+                                              : inventory_limit_group_name(group));
     strnfmt(prompt, sizeof(prompt),
-        "Your %s can only hold %d of %d. Pick up how many? (0-%d): ",
+        ui_text("Your %s can only hold %d of %d. Pick up how many? (0-%d): "),
         capacity_name, max_qty, incoming->number, max_qty);
     qty = get_quantity_touch_category_force_prompt_action(prompt, "Pick Up",
         max_qty, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
@@ -262,8 +263,8 @@ static bool pickup_partial_volume_stack(object_type* floor_object,
     picked = qty - MAX(partial.number, 0);
     if (picked > 0)
     {
-        tutorial_game_explain("storage.partial_pickup", "Partial pickup",
-            "Part of the stack was picked up. The remainder stays on the floor; your Pack, Harness and Quiver have separate limits.");
+        tutorial_game_explain("storage.partial_pickup", ui_text("Partial pickup"),
+            ui_text("Part of the stack was picked up. The remainder stays on the floor; your Pack, Harness and Quiver have separate limits."));
         floor_object->number = MAX(0, floor_object->number - picked);
         break_truce(false);
     }
@@ -473,7 +474,7 @@ bool player_channel_floor_staff(object_type* donor, int floor_o_idx)
               target_slot, target->k_idx, target->pval, target->number);
 
     strnfmt(prompt, sizeof(prompt),
-        "Channel %s into your %s (%d charges)?",
+        ui_text("Channel %s into your %s (%d charges)?"),
         donor_name, target_name, combined_uses);
     if (!get_check(prompt))
         return false;
@@ -490,8 +491,8 @@ bool player_channel_floor_staff(object_type* donor, int floor_o_idx)
         inven_item_charges(target_slot);
     p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST);
     p_ptr->window |= (PW_EQUIP | PW_PLAYER_0 | PW_INVEN);
-    msg_format("You channel %d charge%s into your %s (now %d).",
-        gain_uses, (gain_uses == 1) ? "" : "s",
+    msg_format("You channel %d %s into your %s (now %d).",
+        gain_uses, ui_text(gain_uses == 1 ? "charge" : "charges"),
         target_name, combined_uses);
     delete_object_idx(floor_o_idx);
 
@@ -527,7 +528,7 @@ static bool prompt_replace_pack_item(const object_type* incoming)
     msg_format("No room for %s.", incoming_name);
     msg_print("Choose an item to replace.");
 
-    strnfmt(prompt, sizeof(prompt), "Replace which item to pick up %s? ", incoming_name);
+    strnfmt(prompt, sizeof(prompt), ui_text("Replace which item to pick up %s? "), incoming_name);
 
     while (true)
     {
@@ -766,8 +767,10 @@ static bool queue_deferred_pickup_supply_drop(int supply_idx, int amount,
 
     if (player_light_destroyed_on_drop(&deferred))
     {
-        msg_format("You discard %s; %s too spent to keep.",
-            o_name, (deferred.number > 1) ? "they are" : "it is");
+        msg_format(deferred.number > 1
+                ? "You discard %s; they are too spent to keep."
+                : "You discard %s; it is too spent to keep.",
+            o_name);
         (void)supplies_consume_quantity(supply_idx, amount);
         p_ptr->redraw |= (PR_MAP | PR_LIGHT);
         p_ptr->window |= (PW_MESSAGE);
@@ -825,8 +828,10 @@ static bool queue_deferred_pickup_pack_drop(int item, int amount,
 
     if (player_light_destroyed_on_drop(&deferred))
     {
-        msg_format("You discard %s; %s too spent to keep.",
-            o_name, (deferred.number > 1) ? "they are" : "it is");
+        msg_format(deferred.number > 1
+                ? "You discard %s; they are too spent to keep."
+                : "You discard %s; it is too spent to keep.",
+            o_name);
 
         inven_item_increase(item, -amount);
         inven_item_describe(item);
@@ -893,7 +898,7 @@ static bool confirm_oil_pickup_overflow_with_bonus(const object_type* o_ptr,
 
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
     strnfmt(prompt, sizeof(prompt),
-        "Adding the oil from %s will waste some oil. Proceed? ", o_name);
+        ui_text("Adding the oil from %s will waste some oil. Proceed? "), o_name);
     return get_check(prompt);
 }
 
@@ -921,21 +926,21 @@ static void format_inventory_limit_reason(char* buf, size_t max,
             needed = inventory_limit_space_for_object(incoming);
         shortage = MAX(used + needed - limit, 0);
         strnfmt(buf, max,
-            "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). "
-            "Incoming needs %d.%d qt; short by %d.%d qt.",
-            inventory_limit_group_name(group), used / 10, used % 10,
+            ui_text("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; short by %d.%d qt."),
+            ui_text(inventory_limit_group_name(group)), used / 10, used % 10,
             limit / 10, limit % 10, left / 10, left % 10,
             needed / 10, needed % 10, shortage / 10, shortage % 10);
     }
     else if (label)
     {
         strnfmt(buf, max,
-            "No room: you already carry the most %s you can (limit %d).",
+            ui_text("No room: you already carry the most %s you can (limit %d)."),
             label, limit);
     }
     else
     {
-        SDL_strlcpy(buf, "No room: drop something to make space.", max);
+        SDL_strlcpy(buf, ui_text("No room: drop something to make space."), max);
     }
 }
 
@@ -999,7 +1004,7 @@ static pickup_failure_result prompt_replace_light_limit_item(
         msg_print("Choose an item to replace.");
 
     strnfmt(prompt, sizeof(prompt),
-            "Replace which item to pick up %s? ", incoming_name);
+            ui_text("Replace which item to pick up %s? "), incoming_name);
 
     replacement_filter_incoming = incoming;
     item_tester_tval = 0;
@@ -1353,13 +1358,14 @@ static bool pickup_oil_flask_oil_only(int o_idx, object_type* o_ptr)
     {
         player_gain_lamp_oil(oil_amount, true);
         (void)player_lamp_oil();
-        msg_format("You pour the oil into your lamp stores and discard the "
-            "flask%s.", (MAX(o_ptr->number, 1) == 1) ? "" : "s");
+        msg_print(o_ptr->number > 1
+                ? "You pour the oil into your lamp stores and discard the oil flasks."
+                : "You pour the oil into your lamp stores and discard the oil flask.");
     }
     else
     {
-        msg_format("You discard the empty oil flask%s.",
-            (MAX(o_ptr->number, 1) == 1) ? "" : "s");
+        msg_print(o_ptr->number > 1 ? "You discard the empty oil flasks."
+                                  : "You discard the empty oil flask.");
     }
 
     delete_object_idx(o_idx);
@@ -1503,9 +1509,9 @@ bool commit_brass_lamp_flask_replacement(int flasks_to_replace, int flask_oil)
     {
         if (flask_oil > 0)
             player_gain_lamp_oil(flask_oil, true);
-        msg_format("Your lamp replaces %d oil flask%s, keeping the oil in "
+        msg_format("Your lamp replaces %d %s, keeping the oil in "
             "your lamp stores.",
-            discarded, (discarded == 1) ? "" : "s");
+            discarded, ui_text(discarded == 1 ? "oil flask" : "oil flasks"));
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
         p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
     }
@@ -1757,7 +1763,7 @@ static void py_pickup_aux_execute(int o_idx, bool allow_channel,
                 
                 char prompt[160];
                 strnfmt(prompt, sizeof(prompt), 
-                        "Your supply cache can only hold %d of %d. Pick up how many? (0-%d): ",
+                        ui_text("Your supply cache can only hold %d of %d. Pick up how many? (0-%d): "),
                         max_qty, o_ptr->number, max_qty);
                 
                 int qty = get_quantity_touch_category_force_prompt_action(
@@ -1771,7 +1777,7 @@ static void py_pickup_aux_execute(int o_idx, bool allow_channel,
                     return;
                 }
                 
-                tutorial_game_explain("storage.partial_pickup", "Partial pickup", "Only part of this stack fits. The remainder stays on the floor; inspect the destination's capacity.");
+                tutorial_game_explain("storage.partial_pickup", ui_text("Partial pickup"), ui_text("Only part of this stack fits. The remainder stays on the floor; inspect the destination's capacity."));
 
                 /* Create a partial object to pick up */
                 object_type partial;
@@ -1920,18 +1926,33 @@ static void report_pack_limit_failure(const char* o_name, bool still)
             int used = inventory_limit_usage_for_group(group);
             int left = MAX(limit - used, 0);
 
-            msg_format("Your %s %s full: %d.%d/%d.%d qt used "
-                       "(%d.%d qt left).",
-                inventory_limit_group_name(group), still ? "is still" : "is",
+            cptr fmt = "Your %s %s full: %d.%d/%d.%d qt used (%d.%d qt left).";
+            cptr name = inventory_limit_group_name(group);
+            cptr status = still ? "is still" : "is";
+            cptr localized_fmt = ui_message_text(fmt);
+            if (localized_fmt == fmt)
+            {
+                msg_format(fmt, name, status, used / 10, used % 10,
+                    limit / 10, limit % 10, left / 10, left % 10);
+                return;
+            }
+
+            char english[1024];
+            char localized[1024];
+            strnfmt(english, sizeof(english), fmt, name, status,
                 used / 10, used % 10, limit / 10, limit % 10,
                 left / 10, left % 10);
+            strnfmt(localized, sizeof(localized), localized_fmt, ui_text(name),
+                ui_text(status), used / 10, used % 10, limit / 10, limit % 10,
+                left / 10, left % 10);
+            msg_print_localized(english, localized);
             return;
         }
 
         if (label)
         {
             /* Special message for supply weight limit */
-            if (strcmp(label, "supply weight") == 0)
+            if (strcmp(label, ui_text("supply weight")) == 0)
             {
                 msg_format("Your supply cache cannot carry any more weight (limit %d lbs).",
                            limit);
@@ -2089,7 +2110,7 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
         msg_print("Choose an item to replace.");
 
     strnfmt(prompt, sizeof(prompt),
-            "Replace which item to pick up %s? ", incoming_name);
+            ui_text("Replace which item to pick up %s? "), incoming_name);
 
     replacement_filter_incoming = incoming;
     item_tester_tval = 0;
@@ -2265,7 +2286,7 @@ static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,
     object_desc(equipped_name, sizeof(equipped_name), equip_ptr, true, 3);
 
     char prompt[160];
-    strnfmt(prompt, sizeof(prompt), "Replace %s with %s? ", equipped_name,
+    strnfmt(prompt, sizeof(prompt), ui_text("Replace %s with %s? "), equipped_name,
             incoming_name);
 
     if (get_check(prompt))

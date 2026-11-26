@@ -1,6 +1,7 @@
 /* File: monster-recall.c */
 
 #include "monster-internal.h"
+#include "ui/ui-language.h"
 
 static void roff_top_live(int r_idx, const monster_type* m_ptr)
 {
@@ -22,7 +23,7 @@ static void roff_top_live(int r_idx, const monster_type* m_ptr)
     /* A title (use "The" for non-uniques) */
     if (!(r_ptr->flags1 & RF1_UNIQUE))
     {
-        Term_addstr(-1, TERM_WHITE, "The ");
+        Term_addstr(-1, TERM_WHITE, ui_text("The "));
     }
 
     /* Dump the name */

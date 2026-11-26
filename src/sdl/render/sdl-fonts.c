@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
+#include "ui/ui-language.h"
 
 /* Readable text and touch targets follow the device, independently of the
  * selected input mode. A desktop with an attached controller stays desktop. */
@@ -78,6 +79,7 @@ enum { SDL_FONT_FIT_CACHE_SIZE = 32, SDL_FONT_FIT_TEXT_MAX = 128 };
 typedef struct {
     char text[SDL_FONT_FIT_TEXT_MAX];
     int slot;
+    int interface_region;
     int maximum_px;
     float width;
     float height;
@@ -93,6 +95,12 @@ static void sdl_story_font_cache_changed(void)
     g_story_font_generation++;
     if (g_story_font_generation == 0)
         g_story_font_generation = 1;
+}
+
+void sdl_ui_language_changed(void)
+{
+    sdl_story_font_cache_changed();
+    g_state.need_present = true;
 }
 
 void sdl_apply_font_settings(TTF_Font* font, bool is_story_font)
@@ -693,15 +701,19 @@ SDL_Texture* sdl_acquire_mono_font_atlas_cells_ex(const char* font_path,
     return atlas;
 }
 
-/* Each regional face has its own cache key so a language switch takes
- * effect even when both cards use the same pixel height. */
-int sdl_tutorial_font_slot(int normal_slot)
+static int sdl_regional_font_slot(cptr code, int normal_slot)
 {
-    const char *code = tutorial_language();
     if (streq(code, "ja")) return SDL_STORY_FONT_SLOT_TUTORIAL_JA;
     if (streq(code, "ko")) return SDL_STORY_FONT_SLOT_TUTORIAL_KO;
     if (streq(code, "zh")) return SDL_STORY_FONT_SLOT_TUTORIAL_ZH;
     return normal_slot;
+}
+
+/* Each regional face has its own cache key so a language switch takes
+ * effect even when both cards use the same pixel height. */
+int sdl_tutorial_font_slot(int normal_slot)
+{
+    return sdl_regional_font_slot(tutorial_language(), normal_slot);
 }
 
 static int sdl_story_slot_clamp(int slot)
@@ -717,7 +729,8 @@ static int sdl_story_slot_clamp(int slot)
 
 static int sdl_story_slot_resolve(int slot)
 {
-    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
+    if (slot != SDL_STORY_FONT_SLOT_LANGUAGE_PICKER
+        && sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
         slot = sdl_tutorial_font_slot(slot);
     return sdl_story_slot_clamp(slot);
 }
@@ -846,6 +859,21 @@ static TTF_Font* sdl_open_story_font(const char* path, int font_size)
 #endif
 }
 
+static cptr sdl_bundled_story_font(int slot)
+{
+    switch (slot) {
+    case SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE:
+        return "font/CormorantSC-SemiBold.ttf";
+    case SDL_STORY_FONT_SLOT_TUTORIAL_JA:
+        return "font/TutorialSansJP.otf";
+    case SDL_STORY_FONT_SLOT_TUTORIAL_KO:
+        return "font/TutorialSansKR.otf";
+    case SDL_STORY_FONT_SLOT_TUTORIAL_ZH:
+        return "font/TutorialSansSC.otf";
+    }
+    return NULL;
+}
+
 /*
  * Load a story font for a slot, applying that slot's style and falling back to
  * the slot's fallback font when the configured path fails to load.
@@ -857,13 +885,7 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
 
     sdl_story_slot_style(slot, &style);
 
-    const char* bundled = NULL;
-    switch (slot) {
-    case SDL_STORY_FONT_SLOT_TUTORIAL_LOCALIZED_TITLE: bundled = "font/CormorantSC-SemiBold.ttf"; break;
-    case SDL_STORY_FONT_SLOT_TUTORIAL_JA: bundled = "font/TutorialSansJP.otf"; break;
-    case SDL_STORY_FONT_SLOT_TUTORIAL_KO: bundled = "font/TutorialSansKR.otf"; break;
-    case SDL_STORY_FONT_SLOT_TUTORIAL_ZH: bundled = "font/TutorialSansSC.otf"; break;
-    }
+    cptr bundled = sdl_bundled_story_font(slot);
     if (bundled) {
         char path[1024];
         path_build(path, sizeof(path), ANGBAND_DIR_XTRA ? ANGBAND_DIR_XTRA : "lib/xtra",
@@ -900,6 +922,14 @@ static TTF_Font* sdl_load_story_font_slot(const char* font_path, int font_size, 
     return font;
 }
 
+static void sdl_close_story_font_entry(story_font_entry* entry)
+{
+    TTF_CloseFont(entry->font);
+    for (int i = 0; i < SDL_STORY_FONT_FALLBACK_COUNT; i++)
+        TTF_CloseFont(entry->fallbacks[i]);
+    SDL_zero(*entry);
+}
+
 void sdl_story_font_cache_clear(void)
 {
     /* Wrapped-description entries hold non-owning TTF_Font pointers. */
@@ -908,23 +938,8 @@ void sdl_story_font_cache_clear(void)
     SDL_zeroa(g_font_fit_cache);
     g_font_fit_cache_next = 0;
 
-    for (int i = 0; i < g_state.story_font_count; i++) {
-        if (g_state.story_fonts[i].font) {
-            TTF_CloseFont(g_state.story_fonts[i].font);
-            g_state.story_fonts[i].font = NULL;
-        }
-        if (g_state.story_fonts[i].fallback) {
-            TTF_CloseFont(g_state.story_fonts[i].fallback);
-            g_state.story_fonts[i].fallback = NULL;
-        }
-        if (g_state.story_fonts[i].picker_fallback) {
-            TTF_CloseFont(g_state.story_fonts[i].picker_fallback);
-            g_state.story_fonts[i].picker_fallback = NULL;
-        }
-        g_state.story_fonts[i].pixel_height = 0;
-        g_state.story_fonts[i].slot = 0;
-        g_state.story_fonts[i].last_used = 0;
-    }
+    for (int i = 0; i < g_state.story_font_count; i++)
+        sdl_close_story_font_entry(&g_state.story_fonts[i]);
 #ifdef __ANDROID__
     /* SDL_ttf faces and their copies keep reading from these buffers. */
     sdl_story_font_assets_clear();
@@ -1007,37 +1022,57 @@ static TTF_Font *sdl_add_story_fallback(TTF_Font *font, cptr filename, int px, i
     return face;
 }
 
-static TTF_Font* sdl_story_font_lookup(int pixel_height, int slot)
+static story_font_entry* sdl_story_font_lookup(int pixel_height, int slot,
+    int interface_region)
 {
     const char* font_path;
-    TTF_Font* font;
-    TTF_Font* fallback = NULL;
-    TTF_Font* picker_fallback = NULL;
+    story_font_entry entry = {
+        .pixel_height = pixel_height,
+        .slot = slot,
+        .interface_region = interface_region,
+    };
     int target_index;
 
     for (int i = 0; i < g_state.story_font_count; i++) {
         if (g_state.story_fonts[i].pixel_height == pixel_height
-            && g_state.story_fonts[i].slot == slot) {
+            && g_state.story_fonts[i].slot == slot
+            && g_state.story_fonts[i].interface_region == interface_region) {
             g_state.story_fonts[i].last_used = ++g_story_font_use_clock;
-            return g_state.story_fonts[i].font;
+            return &g_state.story_fonts[i];
         }
     }
 
     font_path = sdl_story_font_path_for_slot(slot);
-    font = sdl_load_story_font_slot(font_path, pixel_height, slot);
+    TTF_Font* font = sdl_load_story_font_slot(font_path, pixel_height, slot);
     if (!font)
         return NULL;
+    entry.font = font;
 
-    bool picker = slot == SDL_STORY_FONT_SLOT_TUTORIAL_MENU;
-    bool regional = slot >= SDL_STORY_FONT_SLOT_TUTORIAL_JA && slot <= SDL_STORY_FONT_SLOT_TUTORIAL_ZH;
+    bool regional = slot >= SDL_STORY_FONT_SLOT_TUTORIAL_JA
+        && slot <= SDL_STORY_FONT_SLOT_TUTORIAL_ZH;
     if (regional)
-        fallback = sdl_add_story_fallback(font, "font/EBGaramond-Regular.ttf", pixel_height, slot);
+        entry.fallbacks[0] = sdl_add_story_fallback(font,
+            "font/EBGaramond-Regular.ttf", pixel_height, slot);
     else if (!TTF_FontHasGlyph(font, 0x416) || !TTF_FontHasGlyph(font, 0x451)
-        || (picker && (!TTF_FontHasGlyph(font, 0x010c) || !TTF_FontHasGlyph(font, 0x0457))))
-        fallback = sdl_add_story_fallback(font, "font/VictorMono-Regular.ttf", pixel_height, slot);
+        || !TTF_FontHasGlyph(font, 0x010c) || !TTF_FontHasGlyph(font, 0x0218)
+        || !TTF_FontHasGlyph(font, 0x0457))
+        entry.fallbacks[0] = sdl_add_story_fallback(font,
+            "font/VictorMono-Regular.ttf", pixel_height, slot);
+
+    /* The regular UI uses its selected region's face for missing glyphs.
+     * An explicitly selected tutorial face keeps priority for its own text. */
+    cptr interface_font = sdl_bundled_story_font(interface_region);
+    if (interface_font && interface_region != slot)
+        entry.fallbacks[1] = sdl_add_story_fallback(font, interface_font,
+            pixel_height, slot);
+
     /* Every native name must be visible even before a locale is chosen. */
-    if (picker)
-        picker_fallback = sdl_add_story_fallback(font, "font/TutorialSansJP.otf", pixel_height, slot);
+    if ((slot == SDL_STORY_FONT_SLOT_TUTORIAL_MENU
+            || slot == SDL_STORY_FONT_SLOT_LANGUAGE_PICKER)
+        && interface_region != SDL_STORY_FONT_SLOT_TUTORIAL_JA)
+        entry.fallbacks[2] = sdl_add_story_fallback(font,
+            sdl_bundled_story_font(SDL_STORY_FONT_SLOT_TUTORIAL_JA),
+            pixel_height, slot);
 
     if (g_state.story_font_count >= MAX_STORY_FONT_CACHE) {
         target_index = 0;
@@ -1055,30 +1090,24 @@ static TTF_Font* sdl_story_font_lookup(int pixel_height, int slot)
             g_state.story_fonts[target_index].font);
         sdl_ui_text_cache_clear_font(
             g_state.story_fonts[target_index].font);
-        TTF_CloseFont(g_state.story_fonts[target_index].font);
-        if (g_state.story_fonts[target_index].fallback)
-            TTF_CloseFont(g_state.story_fonts[target_index].fallback);
-        if (g_state.story_fonts[target_index].picker_fallback)
-            TTF_CloseFont(g_state.story_fonts[target_index].picker_fallback);
+        sdl_close_story_font_entry(&g_state.story_fonts[target_index]);
         sdl_story_font_cache_changed();
     } else {
         target_index = g_state.story_font_count++;
     }
 
-    g_state.story_fonts[target_index].pixel_height = pixel_height;
-    g_state.story_fonts[target_index].slot = slot;
-    g_state.story_fonts[target_index].font = font;
-    g_state.story_fonts[target_index].fallback = fallback;
-    g_state.story_fonts[target_index].picker_fallback = picker_fallback;
-    g_state.story_fonts[target_index].last_used = ++g_story_font_use_clock;
-    return font;
+    entry.last_used = ++g_story_font_use_clock;
+    g_state.story_fonts[target_index] = entry;
+    return &g_state.story_fonts[target_index];
 }
 
 TTF_Font* sdl_story_font_for_height_slot(int pixel_height, int slot)
 {
-    return pixel_height > 0
-        ? sdl_story_font_lookup(pixel_height, sdl_story_slot_resolve(slot))
+    story_font_entry* entry = pixel_height > 0
+        ? sdl_story_font_lookup(pixel_height, sdl_story_slot_resolve(slot),
+            sdl_regional_font_slot(ui_language(), -1))
         : NULL;
+    return entry ? entry->font : NULL;
 }
 
 /* Fit point size before rasterization for fixed-size controls. Body text
@@ -1091,6 +1120,7 @@ int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
     text = text ? text : "Mg";
     wrapped = wrapped && width > 0.0f;
     slot = sdl_story_slot_resolve(slot);
+    int interface_region = sdl_regional_font_slot(ui_language(), -1);
     size_t text_len = strlen(text);
     bool cacheable = text_len < SDL_FONT_FIT_TEXT_MAX;
 
@@ -1099,6 +1129,7 @@ int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
             const sdl_font_fit_entry* entry = &g_font_fit_cache[i];
 
             if (entry->maximum_px == maximum_px && entry->slot == slot
+                && entry->interface_region == interface_region
                 && entry->width == width && entry->height == height
                 && entry->wrapped == wrapped && streq(entry->text, text))
             {
@@ -1107,17 +1138,41 @@ int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
         }
     }
 
-    TTF_Font* base = sdl_story_font_lookup(maximum_px, slot);
-    TTF_Font* measure = base ? TTF_CopyFont(base) : NULL;
+    story_font_entry* base = sdl_story_font_lookup(maximum_px, slot,
+        interface_region);
+    TTF_Font* measure = base ? TTF_CopyFont(base->font) : NULL;
     if (!measure)
         return best;
+
+    TTF_Font* fallbacks[SDL_STORY_FONT_FALLBACK_COUNT] = { NULL };
+    const char* next = text;
+    size_t remaining = text_len;
+    while (remaining) {
+        if (!TTF_FontHasGlyph(measure, SDL_StepUTF8(&next, &remaining))) {
+            /* SDL_ttf copies the primary face without its fallback list. */
+            for (int i = 0; i < SDL_STORY_FONT_FALLBACK_COUNT; i++) {
+                if (base->fallbacks[i])
+                    fallbacks[i] = TTF_CopyFont(base->fallbacks[i]);
+                if (fallbacks[i] && !TTF_AddFallbackFont(measure, fallbacks[i])) {
+                    TTF_CloseFont(fallbacks[i]);
+                    fallbacks[i] = NULL;
+                }
+            }
+            break;
+        }
+    }
+
     /* Measuring a private copy avoids filling/evicting the shared font cache
      * with intermediate sizes while a caller is borrowing another font. */
     while (low <= high) {
         int px = low + (high - low) / 2;
         int w = 0, h = 0;
-        bool measured = TTF_SetFontSize(measure, (float)px)
-            && (wrapped
+        bool sized = TTF_SetFontSize(measure, (float)px);
+        for (int i = 0; i < SDL_STORY_FONT_FALLBACK_COUNT; i++) {
+            if (fallbacks[i] && !TTF_SetFontSize(fallbacks[i], (float)px))
+                sized = false;
+        }
+        bool measured = sized && (wrapped
                 ? TTF_GetStringSizeWrapped(measure, text, text_len,
                     MAX(1, (int)width), &w, &h)
                 : TTF_GetStringSize(measure, text, text_len, &w, &h));
@@ -1130,12 +1185,15 @@ int sdl_ui_fitted_font_px(cptr text, int slot, int maximum_px,
         } else high = px - 1;
     }
     TTF_CloseFont(measure);
+    for (int i = 0; i < SDL_STORY_FONT_FALLBACK_COUNT; i++)
+        TTF_CloseFont(fallbacks[i]);
 
     if (cacheable) {
         sdl_font_fit_entry* entry = &g_font_fit_cache[g_font_fit_cache_next];
 
         memcpy(entry->text, text, text_len + 1);
         entry->slot = slot;
+        entry->interface_region = interface_region;
         entry->maximum_px = maximum_px;
         entry->width = width;
         entry->height = height;

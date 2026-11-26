@@ -12,11 +12,13 @@
 #include "sdl-sound.h"
 #include "init2-internal.h"
 #include "init-lifecycle.h"
+#include "ui/ui-language.h"
 #include <SDL3/SDL_filesystem.h>
 #include <stdio.h>
 void cleanup_angband(void)
 {
     lore_cleanup();
+    ui_language_cleanup();
     /* Free the macros */
     macro_free();
 

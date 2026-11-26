@@ -270,7 +270,7 @@
     "item.oil": {
       "title": "Nádoby na olej",
       "steps": [
-        "Palivo je uloženo v slotu \"Suroviny\". Jeden kontejner obsahuje až 2 500 jednotek paliva pro pochodň. Použijte příkaz \"Doplnit palivo\" s vhodnou pochodní; pochodně vyžadují jiný způsob doplnění paliva. V nabídce: Refuel."
+        "Olej zabírá místo na olej v zásobách. Do jedné nádoby se vejde palivo na nejvýše 2 500 tahů svícení lucernou. U vhodné lucerny použij příkaz Doplnit palivo (Refuel). Pochodně se doplňují jinak."
       ],
       "source_sha256": "6819ab50906ce7592bc8009eb548dfc1203a5851e28a80c92addbfa02251259a"
     },
@@ -333,7 +333,7 @@
     "item.staff.ready": {
       "title": "Připravit hůl",
       "steps": [
-        "Otevři inventář, vyber hůl a příkazem Ready jej přesuň na opasek. Sáhnout do batohu trvá tři tahy a útok to může přerušit. Pokud si chceš ponechat současné vybavení, přeskoč lekci."
+        "Otevři inventář, vyber hůl a zvol „Přesunout na opasek“ (Move to Harness). Sáhnout do batohu zabere tři tahy a útok může tuto akci přerušit. Pokud chceš výbavu ponechat na místě, lekci přeskoč."
       ],
       "source_sha256": "6d9ae83430825c2768a4ecb135e730cda5c495dafd875172e486ff4ec59317db"
     },
@@ -348,7 +348,7 @@
     "item.horn.ready": {
       "title": "Připravit roh",
       "steps": [
-        "Otevři inventář, vyber roh a příkazem Ready jej přesuň na opasek. Sáhnout do batohu trvá tři tahy a útok to může přerušit. Pokud si chceš ponechat současné vybavení, přeskoč lekci."
+        "Otevři inventář, vyber roh a zvol „Přesunout na opasek“ (Move to Harness). Sáhnout do batohu zabere tři tahy a útok může tuto akci přerušit. Pokud chceš výbavu ponechat na místě, lekci přeskoč."
       ],
       "source_sha256": "69939b5719d6b60428c241c381ab39de389314983d498a6e4c2afbaad51cf6ab"
     },
@@ -768,7 +768,7 @@
     "menu.harness": {
       "title": "Opasek (Harness)",
       "steps": [
-        "Opasek obsahuje vybavení, které je k dispozici v rámci jeho vlastního objemu. Vyberte možnost \"Připraveno\" u vhodného předmětu v batohu, abyste jej sem přesunuli, nebo \"Nepřipraveno\", abyste jej znovu uložili. Před útokem s danou zbraní je nutné také vybrat možnost \"Aktivní\" v menu \"Změnit aktivní\". V nabídce: Change Active, Unready, Ready."
+        "Opasek má vlastní omezenou kapacitu a předměty na něm máš po ruce. U vhodného předmětu v batohu zvol „Přesunout na opasek“ (Move to Harness). Zpět do batohu ho vrátíš volbou „Uložit do batohu“ (Store in Pack). Před běžným útokem ještě vyber zbraň v nabídce „Změnit aktivní zbraň“ (Change Active)."
       ],
       "source_sha256": "23cb4a9a0a6d5812faf908f8c385549e6e1636fbf5a3f609129d3a751eb9ae3f"
     },
@@ -880,9 +880,9 @@
     "menu.smithing": {
       "title": "Kovářství",
       "steps": [
-        "Vyber předmět nebo vylepšení a zjisti jeho obtížnost, své možnosti a náklady. Ke kovářství se přičítá polovina současné obratnosti a polovina současného půvabu. Tyto hodnoty ovlivňuje výstroj, dočasné účinky a oslabení vlastností. Naučené a aktivní řemeslné schopnosti a mistrovství přidávají další bonusy ke každému výrobku. Naugrimové přičítají každou kladnou úroveň nadání pro kovářství k použitým vlastnostem. Sečti bonusy a zaokrouhli dolů jen jednou. Platí také bonusy ke kovářství z výstroje."
+        "Vyber předmět nebo vylepšení a zjisti jeho obtížnost, své možnosti a náklady. Ke kovářství se přičítá polovina tvé trvalé obratnosti a polovina tvého trvalého půvabu. Do trvalých hodnot se počítají základní vlastnosti a naučené schopnosti, které vlastnosti zvyšují bez dalších podmínek. Výstroj, dočasné účinky, oslabení vlastností, písně ani podmíněné bonusy tyto hodnoty nemění. Naučené a aktivní řemeslné schopnosti a mistrovství dávají další bonusy ke každému výrobku. Naugrimové zvyšují zde použité vlastnosti o každý kladný bod nadání pro kovářství. Sečti bonusy a zaokrouhli dolů jen jednou. Bonusy ke kovářství z výstroje se dál započítávají."
       ],
-      "source_sha256": "27a42bca332fbfd75f31dfe34f70c52c7579ebb9e6ae97193d64fc915ff9b0ee"
+      "source_sha256": "68f4d01a2a0ca06f009e07def51c22357ba694c4bca28eab64e4f1a2af40f895"
     },
     "menu.nearby-monsters": {
       "title": "Tvorové v okolí",
@@ -1443,51 +1443,51 @@
     "ability.120.preview": {
       "title": "Zbrojíř (Weaponsmith)",
       "steps": [
-        "Umožňuje kovat zbraně a mírně usnadňuje jejich rozpoznávání. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvé současné obratnosti."
+        "Umožňuje kovat zbraně a mírně usnadňuje jejich rozpoznávání. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvé trvalé obratnosti."
       ],
-      "source_sha256": "d83db7a5cb4d0c2b671fdcbfea063acb7e19879422aca2557f3c640fde12c32d"
+      "source_sha256": "57cd9972362062d683f7d9ced8358fec833a6b9f644d0bd9d32b87dde5c91925"
     },
     "ability.121.preview": {
       "title": "Platnéř (Armoursmith)",
       "steps": [
-        "Umožňuje kovat zbroj a mírně usnadňuje její rozpoznávání. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvé současné síly."
+        "Umožňuje kovat zbroj a mírně usnadňuje její rozpoznávání. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvé trvalé síly."
       ],
-      "source_sha256": "b678077db771124fab7f76ccfd9d0e88ea024d2f33d8622307b565133a2f5573"
+      "source_sha256": "16b9acb9a7bf3d90caad2622fc13f324b165d5b3cdc55c040a4995c88465143c"
     },
     "ability.122.preview": {
       "title": "Klenotník (Jeweller)",
       "steps": [
-        "Můžeš vyrábět prsteny, amulety, rohy a světla a automaticky poznáš jejich druh. Jednotlivé kusy mohou stále skrývat zvláštní vlastnosti. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvého současného půvabu."
+        "Můžeš vyrábět prsteny, amulety, rohy a světla a automaticky poznáš jejich druh. Jednotlivé kusy mohou stále skrývat zvláštní vlastnosti. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvého trvalého půvabu."
       ],
-      "source_sha256": "e1c306ed445a7a4ba455218355ff175418c0690016de92c49e987f6700a6761a"
+      "source_sha256": "b6532ccc257c13e5f08c9ac9b7771acd2d7cdaaee9c244ff05efa381fadb8540"
     },
     "ability.123.preview": {
       "title": "Očarování (Enchantment)",
       "steps": [
-        "Umožňuje kovat očarované předměty s pojmenovanými zvláštními vlastnostmi. Poznáš očarování předmětů a získáš menší bonus k rozpoznávání. Naučená a aktivní schopnost přidává ke každému výrobku tvůj současný půvab."
+        "Umožňuje kovat očarované předměty s pojmenovanými zvláštními vlastnostmi. Poznáš očarování předmětů a získáš menší bonus k rozpoznávání. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvého trvalého půvabu."
       ],
-      "source_sha256": "8100a52a5b4f99f77c3b8ca7f082708686fd759417138c1ffb65942a1f200368"
+      "source_sha256": "6df49478c9c23c77b67b9cf185c7d26aa911ae6faf02ed4634466bd6d8750c30"
     },
     "ability.124.preview": {
       "title": "Odbornost (Expertise)",
       "steps": [
-        "Zkrátí dobu kování na polovinu a odstraní běžnou cenu ve zkušenostech a vlastnostech. Materiál i zbývající použití kovárny jsou stále důležité. Prohlédni si celý návrh. Naučená a aktivní schopnost přidává ke každému výrobku tvou současnou obratnost."
+        "Zkrátí dobu kování na polovinu a odstraní běžnou cenu ve zkušenostech a vlastnostech. Materiál i zbývající použití kovárny jsou stále důležité. Prohlédni si celý návrh. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvé trvalé obratnosti."
       ],
-      "source_sha256": "52084e31e80fdc4b44b8d80604e2c4e118bee510a1c2f3e7cd7dc50fbf828e83"
+      "source_sha256": "06ded559e9634914fee328d885279d91bfbe56ef05fe076e73231c9363503935"
     },
     "ability.125.preview": {
       "title": "Umění artefaktů (Artifice)",
       "steps": [
-        "Můžeš kovat vlastní artefakty a získáš výrazný bonus k rozpoznávání. Návrh ukazuje cenu vybraných vlastností. Naučená a aktivní schopnost přidává ke každému výrobku tvůj současný půvab."
+        "Můžeš kovat vlastní artefakty a získáš výrazný bonus k rozpoznávání. Návrh ukazuje cenu vybraných vlastností. Naučená a aktivní schopnost přidává ke každému výrobku polovinu tvého trvalého půvabu."
       ],
-      "source_sha256": "415ff774cd4eb6c57d172a82d4cbb2d649a6042a2043247a3b0a03411df19656"
+      "source_sha256": "e73cd73400d79b457f55e279b0e478f25e0216a6e66d79ed2f14200c21c7e46c"
     },
     "ability.126.preview": {
       "title": "Mistrovské dílo (Masterpiece)",
       "steps": [
-        "Nad běžný limit obtížnosti můžeš kovat za trvale obětované základní body kovářství. Každý bod obtížnosti nad limit stojí jeden bod dovednosti. Utratit můžeš nejvýš body vložené do kovářství."
+        "Nad běžný limit obtížnosti můžeš kovat za trvale obětované základní body kovářství. Každý bod obtížnosti nad limit stojí jeden bod dovednosti. Utratit můžeš nejvýš body vložené do kovářství. Naučené a aktivní Mistrovské dílo navíc přidává ke každému výrobku polovinu tvého trvalého půvabu."
       ],
-      "source_sha256": "d796523bd4f90f1552a7961581e4c46d6d75f4904b3a488c28cd40a27f558b30"
+      "source_sha256": "9b4b435cab3009f0fb78f9fe2dc392ab714f7f532f70eaac0a2dc300aa477c95"
     },
     "ability.127.preview": {
       "title": "Půvab (Grace)",
@@ -1506,7 +1506,7 @@
     "ability.129.preview": {
       "title": "Překování (Reforging)",
       "steps": [
-        "Na kovárně můžete opravit poškozené předměty nebo přidat chybějící předponu k nalezenému předmětu. Obtíž znovuvytvoření je 1,5 násobek zvýšené obtížnosti. Před rozhodnutím porovnejte výsledek a náklady."
+        "V kovárně můžeš opravit poškozený předmět nebo doplnit chybějící předponu nalezeného předmětu. Obtížnost překování je 1,5násobek nárůstu obtížnosti. Než se rozhodneš, porovnej výsledek a náklady."
       ],
       "source_sha256": "a6cc7d644a7e131068374a871adaedf99d820f59a8588295e857dd918722bbc3"
     },
@@ -2165,7 +2165,7 @@
       "title": "Mírně hluboká voda",
       "steps": [
         "Pohyb po, přes nebo z mělké vody stojí o 50 % více času a snižuje skrytost o -3 díky šplhání. Stání na místě nemá žádný další náklad na pohyb. Voda zničí váš pachový stop, ale nepřátele stále mohou sledovat, pokud vás uvidí nebo uslyší.",
-        "Pokud je postava zdravá, vstup do každého vodního pole pěšky má základní šanci 0,5 % na nákazu, než se objeví imunitní obrana nebo \"Odolnost\". Stání na místě nepřidává žádnou šanci na nákazu. Úspěšný skok zabraňuje kontaktu a stříkání vody, i když dopad stále vydává zvuk. Nákaza přetrvává i při odpočinku. Bylina léčivá, elixír léčivý nebo Miruvor vyléčí všechny nemoci. Ostatní byliny léčivé fungují, kromě případu nákazy Angband Plague."
+        "Jsi-li zdravý, každé vodní pole, na které vstoupíš pěšky, má základní riziko vystavení nákaze 0,5 % před započtením imunity či schopnosti Hardiness. Při stání na místě se riziko nevyhodnocuje. Úspěšný skok zabrání kontaktu s vodou a šplouchnutí, přistání však stále vydá zvuk. Nemoc postupuje i při odpočinku. Léčivá bylina, léčivý lektvar nebo Miruvor vyléčí každou nemoc. Ostatní léčivé byliny nepůsobí na angbandský mor."
       ],
       "source_sha256": "2db23b5559af8e90b15007a978cd514300ea076fe79efbe2e2467d404d8349cd"
     },
@@ -2242,7 +2242,7 @@
     "effect.202": {
       "title": "Sebeznáma — známý účinek",
       "steps": [
-        "Zobrazuje vaše aktuální efekty a charakterové vlastnosti. Pokud máte například nemoc, \"Alchymie\" zobrazí název nemoci a bylinu pro její vyléčení; bez \"Alchymie\" má každé použití 50% šanci rozpoznat název nemoci a, po rozpoznání, 50% šanci rozpoznat bylinu pro její vyléčení. Objevy trvají po dobu infekce a jsou uloženy. Každé použití také může odhalit jednu aktivní prokletí. Nezruší to prokletí."
+        "Zobrazí aktuální stavy a vlastnosti postavy. Při nemoci se schopností Alchymie (Alchemy) odhalí název nemoci i léčivou bylinu. Bez ní má každé použití 50% šanci odhalit název a po jeho zjištění 50% šanci odhalit bylinu. Poznatky platí po dobu této nákazy a ukládají se. Každé použití může také odhalit jednu aktivní kletbu, neodstraní ji však."
       ],
       "source_sha256": "adec9e4419373baff8729413fe7595c008d82b5605b5264000412888a248a1b5"
     },
@@ -2466,7 +2466,7 @@
     "effect.381": {
       "title": "Zajištění základních potřeb — známý účinek",
       "steps": [
-        "Poskytuje přibližně 2 000 běžných porcí výživy. Skutečná míra spotřeby se může měnit v závislosti na vašich aktuálních modifikátorech. Pokud toto léčí vaši současnou nemoc, léčí ji a obnovuje její negativní efekty místo toho, aby se uplatnily normální efekty nebo výživa; jinak se uplatní normální efekt."
+        "Zasytí přibližně na 2 000 běžných tahů. Skutečná spotřeba závisí na aktuálních modifikátorech. Je-li tato bylina lékem na tvou současnou nemoc, nemoc vyléčí a odstraní její postihy. V takovém případě nezasytí ani nemá obvyklý účinek. Jinak působí normálně."
       ],
       "source_sha256": "a8621b751b5fbc4f405a9d2e4c7136d8e04f47ca873476c7cfaf23ea86be66a2"
     },
@@ -2494,7 +2494,7 @@
     "effect.385": {
       "title": "Prázdnota — známý účinek",
       "steps": [
-        "Snižuje příjem potravy o přibližně 1 000 běžných tahů, což může zhoršit hlad, pokud platí jeho normální účinek. Pokud tento předmět léčí vaši současnou nemoc, léčí ji a obnovuje její negativní efekty místo toho, aby platil jeho normální účinek nebo snižoval příjem potravy; jinak platí jeho normální účinek."
+        "Ubírá výživu přibližně na 1 000 běžných tahů, což může zhoršit hlad. Je-li tato bylina lékem na tvou současnou nemoc, nemoc vyléčí a odstraní její postihy a výživu ti neubere. Jinak působí normálně."
       ],
       "source_sha256": "5ce314f56c8b5bbb09224dbe1ae73c4448bb2b21642b42de198d56235d58eba6"
     },
@@ -2529,28 +2529,28 @@
     "effect.399": {
       "title": "Kousek tmavého chleba — známý účinek",
       "steps": [
-        "Poskytuje přibližně 1 500 běžných jídel."
+        "Zasytí přibližně na 1 500 běžných tahů."
       ],
       "source_sha256": "d358279640cace15de4d1a702b32ebe61c8c90796a253163279dff44dacee8fd"
     },
     "effect.400": {
       "title": "Pás sušeného masa — známý účinek",
       "steps": [
-        "Poskytuje přibližně 2 000 běžných jídel, s 20% základní šancí na nákazu: -1 Odolnost při nákaze, poté -1 na náhodnou vlastnost každých 150 herních kol (300 s vlastností \"Odolnost\"). Odpočinek to neřeší. Bylina Léčení, elixír Léčení nebo Miruvor léčí všechny nemoci."
+        "Zasytí přibližně na 2 000 běžných tahů. Základní riziko vystavení nákaze je 20 %. Nákaza ihned sníží odolnost o 1 a pak každých 150 tahů hráče sníží jednu náhodnou vlastnost o 1 (300 tahů se schopností Hardiness). Odpočinek nemoc nevyléčí. Léčivá bylina, léčivý lektvar nebo Miruvor vyléčí každou nemoc."
       ],
       "source_sha256": "60fb6ef370957c5bc80e489c5fc13dd8ee188e68604c3b1f8dd221f43c9335c1"
     },
     "effect.401": {
       "title": "Kousek z Lembas — známý účinek",
       "steps": [
-        "Poskytuje přibližně 3 000 běžných tahů, které zajišťují výživu, a obnovuje 1 jednotku ztracené půvabu."
+        "Zasytí přibližně na 3 000 běžných tahů a vrátí 1 ztracený bod půvabu."
       ],
       "source_sha256": "c3fbee491d23938b05e2e4a9ba57ca6294c4ce5acd6c9cfae44b0e4f4afb0bff"
     },
     "item.throwing.ready": {
       "title": "Zbraň k házení: připravena",
       "steps": [
-        "Otevři inventář, vyber vrhací zbraň a příkazem Ready jej přesuň na opasek. Sáhnout do batohu trvá tři tahy a útok to může přerušit. Pokud si chceš ponechat současné vybavení, přeskoč lekci."
+        "Otevři inventář, vyber vrhací zbraň a zvol „Přesunout na opasek“ (Move to Harness). Sáhnout do batohu zabere tři tahy a útok může tuto akci přerušit. Pokud chceš výbavu ponechat na místě, lekci přeskoč."
       ],
       "source_sha256": "cf3c627074fa43b9156e7d81f269029871f96de54eaa12d6893d5e5b85324ae4"
     },
@@ -2571,7 +2571,7 @@
     "item.bow.ready": {
       "title": "Luk: připraven",
       "steps": [
-        "Otevři inventář, vyber luk a příkazem Ready jej přesuň na opasek. Sáhnout do batohu trvá tři tahy a útok to může přerušit. Pokud si chceš ponechat současné vybavení, přeskoč lekci."
+        "Otevři inventář, vyber luk a zvol „Přesunout na opasek“ (Move to Harness). Sáhnout do batohu zabere tři tahy a útok může tuto akci přerušit. Pokud chceš výbavu ponechat na místě, lekci přeskoč."
       ],
       "source_sha256": "feb12c8654451c767dba1e16c5f5e5c1fe28c572a6bd249b9546b019e8bf3369"
     },
@@ -3907,7 +3907,7 @@
       "title": "Hluboká voda",
       "steps": [
         "Pohyb do, přes nebo z hluboké vody vyžaduje čtyřnásobnou energii ve srovnání s normálním pohybem. Nemůžete útočit, když jste ponoření. Naplánujte si trasu na suchou půdu před vstupem; most poskytuje suché místo nad vodou.",
-        "Plavání snižuje skryté útoky o -3. Každý vstup do vodního pole, pokud je postava zdravá, má základní šanci 0,5 % na nákazu, než se dosáhne imunity nebo \"odolnosti\". Stání na místě nezpůsobuje žádné snížení pohybu ani hody na infekci, ale znemožňuje útok, dokud se postava nedostane do bezpečné pozice."
+        "Plavání šplouchá a snižuje plížení o 3. Jsi-li zdravý, každé vodní pole, na které vstoupíš, má základní riziko vystavení nákaze 0,5 % před započtením imunity či schopnosti Hardiness. Když zůstaneš na místě, nevzniká další postih za pohyb ani nové riziko nákazy. Útočit můžeš až po návratu na pevný podklad."
       ],
       "source_sha256": "c331749fe6aedf1c8db6da3ec67ee1d26b863d86956dfb50b1178d8198b45612"
     },
@@ -3946,7 +3946,7 @@
     "Preview item": "Prohlédnout předmět",
     "Preview the selected item%s%s": "Prohlédnout vybraný předmět%s%s",
     "The selected item's preview is open.": "Popis vybraného předmětu je otevřený.",
-    "Select the item, then choose Ready.": "Vyber předmět a potom příkaz Ready.",
+    "Select the item, then choose Ready.": "Vyber předmět a zvol „Přesunout na opasek“ (Move to Harness).",
     "Select the equipment you want to wear or wield.": "Vyber výstroj, kterou chceš obléci nebo vzít do ruky.",
     "Select an item to preview.": "Vyber předmět k prohlédnutí.",
     "Select the required item and choose Use.": "Vyber požadovaný předmět a příkaz Use.",

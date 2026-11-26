@@ -30,9 +30,10 @@ void fixture_details(int item, int prefix, int mode)
     if (mode < 2 || mode == 4)
     {
         reforge_preview_type preview;
-        assert(reforge_preview_build(player_inventory_object(item), prefix, &preview));
-        *smith_o_ptr = *player_inventory_object(item);
-        prt_reforge_preview(&preview);
+        const object_type* source = player_inventory_object(item);
+        assert(reforge_preview_build(source, prefix, &preview));
+        smith_sheet_layout sheet = smith_sheet_geometry();
+        prt_reforge_preview(&sheet, &preview, source);
         assert(smith_ui_detail_valid && !smith_ui_detail_paid);
         assert(!memcmp(&preview.cost, &smith_ui_detail_cost, sizeof(preview.cost)));
         assert(smith_ui_detail_turns == preview.turns);
@@ -115,6 +116,12 @@ void fixture_long_costs(void)
     assert(!memcmp(&current_cost, &smithing_cost, sizeof(current_cost)));
     assert(!memcmp(&alloy, &smith_alloy, sizeof(alloy)));
 }
+
+cptr fixture_effects(void)
+{
+    return smith_description.active && smith_description.effects
+        ? smith_description.text : "";
+}
 '''
 CHECKS = r'''
 #include "sdl-config.h"
@@ -122,6 +129,7 @@ CHECKS = r'''
 extern void fixture_details(int,int,int);
 extern void fixture_detail_bill(int*,int*);
 extern void fixture_long_costs(void);
+extern cptr fixture_effects(void);
 typedef enum { DRAFT_UNCHECKED, DRAFT_PLAIN, DRAFT_PREFIX, DRAFT_ARTEFACT } draft_check;
 typedef enum { NEW_WORK, INTERRUPTED_WORK, PAID_REFORGE } work_check;
 typedef struct editor_step {
@@ -146,6 +154,9 @@ typedef struct editor_step {
     bool full_description;
     int skill, skill_bonus;
     cptr name_input;
+    cptr effect;
+    int tunneling, suffix;
+    bool no_tunneling;
 } editor_step;
 static const editor_step* editor_steps;
 static int editor_step_index;
@@ -461,6 +472,22 @@ static char editor_step_key(void)
         assert(!editor_frame_find(step->missing_choice, NULL, NULL, true));
     if (step->skill)
         assert(smith_o_ptr->skill_bonus[step->skill] == step->skill_bonus);
+    if (step->effect)
+    {
+        editor_require("Effects", true, NULL);
+        if (!strstr(fixture_effects(), step->effect))
+            fprintf(stderr, "Expected effect '%s', got '%s'\n", step->effect, fixture_effects());
+        assert(strstr(fixture_effects(), step->effect));
+    }
+    if (step->tunneling || step->no_tunneling)
+    {
+        u32b f1, f2, f3;
+        object_flags(smith_o_ptr, &f1, &f2, &f3);
+        assert(((f1 & TR1_TUNNEL) != 0) != step->no_tunneling);
+        assert(smith_o_ptr->pval == step->tunneling);
+    }
+    if (step->suffix)
+        assert(object_ego_suffix(smith_o_ptr) == step->suffix);
     ++editor_step_index;
     if (step->draft)
     {
@@ -700,6 +727,62 @@ static void editor_checks(void)
         { "Choose base item", ESCAPE },
         { 0 },
     };
+    const editor_step affix_effect_steps[] = {
+        { "Dagger", 0, true },
+        { "Enhancements", 0, true },
+        { "Suffix", 0, true },
+        { "of the Haladin", 0, true, .effect = "without a suffix" },
+        { "of the Haladin", 0, true, .effect = "spiders", .also = "They slay" },
+        { "Suffix", 0, true, .suffix = 186 },
+        { "of the Haladin", '8', .row_value = "Current", .suffix = 186 },
+        { "of the Gaurwaith", 0, .effect = "ability: Throwing", .suffix = 186,
+            .also = "Volume per item" },
+        { "of the Haladin", ESCAPE, .row_value = "Current", .effect = "ability: Throwing" },
+        { "Suffix", ESCAPE, .row_value = "of the Haladin", .suffix = 186 },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step mattock_steps[] = {
+        { "Mattock", 0, true },
+        { "Tunneling", '[', .row_value = "+2 (Fixed)", .tunneling = 2 },
+        { "Melee powers", 0, true },
+        { "Tunneling Bonus", '-', .row_value = "+2", .effect = "your tunneling by 2",
+            .missing = "Toggle" },
+        { "Edit", 0, true, .also = "Tunneling Bonus" },
+        { "+3", 0, true, .also = "Choose Tunneling", .tunneling = 2 },
+        { "Tunneling Bonus", ESCAPE, .row_value = "+3", .effect = "your tunneling by 3",
+            .tunneling = 3, .also = "Strength" },
+        { "Melee powers", ']', .tunneling = 3 },
+        { "Tunneling", 0, true, .row_value = "+3", .tunneling = 3 },
+        { "Choose Tunneling", '6', .tunneling = 3 },
+        { "Choose Tunneling", ESCAPE, .effect = "your tunneling by 4", .tunneling = 3 },
+        { "Tunneling", ESCAPE, .row_value = "+3", .tunneling = 3 },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step added_tunneling_steps[] = {
+        { "Dagger", 0, true },
+        { "Simple", '[' },
+        { "Melee powers", 0, true },
+        { "Add", 0, true, .effect = "your tunneling by 1" },
+        { "Tunneling Bonus", 0, .row_value = "+1", .tunneling = 1 },
+        { "Remove", 0, true },
+        { "Tunneling Bonus", ESCAPE, .effect = "your tunneling by 1", .no_tunneling = true },
+        { "Melee powers", ESCAPE },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
+    const editor_step stone_hewer_steps[] = {
+        { "Mattock", 0, true },
+        { "Tunneling", ']', .row_value = "+2 (Fixed)", .tunneling = 2 },
+        { "Suffix", 0, true },
+        { "of the Stone-hewers", 0, true },
+        { "of the Stone-hewers", 0, true, .effect = "your tunneling by 3", .tunneling = 2 },
+        { "Suffix", '[', .row_value = "of the Stone-hewers", .tunneling = 3, .suffix = 51 },
+        { "Tunneling", ESCAPE, .row_value = "+3 (Fixed)", .tunneling = 3 },
+        { "Choose base item", ESCAPE },
+        { 0 },
+    };
     const editor_step description_scroll_steps[] = {
         { "Description", 0, .also = "A belt-knife", .missing = "weapon.",
             .drag_rows = 100, .description_scroll = true },
@@ -810,6 +893,10 @@ static void editor_checks(void)
     run_editor_steps("Smithing prepaid reforge can resume at an exhausted forge", 30, 12, prepaid_steps, PAID_REFORGE);
     run_editor_steps("Smithing full description opens and pages on a short screen", 30, 12, description_reader_steps, NEW_WORK);
     editor_touch = true;
+    run_editor_steps("Smithing touch suffix previews show real effects and preserve the applied affix", 44, 45, affix_effect_steps, NEW_WORK);
+    run_editor_steps("Smithing touch Mattock edits inherent tunneling through Artifice and Simple", 44, 45, mattock_steps, NEW_WORK);
+    run_editor_steps("Smithing added tunneling has an immediate effect and can be removed", 44, 45, added_tunneling_steps, NEW_WORK);
+    run_editor_steps("Smithing Stone-hewers previews and applies an increased tunneling bonus", 44, 45, stone_hewer_steps, NEW_WORK);
     run_editor_steps("Smithing portrait touch renames the artefact from the Work Order", 44, 45, artifice_name_steps, NEW_WORK);
     run_editor_steps("Smithing native touch actions design, apply, costs and back", 30, 15, touch_actions, NEW_WORK);
     run_editor_steps("Smithing drag scroll and touch targets", 30, 15, touch_scroll_steps, NEW_WORK);

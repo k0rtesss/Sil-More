@@ -61,7 +61,8 @@ static SDL_FRect wet_reference_tile(SDL_Texture* texture,int mask,int page) {
         return (SDL_FRect){(mask%16)*16,(mask/16+page*16)*16,16,16};
     assert(texture->w==128);
     int slot=0;
-    for(int m=0;m<normalized_shore(mask);m++)
+    int shape=normalized_shore(mask);
+    for(int m=0;m<shape;m++)
         if(normalized_shore(m)==m) slot++;
     if(texture->h==96) page=0;
     return (SDL_FRect){(slot%8)*16,(slot/8+page*6)*16,16,16};
@@ -88,6 +89,18 @@ static void wet_atlas_tests(void) {
         int feat=wet_features[kind];cave_water_flow_reset();
         assert(load_liquid_texture(feat));
         SDL_Texture* atlas=load_liquid_transition_texture(feat);assert(atlas);
+        if(feat==FEAT_WATER) {
+            /* First contact with water eagerly uploads all four textures.
+             * Guard the shipped pixel budget, including the static bank. */
+            SDL_Texture* loaded[]={atlas,deep_water_transition_texture,
+                water_depth_transition_texture,water_bank_overlay_texture};
+            int pixels=0;
+            for(unsigned i=0;i<N_ELEMENTS(loaded);i++) {
+                assert(loaded[i]);
+                pixels+=loaded[i]->w*loaded[i]->h;
+            }
+            assert(pixels<=128*(3*1536+96));
+        }
         int count=4; /* calm pools use the four authored surface frames */
         assert(liquid_frame_count_at(10,11,feat)==count);
         for(int mask=0;mask<256;mask++) {

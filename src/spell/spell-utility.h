@@ -11,6 +11,7 @@ typedef struct monster_type monster_type;
 bool hp_player(int x, bool percent, bool message);
 void warding_glyph(void);
 bool do_dec_stat(int stat, monster_type* m_ptr);
+void spell_report_stat_loss(int stat);
 bool do_res_stat(int stat, int points);
 bool do_inc_stat(int stat);
 void identify_pack(void);

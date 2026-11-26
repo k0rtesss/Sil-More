@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -6,6 +7,7 @@
 #include "supplies.h"
 #include "item_set.h"
 #include "ui/status/status-internal.h"
+#include "player/player-active-weapon.h"
 
 bool ui_hide_left_panel(void)
 {
@@ -180,11 +182,6 @@ static bool pointer_attack_ranged_display_stats(int* attack, int* dd, int* ds,
         PLAYER_ACTIVE_WEAPON_RANGED_1, attack, dd, ds, throwing);
 }
 
-static bool pointer_attack_melee_has_offhand(void)
-{
-    return player_active_weapon_offhand_stats_preview(NULL, NULL, NULL);
-}
-
 static bool left_panel_object_icon_is_usable(const object_type* o_ptr)
 {
     return o_ptr && o_ptr->k_idx;
@@ -291,11 +288,6 @@ static int left_panel_put_object_icon(const object_type* o_ptr, int row,
 static const object_type* left_panel_melee_display_object(void)
 {
     return inventory[INVEN_WIELD].k_idx ? &inventory[INVEN_WIELD] : NULL;
-}
-
-static const object_type* left_panel_offhand_display_object(void)
-{
-    return pointer_attack_melee_has_offhand() ? &inventory[INVEN_ARM] : NULL;
 }
 
 static const object_type* left_panel_ranged_display_object(bool throwing)
@@ -541,7 +533,7 @@ void prt_stat(int stat)
     }
 
     /* Trim trailing spaces for story font rendering */
-    SDL_strlcpy(trimmed_label, stat_label, sizeof(trimmed_label));
+    SDL_strlcpy(trimmed_label, ui_text(stat_label), sizeof(trimmed_label));
     len = strlen(trimmed_label);
     while (len > 0 && trimmed_label[len-1] == ' ') {
         trimmed_label[--len] = '\0';
@@ -609,7 +601,7 @@ void prt_exp(void)
     sdl_story_font_enable();
 
     /*Print experience label*/
-    c_put_str(label_attr, "Exp", ROW_EXP, 0);
+    c_put_str(label_attr, ui_text("Exp"), ROW_EXP, 0);
 
     sdl_story_font_disable();
 
@@ -625,14 +617,7 @@ void prt_exp(void)
 void prt_mel(void)
 {
     char buf[32];
-    int main_attack = 0;
-    int main_dd;
-    int main_ds;
-    int offhand_attack = 0;
-    int offhand_dd = 0;
-    int offhand_ds = 0;
-    bool has_main;
-    bool has_offhand;
+    active_weapon_preview preview = { 0 };
     bool can_use_offhand_row = (ROW_MEL - 1) != ROW_LIGHT;
     int main_row = ROW_MEL;
     byte melee_bg_attr = pointer_attack_panel_bg_attr(SDL_POINTER_ATTACK_MELEE);
@@ -650,11 +635,8 @@ void prt_mel(void)
     if (!player_active_weapon_is_melee())
         return;
 
-    has_main = player_active_weapon_stats_preview(
-        PLAYER_ACTIVE_WEAPON_MELEE, &main_attack, &main_dd, &main_ds, NULL);
-    has_offhand = player_active_weapon_offhand_stats_preview(
-        &offhand_attack, &offhand_dd, &offhand_ds);
-    if (has_offhand && can_use_offhand_row)
+    player_equipped_weapon_preview(PLAYER_ACTIVE_WEAPON_MELEE, &preview);
+    if (preview.has_offhand && can_use_offhand_row)
         main_row = ROW_MEL - 1;
 
     /* Melee attacks */
@@ -662,23 +644,22 @@ void prt_mel(void)
         = p_ptr->active_ability[S_MEL][MEL_SMITE] ? TERM_L_RED : TERM_L_WHITE;
     meleeColour = pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE,
         meleeColour);
-    if (!has_main)
-        main_attack = main_dd = main_ds = 0;
-    strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", main_attack, main_dd, main_ds);
+    strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", preview.attack, preview.dd,
+        preview.ds);
     prt_pointer_attack_value_row_icon(
-        p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] ? "M2x" : "Mel",
+        p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] ? "M2x" : ui_text("Mel"),
         pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE, TERM_L_WHITE),
         meleeColour, buf, main_row, left_panel_melee_display_object(),
         melee_bg_attr);
 
-    if (has_offhand && can_use_offhand_row)
+    if (preview.has_offhand && can_use_offhand_row)
     {
-        strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", offhand_attack, offhand_dd,
-            offhand_ds);
-        prt_pointer_attack_value_row_icon("Off",
+        strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", preview.offhand_attack,
+            preview.offhand_dd, preview.offhand_ds);
+        prt_pointer_attack_value_row_icon(ui_text("Off"),
             pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE, TERM_L_WHITE),
             pointer_attack_panel_attr(SDL_POINTER_ATTACK_MELEE, TERM_L_WHITE),
-            buf, ROW_MEL, left_panel_offhand_display_object(), melee_bg_attr);
+            buf, ROW_MEL, &inventory[INVEN_ARM], melee_bg_attr);
     }
 }
 
@@ -705,7 +686,7 @@ void prt_arc(void)
     {
         byte arc_attr = pointer_attack_ranged_panel_attr(TERM_UMBER);
         byte arc_bg_attr = pointer_attack_ranged_panel_bg_attr();
-        cptr label = throwing ? "Thr" : "Arc";
+        cptr label = ui_text(throwing ? "Thr" : "Arc");
         const object_type* icon_obj = left_panel_ranged_display_object(throwing);
         bool draw_icon = left_panel_object_icon_is_usable(icon_obj);
 
@@ -865,11 +846,11 @@ void prt_hp(void)
 
     if (p_ptr->mhp >= 100)
     {
-        c_put_str(label_attr, "Hth", ROW_HP, COL_HP);
+        c_put_str(label_attr, ui_text("Hth"), ROW_HP, COL_HP);
     }
     else
     {
-        c_put_str(label_attr, "Health", ROW_HP, COL_HP);
+        c_put_str(label_attr, ui_text("Health"), ROW_HP, COL_HP);
     }
 
     sdl_story_font_disable();
@@ -1222,7 +1203,7 @@ void prt_light(void)
     if (!current_light_status(&infinite, &fuel, &fuel_attr, &attr, &icon))
     {
         c_put_str(panel_touch_zone_attr(SDL_PANEL_CLICK_SUPPLIES_LIGHTS,
-            ROW_LIGHT, TERM_SLATE), "Torch", ROW_LIGHT, icon_col);
+            ROW_LIGHT, TERM_SLATE), ui_text("Torch"), ROW_LIGHT, icon_col);
         return;
     }
 
@@ -1275,9 +1256,9 @@ void prt_sp(void)
     sdl_story_font_enable();
 
     if (p_ptr->msp >= 100)
-        c_put_str(label_attr, "Vce", ROW_SP, COL_SP);
+        c_put_str(label_attr, ui_text("Vce"), ROW_SP, COL_SP);
     else
-        c_put_str(label_attr, "Voice", ROW_SP, COL_SP);
+        c_put_str(label_attr, ui_text("Voice"), ROW_SP, COL_SP);
 
     sdl_story_font_disable();
 
@@ -1555,7 +1536,7 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
     else
         voice_color = TERM_RED;
 
-    strnfmt(buf, sizeof(buf), "HP %3d", MIN(p_ptr->chp, 999));
+    strnfmt(buf, sizeof(buf), ui_text("HP %3d"), MIN(p_ptr->chp, 999));
     {
         int old_count = count;
         hidden_left_panel_add_line(lines, &count, max_lines, hp_color, buf);
@@ -1563,7 +1544,7 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
             lines[count - 1].click_action = SDL_PANEL_CLICK_CHARACTER;
     }
 
-    strnfmt(buf, sizeof(buf), "VC %3d", MIN(p_ptr->csp, 999));
+    strnfmt(buf, sizeof(buf), ui_text("VC %3d"), MIN(p_ptr->csp, 999));
     {
         int old_count = count;
         hidden_left_panel_add_line(lines, &count, max_lines, voice_color, buf);
@@ -1603,24 +1584,12 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
     {
         const object_type* icon_obj = left_panel_melee_display_object();
         int toggle_mode = player_opposite_active_weapon_mode();
-        int main_attack = 0;
-        int main_dd = 0;
-        int main_ds = 0;
-        int offhand_attack = 0;
-        int offhand_dd = 0;
-        int offhand_ds = 0;
-        bool has_main = player_active_weapon_stats_preview(
-            PLAYER_ACTIVE_WEAPON_MELEE, &main_attack, &main_dd, &main_ds,
-            NULL);
-        bool has_offhand = player_active_weapon_offhand_stats_preview(
-            &offhand_attack, &offhand_dd, &offhand_ds);
-
-        if (!has_main)
-            main_attack = main_dd = main_ds = 0;
+        active_weapon_preview preview = { 0 };
+        player_equipped_weapon_preview(PLAYER_ACTIVE_WEAPON_MELEE, &preview);
 
         strnfmt(buf, sizeof(buf), "%s(%+d,%dd%d)",
             p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK] ? "M2" : "M",
-            main_attack, main_dd, main_ds);
+            preview.attack, preview.dd, preview.ds);
         SDL_strlcpy(short_buf, buf, sizeof(short_buf));
         {
             int old_count = count;
@@ -1640,12 +1609,12 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
                     sizeof(lines[count - 1].short_text));
         }
 
-        if (has_offhand)
+        if (preview.has_offhand)
         {
-            const object_type* offhand_icon = left_panel_offhand_display_object();
+            const object_type* offhand_icon = &inventory[INVEN_ARM];
 
             strnfmt(buf, sizeof(buf), "O(%+d,%dd%d)",
-                offhand_attack, offhand_dd, offhand_ds);
+                preview.offhand_attack, preview.offhand_dd, preview.offhand_ds);
             SDL_strlcpy(short_buf, buf, sizeof(short_buf));
             {
                 int old_count = count;
@@ -1766,12 +1735,12 @@ int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
 
         if (p_ptr->poisoned > 20)
         {
-            strnfmt(buf, sizeof(buf), "PS %3d", MIN(p_ptr->poisoned, 999));
+            strnfmt(buf, sizeof(buf), ui_text("PS %3d"), MIN(p_ptr->poisoned, 999));
             hidden_left_panel_add_line(lines, &count, max_lines, TERM_L_GREEN, buf);
         }
         else if (p_ptr->poisoned > 0)
         {
-            strnfmt(buf, sizeof(buf), "PS %3d", MIN(p_ptr->poisoned, 999));
+            strnfmt(buf, sizeof(buf), ui_text("PS %3d"), MIN(p_ptr->poisoned, 999));
             hidden_left_panel_add_line(lines, &count, max_lines, TERM_GREEN, buf);
         }
     }

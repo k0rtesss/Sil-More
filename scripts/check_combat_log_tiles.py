@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Render real full-log combat rows with SDL, without opening player data."""
 from pathlib import Path
+import argparse
 import os
 import shlex
 import subprocess
@@ -12,6 +13,7 @@ OUT = ROOT / "scripts/output/combat-log-tiles"
 HARNESS = r'''
 #include "angband.h"
 #include "sdl/main-sdl-private.h"
+#include "ui/ui-language.h"
 /* FULL LOG SOURCE */
 #include <assert.h>
 
@@ -71,6 +73,14 @@ static void matches_overlay(const combat_roll *roll,int rows)
             actual_attrs[actual]=Term->scr->a[y][x];
             actual_chars[actual++]=Term->scr->c[y][x];
         }
+    if(actual!=expected) {
+        fprintf(stderr,"Locale %s width %d: expected %d bytes, got %d\nExpected: ",
+            ui_language(),Term->wid,expected,actual);
+        for(int i=0;i<expected;i++)fprintf(stderr,"%02x ",(unsigned char)expected_chars[i]);
+        fputs("\nActual: ",stderr);
+        for(int i=0;i<actual;i++)fprintf(stderr,"%02x ",(unsigned char)actual_chars[i]);
+        fputc('\n',stderr);
+    }
     assert(actual==expected);
     assert(!memcmp(actual_chars,expected_chars,actual));
     assert(!memcmp(actual_attrs,expected_attrs,actual));
@@ -176,13 +186,15 @@ static void check(int width,bool bigger,bool bigtile,bool ascii,int scenario)
     SDL_DestroyTexture(view->canvas);view->canvas=NULL;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     maxima limits={0};player_type player={0};player_other options={0};
     z_info=&limits;p_ptr=&player;op_ptr=&options;
     log_set_quiet(true);SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy");
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) && TTF_Init());
     sdl_config_set_defaults(&config);
+    ANGBAND_DIR_HELP = "lib/help";
+    ui_set_language(argc > 1 ? argv[1] : "en");
     SDL_strlcpy(config.monospace_font,"lib/xtra/font/VictorMono-Medium.ttf",sizeof(config.monospace_font));
     SDL_strlcpy(config.story_font,"lib/xtra/font/Cinzel-Medium.ttf",sizeof(config.story_font));
     SDL_strlcpy(config.story_font2,"lib/xtra/font/EBGaramond-Regular.ttf",sizeof(config.story_font2));
@@ -200,6 +212,13 @@ int main(void)
     for(int big=0;big<2;big++)for(int ascii=0;ascii<2;ascii++)
         for(int double_tile=0;double_tile<2;double_tile++)for(int scenario=0;scenario<8;scenario++)
             for(size_t i=0;i<N_ELEMENTS(widths);i++)check(widths[i],big,double_tile,ascii,scenario);
+    /* Notes have a separate backing array. A stale combat entry at the same
+     * index must not make their prose use combat's byte-cell row budget. */
+    const char *note="漢字漢字漢字漢字";
+    log_history_note_lines[0]=(log_history_note_line){note,(int)strlen(note)};
+    log_history_entries[0].kind=LOG_HISTORY_ENTRY_COMBAT;
+    config.bigger_font=true;
+    assert(log_history_wrapped_entry_rows(LOG_HISTORY_FILTER_NOTES,0,12)==1);
     puts("Combat full log: overlay values/colors, SDL icons, narrow wrapping, font sizes, double tiles, misses, no-damage/combined attacks, resisted/vulnerable breath, poison, highlights and slices: PASS");
     return 0;
 }
@@ -207,9 +226,13 @@ int main(void)
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--language", default="en",
+                        help="UI locale to exercise with the production combat renderer")
+    args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     source = OUT / "check.c"
-    commands = (ROOT / "src/cmd/ui/cmd-ui-main-menu.c").read_text()
+    commands = (ROOT / "src/cmd/ui/cmd-ui-main-menu.c").read_text(encoding="utf-8")
     # main-sdl-private.h already includes the unguarded extern declarations.
     commands = commands.replace('#include "externs.h"', '')
     source.write_text(HARNESS.replace("/* FULL LOG SOURCE */", commands), encoding="utf-8")
@@ -226,7 +249,7 @@ def main():
     subprocess.run(["C:/msys64/mingw64/bin/cc.exe", "-DUSE_SDL", "-std=c17", "-O0", "-g",
         "@CMakeFiles/sil-more.dir/includes_C.rsp", str(source), "@" + str(response),
         "@CMakeFiles/sil-more.dir/linkLibs.rsp", "-o", str(exe)], cwd=BUILD, env=env, check=True)
-    subprocess.run([str(exe)], cwd=ROOT, env=env, check=True, timeout=60)
+    subprocess.run([str(exe), args.language], cwd=ROOT, env=env, check=True, timeout=120)
 
 
 if __name__ == "__main__":

@@ -926,7 +926,7 @@ static cptr option_menu_label(int opt)
                        : "Running delay";
     case OPT_hitpoint_warning:
         return compact ? (narrow ? "HP warn" : "HP warning")
-                       : "Hitpoint warning threshold (0% to 90%)";
+                       : "Hitpoint warning threshold (0%–90%)";
     case OPT_styled_player_health_bar:
         return compact ? (narrow ? "Styled HP bar" : "Styled health bar")
                        : "Use styled player health bar in the left panel";
@@ -1201,7 +1201,7 @@ static void option_apply_side_effects(int opt)
         if (!lore_set_generic(op_ptr->opt[OPT_generic]))
         {
             op_ptr->opt[OPT_generic] = false;
-            msg_print("Could not load generic lore. Update lib/pref/generic_lore.json with the game.");
+            msg_print(ui_text("Could not load generic lore. Update lib/pref/generic_lore.json with the game."));
         }
         p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
         p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0
@@ -1426,7 +1426,7 @@ static bool option_pick_from_choices(int opt,
     if (handled)
         *handled = true;
 
-    return settings_pick_value(option_menu_label(opt), NULL, choices, count,
+    return settings_pick_value(ui_text(option_menu_label(opt)), NULL, choices, count,
         current_value, out_value);
 }
 
@@ -2180,9 +2180,9 @@ extern void do_cmd_options_aux(int page, cptr info)
         settings_semantic_menu_begin(info, k);
         if (page == CHALLENGE_PAGE)
         {
-            sdl_character_sheet_screen_set_select_description(
+            sdl_character_sheet_screen_set_select_description(ui_text(
                 "Challenge options can only be changed during character creation "
-                "or on the very first turn.");
+                "or on the very first turn."));
         }
 
         /* Display the options */
@@ -2506,10 +2506,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                     turns = DEFAULT_NARRATIVE_BANNER_TURNS;
 
                 if (turns == 0)
-                    strnfmt(value_str, sizeof(value_str), "Manual dismiss");
+                    SDL_strlcpy(value_str, ui_text("Manual dismiss"), sizeof(value_str));
                 else
-                    strnfmt(value_str, sizeof(value_str), "%d turn%s",
-                        turns, (turns == 1) ? "" : "s");
+                    strnfmt(value_str, sizeof(value_str),
+                        ui_text(turns == 1 ? "%d turn" : "%d turns"), turns);
 
                 option_menu_format_line(buf, sizeof(buf), option_menu_label(opt[i]),
                     value_str);
@@ -3436,7 +3436,7 @@ extern void do_cmd_options_aux(int page, cptr info)
 
         default:
         {
-            bell("Illegal command for normal options!");
+            bell(ui_text("Illegal command for normal options!"));
             break;
         }
         }
@@ -3563,23 +3563,23 @@ static void sdl_open_config_file(void)
     char url[2048];
 
     if (!config_path || !config_path[0]) {
-        bell("SDL config path is not available");
+        bell(ui_text("SDL config path is not available"));
         return;
     }
 
     if (!sdl_build_file_url(config_path, url, sizeof(url))) {
-        msg_format("Could not build file URL for %s",
+        msg_format(ui_text("Could not build file URL for %s"),
             sdl_config_path_leaf(config_path));
         return;
     }
 
     if (!SDL_OpenURL(url)) {
-        msg_format("Could not open %s (%s)",
+        msg_format(ui_text("Could not open %s (%s)"),
             sdl_config_path_leaf(config_path), SDL_GetError());
         return;
     }
 
-    msg_format("Opened %s", sdl_config_path_leaf(config_path));
+    msg_format(ui_text("Opened %s"), sdl_config_path_leaf(config_path));
 }
 
 
@@ -3612,7 +3612,7 @@ static void do_cmd_big_font_settings(bool* settings_changed)
             sdl_character_sheet_screen_set_last_select_row_reset(
                 SETTINGS_CLICK_RESET_ROW_BASE + row);
         }
-        sdl_character_sheet_screen_set_select_description(selected == FONT_ALL
+        sdl_character_sheet_screen_set_select_description(ui_text(selected == FONT_ALL
             ? "Switch the UI and every menu on or off together. Mixed means "
               "some use larger text. Tap or press Space to switch; Left is off, Right is on."
             : selected == FONT_UI
@@ -3621,7 +3621,7 @@ static void do_cmd_big_font_settings(bool* settings_changed)
                     ? "Show B in menu corners to switch between normal and big text in real time. You can turn it on or off here."
                 : selected == FONT_MENU_FIRST + SDL_MENU_FONT_INVENTORY
                     ? "Use the same font size for Equipped, Inventory, Jewelry, and Supplies. Tap B on any tab to change all four."
-                : "Enlarge this menu's text by 50%. You can also tap B in its corner.");
+                : "Enlarge this menu's text by 50%. You can also tap B in its corner."));
         sdl_character_sheet_screen_commit_select(selected);
         bool saved_hide_cursor = hide_cursor;
         hide_cursor = true;
@@ -3804,7 +3804,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "Minimum Terminal Size",
                 "Min Terminal Size",
                 "Min Terminal"),
-            sdl_min_terminal_mode_label(get_sdl_min_terminal_mode()),
+            ui_text(sdl_min_terminal_mode_label(get_sdl_min_terminal_mode())),
             row_width, 10);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MIN_TERMINAL_SIZE, 0, a, buf);
 
@@ -3880,7 +3880,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "Orientation",
                 "Orientation",
                 "Orient."),
-            get_sdl_mobile_portrait_mode() ? "portrait" : "landscape",
+            ui_text(get_sdl_mobile_portrait_mode() ? "portrait" : "landscape"),
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_MOBILE_PORTRAIT_MODE, 4,
             a, buf);
@@ -3892,8 +3892,8 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "Portrait Button Wheel Position",
                 "Portrait Wheel Position",
                 "Wheel Position"),
-            get_sdl_touch_round_portrait_centered()
-                ? "smart center" : "side lane",
+            ui_text(get_sdl_touch_round_portrait_centered()
+                ? "smart center" : "side lane"),
             row_width, 12);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TOUCH_ROUND_PORTRAIT_CENTER, 5,
             a, buf);
@@ -3906,7 +3906,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "Enable Side Panes [Alt+I]",
                 "Side Panes [Alt+I]",
                 "Side Panes"),
-            get_sdl_enable_right_panes() ? "yes" : "no",
+            ui_text(get_sdl_enable_right_panes() ? "yes" : "no"),
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_SIDE_PANES, 4, a, buf);
 
@@ -3917,20 +3917,20 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "Enable Bottom Panes [Alt+L]",
                 "Bottom Panes [Alt+L]",
                 "Bottom Panes"),
-            get_sdl_enable_bottom_panes() ? "yes" : "no",
+            ui_text(get_sdl_enable_bottom_panes() ? "yes" : "no"),
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_ENABLE_BOTTOM_PANES, 5, a, buf);
 
         /* Fullscreen */
         a = (k == PANE_SETTING_FULLSCREEN) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf), ui_text("Fullscreen"),
-            get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
+            ui_text(get_sdl_fullscreen() ? "yes" : "no"), row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_FULLSCREEN, 6, a, buf);
 
         /* Tiles */
         a = (k == PANE_SETTING_TILES) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf), ui_text("Tiles [Alt+A]"),
-            get_sdl_tiles() ? "yes" : "no", row_width, 3);
+            ui_text(get_sdl_tiles() ? "yes" : "no"), row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_TILES, 7, a, buf);
 
         /* Use Unsafe Area */
@@ -3940,7 +3940,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "Use Unsafe Area (notch/cutout area)",
                 "Use Unsafe Area",
                 "Unsafe Area"),
-            get_sdl_use_unsafe_area() ? "yes" : "no",
+            ui_text(get_sdl_use_unsafe_area() ? "yes" : "no"),
             row_width, 3);
         ADD_PANE_SETTING_ROW(PANE_SETTING_USE_UNSAFE_AREA, 8, a, buf);
 
@@ -3951,7 +3951,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 "White Pane Borders",
                 "White Pane Borders",
                 "White Borders"),
-            get_sdl_show_pane_borders() ? "white" : "black",
+            ui_text(get_sdl_show_pane_borders() ? "white" : "black"),
             row_width, 5);
         ADD_PANE_SETTING_ROW(PANE_SETTING_WHITE_PANE_BORDERS, 9, a, buf);
 
@@ -4240,7 +4240,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
             {
                 if (save_pane_config_to_json())
                 {
-                    msg_print("Settings saved.");
+                    msg_print(ui_text("Settings saved."));
                     log_debug("Settings saved to %s", config_label);
                 }
             }
@@ -4277,7 +4277,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 {
                     sdl_reset_interface_settings_to_defaults();
                     settings_changed = false;
-                    msg_print("All interface settings reset to defaults.");
+                    msg_print(ui_text("All interface settings reset to defaults."));
                 }
                 break;
             }
@@ -4287,7 +4287,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
             {
                 if (save_pane_config_to_json())
                 {
-                    msg_print("Settings saved.");
+                    msg_print(ui_text("Settings saved."));
                     log_debug("Settings saved to %s", config_label);
                 }
             }
@@ -4327,7 +4327,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
             }
             else
             {
-                bell("0 sets the default aux font to auto");
+                bell(ui_text("0 sets the default aux font to auto"));
             }
             break;
         }
@@ -4491,7 +4491,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 {
                     sdl_reset_interface_settings_to_defaults();
                     settings_changed = false;
-                    msg_print("All interface settings reset to defaults.");
+                    msg_print(ui_text("All interface settings reset to defaults."));
                 }
             }
             else if (k == PANE_SETTING_SAVE_RETURN) /* Save/Return */
@@ -4500,7 +4500,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
                 {
                     if (save_pane_config_to_json())
                     {
-                        msg_print("Settings saved.");
+                        msg_print(ui_text("Settings saved."));
                         log_debug("Settings saved to %s", config_label);
                     }
                 }
@@ -4786,7 +4786,7 @@ static void do_cmd_pane_settings_for_page(bool text_only)
 
         default:
         {
-            bell("Illegal command for general settings!");
+            bell(ui_text("Illegal command for general settings!"));
             break;
         }
         }
@@ -4857,7 +4857,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
         settings_semantic_menu_begin("Pane Fonts", -1);
         sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
         sdl_character_sheet_screen_set_select_description(
-            "No configurable panes are configured.");
+            ui_text("No configurable panes are configured."));
         sdl_character_sheet_screen_commit_select(-1);
         (void)inkey();
         settings_semantic_menu_hide();
@@ -5026,7 +5026,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             }
 
             default:
-                bell("Illegal command for pane font editor!");
+                bell(ui_text("Illegal command for pane font editor!"));
                 break;
             }
         }
@@ -5687,7 +5687,7 @@ static bool iface_pane_pick_from_choices(const struct iface_pane_row* row,
     if (handled)
         *handled = true;
 
-    strnfmt(title, sizeof(title), "%s %s", group, iface_pane_row_label(row));
+    strnfmt(title, sizeof(title), "%s %s", ui_text(group), ui_text(iface_pane_row_label(row)));
     return settings_pick_value(title, NULL, choices, count, current_value,
         out_value);
 }
@@ -6574,7 +6574,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         settings_semantic_menu_begin("Pane Layout", -1);
         sdl_character_sheet_screen_set_select_confirm_label(ui_text("Done"));
         sdl_character_sheet_screen_set_select_description(
-            "No configurable panes are configured.");
+            ui_text("No configurable panes are configured."));
         sdl_character_sheet_screen_commit_select(-1);
         (void)inkey();
         settings_semantic_menu_hide();
@@ -6669,7 +6669,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         }
 
         sdl_character_sheet_screen_set_select_description(
-            "Up and down select a pane. Space chooses the active field. Left/Right or N/Y toggles, cycles, or adjusts the active value. 0 sets rows or columns to auto. Changes apply immediately.");
+            ui_text("Up and down select a pane. Space chooses the active field. Left/Right or N/Y toggles, cycles, or adjusts the active value. 0 sets rows or columns to auto. Changes apply immediately."));
         sdl_character_sheet_screen_commit_select(sel);
 
         hide_cursor = true;
@@ -6788,17 +6788,17 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
             int idx = pane_indices[sel];
             if (field == 0 || field == 1)
             {
-                bell("Use Left/Right to toggle enabled or cycle placement");
+                bell(ui_text("Use Left/Right to toggle enabled or cycle placement"));
                 break;
             }
             if (field == 2 && supporting_pane_rows_locked(pane_indices, pane_count, idx))
             {
-                bell("Rows are shared within each bottom slot");
+                bell(ui_text("Rows are shared within each bottom slot"));
                 break;
             }
             if (field == 3 && supporting_pane_cols_locked(pane_indices, pane_count, idx))
             {
-                bell("Cols are shared within each side/corner slot");
+                bell(ui_text("Cols are shared within each side/corner slot"));
                 break;
             }
 
@@ -6839,7 +6839,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
                 if (supporting_pane_rows_locked(pane_indices, pane_count, idx))
                 {
-                    bell("Rows are shared within each bottom slot");
+                    bell(ui_text("Rows are shared within each bottom slot"));
                     break;
                 }
                 if (rows == 0)
@@ -6853,7 +6853,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
                 if (supporting_pane_cols_locked(pane_indices, pane_count, idx))
                 {
-                    bell("Cols are shared within each side/corner slot");
+                    bell(ui_text("Cols are shared within each side/corner slot"));
                     break;
                 }
                 if (cols == 0)
@@ -6871,7 +6871,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         }
 
         default:
-            bell("Illegal command for pane layout editor!");
+            bell(ui_text("Illegal command for pane layout editor!"));
             break;
         }
     }
@@ -7782,7 +7782,7 @@ bool do_cmd_touch_top_widget_pick_button(int slot)
         if (!choices || choice_count <= 0)
             break;
 
-        strnfmt(title, sizeof(title), "Quick Access %d", slot + 1);
+        strnfmt(title, sizeof(title), ui_text("Quick Access %d"), slot + 1);
         current = touch_control_binding_value(binding);
         if (!touch_pick_action_value_buttons(title,
                 SDL_TOUCH_PANE_PANEL_MAIN, false, choices, choice_count,
@@ -7801,7 +7801,7 @@ bool do_cmd_touch_top_widget_pick_button(int slot)
         if (button_choice == SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL)
         {
             if (cell_count >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX) {
-                bell("Quick access is already at the maximum number of cells.");
+                bell(ui_text("Quick access is already at the maximum number of cells."));
                 continue;
             }
             slot = cell_count;
@@ -7838,7 +7838,7 @@ bool do_cmd_touch_top_widget_pick_button(int slot)
     if (changed)
     {
         if (!save_pane_config_to_json())
-            msg_print("Quick access changed, but saving sil_sdl.json failed.");
+            msg_print(ui_text("Quick access changed, but saving sil_sdl.json failed."));
     }
 
     return changed;
@@ -8225,22 +8225,22 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             char info_buf[96];
 
             get_sdl_touch_pane_panel_name(panel, panel_name, sizeof(panel_name));
-            strnfmt(info_buf, sizeof(info_buf), "Editing %s panel%s",
-                panel_name, (panel == SDL_TOUCH_PANE_PANEL_SECOND) ? " (empty = main panel)" : "");
+            strnfmt(info_buf, sizeof(info_buf), ui_text("Editing %s panel%s"),
+                panel_name, (panel == SDL_TOUCH_PANE_PANEL_SECOND) ? ui_text(" (empty = main panel)") : "");
             char desc[512];
 
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                "Switch Button Panel", "Tab", TERM_UMBER);
+                ui_text("Switch Button Panel"), "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_SELECTED,
-                "Rename Button Label", "L", TERM_UMBER);
+                ui_text("Rename Button Label"), "L", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RENAME_GROUP,
-                "Rename Panel", "P", TERM_UMBER);
+                ui_text("Rename Panel"), "P", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_ORANGE);
+                ui_text("Reset Selected"), "X", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset Panel Buttons", "M", TERM_ORANGE);
+                ui_text("Reset Panel Buttons"), "M", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
-                "%s. Space chooses an action. Left/Right nudges the selected action. Main panel must keep Confirm on at least one button.",
+                ui_text("%s. Space chooses an action. Left/Right nudges the selected action. Main panel must keep Confirm on at least one button."),
                 info_buf);
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
@@ -8370,7 +8370,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             idx = (choice_count + idx - 1) % choice_count;
 
             if (!touch_pane_main_confirm_change_allowed(panel, button_index, choices[idx])) {
-                bell("Bind Confirm (pick) to another main-panel button first.");
+                bell(ui_text("Bind Confirm (pick) to another main-panel button first."));
                 break;
             }
 
@@ -8397,7 +8397,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             idx = (idx + 1) % choice_count;
 
             if (!touch_pane_main_confirm_change_allowed(panel, button_index, choices[idx])) {
-                bell("Bind Confirm (pick) to another main-panel button first.");
+                bell(ui_text("Bind Confirm (pick) to another main-panel button first."));
                 break;
             }
 
@@ -8438,7 +8438,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             if (!touch_pane_main_confirm_change_allowed(panel, button_index,
                     picked))
             {
-                bell("Bind Confirm (pick) to another main-panel button first.");
+                bell(ui_text("Bind Confirm (pick) to another main-panel button first."));
                 break;
             }
 
@@ -8461,7 +8461,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
             button_index = touch_pane_row_button_index(highlight);
             if (button_index < 0) {
-                bell("Select a touch panel button to rename.");
+                bell(ui_text("Select a touch panel button to rename."));
                 break;
             }
 
@@ -8534,7 +8534,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
                 if (!touch_pane_main_confirm_change_allowed(panel, button_index,
                         get_sdl_touch_pane_default_binding_for_panel(panel, button_index))) {
-                    bell("Bind Confirm (pick) to another main-panel button first.");
+                    bell(ui_text("Bind Confirm (pick) to another main-panel button first."));
                     break;
                 }
 
@@ -8552,7 +8552,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             break;
 
         default:
-            bell("Illegal command for touch panel settings!");
+            bell(ui_text("Illegal command for touch panel settings!"));
             break;
         }
     }
@@ -8605,7 +8605,7 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
             touch_top_widget_binding_label(
                 touch_top_widget_editor_binding_row(slot),
                 action_buf, sizeof(action_buf));
-            strnfmt(button_buf, sizeof(button_buf), "Quick Access %d",
+            strnfmt(button_buf, sizeof(button_buf), ui_text("Quick Access %d"),
                 slot + 1);
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
                 label, action_buf, row_width, 24);
@@ -8621,16 +8621,16 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_QUICK_ACCESS_ADD_CELL,
-            "Add Cell", total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
+            ui_text("Add Cell"), total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
                 ? "Max" : "+1",
             total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX
                 ? TERM_SLATE : TERM_UMBER);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_ORANGE);
+            ui_text("Reset Selected"), "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Quick Access Buttons", "M", TERM_ORANGE);
+            ui_text("Reset All Quick Access Buttons"), "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
-            "Add Cell opens a new action picker. Choosing Unbound removes that cell. Rows balance the current cells across one or two rows. X resets selected, M resets all.");
+            ui_text("Add Cell opens a new action picker. Choosing Unbound removes that cell. Rows balance the current cells across one or two rows. X resets selected, M resets all."));
         sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
@@ -8744,7 +8744,7 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
         case 'a':
         case 'A':
             if (total_rows >= SDL_TOUCH_TOP_PANEL_CELL_COUNT_MAX)
-                bell("Quick access is already at the maximum number of cells.");
+                bell(ui_text("Quick access is already at the maximum number of cells."));
             else
                 changed |= do_cmd_touch_top_widget_pick_button(total_rows);
             break;
@@ -8761,7 +8761,7 @@ static void do_cmd_touch_top_widget_button_editor(bool* settings_changed)
             changed = true;
             break;
         default:
-            bell("Illegal command for quick access button settings!");
+            bell(ui_text("Illegal command for quick access button settings!"));
             break;
         }
     }
@@ -8826,11 +8826,11 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_ORANGE);
+            ui_text("Reset Selected"), "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Thumb Buttons", "M", TERM_ORANGE);
+            ui_text("Reset All Thumb Buttons"), "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
-            "Space toggles On/Off or chooses an action. Left/Right nudges the selected row. X resets selected, M resets all. Escape or Enter returns.");
+            ui_text("Space toggles On/Off or chooses an action. Left/Right nudges the selected row. X resets selected, M resets all. Escape or Enter returns."));
         sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
@@ -8954,7 +8954,7 @@ static void do_cmd_touch_thumb_button_editor(bool* settings_changed)
             changed = true;
             break;
         default:
-            bell("Illegal command for thumb button settings!");
+            bell(ui_text("Illegal command for thumb button settings!"));
             break;
         }
     }
@@ -8999,12 +8999,12 @@ static void do_cmd_touch_button_settings(bool* settings_changed)
             char line_buf[128];
             byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
 
-            settings_ui_fit_text(line_buf, sizeof(line_buf), labels[i], row_width);
+            settings_ui_fit_text(line_buf, sizeof(line_buf), ui_text(labels[i]), row_width);
             settings_semantic_add_row(i, line_buf, a);
         }
 
         sdl_character_sheet_screen_set_select_description(
-            "Enter or Space opens the selected row. Escape returns to Touch Settings.");
+            ui_text("Enter or Space opens the selected row. Escape returns to Touch Settings."));
         sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
@@ -9078,7 +9078,7 @@ static void do_cmd_touch_button_settings(bool* settings_changed)
             }
             break;
         default:
-            bell("Illegal command for touch button settings!");
+            bell(ui_text("Illegal command for touch button settings!"));
             break;
         }
     }
@@ -9127,7 +9127,7 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
                 (profiles[i] == get_sdl_touch_profile()) ? "Selected" : "",
                 sizeof(action_buf));
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                touch_profile_label(profiles[i]), action_buf, row_width, 10);
+                ui_text(touch_profile_label(profiles[i])), ui_text(action_buf), row_width, 10);
             {
                 char semantic_line[160];
 
@@ -9138,7 +9138,7 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
         }
 
         sdl_character_sheet_screen_set_select_description(
-            "Space or Enter applies the highlighted touch profile defaults. Escape returns.");
+            ui_text("Space or Enter applies the highlighted touch profile defaults. Escape returns."));
         sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
@@ -9201,7 +9201,7 @@ static void do_cmd_touch_profile_settings(bool* settings_changed)
             highlight = (highlight + 1) % (int)N_ELEMENTS(profiles);
             break;
         default:
-            bell("Illegal command for touch profile settings!");
+            bell(ui_text("Illegal command for touch profile settings!"));
             break;
         }
     }
@@ -9280,7 +9280,7 @@ static void do_cmd_touch_settings(bool* settings_changed)
         }
 
         sdl_character_sheet_screen_set_select_description(
-            "Enter opens or toggles the selected row. Left/Right changes values where available. Escape returns.");
+            ui_text("Enter opens or toggles the selected row. Left/Right changes values where available. Escape returns."));
         sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
@@ -9352,7 +9352,7 @@ static void do_cmd_touch_settings(bool* settings_changed)
                     SDL_TOUCH_CORNER_UP_DOWN_LEFT);
                 changed = true;
             } else {
-                bell("Illegal command for touch settings!");
+                bell(ui_text("Illegal command for touch settings!"));
             }
             break;
         case '\n':
@@ -9385,7 +9385,7 @@ static void do_cmd_touch_settings(bool* settings_changed)
             }
             break;
         default:
-            bell("Illegal command for touch settings!");
+            bell(ui_text("Illegal command for touch settings!"));
             break;
         }
     }
@@ -9478,7 +9478,7 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             }
 
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                touch_control_row_name(i), action_buf, row_width, 24);
+                ui_text(touch_control_row_name(i)), ui_text(action_buf), row_width, 24);
             {
                 char semantic_line[160];
 
@@ -9491,11 +9491,11 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
         }
 
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-            "Reset Selected", "X", TERM_ORANGE);
+            ui_text("Reset Selected"), "X", TERM_ORANGE);
         settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-            "Reset All Touch Controls", "M", TERM_ORANGE);
+            ui_text("Reset All Touch Controls"), "M", TERM_ORANGE);
         sdl_character_sheet_screen_set_select_description(
-            "Controls touch menus, game-screen layers, movement, overlays, and swipes. Space chooses binding rows; Left/Right nudges values; X resets selected, M resets all.");
+            ui_text("Controls touch menus, game-screen layers, movement, overlays, and swipes. Space chooses binding rows; Left/Right nudges values; X resets selected, M resets all."));
         sdl_character_sheet_screen_commit_select(highlight);
 
         hide_cursor = true;
@@ -9731,7 +9731,7 @@ static void do_cmd_touch_control_settings(bool* settings_changed)
             break;
 
         default:
-            bell("Illegal command for touch control settings!");
+            bell(ui_text("Illegal command for touch control settings!"));
             break;
         }
     }
@@ -9808,9 +9808,9 @@ static void do_cmd_mouse_settings(bool* settings_changed)
 
         {
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", "X", TERM_ORANGE);
+                ui_text("Reset Selected"), "X", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All", "M", TERM_ORANGE);
+                ui_text("Reset All"), "M", TERM_ORANGE);
             static const char* const mouse_setting_desc[MOUSE_SETTING_COUNT] = {
                 [MOUSE_SETTING_ENABLE] = "Turn mouse input on or off.",
                 [MOUSE_SETTING_MOVEMENT] =
@@ -9978,7 +9978,7 @@ static void do_cmd_mouse_settings(bool* settings_changed)
             break;
 
         default:
-            bell("Illegal command for mouse input settings!");
+            bell(ui_text("Illegal command for mouse input settings!"));
             break;
         }
     }
@@ -10096,7 +10096,7 @@ static void do_cmd_about_actions(void)
             break;
         case ABOUT_ACTION_PRIVACY:
             if (!SDL_OpenURL(SIL_MORE_PRIVACY_POLICY_URL))
-                msg_format("Could not open the privacy policy (%s)", SDL_GetError());
+                msg_format(ui_text("Could not open the privacy policy (%s)"), SDL_GetError());
             break;
         case ABOUT_ACTION_RETURN:
             done = true;
@@ -10112,14 +10112,15 @@ enum {
     OPTIONS_RETURN
 };
 
-static cptr settings_tutorial_language_name(void)
+static cptr settings_language_name(cptr language)
 {
-    /* Standard menu fonts lack CJK glyphs. The picker uses its own font
-     * and shows every endonym; use the interface spelling here. */
-    cptr language = tutorial_language();
-    if (streq(language, "ja")) return ui_text("Japanese");
-    if (streq(language, "ko")) return ui_text("Korean");
-    if (streq(language, "zh")) return ui_text("Simplified Chinese");
+    /* The picker has fonts for all endonyms. In the Options summary, use the
+     * interface spelling for CJK locales other than the active interface. */
+    if (!streq(language, ui_language())) {
+        if (streq(language, "ja")) return ui_text("Japanese");
+        if (streq(language, "ko")) return ui_text("Korean");
+        if (streq(language, "zh")) return ui_text("Simplified Chinese");
+    }
 
     size_t count;
     const tutorial_locale* locales = tutorial_available_locales(&count);
@@ -10131,17 +10132,27 @@ static cptr settings_tutorial_language_name(void)
 
 static void settings_choose_ui_language(void)
 {
-    const ui_question_option languages[] = {
-        { 'e', "English", TERM_WHITE, false },
-        { 'd', "Deutsch", TERM_WHITE, false }
-    };
-    int current = streq(ui_language(), "de") ? 1 : 0;
-    int choice = ui_question_ask_overlay(ui_text("Interface language"),
-        ui_text("Choose the language for menus, controls, status text, and messages."), languages,
-        N_ELEMENTS(languages), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, current);
-    if (choice >= 0 && choice < (int)N_ELEMENTS(languages) && choice != current)
+    size_t count;
+    const tutorial_locale *locales = tutorial_available_locales(&count);
+    ui_question_option *options = calloc(count, sizeof(*options));
+    if (!options) return;
+
+    cptr language = ui_language();
+    int current = 0;
+    for (size_t i = 0; i < count; ++i) {
+        options[i].label = locales[i].name;
+        options[i].attr = TERM_WHITE;
+        if (streq(locales[i].code, "en")) options[i].key = 'e';
+        if (streq(locales[i].code, "de")) options[i].key = 'd';
+        if (streq(language, locales[i].code)) current = (int)i;
+    }
+    int choice = ui_question_ask_language(ui_text("Interface language"),
+        ui_text("Choose the language for menus, controls, status text, and messages."),
+        options, (int)count, current);
+    free(options);
+    if (choice >= 0 && (size_t)choice < count && choice != current)
     {
-        ui_set_language(choice == 1 ? "de" : "en");
+        ui_set_language(locales[choice].code);
         (void)save_pane_config_to_json();
     }
 }
@@ -10183,9 +10194,9 @@ int options_menu(int* highlight)
         int choice = i + 1;
         keyed_menu_entry_label(label, sizeof(label), rows[i].key, ui_text(rows[i].label));
         if (choice == OPTIONS_TUTORIAL_LANGUAGE)
-            value = settings_tutorial_language_name();
+            value = settings_language_name(tutorial_language());
         else if (choice == OPTIONS_UI_LANGUAGE)
-            value = streq(ui_language(), "de") ? "Deutsch" : "English";
+            value = settings_language_name(ui_language());
         byte attr = *highlight == choice ? TERM_L_BLUE : TERM_WHITE;
         if (value)
             settings_semantic_add_pair_row(choice, label, value, attr);
@@ -10444,15 +10455,15 @@ static int input_option_rows_collect(struct input_option_row* rows,
             ui_text(get_sdl_input_ui_mode_label(get_sdl_input_ui_mode())));
 #if SIL_SDL_MOBILE_BUILD
         ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
-            "Auto detects the device. Touch or Controller overrides detection. "
-            "Tap Input UI to cycle modes; choose Auto to reset.");
+            ui_text("Auto detects the device. Touch or Controller overrides detection. "
+            "Tap Input UI to cycle modes; choose Auto to reset."));
 #else
         ADD_INPUT_OPTION(INPUT_OPTION_UI_MODE, 'a', mode_label,
-            "Choose Auto, Keyboard, or Controller presentation. Auto leaves "
+            ui_text("Choose Auto, Keyboard, or Controller presentation. Auto leaves "
             "the choice to the game's device and input detection. Keyboard "
             "and Controller force an override. Left/Right or Enter changes "
             "the mode; R resets Auto. Changing this clears the remembered "
-            "startup choice. At launch, a missing controller switches to Keyboard.");
+            "startup choice. At launch, a missing controller switches to Keyboard."));
 #endif
     }
     if (SDL_HasKeyboard() || sdl_control_enabled()) {
@@ -10702,6 +10713,7 @@ void do_cmd_options(void)
     int queued_choice = 0;
     int original_width = 0;
     int original_height = 0;
+    cptr original_ui_language = ui_language();
     bool original_tiles = use_bigtile;
     bool original_portrait = get_sdl_mobile_portrait_mode();
 
@@ -10854,6 +10866,9 @@ void do_cmd_options(void)
             if (projection_changed)
                 p_ptr->update |= PU_PANEL;
             p_ptr->redraw |= PR_MAP | PR_BASIC | PR_EXTRA;
+            if (!streq(original_ui_language, ui_language()))
+                p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0 | PW_MESSAGE
+                    | PW_OVERHEAD | PW_MONSTER | PW_OBJECT | PW_MONLIST | PW_SUPPLY;
             handle_stuff();
         }
     }
@@ -10964,7 +10979,7 @@ static void describe_action_bindings(int mode, const struct keybind_entry* entry
 
     if (!entry->action)
     {
-        SDL_strlcpy(buf, "(none)", buflen);
+        SDL_strlcpy(buf, ui_text("(none)"), buflen);
         return;
     }
 
@@ -11024,7 +11039,7 @@ static void describe_action_bindings(int mode, const struct keybind_entry* entry
     }
 
     if (!found)
-        SDL_strlcpy(buf, "(none)", buflen);
+        SDL_strlcpy(buf, ui_text("(none)"), buflen);
 }
 
 /*
@@ -11110,7 +11125,7 @@ static void keybind_choices_add_entry(struct settings_value_choice* choices,
         return;
 
     keybind_choice_add(choices, labels, count, max_count, entry->key_code,
-        entry->key_name);
+        ui_text(entry->key_name));
 
     if (entry->extra_default_keys)
     {
@@ -11118,7 +11133,7 @@ static void keybind_choices_add_entry(struct settings_value_choice* choices,
         while (*extra)
         {
             keybind_choice_add(choices, labels, count, max_count, (byte)*extra,
-                entry->key_name);
+                ui_text(entry->key_name));
             extra++;
         }
     }
@@ -11156,12 +11171,12 @@ static bool keybind_pick_key(int mode, const struct keybind_entry* entry,
     if (count < SETTINGS_VALUE_PICKER_MAX)
     {
         choices[count].value = KEYBIND_PICK_OTHER;
-        choices[count].label = "Press another key...";
+        choices[count].label = ui_text("Press another key...");
         count++;
     }
 
     current = keybind_current_key(mode, entry);
-    strnfmt(title, sizeof(title), "Bind %s", entry->key_name);
+    strnfmt(title, sizeof(title), ui_text("Bind %s"), ui_text(entry->key_name));
     if (!settings_pick_value(title, NULL, choices, count, current, &picked))
         return false;
 
@@ -11195,7 +11210,7 @@ static bool list_missing_primary_bindings(int mode, const struct keybind_entry* 
 
         if (!ok)
             strnfcat(buffer, buflen, &cur, ", ");
-        strnfcat(buffer, buflen, &cur, "%s", entries[i].key_name);
+        strnfcat(buffer, buflen, &cur, "%s", ui_text(entries[i].key_name));
         ok = false;
     }
 
@@ -11307,17 +11322,17 @@ static void movement_binding_key_label(SDL_Scancode scancode, char* buf,
 
     name = SDL_GetScancodeName(scancode);
     if (!name || !name[0])
-        strnfmt(buf, buflen, "Scancode %d", (int)scancode);
+        strnfmt(buf, buflen, ui_text("Scancode %d"), (int)scancode);
     else if (prefix(name, "Keypad "))
-        strnfmt(buf, buflen, "Numpad %s", name + strlen("Keypad "));
+        strnfmt(buf, buflen, ui_text("Numpad %s"), name + strlen("Keypad "));
     else if (streq(name, "Page Up"))
-        SDL_strlcpy(buf, "PageUp", buflen);
+        SDL_strlcpy(buf, ui_text("PageUp"), buflen);
     else if (streq(name, "Page Down"))
-        SDL_strlcpy(buf, "PageDown", buflen);
+        SDL_strlcpy(buf, ui_text("PageDown"), buflen);
     else if (streq(name, "Return"))
-        SDL_strlcpy(buf, "Enter", buflen);
+        SDL_strlcpy(buf, ui_text("Enter"), buflen);
     else if (streq(name, "Escape"))
-        SDL_strlcpy(buf, "Esc", buflen);
+        SDL_strlcpy(buf, ui_text("Esc"), buflen);
     else
         SDL_strlcpy(buf, name, buflen);
 }
@@ -11333,19 +11348,19 @@ static void movement_binding_label(const movement_input_binding* binding,
 
     if (!binding || !movement_input_binding_is_valid(binding))
     {
-        SDL_strlcpy(buf, "(unbound)", buflen);
+        SDL_strlcpy(buf, ui_text("(unbound)"), buflen);
         return;
     }
 
     buf[0] = '\0';
     if (binding->required_modifiers & MOVEMENT_INPUT_MODIFIER_CTRL)
-        strnfcat(buf, buflen, &cursor, "Ctrl+");
+        strnfcat(buf, buflen, &cursor, ui_text("Ctrl+"));
     if (binding->required_modifiers & MOVEMENT_INPUT_MODIFIER_SHIFT)
-        strnfcat(buf, buflen, &cursor, "Shift+");
+        strnfcat(buf, buflen, &cursor, ui_text("Shift+"));
     if (binding->required_modifiers & MOVEMENT_INPUT_MODIFIER_ALT)
-        strnfcat(buf, buflen, &cursor, "Alt+");
+        strnfcat(buf, buflen, &cursor, ui_text("Alt+"));
     if (binding->required_modifiers & MOVEMENT_INPUT_MODIFIER_META)
-        strnfcat(buf, buflen, &cursor, "Meta+");
+        strnfcat(buf, buflen, &cursor, ui_text("Meta+"));
 
     movement_binding_key_label((SDL_Scancode)binding->trigger, key_buf,
         sizeof(key_buf));
@@ -11370,7 +11385,7 @@ static bool movement_list_missing_essentials(char* buffer, size_t buflen)
 
         if (!ok)
             strnfcat(buffer, buflen, &cursor, ", ");
-        strnfcat(buffer, buflen, &cursor, "%s", movement_settings[i].label);
+        strnfcat(buffer, buflen, &cursor, "%s", ui_text(movement_settings[i].label));
         ok = false;
     }
 
@@ -11436,11 +11451,11 @@ static bool movement_capture_binding(const movement_setting_entry* entry,
     settings_semantic_menu_hide();
     Term_clear();
     strnfmt(prompt, sizeof(prompt),
-        steamdeck_controls_active() ? "Press keyboard key for %s (<B> cancels):"
-                                   : "Press key for %s (Escape cancels):", entry->label);
+        steamdeck_controls_active() ? ui_text("Press keyboard key for %s (<B> cancels):")
+                                   : ui_text("Press key for %s (Escape cancels):"), ui_text(entry->label));
     settings_ui_put_fitted(2, 2, TERM_YELLOW, prompt);
     settings_ui_put_fitted(4, 2, TERM_SLATE,
-        "Hold Shift/Ctrl/Alt while pressing the key to require that modifier.");
+        ui_text("Hold Shift/Ctrl/Alt while pressing the key to require that modifier."));
     Term_fresh();
 
     if (!sdl_keyboard_capture_begin())
@@ -11540,18 +11555,18 @@ static void do_cmd_movement_keybinds(void)
         settings_menu_begin_scroll_area(list_start_row, visible_rows);
 
         settings_ui_put_fitted(1, 2, TERM_WHITE,
-            "Movement Bindings");
+            ui_text("Movement Bindings"));
         ui_scroll_area_set_indicator(top, MAX(0, entry_count - visible_rows));
-        strnfmt(preset_line, sizeof(preset_line), "Preset: %s",
-            sdl_config_movement_preset_label(config.movement_keyboard_preset));
+        strnfmt(preset_line, sizeof(preset_line), ui_text("Preset: %s"),
+            ui_text(sdl_config_movement_preset_label(config.movement_keyboard_preset)));
         settings_ui_put_fitted(2, 2, TERM_SLATE, preset_line);
         settings_ui_put_fitted(3, 2, TERM_WHITE,
             steamdeck_controls_active()
-                ? "<A> bind  <X> reset  <View> preset  <Y> save  <B> back"
-                : "Enter bind  R reset selected  P cycle preset  S save  Esc return");
+                ? ui_text("<A> bind  <X> reset  <View> preset  <Y> save  <B> back")
+                : ui_text("Enter bind  R reset selected  P cycle preset  S save  Esc return"));
         if (movement_bindings_shadow_letters(&config))
             settings_ui_put_fitted(4, 2, TERM_YELLOW,
-                "Note: letter keys control movement; hold Alt for their command (Alt+w wield, Alt+x examine, Alt+Shift+s stealth).");
+                ui_text("Note: letter keys control movement; hold Alt for their command (Alt+w wield, Alt+x examine, Alt+Shift+s stealth)."));
 
         display_end = top + visible_rows;
         if (display_end > entry_count)
@@ -11565,13 +11580,13 @@ static void do_cmd_movement_keybinds(void)
 
             movement_binding_label(binding, binding_buf, sizeof(binding_buf));
             settings_ui_format_pair_line(line, sizeof(line),
-                movement_settings[i].label, binding_buf, row_width, 18);
+                ui_text(movement_settings[i].label), binding_buf, row_width, 18);
             c_prt((i == highlight) ? TERM_L_BLUE : TERM_WHITE, line, row, 2);
             ui_menu_click_add_full_row(i, row);
         }
 
         if (dirty)
-            c_prt(TERM_YELLOW, "Unsaved movement changes",
+            c_prt(TERM_YELLOW, ui_text("Unsaved movement changes"),
                 term_h - 2, 2);
 
         Term_fresh();
@@ -11608,7 +11623,7 @@ static void do_cmd_movement_keybinds(void)
                 char prompt[512];
 
                 strnfmt(prompt, sizeof(prompt),
-                    "Essential movement bindings are missing (%s). Exit anyway? ",
+                    ui_text("Essential movement bindings are missing (%s). Exit anyway? "),
                     missing);
                 if (!get_check(prompt))
                     continue;
@@ -11643,11 +11658,11 @@ static void do_cmd_movement_keybinds(void)
         {
             if (save_pane_config_to_json())
             {
-                msg_print("Movement bindings saved.");
+                msg_print(ui_text("Movement bindings saved."));
                 dirty = false;
             }
             else
-                msg_print("Failed to save movement bindings.");
+                msg_print(ui_text("Failed to save movement bindings."));
             message_flush();
         }
         else if (ch == '\r' || ch == '\n' || ch == ' ')
@@ -11667,12 +11682,12 @@ static void do_cmd_movement_keybinds(void)
 
     if (dirty)
     {
-        if (get_check("Save movement bindings to sil_sdl.json? "))
+        if (get_check(ui_text("Save movement bindings to sil_sdl.json? ")))
         {
             if (save_pane_config_to_json())
-                msg_print("Movement bindings saved.");
+                msg_print(ui_text("Movement bindings saved."));
             else
-                msg_print("Failed to save movement bindings.");
+                msg_print(ui_text("Failed to save movement bindings."));
             message_flush();
         }
     }
@@ -11754,7 +11769,7 @@ void do_cmd_keybinds(void)
             describe_action_bindings(mode, &keybinds[i], binding_buf,
                 sizeof(binding_buf));
             settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                keybinds[i].key_name, binding_buf, row_width, 12);
+                ui_text(keybinds[i].key_name), binding_buf, row_width, 12);
 
             {
                 char semantic_line[160];
@@ -11774,20 +11789,20 @@ void do_cmd_keybinds(void)
             describe_action_bindings(mode, &keybinds[highlight],
                 detail_binding_buf, sizeof(detail_binding_buf));
             settings_semantic_add_pair_row(SETTINGS_CLICK_SWITCH_GROUP,
-                showing_primary ? "Show All Other Commands"
-                                : "Show Core Commands",
+                showing_primary ? ui_text("Show All Other Commands")
+                                : ui_text("Show Core Commands"),
                 steamdeck_controls_active() ? "<View>" : "Tab", TERM_UMBER);
             settings_semantic_add_pair_row(SETTINGS_CLICK_SAVE,
-                "Save Keybinds", steamdeck_controls_active() ? "<Y>" : "S", TERM_L_GREEN);
+                ui_text("Save Keybinds"), steamdeck_controls_active() ? "<Y>" : "S", TERM_L_GREEN);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", steamdeck_controls_active() ? "<X>" : "R", TERM_ORANGE);
+                ui_text("Reset Selected"), steamdeck_controls_active() ? "<X>" : "R", TERM_ORANGE);
             strnfmt(desc, sizeof(desc),
                 steamdeck_controls_active()
-                    ? "%s. <A> rebinds the selected command. <View> switches Core and All Other commands. <Y> saves to %s. <X> resets selected.%s%s"
-                    : "%s. Enter or Space rebinds the selected command. Tab switches between the complete Core and All Other lists. S saves to %s. R resets selected.%s%s",
+                    ? ui_text("%s. <A> rebinds the selected command. <View> switches Core and All Other commands. <Y> saves to %s. <X> resets selected.%s%s")
+                    : ui_text("%s. Enter or Space rebinds the selected command. Tab switches between the complete Core and All Other lists. S saves to %s. R resets selected.%s%s"),
                 detail_binding_buf, default_file,
                 dirty ? " " : "",
-                dirty ? "Unsaved changes." : "");
+                dirty ? ui_text("Unsaved changes.") : "");
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
         }
@@ -11865,7 +11880,7 @@ void do_cmd_keybinds(void)
             {
                 char prompt[512];
                 strnfmt(prompt, sizeof(prompt),
-                    "Essential commands are unbound (%s). Exit anyway? ", missing);
+                    ui_text("Essential commands are unbound (%s). Exit anyway? "), missing);
                 settings_semantic_menu_hide();
                 if (!get_check(prompt))
                     continue;
@@ -11916,7 +11931,7 @@ void do_cmd_keybinds(void)
                     settings_semantic_menu_hide();
 
                     strnfmt(prompt, sizeof(prompt),
-                        "Bind %s (Esc cancels):", keybinds[highlight].key_name);
+                        ui_text("Bind %s (Esc cancels):"), ui_text(keybinds[highlight].key_name));
                     if (!get_com(prompt, &bind_key))
                         break;
 
@@ -11929,7 +11944,7 @@ void do_cmd_keybinds(void)
                 dirty = true;
 
                 describe_keycode(new_key, key_label, sizeof(key_label));
-                msg_format("Key %s now performs %s", key_label, keybinds[highlight].key_name);
+                msg_format(ui_text("Key %s now performs %s"), key_label, ui_text(keybinds[highlight].key_name));
                 message_flush();
             }
         }
@@ -11951,7 +11966,7 @@ void do_cmd_keybinds(void)
             dirty = true;
 
             describe_keycode(target_key, key_label, sizeof(key_label));
-            msg_format("Reset %s to default key %s", keybinds[highlight].key_name, key_label);
+            msg_format(ui_text("Reset %s to default key %s"), ui_text(keybinds[highlight].key_name), key_label);
             message_flush();
         }
         else if (ch == 's' || ch == 'S')
@@ -11959,12 +11974,12 @@ void do_cmd_keybinds(void)
             settings_semantic_menu_hide();
             if (save_pane_config_to_json())
             {
-                msg_format("Keybinds saved to %s.", default_file);
+                msg_format(ui_text("Keybinds saved to %s."), default_file);
                 dirty = false;
             }
             else
             {
-                msg_print("Failed to save keybinds.");
+                msg_print(ui_text("Failed to save keybinds."));
             }
             message_flush();
         }
@@ -11980,17 +11995,17 @@ void do_cmd_keybinds(void)
     if (dirty)
     {
         char prompt[80];
-        strnfmt(prompt, sizeof(prompt), "Save keybinds to %s? ", default_file);
+        strnfmt(prompt, sizeof(prompt), ui_text("Save keybinds to %s? "), default_file);
         if (get_check(prompt))
         {
             if (save_pane_config_to_json())
             {
-                msg_format("Keybinds saved to %s.", default_file);
+                msg_format(ui_text("Keybinds saved to %s."), default_file);
                 message_flush();
             }
             else
             {
-                msg_print("Failed to save keybinds.");
+                msg_print(ui_text("Failed to save keybinds."));
                 message_flush();
             }
         }
@@ -13226,8 +13241,8 @@ void do_cmd_controller_settings(void)
 
         for (int i = 0; i < entry_count; i++) {
             controller_entry_value(&entries[i], value_buf, sizeof(value_buf));
-            settings_ui_format_pair_line(line_buf, sizeof(line_buf), entries[i].label,
-                value_buf, row_width, 12);
+            settings_ui_format_pair_line(line_buf, sizeof(line_buf), ui_text(entries[i].label),
+                ui_text(value_buf), row_width, 12);
 
             {
                 char semantic_line[160];
@@ -13246,33 +13261,33 @@ void do_cmd_controller_settings(void)
             char desc[1024];
 
             if (entries[highlight].type == CONTROLLER_ENTRY_COMMAND) {
-                strnfmt(desc, sizeof(desc), "Swap movement roles, movement delays, and directional bindings "
-                    "between the sticks. Stick clicks and D-pad controls stay the same.");
+                SDL_strlcpy(desc, ui_text("Swap movement roles, movement delays, and directional bindings "
+                    "between the sticks. Stick clicks and D-pad controls stay the same."), sizeof(desc));
             } else if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_describe_action_bindings_compact(entries[highlight].id,
                     detail_value_buf, sizeof(detail_value_buf));
                 strnfmt(desc, sizeof(desc),
-                    "Bindings: %s. Enter or Space adds a controller control. R resets selected, M resets all. Changes are saved on exit.",
-                    detail_value_buf);
+                    ui_text("Bindings: %s. Enter or Space adds a controller control. R resets selected, M resets all. Changes are saved on exit."),
+                    ui_text(detail_value_buf));
             } else if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
                 cptr cycle_desc;
 
                 switch (entries[highlight].id) {
                 case CONTROLLER_SETTING_BUTTON_ICONS:
-                    cycle_desc = "Auto follows the last controller used. Choose Xbox, DualShock, "
-                        "or DualSense if the button icons do not match your controller.";
+                    cycle_desc = ui_text("Auto follows the last controller used. Choose Xbox, DualShock, "
+                        "or DualSense if the button icons do not match your controller.");
                     break;
                 case CONTROLLER_SETTING_LEFT_DELAY:
                 case CONTROLLER_SETTING_RIGHT_DELAY:
-                    cycle_desc = "Wait for the second movement axis before a cardinal step. "
+                    cycle_desc = ui_text("Wait for the second movement axis before a cardinal step. "
                         "0 ms is immediate. Recognized diagonals and menu navigation are immediate. "
-                        "Use a delay if a virtual joystick represents your physical D-pad.";
+                        "Use a delay if a virtual joystick represents your physical D-pad.");
                     break;
                 case CONTROLLER_SETTING_DPAD_DIAGONAL_DELAY:
                     cycle_desc =
-                        "During gameplay, wait this long for a second D-pad direction to form a diagonal. "
+                        ui_text("During gameplay, wait this long for a second D-pad direction to form a diagonal. "
                         "Recognized diagonals and menu navigation are immediate. "
-                        "50 ms is the fastest setting, but makes diagonals harder to enter.";
+                        "50 ms is the fastest setting, but makes diagonals harder to enter.");
                     break;
                 default:
                     cycle_desc = "";
@@ -13284,23 +13299,23 @@ void do_cmd_controller_settings(void)
 
                 switch (entries[highlight].id) {
                 case CONTROLLER_TOGGLE_ENABLED:
-                    toggle_desc = "Turn controller input on or off.";
+                    toggle_desc = ui_text("Turn controller input on or off.");
                     break;
                 case CONTROLLER_TOGGLE_STEAMDECK_INV_EQUIP_SAME_BUTTON_CYCLE:
                     toggle_desc =
-                        "Cycle inventory and equipment with one button instead "
-                        "of two separate buttons.";
+                        ui_text("Cycle inventory and equipment with one button instead "
+                        "of two separate buttons.");
                     break;
                 case CONTROLLER_TOGGLE_DPAD:
-                    toggle_desc = "Enable D-pad movement independently of either stick.";
+                    toggle_desc = ui_text("Enable D-pad movement independently of either stick.");
                     break;
                 case CONTROLLER_TOGGLE_LEFT_STICK:
-                    toggle_desc = "On: walk with the left stick. Off: navigate interface focus. "
-                        "D-pad and right-stick movement can remain on.";
+                    toggle_desc = ui_text("On: walk with the left stick. Off: navigate interface focus. "
+                        "D-pad and right-stick movement can remain on.");
                     break;
                 case CONTROLLER_TOGGLE_RIGHT_STICK:
-                    toggle_desc = "On: walk with the right stick. Off: navigate interface focus. "
-                        "D-pad and left-stick movement can remain on.";
+                    toggle_desc = ui_text("On: walk with the right stick. Off: navigate interface focus. "
+                        "D-pad and left-stick movement can remain on.");
                     break;
                 default:
                     toggle_desc = "";
@@ -13309,9 +13324,9 @@ void do_cmd_controller_settings(void)
                 strnfmt(desc, sizeof(desc), "%s", toggle_desc);
             }
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_SELECTED,
-                "Reset Selected", steamdeck ? "X" : "R", TERM_ORANGE);
+                ui_text("Reset Selected"), steamdeck ? "X" : "R", TERM_ORANGE);
             settings_semantic_add_pair_row(SETTINGS_CLICK_RESET_ALL,
-                "Reset All", steamdeck ? "Y" : "M", TERM_ORANGE);
+                ui_text("Reset All"), steamdeck ? "Y" : "M", TERM_ORANGE);
             sdl_character_sheet_screen_set_select_description(desc);
             sdl_character_sheet_screen_commit_select(highlight);
         }
@@ -13386,9 +13401,9 @@ void do_cmd_controller_settings(void)
             if (entries[highlight].type == CONTROLLER_ENTRY_ACTION) {
                 controller_clear_effective_action_bindings(entries[highlight].id);
                 if (controller_restore_action_default_bindings(entries[highlight].id)) {
-                    msg_print("Bindings reset to defaults.");
+                    msg_print(ui_text("Bindings reset to defaults."));
                 } else {
-                    msg_print("No default binding for action.");
+                    msg_print(ui_text("No default binding for action."));
                 }
                 message_flush();
             } else if (entries[highlight].type == CONTROLLER_ENTRY_CYCLE) {
@@ -13404,17 +13419,17 @@ void do_cmd_controller_settings(void)
                 } else if (entries[highlight].id == CONTROLLER_SETTING_BUTTON_ICONS) {
                     set_sdl_gamepad_glyph_style(SDL_GAMEPAD_GLYPH_AUTO);
                 }
-                msg_format("Reset %s to default.", entries[highlight].label);
+                msg_format(ui_text("Reset %s to default."), ui_text(entries[highlight].label));
                 message_flush();
             } else {
                 controller_set_toggle(entries[highlight].id,
                     controller_toggle_default_value(entries[highlight].id));
-                msg_format("Reset %s to default.", entries[highlight].label);
+                msg_format(ui_text("Reset %s to default."), ui_text(entries[highlight].label));
                 message_flush();
             }
         } else if (ch == 'R' || (steamdeck && ch == steamdeck_secondary_key())) {
             sdl_gamepad_reset_bindings_to_default();
-            msg_print("All bindings reset to defaults.");
+            msg_print(ui_text("All bindings reset to defaults."));
             message_flush();
         } else if (ch == '\r' || ch == '\n' || ch == ' ') {
             const controller_entry* entry = &entries[highlight];
@@ -13440,27 +13455,27 @@ void do_cmd_controller_settings(void)
                     char cancel_label[16];
                     controller_prompt_label(steamdeck_back_key(), "B", cancel_label, sizeof(cancel_label));
                     strnfmt(prompt_long, sizeof(prompt_long),
-                        "Press control%s to add %s  (%s=cancel)",
-                        allow_modifier_combo ? " or modifier+control" : "",
-                        entry->label, cancel_label);
+                        ui_text("Press control%s to add %s  (%s=cancel)"),
+                        allow_modifier_combo ? ui_text(" or modifier+control") : "",
+                        ui_text(entry->label), cancel_label);
                     strnfmt(prompt_medium, sizeof(prompt_medium),
-                        "Add%s to %s  (%s=cancel)",
-                        allow_modifier_combo ? " control/combo" : " control",
-                        entry->label, cancel_label);
+                        ui_text("Add%s to %s  (%s=cancel)"),
+                        allow_modifier_combo ? ui_text(" control/combo") : ui_text(" control"),
+                        ui_text(entry->label), cancel_label);
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "Add %s%s  (%s cancel)", entry->label,
-                        allow_modifier_combo ? " combo" : "", cancel_label);
+                        ui_text("Add %s%s  (%s cancel)"), ui_text(entry->label),
+                        allow_modifier_combo ? ui_text(" combo") : "", cancel_label);
                 } else {
                     strnfmt(prompt_long, sizeof(prompt_long),
-                        "Press controller control%s to add %s (Esc=cancel, Backspace=clear)",
-                        allow_modifier_combo ? " or modifier+control" : "",
-                        entry->label);
+                        ui_text("Press controller control%s to add %s (Esc=cancel, Backspace=clear)"),
+                        allow_modifier_combo ? ui_text(" or modifier+control") : "",
+                        ui_text(entry->label));
                     strnfmt(prompt_medium, sizeof(prompt_medium),
-                        "Add %s%s (Esc=cancel, Bksp=clear)", entry->label,
-                        allow_modifier_combo ? " with control/combo" : "");
+                        ui_text("Add %s%s (Esc=cancel, Bksp=clear)"), ui_text(entry->label),
+                        allow_modifier_combo ? ui_text(" with control/combo") : "");
                     strnfmt(prompt_short, sizeof(prompt_short),
-                        "Add %s%s (Esc cancel, Bksp clear)", entry->label,
-                        allow_modifier_combo ? " combo" : "");
+                        ui_text("Add %s%s (Esc cancel, Bksp clear)"), ui_text(entry->label),
+                        allow_modifier_combo ? ui_text(" combo") : "");
                 }
                 strnfmt(prompt, sizeof(prompt), "%s",
                     settings_ui_pick_label(row_width, prompt_long, prompt_medium,
@@ -13470,7 +13485,7 @@ void do_cmd_controller_settings(void)
 
                 flush();
                 if (!sdl_gamepad_capture_begin(allow_modifier_combo)) {
-                    msg_print("No controller detected.");
+                    msg_print(ui_text("No controller detected."));
                     message_flush();
                     continue;
                 }
@@ -13488,7 +13503,7 @@ void do_cmd_controller_settings(void)
                         if (!controller_action_is_confirm(entry->id)
                             && controller_capture_matches_action(INPUT_BIND_CONFIRM,
                                 cap_modifier, cap_type, cap_id)) {
-                            msg_print("Rebind Confirm (Space) directly to change that control.");
+                            msg_print(ui_text("Rebind Confirm (Space) directly to change that control."));
                             message_flush();
                             if (!sdl_gamepad_capture_begin(allow_modifier_combo))
                                 waiting = false;
@@ -13506,7 +13521,7 @@ void do_cmd_controller_settings(void)
                                 break;
                             }
 
-                            msg_print("That combo input is not supported.");
+                            msg_print(ui_text("That combo input is not supported."));
                             message_flush();
                             if (!sdl_gamepad_capture_begin(allow_modifier_combo))
                                 waiting = false;
@@ -13811,7 +13826,7 @@ static errr keymap_dump(cptr fname)
 void do_cmd_macros(void)
 {
 #ifndef ALLOW_MACROS
-    msg_print("Legacy macros are no longer supported.");
+    msg_print(ui_text("Legacy macros are no longer supported."));
 #else
     char ch;
 
@@ -13864,20 +13879,20 @@ void do_cmd_macros(void)
 
         settings_semantic_menu_begin("Interact with Macros", '1');
         sdl_character_sheet_screen_set_select_description(tmp);
-        settings_semantic_add_row('1', "1) Load a user pref file",
+        settings_semantic_add_row('1', ui_text("1) Load a user pref file"),
             TERM_WHITE);
 #ifdef ALLOW_MACROS
-        settings_semantic_add_row('2', "2) Append macros to a file",
+        settings_semantic_add_row('2', ui_text("2) Append macros to a file"),
             TERM_WHITE);
-        settings_semantic_add_row('3', "3) Query a macro", TERM_WHITE);
-        settings_semantic_add_row('4', "4) Create a macro", TERM_WHITE);
-        settings_semantic_add_row('5', "5) Remove a macro", TERM_WHITE);
-        settings_semantic_add_row('6', "6) Append keymaps to a file",
+        settings_semantic_add_row('3', ui_text("3) Query a macro"), TERM_WHITE);
+        settings_semantic_add_row('4', ui_text("4) Create a macro"), TERM_WHITE);
+        settings_semantic_add_row('5', ui_text("5) Remove a macro"), TERM_WHITE);
+        settings_semantic_add_row('6', ui_text("6) Append keymaps to a file"),
             TERM_WHITE);
-        settings_semantic_add_row('7', "7) Query a keymap", TERM_WHITE);
-        settings_semantic_add_row('8', "8) Create a keymap", TERM_WHITE);
-        settings_semantic_add_row('9', "9) Remove a keymap", TERM_WHITE);
-        settings_semantic_add_row('0', "0) Enter a new action", TERM_WHITE);
+        settings_semantic_add_row('7', ui_text("7) Query a keymap"), TERM_WHITE);
+        settings_semantic_add_row('8', ui_text("8) Create a keymap"), TERM_WHITE);
+        settings_semantic_add_row('9', ui_text("9) Remove a keymap"), TERM_WHITE);
+        settings_semantic_add_row('0', ui_text("0) Enter a new action"), TERM_WHITE);
 #endif /* ALLOW_MACROS */
         sdl_character_sheet_screen_commit_select('1');
 
@@ -13920,16 +13935,16 @@ void do_cmd_macros(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Append macros to a file", command_row, 0);
+            prt(ui_text("Command: Append macros to a file"), command_row, 0);
 
             /* Prompt */
-            prt("File: ", input_row, 0);
+            prt(ui_text("File: "), input_row, 0);
 
             /* Default filename */
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!get_string_panel("Append macros to file", ftmp,
+            if (!get_string_panel(ui_text("Append macros to file"), ftmp,
                     sizeof(ftmp)))
                 continue;
 
@@ -13937,7 +13952,7 @@ void do_cmd_macros(void)
             (void)macro_dump(ftmp);
 
             /* Prompt */
-            msg_print("Appended macros.");
+            msg_print(ui_text("Appended macros."));
         }
 
         /* Query a macro */
@@ -13947,10 +13962,10 @@ void do_cmd_macros(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Query a macro", command_row, 0);
+            prt(ui_text("Command: Query a macro"), command_row, 0);
 
             /* Prompt */
-            prt("Trigger: ", input_row, 0);
+            prt(ui_text("Trigger: "), input_row, 0);
 
             /* Get a macro trigger */
             do_cmd_macro_aux(pat);
@@ -13962,7 +13977,7 @@ void do_cmd_macros(void)
             if (k < 0)
             {
                 /* Prompt */
-                msg_print("Found no macro.");
+                msg_print(ui_text("Found no macro."));
             }
 
             /* Found one */
@@ -13978,7 +13993,7 @@ void do_cmd_macros(void)
                 Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
 
                 /* Prompt */
-                msg_print("Found a macro.");
+                msg_print(ui_text("Found a macro."));
             }
         }
 
@@ -13987,10 +14002,10 @@ void do_cmd_macros(void)
         {
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Create a macro", command_row, 0);
+            prt(ui_text("Command: Create a macro"), command_row, 0);
 
             /* Prompt */
-            prt("Trigger: ", input_row, 0);
+            prt(ui_text("Trigger: "), input_row, 0);
 
             /* Get a macro trigger */
             do_cmd_macro_aux(pat);
@@ -13999,13 +14014,13 @@ void do_cmd_macros(void)
             clear_from(action_label_row);
 
             /* Prompt */
-            prt("Action: ", action_row, 0);
+            prt(ui_text("Action: "), action_row, 0);
 
             /* Convert to text */
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (get_string_panel("Macro action", tmp, 80))
+            if (get_string_panel(ui_text("Macro action"), tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -14014,7 +14029,7 @@ void do_cmd_macros(void)
                 macro_add(pat, macro_buffer);
 
                 /* Prompt */
-                msg_print("Added a macro.");
+                msg_print(ui_text("Added a macro."));
             }
         }
 
@@ -14023,10 +14038,10 @@ void do_cmd_macros(void)
         {
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Remove a macro", command_row, 0);
+            prt(ui_text("Command: Remove a macro"), command_row, 0);
 
             /* Prompt */
-            prt("Trigger: ", input_row, 0);
+            prt(ui_text("Trigger: "), input_row, 0);
 
             /* Get a macro trigger */
             do_cmd_macro_aux(pat);
@@ -14035,7 +14050,7 @@ void do_cmd_macros(void)
             macro_add(pat, pat);
 
             /* Prompt */
-            msg_print("Removed a macro.");
+            msg_print(ui_text("Removed a macro."));
         }
 
         /* Save keymaps */
@@ -14045,16 +14060,16 @@ void do_cmd_macros(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Append keymaps to a file", command_row, 0);
+            prt(ui_text("Command: Append keymaps to a file"), command_row, 0);
 
             /* Prompt */
-            prt("File: ", input_row, 0);
+            prt(ui_text("File: "), input_row, 0);
 
             /* Default filename */
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!get_string_panel("Append keymaps to file", ftmp,
+            if (!get_string_panel(ui_text("Append keymaps to file"), ftmp,
                     sizeof(ftmp)))
                 continue;
 
@@ -14062,7 +14077,7 @@ void do_cmd_macros(void)
             (void)keymap_dump(ftmp);
 
             /* Prompt */
-            msg_print("Appended keymaps.");
+            msg_print(ui_text("Appended keymaps."));
         }
 
         /* Query a keymap */
@@ -14072,10 +14087,10 @@ void do_cmd_macros(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Query a keymap", command_row, 0);
+            prt(ui_text("Command: Query a keymap"), command_row, 0);
 
             /* Prompt */
-            prt("Keypress: ", input_row, 0);
+            prt(ui_text("Keypress: "), input_row, 0);
 
             /* Get a keymap trigger */
             do_cmd_macro_aux_keymap(pat);
@@ -14087,7 +14102,7 @@ void do_cmd_macros(void)
             if (!act)
             {
                 /* Prompt */
-                msg_print("Found no keymap.");
+                msg_print(ui_text("Found no keymap."));
             }
 
             /* Found one */
@@ -14103,7 +14118,7 @@ void do_cmd_macros(void)
                 Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
 
                 /* Prompt */
-                msg_print("Found a keymap.");
+                msg_print(ui_text("Found a keymap."));
             }
         }
 
@@ -14112,10 +14127,10 @@ void do_cmd_macros(void)
         {
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Create a keymap", command_row, 0);
+            prt(ui_text("Command: Create a keymap"), command_row, 0);
 
             /* Prompt */
-            prt("Keypress: ", input_row, 0);
+            prt(ui_text("Keypress: "), input_row, 0);
 
             /* Get a keymap trigger */
             do_cmd_macro_aux_keymap(pat);
@@ -14124,13 +14139,13 @@ void do_cmd_macros(void)
             clear_from(action_label_row);
 
             /* Prompt */
-            prt("Action: ", action_row, 0);
+            prt(ui_text("Action: "), action_row, 0);
 
             /* Convert to text */
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (get_string_panel("Keymap action", tmp, 80))
+            if (get_string_panel(ui_text("Keymap action"), tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -14142,7 +14157,7 @@ void do_cmd_macros(void)
                 keymap_act[mode][(byte)(pat[0])] = str_dup(macro_buffer);
 
                 /* Prompt */
-                msg_print("Added a keymap.");
+                msg_print(ui_text("Added a keymap."));
             }
         }
 
@@ -14151,10 +14166,10 @@ void do_cmd_macros(void)
         {
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Remove a keymap", command_row, 0);
+            prt(ui_text("Command: Remove a keymap"), command_row, 0);
 
             /* Prompt */
-            prt("Keypress: ", input_row, 0);
+            prt(ui_text("Keypress: "), input_row, 0);
 
             /* Get a keymap trigger */
             do_cmd_macro_aux_keymap(pat);
@@ -14166,7 +14181,7 @@ void do_cmd_macros(void)
             keymap_act[mode][(byte)(pat[0])] = NULL;
 
             /* Prompt */
-            msg_print("Removed a keymap.");
+            msg_print(ui_text("Removed a keymap."));
         }
 
         /* Enter a new action */
@@ -14174,7 +14189,7 @@ void do_cmd_macros(void)
         {
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Enter a new action", command_row, 0);
+            prt(ui_text("Command: Enter a new action"), command_row, 0);
 
             /* Go to the correct location */
             Term_gotoxy(0, action_row);
@@ -14183,7 +14198,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (get_string_panel("New action", tmp, 80))
+            if (get_string_panel(ui_text("New action"), tmp, 80))
             {
                 /* Extract an action */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -14196,7 +14211,7 @@ void do_cmd_macros(void)
         else
         {
             /* Oops */
-            bell("Illegal command for macros!");
+            bell(ui_text("Illegal command for macros!"));
         }
 
         /* Flush messages */
@@ -14234,9 +14249,8 @@ static void askfor_shade(byte* attr, int y)
         Term_erase(0, y, 255);
 
         /* Format the query */
-        msg = format("1. Choose base color (Left/Right) " COLOR_SAMPLE
-                     " %s (attr = %d) ",
-            color_names[base], base);
+        msg = format(ui_text("1. Choose base color (Left/Right) %s %s (attr = %d) "),
+            COLOR_SAMPLE, color_names[base], base);
 
         /* Display it */
         c_put_str(TERM_WHITE, msg, y, 0);
@@ -14245,10 +14259,10 @@ static void askfor_shade(byte* attr, int y)
         pos = strstr(msg, COLOR_SAMPLE);
 
         /* Show it using the proper color */
-        c_put_str(base, COLOR_SAMPLE, y, pos - msg);
+        c_put_str(base, COLOR_SAMPLE, y, utf8_display_width_n(msg, (int)(pos - msg)));
 
         /* Place the cursor at the end of the message */
-        Term_gotoxy(strlen(msg), y);
+        Term_gotoxy(utf8_display_width_n(msg, (int)strlen(msg)), y);
 
         /* Get a command */
         ch = inkey();
@@ -14301,9 +14315,8 @@ static void askfor_shade(byte* attr, int y)
         temp = MAKE_EXTENDED_COLOR(base, shade);
 
         /* Format the message */
-        msg = format("2. Choose shade (Left/Right) " COLOR_SAMPLE
-                     " %s (attr = %d) ",
-            get_ext_color_name(temp), temp);
+        msg = format(ui_text("2. Choose shade (Left/Right) %s %s (attr = %d) "),
+            COLOR_SAMPLE, get_ext_color_name(temp), temp);
 
         /* Display it */
         c_put_str(TERM_WHITE, msg, y, 0);
@@ -14312,10 +14325,10 @@ static void askfor_shade(byte* attr, int y)
         pos = strstr(msg, COLOR_SAMPLE);
 
         /* Show it using the proper color */
-        c_put_str(temp, COLOR_SAMPLE, y, pos - msg);
+        c_put_str(temp, COLOR_SAMPLE, y, utf8_display_width_n(msg, (int)(pos - msg)));
 
         /* Place the cursor at the end of the message */
-        Term_gotoxy(strlen(msg), y);
+        Term_gotoxy(utf8_display_width_n(msg, (int)strlen(msg)), y);
 
         /* Get a command */
         ch = inkey();
@@ -14378,20 +14391,20 @@ void do_cmd_visuals(void)
     while (1)
     {
         settings_semantic_menu_begin("Interact with Visuals", '1');
-        settings_semantic_add_row('1', "1) Load a user pref file", TERM_WHITE);
+        settings_semantic_add_row('1', ui_text("1) Load a user pref file"), TERM_WHITE);
 #ifdef ALLOW_VISUALS
-        settings_semantic_add_row('2', "2) Dump monster attr/chars", TERM_WHITE);
-        settings_semantic_add_row('3', "3) Dump object attr/chars", TERM_WHITE);
-        settings_semantic_add_row('4', "4) Dump feature attr/chars", TERM_WHITE);
-        settings_semantic_add_row('5', "5) Dump flavor attr/chars", TERM_WHITE);
-        settings_semantic_add_row('6', "6) Change monster attr/chars", TERM_WHITE);
-        settings_semantic_add_row('7', "7) Change object attr/chars", TERM_WHITE);
-        settings_semantic_add_row('8', "8) Change feature attr/chars", TERM_WHITE);
-        settings_semantic_add_row('9', "9) Change flavor attr/chars", TERM_WHITE);
+        settings_semantic_add_row('2', ui_text("2) Dump monster attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('3', ui_text("3) Dump object attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('4', ui_text("4) Dump feature attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('5', ui_text("5) Dump flavor attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('6', ui_text("6) Change monster attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('7', ui_text("7) Change object attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('8', ui_text("8) Change feature attr/chars"), TERM_WHITE);
+        settings_semantic_add_row('9', ui_text("9) Change flavor attr/chars"), TERM_WHITE);
 #endif
-        settings_semantic_add_row('0', "0) Reset visuals", TERM_WHITE);
+        settings_semantic_add_row('0', ui_text("0) Reset visuals"), TERM_WHITE);
         sdl_character_sheet_screen_set_select_description(
-            "Visual preference tools. Editor actions open the existing attr/char editor after this menu hides.");
+            ui_text("Visual preference tools. Editor actions open the existing attr/char editor after this menu hides."));
         sdl_character_sheet_screen_commit_select('1');
 
         /* Prompt */
@@ -14425,7 +14438,7 @@ void do_cmd_visuals(void)
             if ((term_wid < 60) || (term_hgt < 21))
             {
                 settings_semantic_menu_hide();
-                msg_print("The attr/char editor requires a larger window than compact mode.");
+                msg_print(ui_text("The attr/char editor requires a larger window than compact mode."));
                 message_flush();
                 continue;
             }
@@ -14449,16 +14462,16 @@ void do_cmd_visuals(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Dump monster attr/chars", 15, 0);
+            prt(ui_text("Command: Dump monster attr/chars"), 15, 0);
 
             /* Prompt */
-            prt("File: ", 17, 0);
+            prt(ui_text("File: "), 17, 0);
 
             /* Default filename */
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!get_string_panel("Monster display file", ftmp,
+            if (!get_string_panel(ui_text("Monster display file"), ftmp,
                     sizeof(ftmp)))
                 continue;
 
@@ -14514,7 +14527,7 @@ void do_cmd_visuals(void)
             sdl_fclose(fff);
 
             /* Message */
-            msg_print("Dumped monster attr/chars.");
+            msg_print(ui_text("Dumped monster attr/chars."));
         }
 
         /* Dump object attr/chars */
@@ -14525,16 +14538,16 @@ void do_cmd_visuals(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Dump object attr/chars", 15, 0);
+            prt(ui_text("Command: Dump object attr/chars"), 15, 0);
 
             /* Prompt */
-            prt("File: ", 17, 0);
+            prt(ui_text("File: "), 17, 0);
 
             /* Default filename */
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!get_string_panel("Object display file", ftmp,
+            if (!get_string_panel(ui_text("Object display file"), ftmp,
                     sizeof(ftmp)))
                 continue;
 
@@ -14591,7 +14604,7 @@ void do_cmd_visuals(void)
             sdl_fclose(fff);
 
             /* Message */
-            msg_print("Dumped object attr/chars.");
+            msg_print(ui_text("Dumped object attr/chars."));
         }
 
         /* Dump feature attr/chars */
@@ -14602,16 +14615,16 @@ void do_cmd_visuals(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Dump feature attr/chars", 15, 0);
+            prt(ui_text("Command: Dump feature attr/chars"), 15, 0);
 
             /* Prompt */
-            prt("File: ", 17, 0);
+            prt(ui_text("File: "), 17, 0);
 
             /* Default filename */
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!get_string_panel("Feature display file", ftmp,
+            if (!get_string_panel(ui_text("Feature display file"), ftmp,
                     sizeof(ftmp)))
                 continue;
 
@@ -14668,7 +14681,7 @@ void do_cmd_visuals(void)
             sdl_fclose(fff);
 
             /* Message */
-            msg_print("Dumped feature attr/chars.");
+            msg_print(ui_text("Dumped feature attr/chars."));
         }
 
         /* Dump flavor attr/chars */
@@ -14679,16 +14692,16 @@ void do_cmd_visuals(void)
 
             settings_semantic_menu_hide();
             /* Prompt */
-            prt("Command: Dump flavor attr/chars", 15, 0);
+            prt(ui_text("Command: Dump flavor attr/chars"), 15, 0);
 
             /* Prompt */
-            prt("File: ", 17, 0);
+            prt(ui_text("File: "), 17, 0);
 
             /* Default filename */
             strnfmt(ftmp, sizeof(ftmp), "%s.legacy", op_ptr->base_name);
 
             /* Get a filename */
-            if (!get_string_panel("Flavor display file", ftmp,
+            if (!get_string_panel(ui_text("Flavor display file"), ftmp,
                     sizeof(ftmp)))
                 continue;
 
@@ -14741,7 +14754,7 @@ void do_cmd_visuals(void)
             sdl_fclose(fff);
 
             /* Message */
-            msg_print("Dumped flavor attr/chars.");
+            msg_print(ui_text("Dumped flavor attr/chars."));
         }
 
         /* Modify monster attr/chars */
@@ -14752,7 +14765,7 @@ void do_cmd_visuals(void)
             settings_semantic_menu_hide();
 
             /* Prompt */
-            prt("Command: Change monster attr/chars", 15, 0);
+            prt(ui_text("Command: Change monster attr/chars"), 15, 0);
 
             /* Hack -- query until done */
             while (1)
@@ -14766,12 +14779,12 @@ void do_cmd_visuals(void)
 
                 /* Label the object */
                 Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Monster = %d, Name = %-40.40s", r,
+                    format(ui_text("Monster = %d, Name = %-40.40s"), r,
                         (r_name + r_ptr->name)));
 
                 /* Label the Default values */
                 Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3u / %3u", da, dc));
+                    format(ui_text("Default attr/char = %3u / %3u"), da, dc));
                 Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 19, da, dc);
 
@@ -14785,7 +14798,7 @@ void do_cmd_visuals(void)
 
                 /* Label the Current values */
                 Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3u / %3u", ca, cc));
+                    format(ui_text("Current attr/char = %3u / %3u"), ca, cc));
                 Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 20, ca, cc);
 
@@ -14799,7 +14812,7 @@ void do_cmd_visuals(void)
 
                 /* Prompt */
                 Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
+                    0, 22, -1, TERM_WHITE, ui_text("Command (n/N/a/A/c/C/'s'hade): "));
 
                 /* Get a command */
                 cx = inkey();
@@ -14836,7 +14849,7 @@ void do_cmd_visuals(void)
             settings_semantic_menu_hide();
 
             /* Prompt */
-            prt("Command: Change object attr/chars", 15, 0);
+            prt(ui_text("Command: Change object attr/chars"), 15, 0);
 
             /* Hack -- query until done */
             while (1)
@@ -14850,12 +14863,12 @@ void do_cmd_visuals(void)
 
                 /* Label the object */
                 Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Object = %d, Name = %-40.40s", k,
+                    format(ui_text("Object = %d, Name = %-40.40s"), k,
                         (k_name + k_ptr->name)));
 
                 /* Label the Default values */
                 Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3d / %3d", da, dc));
+                    format(ui_text("Default attr/char = %3d / %3d"), da, dc));
                 Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 19, da, dc);
 
@@ -14869,7 +14882,7 @@ void do_cmd_visuals(void)
 
                 /* Label the Current values */
                 Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3d / %3d", ca, cc));
+                    format(ui_text("Current attr/char = %3d / %3d"), ca, cc));
                 Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 20, ca, cc);
 
@@ -14883,7 +14896,7 @@ void do_cmd_visuals(void)
 
                 /* Prompt */
                 Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
+                    0, 22, -1, TERM_WHITE, ui_text("Command (n/N/a/A/c/C/'s'hade): "));
 
                 /* Get a command */
                 cx = inkey();
@@ -14920,7 +14933,7 @@ void do_cmd_visuals(void)
             settings_semantic_menu_hide();
 
             /* Prompt */
-            prt("Command: Change feature attr/chars", 15, 0);
+            prt(ui_text("Command: Change feature attr/chars"), 15, 0);
 
             /* Hack -- query until done */
             while (1)
@@ -14934,12 +14947,12 @@ void do_cmd_visuals(void)
 
                 /* Label the object */
                 Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Terrain = %d, Name = %-40.40s", f,
+                    format(ui_text("Terrain = %d, Name = %-40.40s"), f,
                         (f_name + f_ptr->name)));
 
                 /* Label the Default values */
                 Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3d / %3d", da, dc));
+                    format(ui_text("Default attr/char = %3d / %3d"), da, dc));
                 Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 19, da, dc);
 
@@ -14953,7 +14966,7 @@ void do_cmd_visuals(void)
 
                 /* Label the Current values */
                 Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3d / %3d", ca, cc));
+                    format(ui_text("Current attr/char = %3d / %3d"), ca, cc));
                 Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 20, ca, cc);
 
@@ -14967,7 +14980,7 @@ void do_cmd_visuals(void)
 
                 /* Prompt */
                 Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
+                    0, 22, -1, TERM_WHITE, ui_text("Command (n/N/a/A/c/C/'s'hade): "));
 
                 /* Get a command */
                 cx = inkey();
@@ -15004,7 +15017,7 @@ void do_cmd_visuals(void)
             settings_semantic_menu_hide();
 
             /* Prompt */
-            prt("Command: Change flavor attr/chars", 15, 0);
+            prt(ui_text("Command: Change flavor attr/chars"), 15, 0);
 
             /* Hack -- query until done */
             while (1)
@@ -15018,12 +15031,12 @@ void do_cmd_visuals(void)
 
                 /* Label the object */
                 Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Flavor = %d, Text = %-40.40s", f,
+                    format(ui_text("Flavor = %d, Text = %-40.40s"), f,
                         (flavor_text + flavor_ptr->text)));
 
                 /* Label the Default values */
                 Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3d / %3d", da, dc));
+                    format(ui_text("Default attr/char = %3d / %3d"), da, dc));
                 Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 19, da, dc);
                 Term_putch(43, 19, da, dc);
@@ -15038,7 +15051,7 @@ void do_cmd_visuals(void)
 
                 /* Label the Current values */
                 Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3d / %3d", ca, cc));
+                    format(ui_text("Current attr/char = %3d / %3d"), ca, cc));
                 Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
                 Term_putch(43, 20, ca, cc);
 
@@ -15052,7 +15065,7 @@ void do_cmd_visuals(void)
 
                 /* Prompt */
                 Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
+                    0, 22, -1, TERM_WHITE, ui_text("Command (n/N/a/A/c/C/'s'hade): "));
 
                 /* Get a command */
                 cx = inkey();
@@ -15092,13 +15105,13 @@ void do_cmd_visuals(void)
             reset_visuals(true);
 
             /* Message */
-            msg_print("Visual attr/char tables reset.");
+            msg_print(ui_text("Visual attr/char tables reset."));
         }
 
         /* Unknown option */
         else
         {
-            bell("Illegal command for visuals!");
+            bell(ui_text("Illegal command for visuals!"));
         }
 
         /* Flush messages */
@@ -15112,7 +15125,7 @@ void do_cmd_visuals(void)
 #else
 void do_cmd_visuals(void)
 {
-    msg_print("Legacy visual overrides are no longer supported.");
+    msg_print(ui_text("Legacy visual overrides are no longer supported."));
 }
 #endif
 
@@ -15131,7 +15144,7 @@ static bool askfor_color_values(int idx)
     sprintf(str, "%d", angband_color_table[idx][1]);
 
     /* Query, check for ESCAPE */
-    if (!term_get_string("Red (0-255) ", str, sizeof(str)))
+    if (!term_get_string(ui_text("Red (0-255) "), str, sizeof(str)))
         return false;
 
     /* Convert to number */
@@ -15147,7 +15160,7 @@ static bool askfor_color_values(int idx)
     sprintf(str, "%d", angband_color_table[idx][2]);
 
     /* Query, check for ESCAPE */
-    if (!term_get_string("Green (0-255) ", str, sizeof(str)))
+    if (!term_get_string(ui_text("Green (0-255) "), str, sizeof(str)))
         return false;
 
     /* Convert to number */
@@ -15163,7 +15176,7 @@ static bool askfor_color_values(int idx)
     sprintf(str, "%d", angband_color_table[idx][3]);
 
     /* Query, check for ESCAPE */
-    if (!term_get_string("Blue (0-255) ", str, sizeof(str)))
+    if (!term_get_string(ui_text("Blue (0-255) "), str, sizeof(str)))
         return false;
 
     /* Convert to number */
@@ -15179,7 +15192,7 @@ static bool askfor_color_values(int idx)
     sprintf(str, "%d", angband_color_table[idx][0]);
 
     /* Query, check for ESCAPE */
-    if (!term_get_string("Extra (0-255) ", str, sizeof(str)))
+    if (!term_get_string(ui_text("Extra (0-255) "), str, sizeof(str)))
         return false;
 
     /* Convert to number */
@@ -15253,20 +15266,20 @@ static void modify_colors(void)
     /* Show screen commands and help */
     y = 2;
     x = 42;
-    c_put_str(TERM_WHITE, "Commands:", y, x);
-    c_put_str(TERM_WHITE, "ESC: Return", y + 2, x);
-    c_put_str(TERM_WHITE, "Left/Right: Move to color", y + 3, x);
-    c_put_str(TERM_WHITE, "k,K: Incr,Decr extra value", y + 4, x);
-    c_put_str(TERM_WHITE, "r,R: Incr,Decr red value", y + 5, x);
-    c_put_str(TERM_WHITE, "g,G: Incr,Decr green value", y + 6, x);
-    c_put_str(TERM_WHITE, "b,B: Incr,Decr blue value", y + 7, x);
-    c_put_str(TERM_WHITE, "c: Copy from color", y + 8, x);
-    c_put_str(TERM_WHITE, "v: Set specific values", y + 9, x);
-    c_put_str(TERM_WHITE, "First column: base colors", y + 11, x);
-    c_put_str(TERM_WHITE, "Second column: first shade, etc.", y + 12, x);
+    c_put_str(TERM_WHITE, ui_text("Commands:"), y, x);
+    c_put_str(TERM_WHITE, ui_text("ESC: Return"), y + 2, x);
+    c_put_str(TERM_WHITE, ui_text("Left/Right: Move to color"), y + 3, x);
+    c_put_str(TERM_WHITE, ui_text("k,K: Incr,Decr extra value"), y + 4, x);
+    c_put_str(TERM_WHITE, ui_text("r,R: Incr,Decr red value"), y + 5, x);
+    c_put_str(TERM_WHITE, ui_text("g,G: Incr,Decr green value"), y + 6, x);
+    c_put_str(TERM_WHITE, ui_text("b,B: Incr,Decr blue value"), y + 7, x);
+    c_put_str(TERM_WHITE, ui_text("c: Copy from color"), y + 8, x);
+    c_put_str(TERM_WHITE, ui_text("v: Set specific values"), y + 9, x);
+    c_put_str(TERM_WHITE, ui_text("First column: base colors"), y + 11, x);
+    c_put_str(TERM_WHITE, ui_text("Second column: first shade, etc."), y + 12, x);
 
     c_put_str(
-        TERM_WHITE, "Shades look like base colors in 16 color ports.", 23, 0);
+        TERM_WHITE, ui_text("Shades look like base colors in 16 color ports."), 23, 0);
 
     /* Hack - We want to show the fake cursor */
     do_move = true;
@@ -15306,7 +15319,7 @@ static void modify_colors(void)
 
             /* Format the name of the color */
             SDL_strlcpy(msg,
-                format("Color = %d (0x%02X), Name = %s", idx, idx,
+                format(ui_text("Color = %d (0x%02X), Name = %s"), idx, idx,
                     get_ext_color_name(idx)),
                 sizeof(msg));
 
@@ -15359,7 +15372,7 @@ static void modify_colors(void)
         old_idx = -1;
 
         /* Get a command */
-        if (!get_com("Command: Modify colors ", &ch))
+        if (!get_com(ui_text("Command: Modify colors "), &ch))
             break;
 
         switch (ch)
@@ -15446,7 +15459,7 @@ static void modify_colors(void)
             sprintf(str, "%d", GET_BASE_COLOR(idx));
 
             /* Query, check for ESCAPE */
-            if (!term_get_string(format("Copy from color (0-%d, def. base) ",
+            if (!term_get_string(format(ui_text("Copy from color (0-%d, def. base) "),
                                      MAX_COLORS - 1),
                     str, sizeof(str)))
                 break;
@@ -15614,14 +15627,14 @@ void do_cmd_colors(void)
     count = MIN(ui_colors_palette_preset_count(), UI_COLOR_PRESET_MAX);
     if (count <= 0)
     {
-        msg_print("No palette presets are available.");
+        msg_print(ui_text("No palette presets are available."));
         return;
     }
 
     for (int i = 0; i < count; i++)
     {
         choices[i].value = i;
-        choices[i].label = ui_colors_palette_preset_label(i);
+        choices[i].label = ui_text(ui_colors_palette_preset_label(i));
         if (streq(ui_colors_palette_preset_id(i),
                 ui_colors_current_palette_preset()))
         {
@@ -15629,7 +15642,7 @@ void do_cmd_colors(void)
         }
     }
 
-    if (!settings_pick_value("Choose Palette", NULL, choices, count,
+    if (!settings_pick_value(ui_text("Choose Palette"), NULL, choices, count,
             selected, &choice))
     {
         return;
@@ -15637,7 +15650,7 @@ void do_cmd_colors(void)
 
     if (!ui_colors_apply_palette_preset(ui_colors_palette_preset_id(choice)))
     {
-        msg_print("Failed to apply palette preset.");
+        msg_print(ui_text("Failed to apply palette preset."));
         return;
     }
 
@@ -15647,9 +15660,9 @@ void do_cmd_colors(void)
     Term_redraw();
 
     if (save_pane_config_to_json())
-        msg_format("Palette preset '%s' saved.", config.palette_preset);
+        msg_format(ui_text("Palette preset '%s' saved."), config.palette_preset);
     else
-        msg_print("Palette changed, but saving sil_sdl.json failed.");
+        msg_print(ui_text("Palette changed, but saving sil_sdl.json failed."));
 }
 
 /*

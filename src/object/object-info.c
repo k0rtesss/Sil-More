@@ -1,6 +1,7 @@
 /* File: object/object-info.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "object/object-info.h"
@@ -122,11 +123,11 @@ static bool describe_consumable_healing(const object_type* o_ptr)
         && disease_herb_matches(o_ptr))
     {
         if (p_ptr->disease_knowledge & DISEASE_KNOWN_NAME)
-            p_text_out(format("It cures your %s, restoring the attributes lost to it.  ",
+            p_text_out(format(ui_text("It cures your %s, restoring the attributes lost to it.  "),
                 disease_name()));
         else
-            p_text_out("It cures your disease, restoring the attributes lost to it.  ");
-        p_text_out("Its usual effects and nourishment do not apply while curing this disease.  ");
+            p_text_out(ui_text("It cures your disease, restoring the attributes lost to it.  "));
+        p_text_out(ui_text("Its usual effects and nourishment do not apply while curing this disease.  "));
         return true;
     }
 
@@ -140,26 +141,26 @@ static bool describe_consumable_healing(const object_type* o_ptr)
 
     actual = MIN(potential, missing);
 
-    p_text_out((o_ptr->number == 1) ? "It restores " : "Each one restores ");
+    p_text_out((o_ptr->number == 1) ? ui_text("It restores ") : ui_text("Each one restores "));
 
     if (actual == potential)
     {
-        p_text_out_c(TERM_L_GREEN, format("%d health", actual));
-        p_text_out(" right now.  ");
+        p_text_out_c(TERM_L_GREEN, format(ui_text("%d health"), actual));
+        p_text_out(ui_text(" right now.  "));
     }
     else
     {
-        p_text_out("up to ");
-        p_text_out_c(TERM_L_GREEN, format("%d health", potential));
+        p_text_out(ui_text("up to "));
+        p_text_out_c(TERM_L_GREEN, format(ui_text("%d health"), potential));
 
         if (actual > 0)
         {
             p_text_out(format(
-                "; at your current wounds it would restore %d.  ", actual));
+                ui_text("; at your current wounds it would restore %d.  "), actual));
         }
         else
         {
-            p_text_out("; you are already at full health.  ");
+            p_text_out(ui_text("; you are already at full health.  "));
         }
     }
 
@@ -170,7 +171,7 @@ static void output_list(cptr list[], int n)
 {
     int i;
 
-    char* conjunction = "and ";
+    cptr conjunction = ui_text("and ");
     if (n < 0)
     {
         n = -n;
@@ -186,7 +187,7 @@ static void output_list(cptr list[], int n)
             if (i == n - 1)
                 p_text_out(conjunction);
         }
-        p_text_out(list[i]);
+        p_text_out(ui_text(list[i]));
     }
 }
 
@@ -195,7 +196,7 @@ static void output_list_c(cptr list[], int n, byte attr)
 {
     int i;
 
-    char* conjunction = "and ";
+    cptr conjunction = ui_text("and ");
     if (n < 0)
     {
         n = -n;
@@ -210,7 +211,7 @@ static void output_list_c(cptr list[], int n, byte attr)
             if (i == n - 1)
                 p_text_out(conjunction);
         }
-        p_text_out_c(attr, list[i]);
+        p_text_out_c(attr, ui_text(list[i]));
     }
 }
 
@@ -263,11 +264,11 @@ static bool describe_stats(const object_type* o_ptr, u32b f1)
         if (!(f1 & stat_flag_for_bonus(stat, false)))
             continue;
 
-        p_text_out("It ");
-        p_text_out_c(TERM_GREEN, "increases");
-        p_text_out(" your ");
-        p_text_out(stat_names_full[stat]);
-        p_text_out(" by ");
+        p_text_out(ui_text("It "));
+        p_text_out_c(TERM_GREEN, ui_text("increases"));
+        p_text_out(ui_text(" your "));
+        p_text_out(ui_text(stat_names_full[stat]));
+        p_text_out(ui_text(" by "));
         p_text_out_c(TERM_UMBER, format("%i", bonus));
         p_text_out(".  ");
         found = true;
@@ -293,11 +294,11 @@ static bool describe_neg_stats(const object_type* o_ptr, u32b f1)
         if (!(f1 & stat_flag_for_bonus(stat, true)))
             continue;
 
-        p_text_out("It ");
-        p_text_out_c(TERM_L_RED, "decreases");
-        p_text_out(" your ");
-        p_text_out(stat_names_full[stat]);
-        p_text_out(" by ");
+        p_text_out(ui_text("It "));
+        p_text_out_c(TERM_L_RED, ui_text("decreases"));
+        p_text_out(ui_text(" your "));
+        p_text_out(ui_text(stat_names_full[stat]));
+        p_text_out(ui_text(" by "));
         p_text_out_c(TERM_UMBER, format("%i", -bonus));
         p_text_out(".  ");
         found = true;
@@ -318,10 +319,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_MEL];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your melee by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your melee by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -332,10 +333,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_ARC];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your archery by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your archery by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -346,10 +347,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_STL];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your stealth by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your stealth by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -360,10 +361,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_PER];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your perception by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your perception by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -374,10 +375,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_WIL];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your will by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your will by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -388,10 +389,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_SMT];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your smithing by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your smithing by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -402,10 +403,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->skill_bonus[S_SNG];
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your song by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your song by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -417,10 +418,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->pval;
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your tunneling by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your tunneling by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -431,10 +432,10 @@ static bool describe_secondary(const object_type* o_ptr, u32b f1)
         int bonus = o_ptr->pval;
         if (bonus != 0)
         {
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
             p_text_out_c(bonus > 0 ? TERM_GREEN : TERM_L_RED,
-                (bonus > 0 ? "improves" : "worsens"));
-            p_text_out(" your damage sides by ");
+                (bonus > 0 ? ui_text("improves") : ui_text("worsens")));
+            p_text_out(ui_text(" your damage sides by "));
             p_text_out_c(TERM_UMBER, format("%i", ABS(bonus)));
             p_text_out(".  ");
             found = true;
@@ -492,15 +493,15 @@ static bool describe_slay(const object_type* o_ptr, u32b f1, u32b f4)
         if (o_ptr->number == 1)
         {
             /* Output intro */
-            p_text_out("It ");
-            p_text_out_c(TERM_L_RED, "slays");
+            p_text_out(ui_text("It "));
+            p_text_out_c(TERM_L_RED, ui_text("slays"));
             p_text_out(" ");
         }
         else
         {
             /* Output intro */
-            p_text_out("They ");
-            p_text_out_c(TERM_L_RED, "slay");
+            p_text_out(ui_text("They "));
+            p_text_out_c(TERM_L_RED, ui_text("slay"));
             p_text_out(" ");
         }
 
@@ -560,15 +561,15 @@ static bool describe_brand(const object_type* o_ptr, u32b f1)
         
         if (o_ptr->number == 1)
         {
-            p_text_out("It is ");
-            p_text_out_c(TERM_ORANGE, "branded");
-            p_text_out(" with ");
+            p_text_out(ui_text("It is "));
+            p_text_out_c(TERM_ORANGE, ui_text("branded"));
+            p_text_out(ui_text(" with "));
         }
         else
         {
-            p_text_out("They are ");
-            p_text_out_c(TERM_ORANGE, "branded");
-            p_text_out(" with ");
+            p_text_out(ui_text("They are "));
+            p_text_out_c(TERM_ORANGE, ui_text("branded"));
+            p_text_out(ui_text(" with "));
         }
         
         for (i = 0; i < cnt; i++)
@@ -577,19 +578,19 @@ static bool describe_brand(const object_type* o_ptr, u32b f1)
             {
                 p_text_out((i == 1 && i == cnt - 1) ? " " : ", ");
                 if (i == cnt - 1)
-                    p_text_out("and ");
+                    p_text_out(ui_text("and "));
             }
-            p_text_out_c(colors[i], descs[i]);
+            p_text_out_c(colors[i], ui_text(descs[i]));
         }
         p_text_out(".  ");
     }
 
     /* We are done here */
     if (f1 & TR1_BRAND_POIS)
-        p_text_out("Venom adds poison equal to half the damage dealt after "
+        p_text_out(ui_text("Venom adds poison equal to half the damage dealt after "
                    "Protection, rounded up. Each turn, one fifth of the "
                    "remaining poison deals damage, rounded up. "
-                   "Poison-resistant creatures are immune.  ");
+                   "Poison-resistant creatures are immune.  "));
     return (cnt ? true : false);
 }
 
@@ -604,39 +605,39 @@ static bool describe_misc_weapon_attributes(
     if (f1 & (TR1_SHARPNESS))
     {
         if (o_ptr->number == 1)
-            p_text_out("It cuts easily through armour.  ");
+            p_text_out(ui_text("It cuts easily through armour.  "));
         else
-            p_text_out("They cut easily through armour.  ");
+            p_text_out(ui_text("They cut easily through armour.  "));
         message = true;
     }
     if (f1 & (TR1_SHARPNESS2))
     {
-        p_text_out("It cuts very easily through armour.  ");
+        p_text_out(ui_text("It cuts very easily through armour.  "));
         message = true;
     }
     if (f1 & (TR1_VAMPIRIC))
     {
-        p_text_out("It drains life from your enemies.  ");
+        p_text_out(ui_text("It drains life from your enemies.  "));
         message = true;
     }
     if (f3 & (TR3_ACCURATE))
     {
         if (o_ptr->tval == TV_BOW)
         {
-            p_text_out("It fires arrows with unerring precision (misses are "
-                       "rerolled).  ");
+            p_text_out(ui_text("It fires arrows with unerring precision (misses are "
+                       "rerolled).  "));
             message = true;
         }
         else
         {
             p_text_out(
-                "It is unusually well balanced (misses are rerolled).  ");
+                ui_text("It is unusually well balanced (misses are rerolled).  "));
             message = true;
         }
     }
     if (f3 & (TR3_CUMBERSOME))
     {
-        p_text_out("It is cumbersome (it does not score critical hits).  ");
+        p_text_out(ui_text("It is cumbersome (it does not score critical hits).  "));
         message = true;
     }
 
@@ -722,9 +723,9 @@ static bool describe_resist(const object_type* o_ptr, u32b f2)
     if (vn)
     {
         int i;
-        p_text_out("It provides ");
-        p_text_out_c(TERM_L_BLUE, "resistance");
-        p_text_out(" to ");
+        p_text_out(ui_text("It provides "));
+        p_text_out_c(TERM_L_BLUE, ui_text("resistance"));
+        p_text_out(ui_text(" to "));
         
         for (i = 0; i < vn; i++)
         {
@@ -732,9 +733,9 @@ static bool describe_resist(const object_type* o_ptr, u32b f2)
             {
                 p_text_out((i == 1 && i == vn - 1) ? " " : ", ");
                 if (i == vn - 1)
-                    p_text_out("and ");
+                    p_text_out(ui_text("and "));
             }
-            p_text_out_c(colors[i], vp[i]);
+            p_text_out_c(colors[i], ui_text(vp[i]));
         }
         p_text_out(".  ");
     }
@@ -779,9 +780,9 @@ static bool describe_vulnerability(const object_type* o_ptr, u32b f2)
     if (vn)
     {
         int i;
-        p_text_out("It makes you more ");
-        p_text_out_c(TERM_RED, "vulnerable");
-        p_text_out(" to ");
+        p_text_out(ui_text("It makes you more "));
+        p_text_out_c(TERM_RED, ui_text("vulnerable"));
+        p_text_out(ui_text(" to "));
         
         for (i = 0; i < vn; i++)
         {
@@ -789,9 +790,9 @@ static bool describe_vulnerability(const object_type* o_ptr, u32b f2)
             {
                 p_text_out((i == 1 && i == vn - 1) ? " " : ", ");
                 if (i == vn - 1)
-                    p_text_out("and ");
+                    p_text_out(ui_text("and "));
             }
-            p_text_out_c(colors[i], vp[i]);
+            p_text_out_c(colors[i], ui_text(vp[i]));
         }
         p_text_out(".  ");
     }
@@ -811,9 +812,9 @@ static bool describe_handedness(const object_type* o_ptr, u32b f3)
         || (n == TV_SWORD))
     {
         if (f3 & (TR3_HAND_AND_A_HALF))
-            p_text_out("It does extra damage when wielded with both hands.  ");
+            p_text_out(ui_text("It does extra damage when wielded with both hands.  "));
         else if (f3 & (TR3_TWO_HANDED))
-            p_text_out("It requires both hands to wield it properly.  ");
+            p_text_out(ui_text("It requires both hands to wield it properly.  "));
         else
             return (false);
 
@@ -830,7 +831,7 @@ static bool describe_polearmness(u32b f3)
 {
     if (f3 & (TR3_POLEARM))
     {
-        p_text_out("It counts as a type of polearm.  ");
+        p_text_out(ui_text("It counts as a type of polearm.  "));
         return (true);
     }
 
@@ -859,7 +860,7 @@ static bool describe_ignores(const object_type* o_ptr, u32b f3)
     if ((f3 & (TR3_IGNORE_ACID)) && (f3 & (TR3_IGNORE_FIRE))
         && (f3 & (TR3_IGNORE_COLD)))
     {
-        p_text_out("It cannot be harmed by the elements.  ");
+        p_text_out(ui_text("It cannot be harmed by the elements.  "));
 
         return (true);
     }
@@ -892,9 +893,9 @@ static bool describe_sustains(const object_type* o_ptr, u32b f2)
 
     /* Describe immunities */
     if (n == A_MAX)
-        p_text_out("It sustains all your stats.  ");
+        p_text_out(ui_text("It sustains all your stats.  "));
     else
-        output_desc_list("It sustains your ", list, n);
+        output_desc_list(ui_text("It sustains your "), list, n);
 
     /* We are done here */
     return (n ? true : false);
@@ -1020,7 +1021,7 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
         good[gc++] = "is unusually light for its kind";
 
     /* Describe */
-    output_desc_list("It ", good, gc);
+    output_desc_list(ui_text("It "), good, gc);
 
     /* Set "something" */
     if (gc)
@@ -1075,9 +1076,9 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (gc)
     {
         /* Output intro */
-        p_text_out("It ");
-        p_text_out_c(TERM_L_BLUE, "grants");
-        p_text_out(" you ");
+        p_text_out(ui_text("It "));
+        p_text_out_c(TERM_L_BLUE, ui_text("grants"));
+        p_text_out(ui_text(" you "));
 
         /* Output list in light blue */
         output_list_c(good, gc, TERM_L_BLUE);
@@ -1091,9 +1092,9 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     {
         /* Output intro */
         if (gc)
-            p_text_out(", but it also ");
+            p_text_out(ui_text(", but it also "));
         else
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
         
         /* Check if any curse-related items */
         bool has_curse = false;
@@ -1117,27 +1118,27 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
                 {
                     p_text_out((i == 1 && i == bc - 1) ? " " : ", ");
                     if (i == bc - 1)
-                        p_text_out("and ");
+                        p_text_out(ui_text("and "));
                 }
                 
                 /* Color curse-related text in violet */
                 if (strstr(bad[i], "Oath of Fëanor"))
                 {
-                    p_text_out("is ");
-                    p_text_out_c(TERM_VIOLET, "bound by the Oath of Fëanor");
-                    p_text_out(" (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were five levels deeper even in your inventory");
+                    p_text_out(ui_text("is "));
+                    p_text_out_c(TERM_VIOLET, ui_text("bound by the Oath of Fëanor"));
+                    p_text_out(ui_text(" (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were five levels deeper even in your inventory"));
                 }
                 else if (strstr(bad[i], "cursed"))
                 {
                     if (strstr(bad[i], "heavily"))
                     {
-                        p_text_out("is ");
-                        p_text_out_c(TERM_VIOLET, "heavily cursed");
+                        p_text_out(ui_text("is "));
+                        p_text_out_c(TERM_VIOLET, ui_text("heavily cursed"));
                     }
                     else
                     {
-                        p_text_out("is ");
-                        p_text_out_c(TERM_VIOLET, "cursed");
+                        p_text_out(ui_text("is "));
+                        p_text_out_c(TERM_VIOLET, ui_text("cursed"));
                     }
                 }
                 else
@@ -1145,20 +1146,20 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
                     /* Color darkness in dark gray/violet */
                     if (strstr(bad[i], "darkness"))
                     {
-                        p_text_out("creates an unnatural ");
-                        p_text_out_c(TERM_L_DARK, "darkness");
+                        p_text_out(ui_text("creates an unnatural "));
+                        p_text_out_c(TERM_L_DARK, ui_text("darkness"));
                     }
                     /* Color fear/panic in violet */
                     else if (strstr(bad[i], "panic"))
                     {
-                        p_text_out("causes you to ");
-                        p_text_out_c(TERM_VIOLET, "panic");
-                        p_text_out(" in combat");
+                        p_text_out(ui_text("causes you to "));
+                        p_text_out_c(TERM_VIOLET, ui_text("panic"));
+                        p_text_out(ui_text(" in combat"));
                     }
                     /* Default red for other bad effects */
                     else
                     {
-                        p_text_out_c(TERM_L_RED, bad[i]);
+                        p_text_out_c(TERM_L_RED, ui_text(bad[i]));
                     }
                 }
             }
@@ -1173,26 +1174,26 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
                 {
                     p_text_out((i == 1 && i == bc - 1) ? " " : ", ");
                     if (i == bc - 1)
-                        p_text_out("and ");
+                        p_text_out(ui_text("and "));
                 }
                 
                 /* Color darkness in dark gray */
                 if (strstr(bad[i], "darkness"))
                 {
-                    p_text_out("creates an unnatural ");
-                    p_text_out_c(TERM_L_DARK, "darkness");
+                    p_text_out(ui_text("creates an unnatural "));
+                    p_text_out_c(TERM_L_DARK, ui_text("darkness"));
                 }
                 /* Color fear/panic in violet */
                 else if (strstr(bad[i], "panic"))
                 {
-                    p_text_out("causes you to ");
-                    p_text_out_c(TERM_VIOLET, "panic");
-                    p_text_out(" in combat");
+                    p_text_out(ui_text("causes you to "));
+                    p_text_out_c(TERM_VIOLET, ui_text("panic"));
+                    p_text_out(ui_text(" in combat"));
                 }
                 /* Default red for other bad effects */
                 else
                 {
-                    p_text_out_c(TERM_L_RED, bad[i]);
+                    p_text_out_c(TERM_L_RED, ui_text(bad[i]));
                 }
             }
         }
@@ -1255,18 +1256,18 @@ static void describe_item_activation(
         }
 
         /* Some artefacts can be activated */
-        SDL_strlcat(random_name, act_description[a_ptr->activation], max);
+        SDL_strlcat(random_name, ui_text(act_description[a_ptr->activation]), max);
 
         /* Output the number of turns */
         if (a_ptr->time && a_ptr->randtime)
             SDL_strlcat(random_name,
-                format(" every %d+d%d turns", a_ptr->time, a_ptr->randtime),
+                format(ui_text(" every %d+d%d turns"), a_ptr->time, a_ptr->randtime),
                 max);
         else if (a_ptr->time)
-            SDL_strlcat(random_name, format(" every %d turns", a_ptr->time), max);
+            SDL_strlcat(random_name, format(ui_text(" every %d turns"), a_ptr->time), max);
         else if (a_ptr->randtime)
             SDL_strlcat(
-                random_name, format(" every d%d turns", a_ptr->randtime), max);
+                random_name, format(ui_text(" every d%d turns"), a_ptr->randtime), max);
 
         return;
     }
@@ -1280,11 +1281,11 @@ static bool describe_activation(const object_type* o_ptr, u32b f3)
     /* Check for the activation flag */
     if (f3 & TR3_ACTIVATE)
     {
-        char act_desc[120];
+        char act_desc[256];
 
         u16b size;
 
-        SDL_strlcpy(act_desc, "It activates for ", sizeof(act_desc));
+        SDL_strlcpy(act_desc, ui_text("It activates for "), sizeof(act_desc));
 
         /*get the size of the file*/
         size = strlen(act_desc);
@@ -1357,13 +1358,13 @@ static bool describe_abilities(const object_type* o_ptr)
     {
         /* Output intro */
         if (ac == 1)
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
         else
-            p_text_out("It ");
+            p_text_out(ui_text("It "));
         
-        p_text_out_c(TERM_L_BLUE, "grants");
-        p_text_out(" you the ");
-        p_text_out_c(TERM_L_BLUE, (ac == 1 ? "ability" : "abilities"));
+        p_text_out_c(TERM_L_BLUE, ui_text("grants"));
+        p_text_out(ui_text(" you the "));
+        p_text_out_c(TERM_L_BLUE, (ac == 1 ? ui_text("ability") : ui_text("abilities")));
         p_text_out(": ");
 
         /* Output list in light blue */
@@ -1377,7 +1378,7 @@ static bool describe_abilities(const object_type* o_ptr)
                 sizeof(cruel_blow_bonus),
                 MIN_DEPTH_ITEM_BONUS_CRUEL_BLOW_EQUIPPED);
             strnfmt(cruel_blow_desc, sizeof(cruel_blow_desc),
-                "When equipped, its Cruel Blow grant speeds min depth by the same amount as equipped Deep Call (+%s), even if disabled.  ",
+                ui_text("When equipped, its Cruel Blow grant speeds min depth by the same amount as equipped Deep Call (+%s), even if disabled.  "),
                 cruel_blow_bonus);
             p_text_out(cruel_blow_desc);
         }
@@ -1398,7 +1399,7 @@ static bool describe_archery(const object_type* o_ptr)
     if (o_ptr->tval == TV_BOW)
     {
         p_text_out(format(
-            "It can shoot arrows %d squares (with your current strength).",
+            ui_text("It can shoot arrows %d squares (with your current strength)."),
             archery_range(o_ptr)));
         return (true);
     }
@@ -1409,14 +1410,14 @@ static bool describe_archery(const object_type* o_ptr)
         {
             if (o_ptr->number == 1)
             {
-                p_text_out(format("It can be shot %d squares (with your "
-                                  "current strength and bow).",
+                p_text_out(format(ui_text("It can be shot %d squares (with your "
+                                  "current strength and bow)."),
                     archery_range(&inventory[INVEN_BOW])));
             }
             else
             {
-                p_text_out(format("They can be shot %d squares (with your "
-                                  "current strength and bow).",
+                p_text_out(format(ui_text("They can be shot %d squares (with your "
+                                  "current strength and bow)."),
                     archery_range(&inventory[INVEN_BOW])));
             }
         }
@@ -1424,11 +1425,11 @@ static bool describe_archery(const object_type* o_ptr)
         {
             if (o_ptr->number == 1)
             {
-                p_text_out("It can be shot by a bow.");
+                p_text_out(ui_text("It can be shot by a bow."));
             }
             else
             {
-                p_text_out("They can be shot by a bow.");
+                p_text_out(ui_text("They can be shot by a bow."));
             }
         }
         return (true);
@@ -1447,13 +1448,13 @@ static bool describe_weapon_damage(const object_type* o_ptr)
     if (!object_compare_weapon_damage(o_ptr, &actual_dd, &actual_ds))
         return false;
 
-    cptr attack = o_ptr->tval == TV_BOW ? "It shoots arrows for" : "It does";
+    cptr attack = o_ptr->tval == TV_BOW ? ui_text("It shoots arrows for") : ui_text("It does");
     if (o_ptr->dd != actual_dd || o_ptr->ds != actual_ds)
         p_text_out(format(
-            "%s %dd%d damage (%dd%d when equipped with your current strength and abilities).",
+            ui_text("%s %dd%d damage (%dd%d when equipped with your current strength and abilities)."),
             attack, o_ptr->dd, o_ptr->ds, actual_dd, actual_ds));
     else
-        p_text_out(format("%s %dd%d damage.", attack, actual_dd, actual_ds));
+        p_text_out(format(ui_text("%s %dd%d damage."), attack, actual_dd, actual_ds));
     return true;
 }
 
@@ -1506,7 +1507,7 @@ static bool describe_potion_throw(const object_type* o_ptr)
         break;
     }
 
-    output_desc_list("If thrown, it ", good, gc);
+    output_desc_list(ui_text("If thrown, it "), good, gc);
     return true;
 }
 
@@ -1524,29 +1525,11 @@ static int object_info_inventory_volume(const object_type* o_ptr)
     return inventory_limit_space_for_object(o_ptr);
 }
 
-bool object_info_out(const object_type* o_ptr)
+static bool object_info_properties_out(const object_type* o_ptr,
+    u32b f1, u32b f2, u32b f3, u32b f4)
 {
-    u32b f1, f2, f3, f4;
-    u32b ff1, ff2, ff3, ff4;
     bool something = false;
-    bool known_only = (object_info_out_flags == object_flags_known);
 
-    /* Grab the object flags */
-    object_info_out_flags(o_ptr, &f1, &f2, &f3);
-    if (known_only)
-        object_flags_known4(o_ptr, &ff1, &ff2, &ff3, &f4);
-    else
-        object_flags4(o_ptr, &ff1, &ff2, &ff3, &f4);
-
-    /* Hack - grab the ID-independent flags */
-    /* Used to show handedness even when not ID'd */
-    object_flags4(o_ptr, &ff1, &ff2, &ff3, &ff4);
-
-    /* Describe the object */
-    if (describe_consumable_healing(o_ptr))
-        something = true;
-    if (describe_potion_throw(o_ptr))
-        something = true;
     if (describe_stats(o_ptr, f1))
         something = true;
     if (describe_neg_stats(o_ptr, f1))
@@ -1574,6 +1557,31 @@ bool object_info_out(const object_type* o_ptr)
     if (describe_abilities(o_ptr))
         something = true;
 
+    return something;
+}
+
+bool object_info_out(const object_type* o_ptr)
+{
+    u32b f1, f2, f3, f4;
+    u32b ff1, ff2, ff3, ff4;
+    bool something = false;
+    bool known_only = (object_info_out_flags == object_flags_known);
+
+    object_info_out_flags(o_ptr, &f1, &f2, &f3);
+    if (known_only)
+        object_flags_known4(o_ptr, &ff1, &ff2, &ff3, &f4);
+    else
+        object_flags4(o_ptr, &ff1, &ff2, &ff3, &f4);
+
+    /* Handedness is visible even when the item is unidentified. */
+    object_flags4(o_ptr, &ff1, &ff2, &ff3, &ff4);
+
+    if (describe_consumable_healing(o_ptr))
+        something = true;
+    if (describe_potion_throw(o_ptr))
+        something = true;
+    if (object_info_properties_out(o_ptr, f1, f2, f3, f4))
+        something = true;
     if (describe_handedness(o_ptr, ff3))
         something = true;
     if (describe_polearmness(ff3))
@@ -1585,6 +1593,59 @@ bool object_info_out(const object_type* o_ptr)
 
     /* We are done. */
     return something;
+}
+
+static struct {
+    char* text;
+    size_t capacity, length;
+} effect_text;
+
+static void object_info_append_effect(byte attr, cptr text)
+{
+    (void)attr;
+    int len = utf8_safe_prefix_len(text,
+        (int)(effect_text.capacity - effect_text.length - 1));
+    memcpy(effect_text.text + effect_text.length, text, (size_t)len);
+    effect_text.length += len;
+    effect_text.text[effect_text.length] = '\0';
+}
+
+void object_info_effect_text(const object_type* o_ptr, const u32b mask[4],
+    char* text, size_t size)
+{
+    if (!size) return;
+    text[0] = '\0';
+    if (!o_ptr->k_idx) return;
+
+    object_type known = *o_ptr;
+    known.ident |= IDENT_KNOWN | IDENT_SPOIL;
+    u32b flags[4];
+    object_flags4(&known, &flags[0], &flags[1], &flags[2], &flags[3]);
+    if (mask)
+    {
+        for (int i = 0; i < 4; i++) flags[i] &= mask[i];
+        if (!(flags[2] & (TR3_LIGHT_CURSE | TR3_HEAVY_CURSE | TR3_PERMA_CURSE)))
+            known.ident &= ~IDENT_CURSED;
+    }
+
+    void (*old_hook)(byte, cptr) = text_out_hook;
+    bool old_paragraph = new_paragraph;
+    effect_text.text = text;
+    effect_text.capacity = size;
+    effect_text.length = 0;
+    text_out_hook = object_info_append_effect;
+    new_paragraph = false;
+    object_info_properties_out(&known, flags[0], flags[1], flags[2], flags[3]);
+    if (mask)
+    {
+        describe_handedness(&known, flags[2]);
+        describe_polearmness(flags[2]);
+    }
+    new_paragraph = old_paragraph;
+    text_out_hook = old_hook;
+    while (effect_text.length > 0
+        && text[effect_text.length - 1] == ' ')
+        text[--effect_text.length] = '\0';
 }
 
 typedef struct object_lore_profile
@@ -2411,7 +2472,7 @@ static bool screen_out_head(const object_type* o_ptr)
     if (o_ptr->obj_note && quark_str(o_ptr->obj_note)[0])
     {
         text_out("\n\n");
-        text_out_c(TERM_L_BLUE, "Inscription: ");
+        text_out_c(TERM_L_BLUE, ui_text("Inscription: "));
         text_out(quark_str(o_ptr->obj_note));
         has_description = true;
     }
@@ -2514,7 +2575,7 @@ void note_info_screen(const object_type* o_ptr)
 
     /* Note intro */
     Term_gotoxy(text_out_indent, 0);
-    text_out_c(TERM_L_WHITE + TERM_SHADE, "The note here reads:\n\n");
+    text_out_c(TERM_L_WHITE + TERM_SHADE, ui_text("The note here reads:\n\n"));
 
     /* Note text */
     Term_gotoxy(text_out_indent, 2);
@@ -2522,7 +2583,7 @@ void note_info_screen(const object_type* o_ptr)
 
     /* Note outro */
     text_out_c(TERM_L_WHITE + TERM_SHADE, steamdeck_controls_active()
-        ? "\n\n<B> back\n" : "\n\n(press any key)\n");
+        ? ui_text("\n\n<B> back\n") : ui_text("\n\n(press any key)\n"));
 
     /* Reset text_out() vars */
     text_out_wrap = 0;
@@ -2553,7 +2614,7 @@ static void object_info_screen_multi_body(const object_type** objects,
 {
     if (compare)
     {
-        text_out_c(TERM_L_BLUE, "Selected item\n");
+        text_out_c(TERM_L_BLUE, ui_text("Selected item\n"));
         object_info_item_header_out(objects[0]);
         text_out("\n\n");
         object_compare_summary_out(objects, headings, count);
@@ -2589,18 +2650,18 @@ static void object_info_screen_multi_body(const object_type** objects,
 
                 if (!object_known_p(objects[i]))
                 {
-                    p_text_out("\n\n   This item has not been identified.");
+                    p_text_out(ui_text("\n\n   This item has not been identified."));
                 }
                 else if ((!has_description) && (!has_info))
                 {
                     p_text_out(
-                        "\n\n   This item does not seem to possess any special abilities.");
+                        ui_text("\n\n   This item does not seem to possess any special abilities."));
                 }
             }
         }
         else
         {
-            p_text_out("\n   (slot is empty)");
+            p_text_out(ui_text("\n   (slot is empty)"));
         }
     }
 }

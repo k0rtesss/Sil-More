@@ -39,6 +39,7 @@ typedef struct { int x, y, w, h; } SDL_Rect;
 __CONSTANTS__
 __PRESS_STATE__
 static touch_round_press_state g_touch_round_press;
+static Uint64 touch_round_event_start_time;
 static struct { bool need_present; } g_state;
 static Uint64 now;
 static int g_touch_round_last_dir;
@@ -78,19 +79,21 @@ CANCEL(sdl_touch_top_panel_cancel_press)
 CANCEL(sdl_touch_swipe_cancel)
 __FUNCTIONS__
 
-static void begin(float x, float y)
+static void begin_event(float x, float y, Uint64 event_time)
 {
     sdl_touch_round_cancel_press(); now=1000000000ULL;
     sends=0; sent_dir=0; sent_ctrl=false; sent_run=false;
     g_touch_round_last_dir=4; suppressed=false; aiming=false; overlay=false;
-    assert(sdl_touch_round_handle_pointer_down(x,y,7));
+    assert(sdl_touch_round_handle_pointer_down(x,y,7,event_time));
 }
+static void begin(float x, float y)
+{ begin_event(x,y,0); }
 static void motion(float x, float y)
 { now+=50000000ULL; assert(sdl_touch_round_handle_pointer_motion(x,y,7)); }
 static void release(float x, float y, int ms)
 {
     now=1000000000ULL+(Uint64)ms*1000000ULL;
-    assert(sdl_touch_round_handle_pointer_up(x,y,7));
+    assert(sdl_touch_round_handle_pointer_up(x,y,7,0));
     assert(!g_touch_round_press.active);
 }
 static void check(float r)
@@ -127,6 +130,24 @@ static void check(float r)
     assert(sends==1 && sent_dir==6 && !sent_ctrl && !sent_run);
     begin(radius*0.8f,0); release(radius*0.8f,0,650);
     assert(sends==1 && sent_dir==6 && sent_ctrl && !sent_run);
+
+    /* Both event times, independent of when a frame lets SDL dispatch them. */
+    begin_event(radius*0.8f,0,950000000ULL);
+    now=1650000000ULL;
+    assert(sdl_touch_round_handle_pointer_up(radius*0.8f,0,7,1050000000ULL));
+    assert(sends==1 && sent_dir==6 && !sent_ctrl && !sent_run);
+    begin_event(radius*0.8f,0,200000000ULL);
+    assert(sdl_touch_round_handle_pointer_up(radius*0.8f,0,7,850000000ULL));
+    assert(sends==1 && sent_dir==6 && sent_ctrl && !sent_run);
+
+    /* Bad ordering cannot underflow; mixed timestamp sources use dispatch. */
+    begin_event(radius*0.8f,0,950000000ULL);
+    now=1650000000ULL;
+    assert(sdl_touch_round_handle_pointer_up(radius*0.8f,0,7,940000000ULL));
+    assert(sends==1 && sent_dir==6 && !sent_ctrl && !sent_run);
+    begin_event(radius*0.8f,0,200000000ULL);
+    release(radius*0.8f,0,150);
+    assert(sends==1 && sent_dir==6 && !sent_ctrl && !sent_run);
     begin(radius*0.8f,0); motion(0,0); release(0,0,150);
     assert(sends==0);
 
@@ -140,15 +161,15 @@ static void check(float r)
     /* Another finger cannot finish the owner's press; cancellation cannot fire. */
     begin(0,0);
     assert(!sdl_touch_round_handle_pointer_motion(inner,0,8));
-    assert(!sdl_touch_round_handle_pointer_up(inner,0,8));
+    assert(!sdl_touch_round_handle_pointer_up(inner,0,8,0));
     assert(sends==0 && g_touch_round_press.active);
     sdl_touch_round_cancel_press();
-    assert(!sdl_touch_round_handle_pointer_up(inner,0,7)); assert(sends==0);
+    assert(!sdl_touch_round_handle_pointer_up(inner,0,7,0)); assert(sends==0);
     begin(0,0); suppressed=true;
-    assert(!sdl_touch_round_handle_pointer_up(inner,0,7));
+    assert(!sdl_touch_round_handle_pointer_up(inner,0,7,0));
     assert(sends==0 && !g_touch_round_press.active);
     suppressed=false; overlay=true;
-    assert(!sdl_touch_round_handle_pointer_down(0,0,7));
+    assert(!sdl_touch_round_handle_pointer_down(0,0,7,0));
     assert(!g_touch_round_press.active);
     printf("Direction wheel radius %.0f: repeat, cancelled drags, move/run/alter, aim and ownership PASS\n",r);
 }
@@ -164,7 +185,8 @@ def main():
     press = re.search(r"TOUCH_PANE_LONG_PRESS_MS\s*=\s*(\d+)", header)
     assert press, "long-press threshold"
     constants += "\n#define TOUCH_PANE_LONG_PRESS_MS " + press.group(1)
-    names = ["sdl_touch_round_dir_for_delta", "sdl_touch_round_point_to_wheel",
+    names = ["sdl_touch_press_elapsed", "sdl_touch_press_event_elapsed",
+             "sdl_touch_round_dir_for_delta", "sdl_touch_round_point_to_wheel",
              "sdl_touch_round_drag_is_run", "sdl_touch_round_send_dir",
              "sdl_touch_round_cancel_press", "sdl_touch_round_handle_pointer_down",
              "sdl_touch_round_handle_pointer_motion", "sdl_touch_round_handle_pointer_up"]

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -321,7 +322,7 @@ static void quest_status_reset_page(int col, int *row)
     ui_menu_click_set_hover_enabled(true);
     ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
     sdl_hint_quest_menu_begin(HINT_QUEST_PAGE_QUESTS,
-        "Hints & Quests", "Quest Status", true, false, 0);
+        ui_text("Hints & Quests"), ui_text("Quest Status"), true, false, 0);
     if (row)
         *row = 0;
 }
@@ -331,7 +332,7 @@ static void quest_status_put_line(int col, int hgt, int *row, byte color, cptr t
     int indent = MAX(0, (col - quest_status_content_col) / 2);
 
     (void)hgt;
-    sdl_hint_quest_menu_add_block(text ? text : "", color, indent, 0);
+    sdl_hint_quest_menu_add_block(text ? ui_text(text) : "", color, indent, 0);
     if (row)
         (*row)++;
 }
@@ -343,7 +344,7 @@ static void quest_status_put_wrapped(int col, int wid, int hgt, int *row,
 
     (void)wid;
     (void)hgt;
-    sdl_hint_quest_menu_add_block(text ? text : "", color, indent, 0);
+    sdl_hint_quest_menu_add_block(text ? ui_text(text) : "", color, indent, 0);
     if (row)
         (*row)++;
 }
@@ -360,7 +361,7 @@ static void quest_status_put_main_step(int col, int hgt, int *row,
         color = TERM_WHITE;
 
     strnfmt(line, sizeof(line), "%s %s",
-        complete ? "[done]" : (current ? ">" : "[ ]"), text);
+        complete ? ui_text("[done]") : (current ? ">" : "[ ]"), ui_text(text));
     quest_status_put_line(col, hgt, row, color, line);
 }
 
@@ -380,7 +381,7 @@ static void quest_status_put_main_quest(int col, int wid, int hgt, int *row)
     if (!reached_morgoth)
     {
         strnfmt(objective, sizeof(objective),
-            "Current objective: Reach Morgoth's level at %d ft.",
+            ui_text("Current objective: Reach Morgoth's level at %d ft."),
             MORGOTH_DEPTH * 50);
     }
     else if (!found_throne)
@@ -708,7 +709,7 @@ static void quest_minimum_reward_add(char* out, size_t size, cptr text)
 {
     if (!text || !text[0]) return;
     if (out[0]) SDL_strlcat(out, ", ", size);
-    SDL_strlcat(out, text, size);
+    SDL_strlcat(out, ui_text(text), size);
 }
 
 static void quest_minimum_reward(int quest_idx, char* out, size_t size)
@@ -740,14 +741,14 @@ static void quest_minimum_reward(int quest_idx, char* out, size_t size)
     for (int i = 0; i < A_MAX; i++)
         if (quest->stat_bonuses[i])
         {
-            strnfmt(part, sizeof(part), "+%d %s (up to cap)",
-                quest->stat_bonuses[i], stat_names[i]);
+            strnfmt(part, sizeof(part), ui_text("+%d %s (up to cap)"),
+                quest->stat_bonuses[i], ui_text(stat_names[i]));
             quest_minimum_reward_add(out, size, part);
         }
     if (quest->skill_bonus && quest->skill_type < S_MAX)
     {
         strnfmt(part, sizeof(part), "+%d %s", quest->skill_bonus,
-            skill_names_full[quest->skill_type]);
+            ui_text(skill_names_full[quest->skill_type]));
         quest_minimum_reward_add(out, size, part);
     }
     if (quest->ability_type == S_SPC && quest->ability_id < ABILITIES_MAX
@@ -760,7 +761,7 @@ static void quest_minimum_reward(int quest_idx, char* out, size_t size)
     if (quest->oath_id && oath_info && oath_name_text
         && quest->oath_id < z_info->oath_max)
     {
-        strnfmt(part, sizeof(part), "unlock %s for future characters",
+        strnfmt(part, sizeof(part), ui_text("unlock %s for future characters"),
             get_oath_name_from_id(quest->oath_id));
         quest_minimum_reward_add(out, size, part);
     }
@@ -783,8 +784,8 @@ void quest_minimum_summary(int quest_idx, bool complete, char* out, size_t size)
     saved_rng = Rand_state_export();
     quest_minimum_objective(quest_idx, objective, sizeof(objective));
     quest_minimum_reward(quest_idx, reward, sizeof(reward));
-    strnfmt(out, size, "%sObjective: %s  Reward: %s.",
-        complete ? "Completed. " : "", objective, reward);
+    strnfmt(out, size, ui_text("%sObjective: %s  Reward: %s."),
+        complete ? ui_text("Completed. ") : "", ui_text(objective), reward);
     Rand_state_pop(saved_rng);
 }
 
@@ -869,8 +870,8 @@ static bool quest_status_put_minimum(int col, int wid, int hgt, int* row)
     char line[768];
 
     quest_status_put_line(col, hgt, row, TERM_ORANGE, "Main Quest: The Silmaril");
-    strnfmt(line, sizeof(line), "Objective: %s. Reward: a Silmaril and victory.",
-        main_objective);
+    strnfmt(line, sizeof(line), ui_text("Objective: %s. Reward: a Silmaril and victory."),
+        ui_text(main_objective));
     quest_status_put_wrapped(col, wid, hgt, row, TERM_WHITE, line);
     quest_status_put_line(col, hgt, row, TERM_WHITE, "");
 
@@ -886,7 +887,7 @@ static bool quest_status_put_minimum(int col, int wid, int hgt, int* row)
         rewarded = quest_minimum_rewarded(id, state) && !failed;
         status = failed ? "Failed" : rewarded ? "Reward claimed"
             : completed ? "Complete; return for reward" : "Active";
-        strnfmt(line, sizeof(line), "%s - %s", quest_minimum_name(id), status);
+        strnfmt(line, sizeof(line), "%s - %s", quest_minimum_name(id), ui_text(status));
         quest_status_put_line(col, hgt, row, failed ? TERM_RED
             : completed ? TERM_L_GREEN : TERM_YELLOW, line);
         quest_minimum_summary(id, false, line, sizeof(line));
@@ -894,13 +895,13 @@ static bool quest_status_put_minimum(int col, int wid, int hgt, int* row)
         if (id == QUEST_ID_NIENA
             && (state == NIENA_QUEST_ACTIVE || state == NIENA_QUEST_FAILED))
         {
-            strnfmt(line, sizeof(line), "Seen: %d; killed: %d.",
+            strnfmt(line, sizeof(line), ui_text("Seen: %d; killed: %d."),
                 p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
             quest_status_put_line(col, hgt, row, TERM_SLATE, line);
         }
         if (id == QUEST_ID_OROME && state == OROME_QUEST_ACTIVE)
         {
-            strnfmt(line, sizeof(line), "Wolves %d/100; spiders %d/80; serpents %d/60; vampires %d/30.",
+            strnfmt(line, sizeof(line), ui_text("Wolves %d/100; spiders %d/80; serpents %d/60; vampires %d/30."),
                 p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
                 p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
             quest_status_put_wrapped(col, wid, hgt, row, TERM_SLATE, line);
@@ -1103,7 +1104,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                     quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, processed_challenge);
                 }
                 log_trace("QUEST STATUS: Calling get_quest_reward_text for TULKAS (GIVER_PRESENT)");
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_TULKAS));
                 log_trace("QUEST STATUS: Reward text result: '%s'", buf);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
@@ -1115,7 +1116,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                     cptr processed_challenge = process_quest_placeholders(quest_challenge, QUEST_ID_TULKAS);
                     log_trace("QUEST STATUS: process_quest_placeholders returned: '%s'", processed_challenge ? processed_challenge : "NULL");
                     quest_status_put_wrapped(col, wid, hgt, &row, TERM_WHITE, processed_challenge);
-                    strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS));
+                    strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_TULKAS));
                     quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                     break;
                 }
@@ -1132,7 +1133,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, tulkas_status);
                 log_trace("QUEST STATUS: Calling get_quest_reward_text for TULKAS (REWARDED)");
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_TULKAS));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s received"), get_quest_reward_text(QUEST_ID_TULKAS));
                 log_trace("QUEST STATUS: Reward text result: '%s'", buf);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
@@ -1161,20 +1162,20 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_L_BLUE;
                 quest_status_put_line(col + 2, hgt, &row, color, aule_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_AULE));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_AULE));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case AULE_QUEST_ACTIVE:
                 /* Use challenge text instead of hardcoded status */
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_WHITE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_AULE));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_AULE));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case AULE_QUEST_SUCCESS:
                 aule_status = "Complete - Return for reward";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, aule_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_AULE));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_AULE));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case AULE_QUEST_REWARDED:
@@ -1183,7 +1184,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 aule_status = "Completed by this character";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, aule_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_AULE));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s received"), get_quest_reward_text(QUEST_ID_AULE));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             default:
@@ -1211,7 +1212,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_L_BLUE;
                 quest_status_put_line(col + 2, hgt, &row, color, mandos_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_MANDOS));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case MANDOS_QUEST_ACTIVE:
@@ -1219,14 +1220,14 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_WHITE;
                 quest_status_put_line(col + 2, hgt, &row, color, mandos_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_MANDOS));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case MANDOS_QUEST_SUCCESS:
                 mandos_status = "Complete - Return for reward";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, mandos_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_MANDOS));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case MANDOS_QUEST_REWARDED:
@@ -1235,7 +1236,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 mandos_status = "Completed by this character";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, mandos_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s received"), get_quest_reward_text(QUEST_ID_MANDOS));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             default:
@@ -1263,24 +1264,24 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_L_BLUE;
                 quest_status_put_line(col + 2, hgt, &row, color, niena_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_NIENA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case NIENA_QUEST_ACTIVE:
-                strnfmt(buf, sizeof(buf), "Active: %d seen, %d killed",
+                strnfmt(buf, sizeof(buf), ui_text("Active: %d seen, %d killed"),
                         p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
                 niena_status = buf;
                 color = TERM_WHITE;
                 quest_status_put_line(col + 2, hgt, &row, color, niena_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_NIENA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case NIENA_QUEST_SUCCESS:
                 niena_status = "Complete - Return for reward";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, niena_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_NIENA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case NIENA_QUEST_REWARDED:
@@ -1289,11 +1290,11 @@ hint_quest_page do_cmd_quest_status_page(void)
                 niena_status = "Completed by this character";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, niena_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_NIENA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s received"), get_quest_reward_text(QUEST_ID_NIENA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case NIENA_QUEST_FAILED:
-                strnfmt(buf, sizeof(buf), "Failed: %d seen, %d killed",
+                strnfmt(buf, sizeof(buf), ui_text("Failed: %d seen, %d killed"),
                         p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
                 color = TERM_RED;
                 quest_status_put_line(col + 2, hgt, &row, color, buf);
@@ -1327,32 +1328,32 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_L_BLUE;
                 quest_status_put_line(col + 2, hgt, &row, color, orome_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_OROME));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case OROME_QUEST_ACTIVE:
                 {
-                    strnfmt(buf, sizeof(buf), "Active: Hunt the fell kindreds");
+                    strnfmt(buf, sizeof(buf), ui_text("Active: Hunt the fell kindreds"));
                     orome_status = buf;
                     color = TERM_WHITE;
                     quest_status_put_line(col + 2, hgt, &row, color, orome_status);
 
                     /* Show current kill counts for all monster types */
-                    strnfmt(buf, sizeof(buf), "Wolves killed: %d/100", p_ptr->orome_wolves_killed);
+                    strnfmt(buf, sizeof(buf), ui_text("Wolves killed: %d/100"), p_ptr->orome_wolves_killed);
                     quest_status_put_wrapped(col + 4, wid, hgt, &row,
                         p_ptr->orome_wolves_killed >= 100 ? TERM_L_GREEN : TERM_SLATE, buf);
-                    strnfmt(buf, sizeof(buf), "Spiders killed: %d/80", p_ptr->orome_spiders_killed);
+                    strnfmt(buf, sizeof(buf), ui_text("Spiders killed: %d/80"), p_ptr->orome_spiders_killed);
                     quest_status_put_wrapped(col + 4, wid, hgt, &row,
                         p_ptr->orome_spiders_killed >= 80 ? TERM_L_GREEN : TERM_SLATE, buf);
-                    strnfmt(buf, sizeof(buf), "Serpents killed: %d/60", p_ptr->orome_serpents_killed);
+                    strnfmt(buf, sizeof(buf), ui_text("Serpents killed: %d/60"), p_ptr->orome_serpents_killed);
                     quest_status_put_wrapped(col + 4, wid, hgt, &row,
                         p_ptr->orome_serpents_killed >= 60 ? TERM_L_GREEN : TERM_SLATE, buf);
-                    strnfmt(buf, sizeof(buf), "Vampires killed: %d/30", p_ptr->orome_vampires_killed);
+                    strnfmt(buf, sizeof(buf), ui_text("Vampires killed: %d/30"), p_ptr->orome_vampires_killed);
                     quest_status_put_wrapped(col + 4, wid, hgt, &row,
                         p_ptr->orome_vampires_killed >= 30 ? TERM_L_GREEN : TERM_SLATE, buf);
 
                     quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                    strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
+                    strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_OROME));
                     quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 }
                 break;
@@ -1360,7 +1361,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 orome_status = "Complete - Return for reward";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, orome_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_OROME));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case OROME_QUEST_REWARDED:
@@ -1369,7 +1370,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 orome_status = "Completed by this character";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, orome_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_OROME));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s received"), get_quest_reward_text(QUEST_ID_OROME));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             default:
@@ -1400,7 +1401,7 @@ hint_quest_page do_cmd_quest_status_page(void)
                 color = TERM_L_BLUE;
                 quest_status_put_line(col + 2, hgt, &row, color, varda_status);
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_VARDA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case VARDA_QUEST_ACTIVE:
@@ -1420,21 +1421,21 @@ hint_quest_page do_cmd_quest_status_page(void)
                     quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE,
                         "Duruin's Bastion will appear on the first level you reach after 500 ft.");
                 }
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_VARDA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case VARDA_QUEST_SUCCESS:
                 varda_status = "Complete - Claim Varda's blessing";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, varda_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s"), get_quest_reward_text(QUEST_ID_VARDA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case VARDA_QUEST_REWARDED:
                 varda_status = "Completed by this character";
                 color = TERM_L_GREEN;
                 quest_status_put_line(col + 2, hgt, &row, color, varda_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_VARDA));
+                strnfmt(buf, sizeof(buf), ui_text("Reward: %s received"), get_quest_reward_text(QUEST_ID_VARDA));
                 quest_status_put_wrapped(col, wid, hgt, &row, TERM_SLATE, buf);
                 break;
             case VARDA_QUEST_FAILED:
@@ -1550,9 +1551,9 @@ quest_status_finish:
     quest_status_put_line(col, hgt, &row, TERM_WHITE, "");
     if (minimum_text_mode && any_quests)
         sdl_hint_quest_menu_add_button(QUEST_STATUS_CLICK_STORY,
-            steamdeck_controls_active() ? "<X> Stories" : "s Stories", TERM_L_BLUE);
+            steamdeck_controls_active() ? ui_text("<X> Stories") : ui_text("s Stories"), TERM_L_BLUE);
     sdl_hint_quest_menu_add_button(HINT_QUEST_CLICK_RETURN,
-        steamdeck_controls_active() ? "<B> Back" : "Back",
+        steamdeck_controls_active() ? ui_text("<B> Back") : ui_text("Back"),
         TERM_L_WHITE);
     sdl_hint_quest_menu_finish();
     Term_fresh();

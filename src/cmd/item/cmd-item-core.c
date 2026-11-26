@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "achievements-character.h"
 #include "achievements-lore.h"
@@ -162,8 +163,8 @@ static bool cursed_item_known_to_player(const object_type* o_ptr)
 static bool confirm_known_cursed_wield(const object_type* o_ptr, int item)
 {
     ui_question_option options[2] = {
-        { 'e', "Equip anyway", TERM_ORANGE, false },
-        { 'c', "Cancel", TERM_SLATE, false }
+        { 'e', ui_text("Equip anyway"), TERM_ORANGE, false },
+        { 'c', ui_text("Cancel"), TERM_SLATE, false }
     };
     char o_name[120];
     char desc[260];
@@ -180,10 +181,10 @@ static bool confirm_known_cursed_wield(const object_type* o_ptr, int item)
         object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
 
     strnfmt(desc, sizeof(desc),
-        "You know %s is cursed. Once equipped, it may be impossible to "
-        "remove.", o_name);
+        ui_text("You know %s is cursed. Once equipped, it may be impossible to "
+        "remove."), o_name);
 
-    return ui_question_ask("Known cursed item", desc, options, 2,
+    return ui_question_ask(ui_text("Known cursed item"), desc, options, 2,
         UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1) == 0;
 }
 
@@ -419,7 +420,7 @@ static bool floor_context_add_action(floor_context_action actions[],
     if (key == ESCAPE)
         strnfmt(action->token, sizeof(action->token), "Esc %s", label);
     else if (key == ' ')
-        strnfmt(action->token, sizeof(action->token), "Space %s", label);
+        strnfmt(action->token, sizeof(action->token), ui_text("Space %s"), label);
     else if (key > 0 && key < 128 && SDL_isprint(key))
         strnfmt(action->token, sizeof(action->token), "%c %s", key, label);
     else
@@ -601,7 +602,7 @@ int floor_context_collect_square_actions(bool include_details,
     {
         char label[32];
 
-        strnfmt(label, sizeof(label), "Items (%d)...", item_count);
+        strnfmt(label, sizeof(label), ui_text("Items (%d)..."), item_count);
         floor_context_add_action(actions, capacity, &count,
             FLOOR_CONTEXT_ACTION_ITEMS, 'i', label, TERM_L_WHITE);
     }
@@ -725,16 +726,16 @@ static int choose_arrow_move_quantity(const object_type* o_ptr,
     if (partial_fit)
     {
         strnfmt(prompt, sizeof(prompt),
-            "Your %s can only hold %d of %s. Move how many? (0-%d): ",
+            ui_text("Your %s can only hold %d of %s. Move how many? (0-%d): "),
             destination, maximum, o_name, maximum);
-        return get_quantity_touch_category_force_prompt_action(prompt, "Move",
+        return get_quantity_touch_category_force_prompt_action(prompt, ui_text("Move"),
             maximum, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
     }
 
     strnfmt(prompt, sizeof(prompt),
-        "How many do you want to move from %s to your %s? ", o_name,
+        ui_text("How many do you want to move from %s to your %s? "), o_name,
         destination);
-    return get_quantity_action(prompt, "Move", maximum);
+    return get_quantity_action(prompt, ui_text("Move"), maximum);
 }
 
 static bool replace_quiver_arrows(int requested, int item)
@@ -766,14 +767,15 @@ static bool replace_quiver_arrows(int requested, int item)
             entry_slots[count] = i;
             object_choice_entry_make(&entries[count], handles[i], candidate,
                 label, handles[i] == player_quiver_selected_arrow_slot()
-                    ? "Active" : "Quiver");
+                    ? ui_text("Active") : "Quiver");
             count++;
         }
 
         strnfmt(desc, sizeof(desc),
-            "Your quiver would hold %d/%d arrows after the removals chosen "
-            "so far. Moving these arrows requires replacing %d quivered arrow%s.",
-            remaining, QUIVER_ARROW_CAPACITY, needed, needed == 1 ? "" : "s");
+            ui_text("Your quiver would hold %d/%d arrows after the removals chosen "
+                "so far. Moving these arrows requires replacing %d quivered %s."),
+            remaining, QUIVER_ARROW_CAPACITY, needed,
+            ui_text(needed == 1 ? "arrow" : "arrows"));
         if (!object_choice_overlay("What to replace?", desc, entries, count, 0,
                 &selected)
             || selected < 0 || selected >= count)
@@ -886,8 +888,8 @@ static void do_cmd_quiver_arrows(object_type* o_ptr, int item)
     p_ptr->notice |= PN_COMBINE | PN_REORDER;
     p_ptr->redraw |= PR_QUIVER;
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
-    msg_format("You place %d arrow%s in your quiver (%d/%d).", placed,
-        placed == 1 ? "" : "s", player_quiver_arrow_count(),
+    msg_format("You place %d %s in your quiver (%d/%d).", placed,
+        ui_text(placed == 1 ? "arrow" : "arrows"), player_quiver_arrow_count(),
         QUIVER_ARROW_CAPACITY);
     sound(MSG_EQUIP_BOW);
     wield_command_succeeded = true;
@@ -971,7 +973,7 @@ bool do_cmd_context_square_action_popup(void)
     }
     else if (bridge_repairable)
     {
-        SDL_strlcpy(title, "Damaged bridge", sizeof(title));
+        SDL_strlcpy(title, ui_text("Damaged bridge"), sizeof(title));
     }
     else if (floor_item)
     {
@@ -1011,22 +1013,22 @@ bool do_cmd_context_square_action_popup(void)
         bool action_is_pickup = !action_name;
 
         if (!action_only)
-            sdl_question_menu_add_button('x', "Description", TERM_L_BLUE);
+            sdl_question_menu_add_button('x', ui_text("Description"), TERM_L_BLUE);
         if (!action_is_pickup)
             sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_ACTION,
-                action_name, TERM_L_WHITE);
+                ui_text(action_name), TERM_L_WHITE);
         if (!action_only)
         {
             if (o_ptr->tval == TV_ARROW)
                 sdl_question_menu_add_button(CMD_CONTEXT_FLOOR_QUIVER,
-                    "Quiver", TERM_L_BLUE);
+                    ui_text("Quiver"), TERM_L_BLUE);
 
             if (object_can_choose_pack_or_harness(o_ptr))
             {
                 /* Space opens the Pack/Harness destination chooser.  Keep
                  * this as one Pick Up action so the popup does not offer a
                  * second storage choice after the player selects Harness. */
-                sdl_question_menu_add_button(' ', "Pick Up", TERM_L_WHITE);
+                sdl_question_menu_add_button(' ', ui_text("Pick Up"), TERM_L_WHITE);
             }
             else
             {
@@ -1251,15 +1253,15 @@ bool touch_shortcut_context_action(int binding, bool description_open,
              * the context popup, so this reaches do_cmd_alter() on the
              * crossing beneath the player. */
             key = ' ';
-            name = "Repair bridge";
+            name = ui_text("Repair bridge");
         } else if (cave_down_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';
-            name = "Go Down";
+            name = ui_text("Go Down");
         } else if (cave_up_stairs_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which asks before changing levels. */
             key = ' ';
-            name = "Go Up";
+            name = ui_text("Go Up");
         } else if (cave_forge_bold(p_ptr->py, p_ptr->px)) {
             /* Space runs interact-here, which opens the smithing screen. */
             key = ' ';
@@ -1271,7 +1273,7 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             if (item_count > 1)
             {
                 key = CMD_CONTEXT_FLOOR_ACTION;
-                strnfmt(context_name, sizeof(context_name), "Items (%d)...",
+                strnfmt(context_name, sizeof(context_name), ui_text("Items (%d)..."),
                     item_count);
                 name = context_name;
             }
@@ -1300,13 +1302,13 @@ bool touch_shortcut_context_action(int binding, bool description_open,
             return false;
         /* Keep Space so the interact-here command supplies the confirmation. */
         key = ' ';
-        name = "Go Up";
+        name = ui_text("Go Up");
     } else if (binding == '>') {
         if (!cave_down_stairs_bold(p_ptr->py, p_ptr->px))
             return false;
         /* Keep Space so the interact-here command supplies the confirmation. */
         key = ' ';
-        name = "Go Down";
+        name = ui_text("Go Down");
     } else if (binding == 'u') {
         int floor_item = first_floor_item_under_player();
         floor_context_action selected;
@@ -1341,7 +1343,7 @@ bool touch_shortcut_context_action(int binding, bool description_open,
                 name = "Use";
             }
         } else {
-            name = "Description";
+            name = ui_text("Description");
         }
     } else {
         return false;
@@ -1617,12 +1619,12 @@ static bool open_inventory_replacement_menu_with_action(
     }
     if (reason && reason[0])
     {
-        strnfmt(desc, sizeof(desc), "%s\nPicking up: %s", reason,
+        strnfmt(desc, sizeof(desc), ui_text("%s\nPicking up: %s"), reason,
             incoming_summary);
     }
     else
     {
-        strnfmt(desc, sizeof(desc), "Picking up: %s", incoming_summary);
+        strnfmt(desc, sizeof(desc), ui_text("Picking up: %s"), incoming_summary);
     }
 
     if (!object_choice_overlay("What to replace?", desc, entries, count, 0,
@@ -1692,12 +1694,12 @@ static void format_storage_exchange_reason(const object_type* incoming,
     limit = inventory_limit_limit_for_group(group);
     left = MAX(limit - used, 0);
     strnfmt(buf, buflen,
-        "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). Choose an "
-        "item to move to your %s; %s will move to your %s.",
-        inventory_limit_group_name(group), used / 10, ABS(used % 10),
+        ui_text("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left). Choose an "
+        "item to move to your %s; %s will move to your %s."),
+        ui_text(inventory_limit_group_name(group)), used / 10, ABS(used % 10),
         limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
-        inventory_limit_group_name(source_group), incoming_name,
-        inventory_limit_group_name(group));
+        ui_text(inventory_limit_group_name(source_group)), incoming_name,
+        ui_text(inventory_limit_group_name(group)));
 }
 
 static bool open_inventory_storage_exchange_menu(
@@ -1944,8 +1946,8 @@ static bool replace_pack_item_for_arrow_move(const object_type* incoming)
         return false;
     }
     strnfmt(reason, sizeof(reason),
-        "No room in Pack: %d.%d/%d.%d qt used; %d.%d qt left, %d.%d qt "
-        "needed. Choose an item to drop.",
+        ui_text("No room in Pack: %d.%d/%d.%d qt used; %d.%d qt left, %d.%d qt "
+        "needed. Choose an item to drop."),
         used / 10, ABS(used % 10), limit / 10, ABS(limit % 10), left / 10,
         ABS(left % 10), needed / 10, ABS(needed % 10));
 
@@ -2049,8 +2051,8 @@ static bool do_cmd_unquiver_pack_arrow(int item)
     p_ptr->notice |= PN_COMBINE | PN_REORDER;
     p_ptr->redraw |= PR_QUIVER;
     p_ptr->window |= PW_INVEN | PW_EQUIP | PW_PLAYER_0;
-    msg_format("You move %d arrow%s from your quiver to your Pack.", placed,
-        placed == 1 ? "" : "s");
+    msg_format("You move %d %s from your quiver to your Pack.", placed,
+        ui_text(placed == 1 ? "arrow" : "arrows"));
     return true;
 }
 
@@ -2085,11 +2087,27 @@ static bool item_storage_destination_available(const object_type* o_ptr,
         if (limit < 0)
             limit = inventory_limit_limit_for_group(group);
         left = MAX(limit - used, 0);
-        msg_format("No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
-                   "this move needs %d.%d qt.",
-            inventory_limit_group_name(group), used / 10, ABS(used % 10),
+        cptr fmt = "No room in %s: %d.%d/%d.%d qt used (%d.%d qt left); "
+                   "this move needs %d.%d qt.";
+        cptr name = inventory_limit_group_name(group);
+        cptr localized_fmt = ui_message_text(fmt);
+        if (localized_fmt == fmt)
+        {
+            msg_format(fmt, name, used / 10, ABS(used % 10),
+                limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
+                needed / 10, ABS(needed % 10));
+            return false;
+        }
+
+        char english[1024];
+        char localized[1024];
+        strnfmt(english, sizeof(english), fmt, name, used / 10, ABS(used % 10),
             limit / 10, ABS(limit % 10), left / 10, ABS(left % 10),
             needed / 10, ABS(needed % 10));
+        strnfmt(localized, sizeof(localized), localized_fmt, ui_text(name),
+            used / 10, ABS(used % 10), limit / 10, ABS(limit % 10),
+            left / 10, ABS(left % 10), needed / 10, ABS(needed % 10));
+        msg_print_localized(english, localized);
     }
 
     return false;
@@ -2128,9 +2146,9 @@ static int choose_storage_exchange_quantity(const object_type* incoming,
 
     object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
     strnfmt(prompt, sizeof(prompt),
-        "Only %d of %s fit after the exchange. Move how many? (0-%d): ",
+        ui_text("Only %d of %s fit after the exchange. Move how many? (0-%d): "),
         maximum, incoming_name, maximum);
-    return get_quantity_touch_category_force_prompt_action(prompt, "Move",
+    return get_quantity_touch_category_force_prompt_action(prompt, ui_text("Move"),
         maximum, SDL_TOUCH_MENU_CATEGORY_INVENTORY_EQUIPMENT);
 }
 
@@ -2657,8 +2675,8 @@ static bool plan_floor_wield_replacements(
         char reason[280];
 
         strnfmt(reason, sizeof(reason),
-            "No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
-            "Incoming needs %d.%d qt; choose an item to drop.",
+            ui_text("No room in Harness: %d.%d/%d.%d qt used (%d.%d qt left). "
+            "Incoming needs %d.%d qt; choose an item to drop."),
             projected_used / 10, projected_used % 10, limit / 10, limit % 10,
             left / 10, left % 10, needed / 10, needed % 10);
 
@@ -3212,18 +3230,37 @@ void do_cmd_equip(void)
     do_cmd_equip_direct();
 }
 
+static void report_cursed_equipped_item(int slot, bool moving)
+{
+    cptr fmt = moving ? "You cannot bear to move the %s you are %s."
+                      : "You cannot bear to give up the %s you are %s.";
+    cptr use = describe_use(slot);
+    char name[80];
+    object_desc(name, sizeof(name), &inventory[slot], false, 0);
+
+    cptr localized_fmt = ui_message_text(fmt);
+    if (localized_fmt == fmt)
+    {
+        msg_format(fmt, name, use);
+        return;
+    }
+
+    char english[256];
+    char localized[256];
+    strnfmt(english, sizeof(english), fmt, name, use);
+    strnfmt(localized, sizeof(localized), localized_fmt, name, ui_text(use));
+    msg_print_localized(english, localized);
+}
+
 static bool wield_slot_bound_by_curse(int slot)
 {
     object_type* worn = &inventory[slot];
-    char name[80];
 
     /* Inactive reserved slots are Harness storage. */
     if (!player_equipment_slot_counts_as_equipped(slot) || !cursed_p(worn))
         return false;
 
-    object_desc(name, sizeof(name), worn, false, 0);
-    msg_format("You cannot bear to give up the %s you are %s.", name,
-        describe_use(slot));
+    report_cursed_equipped_item(slot, false);
     return true;
 }
 
@@ -3625,9 +3662,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if (player_equipment_slot_counts_as_equipped(item) && (item != slot)
         && cursed_p(o_ptr))
     {
-        object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-        msg_format("You cannot bear to move the %s you are %s.", o_name,
-            describe_use(item));
+        report_cursed_equipped_item(item, true);
         return;
     }
 
@@ -4193,31 +4228,31 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
     if ((slot == INVEN_WIELD)
         || ((slot == INVEN_ARM) && (o_ptr->tval != TV_SHIELD)))
     {
-        act = "You are wielding";
+        act = ui_text("You are wielding");
     }
     else if (slot == INVEN_BOW)
     {
-        act = "You are shooting with";
+        act = ui_text("You are shooting with");
     }
     else if (slot == INVEN_LITE)
     {
-        act = "Your light source is";
+        act = ui_text("Your light source is");
     }
     else if (slot == INVEN_HORN)
     {
-        act = "You are carrying";
+        act = ui_text("You are carrying");
     }
     else if (slot == INVEN_QUIVER1)
     {
-        act = "In your quiver you have";
+        act = ui_text("In your quiver you have");
     }
     else if (slot == INVEN_BELT)
     {
-        act = "At your belt you have";
+        act = ui_text("At your belt you have");
     }
     else
     {
-        act = "You are wearing";
+        act = ui_text("You are wearing");
     }
 
     /* Describe the result */
@@ -4581,13 +4616,7 @@ static bool jewelry_preset_current_jewelry_can_move(
             continue;
 
         if (report)
-        {
-            char o_name[80];
-
-            object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-            msg_format("You cannot bear to give up the %s you are %s.",
-                o_name, describe_use(item));
-        }
+            report_cursed_equipped_item(item, false);
         return false;
     }
 
@@ -4627,7 +4656,7 @@ static void jewelry_preset_display_name(int preset, char* buf, size_t buflen)
     if (name && name[0])
         SDL_strlcpy(buf, name, buflen);
     else
-        strnfmt(buf, buflen, "Jewelry set %d", preset + 1);
+        strnfmt(buf, buflen, ui_text("Jewelry set %d"), preset + 1);
 }
 
 bool do_cmd_jewelry_preset_apply(int preset)
@@ -4757,7 +4786,7 @@ bool do_cmd_jewelry_preset_store(int preset)
     }
 
     if (jewelry_preset_is_set(preset)
-        && !get_check(format("Replace %s? ", preset_name)))
+        && !get_check(format(ui_text("Replace %s? "), preset_name)))
     {
         return false;
     }
@@ -4787,7 +4816,7 @@ bool do_cmd_jewelry_preset_clear(int preset)
         return false;
     }
 
-    if (!get_check(format("Clear %s? ", preset_name)))
+    if (!get_check(format(ui_text("Clear %s? "), preset_name)))
         return false;
 
     jewelry_preset_clear(preset);
@@ -4811,7 +4840,7 @@ void do_cmd_jewelry_preset_shortcut(void)
         jewelry_preset_display_name(i, preset_name, sizeof(preset_name));
         strnfmt(labels[i], sizeof(labels[i]), "%s%s", preset_name,
             jewelry_preset_is_set(i)
-                ? (available ? "" : " (unavailable)") : " (empty)");
+                ? (available ? "" : ui_text(" (unavailable)")) : ui_text(" (empty)"));
         options[i].key = (char)('1' + i);
         options[i].label = labels[i];
         options[i].attr = TERM_L_WHITE;
@@ -4819,11 +4848,11 @@ void do_cmd_jewelry_preset_shortcut(void)
     }
 
     options[JEWELRY_PRESET_MAX] = (ui_question_option){
-        'j', "Open Jewelry tab", TERM_L_WHITE, false
+        'j', ui_text("Open Jewelry tab"), TERM_L_WHITE, false
     };
 
-    choice = ui_question_ask("Wear which jewelry set?",
-        "Grey choices cannot be worn right now.", options,
+    choice = ui_question_ask(ui_text("Wear which jewelry set?"),
+        ui_text("Grey choices cannot be worn right now."), options,
         JEWELRY_PRESET_MAX + 1, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
     if (choice < 0)
         return;
@@ -4998,7 +5027,7 @@ static bool confirm_drop_item_amount(object_type* o_ptr, int amt)
     object_copy(&prompt_obj, o_ptr);
     prompt_obj.number = amt;
     object_desc(prompt_name, sizeof(prompt_name), &prompt_obj, false, 0);
-    strnfmt(prompt, sizeof(prompt), "Drop %s? ", prompt_name);
+    strnfmt(prompt, sizeof(prompt), ui_text("Drop %s? "), prompt_name);
     return get_check(prompt);
 }
 
@@ -5031,7 +5060,7 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
             return false;
         object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
         strnfmt(quantity_prompt, sizeof(quantity_prompt),
-            "Drop how many %s? ", o_name);
+            ui_text("Drop how many %s? "), o_name);
         amt = get_quantity_action(quantity_prompt, "Drop", o_ptr->number);
         if (amt <= 0)
             return false;
@@ -5070,7 +5099,7 @@ bool do_cmd_drop_item_by_index_confirm(int item, bool confirm)
     else
     {
         object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
-        strnfmt(quantity_prompt, sizeof(quantity_prompt), "Drop how many %s? ",
+        strnfmt(quantity_prompt, sizeof(quantity_prompt), ui_text("Drop how many %s? "),
             o_name);
         amt = get_quantity_action(quantity_prompt, "Drop", o_ptr->number);
     }
@@ -5649,8 +5678,8 @@ bool do_cmd_delete_item_by_index(int item)
 
         object_desc(quantity_name, sizeof(quantity_name), o_ptr, false, 0);
         strnfmt(quantity_prompt, sizeof(quantity_prompt),
-            "Delete how many %s? ", quantity_name);
-        amt = get_quantity_action(quantity_prompt, "Delete", o_ptr->number);
+            ui_text("Delete how many %s? "), quantity_name);
+        amt = get_quantity_action(quantity_prompt, ui_text("Delete"), o_ptr->number);
         if (amt <= 0)
             return false;
 
@@ -5660,7 +5689,7 @@ bool do_cmd_delete_item_by_index(int item)
         object_desc(prompt_name, sizeof(prompt_name), o_ptr, false, 0);
         o_ptr->number = old_number;
 
-        strnfmt(prompt, sizeof(prompt), "Do you really want to DELETE %s? ",
+        strnfmt(prompt, sizeof(prompt), ui_text("Do you really want to DELETE %s? "),
             prompt_name);
         if (!get_check(prompt))
             return false;
@@ -5709,8 +5738,8 @@ bool do_cmd_delete_item_by_index(int item)
         else
             object_desc(quantity_name, sizeof(quantity_name), o_ptr, false, 0);
         strnfmt(quantity_prompt, sizeof(quantity_prompt),
-            "Delete how many %s? ", quantity_name);
-        amt = get_quantity_action(quantity_prompt, "Delete", o_ptr->number);
+            ui_text("Delete how many %s? "), quantity_name);
+        amt = get_quantity_action(quantity_prompt, ui_text("Delete"), o_ptr->number);
     }
 
     /* Allow user abort */
@@ -5750,7 +5779,7 @@ bool do_cmd_delete_item_by_index(int item)
     /*reverse the hack*/
     o_ptr->number = old_number;
 
-    strnfmt(prompt, sizeof(prompt), "Do you really want to DELETE %s? ",
+    strnfmt(prompt, sizeof(prompt), ui_text("Do you really want to DELETE %s? "),
         prompt_name);
     if (!player_pack_action_completing(PLAYER_PACK_ACTION_DELETE)
         && !get_check(prompt))
@@ -5972,7 +6001,7 @@ static int floor_context_pickup_preview_destination(
             floor_context_pickup_preview_item(preview,
                 player_quiver_arrow_object(slots[i]), &stacks, &quantity);
         strnfmt(preview->labels[heading], sizeof(preview->labels[heading]),
-            "Quiver: %d/%d arrows (%d free)", player_quiver_arrow_count(),
+            ui_text("Quiver: %d/%d arrows (%d free)"), player_quiver_arrow_count(),
             QUIVER_ARROW_CAPACITY, player_quiver_arrow_space());
     }
     else
@@ -5995,7 +6024,7 @@ static int floor_context_pickup_preview_destination(
             floor_context_pickup_preview_item(preview, held, &stacks, &quantity);
         }
         strnfmt(preview->labels[heading], sizeof(preview->labels[heading]),
-            "%s: %d.%d/%d.%d qt used (%d.%d free)", action->label,
+            ui_text("%s: %d.%d/%d.%d qt used (%d.%d free)"), ui_text(action->label),
             used / 10, used % 10, limit / 10, limit % 10,
             free_space / 10, free_space % 10);
         if (arrows_only)
@@ -6003,7 +6032,8 @@ static int floor_context_pickup_preview_destination(
             size_t len = strlen(preview->labels[heading]);
             strnfmt(preview->labels[heading] + len,
                 sizeof(preview->labels[heading]) - len,
-                "\n%d arrow%s in Pack", quantity, quantity == 1 ? "" : "s");
+                ui_text("\n%d %s in Pack"), quantity,
+                ui_text(quantity == 1 ? "arrow" : "arrows"));
         }
     }
 
@@ -6013,10 +6043,10 @@ static int floor_context_pickup_preview_destination(
 
         if (stacks == 0)
             strnfmt(preview->labels[row], sizeof(preview->labels[row]),
-                "%s", arrows_only ? "No arrows" : "Empty");
+                "%s", arrows_only ? ui_text("No arrows") : ui_text("Empty"));
         else
             strnfmt(preview->labels[row], sizeof(preview->labels[row]),
-                "%d more stacks", stacks - PICKUP_PREVIEW_STACKS);
+                ui_text("%d more stacks"), stacks - PICKUP_PREVIEW_STACKS);
         preview->options[row] = (ui_question_option){
             0, preview->labels[row], TERM_SLATE, true
         };
@@ -6084,8 +6114,8 @@ static bool floor_context_pickup(int floor_item)
     }
 
     object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 0);
-    strnfmt(desc, sizeof(desc), "Choose where to put %s.", o_name);
-    choice = ui_question_ask_objects("Pick up where?", desc, preview.options,
+    strnfmt(desc, sizeof(desc), ui_text("Choose where to put %s."), o_name);
+    choice = ui_question_ask_objects(ui_text("Pick up where?"), desc, preview.options,
         preview.icons, preview.count, p_ptr->py, p_ptr->px, default_index);
     if (choice < 0 || choice >= preview.count || preview.options[choice].disabled)
         return false;
@@ -6138,8 +6168,8 @@ static bool floor_context_equip_belt_weapon(object_type* o_ptr,
     if (destination_count == 1)
         slot = enabled[INVEN_WIELD] ? INVEN_WIELD : INVEN_BELT;
     else if (!open_inventory_slot_pick_menu(o_ptr, enabled,
-            "Equip this throwing weapon: the active Harness weapon is "
-            "readied to throw, while the belt holds one dagger or hand axe.",
+            ui_text("Equip this throwing weapon: the active Harness weapon is "
+            "readied to throw, while the belt holds one dagger or hand axe."),
             &slot))
     {
         return true;
@@ -6383,7 +6413,7 @@ void uninscribe(object_type* o_ptr)
 
         /* Prompt */
         strnfmt(tmp_val, sizeof(tmp_val),
-            "Remove automatic inscription for %s? ", o_name2);
+            ui_text("Remove automatic inscription for %s? "), o_name2);
 
         /* Auto-Inscribe if they want that */
         if (get_check(tmp_val))
@@ -6488,7 +6518,7 @@ void do_cmd_inscribe(void)
     }
 
     /* Get a new inscription (possibly empty) */
-    if (term_get_string("Inscription: ", tmp, sizeof(tmp)))
+    if (term_get_string(ui_text("Inscription: "), tmp, sizeof(tmp)))
     {
         char tmp_val[160];
         char o_name2[80];
@@ -6528,7 +6558,7 @@ void do_cmd_inscribe(void)
 
             /* Prompt */
             strnfmt(tmp_val, sizeof(tmp_val),
-                "Automatically inscribe all %s with '%s'? ", o_name2, tmp);
+                ui_text("Automatically inscribe all %s with '%s'? "), o_name2, tmp);
 
             /* Auto-Inscribe if they want that */
             if (get_check(tmp_val))

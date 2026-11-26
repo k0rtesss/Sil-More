@@ -1,6 +1,7 @@
 /* File: object/object-ui-enhanced.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-internal.h"
@@ -46,8 +47,8 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
 {
     const bool controller_controls = steamdeck_controls_active();
     const bool examine_mode = (current_menu_command == 'x');
-    const char* context = equipment ? " (Equipped)" : " (Inventory)";
-    const char* action = equipment ? "remove" : (examine_mode ? "examine" : "use");
+    const char* context = equipment ? ui_text(" (Equipped)") : ui_text(" (Inventory)");
+    const char* action = ui_text(equipment ? "remove" : (examine_mode ? "examine" : "use"));
     char full[192];
     char medium[192];
     char short_form[160];
@@ -64,15 +65,15 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
         const char* touch_variants[3];
 
         /* The callers register tappable tokens by scanning this string for
-         * the words "drop" and "cycle", so keep them present on the wider
+         * the localized drop and cycle labels, so keep them present on the wider
          * variants or those affordances would silently disappear on touch. */
         strnfmt(touch_long, sizeof(touch_long),
-            "Tap row to select; selected row to %s; drop; cycle", action);
-        strnfmt(touch_mid, sizeof(touch_mid), "Selected row: %s; drop; cycle",
+            ui_text("Tap row to select; selected row to %s; drop; cycle"), action);
+        strnfmt(touch_mid, sizeof(touch_mid), ui_text("Selected row: %s; drop; cycle"),
             action);
         touch_variants[0] = touch_long;
         touch_variants[1] = touch_mid;
-        touch_variants[2] = "Tap row";
+        touch_variants[2] = ui_text("Tap row");
         terminal_prompt_pick_variant(out, out_size, term_wid - 1,
             use_story_font, touch_variants, N_ELEMENTS(touch_variants));
         return false;
@@ -113,20 +114,20 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
             if (show_cycle)
             {
                 strnfmt(full, sizeof(full),
-                    "%s %s  D-pad left drop  %s cycle%s",
+                    ui_text("%s %s  D-pad left drop  %s cycle%s"),
                     confirm_label, action, cycle_label, context);
                 strnfmt(medium, sizeof(medium),
-                    "%s %s  D-left drop  %s cycle",
+                    ui_text("%s %s  D-left drop  %s cycle"),
                     confirm_label, action, cycle_label);
-                strnfmt(short_form, sizeof(short_form), "%s %s  %s cycle",
+                strnfmt(short_form, sizeof(short_form), ui_text("%s %s  %s cycle"),
                     confirm_label, action, cycle_label);
                 strnfmt(tiny, sizeof(tiny), "%s %s", confirm_label, action);
             }
             else
             {
-                strnfmt(full, sizeof(full), "%s %s  D-pad left drop%s",
+                strnfmt(full, sizeof(full), ui_text("%s %s  D-pad left drop%s"),
                     confirm_label, action, context);
-                strnfmt(medium, sizeof(medium), "%s %s  D-left drop",
+                strnfmt(medium, sizeof(medium), ui_text("%s %s  D-left drop"),
                     confirm_label, action);
                 strnfmt(short_form, sizeof(short_form), "%s %s",
                     confirm_label, action);
@@ -136,26 +137,26 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
         else if (show_cycle)
         {
             strnfmt(full, sizeof(full),
-                "%s %s  %s details  D-pad left drop  %s cycle%s",
+                ui_text("%s %s  %s details  D-pad left drop  %s cycle%s"),
                 confirm_label, action, desc_label, cycle_label, context);
             strnfmt(medium, sizeof(medium),
-                "%s %s  %s details  D-left drop  %s cycle",
+                ui_text("%s %s  %s details  D-left drop  %s cycle"),
                 confirm_label, action, desc_label, cycle_label);
             strnfmt(short_form, sizeof(short_form),
-                "%s %s  %s details  %s cycle",
+                ui_text("%s %s  %s details  %s cycle"),
                 confirm_label, action, desc_label, cycle_label);
-            strnfmt(tiny, sizeof(tiny), "%s %s  D-left drop",
+            strnfmt(tiny, sizeof(tiny), ui_text("%s %s  D-left drop"),
                 confirm_label, action);
         }
         else
         {
             strnfmt(full, sizeof(full),
-                "%s %s  %s details  D-pad left drop%s",
+                ui_text("%s %s  %s details  D-pad left drop%s"),
                 confirm_label, action, desc_label, context);
             strnfmt(medium, sizeof(medium),
-                "%s %s  %s details  D-left drop",
+                ui_text("%s %s  %s details  D-left drop"),
                 confirm_label, action, desc_label);
-            strnfmt(short_form, sizeof(short_form), "%s %s  %s details",
+            strnfmt(short_form, sizeof(short_form), ui_text("%s %s  %s details"),
                 confirm_label, action, desc_label);
             strnfmt(tiny, sizeof(tiny), "%s %s", confirm_label, action);
         }
@@ -170,46 +171,46 @@ static bool enhanced_menu_format_prompt(char* out, size_t out_size,
             if (show_cycle)
             {
                 strnfmt(full, sizeof(full),
-                    "Space examine  Left drop  %c cycle%s",
+                    ui_text("Space examine  Left drop  %c cycle%s"),
                     current_menu_command, context);
                 strnfmt(medium, sizeof(medium),
-                    "Space examine  Left drop  %c cycle",
+                    ui_text("Space examine  Left drop  %c cycle"),
                     current_menu_command);
                 strnfmt(short_form, sizeof(short_form),
-                    "Space examine  %c cycle", current_menu_command);
-                SDL_strlcpy(tiny, "Space examine", sizeof(tiny));
+                    ui_text("Space examine  %c cycle"), current_menu_command);
+                SDL_strlcpy(tiny, ui_text("Space examine"), sizeof(tiny));
             }
             else
             {
-                strnfmt(full, sizeof(full), "Space examine  Left drop%s",
+                strnfmt(full, sizeof(full), ui_text("Space examine  Left drop%s"),
                     context);
-                SDL_strlcpy(medium, "Space examine  Left drop",
+                SDL_strlcpy(medium, ui_text("Space examine  Left drop"),
                     sizeof(medium));
-                SDL_strlcpy(short_form, "Space examine", sizeof(short_form));
+                SDL_strlcpy(short_form, ui_text("Space examine"), sizeof(short_form));
                 SDL_strlcpy(tiny, short_form, sizeof(tiny));
             }
         }
         else if (show_cycle)
         {
             strnfmt(full, sizeof(full),
-                "Space %s  Right details  Left drop  %c cycle%s",
+                ui_text("Space %s  Right details  Left drop  %c cycle%s"),
                 action, current_menu_command, context);
             strnfmt(medium, sizeof(medium),
-                "Space %s  Right details  Left drop  %c cycle",
+                ui_text("Space %s  Right details  Left drop  %c cycle"),
                 action, current_menu_command);
             strnfmt(short_form, sizeof(short_form),
-                "Space %s  Details  Drop  %c cycle",
+                ui_text("Space %s  Details  Drop  %c cycle"),
                 action, current_menu_command);
-            strnfmt(tiny, sizeof(tiny), "Space %s  Drop", action);
+            strnfmt(tiny, sizeof(tiny), ui_text("Space %s  Drop"), action);
         }
         else
         {
             strnfmt(full, sizeof(full),
-                "Space %s  Right details  Left drop%s", action, context);
+                ui_text("Space %s  Right details  Left drop%s"), action, context);
             strnfmt(medium, sizeof(medium),
-                "Space %s  Right details  Left drop", action);
+                ui_text("Space %s  Right details  Left drop"), action);
             strnfmt(short_form, sizeof(short_form),
-                "Space %s  Details  Drop", action);
+                ui_text("Space %s  Details  Drop"), action);
             strnfmt(tiny, sizeof(tiny), "Space %s", action);
         }
     }
@@ -436,7 +437,7 @@ static bool append_description_object(const object_type* objects[],
         return false;
 
     strnfmt(heading_texts[*count], sizeof(heading_texts[0]), "%s:",
-        heading ? heading : "Item");
+        heading ? heading : ui_text("Item"));
     headings[*count] = heading_texts[*count];
     objects[(*count)++] = o_ptr;
     return true;
@@ -458,7 +459,7 @@ static cptr description_inventory_group_name(const object_type* o_ptr)
     cptr group_name = inventory_limit_group_name(
         inventory_limit_group_for_object(o_ptr));
 
-    return (group_name && group_name[0]) ? group_name : "Pack";
+    return ui_text((group_name && group_name[0]) ? group_name : "Pack");
 }
 
 
@@ -516,11 +517,11 @@ static char describe_item_with_comparisons_aux(int item_index,
 
     append_description_object(objects, headings, heading_texts, &count,
         MAX_DESCRIPTION_COMPARE_ITEMS, base_obj,
-        is_preview ? "Smithing preview"
-            : (is_floor ? "Selected item (floor)"
-                : (is_supply ? "Selected item (supply)"
-                    : (is_quiver ? "Selected item (quiver)"
-                        : "Selected item"))));
+        is_preview ? ui_text("Smithing preview")
+            : (is_floor ? ui_text("Selected item (floor)")
+                : (is_supply ? ui_text("Selected item (supply)")
+                    : (is_quiver ? ui_text("Selected item (quiver)")
+                        : ui_text("Selected item")))));
 
     if (include_comparisons)
     {
@@ -547,7 +548,7 @@ static char describe_item_with_comparisons_aux(int item_index,
                     append_description_object(objects, headings,
                         heading_texts, &count,
                         MAX_DESCRIPTION_COMPARE_ITEMS, wielded,
-                        priority == 2 ? "Digging" : mention_use(INVEN_WIELD));
+                        priority == 2 ? ui_text("Digging") : mention_use(INVEN_WIELD));
                 }
 
                 for (int ordinal = 0;
@@ -571,7 +572,7 @@ static char describe_item_with_comparisons_aux(int item_index,
                     if (priority == 2)
                     {
                         strnfmt(heading, sizeof(heading),
-                            "Digging (%s %c)", group_name,
+                            ui_text("Digging (%s %c)"), group_name,
                             player_inventory_label(item));
                     }
                     else
@@ -610,7 +611,7 @@ static char describe_item_with_comparisons_aux(int item_index,
                         append_description_object(objects, headings,
                             heading_texts, &count,
                             MAX_DESCRIPTION_COMPARE_ITEMS, floor_obj,
-                            priority == 2 ? "Digging (floor)" : "Floor");
+                            priority == 2 ? ui_text("Digging (floor)") : ui_text("Floor"));
                     }
                 }
 
@@ -618,7 +619,7 @@ static char describe_item_with_comparisons_aux(int item_index,
                 {
                     append_description_object(objects, headings,
                         heading_texts, &count,
-                        MAX_DESCRIPTION_COMPARE_ITEMS, NULL, "Digging");
+                        MAX_DESCRIPTION_COMPARE_ITEMS, NULL, ui_text("Digging"));
                 }
             }
 
@@ -644,7 +645,7 @@ static char describe_item_with_comparisons_aux(int item_index,
                 if (!arrow)
                     continue;
 
-                strnfmt(heading, sizeof(heading), "Quiver arrows (%d/%d)",
+                strnfmt(heading, sizeof(heading), ui_text("Quiver arrows (%d/%d)"),
                     i + 1, quiver_count);
                 append_description_object(objects, headings, heading_texts,
                     &count, MAX_DESCRIPTION_COMPARE_ITEMS, arrow, heading);
@@ -745,7 +746,7 @@ static char describe_item_with_comparisons_aux(int item_index,
             if (!description_object_matches(base_obj, base_groups, supply_obj))
                 continue;
 
-            strnfmt(heading, sizeof(heading), "Supply %c",
+            strnfmt(heading, sizeof(heading), ui_text("Supply %c"),
                 supplies_label_for_entry(i));
             append_description_object(objects, headings, heading_texts, &count,
                 MAX_DESCRIPTION_COMPARE_ITEMS, supply_obj, heading);
@@ -773,7 +774,7 @@ static char describe_item_with_comparisons_aux(int item_index,
 
                 append_description_object(objects, headings, heading_texts,
                     &count, MAX_DESCRIPTION_COMPARE_ITEMS, floor_obj,
-                    "Floor");
+                    ui_text("Floor"));
             }
         }
 
@@ -786,11 +787,11 @@ comparisons_done:
         if (object_is_searched_skeleton(base_obj))
         {
             object_info_screen_action actions[] = {
-                { ESCAPE, "Esc close" }
+                { ESCAPE, ui_text("Esc close") }
             };
 
             return object_info_screen_multi_with_actions(objects, headings,
-                count, "Esc close", actions, N_ELEMENTS(actions),
+                count, ui_text("Esc close"), actions, N_ELEMENTS(actions),
                 include_comparisons);
         }
 
@@ -831,7 +832,7 @@ comparisons_done:
                 context_action->kind = FLOOR_CONTEXT_ACTION_PICKUP_CONTEXT;
                 context_action->key = ' ';
                 if (pickup_count > 1)
-                    SDL_strlcpy(context_action->label, "Pick Up...",
+                    SDL_strlcpy(context_action->label, ui_text("Pick Up..."),
                         sizeof(context_action->label));
                 strnfmt(context_action->token, sizeof(context_action->token),
                     "Space %s", context_action->label);
@@ -1086,15 +1087,15 @@ void show_inven_enhanced(void)
             sizeof(out_val), term_wid, use_story_font, false);
         prt(out_val, 0, 0);
         ui_menu_click_add_text_token(ENHANCED_MENU_CLICK_DROP, 0, 0,
-            out_val, "drop");
+            out_val, ui_text("drop"));
         if (prompt_context_visible)
             ui_menu_click_add_text_token(ENHANCED_MENU_CLICK_SWITCH, 0, 0,
-                out_val, "Inventory");
+                out_val, ui_text("Inventory"));
         else
             ui_menu_click_add_text_token(ENHANCED_MENU_CLICK_SWITCH, 0, 0,
-                out_val, "cycle");
+                out_val, ui_text("cycle"));
         if (drop_click_mode)
-            enhanced_menu_highlight_prompt_token(out_val, "drop", TERM_YELLOW);
+            enhanced_menu_highlight_prompt_token(out_val, ui_text("drop"), TERM_YELLOW);
 
         bool allow_compare = (current_menu_command == 'u' || current_menu_command == 'x');
         
@@ -1688,7 +1689,7 @@ void show_inven_enhanced(void)
                 {
                     if (out_is_floor[highlight_row])
                     {
-                        bell("Cannot drop floor items!");
+                        bell(ui_text("Cannot drop floor items!"));
                         continue;
                     }
                     if (!death_spectator_allow_menu_action())
@@ -1863,7 +1864,7 @@ void show_inven_enhanced(void)
                     enhanced_menu_action = ENHANCED_ACTION_DROP;
                     enhanced_inventory_selected_item = out_index[highlight_row];
                 } else {
-                    bell("Cannot drop floor items!");
+                    bell(ui_text("Cannot drop floor items!"));
                 }
             }
             break;
@@ -1878,7 +1879,7 @@ void show_inven_enhanced(void)
                 /* Letter selection is hidden/disabled only in controller UI mode. */
                 allow_letters = !controller_controls;
                 if (!allow_letters) {
-                    bell("Use directions and Space to select items in this mode");
+                    bell(ui_text("Use directions and Space to select items in this mode"));
                     break;
                 }
                 if (death_spectator_active()) {
@@ -1975,7 +1976,7 @@ void show_inven_enhanced(void)
                 }
             }
             else {
-                bell("Invalid command!");
+                bell(ui_text("Invalid command!"));
             }
             break;
         }
@@ -2226,15 +2227,15 @@ void show_equip_enhanced(void)
             sizeof(out_val), term_wid, use_story_font, true);
         prt(out_val, 0, 0);
         ui_menu_click_add_text_token(ENHANCED_MENU_CLICK_DROP, 0, 0,
-            out_val, "drop");
+            out_val, ui_text("drop"));
         if (prompt_context_visible)
             ui_menu_click_add_text_token(ENHANCED_MENU_CLICK_SWITCH, 0, 0,
-                out_val, "Equipped");
+                out_val, ui_text("Equipped"));
         else
             ui_menu_click_add_text_token(ENHANCED_MENU_CLICK_SWITCH, 0, 0,
-                out_val, "cycle");
+                out_val, ui_text("cycle"));
         if (drop_click_mode)
-            enhanced_menu_highlight_prompt_token(out_val, "drop", TERM_YELLOW);
+            enhanced_menu_highlight_prompt_token(out_val, ui_text("drop"), TERM_YELLOW);
         
         /* Highlight current selection - find the display row for this equipped item */
         if (!use_story_font && highlight_active && highlight_index >= 0 && highlight_index < k)
@@ -2548,7 +2549,7 @@ void show_equip_enhanced(void)
                 allow_letters = !controller_controls;
                 
                 if (!allow_letters) {
-                    bell("Use directions and Space to select items in this mode");
+                    bell(ui_text("Use directions and Space to select items in this mode"));
                     break;
                 }
                 if (death_spectator_active()) {
@@ -2590,7 +2591,7 @@ void show_equip_enhanced(void)
                 }
             }
             else {
-                bell("Invalid command!");
+                bell(ui_text("Invalid command!"));
             }
             break;
         }

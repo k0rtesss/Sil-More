@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 
 #define SDL_NARRATIVE_BANNER_TRANSITION_FADE_MS 500
@@ -18,17 +19,17 @@ cptr sdl_depth_menu_partition_label(void)
     switch (level_partition_kind_for_point(p_ptr->py, p_ptr->px))
     {
     case LEVEL_PART_ROOMY:
-        return "Room";
+        return ui_text("Room");
     case LEVEL_PART_RUINED:
-        return "Ruin";
+        return ui_text("Ruin");
     case LEVEL_PART_CAVEY:
-        return "Caves";
+        return ui_text("Caves");
     case LEVEL_PART_BIG_CAVE:
-        return "Big Cave";
+        return ui_text("Big Cave");
     case LEVEL_PART_LABYRINTH:
-        return "Labyrinth";
+        return ui_text("Labyrinth");
     case LEVEL_PART_CHASM:
-        return "Chasm";
+        return ui_text("Chasm");
     default:
         return "";
     }
@@ -47,9 +48,9 @@ void sdl_depth_menu_pane_label(char* out, size_t out_sz)
         return;
 
     if (!p_ptr->depth)
-        SDL_strlcpy(depth, "Surface", sizeof(depth));
+        SDL_strlcpy(depth, ui_text("Surface"), sizeof(depth));
     else
-        strnfmt(depth, sizeof(depth), "%d ft", p_ptr->depth * 50);
+        strnfmt(depth, sizeof(depth), ui_text("%d ft"), p_ptr->depth * 50);
 
     partition = sdl_depth_menu_partition_label();
     if (partition && partition[0] && p_ptr->depth)
@@ -1301,7 +1302,7 @@ int sdl_touch_pane_wrap_prompt_lines(cptr text, TTF_Font* font,
     if (!lines || max_lines <= 0)
         return 0;
 
-    p = (text && text[0]) ? text : "Are you sure?";
+    p = ui_text((text && text[0]) ? text : "Are you sure?");
     current[0] = '\0';
 
     while (*p) {
@@ -1360,7 +1361,7 @@ int sdl_touch_pane_wrap_prompt_lines(cptr text, TTF_Font* font,
     }
 
     if (line_count <= 0) {
-        SDL_strlcpy(lines[0], "Are you sure?", SDL_TOUCH_YES_NO_LINE_LEN);
+        SDL_strlcpy(lines[0], ui_text("Are you sure?"), SDL_TOUCH_YES_NO_LINE_LEN);
         line_count = 1;
     }
 
@@ -1430,7 +1431,7 @@ bool sdl_touch_pane_yes_no_prompt_layout(SDL_FRect* panel_rect,
         screen = sdl_get_layout_screen_rect();
     prompt_text = g_touch_pane_yes_no_prompt_text[0]
         ? g_touch_pane_yes_no_prompt_text
-        : "Are you sure?";
+        : ui_text("Are you sure?");
     prompt_font_px = sdl_touch_pane_yes_no_prompt_font_px(cell_h, screen.h);
     prompt_font = sdl_story_font_for_height_slot(prompt_font_px, SDL_STORY_FONT_SLOT_MENU);
     prompt_text_w = sdl_touch_pane_story_text_width(prompt_font, prompt_text);
@@ -1876,6 +1877,8 @@ void sdl_touch_pane_draw_button_text_scaled(const SDL_FRect* rect, const char* n
 {
     if (!rect)
         return;
+    name = ui_text(name);
+    symbol = ui_text(symbol);
     bool have_name = name && name[0];
     bool have_symbol = symbol && symbol[0];
     int name_px = MAX(10, (int)(rect->h * 0.18f));
@@ -1914,6 +1917,8 @@ void sdl_touch_pane_draw_button_text_px(const SDL_FRect* rect,
 {
     if (!rect)
         return;
+    name = ui_text(name);
+    symbol = ui_text(symbol);
     bool have_name = name && name[0];
     name_px = MAX(8, name_px);
     symbol_px = MAX(8, symbol_px);
@@ -1980,7 +1985,7 @@ void sdl_touch_pane_draw_wrapped_prompt(const SDL_FRect* rect,
                     TTF_Font* hint_font = sdl_story_font_for_height_slot(
                         sdl_menu_role_font_px(SDL_UI_FONT_META), SDL_STORY_FONT_SLOT_LOG);
                     SDL_Texture* hint_texture;
-                    strnfmt(hint, sizeof(hint), "Tap text: page %d/%d",
+                    strnfmt(hint, sizeof(hint), ui_text("Tap text: page %d/%d"),
                         g_yes_no_prompt_page + 1, g_yes_no_prompt_pages);
                     hint_texture = sdl_ui_text_texture(hint_font, hint, color, &width, &height);
                     if (hint_texture) {
@@ -2105,7 +2110,7 @@ void sdl_touch_pane_render_reset_prompt(void)
     SDL_RenderFillRect(g_state.renderer, &rect);
     SDL_SetRenderDrawColor(g_state.renderer, frame.r, frame.g, frame.b, 220);
     SDL_RenderRect(g_state.renderer, &rect);
-    sdl_touch_pane_draw_button_text(&rect, "Reset touch controls to defaults?",
+    sdl_touch_pane_draw_button_text(&rect, ui_text("Reset touch controls to defaults?"),
         steamdeck_controls_active()
             ? "[A] Reset. [B] Cancel."
             : "Confirm: Pick/Enter. Cancel: Esc.", text);
@@ -2133,7 +2138,7 @@ void sdl_touch_pane_render_yes_no_prompt(void)
     SDL_Color no_border;
     cptr prompt_text = g_touch_pane_yes_no_prompt_text[0]
         ? g_touch_pane_yes_no_prompt_text
-        : "Are you sure?";
+        : ui_text("Are you sure?");
 
     if (!sdl_touch_pane_yes_no_prompt_layout(&panel_rect, &prompt_rect,
         &yes_rect, &no_rect))
@@ -2201,14 +2206,14 @@ void sdl_touch_pane_render_yes_no_prompt(void)
     if (g_startup_device_class == SDL_STARTUP_DEVICE_DESKTOP_HANDHELD) {
         /* Keep the labels in proportion with the Deck-specific prompt size;
          * the button rectangles remain full-size touch targets. */
-        sdl_touch_pane_draw_readable_label(&yes_rect, "Yes", button_text,
+        sdl_touch_pane_draw_readable_label(&yes_rect, ui_text("Yes"), button_text,
             prompt_font_px);
-        sdl_touch_pane_draw_readable_label(&no_rect, "No", button_text,
+        sdl_touch_pane_draw_readable_label(&no_rect, ui_text("No"), button_text,
             prompt_font_px);
     } else {
-        sdl_touch_pane_draw_button_text_scaled(&yes_rect, NULL, "Yes",
+        sdl_touch_pane_draw_button_text_scaled(&yes_rect, NULL, ui_text("Yes"),
             button_text, 0.44f, 0.58f);
-        sdl_touch_pane_draw_button_text_scaled(&no_rect, NULL, "No",
+        sdl_touch_pane_draw_button_text_scaled(&no_rect, NULL, ui_text("No"),
             button_text, 0.44f, 0.58f);
     }
 }

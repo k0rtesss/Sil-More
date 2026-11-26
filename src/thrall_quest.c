@@ -5,6 +5,7 @@
  */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
@@ -636,9 +637,9 @@ static int thrall_give_item_question(monster_type* m_ptr, cptr prompt_desc)
         return -1;
 
     item_name = get_thrall_quest_item_name(m_ptr->thrall_quest_item);
-    strnfmt(title, sizeof(title), "Give %s?", item_name);
+    strnfmt(title, sizeof(title), ui_text("Give %s?"), item_name);
     strnfmt(desc, sizeof(desc),
-        "Give it for a reward, or refuse for now.");
+        ui_text("Give it for a reward, or refuse for now."));
     desc_to_use = (prompt_desc && prompt_desc[0]) ? prompt_desc : desc;
 
     options[0]
@@ -2118,18 +2119,18 @@ static int choose_thrall_reward(monster_type* m_ptr, bool pending_reward)
     if (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
     {
         SDL_strlcpy(title, "The Elven Thrall's Reward", sizeof(title));
-        strnfmt(desc, sizeof(desc), "%s Try a grey gift to learn why it is unavailable.",
-            pending_reward
+        strnfmt(desc, sizeof(desc), ui_text("%s Try a grey gift to learn why it is unavailable."),
+            ui_text(pending_reward
                 ? "The elven thrall still waits to grant the boon you earned."
-                : "Choose what gift the elven thrall will grant you.");
+                : "Choose what gift the elven thrall will grant you."));
     }
     else
     {
         SDL_strlcpy(title, "The Human Thrall's Reward", sizeof(title));
-        strnfmt(desc, sizeof(desc), "%s Try a grey gift to learn why it is unavailable.",
-            pending_reward
+        strnfmt(desc, sizeof(desc), ui_text("%s Try a grey gift to learn why it is unavailable."),
+            ui_text(pending_reward
                 ? "The human thrall still waits to grant the boon you earned."
-                : "Choose what gift the human thrall will grant you.");
+                : "Choose what gift the human thrall will grant you."));
     }
 
     {

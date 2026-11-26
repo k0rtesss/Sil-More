@@ -1,6 +1,7 @@
 /* File: birth/birth-allocation.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "birth/birth-internal.h"
 
 /* Character/race affinities and starting abilities describe specialisation;
@@ -122,7 +123,7 @@ NavResult player_birth_aux_2(int stats[A_MAX])
         if (cost > MAX_COST)
         {
             /* Warning */
-            bell("Excessive stats!");
+            bell(ui_text("Excessive stats!"));
 
             /* Reduce stat */
             stats[stat]--;

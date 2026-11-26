@@ -17,6 +17,7 @@
 #include "log/log.h"
 #include "player/killer.h"
 #include "score/score_guid.h"
+#include "ui/ui-language.h"
 #include <string.h> /* memset, strstr */
 #include <stdio.h>  /* FILE, getc, ftell, fseek, ferror */
 #include <sys/types.h>
@@ -1936,10 +1937,10 @@ static void queue_retired_activatable_slot_messages(
     msg_print("Staves and horns are now kept in your Harness, not equipped.");
     if (report->dropped > 0)
     {
-        msg_format("With no free inventory slot, %d item%s from the retired "
-                   "slots %s placed at your feet.",
-            report->dropped, report->dropped == 1 ? "" : "s",
-            report->dropped == 1 ? "was" : "were");
+        msg_format(report->dropped == 1
+                ? "With no free inventory slot, %d item from the retired slots was placed at your feet."
+                : "With no free inventory slot, %d items from the retired slots were placed at your feet.",
+            report->dropped);
     }
 }
 
@@ -2044,16 +2045,20 @@ static void queue_legacy_belt_migration_messages(
         }
 
         if (report->moved_to_quiver > 0)
-            msg_format("%d item%s moved to your quiver.",
-                report->moved_to_quiver,
-                report->moved_to_quiver == 1 ? "" : "s");
+            msg_format(report->moved_to_quiver == 1
+                    ? "%d item moved to your quiver."
+                    : "%d items moved to your quiver.",
+                report->moved_to_quiver);
         if (report->moved_to_harness > 0)
-            msg_format("%d item%s moved to your Harness, even if that leaves it over capacity.",
-                report->moved_to_harness,
-                report->moved_to_harness == 1 ? "" : "s");
+            msg_format(report->moved_to_harness == 1
+                    ? "%d item moved to your Harness, even if that leaves it over capacity."
+                    : "%d items moved to your Harness, even if that leaves it over capacity.",
+                report->moved_to_harness);
         if (report->dropped > 0)
-            msg_format("%d item%s placed at your feet because every inventory slot was occupied.",
-                report->dropped, report->dropped == 1 ? " was" : "s were");
+            msg_format(report->dropped == 1
+                    ? "%d item was placed at your feet because every inventory slot was occupied."
+                    : "%d items were placed at your feet because every inventory slot was occupied.",
+                report->dropped);
         if (report->active_mode_changed)
             msg_print("Your active weapon was adjusted to a valid slot.");
     }
@@ -2067,9 +2072,24 @@ static void queue_legacy_belt_migration_messages(
 
         if (limit >= 0 && used > limit)
         {
-            msg_format("This older save is over %s capacity (%d.%d/%d.%d qt). All items were preserved; make room before carrying more.",
-                inventory_limit_group_name((enum inventory_limit_group)group),
+            cptr fmt = "This older save is over %s capacity (%d.%d/%d.%d qt). "
+                       "All items were preserved; make room before carrying more.";
+            cptr name = inventory_limit_group_name(
+                (enum inventory_limit_group)group);
+            cptr localized_fmt = ui_message_text(fmt);
+            if (localized_fmt == fmt)
+            {
+                msg_format(fmt, name, used / 10, used % 10, limit / 10, limit % 10);
+                continue;
+            }
+
+            char english[1024];
+            char localized[1024];
+            strnfmt(english, sizeof(english), fmt, name,
                 used / 10, used % 10, limit / 10, limit % 10);
+            strnfmt(localized, sizeof(localized), localized_fmt, ui_text(name),
+                used / 10, used % 10, limit / 10, limit % 10);
+            msg_print_localized(english, localized);
         }
     }
 }

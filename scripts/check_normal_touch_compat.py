@@ -170,7 +170,7 @@ static void hud(void) {
         }
         clear();
         if(have_left) assert(sdl_render_left_panel_pane_from_cells(view,&left));
-        if(valid) for(int i=0;i<count;i++) sdl_touch_thumb_render_button(&thumb[i],i,false,false);
+        if(valid) sdl_touch_thumb_render();
         char name[80]; strnfmt(name,sizeof(name),"quick-touch-%d-%d-%d",scales[scale],row,description);
         unsigned long long pixels=capture(name);
         printf("{\"kind\":\"hud\",\"id\":\"%s\",\"valid\":%d,\"hits\":%d,\"fonts\":[%d,%d,%d,%d],\"left\":",

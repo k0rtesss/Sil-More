@@ -6,9 +6,11 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "ui/character-screen.h"
 #include "fs/savefile-name.h"
 #include "score/score_entry.h"
+#include "support/utf8.h"
 #include "ui/story_font.h"
 #include "log/log.h"
 #include "sdl-config.h"
@@ -28,7 +30,7 @@ static void display_skill(int skill, int row, int col)
         sdl_story_font_enable();
     }
     
-    put_str(skill_names_full[skill], row, col);
+    put_str(ui_text(skill_names_full[skill]), row, col);
     
     /* Disable story font - all numbers must use monospace */
     sdl_story_font_disable();
@@ -140,7 +142,9 @@ static void put_label_fit(int x, int y, const char* label, int start)
         return;
 
     char buf[64];
-    strnfmt(buf, sizeof(buf), "%-*.*s", maxw, maxw, label);
+    label = ui_text(label);
+    int len = utf8_safe_prefix_len(label, MIN(maxw, (int)sizeof(buf) - 1));
+    strnfmt(buf, sizeof(buf), "%-*.*s", maxw, len, label);
     Term_putstr(x, y, -1, TERM_WHITE, buf);
 }
 
@@ -422,7 +426,7 @@ static bool display_player_min_depth_progress_bar_line(int x, int y, int line_w)
 
 static void display_player_deep_call_line(int x, int y, int line_w)
 {
-    const char* label = (line_w >= 16) ? "Deep Call" : "Call";
+    const char* label = ui_text((line_w >= 16) ? "Deep Call" : "Call");
     int val_w = line_w - (int)strlen(label);
     char value_buf[96];
     byte value_attr;
@@ -1788,7 +1792,7 @@ static void display_player_compact_traits_middle_column(int row_start, int col,
         draw_w = 1;
 
     start_col = col + (max_cols - draw_w) / 2;
-    display_player_compact_heading("Traits", row++, start_col);
+    display_player_compact_heading(ui_text("Traits"), row++, start_col);
 
     for (int i = 0; i < line_count && row < row_limit; ++i)
     {
@@ -2002,7 +2006,7 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
         || p_ptr->stat_disease[stat] < 0) ? stat_names_reduced[stat]
                                           : stat_names[stat];
     char label_buf[32];
-    SDL_strlcpy(label_buf, stat_label ? stat_label : "", sizeof(label_buf));
+    SDL_strlcpy(label_buf, stat_label ? ui_text(stat_label) : "", sizeof(label_buf));
     int len = (int)strlen(label_buf);
     while (len > 0 && label_buf[len - 1] == ' ')
         label_buf[--len] = '\0';
@@ -2061,7 +2065,7 @@ static void display_player_compact_attributes(int row_start, int max_cols)
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
-    display_player_compact_heading("Attributes", row++, col);
+    display_player_compact_heading(ui_text("Attributes"), row++, col);
 
     if (max_cols <= 0)
         max_cols = wid - col - COMPACT_RIGHT_PAD;
@@ -2120,12 +2124,13 @@ static void display_player_compact_skill_line(int row, int col, int max_cols, in
     Term_erase(col, row, label_w);
     Term_erase(val_start, row, val_w);
 
-    const char* name = skill_names_full[skill];
+    const char* name = ui_text(skill_names_full[skill]);
     if (!name)
         name = "";
 
     char label_buf[64];
-    strnfmt(label_buf, sizeof(label_buf), "%.*s", label_w, name);
+    strnfmt(label_buf, sizeof(label_buf), "%.*s",
+        utf8_safe_prefix_len(name, MIN(label_w, (int)sizeof(label_buf) - 1)), name);
 
     if (story_character_enabled() && label_w > 0)
     {
@@ -2199,7 +2204,7 @@ static void display_player_compact_attributes_and_skills(int row_start)
         int row = row_start;
 
         display_player_compact_attributes(row_start, attr_width);
-        display_player_compact_heading("Skills", row++, col_skill);
+        display_player_compact_heading(ui_text("Skills"), row++, col_skill);
 
         for (int skill = 0; skill < S_MAX && row < hgt - 1; ++skill)
         {
@@ -2219,7 +2224,7 @@ static void display_player_compact_attributes_and_skills(int row_start)
     if (side_by_side)
     {
         int row = row_start;
-        display_player_compact_heading("Skills", row++, col_skill);
+        display_player_compact_heading(ui_text("Skills"), row++, col_skill);
 
         for (int skill = 0; skill < S_MAX && row < hgt - 1; ++skill)
         {
@@ -2249,7 +2254,7 @@ static void display_player_compact_skills_list(int row_start)
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
-    display_player_compact_heading("Skills", row++, col);
+    display_player_compact_heading(ui_text("Skills"), row++, col);
 
     int max_cols = wid - col - COMPACT_RIGHT_PAD;
     if (max_cols < 10)
@@ -2318,7 +2323,7 @@ void display_player_stat_info(int row, int col)
         }
         
         /* Trim trailing spaces for story font rendering */
-        SDL_strlcpy(trimmed_label, stat_label, sizeof(trimmed_label));
+        SDL_strlcpy(trimmed_label, ui_text(stat_label), sizeof(trimmed_label));
         int len = strlen(trimmed_label);
         while (len > 0 && trimmed_label[len-1] == ' ') {
             trimmed_label[--len] = '\0';
@@ -2728,11 +2733,11 @@ bool get_name(void)
         tutorial_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
         tutorial_prompt_label('\t', "L5", random_label, sizeof(random_label));
-        strnfmt(prompt_buf, sizeof(prompt_buf), "%s accept name",
+        strnfmt(prompt_buf, sizeof(prompt_buf), ui_text("%s accept name"),
             confirm_label);
         Term_putstr(QUESTION_COL, INSTRUCT_ROW + 1, -1, TERM_SLATE,
             prompt_buf);
-        strnfmt(prompt_buf, sizeof(prompt_buf), "  %s random name",
+        strnfmt(prompt_buf, sizeof(prompt_buf), ui_text("  %s random name"),
             random_label);
         Term_putstr(QUESTION_COL, INSTRUCT_ROW + 2, -1, TERM_SLATE,
             prompt_buf);
@@ -2740,13 +2745,13 @@ bool get_name(void)
     else
     {
         Term_putstr(
-            QUESTION_COL, INSTRUCT_ROW + 1, -1, TERM_SLATE, "Enter accept name");
+            QUESTION_COL, INSTRUCT_ROW + 1, -1, TERM_SLATE, ui_text("Enter accept name"));
         Term_putstr(
-            QUESTION_COL, INSTRUCT_ROW + 2, -1, TERM_SLATE, "  Tab random name");
+            QUESTION_COL, INSTRUCT_ROW + 2, -1, TERM_SLATE, ui_text("  Tab random name"));
 
         /* Hack - highlight the key names */
         Term_putstr(QUESTION_COL, INSTRUCT_ROW + 1, -1, TERM_L_WHITE, "Enter");
-        Term_putstr(QUESTION_COL + 2, INSTRUCT_ROW + 2, -1, TERM_L_WHITE, "Tab");
+        Term_putstr(QUESTION_COL + 2, INSTRUCT_ROW + 2, -1, TERM_L_WHITE, ui_text("Tab"));
     }
 
     /* Special Prompt? */
@@ -2759,7 +2764,7 @@ bool get_name(void)
 
             tutorial_prompt_label(steamdeck_back_key(), "B", back_label,
                 sizeof(back_label));
-            strnfmt(prompt_buf, sizeof(prompt_buf), "%s abort name change",
+            strnfmt(prompt_buf, sizeof(prompt_buf), ui_text("%s abort name change"),
                 back_label);
             Term_putstr(QUESTION_COL + 38 + 2, INSTRUCT_ROW + 1, -1,
                 TERM_SLATE, prompt_buf);
@@ -2767,7 +2772,7 @@ bool get_name(void)
         else
         {
             Term_putstr(QUESTION_COL + 38 + 2, INSTRUCT_ROW + 1, -1, TERM_SLATE,
-                "ESC abort name change                  ");
+                ui_text("ESC abort name change                  "));
 
             /* Hack - highlight the key names */
             Term_putstr(

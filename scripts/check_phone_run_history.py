@@ -15,7 +15,7 @@ BUILD=ROOT/"build-standard"
 OUT=ROOT/"scripts/output/phone-run-history-check"
 PREFIX=AUX[:AUX.index("static void check_touch_panels(void)")]
 INIT=AUX[AUX.index("int main(int argc,char **argv)"):AUX.index("    for(int big=")]
-INIT=INIT.replace("argc==7","argc==9").replace("term_init(&view->t,80,24,256)",
+INIT=INIT.replace("argc==7","argc==10").replace("term_init(&view->t,80,24,256)",
     "term_init(&view->t,atoi(argv[7]),atoi(argv[8]),256)")
 HARNESS=PREFIX+r'''
 #include "score/score_ui.c"
@@ -110,6 +110,18 @@ char __wrap_inkey(void)
         fixture_assert(inspect_count==1); return click(-1);
     case 14:
         fixture_assert(streq(g_question_menu.title,"Run History")); return click(-2);
+    case 15:
+        fixture_assert(!streq(g_question_menu.title,"Run History"));
+        fixture_assert(streq(g_question_menu.title,ui_text("Run History")));
+        contains("Fixture Hero 2"); contains("Tiefe: 950 Fuß"); contains("Wertung:");
+        contains("FATE_END_MARKER"); return click(-3);
+    case 16:
+        contains("Held:"); contains("Todesursache: FATE_END_MARKER"); return '6';
+    case 17:
+        contains("Basis: 7 | Verlust: -2 | Aktuell: 5");
+        screenshot("detail-stats-de"); return click(-1);
+    case 18:
+        fixture_assert(streq(g_question_menu.title,ui_text("Run History"))); return click(-2);
     default: fixture_assert(false); return ESCAPE;
     }
 }
@@ -164,10 +176,14 @@ static void write_db(void)
     character_generated=false; player.is_dead=true;
     write_db();
     for(int big=1;big<2;big++) {
-        config.bigger_font=big; fixture.active=false;
+        config.bigger_font=big; config.menu_bigger_font[SDL_MENU_FONT_SCORES]=big;
+        fixture.active=false;
         modal_stage=inspect_count=0;
         do_cmd_run_history();
         fixture_assert(modal_stage==15 && !g_question_menu.active);
+        ANGBAND_DIR_HELP=argv[9]; ui_set_language("de");
+        do_cmd_run_history();
+        fixture_assert(modal_stage==19 && !g_question_menu.active);
     }
     printf("Run History DB/modal %dx%d @%.3f terminal%sx%s Big font: PASS\n",
         fixture_width,fixture_height,fixture_density,argv[7],argv[8]);
@@ -181,7 +197,7 @@ def main():
     OUT.mkdir(parents=True,exist_ok=True)
     # externs.h contains enum definitions without an include guard. The live
     # UI source normally includes it once; this composed fixture already has it.
-    live=(ROOT/"src/score/score_ui.c").read_text().replace('#include "externs.h"','')
+    live=(ROOT/"src/score/score_ui.c").read_text(encoding="utf-8").replace('#include "externs.h"','')
     (OUT/"score-ui-live.c").write_text(live,encoding="utf-8")
     source=OUT/"check.c"
     source.write_text(HARNESS.replace('#include "score/score_ui.c"',
@@ -211,7 +227,7 @@ def main():
         (1080,2400,2.625,30,30),(2400,1080,2.625,68,12)]:
         subprocess.run([str(exe),str(w),str(h),str(density),
             str(ROOT/"lib/xtra/font/EBGaramond-Regular.ttf"),str(ROOT/"lib/xtra/font/Cinzel-Medium.ttf"),
-            str(ROOT/"lib/xtra/font/VictorMono-Medium.ttf"),str(cols),str(rows)],cwd=OUT,env=env,check=True,timeout=60)
+            str(ROOT/"lib/xtra/font/VictorMono-Medium.ttf"),str(cols),str(rows),str(ROOT/"lib/help")],cwd=OUT,env=env,check=True,timeout=60)
 
 
 if __name__=="__main__": main()

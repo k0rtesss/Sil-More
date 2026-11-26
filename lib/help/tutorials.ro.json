@@ -880,9 +880,9 @@
     "menu.smithing": {
       "title": "Fierărie",
       "steps": [
-        "Alege un obiect sau o îmbunătățire pentru a vedea dificultatea, capacitatea ta și costurile. Fierăria adaugă jumătate din dexteritatea actuală și jumătate din grația actuală. Echipamentul, efectele temporare și pierderile de atribute modifică aceste valori. Aptitudinile de meșteșug și măiestriile învățate și active adaugă bonusuri fiecărei rețete. Naugrimii adaugă fiecare nivel pozitiv de afinitate pentru fierărie la atributele folosite aici. Adună bonusurile și rotunjește o singură dată în jos. Se aplică și bonusurile echipamentului la fierărie."
+        "Alege un obiect sau o îmbunătățire ca să vezi dificultatea, capacitatea ta de făurire și costurile. La capacitate se adaugă jumătate din dexteritatea permanentă și jumătate din grația permanentă. Atributele permanente cuprind valorile de bază și bonusurile necondiționate ale aptitudinilor învățate. Echipamentul, efectele temporare, pierderile de atribute, cântecele și bonusurile condiționate nu modifică aceste valori. Aptitudinile de meșteșug și măiestriile învățate și active dau bonusuri suplimentare la fiecare rețetă. Naugrimii adaugă fiecare nivel pozitiv de afinitate pentru fierărie la atributele folosite în calcul. Adună toate bonusurile înainte de a rotunji în jos o singură dată. Bonusurile pe care echipamentul le dă direct deprinderii de fierărie se aplică în continuare."
       ],
-      "source_sha256": "27a42bca332fbfd75f31dfe34f70c52c7579ebb9e6ae97193d64fc915ff9b0ee"
+      "source_sha256": "68f4d01a2a0ca06f009e07def51c22357ba694c4bca28eab64e4f1a2af40f895"
     },
     "menu.nearby-monsters": {
       "title": "Creaturi apropiate",
@@ -1184,7 +1184,7 @@
     "ability.43.preview": {
       "title": "Luptă contra unui grup (Crowd Fighting)",
       "steps": [
-        "Reduce bonusul pe care îl primesc inamicii pentru a te înconjura. Un pasaj îngust poate continua să fie util, limitând numărul de inamici care pot ataca."
+        "Înjumătățește bonusul primit de inamicii care te înconjoară. Un pasaj îngust rămâne util, deoarece limitează numărul inamicilor care te pot ataca."
       ],
       "source_sha256": "f4938a7bd1713f527edb33663973c3977cfc8912cfd800bc5960f71f12dfaeaf"
     },
@@ -1219,7 +1219,7 @@
     "ability.48.preview": {
       "title": "Ripostă (Riposte)",
       "steps": [
-        "O dată pe rundă, puteți contraataca atunci când un inamic vă ratează cu cel puțin 10 puncte, plus greutatea armei în lire. O armă mai ușoară face ca această marjă să fie mai mică."
+        "O dată pe rundă poți contraataca dacă rezultatul eschivei tale îl depășește pe cel al atacului inamic cu cel puțin 10 plus greutatea armei tale în livre. O armă mai ușoară reduce diferența necesară."
       ],
       "source_sha256": "8e8902a1ee8c120da2b461403ea47e685de3a43b9728984bdbd55eb50978fdc7"
     },
@@ -1443,51 +1443,51 @@
     "ability.120.preview": {
       "title": "Făurar de arme (Weaponsmith)",
       "steps": [
-        "Permite făurirea armelor și ajută puțin la identificarea lor. Când este învățată și activă, aptitudinea adaugă jumătate din dexteritatea actuală fiecărui obiect făurit."
+        "Permite făurirea armelor și ajută puțin la identificarea lor. Când este învățată și activă, aptitudinea adaugă jumătate din dexteritatea permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "d83db7a5cb4d0c2b671fdcbfea063acb7e19879422aca2557f3c640fde12c32d"
+      "source_sha256": "57cd9972362062d683f7d9ced8358fec833a6b9f644d0bd9d32b87dde5c91925"
     },
     "ability.121.preview": {
       "title": "Făurar de armuri (Armoursmith)",
       "steps": [
-        "Permite făurirea armurilor și ajută puțin la identificarea lor. Când este învățată și activă, aptitudinea adaugă jumătate din forța actuală fiecărui obiect făurit."
+        "Permite făurirea armurilor și ajută puțin la identificarea lor. Când este învățată și activă, aptitudinea adaugă jumătate din forța permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "b678077db771124fab7f76ccfd9d0e88ea024d2f33d8622307b565133a2f5573"
+      "source_sha256": "16b9acb9a7bf3d90caad2622fc13f324b165d5b3cdc55c040a4995c88465143c"
     },
     "ability.122.preview": {
       "title": "Bijutier (Jeweller)",
       "steps": [
-        "Poți făuri inele, amulete, cornuri și surse de lumină și le recunoști automat tipul. Un anumit obiect poate avea încă proprietăți speciale neidentificate. Aptitudinea învățată și activă adaugă jumătate din grația actuală fiecărui obiect făurit."
+        "Poți făuri inele, amulete, cornuri și surse de lumină și le recunoști automat tipul. Un anumit obiect poate avea încă proprietăți speciale neidentificate. Aptitudinea învățată și activă adaugă jumătate din grația permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "e1c306ed445a7a4ba455218355ff175418c0690016de92c49e987f6700a6761a"
+      "source_sha256": "b6532ccc257c13e5f08c9ac9b7771acd2d7cdaaee9c244ff05efa381fadb8540"
     },
     "ability.123.preview": {
       "title": "Fermecare (Enchantment)",
       "steps": [
-        "Poți făuri obiecte fermecate cu proprietăți speciale denumite. Recunoști farmecele de pe obiecte și primești un mic bonus la identificare. Aptitudinea învățată și activă adaugă grația actuală fiecărui obiect făurit."
+        "Poți făuri obiecte fermecate cu proprietăți speciale denumite. Recunoști farmecele de pe obiecte și primești un mic bonus la identificare. Aptitudinea învățată și activă adaugă jumătate din grația permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "8100a52a5b4f99f77c3b8ca7f082708686fd759417138c1ffb65942a1f200368"
+      "source_sha256": "6df49478c9c23c77b67b9cf185c7d26aa911ae6faf02ed4634466bd6d8750c30"
     },
     "ability.124.preview": {
       "title": "Pricepere (Expertise)",
       "steps": [
-        "Înjumătățește timpul de făurire și elimină costurile obișnuite de experiență și atribute. Materialele și utilizările fierăriei contează în continuare. Verifică întregul proiect. Aptitudinea învățată și activă adaugă dexteritatea actuală fiecărui obiect făurit."
+        "Înjumătățește timpul de făurire și elimină costurile obișnuite de experiență și atribute. Materialele și utilizările fierăriei contează în continuare. Verifică întregul proiect. Aptitudinea învățată și activă adaugă jumătate din dexteritatea permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "52084e31e80fdc4b44b8d80604e2c4e118bee510a1c2f3e7cd7dc50fbf828e83"
+      "source_sha256": "06ded559e9634914fee328d885279d91bfbe56ef05fe076e73231c9363503935"
     },
     "ability.125.preview": {
       "title": "Arta artefactelor (Artifice)",
       "steps": [
-        "Poți făuri artefacte proprii și primești un bonus important la identificare. Proiectul arată costul proprietăților alese. Aptitudinea învățată și activă adaugă grația actuală fiecărui obiect făurit."
+        "Poți făuri artefacte proprii și primești un bonus important la identificare. Proiectul arată costul proprietăților alese. Aptitudinea învățată și activă adaugă jumătate din grația permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "415ff774cd4eb6c57d172a82d4cbb2d649a6042a2043247a3b0a03411df19656"
+      "source_sha256": "e73cd73400d79b457f55e279b0e478f25e0216a6e66d79ed2f14200c21c7e46c"
     },
     "ability.126.preview": {
       "title": "Capodoperă (Masterpiece)",
       "steps": [
-        "Poți făuri peste limita normală de dificultate cheltuind definitiv puncte de bază de fierărie: un punct de deprindere pentru fiecare punct peste limită. Suma disponibilă este limitată la cât ai investit în fierărie."
+        "Poți făuri peste limita normală de dificultate cheltuind definitiv puncte de bază de fierărie: un punct de deprindere pentru fiecare punct peste limită. Suma disponibilă este limitată la cât ai investit în fierărie. Când este învățată și activă, Capodopera adaugă și jumătate din grația permanentă fiecărui obiect făurit."
       ],
-      "source_sha256": "d796523bd4f90f1552a7961581e4c46d6d75f4904b3a488c28cd40a27f558b30"
+      "source_sha256": "9b4b435cab3009f0fb78f9fe2dc392ab714f7f532f70eaac0a2dc300aa477c95"
     },
     "ability.127.preview": {
       "title": "Grație (Grace)",

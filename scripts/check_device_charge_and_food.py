@@ -27,7 +27,7 @@ void __wrap_msg_print(cptr message)
 }
 void __wrap_msg_format(cptr fmt, ...)
 {
-    if (!strstr(fmt, "charge%s remaining."))
+    if (!strstr(fmt, "charge") || !strstr(fmt, " remaining."))
         return;
 
     va_list args;
@@ -188,7 +188,8 @@ static void check_odd_charges(void)
 
         charge_message[0] = '\0';
         floor_item_charges(floor);
-        strnfmt(expected, sizeof(expected), "There are %d charge%s remaining.", usable, plural);
+        strnfmt(expected, sizeof(expected), usable == 1
+            ? "There is %d charge remaining." : "There are %d charges remaining.", usable);
         mismatches += !streq(charge_message, expected);
 
         reset_action();

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "monster/monster-ai.h"
 #include "monster/monster-tactics.h"
 #include "externs.h"
@@ -926,11 +927,11 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                 /* Handle special effect types */
                 if (effect == RBE_BATTER)
                 {
-                    act = "batters you";
+                    act = "%^s batters you%s";
                 }
                 else
                 {
-                    act = "hits you";
+                    act = "%^s hits you%s";
                 }
 
                 do_cut = do_stun = 1;
@@ -942,7 +943,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_TOUCH:
             {
-                act = "touches you";
+                act = "%^s touches you%s";
 
                 // ignores armor
                 prt_percent = 0;
@@ -954,7 +955,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_CLAW:
             {
-                act = "claws you";
+                act = "%^s claws you%s";
                 do_cut = 1;
 
                 // stopped by armor
@@ -964,7 +965,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_BITE:
             {
-                act = "bites you";
+                act = "%^s bites you%s";
                 do_cut = 1;
 
                 // stopped by armor
@@ -974,7 +975,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_PECK:
             {
-                act = "pecks you";
+                act = "%^s pecks you%s";
                 do_cut = 1;
 
                 // stopped by armor
@@ -984,7 +985,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_STING:
             {
-                act = "stings you";
+                act = "%^s stings you%s";
 
                 // stopped by armor
                 prt_percent = 100;
@@ -994,7 +995,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             case RBM_CRUSH:
             {
                 if (dam >= 10)
-                    act = "crushes you";
+                    act = "%^s crushes you%s";
                 do_stun = 1;
 
                 // stopped by armor
@@ -1004,7 +1005,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_ENGULF:
             {
-                act = "engulfs you";
+                act = "%^s engulfs you%s";
 
                 // stopped by armor
                 prt_percent = 100;
@@ -1013,7 +1014,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_CRAWL:
             {
-                act = "crawls on you";
+                act = "%^s crawls on you%s";
 
                 // stopped by armor
                 prt_percent = 100;
@@ -1022,7 +1023,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_THORN:
             {
-                act = "tears at you";
+                act = "%^s tears at you%s";
 
                 // stopped by armor
                 prt_percent = 100;
@@ -1031,7 +1032,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_SPORE:
             {
-                act = "releases a cloud of spores";
+                act = "%^s releases a cloud of spores%s";
 
                 // ignores armor
                 prt_percent = 0;
@@ -1043,7 +1044,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
             }
             case RBM_WHIP:
             {
-                act = "whips you";
+                act = "%^s whips you%s";
 
                 // stopped by armor
                 prt_percent = 100;
@@ -1117,7 +1118,7 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
 
                     msg_format("Your %s feels suddenly heavy! You fail to %s "
                                "the blow!",
-                        o_name, betrayal_wield ? "parry" : "block");
+                        o_name, ui_text(betrayal_wield ? "parry" : "block"));
                     ident_f2(TR2_TRAITOR, o_ptr);
                 }
             }
@@ -1137,12 +1138,11 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     if (m_ptr->ml)
                         l_ptr->flags2 |= (RF2_CHARGE);
 
-                    act = "charges you";
+                    act = "%^s charges you%s";
                 }
 
                 /* Message */
-                if (act)
-                    msg_format("%^s %s%s", m_name, act, punctuation);
+                msg_format(act, m_name, punctuation);
             }
 
             /* Hack -- assume all attacks are obvious */
@@ -1494,9 +1494,8 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     // Sil-y: perhaps need a PER check to notice?
 
                     /* Message */
-                    msg_format("%sour %s (%c) was stolen!",
-                        ((o_ptr->number > 1) ? "One of y" : "Y"), o_name,
-                        index_to_label(i));
+                    msg_format(o_ptr->number > 1 ? "One of your %s (%c) was stolen!"
+                        : "Your %s (%c) was stolen!", o_name, index_to_label(i));
 
                     /* Get local object */
                     i_ptr = &object_type_body;
@@ -1551,9 +1550,8 @@ static bool make_attack_melee(monster_type* m_ptr, bool ordinary)
                     object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
 
                     /* Message */
-                    msg_format("%s %s (%c) was eaten!",
-                        ((o_ptr->number > 1) ? "One of your" : "Your last"),
-                        o_name, index_to_label(i));
+                    msg_format(o_ptr->number > 1 ? "One of your %s (%c) was eaten!"
+                        : "Your last %s (%c) was eaten!", o_name, index_to_label(i));
 
                     /* Steal the items */
                     inven_item_increase(i, -1);

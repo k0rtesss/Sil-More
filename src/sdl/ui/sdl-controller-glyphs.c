@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 #include <math.h>
 
@@ -6,9 +7,9 @@ cptr sdl_controller_menu_hint(bool selectable, bool scrollable)
 {
     if (!steamdeck_controls_active()) return "";
     if (selectable) return scrollable
-        ? "D-pad   <RS> scroll   <A> choose   <B> back"
-        : "D-pad select   <A> choose   <B> back";
-    return scrollable ? "D-pad / <RS> scroll   <B> back" : "<B> back";
+        ? ui_text("D-pad   <RS> scroll   <A> choose   <B> back")
+        : ui_text("D-pad select   <A> choose   <B> back");
+    return scrollable ? ui_text("D-pad / <RS> scroll   <B> back") : ui_text("<B> back");
 }
 
 /* Explicit prompt markers keep ordinary prose and keyboard shortcuts out of

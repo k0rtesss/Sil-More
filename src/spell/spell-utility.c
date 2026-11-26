@@ -1,6 +1,7 @@
 ﻿/* File: spell/spell-utility.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "externs.h"
 #include "log/log.h"
@@ -142,7 +143,7 @@ static bool self_knowledge_capture_render_body(char s[][200], char t[][200],
     if (term_wid < 20)
         term_wid = 20;
 
-    Term_putstr(0, 0, -1, TERM_L_WHITE + TERM_SHADE, "Your Attributes:");
+    Term_putstr(0, 0, -1, TERM_L_WHITE + TERM_SHADE, ui_text("Your Attributes:"));
 
     text_out_hook = text_out_to_screen;
     text_out_indent = 1;
@@ -661,15 +662,38 @@ void warding_glyph(void)
     cave_set_feat(py, px, FEAT_GLYPH);
 }
 
-/*
- * Array of stat "descriptions"
- */
-static cptr desc_stat_pos[] = { "strong", "dextrous", "healthy", "attuned" };
+static const cptr stat_gain_messages[A_MAX] = {
+    [A_STR] = "You feel strong!",
+    [A_DEX] = "You feel dextrous!",
+    [A_CON] = "You feel healthy!",
+    [A_GRA] = "You feel attuned!",
+};
 
-/*
- * Array of stat "descriptions"
- */
-static cptr desc_stat_neg[] = { "weak", "awkward", "sickly", "drained" };
+static const cptr stat_loss_messages[A_MAX] = {
+    [A_STR] = "You feel weak.",
+    [A_DEX] = "You feel awkward.",
+    [A_CON] = "You feel sickly.",
+    [A_GRA] = "You feel drained.",
+};
+
+static const cptr stat_restore_messages[A_MAX] = {
+    [A_STR] = "You feel less weak.",
+    [A_DEX] = "You feel less awkward.",
+    [A_CON] = "You feel less sickly.",
+    [A_GRA] = "You feel less drained.",
+};
+
+static const cptr stat_sustain_messages[A_MAX] = {
+    [A_STR] = "You feel weak for a moment, but it passes.",
+    [A_DEX] = "You feel awkward for a moment, but it passes.",
+    [A_CON] = "You feel sickly for a moment, but it passes.",
+    [A_GRA] = "You feel drained for a moment, but it passes.",
+};
+
+void spell_report_stat_loss(int stat)
+{
+    msg_print(stat_loss_messages[stat]);
+}
 
 /*
  * Lose a "point"
@@ -703,8 +727,7 @@ bool do_dec_stat(int stat, monster_type* m_ptr)
     if (saving_throw(m_ptr, resistance))
     {
         /* Message */
-        msg_format(
-            "You feel %s for a moment, but it passes.", desc_stat_neg[stat]);
+        msg_print(stat_sustain_messages[stat]);
 
         // possibly identify relevant items
         switch (stat)
@@ -731,7 +754,7 @@ bool do_dec_stat(int stat, monster_type* m_ptr)
     if (dec_stat(stat, 1, false))
     {
         /* Message */
-        msg_format("You feel %s.", desc_stat_neg[stat]);
+        spell_report_stat_loss(stat);
 
         /* Notice effect */
         return (true);
@@ -750,7 +773,7 @@ bool do_res_stat(int stat, int points)
     if (res_stat(stat, points))
     {
         /* Message */
-        msg_format("You feel less %s.", desc_stat_neg[stat]);
+        msg_print(stat_restore_messages[stat]);
 
         /* Notice */
         return (true);
@@ -774,7 +797,7 @@ bool do_inc_stat(int stat)
     if (inc_stat(stat))
     {
         /* Message */
-        msg_format("You feel %s!", desc_stat_pos[stat]);
+        msg_print(stat_gain_messages[stat]);
 
         /* Notice */
         return (true);
@@ -784,7 +807,7 @@ bool do_inc_stat(int stat)
     if (res)
     {
         /* Message */
-        msg_format("You feel less %s.", desc_stat_neg[stat]);
+        msg_print(stat_restore_messages[stat]);
 
         /* Notice */
         return (true);

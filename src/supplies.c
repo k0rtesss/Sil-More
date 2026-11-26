@@ -1680,8 +1680,10 @@ bool supplies_drop_amount(int idx, int amount)
 
     if (player_light_destroyed_on_drop(&drop))
     {
-        msg_format("You discard %s; %s too spent to keep.",
-            o_name, (drop.number > 1) ? "they are" : "it is");
+        msg_format(drop.number > 1
+                ? "You discard %s; they are too spent to keep."
+                : "You discard %s; it is too spent to keep.",
+            o_name);
         supplies_consume_quantity(idx, amount);
         p_ptr->redraw |= (PR_MAP | PR_LIGHT);
         p_ptr->window |= (PW_MESSAGE);
@@ -1824,6 +1826,19 @@ bool supplies_pending_hotkey(void)
     return g_pending_hotkey;
 }
 
+static void supplies_report_destroyed(const char* name, int stack_size,
+    int destroyed)
+{
+    if (stack_size == 1)
+        msg_format("Your %s in supply was destroyed!", name);
+    else if (destroyed == stack_size)
+        msg_format("All of your %s in supply were destroyed!", name);
+    else if (destroyed > 1)
+        msg_format("Some of your %s in supply were destroyed!", name);
+    else
+        msg_format("One of your %s in supply was destroyed!", name);
+}
+
 /*
  * Damage supply items based on a type check function
  * Similar to inven_damage but for the supply system
@@ -1872,12 +1887,7 @@ int supplies_damage(int (*typ)(const object_type*), int perc, int resistance)
                 object_desc(o_name, sizeof(o_name), o_ptr, false, 3);
 
                 /* Message */
-                msg_format("%sour %s in supply %s destroyed!",
-                    ((total_count > 1) ? ((amt == total_count)
-                             ? "All of y"
-                             : (amt > 1 ? "Some of y" : "One of y"))
-                                         : "Y"),
-                    o_name, ((amt > 1) ? "were" : "was"));
+                supplies_report_destroyed(o_name, total_count, amt);
 
                 /* Reduce the count */
                 o_ptr->number -= amt;
@@ -1950,12 +1960,7 @@ int supplies_damage_cold(int perc, int resistance)
 
         object_desc(o_name, sizeof(o_name), o_ptr, false, 3);
 
-        msg_format("%sour %s in supply %s destroyed!",
-            ((o_ptr->number > 1) ? ((amt == o_ptr->number)
-                     ? "All of y"
-                     : (amt > 1 ? "Some of y" : "One of y"))
-                                 : "Y"),
-            o_name, ((amt > 1) ? "were" : "was"));
+        supplies_report_destroyed(o_name, o_ptr->number, amt);
 
         o_ptr->number -= amt;
 

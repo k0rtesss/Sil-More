@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -207,7 +208,7 @@ void show_nearby_monsters(bool line_of_sight_only)
         Term_erase(0, 2, 255);
         Term_erase(0, 3, 255);
         Term_putstr(empty_col, 1, term_wid - empty_col, TERM_WHITE,
-            "No visible monsters.");
+            ui_text("No visible monsters."));
         return;
     }
 
@@ -309,7 +310,7 @@ void show_nearby_objects(bool line_of_sight_only)
             = distance(p_ptr->py, p_ptr->px, temp_y[i], temp_x[i]);
 
         if (strlen(lines[j].direction) == 0)
-            SDL_strlcpy(lines[j].direction, "underfoot", sizeof(lines[j].direction));
+            SDL_strlcpy(lines[j].direction, ui_text("underfoot"), sizeof(lines[j].direction));
 
         longest_direction_length = MAX(longest_direction_length,
             (int)strlen(lines[j].direction));
@@ -333,7 +334,7 @@ void show_nearby_objects(bool line_of_sight_only)
         Term_erase(0, 2, 255);
         Term_erase(0, 3, 255);
         Term_putstr(empty_col, 1, term_wid - empty_col, TERM_WHITE,
-            "No visible objects.");
+            ui_text("No visible objects."));
         return;
     }
 
@@ -386,7 +387,7 @@ void show_nearby_objects(bool line_of_sight_only)
 
 void do_cmd_view_monsters()
 {
-    tutorial_game_menu("nearby-monsters", "Review nearby monsters and their distance and direction. The toggle changes the list's line-of-sight filter.");
+    tutorial_game_menu("nearby-monsters", ui_text("Review nearby monsters and their distance and direction. The toggle changes the list's line-of-sight filter."));
     char get_char = '[';
     bool show_los = true;
 
@@ -402,9 +403,9 @@ void do_cmd_view_monsters()
         show_nearby_monsters(show_los);
         /* Show the prompt */
         if (show_los)
-            prt("Monsters you can see (press [ to toggle):", 0, 0);
+            prt(ui_text("Monsters you can see (press [ to toggle):"), 0, 0);
         else
-            prt("Monsters on screen (press [ to toggle):", 0, 0);
+            prt(ui_text("Monsters on screen (press [ to toggle):"), 0, 0);
         get_char = (char)steamdeck_menu_key(inkey(), 0, 0);
         show_los = !show_los;
         screen_load();
@@ -413,7 +414,7 @@ void do_cmd_view_monsters()
 
 void do_cmd_view_objects()
 {
-    tutorial_game_menu("nearby-objects", "Review known nearby objects and their direction. A listed object is not automatically collected.");
+    tutorial_game_menu("nearby-objects", ui_text("Review known nearby objects and their direction. A listed object is not automatically collected."));
     char get_char = ']';
     bool show_los = true;
 
@@ -429,9 +430,9 @@ void do_cmd_view_objects()
         show_nearby_objects(show_los);
         /* Show the prompt */
         if (show_los)
-            prt("Objects you can see (press ] to toggle):", 0, 0);
+            prt(ui_text("Objects you can see (press ] to toggle):"), 0, 0);
         else
-            prt("Objects on screen (press ] to toggle):", 0, 0);
+            prt(ui_text("Objects on screen (press ] to toggle):"), 0, 0);
         get_char = (char)steamdeck_menu_key(inkey(), 0, 0);
         show_los = !show_los;
         screen_load();
@@ -1377,15 +1378,15 @@ static cptr unified_sidebar_object_filter_tag(int group_filter)
     switch (group_filter)
     {
     case LOOK_GROUP_ARTIFACT:   return "ART";
-    case LOOK_GROUP_WEAPON:     return "WEAP";
-    case LOOK_GROUP_ARMOUR:     return "ARM";
-    case LOOK_GROUP_JEWELRY:    return "JEWL";
-    case LOOK_GROUP_HERBS:      return "HERB";
-    case LOOK_GROUP_POTIONS:    return "POT";
-    case LOOK_GROUP_GEMS:       return "GEM";
-    case LOOK_GROUP_CONSUMABLE: return "CONS";
-    case LOOK_GROUP_OTHER:      return "OTHER";
-    default:                    return "ALL";
+    case LOOK_GROUP_WEAPON:     return ui_text("WEAP");
+    case LOOK_GROUP_ARMOUR:     return ui_text("ARM");
+    case LOOK_GROUP_JEWELRY:    return ui_text("JEWL");
+    case LOOK_GROUP_HERBS:      return ui_text("HERB");
+    case LOOK_GROUP_POTIONS:    return ui_text("POT");
+    case LOOK_GROUP_GEMS:       return ui_text("GEM");
+    case LOOK_GROUP_CONSUMABLE: return ui_text("CONS");
+    case LOOK_GROUP_OTHER:      return ui_text("OTHER");
+    default:                    return ui_text("ALL");
     }
 }
 
@@ -1434,7 +1435,7 @@ static bool show_unified_sidebar_pixel(unified_look_state* state)
 
     if (state->show_monsters)
     {
-        sdl_unified_look_sidebar_add_header("MONSTERS:");
+        sdl_unified_look_sidebar_add_header(ui_text("MONSTERS:"));
         for (int i = 0; i < entry_count; i++)
         {
             unified_sidebar_compact_entry* entry = &entries[i];
@@ -1451,7 +1452,7 @@ static bool show_unified_sidebar_pixel(unified_look_state* state)
     {
         char header_buf[32];
 
-        strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s",
+        strnfmt(header_buf, sizeof(header_buf), ui_text("OBJECTS: %s"),
             unified_sidebar_object_filter_tag(state->object_group_filter));
         sdl_unified_look_sidebar_add_header(header_buf);
         for (int i = 0; i < entry_count; i++)
@@ -1588,8 +1589,8 @@ void show_unified_sidebar(unified_look_state* state)
     {
         log_trace("show_unified_sidebar: displaying MONSTERS header at line %d", line);
         unified_sidebar_clear_row(line, unified_sidebar_text_hit_width(
-            sidebar_col, sidebar_col, "MONSTERS:    ", 13));
-        c_put_str(TERM_WHITE, "MONSTERS:    ", line++, sidebar_col);
+            sidebar_col, sidebar_col, ui_text("MONSTERS:    "), 13));
+        c_put_str(TERM_WHITE, ui_text("MONSTERS:    "), line++, sidebar_col);
 
         /* Get monster list */
         get_sorted_target_list(TARGET_LIST_MONSTER, 0);
@@ -1797,23 +1798,23 @@ void show_unified_sidebar(unified_look_state* state)
     /* Show objects section */
     if (state->show_objects)
     {
-        const char* filter_tag = "ALL";
+        const char* filter_tag = ui_text("ALL");
         switch (state->object_group_filter)
         {
         case LOOK_GROUP_ARTIFACT:   filter_tag = "ART"; break;
-        case LOOK_GROUP_WEAPON:     filter_tag = "WEAP"; break;
-        case LOOK_GROUP_ARMOUR:     filter_tag = "ARM"; break;
-        case LOOK_GROUP_JEWELRY:    filter_tag = "JEWL"; break;
-        case LOOK_GROUP_HERBS:      filter_tag = "HERB"; break;
-        case LOOK_GROUP_POTIONS:    filter_tag = "POT"; break;
-        case LOOK_GROUP_GEMS:       filter_tag = "GEM"; break;
-        case LOOK_GROUP_CONSUMABLE: filter_tag = "CONS"; break;
-        case LOOK_GROUP_OTHER:      filter_tag = "OTHER"; break;
-        default:                    filter_tag = "ALL"; break;
+        case LOOK_GROUP_WEAPON:     filter_tag = ui_text("WEAP"); break;
+        case LOOK_GROUP_ARMOUR:     filter_tag = ui_text("ARM"); break;
+        case LOOK_GROUP_JEWELRY:    filter_tag = ui_text("JEWL"); break;
+        case LOOK_GROUP_HERBS:      filter_tag = ui_text("HERB"); break;
+        case LOOK_GROUP_POTIONS:    filter_tag = ui_text("POT"); break;
+        case LOOK_GROUP_GEMS:       filter_tag = ui_text("GEM"); break;
+        case LOOK_GROUP_CONSUMABLE: filter_tag = ui_text("CONS"); break;
+        case LOOK_GROUP_OTHER:      filter_tag = ui_text("OTHER"); break;
+        default:                    filter_tag = ui_text("ALL"); break;
         }
 
         char header_buf[32];
-        strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s", filter_tag);
+        strnfmt(header_buf, sizeof(header_buf), ui_text("OBJECTS: %s"), filter_tag);
         unified_sidebar_clear_row(line, unified_sidebar_text_hit_width(
             sidebar_col, sidebar_col, header_buf, (int)strlen(header_buf)));
         c_put_str(TERM_WHITE, header_buf, line++, sidebar_col);

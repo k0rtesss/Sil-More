@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
@@ -629,8 +630,8 @@ static void unified_look_print_controller_prompt(
     char back_compact[32];
     char zoom_in_compact[32];
     char zoom_out_compact[32];
-    cptr obj_action = compact_look_layout ? "View" : "Objects";
-    cptr mode_action = cursor_mode ? "Cursor" : "Pan";
+    cptr obj_action = compact_look_layout ? ui_text("View") : ui_text("Objects");
+    cptr mode_action = cursor_mode ? "Cursor" : ui_text("Pan");
 
     unified_look_prompt_label(steamdeck_prev_page_key(), "L1", prev_label,
         sizeof(prev_label));
@@ -647,24 +648,24 @@ static void unified_look_print_controller_prompt(
     unified_look_prompt_label(steamdeck_back_key(), "B", back_label,
         sizeof(back_label));
 
-    strnfmt(prev_full, sizeof(prev_full), "%s Prev", prev_label);
-    strnfmt(next_full, sizeof(next_full), "%s Next", next_label);
-    strnfmt(exam_full, sizeof(exam_full), "%s Exam", exam_label);
-    strnfmt(target_full, sizeof(target_full), "%s Target", target_label);
+    strnfmt(prev_full, sizeof(prev_full), ui_text("%s Prev"), prev_label);
+    strnfmt(next_full, sizeof(next_full), ui_text("%s Next"), next_label);
+    strnfmt(exam_full, sizeof(exam_full), ui_text("%s Exam"), exam_label);
+    strnfmt(target_full, sizeof(target_full), ui_text("%s Target"), target_label);
     strnfmt(obj_full, sizeof(obj_full), "%s %s", obj_label, obj_action);
     strnfmt(mode_full, sizeof(mode_full), "%s %s", mode_label, mode_action);
-    strnfmt(back_full, sizeof(back_full), "%s Back", back_label);
+    strnfmt(back_full, sizeof(back_full), ui_text("%s Back"), back_label);
     SDL_strlcpy(zoom_in_full, "Zoom +", sizeof(zoom_in_full));
     SDL_strlcpy(zoom_out_full, "Zoom -", sizeof(zoom_out_full));
-    strnfmt(prev_compact, sizeof(prev_compact), "%s Prv", prev_label);
-    strnfmt(next_compact, sizeof(next_compact), "%s Nxt", next_label);
-    strnfmt(exam_compact, sizeof(exam_compact), "%s Ex", exam_label);
-    strnfmt(target_compact, sizeof(target_compact), "%s Tgt", target_label);
+    strnfmt(prev_compact, sizeof(prev_compact), ui_text("%s Prv"), prev_label);
+    strnfmt(next_compact, sizeof(next_compact), ui_text("%s Nxt"), next_label);
+    strnfmt(exam_compact, sizeof(exam_compact), ui_text("%s Ex"), exam_label);
+    strnfmt(target_compact, sizeof(target_compact), ui_text("%s Tgt"), target_label);
     strnfmt(obj_compact, sizeof(obj_compact), "%s %s", obj_label,
-        compact_look_layout ? "Vw" : "Obj");
+        compact_look_layout ? ui_text("Vw") : ui_text("Obj"));
     strnfmt(mode_compact, sizeof(mode_compact), "%s %s", mode_label,
-        cursor_mode ? "Cur" : "Pan");
-    strnfmt(back_compact, sizeof(back_compact), "%s Bk", back_label);
+        cursor_mode ? ui_text("Cur") : ui_text("Pan"));
+    strnfmt(back_compact, sizeof(back_compact), ui_text("%s Bk"), back_label);
     SDL_strlcpy(zoom_in_compact, "Z+", sizeof(zoom_in_compact));
     SDL_strlcpy(zoom_out_compact, "Z-", sizeof(zoom_out_compact));
 
@@ -705,7 +706,7 @@ static void unified_look_print_touch_prompt(bool compact_look_layout,
     char display_compact[32];
     char mode_full[32];
     char mode_compact[32];
-    cptr display_action = compact_look_layout ? "View" : "Display";
+    cptr display_action = compact_look_layout ? ui_text("View") : ui_text("Display");
 
     if (!filter_action)
         filter_action = "";
@@ -713,23 +714,23 @@ static void unified_look_print_touch_prompt(bool compact_look_layout,
     strnfmt(filter_full, sizeof(filter_full), "%s", filter_action);
     strnfmt(display_full, sizeof(display_full), "%s", display_action);
     strnfmt(display_compact, sizeof(display_compact), "%s",
-        compact_look_layout ? "View" : "Disp");
-    strnfmt(mode_full, sizeof(mode_full), "%s", cursor_mode ? "Cursor" : "Pan");
+        compact_look_layout ? ui_text("View") : ui_text("Disp"));
+    strnfmt(mode_full, sizeof(mode_full), "%s", cursor_mode ? "Cursor" : ui_text("Pan"));
     strnfmt(mode_compact, sizeof(mode_compact), "%s",
-        cursor_mode ? "Cur" : "Pan");
+        cursor_mode ? ui_text("Cur") : ui_text("Pan"));
 
     {
         unified_look_prompt_button buttons[UNIFIED_LOOK_PROMPT_MAX_BUTTONS];
         int count = 0;
 
         buttons[count++] = (unified_look_prompt_button)
-            { '\t', "Next", "Next", "Nxt", "Nxt" };
+            { '\t', ui_text("Next"), ui_text("Next"), ui_text("Nxt"), ui_text("Nxt") };
         buttons[count++] = (unified_look_prompt_button)
-            { 'q', "Prev", "Prev", "Prv", "Prv" };
+            { 'q', ui_text("Prev"), ui_text("Prev"), ui_text("Prv"), ui_text("Prv") };
         buttons[count++] = (unified_look_prompt_button)
-            { ' ', "Examine", "Exam", "Ex", "Ex" };
+            { ' ', ui_text("Examine"), ui_text("Exam"), ui_text("Ex"), ui_text("Ex") };
         buttons[count++] = (unified_look_prompt_button)
-            { 't', "Target", "Target", "Tgt", "Tgt" };
+            { 't', ui_text("Target"), ui_text("Target"), ui_text("Tgt"), ui_text("Tgt") };
         buttons[count++] = (unified_look_prompt_button)
             { 'i', filter_full, filter_full, filter_full, filter_full };
         buttons[count++] = (unified_look_prompt_button)
@@ -738,9 +739,9 @@ static void unified_look_print_touch_prompt(bool compact_look_layout,
         if (extended)
         {
             buttons[count++] = (unified_look_prompt_button)
-                { 'm', "Monsters", "Mon", "Mon", "Mon" };
+                { 'm', ui_text("Monsters"), "Mon", "Mon", "Mon" };
             buttons[count++] = (unified_look_prompt_button)
-                { 'o', "Objects", "Obj", "Obj", "Obj" };
+                { 'o', ui_text("Objects"), ui_text("Obj"), ui_text("Obj"), ui_text("Obj") };
             buttons[count++] = (unified_look_prompt_button)
                 { 'T', "Top 5", "Top 5", "Top", "Top" };
         }
@@ -751,7 +752,7 @@ static void unified_look_print_touch_prompt(bool compact_look_layout,
         buttons[count++] = (unified_look_prompt_button)
             { '-', "Zoom -", "Zoom -", "Z-", "Z-" };
         buttons[count++] = (unified_look_prompt_button)
-            { ESCAPE, "Back", "Back", "Back", "Back" };
+            { ESCAPE, ui_text("Back"), ui_text("Back"), ui_text("Back"), ui_text("Back") };
 
         unified_look_print_prompt_buttons(buttons, count, register_clicks);
     }
@@ -772,33 +773,33 @@ static void unified_look_print_keyboard_prompt(bool cursor_mode,
         int count = 0;
 
         buttons[count++] = (unified_look_prompt_button)
-            { '\t', "Tab Next", "Tab Next", "Tab N", "Tab" };
+            { '\t', ui_text("Tab Next"), ui_text("Tab Next"), "Tab N", "Tab" };
         buttons[count++] = (unified_look_prompt_button)
-            { 'q', "q Prev", "q Prev", "q P", "q" };
+            { 'q', ui_text("q Prev"), ui_text("q Prev"), "q P", "q" };
         buttons[count++] = (unified_look_prompt_button)
-            { ' ', "Space Exam", "Sp Exam", "Sp Ex", "Sp" };
+            { ' ', ui_text("Space Exam"), ui_text("Sp Exam"), ui_text("Sp Ex"), ui_text("Sp") };
         buttons[count++] = (unified_look_prompt_button)
-            { 't', "t Target", "t Target", "t Tgt", "t" };
+            { 't', ui_text("t Target"), ui_text("t Target"), ui_text("t Tgt"), "t" };
         buttons[count++] = (unified_look_prompt_button)
             { 'i', filter_full, filter_full, filter_full, "i" };
         buttons[count++] = (unified_look_prompt_button)
-            { 'l', "l Display", "l Disp", "l Dsp", "l" };
+            { 'l', ui_text("l Display"), ui_text("l Disp"), ui_text("l Dsp"), "l" };
         buttons[count++] = (unified_look_prompt_button)
-            { 'm', "m Monsters", "m Mon", "m Mon", "m" };
+            { 'm', ui_text("m Monsters"), "m Mon", "m Mon", "m" };
         buttons[count++] = (unified_look_prompt_button)
-            { 'o', "o Objects", "o Obj", "o Obj", "o" };
+            { 'o', ui_text("o Objects"), ui_text("o Obj"), ui_text("o Obj"), "o" };
         buttons[count++] = (unified_look_prompt_button)
             { 'T', "T Top5", "T Top", "T Top", "T" };
         buttons[count++] = (unified_look_prompt_button)
-            { 's', cursor_mode ? "s Cursor" : "s Pan",
-                cursor_mode ? "s Cursor" : "s Pan",
-                cursor_mode ? "s Cur" : "s Pan", "s" };
+            { 's', cursor_mode ? "s Cursor" : ui_text("s Pan"),
+                cursor_mode ? "s Cursor" : ui_text("s Pan"),
+                cursor_mode ? ui_text("s Cur") : ui_text("s Pan"), "s" };
         buttons[count++] = (unified_look_prompt_button)
             { '+', "+ Zoom", "+ Zoom", "+ Zm", "+" };
         buttons[count++] = (unified_look_prompt_button)
             { '-', "- Zoom", "- Zoom", "- Zm", "-" };
         buttons[count++] = (unified_look_prompt_button)
-            { ESCAPE, "Esc Back", "Esc Back", "Esc", "Esc" };
+            { ESCAPE, ui_text("Esc Back"), ui_text("Esc Back"), "Esc", "Esc" };
 
         unified_look_print_prompt_buttons(buttons, count, register_clicks);
     }
@@ -811,7 +812,7 @@ static void unified_look_update_prompt_buttons_ex(bool controller_controls,
     if (sdl_touch_only_device_active())
     {
         unified_look_print_touch_prompt(compact_look_layout, cursor_mode,
-            nearby_filter ? "All" : "Near", register_clicks);
+            nearby_filter ? ui_text("All") : ui_text("Near"), register_clicks);
     }
     else if (controller_controls)
     {
@@ -821,7 +822,7 @@ static void unified_look_update_prompt_buttons_ex(bool controller_controls,
     else
     {
         unified_look_print_keyboard_prompt(cursor_mode,
-            nearby_filter ? "All" : "Near", register_clicks);
+            nearby_filter ? ui_text("All") : ui_text("Near"), register_clicks);
     }
 }
 
@@ -1168,7 +1169,7 @@ static void unified_look_redraw_overlay(unified_look_state* state,
 
 void do_cmd_unified_look(void)
 {
-    tutorial_game_menu("look", "Move the inspection cursor and select visible creatures, known items or terrain. Looking does not move your character.");
+    tutorial_game_menu("look", ui_text("Move the inspection cursor and select visible creatures, known items or terrain. Looking does not move your character."));
     unified_look_state state;
     int y, x;
     char query;
@@ -2658,7 +2659,7 @@ void do_cmd_locate(void)
     }
 
     /* Calculate explored bounds */
-    tutorial_game_menu("map", "Pan through explored terrain. Moving this view does not move your character or reveal unexplored squares.");
+    tutorial_game_menu("map", ui_text("Pan through explored terrain. Moving this view does not move your character or reveal unexplored squares."));
     if (get_explored_bounds(&min_y, &max_y, &min_x, &max_x))
     {
         /* Calculate viewport bounds based on explored area */
@@ -2977,7 +2978,7 @@ void do_cmd_query_symbol(void)
     }
     else
     {
-        strnfmt(buf, sizeof(buf), "%c - %s.", sym, "Unknown Symbol");
+        strnfmt(buf, sizeof(buf), "%c - %s.", sym, ui_text("Unknown Symbol"));
     }
 
     /* Display the result */
@@ -3024,9 +3025,9 @@ void do_cmd_query_symbol(void)
 
     /* Prompt */
     if (steamdeck_controls_active())
-        prt("<A> recall   <X> sort kills   <Y> sort level   <B> back", 0, 0);
+        prt(ui_text("<A> recall   <X> sort kills   <Y> sort level   <B> back"), 0, 0);
     else
-        put_str("Recall details? (k/p/y/n): ", 0, 40);
+        put_str(ui_text("Recall details? (k/p/y/n): "), 0, 40);
 
     /* Query */
     query = inkey();
@@ -3094,10 +3095,10 @@ void do_cmd_query_symbol(void)
 
         /* Hack -- Complete the prompt */
         if (steamdeck_controls_active())
-            prt("<A> recall   <LB>/<RB> previous/next   <B> back",
+            prt(ui_text("<A> recall   <LB>/<RB> previous/next   <B> back"),
                 (Term ? Term->hgt : 24) - 1, 0);
         else
-            Term_addstr(-1, TERM_WHITE, " [(r)ecall, ESC]");
+            Term_addstr(-1, TERM_WHITE, ui_text(" [(r)ecall, ESC]"));
 
         /* Interact */
         while (1)

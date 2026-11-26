@@ -10,6 +10,7 @@
  */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 #include "tutorial/tutorial.h"
 #include "log/perf.h"
@@ -462,6 +463,8 @@ static int sdl_question_menu_display_columns(cptr text, bool compact,
 
 static int sdl_question_menu_body_slot(void)
 {
+    if (g_question_menu.language_picker)
+        return SDL_STORY_FONT_SLOT_LANGUAGE_PICKER;
     return g_question_menu.tutorial_fonts
         ? sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL_MENU)
         : SDL_STORY_FONT_SLOT_MENU;
@@ -735,10 +738,12 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         anchor = visible;
     }
     compact_table = get_sdl_menu_bigger_font() || anchor.h > anchor.w;
+    bool touch_language_picker = g_question_menu.language_picker
+        && sdl_touch_only_device_active();
 
     font_px = sdl_main_menu_pane_font_px();
     if (sdl_handheld_ui_active()) {
-        font_px = get_sdl_menu_bigger_font()
+        font_px = get_sdl_menu_bigger_font() || touch_language_picker
             ? sdl_menu_role_font_px(SDL_UI_FONT_BODY)
             : (int)((float)font_px * 1.18f + 0.5f);
     }
@@ -845,7 +850,8 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
         row_h = MAX(row_h, (float)TTF_GetFontHeight(mono_font) + 4.0f);
     if (get_sdl_menu_bigger_font() || g_question_menu.text_input)
         row_h = MAX(44.0f, (float)TTF_GetFontHeight(story_font) * 1.3f);
-    if (sdl_handheld_ui_active() && (get_sdl_menu_bigger_font() || g_question_menu.text_input))
+    if (sdl_handheld_ui_active() && (get_sdl_menu_bigger_font()
+            || g_question_menu.text_input || touch_language_picker))
         row_h = MAX(row_h, (float)sdl_ui_min_tap_px());
     divider_gap = sdl_touch_pane_clampf((float)font_px * 0.3f, 3.0f, 8.0f);
     button_gap = sdl_touch_pane_clampf((float)font_px * 0.42f, 6.0f, 14.0f);
@@ -1145,8 +1151,8 @@ static bool sdl_question_menu_layout_aux(sdl_question_menu_layout_info* out,
             g_question_menu.help_open || g_question_menu.scroll_offset_ptr != NULL);
         if (steamdeck_controls_active() && g_question_menu.help_mode)
             out->controller_hint_text = g_question_menu.help_open
-                ? "D-pad / <RS> scroll   <View> choices   <B> back"
-                : "D-pad select   <RS> scroll   <A> choose   <View> help   <B> back";
+                ? ui_text("D-pad / <RS> scroll   <View> choices   <B> back")
+                : ui_text("D-pad select   <RS> scroll   <A> choose   <View> help   <B> back");
         if (out->controller_hint_text[0])
             controller_hint_h = sdl_question_menu_wrapped_text_height(
                 story_font, out->controller_hint_text,
@@ -2030,6 +2036,11 @@ void sdl_question_menu_use_tutorial_fonts(void)
     g_question_menu.tutorial_fonts = true;
 }
 
+void sdl_question_menu_use_language_picker_fonts(void)
+{
+    g_question_menu.language_picker = true;
+}
+
 void sdl_question_menu_set_anchor_grid(int y, int x)
 {
     if (!g_question_menu.active)
@@ -2398,7 +2409,7 @@ void sdl_question_menu_render(void)
     {
         TTF_Font* title_font = sdl_question_menu_title_font(layout.font_px);
         sdl_question_menu_draw_text(title_font,
-            g_question_menu.help_open ? "Help" : g_question_menu.title,
+            g_question_menu.help_open ? ui_text("Help") : g_question_menu.title,
             g_state.palette[TERM_WHITE], layout.title_row.x,
             layout.title_row.y, layout.title_row.w, layout.title_row.h,
             true);
@@ -2604,11 +2615,11 @@ void sdl_question_menu_render(void)
             }
             else
             {
-                if (layout.inline_text)
+                if (layout.inline_text || g_question_menu.language_picker)
                     sdl_question_menu_draw_text(story_font,
-                        sdl_question_menu_inline_text_tail(story_font,
-                            entry->text, text_w), text_color,
-                        text_x, row.y, text_w, row.h, false);
+                        layout.inline_text ? sdl_question_menu_inline_text_tail(
+                            story_font, entry->text, text_w) : entry->text,
+                        text_color, text_x, row.y, text_w, row.h, false);
                 else
                     sdl_question_menu_draw_wrapped_text(story_font, entry->text,
                         text_color, text_x, row.y, text_w, row.h);
@@ -2664,7 +2675,7 @@ void sdl_question_menu_render(void)
         SDL_SetRenderDrawColor(g_state.renderer, 36, 47, 62, 235);
         SDL_RenderFillRect(g_state.renderer, &rect);
         sdl_question_menu_draw_text(story_font,
-            at_actions ? "Choices" : "Actions", g_state.palette[TERM_WHITE],
+            at_actions ? ui_text("Choices") : ui_text("Actions"), g_state.palette[TERM_WHITE],
             rect.x, rect.y, rect.w, rect.h, true);
     }
 
@@ -3268,7 +3279,7 @@ bool sdl_question_menu_handle_hover_pointer(float x, float y)
             if (sdl_question_menu_layout(&layout))
             {
                 (void)sdl_object_tooltip_show_text_at_rect(
-                    &layout.close_rect, "Close this popup.", false);
+                    &layout.close_rect, ui_text("Close this popup."), false);
             }
         }
         return true;
@@ -3294,7 +3305,7 @@ bool sdl_question_menu_handle_hover_pointer(float x, float y)
         {
             (void)sdl_object_tooltip_show_text_at_rect(
                 &layout.suppress_rect,
-                "Hide these popups for 10 turns.", false);
+                ui_text("Hide these popups for 10 turns."), false);
         }
         return true;
     }

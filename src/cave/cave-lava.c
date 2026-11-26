@@ -1,5 +1,4 @@
-#include "angband.h"
-#include "externs.h"
+#include "cave-internal.h"
 #include "player/killer.h"
 #include "cave/cave-bridge.h"
 #include "cave/cave-environment.h"
@@ -168,6 +167,9 @@ void lava_light(void)
                     int yy = y + dy, xx = x + dx;
                     int d = distance(y, x, yy, xx);
                     if (!in_bounds(yy, xx) || d > 2 || !los(y, x, yy, xx))
+                        continue;
+                    if (cave_feat[yy][xx] == FEAT_ILLUSORY_WALL
+                        && !same_side_of_wall_as_player(yy, xx, y, x))
                         continue;
                     light[yy][xx] = MAX(light[yy][xx], 3 - d);
                 }

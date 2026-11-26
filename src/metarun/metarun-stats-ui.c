@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "metarun-internal.h"
 #include "ui/question.h"
 
@@ -63,17 +64,17 @@ static void story_book_show_tale_action_error(void)
     screen_save();
     Term_clear();
     Term_putstr(2, 5, -1, TERM_L_RED,
-        "The tale could not be changed safely.");
+        ui_text("The tale could not be changed safely."));
     if (recovery_required) {
         Term_putstr(2, 7, -1, TERM_WHITE,
-            "Tale recovery is pending; restart before starting a Story character.");
+            ui_text("Tale recovery is pending; restart before starting a Story character."));
     } else {
         Term_putstr(2, 7, -1, TERM_WHITE,
-            "The existing tale remains active; see log.txt for details.");
+            ui_text("The existing tale remains active; see log.txt for details."));
     }
     Term_putstr(2, 9, -1, TERM_L_DARK,
-        steamdeck_controls_active() ? "<B> Return to the Chronicle of Tales."
-            : "Press any key to return to the Chronicle of Tales.");
+        steamdeck_controls_active() ? ui_text("<B> Return to the Chronicle of Tales.")
+            : ui_text("Press any key to return to the Chronicle of Tales."));
     metarun_wait_hidden();
     screen_load();
 }
@@ -238,17 +239,18 @@ static void story_book_sdl_difficulty_effects(int runtype_id, char *out,
 
     if (stacks > 0) {
         strnfmt(out, size,
-            "%d starting curse stack%s across %d curse%s. Win at %d "
+            ui_text("%d %s across %d %s. Win at %d "
             "Silmarils. Blessings require %lu/%lu/%lu fallen-score points "
-            "on easier/normal/harder thresholds.",
-            stacks, stacks == 1 ? "" : "s", kinds, kinds == 1 ? "" : "s",
+            "on easier/normal/harder thresholds."),
+            stacks, ui_text(stacks == 1 ? "starting curse stack" : "starting curse stacks"),
+            kinds, ui_text(kinds == 1 ? "curse" : "curses"),
             win_goal, (unsigned long)easier, (unsigned long)normal,
             (unsigned long)harder);
     } else {
         strnfmt(out, size,
-            "No starting curses. Win at %d Silmarils. Blessings require "
+            ui_text("No starting curses. Win at %d Silmarils. Blessings require "
             "%lu/%lu/%lu fallen-score points on easier/normal/harder "
-            "thresholds.", win_goal, (unsigned long)easier,
+            "thresholds."), win_goal, (unsigned long)easier,
             (unsigned long)normal, (unsigned long)harder);
     }
 }
@@ -281,17 +283,17 @@ static int story_book_sdl_action_cost(int choice)
 static void story_book_sdl_action_label(int choice, char *out, size_t size)
 {
     if (choice >= STORY_BOOK_DIFFICULTY_BASE) {
-        SDL_strlcpy(out, runtype_info[choice - STORY_BOOK_DIFFICULTY_BASE].name, size);
+        SDL_strlcpy(out, ui_text(runtype_info[choice - STORY_BOOK_DIFFICULTY_BASE].name), size);
     } else if (choice >= STORY_BOOK_THRESHOLD_BASE) {
-        strnfmt(out, size, "%s blessing threshold",
-            threshold_mode_name((metarun_blessing_threshold_mode)(choice - STORY_BOOK_THRESHOLD_BASE)));
+        strnfmt(out, size, ui_text("%s blessing threshold"),
+            ui_text(threshold_mode_name((metarun_blessing_threshold_mode)(choice - STORY_BOOK_THRESHOLD_BASE))));
     } else if (choice >= STORY_BOOK_REMOVE_CURSE_BASE) {
-        strnfmt(out, size, "Lift one stack of %s",
+        strnfmt(out, size, ui_text("Lift one stack of %s"),
             curse_display_name(choice - STORY_BOOK_REMOVE_CURSE_BASE));
     } else if (choice >= STORY_BOOK_MAJOR_BASE) {
-        strnfmt(out, size, "Seal %s", major_blessing_name_str(choice - STORY_BOOK_MAJOR_BASE));
+        strnfmt(out, size, ui_text("Seal %s"), major_blessing_name_str(choice - STORY_BOOK_MAJOR_BASE));
     } else {
-        strnfmt(out, size, "Receive %s", blessing_display_name(choice - STORY_BOOK_MINOR_BASE));
+        strnfmt(out, size, ui_text("Receive %s"), blessing_display_name(choice - STORY_BOOK_MINOR_BASE));
     }
 }
 
@@ -307,18 +309,18 @@ static void story_book_sdl_action_description(int choice)
             text, sizeof(text));
         sdl_character_sheet_screen_add_book_paragraph(text);
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "A difficulty increase is permanent for this tale. You cannot return "
-            "to the current difficulty after confirming.", TERM_L_RED);
+            ui_text("A difficulty increase is permanent for this tale. You cannot return "
+            "to the current difficulty after confirming."), TERM_L_RED);
     } else if (choice >= STORY_BOOK_THRESHOLD_BASE) {
         metarun_blessing_threshold_mode mode =
             (metarun_blessing_threshold_mode)(choice - STORY_BOOK_THRESHOLD_BASE);
         strnfmt(text, sizeof(text),
-            "Earn one blessing point for every %lu fallen-score points on the %s "
+            ui_text("Earn one blessing point for every %lu fallen-score points on the %s "
             "threshold. Unspent score carries toward the next point. Changing "
             "the threshold recalculates earned points; points already spent "
-            "remain spent, and existing blessings remain active.",
+            "remain spent, and existing blessings remain active."),
             (unsigned long)runtype_threshold_for_mode(metar.type, mode),
-            threshold_mode_name(mode));
+            ui_text(threshold_mode_name(mode)));
         sdl_character_sheet_screen_add_book_paragraph(text);
     } else if (choice >= STORY_BOOK_REMOVE_CURSE_BASE) {
         int id = choice - STORY_BOOK_REMOVE_CURSE_BASE;
@@ -329,13 +331,13 @@ static void story_book_sdl_action_description(int choice)
             sdl_character_sheet_screen_add_book_paragraph_colored(
                 lore_text(cu_text + curse->power), TERM_L_RED);
         sdl_character_sheet_screen_add_book_paragraph(
-            "Permanently removes one curse stack from this tale. This does not grant a blessing stack.");
+            ui_text("Permanently removes one curse stack from this tale. This does not grant a blessing stack."));
     } else if (choice >= STORY_BOOK_MAJOR_BASE) {
         cptr detail = major_blessing_detail_desc(choice - STORY_BOOK_MAJOR_BASE);
         if (detail && detail[0])
             sdl_character_sheet_screen_add_book_paragraph(detail);
         sdl_character_sheet_screen_add_book_paragraph(
-            "This major blessing is permanent for this tale.");
+            ui_text("This major blessing is permanent for this tale."));
     } else {
         const curse_type *curse = &cu_info[choice - STORY_BOOK_MINOR_BASE];
         if (curse->blessing_text)
@@ -344,11 +346,11 @@ static void story_book_sdl_action_description(int choice)
             sdl_character_sheet_screen_add_book_paragraph_colored(
                 lore_text(cu_text + curse->blessing_power), TERM_L_GREEN);
         sdl_character_sheet_screen_add_book_paragraph(
-            "Permanently adds one blessing stack to this tale.");
+            ui_text("Permanently adds one blessing stack to this tale."));
     }
     if (cost > 0) {
-        strnfmt(text, sizeof(text), "Cost: %d blessing point%s. Spent points cannot be refunded.",
-            cost, cost == 1 ? "" : "s");
+        strnfmt(text, sizeof(text), ui_text("Cost: %s. Spent points cannot be refunded."),
+            format(ui_text(cost == 1 ? "%d blessing point" : "%d blessing points"), cost));
         sdl_character_sheet_screen_add_book_paragraph_colored(text, TERM_YELLOW);
     }
 }
@@ -385,8 +387,8 @@ static void story_book_sdl_add_change(story_book_sdl_state *state,
     story_book_sdl_action_description(choice);
     sdl_character_sheet_screen_add_book_paragraph_colored(
         story_book_sdl_action_cost(choice) > blessing_points_available()
-            ? "Not enough blessing points. This description is available without spending points."
-            : "Tap the highlighted choice again to select it, then confirm.", TERM_L_BLUE);
+            ? ui_text("Not enough blessing points. This description is available without spending points.")
+            : ui_text("Tap the highlighted choice again to select it, then confirm."), TERM_L_BLUE);
 }
 
 static void story_book_sdl_confirmation(int choice)
@@ -396,15 +398,16 @@ static void story_book_sdl_confirmation(int choice)
     int cost = story_book_sdl_action_cost(choice);
 
     story_book_sdl_action_label(choice, label, sizeof(label));
-    strnfmt(text, sizeof(text), "Confirm: %s?", label);
+    strnfmt(text, sizeof(text), ui_text("Confirm: %s?"), label);
     sdl_character_sheet_screen_add_book_paragraph_colored(text, TERM_YELLOW);
     story_book_sdl_action_description(choice);
     if (cost > 0)
-        strnfmt(text, sizeof(text), "Confirm - spend %d blessing point%s", cost, cost == 1 ? "" : "s");
+        strnfmt(text, sizeof(text), ui_text("Confirm - spend %s"),
+            format(ui_text(cost == 1 ? "%d blessing point" : "%d blessing points"), cost));
     else
-        SDL_strlcpy(text, "Confirm change", sizeof(text));
+        SDL_strlcpy(text, ui_text("Confirm change"), sizeof(text));
     sdl_character_sheet_screen_add_book_action_colored(text, STORY_BOOK_ACTION_CONFIRM, TERM_L_RED);
-    sdl_character_sheet_screen_add_book_action_colored("Cancel - keep current tale",
+    sdl_character_sheet_screen_add_book_action_colored(ui_text("Cancel - keep current tale"),
         STORY_BOOK_ACTION_CANCEL, TERM_L_GREEN);
 }
 
@@ -468,7 +471,7 @@ static void story_book_sdl_update(bool startup_scene,
 {
     char buf[1024];
     char line[256];
-    const char *difficulty = "Unknown";
+    const char *difficulty = ui_text("Unknown");
     int win_goal = WINCON_SILMARILS;
     int required_survivors;
     int available;
@@ -485,18 +488,18 @@ static void story_book_sdl_update(bool startup_scene,
     u64b run_blessings = startup_scene ? state->run_blessings : metarun_run_blessings(p_ptr);
     if (startup_scene) {
         sdl_character_sheet_screen_set_book_close_label(
-            "Proceed to character creation");
+            ui_text("Proceed to character creation"));
     }
 
-    sdl_character_sheet_screen_add_book_contents("I. Statistics",
+    sdl_character_sheet_screen_add_book_contents(ui_text("I. Statistics"),
         STORY_BOOK_PAGE_BASE + STORY_BOOK_STATISTICS, STORY_BOOK_STATISTICS);
-    sdl_character_sheet_screen_add_book_contents("II. Blessings",
+    sdl_character_sheet_screen_add_book_contents(ui_text("II. Blessings"),
         STORY_BOOK_PAGE_BASE + STORY_BOOK_BLESSINGS, STORY_BOOK_BLESSINGS);
-    sdl_character_sheet_screen_add_book_contents("III. Curses",
+    sdl_character_sheet_screen_add_book_contents(ui_text("III. Curses"),
         STORY_BOOK_PAGE_BASE + STORY_BOOK_CURSES, STORY_BOOK_CURSES);
-    sdl_character_sheet_screen_add_book_contents("IV. Difficulty",
+    sdl_character_sheet_screen_add_book_contents(ui_text("IV. Difficulty"),
         STORY_BOOK_PAGE_BASE + STORY_BOOK_DIFFICULTY, STORY_BOOK_DIFFICULTY);
-    sdl_character_sheet_screen_add_book_contents("V. Tales",
+    sdl_character_sheet_screen_add_book_contents(ui_text("V. Tales"),
         STORY_BOOK_PAGE_BASE + STORY_BOOK_METARUNS, STORY_BOOK_METARUNS);
 
     refresh_current_metar_score();
@@ -506,7 +509,7 @@ static void story_book_sdl_update(bool startup_scene,
     if (runtype_info && metar.type < z_info->rt_max
         && runtype_info[metar.type].name[0])
     {
-        difficulty = runtype_info[metar.type].name;
+        difficulty = ui_text(runtype_info[metar.type].name);
         if (runtype_info[metar.type].win_con)
             win_goal = runtype_info[metar.type].win_con;
     }
@@ -518,36 +521,36 @@ static void story_book_sdl_update(bool startup_scene,
      * Light that stands beside it -- tan for the framing, gold for glory and
      * the Silmarils, cream for the count of the living and the dead, and amber
      * (the colour of the held light) for the road to the next blessing. */
-    story_book_sdl_heading("I - The Measure of the Tale", false);
+    story_book_sdl_heading(ui_text("I - The Measure of the Tale"), false);
 
-    strnfmt(line, sizeof(line), "Tale %u on %s difficulty.",
+    strnfmt(line, sizeof(line), ui_text("Tale %u on %s difficulty."),
         (unsigned)metar.id, difficulty);
     sdl_character_sheet_screen_add_book_paragraph_colored(line, TERM_L_UMBER);
     if (run_blessings)
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            RUN_BLESSING_MODE_NAME " (Easy) is active for this hero.", TERM_L_GREEN);
+            ui_text(RUN_BLESSING_MODE_NAME " (Easy) is active for this hero."), TERM_L_GREEN);
 
     strnfmt(line, sizeof(line),
-        "Tale score: %lu  (best hero run: %lu).   Silmarils: %d of %d.",
+        ui_text("Tale score: %lu  (best hero run: %lu).   Silmarils: %d of %d."),
         (unsigned long)metar.score,
         (unsigned long)get_best_run_score_from_highscores(),
         metar.silmarils, win_goal);
     sdl_character_sheet_screen_add_book_paragraph_colored(line, TERM_YELLOW);
 
-    strnfmt(line, sizeof(line), "Living heroes: %d (need %d).   Deaths: %d.",
+    strnfmt(line, sizeof(line), ui_text("Living heroes: %d (need %d).   Deaths: %d."),
         metar.alive_characters, required_survivors, metar.deaths);
     sdl_character_sheet_screen_add_book_paragraph_colored(line, TERM_L_WHITE);
 
     strnfmt(line, sizeof(line),
-        "Blessing points: %d available, %d spent, %d earned.",
+        ui_text("Blessing points: %d available, %d spent, %d earned."),
         available, metar.blessing_points_spent, metar.blessing_points);
     sdl_character_sheet_screen_add_book_paragraph_colored(line, TERM_L_UMBER);
 
     strnfmt(line, sizeof(line),
-        "Fallen score: %lu.   Next blessing: %lu of %lu (%s).",
+        ui_text("Fallen score: %lu.   Next blessing: %lu of %lu (%s)."),
         (unsigned long)metar.fallen_score_total,
         (unsigned long)metar.fallen_score_pool, (unsigned long)threshold,
-        threshold_mode_name(metarun_get_threshold_mode(&metar)));
+        ui_text(threshold_mode_name(metarun_get_threshold_mode(&metar))));
     sdl_character_sheet_screen_add_book_paragraph_colored(line, TERM_ORANGE);
 
     sdl_character_sheet_screen_set_book_lamp(metar.fallen_score_pool,
@@ -557,14 +560,15 @@ static void story_book_sdl_update(bool startup_scene,
         run_blessings != 0);
 
     /* Page II: blessings and the exchange. */
-    story_book_sdl_heading("II - Blessings of the West", true);
-    strnfmt(line, sizeof(line), "%d blessing point%s available.",
-        available, available == 1 ? "" : "s");
+    story_book_sdl_heading(ui_text("II - Blessings of the West"), true);
+    strnfmt(line, sizeof(line),
+        ui_text(available == 1 ? "%d blessing point available." : "%d blessing points available."),
+        available);
     sdl_character_sheet_screen_add_book_paragraph_colored(line, TERM_L_GREEN);
 
     if (run_blessings) {
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            RUN_BLESSING_MODE_NAME " - this hero's blessings", TERM_YELLOW);
+            ui_text(RUN_BLESSING_MODE_NAME " - this hero's blessings"), TERM_YELLOW);
         for (int id = 0; id < MIN(z_info->cu_max, METAR_CURSE_SLOTS); id++) {
             if (!(run_blessings & (1ULL << id))) continue;
             sdl_character_sheet_screen_add_book_action_described(
@@ -579,7 +583,7 @@ static void story_book_sdl_update(bool startup_scene,
         if (stacks >= 0)
             continue;
         if (minor_count++ == 0)
-            sdl_character_sheet_screen_add_book_paragraph_colored("Minor blessings", TERM_YELLOW);
+            sdl_character_sheet_screen_add_book_paragraph_colored(ui_text("Minor blessings"), TERM_YELLOW);
         strnfmt(line, sizeof(line), "%s x%d", blessing_display_name(id), -stacks);
         sdl_character_sheet_screen_add_book_action_described(line,
             STORY_BOOK_OWNED_MINOR_BASE + id, TERM_L_GREEN,
@@ -590,7 +594,7 @@ static void story_book_sdl_update(bool startup_scene,
         if (!metarun_has_major_blessing_index(i))
             continue;
         if (major_count++ == 0)
-            sdl_character_sheet_screen_add_book_paragraph_colored("Major blessings", TERM_YELLOW);
+            sdl_character_sheet_screen_add_book_paragraph_colored(ui_text("Major blessings"), TERM_YELLOW);
         sdl_character_sheet_screen_add_book_action_described(major_blessing_name_str(i),
             STORY_BOOK_OWNED_MAJOR_BASE + i, TERM_L_GREEN, major_blessing_detail_desc(i));
     }
@@ -604,10 +608,10 @@ static void story_book_sdl_update(bool startup_scene,
             minor_choices);
 
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Tap to read. Tap the choice again to select, then confirm.", TERM_L_BLUE);
+            ui_text("Tap to read. Tap the choice again to select, then confirm."), TERM_L_BLUE);
         for (int i = 0; i < minor_choices_count; i++) {
             int id = minor_choices[i];
-            strnfmt(line, sizeof(line), "Receive %s (cost 1)",
+            strnfmt(line, sizeof(line), ui_text("Receive %s (cost 1)"),
                 blessing_display_name(id));
             story_book_sdl_add_change(state, line,
                 STORY_BOOK_MINOR_BASE + id, TERM_L_GREEN);
@@ -616,7 +620,7 @@ static void story_book_sdl_update(bool startup_scene,
             int stacks = MAX(story_book_curse_get(id), 0);
             if (stacks <= 0)
                 continue;
-            strnfmt(line, sizeof(line), "Lift one stack of %s (cost 1)",
+            strnfmt(line, sizeof(line), ui_text("Lift one stack of %s (cost 1)"),
                 curse_display_name(id));
             story_book_sdl_add_change(state, line,
                 STORY_BOOK_REMOVE_CURSE_BASE + id, TERM_L_RED);
@@ -626,23 +630,23 @@ static void story_book_sdl_update(bool startup_scene,
             if (!major_blessing_def(i) || metarun_has_major_blessing_index(i))
                 continue;
             cost = major_blessing_cost(i);
-            strnfmt(line, sizeof(line), "Seal %s (cost %d)",
+            strnfmt(line, sizeof(line), ui_text("Seal %s (cost %d)"),
                 major_blessing_name_str(i), cost);
             story_book_sdl_add_change(state, line,
                 STORY_BOOK_MAJOR_BASE + i, cost <= available ? TERM_YELLOW : TERM_L_DARK);
         }
     } else if (run_mode_is_blitz()) {
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Tale blessings cannot be changed during a Blitz run.",
+            ui_text("Tale blessings cannot be changed during a Blitz run."),
             TERM_L_DARK);
     } else {
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Earn another blessing point to alter the gifts of this tale.",
+            ui_text("Earn another blessing point to alter the gifts of this tale."),
             TERM_L_DARK);
     }
 
     /* Show active curses before their effects are discovered. */
-    story_book_sdl_heading("III - The Curses of the Tale", true);
+    story_book_sdl_heading(ui_text("III - The Curses of the Tale"), true);
     int curse_ids[METAR_CURSE_SLOTS];
     int curse_count = story_book_sdl_collect_known_curses(curse_ids,
         N_ELEMENTS(curse_ids));
@@ -654,7 +658,7 @@ static void story_book_sdl_update(bool startup_scene,
         state->selected_curse = -1;
         state->curse_offset = 0;
         sdl_character_sheet_screen_add_book_paragraph(
-            "This tale has no active or discovered curses.");
+            ui_text("This tale has no active or discovered curses."));
     } else {
         int selected_pos = -1;
 
@@ -681,7 +685,7 @@ static void story_book_sdl_update(bool startup_scene,
             int stacks = story_book_curse_get(id);
             char suffix[32] = "";
             if (stacks > 0)
-                strnfmt(suffix, sizeof(suffix), " (active x%d)", stacks);
+                strnfmt(suffix, sizeof(suffix), ui_text(" (active x%d)"), stacks);
             strnfmt(line, sizeof(line), "%c %s%s",
                 id == state->selected_curse ? '>' : '-',
                 curse_display_name(id), suffix);
@@ -694,7 +698,7 @@ static void story_book_sdl_update(bool startup_scene,
         char desc[384];
         char power[384];
         story_book_sdl_copy_excerpt(desc, sizeof(desc),
-            curse->text ? lore_text(cu_text + curse->text) : "No description recorded.",
+            curse->text ? lore_text(cu_text + curse->text) : ui_text("No description recorded."),
             300);
         strnfmt(buf, sizeof(buf), "%s\n%s",
             curse_display_name(state->selected_curse), desc);
@@ -704,23 +708,23 @@ static void story_book_sdl_update(bool startup_scene,
             sdl_character_sheet_screen_add_book_paragraph_colored(power, TERM_L_RED);
         } else {
             sdl_character_sheet_screen_add_book_paragraph_colored(
-                "Self Knowledge can reveal this curse's effect.", TERM_SLATE);
+                ui_text("Self Knowledge can reveal this curse's effect."), TERM_SLATE);
         }
         if (state->curse_offset > 0)
             sdl_character_sheet_screen_add_book_action_colored(
-                "Earlier known curses", STORY_BOOK_CURSES_EARLIER,
+                ui_text("Earlier known curses"), STORY_BOOK_CURSES_EARLIER,
                 TERM_L_BLUE);
         if (end < curse_count)
             sdl_character_sheet_screen_add_book_action_colored(
-                "Later known curses", STORY_BOOK_CURSES_LATER,
+                ui_text("Later known curses"), STORY_BOOK_CURSES_LATER,
                 TERM_L_BLUE);
     }
 
     /* Page IV: difficulty changes are previewed and confirmed on this page. */
-    story_book_sdl_heading("IV - The Weight of Doom", true);
+    story_book_sdl_heading(ui_text("IV - The Weight of Doom"), true);
     if (run_blessings)
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Hero difficulty: " RUN_BLESSING_MODE_NAME " (Easy)", TERM_L_GREEN);
+            ui_text("Hero difficulty: " RUN_BLESSING_MODE_NAME " (Easy)"), TERM_L_GREEN);
     if (!run_mode_is_blitz() && state->pending_action >= STORY_BOOK_THRESHOLD_BASE
         && story_book_sdl_change_action(state->pending_action)) {
         story_book_sdl_confirmation(state->pending_action);
@@ -732,20 +736,20 @@ static void story_book_sdl_update(bool startup_scene,
         };
 
         strnfmt(buf, sizeof(buf),
-            "Current: %s. Blessing threshold: %s - %lu points.", difficulty,
-            threshold_mode_name(metarun_get_threshold_mode(&metar)),
+            ui_text("Current: %s. Blessing threshold: %s - %lu points."), difficulty,
+            ui_text(threshold_mode_name(metarun_get_threshold_mode(&metar))),
             (unsigned long)threshold);
         sdl_character_sheet_screen_add_book_paragraph_colored(buf,
             TERM_L_BLUE);
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Tap to read. Tap the choice again to select, then confirm.", TERM_SLATE);
+            ui_text("Tap to read. Tap the choice again to select, then confirm."), TERM_SLATE);
         for (int i = 0; i < (int)N_ELEMENTS(modes); i++) {
             byte attr = modes[i] == METARUN_BLESSING_THRESHOLD_EASIER
                 ? TERM_L_GREEN
                 : (modes[i] == METARUN_BLESSING_THRESHOLD_HARDER
                     ? TERM_ORANGE : TERM_WHITE);
-            strnfmt(line, sizeof(line), "%s threshold - %lu points",
-                threshold_mode_name(modes[i]),
+            strnfmt(line, sizeof(line), ui_text("%s threshold - %lu points"),
+                ui_text(threshold_mode_name(modes[i])),
                 (unsigned long)runtype_threshold_for_mode(metar.type,
                     modes[i]));
             if (!run_mode_is_blitz()) {
@@ -757,7 +761,7 @@ static void story_book_sdl_update(bool startup_scene,
             }
         }
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Difficulty levels (select one to review its effects):",
+            ui_text("Difficulty levels (select one to review its effects):"),
             TERM_SLATE);
         for (int i = 0; runtype_info && i < z_info->rt_max; i++) {
             int stacks;
@@ -766,10 +770,12 @@ static void story_book_sdl_update(bool startup_scene,
             if (!runtype_info[i].name[0])
                 continue;
             stacks = story_book_sdl_difficulty_curse_stacks(i, NULL);
+            cptr curse_summary = stacks > 0
+                ? format(ui_text(stacks == 1 ? "%d starting curse stack"
+                                            : "%d starting curse stacks"), stacks)
+                : ui_text("no starting curses");
             strnfmt(line, sizeof(line), "%c %s - %s", i == metar.type ? '>' : '-',
-                runtype_info[i].name,
-                stacks > 0 ? format("%d starting curse stack%s", stacks,
-                    stacks == 1 ? "" : "s") : "no starting curses");
+                ui_text(runtype_info[i].name), curse_summary);
             attr = i == metar.type ? TERM_YELLOW
                 : (i < metar.max_difficulty_reached ? TERM_L_DARK
                                                      : runtype_info[i].colour);
@@ -779,44 +785,44 @@ static void story_book_sdl_update(bool startup_scene,
                     STORY_BOOK_DIFFICULTY_BASE + i, attr);
             } else {
                 if (i < metar.max_difficulty_reached)
-                    SDL_strlcat(line, " (locked)", sizeof(line));
+                    SDL_strlcat(line, ui_text(" (locked)"), sizeof(line));
                 sdl_character_sheet_screen_add_book_paragraph_colored(line,
                     attr);
             }
         }
         if (run_mode_is_blitz())
             sdl_character_sheet_screen_add_book_paragraph_colored(
-                "Tale difficulty cannot be changed during a Blitz run.",
+                ui_text("Tale difficulty cannot be changed during a Blitz run."),
                 TERM_L_DARK);
     }
 
     /* Page V: click a tale to replace the detail paragraph in place. */
-    story_book_sdl_heading("V - The Chronicle of Tales", true);
+    story_book_sdl_heading(ui_text("V - The Chronicle of Tales"), true);
     if (!steamdeck_controls_active())
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "PageUp/PageDown scroll details. Up/Down select a tale.",
+            ui_text("PageUp/PageDown scroll details. Up/Down select a tale."),
             TERM_SLATE);
     if (startup_scene) {
         sdl_character_sheet_screen_add_book_paragraph_colored(
-            "Blitz is a separate, self-contained run for practice or quick "
+            ui_text("Blitz is a separate, self-contained run for practice or quick "
             "play. It does not affect this tale, its heroes, blessings, "
-            "saves, or score.", TERM_SLATE);
+            "saves, or score."), TERM_SLATE);
         sdl_character_sheet_screen_add_book_action_colored(
-            "Start a separate Blitz run", STORY_BOOK_BLITZ, TERM_L_BLUE);
+            ui_text("Start a separate Blitz run"), STORY_BOOK_BLITZ, TERM_L_BLUE);
     }
     s16b *order = story_book_metarun_order();
     bool can_manage = metarun_tale_management_available();
     if (can_manage) {
         sdl_character_sheet_screen_add_book_action_colored(
-            steamdeck_controls_active() ? "<Y> Start a new tale"
-                                        : "N - Start a new tale",
+            steamdeck_controls_active() ? ui_text("<Y> Start a new tale")
+                                        : ui_text("N - Start a new tale"),
             STORY_BOOK_NEW_TALE, TERM_L_BLUE);
     }
     if (!order) {
         state->selected_run = 0;
         state->run_offset = 0;
         sdl_character_sheet_screen_add_book_paragraph(
-            "No tales have been recorded.");
+            ui_text("No tales have been recorded."));
     } else {
         if (state->selected_run < 0) state->selected_run = 0;
         if (state->selected_run >= metarun_max)
@@ -830,8 +836,8 @@ static void story_book_sdl_update(bool startup_scene,
 
         if (can_manage && order[state->selected_run] != current_run) {
             sdl_character_sheet_screen_add_book_action_colored(
-                steamdeck_controls_active() ? "<A> Load selected tale"
-                                            : "Enter - Load selected tale",
+                steamdeck_controls_active() ? ui_text("<A> Load selected tale")
+                                            : ui_text("Enter - Load selected tale"),
                 STORY_BOOK_LOAD_TALE,
                 TERM_L_BLUE);
         }
@@ -841,14 +847,15 @@ static void story_book_sdl_update(bool startup_scene,
             s16b idx = order[pos];
             const metarun *m = &metaruns[idx];
             time_t played = (time_t)m->last_played;
-            char date[24] = "unknown date";
+            char date[32];
+            SDL_strlcpy(date, ui_text("unknown date"), sizeof(date));
             struct tm *when = localtime(&played);
             if (when)
                 strftime(date, sizeof(date), "%Y-%m-%d", when);
-            strnfmt(line, sizeof(line), "%c Tale %u - score %lu - %s%s",
+            strnfmt(line, sizeof(line), ui_text("%c Tale %u - score %lu - %s%s"),
                 pos == state->selected_run ? '>' : '-', (unsigned)m->id,
                 (unsigned long)m->score, date,
-                idx == current_run ? " (current)" : "");
+                idx == current_run ? ui_text(" (current)") : "");
             sdl_character_sheet_screen_add_book_action_colored(line,
                 STORY_BOOK_RUN_BASE + pos,
                 idx == current_run ? TERM_YELLOW : TERM_WHITE);
@@ -856,21 +863,21 @@ static void story_book_sdl_update(bool startup_scene,
 
         s16b idx = order[state->selected_run];
         const metarun *m = &metaruns[idx];
-        const char *run_difficulty = "Unknown";
+        const char *run_difficulty = ui_text("Unknown");
         int run_win_goal = WINCON_SILMARILS;
         int curses = 0;
         int blessings = 0;
         int majors = 0;
-        const char *result = "In progress";
+        const char *result = ui_text("In progress");
         if (runtype_info && m->type < z_info->rt_max
             && runtype_info[m->type].name[0])
         {
-            run_difficulty = runtype_info[m->type].name;
+            run_difficulty = ui_text(runtype_info[m->type].name);
             if (runtype_info[m->type].win_con)
                 run_win_goal = runtype_info[m->type].win_con;
         }
-        if (m->silmarils >= run_win_goal) result = "Victory";
-        else if (m->deaths >= LOSECON_DEATHS) result = "Defeat";
+        if (m->silmarils >= run_win_goal) result = ui_text("Victory");
+        else if (m->deaths >= LOSECON_DEATHS) result = ui_text("Defeat");
         for (int id = 0; id < METAR_CURSE_SLOTS; id++) {
             if (m->curse_stacks[id] > 0) curses += m->curse_stacks[id];
             else blessings -= m->curse_stacks[id];
@@ -879,17 +886,17 @@ static void story_book_sdl_update(bool startup_scene,
             if (m->major_blessings & (1U << i)) majors++;
         }
         strnfmt(buf, sizeof(buf),
-            "Tale %u - %s.\n%s difficulty; %d Silmarils; %d deaths; best hero run %lu.\n"
-            "%d curse stacks, %d minor blessing stacks, %d major blessings.",
+            ui_text("Tale %u - %s.\n%s difficulty; %d Silmarils; %d deaths; best hero run %lu.\n"
+            "%d curse stacks, %d minor blessing stacks, %d major blessings."),
             (unsigned)m->id, result, run_difficulty, m->silmarils, m->deaths,
             (unsigned long)m->best_run_score, curses, blessings, majors);
         sdl_character_sheet_screen_add_book_paragraph_colored(buf, TERM_SLATE);
         if (state->run_offset > 0)
             sdl_character_sheet_screen_add_book_action_colored(
-                "Newer tales", STORY_BOOK_RUNS_NEWER, TERM_L_BLUE);
+                ui_text("Newer tales"), STORY_BOOK_RUNS_NEWER, TERM_L_BLUE);
         if (end < metarun_max)
             sdl_character_sheet_screen_add_book_action_colored(
-                "Older tales", STORY_BOOK_RUNS_OLDER, TERM_L_BLUE);
+                ui_text("Older tales"), STORY_BOOK_RUNS_OLDER, TERM_L_BLUE);
         order = mem_free(order);
     }
 
@@ -910,21 +917,21 @@ static void story_book_sdl_toggle_easy(story_book_sdl_state *state)
         return;
     }
 
-    char description[480];
+    char description[1024];
     const ui_question_option options[] = {
-        { 'y', "Accept Nienna's Mercy", TERM_L_GREEN, false },
-        { 'n', "Keep current difficulty", TERM_WHITE, false },
+        { 'y', ui_text("Accept Nienna's Mercy"), TERM_L_GREEN, false },
+        { 'n', ui_text("Keep current difficulty"), TERM_WHITE, false },
     };
     strnfmt(description, sizeof(description),
-        "Fallen heroes earn a blessing point per %lu score points. "
+        ui_text("Fallen heroes earn a blessing point per %lu score points. "
         "Leftover score carries forward. In Blessings, one point buys a minor "
         "blessing or lifts one curse stack. Major blessings have listed costs.\n\n"
         "If the game feels too hard, try Easy. Nienna, Lady of Pity, offers twelve "
         "blessings, fixed for your next hero. Choose four for free. Your picks "
         "lower your score and lock some challenge achievements. Tap the bottle again "
-        "before starting to turn Easy off.",
+        "before starting to turn Easy off."),
         (unsigned long)metarun_threshold_value(&metar));
-    if (ui_question_ask_overlay(RUN_BLESSING_MODE_NAME " (Easy)", description, options,
+    if (ui_question_ask_overlay(ui_text(RUN_BLESSING_MODE_NAME " (Easy)"), description, options,
             N_ELEMENTS(options), UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 1) == 0) {
         sdl_character_sheet_screen_hide();
         state->run_blessings = metarun_choose_run_blessings();

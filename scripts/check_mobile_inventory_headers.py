@@ -76,6 +76,7 @@ static bool sdl_handheld_ui_active(void){return handheld;}
 static bool sdl_touch_only_device_active(void){return touch_only;}
 static bool get_sdl_menu_bigger_font(void){return bigger;}
 static bool sdl_mobile_portrait_layout_active(void){return portrait;}
+static cptr ui_text(cptr text){return text;}
 static int utf8_sequence_len_n(cptr s,int n){return n&&*s?1:0;}
 static int utf8_display_width_n(cptr s,int n){return n;}
 static int utf8_safe_prefix_len(cptr s,int n){return n;}

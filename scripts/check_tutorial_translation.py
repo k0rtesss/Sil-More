@@ -16,6 +16,7 @@ CJK_SCRIPTS = {
 }
 DICE = re.compile(r"(?<![a-z0-9])(?:\d+d(?:\d+|X)|Xd1)(?![a-z0-9])", re.ASCII | re.IGNORECASE)
 BAD_TEXT = re.compile(r"[\ufffd\u2047▁]|\?{3}")
+HELP_KEY_BINDING = re.compile(r"\(\^?[!-~]\)$")
 
 
 def source_hash(lesson):
@@ -23,27 +24,30 @@ def source_hash(lesson):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def check_alphabet(language, value, location, source=""):
+    alphabets = ("LATIN", "CYRILLIC") if language in ("ru", "uk", "bg") else ("LATIN",)
+    alphabets += CJK_SCRIPTS.get(language, ())
+    unexpected = {ch for ch in value if ch not in source
+                  and unicodedata.category(ch) in ("Lu", "Ll", "Lt", "Lo")
+                  and not unicodedata.name(ch, "").startswith(alphabets)}
+    assert not unexpected, (language, location, "unexpected characters", sorted(unexpected))
+
+
 def check(language, locale, english, keys):
     assert locale["version"] == 1 and locale["language"] == language
     assert set(locale["lessons"]) == {lesson["id"] for lesson in english["lessons"]}
     placeholders = lambda text: sorted(re.findall(r"\{[^}]*\}", text))
     count = 0
-    alphabets = ("LATIN", "CYRILLIC") if language in ("ru", "uk", "bg") else ("LATIN",)
-    alphabets += CJK_SCRIPTS.get(language, ())
-    def check_alphabet(value, location):
-        unexpected = {ch for ch in value if unicodedata.category(ch) in ("Lu", "Ll", "Lt", "Lo")
-                      and not unicodedata.name(ch, "").startswith(alphabets)}
-        assert not unexpected, (language, location, "unexpected characters", sorted(unexpected))
     for lesson in english["lessons"]:
         translated = locale["lessons"][lesson["id"]]
-        assert translated["source_sha256"] == source_hash(lesson), (lesson["id"], "translation needs review")
+        assert translated["source_sha256"] == source_hash(lesson), (language, lesson["id"], "translation needs review")
         assert translated["title"].strip() and len(translated["title"].encode("utf-8")) < 320
         assert not BAD_TEXT.search(translated["title"]), (language, lesson["id"])
-        check_alphabet(translated["title"], lesson["id"])
+        check_alphabet(language, translated["title"], lesson["id"])
         assert len(translated["steps"]) == len(lesson["steps"]), lesson["id"]
         for source, text in zip(lesson["steps"], translated["steps"]):
             assert text.strip(), lesson["id"]
-            check_alphabet(text, lesson["id"])
+            check_alphabet(language, text, lesson["id"])
             if language in ("ru", "uk", "bg"):
                 assert re.search("[А-Яа-яЁё]", text), lesson["id"]
             elif language in CJK_SCRIPTS:
@@ -65,7 +69,7 @@ def check(language, locale, english, keys):
             formats = lambda value: re.findall(r"%(?:%|[+\-.\d]*[dsuf])", value)
             assert formats(source) == formats(text), source
             assert text.strip() and not BAD_TEXT.search(text), source
-            check_alphabet(text, source)
+            check_alphabet(language, text, source)
     print(f"{language} tutorial catalogue: PASS ({len(locale['lessons'])} lessons, {count} pages)")
 
 
@@ -94,7 +98,11 @@ def main():
         device = {**reference.get("device", {}), **locale.get("device", {})}
         assert set(reference["help"]) == expected_help, (code, "help pages")
         assert set(device) == expected_device, (code, "device tutorials")
+        for source, translated in reference["help"].items():
+            binding = HELP_KEY_BINDING.search(source)
+            assert not binding or binding[0] in translated, (code, source, "keyboard shortcut")
         for source, translated in (*reference["help"].items(), *device.items()):
+            check_alphabet(code, translated, source, source)
             assert translated.strip() and not BAD_TEXT.search(translated), (code, source)
             assert "▁" not in translated and "<unk>" not in translated, (code, source, "unconverted text")
             assert not re.search(r"\b([^\W\d_]{2,})(?:\s+\1){3,}\b", translated, re.IGNORECASE), (code, source, "repeated words")

@@ -15,6 +15,7 @@
 
 #include "mem/alloc.h"
 #include "log/log.h"
+#include "support/utf8.h"
 
 term_pre_fresh_hook_func g_term_pre_fresh_hook = NULL;
 term_clear_hook_func g_term_clear_hook = NULL;
@@ -1949,6 +1950,10 @@ errr Term_addstr(int n, byte a, cptr s)
     /* React to reaching the edge of the screen */
     if (Term->scr->cx + n >= w)
         res = n = w - Term->scr->cx;
+
+    /* The grid stores UTF-8 bytes. Keep a glyph whole when clipping a run. */
+    if (n > 0 && (unsigned char)s[n - 1] >= 0x80)
+        n = utf8_safe_prefix_len(s, n);
 
     /* Queue the first "n" characters for display */
     Term_queue_chars(Term->scr->cx, Term->scr->cy, n, a, s);

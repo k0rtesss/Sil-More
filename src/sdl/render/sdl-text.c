@@ -75,6 +75,50 @@ static sdl_ui_text_cache_entry g_ui_text_cache[SDL_UI_TEXT_CACHE_MAX];
 static Uint64 g_ui_text_cache_clock;
 static size_t g_ui_text_cache_pixels;
 
+/* Adjacent log refreshes share messages and roll tokens. Cache the exact
+ * SDL_ttf advance and UTF-8 fit offset, including for a partial line. */
+typedef struct {
+    TTF_Font* font;
+    Uint32 generation;
+    int max_width;
+    size_t length;
+    int width;
+    size_t fit;
+    char text[96];
+} log_measurement;
+
+static log_measurement log_measurements[128];
+
+static bool sdl_measure_log_text(TTF_Font* font, const char* text, size_t len,
+    int max_width, int* width, size_t* fit)
+{
+    if (!len || len > sizeof(log_measurements[0].text))
+        return TTF_MeasureString(font, text, len, max_width, width, fit);
+
+    Uint32 hash = SDL_murmur3_32(text, len, (Uint32)max_width);
+    log_measurement* entry = &log_measurements[hash % N_ELEMENTS(log_measurements)];
+    Uint32 generation = TTF_GetFontGeneration(font);
+    if (entry->font != font || entry->generation != generation
+        || entry->length != len || entry->max_width != max_width
+        || memcmp(entry->text, text, len) != 0) {
+        int measured_width;
+        size_t measured_fit;
+        if (!TTF_MeasureString(font, text, len, max_width,
+                &measured_width, &measured_fit))
+            return false;
+        entry->font = font;
+        entry->generation = generation;
+        entry->length = len;
+        entry->max_width = max_width;
+        entry->width = measured_width;
+        entry->fit = measured_fit;
+        memcpy(entry->text, text, len);
+    }
+    if (width) *width = entry->width;
+    if (fit) *fit = entry->fit;
+    return true;
+}
+
 static void sdl_ui_text_cache_entry_clear(sdl_ui_text_cache_entry* entry)
 {
     if (!entry)
@@ -88,6 +132,7 @@ static void sdl_ui_text_cache_entry_clear(sdl_ui_text_cache_entry* entry)
 
 void sdl_ui_text_cache_clear(void)
 {
+    SDL_zeroa(log_measurements);
     sdl_hint_quest_context_cache_clear();
     for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++)
         sdl_ui_text_cache_entry_clear(&g_ui_text_cache[i]);
@@ -99,6 +144,10 @@ void sdl_ui_text_cache_clear_font(TTF_Font* font)
 {
     if (!font)
         return;
+
+    for (size_t i = 0; i < N_ELEMENTS(log_measurements); ++i)
+        if (log_measurements[i].font == font)
+            log_measurements[i].font = NULL;
 
     for (int i = 0; i < SDL_UI_TEXT_CACHE_MAX; i++) {
         sdl_ui_text_cache_entry* entry = &g_ui_text_cache[i];
@@ -441,14 +490,16 @@ void sdl_render_mono_utf8_glyph(TTF_Font* font, float cell_w,
     if (cell_span < 1)
         cell_span = 1;
 
-    if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP) {
-        int slot = sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL);
-        const char *p = s;
-        size_t remaining = (size_t)len;
-        if (slot != SDL_STORY_FONT_SLOT_TUTORIAL || !TTF_FontHasGlyph(font, SDL_StepUTF8(&p, &remaining))) {
-            TTF_Font *help_font = sdl_story_font_for_height_slot(MAX(1, (int)cell_h), slot);
-            if (help_font) font = help_font;
-        }
+    bool regional_help = sdl_terminal_menu_font() == SDL_MENU_FONT_HELP
+        && sdl_tutorial_font_slot(SDL_STORY_FONT_SLOT_TUTORIAL)
+            != SDL_STORY_FONT_SLOT_TUTORIAL;
+    const char* p = s;
+    size_t remaining = (size_t)len;
+    if (regional_help || !TTF_FontHasGlyph(font, SDL_StepUTF8(&p, &remaining))) {
+        TTF_Font* fallback = sdl_story_font_for_height_slot(
+            MAX(1, (int)cell_h), SDL_STORY_FONT_SLOT_MENU);
+        if (fallback)
+            font = fallback;
     }
     memcpy(text_buf, s, (size_t)len);
     text_buf[len] = '\0';
@@ -832,7 +883,7 @@ int sdl_overlay_log_wrap(const char* msg, int max_segs, int* out_off,
         size_t fit = 0;
         /* SDL_ttf returns the byte offset of the first cluster that does
          * not fit. Shape each line once instead of shaping every prefix. */
-        if (limit > 0 && !TTF_MeasureString(font, msg + pos, limit,
+        if (limit > 0 && !sdl_measure_log_text(font, msg + pos, limit,
                 max_width, NULL, &fit))
             fit = limit;
         int take = fit ? (int)fit : utf8_sequence_len_n(msg + pos, remain);
@@ -944,7 +995,7 @@ static void sdl_render_combat_roll_row_px(sdl_view* d, TTF_Font* font,
             col = sdl_color_from_attr(sdl_ui_text_fg_attr(t->attr));
             sdl_draw_story_run_px(d, font, px, y, t->text, col, right_edge - px);
             int advance = 0;
-            if (TTF_MeasureString(font, t->text, len, 0, &advance, NULL))
+            if (sdl_measure_log_text(font, t->text, len, 0, &advance, NULL))
                 px += advance * advance_scale;
         }
     }

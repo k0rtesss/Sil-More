@@ -427,14 +427,14 @@ bool same_side_of_wall_as_player(int y, int x, int fy, int fx)
     {
         if ((px < x) && (fx < x))
         {
-            if (cave_info[y][x - 1] & (CAVE_WALL))
+            if (cave_blocks_sight(y, x - 1))
             {
                 same = false;
             }
         }
         else if ((px > x) && (fx > x))
         {
-            if (cave_info[y][x + 1] & (CAVE_WALL))
+            if (cave_blocks_sight(y, x + 1))
             {
                 same = false;
             }
@@ -451,14 +451,14 @@ bool same_side_of_wall_as_player(int y, int x, int fy, int fx)
         // if both above
         if ((py < y) && (fy < y))
         {
-            if (cave_info[y - 1][x] & (CAVE_WALL))
+            if (cave_blocks_sight(y - 1, x))
             {
                 same = false;
             }
         }
         else if ((py > y) && (fy > y))
         {
-            if (cave_info[y + 1][x] & (CAVE_WALL))
+            if (cave_blocks_sight(y + 1, x))
             {
                 same = false;
             }
@@ -746,7 +746,7 @@ static void update_view_aux(bool generation_preview)
                 }
 
                 /* Handle wall */
-                if (info & (CAVE_WALL))
+                if (cave_blocks_sight(GRID_Y(g), GRID_X(g)))
                 {
                     /* Clear bits */
                     bits0 &= ~(p->bits_0);
@@ -783,11 +783,11 @@ static void update_view_aux(bool generation_preview)
                                 = (x < px) ? (x + 1) : (x > px) ? (x - 1) : x;
 
                             /* Check for "complex" illumination */
-                            if ((!(cave_info[yy][xx] & (CAVE_WALL))
+                            if ((!cave_blocks_sight(yy, xx)
                                     && (cave_info[yy][xx] & (CAVE_GLOW)))
-                                || (!(cave_info[y][xx] & (CAVE_WALL))
+                                || (!cave_blocks_sight(y, xx)
                                     && (cave_info[y][xx] & (CAVE_GLOW)))
-                                || (!(cave_info[yy][x] & (CAVE_WALL))
+                                || (!cave_blocks_sight(yy, x)
                                     && (cave_info[yy][x] & (CAVE_GLOW))))
                             {
                                 /* Mark as seen */
@@ -1007,10 +1007,8 @@ static void update_view_aux(bool generation_preview)
                         if ((distance(py, px, y, x) <= MAX_SIGHT)
                             && (info & (CAVE_VIEW)))
                         {
-                            if (((cave_info[y][x] & (CAVE_WALL))
-                                    && same_side_of_wall_as_player(
-                                        y, x, fy, fx))
-                                || !(cave_info[y][x] & (CAVE_WALL)))
+                            if (!cave_blocks_sight(y, x)
+                                || same_side_of_wall_as_player(y, x, fy, fx))
                             {
                                 int contribution = cave_light_contribution(
                                     mon_light, glow, fy, fx, y, x);
@@ -1093,10 +1091,8 @@ static void update_view_aux(bool generation_preview)
                         if ((distance(py, px, y, x) <= MAX_SIGHT)
                             && (info & (CAVE_VIEW)))
                         {
-                            if (((cave_info[y][x] & (CAVE_WALL))
-                                    && same_side_of_wall_as_player(
-                                        y, x, fy, fx))
-                                || !(cave_info[y][x] & (CAVE_WALL)))
+                            if (!cave_blocks_sight(y, x)
+                                || same_side_of_wall_as_player(y, x, fy, fx))
                             {
                                 // Brighten the square
                                 if (obj_light > 0)

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -295,7 +296,7 @@ static bool choose_fletchery_supply_torch(int* out_sval)
     options[1]
         = (ui_question_option){ 'm', mallorn_label, TERM_L_WHITE, false };
 
-    choice = ui_question_ask("Use which torches from supplies?", NULL,
+    choice = ui_question_ask(ui_text("Use which torches from supplies?"), NULL,
         options, 2, UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, 0);
     if (choice < 0)
         return false;
@@ -672,7 +673,7 @@ void do_cmd_fletchery(void)
             return;
         }
 
-        int amount = get_quantity_action("Convert how many?", "Convert",
+        int amount = get_quantity_action(ui_text("Convert how many?"), ui_text("Convert"),
             max_convert);
         if (amount <= 0)
             return;
@@ -690,8 +691,8 @@ void do_cmd_fletchery(void)
         int arrows_per = is_staff ? 6 : 3;
         int produced_total = amount * arrows_per;
 
-        msg_format("You carve %d +3 arrow%s from %s.", produced_total,
-            (produced_total == 1) ? "" : "s", source_name);
+        msg_format("You carve %d +3 %s from %s.", produced_total,
+            ui_text(produced_total == 1 ? "arrow" : "arrows"), source_name);
 
         /* Remove the raw materials */
         if (from_floor)

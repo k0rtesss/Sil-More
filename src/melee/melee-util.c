@@ -108,6 +108,16 @@ bool cave_exist_mon(
     }
 }
 
+bool monster_can_cross_rock(const monster_type* m_ptr)
+{
+    u32b flags = r_info[m_ptr->r_idx].flags2;
+
+    return (flags & (RF2_PASS_WALL | RF2_KILL_WALL))
+        || ((flags & RF2_TUNNEL_WALL)
+            && m_ptr->alertness >= ALERTNESS_ALERT
+            && m_ptr->stance != STANCE_FLEEING);
+}
+
 /*
  * Can the monster enter this grid?  How easy is it for them to do so?
  *
@@ -279,19 +289,7 @@ int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash)
         if (FEAT_IS_ROCK(feat)
             || (feat == FEAT_RUBBLE) || (feat == FEAT_ILLUSORY_WALL))
         {
-            /* Impassible except for monsters that move through walls */
-            if ((r_ptr->flags2 & (RF2_PASS_WALL))
-                || (r_ptr->flags2 & (RF2_KILL_WALL)))
-                return (move_chance);
-
-            // alert unafraid monsters can slowly tunnel through walls
-            else if ((r_ptr->flags2 & (RF2_TUNNEL_WALL))
-                && (m_ptr->alertness >= ALERTNESS_ALERT)
-                && (m_ptr->stance != STANCE_FLEEING))
-                return (move_chance);
-
-            else
-                return (0);
+            return monster_can_cross_rock(m_ptr) ? move_chance : 0;
         }
 
         /* Doors */

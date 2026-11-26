@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 
 /* This keyboard also works outside Steam.  It feeds the existing UTF-8 text
@@ -36,9 +37,9 @@ static cptr keyboard_hints(void)
 {
     SDL_Rect screen = sdl_get_layout_screen_rect();
     if (screen.h < 520 || screen.w < 600)
-        return "<A> Type   <B> Cancel   <X> Delete";
-    return "<A> Type   <B> Cancel   <X> Delete   <Y> Case\n"
-        "<Menu> Done   <LB>/<RB> Letters / symbols";
+        return ui_text("<A> Type   <B> Cancel   <X> Delete");
+    return ui_text("<A> Type   <B> Cancel   <X> Delete   <Y> Case\n"
+        "<Menu> Done   <LB>/<RB> Letters / symbols");
 }
 
 bool sdl_controller_keyboard_active(void)
@@ -87,7 +88,7 @@ static bool keyboard_layout(controller_keyboard_layout* layout)
     int hint_w = 0, hint_h = 0;
     TTF_GetStringSizeWrapped(font, keyboard_hints(), 0,
         MAX(1, screen.w - (int)(2 * pad)), &hint_w, &hint_h);
-    cptr actions[] = {"ABC", "#+=", "Space", "Clear", "Done"};
+    cptr actions[] = {"ABC", "#+=", ui_text("Space"), ui_text("Clear"), ui_text("Done")};
     layout->action_rows = 1;
     for (int key = 0; key < 5; ++key) {
         int width = 0;
@@ -329,7 +330,7 @@ void sdl_controller_keyboard_render(void)
             label = letter[0] == ' ' ? "_" : letter;
         } else {
             cptr actions[] = {keyboard.upper ? "abc" : "ABC",
-                keyboard.symbols ? "abc" : "#+=", "Space", "Clear", "Done"};
+                keyboard.symbols ? "abc" : "#+=", ui_text("Space"), ui_text("Clear"), ui_text("Done")};
             label = actions[key - KEYBOARD_ACTION_FIRST];
         }
         keyboard_draw_text(font, label, rect, false);

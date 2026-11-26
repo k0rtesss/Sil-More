@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 
 bool sdl_main_screen_handle_supporting_pane_pointer(float x, float y)
@@ -545,22 +546,22 @@ int sdl_log_pane_menu_collect(enum pane_type pane,
     enum pane_type other = sdl_log_pane_other(pane);
     char rows_hint[32];
 
-    strnfmt(rows_hint, sizeof(rows_hint), "currently %d", rows);
+    strnfmt(rows_hint, sizeof(rows_hint), ui_text("currently %d"), rows);
 
     sdl_log_pane_menu_add_entry(entries, &count, LOG_PANE_MENU_FILTER,
-        LOG_HISTORY_FILTER_ALL, 0, "Combined", "log + combat");
+        LOG_HISTORY_FILTER_ALL, 0, ui_text("Combined"), ui_text("log + combat"));
     sdl_log_pane_menu_add_entry(entries, &count, LOG_PANE_MENU_FILTER,
-        LOG_HISTORY_FILTER_MESSAGES, 0, "Log only", "messages");
+        LOG_HISTORY_FILTER_MESSAGES, 0, ui_text("Log only"), ui_text("messages"));
     sdl_log_pane_menu_add_entry(entries, &count, LOG_PANE_MENU_FILTER,
-        LOG_HISTORY_FILTER_COMBAT, 0, "Combat only", "rolls");
+        LOG_HISTORY_FILTER_COMBAT, 0, ui_text("Combat only"), ui_text("rolls"));
     sdl_log_pane_menu_add_entry(entries, &count, LOG_PANE_MENU_ROWS,
-        LOG_HISTORY_FILTER_ALL, -1, "Rows -", rows_hint);
+        LOG_HISTORY_FILTER_ALL, -1, ui_text("Rows -"), rows_hint);
     sdl_log_pane_menu_add_entry(entries, &count, LOG_PANE_MENU_ROWS,
-        LOG_HISTORY_FILTER_ALL, 1, "Rows +", rows_hint);
+        LOG_HISTORY_FILTER_ALL, 1, ui_text("Rows +"), rows_hint);
     sdl_log_pane_menu_add_entry(entries, &count, LOG_PANE_MENU_SWITCH,
         LOG_HISTORY_FILTER_ALL, 0,
-        (other == PANE_ROLLS) ? "Use overlay" : "Use bottom",
-        "switch");
+        (other == PANE_ROLLS) ? ui_text("Use overlay") : ui_text("Use bottom"),
+        ui_text("switch"));
 
     return count;
 }
@@ -1200,12 +1201,12 @@ void sdl_log_pane_menu_render(void)
     sdl_pane_menu_draw_controller_hint(&header);
     if (sdl_pane_menu_flow_layout()) {
         sdl_pane_menu_mobile_text(&header,
-            g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
+            g_log_pane_menu.target_pane == PANE_ROLLS ? ui_text("Overlay Log") : ui_text("Log Pane"),
             NULL, text);
     } else
     {
         sdl_touch_pane_draw_button_text_px(&header, NULL,
-            g_log_pane_menu.target_pane == PANE_ROLLS ? "Overlay Log" : "Log Pane",
+            g_log_pane_menu.target_pane == PANE_ROLLS ? ui_text("Overlay Log") : ui_text("Log Pane"),
             text, font_px, font_px);
     }
 
@@ -1236,23 +1237,23 @@ void sdl_log_pane_menu_render(void)
 const char* sdl_side_pane_menu_label(enum pane_type pane)
 {
     switch (pane) {
-    case PANE_INVENTORY: return "Inventory";
-    case PANE_SUPPLY: return "Supply";
-    case PANE_WORN: return "Equipment";
+    case PANE_INVENTORY: return ui_text("Inventory");
+    case PANE_SUPPLY: return ui_text("Supply");
+    case PANE_WORN: return ui_text("Equipment");
     case PANE_INFO: return "Info";
-    case PANE_CHARACTER: return "Character";
-    case PANE_LOG: return "Messages";
-    case PANE_MONSTERS: return "Monsters";
-    case PANE_MAP: return "Map";
-    case PANE_ROLLS: return "Overlay Log";
-    case PANE_LEFT_PANEL: return "Left Panel";
+    case PANE_CHARACTER: return ui_text("Character");
+    case PANE_LOG: return ui_text("Messages");
+    case PANE_MONSTERS: return ui_text("Monsters");
+    case PANE_MAP: return ui_text("Map");
+    case PANE_ROLLS: return ui_text("Overlay Log");
+    case PANE_LEFT_PANEL: return ui_text("Left Panel");
     case PANE_STATUS: return "Status";
-    case PANE_DEPTH: return "Depth";
-    case PANE_DESCRIPTION: return "Description";
-    case PANE_OVERLAY_MENU: return "Quick Access";
-    case PANE_COMBAT: return "Combat";
-    case PANE_STATUS_DEPTH: return "Status & Depth";
-    default: return "Pane";
+    case PANE_DEPTH: return ui_text("Depth");
+    case PANE_DESCRIPTION: return ui_text("Description");
+    case PANE_OVERLAY_MENU: return ui_text("Quick Access");
+    case PANE_COMBAT: return ui_text("Combat");
+    case PANE_STATUS_DEPTH: return ui_text("Status & Depth");
+    default: return ui_text("Pane");
     }
 }
 
@@ -1368,7 +1369,7 @@ bool sdl_side_pane_menu_layout(side_pane_menu_entry* entries,
             SDL_FRect rects[MAX_PANE_CONFIGS];
             for (int i = 0; i < count; i++) {
                 labels[i] = sdl_side_pane_menu_label(entries[i].pane);
-                hints[i] = entries[i].enabled ? "on" : "off";
+                hints[i] = entries[i].enabled ? ui_text("on") : ui_text("off");
             }
             if (!sdl_pane_menu_mobile_grid(&screen, count, labels, hints,
                     g_side_pane_menu.anchor_x, g_side_pane_menu.anchor_y, rects, out_panel))
@@ -1787,10 +1788,10 @@ void sdl_side_pane_menu_render(void)
     SDL_RenderRect(g_state.renderer, &header);
     sdl_pane_menu_draw_controller_hint(&header);
     if (sdl_pane_menu_flow_layout()) {
-    sdl_pane_menu_mobile_text(&header, "Side Panes", NULL, text);
+    sdl_pane_menu_mobile_text(&header, ui_text("Side Panes"), NULL, text);
     } else
     {
-    sdl_touch_pane_draw_button_text_scaled(&header, NULL, "Side Panes",
+    sdl_touch_pane_draw_button_text_scaled(&header, NULL, ui_text("Side Panes"),
         text, 0.48f, 0.63f);
     }
 
@@ -1800,7 +1801,7 @@ void sdl_side_pane_menu_render(void)
             && i == g_side_pane_menu.press_index;
         SDL_Color line = hover ? hover_border : border;
         SDL_Color label = entries[i].enabled ? text : muted;
-        const char* status = entries[i].enabled ? "on" : "off";
+        const char* status = entries[i].enabled ? ui_text("on") : ui_text("off");
         const SDL_FRect* rect = &entries[i].rect;
 
         if (entries[i].enabled)

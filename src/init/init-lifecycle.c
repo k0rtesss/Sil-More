@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -40,11 +41,13 @@ static void note(cptr str)
 void init_progress_error(const char* path, const char* reason)
 {
     char message[2304];
-    strnfmt(message, sizeof(message), "%s\n\n%s\n\n"
-        "Check that your save location is available and that Sil-More can access it.",
-        reason, path);
-    log_error("%s", message);
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Sil-More save data", message, NULL);
+    cptr recovery = "Check that your save location is available and that Sil-More can access it.";
+
+    log_error("%s Path: %s", reason, path);
+    strnfmt(message, sizeof(message), "%s\n\n%s\n\n%s",
+        ui_text(reason), path, ui_text(recovery));
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+        ui_text("Sil-More save data"), message, NULL);
     quit(message);
 }
 
@@ -128,7 +131,8 @@ static void init_scores(void)
             "Existing character files are still in your save folder. To resume them automatically, "
             "close the game and restore your previous scores.raw from a backup.";
         log_warn("%s Path: %s", warning, path);
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sil-More save data", warning, NULL);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING,
+            ui_text("Sil-More save data"), ui_text(warning), NULL);
     }
 }
 

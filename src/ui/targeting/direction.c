@@ -58,6 +58,15 @@ static bool player_visual_facing_enabled(void)
 /* Movement may set the direction before melee requests its visible frame. */
 static bool player_facing_changed;
 
+static bool visual_facing_same_side(int before, int after)
+{
+    /* Only compare explicit horizontal signs. Vertical facing can fall
+     * back to the previous action, and the initial paint must initialize it. */
+    return playerturn > 1 && !p_ptr->restoring
+        && before >= 1 && before <= 9 && after >= 1 && after <= 9
+        && ddx[before] != 0 && ddx[before] == ddx[after];
+}
+
 static void refresh_visual_facing(int y, int x, int dir, bool changed)
 {
     /* Vertical directions fall back to the previous action. An explicit
@@ -79,8 +88,9 @@ void player_set_visual_facing_dir(int dir)
         return;
 
     if (dir >= 1 && dir <= 9 && p_ptr->visual_facing_dir != dir) {
+        if (!visual_facing_same_side(p_ptr->visual_facing_dir, dir))
+            player_facing_changed = true;
         p_ptr->visual_facing_dir = (byte)dir;
-        player_facing_changed = true;
     }
 }
 
@@ -156,7 +166,8 @@ static void monster_refresh_visual_facing(const monster_type* m_ptr, int previou
         return;
 
     refresh_visual_facing(m_ptr->fy, m_ptr->fx, m_ptr->visual_facing_dir,
-        m_ptr->visual_facing_dir != previous_dir);
+        m_ptr->visual_facing_dir != previous_dir
+            && !visual_facing_same_side(previous_dir, m_ptr->visual_facing_dir));
 }
 
 void monster_set_visual_facing_dir_immediate(monster_type* m_ptr, int dir)

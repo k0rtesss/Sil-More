@@ -1374,7 +1374,7 @@ static void log_history_wrapped_entry_text(int filter, int idx, char* out,
 }
 
 static bool log_history_wrap_next(cptr* cursor, int width, char* line,
-    size_t size)
+    size_t size, bool terminal_bytes)
 {
     cptr text = *cursor;
     int take = 0, cols = 0, space = -1;
@@ -1383,7 +1383,10 @@ static bool log_history_wrap_next(cptr* cursor, int width, char* line,
     while (text[take] && text[take] != '\n')
     {
         int bytes = utf8_sequence_len(text + take);
-        int cells = utf8_display_width_n(text + take, bytes);
+        /* Combat spans queue UTF-8 bytes directly into terminal cells. Their
+         * row budget must match that representation, while prose renderers
+         * measure the displayed glyphs. Never split a UTF-8 sequence. */
+        int cells = terminal_bytes ? bytes : utf8_display_width_n(text + take, bytes);
         if (cols + cells > width) break;
         if (text[take] == ' ') space = take;
         take += bytes;
@@ -1415,7 +1418,9 @@ static int log_history_wrapped_entry_rows(int filter, int idx, int width)
     cptr cursor = text;
     char line[256];
     int rows = 0;
-    while (log_history_wrap_next(&cursor, width, line, sizeof(line))) ++rows;
+    bool combat = filter != LOG_HISTORY_FILTER_NOTES
+        && log_history_entries[idx].kind == LOG_HISTORY_ENTRY_COMBAT;
+    while (log_history_wrap_next(&cursor, width, line, sizeof(line), combat)) ++rows;
     return MAX(rows, 1);
 }
 
@@ -1464,7 +1469,7 @@ static void log_history_draw_wrapped_combat(const log_history_entry* entry,
     while (drawn < max_rows)
     {
         int start = (int)(cursor - line.text);
-        if (!log_history_wrap_next(&cursor, width, wrapped, sizeof(wrapped)))
+        if (!log_history_wrap_next(&cursor, width, wrapped, sizeof(wrapped), true))
             break;
         if (index++ < first_line)
             continue;
@@ -1657,7 +1662,7 @@ static void log_history_draw_wrapped_slice(int row, int width, byte attr,
     char line[256];
     int index = 0, drawn = 0;
     while (drawn < max_rows
-        && log_history_wrap_next(&cursor, width, line, sizeof(line)))
+        && log_history_wrap_next(&cursor, width, line, sizeof(line), false))
     {
         if (index++ < first_line) continue;
         log_history_draw_wrapped_text(row + drawn++, width, attr, line, highlight);

@@ -438,8 +438,8 @@ static bool project_floor_objects(int y, int x, int typ, s16b first_o_idx)
                 if (object_break_brass_lantern(o_ptr))
                 {
                     if (o_ptr->marked)
-                        msg_format("The %s %s broken!", o_name,
-                            (plural ? "are" : "is"));
+                        msg_format(plural ? "The %s are broken!"
+                                          : "The %s is broken!", o_name);
                     lite_spot(y, x);
                     break;
                 }
@@ -525,8 +525,8 @@ static bool project_floor_objects(int y, int x, int typ, s16b first_o_idx)
                 /* Observe the resist */
                 if (o_ptr->marked)
                 {
-                    msg_format("The %s %s unaffected!", o_name,
-                        (plural ? "are" : "is"));
+                    msg_format(plural ? "The %s are unaffected!"
+                                      : "The %s is unaffected!", o_name);
                 }
             }
 

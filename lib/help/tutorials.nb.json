@@ -6,7 +6,7 @@
       "title": "Dine første skritt",
       "steps": [
         "Velkommen til Sil-More. Målet er å hente tilbake en silmaril og komme deg ut av Angband. Utforsk gangene forsiktig. Verden venter mens du leser. «Fortsett» åpner neste side, og «Hopp over» lukker den gjeldende leksjonen. Under «Modus» kan du velge Av, Normal eller Utvidet.",
-        "Finn et passende våpen og en rustning før du går i kamp. Les beskrivelsen av en gjenstand før du bruker den eller tar den på. Ryggsekken (Pack) er til oppbevaring. På bærereima (Harness) har du tingene lett tilgjengelig. Du angriper med det aktive våpenet ditt.",
+        "Finn et passende våpen og en rustning før du går i kamp. Les beskrivelsen av en gjenstand før du bruker den eller tar den på. Ryggsekken er til oppbevaring. I bæreselen har du tingene lett tilgjengelig. Du angriper med det aktive våpenet ditt.",
         "På fri grunn går du én rute i valgt retning. Bevegelse tar tid, så skapninger i nærheten kan handle. Se etter fiender, feller og farlig terreng i målruten. «Fortsett» tar deg tilbake til spillet, der du kan velge neste handling."
       ],
       "source_sha256": "54bb70a24ff744c624e83c6bfdfd5d523d6f8de9853aadd150069bdb8ada90fe"
@@ -14,7 +14,7 @@
     "combat.first_monster": {
       "title": "En skapning i sikte",
       "steps": [
-        "{subject} er innen synsvidde. En sovende eller intetanende skapning har ikke lagt merke til deg ennå. En årvåken skapning har oppdaget en trussel. Moralen avgjør om den slåss eller flykter. Bruk Look for å se tilstanden og de kjente angrepene før du nærmer deg."
+        "{subject} er innen synsvidde. En sovende eller intetanende skapning har ikke lagt merke til deg ennå. En årvåken skapning har oppdaget en trussel. Moralen avgjør om den slåss eller flykter. Velg «Undersøk» for å se tilstanden og de kjente angrepene før du nærmer deg."
       ],
       "source_sha256": "2c52093a90aafde32f508100593ecfd3c75d374828c4cc49565024325e7b9a28"
     },
@@ -22,7 +22,7 @@
       "title": "Nærkampangrep",
       "steps": [
         "{subject} står ved siden av deg. Går du mot en fiende i en naborute, angriper du i nærkamp. Sjekk først det aktive våpenet og hvor mye helse du har igjen.",
-        "Angrep på nært hold bruker tid, selv om de ikke treffer. Nærliggende fiender kan svare. Å trekke seg tilbake, bruke et gjenstand eller velge en annen taktikk er også mulig. \"Continue\" returnerer til spillet."
+        "Nærkampangrep tar tid selv om de bommer. Fiender i nærheten kan slå tilbake. Du kan også trekke deg tilbake, bruke en gjenstand eller velge en annen taktikk. Velg «Fortsett» for å gå tilbake til spillet."
       ],
       "source_sha256": "5853d522026702235f9465ddc58cba1adee33c25ee602d30e24fb1e9c19a94d9"
     },
@@ -52,7 +52,7 @@
     "combat.surrounded": {
       "title": "Flere fiender ved siden av deg",
       "steps": [
-        "Flere fiender er ved siden av deg. De får en angrepsbonus for å være omgitt av deg. En dør eller smal passasje kan begrense hvor mange som kan angripe deg samtidig. \"Kamphandling\" reduserer bonusen de får for å være omgitt."
+        "Flere fiender står ved siden av deg. De får en angrepsbonus når de omringer deg. En døråpning eller trang passasje kan begrense hvor mange som når deg samtidig. Evnen Crowd Fighting halverer omringingsbonusen deres."
       ],
       "source_sha256": "c3f14764b74a8ed09db31b7acc094e111e88869d43a24fccb3e82d6d121e85ab"
     },
@@ -200,7 +200,7 @@
     "item.throwing": {
       "title": "Kastevåpen",
       "steps": [
-        "Treffsikkerheten til kastevåpen avhenger av nærkamp og synker med avstanden. Gjør våpenet klart i bæreremmen og velg det i Change Active før et vanlig kast. Noen evner tillater også hurtigkast uten å bytte aktivt våpen."
+        "Treffsikkerheten til kastevåpen avhenger av nærkamp og synker med avstanden. Gjør våpenet klart i bæreselen og velg det i Change Active før et vanlig kast. Noen evner tillater også hurtigkast uten å bytte aktivt våpen."
       ],
       "source_sha256": "002c3234ef47e8dbf5c525122cc0a7a3cdea763d1805d88b99329f37369bfaac"
     },
@@ -270,7 +270,7 @@
     "item.oil": {
       "title": "Oljebeholdere",
       "steps": [
-        "Oljen lagres i en \"Forsyninger\"-oljelomme. En beholder kan inneholde opptil 2 500 \"turn\" med lanternelys-drivstoff. Bruk \"Fyll på\" med en egnet lanternelys; fakler bruker en annen påfyllingsmetode. I menyen: Refuel."
+        "Oljen har sin egen plass under Forsyninger. En beholder rommer brensel til opptil 2 500 trekk med en lykt. Velg «Fyll på brensel» med en egnet lykt. Fakler fylles på på en annen måte."
       ],
       "source_sha256": "6819ab50906ce7592bc8009eb548dfc1203a5851e28a80c92addbfa02251259a"
     },
@@ -319,7 +319,7 @@
     "item.staff": {
       "title": "Tryllestaver",
       "steps": [
-        "Staver bruker ladninger til å utløse sin kjente virkning. Ha staven klar i bæreremmen for rask tilgang. Å bruke den fra sekken tar ekstra tid. Sjekk virkning og ladninger før bruk. Beskrivelsen kan leses uten å bruke en ladning."
+        "Staver bruker ladninger til å utløse sin kjente virkning. Ha staven klar i bæreselen for rask tilgang. Å bruke den fra sekken tar ekstra tid. Sjekk virkning og ladninger før bruk. Beskrivelsen kan leses uten å bruke en ladning."
       ],
       "source_sha256": "ffb0c70961d3a24aa91d7337dbff9a29ece2bb3afe3e879659651c9a794bc266"
     },
@@ -333,7 +333,7 @@
     "item.staff.ready": {
       "title": "Gjør en stav klar",
       "steps": [
-        "Åpne inventaret, velg staven og deretter Ready for å flytte gjenstanden til bærereima. Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
+        "Åpne inventaret, velg staven og deretter «Flytt til bæreselen». Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
       ],
       "source_sha256": "6d9ae83430825c2768a4ecb135e730cda5c495dafd875172e486ff4ec59317db"
     },
@@ -348,7 +348,7 @@
     "item.horn.ready": {
       "title": "Gjør et horn klart",
       "steps": [
-        "Åpne inventaret, velg hornet og deretter Ready for å flytte gjenstanden til bærereima. Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
+        "Åpne inventaret, velg hornet og deretter «Flytt til bæreselen». Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
       ],
       "source_sha256": "69939b5719d6b60428c241c381ab39de389314983d498a6e4c2afbaad51cf6ab"
     },
@@ -391,7 +391,7 @@
     "status.diseased": {
       "title": "Sykdom",
       "steps": [
-        "{detail} Ved smittefare trekkes én av åtte sykdommer. En sykdom du har blitt frisk fra, kan ikke smitte deg igjen på denne ferden. En legeurt, en helbredende drikk eller Miruvor kurerer alle sykdommer, også før diagnosen. Mot Angbands pest er legeurten den eneste urtekuren. Hver annen sykdom har også en tilfeldig valgt kururt. Smitte koster straks 1 fysikk og deretter 1 poeng i en tilfeldig egenskap hvert 150. spillertrekk, også under hvile. Hardiness øker intervallet til 300 trekk og halverer smittefaren. Med Alchemy avslører en selvinnsiktens edelstein navnet på sykdommen og urten. Uten Alchemy gir hver bruk 50% sjanse for å lære navnet, og når navnet er kjent, 50% for å finne urten. Menneske- og alvefanger kan gi en fullstendig diagnose som oppdragsbelønning. Bortsett fra ved pesten kan de også stille diagnosen og gi deg en passende urt å spise. Helbredelse fjerner sykdommens egenskapsfradrag og gir immunitet. Oppdagelser og immunitet lagres. Når en urt kurerer sykdommen, erstatter kuren den vanlige virkningen og næringen. Andre urter virker som normalt."
+        "{detail} Ved smittefare trekkes én av åtte sykdommer. En sykdom du har blitt frisk fra, kan ikke smitte deg igjen på denne ferden. En legeurt, en helbredende drikk eller Miruvor kurerer alle sykdommer, også før diagnosen. Mot Angbands pest er legeurten den eneste urtekuren. Hver annen sykdom har også en tilfeldig valgt kururt. Smitte koster straks 1 utholdenhet og deretter 1 poeng i en tilfeldig egenskap hvert 150. spillertrekk, også under hvile. Hardiness øker intervallet til 300 trekk og halverer smittefaren. Med Alchemy avslører en selvinnsiktens edelstein navnet på sykdommen og urten. Uten Alchemy gir hver bruk 50% sjanse for å lære navnet, og når navnet er kjent, 50% for å finne urten. Menneske- og alvefanger kan gi en fullstendig diagnose som oppdragsbelønning. Bortsett fra ved pesten kan de også stille diagnosen og gi deg en passende urt å spise. Helbredelse fjerner sykdommens egenskapsfradrag og gir immunitet. Oppdagelser og immunitet lagres. Når en urt kurerer sykdommen, erstatter kuren den vanlige virkningen og næringen. Andre urter virker som normalt."
       ],
       "source_sha256": "f69e479dbfbf5105e334b545ae909112394825bedc565b0fad516b9b57f33494"
     },
@@ -468,7 +468,7 @@
     "status.rage": {
       "title": "Raseri",
       "steps": [
-        "«Sinne» gir +1 styrke og fysikk, -1 smidighet og ynde, resistens mot frykt og en spesiell nærkampangrep. Det begrenser din bevissthet og hindrer «skjulte» modus. «Klarhet» avslutter «sinnet»."
+        "«Sinne» gir +1 styrke og utholdenhet, -1 smidighet og ynde, resistens mot frykt og en spesiell nærkampangrep. Det begrenser din bevissthet og hindrer «skjulte» modus. «Klarhet» avslutter «sinnet»."
       ],
       "source_sha256": "b71354e1749cf204ec194a78b4db5cb5e32e79b2bcbe0b2a874b3070a28d3483"
     },
@@ -494,9 +494,9 @@
       "source_sha256": "a683798cc3f109bdf83461bb175b81b14ae999278f8869318765239d3c05f2cf"
     },
     "status.tmp_con": {
-      "title": "Midlertidig bonus: fysikk",
+      "title": "Midlertidig bonus: utholdenhet",
       "steps": [
-        "Midlertidig fysikk øker maksimal helse og beskytter fysikken mot vanlig nedgang mens den er aktiv. Sjekk både nåværende og maksimal helse, spesielt før bonusen utløper."
+        "Midlertidig utholdenhet øker maksimal helse og beskytter utholdenheten mot vanlig nedgang mens den er aktiv. Sjekk både nåværende og maksimal helse, spesielt før bonusen utløper."
       ],
       "source_sha256": "4550d35e2c333e03cf132b1093dfa8464616e8a3ed0513b226d9a149ce89ba9b"
     },
@@ -710,9 +710,9 @@
       "source_sha256": "3b388bcbd3f7f582fdb94af020e1c717de7d2545c514ce328d79e59ed8f0941f"
     },
     "status.drain2": {
-      "title": "Svekket egenskap: fysikk",
+      "title": "Svekket egenskap: utholdenhet",
       "steps": [
-        "{detail} Svekket egenskap: fysikk. En gjenopprettende urt gir tilbake inntil 3 tapte poeng i hver egenskap. Har denne egenskapen mistet minst 3 poeng, gir den tilsvarende drikken straks 3 tilbake. Ellers får du en midlertidig bonus og inntil 3 poeng tilbake når den utløper. Sykdomsfradrag krever at sykdommen kureres."
+        "{detail} Svekket egenskap: utholdenhet. En gjenopprettende urt gir tilbake inntil 3 tapte poeng i hver egenskap. Har denne egenskapen mistet minst 3 poeng, gir den tilsvarende drikken straks 3 tilbake. Ellers får du en midlertidig bonus og inntil 3 poeng tilbake når den utløper. Sykdomsfradrag krever at sykdommen kureres."
       ],
       "source_sha256": "7dd396725a4aabc7655e143a87ae98297c6165fc1eab0e5371daa0474f055f85"
     },
@@ -726,7 +726,7 @@
     "menu.abilities": {
       "title": "Evner",
       "steps": [
-        "Velg en ferdighet, les beskrivelsen av effekten, de nødvendige ferdighetspoengene, forutsetningene og kostnaden i XP. Å kjøpe en ferdighet koster XP. Noen lærte ferdigheter kan slås på og av; de fungerer kun når de er aktive, og når de oppfyller eventuelle krav til utstyr eller situasjon."
+        "Velg en evne for å se virkningen, kravet til ferdighetspoeng, nødvendige forkunnskaper og kostnaden i XP. Det koster XP å lære en evne. Noen lærte evner kan slås av og på. De virker bare når de er aktive og kravene til utstyr eller situasjon er oppfylt."
       ],
       "source_sha256": "60efc85359f89a218b73f026715d2a23a768af037c0e93fae9bb1eac4c865a56"
     },
@@ -761,21 +761,21 @@
     "menu.pack": {
       "title": "Ryggsekken (Pack)",
       "steps": [
-        "Ryggsekken lagrer ekstra utstyr og forsyninger innenfor sitt volum. Å bruke utstyr fra ryggsekken tar tre runder; et angrep kan avbryte prosessen. Flytt viktig utstyr til bærereimen eller \"Forsyninger\" mens du har tid til å forberede deg."
+        "Ryggsekken lagrer ekstra utstyr og forsyninger innenfor sitt volum. Å bruke utstyr fra ryggsekken tar tre runder; et angrep kan avbryte prosessen. Flytt viktig utstyr til bæreselen eller \"Forsyninger\" mens du har tid til å forberede deg."
       ],
       "source_sha256": "8ff5559af49a6e5c123113c7156c935dc3ff936506be1e03fccd700f2f04f53c"
     },
     "menu.harness": {
-      "title": "Bærereima (Harness)",
+      "title": "Bæreselen",
       "steps": [
-        "Bæreremmen har sin egen volumgrense for utstyr du vil ha klart. Velg Ready på en egnet gjenstand i sekken for å flytte den hit, eller Unready for å legge den bort igjen. Et klargjort våpen må også velges i Change Active før du kan angripe med det på vanlig vis."
+        "Bæreselen holder utstyr klart og har sin egen volumgrense. Velg en egnet gjenstand i ryggsekken og bruk «Flytt til bæreselen». Velg «Legg i ryggsekken» for å legge gjenstanden tilbake. Velg også våpenet under «Bytt aktivt våpen» før du angriper med det."
       ],
       "source_sha256": "23cb4a9a0a6d5812faf908f8c385549e6e1636fbf5a3f609129d3a751eb9ae3f"
     },
     "menu.quiver": {
       "title": "Koggeret (Quiver)",
       "steps": [
-        "Koggeren inneholder ferdige piler i henhold til sine egne kapasitetsregler. Velg en pille for å inspisere mengden og handlingene. Endring av kun den aktive pille-stakken er gratis; andre endringer av aktive våpen har sine normale kostnader."
+        "Koggeret holder pilbunter klare og har sin egen kapasitetsgrense. Velg en bunt for å se antallet piler og mulige handlinger. Å bytte bare den aktive pilbunten koster ingen tid. Andre våpenbytter har vanlig kostnad."
       ],
       "source_sha256": "92eedf94b49276036594749960f2d51ead3307dd7018dcaff403683a3f2fdf80"
     },
@@ -789,7 +789,7 @@
     "menu.supplies": {
       "title": "Forsyninger",
       "steps": [
-        "\"Forsyninger\" inneholder forbruksvarer og deres beholdere. Velg et element for å lese dets kjente effekt, gjenværende mengde og tilgjengelige handlinger. Ha en kur mot en akutt tilstand tilgjengelig før en kamp."
+        "Forsyningene inneholder forbruksvarer og beholderne deres. Velg en gjenstand for å se kjent virkning, gjenværende mengde og mulige handlinger. Ha midler mot akutte tilstander tilgjengelig før kamp."
       ],
       "source_sha256": "3ccba9bb472d6d67ad117c50e74ceae8f4ea95749ee96172f41cf21ee10c060c"
     },
@@ -880,9 +880,9 @@
     "menu.smithing": {
       "title": "Smiing",
       "steps": [
-        "Velg en gjenstand eller forbedring for å se vanskelighetsgrad, kapasitet og kostnader. Til smiing legges halvparten av nåværende smidighet og halvparten av nåværende ynde. Utstyr, midlertidige effekter og egenskapstap påvirker verdiene. Lærte og aktive håndverksevner og mestringer gir flere bonuser til hver oppskrift. Naugrim legger hvert positive nivå av anlegg for smiing til egenskapene som brukes her. Legg sammen bonusene og rund ned én gang. Utstyrets bonus til smiing gjelder også."
+        "Velg en gjenstand eller forbedring for å se vanskelighetsgraden, kapasiteten din og kostnadene. I smiing teller halvparten av din permanente smidighet og halvparten av din permanente ynde. Permanente egenskapsverdier omfatter grunnverdier og lærte evner som øker dem uten vilkår. Utstyr, midlertidige virkninger, tap av egenskapspoeng, sanger og betingede bonuser påvirker ikke disse verdiene. Lærte, aktive håndverksevner og mestringsevner gir ytterligere bonus til alle oppskrifter. For Naugrim gir hvert positivt nivå av anlegg for smiing +1 til egenskapene som teller her. Legg sammen bonusene og rund ned én gang. Utstyr som øker selve smiferdigheten, gir fortsatt bonus."
       ],
-      "source_sha256": "27a42bca332fbfd75f31dfe34f70c52c7579ebb9e6ae97193d64fc915ff9b0ee"
+      "source_sha256": "68f4d01a2a0ca06f009e07def51c22357ba694c4bca28eab64e4f1a2af40f895"
     },
     "menu.nearby-monsters": {
       "title": "Skapninger i nærheten",
@@ -922,7 +922,7 @@
     "menu.combat-history": {
       "title": "Kamplogg",
       "steps": [
-        "Gjennomgå angreps- og unnvikelseskast, skadedyse, beskyttelse og de resulterende effektene. Et mislykket angrep gir ingen skade; et vellykket angrep kan fortsatt blokkeres fullstendig av beskyttelsen. Spesielle terninger og bonuser for elementære angrep eller for å drepe fienden er listet separat."
+        "Her ser du kast for angrep, unnvikelse, skade og beskyttelse, og hvilke følger de fikk. Et bomslag treffer ikke. Beskyttelse kan også stanse all skade fra et treff. Kritiske terninger, elementbonuser og bonuser mot visse skapninger kan endre resultatet."
       ],
       "source_sha256": "dab81318aa51f6f7d056a93e5cd22bc8548561a02f7db0dda42ed2ef79e03ca1"
     },
@@ -985,14 +985,14 @@
     "ability.2.preview": {
       "title": "Tilbakestøt (Knock Back)",
       "steps": [
-        "Et nærkamptreff kan skyve en fiende én rute bakover hvis styrken din slår fysikken dens. En fiende med bakkekontakt på is kan gli opptil to ruter. Sjekk hva som finnes bak målet. Skyvet kan endre hvem som når deg eller sende fienden inn i en fare."
+        "Et nærkamptreff kan skyve en fiende én rute bakover hvis styrken din slår utholdenheten dens. En fiende med bakkekontakt på is kan gli opptil to ruter. Sjekk hva som finnes bak målet. Skyvet kan endre hvem som når deg eller sende fienden inn i en fare."
       ],
       "source_sha256": "85e2c8c7bdb0c638a03dcbf9c1348b610202e234f3bd7f73b8d9e4b6fab7c854"
     },
     "ability.3.preview": {
       "title": "Kasting (Throwing)",
       "steps": [
-        "Du får +1 angrep med kastevåpen, halverte avstandsstraffer og lettere kritiske kast. Når du lærer Throwing selv, tar kastevåpen 20 % mindre plass i bæreremmen. Du kan også hurtigkaste dolker fra remmen uten nærkampvåpen, eller med et aktivt enhånds- eller halvannethåndsvåpen, kastevåpen eller en kortbue.",
+        "Du får +1 angrep med kastevåpen, halverte avstandsstraffer og lettere kritiske kast. Når du lærer Throwing selv, tar kastevåpen 20 % mindre plass i bæreselen. Du kan også hurtigkaste dolker fra remmen uten nærkampvåpen, eller med et aktivt enhånds- eller halvannethåndsvåpen, kastevåpen eller en kortbue.",
         "Det første byttet mellom aktive kastevåpen før neste handling er gratis. Med Warden gjelder det også mellom nærkamp og kast eller mellom nærkampvåpen. Med Versatility gjelder det også mellom bue og kast eller mellom buer. Med begge evnene kan du bytte gratis mellom alle aktive våpen."
       ],
       "source_sha256": "602158ba425c20d7d1206d05cb888b280fe49818bc4bd63b8040759a1729c119"
@@ -1056,7 +1056,7 @@
     "ability.12.preview": {
       "title": "Kamp med to våpen (Two Weapon Fighting)",
       "steps": [
-        "Utstyr et våpen med én hånd i den ledige hånden for å få et ekstra angrep. Angrepet med den ledige hånden bruker -3 styrke og smidighet. Sjekk den resulterende våpen- og skjoldoppsettet før du utstyrer det."
+        "Utstyr et enhåndsvåpen i den andre hånden for å få et ekstra angrep. Angrepet med det våpenet bruker styrke og smidighet med −3 på hver. Sjekk hvordan våpen og skjold blir fordelt før du utstyrer våpenet."
       ],
       "source_sha256": "42b08bc8c463ceff2f170b80ed9a99e47c6ce39411e5f08de7048caea6a95885"
     },
@@ -1085,7 +1085,7 @@
     "ability.16.preview": {
       "title": "Kraftkast (Power Throw)",
       "steps": [
-        "Etter et trekk der du ventet eller gjorde nærkampvåpenet klart, kan du kaste et spyd eller en håndøks fra bæreremmen mot en fiende ved siden av deg samtidig som du slår i nærkamp. Kast separat mot unnvikelse for begge angrepene. Legg sammen skaden fra treffene før ett beskyttelseskast. Nærkampvåpenet forblir aktivt."
+        "Etter et trekk der du ventet eller gjorde nærkampvåpenet klart, kan du kaste et spyd eller en håndøks fra bæreselen mot en fiende ved siden av deg samtidig som du slår i nærkamp. Kast separat mot unnvikelse for begge angrepene. Legg sammen skaden fra treffene før ett beskyttelseskast. Nærkampvåpenet forblir aktivt."
       ],
       "source_sha256": "2cd156e91f84b252398b21033159276f973303929066473e826d737625964b0c"
     },
@@ -1352,7 +1352,7 @@
     "ability.89.preview": {
       "title": "Ynde (Grace)",
       "steps": [
-        "Gir +1 i ynde og øker kapasiteten til bærereima med 6,0 qt. Du kan ha mer utstyr lett tilgjengelig."
+        "Gir +1 i ynde og øker kapasiteten til bæreselen med 6,0 qt. Du kan ha mer utstyr lett tilgjengelig."
       ],
       "source_sha256": "c812128d264feb733c88504217f32cec4127b059e3b494ebeca13b03e1da2104"
     },
@@ -1434,60 +1434,60 @@
       "source_sha256": "aa2852bd2dc2f2e02f3114e3b40adc6c811dd150044f6758fe3188b924b19de8"
     },
     "ability.110.preview": {
-      "title": "Fysikk (Constitution)",
+      "title": "Utholdenhet (Constitution)",
       "steps": [
-        "Gir +1 i fysikk og øker ryggsekkens kapasitet med 6,0 qt."
+        "Gir +1 i utholdenhet og øker ryggsekkens kapasitet med 6,0 qt."
       ],
       "source_sha256": "e65abeee979744c705c818dbdb108a20ca964446b0d5686a4d1d640671928b56"
     },
     "ability.120.preview": {
       "title": "Våpensmed (Weaponsmith)",
       "steps": [
-        "Lar deg smi våpen og gir en liten bonus til å identifisere dem. Når evnen er lært og aktiv, legges halvparten av din nåværende smidighet til alt du smir."
+        "Lar deg smi våpen i en smie og gir en liten bonus når du identifiserer dem. Når evnen er lært og aktiv, teller halvparten av din permanente smidighet med i alt du smir."
       ],
-      "source_sha256": "d83db7a5cb4d0c2b671fdcbfea063acb7e19879422aca2557f3c640fde12c32d"
+      "source_sha256": "57cd9972362062d683f7d9ced8358fec833a6b9f644d0bd9d32b87dde5c91925"
     },
     "ability.121.preview": {
       "title": "Rustningssmed (Armoursmith)",
       "steps": [
-        "Lar deg smi rustninger og gir en liten bonus til å identifisere dem. Når evnen er lært og aktiv, legges halvparten av din nåværende styrke til alt du smir."
+        "Lar deg smi rustning i en smie og gir en liten bonus når du identifiserer rustninger. Når evnen er lært og aktiv, teller halvparten av din permanente styrke med i alt du smir."
       ],
-      "source_sha256": "b678077db771124fab7f76ccfd9d0e88ea024d2f33d8622307b565133a2f5573"
+      "source_sha256": "16b9acb9a7bf3d90caad2622fc13f324b165d5b3cdc55c040a4995c88465143c"
     },
     "ability.122.preview": {
       "title": "Juveler (Jeweller)",
       "steps": [
-        "Du kan smi ringer, amuletter, horn og lyskilder og kjenner automatisk igjen typene deres. En enkelt gjenstand kan fortsatt ha ukjente spesialegenskaper. Når evnen er lært og aktiv, legges halvparten av din nåværende ynde til alt du smir."
+        "Du kan lage ringer, amuletter, horn og lyskilder i en smie og kjenner automatisk igjen typen. Du kan fortsatt måtte identifisere de særlige egenskapene ved hver gjenstand. Når evnen er lært og aktiv, teller halvparten av din permanente ynde med i alt du smir."
       ],
-      "source_sha256": "e1c306ed445a7a4ba455218355ff175418c0690016de92c49e987f6700a6761a"
+      "source_sha256": "b6532ccc257c13e5f08c9ac9b7771acd2d7cdaaee9c244ff05efa381fadb8540"
     },
     "ability.123.preview": {
       "title": "Fortrylling (Enchantment)",
       "steps": [
-        "Du kan smi forheksede gjenstander med navngitte spesialegenskaper. Du kan oppdage fortryllelser og får en liten bonus til identifisering. Når evnen er lært og aktiv, legges din nåværende ynde til alt du smir."
+        "Du kan smi fortryllede gjenstander med navngitte spesialegenskaper i en smie. Du kan påvise fortryllelsene på gjenstander og får en liten identifiseringsbonus. Når evnen er lært og aktiv, teller halvparten av din permanente ynde med i alt du smir."
       ],
-      "source_sha256": "8100a52a5b4f99f77c3b8ca7f082708686fd759417138c1ffb65942a1f200368"
+      "source_sha256": "6df49478c9c23c77b67b9cf185c7d26aa911ae6faf02ed4634466bd6d8750c30"
     },
     "ability.124.preview": {
       "title": "Fagkunnskap (Expertise)",
       "steps": [
-        "Halverer smitiden og fjerner de vanlige kostnadene i erfaring og egenskaper. Materialer og bruk av smia teller fortsatt. Les hele planen. Når evnen er lært og aktiv, legges din nåværende smidighet til alt du smir."
+        "Halverer tiden det tar å smi og fjerner de vanlige kostnadene i erfarings- og egenskapspoeng. Materialer og antall gjenstående bruk av smia teller fortsatt. Se gjennom hele forslaget. Når evnen er lært og aktiv, teller halvparten av din permanente smidighet med i alt du smir."
       ],
-      "source_sha256": "52084e31e80fdc4b44b8d80604e2c4e118bee510a1c2f3e7cd7dc50fbf828e83"
+      "source_sha256": "06ded559e9634914fee328d885279d91bfbe56ef05fe076e73231c9363503935"
     },
     "ability.125.preview": {
       "title": "Artefaktsmiing (Artifice)",
       "steps": [
-        "Du kan smi egne artefakter og får en stor bonus til identifisering. Planen viser kostnaden for egenskapene du velger. Når evnen er lært og aktiv, legges din nåværende ynde til alt du smir."
+        "Du kan smi egne artefakter i en smie og får en stor bonus når du identifiserer gjenstander. Forhåndsvisningen viser kostnaden for egenskapene du velger. Når evnen er lært og aktiv, teller halvparten av din permanente ynde med i alt du smir."
       ],
-      "source_sha256": "415ff774cd4eb6c57d172a82d4cbb2d649a6042a2043247a3b0a03411df19656"
+      "source_sha256": "e73cd73400d79b457f55e279b0e478f25e0216a6e66d79ed2f14200c21c7e46c"
     },
     "ability.126.preview": {
       "title": "Mesterverk (Masterpiece)",
       "steps": [
-        "Du kan smi over den vanlige vanskelighetsgrensen ved å ofre grunnpoeng i smiing permanent. Hvert ekstra vanskelighetspoeng koster ett ferdighetspoeng. Du kan høyst bruke de poengene du har investert i smiing."
+        "Du kan smi over den vanlige vanskelighetsgrensen ved å ofre grunnpoeng i smiing permanent. Hvert poeng over grensen koster ett ferdighetspoeng, opptil poengene du selv har investert i smiing. Når evnen er lært og aktiv, teller også halvparten av din permanente ynde med i alt du smir."
       ],
-      "source_sha256": "d796523bd4f90f1552a7961581e4c46d6d75f4904b3a488c28cd40a27f558b30"
+      "source_sha256": "9b4b435cab3009f0fb78f9fe2dc392ab714f7f532f70eaac0a2dc300aa477c95"
     },
     "ability.127.preview": {
       "title": "Ynde (Grace)",
@@ -1499,14 +1499,14 @@
     "ability.128.preview": {
       "title": "Legeringsmester (Alloy mastery)",
       "steps": [
-        "Smelt mithril eller stjerne-jern, eller lag våpen og rustning av passende legeringer med disse metallene. Legering legger ikke til ekstra vanskelighetsgrad, men krever fortsatt materialet."
+        "Smi utstyr av mithril eller stjernejern, eller leger egnede våpen og rustninger med disse metallene. Legering øker ikke vanskelighetsgraden, men krever fortsatt materialet."
       ],
       "source_sha256": "e73f37484b771f0db93bd7c2547e8101d7e0061308d484bf89db9bcef085ae48"
     },
     "ability.129.preview": {
       "title": "Omsmiing (Reforging)",
       "steps": [
-        "På en smie, reparer skadede gjenstander eller legg til en manglende prefiks til en funnet gjenstand. Vanskelighetsgraden for å omforme er 1,5 ganger økningen i vanskelighetsgrad. Sammenlign resultatet og kostnadene før du bestemmer deg."
+        "I en smie kan du reparere skadede gjenstander eller legge til et prefiks som mangler på en gjenstand du har funnet. Vanskelighetsgraden for omsmiing er 1,5 ganger økningen i vanskelighetsgrad. Sammenlign resultatet og kostnadene før du bestemmer deg."
       ],
       "source_sha256": "a6cc7d644a7e131068374a871adaedf99d820f59a8588295e857dd918722bbc3"
     },
@@ -1681,7 +1681,7 @@
     "ability.164.preview": {
       "title": "Jernets ed (Oath of Iron)",
       "steps": [
-        "«Oath of Iron» gir +1 fysikk. Inntil du har en Silmaril, forbyr den deg å gå opp trapper eller forlate de dypeste områdene. Forbered deg på en reise uten mulighet til å trekke deg tilbake til mindre dype nivåer."
+        "«Oath of Iron» gir +1 utholdenhet. Inntil du har en Silmaril, forbyr den deg å gå opp trapper eller forlate de dypeste områdene. Forbered deg på en reise uten mulighet til å trekke deg tilbake til mindre dype nivåer."
       ],
       "source_sha256": "e5e6fb83fed7e75135c37d6104ad72e8a5f14ff61596078a8d1517200c426c4d"
     },
@@ -1735,7 +1735,7 @@
       "source_sha256": "79d00cc01136bb067f627d9f941135c31fd67f11ed34e7964d2fc283a8821cc8"
     },
     "terrain.4": {
-      "title": "Åpne døren",
+      "title": "Åpen dør",
       "steps": [
         "En åpen dør lar deg passere. Å lukke den kan blokkere synet og forsinke en fiende. Noen skapninger kan åpne, bryte eller passere gjennom dører, så sjekk deres kjente evner."
       ],
@@ -1749,21 +1749,21 @@
       "source_sha256": "34bb414ff5e1125e245fd11eaec6629a86f96c18883c918e902a698190bf36db"
     },
     "terrain.6": {
-      "title": "Beskyttede dører",
+      "title": "Dører med beskyttelsessegl",
       "steps": [
         "En beskyttet dør er vanskeligere for fiender å åpne eller bryte seg gjennom. Styrken på beskyttelsen er viktig. Sjekk tilgjengelige interaksjoner før du stoler på at den holder en passasje."
       ],
       "source_sha256": "ffad56c5ad680443ef114160ee64a0ad1045165127fb8ce224b017debedf3348"
     },
     "terrain.7": {
-      "title": "Låst dør",
+      "title": "Dør med beskyttelsessegl",
       "steps": [
         "En beskyttet dør er vanskeligere for fiender å åpne eller bryte seg gjennom. Styrken på beskyttelsen er viktig. Sjekk tilgjengelige interaksjoner før du stoler på at den holder en passasje."
       ],
       "source_sha256": "f9d08dca20514c5ab1e6c2ebfcc80be43e2bd3ebf04a0786831e6122b252fa96"
     },
     "terrain.8": {
-      "title": "Låst dør",
+      "title": "Dør med beskyttelsessegl",
       "steps": [
         "En beskyttet dør er vanskeligere for fiender å åpne eller bryte seg gjennom. Styrken på beskyttelsen er viktig. Sjekk tilgjengelige interaksjoner før du stoler på at den holder en passasje."
       ],
@@ -1777,28 +1777,28 @@
       "source_sha256": "b73c420ecd4aecd92bf552cc6373f86350fdd8e990c4b72eb4c7866f219e96d9"
     },
     "terrain.16": {
-      "title": "Falsk gulv",
+      "title": "Falskt gulv",
       "steps": [
         "Et falskt gulv kan kollapse og få deg til å falle til en dypere nivå. Unngå det, eller inspiser en lovlig måte å disarmere eller hoppe over det før du krysser."
       ],
       "source_sha256": "74c3b3575814bdd856632fefdcfd1e202dc668378c5503cfd39414ad34ea7d8c"
     },
     "terrain.17": {
-      "title": "Felle",
+      "title": "Grop",
       "steps": [
         "Et hull kan skade deg når du faller ned i det. Å komme seg opp tar tid og kan sette deg i en sårbar posisjon overfor fiender. En lovlig sprang går over det uten å gå inn i hullet."
       ],
       "source_sha256": "144961b579f778e8625fff52036ce68997e408429d8e1c16c392ee010db592ab"
     },
     "terrain.18": {
-      "title": "Spisskavet",
+      "title": "Grop med spisser",
       "steps": [
         "Et hull med pigger kan forårsake skade og blødning, og deretter hindre deg mens du prøver å komme deg ut. Vurder å gå rundt det, eller bruke en lovlig mulighet for å disarm eller hoppe over det."
       ],
       "source_sha256": "7a82fe92e9bd0ee318dfa72cc5ecbfd4cd8510b482fe4476e48b9e8fcace67be"
     },
     "terrain.19": {
-      "title": "Spydfelle",
+      "title": "Pilfelle",
       "steps": [
         "En pilerfelle utfører et angrep som kan skade deg og tappe styrken din, hvis den klarer å trenge gjennom rustningen din. Unngå firkantet område, eller inspiser \"Deaktiver\" og risikoen for at den mislykkes. I menyen: Disarm."
       ],
@@ -1819,14 +1819,14 @@
       "source_sha256": "deba23c7ae482555c898b0d3b7f149065308cfe5aa438b14b9440ab57c9ed03f"
     },
     "terrain.22": {
-      "title": "Felle",
+      "title": "Alarmfelle",
       "steps": [
         "En alarmsnelle lager lyd som kan varsle fiender i nærheten. Unngå den eller deaktiver den når du ønsker å holde deg skjult."
       ],
       "source_sha256": "2e76b2726988706762d3d815d2ee6d193bacab34c5ebb29dfe7e0105e7f883a5"
     },
     "terrain.23": {
-      "title": "Felle",
+      "title": "Lysglimtfelle",
       "steps": [
         "En felle kan blinde deg. En avslørt felle er fortsatt aktiv, så unngå den eller undersøk muligheten for å deaktivere den. \"True Sight\" eller \"Miruvor\" kan kurere blindhet hvis det oppstår."
       ],
@@ -1840,21 +1840,21 @@
       "source_sha256": "ec64186610467999425dc7eb3b2dd3425059057caf18fd54c943df0663fac980"
     },
     "terrain.25": {
-      "title": "Hul",
+      "title": "Rasteplass for fugler",
       "steps": [
         "Å forstyrre et rede kan tiltrekke seg fugler eller flaggermus. Å hoppe over det fungerer ikke. La det være plass til å håndtere nye fiender hvis du velger å krysse."
       ],
       "source_sha256": "e84f6b961b7b48b20862267b86ab71b171cdc15449d36ae6a77029f8cb33ebae"
     },
     "terrain.26": {
-      "title": "Nettverk",
+      "title": "Spindelvev",
       "steps": [
         "Et nett kan fange deg og tiltrekke en edderkopp. Det kan ta flere runder å unnslippe. Å hoppe over nett fungerer ikke, så vurder å gå rundt eller fjerne ett nett før du går inn."
       ],
       "source_sha256": "8b373793a4f1c59e033f47cd0a2232988e303ca2fa75b7e38b96d95325f1dd40"
     },
     "terrain.27": {
-      "title": "Felle",
+      "title": "Steinfallfelle",
       "steps": [
         "En dødfall kan få ned tunge gjenstander og endre terrenget rundt. Unngå det, eller inspiser \"Deaktiver\" før du krysser; mislykkes, kan det utløse fellen. I menyen: Disarm."
       ],
@@ -1931,70 +1931,70 @@
       "source_sha256": "062f0be3cfd9bb7b98c70bc5caff0fcc573829815a4743e22f64234bc7641ad5"
     },
     "terrain.40": {
-      "title": "Låste dører",
+      "title": "Fastkilte dører",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "acde484c18dfe6bc62b220294d221a97ab17c8ed338022d7a695bb493787e196"
     },
     "terrain.41": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.42": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.43": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.44": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.45": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.46": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.47": {
-      "title": "Låst dør",
+      "title": "Fastkilt dør",
       "steps": [
         "En låst dør kan ikke åpnes normalt. Undersøk om du kan bruke \"Bash\" eller en annen tilgjengelig måte å komme deg gjennom. Å bryte opp en dør tar tid og lager lyd; en annen rute kan være tryggere."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.49": {
-      "title": "Rest av ruin",
+      "title": "Haug med murrester",
       "steps": [
         "Rubble blokkerer en vei til den er ryddet opp. Tunnelgraving kan ta flere runder og lage støy. Forbered et verktøy for graving og sjekk etter fiender før du starter."
       ],
       "source_sha256": "6a065be054a49b8e0194ff7ae29087620d6877fdd3a2290a71b3164754615701"
     },
     "terrain.51": {
-      "title": "Kvartssøl",
+      "title": "Kvartsåre",
       "steps": [
         "Kvartsåren kjennetegnes av synlige krystaller. Bryter du opp åren, får du en edelsten. Dype årer kan også gi mithril, mens stjernejern bare finnes i meteorittkløfter. Både redskapets graveevne og din styrke må være minst 2. Et vanlig slag sprekker hel kvarts, et kraftig slag knuser den. Å rydde vekk steinmassene krever enda en handling."
       ],
@@ -2022,147 +2022,147 @@
       "source_sha256": "9c3aeb85416c4d9cbdd8fa34da2a70eb9a99d6d24fe11b94ca9d00fdc389c5da"
     },
     "terrain.64": {
-      "title": "Sliten smie",
+      "title": "Oppbrukt smie",
       "steps": [
         "Smia er oppbrukt. Du kan ikke smi flere gjenstander her. Finn en brukbar smie hvis du vil fortsette."
       ],
       "source_sha256": "1965e80bb7c3ffaf246555323cc65bb092b027d68ec4c4bfcb12075480f077a1"
     },
     "terrain.65": {
-      "title": "Smelteovn",
+      "title": "Smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Planen viser vanskelighetsgrad, materialer, tid og andre kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.66": {
-      "title": "Smelteovn",
+      "title": "Smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Planen viser vanskelighetsgrad, materialer, tid og andre kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.67": {
-      "title": "Smelteovn",
+      "title": "Smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Planen viser vanskelighetsgrad, materialer, tid og andre kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.68": {
-      "title": "Smelteovn",
+      "title": "Smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Planen viser vanskelighetsgrad, materialer, tid og andre kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.69": {
-      "title": "Smelteovn",
+      "title": "Smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Planen viser vanskelighetsgrad, materialer, tid og andre kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.70": {
-      "title": "Utmattet, magisk smie",
+      "title": "Oppbrukt fortryllet smie",
       "steps": [
         "Den fortryllede smia er oppbrukt. Du kan ikke smi flere gjenstander her. Finn en brukbar smie hvis du vil fortsette."
       ],
       "source_sha256": "604ded6e6f2f620482f12517b32d6ff9d6906d271edbd0d649b5e1470a487f40"
     },
     "terrain.71": {
-      "title": "Forg med magiske krefter",
+      "title": "Fortryllet smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +3 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.72": {
-      "title": "Forg med magiske krefter",
+      "title": "Fortryllet smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +3 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.73": {
-      "title": "Forg med magiske krefter",
+      "title": "Fortryllet smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +3 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.74": {
-      "title": "Forg med magiske krefter",
+      "title": "Fortryllet smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +3 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.75": {
-      "title": "Forg med magiske krefter",
+      "title": "Fortryllet smie",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +3 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.76": {
-      "title": "Utmattet smed, Orodruth",
+      "title": "Den oppbrukte smia Orodruth",
       "steps": [
         "Smia Orodruth er oppbrukt. Du kan ikke smi flere gjenstander her. Finn en brukbar smie hvis du vil fortsette."
       ],
       "source_sha256": "edbc7e92425bff67d1112063f045831df5fd4c45ed44b2826575c0ae82933a0a"
     },
     "terrain.77": {
-      "title": "Smidd Orodruth",
+      "title": "Smia Orodruth",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +7 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "e0777eee03de8accdafc1c8bec0c7ee2cfc3b53ba7f52e0d1a0261411694da0d"
     },
     "terrain.78": {
-      "title": "Smidd Orodruth",
+      "title": "Smia Orodruth",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +7 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "e0777eee03de8accdafc1c8bec0c7ee2cfc3b53ba7f52e0d1a0261411694da0d"
     },
     "terrain.79": {
-      "title": "Smidd Orodruth",
+      "title": "Smia Orodruth",
       "steps": [
         "Antall bruk er begrenset. Sjekk hvor mange som er igjen, og les smiplanen før du begynner. Når du arbeider her, får du +7 i smiing og kan lage vanskeligere gjenstander."
       ],
       "source_sha256": "e0777eee03de8accdafc1c8bec0c7ee2cfc3b53ba7f52e0d1a0261411694da0d"
     },
     "terrain.80": {
-      "title": "Opp trappen",
+      "title": "Trapp opp",
       "steps": [
         "En trapp opp går vanligvis én etasje ned. Hvis minimumsdybden forhindrer dette, kan den returnere deg på samme dybde eller dypere. Ed kan forby bruk av den. Les bekreftelsen; å forlate alltid genererer en ny kart."
       ],
       "source_sha256": "bb1dd21406c31fa6bf9d016ec8031f259fdf904c3d44a1dbf2074bdcc1d1df10"
     },
     "terrain.81": {
-      "title": "Nedover trappen",
+      "title": "Trapp ned",
       "steps": [
         "En trapp ned går ett nivå ned og genererer et nytt kart. Samle alt du ønsker å beholde, og sjekk uferdige lokale mål før du går ned."
       ],
       "source_sha256": "6a4408864c172f57692d96eba6cb0682d42c7774c9a603d3438f89389997859b"
     },
     "terrain.82": {
-      "title": "Oppgang",
+      "title": "Sjakt opp",
       "steps": [
         "En oppadgående trapp kan stige høyere enn en vanlig trapp, men minimumsdybden kan føre deg til samme dybde eller enda dypere. Reglene for eder gjelder fortsatt. Les destinasjonen før du forlater; kartet er nylig generert."
       ],
       "source_sha256": "611a70f61c0926db1e59742dbcf4019915ec55ee23de71386f11bc936ae20033"
     },
     "terrain.83": {
-      "title": "Nedover",
+      "title": "Sjakt ned",
       "steps": [
         "En nedgangsgang går lenger enn en vanlig trapp. Les destinasjonen før du bekrefter, og forbered deg på et nytt nivå på større dybde."
       ],
       "source_sha256": "ef585d0af3c225abc49b27f3ccf6b7eef2911086e6c7179846eaa047e998c13d"
     },
     "terrain.84": {
-      "title": "Dyp vann",
+      "title": "Grunt vann",
       "steps": [
         "Å bevege seg inn i, gjennom eller ut av grunt vann tar 50 % lengre tid. Plaskingen gir -3 sniking. Å stå stille koster ingen ekstra bevegelsestid. Vann bryter luktsporet ditt, men fiender kan fremdeles se eller høre deg.",
         "Er du frisk, har hver vannrute du går inn i, 0,5 % grunnrisiko for sykdomssmitte før immunitet og Hardiness regnes med. Å stå stille gir ingen ny smittesjekk. Et vellykket hopp unngår vannkontakt og plasking, men landingen lager lyd. Sykdom fortsetter under hvile. En helbredende urt, en helbredende drikk eller Miruvor kurerer alle sykdommer. Andre kururter virker mot sine sykdommer, unntatt Angband-pesten."
@@ -2254,7 +2254,7 @@
       "source_sha256": "2f758a07b2b4ce2cfd82bc811244fd4730053ff1563ecc372e78d1264e4fbed8"
     },
     "effect.204": {
-      "title": "Frykt — kjent virkning",
+      "title": "Bestyrtelse — kjent virkning",
       "steps": [
         "Forsøk på å forvirre monstre som er synlige. Sjekk hva som faktisk skjedde før du stoler på at et mål er forvirret."
       ],
@@ -2401,9 +2401,9 @@
       "source_sha256": "d9c5e303c75e3df4c79f6685c279cc6a0f83c64d2036c32c87151ecc62891fad"
     },
     "effect.329": {
-      "title": "Fysikk — kjent virkning",
+      "title": "Utholdenhet — kjent virkning",
       "steps": [
-        "Sjekk tapet i egenskapen fysikk. Mangler minst 3 poeng, gir drikken straks 3 tilbake. Ellers får du +3 i egenskapen i 20d4 trekk og inntil 3 tapte poeng tilbake når bonusen utløper."
+        "Sjekk tapet i egenskapen utholdenhet. Mangler minst 3 poeng, gir drikken straks 3 tilbake. Ellers får du +3 i egenskapen i 20d4 trekk og inntil 3 tapte poeng tilbake når bonusen utløper."
       ],
       "source_sha256": "7e7c544659380baf745ee7e3926ca9471a1be95556c174f47f466a217bcab59d"
     },
@@ -2459,7 +2459,7 @@
     "effect.380": {
       "title": "Raseri — kjent virkning",
       "steps": [
-        "Gir raseri i 10d4 trekk: +1 styrke og fysikk, -1 smidighet og ynde, et spesielt nærkampangrep og fryktmotstand. Raseri begrenser oppmerksomhet og sniking. Urten gir vanlig næring. Er den kuren mot sykdommen din, helbreder den i stedet sykdommen og gjenoppretter tapte egenskaper uten å gi raseri eller næring."
+        "Gir raseri i 10d4 trekk: +1 styrke og utholdenhet, -1 smidighet og ynde, et spesielt nærkampangrep og fryktmotstand. Raseri begrenser oppmerksomhet og sniking. Urten gir vanlig næring. Er den kuren mot sykdommen din, helbreder den i stedet sykdommen og gjenoppretter tapte egenskaper uten å gi raseri eller næring."
       ],
       "source_sha256": "616ca8499f908903e134e6fe9d3fabd14444e1c12310d4b4304065a1318810e1"
     },
@@ -2522,42 +2522,42 @@
     "effect.389": {
       "title": "Syke — kjent virkning",
       "steps": [
-        "Normalt kan denne urten smitte en frisk helt. Ved smitte får du -1 fysikk, deretter -1 til en tilfeldig egenskap hvert 150. spillertrekk (300 med Hardiness) til du kureres. Hvile kurerer ikke sykdommen. En helbredende urt, en helbredende drikk eller Miruvor kurerer alle sykdommer og gjenoppretter sykdommens egenskapstap. Urten gir vanlig næring. Er den kuren mot sykdommen du allerede har, gjør den deg frisk og gjenoppretter tapte egenskaper i stedet for å smitte deg eller gi næring."
+        "Normalt kan denne urten smitte en frisk helt. Ved smitte får du -1 utholdenhet, deretter -1 til en tilfeldig egenskap hvert 150. spillertrekk (300 med Hardiness) til du kureres. Hvile kurerer ikke sykdommen. En helbredende urt, en helbredende drikk eller Miruvor kurerer alle sykdommer og gjenoppretter sykdommens egenskapstap. Urten gir vanlig næring. Er den kuren mot sykdommen du allerede har, gjør den deg frisk og gjenoppretter tapte egenskaper i stedet for å smitte deg eller gi næring."
       ],
       "source_sha256": "1a36c79391b42d1d2638cd6767a512eb3c82dd50246dd4fe8ef6905e585cba05"
     },
     "effect.399": {
       "title": "Et stykke mørkt brød — kjent virkning",
       "steps": [
-        "Gir omtrent 1500 vanlige måltider."
+        "Gir næring for omtrent 1 500 vanlige trekk."
       ],
       "source_sha256": "d358279640cace15de4d1a702b32ebe61c8c90796a253163279dff44dacee8fd"
     },
     "effect.400": {
       "title": "Bånd av tørket kjøtt — kjent virkning",
       "steps": [
-        "Gir næring for omtrent 2000 vanlige trekk. Grunnrisikoen for sykdomssmitte er 20 %. Ved smitte får du -1 fysikk og så -1 til en tilfeldig egenskap hvert 150. spillertrekk (300 med Hardiness). Hvile kurerer ikke sykdommen. En helbredende urt, en helbredende drikk eller Miruvor kurerer alle sykdommer."
+        "Gir næring for omtrent 2 000 vanlige trekk. Grunnrisikoen for smitte er 20 %. Ved smitte mister du 1 poeng i utholdenhet og deretter 1 poeng i en tilfeldig egenskap hvert 150. spillertrekk (hvert 300. trekk med Hardiness). Hvile kurerer ikke sykdommen. En helbredende urt, en helbredende drikk eller Miruvor kurerer alle sykdommer."
       ],
       "source_sha256": "60fb6ef370957c5bc80e489c5fc13dd8ee188e68604c3b1f8dd221f43c9335c1"
     },
     "effect.401": {
       "title": "Et stykke av Lembas — kjent virkning",
       "steps": [
-        "Gir omtrent 3 000 vanlige turers ernæring og gjenoppretter 1 tapte ynde."
+        "Gir næring for omtrent 3 000 vanlige trekk og gjenoppretter 1 tapt poeng i ynde."
       ],
       "source_sha256": "c3fbee491d23938b05e2e4a9ba57ca6294c4ce5acd6c9cfae44b0e4f4afb0bff"
     },
     "item.throwing.ready": {
       "title": "Våpen for kast: klar",
       "steps": [
-        "Åpne inventaret, velg kastevåpenet og deretter Ready for å flytte gjenstanden til bærereima. Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
+        "Åpne inventaret, velg kastevåpenet og deretter «Flytt til bæreselen». Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
       ],
       "source_sha256": "cf3c627074fa43b9156e7d81f269029871f96de54eaa12d6893d5e5b85324ae4"
     },
     "item.throwing.active": {
       "title": "Våpen for kast: aktiv",
       "steps": [
-        "Åpne Change Active og velg raden Throwing for et klargjort våpen. Et spyd kan også ha en egen Melee-rad. Velg Throwing i denne øvelsen. Sjekk hvilket våpen og skjold som blir aktive, og bekreft. Hopp over leksjonen for å beholde dagens oppsett."
+        "Åpne «Bytt aktivt våpen» og velg raden «Throwing» for kastevåpenet du har klart. Et spyd kan også ha en egen rad for nærkamp, «Melee». Velg «Throwing» til denne øvelsen. Sjekk hvilket våpen og skjold som blir aktive, og bekreft. Hopp over leksjonen hvis du vil beholde oppsettet ditt."
       ],
       "source_sha256": "662ec2eb8ad97fb769090a4913e0b68ab4d71aced3adbc81527c8eb1e290c922"
     },
@@ -2571,14 +2571,14 @@
     "item.bow.ready": {
       "title": "Bue: klar",
       "steps": [
-        "Åpne inventaret, velg buen og deretter Ready for å flytte gjenstanden til bærereima. Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
+        "Åpne inventaret, velg buen og deretter «Flytt til bæreselen». Å hente noe fra ryggsekken tar tre trekk og kan avbrytes av et angrep. Hopp over leksjonen hvis du vil beholde dagens oppsett."
       ],
       "source_sha256": "feb12c8654451c767dba1e16c5f5e5c1fe28c572a6bd249b9546b019e8bf3369"
     },
     "item.bow.active": {
       "title": "Bue: aktiv",
       "steps": [
-        "Velg den klargjorte buen i Change Active. Sjekk hvilket våpen og skjold som blir aktive. Bekreft byttet for å fullføre øvelsen, eller hopp over leksjonen for å beholde dagens oppsett."
+        "Velg buen du har klart under «Bytt aktivt våpen». Sjekk hvilket våpen og skjold som blir aktive. Bekreft byttet for å fullføre øvelsen, eller hopp over leksjonen for å beholde oppsettet ditt."
       ],
       "source_sha256": "2d8fa1bb9295b295f10c11bee1f9d9664ea80d3f8da2f3e27a6accc8b64a4642"
     },
@@ -2597,9 +2597,9 @@
       "source_sha256": "22889891699c1d952545458640026303a6bffca6515e5da6d8970746030a2498"
     },
     "item.armour.equip": {
-      "title": "Utstyr rustning",
+      "title": "Ta på rustning",
       "steps": [
-        "Velg \"Utstyr\" for kjent, ikke fortryllede rustning som passer i en ledig plass. Sjekk beskyttelse, unnvikelse, straffer og sverget ditt før du bekrefter. Hopp over hvis du foretrekker din nåværende oppsett. I menyen: Equip."
+        "Velg «Utstyr» på en identifisert rustning uten forbannelse som passer på en ledig plass. Sjekk beskyttelse, unnvikelse, ulemper og eden din før du bekrefter. Hopp over leksjonen hvis du vil beholde utstyret ditt."
       ],
       "source_sha256": "dda38dd3b88e9b72cea092ddf630c98ca9b8d9bddf7c817f7c2a519808f8088f"
     },
@@ -2611,14 +2611,14 @@
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
-      "title": "Bæreevne",
+      "title": "Bæreselens kapasitet",
       "steps": [
-        "{detail} Bærereimen har en egen grense for hvor mye den kan bære, uavhengig av ryggsekken. Utstyret som er klart, kan hentes ved hjelp av egne regler. Å flytte et objekt mellom lagringsplasser, skaper ikke en ubegrenset total kapasitet for å bære."
+        "{detail} Bæreselen har en egen grense for hvor mye den kan bære, uavhengig av ryggsekken. Utstyret som er klart, kan hentes ved hjelp av egne regler. Å flytte et objekt mellom lagringsplasser, skaper ikke en ubegrenset total kapasitet for å bære."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
     "storage.quiver": {
-      "title": "Koggers kapasitet",
+      "title": "Koggerets kapasitet",
       "steps": [
         "{detail} Koggeren holder pilene under sine egne regler for kapasitet. For mange piler kan kreve plass i ryggsekken. En bunke kan plukkes opp delvis når bare en del passer; sjekk hvor mange piler som faktisk er samlet."
       ],
@@ -2632,14 +2632,14 @@
       "source_sha256": "13beba1f2d1595f6ba75a4ba3519f791ed15c82ba0f795552a90818a63c498eb"
     },
     "storage.pack_access": {
-      "title": "Søke i ryggsekken",
+      "title": "Hente frem gjenstander fra ryggsekken",
       "steps": [
         "Denne handlingen med ryggsekk tar tre runder å fullføre. Fiender kan handle i løpet av disse rundene, og et angrep eller din avbrytelse kan stoppe det. \"Klar\" viktig utstyr før kamp, hvis mulig."
       ],
       "source_sha256": "68ce9a0651f5cd3b3f6f0cfa00a4a9173c9b2b10234538843f40c2b11cad2386"
     },
     "storage.pack_interrupted": {
-      "title": "Tilgang til utstyr forstyrret",
+      "title": "Tilgang til ryggsekken avbrutt",
       "steps": [
         "Et angrep avbrøt handlingen med ryggsekken før den var ferdig. Sjekk hvor gjenstanden befinner seg nå, og se gjennom historikken av meldingene. Du må kanskje trekke deg tilbake for å unngå fare før du prøver igjen."
       ],
@@ -2653,7 +2653,7 @@
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
     "world.rest": {
-      "title": "Pauser koster turar",
+      "title": "Hvile koster trekk",
       "steps": [
         "Hvile gjentar trekk til målet er nådd eller du avbrytes. Fiender og klokken for minstedybde fortsetter. Gift, blødning og utsulting stanser vanlig helsefornyelse. Sang stanser stemmefornyelse. Behandle sykdom før en lang hvil."
       ],
@@ -2669,7 +2669,7 @@
     "world.trap": {
       "title": "En kjent felle",
       "steps": [
-        "Du har funnet en felle. Å se den deaktiverer den ikke. Velg en rute rundt den, undersøk \"Deaktivere\" og risikoen, eller bruk en lovlig salto hvis helten din har \"Salto\". Hvis den allerede er utløst, sjekk helsen og tilstanden din før du handler. I menyen: Disarm."
+        "Du har oppdaget en felle. Den virker fortsatt. Gå rundt den, sjekk valget «Uskadeliggjør» og risikoen, eller hopp over den hvis helten har evnen Sprang og hoppet er mulig. Har fellen allerede blitt utløst, bør du sjekke helsen og tilstandene dine før du handler."
       ],
       "source_sha256": "d736a4fbda85cbff7b263fbacd3afb7a4d62740a39ffd513a2f8ba153094689d"
     },
@@ -2807,7 +2807,7 @@
       "source_sha256": "6a8e92396417cc8516de5c98afb86fa631b33d6090abdb369bfbb9ccbd64eaee"
     },
     "world.partition.5": {
-      "title": "Kravle-region",
+      "title": "Område med kløfter",
       "steps": [
         "{detail} Kløfter deler opp området. Et fall kan skade deg og sende deg dypere. Sjekk mulige kryssinger og krav til hopp før du går. Se etter mistet utstyr langs kantene, men unngå kamp på smale broer. Stjernejern kan forekomme på egnede dybder."
       ],
@@ -3045,7 +3045,7 @@
       "source_sha256": "17ac5e2cf9488195da351473991fc38df233df65831c2300c5b2fc0b712b15a8"
     },
     "monster.rf2_pass_door": {
-      "title": "Gå gjennom dører",
+      "title": "Passere under dører",
       "steps": [
         "Denne skapningen kan passere under dører. Å lukke en dør vil ikke hindre den i å komme inn."
       ],
@@ -3269,9 +3269,9 @@
       "source_sha256": "6aa1a3b6a7f6231b7525cb6d83f1c458fddcbda90b2634270c2664e20519d2e7"
     },
     "monster.rf4_arrow1": {
-      "title": "Fiendenes bueskytterferdigheter",
+      "title": "Fiendens bueskyting",
       "steps": [
-        "Denne skapningen har angrep med en kortbuepiler. Linjer med ild og tilgjengelig dekning er viktige, selv når den ikke er i direkte nærhet."
+        "Skapningen kan skyte piler med en kortbue. Ta hensyn til skuddlinjen og dekning i nærheten selv når den står lenger unna."
       ],
       "source_sha256": "1693e9ae6290442f88bf766ab45731c81fa8f7d18eefaf879a7060f11b42d67c"
     },
@@ -3367,9 +3367,9 @@
       "source_sha256": "05d860d4fde4c72a7170bd7f29b04a7176dcc28ee5565f0c99e5018b106058e5"
     },
     "monster.rf4_hold": {
-      "title": "Å skape fascinasjon",
+      "title": "Setter deg i transe",
       "steps": [
-        "Denne skapningen kan fortrylle deg. En vellykket fortryllelse hindrer vanlige handlinger til den opphører. Unngå å anta at du kan drikke et middel etter at du har mistet evnen til å handle."
+        "Skapningen kan sette deg i transe. Så lenge transen varer, kan du ikke utføre vanlige handlinger. Regn ikke med å kunne drikke et middel etter at du har mistet evnen til å handle."
       ],
       "source_sha256": "419f9d5d6e421ee5030767bb868350b0e5f0be77fc5000f96c0feb39790f4598"
     },
@@ -3395,23 +3395,23 @@
       "source_sha256": "b12fbadd52b9abb41b6dbaec5e7be9318027efda0e13cb558697dc70cd7c033a"
     },
     "monster.rf4_sng_binding": {
-      "title": "En sang som binder fienden",
+      "title": "Fiendens bindesang",
       "steps": [
-        "Denne fiendens \"Sang av Binding\" kan bremse deg og stenge eller låse dører. Sjekk din fluktvei og \"Slow\"-tilstand. \"Sang av Stillhet\" svekker motstanderens sang."
+        "Fiendens bindesang (Song of Binding) kan gjøre deg langsommere og lukke eller låse dører. Sjekk fluktveien og om du har blitt langsommere. Stillhetens sang (Song of Silence) svekker fiendens sang."
       ],
       "source_sha256": "0c7ec48342eb26d5972c9a6f448b67bfb4a732c9de42bf1230cce8384fcf94a9"
     },
     "monster.rf4_sng_piercing": {
-      "title": "En fiendes dødsdanser",
+      "title": "Fiendens gjennomtrengende sang",
       "steps": [
-        "Denne fienden kan bruke \"Song of Piercing\" for å avsløre din posisjon ved hjelp av en motstandende viljekke. Avstand og \"Song of Silence\" hjelper deg med å motstå søket."
+        "Fiendens gjennomtrengende sang (Song of Piercing) kan avsløre hvor du er gjennom en motstående viljeprøve. Avstand og Stillhetens sang (Song of Silence) hjelper deg med å motstå letingen."
       ],
       "source_sha256": "57af736e8eb03e757e1a419757bda24e52507dd08915b0eb029696b0ea45b0cc"
     },
     "monster.rf4_sng_oaths": {
       "title": "En fiendes edssang",
       "steps": [
-        "Denne fienden kan bruke \"Sang av løfter\" for å kalle frem \"Oathwraiths\". Å la den fortsette å synge kan tiltrekke flere motstandere. \"Sang av stillhet\" svekker den magiske sangen."
+        "Fiendens edssang (Song of Oaths) kan mane fram edsånder (Oathwraiths). Hvis fienden får fortsette å synge, kan du få flere forfølgere. Stillhetens sang (Song of Silence) svekker frammaningen."
       ],
       "source_sha256": "3e4461156bb9b54750ff75d3fd8d545e635a5db81aba2f4a1ad604276b0a074a"
     },
@@ -3437,7 +3437,7 @@
       "source_sha256": "489f6287b462ce484bd68e76e43d2c732afafa58acebfe7b4756274a9c72c4e0"
     },
     "monster.rf4_rally": {
-      "title": "Samle allierte",
+      "title": "Gi allierte mot",
       "steps": [
         "Denne skapningen kan gjenopprette motet til allierte som trekker seg tilbake. Vær oppmerksom på fiender som vender tilbake til kampen etter at de har trukket seg tilbake."
       ],
@@ -3649,7 +3649,7 @@
     "status.power_throw": {
       "title": "Kraftkast er klar",
       "steps": [
-        "Kraftkast er klart. Kast et spyd eller en håndøks fra bæreremmen mot en fiende i naboruten samtidig som du slår i nærkamp. Begge angrepene får hvert sitt treffkast. Skaden fra treffene legges sammen før ett beskyttelseskast. Nærkampvåpenet forblir aktivt."
+        "Kraftkast er klart. Kast et spyd eller en håndøks fra bæreselen mot en fiende i naboruten samtidig som du slår i nærkamp. Begge angrepene får hvert sitt treffkast. Skaden fra treffene legges sammen før ett beskyttelseskast. Nærkampvåpenet forblir aktivt."
       ],
       "source_sha256": "17ce483ef21345b672af7ad50d9eb16456d8ba4e308ac4ec00c4ab084b3c0689"
     },
@@ -3696,7 +3696,7 @@
       "source_sha256": "dbd6d44e9cb1a518e534903baadd27af7e30dea5d5b52b483196532c7252e7a0"
     },
     "status.smithing": {
-      "title": "Jernsmidning pågår",
+      "title": "Smiing pågår",
       "steps": [
         "Smidearbeidet er i gang. Arbeidet fortsetter i den tidsrammen som er angitt i den aksepterte forespørselen. Hvis arbeidet blir avbrutt, sjekk det uferdige arbeidet og de gjenværende kostnadene før du fortsetter."
       ],
@@ -3741,7 +3741,7 @@
       "title": "Nærm deg forsiktig",
       "steps": [
         "{subject} har ikke oppdaget deg ennå. Når du sniker deg, er du vanskeligere å oppdage, men de fleste handlinger tar lengre tid. Avstand og dekning hjelper også. Begynn å snike deg før du nærmer deg hvis du vil forbli usett.",
-        "Bruk \"skjulte\" modus for denne øvelsen. Du kan slå den av senere når hastighet er viktigere. Hopp over hvis du foretrekker en annen tilnærming."
+        "Slå på sniking i denne øvelsen. Du kan slå den av igjen når fart er viktigere. Hopp over hvis du foretrekker en annen fremgangsmåte."
       ],
       "source_sha256": "b85c89b23bb74b88561878bf681c5cfc81fde7632b84b55b0b1e7b86f2c26851"
     },
@@ -3912,7 +3912,7 @@
       "source_sha256": "c331749fe6aedf1c8db6da3ec67ee1d26b863d86956dfb50b1178d8198b45612"
     },
     "terrain.101": {
-      "title": "Felle med vann",
+      "title": "Oversvømmelsesfelle",
       "steps": [
         "Fellen fyller ruten under deg med grunt vann. Etter hver av de neste to fullførte handlingene dine fylles neste ring av ruter vannet kan nå langs en åpen vei, først opptil åtte og så opptil seksten. Vannet går ikke gjennom vegger, men dører på veien ødelegges og erstattes av vann. En syrevariant bruker syre. Etter andre handling blir midten av en vannflom til dypt vann. Der koster bevegelse fire ganger vanlig energi, og du kan ikke angripe.",
         "Undersøk en avslørt felle før du går på den. Gå rundt eller sjekk Disarm og risikoen ved forsøket. Har flommen begynt, kom deg mot tørr grunn. Å lese menyer får den ikke til å spre seg, men venting og andre handlinger gjør det."
@@ -3946,11 +3946,11 @@
     "Preview item": "Undersøk gjenstanden",
     "Preview the selected item%s%s": "Undersøk valgt gjenstand%s%s",
     "The selected item's preview is open.": "Beskrivelsen av den valgte gjenstanden er åpen.",
-    "Select the item, then choose Ready.": "Velg gjenstanden og deretter Ready.",
+    "Select the item, then choose Ready.": "Velg gjenstanden og deretter «Flytt til bæreselen».",
     "Select the equipment you want to wear or wield.": "Velg utstyret du vil ta på eller holde i hånden.",
     "Select an item to preview.": "Velg en gjenstand å undersøke.",
     "Select the required item and choose Use.": "Velg den etterspurte gjenstanden og deretter Use.",
-    "Choose a Throwing row, then confirm the change.": "Velg en rad merket Throwing, og bekreft byttet.",
+    "Choose a Throwing row, then confirm the change.": "Velg raden «Throwing» for kastevåpen og bekreft byttet.",
     "Make the requested selection in the open menu.": "Gjør det etterspurte valget i den åpne menyen.",
     "Throw active weapon": "Kast det aktive våpenet",
     "Attack": "Angrip",
@@ -4043,7 +4043,7 @@
     "This hero's run has ended. Review the cause of death and combat history before choosing the next hero in this Tale.": "Denne heltens ferd er over. Se på dødsårsaken og kamphistorikken før du velger neste helt i fortellingen.",
     "Strength": "Styrke",
     "Dexterity": "Smidighet",
-    "Constitution": "Fysikk",
+    "Constitution": "Utholdenhet",
     "Grace": "Ynde",
     "Challenge echo": "Utfordringens ekko",
     "Elbereth echo": "Elbereths ekko",
@@ -4052,7 +4052,7 @@
     "Your saved tutorial setting is Disabled. They will stay off until you choose Normal or Extended in Options.": "Den lagrede opplæringsinnstillingen er Av. Opplæringen forblir slått av til du velger Normal eller Utvidet i innstillingene.",
     "Extended is the default. You can choose Disabled, Normal or Extended in Options; changing this setting will not enable tutorials for an older character.": "Utvidet er standardvalget. Du kan velge Av, Normal eller Utvidet i innstillingene. En endring slår ikke på opplæringen for en eldre figur.",
     "Updated to 0.9.8": "Oppdatert til 0.9.8",
-    "Use this known staff from the Harness once. It spends a charge; effects on enemies may be resisted.": "Bruk denne kjente staven fra bæreremmen én gang. Det bruker én ladning. Fiender kan motstå virkningen.",
+    "Use this known staff from the Harness once. It spends a charge; effects on enemies may be resisted.": "Bruk den kjente staven fra bæreselen én gang. Det bruker én ladning. Fiender kan motstå virkningen.",
     "Use item": "Bruk gjenstand",
     "Examine item": "Undersøk gjenstand",
     "Sing / change song": "Syng / bytt sang",
@@ -4071,13 +4071,13 @@
     "Your hit margin was %d with a %.1f lb weapon, adding %d critical dice. Damage now rolls %dd%d before Protection.": "Treffmarginen var %d med et våpen på %.1f lb. Ekstra kritiske terninger: %d. Skaden før beskyttelse er %dd%d.",
     "Sound this known horn toward a hostile target. It costs %d Voice and makes a loud noise.": "Blås i det kjente hornet mot en fiende. Det koster %d stemme og lager mye støy.",
     "Severity %d; at this value the next damage tick is %d Health.": "Alvorlighetsgrad: %d. Neste skade koster %d helse.",
-    "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d.": "Sykdomsfradrag: styrke %+d, smidighet %+d, fysikk %+d, ynde %+d.",
+    "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d.": "Sykdomsfradrag: styrke %+d, smidighet %+d, utholdenhet %+d, ynde %+d.",
     "Stun %d: %+d to every skill.": "Bedøvelse %d: %+d på hver ferdighet.",
     "%s drain changed from %d to %d. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.": "%s: tapet endret seg fra %d til %d. Egenskapsoversikten viser tap, utstyrsfradrag og utløpende bonuser hver for seg.",
     "Health: %d/%d. Read the last attack and its effects before acting again.": "Helse: %d/%d. Se på det siste angrepet og følgene før du handler igjen.",
     "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Minste dybde er nå %d fot. Spillhandlinger får tiden til å gå. Lesing koster ingen spilletid.",
     "Pack space: %d.%d/%d.%d qt.": "Plass i ryggsekken: %d,%d/%d,%d qt.",
-    "Harness space: %d.%d/%d.%d qt.": "Plass på bærereima: %d,%d/%d,%d qt.",
+    "Harness space: %d.%d/%d.%d qt.": "Plass i bæreselen: %d,%d/%d,%d qt.",
     "Arrows: %d. Current free Quiver space: %d.": "Piler: %d. Ledige plasser i koggeret: %d.",
     "Challenge echo %d. A song has left a temporary effect. Read your current skill breakdown.": "Utfordringens ekko %d. En sang har etterlatt en midlertidig virkning. Se ferdighetsoversikten.",
     "Elbereth echo %d. A song has left a temporary effect. Read your current skill breakdown.": "Elbereths ekko %d. En sang har etterlatt en midlertidig virkning. Se ferdighetsoversikten."

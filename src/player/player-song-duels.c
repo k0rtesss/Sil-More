@@ -9,6 +9,7 @@
 #include "metarun.h"
 #include "sdl-config.h"
 #include "supplies.h"
+#include "spell/spell-utility.h"
 #include <math.h>
 
 #define SONG_DUEL_LOCKOUT_TURNS 10
@@ -504,9 +505,10 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
             msg_format(
                 "%s is diminished: Will -%d, max HP -%d.",
                 m_name, applied.will, applied.maxhp);
-            msg_format("Damage dice -%d across %d blow%s.",
-                applied.damage_dice, applied.damage_blows,
-                (applied.damage_blows == 1) ? "" : "s");
+            msg_format(applied.damage_blows == 1
+                    ? "Damage dice -%d across %d blow."
+                    : "Damage dice -%d across %d blows.",
+                applied.damage_dice, applied.damage_blows);
         }
         else
         {
@@ -563,9 +565,8 @@ static void song_duel_finish_player_loss(int song, monster_type* m_ptr)
     {
         // Song of Contest always drains a random stat - no resistance
         int stat = rand_int(A_MAX);
-        static cptr desc_stat_neg[] = { "weak", "awkward", "sickly", "drained" };
         if (dec_stat(stat, 1, false))
-            msg_format("You feel %s.", desc_stat_neg[stat]);
+            spell_report_stat_loss(stat);
     }
 
     change_song(SNG_NOTHING);

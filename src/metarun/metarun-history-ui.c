@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "metarun-internal.h"
 
@@ -35,9 +36,9 @@ void list_metaruns(void)
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
     }
     Term_clear();
-    c_prt(TERM_L_GREEN, "Tale history", 1, 2);
+    c_prt(TERM_L_GREEN, ui_text("Tale history"), 1, 2);
     c_put_str(TERM_L_DARK,
-              " *Tale    Score     Sil  Dth  Res  Last played", 3, 2);
+              ui_text(" *Tale    Score     Sil  Dth  Res  Last played"), 3, 2);
 
     refresh_current_metar_score();
 
@@ -82,12 +83,12 @@ void list_metaruns(void)
         if (row >= footer_row && i+1 < metarun_max) {   /* page break */
             if (steamdeck) {
                 char hint_buf[64];
-                strnfmt(hint_buf, sizeof(hint_buf), "[more - press %s]", accept_label);
+                strnfmt(hint_buf, sizeof(hint_buf), ui_text("[more - press %s]"), accept_label);
                 c_put_str(TERM_L_DARK, hint_buf, footer_row, 2);
             } else if (sdl_touch_only_device_active()) {
-                c_put_str(TERM_L_DARK, "[more - tap to continue]", footer_row, 2);
+                c_put_str(TERM_L_DARK, ui_text("[more - tap to continue]"), footer_row, 2);
             } else {
-                c_put_str(TERM_L_DARK, "[more - any key]", footer_row, 2);
+                c_put_str(TERM_L_DARK, ui_text("[more - any key]"), footer_row, 2);
             }
             /* Register a full-screen tap target so touch-only users (whose
              * prompt no longer says "any key") can advance the page. */
@@ -97,22 +98,22 @@ void list_metaruns(void)
             metarun_wait_hidden();  Term_clear();
             ui_menu_click_clear();
             row = 4;
-            c_prt(TERM_L_GREEN, "Tale history (cont.)", 1, 2);
+            c_prt(TERM_L_GREEN, ui_text("Tale history (cont.)"), 1, 2);
             c_put_str(TERM_L_DARK,
-                      " *Tale    Score     Sil  Dth  Res  Last played", 3, 2);
+                      ui_text(" *Tale    Score     Sil  Dth  Res  Last played"), 3, 2);
         }
     }
 
     order = mem_free(order);
     if (steamdeck) {
         char hint_buf[64];
-        strnfmt(hint_buf, sizeof(hint_buf), "Press %s to return.", accept_label);
+        strnfmt(hint_buf, sizeof(hint_buf), ui_text("Press %s to return."), accept_label);
         c_put_str(TERM_L_DARK, hint_buf, MIN(row + 1, footer_row), 2);
     } else if (sdl_touch_only_device_active()) {
-        c_put_str(TERM_L_DARK, "Tap to return",
+        c_put_str(TERM_L_DARK, ui_text("Tap to return"),
             MIN(row + 1, footer_row), 2);
     } else {
-        c_put_str(TERM_L_DARK, "Press any key to return.",
+        c_put_str(TERM_L_DARK, ui_text("Press any key to return."),
             MIN(row + 1, footer_row), 2);
     }
     /* Register a full-screen tap target so touch-only users can dismiss. */

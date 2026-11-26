@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "object/object-inventory-limits.h"
 #include "object/object-internal.h"
 #include "support/screen.h"
@@ -261,7 +262,7 @@ static void debug_overlay_number_draw(cptr title, cptr desc, long current,
     strnfmt(line, sizeof(line), "Reset to %ld", initial);
     sdl_question_menu_add_entry(DEBUG_NUMBER_DEFAULT, "r)", line,
         TERM_SLATE);
-    sdl_question_menu_add_entry(DEBUG_NUMBER_CANCEL, "", "Cancel",
+    sdl_question_menu_add_entry(DEBUG_NUMBER_CANCEL, "", ui_text("Cancel"),
         TERM_SLATE);
 
     sdl_question_menu_set_highlight(DEBUG_NUMBER_ACCEPT);
@@ -1057,52 +1058,52 @@ static void wiz_display_item(const object_type* o_ptr)
 
     prt(buf, 2, j);
 
-    prt(format("kind = %-5d  level = %-4d  tval = %-5d  sval = %-5d",
+    prt(format(ui_text("kind = %-5d  level = %-4d  tval = %-5d  sval = %-5d"),
             o_ptr->k_idx, k_info[o_ptr->k_idx].level, o_ptr->tval, o_ptr->sval),
         4, j);
 
-    prt(format("number = %-3d  wgt = %-6d  prt = %dd%d    damage = %dd%d",
+    prt(format(ui_text("number = %-3d  wgt = %-6d  prt = %dd%d    damage = %dd%d"),
             o_ptr->number, o_ptr->weight, o_ptr->pd, o_ptr->ps, o_ptr->dd,
             o_ptr->ds),
         5, j);
 
-    prt(format("pval = %-5d  toev = %-5d  tohit = %-4d", o_ptr->pval,
+    prt(format(ui_text("pval = %-5d  toev = %-5d  tohit = %-4d"), o_ptr->pval,
             o_ptr->evn, o_ptr->att),
         6, j);
 
-    prt(format("name1 = %-4d  egoP = %-4d  egoS = %-4d  cost = %ld", o_ptr->name1,
+    prt(format(ui_text("name1 = %-4d  egoP = %-4d  egoS = %-4d  cost = %ld"), o_ptr->name1,
             object_ego_prefix(o_ptr), object_ego_suffix(o_ptr),
             (long)object_value(o_ptr)),
         7, j);
 
-    prt(format("ident = %04x  timeout = %-d", o_ptr->ident, o_ptr->timeout), 8,
+    prt(format(ui_text("ident = %04x  timeout = %-d"), o_ptr->ident, o_ptr->timeout), 8,
         j);
 
-    prt("+------------FLAGS1------------+", 10, j);
-    prt("AFFECT..........SLAY.......BRAND", 11, j);
-    prt("                ae      xxxaefcp", 12, j);
-    prt("siwdcc  ssitsasmnvudotgddduclioo", 13, j);
-    prt("tnieoh  trnupthgiinmrrnrrmnierli", 14, j);
+    prt(ui_text("+------------FLAGS1------------+"), 10, j);
+    prt(ui_text("AFFECT..........SLAY.......BRAND"), 11, j);
+    prt(ui_text("                ae      xxxaefcp"), 12, j);
+    prt(ui_text("siwdcc  ssitsasmnvudotgddduclioo"), 13, j);
+    prt(ui_text("tnieoh  trnupthgiinmrrnrrmnierli"), 14, j);
     prt("rtsxna..lcfndkttmldncltggnddceds", 15, j);
     prt_binary(f1, 16, j);
 
-    prt("+------------FLAGS2------------+", 17, j);
-    prt("SUST.......IMM..RESIST.........", 18, j);
-    prt("           afecpaefcpfldbc s n  ", 19, j);
-    prt("siwdcc     ciloocliooeialoshnecd", 20, j);
-    prt("tnieoh     ireliierliatrnnnrethi", 21, j);
+    prt(ui_text("+------------FLAGS2------------+"), 17, j);
+    prt(ui_text("SUST.......IMM..RESIST........."), 18, j);
+    prt(ui_text("           afecpaefcpfldbc s n  "), 19, j);
+    prt(ui_text("siwdcc     ciloocliooeialoshnecd"), 20, j);
+    prt(ui_text("tnieoh     ireliierliatrnnnrethi"), 21, j);
     prt("rtsxna.....decdsdcedsrekdfddxhss", 22, j);
     prt_binary(f2, 23, j);
 
-    prt("+------------FLAGS3------------+", 10, j + 32);
-    prt("s   ts h     tadiiii   aiehs  hp", 11, j + 32);
-    prt("lf  eefoni   egrgggg  bcnaih  vr", 12, j + 32);
-    prt("we  lerler  ilgannnn  ltssdo  ym", 13, j + 32);
-    prt("da reiedvo  merirrrr  eityew ccc", 14, j + 32);
-    prt("itlepnelpn  ppanaefc  svaktm uuu", 15, j + 32);
-    prt("ghigavaiim  aoveclio  saanyo rrr", 16, j + 32);
-    prt("seteticfca  craxierl  etropd sss", 17, j + 32);
-    prt("trenhstekn  tttpdced  detwes eee", 18, j + 32);
+    prt(ui_text("+------------FLAGS3------------+"), 10, j + 32);
+    prt(ui_text("s   ts h     tadiiii   aiehs  hp"), 11, j + 32);
+    prt(ui_text("lf  eefoni   egrgggg  bcnaih  vr"), 12, j + 32);
+    prt(ui_text("we  lerler  ilgannnn  ltssdo  ym"), 13, j + 32);
+    prt(ui_text("da reiedvo  merirrrr  eityew ccc"), 14, j + 32);
+    prt(ui_text("itlepnelpn  ppanaefc  svaktm uuu"), 15, j + 32);
+    prt(ui_text("ghigavaiim  aoveclio  saanyo rrr"), 16, j + 32);
+    prt(ui_text("seteticfca  craxierl  etropd sss"), 17, j + 32);
+    prt(ui_text("trenhstekn  tttpdced  detwes eee"), 18, j + 32);
     prt_binary(f3, 19, j + 32);
 }
 
@@ -2563,8 +2564,10 @@ static void do_cmd_wiz_unlock_all_oaths(void)
     {
         if (already_unlocked > 0)
         {
-            msg_format("Unlocked %d oath%s (%d already unlocked).",
-                      count, (count == 1) ? "" : "s", already_unlocked);
+            msg_format(count == 1
+                    ? "Unlocked %d oath (%d already unlocked)."
+                    : "Unlocked %d oaths (%d already unlocked).",
+                count, already_unlocked);
         }
         else
         {
@@ -2834,7 +2837,9 @@ static void do_cmd_debug_identify_all_items(void)
     /* Report result */
     if (count > 0)
     {
-        msg_format("Identified %d item%s on the dungeon floor.", count, (count != 1) ? "s" : "");
+        msg_format(count == 1 ? "Identified %d item on the dungeon floor."
+                              : "Identified %d items on the dungeon floor.",
+            count);
     }
     else
     {
@@ -3443,7 +3448,7 @@ static void do_cmd_debug_execute(char cmd)
     case 'O':
     {
         screen_save();
-        do_cmd_options_aux(DEBUG_PAGE, "Debug Options");
+        do_cmd_options_aux(DEBUG_PAGE, ui_text("Debug Options"));
         screen_load();
         break;
     }
@@ -3566,8 +3571,16 @@ static void do_cmd_debug_execute(char cmd)
         for (int y = 0; y < p_ptr->cur_map_hgt; y++)
             for (int x = 0; x < p_ptr->cur_map_wid; x++)
                 if (cave_feat[y][x] == FEAT_ILLUSORY_WALL) count++;
-        msg_format("Illusory wall dots %s: %d wall%s on this level.",
-            enabled ? "on" : "off", count, count == 1 ? "" : "s");
+        if (enabled)
+            msg_format(count == 1
+                    ? "Illusory wall dots on: %d wall on this level."
+                    : "Illusory wall dots on: %d walls on this level.",
+                count);
+        else
+            msg_format(count == 1
+                    ? "Illusory wall dots off: %d wall on this level."
+                    : "Illusory wall dots off: %d walls on this level.",
+                count);
         if (enabled && count) msg_print("Press M to see the dots on the whole map.");
         if (enabled && !count) msg_print("There are no remaining illusory walls to mark on this level.");
         log_debug("Illusory wall dots %s: count=%d depth=%d viewport=(%d,%d)",

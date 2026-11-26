@@ -49,13 +49,23 @@ static void check_bank_costs(void) {
     p_ptr->cur_map_hgt = p_ptr->cur_map_wid = size;
     p_ptr->py = 8; p_ptr->px = 13; cave_m_idx[8][13] = -1;
     for (int y = 0; y < size; ++y) for (int x = 0; x < size; ++x) {
-        bool wall = !x || !y || x+1 == size || y+1 == size || (y == 6 && x < 9);
-        cave_feat[y][x] = wall ? FEAT_WALL_PERM : x == 6 ? FEAT_DEEP_WATER
+        bool border = !x || !y || x + 1 == size || y + 1 == size;
+        bool rock = (y == 6 && x < 9) || (y == 8 && x == 11);
+        cave_feat[y][x] = border ? FEAT_WALL_PERM : rock ? FEAT_WALL_EXTRA : x == 6 ? FEAT_DEEP_WATER
             : x == 7 || y == 8 ? FEAT_WATER : FEAT_FLOOR;
-        cave_info[y][x] = wall ? CAVE_WALL : 0;
+        cave_info[y][x] = border || rock ? CAVE_WALL : 0;
     }
-    for (int flying = 0; flying <= 1; ++flying) {
-        if (flying) r_info[m->r_idx].flags2 |= RF2_FLYING;
+    /* A player displaced inside rock remains attackable even when a normal
+     * monster cannot enter that terrain. This square is not the flow origin. */
+    cave_m_idx[8][13] = 0;
+    p_ptr->px = 11;
+    cave_m_idx[8][11] = -1;
+    const u32b abilities[] = {0, RF2_FLYING, RF2_PASS_WALL, RF2_KILL_WALL,
+        RF2_TUNNEL_WALL, RF2_TUNNEL_WALL};
+    for (unsigned actor = 0; actor < N_ELEMENTS(abilities); ++actor) {
+        r_info[m->r_idx].flags2 = abilities[actor];
+        m->alertness = ALERTNESS_ALERT;
+        m->stance = actor == 5 ? STANCE_FLEEING : STANCE_AGGRESSIVE;
         int expected[size][size];
         for (int y = 0; y < size; ++y) for (int x = 0; x < size; ++x)
             expected[y][x] = FLOW_MAX_DIST;
@@ -79,7 +89,7 @@ static void check_bank_costs(void) {
         for (int y = 0; y < size; ++y) for (int x = 0; x < size; ++x)
             assert(flow_dist(idx, y, x) == expected[y][x]);
     }
-    puts("Mixed banks: all grounded and flying flow distances match individual directed edges PASS.");
+    puts("Mixed banks, wall traversal, fleeing tunneler and player in rock: complete fields match directed edges PASS.");
 }
 static void check_flow_work(void) {
     monster_race saved = r_info[403];

@@ -1,6 +1,7 @@
 /* File: birth/birth-blitz.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl-config.h"
 #include "birth/birth-internal.h"
 
@@ -8,9 +9,9 @@ static cptr blitz_character_mode_name(byte mode)
 {
     switch (mode)
     {
-    case BLITZ_CHARACTER_RANDOM_STATS: return "Random with stats";
-    case BLITZ_CHARACTER_SELECTED: return "Selected";
-    default: return "Random";
+    case BLITZ_CHARACTER_RANDOM_STATS: return ui_text("Random with stats");
+    case BLITZ_CHARACTER_SELECTED: return ui_text("Selected");
+    default: return ui_text("Random");
     }
 }
 
@@ -18,9 +19,9 @@ static cptr blitz_effect_mode_name(byte mode)
 {
     switch (mode)
     {
-    case BLITZ_EFFECT_SELECTED: return "Selected";
-    case BLITZ_EFFECT_SELECTED_DESCR: return "Selected + descriptions";
-    default: return "Random";
+    case BLITZ_EFFECT_SELECTED: return ui_text("Selected");
+    case BLITZ_EFFECT_SELECTED_DESCR: return ui_text("Selected + descriptions");
+    default: return ui_text("Random");
     }
 }
 
@@ -71,19 +72,19 @@ static void blitz_pick_random_race_and_character(void)
 static void blitz_setup_draw_mobile(const blitz_setup* setup, int selected)
 {
     char rows[5][160];
-    strnfmt(rows[0], sizeof(rows[0]), "Character: %s",
+    strnfmt(rows[0], sizeof(rows[0]), ui_text("Character: %s"),
         blitz_character_mode_name(setup->character_mode));
-    strnfmt(rows[1], sizeof(rows[1]), "Oaths: %s", setup->oaths_enabled ? "Yes" : "No");
-    strnfmt(rows[2], sizeof(rows[2]), "Blessings: %d", setup->blessing_count);
-    strnfmt(rows[3], sizeof(rows[3]), "Curses: %d", setup->curse_count);
-    strnfmt(rows[4], sizeof(rows[4]), "Effect picks: %s",
+    strnfmt(rows[1], sizeof(rows[1]), ui_text("Oaths: %s"), setup->oaths_enabled ? ui_text("Yes") : ui_text("No"));
+    strnfmt(rows[2], sizeof(rows[2]), ui_text("Blessings: %d"), setup->blessing_count);
+    strnfmt(rows[3], sizeof(rows[3]), ui_text("Curses: %d"), setup->curse_count);
+    strnfmt(rows[4], sizeof(rows[4]), ui_text("Effect picks: %s"),
         blitz_effect_mode_name(setup->effect_mode));
-    sdl_character_sheet_screen_begin_select(selected, "Blitz Setup");
+    sdl_character_sheet_screen_begin_select(selected, ui_text("Blitz Setup"));
     sdl_character_sheet_screen_set_select_menu_style(true);
     sdl_character_sheet_screen_set_select_confirm_label("Begin");
     sdl_character_sheet_screen_add_select_heading(
-        "Story progress stays untouched. Left/right changes a value; "
-        "tap a selected value again to change it. Begin starts this Blitz run.");
+        ui_text("Story progress stays untouched. Left/right changes a value; "
+        "tap a selected value again to change it. Begin starts this Blitz run."));
     for (int i = 0; i < 5; ++i)
         sdl_character_sheet_screen_add_select_row(i, rows[i],
             i == selected ? TERM_L_BLUE : TERM_WHITE, "");
@@ -108,28 +109,30 @@ static void blitz_setup_draw(const blitz_setup* setup, int selected)
         return;
     }
 
-    c_put_str(TERM_YELLOW, "Blitz Setup", 1, MAX((wid - 11) / 2, 0));
+    cptr title = ui_text("Blitz Setup");
+    int title_w = utf8_display_width_n(title, (int)strlen(title));
+    c_put_str(TERM_YELLOW, title, 1, MAX((wid - title_w) / 2, 0));
     birth_put_wrapped_text(TERM_SLATE,
-        "Configure a self-contained Blitz run. Story progress stays untouched.",
+        ui_text("Configure a self-contained Blitz run. Story progress stays untouched."),
         3, 2);
 
-    strnfmt(buf, sizeof(buf), "Character: %s", blitz_character_mode_name(setup->character_mode));
+    strnfmt(buf, sizeof(buf), ui_text("Character: %s"), blitz_character_mode_name(setup->character_mode));
     birth_put_str_fit(selected == 0 ? TERM_L_BLUE : TERM_WHITE, buf, 6, 4);
     ui_menu_click_add(0, 4, 6, wid - 8);
 
-    strnfmt(buf, sizeof(buf), "Oaths: %s", setup->oaths_enabled ? "Yes" : "No");
+    strnfmt(buf, sizeof(buf), ui_text("Oaths: %s"), setup->oaths_enabled ? ui_text("Yes") : ui_text("No"));
     birth_put_str_fit(selected == 1 ? TERM_L_BLUE : TERM_WHITE, buf, 7, 4);
     ui_menu_click_add(1, 4, 7, wid - 8);
 
-    strnfmt(buf, sizeof(buf), "Blessings: %d", setup->blessing_count);
+    strnfmt(buf, sizeof(buf), ui_text("Blessings: %d"), setup->blessing_count);
     birth_put_str_fit(selected == 2 ? TERM_L_BLUE : TERM_WHITE, buf, 8, 4);
     ui_menu_click_add(2, 4, 8, wid - 8);
 
-    strnfmt(buf, sizeof(buf), "Curses: %d", setup->curse_count);
+    strnfmt(buf, sizeof(buf), ui_text("Curses: %d"), setup->curse_count);
     birth_put_str_fit(selected == 3 ? TERM_L_BLUE : TERM_WHITE, buf, 9, 4);
     ui_menu_click_add(3, 4, 9, wid - 8);
 
-    strnfmt(buf, sizeof(buf), "Effect picks: %s", blitz_effect_mode_name(setup->effect_mode));
+    strnfmt(buf, sizeof(buf), ui_text("Effect picks: %s"), blitz_effect_mode_name(setup->effect_mode));
     birth_put_str_fit(selected == 4 ? TERM_L_BLUE : TERM_WHITE, buf, 10, 4);
     ui_menu_click_add(4, 4, 10, wid - 8);
 
@@ -149,32 +152,32 @@ static void blitz_setup_draw(const blitz_setup* setup, int selected)
             const char* variants[2];
 
             strnfmt(prompt_full, sizeof(prompt_full),
-                "D-pad navigate/change  %s begin  %s back",
+                ui_text("D-pad navigate/change  %s begin  %s back"),
                 confirm_label, back_label);
             strnfmt(prompt_short, sizeof(prompt_short),
-                "%s begin  %s back", confirm_label, back_label);
+                ui_text("%s begin  %s back"), confirm_label, back_label);
             variants[0] = prompt_full;
             variants[1] = prompt_short;
             terminal_prompt_pick_variant(prompt_buf, sizeof(prompt_buf),
                 wid - 4, false, variants, N_ELEMENTS(variants));
         }
         birth_put_str_fit(TERM_L_DARK, prompt_buf, 13, 2);
-        ui_menu_click_add_text_token(-2, 2, 13, prompt_buf, "begin");
-        ui_menu_click_add_text_token(-1, 2, 13, prompt_buf, "back");
+        ui_menu_click_add_text_token(-2, 2, 13, prompt_buf, ui_text("begin"));
+        ui_menu_click_add_text_token(-1, 2, 13, prompt_buf, ui_text("back"));
     }
     else
     {
         char prompt_text[96];
         const char* variants[] = {
-            "Dir navigate/change  Enter begin  Esc back",
-            "Dir change  Enter begin  Esc back",
-            "Enter begin  Esc back"
+            ui_text("Dir navigate/change  Enter begin  Esc back"),
+            ui_text("Dir change  Enter begin  Esc back"),
+            ui_text("Enter begin  Esc back")
         };
         terminal_prompt_pick_variant(prompt_text, sizeof(prompt_text),
             wid - 4, false, variants, N_ELEMENTS(variants));
         birth_put_str_fit(TERM_L_DARK, prompt_text, 13, 2);
-        ui_menu_click_add_text_token(-2, 2, 13, prompt_text, "begin");
-        ui_menu_click_add_text_token(-1, 2, 13, prompt_text, "back");
+        ui_menu_click_add_text_token(-2, 2, 13, prompt_text, ui_text("begin"));
+        ui_menu_click_add_text_token(-1, 2, 13, prompt_text, ui_text("back"));
     }
 }
 
@@ -533,7 +536,7 @@ static void blitz_add_effect_details(int id, bool blessing,
     {
         char power_line[1024];
 
-        strnfmt(power_line, sizeof(power_line), "Effect: %s", power);
+        strnfmt(power_line, sizeof(power_line), ui_text("Effect: %s"), power);
         blitz_add_effect_detail_line(power_line,
             blessing ? TERM_L_GREEN : TERM_L_RED);
     }
@@ -559,8 +562,8 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects, int o
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
 
-        strnfmt(title, sizeof(title), "Choose %s %d of %d",
-            blessing ? "Blessing" : "Curse", ordinal, total);
+        strnfmt(title, sizeof(title), ui_text("Choose %s %d of %d"),
+            blessing ? ui_text("Blessing") : ui_text("Curse"), ordinal, total);
         sdl_character_sheet_screen_begin_select(selected, title);
         sdl_character_sheet_screen_set_select_menu_style(true);
         sdl_character_sheet_screen_set_select_dynamic_description(true);
@@ -667,7 +670,9 @@ blitz_summary_redraw:
     row = 3;
     Term_get_size(&wid, &hgt);
     Term_clear();
-    c_put_str(TERM_YELLOW, "Blitz Effects", 1, MAX((wid - 13) / 2, 0));
+    cptr title = ui_text("Blitz Effects");
+    int title_w = utf8_display_width_n(title, (int)strlen(title));
+    c_put_str(TERM_YELLOW, title, 1, MAX((wid - title_w) / 2, 0));
 
     for (int id = 0; z_info && id < z_info->cu_max; id++)
     {
@@ -684,7 +689,7 @@ blitz_summary_redraw:
     }
 
     if (row == 3)
-        birth_put_str_fit(TERM_SLATE, "No blessings or curses selected.", row++, 4);
+        birth_put_str_fit(TERM_SLATE, ui_text("No blessings or curses selected."), row++, 4);
 
     if (steamdeck_controls_active())
     {
@@ -693,12 +698,12 @@ blitz_summary_redraw:
 
         birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
-        strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] continue", confirm_label);
+        strnfmt(prompt_buf, sizeof(prompt_buf), ui_text("[%s] continue"), confirm_label);
         birth_put_str_fit(TERM_L_BLUE, prompt_buf, MIN(row + 1, hgt - 1), 2);
     }
     else
     {
-        birth_put_str_fit(TERM_L_BLUE, "Press any key to continue.",
+        birth_put_str_fit(TERM_L_BLUE, ui_text("Press any key to continue."),
             MIN(row + 1, hgt - 1), 2);
     }
     if (inkey() == UI_MENU_CLICK_WAKE_KEY)

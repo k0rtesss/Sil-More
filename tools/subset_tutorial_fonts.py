@@ -1,4 +1,4 @@
-"""Build the tutorial OTFs from the three upstream Noto Sans CJK regular faces.
+"""Build the tutorial and interface OTFs from upstream Noto Sans CJK regular faces.
 
 Usage: python tools/subset_tutorial_fonts.py DIRECTORY (requires fonttools).
 Use the jp, kr and sc OTF files from notofonts/noto-cjk tag Sans2.004.
@@ -25,9 +25,10 @@ def main():
         # Include all picker names and common Latin/Cyrillic characters for
         # bindings, names, titles and English text inserted by the engine.
         text = json.dumps(json.loads(catalog), ensure_ascii=False) + "日本語한국어简体中文"
-        reference = ROOT / f"lib/help/reference.{language}.json"
-        if reference.is_file():
-            text += json.dumps(json.loads(reference.read_text(encoding="utf-8")), ensure_ascii=False)
+        for domain in ("reference", "ui"):
+            catalogue = ROOT / f"lib/help/{domain}.{language}.json"
+            if catalogue.is_file():
+                text += json.dumps(json.loads(catalogue.read_text(encoding="utf-8")), ensure_ascii=False)
         font = TTFont(args.upstream / f"NotoSansCJK{region.lower()}-Regular.otf", recalcTimestamp=False)
         repertoire = set(map(ord, text)) | set(range(32, 0x250)) | set(range(0x400, 0x530))
         # Live names and reference entries can contain characters beyond this

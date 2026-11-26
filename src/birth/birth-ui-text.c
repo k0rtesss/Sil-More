@@ -1,6 +1,7 @@
 /* File: birth/birth-ui-text.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "birth/birth-internal.h"
 
 /*
@@ -50,6 +51,7 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
     char buf[160];
     char warning_buf[160];
     bool confirmed = false;
+    cptr continue_label = ui_text("Continue");
 
     if (points_left <= 0)
         return true;
@@ -69,8 +71,10 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
     Term_erase(0, prompt_row, 255);
 
     strnfmt(warning_buf, sizeof(warning_buf),
-        "%d unassigned attribute point%s. Continue anyway?", points_left,
-        (points_left == 1) ? "" : "s");
+        ui_text(points_left == 1
+            ? "%d unassigned attribute point. Continue anyway?"
+            : "%d unassigned attribute points. Continue anyway?"),
+        points_left);
     birth_put_str_fit(TERM_YELLOW, warning_buf, message_row, 1);
 
     if (steamdeck)
@@ -83,17 +87,17 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
         birth_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
 
-        strnfmt(buf, sizeof(buf), "%s continue  %s keep allocating",
+        strnfmt(buf, sizeof(buf), ui_text("%s continue  %s keep allocating"),
             confirm_label, back_label);
     }
     else
     {
         if (sdl_touch_only_device_active())
             strnfmt(buf, sizeof(buf),
-                "Tap Yes to continue  No to keep allocating");
+                ui_text("Tap Yes to continue  No to keep allocating"));
         else
             strnfmt(buf, sizeof(buf),
-                "Enter/y continue  n/Esc keep allocating");
+                ui_text("Enter/y continue  n/Esc keep allocating"));
     }
 
     birth_put_str_fit(TERM_SLATE, buf, prompt_row, 1);
@@ -110,19 +114,21 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
             sizeof(back_label));
         ui_menu_click_add_text_token(1, 1, prompt_row, buf, confirm_label);
         ui_menu_click_add_text_token(1, 1, prompt_row, buf, "continue");
+        ui_menu_click_add_text_token(1, 1, prompt_row, buf, continue_label);
         ui_menu_click_add_text_token(0, 1, prompt_row, buf, back_label);
-        ui_menu_click_add_text_token(0, 1, prompt_row, buf, "keep allocating");
+        ui_menu_click_add_text_token(0, 1, prompt_row, buf, ui_text("keep allocating"));
     }
     else
     {
         ui_menu_click_add_text_token(1, 1, prompt_row, buf, "SPACE/y");
         ui_menu_click_add_text_token(1, 1, prompt_row, buf, "Enter/y");
-        ui_menu_click_add_text_token(1, 1, prompt_row, buf, "Yes");
+        ui_menu_click_add_text_token(1, 1, prompt_row, buf, ui_text("Yes"));
         ui_menu_click_add_text_token(1, 1, prompt_row, buf, "continue");
+        ui_menu_click_add_text_token(1, 1, prompt_row, buf, continue_label);
         ui_menu_click_add_text_token(0, 1, prompt_row, buf, "n/ESC");
         ui_menu_click_add_text_token(0, 1, prompt_row, buf, "n/Esc");
-        ui_menu_click_add_text_token(0, 1, prompt_row, buf, "No");
-        ui_menu_click_add_text_token(0, 1, prompt_row, buf, "keep allocating");
+        ui_menu_click_add_text_token(0, 1, prompt_row, buf, ui_text("No"));
+        ui_menu_click_add_text_token(0, 1, prompt_row, buf, ui_text("keep allocating"));
     }
     sdl_touch_pane_begin_yes_no_prompt(warning_buf);
     Term_fresh();
@@ -155,7 +161,7 @@ bool birth_confirm_unspent_stat_points(int points_left, bool steamdeck)
         if (key == 'n' || key == 'N' || key == ESCAPE)
             break;
 
-        bell("Confirm or cancel the stat warning.");
+        bell(ui_text("Confirm or cancel the stat warning."));
     }
 
     sdl_touch_pane_end_yes_no_prompt();
@@ -217,9 +223,9 @@ bool character_flags_need_compact_layout(void)
 cptr character_selection_header_text(bool character_phase)
 {
     if (character_phase && character_flags_need_compact_layout())
-        return "Character:";
+        return ui_text("Character:");
 
-    return "Character Selection:";
+    return ui_text("Character Selection:");
 }
 
 void draw_character_selection_header(bool character_phase)

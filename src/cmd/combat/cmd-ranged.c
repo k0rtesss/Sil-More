@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "achievements-lore.h"
 #include "tutorial/tutorial-game.h"
@@ -10,6 +11,44 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "ui/question.h"
+
+static void report_shot_effect(cptr format, const monster_type* m_ptr)
+{
+    char m_poss[80];
+    char english[120];
+    char localized[120];
+    cptr display_format = ui_message_text(format);
+
+    monster_desc(m_poss, sizeof(m_poss), m_ptr, 0x22);
+    strnfmt(english, sizeof(english), format, m_poss);
+    if (display_format == format)
+        msg_print_localized(english, english);
+    else
+    {
+        strnfmt(localized, sizeof(localized), display_format, ui_text(m_poss));
+        msg_print_localized(english, localized);
+    }
+}
+
+static void report_power_throw_attack(cptr format, cptr weapon, bool hit,
+    cptr target)
+{
+    char english[240];
+    char localized[240];
+    cptr verb = hit ? "hits" : "misses";
+    cptr display_format = ui_message_text(format);
+
+    strnfmt(english, sizeof(english), format, weapon, verb, target);
+    if (display_format == format)
+        msg_print_localized(english, english);
+    else
+    {
+        cptr target_name = prefix(target, "the ") ? target + 4 : ui_text(target);
+        strnfmt(localized, sizeof(localized), display_format, weapon,
+            ui_text(verb), target_name);
+        msg_print_localized(english, localized);
+    }
+}
 
 #define THROW_PENDING_NONE -9999
 #define ORCISH_LIQUOR_THROW_RANGE 5
@@ -912,7 +951,7 @@ void do_cmd_fire(int quiver)
                 if (hit_result > 0)
                 {
                     /* Assume a default death */
-                    cptr note_dies = " dies.";
+                    cptr note_dies = ui_text(" dies.");
 
                     char m_name[80];
 
@@ -925,7 +964,7 @@ void do_cmd_fire(int quiver)
                     if (monster_nonliving(r_ptr))
                     {
                         /* Special note at death */
-                        note_dies = " is destroyed.";
+                        note_dies = ui_text(" is destroyed.");
                     }
 
                     // Handle sharpness (which can change 'hit' message)
@@ -1066,12 +1105,8 @@ void do_cmd_fire(int quiver)
 
                                     if (m_ptr->ml)
                                     {
-                                        char m_poss[80];
-                                        monster_desc(
-                                            m_poss, sizeof(m_poss), m_ptr, 0x22);
-                                        msg_format(
-                                            "Your shot shatters %s armor!",
-                                            m_poss);
+                                        report_shot_effect(
+                                            "Your shot shatters %s armor!", m_ptr);
                                     }
 
                                     if (!noticed_arrow_flag
@@ -1104,11 +1139,8 @@ void do_cmd_fire(int quiver)
 
                                 if (m_ptr->ml)
                                 {
-                                    char m_poss[80];
-                                    monster_desc(
-                                        m_poss, sizeof(m_poss), m_ptr, 0x22);
-                                    msg_format("Your shot drains %s will!",
-                                        m_poss);
+                                    report_shot_effect(
+                                        "Your shot drains %s will!", m_ptr);
                                 }
 
                                 if (!noticed_arrow_flag
@@ -1817,9 +1849,9 @@ static bool select_throw_slot(int* item)
             }
             object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
             if (slots[i] == INVEN_BELT)
-                strnfmt(labels[i], sizeof(labels[i]), "%s (belt)", o_name);
+                strnfmt(labels[i], sizeof(labels[i]), ui_text("%s (belt)"), o_name);
             else if (slots[i] >= 0 && slots[i] < INVEN_TOTAL)
-                strnfmt(labels[i], sizeof(labels[i]), "%s (Harness)", o_name);
+                strnfmt(labels[i], sizeof(labels[i]), ui_text("%s (Harness)"), o_name);
             else
                 strnfmt(labels[i], sizeof(labels[i]), "%s", o_name);
 
@@ -1833,7 +1865,7 @@ static bool select_throw_slot(int* item)
             object_icons[i] = o_ptr;
         }
 
-        choice = ui_question_ask_objects("Throw", "Choose what to hurl.",
+        choice = ui_question_ask_objects(ui_text("Throw"), ui_text("Choose what to hurl."),
             options, object_icons, count, p_ptr->py, p_ptr->px, 0);
 
         if (choice < 0 || choice >= count)
@@ -2630,16 +2662,14 @@ void do_cmd_throw(bool automatic)
                     }
                 }
 
-                msg_format("Your thrown %s %s %s.", thrown_weapon_name,
-                    (hit_result > 0) ? "hits" : "misses",
-                    power_throw_target_name);
+                report_power_throw_attack("Your thrown %s %s %s.",
+                    thrown_weapon_name, hit_result > 0, power_throw_target_name);
                 update_combat_rolls1(PLAYER, m_ptr, m_ptr->ml,
                     total_attack_mod, throw_attack_die, total_evasion_mod,
                     throw_evasion_die);
                 update_combat_rolls_no_damage();
-                msg_format("Your wielded %s %s %s.", melee_weapon_name,
-                    (melee_hit_result > 0) ? "hits" : "misses",
-                    power_throw_target_name);
+                report_power_throw_attack("Your wielded %s %s %s.",
+                    melee_weapon_name, melee_hit_result > 0, power_throw_target_name);
                 update_combat_rolls1(PLAYER, m_ptr, m_ptr->ml,
                     melee_total_attack_mod, melee_attack_die,
                     total_evasion_mod, melee_evasion_die);
@@ -2670,7 +2700,7 @@ void do_cmd_throw(bool automatic)
                 hit_body = thrown_hit;
 
                 /* Assume a default death */
-                cptr note_dies = " dies.";
+                cptr note_dies = ui_text(" dies.");
 
                 /*Mark the monster as attacked by the player*/
                 if (thrown_hit)
@@ -2682,7 +2712,7 @@ void do_cmd_throw(bool automatic)
                 if (monster_nonliving(r_ptr))
                 {
                     /* Special note at death */
-                    note_dies = " is destroyed.";
+                    note_dies = ui_text(" is destroyed.");
                 }
 
                 /* Apply special damage XXX XXX XXX */

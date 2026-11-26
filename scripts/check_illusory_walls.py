@@ -11,6 +11,9 @@ TESTS = r'''
 #include "level-generation/level-generation-terrain.h"
 #include "level-generation/level-generation-terrain-access.h"
 #include "level-generation/level-generation-terrain-vaults.h"
+
+void apply_fixture_light_area(int y, int x, int radius, bool allow_room_tiles);
+
 static bool same_illusion_cell(SDL_Surface* a,SDL_Surface* b,int big) {
     int x=(COL_MAP+11*(big?2:1))*16, y=(ROW_MAP+10)*16;
     for(int row=y;row<y+16;row++)
@@ -113,6 +116,63 @@ static void illusion_vault_tests(void) {
     op_ptr->opt[OPT_illusory_walls] = true;
     puts("Illusion generation: optional vault accessible only through its single threshold: PASS");
 }
+
+static void illusion_light_tests(void) {
+    static u16b view_grids[VIEW_MAX], temp_grids[TEMP_MAX];
+    view_g = view_grids;
+    temp_g = temp_grids;
+    assert(vinfo_init() == 0);
+    illusion_map(24);
+    for (int x = 9; x <= 14; x++) cave_set_feat(10, x, FEAT_FLOOR);
+    cave_set_feat(10, 11, FEAT_ILLUSORY_WALL);
+    cave_m_idx[10][10] = -1;
+
+    p_ptr->cur_light = 4;
+    update_view();
+    assert(player_can_see_bold(10, 11) && cave_illusion_opacity(10, 11) < 255);
+    assert(!(cave_info[10][12] & (CAVE_VIEW | CAVE_SEEN | CAVE_MARK)));
+    assert(cave_light[10][12] == 0);
+    assert(los(10, 10, 10, 11));
+    assert(!los(10, 10, 10, 12) && !los(10, 12, 10, 10));
+
+    p_ptr->cur_light = 0;
+    cave_set_feat(10, 12, FEAT_LAVA);
+    update_view();
+    assert(cave_light[10][12] > 0);
+    assert(cave_light[10][10] == 0 && cave_light[10][11] == 0);
+    assert(cave_illusion_opacity(10, 11) == 255);
+
+    cave_set_feat(10, 12, FEAT_FLOOR);
+    mon_list[1] = (monster_type){ .r_idx = 1, .fy = 10, .fx = 12 };
+    r_info[1].light = 3;
+    mon_max = 2;
+    update_view();
+    assert(cave_light[10][10] == 0 && cave_light[10][11] == 0);
+    assert(cave_illusion_opacity(10, 11) == 255);
+    mon_list[1].fx = 9;
+    update_view();
+    assert(player_can_see_bold(10, 11) && cave_illusion_opacity(10, 11) < 255);
+    assert(cave_light[10][12] == 0);
+    r_info[1].light = 0;
+    mon_list[1].r_idx = 0;
+    mon_max = 1;
+
+    /* The fixture lights the far passage, which becomes visible on dissolution. */
+    apply_fixture_light_area(10, 12, 2, false);
+    update_view();
+    assert(cave_light[10][12] > 0 && !player_can_see_bold(10, 12));
+    assert(cave_light[10][10] == 0 && cave_illusion_opacity(10, 11) == 255);
+    character_dungeon = true;
+    p_ptr->update = 0;
+    cave_dissolve_illusion(10, 11);
+    assert(p_ptr->update & PU_UPDATE_VIEW);
+    update_view();
+    assert(los(10, 10, 10, 12) && player_can_see_bold(10, 12));
+    forget_view();
+    character_dungeon = false;
+    puts("Illusion occlusion: sight, player, monster, lava and fixture light, and dissolution: PASS");
+}
+
 static void illusion_tests(void) {
     messages_init();
     assert(option_norm[OPT_illusory_walls]);
@@ -190,6 +250,7 @@ static void illusion_tests(void) {
     }
     puts("Illusion generation: map-size scaling: PASS");
     illusion_vault_tests();
+    illusion_light_tests();
 
     water_map(24,24,FEAT_FLOOR);
     cave_set_feat(10,11,FEAT_ILLUSORY_WALL);

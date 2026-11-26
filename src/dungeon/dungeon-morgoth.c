@@ -1,6 +1,7 @@
 /* File: dungeon/dungeon-morgoth.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "dungeon-internal.h"
 
 void morgoth_prompt_controller_label(int binding, const char* fallback,
@@ -140,7 +141,7 @@ bool confirm_enter_morgoth_hall(void)
             col = 1;
         Term_putstr(col, prompt_row, -1, TERM_YELLOW, prompt);
     }
-    sdl_touch_pane_begin_yes_no_prompt_lower("Enter Morgoth's hall?");
+    sdl_touch_pane_begin_yes_no_prompt_lower(ui_text("Enter Morgoth's hall?"));
     Term_fresh();
 
     /* Get an acceptable answer */

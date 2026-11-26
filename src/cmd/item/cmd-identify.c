@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
 #include "log/log.h"
@@ -612,106 +613,106 @@ extern void ident_resist(u32b flag)
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s partly protects you from the chill.",
+                    ui_text("Your %s partly protects you from the chill."),
                     o_short_name);
             }
             else if ((flag == TR2_RES_FIRE) && (f2 & (TR2_RES_FIRE)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s partly protects you from the flame.",
+                    ui_text("Your %s partly protects you from the flame."),
                     o_short_name);
             }
             else if ((flag == TR2_RES_POIS) && (f2 & (TR2_RES_POIS)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s partly protects you from the poison.",
+                    ui_text("Your %s partly protects you from the poison."),
                     o_short_name);
             }
             else if ((flag == TR2_RES_BLEED) && (f2 & (TR2_RES_BLEED)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your bleeding is slowed by your %s.", o_short_name);
+                    ui_text("Your bleeding is slowed by your %s."), o_short_name);
             }
             else if ((flag == TR2_RES_COLD) && (f2 & (TR2_VUL_COLD)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s intensifies the chill.", o_short_name);
+                    ui_text("Your %s intensifies the chill."), o_short_name);
             }
             else if ((flag == TR2_RES_FIRE) && (f2 & (TR2_VUL_FIRE)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s intensifies the flame.", o_short_name);
+                    ui_text("Your %s intensifies the flame."), o_short_name);
             }
             else if ((flag == TR2_RES_POIS) && (f2 & (TR2_VUL_POIS)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s intensifies the poison.", o_short_name);
+                    ui_text("Your %s intensifies the poison."), o_short_name);
             }
             else if ((flag == TR2_RES_FEAR) && (f2 & (TR2_RES_FEAR)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s fills you with courage.", o_short_name);
+                    ui_text("Your %s fills you with courage."), o_short_name);
             }
             else if ((flag == TR2_RES_BLIND) && (f2 & (TR2_RES_BLIND)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s protects your sight.", o_short_name);
+                    ui_text("Your %s protects your sight."), o_short_name);
             }
             else if ((flag == TR2_RES_HALLU) && (f2 & (TR2_RES_HALLU)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s protects your sight.", o_short_name);
+                    ui_text("Your %s protects your sight."), o_short_name);
             }
             else if ((flag == TR2_RES_CONFU) && (f2 & (TR2_RES_CONFU)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s fills you with calm.", o_short_name);
+                    ui_text("Your %s fills you with calm."), o_short_name);
             }
             else if ((flag == TR2_RES_STUN) && (f2 & (TR2_RES_STUN)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s fills you with calm.", o_short_name);
+                    ui_text("Your %s fills you with calm."), o_short_name);
             }
             else if ((flag == TR2_FREE_ACT) && (f2 & (TR2_FREE_ACT)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s glows softly.", o_short_name);
+                    ui_text("Your %s glows softly."), o_short_name);
             }
             else if ((flag == TR2_SUST_STR) && (f2 & (TR2_SUST_STR)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s sustains your strength.", o_short_name);
+                    ui_text("Your %s sustains your strength."), o_short_name);
             }
             else if ((flag == TR2_SUST_DEX) && (f2 & (TR2_SUST_DEX)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s sustains your dexterity.", o_short_name);
+                    ui_text("Your %s sustains your dexterity."), o_short_name);
             }
             else if ((flag == TR2_SUST_CON) && (f2 & (TR2_SUST_CON)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s sustains your constitution.", o_short_name);
+                    ui_text("Your %s sustains your constitution."), o_short_name);
             }
             else if ((flag == TR2_SUST_GRA) && (f2 & (TR2_SUST_GRA)))
             {
                 notice = true;
                 strnfmt(effect_string, sizeof(effect_string),
-                    "Your %s sustains your grace.", o_short_name);
+                    ui_text("Your %s sustains your grace."), o_short_name);
             }
         }
 

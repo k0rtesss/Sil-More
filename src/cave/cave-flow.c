@@ -66,6 +66,20 @@ static int reverse_step_cost(monster_type* m_ptr, int from_y, int from_x,
     return cached[bank];
 }
 
+/* An actor can leave forbidden rock if it is displaced there, so the full
+ * field still needs its minimum escape cost. Such a tile cannot lead any
+ * other tile to the destination. The player square can be attacked even
+ * inside ordinary rock, and the virtual origin is always seeded separately. */
+static bool reverse_flow_dead_end(int y, int x, bool cannot_cross_rock)
+{
+    int feat = cave_feat[y][x];
+
+    return feat == FEAT_WALL_PERM
+        || (cannot_cross_rock && (FEAT_IS_ROCK(feat) || feat == FEAT_RUBBLE
+                || feat == FEAT_ILLUSORY_WALL)
+            && cave_monster_wall_bold(y, x) && cave_m_idx[y][x] >= 0);
+}
+
 /* With no possible poison exposure, the cheapest route dominates every
  * alternative. Keep just one label per square and avoid the Pareto scratch
  * initialization and comparisons on ordinary maps or for immune creatures. */
@@ -78,6 +92,7 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
     int origin = cy * MAX_DUNGEON_WID + cx;
     int entry_cost[3][3] = {{0}};
     int best_step = FLOW_MAX_DIST + 1;
+    bool cannot_cross_rock = !pursuit && !monster_can_cross_rock(m_ptr);
 
     if (pursuit)
         for (int d = 0; d < 8; d++)
@@ -141,6 +156,12 @@ static void update_monster_flow_without_poison(int cy, int cx, int which_flow,
                 total = cost + edge;
                 if (total >= old || total >= FLOW_MAX_DIST)
                     continue;
+
+                if (!pursuit && reverse_flow_dead_end(yy, xx, cannot_cross_rock))
+                {
+                    cave_cost[which_flow][yy][xx] = total;
+                    continue;
+                }
 
                 if (old < FLOW_MAX_DIST)
                 {
@@ -1122,6 +1143,8 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Notice/Redraw */
     if (character_dungeon)
     {
+        if ((old_feat == FEAT_ILLUSORY_WALL) != (feat == FEAT_ILLUSORY_WALL))
+            p_ptr->update |= PU_UPDATE_VIEW | PU_MONSTERS;
         if (FEAT_IS_QUARTZ(old_feat) && !FEAT_IS_QUARTZ(feat)
             && (feat == FEAT_RUBBLE || !cave_wall_bold(y, x)))
             cave_quartz_release(y, x);

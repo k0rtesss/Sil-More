@@ -1,6 +1,7 @@
 /* File: birth/birth-flow.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "birth/birth-internal.h"
 
 #define BASE_COLUMN 7
@@ -117,7 +118,7 @@ static int birth_keyboard_preset_choose(void)
         ui_menu_click_begin();
         ui_menu_click_set_hover_enabled(true);
         sdl_character_sheet_screen_begin_select(selected,
-            "Choose Keyboard Movement");
+            ui_text("Choose Keyboard Movement"));
         sdl_character_sheet_screen_set_select_menu_style(true);
         sdl_character_sheet_screen_set_select_dynamic_description(true);
 
@@ -127,9 +128,9 @@ static int birth_keyboard_preset_choose(void)
 
             if (menu_letters && !sdl_touch_only_device_active())
                 strnfmt(label, sizeof(label), "%c) %s", I2A(i),
-                    keyboard_preset_choices[i].name);
+                    ui_text(keyboard_preset_choices[i].name));
             else
-                SDL_strlcpy(label, keyboard_preset_choices[i].name,
+                SDL_strlcpy(label, ui_text(keyboard_preset_choices[i].name),
                     sizeof(label));
             sdl_character_sheet_screen_add_select_row(i, label,
                 i == selected ? TERM_L_BLUE : TERM_WHITE, "");
@@ -140,11 +141,11 @@ static int birth_keyboard_preset_choose(void)
          * single-column list, so this is what gives it the proper layout
          * (list on one side, description on the other). */
         sdl_character_sheet_screen_add_select_detail(
-            keyboard_preset_choices[selected].text, TERM_WHITE, "");
+            ui_text(keyboard_preset_choices[selected].text), TERM_WHITE, "");
         /* Always-visible general recommendation, re-added every iteration
          * so it stays put regardless of the highlighted preset. */
         sdl_character_sheet_screen_add_select_detail(
-            keyboard_preset_recommendation, TERM_L_GREEN, "");
+            ui_text(keyboard_preset_recommendation), TERM_L_GREEN, "");
         sdl_character_sheet_screen_commit_select(selected);
 
         hide_cursor = true;
@@ -230,7 +231,7 @@ static int birth_keyboard_preset_choose(void)
             return selected;
         }
 
-        bell("Illegal response to question!");
+        bell(ui_text("Illegal response to question!"));
     }
 }
 

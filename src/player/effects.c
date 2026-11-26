@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "achievements-character.h"
 #include "externs.h"
@@ -408,7 +409,7 @@ void process_disease(void)
     if (p_ptr->stat_disease[stat] > -32767)
     {
         p_ptr->stat_disease[stat]--;
-        msg_format("Your disease worsens. Your %s decreases.", names[stat]);
+        msg_format("Your disease worsens. Your %s decreases.", ui_text(names[stat]));
         disease_changed();
     }
 }

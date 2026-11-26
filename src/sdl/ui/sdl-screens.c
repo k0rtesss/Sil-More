@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 #include "metarun.h"
 #include "ui/question.h"
@@ -435,7 +436,7 @@ bool sdl_welcome_screen_set_status(cptr status)
     if (!sdl_welcome_screen_available() || !sdl_welcome_screen_active())
         return false;
 
-    SDL_strlcpy(g_sdl_welcome_screen.status, status ? status : "",
+    SDL_strlcpy(g_sdl_welcome_screen.status, status ? ui_text(status) : "",
         sizeof(g_sdl_welcome_screen.status));
     sdl_welcome_screen_mark_dirty();
     return true;
@@ -448,7 +449,7 @@ bool sdl_welcome_screen_show_loading(cptr status)
 
     g_sdl_welcome_screen.mode = SDL_WELCOME_SCREEN_LOADING;
     SDL_strlcpy(g_sdl_welcome_screen.status,
-        (status && status[0]) ? status : "Loading...",
+        ui_text((status && status[0]) ? status : "Loading..."),
         sizeof(g_sdl_welcome_screen.status));
     g_sdl_welcome_screen.hover_continue = false;
     g_sdl_welcome_screen.hover_quit = false;
@@ -500,7 +501,7 @@ void sdl_poetry_screen_begin(cptr title, cptr body, cptr transition,
         transition ? transition : "",
         sizeof(g_sdl_poetry_screen.transition));
     SDL_strlcpy(g_sdl_poetry_screen.prompt,
-        (prompt && prompt[0]) ? prompt : "[Press any key to continue]",
+        (prompt && prompt[0]) ? prompt : ui_text("[Press any key to continue]"),
         sizeof(g_sdl_poetry_screen.prompt));
     sdl_welcome_screen_mark_dirty();
 }
@@ -1086,12 +1087,12 @@ static cptr sdl_welcome_big_menu_hint(void)
 {
     if (sdl_welcome_input_style() == 2)
         return g_sdl_welcome_screen.new_metarun
-            ? "Press A to begin" : "Press A to continue";
+            ? ui_text("Press A to begin") : ui_text("Press A to continue");
     if (sdl_welcome_input_style() == 1)
         return g_sdl_welcome_screen.new_metarun
-            ? "Tap to begin" : "Tap to continue";
+            ? ui_text("Tap to begin") : ui_text("Tap to continue");
     return g_sdl_welcome_screen.new_metarun
-        ? "Press any key to begin" : "Press any key to continue";
+        ? ui_text("Press any key to begin") : ui_text("Press any key to continue");
 }
 
 static bool sdl_welcome_layout_cache_matches(const SDL_Rect* canvas)
@@ -1467,28 +1468,29 @@ void sdl_welcome_compose_menu_line(char* menu_line, size_t menu_size,
     bool controller = steamdeck_controls_active();
     bool touch = !controller && sdl_touch_only_device_active();
     cptr quit_token = controller ? "<B>" : "Q/Esc";
+    cptr quit_label = ui_text("Quit");
+    cptr primary_label = ui_text(g_sdl_welcome_screen.new_metarun
+        ? "Begin" : "Continue");
 
     if (primary_token)
-        *primary_token = g_sdl_welcome_screen.new_metarun
-            ? "Begin"
-            : "Continue";
+        *primary_token = primary_label;
     if (quit_command && quit_command_size > 0)
     {
         if (touch)
-            SDL_strlcpy(quit_command, "Quit", quit_command_size);
+            SDL_strlcpy(quit_command, quit_label, quit_command_size);
         else
             strnfmt(quit_command, quit_command_size, "[%s]", quit_token);
     }
     if (menu_line && menu_size > 0)
     {
+        cptr primary_command = touch ? ui_text("[Tap]")
+            : controller ? "[<A>]" : ui_text("[Any key]");
         if (touch)
-            strnfmt(menu_line, menu_size, "[Tap] %s    Quit",
-                g_sdl_welcome_screen.new_metarun ? "Begin" : "Continue");
+            strnfmt(menu_line, menu_size, "%s %s    %s",
+                primary_command, primary_label, quit_label);
         else
-            strnfmt(menu_line, menu_size, "%s %s    [%s] Quit",
-                controller ? "[<A>]" : "[Any key]",
-                g_sdl_welcome_screen.new_metarun ? "Begin" : "Continue",
-                quit_token);
+            strnfmt(menu_line, menu_size, "%s %s    [%s] %s",
+                primary_command, primary_label, quit_token, quit_label);
     }
 }
 
@@ -1649,7 +1651,7 @@ static float sdl_welcome_footer_height_for_base(int base_px, float width,
                 sdl_welcome_big_menu_hint(), width, line_h);
             if (g_sdl_welcome_screen.show_wizard) {
                 line_h = sdl_welcome_complete_text_h(font,
-                    "Resurrecting a character is a form of cheating.",
+                    ui_text("Resurrecting a character is a form of cheating."),
                     width, line_h);
                 height = line_h * 2.0f + gap;
             } else {
@@ -1691,7 +1693,7 @@ static float sdl_welcome_footer_width_for_font(TTF_Font* font)
         char menu_line[96];
         char quit_command[32];
         cptr primary_token;
-        cptr wizard_line = "Resurrecting a character is a form of cheating.";
+        cptr wizard_line = ui_text("Resurrecting a character is a form of cheating.");
 
         sdl_welcome_compose_menu_line(menu_line, sizeof(menu_line),
             quit_command, sizeof(quit_command), &primary_token);
@@ -2170,7 +2172,7 @@ void sdl_welcome_render_menu_footer_canvas(const SDL_Rect* canvas)
     char menu_line[96];
     char quit_command[32];
     cptr primary_token;
-    cptr wizard_line = "Resurrecting a character is a form of cheating.";
+    cptr wizard_line = ui_text("Resurrecting a character is a form of cheating.");
     sdl_welcome_layout_metrics metrics = { 0 };
     sdl_welcome_layout_line layout[SDL_WELCOME_MAX_LINES];
     SDL_FRect prompt_box;
@@ -2239,11 +2241,11 @@ void sdl_welcome_render_menu_footer_canvas(const SDL_Rect* canvas)
             TERM_SLATE, prompt_box, false);
 
     has_primary_range = sdl_welcome_text_command_range(menu_line,
-        sdl_welcome_input_style() == 1 ? "[Tap]"
-            : sdl_welcome_input_style() == 2 ? "[<A>]" : "[Any key]",
+        sdl_welcome_input_style() == 1 ? ui_text("[Tap]")
+            : sdl_welcome_input_style() == 2 ? "[<A>]" : ui_text("[Any key]"),
         primary_token, &primary_start, &primary_end);
     has_quit_range = sdl_welcome_text_command_range(menu_line, quit_command,
-        "Quit", &quit_start, &quit_end);
+        ui_text("Quit"), &quit_start, &quit_end);
 
     if (has_primary_range)
         g_sdl_welcome_screen.continue_rect =
@@ -4279,9 +4281,9 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
     if (focused)
         sdl_char_sheet_draw_focus_rect(row_rect, true);
 
-    sdl_char_sheet_copy_trimmed((p_ptr && (p_ptr->stat_drain[stat] < 0
+    sdl_char_sheet_copy_trimmed(ui_text((p_ptr && (p_ptr->stat_drain[stat] < 0
             || p_ptr->stat_disease[stat] < 0))
-            ? stat_names_reduced[stat] : stat_names[stat],
+            ? stat_names_reduced[stat] : stat_names[stat]),
         label, sizeof(label));
     cnv_stat(p_ptr ? p_ptr->stat_use[stat]
                    : g_sdl_character_sheet_screen.stat_values[stat],
@@ -4311,13 +4313,13 @@ void sdl_char_sheet_draw_birth_stat_table_row(TTF_Font* font,
         if (sdl_touch_only_device_active())
         {
             strnfmt(desc, sizeof(desc),
-                "%s Cost to raise now: %d. Tap to select; tap the selected row to increase, long tap the selected row to decrease.",
+                ui_text("%s Cost to raise now: %d. Tap to select; tap the selected row to increase, long tap the selected row to decrease."),
                 hint, g_sdl_character_sheet_screen.stat_costs[stat]);
         }
         else
 #endif
         strnfmt(desc, sizeof(desc),
-            "%s Cost to raise now: %d. Click/tap to select; click/tap the selected row to increase, right-click to decrease.",
+            ui_text("%s Cost to raise now: %d. Click/tap to select; click/tap the selected row to increase, right-click to decrease."),
             hint, g_sdl_character_sheet_screen.stat_costs[stat]);
         sdl_char_sheet_add_hit(row_rect, stat, desc, TERM_L_BLUE);
     }
@@ -4351,7 +4353,7 @@ void sdl_char_sheet_draw_birth_skill_table_row(TTF_Font* font,
         sdl_char_sheet_draw_focus_rect(row_rect, true);
 
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 10,
-        TERM_WHITE, skill_names_full[skill], focused);
+        TERM_WHITE, ui_text(skill_names_full[skill]), focused);
 
     strnfmt(buf, sizeof(buf), "%3d", p_ptr ? p_ptr->skill_use[skill] : 0);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 11, 3,
@@ -4391,7 +4393,7 @@ void sdl_char_sheet_draw_birth_skill_table_row(TTF_Font* font,
 
     hint = character_sheet_skill_description(skill);
     if (!hint || !hint[0])
-        hint = "Skill total and starting base value.";
+        hint = ui_text("Skill total and starting base value.");
     if (allocation)
     {
         /* The table shows the cumulative cost of the gains selected so far.
@@ -4402,21 +4404,20 @@ void sdl_char_sheet_draw_birth_skill_table_row(TTF_Font* font,
         if (sdl_touch_only_device_active())
         {
             strnfmt(desc, sizeof(desc),
-                "%s: %s Cost to raise now: %d. Tap to select; tap the selected row to increase, long tap the selected row to decrease.",
-                skill_names_full[skill], hint, increase_cost);
+                ui_text("%s: %s Cost to raise now: %d. Tap to select; tap the selected row to increase, long tap the selected row to decrease."),
+                ui_text(skill_names_full[skill]), hint, increase_cost);
         }
         else
 #endif
         strnfmt(desc, sizeof(desc),
-            "%s: %s Cost to raise now: %d. Click/tap to select; click/tap the selected row to increase, right-click to decrease.",
-            skill_names_full[skill], hint, increase_cost);
+            ui_text("%s: %s Cost to raise now: %d. Click/tap to select; click/tap the selected row to increase, right-click to decrease."),
+            ui_text(skill_names_full[skill]), hint, increase_cost);
         sdl_char_sheet_add_hit(row_rect, skill, desc,
             ability_skill_color(skill));
     }
     else
     {
-        strnfmt(desc, sizeof(desc), "%s: %s", skill_names_full[skill],
-            hint);
+        strnfmt(desc, sizeof(desc), "%s: %s", ui_text(skill_names_full[skill]), hint);
         sdl_char_sheet_add_hit(row_rect,
             SDL_CHAR_SHEET_BIRTH_SKILL_INFO_BASE + skill, desc,
             ability_skill_color(skill));
@@ -4430,7 +4431,7 @@ void sdl_char_sheet_draw_birth_status_row(TTF_Font* font, float x,
     SDL_FRect hit;
     bool confirm_focused;
     bool back_focused;
-    cptr confirm_text = "[Confirm]";
+    cptr confirm_text = ui_text("[Confirm]");
     cptr back_text = "[Esc]";
     int status_span = 20;
     int confirm_col = 23;
@@ -4486,7 +4487,7 @@ static void sdl_char_sheet_draw_birth_points_row(TTF_Font* font, float x,
     if (!sdl_char_sheet_alloc_row_visible(y, h, line_h, row))
         return;
 
-    strnfmt(status, sizeof(status), "Points Left: %d",
+    strnfmt(status, sizeof(status), ui_text("Points Left: %d"),
         g_sdl_character_sheet_screen.points_left);
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, row, 0, 20,
         TERM_L_BLUE, status, false);
@@ -4507,7 +4508,7 @@ void sdl_char_sheet_draw_birth_allocation_area(TTF_Font* font,
         return;
 
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, 0, 0, 14,
-        TERM_SLATE, "Attributes", false);
+        TERM_SLATE, ui_text("Attributes"), false);
 
     for (int stat = 0; stat < A_MAX; stat++)
         sdl_char_sheet_draw_birth_stat_table_row(font, x, y, w, h,
@@ -4517,7 +4518,7 @@ void sdl_char_sheet_draw_birth_allocation_area(TTF_Font* font,
         sdl_char_sheet_draw_birth_points_row(font, x, y, w, h, line_h, 5);
 
     sdl_char_sheet_alloc_text(font, x, y, w, line_h, 6, 0, 14,
-        TERM_SLATE, "Skills", false);
+        TERM_SLATE, ui_text("Skills"), false);
 
     for (int skill = 0; skill < S_MAX; skill++)
     {
@@ -5508,7 +5509,7 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
             SDL_FRect rect = { x + (i % action_cols) * (action_w + action_gap),
                 footer_y - actions_h + (i / action_cols) * button_h,
                 action_w, button_h };
-            (void)sdl_char_sheet_draw_button_text(font, action_labels[i], TERM_WHITE, &rect);
+            (void)sdl_char_sheet_draw_button_text(font, ui_text(action_labels[i]), TERM_WHITE, &rect);
             sdl_char_sheet_add_hit(rect, choices[i], "", TERM_WHITE);
         }
     }
@@ -5521,15 +5522,15 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
     static const int choices[] = { '[', ']', ESCAPE };
     float label_w = 0.0f;
     for (int i = 0; i < 3; i++)
-        label_w = MAX(label_w, sdl_char_sheet_text_width(font, nav_labels[i]));
+        label_w = MAX(label_w, sdl_char_sheet_text_width(font, ui_text(nav_labels[i])));
     if (label_w * 3.0f > width)
     {
         nav_labels = steamdeck_controls_active() ? controller_short_labels
-            : sdl_char_sheet_text_width(font, "Back") * 3.0f <= width
+            : sdl_char_sheet_text_width(font, ui_text("Back")) * 3.0f <= width
                 ? short_labels : narrow_labels;
         label_w = 0.0f;
         for (int i = 0; i < 3; i++)
-            label_w = MAX(label_w, sdl_char_sheet_text_width(font, nav_labels[i]));
+            label_w = MAX(label_w, sdl_char_sheet_text_width(font, ui_text(nav_labels[i])));
     }
     float nav_gap = MIN(gap, MAX(0.0f, (width - label_w * 3.0f) * 0.5f));
     float button_w = (width - nav_gap * 2.0f) / 3.0f;
@@ -5544,7 +5545,7 @@ static void sdl_debug_sheet_render(const SDL_Rect* canvas)
         SDL_RenderRect(g_state.renderer, &rect);
         if (focused)
             sdl_char_sheet_draw_focus_rect(rect, true);
-        (void)sdl_char_sheet_draw_button_text(font, nav_labels[i],
+        (void)sdl_char_sheet_draw_button_text(font, ui_text(nav_labels[i]),
             focused ? TERM_DARK : enabled ? TERM_WHITE : TERM_SLATE, &rect);
         if (enabled)
             sdl_char_sheet_add_hit(rect, choices[i], "", TERM_WHITE);
@@ -7421,9 +7422,9 @@ static bool sdl_birth_prompt_stacks(TTF_Font* font, float width)
 {
 #if SIL_SDL_MOBILE_BUILD
     if (sdl_touch_only_device_active() && font) {
-        float natural = sdl_char_sheet_text_width(font, "Back")
-            + sdl_char_sheet_text_width(font, "Defaults")
-            + sdl_char_sheet_text_width(font, "Confirm");
+        float natural = sdl_char_sheet_text_width(font, ui_text("Back"))
+            + sdl_char_sheet_text_width(font, ui_text("Defaults"))
+            + sdl_char_sheet_text_width(font, ui_text("Confirm"));
         float gap = MAX(8.0f, TTF_GetFontHeight(font) * 0.16f);
         return natural / 0.84f + gap * 2.0f > width;
     }
@@ -7568,16 +7569,16 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         }
 
         strnfmt(birth_controller_back_text,
-            sizeof(birth_controller_back_text), "%s back",
+            sizeof(birth_controller_back_text), ui_text("%s back"),
             controller_back_label);
         strnfmt(birth_controller_confirm_text,
-            sizeof(birth_controller_confirm_text), "%s confirm",
+            sizeof(birth_controller_confirm_text), ui_text("%s confirm"),
             controller_confirm_label);
         strnfmt(select_controller_back_text,
-            sizeof(select_controller_back_text), "%s back",
+            sizeof(select_controller_back_text), ui_text("%s back"),
             controller_back_label);
         strnfmt(select_controller_confirm_text,
-            sizeof(select_controller_confirm_text), "%s select",
+            sizeof(select_controller_confirm_text), ui_text("%s select"),
             controller_confirm_label);
 
         birth_controller_items[0].label = birth_controller_back_text;
@@ -7668,7 +7669,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     if (beginner_defaults)
     {
-        SDL_strlcpy(beginner_label, "N beginner defaults",
+        SDL_strlcpy(beginner_label, ui_text("N beginner defaults"),
             sizeof(beginner_label));
         if (controller)
         {
@@ -7677,20 +7678,20 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
             sdl_gamepad_ui_prompt_label(steamdeck_alt_action_key(), "X",
                 controller_beginner_label, sizeof(controller_beginner_label));
             strnfmt(beginner_label, sizeof(beginner_label),
-                "%s beginner defaults", controller_beginner_label);
+                ui_text("%s beginner defaults"), controller_beginner_label);
         }
 #if SIL_SDL_MOBILE_BUILD
         if (touch_only)
         {
-            cptr touch_label = "Beginner defaults";
+            cptr touch_label = ui_text("Beginner defaults");
 
             if (sdl_char_sheet_text_width(font, touch_label) > w * 0.30f)
-                touch_label = "Defaults";
+                touch_label = ui_text("Defaults");
             SDL_strlcpy(beginner_label, touch_label, sizeof(beginner_label));
         }
 #endif
         if (large_touch_birth_actions)
-            SDL_strlcpy(beginner_label, "Defaults", sizeof(beginner_label));
+            SDL_strlcpy(beginner_label, ui_text("Defaults"), sizeof(beginner_label));
         beginner_items[0] = items[0];
         beginner_items[1].label = beginner_label;
         beginner_items[1].choice = -4;
@@ -7716,7 +7717,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
         float button_pad_x = (beginner_defaults && items[i].choice == -4)
             ? MAX(12.0f, h * 0.58f) : 0.0f;
 
-        text_widths[i] = sdl_char_sheet_text_width(font, items[i].label);
+        text_widths[i] = sdl_char_sheet_text_width(font, ui_text(items[i].label));
         item_widths[i] = (float)text_widths[i];
 #if SIL_SDL_MOBILE_BUILD
         if (touch_buttons)
@@ -7820,7 +7821,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
 
     for (int i = 0; i < item_count; i++)
     {
-        cptr label = items[i].label;
+        cptr label = ui_text(items[i].label);
         int text_w = text_widths[i];
         float item_w = item_widths[i];
         float item_y = y;
@@ -7834,7 +7835,7 @@ void sdl_char_sheet_draw_prompt(TTF_Font* font, cptr prompt, float x,
             /* Keep the resolved font size even on the narrowest phones. */
             if (text_w > item_w * 0.84f)
             {
-                label = choice == -1 ? "<" : choice == -2 ? "OK" : "Defaults";
+                label = choice == -1 ? "<" : choice == -2 ? "OK" : ui_text("Defaults");
                 text_w = sdl_char_sheet_text_width(font, label);
             }
         }
@@ -8105,7 +8106,7 @@ static int sdl_touch_menu_button_layout_normal(
 
         buttons[count].choice = choice;
         buttons[count].attr = attr;
-        SDL_strlcpy(buttons[count].label, label, sizeof(buttons[count].label));
+        SDL_strlcpy(buttons[count].label, ui_text(label), sizeof(buttons[count].label));
         count++;
     }
 
@@ -8114,7 +8115,7 @@ static int sdl_touch_menu_button_layout_normal(
     {
         buttons[count].choice = SDL_TOUCH_MENU_EXIT_CHOICE;
         buttons[count].attr = TERM_DARK;
-        SDL_strlcpy(buttons[count].label, "Exit", sizeof(buttons[count].label));
+        SDL_strlcpy(buttons[count].label, ui_text("Exit"), sizeof(buttons[count].label));
         count++;
     }
 
@@ -8252,7 +8253,7 @@ static int sdl_touch_menu_button_layout(
 
         buttons[count].choice = choice;
         buttons[count].attr = attr;
-        SDL_strlcpy(buttons[count].label, label, sizeof(buttons[count].label));
+        SDL_strlcpy(buttons[count].label, ui_text(label), sizeof(buttons[count].label));
         count++;
     }
 
@@ -8261,7 +8262,7 @@ static int sdl_touch_menu_button_layout(
     {
         buttons[count].choice = SDL_TOUCH_MENU_EXIT_CHOICE;
         buttons[count].attr = TERM_DARK;
-        SDL_strlcpy(buttons[count].label, "Exit", sizeof(buttons[count].label));
+        SDL_strlcpy(buttons[count].label, ui_text("Exit"), sizeof(buttons[count].label));
         count++;
     }
 
@@ -8517,7 +8518,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         && g_sdl_character_sheet_screen.narrative_quit_enabled;
     cptr narrative_exit_verb =
         streq(g_sdl_character_sheet_screen.narrative_close_label, "Close")
-            ? "close" : "proceed";
+            ? ui_text("close") : ui_text("proceed");
 
     if (!prompt_font || content_w <= 0.0f || prompt_h <= 0.0f)
         return;
@@ -8568,7 +8569,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
                 SDL_RenderFillRect(g_state.renderer, &rect);
                 SDL_SetRenderDrawColor(g_state.renderer, 90, 103, 111, 255);
                 SDL_RenderRect(g_state.renderer, &rect);
-                sdl_char_sheet_draw_button_text(prompt_font, labels[i],
+                sdl_char_sheet_draw_button_text(prompt_font, ui_text(labels[i]),
                     sdl_char_sheet_terminal_book_style()
                         ? TERM_L_WHITE : TERM_L_BLUE, &rect);
                 if (choices[i] == -2)
@@ -8597,8 +8598,8 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
                 continue;
             SDL_FRect rect = { content_x + content_w * offsets[i],
                 prompt_y, content_w * fractions[i], prompt_h };
-            rect = sdl_char_sheet_icon_book_footer_rect(prompt_font, labels[i], rect);
-            sdl_char_sheet_draw_button_text(prompt_font, labels[i],
+            rect = sdl_char_sheet_icon_book_footer_rect(prompt_font, ui_text(labels[i]), rect);
+            sdl_char_sheet_draw_button_text(prompt_font, ui_text(labels[i]),
                 i == 1 ? TERM_L_GREEN : TERM_L_BLUE, &rect);
             sdl_char_sheet_add_select_button_hit(rect, choices[i]);
         }
@@ -8651,27 +8652,27 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             {
                 if (page > 0 && narrative)
                     strnfmt(prompt, sizeof(prompt),
-                        "%s previous  %s continue  %s %s", prev_label,
+                        ui_text("%s previous  %s continue  %s %s"), prev_label,
                         confirm_label, back_label, narrative_exit_verb);
                 else if (page > 0)
                     strnfmt(prompt, sizeof(prompt),
-                        "%s previous  %s select  %s back", prev_label,
+                        ui_text("%s previous  %s select  %s back"), prev_label,
                         confirm_label, back_label);
                 else
-                    strnfmt(prompt, sizeof(prompt), "%s select  %s back",
+                    strnfmt(prompt, sizeof(prompt), ui_text("%s select  %s back"),
                         confirm_label, back_label);
             }
             else if (page > 0)
             {
                 strnfmt(prompt, sizeof(prompt),
-                    "%s previous  %s/%s next  %s last page  %s back",
+                    ui_text("%s previous  %s/%s next  %s last page  %s back"),
                     prev_label, next_label, confirm_label, last_label,
                     back_label);
             }
             else
             {
                 strnfmt(prompt, sizeof(prompt),
-                    "%s/%s next  %s last page  %s back", next_label,
+                    ui_text("%s/%s next  %s last page  %s back"), next_label,
                     confirm_label, last_label, back_label);
             }
         }
@@ -8681,22 +8682,22 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             {
                 if (page > 0 && narrative)
                     strnfmt(prompt, sizeof(prompt),
-                        "Left previous  Enter continue  Esc %s",
+                        ui_text("Left previous  Enter continue  Esc %s"),
                         narrative_exit_verb);
                 else if (page > 0)
                     strnfmt(prompt, sizeof(prompt),
-                        "Left previous  Enter select  Esc back");
+                        ui_text("Left previous  Enter select  Esc back"));
                 else
-                    strnfmt(prompt, sizeof(prompt), "Enter select  Esc back");
+                    strnfmt(prompt, sizeof(prompt), ui_text("Enter select  Esc back"));
             }
             else if (page > 0)
             {
                 strnfmt(prompt, sizeof(prompt),
-                    "Left previous  Right/Enter next  Esc back");
+                    ui_text("Left previous  Right/Enter next  Esc back"));
             }
             else
             {
-                strnfmt(prompt, sizeof(prompt), "Right/Enter next  Esc back");
+                strnfmt(prompt, sizeof(prompt), ui_text("Right/Enter next  Esc back"));
             }
         }
 
@@ -8730,10 +8731,10 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
     /* Fit both side labels to the same native font size so the words and
      * arrows remain complete and consistent as pages change. */
     TTF_Font* page_font = sdl_char_sheet_fit_label_font(prompt_font,
-        "\xe2\x80\xb9 Previous page", g_sdl_character_sheet_prompt_slot,
+        ui_text("\xe2\x80\xb9 Previous page"), g_sdl_character_sheet_prompt_slot,
         sdl_char_sheet_terminal_book_style(), bw, bh);
     page_font = sdl_char_sheet_fit_label_font(page_font,
-        "Turn the page \xe2\x80\xba", g_sdl_character_sheet_prompt_slot,
+        ui_text("Turn the page \xe2\x80\xba"), g_sdl_character_sheet_prompt_slot,
         sdl_char_sheet_terminal_book_style(), bw, bh);
 
     if (quit_page)
@@ -8741,7 +8742,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         SDL_FRect r = { content_x, prompt_y, bw, bh };
         byte a = (hov == SDL_SELECT_CLICK_BOOK_QUIT) ? TERM_WHITE : TERM_L_RED;
 
-        (void)sdl_char_sheet_draw_text(page_font, "Quit game", a,
+        (void)sdl_char_sheet_draw_text(page_font, ui_text("Quit game"), a,
             r.x, r.y, r.w, r.h, true);
         sdl_char_sheet_add_select_button_hit(r, SDL_SELECT_CLICK_BOOK_QUIT);
     }
@@ -8752,7 +8753,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             ? TERM_WHITE : TERM_L_BLUE;
 
         (void)sdl_char_sheet_draw_text(page_font,
-            "\xe2\x80\xb9 Previous page", a, content_x, prompt_y, bw,
+            ui_text("\xe2\x80\xb9 Previous page"), a, content_x, prompt_y, bw,
             bh, true);
         sdl_char_sheet_add_select_button_hit(r,
             SDL_SELECT_CLICK_PAGE_PREV);
@@ -8764,7 +8765,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         byte a = (hov == SDL_SELECT_CLICK_PAGE_PREV)
             ? TERM_WHITE : TERM_L_BLUE;
 
-        (void)sdl_char_sheet_draw_text(page_font, "Back", a, content_x,
+        (void)sdl_char_sheet_draw_text(page_font, ui_text("Back"), a, content_x,
             prompt_y, bw, bh, true);
         sdl_char_sheet_add_select_button_hit(r,
             SDL_SELECT_CLICK_PAGE_PREV);
@@ -8775,7 +8776,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
         byte a = (hov == SDL_SELECT_CLICK_PAGE_NEXT)
             ? TERM_WHITE : TERM_L_BLUE;
         char controller_label[64];
-        cptr next_page_label = "Turn the page \xe2\x80\xba";
+        cptr next_page_label = ui_text("Turn the page \xe2\x80\xba");
 
         if (steamdeck_controls_active())
         {
@@ -8791,7 +8792,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
             strnfmt(controller_label, sizeof(controller_label),
-                "%s next  %s last page", next_label, last_label);
+                ui_text("%s next  %s last page"), next_label, last_label);
             next_page_label = controller_label;
         }
 
@@ -8808,7 +8809,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             ? TERM_WHITE : TERM_L_BLUE;
 
         (void)sdl_char_sheet_draw_text(page_font,
-            "Continue", a, content_x + content_w - bw, prompt_y, bw,
+            ui_text("Continue"), a, content_x + content_w - bw, prompt_y, bw,
             bh, true);
         sdl_char_sheet_add_select_button_hit(r,
             SDL_SELECT_CLICK_PAGE_NEXT);
@@ -8833,7 +8834,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
                 && streq(close_label, "Proceed to character creation")
             ? "Create character" : close_label;
         bool long_close_label =
-            display_close_label && strlen(display_close_label) > 12;
+            display_close_label && strlen(ui_text(display_close_label)) > 12;
         bool emphasized_close =
             g_sdl_character_sheet_screen.context
                 == SDL_CHARACTER_SHEET_NARRATIVE
@@ -8854,7 +8855,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             : (jump_to_last_page ? TERM_L_BLUE
                 : (emphasized_close ? TERM_L_GREEN : TERM_SLATE));
         char controller_jump_label[48];
-        cptr label = display_close_label;
+        cptr label = ui_text(display_close_label);
 
         /* The race-book shortcut needs a full third of a portrait footer.
          * A single long line was scaled down to half the neighboring labels. */
@@ -8875,7 +8876,7 @@ static void sdl_char_sheet_draw_book_page_controls(TTF_Font* prompt_font,
             if (streq(last_label, "(unbound)") || streq(last_label, "Multiple"))
                 SDL_strlcpy(last_label, "X", sizeof(last_label));
             strnfmt(controller_jump_label, sizeof(controller_jump_label),
-                "%s Jump to last page", last_label);
+                ui_text("%s Jump to last page"), last_label);
             label = controller_jump_label;
         }
 
@@ -9586,7 +9587,7 @@ void sdl_char_sheet_draw_menu_row(TTF_Font* font, cptr text, byte attr,
                 border.b, border.a);
             SDL_RenderRect(g_state.renderer, &btn);
 
-            drawn = sdl_char_sheet_draw_button_text(btn_font, "Reset",
+            drawn = sdl_char_sheet_draw_button_text(btn_font, ui_text("Reset"),
                 reset_hover ? TERM_DARK : TERM_L_WHITE, &label_rect);
             (void)drawn;
 
@@ -10151,7 +10152,7 @@ void sdl_char_sheet_render_menu_select(TTF_Font* prompt_font,
                 132.0f);
             if (wrap_rows)
                 reset_reserve = MAX(reset_reserve,
-                    sdl_char_sheet_text_width(best_font, "Reset") / 0.84f + 20.0f);
+                    sdl_char_sheet_text_width(best_font, ui_text("Reset")) / 0.84f + 20.0f);
             break;
         }
     }
@@ -16398,8 +16399,8 @@ static void sdl_char_sheet_render_big_birth(float x, float y, float width,
     if (!font)
         return;
     font_h = (float)TTF_GetFontHeight(font);
-    strnfmt(points, sizeof(points), "%d %s left",
-        g_sdl_character_sheet_screen.points_left, stats ? "points" : "experience");
+    strnfmt(points, sizeof(points), ui_text("%d %s left"),
+        g_sdl_character_sheet_screen.points_left, stats ? ui_text("points") : ui_text("experience"));
     (void)sdl_char_sheet_draw_text(font, points, TERM_L_BLUE,
         x, y, width, font_h * 1.3f, false);
     list_top = y + font_h * 1.5f;
@@ -16414,16 +16415,16 @@ static void sdl_char_sheet_render_big_birth(float x, float y, float width,
             char value[32];
             cnv_stat(p_ptr ? p_ptr->stat_use[i]
                 : g_sdl_character_sheet_screen.stat_values[i], value);
-            strnfmt(text[i], sizeof(text[i]), "%s\t%s (Cost: %d)",
-                stat_names[i], value, g_sdl_character_sheet_screen.stat_costs[i]);
+            strnfmt(text[i], sizeof(text[i]), ui_text("%s\t%s (Cost: %d)"),
+                ui_text(stat_names[i]), value, g_sdl_character_sheet_screen.stat_costs[i]);
             character_sheet_format_stat_hint(i, 0, false, desc[i], sizeof(desc[i]));
         }
         else
         {
             int cost = (g_sdl_character_sheet_screen.skill_old_base[skill]
                 + g_sdl_character_sheet_screen.skill_gain[skill] + 1) * 100;
-            strnfmt(text[i], sizeof(text[i]), "%s\t%d = %d %+d %+d %+d (Cost: %d)",
-                skill_names_full[skill], p_ptr ? p_ptr->skill_use[skill] : 0,
+            strnfmt(text[i], sizeof(text[i]), ui_text("%s\t%d = %d %+d %+d %+d (Cost: %d)"),
+                ui_text(skill_names_full[skill]), p_ptr ? p_ptr->skill_use[skill] : 0,
                 p_ptr ? p_ptr->skill_base[skill] : 0,
                 p_ptr ? p_ptr->skill_stat_mod[skill] : 0,
                 p_ptr ? p_ptr->skill_equip_mod[skill] : 0,
@@ -16446,9 +16447,9 @@ static void sdl_char_sheet_render_big_birth(float x, float y, float width,
             int cost = (g_sdl_character_sheet_screen.skill_old_base[skill]
                 + g_sdl_character_sheet_screen.skill_gain[skill] + 1) * 100;
             char value[96];
-            strnfmt(value, sizeof(value), "%d (Cost: %d)",
+            strnfmt(value, sizeof(value), ui_text("%d (Cost: %d)"),
                 p_ptr ? p_ptr->skill_use[skill] : 0, cost);
-            strnfmt(text[i], sizeof(text[i]), "%s\t%s", skill_names_full[skill], value);
+            strnfmt(text[i], sizeof(text[i]), "%s\t%s", ui_text(skill_names_full[skill]), value);
             strnfmt(calculations[i], sizeof(calculations[i]), "%d = %d %+d %+d %+d",
                 p_ptr ? p_ptr->skill_use[skill] : 0,
                 p_ptr ? p_ptr->skill_base[skill] : 0,
@@ -16716,14 +16717,14 @@ static void sdl_character_sheet_screen_render_content(
         sdl_char_sheet_title(title, sizeof(title));
         if (g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_BIRTH_STATS)
-            SDL_strlcat(title, " - Assign Attributes", sizeof(title));
+            SDL_strlcat(title, ui_text(" - Assign Attributes"), sizeof(title));
         else if (g_sdl_character_sheet_screen.context
             == SDL_CHARACTER_SHEET_BIRTH_SKILLS)
-            SDL_strlcat(title, " - Assign Skills", sizeof(title));
+            SDL_strlcat(title, ui_text(" - Assign Skills"), sizeof(title));
         if (get_sdl_menu_bigger_font() && sdl_char_sheet_birth_context())
             SDL_strlcpy(title,
                 g_sdl_character_sheet_screen.context == SDL_CHARACTER_SHEET_BIRTH_STATS
-                    ? "Attributes" : "Skills", sizeof(title));
+                    ? ui_text("Attributes") : ui_text("Skills"), sizeof(title));
     }
     title_suffix = (g_sdl_character_sheet_screen.context
         == SDL_CHARACTER_SHEET_BIRTH_SELECT)

@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "sdl/main-sdl-private.h"
 
 #define SDL_TOUCH_ROUND_INNER_RADIUS_FRAC 0.45f
@@ -965,10 +966,10 @@ int sdl_touch_thumb_button_binding(int index, bool long_press)
                       : set.buttons[index].tap_binding;
 }
 
-static bool sdl_touch_thumb_button_has_binding(int index)
+static bool sdl_touch_thumb_button_has_binding(const touch_thumb_button* button)
 {
-    return sdl_touch_thumb_button_binding(index, false) != GAMEPAD_BIND_NONE
-        || sdl_touch_thumb_button_binding(index, true) != GAMEPAD_BIND_NONE;
+    return button->tap_binding != GAMEPAD_BIND_NONE
+        || button->long_binding != GAMEPAD_BIND_NONE;
 }
 
 bool sdl_touch_thumb_config_enabled(void)
@@ -1462,7 +1463,7 @@ bool sdl_touch_thumb_current_bounds(SDL_FRect* out_bounds)
     SDL_FRect rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
     SDL_FRect bounds = { 0 };
     bool have_bounds = false;
-    int button_count = sdl_touch_thumb_button_count();
+    touch_thumb_button_set set;
 
     if (out_bounds)
         *out_bounds = (SDL_FRect){ 0 };
@@ -1472,8 +1473,9 @@ bool sdl_touch_thumb_current_bounds(SDL_FRect* out_bounds)
         return false;
     }
 
-    for (int i = 0; i < button_count; i++) {
-        if (!sdl_touch_thumb_button_has_binding(i))
+    sdl_touch_thumb_collect_buttons(&set);
+    for (int i = 0; i < set.count; i++) {
+        if (!sdl_touch_thumb_button_has_binding(&set.buttons[i]))
             continue;
         if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
             continue;
@@ -1504,7 +1506,7 @@ bool sdl_touch_thumb_current_bounds(SDL_FRect* out_bounds)
 bool sdl_touch_thumb_point_to_button(float px, float py, int* out_index)
 {
     SDL_FRect rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
-    int button_count = sdl_touch_thumb_button_count();
+    touch_thumb_button_set set;
 
     if (out_index)
         *out_index = -1;
@@ -1514,8 +1516,9 @@ bool sdl_touch_thumb_point_to_button(float px, float py, int* out_index)
         return false;
     }
 
-    for (int i = 0; i < button_count; i++) {
-        if (!sdl_touch_thumb_button_has_binding(i))
+    sdl_touch_thumb_collect_buttons(&set);
+    for (int i = 0; i < set.count; i++) {
+        if (!sdl_touch_thumb_button_has_binding(&set.buttons[i]))
             continue;
         if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
             continue;
@@ -1640,15 +1643,15 @@ static void sdl_touch_context_label_for_binding(int binding, char* buf,
     binding_action_short(binding, buf, buflen);
 }
 
-static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
-    bool pressed, bool flashed)
+static void sdl_touch_thumb_render_button(const SDL_FRect* rect,
+    const touch_thumb_button* button, bool pressed, bool flashed)
 {
     SDL_Color frame = g_state.palette[TERM_WHITE];
     SDL_Color text = g_state.palette[TERM_WHITE];
     SDL_Color selected = g_state.palette[TERM_YELLOW];
     bool active = pressed || flashed;
-    int tap_binding = sdl_touch_thumb_button_binding(index, false);
-    int long_binding = sdl_touch_thumb_button_binding(index, true);
+    int tap_binding = button->tap_binding;
+    int long_binding = button->long_binding;
     char label[128];
     char* detail;
 
@@ -1728,7 +1731,7 @@ static void sdl_touch_thumb_render_button(const SDL_FRect* rect, int index,
 void sdl_touch_thumb_render(void)
 {
     SDL_FRect rects[SDL_TOUCH_THUMB_RUNTIME_CAPACITY];
-    int button_count = sdl_touch_thumb_button_count();
+    touch_thumb_button_set set;
 
     if (g_touch_thumb_flash_button >= 0
         && SDL_GetTicksNS() >= g_touch_thumb_flash_until)
@@ -1744,19 +1747,77 @@ void sdl_touch_thumb_render(void)
         return;
     }
 
+    /* All buttons in this paint see the same floor and weapon context. */
+    sdl_touch_thumb_collect_buttons(&set);
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    for (int i = 0; i < button_count; i++) {
+    for (int i = 0; i < set.count; i++) {
+        const touch_thumb_button* button = &set.buttons[i];
         bool pressed;
         bool flashed;
 
-        if (!sdl_touch_thumb_button_has_binding(i))
+        if (!sdl_touch_thumb_button_has_binding(button))
             continue;
         if (rects[i].w <= 0.0f || rects[i].h <= 0.0f)
             continue;
         pressed = g_touch_thumb_pressed_button == i;
         flashed = g_touch_thumb_flash_button == i;
-        sdl_touch_thumb_render_button(&rects[i], i, pressed, flashed);
+        sdl_touch_thumb_render_button(&rects[i], button, pressed, flashed);
     }
+}
+
+static Uint64 touch_thumb_event_start_time;
+
+#if defined(SDL_PLATFORM_ANDROID)
+static SDL_TouchID touch_thumb_android_device;
+static Sint32 touch_thumb_hold_token;
+static Sint32 touch_thumb_next_hold_token;
+static bool touch_thumb_hold_confirmed;
+
+void sdl_touch_thumb_note_android_press(SDL_TouchID device, SDL_FingerID finger,
+    Uint64 timestamp)
+{
+    if (g_touch_thumb_press.active && !g_touch_thumb_press.mouse
+        && g_touch_thumb_press.finger_id == finger
+        && touch_thumb_event_start_time == timestamp)
+        touch_thumb_android_device = device;
+}
+
+void sdl_touch_thumb_confirm_android_hold(Sint32 token)
+{
+    if (token > 0 && token == touch_thumb_hold_token)
+        touch_thumb_hold_confirmed = true;
+}
+
+static bool sdl_touch_thumb_android_hold_ready(void)
+{
+    if (!touch_thumb_android_device || touch_thumb_hold_confirmed)
+        return true;
+    if (touch_thumb_hold_token == 0) {
+        touch_thumb_next_hold_token = touch_thumb_next_hold_token == SDL_MAX_SINT32
+            ? 1 : touch_thumb_next_hold_token + 1;
+        touch_thumb_hold_token = touch_thumb_next_hold_token;
+        sdl_android_request_thumb_hold(touch_thumb_android_device,
+            g_touch_thumb_press.finger_id, touch_thumb_event_start_time,
+            touch_thumb_hold_token);
+    }
+    /* The UI callback wakes the input pump. Release is still authoritative
+     * if the contact ended or an acknowledgement could not be queued. */
+    return false;
+}
+#endif
+
+static Uint64 sdl_touch_press_elapsed(Uint64 start, Uint64 end)
+{
+    return end >= start ? end - start : 0;
+}
+
+static Uint64 sdl_touch_press_event_elapsed(Uint64 dispatch_start,
+    Uint64 event_start, Uint64 event_end)
+{
+    /* Rendering can delay release dispatch. Use one clock for both endpoints. */
+    if (event_start && event_end)
+        return sdl_touch_press_elapsed(event_start, event_end);
+    return sdl_touch_press_elapsed(dispatch_start, SDL_GetTicksNS());
 }
 
 void sdl_touch_thumb_cancel_press(void)
@@ -1766,6 +1827,12 @@ void sdl_touch_thumb_cancel_press(void)
 
     g_touch_thumb_press.active = false;
     g_touch_thumb_press.long_press_enabled = false;
+    touch_thumb_event_start_time = 0;
+#if defined(SDL_PLATFORM_ANDROID)
+    touch_thumb_android_device = 0;
+    touch_thumb_hold_token = 0;
+    touch_thumb_hold_confirmed = false;
+#endif
     g_touch_thumb_pressed_button = -1;
     g_state.need_present = true;
 }
@@ -1863,8 +1930,14 @@ int sdl_touch_thumb_pending_timeout_ms(Uint64 now_ns)
         return -1;
     if (!g_touch_thumb_press.long_press_enabled)
         return -1;
+#if defined(SDL_PLATFORM_ANDROID)
+    if (touch_thumb_hold_token && !touch_thumb_hold_confirmed)
+        return -1;
+#endif
 
-    elapsed = now_ns - g_touch_thumb_press.start_time;
+    elapsed = sdl_touch_press_elapsed(touch_thumb_event_start_time
+            ? touch_thumb_event_start_time : g_touch_thumb_press.start_time,
+        now_ns);
     if (elapsed >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
         return 0;
 
@@ -1883,11 +1956,29 @@ bool sdl_touch_thumb_flush_pending_press(Uint64 now_ns)
         return false;
     if (!g_touch_thumb_press.long_press_enabled)
         return false;
-    if (now_ns - g_touch_thumb_press.start_time
+    if (sdl_touch_press_elapsed(touch_thumb_event_start_time
+            ? touch_thumb_event_start_time : g_touch_thumb_press.start_time,
+            now_ns)
         < (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL)
     {
         return false;
     }
+
+    /* A queued ending event may belong to a tap that ended before the
+     * deadline. Let the event pump classify it before firing the timer. */
+    if (g_touch_thumb_press.mouse
+        || g_touch_thumb_press.finger_id == TOUCH_MOUSE_FALLBACK_FINGER_ID) {
+        if (SDL_HasEvent(SDL_EVENT_MOUSE_BUTTON_UP))
+            return false;
+    } else if (SDL_HasEvent(SDL_EVENT_FINGER_UP)
+        || SDL_HasEvent(SDL_EVENT_FINGER_CANCELED)) {
+        return false;
+    }
+
+#if defined(SDL_PLATFORM_ANDROID)
+    if (!sdl_touch_thumb_android_hold_ready())
+        return false;
+#endif
 
     index = g_touch_thumb_press.slot;
     sdl_touch_thumb_cancel_press();
@@ -1896,7 +1987,7 @@ bool sdl_touch_thumb_flush_pending_press(Uint64 now_ns)
 }
 
 bool sdl_touch_thumb_handle_pointer_down(float x, float y, bool mouse,
-    SDL_FingerID finger_id)
+    SDL_FingerID finger_id, Uint64 event_time)
 {
     int index = -1;
 
@@ -1916,6 +2007,7 @@ bool sdl_touch_thumb_handle_pointer_down(float x, float y, bool mouse,
     g_touch_thumb_press.start_x = x;
     g_touch_thumb_press.start_y = y;
     g_touch_thumb_press.start_time = SDL_GetTicksNS();
+    touch_thumb_event_start_time = event_time;
     g_touch_thumb_pressed_button = index;
     g_state.need_present = true;
     return true;
@@ -1963,7 +2055,7 @@ bool sdl_touch_thumb_handle_pointer_motion(float x, float y, bool mouse,
 }
 
 bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse,
-    SDL_FingerID finger_id)
+    SDL_FingerID finger_id, Uint64 event_time)
 {
     Uint64 press_time;
     bool long_fire;
@@ -1982,7 +2074,8 @@ bool sdl_touch_thumb_handle_pointer_up(float x, float y, bool mouse,
     if (!mouse && g_touch_thumb_press.finger_id != finger_id)
         return false;
 
-    press_time = SDL_GetTicksNS() - g_touch_thumb_press.start_time;
+    press_time = sdl_touch_press_event_elapsed(g_touch_thumb_press.start_time,
+        touch_thumb_event_start_time, event_time);
     long_fire = g_touch_thumb_press.long_press_enabled
         && (press_time >= (Uint64)TOUCH_PANE_LONG_PRESS_MS * 1000000ULL);
     index = g_touch_thumb_press.slot;
@@ -2797,6 +2890,8 @@ void sdl_touch_round_send_dir(int dir, bool ctrl, bool run)
     sdl_gamepad_send_direction_mods(dir, run, ctrl, false);
 }
 
+static Uint64 touch_round_event_start_time;
+
 void sdl_touch_round_cancel_press(void)
 {
     if (!g_touch_round_press.active)
@@ -2815,11 +2910,12 @@ void sdl_touch_round_cancel_press(void)
     g_touch_round_press.direction_dragged = false;
     g_touch_round_press.button_dir = 0;
     g_touch_round_press.start_time = 0;
+    touch_round_event_start_time = 0;
     g_state.need_present = true;
 }
 
 bool sdl_touch_round_handle_pointer_down(float x, float y,
-    SDL_FingerID finger_id)
+    SDL_FingerID finger_id, Uint64 event_time)
 {
     float cx;
     float cy;
@@ -2869,6 +2965,7 @@ bool sdl_touch_round_handle_pointer_down(float x, float y,
     g_touch_round_press.direction_dragged = !outer_button && dir != 0;
     g_touch_round_press.button_dir = outer_button ? dir : 0;
     g_touch_round_press.start_time = SDL_GetTicksNS();
+    touch_round_event_start_time = event_time;
     g_state.need_present = true;
     return true;
 }
@@ -2931,7 +3028,7 @@ bool sdl_touch_round_handle_pointer_motion(float x, float y,
 }
 
 bool sdl_touch_round_handle_pointer_up(float x, float y,
-    SDL_FingerID finger_id)
+    SDL_FingerID finger_id, Uint64 event_time)
 {
     float dx;
     float dy;
@@ -2959,7 +3056,8 @@ bool sdl_touch_round_handle_pointer_up(float x, float y,
     radius = g_touch_round_press.radius;
     if (radius <= 0.0f)
         radius = sdl_touch_round_radius_px();
-    press_time = SDL_GetTicksNS() - g_touch_round_press.start_time;
+    press_time = sdl_touch_press_event_elapsed(g_touch_round_press.start_time,
+        touch_round_event_start_time, event_time);
 
     if (g_touch_round_press.button_press) {
         if (dist >= g_touch_round_press.inner_radius
@@ -3206,56 +3304,56 @@ const char* sdl_touch_round_ctrl_action_for_dir(int dir)
     bool is_visible;
 
     if (!p_ptr || dir < 1 || dir > 9 || dir == 5)
-        return "Alter";
+        return ui_text("Alter");
 
     y = p_ptr->py + ddy[dir];
     x = p_ptr->px + ddx[dir];
     if (!in_bounds(y, x))
-        return "Alter";
+        return ui_text("Alter");
 
     if (sdl_mouse_grid_has_visible_monster(y, x, NULL))
-        return "Attack";
+        return ui_text("Attack");
 
     is_marked = (cave_info[y][x] & CAVE_MARK) != 0;
     is_visible = (cave_info[y][x] & CAVE_SEEN) != 0;
     if (!is_marked && !is_visible)
-        return "Strike";
+        return ui_text("Strike");
 
     feat = is_marked ? cave_feat[y][x] : FEAT_NONE;
 
     if (cave_wall_bold(y, x))
-        return "Tunnel";
+        return ui_text("Tunnel");
     if (cave_known_closed_door_bold(y, x))
-        return "Bash door";
+        return ui_text("Bash door");
     if (cave_trap_bold(y, x) && !cave_floorlike_bold(y, x))
-        return "Disarm trap";
+        return ui_text("Disarm trap");
 
     if (cave_o_idx[y][x]) {
         object_type* o_ptr = &o_list[cave_o_idx[y][x]];
 
         if (object_is_visible(o_ptr) && o_ptr->tval == TV_CHEST) {
             if (chest_trap_minigame && o_ptr->pval != 0)
-                return "Handle chest";
+                return ui_text("Handle chest");
             if ((o_ptr->pval > 0) && object_chest_trap_flags(o_ptr)
                 && object_known_p(o_ptr))
             {
-                return "Disarm chest";
+                return ui_text("Disarm chest");
             }
 
-            return "Open chest";
+            return ui_text("Open chest");
         }
 
         if (object_is_visible(o_ptr) && o_ptr->tval == TV_SKELETON
             && !object_is_searched_skeleton(o_ptr))
         {
-            return "Search skeleton";
+            return ui_text("Search skeleton");
         }
     }
 
     if (feat == FEAT_OPEN)
-        return "Close door";
+        return ui_text("Close door");
 
-    return "Strike";
+    return ui_text("Strike");
 }
 
 void sdl_touch_round_ctrl_action_label(int dir, char* buf, size_t buflen)
@@ -3272,7 +3370,7 @@ void sdl_touch_round_ctrl_action_label(int dir, char* buf, size_t buflen)
         return;
 
     action = sdl_touch_round_ctrl_action_for_dir(dir);
-    strnfmt(buf, buflen, "Ctrl+%s: %s", dir_label, action);
+    strnfmt(buf, buflen, ui_text("Ctrl+%s: %s"), dir_label, action);
 }
 
 static void sdl_touch_round_render_action_label(const char* label,
@@ -3355,7 +3453,7 @@ static void sdl_touch_round_render_run_action_label(int dir, float radius,
     dir_label = sdl_touch_round_dir_label(dir);
     if (!dir_label[0])
         return;
-    strnfmt(label, sizeof(label), "Run %s", dir_label);
+    strnfmt(label, sizeof(label), ui_text("Run %s"), dir_label);
     sdl_touch_round_render_action_label(label,
         g_state.palette[TERM_L_GREEN], radius, clip);
 }
@@ -6476,203 +6574,203 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
             sdl_touch_thumb_description_open(), NULL, label, sizeof(label))) {
         if (context_binding == ' ' && streq(label, "Pick Up"))
             strnfmt(buf, buflen,
-                "%s: pick up the floor item and choose where to put it.",
-                label);
+                ui_text("%s: pick up the floor item and choose where to put it."),
+                ui_text(label));
         else if (context_binding == ' ')
             strnfmt(buf, buflen,
-                "%s: confirm the current prompt or interact with what is on your square.",
-                label);
+                ui_text("%s: confirm the current prompt or interact with what is on your square."),
+                ui_text(label));
         else if (context_binding == 'u')
             strnfmt(buf, buflen,
-                "%s: perform the available action for the item on your square.",
+                ui_text("%s: perform the available action for the item on your square."),
                 label);
         else
             strnfmt(buf, buflen,
-                "%s: show details for the item on your square.", label);
+                ui_text("%s: show details for the item on your square."), ui_text(label));
         return;
     }
 
     switch (binding) {
     case GAMEPAD_BIND_NONE:
         SDL_strlcpy(buf,
-            "Unbound: this Quick Access cell has no command.", buflen);
+            ui_text("Unbound: this Quick Access cell has no command."), buflen);
         return;
     case TOUCH_BIND_TOP_PANEL_OPEN:
-        SDL_strlcpy(buf, "Overlay menu: open the shortcut menu.", buflen);
+        SDL_strlcpy(buf, ui_text("Overlay menu: open the shortcut menu."), buflen);
         return;
     case TOUCH_BIND_TOP_PANEL_CLOSE:
-        SDL_strlcpy(buf, "Overlay menu: close the shortcut menu.", buflen);
+        SDL_strlcpy(buf, ui_text("Overlay menu: close the shortcut menu."), buflen);
         return;
     case TOUCH_BIND_MAIN_MENU_KNOWLEDGE:
-        SDL_strlcpy(buf, "Known Lore: open the lore browser.", buflen);
+        SDL_strlcpy(buf, ui_text("Known Lore: open the lore browser."), buflen);
         return;
     case TOUCH_BIND_MAIN_MENU_HINTS_QUESTS:
         SDL_strlcpy(buf,
-            "Hints & Quests: open saved hints, quest notes, and thrall requests.",
+            ui_text("Hints & Quests: open saved hints, quest notes, and thrall requests."),
             buflen);
         return;
     case TOUCH_BIND_OPEN_JEWELRY:
         SDL_strlcpy(buf,
-            "Jewelry: open rings, amulets, and saved jewelry sets.", buflen);
+            ui_text("Jewelry: open rings, amulets, and saved jewelry sets."), buflen);
         return;
     case TOUCH_BIND_TOGGLE_TILES:
-        strnfmt(buf, buflen, "%s: change how the dungeon map is displayed.",
-            get_sdl_tiles() ? "Change to ASCII" : "Change to Tiles");
+        strnfmt(buf, buflen, ui_text("%s: change how the dungeon map is displayed."),
+            get_sdl_tiles() ? ui_text("Change to ASCII") : ui_text("Change to Tiles"));
         return;
     case 'm':
         SDL_strlcpy(buf,
-            "Main Menu: open the main menu and its game, character, and settings actions.",
+            ui_text("Main Menu: open the main menu and its game, character, and settings actions."),
             buflen);
         return;
     case 'e':
         SDL_strlcpy(buf,
-            "Equipment: view your worn and wielded items and choose actions for them.",
+            ui_text("Equipment: view your worn and wielded items and choose actions for them."),
             buflen);
         return;
     case 'i':
         SDL_strlcpy(buf,
-            "Inventory: view your carried items and choose actions for them.",
+            ui_text("Inventory: view your carried items and choose actions for them."),
             buflen);
         return;
     case 'j':
-        SDL_strlcpy(buf, "Supply: open supplies and carried resources.",
+        SDL_strlcpy(buf, ui_text("Supply: open supplies and carried resources."),
             buflen);
         return;
     case 's':
         SDL_strlcpy(buf,
-            "Song: choose a song, begin singing, or stop your current song.",
+            ui_text("Song: choose a song, begin singing, or stop your current song."),
             buflen);
         return;
     case 'f':
         SDL_strlcpy(buf,
-            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
+            ui_text("Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target."),
             buflen);
         return;
     case 'F':
         SDL_strlcpy(buf,
-            "Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target.",
+            ui_text("Ranged attack: fire a chosen quivered arrow or throw the active throwing weapon at a chosen target."),
             buflen);
         return;
     case KTRL('F'):
         SDL_strlcpy(buf,
-            "Arrows: choose the active arrow type from your mixed Quiver.",
+            ui_text("Arrows: choose the active arrow type from your mixed Quiver."),
             buflen);
         return;
     case 'a':
         SDL_strlcpy(buf,
-            "Staff: choose and activate a staff from your Harness.",
+            ui_text("Staff: choose and activate a staff from your Harness."),
             buflen);
         return;
     case KTRL('A'):
         SDL_strlcpy(buf,
-            "Legacy staff shortcut: choose and activate a staff from your Harness.",
+            ui_text("Legacy staff shortcut: choose and activate a staff from your Harness."),
             buflen);
         return;
     case '0':
-        SDL_strlcpy(buf, "Smithing: open the forge crafting screen.", buflen);
+        SDL_strlcpy(buf, ui_text("Smithing: open the forge crafting screen."), buflen);
         return;
     case 'l':
-        SDL_strlcpy(buf, "View: inspect the map, floor items, and nearby creatures.",
+        SDL_strlcpy(buf, ui_text("View: inspect the map, floor items, and nearby creatures."),
             buflen);
         return;
     case '\t':
         SDL_strlcpy(buf,
-            "Weapon: change the active melee, throwing, bow, shield, and arrow setup.",
+            ui_text("Weapon: change the active melee, throwing, bow, shield, and arrow setup."),
             buflen);
         return;
     case 'y':
         SDL_strlcpy(buf,
-            "Abilities: review learned abilities and buy available ones.",
+            ui_text("Abilities: review learned abilities and buy available ones."),
             buflen);
         return;
     case 'M':
-        SDL_strlcpy(buf, "Map: view the full dungeon map.", buflen);
+        SDL_strlcpy(buf, ui_text("Map: view the full dungeon map."), buflen);
         return;
     case 'h':
         SDL_strlcpy(buf,
-            "Character: open your character sheet, skills, attributes, and status details.",
+            ui_text("Character: open your character sheet, skills, attributes, and status details."),
             buflen);
         return;
     case 'z':
         SDL_strlcpy(buf,
-            "Wait: spend one turn in place without moving or taking another action.",
+            ui_text("Wait: spend one turn in place without moving or taking another action."),
             buflen);
         return;
     case 'Z':
         SDL_strlcpy(buf,
-            "Rest: wait repeatedly until recovered or interrupted by danger.",
+            ui_text("Rest: wait repeatedly until recovered or interrupted by danger."),
             buflen);
         return;
     case 'g':
         SDL_strlcpy(buf,
-            "Pick Up: collect an item from your current square.", buflen);
+            ui_text("Pick Up: collect an item from your current square."), buflen);
         return;
     case 'o':
         SDL_strlcpy(buf,
-            "Open: choose an adjacent door or chest and attempt to open it.",
+            ui_text("Open: choose an adjacent door or chest and attempt to open it."),
             buflen);
         return;
     case 'c':
         SDL_strlcpy(buf,
-            "Close: choose an adjacent open door and close it.", buflen);
+            ui_text("Close: choose an adjacent open door and close it."), buflen);
         return;
     case 'D':
         SDL_strlcpy(buf,
-            "Disarm: choose an adjacent known floor trap or chest and attempt to disarm it.",
+            ui_text("Disarm: choose an adjacent known floor trap or chest and attempt to disarm it."),
             buflen);
         return;
     case 'X':
         SDL_strlcpy(buf,
-            "Exchange Places: swap positions with an adjacent creature when allowed.",
+            ui_text("Exchange Places: swap positions with an adjacent creature when allowed."),
             buflen);
         return;
     case '-':
         SDL_strlcpy(buf,
-            "Fletchery: make arrows while you have the required materials and ability.",
+            ui_text("Fletchery: make arrows while you have the required materials and ability."),
             buflen);
         return;
     case 't':
         SDL_strlcpy(buf,
-            "Throw: choose an eligible Harness or Belt weapon, or an Alchemy potion, then choose a target.",
+            ui_text("Throw: choose an eligible Harness or Belt weapon, or an Alchemy potion, then choose a target."),
             buflen);
         return;
     case 'p':
         SDL_strlcpy(buf,
-            "Horn: choose and sound a horn from your Harness.", buflen);
+            ui_text("Horn: choose and sound a horn from your Harness."), buflen);
         return;
     case 'q':
         SDL_strlcpy(buf,
-            "Quaff: choose and drink a potion from your carried items.", buflen);
+            ui_text("Quaff: choose and drink a potion from your carried items."), buflen);
         return;
     case 'S':
         SDL_strlcpy(buf,
-            "Stealth: enter or leave stealth mode.", buflen);
+            ui_text("Stealth: enter or leave stealth mode."), buflen);
         return;
     case 'b':
         SDL_strlcpy(buf,
-            "Bash: choose an adjacent closed door and attempt to force it open.",
+            ui_text("Bash: choose an adjacent closed door and attempt to force it open."),
             buflen);
         return;
     case KTRL('Q'):
         SDL_strlcpy(buf,
-            "Combat Rolls: open the detailed history of recent combat rolls.",
+            ui_text("Combat Rolls: open the detailed history of recent combat rolls."),
             buflen);
         return;
     case KTRL('Y'):
         SDL_strlcpy(buf,
-            "Debug Command: open the developer command menu.", buflen);
+            ui_text("Debug Command: open the developer command menu."), buflen);
         return;
     case 'J':
         SDL_strlcpy(buf,
-            "Jewel Set: choose a saved jewel set to equip.", buflen);
+            ui_text("Jewel Set: choose a saved jewel set to equip."), buflen);
         return;
     case '?':
         SDL_strlcpy(buf,
-            "Help: open the in-game help and control reference.", buflen);
+            ui_text("Help: open the in-game help and control reference."), buflen);
         return;
     case 'O':
         SDL_strlcpy(buf,
-            "Options: open game, interface, input, and display settings.",
+            ui_text("Options: open game, interface, input, and display settings."),
             buflen);
         return;
     default:
@@ -6682,16 +6780,16 @@ static void sdl_touch_top_panel_description_for_binding(int binding,
     label[0] = '\0';
     binding_action_short(binding, label, sizeof(label));
     if (label[0])
-        strnfmt(buf, buflen, "%s: run this bound command.", label);
+        strnfmt(buf, buflen, ui_text("%s: run this bound command."), ui_text(label));
     else
-        strnfmt(buf, buflen, "Action %d: run this bound command.", binding);
+        strnfmt(buf, buflen, ui_text("Action %d: run this bound command."), binding);
 }
 
 static void sdl_touch_top_panel_description_for_slot(int slot, bool persistent,
     char* buf, size_t buflen)
 {
     int tap_binding;
-    char tap_desc[192];
+    char tap_desc[256];
 
     if (!buf || !buflen)
         return;
@@ -6712,7 +6810,7 @@ static void sdl_touch_top_panel_description_for_slot(int slot, bool persistent,
     if (persistent)
         SDL_strlcpy(buf, tap_desc, buflen);
     else
-        strnfmt(buf, buflen, "Tap: %s\nHold: open description.", tap_desc);
+        strnfmt(buf, buflen, ui_text("Tap: %s\nHold: open description."), tap_desc);
 }
 
 static void sdl_touch_top_panel_render_description_button(

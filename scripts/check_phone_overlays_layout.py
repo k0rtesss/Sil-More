@@ -6,16 +6,33 @@ OUT = runner.ROOT / "scripts/output/phone-overlays-check"
 PREFIX = runner.HARNESS[:runner.HARNESS.index('static int width, height;')]
 PREFIX = PREFIX.replace('#include "sdl/ui/sdl-halls-screen.c"', '''#include "sdl/ui/sdl-menus.c"
 #include "sdl/input/sdl-tooltips.c"
+void sdl_android_request_thumb_hold(SDL_TouchID, SDL_FingerID, Uint64, Sint32);
+#define SDL_PLATFORM_ANDROID 1
 #include "sdl/input/sdl-touch-controls.c"
+#undef SDL_PLATFORM_ANDROID
 #include "sdl/ui/sdl-hint-quest-menu.c"
 #include "sdl/ui/sdl-pane-menus.c"''')
 HARNESS = PREFIX + r'''
 static int width,height,keys,last_game_key;
 static floor_context_action_kind queued_floor;
 static int context_fixture;
+static int floor_action_queries;
 static floor_context_action_kind floor_fixture;
 static float density;
 static int applied,saved;
+static Uint64 thumb_test_now;
+static int thumb_requests;
+static Sint32 thumb_requested_token;
+void sdl_android_request_thumb_hold(SDL_TouchID device, SDL_FingerID finger,
+    Uint64 timestamp, Sint32 token)
+{
+    assert(device==1 && finger==99 && timestamp==1000000000ULL && token>0);
+    thumb_requests++;
+    thumb_requested_token=token;
+}
+Uint64 SDLCALL __real_SDL_GetTicksNS(void);
+Uint64 SDLCALL __wrap_SDL_GetTicksNS(void)
+{return thumb_test_now ? thumb_test_now : __real_SDL_GetTicksNS();}
 void __wrap_sdl_apply_config(void){applied++;}
 bool __wrap_save_pane_config_to_json(void){saved++;return true;}
 float __wrap_SDL_GetDisplayContentScale(SDL_DisplayID d){return density;}
@@ -30,6 +47,7 @@ bool __wrap_player_quick_throw_available(void){return false;}
 void __wrap_sdl_gamepad_send_key(int key,bool bypass){last_game_key=key;}
 void __wrap_do_cmd_queue_floor_context_action(floor_context_action_kind kind){queued_floor=kind;}
 int __wrap_floor_context_collect_square_actions(bool details,floor_context_action *actions,int capacity){
+    floor_action_queries++;
     if(floor_fixture==FLOOR_CONTEXT_ACTION_NONE)return 0;
     assert(capacity>=2);actions[0]=(floor_context_action){.kind=floor_fixture};
     actions[1]=(floor_context_action){.kind=FLOOR_CONTEXT_ACTION_PACK};return 2;
@@ -192,8 +210,112 @@ static void check_pane_menus(void){
     }
     g_side_pane_menu.active=false;g_log_pane_menu.active=false;pane_config_count=0;
 }
+static void check_thumb_wait_and_rest(float x,float y)
+{
+    const Uint64 down=1000000000ULL;
+    const Uint64 hold=(Uint64)TOUCH_PANE_LONG_PRESS_MS*1000000ULL;
+    SDL_Event release={0}, queued;
+    release.tfinger.type=SDL_EVENT_FINGER_UP;
+    release.tfinger.fingerID=99;
+    release.tfinger.windowID=SDL_GetWindowID(g_state.window);
+
+    /* A short physical tap can finish while dispatch is stalled past the
+     * deadline. The timer must leave the release queued and emit no Rest. */
+    thumb_test_now=down;
+    last_game_key=0;
+    assert(sdl_touch_thumb_handle_pointer_down(x,y,false,99,down));
+    release.tfinger.timestamp=down+hold/2;
+    assert(SDL_PushEvent(&release));
+    thumb_test_now=down+hold+20000000ULL;
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(!last_game_key && g_touch_thumb_press.active);
+    assert(SDL_PeepEvents(&queued,1,SDL_GETEVENT,SDL_EVENT_FINGER_UP,SDL_EVENT_FINGER_UP)==1);
+    assert(queued.tfinger.timestamp==down+hold/2);
+    assert(sdl_touch_thumb_handle_pointer_up(x,y,false,99,queued.tfinger.timestamp));
+    assert(last_game_key=='z' && !g_touch_thumb_press.active);
+
+    /* A real hold fires at the deadline while pressed, then release is a
+     * no-op. A completed long hold instead fires once on queued release. */
+    thumb_test_now=down;
+    last_game_key=0;
+    assert(sdl_touch_thumb_handle_pointer_down(x,y,false,99,down));
+    thumb_test_now=down+hold-1;
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(!last_game_key);
+    thumb_test_now++;
+    assert(sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(last_game_key=='Z' && !g_touch_thumb_press.active);
+    last_game_key=0;
+    assert(!sdl_touch_thumb_handle_pointer_up(x,y,false,99,thumb_test_now));
+    assert(!last_game_key);
+
+    thumb_test_now=down+hold+20000000ULL;
+    assert(sdl_touch_thumb_handle_pointer_down(x,y,false,99,down));
+    release.tfinger.timestamp=down+hold;
+    assert(SDL_PushEvent(&release));
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(!last_game_key);
+    assert(SDL_PeepEvents(&queued,1,SDL_GETEVENT,SDL_EVENT_FINGER_UP,SDL_EVENT_FINGER_UP)==1);
+    assert(sdl_touch_thumb_handle_pointer_up(x,y,false,99,queued.tfinger.timestamp));
+    assert(last_game_key=='Z' && !g_touch_thumb_press.active);
+    thumb_test_now=0;
+}
+static void check_android_thumb_confirmation(float x,float y)
+{
+    const Uint64 down=1000000000ULL;
+    const Uint64 threshold=(Uint64)TOUCH_PANE_LONG_PRESS_MS*1000000ULL;
+    thumb_requests=0;
+    thumb_test_now=down;
+    last_game_key=0;
+    assert(sdl_touch_thumb_handle_pointer_down(x,y,false,99,down));
+    sdl_touch_thumb_note_android_press(1,99,down);
+    thumb_test_now=down+threshold-1;
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(!thumb_requests && !last_game_key);
+    thumb_test_now+=20000000ULL;
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(thumb_requests==1 && !last_game_key);
+    assert(sdl_touch_thumb_pending_timeout_ms(thumb_test_now)==-1);
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(thumb_requests==1);
+    Sint32 stale=thumb_requested_token;
+    /* Android had not delivered UP when the native deadline expired. */
+    assert(sdl_touch_thumb_handle_pointer_up(x,y,false,99,down+threshold/2));
+    assert(last_game_key=='z');
+
+    thumb_test_now=down;
+    last_game_key=0;
+    assert(sdl_touch_thumb_handle_pointer_down(x,y,false,99,down));
+    sdl_touch_thumb_note_android_press(1,99,down);
+    thumb_test_now=down+threshold;
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(thumb_requests==2 && thumb_requested_token!=stale && !last_game_key);
+    sdl_touch_thumb_confirm_android_hold(stale);
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    sdl_touch_thumb_confirm_android_hold(thumb_requested_token);
+    assert(sdl_touch_thumb_pending_timeout_ms(thumb_test_now)==0);
+    assert(sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(last_game_key=='Z');
+    last_game_key=0;
+    assert(!sdl_touch_thumb_handle_pointer_up(x,y,false,99,thumb_test_now));
+    assert(!last_game_key);
+
+    thumb_test_now=down;
+    assert(sdl_touch_thumb_handle_pointer_down(x,y,false,99,down));
+    sdl_touch_thumb_note_android_press(1,99,down);
+    thumb_test_now=down+threshold;
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now));
+    assert(thumb_requests==3 && !last_game_key);
+    assert(sdl_touch_thumb_handle_pointer_up(x,y,false,99,thumb_test_now));
+    assert(last_game_key=='Z');
+    last_game_key=0;
+    sdl_touch_thumb_confirm_android_hold(thumb_requested_token);
+    assert(!sdl_touch_thumb_flush_pending_press(thumb_test_now) && !last_game_key);
+    thumb_test_now=0;
+}
 static void check_context_buttons(void){
     static player_type player;
+    bool tested_wait=false;
     player.playing=true;p_ptr=&player;character_dungeon=true;character_icky=0;
     config.touch_thumb_enabled=true;g_description_overlay.active=false;
     for(int scenario=0;scenario<9;scenario++){
@@ -226,14 +348,14 @@ static void check_context_buttons(void){
                     int w,h;assert(TTF_GetStringSize(font,word,0,&w,&h));assert(w<=r.w-6);
                 }
             }
-            sdl_touch_thumb_render_button(&r,i,false,false);
+            sdl_touch_thumb_render_button(&r,&set.buttons[i],false,false);
         }
         for(int i=0;i<set.count;i++){
             SDL_FRect r=g_touch_target_layout.thumb_rects[i];int hit=-1;
             assert(sdl_touch_thumb_point_to_button(r.x+r.w/2,r.y+r.h/2,&hit)&&hit==i);
             last_game_key=0;queued_floor=FLOOR_CONTEXT_ACTION_NONE;
-            assert(sdl_touch_thumb_handle_pointer_down(r.x+r.w/2,r.y+r.h/2,false,99));
-            assert(sdl_touch_thumb_handle_pointer_up(r.x+r.w/2,r.y+r.h/2,false,99));
+            assert(sdl_touch_thumb_handle_pointer_down(r.x+r.w/2,r.y+r.h/2,false,99,0));
+            assert(sdl_touch_thumb_handle_pointer_up(r.x+r.w/2,r.y+r.h/2,false,99,0));
             int binding=set.buttons[i].tap_binding;floor_context_action_kind kind;
             if(sdl_touch_thumb_floor_action_from_binding(binding,&kind))assert(queued_floor==kind);
             else assert(last_game_key==(binding==SDL_TOUCH_THUMB_BIND_SPACE_CONTEXT?' ':binding));
@@ -243,9 +365,34 @@ static void check_context_buttons(void){
                 if(sdl_touch_thumb_floor_action_from_binding(binding,&kind))assert(queued_floor==kind);
                 else assert(last_game_key==binding);
             }
+            if(scenario==0 && set.buttons[i].tap_binding=='z'
+                && set.buttons[i].long_binding=='Z') {
+                check_thumb_wait_and_rest(r.x+r.w/2,r.y+r.h/2);
+                check_android_thumb_confirmation(r.x+r.w/2,r.y+r.h/2);
+                tested_wait=true;
+            }
+        }
+        /* The locked layout checks availability once. Painting then shares
+         * one fresh context across all visible thumb buttons. */
+        if(scenario==0){
+            floor_action_queries=0;
+            sdl_touch_thumb_render();
+            assert(floor_action_queries==2);
+
+            SDL_FRect bounds;
+            floor_action_queries=0;
+            assert(sdl_touch_thumb_current_bounds(&bounds));
+            assert(floor_action_queries==2);
+            int last=set.count-1, hit=-1;
+            SDL_FRect r=g_touch_target_layout.thumb_rects[last];
+            assert(SDL_HasRectIntersectionFloat(&bounds,&r));
+            floor_action_queries=0;
+            assert(sdl_touch_thumb_point_to_button(r.x+r.w/2,r.y+r.h/2,&hit));
+            assert(hit==last && floor_action_queries==2);
         }
         if(scenario<2){char name[64];strnfmt(name,sizeof(name),"floor-context%d",scenario);snapshot(name);}
     }
+    assert(tested_wait);
     g_touch_target_layout.locked=false;floor_fixture=FLOOR_CONTEXT_ACTION_NONE;context_fixture=0;
     p_ptr=NULL;character_dungeon=false;
 }
@@ -342,7 +489,7 @@ def main():
         '"/src/sdl/ui/sdl-menus.c.obj", "/src/sdl/input/sdl-tooltips.c.obj", '
         '"/src/sdl/input/sdl-touch-controls.c.obj", "/src/sdl/ui/sdl-hint-quest-menu.c.obj", "/src/sdl/ui/sdl-pane-menus.c.obj",')
     code = code.replace('--wrap=Term_keypress",',
-        '--wrap=Term_keypress,--wrap=sdl_overlay_pane_anchor_rect,--wrap=sdl_touch_thumb_current_bounds,--wrap=sdl_apply_config,--wrap=save_pane_config_to_json,--wrap=sdl_touch_only_device_active,--wrap=player_active_weapon_is_ranged,--wrap=player_quick_throw_available,--wrap=sdl_gamepad_send_key,--wrap=do_cmd_queue_floor_context_action,--wrap=floor_context_collect_square_actions,--wrap=touch_shortcut_context_action",')
+        '--wrap=Term_keypress,--wrap=SDL_GetTicksNS,--wrap=sdl_overlay_pane_anchor_rect,--wrap=sdl_touch_thumb_current_bounds,--wrap=sdl_apply_config,--wrap=save_pane_config_to_json,--wrap=sdl_touch_only_device_active,--wrap=player_active_weapon_is_ranged,--wrap=player_quick_throw_available,--wrap=sdl_gamepad_send_key,--wrap=do_cmd_queue_floor_context_action,--wrap=floor_context_collect_square_actions,--wrap=touch_shortcut_context_action",')
     scope = runner.__dict__.copy()
     exec(code, scope)
     scope['main']()

@@ -1,6 +1,7 @@
 /* File: object/object-ui-identify.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "object/object-ui-identify.h"
 #include "object/object-internal.h"
@@ -96,13 +97,13 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         }
 
         if (o_ptr->tval == TV_POTION)
-            prefix = "Supplies (potions)";
+            prefix = ui_text("Supplies (potions)");
         else if (o_ptr->tval == TV_GEM)
-            prefix = "Supplies (gems)";
+            prefix = ui_text("Supplies (gems)");
         else if (o_ptr->tval == TV_FOOD)
-            prefix = "Supplies (food)";
+            prefix = ui_text("Supplies (food)");
         else if (supplies_group_matches_object(SUPPLY_GROUP_LIGHTS, o_ptr))
-            prefix = "Supplies (lights/oil)";
+            prefix = ui_text("Supplies (lights/oil)");
 
         entry = &entries[entry_count];
         entry->type = IDENT_ENTRY_SUPPLY;
@@ -172,7 +173,7 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         return false;
     }
 
-    if (!object_choice_overlay("Identify which item?", NULL, choices,
+    if (!object_choice_overlay(ui_text("Identify which item?"), NULL, choices,
             entry_count, 0, &selected))
     {
         entries = mem_free(entries);

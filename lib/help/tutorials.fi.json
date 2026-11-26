@@ -270,7 +270,7 @@
     "item.oil": {
       "title": "Öljyastiat",
       "steps": [
-        "Öljy säilytetään tarvikkeiden öljypaikassa. Yhteen astiaan mahtuu lyhdyn polttoainetta enintään 2500 vuoroksi. Täytä sopiva lyhty Refuel-toiminnolla. Soihdut täydennetään eri tavalla."
+        "Öljy säilytetään tarvikkeissa öljylle varatulla paikalla. Yhdessä astiassa on lyhdyn polttoainetta enintään 2 500 vuoroksi. Täytä sopiva lyhty toiminnolla Lisää polttoainetta (Refuel). Soihdut täydennetään eri tavalla."
       ],
       "source_sha256": "6819ab50906ce7592bc8009eb548dfc1203a5851e28a80c92addbfa02251259a"
     },
@@ -333,7 +333,7 @@
     "item.staff.ready": {
       "title": "Valmistele sauva",
       "steps": [
-        "Avaa tavaraluettelo, valitse sauva ja siirrä se varustevyölle Ready-komennolla. Reppuun kurottaminen kestää kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat pitää varusteesi ennallaan."
+        "Avaa tavaraluettelo, valitse taikasauva ja sitten ”Siirrä varustevyöhön” (Move to Harness). Reppuun kurottaminen vie kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat säilyttää nykyisen järjestyksen."
       ],
       "source_sha256": "6d9ae83430825c2768a4ecb135e730cda5c495dafd875172e486ff4ec59317db"
     },
@@ -348,7 +348,7 @@
     "item.horn.ready": {
       "title": "Valmistele torvi",
       "steps": [
-        "Avaa tavaraluettelo, valitse torvi ja siirrä se varustevyölle Ready-komennolla. Reppuun kurottaminen kestää kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat pitää varusteesi ennallaan."
+        "Avaa tavaraluettelo, valitse torvi ja sitten ”Siirrä varustevyöhön” (Move to Harness). Reppuun kurottaminen vie kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat säilyttää nykyisen järjestyksen."
       ],
       "source_sha256": "69939b5719d6b60428c241c381ab39de389314983d498a6e4c2afbaad51cf6ab"
     },
@@ -768,7 +768,7 @@
     "menu.harness": {
       "title": "Varustevyö (Harness)",
       "steps": [
-        "Varustevyölle mahtuu rajallinen määrä käyttövalmiita varusteita. Valitse repussa olevalle esineelle Ready siirtääksesi sen vyölle tai Unready palauttaaksesi sen reppuun. Valitse valmis ase lisäksi Change Active -valikosta ennen tavallista hyökkäystä."
+        "Varustevyön tila on rajallinen. Siellä olevat varusteet ovat heti käsillä. Valitse repusta sopiva esine ja sitten ”Siirrä varustevyöhön” (Move to Harness). Esineen saat takaisin reppuun valitsemalla ”Pane reppuun” (Store in Pack). Valitse ase ennen tavallista hyökkäystä ”Vaihda aktiivista asetta” (Change Active) -valikosta."
       ],
       "source_sha256": "23cb4a9a0a6d5812faf908f8c385549e6e1636fbf5a3f609129d3a751eb9ae3f"
     },
@@ -880,9 +880,9 @@
     "menu.smithing": {
       "title": "Taonta",
       "steps": [
-        "Valitse esine tai parannus, niin näet vaikeuden, oman taontakykysi ja kustannukset. Taontaan lisätään puolet nykyisestä ketteryydestäsi ja puolet nykyisestä sulostasi. Varusteet, tilapäiset vaikutukset ja ominaisuuksien menetykset muuttavat näitä arvoja. Opitut ja aktiiviset käsityökyvyt sekä mestaruudet antavat lisäbonuksia jokaiseen reseptiin. Naugrimit lisäävät jokaisen positiivisen taontataipumuksen tason tässä käytettäviin ominaisuuksiin. Laske bonukset yhteen ja pyöristä alaspäin vain kerran. Myös varusteiden taontabonukset pätevät."
+        "Valitse esine tai parannus, niin näet sen vaikeuden, oman taontakykysi ja kustannukset. Taontakykyyn lisätään puolet pysyvästä ketteryydestäsi ja puolet pysyvästä sulostasi. Pysyviin arvoihin lasketaan perusominaisuudet ja opitut kyvyt, jotka parantavat ominaisuuksia ilman ehtoja. Varusteet, tilapäiset vaikutukset, ominaisuuksien heikentyminen, laulut ja ehdolliset bonukset eivät muuta näitä arvoja. Opitut ja aktiiviset taontakyvyt sekä mestaruudet antavat lisäbonuksia kaikkeen taontaan. Naugrimeilla jokainen positiivinen taontataipumuksen taso korottaa tässä käytettäviä ominaisuuksia. Laske bonukset yhteen ja pyöristä alaspäin vasta lopuksi. Varusteiden antamat taontataidon bonukset lasketaan edelleen mukaan."
       ],
-      "source_sha256": "27a42bca332fbfd75f31dfe34f70c52c7579ebb9e6ae97193d64fc915ff9b0ee"
+      "source_sha256": "68f4d01a2a0ca06f009e07def51c22357ba694c4bca28eab64e4f1a2af40f895"
     },
     "menu.nearby-monsters": {
       "title": "Lähellä olevat olennot",
@@ -1317,7 +1317,7 @@
     "ability.84.preview": {
       "title": "Alkemia (Alchemy)",
       "steps": [
-        "Tunnistat automaattisesti yrtit, juomat, sauvat ja torvet. Sairaana itsetuntemuksen jalokivi näyttää taudin nimen ja hoitoyrtin. Heitettäviä juomia voi pikaheittää, jolloin ne roiskuvat osumaruutuun ja kaikkiin naapuriruutuihin. Revelation-, Foes- ja Treasures-jalokivien kantama kasvaa 50 %."
+        "Tunnistat automaattisesti yrtit, juomat, sauvat ja torvet. Sairaana itsetuntemuksen jalokivi paljastaa taudin nimen ja hoitoyrtin. Heitettäviä juomia voi pikaheittää, jolloin ne roiskuvat osumaruutuun ja kaikkiin viereisiin ruutuihin. Revelation-, Foes- ja Treasures-jalokivien kantama kasvaa 50 %."
       ],
       "source_sha256": "6233a61c84c16220f39efc944a19cb897281e867d7f155ce3c90437d55f3b235"
     },
@@ -1443,51 +1443,51 @@
     "ability.120.preview": {
       "title": "Aseseppä (Weaponsmith)",
       "steps": [
-        "Voit takoa aseita ja saat pienen bonuksen niiden tunnistamiseen. Opittuna ja aktiivisena kyky lisää puolet nykyisestä ketteryydestäsi kaikkeen taontaasi."
+        "Voit takoa aseita ja saat pienen bonuksen niiden tunnistamiseen. Opittuna ja aktiivisena kyky lisää puolet pysyvästä ketteryydestäsi kaikkeen taontaasi."
       ],
-      "source_sha256": "d83db7a5cb4d0c2b671fdcbfea063acb7e19879422aca2557f3c640fde12c32d"
+      "source_sha256": "57cd9972362062d683f7d9ced8358fec833a6b9f644d0bd9d32b87dde5c91925"
     },
     "ability.121.preview": {
       "title": "Haarniskaseppä (Armoursmith)",
       "steps": [
-        "Voit takoa haarniskoja ja saat pienen bonuksen niiden tunnistamiseen. Opittuna ja aktiivisena kyky lisää puolet nykyisestä voimastasi kaikkeen taontaasi."
+        "Voit takoa haarniskoja ja saat pienen bonuksen niiden tunnistamiseen. Opittuna ja aktiivisena kyky lisää puolet pysyvästä voimastasi kaikkeen taontaasi."
       ],
-      "source_sha256": "b678077db771124fab7f76ccfd9d0e88ea024d2f33d8622307b565133a2f5573"
+      "source_sha256": "16b9acb9a7bf3d90caad2622fc13f324b165d5b3cdc55c040a4995c88465143c"
     },
     "ability.122.preview": {
       "title": "Koruseppä (Jeweller)",
       "steps": [
-        "Voit takoa sormuksia, amuletteja, torvia ja valonlähteitä ja tunnistat niiden lajit automaattisesti. Yksittäisellä esineellä voi silti olla tunnistamattomia erikoisominaisuuksia. Opittuna ja aktiivisena kyky lisää puolet nykyisestä sulostasi kaikkeen taontaasi."
+        "Voit takoa sormuksia, amuletteja, torvia ja valonlähteitä ja tunnistat niiden lajit automaattisesti. Yksittäisellä esineellä voi silti olla tunnistamattomia erikoisominaisuuksia. Opittuna ja aktiivisena kyky lisää puolet pysyvästä sulostasi kaikkeen taontaasi."
       ],
-      "source_sha256": "e1c306ed445a7a4ba455218355ff175418c0690016de92c49e987f6700a6761a"
+      "source_sha256": "b6532ccc257c13e5f08c9ac9b7771acd2d7cdaaee9c244ff05efa381fadb8540"
     },
     "ability.123.preview": {
       "title": "Lumoaminen (Enchantment)",
       "steps": [
-        "Voit takoa lumottuja esineitä, joilla on nimettyjä erikoisominaisuuksia. Tunnistat esineissä olevat lumoukset ja saat pienen tunnistusbonuksen. Opittuna ja aktiivisena kyky lisää nykyisen sulosi kaikkeen taontaasi."
+        "Voit takoa lumottuja esineitä, joilla on nimettyjä erikoisominaisuuksia. Tunnistat esineissä olevat lumoukset ja saat pienen tunnistusbonuksen. Opittuna ja aktiivisena kyky lisää puolet pysyvästä sulostasi kaikkeen taontaasi."
       ],
-      "source_sha256": "8100a52a5b4f99f77c3b8ca7f082708686fd759417138c1ffb65942a1f200368"
+      "source_sha256": "6df49478c9c23c77b67b9cf185c7d26aa911ae6faf02ed4634466bd6d8750c30"
     },
     "ability.124.preview": {
       "title": "Asiantuntemus (Expertise)",
       "steps": [
-        "Puolittaa taonta-ajan ja poistaa taonnan tavalliset kokemus- ja ominaisuuskustannukset. Materiaaleja ja pajan käyttökertoja tarvitaan edelleen. Tarkista koko suunnitelma. Opittuna ja aktiivisena kyky lisää nykyisen ketteryytesi kaikkeen taontaasi."
+        "Puolittaa taonta-ajan ja poistaa taonnan tavalliset kokemus- ja ominaisuuskustannukset. Materiaaleja ja pajan käyttökertoja tarvitaan edelleen. Tarkista koko suunnitelma. Opittuna ja aktiivisena kyky lisää puolet pysyvästä ketteryydestäsi kaikkeen taontaasi."
       ],
-      "source_sha256": "52084e31e80fdc4b44b8d80604e2c4e118bee510a1c2f3e7cd7dc50fbf828e83"
+      "source_sha256": "06ded559e9634914fee328d885279d91bfbe56ef05fe076e73231c9363503935"
     },
     "ability.125.preview": {
       "title": "Muinaisesineiden taonta (Artifice)",
       "steps": [
-        "Voit takoa omia muinaisesineitä ja saat merkittävän tunnistusbonuksen. Suunnitelma näyttää valitsemiesi ominaisuuksien kustannukset. Opittuna ja aktiivisena kyky lisää nykyisen sulosi kaikkeen taontaasi."
+        "Voit takoa omia muinaisesineitä ja saat merkittävän tunnistusbonuksen. Suunnitelma näyttää valitsemiesi ominaisuuksien kustannukset. Opittuna ja aktiivisena kyky lisää puolet pysyvästä sulostasi kaikkeen taontaasi."
       ],
-      "source_sha256": "415ff774cd4eb6c57d172a82d4cbb2d649a6042a2043247a3b0a03411df19656"
+      "source_sha256": "e73cd73400d79b457f55e279b0e478f25e0216a6e66d79ed2f14200c21c7e46c"
     },
     "ability.126.preview": {
       "title": "Mestariteos (Masterpiece)",
       "steps": [
-        "Voit takoa tavallista vaikeusrajaasi vaativamman esineen kuluttamalla pysyvästi taonnan peruspisteitä. Jokainen rajan ylittävä vaikeuspiste maksaa yhden taitopisteen. Käytössä ovat vain taontaan sijoittamasi pisteet."
+        "Voit takoa tavallista vaikeusrajaasi vaativamman esineen kuluttamalla pysyvästi taonnan peruspisteitä. Jokainen rajan ylittävä vaikeuspiste maksaa yhden taitopisteen. Käytössä ovat vain taontaan sijoittamasi pisteet. Opittuna ja aktiivisena Mestariteos lisää myös puolet pysyvästä sulostasi kaikkeen taontaasi."
       ],
-      "source_sha256": "d796523bd4f90f1552a7961581e4c46d6d75f4904b3a488c28cd40a27f558b30"
+      "source_sha256": "9b4b435cab3009f0fb78f9fe2dc392ab714f7f532f70eaac0a2dc300aa477c95"
     },
     "ability.127.preview": {
       "title": "Sulo (Grace)",
@@ -1506,7 +1506,7 @@
     "ability.129.preview": {
       "title": "Uudelleentaonta (Reforging)",
       "steps": [
-        "Töissä voit korjata vaurioituneita esineitä tai lisätä löydetyn esineeseen puuttuvan etuliitteen. Uudelleenvalmistuksen vaikeus on 1,5 kertaa vaikeuden lisäyksen verran. Vertaile tulosta ja kustannuksia ennen päätöksen tekemistä."
+        "Voit korjata pajassa vaurioituneen esineen tai lisätä löytämääsi esineeseen puuttuvan etuliitteen. Uudelleentaonnan vaikeus on 1,5 kertaa vaikeuden kasvu. Tarkista lopputulos ja kustannukset ennen päätöstä."
       ],
       "source_sha256": "a6cc7d644a7e131068374a871adaedf99d820f59a8588295e857dd918722bbc3"
     },
@@ -2165,7 +2165,7 @@
       "title": "Matala vesi",
       "steps": [
         "Liikkuminen, läpi tai ulos matalassa vedessä maksaa 50 % enemmän, ja se antaa -3 salakäynnin bonuksen, koska vesi aiheuttaa aaltoilua. Pysyminen paikallaan ei aiheuta ylimääräisiä liikkumiskustannuksia. Vesi peittää hajun, mutta viholliset voivat edelleen seurata sinua näkö- tai äänen avulla.",
-        "Kun pelaaja on terve, jokainen veteen astuminen jalkojen avulla antaa 0,5 %:n perusriskin sairastumiselle, ennen kuin immuuni tai \"Kestävyys\" on saavutettu. Paikoillaan olemisella ei ole vaikutusta infektion riskiin. Onnistunut hyppy välttää kontaktin ja veden roiskumisen, mutta laskeutumisesta syntyy ääntä. Sairaus jatkuu levossa. \"Heilun kukka\" tai \"Parannusjuoma\" tai \"Miruvor\" parantaa kaiken sairauden. Muut parannusomenat toimivat, paitsi Angbandin tuhon aiheuttamaa."
+        "Jos olet terve, jokaisessa vesiruudussa, johon astut, on 0,5 %:n perusriski altistua taudille ennen immuniteetin ja Hardiness-kyvyn huomioimista. Paikallaan pysyminen ei aiheuta uutta tartuntariskiä. Onnistunut hyppy välttää kosketuksen ja loiskeen, vaikka laskeutumisesta syntyy ääntä. Tauti etenee levossakin. Parantava yrtti, parannusjuoma tai Miruvor parantaa minkä tahansa taudin. Muut hoitoyrtit eivät tehoa Angbandin ruttoon."
       ],
       "source_sha256": "2db23b5559af8e90b15007a978cd514300ea076fe79efbe2e2467d404d8349cd"
     },
@@ -2242,7 +2242,7 @@
     "effect.202": {
       "title": "Itsetuntemus — tunnettu vaikutus",
       "steps": [
-        "Näyttää nykyiset tilastosi ja hahmosi ominaisuudet. \"Alkemia\"-ominaisuus näyttää, mikä on oire ja mikä on parannus, jos olet sairas. Ilman \"Alkemian\", jokaisella käytöllä on 50 %:n mahdollisuus tunnistaa oire ja, kun oire on tunnistettu, 50 %:n mahdollisuus tunnistaa parannus. Löydöt ovat voimassa tämän infektion ajan ja tallennetaan. Jokaisella käytöllä voidaan myös paljastaa yksi aktiivinen kirous. Tämä ei poista kirousta."
+        "Näyttää nykyiset tilavaikutukset ja hahmon piirteet. Sairaana Alkemia (Alchemy) paljastaa taudin nimen ja hoitoyrtin. Ilman Alkemiaa jokaisella käyttökerralla on 50 %:n mahdollisuus paljastaa nimi ja nimen selvittyä 50 %:n mahdollisuus paljastaa hoitoyrtti. Tiedot säilyvät tämän tartunnan ajan ja tallentuvat. Jokainen käyttö voi paljastaa yhden aktiivisen kirouksen. Se ei poista kirousta."
       ],
       "source_sha256": "adec9e4419373baff8729413fe7595c008d82b5605b5264000412888a248a1b5"
     },
@@ -2466,7 +2466,7 @@
     "effect.381": {
       "title": "Ravinto — tunnettu vaikutus",
       "steps": [
-        "Tarjoaa noin 2 000 normaalia ateriaa. Todellinen kulutus voi vaihdella nykyisten modifikaatioidesi mukaan. Jos tämä on nykyisen sairauden hoito, se parantaa sairauden ja palauttaa sen vaikutukset, sen sijaan että se aiheuttaisi normaalin vaikutuksen tai ravinnon; muuten, se toimii normaalisti."
+        "Antaa ravintoa noin 2 000 tavalliseksi vuoroksi. Nykyiset vaikutukset voivat muuttaa ravinnon kulumisnopeutta. Jos tämä yrtti on nykyisen tautisi hoitoyrtti, se parantaa taudin ja poistaa sen haitat. Tällöin se ei anna ravintoa eikä sillä ole tavallista vaikutustaan. Muuten se vaikuttaa normaalisti."
       ],
       "source_sha256": "a8621b751b5fbc4f405a9d2e4c7136d8e04f47ca873476c7cfaf23ea86be66a2"
     },
@@ -2494,7 +2494,7 @@
     "effect.385": {
       "title": "Tyhjyys — tunnettu vaikutus",
       "steps": [
-        "Vähentää ravintoa noin 1 000 normaalin kierroksen aikana, mikä voi pahentaa nälkää, kun normaali vaikutus on voimassa. Jos tämä on nykyisen sairauden hoito, se parantaa sairauden ja palauttaa sen vaikutukset sen sijaan, että normaali vaikutus tai ravinto otettaisiin huomioon; muuten, normaali vaikutus otetaan huomioon."
+        "Vähentää ravintoa noin 1 000 tavallisen vuoron verran, mikä voi pahentaa nälkää. Jos tämä yrtti on nykyisen tautisi hoitoyrtti, se parantaa taudin ja poistaa sen haitat. Tällöin se ei vähennä ravintoa. Muuten se vaikuttaa normaalisti."
       ],
       "source_sha256": "5ce314f56c8b5bbb09224dbe1ae73c4448bb2b21642b42de198d56235d58eba6"
     },
@@ -2529,28 +2529,28 @@
     "effect.399": {
       "title": "Pala tummaa leipää — tunnettu vaikutus",
       "steps": [
-        "Tarjoaa noin 1 500 normaalia ateriaa."
+        "Antaa ravintoa noin 1 500 tavalliseksi vuoroksi."
       ],
       "source_sha256": "d358279640cace15de4d1a702b32ebe61c8c90796a253163279dff44dacee8fd"
     },
     "effect.400": {
       "title": "Suikale kuivattua lihaa — tunnettu vaikutus",
       "steps": [
-        "Tarjoaa noin 2 000 normaalia ateriaa, joiden kanssa on 20 %:n perusriski sairastumiselle: -1 terveys, jos sairastuu, ja sitten -1 satunnaiseen ominaisuuteen 150 pelaajan kierroksen välein (300 kierrosta, jos \"Kestävyys\" on käytössä). Lepo ei paranna. \"Hevosherkun\" tai \"Parannusjuoman\" tai \"Miruvorin\" avulla voidaan parantaa kaikki sairaudet."
+        "Antaa ravintoa noin 2 000 tavalliseksi vuoroksi. Taudille altistumisen perusriski on 20 %. Tartunta vähentää kuntoa heti 1 pisteellä ja sen jälkeen satunnaista ominaisuutta 1 pisteellä joka 150. pelaajan vuoro (Hardiness-kyvyllä joka 300. vuoro). Lepo ei paranna tautia. Parantava yrtti, parannusjuoma tai Miruvor parantaa minkä tahansa taudin."
       ],
       "source_sha256": "60fb6ef370957c5bc80e489c5fc13dd8ee188e68604c3b1f8dd221f43c9335c1"
     },
     "effect.401": {
       "title": "Pala lembasia — tunnettu vaikutus",
       "steps": [
-        "Tarjoaa noin 3 000 normaalia ateriaa ja palauttaa 1 kulutetun sielun."
+        "Antaa ravintoa noin 3 000 tavalliseksi vuoroksi ja palauttaa 1 menetetyn sulopisteen."
       ],
       "source_sha256": "c3fbee491d23938b05e2e4a9ba57ca6294c4ce5acd6c9cfae44b0e4f4afb0bff"
     },
     "item.throwing.ready": {
       "title": "Heittoaseen siirto varustevyölle",
       "steps": [
-        "Avaa tavaraluettelo, valitse heittoase ja siirrä se varustevyölle Ready-komennolla. Reppuun kurottaminen kestää kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat pitää varusteesi ennallaan."
+        "Avaa tavaraluettelo, valitse heittoase ja sitten ”Siirrä varustevyöhön” (Move to Harness). Reppuun kurottaminen vie kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat säilyttää nykyisen järjestyksen."
       ],
       "source_sha256": "cf3c627074fa43b9156e7d81f269029871f96de54eaa12d6893d5e5b85324ae4"
     },
@@ -2571,7 +2571,7 @@
     "item.bow.ready": {
       "title": "Jousen siirto varustevyölle",
       "steps": [
-        "Avaa tavaraluettelo, valitse jousi ja siirrä se varustevyölle Ready-komennolla. Reppuun kurottaminen kestää kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat pitää varusteesi ennallaan."
+        "Avaa tavaraluettelo, valitse jousi ja sitten ”Siirrä varustevyöhön” (Move to Harness). Reppuun kurottaminen vie kolme vuoroa, ja hyökkäys voi keskeyttää sen. Ohita oppitunti, jos haluat säilyttää nykyisen järjestyksen."
       ],
       "source_sha256": "feb12c8654451c767dba1e16c5f5e5c1fe28c572a6bd249b9546b019e8bf3369"
     },
@@ -3946,7 +3946,7 @@
     "Preview item": "Tutki esinettä",
     "Preview the selected item%s%s": "Tutki valittua esinettä%s%s",
     "The selected item's preview is open.": "Valitun esineen kuvaus on auki.",
-    "Select the item, then choose Ready.": "Valitse esine ja sitten Ready.",
+    "Select the item, then choose Ready.": "Valitse esine ja sitten ”Siirrä varustevyöhön” (Move to Harness).",
     "Select the equipment you want to wear or wield.": "Valitse varuste, jonka haluat pukea tai ottaa käteen.",
     "Select an item to preview.": "Valitse tutkittava esine.",
     "Select the required item and choose Use.": "Valitse pyydetty esine ja sitten Use.",

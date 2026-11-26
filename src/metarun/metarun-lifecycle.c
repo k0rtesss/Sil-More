@@ -383,8 +383,9 @@ static void announce_blessing_gain(int previous_points)
     int delta = current_points - previous_points;
     int available = current_points - metar.blessing_points_spent;
     if (available < 0) available = 0;
-    msg_format("You gain %d blessing point%s. (%d available)",
-               delta, (delta == 1) ? "" : "s", available);
+    msg_format(delta == 1 ? "You gain %d blessing point. (%d available)"
+                          : "You gain %d blessing points. (%d available)",
+        delta, available);
     message_flush();
 }
 

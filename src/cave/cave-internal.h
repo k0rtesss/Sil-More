@@ -38,6 +38,12 @@
 #define VINFO_BITS_0 0xFFFFFFFF
 #define SCALE 100000L
 
+/* An intact illusion is opaque even though the player can walk through it. */
+static inline bool cave_blocks_sight(int y, int x)
+{
+    return !cave_floor_bold(y, x) || cave_feat[y][x] == FEAT_ILLUSORY_WALL;
+}
+
 typedef struct vinfo_type vinfo_type;
 
 struct vinfo_type
@@ -63,6 +69,7 @@ struct vinfo_type
 
 extern vinfo_type vinfo[VINFO_MAX_GRIDS];
 
+bool same_side_of_wall_as_player(int y, int x, int fy, int fx);
 byte cave_style_door_choice(int sidx);
 bool cave_style_index_is_valid(int sidx);
 int cave_style_index_for_color(byte color_value);

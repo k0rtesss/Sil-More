@@ -11,6 +11,7 @@
 #endif
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "platform-signals.h"
 #include "game/game-lifecycle.h"
 #include "score/score_entry.h"
@@ -155,7 +156,7 @@ static void handle_signal_simple(int sig)
         Term_erase(0, 0, 255);
 
         /* Display the cause */
-        Term_putstr(0, 0, -1, TERM_WHITE, "Contemplating suicide!");
+        Term_putstr(0, 0, -1, TERM_WHITE, ui_text("Contemplating suicide!"));
 
         /* Flush */
         Term_fresh();
@@ -208,14 +209,14 @@ static void handle_signal_abort(int sig)
 
         /* Give a warning */
         Term_putstr(
-            0, status_row, -1, TERM_RED, "A gruesome software bug LEAPS out at you!");
+            0, status_row, -1, TERM_RED, ui_text("A gruesome software bug LEAPS out at you!"));
 
         /* Show and log the triggering signal */
         Term_erase(0, status_row - 1, 255);
         Term_putstr(0, status_row - 1, -1, TERM_RED, signal_text);
 
         /* Message */
-        Term_putstr(message_col, status_row, -1, TERM_RED, "Panic save...");
+        Term_putstr(message_col, status_row, -1, TERM_RED, ui_text("Panic save..."));
 
         /* Flush output */
         Term_fresh();
@@ -234,14 +235,14 @@ static void handle_signal_abort(int sig)
         if (save_player())
         {
             Term_putstr(message_col, status_row, -1, TERM_RED,
-                "Panic save succeeded!");
+                ui_text("Panic save succeeded!"));
         }
 
         /* Save failed */
         else
         {
             Term_putstr(message_col, status_row, -1, TERM_RED,
-                "Panic save failed!");
+                ui_text("Panic save failed!"));
         }
 
         /* Flush output */

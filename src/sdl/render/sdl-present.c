@@ -584,7 +584,8 @@ byte sdl_left_panel_pane_render_attr_for_cell(int source_col,
 {
     int action;
 
-    if (!sdl_left_panel_pane_presentation_active())
+    if (g_main_screen_panel_selected_action == SDL_PANEL_CLICK_NONE
+        || !sdl_left_panel_pane_presentation_active())
         return attr;
     if (source_col < 0 || source_col >= LEFT_PANEL_CONTENT_WID
         || source_row < 0)

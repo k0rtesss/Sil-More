@@ -16,12 +16,12 @@ BUILD = ROOT / "build-standard"
 OUT = ROOT / "scripts/output/phone-aux-check"
 CASES = [(720, 1600, 2), (1080, 2340, 2.75), (1080, 2400, 2.625)]
 PREFIX = CARD[:CARD.index("static void field(")].replace(
-    '#define sdl_touch_tutorial_draw_text_line',
+    '#define sdl_tutorial_draw_text_line_for_slot',
     '#include "sdl/main-sdl-private.h"\n#undef SIL_SDL_MOBILE_BUILD\n'
     '#define SIL_SDL_MOBILE_BUILD 1\n#include "sdl/render/sdl-fonts.c"\n'
     '#include "sdl/input/sdl-touch-tutorial.c"\n'
-    'float fixture_draw_text_line(cptr,float,float,float,int,SDL_Color,bool);\n'
-    '#define sdl_touch_tutorial_draw_text_line', 1
+    'float fixture_draw_text_line(cptr,float,float,float,int,int,SDL_Color,bool);\n'
+    '#define sdl_tutorial_draw_text_line_for_slot', 1
 ).replace('float scale=w>width && width>0?width/w:1;',
           'if(width>0) TTF_GetStringSizeWrapped(font,text,0,(int)width,&w,&h); float scale=1;')
 HELPERS = BASE[BASE.index("static void inside(SDL_FRect r)\n{"):BASE.index("static void check_config(void)")]

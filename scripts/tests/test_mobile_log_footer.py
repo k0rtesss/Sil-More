@@ -19,6 +19,7 @@ harness=harness.replace('static void text_out_to_screen(byte a,cptr t){}','stati
 harness=harness.replace('bool playing,is_dead,quit_to_menu,leaving;','bool playing,is_dead,quit_to_menu,leaving;unsigned redraw;')
 fixtures=r'''
 #define USE_SDL
+static cptr ui_text(cptr text){return text;}
 #define SDL_strlcpy(d,s,n) snprintf(d,n,"%s",s)
 #define KTRL(c) ((c)&31)
 #define SDL_MENU_FONT_MESSAGES SDL_MENU_FONT_HELP

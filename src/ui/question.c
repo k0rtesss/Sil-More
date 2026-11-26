@@ -4,6 +4,13 @@
 #include "tutorial/tutorial.h"
 #include "ui/menu-click.h"
 #include "ui/question.h"
+#include "ui/ui-language.h"
+
+enum ui_question_locale {
+    UI_QUESTION_INTERFACE,
+    UI_QUESTION_TUTORIAL,
+    UI_QUESTION_LANGUAGE_PICKER,
+};
 
 cptr ui_question_interaction_help_once(void)
 {
@@ -23,13 +30,20 @@ static void ui_question_show(cptr title, cptr desc,
     const object_type* const object_icons[], int count, int anchor_y,
     int anchor_x, int highlight, int* scroll_offset,
     bool scroll_follow_highlight, const ui_question_button* buttons,
-    int button_count, bool desc_on_demand, bool localized_tutorial)
+    int button_count, bool desc_on_demand, enum ui_question_locale locale)
 {
     char letter[4];
+    bool localize = locale == UI_QUESTION_INTERFACE;
 
+    if (localize) {
+        title = ui_text(title);
+        desc = ui_text(desc);
+    }
     sdl_question_menu_begin(title);
-    if (localized_tutorial)
+    if (locale == UI_QUESTION_TUTORIAL)
         sdl_question_menu_use_tutorial_fonts();
+    if (locale == UI_QUESTION_LANGUAGE_PICKER)
+        sdl_question_menu_use_language_picker_fonts();
     sdl_question_menu_set_scroll_offset_target(scroll_offset,
         scroll_follow_highlight);
     if ((anchor_y >= 0) && (anchor_x >= 0))
@@ -45,46 +59,48 @@ static void ui_question_show(cptr title, cptr desc,
     for (int i = 0; i < count; i++)
     {
         byte attr = options[i].disabled ? TERM_L_DARK : options[i].attr;
+        const object_type *icon = object_icons ? object_icons[i] : NULL;
+        cptr label = options[i].label;
+        if (localize && !icon) label = ui_text(label);
 
         /* Keyless disabled rows describe the choices without becoming mouse
          * or controller targets. Keep their informational text readable. */
         if (!options[i].key && options[i].disabled)
         {
-            sdl_question_menu_add_object_entry(-1, "", options[i].label,
-                options[i].attr, object_icons ? object_icons[i] : NULL);
+            sdl_question_menu_add_object_entry(-1, "", label,
+                options[i].attr, icon);
             continue;
         }
 
         if (options[i].key)
         {
             strnfmt(letter, sizeof(letter), "%c)", options[i].key);
-            if (object_icons && object_icons[i])
+            if (icon)
             {
                 sdl_question_menu_add_object_entry(i, letter,
-                    options[i].label, attr, object_icons[i]);
+                    label, attr, icon);
             }
             else
             {
-                sdl_question_menu_add_entry(i, letter, options[i].label,
-                    attr);
+                sdl_question_menu_add_entry(i, letter, label, attr);
             }
         }
         else
         {
-            if (object_icons && object_icons[i])
+            if (icon)
             {
                 sdl_question_menu_add_object_entry(i, "",
-                    options[i].label, attr, object_icons[i]);
+                    label, attr, icon);
             }
             else
             {
-                sdl_question_menu_add_entry(i, "", options[i].label,
-                    attr);
+                sdl_question_menu_add_entry(i, "", label, attr);
             }
         }
     }
     for (int i = 0; buttons && i < button_count; i++)
-        sdl_question_menu_add_button(buttons[i].choice, buttons[i].label,
+        sdl_question_menu_add_button(buttons[i].choice,
+            localize ? ui_text(buttons[i].label) : buttons[i].label,
             buttons[i].disabled ? TERM_L_DARK : buttons[i].attr);
 
     sdl_question_menu_set_highlight(highlight);
@@ -129,7 +145,8 @@ static int ui_question_ask_aux(cptr title, cptr desc,
     const object_type* const object_icons[], int count, int anchor_y,
     int anchor_x, int default_index, bool repaint_background,
     const ui_question_button* buttons, int button_count,
-    bool desc_on_demand, const cptr disabled_reasons[], bool localized_tutorial)
+    bool desc_on_demand, const cptr disabled_reasons[],
+    enum ui_question_locale locale)
 {
     int highlight;
     int result = -1;
@@ -172,7 +189,7 @@ static int ui_question_ask_aux(cptr title, cptr desc,
         ui_menu_click_set_touch_category(SDL_TOUCH_MENU_CATEGORY_OTHER);
         ui_question_show(title, desc, options, object_icons, count, anchor_y,
             anchor_x, highlight, &scroll_offset, scroll_follow_highlight,
-            buttons, button_count, desc_on_demand, localized_tutorial);
+            buttons, button_count, desc_on_demand, locale);
 
         which = inkey();
         if (sdl_question_menu_take_touch_scrolled())
@@ -359,7 +376,7 @@ int ui_question_ask(cptr title, cptr desc, const ui_question_option* options,
     int count, int anchor_y, int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, true, NULL, 0, false, NULL, false);
+        anchor_x, default_index, true, NULL, 0, false, NULL, UI_QUESTION_INTERFACE);
 }
 
 int ui_question_ask_with_reasons(cptr title, cptr desc,
@@ -367,7 +384,8 @@ int ui_question_ask_with_reasons(cptr title, cptr desc,
     int count, int anchor_y, int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, true, NULL, 0, false, disabled_reasons, false);
+        anchor_x, default_index, true, NULL, 0, false, disabled_reasons,
+        UI_QUESTION_INTERFACE);
 }
 
 int ui_question_ask_objects(cptr title, cptr desc,
@@ -376,7 +394,7 @@ int ui_question_ask_objects(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, object_icons, count,
-        anchor_y, anchor_x, default_index, true, NULL, 0, false, NULL, false);
+        anchor_y, anchor_x, default_index, true, NULL, 0, false, NULL, UI_QUESTION_INTERFACE);
 }
 
 int ui_question_ask_objects_with_help(cptr title, cptr desc,
@@ -385,7 +403,7 @@ int ui_question_ask_objects_with_help(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, object_icons, count,
-        anchor_y, anchor_x, default_index, true, NULL, 0, true, NULL, false);
+        anchor_y, anchor_x, default_index, true, NULL, 0, true, NULL, UI_QUESTION_INTERFACE);
 }
 
 int ui_question_ask_overlay(cptr title, cptr desc,
@@ -393,7 +411,7 @@ int ui_question_ask_overlay(cptr title, cptr desc,
     int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, false, NULL, 0, false, NULL, false);
+        anchor_x, default_index, false, NULL, 0, false, NULL, UI_QUESTION_INTERFACE);
 }
 
 int ui_question_ask_tutorial(cptr title, cptr desc,
@@ -401,7 +419,15 @@ int ui_question_ask_tutorial(cptr title, cptr desc,
 {
     return ui_question_ask_aux(title, desc, options, NULL, count,
         UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, default_index, false,
-        NULL, 0, false, NULL, true);
+        NULL, 0, false, NULL, UI_QUESTION_TUTORIAL);
+}
+
+int ui_question_ask_language(cptr title, cptr desc,
+    const ui_question_option* options, int count, int default_index)
+{
+    return ui_question_ask_aux(title, desc, options, NULL, count,
+        UI_QUESTION_GLOBAL, UI_QUESTION_GLOBAL, default_index, false,
+        NULL, 0, false, NULL, UI_QUESTION_LANGUAGE_PICKER);
 }
 
 int ui_question_ask_overlay_buttons(cptr title, cptr desc,
@@ -410,5 +436,5 @@ int ui_question_ask_overlay_buttons(cptr title, cptr desc,
     int anchor_x, int default_index)
 {
     return ui_question_ask_aux(title, desc, options, NULL, count, anchor_y,
-        anchor_x, default_index, false, buttons, button_count, false, NULL, false);
+        anchor_x, default_index, false, buttons, button_count, false, NULL, UI_QUESTION_INTERFACE);
 }

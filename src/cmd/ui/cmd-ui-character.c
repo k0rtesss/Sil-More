@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "tutorial/tutorial-game.h"
 #include "sdl-config.h"
 #include "sound-config.h"
@@ -150,7 +151,7 @@ static const character_sheet_named_trait character_sheet_named_traits[] = {
     { "Girdle of Melian", "Song of Thresholds and Gems of Warding are twice as effective." },
     { "Creator of Angrist", "You can create very sharp items; sharp and accurate items are easier to smith." },
     { "Old Master", "Using 3 forge charges can create mithril items without mithril." },
-    { "Ring Master", "Rings cost 30% less to create and ring slots are treated as major slots." },
+    { "Ring Master", "Rings cost 30 percent less to create and ring slots are treated as major slots." },
     { "Aure entuluva", "Song of Slaying is twice as effective." },
     { "Voice of the Girdle", "Song of Mastery is 1.75x effective." },
     { "Forgotten", "You begin with all stealth abilities." },
@@ -188,7 +189,7 @@ cptr character_sheet_trait_description(cptr label)
     for (size_t i = 0; i < N_ELEMENTS(character_sheet_named_traits); i++)
     {
         if (!strcmp(label, character_sheet_named_traits[i].label))
-            return character_sheet_named_traits[i].desc;
+            return ui_text(character_sheet_named_traits[i].desc);
     }
 
     return "";
@@ -437,24 +438,24 @@ static int character_sheet_collect_semantic_items(character_sheet_item items[],
     ADD_SEMANTIC_UNIQUE("Doom of Mandos", RHF_CURSE);
     ADD_SEMANTIC_UNIQUE("Morgoth Curse", RHF_MOR_CURSE);
 
-    ADD_SEMANTIC_SKILL_TRAIT("melee", S_MEL, RHF_MEL_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("melee"), S_MEL, RHF_MEL_AFFINITY,
         RHF_MEL_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("evasion", S_EVN, RHF_EVN_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("evasion"), S_EVN, RHF_EVN_AFFINITY,
         RHF_EVN_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("stealth", S_STL, RHF_STL_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("stealth"), S_STL, RHF_STL_AFFINITY,
         RHF_STL_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("archery", S_ARC, RHF_ARC_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("archery"), S_ARC, RHF_ARC_AFFINITY,
         RHF_ARC_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("will", S_WIL, RHF_WIL_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("will"), S_WIL, RHF_WIL_AFFINITY,
         RHF_WIL_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("perception", S_PER, RHF_PER_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("perception"), S_PER, RHF_PER_AFFINITY,
         RHF_PER_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("smithing", S_SMT, RHF_SMT_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("smithing"), S_SMT, RHF_SMT_AFFINITY,
         RHF_SMT_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("song", S_SNG, RHF_SNG_AFFINITY,
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("song"), S_SNG, RHF_SNG_AFFINITY,
         RHF_SNG_PENALTY, false);
-    ADD_SEMANTIC_SKILL_TRAIT("bow", S_ARC, RHF_BOW_PROFICIENCY, 0, true);
-    ADD_SEMANTIC_SKILL_TRAIT("axe", S_MEL, RHF_AXE_PROFICIENCY, 0, true);
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("bow"), S_ARC, RHF_BOW_PROFICIENCY, 0, true);
+    ADD_SEMANTIC_SKILL_TRAIT(ui_text("axe"), S_MEL, RHF_AXE_PROFICIENCY, 0, true);
 
 #undef ADD_SEMANTIC_SKILL_TRAIT
 #undef ADD_SEMANTIC_UNIQUE_U
@@ -562,7 +563,7 @@ cptr character_sheet_skill_description(int skill)
     if (skill < 0 || skill >= S_MAX)
         return "";
     if (character_sheet_skill_descriptions[skill])
-        return character_sheet_skill_descriptions[skill];
+        return ui_text(character_sheet_skill_descriptions[skill]);
     return "";
 }
 
@@ -608,12 +609,12 @@ static void character_sheet_append_curse_hint(char* buf, size_t buflen,
         if ((blessing || CURSE_SEEN(id)) && power && power[0])
         {
             character_sheet_append_effect_text(buf, buflen,
-                blessing ? "Known blessing" : "Known curse", power);
+                blessing ? ui_text("Known blessing") : ui_text("Known curse"), power);
         }
         else if (desc && desc[0])
         {
             character_sheet_append_effect_text(buf, buflen,
-                blessing ? "Unknown blessing" : "Unknown curse", desc);
+                blessing ? ui_text("Unknown blessing") : ui_text("Unknown curse"), desc);
         }
         return;
     }
@@ -634,26 +635,26 @@ static cptr character_sheet_stat_full_name(int stat)
 {
     switch (stat)
     {
-    case A_STR: return "Strength";
-    case A_DEX: return "Dexterity";
-    case A_CON: return "Constitution";
-    case A_GRA: return "Grace";
+    case A_STR: return ui_text("Strength");
+    case A_DEX: return ui_text("Dexterity");
+    case A_CON: return ui_text("Constitution");
+    case A_GRA: return ui_text("Grace");
     }
 
-    return "Attribute";
+    return ui_text("Attribute");
 }
 
 static cptr character_sheet_stat_description(int stat)
 {
     switch (stat)
     {
-    case A_STR: return "weapon damage die sides and carried-weight limit";
-    case A_DEX: return "melee, evasion, archery, and stealth";
-    case A_CON: return "maximum health";
-    case A_GRA: return "will, perception, smithing, song, and voice";
+    case A_STR: return ui_text("weapon damage die sides and carried-weight limit");
+    case A_DEX: return ui_text("melee, evasion, archery, and stealth");
+    case A_CON: return ui_text("maximum health");
+    case A_GRA: return ui_text("will, perception, smithing, song, and voice");
     }
 
-    return "character performance";
+    return ui_text("character performance");
 }
 
 void character_sheet_format_stat_hint(int stat, int value, bool has_value,
@@ -668,13 +669,13 @@ void character_sheet_format_stat_hint(int stat, int value, bool has_value,
 
     if (has_value)
     {
-        strnfmt(buf, buflen, "%s: Affects %s. Selection total modifier %+d.",
+        strnfmt(buf, buflen, ui_text("%s: Affects %s. Selection total modifier %+d."),
             character_sheet_stat_full_name(stat),
             character_sheet_stat_description(stat), value);
     }
     else
     {
-        strnfmt(buf, buflen, "%s: Affects %s.",
+        strnfmt(buf, buflen, ui_text("%s: Affects %s."),
             character_sheet_stat_full_name(stat),
             character_sheet_stat_description(stat));
     }
@@ -710,8 +711,8 @@ static void character_sheet_format_stat_item(const character_sheet_item* item,
     cnv_stat(p_ptr->stat_use[stat], use_buf);
     cnv_stat(p_ptr->stat_base[stat], base_buf);
     strnfmt(buf, buflen,
-        "%s: %s current (base %s, equipment %+d, misc %+d, "
-        "Drain %+d, Disease %+d). Affects %s.",
+        ui_text("%s: %s current (base %s, equipment %+d, misc %+d, "
+        "Drain %+d, Disease %+d). Affects %s."),
         character_sheet_stat_full_name(stat), use_buf, base_buf,
         p_ptr->stat_equip_mod[stat], p_ptr->stat_misc_mod[stat],
         p_ptr->stat_drain[stat], p_ptr->stat_disease[stat],
@@ -737,7 +738,7 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
     {
     case CHARACTER_SHEET_VALUE_EXP:
         strnfmt(buf, buflen,
-            "Experience: %ld unspent / %ld earned. Unspent XP pays the increasing cost to raise skills and purchase abilities; earned is your lifetime total and does not fall when XP is spent.",
+            ui_text("Experience: %ld unspent / %ld earned. Unspent XP pays the increasing cost to raise skills and purchase abilities; earned is your lifetime total and does not fall when XP is spent."),
             (long)p_ptr->new_exp, (long)p_ptr->exp);
         break;
     case CHARACTER_SHEET_VALUE_BURDEN:
@@ -749,13 +750,13 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
         character_sheet_format_tenths(limit, sizeof(limit),
             (long)weight_limit());
         strnfmt(buf, buflen,
-            "Burden: %s/%s lb carried. Strength sets the limit. Exceeding it costs 1 speed; above 150%% you cannot move or pick up more. Inventory, supplies, and lamp oil all count.",
+            ui_text("Burden: %s/%s lb carried. Strength sets the limit. Exceeding it costs 1 speed; above 150%% you cannot move or pick up more. Inventory, supplies, and lamp oil all count."),
             carried, limit);
         break;
     }
     case CHARACTER_SHEET_VALUE_DEPTH:
         strnfmt(buf, buflen,
-            "Depth c/m: %d ft current / %d ft minimum. Current is your location; minimum is the shallowest depth stairs can return you to as time and Deep Call pressure force you deeper.",
+            ui_text("Depth c/m: %d ft current / %d ft minimum. Current is your location; minimum is the shallowest depth stairs can return you to as time and Deep Call pressure force you deeper."),
             p_ptr->depth * 50, min_depth() * 50);
         break;
     case CHARACTER_SHEET_VALUE_DEEP_CALL:
@@ -771,13 +772,13 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
         if (threshold > 0)
         {
             strnfmt(buf, buflen,
-                "Deep Call: minimum-depth pressure gains %d per turn (%d base %+d from extra depth, carried Deep Call items, and kills). Progress is %d/%d toward the next 50-ft rise.",
+                ui_text("Deep Call: minimum-depth pressure gains %d per turn (%d base %+d from extra depth, carried Deep Call items, and kills). Progress is %d/%d toward the next 50-ft rise."),
                 total, base, additional, progress, threshold);
         }
         else
         {
             SDL_strlcpy(buf,
-                "Deep Call: minimum-depth pressure from time, extra depth, carried Deep Call items, and kills. Each completed threshold raises the shallowest depth stairs can return you to.",
+                ui_text("Deep Call: minimum-depth pressure from time, extra depth, carried Deep Call items, and kills. Each completed threshold raises the shallowest depth stairs can return you to."),
                 buflen);
         }
         break;
@@ -789,7 +790,7 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
 
         min_depth_timer_status(NULL, NULL, NULL, &progress, &threshold);
         strnfmt(buf, buflen,
-            "Minimum-depth progress: %d/%d toward the next 50-ft rise. It advances each turn at the Deep Call rate; extra depth, carried Deep Call items, and kills can accelerate it.",
+            ui_text("Minimum-depth progress: %d/%d toward the next 50-ft rise. It advances each turn at the Deep Call rate; extra depth, carried Deep Call items, and kills can accelerate it."),
             progress, threshold);
         break;
     }
@@ -798,50 +799,50 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
         char turns[32];
         comma_number(turns, playerturn);
         strnfmt(buf, buflen,
-            "Turn: %s player turns elapsed. This clock drives regeneration, timed effects, and the changing base rate of minimum-depth pressure.",
+            ui_text("Turn: %s player turns elapsed. This clock drives regeneration, timed effects, and the changing base rate of minimum-depth pressure."),
             turns);
         break;
     }
     case CHARACTER_SHEET_VALUE_LIGHT:
         strnfmt(buf, buflen,
-            "Light: radius %d. It illuminates nearby tiles and helps you see, but your light also contributes to how readily monsters notice you.",
+            ui_text("Light: radius %d. It illuminates nearby tiles and helps you see, but your light also contributes to how readily monsters notice you."),
             p_ptr->cur_light);
         break;
     case CHARACTER_SHEET_VALUE_MELEE:
         strnfmt(buf, buflen,
-            "Melee: main hand (%+d,%dd%d). The first value is your attack score against enemy Evasion; the dice are base weapon damage before protection. Criticals, slays, and abilities may add dice.",
+            ui_text("Melee: main hand (%+d,%dd%d). The first value is your attack score against enemy Evasion; the dice are base weapon damage before protection. Criticals, slays, and abilities may add dice."),
             p_ptr->skill_use[S_MEL], p_ptr->mdd, p_ptr->mds);
         break;
     case CHARACTER_SHEET_VALUE_MELEE_X2:
         strnfmt(buf, buflen,
-            "Melee x2: Rapid Attack grants a second main-hand attack at (%+d,%dd%d). The first value contests Evasion; the dice are its base damage before protection.",
+            ui_text("Melee x2: Rapid Attack grants a second main-hand attack at (%+d,%dd%d). The first value contests Evasion; the dice are its base damage before protection."),
             p_ptr->skill_use[S_MEL], p_ptr->mdd, p_ptr->mds);
         break;
     case CHARACTER_SHEET_VALUE_OFFHAND:
         strnfmt(buf, buflen,
-            "Offhand: secondary attack (%+d,%dd%d). The first value contests Evasion; the dice are offhand base damage before protection and may differ from your main hand.",
+            ui_text("Offhand: secondary attack (%+d,%dd%d). The first value contests Evasion; the dice are offhand base damage before protection and may differ from your main hand."),
             p_ptr->skill_use[S_MEL] + p_ptr->offhand_mel_mod,
             p_ptr->mdd2, p_ptr->mds2);
         break;
     case CHARACTER_SHEET_VALUE_BOWS:
         strnfmt(buf, buflen,
-            "Bows: ranged attacks (%+d,%dd%d). The first value is your attack score against enemy Evasion; the dice are base bow damage before protection. Range, criticals, and abilities may modify a shot.",
+            ui_text("Bows: ranged attacks (%+d,%dd%d). The first value is your attack score against enemy Evasion; the dice are base bow damage before protection. Range, criticals, and abilities may modify a shot."),
             p_ptr->skill_use[S_ARC], p_ptr->add, p_ptr->ads);
         break;
     case CHARACTER_SHEET_VALUE_ARMOR:
         strnfmt(buf, buflen,
-            "Armor: [%+d,%d-%d]. The first value is total Evasion used to avoid attacks; the range is minimum-maximum protection against physical damage after a hit lands.",
+            ui_text("Armor: [%+d,%d-%d]. The first value is total Evasion used to avoid attacks; the range is minimum-maximum protection against physical damage after a hit lands."),
             p_ptr->skill_use[S_EVN], p_min(GF_HURT, true),
             p_max(GF_HURT, true));
         break;
     case CHARACTER_SHEET_VALUE_HEALTH:
         strnfmt(buf, buflen,
-            "Health: %d/%d hit points. Damage removes current Health and reaching 0 is fatal. Constitution sets maximum Health; resting can restore missing Health.",
+            ui_text("Health: %d/%d hit points. Damage removes current Health and reaching 0 is fatal. Constitution sets maximum Health; resting can restore missing Health."),
             MIN(p_ptr->chp, 999), MIN(p_ptr->mhp, 999));
         break;
     case CHARACTER_SHEET_VALUE_VOICE:
         strnfmt(buf, buflen,
-            "Voice: %d/%d song points. Singing spends current Voice, which does not regenerate while a song is active. Grace sets maximum Voice; resting restores it when you are not singing.",
+            ui_text("Voice: %d/%d song points. Singing spends current Voice, which does not regenerate while a song is active. Grace sets maximum Voice; resting restores it when you are not singing."),
             MIN(p_ptr->csp, 999), MIN(p_ptr->msp, 999));
         break;
     case CHARACTER_SHEET_VALUE_SONG:
@@ -860,24 +861,24 @@ static void character_sheet_format_value_item(const character_sheet_item* item,
         if (item->label && streq(item->label, "Theme") && song2)
         {
             strnfmt(buf, buflen,
-                "Theme: %s is the minor theme woven with %s. Minor themes normally use reduced Song skill, still spend their Voice cost, and may form a synergy pair.",
-                song2, song1 ? song1 : "your primary song");
+                ui_text("Theme: %s is the minor theme woven with %s. Minor themes normally use reduced Song skill, still spend their Voice cost, and may form a synergy pair."),
+                song2, song1 ? song1 : ui_text("your primary song"));
         }
         else if (song1)
         {
             strnfmt(buf, buflen,
-                "Song: %s is your primary song%s. It uses your full Song skill and spends Voice while maintained; Voice does not regenerate while singing.",
-                song1, song2 ? " with a woven minor theme" : "");
+                ui_text("Song: %s is your primary song%s. It uses your full Song skill and spends Voice while maintained; Voice does not regenerate while singing."),
+                song1, song2 ? ui_text(" with a woven minor theme") : "");
         }
         else if (song2)
             strnfmt(buf, buflen,
-                "Theme: %s is an active woven minor theme. It spends Voice while maintained; Voice does not regenerate while singing.", song2);
+                ui_text("Theme: %s is an active woven minor theme. It spends Voice while maintained; Voice does not regenerate while singing."), song2);
         else
-            SDL_strlcpy(buf, "Song: no active song.", buflen);
+            SDL_strlcpy(buf, ui_text("Song: no active song."), buflen);
         break;
     }
     default:
-        SDL_strlcpy(buf, item->desc ? item->desc : "Character sheet value.",
+        SDL_strlcpy(buf, item->desc ? item->desc : ui_text("Character sheet value."),
             buflen);
         break;
     }
@@ -906,15 +907,15 @@ static void character_sheet_format_skill_item(const character_sheet_item* item,
     misc_mod = p_ptr->skill_misc_mod[skill];
 
     strnfmt(buf, buflen,
-        "%s: %s Current %d = base %d%+d stat%+d equip%+d misc. Next point: %d XP.",
-        skill_names_full[skill], character_sheet_skill_description(skill),
+        ui_text("%s: %s Current %d = base %d%+d stat%+d equip%+d misc. Next point: %d XP."),
+        ui_text(skill_names_full[skill]), character_sheet_skill_description(skill),
         p_ptr->skill_use[skill], p_ptr->skill_base[skill], stat_mod,
         equip_mod, misc_mod, next_cost);
 
     if (!p_ptr->leaping && FEAT_IS_ICE(cave_feat[p_ptr->py][p_ptr->px])
         && (skill == S_MEL || skill == S_ARC
             || (skill == S_EVN && !p_ptr->entranced && p_ptr->stun <= 100)))
-        SDL_strlcat(buf, " Ice footing contributes -2 to the misc modifier.", buflen);
+        SDL_strlcat(buf, ui_text(" Ice footing contributes -2 to the misc modifier."), buflen);
 }
 
 static void character_sheet_format_trait_item(const character_sheet_item* item,
@@ -926,7 +927,7 @@ static void character_sheet_format_trait_item(const character_sheet_item* item,
         return;
 
     buf[0] = '\0';
-    label = item->label ? item->label : "Trait";
+    label = ui_text(item->label ? item->label : "Trait");
 
     if (item->trait_score != 0)
     {
@@ -936,34 +937,35 @@ static void character_sheet_format_trait_item(const character_sheet_item* item,
         if (item->proficiency)
         {
             cptr weapon = (item->aff_flag == RHF_BOW_PROFICIENCY)
-                ? "bows" : "axes";
+                ? ui_text("bows") : ui_text("axes");
 
             strnfmt(buf, buflen,
-                "%s: %+d attack bonus when using %s.",
+                ui_text("%s: %+d attack bonus when using %s."),
                 label, amount, weapon);
             character_sheet_append_curse_hint(buf, buflen, item->aff_flag);
             return;
         }
 
         if (item->trait_score == 2)
-            rank = "Mastery";
+            rank = ui_text("Mastery");
         else if (item->trait_score == 1)
-            rank = "Affinity";
+            rank = ui_text("Affinity");
         else if (item->trait_score == -1)
-            rank = "Penalty";
+            rank = ui_text("Penalty");
         else
-            rank = "Grand penalty";
+            rank = ui_text("Grand penalty");
 
         strnfmt(buf, buflen,
-            "%s: %s gives %+d current %s and changes ability costs in that skill.",
-            label, rank, item->trait_score, skill_names_full[item->skill]);
+            ui_text("%s: %s gives %+d current %s and changes ability costs in that skill."),
+            label, rank, item->trait_score,
+            ui_text(skill_names_full[item->skill]));
         character_sheet_append_curse_hint(buf, buflen,
             item->trait_score > 0 ? item->aff_flag : item->pen_flag);
         return;
     }
 
     strnfmt(buf, buflen, "%s: %s", label,
-        item->desc ? item->desc : "A special racial or character trait.");
+        item->desc ? item->desc : ui_text("A special racial or character trait."));
 }
 
 void character_sheet_format_trait_description(cptr label, int skill,
@@ -1058,7 +1060,7 @@ void character_sheet_format_vital_description(cptr label, char* buf,
 
 void do_cmd_character_sheet(void)
 {
-    tutorial_game_menu("character", "Inspect current attributes, skills, Health, Voice and traits. Select a value to see the effects contributing to it.");
+    tutorial_game_menu("character", ui_text("Inspect current attributes, skills, Health, Voice and traits. Select a value to see the effects contributing to it."));
     char ch;
     int focus_item = -1;
     bool focus_from_pointer = false;
@@ -1147,7 +1149,7 @@ void do_cmd_character_sheet(void)
             sdl_character_sheet_screen_add_live_item(
                 CHARACTER_SHEET_CLICK_ITEM_BASE + i,
                 (int)sheet_items[i].kind, sheet_items[i].skill,
-                sheet_items[i].value_kind, sheet_items[i].label, desc);
+                sheet_items[i].value_kind, ui_text(sheet_items[i].label), desc);
         }
         sdl_hover_tooltip_clear();
 
@@ -1336,7 +1338,7 @@ void do_cmd_character_sheet(void)
             sdl_character_sheet_screen_hide();
             strnfmt(ftmp, sizeof(ftmp), "%s.txt", op_ptr->base_name);
 
-            if (term_get_string("File name: ", ftmp, sizeof(ftmp)))
+            if (term_get_string(ui_text("File name: "), ftmp, sizeof(ftmp)))
             {
                 if (ftmp[0] && (ftmp[0] != ' '))
                 {
@@ -1420,7 +1422,7 @@ void character_sheet_show_birth_preview(void)
         sdl_character_sheet_screen_add_live_item(
             CHARACTER_SHEET_CLICK_ITEM_BASE + i,
             (int)sheet_items[i].kind, sheet_items[i].skill,
-            sheet_items[i].value_kind, sheet_items[i].label, desc);
+            sheet_items[i].value_kind, ui_text(sheet_items[i].label), desc);
     }
     sdl_hover_tooltip_clear();
 

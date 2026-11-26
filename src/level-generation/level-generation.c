@@ -1,6 +1,7 @@
 /* File: level-generation.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "monster/monster-routine.h"
 #include "cave/cave-environment.h"
 #include "cave/cave-flood.h"
@@ -205,7 +206,7 @@ bool cave_gen(void)
 
     /* Initialize level style weights and start with basic granite */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_FOUNDATIONS,
-        "Resetting styles, granite, and connection tables.");
+        ui_text("Resetting styles, granite, and connection tables."));
     styles_init_for_level();
     /*start with basic granite*/
     basic_granite();
@@ -403,7 +404,7 @@ bool cave_gen(void)
 
     /* Seed a handful of prefab anchors up front to diversify layout */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_SHAPING,
-        "Generating partitions, rooms, and special areas.");
+        ui_text("Generating partitions, rooms, and special areas."));
     if (!is_utumno_level) seed_prefab_anchors();
     /* Apply quadrant generation modes - this is now the primary room generation */
     apply_quadrant_generation_modes();
@@ -550,7 +551,7 @@ bool cave_gen(void)
     /* make the tunnels */
     /* Sil - This has been changed considerably */
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_LINKING,
-        "Connecting rooms and validating access.");
+        ui_text("Connecting rooms and validating access."));
     terrain_history_start_tunnels();
     if (!connect_rooms_stairs())
     {
@@ -618,7 +619,7 @@ bool cave_gen(void)
     if (is_utumno_level) utumno_shape_frontiers();
 
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_ENTRY,
-        "Placing stairs, rubble, doors, and player start.");
+        ui_text("Placing stairs, rubble, doors, and player start."));
     if (!place_rubble_player())
     {
         if (cheat_room)
@@ -662,7 +663,7 @@ bool cave_gen(void)
         mon_gen = 0;
 
         level_gen_screen_set_stage(LEVEL_GEN_STAGE_TREASURE,
-            "Placing objects, treasure, and traps.");
+            ui_text("Placing objects, treasure, and traps."));
 
         for (int pi = 0; pi < plan_count; ++pi)
         {
@@ -694,13 +695,13 @@ bool cave_gen(void)
         place_traps();
 
         level_gen_screen_set_stage(LEVEL_GEN_STAGE_MONSTERS,
-            "Placing the monster population.");
+            ui_text("Placing the monster population."));
         monsters_placed = run_partition_monster_pass(plans, plan_count);
         log_trace("Partition monster pass: target=%d placed=%d", mon_gen, monsters_placed);
     }
 
     level_gen_screen_set_stage(LEVEL_GEN_STAGE_FINALIZING,
-        "Final quest, boss, and success checks.");
+        ui_text("Final quest, boss, and success checks."));
 
     /* Check for Varda quest spawning - lottery-based */
     log_trace("Varda spawn check: lottery_winner=%d (QUEST_ID_VARDA=%d), depth=%d, varda_quest=%d",
@@ -1741,12 +1742,12 @@ if (playerturn == 0) {
         if (!p_ptr->depth)
         {
             level_gen_screen_set_stage(LEVEL_GEN_STAGE_FOUNDATIONS,
-                "Preparing the Gates.");
+                ui_text("Preparing the Gates."));
             level_gen_screen_set_stage(LEVEL_GEN_STAGE_SHAPING,
-                "Building the Gates of Angband.");
+                ui_text("Building the Gates of Angband."));
             gates_gen();
             level_gen_screen_set_stage(LEVEL_GEN_STAGE_FINALIZING,
-                "Final touches on the Gates.");
+                ui_text("Final touches on the Gates."));
 
             /* Hack -- Clear stairs request */
             p_ptr->create_stair = 0;

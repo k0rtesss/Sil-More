@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "achievements.h"
 #include "tutorial/tutorial-game.h"
 #include "externs.h"
@@ -927,7 +928,7 @@ void do_cmd_rest(void)
         cptr light_name = (light->sval == SV_LIGHT_LANTERN) ? "lamp" : "torch";
 
         p_ptr->resting_light_off = get_check(format(
-            "Turn off your %s while resting to save fuel? ", light_name));
+            ui_text("Turn off your %s while resting to save fuel? "), light_name));
     }
 
     // typically resting ends your current song

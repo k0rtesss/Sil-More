@@ -15,6 +15,10 @@ typedef struct object_info_screen_action
 #endif
 
 bool object_info_out(const object_type* o_ptr);
+/* Describe the mechanics of a known design, optionally restricted to a
+ * subset of its flags. Abilities come from the supplied object. */
+void object_info_effect_text(const object_type* o_ptr, const u32b mask[4],
+    char* text, size_t size);
 /* Shared item name, combat notation, volume and weight in both views. */
 void object_info_item_header_out(const object_type* o_ptr);
 cptr object_lore_select_base_text(const object_type* o_ptr, char* out,

@@ -1,6 +1,8 @@
 #include "angband.h"
 #include "support/message.h"
+#include "support/utf8.h"
 #include "externs.h"
+#include "ui/ui-language.h"
 
 /*
  * The "message memorization" package.
@@ -96,6 +98,9 @@ static u32b log_history__next_sequence = 1;
  * Table of colors associated to message-types
  */
 static byte message__color[MSG_MAX];
+
+/* The log's English phrase rules also apply to freshly localized messages. */
+static byte message__log_color[MESSAGE_MAX];
 
 /*
  * Calculate the index of a message
@@ -448,6 +453,10 @@ static byte message_log_type_color(u16b type)
  */
 byte message_color(s16b age)
 {
+    if (age >= 0 && age < message_num()) {
+        byte color = message__log_color[message_age2idx(age)];
+        if (color) return color;
+    }
     int text_color = message_log_text_color(message_str(age));
 
     if (text_color >= 0)
@@ -540,7 +549,7 @@ errr message_color_define(u16b type, byte color)
  * which is "far away" from the most recent entries, or we will lose a lot
  * of messages when we "expire" the old message index and/or buffer space.
  */
-void message_add(cptr str, u16b type)
+static void message_add_colored(cptr str, u16b type, byte log_color)
 {
     int k, i, x, o;
     size_t n;
@@ -577,6 +586,7 @@ void message_add(cptr str, u16b type)
     /* Last message repeated? */
     if (streq(str, s))
     {
+        if (log_color) message__log_color[x] = log_color;
         /* Increase the message count */
         message__count[x]++;
 
@@ -651,6 +661,7 @@ void message_add(cptr str, u16b type)
 
         /* Store the message type */
         message__type[x] = type;
+        message__log_color[x] = log_color;
 
         /* Store the message count */
         message__count[x] = 1;
@@ -761,12 +772,18 @@ void message_add(cptr str, u16b type)
 
     /* Store the message type */
     message__type[x] = type;
+    message__log_color[x] = log_color;
 
     /* Store the message count */
     message__count[x] = 1;
 
     /* Store the unified log sequence */
     message__sequence[x] = log_history_next_sequence();
+}
+
+void message_add(cptr str, u16b type)
+{
+    message_add_colored(str, type, 0);
 }
 
 /*
@@ -787,6 +804,7 @@ errr messages_init(void)
     message__color[MSG_HITPOINT_WARN] = TERM_ORANGE;
 
     /* Reset the message ring */
+    memset(message__log_color, 0, sizeof(message__log_color));
     message__next = 0;
     message__last = 0;
     message__head = 0;
@@ -824,7 +842,7 @@ static void msg_flush(int x)
         return;
 
     /* Pause for response */
-    Term_putstr(x, 0, -1, a, "-more-");
+    Term_putstr(x, 0, -1, a, ui_text("-more-"));
 
     /* Place the cursor on the player or target */
     if (hilite_player)
@@ -891,7 +909,7 @@ void message_line_reset_column(void)
  * Hack -- Note that "msg_print(NULL)" will clear the top line even if no
  * messages are pending.
  */
-static void msg_print_aux(u16b type, cptr msg)
+static void msg_print_aux(u16b type, cptr msg, cptr canonical)
 {
     int n;
     char* t;
@@ -910,7 +928,7 @@ static void msg_print_aux(u16b type, cptr msg)
     if (!msg_flag)
         message_column = 0;
 
-    /* Layout uses the displayed text; history keeps the canonical message. */
+    /* Apply the active lore presentation to the recorded message. */
     if (msg)
         lore_copy(buf, sizeof(buf), msg);
     n = (msg ? strlen(buf) : 0);
@@ -936,12 +954,14 @@ static void msg_print_aux(u16b type, cptr msg)
     }
 
     /* Paranoia */
-    if (strlen(msg) > 1000)
+    if (strlen(canonical ? canonical : msg) > 1000)
         return;
 
     /* Memorize the message (if legal) */
-    if (character_generated && !p_ptr->is_dead)
-        message_add(msg, type);
+    if (character_generated && !p_ptr->is_dead) {
+        int color = canonical && canonical != msg ? message_log_text_color(canonical) : -1;
+        message_add_colored(msg, type, color >= 0 ? (byte)color : 0);
+    }
 
     /* Window stuff */
     p_ptr->window |= (PW_MESSAGE);
@@ -1024,7 +1044,42 @@ static void msg_print_aux(u16b type, cptr msg)
 /*
  * Print a message in the default color (white)
  */
-void msg_print(cptr msg) { msg_print_aux(MSG_GENERIC, msg); }
+void msg_print(cptr msg) { msg_print_aux(MSG_GENERIC, ui_message_text(msg), msg); }
+
+/* Publish text assembled with localized arguments, retaining its English form. */
+void msg_print_localized(cptr english, cptr localized)
+{
+    if (streq(english, localized))
+    {
+        msg_print_aux(MSG_GENERIC, english, NULL);
+        return;
+    }
+
+    char text[1024];
+    size_t len = strnfmt(text, sizeof(text), "%s", localized);
+    text[utf8_safe_prefix_len(text, (int)len)] = '\0';
+    msg_print_aux(MSG_GENERIC, text, english);
+}
+
+static void msg_vformat(u16b type, cptr fmt, va_list args)
+{
+    char buf[1024];
+    const char *localized = ui_message_text(fmt);
+    if (localized == fmt) {
+        vstrnfmt(buf, sizeof(buf), fmt, args);
+        msg_print_aux(type, buf, NULL);
+        return;
+    }
+
+    char canonical[1024];
+    va_list copy;
+    va_copy(copy, args);
+    vstrnfmt(canonical, sizeof(canonical), fmt, copy);
+    va_end(copy);
+    size_t len = vstrnfmt(buf, sizeof(buf), localized, args);
+    buf[utf8_safe_prefix_len(buf, (int)len)] = '\0';
+    msg_print_aux(type, buf, canonical);
+}
 
 /*
  * Display a formatted message, using "vstrnfmt()" and "msg_print()".
@@ -1032,20 +1087,9 @@ void msg_print(cptr msg) { msg_print_aux(MSG_GENERIC, msg); }
 void msg_format(cptr fmt, ...)
 {
     va_list vp;
-
-    char buf[1024];
-
-    /* Begin the Varargs Stuff */
     va_start(vp, fmt);
-
-    /* Format the args, save the length */
-    (void)vstrnfmt(buf, sizeof(buf), fmt, vp);
-
-    /* End the Varargs Stuff */
+    msg_vformat(MSG_GENERIC, fmt, vp);
     va_end(vp);
-
-    /* Display */
-    msg_print_aux(MSG_GENERIC, buf);
 }
 
 /*
@@ -1070,7 +1114,7 @@ void msg_debug(cptr fmt, ...)
     snprintf(buf2, sizeof(buf2), "<< %s >>", buf);
 
     /* Display */
-    msg_print_aux(MSG_GENERIC, buf2);
+    msg_print_aux(MSG_GENERIC, buf2, NULL);
     message_flush();
 }
 
@@ -1086,24 +1130,24 @@ void message(u16b message_type, s16b extra, cptr message)
 
     sound(message_type);
 
-    msg_print_aux(message_type, message);
+    msg_print_aux(message_type, ui_message_text(message), message);
 }
 
 void message_at(int y, int x, u16b message_type, s16b extra, cptr text)
 {
     (void)extra;
     sound_at(message_type, y, x);
-    msg_print_aux(message_type, text);
+    msg_print_aux(message_type, ui_message_text(text), text);
 }
 
 void message_format_at(int y, int x, u16b message_type, s16b extra, cptr fmt, ...)
 {
     va_list vp;
-    char buf[1024];
+    (void)extra;
+    sound_at(message_type, y, x);
     va_start(vp, fmt);
-    (void)vstrnfmt(buf, sizeof(buf), fmt, vp);
+    msg_vformat(message_type, fmt, vp);
     va_end(vp);
-    message_at(y, x, message_type, extra, buf);
 }
 
 /*
@@ -1114,20 +1158,11 @@ void message_format_at(int y, int x, u16b message_type, s16b extra, cptr fmt, ..
 void message_format(u16b message_type, s16b extra, cptr fmt, ...)
 {
     va_list vp;
-
-    char buf[1024];
-
-    /* Begin the Varargs Stuff */
+    (void)extra;
+    sound(message_type);
     va_start(vp, fmt);
-
-    /* Format the args, save the length */
-    (void)vstrnfmt(buf, sizeof(buf), fmt, vp);
-
-    /* End the Varargs Stuff */
+    msg_vformat(message_type, fmt, vp);
     va_end(vp);
-
-    /* Display */
-    message(message_type, extra, buf);
 }
 
 /*

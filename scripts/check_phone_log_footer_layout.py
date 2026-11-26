@@ -72,7 +72,7 @@ static void check_log_footer(void)
         "Combat @ to o att +14 hit 7 evn +8 damage (2d7+1d5) net 12 protection 3 COMBATTAIL"};
     for(int entry=0;entry<2;entry++) {
     cptr text=entries[entry];
-    char lines[64][256];int total=0;while(log_history_wrap_next(&text,view->cols,lines[total],sizeof(lines[0])))total++;
+    char lines[64][256];int total=0;while(log_history_wrap_next(&text,view->cols,lines[total],sizeof(lines[0]),false))total++;
     int capacity=bottom-top+1;char reached[8192]="";
     for(int start=0;start<=MAX(0,total-capacity);start++) {
         SDL_SetRenderDrawColor(g_state.renderer,0,0,0,255);SDL_RenderClear(g_state.renderer);

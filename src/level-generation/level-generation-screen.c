@@ -1,6 +1,7 @@
 /* File: level-generation-screen.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "level-generation/level-generation-internal.h"
 
 
@@ -140,7 +141,7 @@ void level_gen_screen_put_centered(int row, byte attr, cptr text)
     if (row < 0 || row >= hgt)
         return;
 
-    level_gen_screen_fit_text(buf, sizeof(buf), text, MAX(1, wid - 2));
+    level_gen_screen_fit_text(buf, sizeof(buf), ui_text(text), MAX(1, wid - 2));
     col = (wid - utf8_display_width_n(buf, (int)strlen(buf))) / 2;
     if (col < 0)
         col = 0;
@@ -156,7 +157,7 @@ void level_gen_screen_put_fitted(int col, int row, int width, byte attr,
     if (width <= 0)
         return;
 
-    level_gen_screen_fit_text(buf, sizeof(buf), text, width);
+    level_gen_screen_fit_text(buf, sizeof(buf), ui_text(text), width);
     Term_putstr(col, row, -1, attr, buf);
 }
 
@@ -416,7 +417,7 @@ void level_gen_screen_extract_issue_key(cptr reason, char* buf,
 
     if (!reason || !reason[0])
     {
-        SDL_strlcpy(buf, "Generation failed", buflen);
+        SDL_strlcpy(buf, ui_text("Generation failed"), buflen);
         return;
     }
 
@@ -599,7 +600,7 @@ void level_gen_debug_build_failure_reason(char* buf, size_t buflen,
         strnfmt(buf, buflen, "%s [%s]", reason ? reason : "Generation failed.",
             context);
     else
-        SDL_strlcpy(buf, reason ? reason : "Generation failed.", buflen);
+        SDL_strlcpy(buf, reason ? reason : ui_text("Generation failed."), buflen);
 }
 
 void level_gen_screen_build_generated_summary(char* quest_buf,
@@ -613,24 +614,24 @@ void level_gen_screen_build_generated_summary(char* quest_buf,
         strnfmt(quest_buf, quest_buflen, "Quest vaults: 1 (%s)",
             level_gen_debug_active_quest_vault_name);
     else
-        SDL_strlcpy(quest_buf, "Quest vaults: 0", quest_buflen);
+        SDL_strlcpy(quest_buf, ui_text("Quest vaults: 0"), quest_buflen);
 
     if (roulette_name && roulette_name[0])
         strnfmt(roulette_buf, roulette_buflen, "Roulette winner: %s",
             roulette_name);
     else
-        SDL_strlcpy(roulette_buf, "Roulette winner: none", roulette_buflen);
+        SDL_strlcpy(roulette_buf, ui_text("Roulette winner: none"), roulette_buflen);
 
     if (level_gen_debug_questgiver_name[0])
         strnfmt(giver_buf, giver_buflen, "Quest giver spawned: 1 (%s)",
             level_gen_debug_questgiver_name);
     else
-        SDL_strlcpy(giver_buf, "Quest giver spawned: 0", giver_buflen);
+        SDL_strlcpy(giver_buf, ui_text("Quest giver spawned: 0"), giver_buflen);
 
     if (g_vault_name[0])
         strnfmt(gv_buf, gv_buflen, "Greater vaults: 1 (%s)", g_vault_name);
     else
-        SDL_strlcpy(gv_buf, "Greater vaults: 0", gv_buflen);
+        SDL_strlcpy(gv_buf, ui_text("Greater vaults: 0"), gv_buflen);
 }
 
 void level_gen_screen_draw_recent_events(int row, int col, int width,
@@ -756,7 +757,7 @@ void level_gen_screen_draw_user(int wid, int hgt)
         }
 
         strnfmt(buf, sizeof(buf), "[%c] %s", marker,
-            level_gen_stage_user_labels[i]);
+            ui_text(level_gen_stage_user_labels[i]));
         level_gen_screen_put_centered(stage_row++, attr, buf);
     }
 
@@ -1139,7 +1140,7 @@ void level_gen_screen_begin(void)
     level_gen_screen.stage = LEVEL_GEN_STAGE_PLANNING;
     level_gen_screen_format_depth_label(level_gen_screen.depth_label,
         sizeof(level_gen_screen.depth_label));
-    SDL_strlcpy(level_gen_screen.status_text, "Preparing the level.",
+    SDL_strlcpy(level_gen_screen.status_text, ui_text("Preparing the level."),
         sizeof(level_gen_screen.status_text));
 
     screen_save();
@@ -1158,7 +1159,8 @@ void level_gen_screen_start_attempt(void)
     level_gen_screen.stage = LEVEL_GEN_STAGE_PLANNING;
     level_gen_screen.detail_text[0] = '\0';
     level_gen_screen.final_text[0] = '\0';
-    SDL_strlcpy(level_gen_screen.status_text, level_gen_stage_status[LEVEL_GEN_STAGE_PLANNING],
+    SDL_strlcpy(level_gen_screen.status_text,
+        ui_text(level_gen_stage_status[LEVEL_GEN_STAGE_PLANNING]),
         sizeof(level_gen_screen.status_text));
     level_gen_screen_maybe_draw(level_gen_screen.debug);
 }
@@ -1170,7 +1172,7 @@ void level_gen_screen_set_stage(level_gen_screen_stage_t stage,
         return;
 
     level_gen_screen.stage = stage;
-    SDL_strlcpy(level_gen_screen.status_text, level_gen_stage_status[stage],
+    SDL_strlcpy(level_gen_screen.status_text, ui_text(level_gen_stage_status[stage]),
         sizeof(level_gen_screen.status_text));
     if (detail)
         SDL_strlcpy(level_gen_screen.detail_text, detail,
@@ -1203,7 +1205,7 @@ void level_gen_screen_note_failure(cptr reason)
     level_gen_screen.total_failures++;
     level_gen_screen_record_issue(decorated_reason);
 
-    SDL_strlcpy(level_gen_screen.status_text, "Trying another arrangement.",
+    SDL_strlcpy(level_gen_screen.status_text, ui_text("Trying another arrangement."),
         sizeof(level_gen_screen.status_text));
     if (level_gen_screen.debug)
     {
@@ -1222,7 +1224,7 @@ void level_gen_screen_finish(bool success)
     if (success)
     {
         level_gen_screen.stage = LEVEL_GEN_STAGE_DONE;
-        SDL_strlcpy(level_gen_screen.final_text, "The level is ready.",
+        SDL_strlcpy(level_gen_screen.final_text, ui_text("The level is ready."),
             sizeof(level_gen_screen.final_text));
         level_gen_screen_maybe_draw(true);
     }

@@ -437,7 +437,7 @@ int main(int argc, char **argv)
         }
         char localized[2048];
         assert(!strcmp(context_translation("Severity 15; at this value the next damage tick is 3 Health.",localized,sizeof(localized)),
-            "Тяжесть 15; при ней следующий тик урона отнимет 3 здоровья."));
+            "Тяжесть: 15. Потеря здоровья при следующем срабатывании: 3."));
         assert(!strcmp(context_translation("Pack space: 12.5/24.0 qt.",localized,sizeof(localized)),
             "Объём рюкзака: 12.5/24.0 кварты."));
         assert(strstr(context_translation("Strength drain changed from -1 to -2. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.",localized,sizeof(localized)),"Сила"));

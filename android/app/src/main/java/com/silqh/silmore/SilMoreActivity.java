@@ -1,15 +1,18 @@
 package com.silqh.silmore;
 
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.LongSparseArray;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -19,6 +22,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.libsdl.app.SDLActivity;
+import org.libsdl.app.SDLSurface;
 
 public class SilMoreActivity extends SDLActivity {
 	/** Called only after the native reset request has been durably written. */
@@ -36,6 +40,87 @@ public class SilMoreActivity extends SDLActivity {
 	}
 
 	private static native void onTextInputVisibleFrameChanged();
+	private static native void setTouchEventUptime(long uptimeMillis);
+	private static native void confirmThumbHold(int token);
+	private final LongSparseArray<Long> activeTouchDownTimes = new LongSparseArray<>();
+	private SDLSurface touchSurface;
+
+	private static long touchKey(int deviceId, int pointerId) {
+		return ((long) deviceId << 32) | (pointerId & 0xffffffffL);
+	}
+
+	private void clearTouchDevice(int deviceId) {
+		for (int i = activeTouchDownTimes.size() - 1; i >= 0; i--) {
+			if ((int) (activeTouchDownTimes.keyAt(i) >> 32) == deviceId)
+				activeTouchDownTimes.removeAt(i);
+		}
+	}
+
+	private void recordTouchEdge(MotionEvent event) {
+		int action = event.getActionMasked();
+		int device = event.getDeviceId();
+		if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
+			clearTouchDevice(device);
+			return;
+		}
+		if (action == MotionEvent.ACTION_DOWN)
+			clearTouchDevice(device);
+
+		int index = event.getActionIndex();
+		long key = touchKey(device, event.getPointerId(index));
+		if (action == MotionEvent.ACTION_POINTER_UP) {
+			activeTouchDownTimes.remove(key);
+			return;
+		}
+		int tool = event.getToolType(index);
+		if ((tool == MotionEvent.TOOL_TYPE_FINGER || tool == MotionEvent.TOOL_TYPE_UNKNOWN)
+				&& activeTouchDownTimes.size() < 64)
+			activeTouchDownTimes.put(key, event.getEventTime());
+	}
+
+	/** The animation callback follows the UI thread's input stage. */
+	public void requestThumbHoldConfirmation(int device, int pointer,
+			long downTime, int token) {
+		runOnUiThread(() -> {
+			SDLSurface surface = touchSurface;
+			if (surface == null || !surface.isAttachedToWindow()) return;
+			surface.postOnAnimation(() -> {
+				if (touchSurface != surface || !surface.hasWindowFocus()) return;
+				Long active = activeTouchDownTimes.get(touchKey(device, pointer));
+				if (active != null && active.longValue() == downTime)
+					confirmThumbHold(token);
+			});
+		});
+	}
+
+	@Override
+	protected SDLSurface createSDLSurface(Context context) {
+		touchSurface = new SDLSurface(context) {
+			@Override
+			public boolean onTouch(View view, MotionEvent event) {
+				switch (event.getActionMasked()) {
+					case MotionEvent.ACTION_DOWN:
+					case MotionEvent.ACTION_UP:
+					case MotionEvent.ACTION_POINTER_DOWN:
+					case MotionEvent.ACTION_POINTER_UP:
+					case MotionEvent.ACTION_CANCEL:
+						break;
+					default:
+						return super.onTouch(view, event);
+				}
+				recordTouchEdge(event);
+				// SDL still owns pointer routing, touch state, and pinch gestures.
+				setTouchEventUptime(event.getEventTime());
+				try {
+					return super.onTouch(view, event);
+				} finally {
+					setTouchEventUptime(0);
+				}
+			}
+		};
+		return touchSurface;
+	}
+
 	private PlayGamesAchievements playGamesAchievements;
 	private PlayGamesCloudSaves playGamesCloudSaves;
 
@@ -188,6 +273,7 @@ public class SilMoreActivity extends SDLActivity {
 
 	@Override
 	protected void onPause() {
+		activeTouchDownTimes.clear();
 		playGamesCloudSaves.onPause();
 		playGamesAchievements.onPause();
 		super.onPause();
@@ -195,6 +281,7 @@ public class SilMoreActivity extends SDLActivity {
 
 	@Override
 	protected void onDestroy() {
+		touchSurface = null;
 		playGamesCloudSaves.onDestroy();
 		super.onDestroy();
 	}

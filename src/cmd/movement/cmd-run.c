@@ -8,6 +8,7 @@
 #include "cave/cave.h"
 #include "cave/cave-environment.h"
 #include "melee/melee-util.h"
+#include "ui/ui-language.h"
 #include "ui/question.h"
 #include <math.h>
 
@@ -925,18 +926,23 @@ void move_player(int dir)
 
             else
             {
-                char* article;
+                int feature = cave_feat[y][x];
+                cptr name = f_name + f_info[feature].name;
+                cptr article = "a";
 
-                if (cave_feat[p_ptr->py][p_ptr->px] >= FEAT_FORGE_UNIQUE_HEAD)
+                if (feature >= FEAT_FORGE_UNIQUE_HEAD)
                     article = "the";
-                else if (cave_feat[p_ptr->py][p_ptr->px]
-                    >= FEAT_FORGE_GOOD_HEAD)
+                else if (feature >= FEAT_FORGE_GOOD_HEAD)
                     article = "an";
-                else
-                    article = "a";
 
-                msg_format("You enter %s %s.", article,
-                    f_name + f_info[cave_feat[p_ptr->py][p_ptr->px]].name);
+                const cptr fmt = "You enter %s %s.";
+                char english[1024];
+                strnfmt(english, sizeof(english), fmt, article, name);
+                cptr localized = ui_message_text(english);
+                if (localized != english)
+                    msg_print_localized(english, localized);
+                else
+                    msg_format(fmt, article, name);
             }
 
             cave_info[y][x] |= (CAVE_MARK);

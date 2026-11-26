@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
@@ -446,7 +447,7 @@ static void spoil_artefact(cptr fname)
              * rarity.
              */
 
-            text_out(format("\n(level %u / rarity %u / quality %d)\n",
+            text_out(format(ui_text("\n(level %u / rarity %u / quality %d)\n"),
                 a_ptr->level, a_ptr->rarity, object_difficulty(i_ptr)));
 
             /* Terminate the entry */
@@ -920,7 +921,7 @@ static void spoil_mon_info(cptr fname)
         }
         else
         {
-            text_out("The ");
+            text_out(ui_text("The "));
         }
 
         /* Name */
@@ -1003,17 +1004,17 @@ void do_cmd_spoilers(void)
         Term_clear();
 
         /* Info */
-        prt("Create a spoiler file.", 2, 0);
+        prt(ui_text("Create a spoiler file."), 2, 0);
 
         /* Prompt for a file */
-        prt("(1) Object List (obj-list.txt)", 5, 5);
-        prt("(2) Full Artefact Info (art-info.txt)", 6, 5);
-        prt("(3) Monster List (mon-list.txt)", 7, 5);
-        prt("(4) Full Monster Info (mon-info.txt)", 8, 5);
+        prt(ui_text("(1) Object List (obj-list.txt)"), 5, 5);
+        prt(ui_text("(2) Full Artefact Info (art-info.txt)"), 6, 5);
+        prt(ui_text("(3) Monster List (mon-list.txt)"), 7, 5);
+        prt(ui_text("(4) Full Monster Info (mon-info.txt)"), 8, 5);
         prt("(5) Monster Stat Spreadsheet (mon-ss.txt)", 9, 5);
 
         /* Prompt */
-        prt("Command: ", 13, 0);
+        prt(ui_text("Command: "), 13, 0);
 
         /* Get a choice */
         ch = inkey();

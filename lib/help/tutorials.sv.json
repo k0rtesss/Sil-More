@@ -6,7 +6,7 @@
       "title": "Dina första steg",
       "steps": [
         "Välkommen till Sil-More. Ditt mål är att återta en silmarill och fly från Angband. Utforska försiktigt. Världen väntar medan du läser. ”Fortsätt” öppnar nästa sida och ”Hoppa över” stänger den aktuella lektionen. Under ”Läge” kan du välja Avstängt, Normalt eller Utökat.",
-        "Hitta ett lämpligt vapen och en rustning innan du ger dig in i strid. Läs beskrivningen innan du använder eller utrustar ett föremål. Ryggsäcken (Pack) är till för förvaring. I bärselen (Harness) har du saker nära till hands. Du anfaller med ditt aktiva vapen.",
+        "Hitta ett lämpligt vapen och en rustning innan du ger dig in i strid. Läs föremålets beskrivning innan du använder eller utrustar det. Ryggsäcken är till för förvaring. I bärselen har du föremål nära till hands. Du anfaller med ditt aktiva vapen.",
         "På fri mark går du en ruta i den valda riktningen. Rörelse tar tid, så varelser i närheten kan agera. Se efter om målrutan innehåller fiender, fällor eller farlig terräng. ”Fortsätt” tar dig tillbaka till spelet, där du kan välja nästa handling."
       ],
       "source_sha256": "54bb70a24ff744c624e83c6bfdfd5d523d6f8de9853aadd150069bdb8ada90fe"
@@ -14,7 +14,7 @@
     "combat.first_monster": {
       "title": "En varelse inom synhåll",
       "steps": [
-        "{subject} är inom synhåll. En sovande eller aningslös varelse har ännu inte uppmärksammat dig. En vaksam varelse har märkt ett hot. Moralen avgör om den slåss eller flyr. Använd Look för att läsa om dess tillstånd och kända attacker innan du närmar dig."
+        "{subject} är inom synhåll. En sovande eller aningslös varelse har ännu inte uppmärksammat dig. En vaksam varelse har märkt ett hot. Moralen avgör om den slåss eller flyr. Välj ”Titta” för att läsa om dess tillstånd och kända attacker innan du närmar dig."
       ],
       "source_sha256": "2c52093a90aafde32f508100593ecfd3c75d374828c4cc49565024325e7b9a28"
     },
@@ -22,7 +22,7 @@
       "title": "Närstridsanfall",
       "steps": [
         "{subject} står bredvid dig. Om du går mot en fiende i en angränsande ruta gör du ett närstridsanfall. Kontrollera först ditt aktiva vapen och din återstående hälsa.",
-        "Angrepp på nära håll tar tid även om de missar. Närmaste fiender kan anfalla tillbaka. Att dra sig tillbaka, använda en föremål eller välja en annan taktik är också ett alternativ. \"Continue\" återgår till spelet."
+        "Närstridsanfall tar tid även när de missar. Fiender i närheten kan slå tillbaka. Du kan också dra dig tillbaka, använda ett föremål eller välja en annan taktik. Välj ”Fortsätt” för att återgå till spelet."
       ],
       "source_sha256": "5853d522026702235f9465ddc58cba1adee33c25ee602d30e24fb1e9c19a94d9"
     },
@@ -52,7 +52,7 @@
     "combat.surrounded": {
       "title": "Flera fiender intill dig",
       "steps": [
-        "Flera fiender befinner sig runt omkring dig. De får en bonus på attacken tack vare omgivningen. En dörr eller smal passage kan begränsa hur många som kan attackera dig samtidigt. \"Gruppstrid\" halverar deras bonus tack vare omgivningen."
+        "Flera fiender står intill dig. De får en anfallsbonus när de omringar dig. En dörröppning eller smal passage kan begränsa hur många som når dig samtidigt. Gruppstrid (Crowd Fighting) halverar deras omringningsbonus."
       ],
       "source_sha256": "c3f14764b74a8ed09db31b7acc094e111e88869d43a24fccb3e82d6d121e85ab"
     },
@@ -165,7 +165,7 @@
     "item.description.light": {
       "title": "Beskrivning: ljuskälla",
       "steps": [
-        "{subject}. {detail} Strålningsradien är hur långt den strålar; intensiteten är hur stark den är. Lampor som drivs av bränsle visar också hur mycket bränsle som återstår. Jämför dessa detaljer, vikt och eventuella uppenbara egenskaper innan du väljer din lampa. Att läsa en förhandsvisning ger inte utrustning eller fyller på bränslet."
+        "{subject}. {detail} Ljusradien visar hur långt ljuset når. Intensiteten visar hur starkt det lyser. Ljuskällor som använder bränsle visar hur mycket som finns kvar. Jämför värdena, vikten och egenskaperna du känner till innan du väljer ljuskälla. Att läsa beskrivningen varken utrustar eller fyller på ljuskällan."
       ],
       "source_sha256": "9a8e387cccfc4fefd986262f0c83557d101492d696e28484f3647c489bb0fad2"
     },
@@ -270,7 +270,7 @@
     "item.oil": {
       "title": "Oljebehållare",
       "steps": [
-        "Oljan förvaras i en \"Förnödenheter\"-oljeplats. En behållare rymmer upp till 2 500 \"turn\"-värden av lanternljusbränsle. Använd \"Fyll på\" med en lämplig lantern; spadar använder en annan metod för att fylla på. I menyn: Refuel."
+        "Olja har en egen plats under Förnödenheter. En behållare rymmer bränsle till upp till 2 500 drag med en lykta. Välj ”Fyll på bränsle” med en lämplig lykta. Facklor fylls på på ett annat sätt."
       ],
       "source_sha256": "6819ab50906ce7592bc8009eb548dfc1203a5851e28a80c92addbfa02251259a"
     },
@@ -333,7 +333,7 @@
     "item.staff.ready": {
       "title": "Gör en stav redo",
       "steps": [
-        "Öppna inventariet, välj staven och sedan Ready för att flytta föremålet till bärselen. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
+        "Öppna Föremål, välj staven och sedan ”Flytta till bärselen”. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
       ],
       "source_sha256": "6d9ae83430825c2768a4ecb135e730cda5c495dafd875172e486ff4ec59317db"
     },
@@ -348,7 +348,7 @@
     "item.horn.ready": {
       "title": "Gör ett horn redo",
       "steps": [
-        "Öppna inventariet, välj hornet och sedan Ready för att flytta föremålet till bärselen. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
+        "Öppna Föremål, välj hornet och sedan ”Flytta till bärselen”. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
       ],
       "source_sha256": "69939b5719d6b60428c241c381ab39de389314983d498a6e4c2afbaad51cf6ab"
     },
@@ -391,7 +391,7 @@
     "status.diseased": {
       "title": "Sjukdom",
       "steps": [
-        "{detail} Vid smittrisk väljs en av åtta sjukdomar. En sjukdom som du tillfrisknat från kan inte smitta dig igen under den här färden. En läkeört, läkande dryck eller Miruvor botar alla sjukdomar även före diagnos. För Angbands pest är läkeörten den enda örtkuren. Varje annan sjukdom har också en slumpvis utsedd botande ört. En infektion ger genast -1 i fysik och därefter -1 i en slumpmässig egenskap var 150:e spelardrag, även under vila. Hardiness ökar intervallet till 300 drag och halverar smittrisken. Med Alchemy avslöjar en självkännedomens ädelsten namnet och botemedlet. Utan Alchemy är chansen 50% per användning att lära sig namnet och, när det är känt, 50% att lära sig örten. Mänskliga och alviska fångar kan ge en fullständig diagnos som uppdragsbelöning. Utom vid pesten kan de också ställa diagnos och ge dig en lämplig ört att äta. Ett botemedel häver sjukdomens avdrag och ger immunitet. Upptäckter och immunitet sparas. När örten botar ersätter boten dess vanliga effekt och näring. Andra örter verkar som vanligt."
+        "{detail} Vid smittrisk väljs en av åtta sjukdomar. En sjukdom som du tillfrisknat från kan inte smitta dig igen under den här färden. En läkeört, läkande dryck eller Miruvor botar alla sjukdomar även före diagnos. För Angbands pest är läkeörten den enda örtkuren. Varje annan sjukdom har också en slumpvis utsedd botande ört. En infektion ger genast -1 i uthållighet och därefter -1 i en slumpmässig egenskap var 150:e spelardrag, även under vila. Hardiness ökar intervallet till 300 drag och halverar smittrisken. Med Alchemy avslöjar en självkännedomens ädelsten namnet och botemedlet. Utan Alchemy är chansen 50% per användning att lära sig namnet och, när det är känt, 50% att lära sig örten. Mänskliga och alviska fångar kan ge en fullständig diagnos som uppdragsbelöning. Utom vid pesten kan de också ställa diagnos och ge dig en lämplig ört att äta. Ett botemedel häver sjukdomens avdrag och ger immunitet. Upptäckter och immunitet sparas. När örten botar ersätter boten dess vanliga effekt och näring. Andra örter verkar som vanligt."
       ],
       "source_sha256": "f69e479dbfbf5105e334b545ae909112394825bedc565b0fad516b9b57f33494"
     },
@@ -468,7 +468,7 @@
     "status.rage": {
       "title": "Raseri",
       "steps": [
-        "\"Rage ger +1 styrka och fysik, -1 smidighet och grace, samt motstånd mot rädsla och en speciell närstridsattack. Det begränsar din medvetenhet och förhindrar \"Stealth\"-läge. \"Clarity\" avslutar \"Rage\".\""
+        "\"Rage ger +1 styrka och uthållighet, -1 smidighet och elegans, samt motstånd mot rädsla och en speciell närstridsattack. Det begränsar din medvetenhet och förhindrar \"Stealth\"-läge. \"Clarity\" avslutar \"Rage\".\""
       ],
       "source_sha256": "b71354e1749cf204ec194a78b4db5cb5e32e79b2bcbe0b2a874b3070a28d3483"
     },
@@ -494,16 +494,16 @@
       "source_sha256": "a683798cc3f109bdf83461bb175b81b14ae999278f8869318765239d3c05f2cf"
     },
     "status.tmp_con": {
-      "title": "Tillfällig bonus: fysik",
+      "title": "Tillfällig bonus: uthållighet",
       "steps": [
         "Tillfällig styrka ökar maximal hälsa och skyddar styrkan från vanlig förlust av hälsa medan den är aktiv. Kontrollera både aktuell och maximal hälsa, särskilt innan bonusen upphör att gälla."
       ],
       "source_sha256": "4550d35e2c333e03cf132b1093dfa8464616e8a3ed0513b226d9a149ce89ba9b"
     },
     "status.tmp_gra": {
-      "title": "Tillfällig bonus: grace",
+      "title": "Tillfällig bonus: elegans",
       "steps": [
-        "Tillfällig Grace förbättrar färdigheter som är beroende av Grace och maximerar röst. Den skyddar också Grace från vanlig minskning av röst medan den är aktiv. Den extra röstkapaciteten upphör med bonusen."
+        "Tillfällig Elegans förbättrar färdigheter som är beroende av Elegans och maximerar röst. Den skyddar också Elegans från vanlig minskning av röst medan den är aktiv. Den extra röstkapaciteten upphör med bonusen."
       ],
       "source_sha256": "ddf3c5c9474e1297f41131bd1bbc6db1afd5e7a4c24f88c0a41c30894c25a7c1"
     },
@@ -522,7 +522,7 @@
       "source_sha256": "f97de24e619e45788f3482c7fbcb9e085f9f9534d04629026c2befb968955705"
     },
     "status.oppose_fire": {
-      "title": "Tillfällig eldskydd",
+      "title": "Tillfälligt eldskydd",
       "steps": [
         "Tillfällig eldresistens ger ett extra lager av eldresistens. Det minskar skador från eld medan den är aktiv. Kontrollera din totala resistens: sårbarhet och en eldgrota kan kompensera för ett lager."
       ],
@@ -710,16 +710,16 @@
       "source_sha256": "3b388bcbd3f7f582fdb94af020e1c717de7d2545c514ce328d79e59ed8f0941f"
     },
     "status.drain2": {
-      "title": "Försvagad egenskap: fysik",
+      "title": "Försvagad egenskap: uthållighet",
       "steps": [
-        "{detail} Försvagad egenskap: fysik. En återställande ört ger tillbaka upp till 3 förlorade poäng i varje egenskap. Om just denna egenskap har förlorat minst 3 poäng ger motsvarande dryck omedelbart 3 tillbaka. Annars får du en tillfällig bonus och återfår upp till 3 poäng när den löper ut. Sjukdomsavdrag kräver att sjukdomen botas."
+        "{detail} Försvagad egenskap: uthållighet. En återställande ört ger tillbaka upp till 3 förlorade poäng i varje egenskap. Om just denna egenskap har förlorat minst 3 poäng ger motsvarande dryck omedelbart 3 tillbaka. Annars får du en tillfällig bonus och återfår upp till 3 poäng när den löper ut. Sjukdomsavdrag kräver att sjukdomen botas."
       ],
       "source_sha256": "7dd396725a4aabc7655e143a87ae98297c6165fc1eab0e5371daa0474f055f85"
     },
     "status.drain3": {
-      "title": "Försvagad egenskap: grace",
+      "title": "Försvagad egenskap: elegans",
       "steps": [
-        "{detail} Försvagad egenskap: grace. En återställande ört ger tillbaka upp till 3 förlorade poäng i varje egenskap. Om just denna egenskap har förlorat minst 3 poäng ger motsvarande dryck omedelbart 3 tillbaka. Annars får du en tillfällig bonus och återfår upp till 3 poäng när den löper ut. Sjukdomsavdrag kräver att sjukdomen botas."
+        "{detail} Försvagad egenskap: elegans. En återställande ört ger tillbaka upp till 3 förlorade poäng i varje egenskap. Om just denna egenskap har förlorat minst 3 poäng ger motsvarande dryck omedelbart 3 tillbaka. Annars får du en tillfällig bonus och återfår upp till 3 poäng när den löper ut. Sjukdomsavdrag kräver att sjukdomen botas."
       ],
       "source_sha256": "c06a08be58da6760f957ebd6afd3e1e477604f30dd7dfad74c4b74d255e61e69"
     },
@@ -766,37 +766,37 @@
       "source_sha256": "8ff5559af49a6e5c123113c7156c935dc3ff936506be1e03fccd700f2f04f53c"
     },
     "menu.harness": {
-      "title": "Bärselen (Harness)",
+      "title": "Bärselen",
       "steps": [
-        "Bärselen innehåller utrustning inom dess egen volymgräns. Välj \"Redo\" på ett lämpligt föremål i ryggsäcken för att flytta det hit, eller \"Inte redo\" för att förvara det igen. Ett redo vapen måste också väljas i \"Välj aktivt\" innan du normalt attackerar med det. I menyn: Change Active, Unready, Ready."
+        "Bärselen håller utrustning redo och har en egen volymgräns. Välj ett lämpligt föremål i ryggsäcken och använd ”Flytta till bärselen”. Välj ”Lägg i ryggsäcken” för att lägga tillbaka föremålet. Välj också vapnet under ”Byt aktivt vapen” innan du anfaller med det."
       ],
       "source_sha256": "23cb4a9a0a6d5812faf908f8c385549e6e1636fbf5a3f609129d3a751eb9ae3f"
     },
     "menu.quiver": {
       "title": "Kogret (Quiver)",
       "steps": [
-        "Koger innehåller förberedda lager med pilar, enligt dess egna regler. Välj ett lager för att inspektera dess mängd och tillgängliga åtgärder. Att bara ändra det aktiva pilar-lagret är gratis; andra aktiva vapenändringar behåller sina normala kostnader."
+        "Kogret håller pilbuntar redo och har en egen kapacitetsgräns. Välj en bunt för att se antalet pilar och de tillgängliga åtgärderna. Att enbart byta aktiv pilbunt kostar ingen tid. Andra vapenbyten kostar som vanligt."
       ],
       "source_sha256": "92eedf94b49276036594749960f2d51ead3307dd7018dcaff403683a3f2fdf80"
     },
     "menu.equipment": {
       "title": "Utrustning",
       "steps": [
-        "Bärande rustning och smycken ger sina angivna effekter. Färdiga vapen är tillgängliga att välja, och ditt aktiva vapen är det du för närvarande attackerar med. Kontrollera också det aktiva skölden: ett vapen som används med båda händerna kräver normalt båda händerna."
+        "Rustning och smycken ger effekt när du bär dem. Du kan välja bland vapnen du har gjort redo. Det aktiva vapnet är det du anfaller med för tillfället. Kontrollera även om skölden är aktiv. Ett tvåhandsvapen kräver oftast bägge händerna."
       ],
       "source_sha256": "e1f99841f5863770a3e25b1c0794ebd4965ad2906ccb9551f45ca8edf4dafca7"
     },
     "menu.supplies": {
       "title": "Förråd",
       "steps": [
-        "\"Förnödenheter\" innehåller förbrukningsvaror och deras behållare. Välj en artikel för att läsa dess kända effekt, återstående mängd och tillgängliga åtgärder. Ha läkemedlet tillgängligt för en akut situation innan en strid."
+        "Förrådet innehåller förbrukningsvaror och deras behållare. Välj ett föremål för att se känd effekt, återstående mängd och möjliga åtgärder. Ha medel mot akuta tillstånd till hands före strid."
       ],
       "source_sha256": "3ccba9bb472d6d67ad117c50e74ceae8f4ea95749ee96172f41cf21ee10c060c"
     },
     "menu.active-weapon": {
       "title": "Det aktiva vapnet",
       "steps": [
-        "Välj ett vapen från ditt befintliga utrustning för att attackera. Detta kan påverka om ett sköld är aktivt. Att byta aktiva vapen tar vanligtvis tid, men vissa förmågor ger dig en gratis möjlighet att byta innan nästa handling. Att bara byta pil är gratis."
+        "Välj vilket av dina redo vapen du vill anfalla med. Bytet kan påverka om din sköld är aktiv. Att byta aktivt vapen tar vanligtvis tid. Vissa förmågor tillåter ett kostnadsfritt byte före nästa åtgärd om villkoren för bytet är uppfyllda. Att enbart byta pilar kostar ingen tid."
       ],
       "source_sha256": "ff66b490f231c6fafcdc6dbeac9abf6b7920ca9fcff798517e172890b255952a"
     },
@@ -880,9 +880,9 @@
     "menu.smithing": {
       "title": "Smide",
       "steps": [
-        "Välj ett föremål eller en förbättring för att se svårigheten, din förmåga och kostnaden. Till smide läggs hälften av din nuvarande smidighet och hälften av din nuvarande grace. Utrustning, tillfälliga effekter och egenskapsförluster påverkar värdena. Inlärda, aktiva hantverksförmågor och mästerskap ger ytterligare bonus på varje recept. Naugrim lägger varje positiv nivå av smidesbegåvning till de egenskaper som används här. Lägg ihop bonusarna och avrunda nedåt en gång. Utrustningens bonusar till smide gäller också."
+        "Välj ett föremål eller en förbättring för att se svårighetsgraden, din kapacitet och kostnaderna. I smide räknas hälften av din permanenta smidighet och hälften av din permanenta elegans. Permanenta egenskapsvärden omfattar grundvärden och inlärda förmågor som höjer dem utan särskilda villkor. Utrustning, tillfälliga effekter, egenskapsförluster, sånger och villkorade bonusar påverkar inte dessa värden. Inlärda och aktiva hantverksförmågor och mästerskap ger ytterligare bonus till alla recept. Naugrim får +1 till de egenskaper som räknas för varje positiv nivå av smidesbegåvning. Lägg ihop bonusarna och avrunda nedåt en gång. Utrustning som höjer själva smidesfärdigheten ger fortfarande bonus."
       ],
-      "source_sha256": "27a42bca332fbfd75f31dfe34f70c52c7579ebb9e6ae97193d64fc915ff9b0ee"
+      "source_sha256": "68f4d01a2a0ca06f009e07def51c22357ba694c4bca28eab64e4f1a2af40f895"
     },
     "menu.nearby-monsters": {
       "title": "Varelser i närheten",
@@ -922,7 +922,7 @@
     "menu.combat-history": {
       "title": "Stridslogg",
       "steps": [
-        "Granska attack- och undvikningsresultaten, skadetyd, skydd och de resulterande effekterna. Ett miss ger ingen träff; en lyckad träff kan fortfarande fullständigt blockeras av skyddet. Resultat från kritiska tärningar och bonusar för element eller död är listade separat."
+        "Här ser du slag för anfall, undvikande, skada och skydd samt vilka följder de fick. En miss ger ingen träff. Skydd kan även fånga upp all skada från en träff. Kritiska tärningar, elementbonusar och bonusar mot vissa varelser kan ändra resultatet."
       ],
       "source_sha256": "dab81318aa51f6f7d056a93e5cd22bc8548561a02f7db0dda42ed2ef79e03ca1"
     },
@@ -985,7 +985,7 @@
     "ability.2.preview": {
       "title": "Tillbakaknuff (Knock Back)",
       "steps": [
-        "Dina närstridsattacker kan skjuta tillbaka en fiende ett steg om din styrka är starkare än dess fysik; en fiende som är på is glider uppåt två steg. Kontrollera utrymmet bakom målet: förflyttningen kan ändra vem som kan nå dig och kan skicka ett monster till en farlig zon."
+        "Dina närstridsattacker kan skjuta tillbaka en fiende ett steg om din styrka är starkare än dess uthållighet; en fiende som är på is glider uppåt två steg. Kontrollera utrymmet bakom målet: förflyttningen kan ändra vem som kan nå dig och kan skicka ett monster till en farlig zon."
       ],
       "source_sha256": "85e2c8c7bdb0c638a03dcbf9c1348b610202e234f3bd7f73b8d9e4b6fab7c854"
     },
@@ -1056,7 +1056,7 @@
     "ability.12.preview": {
       "title": "Strid med två vapen (Two Weapon Fighting)",
       "steps": [
-        "Utrust en vapen med en hand för att få ett extra angrepp. Angreppet med en hand kräver -3 styrka och smidighet. Kontrollera den resulterande vapen- och sköldkonfigurationen innan du använder den."
+        "Utrusta ett enhandsvapen i den andra handen för ett extra anfall. Anfallet med det vapnet använder styrka och smidighet med −3 vardera. Kontrollera hur vapen och sköld fördelas innan du utrustar vapnet."
       ],
       "source_sha256": "42b08bc8c463ceff2f170b80ed9a99e47c6ce39411e5f08de7048caea6a95885"
     },
@@ -1338,7 +1338,7 @@
     "ability.87.preview": {
       "title": "Resonans (Resonance)",
       "steps": [
-        "Försök att upptäcka osynliga fiender varje tur. För att identifiera föremål, dubblera bidraget från \"Perception\" (uppfattning) när du räknar med \"Grace\" (graciöshet) en gång."
+        "Försök att upptäcka osynliga fiender varje tur. För att identifiera föremål, dubblera bidraget från \"Perception\" (uppfattning) när du räknar med \"Elegans\" (graciöshet) en gång."
       ],
       "source_sha256": "7841775030dd2d0d4cd3867db89f28d246687589e18b99ea5f4f8bedb8da11c5"
     },
@@ -1350,9 +1350,9 @@
       "source_sha256": "a94bc5cc6c4a0953ecccc6c2e9f451cb7978ba17d147bc82e9aaff684bbd7419"
     },
     "ability.89.preview": {
-      "title": "Grace",
+      "title": "Elegans (Grace)",
       "steps": [
-        "Ger +1 i grace och ökar bärselens kapacitet med 6,0 qt. Du kan ha mer utrustning till hands."
+        "Ger +1 i elegans och ökar bärselens kapacitet med 6,0 qt. Du kan ha mer utrustning till hands."
       ],
       "source_sha256": "c812128d264feb733c88504217f32cec4127b059e3b494ebeca13b03e1da2104"
     },
@@ -1434,65 +1434,65 @@
       "source_sha256": "aa2852bd2dc2f2e02f3114e3b40adc6c811dd150044f6758fe3188b924b19de8"
     },
     "ability.110.preview": {
-      "title": "Fysik (Constitution)",
+      "title": "Uthållighet (Constitution)",
       "steps": [
-        "Ger +1 i fysik och ökar ryggsäckens kapacitet med 6,0 qt."
+        "Ger +1 i uthållighet och ökar ryggsäckens kapacitet med 6,0 qt."
       ],
       "source_sha256": "e65abeee979744c705c818dbdb108a20ca964446b0d5686a4d1d640671928b56"
     },
     "ability.120.preview": {
       "title": "Vapensmed (Weaponsmith)",
       "steps": [
-        "Låter dig smida vapen och ger en liten bonus till att identifiera dem. När förmågan är inlärd och aktiv bidrar hälften av din nuvarande smidighet till allt du smider."
+        "Låter dig smida vapen i en smedja och ger en liten bonus när du identifierar dem. När förmågan är inlärd och aktiv räknas hälften av din permanenta smidighet till allt du smider."
       ],
-      "source_sha256": "d83db7a5cb4d0c2b671fdcbfea063acb7e19879422aca2557f3c640fde12c32d"
+      "source_sha256": "57cd9972362062d683f7d9ced8358fec833a6b9f644d0bd9d32b87dde5c91925"
     },
     "ability.121.preview": {
       "title": "Rustningssmed (Armoursmith)",
       "steps": [
-        "Låter dig smida rustningar och ger en liten bonus till att identifiera dem. När förmågan är inlärd och aktiv bidrar hälften av din nuvarande styrka till allt du smider."
+        "Låter dig smida rustning i en smedja och ger en liten bonus när du identifierar rustningar. När förmågan är inlärd och aktiv räknas hälften av din permanenta styrka till allt du smider."
       ],
-      "source_sha256": "b678077db771124fab7f76ccfd9d0e88ea024d2f33d8622307b565133a2f5573"
+      "source_sha256": "16b9acb9a7bf3d90caad2622fc13f324b165d5b3cdc55c040a4995c88465143c"
     },
     "ability.122.preview": {
       "title": "Juvelerare (Jeweller)",
       "steps": [
-        "Låter dig smida ringar, amuletter, horn och ljuskällor och automatiskt känna igen deras typer. Ett enskilt föremål kan ha okända särskilda egenskaper. Inlärd och aktiv bidrar förmågan med hälften av din nuvarande grace till allt du smider."
+        "Låter dig smida ringar, amuletter, horn och ljuskällor i en smedja och känna igen deras typ automatiskt. Du kan fortfarande behöva identifiera enskilda föremåls särskilda egenskaper. När förmågan är inlärd och aktiv räknas hälften av din permanenta elegans till allt du smider."
       ],
-      "source_sha256": "e1c306ed445a7a4ba455218355ff175418c0690016de92c49e987f6700a6761a"
+      "source_sha256": "b6532ccc257c13e5f08c9ac9b7771acd2d7cdaaee9c244ff05efa381fadb8540"
     },
     "ability.123.preview": {
       "title": "Förtrollning (Enchantment)",
       "steps": [
-        "Låter dig smida förtrollade föremål med namngivna särskilda egenskaper. Du kan urskilja förtrollningar och får en liten identifieringsbonus. Inlärd och aktiv bidrar förmågan med din nuvarande grace till allt du smider."
+        "Låter dig smida förtrollade föremål med namngivna specialegenskaper i en smedja. Du kan urskilja föremåls förtrollningar och får en liten bonus när du identifierar dem. När förmågan är inlärd och aktiv räknas hälften av din permanenta elegans till allt du smider."
       ],
-      "source_sha256": "8100a52a5b4f99f77c3b8ca7f082708686fd759417138c1ffb65942a1f200368"
+      "source_sha256": "6df49478c9c23c77b67b9cf185c7d26aa911ae6faf02ed4634466bd6d8750c30"
     },
     "ability.124.preview": {
       "title": "Sakkunskap (Expertise)",
       "steps": [
-        "Halverar smidestiden och tar bort den vanliga kostnaden i erfarenhet och egenskaper. Material och användningar av smedjan krävs fortfarande. Läs hela förslaget. Inlärd och aktiv bidrar förmågan med din nuvarande smidighet till allt du smider."
+        "Halverar smidestiden och tar bort den vanliga kostnaden i erfarenhets- och egenskapspoäng. Material och smedjans återstående användningar räknas fortfarande. Granska hela förslaget. När förmågan är inlärd och aktiv räknas hälften av din permanenta smidighet till allt du smider."
       ],
-      "source_sha256": "52084e31e80fdc4b44b8d80604e2c4e118bee510a1c2f3e7cd7dc50fbf828e83"
+      "source_sha256": "06ded559e9634914fee328d885279d91bfbe56ef05fe076e73231c9363503935"
     },
     "ability.125.preview": {
       "title": "Artefaktsmide (Artifice)",
       "steps": [
-        "Låter dig smida egna artefakter och ger en stor identifieringsbonus. Förslaget visar kostnaden för dina valda egenskaper. Inlärd och aktiv bidrar förmågan med din nuvarande grace till allt du smider."
+        "Låter dig smida egna artefakter i en smedja och ger en stor bonus när du identifierar föremål. Förhandsvisningen visar kostnaden för de egenskaper du väljer. När förmågan är inlärd och aktiv räknas hälften av din permanenta elegans till allt du smider."
       ],
-      "source_sha256": "415ff774cd4eb6c57d172a82d4cbb2d649a6042a2043247a3b0a03411df19656"
+      "source_sha256": "e73cd73400d79b457f55e279b0e478f25e0216a6e66d79ed2f14200c21c7e46c"
     },
     "ability.126.preview": {
       "title": "Mästerverk (Masterpiece)",
       "steps": [
-        "Du kan smida över din vanliga svårighetsgräns genom att permanent offra grundpoäng i smide. Varje poäng över gränsen kostar en färdighetspoäng. Du kan som mest offra de poäng som du själv investerat i smide."
+        "Du kan smida över din vanliga svårighetsgräns genom att permanent offra grundpoäng i smide. Varje poäng över gränsen kostar en färdighetspoäng, upp till de poäng som du själv har investerat i smide. När förmågan är inlärd och aktiv räknas också hälften av din permanenta elegans till allt du smider."
       ],
-      "source_sha256": "d796523bd4f90f1552a7961581e4c46d6d75f4904b3a488c28cd40a27f558b30"
+      "source_sha256": "9b4b435cab3009f0fb78f9fe2dc392ab714f7f532f70eaac0a2dc300aa477c95"
     },
     "ability.127.preview": {
-      "title": "Grace",
+      "title": "Elegans (Grace)",
       "steps": [
-        "+1 grace."
+        "+1 Elegans."
       ],
       "source_sha256": "318407e939880f8ee4ddb9470d41c8ab1638ba55d156706933b28ba8af096b2a"
     },
@@ -1506,7 +1506,7 @@
     "ability.129.preview": {
       "title": "Omsmide (Reforging)",
       "steps": [
-        "Vid en smed kan du reparera skadade föremål eller lägga till en saknad prefix till ett hittat föremål. Svårighetsgraden för omsmältning är 1,5 gånger ökningen i svårighetsgrad. Jämför resultatet och kostnaderna innan du bestämmer dig."
+        "I en smedja kan du reparera skadade föremål eller lägga till ett prefix som saknas på ett upphittat föremål. Omsmidets svårighetsgrad är 1,5 gånger ökningen i svårighetsgrad. Jämför resultatet och kostnaderna innan du bestämmer dig."
       ],
       "source_sha256": "a6cc7d644a7e131068374a871adaedf99d820f59a8588295e857dd918722bbc3"
     },
@@ -1590,7 +1590,7 @@
     "ability.151.preview": {
       "title": "Alvernas sång (Song of Elveness)",
       "steps": [
-        "Ger +1 i grace och en bonus i undvikande beroende på effektiv sång: +1 vid 0–7, +2 vid 8–15 och +3 vid 16–24. Därefter blir stegen bredare."
+        "Ger +1 i elegans och en bonus i undvikande beroende på effektiv sång: +1 vid 0–7, +2 vid 8–15 och +3 vid 16–24. Därefter blir stegen bredare."
       ],
       "source_sha256": "ff11b0adce4053f67d7683d0b46fbfe09caa6e183bafea7fd28de2ad7e55f529"
     },
@@ -1630,9 +1630,9 @@
       "source_sha256": "2cbe24dd8b765a65dea4cf5818635e508e144faee7a43a30c922b9b6a0d75a1d"
     },
     "ability.157.preview": {
-      "title": "Grace",
+      "title": "Elegans (Grace)",
       "steps": [
-        "+1 grace."
+        "+1 elegans."
       ],
       "source_sha256": "318407e939880f8ee4ddb9470d41c8ab1638ba55d156706933b28ba8af096b2a"
     },
@@ -1646,7 +1646,7 @@
     "ability.159.preview": {
       "title": "Klagosång (Song of Lament)",
       "steps": [
-        "Lament syftar till att permanent minska en lämplig måls värde på Will, maximal hälsa och skade-tern. När effekten är fullständig, minskar din Grace med 1, även om du lyckas. Låten avbryts sedan och sången är låst i 10 rundor; du kan inte upprepa den fullföljda striden mot den fienden igen. Läs målets och Voice-kostnaden innan du bestämmer dig."
+        "Lament syftar till att permanent minska en lämplig måls värde på Will, maximal hälsa och skade-tern. När effekten är fullständig, minskar din Elegans med 1, även om du lyckas. Låten avbryts sedan och sången är låst i 10 rundor; du kan inte upprepa den fullföljda striden mot den fienden igen. Läs målets och Voice-kostnaden innan du bestämmer dig."
       ],
       "source_sha256": "3d0ee17313e137b1f742a3204deec90180913f2a679ab71f63e27d73d8291989"
     },
@@ -1667,7 +1667,7 @@
     "ability.162.preview": {
       "title": "Barmhärtighetens ed (Oath of Mercy)",
       "steps": [
-        "\"Sanningens löfte\" ger +1 grace och förbjuder att attackera eller skada män eller alver. Detta inkluderar indirekt skada. Läs de exakta villkoren för löftet innan du svär på det."
+        "\"Sanningens löfte\" ger +1 elegans och förbjuder att attackera eller skada män eller alver. Detta inkluderar indirekt skada. Läs de exakta villkoren för löftet innan du svär på det."
       ],
       "source_sha256": "c0b72e2afd5cf5ff8115e9aa6304f046ba49e8e39260bd5aa76e394314d22d3d"
     },
@@ -1681,7 +1681,7 @@
     "ability.164.preview": {
       "title": "Järnets ed (Oath of Iron)",
       "steps": [
-        "\"Ed av järn ger +1 fysik. Innan du har en Silmaril, förbjuds det att gå uppför trappor eller lämna djupet. Förbered dig på en resa utan möjlighet att dra sig tillbaka till djupare nivåer."
+        "\"Ed av järn ger +1 uthållighet. Innan du har en Silmaril, förbjuds det att gå uppför trappor eller lämna djupet. Förbered dig på en resa utan möjlighet att dra sig tillbaka till djupare nivåer."
       ],
       "source_sha256": "e5e6fb83fed7e75135c37d6104ad72e8a5f14ff61596078a8d1517200c426c4d"
     },
@@ -1735,7 +1735,7 @@
       "source_sha256": "79d00cc01136bb067f627d9f941135c31fd67f11ed34e7964d2fc283a8821cc8"
     },
     "terrain.4": {
-      "title": "Öppna dörren",
+      "title": "Öppen dörr",
       "steps": [
         "En öppen dörr gör att du kan passera. Att stänga den kan blockera sikten och fördröja en fiende. Vissa varelser kan öppna, bryta eller passera genom dörrar, så kontrollera deras kända förmågor."
       ],
@@ -1749,21 +1749,21 @@
       "source_sha256": "34bb414ff5e1125e245fd11eaec6629a86f96c18883c918e902a698190bf36db"
     },
     "terrain.6": {
-      "title": "Skyddade dörrar",
+      "title": "Dörrar med skyddssigill",
       "steps": [
         "En låst dörr är svårare för fiender att öppna eller bryta upp. Dörrens styrka är viktig. Kontrollera de tillgängliga interaktionerna innan du förlitar dig på att den ska hålla en passage."
       ],
       "source_sha256": "ffad56c5ad680443ef114160ee64a0ad1045165127fb8ce224b017debedf3348"
     },
     "terrain.7": {
-      "title": "Försäkrad dörr",
+      "title": "Dörr med skyddssigill",
       "steps": [
         "En låst dörr är svårare för fiender att öppna eller bryta upp. Dörrens styrka är viktig. Kontrollera de tillgängliga interaktionerna innan du förlitar dig på att den ska hålla en passage."
       ],
       "source_sha256": "f9d08dca20514c5ab1e6c2ebfcc80be43e2bd3ebf04a0786831e6122b252fa96"
     },
     "terrain.8": {
-      "title": "Försäkrad dörr",
+      "title": "Dörr med skyddssigill",
       "steps": [
         "En låst dörr är svårare för fiender att öppna eller bryta upp. Dörrens styrka är viktig. Kontrollera de tillgängliga interaktionerna innan du förlitar dig på att den ska hålla en passage."
       ],
@@ -1777,28 +1777,28 @@
       "source_sha256": "b73c420ecd4aecd92bf552cc6373f86350fdd8e990c4b72eb4c7866f219e96d9"
     },
     "terrain.16": {
-      "title": "Falsk golv",
+      "title": "Falskt golv",
       "steps": [
         "En falsk golv kan kollapsa och få dig att falla ner till en djupare nivå. Undvik det eller undersök en giltig alternativ möjlighet att disarma eller hoppa över innan du korsar."
       ],
       "source_sha256": "74c3b3575814bdd856632fefdcfd1e202dc668378c5503cfd39414ad34ea7d8c"
     },
     "terrain.17": {
-      "title": "Fälla",
+      "title": "Grop",
       "steps": [
         "En grop kan skada dig när du faller ner. Att klättra upp tar tid och kan lämna dig sårbar för fiender. Ett lagligt hopp gör att du övergår över gropen utan att falla ner."
       ],
       "source_sha256": "144961b579f778e8625fff52036ce68997e408429d8e1c16c392ee010db592ab"
     },
     "terrain.18": {
-      "title": "Fäll med spetsar",
+      "title": "Grop med spetsar",
       "steps": [
         "En spetsig grop kan orsaka skada och blödning, och därefter fördröja dig medan du försöker klättra ut. Överväg att gå runt den eller använda en laglig alternativ, som att disarma eller hoppa över den."
       ],
       "source_sha256": "7a82fe92e9bd0ee318dfa72cc5ecbfd4cd8510b482fe4476e48b9e8fcace67be"
     },
     "terrain.19": {
-      "title": "Fäll med pil",
+      "title": "Pilfälla",
       "steps": [
         "En pilarfälla gör ett angrepp som kan skada dig och minska din styrka om den lyckas tränga igenom ditt rustningsskydd. Undvik rutan eller undersök \"Deaktivera\" och risken för att det misslyckas. I menyn: Disarm."
       ],
@@ -1819,14 +1819,14 @@
       "source_sha256": "deba23c7ae482555c898b0d3b7f149065308cfe5aa438b14b9440ab57c9ed03f"
     },
     "terrain.22": {
-      "title": "Fäll för att larma",
+      "title": "Larmfälla",
       "steps": [
         "En larmfälla gör ljud som kan varna närliggande fiender. Undvik den eller desarmera den när du vill förbli osynlig."
       ],
       "source_sha256": "2e76b2726988706762d3d815d2ee6d193bacab34c5ebb29dfe7e0105e7f883a5"
     },
     "terrain.23": {
-      "title": "Fäll",
+      "title": "Blixtfälla",
       "steps": [
         "En fälltrap kan blända dig. En uppenbar fälltrap är fortfarande aktiv, så undvik den eller undersök alternativet för att desarmera den. \"True Sight\" eller \"Miruvor\" kan bota blindhet om det skulle uppstå."
       ],
@@ -1840,21 +1840,21 @@
       "source_sha256": "ec64186610467999425dc7eb3b2dd3425059057caf18fd54c943df0663fac980"
     },
     "terrain.25": {
-      "title": "Hängmatta",
+      "title": "Fåglarnas viloplats",
       "steps": [
         "Att störa en bon är en handling som kan locka fram fåglar eller fladdermöss. Att hoppa kring bonet fungerar inte. Se till att ha utrymme för att hantera nya fiender om du väljer att passera."
       ],
       "source_sha256": "e84f6b961b7b48b20862267b86ab71b171cdc15449d36ae6a77029f8cb33ebae"
     },
     "terrain.26": {
-      "title": "Webb",
+      "title": "Spindelnät",
       "steps": [
         "En väv kan fånga dig och locka fram en spindel. Det kan ta flera rundor att undkomma. Att hoppa över väven fungerar inte, så överväg att gå runt eller rensa bort den innan du går igenom."
       ],
       "source_sha256": "8b373793a4f1c59e033f47cd0a2232988e303ca2fa75b7e38b96d95325f1dd40"
     },
     "terrain.27": {
-      "title": "Fäll",
+      "title": "Stenfallsfälla",
       "steps": [
         "En dödfall kan få ner tunga föremål och förändra omgivningen. Undvik den eller inspektera \"Avfyr\" innan du korsar; ett misslyckande kan utlösa fällan. I menyn: Disarm."
       ],
@@ -1931,70 +1931,70 @@
       "source_sha256": "062f0be3cfd9bb7b98c70bc5caff0fcc573829815a4743e22f64234bc7641ad5"
     },
     "terrain.40": {
-      "title": "Låsade dörrar",
+      "title": "Dörrar som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "acde484c18dfe6bc62b220294d221a97ab17c8ed338022d7a695bb493787e196"
     },
     "terrain.41": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.42": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.43": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.44": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.45": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.46": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.47": {
-      "title": "Låst dörr",
+      "title": "Dörr som kärvar",
       "steps": [
         "En låst dörr kan inte öppnas normalt. Undersök \"Slå\" eller ett annat tillgängligt sätt att ta sig igenom. Att slå sönder en dörr tar tid och gör ljud; en annan väg kan vara säkrare. I menyn: Bash."
       ],
       "source_sha256": "7823fa31884c3907a5cf1f51eeca003a4f60a4f1e37c5e96dbac580bbd23796b"
     },
     "terrain.49": {
-      "title": "Rubblehög",
+      "title": "Bråthög",
       "steps": [
         "Stenblock blockerar en väg tills den är borttagen. Grävning kan ta flera omgångar och skapa ljud. Förbered ett grävverktyg och kontrollera om det finns fiender innan du börjar."
       ],
       "source_sha256": "6a065be054a49b8e0194ff7ae29087620d6877fdd3a2290a71b3164754615701"
     },
     "terrain.51": {
-      "title": "Kvartskontur",
+      "title": "Kvartsåder",
       "steps": [
         "Kvartz är en mineralåder, inte en skadad vägg: dess synliga kristaller identifierar den. Att bryta en åder frigör en pärla; djupa ådrar kan också ge mithril, medan meteoritrav kan ge stjärnjärn. För att gräva behöver du ett verktyg med en viss kvalitet och en styrka på minst 2. Ett vanligt slag spricker intakt kvarts; ett starkt slag krossar den. Att rensa bort skräpet tar en annan åtgärd."
       ],
@@ -2022,147 +2022,147 @@
       "source_sha256": "9c3aeb85416c4d9cbdd8fa34da2a70eb9a99d6d24fe11b94ca9d00fdc389c5da"
     },
     "terrain.64": {
-      "title": "Utmattad smed",
+      "title": "Förbrukad smedja",
       "steps": [
         "Smedjan har inga användningar kvar. Du kan inte smida fler föremål här. Leta efter en användbar smedja om du vill fortsätta."
       ],
       "source_sha256": "1965e80bb7c3ffaf246555323cc65bb092b027d68ec4c4bfcb12075480f077a1"
     },
     "terrain.65": {
-      "title": "Skapa",
+      "title": "Smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. Förslaget visar svårighet, material, tid och övriga kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.66": {
-      "title": "Skapa",
+      "title": "Smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. Förslaget visar svårighet, material, tid och övriga kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.67": {
-      "title": "Skapa",
+      "title": "Smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. Förslaget visar svårighet, material, tid och övriga kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.68": {
-      "title": "Skapa",
+      "title": "Smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. Förslaget visar svårighet, material, tid och övriga kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.69": {
-      "title": "Skapa",
+      "title": "Smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. Förslaget visar svårighet, material, tid och övriga kostnader."
       ],
       "source_sha256": "41b9661c367ef986a106255d5b67431339f8f13aced2cff0ec28bc18e72f4576"
     },
     "terrain.70": {
-      "title": "Utmattad, magiskt förbättrad smed",
+      "title": "Förbrukad förtrollad smedja",
       "steps": [
         "Den förtrollade smedjan har inga användningar kvar. Du kan inte smida fler föremål här. Leta efter en användbar smedja om du vill fortsätta."
       ],
       "source_sha256": "604ded6e6f2f620482f12517b32d6ff9d6906d271edbd0d649b5e1470a487f40"
     },
     "terrain.71": {
-      "title": "Förtryckt smedja",
+      "title": "Förtrollad smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +3 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.72": {
-      "title": "Förtryckt smedja",
+      "title": "Förtrollad smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +3 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.73": {
-      "title": "Förtryckt smedja",
+      "title": "Förtrollad smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +3 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.74": {
-      "title": "Förtryckt smedja",
+      "title": "Förtrollad smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +3 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.75": {
-      "title": "Förtryckt smedja",
+      "title": "Förtrollad smedja",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +3 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "44c943d5550f5df27cbd83c7dcd705346a7a51186af6945537171191c4975278"
     },
     "terrain.76": {
-      "title": "Utmattad smed Orodruth",
+      "title": "Den förbrukade smedjan Orodruth",
       "steps": [
         "Smedjan Orodruth har inga användningar kvar. Du kan inte smida fler föremål här. Leta efter en användbar smedja om du vill fortsätta."
       ],
       "source_sha256": "edbc7e92425bff67d1112063f045831df5fd4c45ed44b2826575c0ae82933a0a"
     },
     "terrain.77": {
-      "title": "Skapa Orodruth",
+      "title": "Smedjan Orodruth",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +7 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "e0777eee03de8accdafc1c8bec0c7ee2cfc3b53ba7f52e0d1a0261411694da0d"
     },
     "terrain.78": {
-      "title": "Skapa Orodruth",
+      "title": "Smedjan Orodruth",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +7 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "e0777eee03de8accdafc1c8bec0c7ee2cfc3b53ba7f52e0d1a0261411694da0d"
     },
     "terrain.79": {
-      "title": "Skapa Orodruth",
+      "title": "Smedjan Orodruth",
       "steps": [
         "Antalet användningar är begränsat. Kontrollera hur många som återstår och läs ditt smidesförslag innan du börjar. När du arbetar här får du +7 i smide och kan tillverka svårare föremål."
       ],
       "source_sha256": "e0777eee03de8accdafc1c8bec0c7ee2cfc3b53ba7f52e0d1a0261411694da0d"
     },
     "terrain.80": {
-      "title": "Uppför trappan",
+      "title": "Trappa upp",
       "steps": [
         "En trappa upp går normalt ner en nivå. Om den minsta djupet förhindrar det, kan den istället ta dig tillbaka till samma djup eller djupare. Ed kan förhindra användningen. Läs bekräftelsen; att lämna alltid genererar en ny karta."
       ],
       "source_sha256": "bb1dd21406c31fa6bf9d016ec8031f259fdf904c3d44a1dbf2074bdcc1d1df10"
     },
     "terrain.81": {
-      "title": "Nedför trappan",
+      "title": "Trappa ned",
       "steps": [
         "En nedförs trappsteg går ner en våning och genererar en ny karta. Samla allt du vill behålla och kontrollera eventuella ofärdiga lokala mål innan du går ner."
       ],
       "source_sha256": "6a4408864c172f57692d96eba6cb0682d42c7774c9a603d3438f89389997859b"
     },
     "terrain.82": {
-      "title": "Uppåt",
+      "title": "Schakt upp",
       "steps": [
         "En uppförsram kan gå längre än en vanlig trappa, men den minsta djupet kan istället placera dig på samma eller djupare nivå. Regeln om löften gäller fortfarande. Läs destinationen innan du reser; kartan genereras nytt."
       ],
       "source_sha256": "611a70f61c0926db1e59742dbcf4019915ec55ee23de71386f11bc936ae20033"
     },
     "terrain.83": {
-      "title": "Nedåt",
+      "title": "Schakt ned",
       "steps": [
         "En nedåtgående trappa går längre ner än en vanlig trappa. Läs destinationen innan du bekräftar, och var beredd på en ny nivå på större djup."
       ],
       "source_sha256": "ef585d0af3c225abc49b27f3ccf6b7eef2911086e6c7179846eaa047e998c13d"
     },
     "terrain.84": {
-      "title": "Djup vatten",
+      "title": "Grunt vatten",
       "steps": [
         "Att röra sig, gå igenom eller ut ur grunt vatten kostar 50% längre rörelse och ger -3 i smygförmåga på grund av vågor. Att stå still har ingen extra rörelsekostnad. Vatten bryter din doftspår, men fiender kan fortfarande spåra dig visuellt eller genom ljud.",
         "När man är frisk, har varje vattenområde som man går in i en grundläggande chans på 0,5 % att bli sjuk, innan man har fått immunitet eller \"motståndskraft\". Att stå still har ingen effekt på risken för infektion. Ett lyckat hopp undviker kontakt och vattenstänk, men landningen gör fortfarande ljud. Sjukdom fortsätter under vila. En ört för läkning eller en potion för läkning eller Miruvor botar alla sjukdomar. Andra örter för läkning fungerar, förutom mot Angbandspest."
@@ -2254,7 +2254,7 @@
       "source_sha256": "2f758a07b2b4ce2cfd82bc811244fd4730053ff1563ecc372e78d1264e4fbed8"
     },
     "effect.204": {
-      "title": "Förvåning — känd effekt",
+      "title": "Förfäran — känd effekt",
       "steps": [
         "Försök att förvirra monster som är synliga. Kontrollera vad som faktiskt hände innan du förlitar dig på att ett monster har blivit förvirrat."
       ],
@@ -2401,16 +2401,16 @@
       "source_sha256": "d9c5e303c75e3df4c79f6685c279cc6a0f83c64d2036c32c87151ecc62891fad"
     },
     "effect.329": {
-      "title": "Fysik — känd effekt",
+      "title": "Uthållighet — känd effekt",
       "steps": [
-        "Kontrollera förlusten i egenskapen fysik. Om du har förlorat minst 3 poäng återställer drycken omedelbart 3. Annars får du +3 i egenskapen i 20d4 drag och återfår upp till 3 förlorade poäng när bonusen upphör."
+        "Kontrollera förlusten i egenskapen uthållighet. Om du har förlorat minst 3 poäng återställer drycken omedelbart 3. Annars får du +3 i egenskapen i 20d4 drag och återfår upp till 3 förlorade poäng när bonusen upphör."
       ],
       "source_sha256": "7e7c544659380baf745ee7e3926ca9471a1be95556c174f47f466a217bcab59d"
     },
     "effect.330": {
-      "title": "Grace — känd effekt",
+      "title": "Elegans — känd effekt",
       "steps": [
-        "Kontrollera förlusten i egenskapen grace. Om du har förlorat minst 3 poäng återställer drycken omedelbart 3. Annars får du +3 i egenskapen i 20d4 drag och återfår upp till 3 förlorade poäng när bonusen upphör."
+        "Kontrollera förlusten i egenskapen elegans. Om du har förlorat minst 3 poäng återställer drycken omedelbart 3. Annars får du +3 i egenskapen i 20d4 drag och återfår upp till 3 förlorade poäng när bonusen upphör."
       ],
       "source_sha256": "116d947c14644f40a14568a84830c7996c7acdb8eb11555011d5e8eb742f8cac"
     },
@@ -2452,21 +2452,21 @@
     "effect.350": {
       "title": "Avkoppling — känd effekt",
       "steps": [
-        "Minskar grace med 1. Återställning eller en motsvarande återställningseffekt åtgärdar minskningen."
+        "Minskar elegans med 1. Återställning eller en motsvarande återställningseffekt åtgärdar minskningen."
       ],
       "source_sha256": "52f2fbb538b3346caf3603db555eedc54a2175ca1168b419873694660af67467"
     },
     "effect.380": {
       "title": "Raseri — känd effekt",
       "steps": [
-        "Ger raseri i 10d4 rundor: +1 styrka/fysik, -1 smidighet/grace, en speciell närstridsattack och motstånd mot rädsla. Raseri begränsar medvetenhet och smygande. Det ger också vanlig örtnäring. Om detta är boten för din nuvarande sjukdom, botar det sjukdomen och återställer dess negativa effekter istället för att tillämpa raseri eller näring; annars gäller dess normala effekt."
+        "Ger raseri i 10d4 rundor: +1 styrka/uthållighet, -1 smidighet/elegans, en speciell närstridsattack och motstånd mot rädsla. Raseri begränsar medvetenhet och smygande. Det ger också vanlig örtnäring. Om detta är boten för din nuvarande sjukdom, botar det sjukdomen och återställer dess negativa effekter istället för att tillämpa raseri eller näring; annars gäller dess normala effekt."
       ],
       "source_sha256": "616ca8499f908903e134e6fe9d3fabd14444e1c12310d4b4304065a1318810e1"
     },
     "effect.381": {
       "title": "Mat och dryck — känd effekt",
       "steps": [
-        "Ger ungefär 2 000 vanliga portioner med näring. Den faktiska konsumtionshastigheten kan variera beroende på dina nuvarande modifieringar. Om detta är boten för din nuvarande sjukdom, botar den sjukdomen och återställer dess negativa effekter istället för att tillämpa den normala effekten eller näringen; annars tillämpas den normala effekten."
+        "Ger näring för ungefär 2 000 vanliga drag. Det faktiska näringsbehovet beror på dina aktuella modifierare. Om örten är botemedlet mot din sjukdom häver den sjukdomen och dess avdrag. Då uteblir örtens vanliga effekt och näring. Annars verkar den som vanligt."
       ],
       "source_sha256": "a8621b751b5fbc4f405a9d2e4c7136d8e04f47ca873476c7cfaf23ea86be66a2"
     },
@@ -2522,42 +2522,42 @@
     "effect.389": {
       "title": "Sjukdom — känd effekt",
       "steps": [
-        "Dess normala effekt är att försöka smitta en frisk person med sjukdom: -1 fysik vid infektion, sedan -1 till en slumpmässig egenskap var 150 spelomgångar (300 med \"Motståndskraft\") tills personen är botad. Vila botar inte sjukdomen. En ört för helande eller en helande dryck eller Miruvor botar alla sjukdomar. Helande återställer de negativa effekterna av sjukdomen. Det ger vanliga örter som näring. Om detta är boten för din nuvarande sjukdom, botar det sjukdomen och återställer dess effekter istället för att smitta dig eller ge näring; annars gäller dess normala effekt."
+        "Dess normala effekt är att försöka smitta en frisk person med sjukdom: -1 uthållighet vid infektion, sedan -1 till en slumpmässig egenskap var 150 spelomgångar (300 med \"Motståndskraft\") tills personen är botad. Vila botar inte sjukdomen. En ört för helande eller en helande dryck eller Miruvor botar alla sjukdomar. Helande återställer de negativa effekterna av sjukdomen. Det ger vanliga örter som näring. Om detta är boten för din nuvarande sjukdom, botar det sjukdomen och återställer dess effekter istället för att smitta dig eller ge näring; annars gäller dess normala effekt."
       ],
       "source_sha256": "1a36c79391b42d1d2638cd6767a512eb3c82dd50246dd4fe8ef6905e585cba05"
     },
     "effect.399": {
       "title": "En bit mörk bröd — känd effekt",
       "steps": [
-        "Ger ungefär 1 500 vanliga matportioner."
+        "Ger näring för ungefär 1 500 vanliga drag."
       ],
       "source_sha256": "d358279640cace15de4d1a702b32ebe61c8c90796a253163279dff44dacee8fd"
     },
     "effect.400": {
       "title": "Torkat kött i remmar — känd effekt",
       "steps": [
-        "Ger cirka 2 000 vanliga portioner med näring, med en grundläggande chans på 20% att bli sjuk: -1 fysik vid infektion, följt av -1 till en slumpmässig egenskap var 150 spelomgångar (300 med \"Motståndskraft\"). Övriga metoder botar inte. En ört av helande eller en helande dryck eller Miruvor botar alla sjukdomar."
+        "Ger näring för ungefär 2 000 vanliga drag. Grundrisken för smitta är 20 %. Vid smitta förlorar du 1 poäng i uthållighet och därefter 1 poäng i en slumpmässig egenskap vart 150:e spelardrag (vart 300:e med Hardiness). Vila botar inte sjukdomen. En läkeört, en läkande dryck eller Miruvor botar alla sjukdomar."
       ],
       "source_sha256": "60fb6ef370957c5bc80e489c5fc13dd8ee188e68604c3b1f8dd221f43c9335c1"
     },
     "effect.401": {
       "title": "En bit Lembas — känd effekt",
       "steps": [
-        "Ger ungefär 3 000 vanliga \"tur\"-måltider och återställer 1 \"grace\"-poäng."
+        "Ger näring för ungefär 3 000 vanliga drag och återställer 1 förlorad poäng i elegans."
       ],
       "source_sha256": "c3fbee491d23938b05e2e4a9ba57ca6294c4ce5acd6c9cfae44b0e4f4afb0bff"
     },
     "item.throwing.ready": {
       "title": "Vapen för kast: redo",
       "steps": [
-        "Öppna inventariet, välj kastvapnet och sedan Ready för att flytta föremålet till bärselen. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
+        "Öppna Föremål, välj kastvapnet och sedan ”Flytta till bärselen”. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
       ],
       "source_sha256": "cf3c627074fa43b9156e7d81f269029871f96de54eaa12d6893d5e5b85324ae4"
     },
     "item.throwing.active": {
       "title": "Vapen för kast: aktiv",
       "steps": [
-        "Öppna Change Active och välj raden Throwing för ett vapen som du har gjort redo. Ett spjut kan även ha en egen rad för Melee. Välj Throwing i den här övningen. Kontrollera vilket vapen och vilken sköld som blir aktiva och bekräfta. Hoppa över lektionen om du vill behålla nuvarande utrustning."
+        "Öppna ”Byt aktivt vapen” och välj raden ”Throwing” för ditt redo kastvapen. Ett spjut kan också ha en separat rad för närstrid, ”Melee”. Välj ”Throwing” i den här övningen. Kontrollera vilket vapen och vilken sköld som blir aktiva och bekräfta. Hoppa över lektionen om du vill behålla din utrustning."
       ],
       "source_sha256": "662ec2eb8ad97fb769090a4913e0b68ab4d71aced3adbc81527c8eb1e290c922"
     },
@@ -2569,16 +2569,16 @@
       "source_sha256": "beb7e46ba1514558d8a3fdd4ad4c888959eba78a239bd24e2915a76a1bf56f6d"
     },
     "item.bow.ready": {
-      "title": "Båg: redo",
+      "title": "Gör en båge redo",
       "steps": [
-        "Öppna inventariet, välj bågen och sedan Ready för att flytta föremålet till bärselen. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
+        "Öppna Föremål, välj bågen och sedan ”Flytta till bärselen”. Att ta något ur ryggsäcken tar tre drag och ett anfall kan avbryta det. Hoppa över lektionen om du vill behålla din utrustning som den är."
       ],
       "source_sha256": "feb12c8654451c767dba1e16c5f5e5c1fe28c572a6bd249b9546b019e8bf3369"
     },
     "item.bow.active": {
-      "title": "Böja: aktiv",
+      "title": "Välj aktiv båge",
       "steps": [
-        "Välj den förberedda bågen i Change Active. Kontrollera vilket vapen och vilken sköld som blir aktiva. Bekräfta för att slutföra övningen, eller hoppa över lektionen för att behålla din utrustning."
+        "Välj bågen du har gjort redo under ”Byt aktivt vapen”. Kontrollera vilket vapen och vilken sköld som blir aktiva. Bekräfta bytet för att avsluta övningen, eller hoppa över lektionen för att behålla din utrustning."
       ],
       "source_sha256": "2d8fa1bb9295b295f10c11bee1f9d9664ea80d3f8da2f3e27a6accc8b64a4642"
     },
@@ -2597,9 +2597,9 @@
       "source_sha256": "22889891699c1d952545458640026303a6bffca6515e5da6d8970746030a2498"
     },
     "item.armour.equip": {
-      "title": "Utrustning",
+      "title": "Ta på rustning",
       "steps": [
-        "Välj \"Utrustning\" för kända, icke-besvärade rustningar som passar en ledig plats. Kontrollera skydd, undvikande, straff och ditt löfte innan du bekräftar. Hoppa över om du föredrar din nuvarande uppsättning. I menyn: Equip."
+        "Välj ”Utrusta” på en identifierad, oförbannad rustning som passar på en ledig plats. Kontrollera skydd, undvikande, avdrag och din ed innan du bekräftar. Hoppa över lektionen om du vill behålla din utrustning."
       ],
       "source_sha256": "dda38dd3b88e9b72cea092ddf630c98ca9b8d9bddf7c817f7c2a519808f8088f"
     },
@@ -2611,14 +2611,14 @@
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
-      "title": "Maximal lastkapacitet",
+      "title": "Bärselens kapacitet",
       "steps": [
         "{detail} Bärselen har en egen begränsning för hur mycket den kan innehålla, separat från ryggsäcken. Utrustning som är redo kan nås enligt sina egna regler. Att flytta en föremål mellan förvaringsplatser skapar inte en oändlig total lastkapacitet."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
     "storage.quiver": {
-      "title": "Maximala kapacitet för pilfälla",
+      "title": "Pilkogrets kapacitet",
       "steps": [
         "{detail} Koger innehåller pilar enligt sina egna regler. Om det finns för många pilar kan de behöva plats i ryggsäcken. Ett antal pilar kan plockas upp delvis, men bara om en del får plats; kontrollera hur många pilar som faktiskt samlats in."
       ],
@@ -2632,14 +2632,14 @@
       "source_sha256": "13beba1f2d1595f6ba75a4ba3519f791ed15c82ba0f795552a90818a63c498eb"
     },
     "storage.pack_access": {
-      "title": "Ta fram utrustningen från packen",
+      "title": "Ta fram föremål ur ryggsäcken",
       "steps": [
         "Den här åtgärden tar tre omgångar att slutföra. Fiender kan agera under dessa omgångar, och en attack eller ditt avbrytande kan stoppa den. Förbered nödvändig utrustning innan striden om möjligt."
       ],
       "source_sha256": "68ce9a0651f5cd3b3f6f0cfa00a4a9173c9b2b10234538843f40c2b11cad2386"
     },
     "storage.pack_interrupted": {
-      "title": "Åtkomst till lagret avbruten",
+      "title": "Åtkomst till ryggsäcken avbruten",
       "steps": [
         "Ett angrepp avbröt handlingen med ryggsäcken innan den var klar. Kontrollera föremålets nuvarande plats och meddelandehistoriken. Du kan behöva flytta dig för att undvika fara innan du försöker igen."
       ],
@@ -2653,9 +2653,9 @@
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
     "world.rest": {
-      "title": "Vila tar en tur",
+      "title": "Vila kostar drag",
       "steps": [
-        "Spelaren upprepar turerna tills målet är uppnått eller något avbryter den. Fiender och timern fortsätter. Gift, blödning och svält stoppar normal häloregenerering; sång stoppar röstregeneration. Behandla sjukdom innan en lång vila."
+        "Du vilar drag för drag tills du har nått målet eller något avbryter dig. Fiender fortsätter att agera och tiden till nästa ökning av minsta djup räknas ned. Gift, blödning och svält hindrar vanlig återhämtning av hälsa. Sång hindrar rösten från att återhämta sig. Behandla sjukdom före en lång vila."
       ],
       "source_sha256": "f8ec297cf2113dd15776f2fd692a10a16c15f5f5eb3374fad40e162c8eb8740d"
     },
@@ -2669,7 +2669,7 @@
     "world.trap": {
       "title": "En känd fälla",
       "steps": [
-        "Du har hittat en fälla. Att se den förhindrar inte att den aktiveras. Välj en väg runt den, undersök \"Deaktivera\" och dess risk, eller använd en laglig hopp om din hjälte har förmågan att hoppa. Om den redan har aktiverats, kontrollera din hälsa och dina förutsättningar innan du agerar. I menyn: Disarm."
+        "Du har upptäckt en fälla. Den är fortfarande aktiv. Gå runt den, kontrollera valet ”Oskadliggör” och risken, eller hoppa över den om hjälten har förmågan Språng och kan utföra hoppet. Har fällan redan löst ut ska du kontrollera hälsan och dina tillstånd innan du agerar."
       ],
       "source_sha256": "d736a4fbda85cbff7b263fbacd3afb7a4d62740a39ffd513a2f8ba153094689d"
     },
@@ -2807,7 +2807,7 @@
       "source_sha256": "6a8e92396417cc8516de5c98afb86fa631b33d6090abdb369bfbb9ccbd64eaee"
     },
     "world.partition.5": {
-      "title": "Avgrundsregionen",
+      "title": "Område med avgrunder",
       "steps": [
         "{detail} Avgrunder delar upp detta område. Ett fall kan skada dig och få dig att falla djupare. Kontrollera varje förbindelse och krav på hopp innan du rör dig. \"Titta\" efter fallna föremål nära kanterna, men undvik att slåss på smala broar. Stjärnjärn kan förekomma på lämpliga djup."
       ],
@@ -2900,7 +2900,7 @@
     "monster.rf1_unique": {
       "title": "Ett unikt väsen",
       "steps": [
-        "Detta varelse är unik och har sina egna attacker och försvar. Läs dess beskrivning innan du konfronterar den; vanliga medlemmar av en liknande grupp kan bete sig annorlunda."
+        "Den här varelsen är unik och har egna attacker och försvar. Läs vad du vet om den innan du möter den. Vanliga varelser i samma grupp kan bete sig annorlunda."
       ],
       "source_sha256": "f7cce25a77783854b9527ada1ba068b7e13fc512a7a5daa1cca19d6f15cb89df"
     },
@@ -3045,7 +3045,7 @@
       "source_sha256": "17ac5e2cf9488195da351473991fc38df233df65831c2300c5b2fc0b712b15a8"
     },
     "monster.rf2_pass_door": {
-      "title": "Genomgång av dörrar",
+      "title": "Passera under dörrar",
       "steps": [
         "Detta väsen kan passera under dörrar. Att stänga en dörr kommer inte att hindra det."
       ],
@@ -3269,9 +3269,9 @@
       "source_sha256": "6aa1a3b6a7f6231b7525cb6d83f1c458fddcbda90b2634270c2664e20519d2e7"
     },
     "monster.rf4_arrow1": {
-      "title": "Fiendens båge",
+      "title": "Fiendens bågskytte",
       "steps": [
-        "Detta monster har en attack med en kortbåge. Riktningen för eld och närliggande skydd är viktigt, även när monstret inte är direkt intill."
+        "Varelsen kan skjuta pilar med en kortbåge. Ta hänsyn till skottlinjen och skydd i närheten även när den står längre bort."
       ],
       "source_sha256": "1693e9ae6290442f88bf766ab45731c81fa8f7d18eefaf879a7060f11b42d67c"
     },
@@ -3367,9 +3367,9 @@
       "source_sha256": "05d860d4fde4c72a7170bd7f29b04a7176dcc28ee5565f0c99e5018b106058e5"
     },
     "monster.rf4_hold": {
-      "title": "Orsakande av fascination",
+      "title": "Försätter dig i trans",
       "steps": [
-        "Detta väsen kan förföra dig. En lyckad trance hindrar dig från att utföra vanliga handlingar tills den upphör. Undvik att anta att du kan dricka ett läkemedel efter att ha förlorat förmågan att agera."
+        "Varelsen kan försätta dig i trans. Så länge transen varar kan du inte utföra vanliga handlingar. Räkna inte med att kunna dricka ett botemedel när du har förlorat förmågan att agera."
       ],
       "source_sha256": "419f9d5d6e421ee5030767bb868350b0e5f0be77fc5000f96c0feb39790f4598"
     },
@@ -3395,23 +3395,23 @@
       "source_sha256": "b12fbadd52b9abb41b6dbaec5e7be9318027efda0e13cb558697dc70cd7c033a"
     },
     "monster.rf4_sng_binding": {
-      "title": "En sång för att binda en fiende",
+      "title": "Fiendens bindande sång",
       "steps": [
-        "Den här fiendes \"Låsningssång\" kan sakta ner dig och stänga eller låsa dörrar. Kontrollera din flyktväg och din \"Långsamma\" tillstånd. \"Låsningssången\" försvagar den motståendes sång."
+        "Fiendens bindande sång (Song of Binding) kan göra dig långsammare och stänga eller låsa dörrar. Kontrollera flyktvägen och om du har blivit långsammare. Tystnadens sång (Song of Silence) försvagar fiendens sång."
       ],
       "source_sha256": "0c7ec48342eb26d5972c9a6f448b67bfb4a732c9de42bf1230cce8384fcf94a9"
     },
     "monster.rf4_sng_piercing": {
-      "title": "En fiende-dödande sång",
+      "title": "Fiendens genomträngande sång",
       "steps": [
-        "Den här fiendes \"Piercing Song\" kan avslöja din position genom en motståndskraftig viljekontroll. Avstånd och \"Song of Silence\" hjälper dig att motstå sökningen."
+        "Fiendens genomträngande sång (Song of Piercing) kan avslöja din position genom ett motstående viljeprov. Avstånd och Tystnadens sång (Song of Silence) hjälper dig att motstå sökandet."
       ],
       "source_sha256": "57af736e8eb03e757e1a419757bda24e52507dd08915b0eb029696b0ea45b0cc"
     },
     "monster.rf4_sng_oaths": {
-      "title": "En fiendes eder-sång",
+      "title": "Fiendens edsång",
       "steps": [
-        "Den här fienden kan använda sin \"Lied von Treue\" för att kalla fram \"Oathwraiths\". Att låta den fortsätta sjunga kan dra till sig fler efterföljare. \"Lied von Stille\" försvagar den magiska sången."
+        "Fiendens edsång (Song of Oaths) kan frammana edsvålnader (Oathwraiths). Om fienden fortsätter sjunga kan du få fler förföljare. Tystnadens sång (Song of Silence) försvagar frambesvärjelsen."
       ],
       "source_sha256": "3e4461156bb9b54750ff75d3fd8d545e635a5db81aba2f4a1ad604276b0a074a"
     },
@@ -3437,7 +3437,7 @@
       "source_sha256": "489f6287b462ce484bd68e76e43d2c732afafa58acebfe7b4756274a9c72c4e0"
     },
     "monster.rf4_rally": {
-      "title": "Samla allierade",
+      "title": "Inge allierade mod",
       "steps": [
         "Detta väsen kan återställa modet hos allierade som flyr. Var uppmärksam på fiender som återvänder till striden efter att ha dragit sig tillbaka."
       ],
@@ -3741,7 +3741,7 @@
       "title": "Närma dig försiktigt",
       "steps": [
         "{subject} har inte upptäckt dig ännu. Smygläget gör dig svårare att upptäcka men saktar ned de flesta handlingar. Avstånd och skydd hjälper också. Börja smyga innan du närmar dig om du vill förbli oupptäckt.",
-        "Aktivera \"Smink\"-läge för detta övningspass. Du kan stänga av det senare när hastighet är viktigare. Hoppa över om du föredrar en annan strategi."
+        "Aktivera smygläget i den här övningen. Du kan stänga av det senare när hastighet är viktigare. Hoppa över om du föredrar en annan strategi."
       ],
       "source_sha256": "b85c89b23bb74b88561878bf681c5cfc81fde7632b84b55b0b1e7b86f2c26851"
     },
@@ -3912,7 +3912,7 @@
       "source_sha256": "c331749fe6aedf1c8db6da3ec67ee1d26b863d86956dfb50b1178d8198b45612"
     },
     "terrain.101": {
-      "title": "Fäll av översvämning",
+      "title": "Översvämningsfälla",
       "steps": [
         "Denna fälla släpper lös en liten vattencell under dig. Efter varje av dina följande två genomförda handlingar fylls nästa ring som är nåbar (upp till åtta celler, sedan upp till sexton) utan att passera väggar; dörrar på vägen förstörs och ersätts med vatten. Syraversioner använder syra istället. På den andra handlingen blir vattenflodens centrum en djup vatten, där rörelse kräver fyra gånger normal energi och du inte kan attackera.",
         "Inspektera en uppenbar fälla innan du går över den. Gå runt den eller använd interaktionen \"Deaktivera\" och dess risker. Om översvämningen redan har börjat, beger dig mot torrt underlag; att läsa menyer gör inte att den fortsätter, men att vänta eller utföra en annan åtgärd gör det. I menyn: Disarm."
@@ -3946,11 +3946,11 @@
     "Preview item": "Granska föremålet",
     "Preview the selected item%s%s": "Granska valt föremål%s%s",
     "The selected item's preview is open.": "Beskrivningen av det valda föremålet är öppen.",
-    "Select the item, then choose Ready.": "Välj föremålet och sedan Ready.",
+    "Select the item, then choose Ready.": "Välj föremålet och sedan ”Flytta till bärselen”.",
     "Select the equipment you want to wear or wield.": "Välj utrustningen du vill bära eller hålla i handen.",
     "Select an item to preview.": "Välj ett föremål att granska.",
     "Select the required item and choose Use.": "Välj det efterfrågade föremålet och sedan Use.",
-    "Choose a Throwing row, then confirm the change.": "Välj en rad märkt Throwing och bekräfta bytet.",
+    "Choose a Throwing row, then confirm the change.": "Välj raden ”Throwing” för kastvapen och bekräfta bytet.",
     "Make the requested selection in the open menu.": "Gör det efterfrågade valet i den öppna menyn.",
     "Throw active weapon": "Kasta det aktiva vapnet",
     "Attack": "Anfall",
@@ -4016,7 +4016,7 @@
     "Reset this Tale's lesson history": "Rensa berättelsens lektionshistorik",
     "Cancel": "Avbryt",
     "Reset tutorials": "Återställ lektioner",
-    "Only tutorial history for the current Tale will be cleared. The game and device controls do not reset.": "Endast historiken för den aktuella berättelsen kommer att raderas. Spelkontrollerna och enhelen återställs inte.",
+    "Only tutorial history for the current Tale will be cleared. The game and device controls do not reset.": "Bara lektionshistoriken för den aktuella berättelsen rensas. Spelet och enhetens kontroller återställs inte.",
     "This item is identified. Read its known properties and any drawbacks.": "Detta föremål har identifierats. Läs dess kända egenskaper och eventuella nackdelar.",
     "Its effect is still unknown. Examining does not identify it, and an unknown effect is not necessarily safe.": "Dess effekt är fortfarande okänd. Att undersöka det identifierar inte det, och en okänd effekt är inte nödvändigtvis säker.",
     "This item is not fully identified. The preview shows only what your hero has learned; undiscovered properties remain hidden.": "Detta föremål är inte fullständigt identifierat. Förhandsvisningen visar endast vad din hjälte har lärt sig; okända egenskaper förblir dolda.",
@@ -4034,7 +4034,7 @@
     "An active quest's recorded progress has changed. Review the current objective in Quests.": "Framstegen för en aktiv uppgift har ändrats. Granska det aktuella målet i \"Uppgifter\".",
     "The target has been defeated. Review the reward state in Quests.": "Målet har besegrats. Granska belöningen i \"Uppdrag\".",
     "A revealed Tale curse has been added or strengthened. Read its current effect in your character details.": "En uppenbarad \"Tale\"- förbannelse har lagts till eller förstärkts. Läs dess aktuella effekt i dina karaktärsdetaljer.",
-    "A known blessing has been added or strengthened. Read its effect before planning around it.": "En känd förbannelse har tillagt eller förstärkt. Läs dess effekt innan du planerar kring den.",
+    "A known blessing has been added or strengthened. Read its effect before planning around it.": "En känd välsignelse har lagts till eller förstärkts. Läs om dess effekt innan du planerar nästa steg.",
     "Your recorded oath state changed. Review the consequence before acting again.": "Din registrerade ed har ändrats. Granska konsekvenserna innan du agerar igen.",
     "You now carry an additional Silmaril. Read the current escape objective and consequences.": "Du har nu en extra Silmaril. Läs det aktuella undkomsterikt och dess konsekvenser.",
     "A truce is active. Consider which actions will break it.": "En tillfällig fred gäller. Fundera på vilka handlingar som kan bryta den.",
@@ -4043,8 +4043,8 @@
     "This hero's run has ended. Review the cause of death and combat history before choosing the next hero in this Tale.": "Den här hjältes resa har tagits till ett slut. Granska dödsorsaken och stridshistoriken innan du väljer nästa hjälte i denna berättelse.",
     "Strength": "Styrka",
     "Dexterity": "Smidighet",
-    "Constitution": "Fysik",
-    "Grace": "Grace",
+    "Constitution": "Uthållighet",
+    "Grace": "Elegans",
     "Challenge echo": "Utmaningens eko",
     "Elbereth echo": "Elbereths eko",
     "You have updated the game to version 0.9.8. This version adds gameplay tutorials. For consistency, they will be enabled for your next new character, after this one dies. This character will continue without gameplay tutorials.": "Du har uppdaterat spelet till version 0.9.8. Denna version inkluderar spelinstruktioner. För att upprätthålla enhetlighet kommer de att aktiveras för din nästa nya karaktär, efter att denna har dött. Denna karaktär kommer att fortsätta utan spelinstruktioner.",
@@ -4052,7 +4052,7 @@
     "Your saved tutorial setting is Disabled. They will stay off until you choose Normal or Extended in Options.": "Dina sparade inställningar för guiden är avstängda. De kommer att förbli avstängda tills du väljer \"Normal\" eller \"Utökad\" i inställningarna.",
     "Extended is the default. You can choose Disabled, Normal or Extended in Options; changing this setting will not enable tutorials for an older character.": "\"Extended\" är standardinställningen. Du kan välja \"Inaktiverat\", \"Normal\" eller \"Extended\" i Inställningar. Att ändra denna inställning kommer inte att aktivera handledningar för en äldre karaktär.",
     "Updated to 0.9.8": "Uppdaterat till 0.9.8",
-    "Use this known staff from the Harness once. It spends a charge; effects on enemies may be resisted.": "Använd denna kända magiska föremål från \"Harness\" en gång. Det kostar en användning; effekterna på fiender kan motverkas.",
+    "Use this known staff from the Harness once. It spends a charge; effects on enemies may be resisted.": "Använd den kända staven i bärselen en gång. Det förbrukar en laddning och fiender kan stå emot effekten.",
     "Use item": "Använd föremål",
     "Examine item": "Granska föremål",
     "Sing / change song": "Sjung / byt sång",
@@ -4071,7 +4071,7 @@
     "Your hit margin was %d with a %.1f lb weapon, adding %d critical dice. Damage now rolls %dd%d before Protection.": "Träffmarginalen var %d med ett vapen på %.1f lb. Extra kritiska tärningar: %d. Skadan före skydd är %dd%d.",
     "Sound this known horn toward a hostile target. It costs %d Voice and makes a loud noise.": "Blås i det här kända hornet mot en fiende. Det kostar %d röst och låter högt.",
     "Severity %d; at this value the next damage tick is %d Health.": "Svårighetsgrad: %d. Nästa skada kostar %d hälsa.",
-    "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d.": "Sjukdomsavdrag: styrka %+d, smidighet %+d, fysik %+d, grace %+d.",
+    "Disease penalties: Strength %+d, Dexterity %+d, Constitution %+d, Grace %+d.": "Sjukdomsavdrag: styrka %+d, smidighet %+d, uthållighet %+d, elegans %+d.",
     "Stun %d: %+d to every skill.": "Bedövning %d: %+d på varje färdighet.",
     "%s drain changed from %d to %d. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.": "%s: förlusten ändrades från %d till %d. I egenskapsöversikten skiljs den från utrustningsavdrag och bonusar som löper ut.",
     "Health: %d/%d. Read the last attack and its effects before acting again.": "Hälsa: %d/%d. Läs om det senaste anfallet och dess följder innan du agerar igen.",

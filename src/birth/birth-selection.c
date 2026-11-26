@@ -1,6 +1,7 @@
 /* File: birth/birth-selection.c */
 
 #include "angband.h"
+#include "ui/ui-language.h"
 #include "birth/birth-internal.h"
 
 /*
@@ -130,30 +131,30 @@ static void birth_format_character_power(byte power, bool leading_space,
 {
     cptr star_text = "**";
     byte star_attr = TERM_WHITE;
-    cptr power_label = "Fair";
+    cptr power_label = ui_text("Fair");
 
     switch (power)
     {
     case 0:
         star_text = "*";
         star_attr = TERM_RED;
-        power_label = "Weak";
+        power_label = ui_text("Weak");
         break;
     case 1:
         star_text = "**";
         star_attr = TERM_WHITE;
-        power_label = "Fair";
+        power_label = ui_text("Fair");
         break;
     case 2:
         star_text = "***";
         star_attr = TERM_GREEN;
-        power_label = "Strong";
+        power_label = ui_text("Strong");
         break;
     case 3:
     case 4:
         star_text = "***";
         star_attr = TERM_L_GREEN;
-        power_label = "Mighty";
+        power_label = ui_text("Mighty");
         break;
     default:
         break;
@@ -354,23 +355,23 @@ static void birth_select_emit_detail(int race, int character, bool affinities_va
 
         birth_count_alive_character_powers(power_counts);
 
-        sdl_character_sheet_screen_begin_select_rating_summary("Heroes Power");
+        sdl_character_sheet_screen_begin_select_rating_summary(ui_text("Heroes Power"));
         birth_format_character_power(3, false, stars, sizeof(stars),
             &star_attr, NULL);
-        sdl_character_sheet_screen_add_select_rating("Mighty", stars,
-            power_counts[3], star_attr, "Mighty heroes still alive.");
+        sdl_character_sheet_screen_add_select_rating(ui_text("Mighty"), stars,
+            power_counts[3], star_attr, ui_text("Mighty heroes still alive."));
         birth_format_character_power(2, false, stars, sizeof(stars),
             &star_attr, NULL);
-        sdl_character_sheet_screen_add_select_rating("Strong", stars,
-            power_counts[2], star_attr, "Strong heroes still alive.");
+        sdl_character_sheet_screen_add_select_rating(ui_text("Strong"), stars,
+            power_counts[2], star_attr, ui_text("Strong heroes still alive."));
         birth_format_character_power(1, false, stars, sizeof(stars),
             &star_attr, NULL);
-        sdl_character_sheet_screen_add_select_rating("Fair", stars,
-            power_counts[1], star_attr, "Fair heroes still alive.");
+        sdl_character_sheet_screen_add_select_rating(ui_text("Fair"), stars,
+            power_counts[1], star_attr, ui_text("Fair heroes still alive."));
         birth_format_character_power(0, false, stars, sizeof(stars),
             &star_attr, NULL);
-        sdl_character_sheet_screen_add_select_rating("Weak", stars,
-            power_counts[0], star_attr, "Weak heroes still alive.");
+        sdl_character_sheet_screen_add_select_rating(ui_text("Weak"), stars,
+            power_counts[0], star_attr, ui_text("Weak heroes still alive."));
 #endif
 
         strnfmt(pretty_name, sizeof(pretty_name), "%s%s",
@@ -421,9 +422,9 @@ static void birth_select_emit_detail(int race, int character, bool affinities_va
     if (affinities_vary)
     {
         sdl_character_sheet_screen_add_select_detail(
-            "Affinities vary by lineage", TERM_SLATE,
-            "Each Noldorin lineage has its own skill affinities; choose a "
-            "lineage to see them.");
+            ui_text("Affinities vary by lineage"), TERM_SLATE,
+            ui_text("Each Noldorin lineage has its own skill affinities; choose a "
+            "lineage to see them."));
         return;
     }
 
@@ -534,7 +535,7 @@ static bool get_player_race(bool open_on_choice_page)
         if (minimum_text_mode)
         {
             /* Use the stat/trait picker directly, without the story pages. */
-            page.title = "Choose Race";
+            page.title = ui_text("Choose Race");
             page.frame_top = page.intro = page.frame_bottom = NULL;
             page.detail_stat_rows_hint = A_MAX;
         }
@@ -681,7 +682,7 @@ static bool get_character_profile(void)
             false                         /* not book mode: no choice-page jump */
         };
         if (minimum_text_mode)
-            page.title = "Choose Hero";
+            page.title = ui_text("Choose Hero");
         page.detail_stat_rows_hint = A_MAX;
         page.detail_ability_rows_hint = max_ability_rows;
         page.detail_trait_rows_hint = max_trait_rows;

@@ -4,6 +4,7 @@
 #include "sdl-config.h"
 #include "support/input.h"
 #include "support/utf8.h"
+#include "ui/ui-language.h"
 #include "support/feedback.h"
 #include "support/screen.h"
 #include "ui/menu-click.h"
@@ -361,6 +362,8 @@ static void string_panel_add_action(int choice, cptr label, byte attr)
 {
     if (sdl_terminal_menu_font() == SDL_MENU_FONT_HELP)
         label = tutorial_help_text(label);
+    else
+        label = ui_text(label);
 #if defined(__ANDROID__)
     sdl_question_menu_add_button(choice, label, attr);
 #else
@@ -379,6 +382,7 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category,
     char line[120];
     cptr panel_title = prompt;
     cptr random_label = "Random name";
+    bool help = sdl_terminal_menu_font() == SDL_MENU_FONT_HELP;
 #if defined(__ANDROID__)
     if (allow_random_name) {
         panel_title = "Name:";
@@ -391,7 +395,7 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category,
     ui_menu_click_set_outside_cancel_enabled(true);
     ui_menu_click_set_touch_category(touch_category);
 
-    sdl_question_menu_begin(panel_title);
+    sdl_question_menu_begin(help ? panel_title : ui_text(panel_title));
     sdl_question_menu_set_text_input(true);
 
     /* Show the current text with a caret (just the caret when empty) */
@@ -402,7 +406,7 @@ static void string_panel_draw(cptr prompt, const char* text, int touch_category,
     if (sdl_controller_keyboard_active()) {
         if (allow_random_name)
             sdl_question_menu_add_button(STRING_PANEL_CLICK_RANDOM,
-                "<View> Random name", TERM_L_WHITE);
+                ui_text("<View> Random name"), TERM_L_WHITE);
         sdl_question_menu_set_highlight(STRING_PANEL_CLICK_FIELD);
         sdl_question_menu_finish();
         Term_fresh();
@@ -619,22 +623,22 @@ static void quantity_prompt_draw(cptr prompt, cptr action, int current,
     ui_menu_click_set_outside_cancel_enabled(true);
     ui_menu_click_set_touch_category(touch_category);
 
-    sdl_question_menu_begin(prompt);
+    sdl_question_menu_begin(ui_text(prompt));
 
-    strnfmt(line, sizeof(line), "%s %d",
-        (action && action[0]) ? action : "Take", current);
+    strnfmt(line, sizeof(line), ui_text("%s %d"),
+        ui_text((action && action[0]) ? action : "Take"), current);
     sdl_question_menu_add_entry(QUANTITY_CLICK_CONFIRM, "", line,
         TERM_L_BLUE);
-    sdl_question_menu_add_entry(QUANTITY_CLICK_INCREASE, "+)", "More",
+    sdl_question_menu_add_entry(QUANTITY_CLICK_INCREASE, "+)", ui_text("More"),
         TERM_L_WHITE);
-    sdl_question_menu_add_entry(QUANTITY_CLICK_DECREASE, "-)", "Fewer",
+    sdl_question_menu_add_entry(QUANTITY_CLICK_DECREASE, "-)", ui_text("Fewer"),
         TERM_L_WHITE);
-    strnfmt(line, sizeof(line), "All (%d)", max);
+    strnfmt(line, sizeof(line), ui_text("All (%d)"), max);
     sdl_question_menu_add_entry(QUANTITY_CLICK_ALL, "a)", line,
         TERM_L_WHITE);
-    sdl_question_menu_add_entry(QUANTITY_CLICK_ZERO, "0)", "None",
+    sdl_question_menu_add_entry(QUANTITY_CLICK_ZERO, "0)", ui_text("None"),
         TERM_L_WHITE);
-    sdl_question_menu_add_entry(QUANTITY_CLICK_CANCEL, "", "Cancel",
+    sdl_question_menu_add_entry(QUANTITY_CLICK_CANCEL, "", ui_text("Cancel"),
         TERM_SLATE);
 
     sdl_question_menu_set_highlight(QUANTITY_CLICK_CONFIRM);
@@ -690,7 +694,7 @@ static s16b get_quantity_aux(cptr prompt, cptr action, int max,
 
         if (!prompt)
         {
-            strnfmt(prompt_buf, sizeof(prompt_buf), "How many? (0-%d)", max);
+            strnfmt(prompt_buf, sizeof(prompt_buf), ui_text("How many? (0-%d)"), max);
             prompt = prompt_buf;
         }
 
@@ -977,6 +981,7 @@ static bool get_check_aux(cptr prompt, int anchor_y, int anchor_x, bool lower)
 {
     char ch;
     bool saved_hide_cursor = hide_cursor;
+    prompt = ui_text(prompt);
 
     /* Paranoia XXX XXX XXX */
     message_flush();
@@ -1068,7 +1073,8 @@ bool get_check_oath_multiline(cptr prompt)
     Term_clear();
     
     /* Title */
-    Term_putstr((wid - 24) / 2, 2, -1, TERM_L_RED, "Breaking a Sacred Oath");
+    cptr title = ui_text("Breaking a Sacred Oath");
+    Term_putstr(MAX(0, (wid - (int)strlen(title)) / 2), 2, -1, TERM_L_RED, title);
     
     /* Display the oath confirmation prompt with word wrapping */
     if (prompt && prompt[0]) {
@@ -1145,11 +1151,11 @@ bool get_check_oath_multiline(cptr prompt)
         prompt_controller_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
         strnfmt(confirm_prompt, sizeof(confirm_prompt),
-            "Are you certain? [%s/%s]", confirm_label, back_label);
+            ui_text("Are you certain? [%s/%s]"), confirm_label, back_label);
     }
     else
     {
-        SDL_strlcpy(confirm_prompt, "Are you certain? [y/n/sp]",
+        SDL_strlcpy(confirm_prompt, ui_text("Are you certain? [y/n/sp]"),
             sizeof(confirm_prompt));
     }
     int prompt_col = (wid - (int)strlen(confirm_prompt)) / 2;
@@ -1157,7 +1163,7 @@ bool get_check_oath_multiline(cptr prompt)
         prompt_col = 1;
     Term_putstr(prompt_col, h - 3, -1, TERM_YELLOW, confirm_prompt);
     ui_menu_click_clear_pending_hover();
-    sdl_touch_pane_begin_yes_no_prompt("Are you certain?");
+    sdl_touch_pane_begin_yes_no_prompt(ui_text("Are you certain?"));
     Term_fresh();
     
     /* Get an acceptable answer */
@@ -1206,7 +1212,7 @@ bool get_com(cptr prompt, char* command)
     screen_command_prompt_begin();
 
     /* Display a prompt */
-    prt(prompt, 0, 0);
+    prt(ui_text(prompt), 0, 0);
 
     /* Get a key */
     inkey_prompt_input_begin();
@@ -1246,15 +1252,15 @@ void any_key_prompt_text(char* buf, size_t len, cptr action)
         prompt_controller_label(steamdeck_confirm_key(), "A", label,
             sizeof(label));
         strnfmt(buf, len, "[%s] %s", label,
-            (action && action[0]) ? action : "continue");
+            ui_text((action && action[0]) ? action : "continue"));
     }
     else if (action && action[0])
     {
-        strnfmt(buf, len, "(press any key to %s)", action);
+        strnfmt(buf, len, ui_text("(press any key to %s)"), ui_text(action));
     }
     else
     {
-        SDL_strlcpy(buf, "(press any key)", len);
+        SDL_strlcpy(buf, ui_text("(press any key)"), len);
     }
 }
 
